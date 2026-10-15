@@ -27,7 +27,7 @@
     <img src="https://opennetworth.ai/video/opennetworth-demo-poster.jpg" alt="Watch the three-minute product demo" width="820">
   </a>
   <br>
-  <sub><a href="https://opennetworth.ai/#demo">▶ Watch the three-minute demo</a> — the real app on a demo book</sub>
+  <sub><a href="https://opennetworth.ai/#demo">▶ Watch</a></sub>
 </p>
 
 **An open-source agent harness for personal finance.** A real multi-currency ledger, budgets, and
