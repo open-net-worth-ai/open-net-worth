@@ -22,6 +22,14 @@
   <a href="https://discord.gg/gRRsQRgwE8"><img src="https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white" alt="Discord"></a>
 </p>
 
+<p align="center">
+  <a href="https://opennetworth.ai/#demo">
+    <img src="https://opennetworth.ai/video/opennetworth-demo-poster.jpg" alt="Watch the three-minute product demo" width="820">
+  </a>
+  <br>
+  <sub><a href="https://opennetworth.ai/#demo">▶ Watch the three-minute demo</a> — the real app on a demo book</sub>
+</p>
+
 **An open-source agent harness for personal finance.** A real multi-currency ledger, budgets, and
 investments — plus an AI that can actually read and change them, not just talk about them.
 Self-hosted, on a machine you control.
