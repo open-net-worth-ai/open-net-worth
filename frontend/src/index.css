@@ -17122,6 +17122,24 @@ body.hide-amounts .money * {
     margin-bottom: 0;
     gap: 0;
   }
+  /* iOS 26+ draws a blurred "scroll edge" under the status bar unless it finds an opaque,
+     full-width FIXED box touching the top edge — then it tints the bar with that box's colour
+     instead. The sticky .topbar above sits inside a non-scrolling column, so WebKit never
+     counted it, and the blur smeared every tab's title (owner report, iOS 27 device). */
+  .app-shell.mb-shell .topbar::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--safe-t);
+    background: var(--bg);
+    pointer-events: none;
+  }
+  /* Lucius owns a deliberate glass header behind the status bar (lucius-mobile.css). */
+  .app-shell.mb-shell .app-main:has(.app-layout--lucius) .topbar::before {
+    display: none;
+  }
 
   /* Pinned and opaque so scrolling content passes under it, never above it. Tabs in
      SELF_HEADER_TABS pin their own header instead. */
