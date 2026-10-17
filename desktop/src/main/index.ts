@@ -11,6 +11,7 @@ import { FolderWatcher } from './folders';
 import { NativeNotifications } from './notifications';
 import { Preferences, settingsPatch, type SettingsPatch } from './preferences';
 import { setKeepAwake } from './keep-awake';
+import { showUpdateProgress } from './update-progress';
 import { bundledRuntime, type RuntimeConfig } from './runtime';
 import { externalUrl } from './security';
 import { DesktopWindow } from './window';
@@ -118,6 +119,8 @@ if (squirrelStartup || !app.requestSingleInstanceLock()) {
   app.on('before-quit', (event) => {
     if (quitting) return;
     event.preventDefault();
+    // Squirrel.Mac installs a downloaded update as the app quits, so the quit says so instead of vanishing.
+    if (process.platform === 'darwin' && updates?.phase === 'ready') showUpdateProgress(updates.readyVersion, false);
     // Every wait inside shutdown() is bounded, but quitting must not depend on that staying true.
     void Promise.race([shutdown(), new Promise<void>(done => setTimeout(done, QUIT_DEADLINE_MS).unref())]).finally(() => app.exit(0));
   });
@@ -150,6 +153,7 @@ function shutdown(): Promise<void> {
 function installUpdate(): void {
   if (quitting) return;
   installingUpdate = true;
+  showUpdateProgress(updates?.readyVersion ?? null, true);
   void shutdown().finally(() => {
     autoUpdater.once('error', () => app.exit(0));
     setTimeout(() => app.exit(0), 30_000).unref();
@@ -161,6 +165,7 @@ function installUpdate(): void {
 function installLinuxUpdate(): void {
   if (quitting) return;
   installingUpdate = true;
+  showUpdateProgress(updates?.readyVersion ?? null, Boolean(process.env.APPIMAGE));
   void shutdown().finally(() => {
     if (process.env.APPIMAGE) relaunchAppImage(process.env.APPIMAGE);
     app.exit(0);

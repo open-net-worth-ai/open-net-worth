@@ -314,3 +314,15 @@ test('the first launch after an update says so once; a fresh install or the same
   clicked.click!();
   assert.equal(clicked.releases, 1);
 });
+
+test('the install progress page names the version, runs no script, and escapes what it shows', async () => {
+  const { updateProgressPage } = await import('../src/main/update-progress');
+  const restart = updateProgressPage('0.2.0', true, 'dark');
+  assert.match(restart, /<title>Updating Open Net Worth<\/title>/);
+  assert.match(restart, /<h1>Installing Open Net Worth 0\.2\.0…<\/h1>/);
+  assert.match(restart, /Closing your book safely, then restarting\./);
+  assert.match(restart, /default-src 'none'/);
+  assert.doesNotMatch(restart, /<script|script-src|<button|<svg/);
+  assert.match(updateProgressPage(null, false, 'light'), /<h1>Installing update…<\/h1><p>Closing your book safely first\.<\/p>/);
+  assert.doesNotMatch(updateProgressPage('<b>', true, 'dark'), /<b>/);
+});
