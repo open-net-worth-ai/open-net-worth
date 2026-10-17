@@ -57,3 +57,12 @@ outside the write lock.
   still stops and hands the match back to Lucius; it is not refused outright.
 - A burst of captures waits in line; past 50 s the phone gets "Still logging this in the
   background" and the outcome as a notification, as before.
+
+## Amendment (2026-10-17, same day)
+
+The rejected prefix rule is adopted for `ios-shortcut` refs ONLY. Reinstalling fixes new
+captures but not the rows already booked: a tap/notification pair under `ios-shortcut` still
+read as one unresolved emitter, so the merge choke refused it even after the owner confirmed it,
+and no caller can reach its override. `core.txn_sources.ref_emitter` now reads `wallet-tap` or
+`notif` from a legacy ref's prefix as its emitter; any other prefix stays unresolved. The new
+namespaces are unchanged.

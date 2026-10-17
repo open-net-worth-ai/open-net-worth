@@ -142,3 +142,83 @@ def test_two_identical_taps_are_still_two_purchases(card):
 
     assert second["ok"] is True, second
     assert _booked("iJooz") == 2
+
+
+# ── rows stamped before the split ─────────────────────────────────────────────
+# Live 2026-10-17: three tap/notification pairs booked under ``ios-shortcut`` the day before the
+# split could not be merged even after the owner confirmed each — the veto read both refs as one
+# unresolved emitter, and the merge choke refuses on it with no override a caller can reach.
+
+LEGACY_TAP = ("ios-shortcut", "wallet-tap:2026-10-15T12:26:14+08:00")
+LEGACY_NOTIF = ("ios-shortcut", "notif:2026-10-15T12:26:21+08:00")
+
+
+def test_a_legacy_shortcut_ref_names_its_trigger_as_the_emitter():
+    assert ref_emitter(*LEGACY_TAP) == "wallet-tap"
+    assert ref_emitter(*LEGACY_NOTIF) == "notif"
+    assert ref_emitter("ios-shortcut", "tap:2026-09-03T11:44:12") is None, "unknown prefix"
+    assert ref_emitter("ios-shortcut", "wallet-tap") is None, "a bare word names no trigger"
+
+
+def test_a_legacy_tap_and_notification_are_compared():
+    assert matching._same_source_event_veto(_row(LEGACY_TAP), _row(LEGACY_NOTIF)) is False
+
+
+def test_two_legacy_taps_stay_two_events():
+    again = ("ios-shortcut", "wallet-tap:2026-10-15T12:26:40+08:00")
+    assert matching._same_source_event_veto(_row(LEGACY_TAP), _row(again)) is True
+
+
+def test_a_legacy_ref_without_a_known_trigger_fails_closed():
+    old = ("ios-shortcut", "tap:2026-10-15T12:26:25+08:00")
+    assert matching._same_source_event_veto(_row(LEGACY_TAP), _row(old)) is True
+
+
+def _booked_pair(account_id: str, first: tuple[str, str], second: tuple[str, str]) -> list[str]:
+    ids = []
+    for description, ref in (("Ridgeline Bistro", first), ("RIDGELINE BISTRO", second)):
+        row = svc.create_transaction(
+            {
+                "description": description,
+                "kind": "expense",
+                "from_account_id": account_id,
+                "from_amount": 16.90,
+                "category": "Food & Dining",
+                "date": "2026-10-15",
+                "external_refs": [{"source": ref[0], "ref": ref[1]}],
+            },
+            force=True,
+        )
+        ids.append(row["id"])
+    return ids
+
+
+def _merge(canonical_id: str, absorbed_id: str) -> dict:
+    text, _ = asyncio.run(
+        execute_tool(
+            "merge_transactions",
+            {"pairs": [{"canonical_id": canonical_id, "absorbed_id": absorbed_id}]},
+        )
+    )
+    return json.loads(text)["results"][0]
+
+
+def test_a_legacy_tap_and_notification_pair_can_be_merged(card):
+    tap_id, notif_id = _booked_pair(card, LEGACY_TAP, LEGACY_NOTIF)
+
+    result = _merge(notif_id, tap_id)
+
+    assert result["ok"] is True, result
+    assert _booked("Ridgeline Bistro", "RIDGELINE BISTRO") == 1
+
+
+def test_two_legacy_taps_are_still_refused_a_merge(card):
+    tap_id, other_id = _booked_pair(
+        card, LEGACY_TAP, ("ios-shortcut", "wallet-tap:2026-10-15T12:26:40+08:00")
+    )
+
+    result = _merge(tap_id, other_id)
+
+    assert result["ok"] is False
+    assert "two real events" in result["error"]
+    assert _booked("Ridgeline Bistro", "RIDGELINE BISTRO") == 2

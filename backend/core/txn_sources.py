@@ -157,6 +157,13 @@ AUTHORITATIVE_ID_NAMESPACES = frozenset(
 _NOTIFICATION_REF_NAMESPACE = "ios-notification"
 _NOTIFICATION_APP_SEPARATOR = "@"
 
+# Before each trigger had its own source, both shortcuts sent ``ios-shortcut`` and the trigger
+# lived only in the ref's prefix. Those rows are still in the book (and a shortcut not yet
+# reinstalled keeps minting them), so the prefix IS their emitter: a tap and a notification
+# are compared, two taps stay two events. Any other prefix stays unresolved.
+_LEGACY_SHORTCUT_NAMESPACE = "ios-shortcut"
+_LEGACY_SHORTCUT_TRIGGERS = frozenset({"wallet-tap", "notif"})
+
 
 def is_authoritative_source(source: str | None) -> bool:
     """True when refs under this namespace are native per-event identifiers (not content
@@ -193,11 +200,17 @@ def ext_ref_emitters(row: dict) -> dict[str, set[str | None]]:
 def ref_emitter(source: str | None, ref: str | None) -> str | None:
     """The emitter a ref states about itself, or None when it states none.
 
-    Only ``ios-notification`` refs carry one: the app is everything after the FIRST "@" — the
+    An ``ios-notification`` ref names its app: everything after the FIRST "@" — the
     timestamp before it never contains one, an app name might. Casefolded so one app is one
     emitter however iOS capitalises it. An older ref without the app stays unresolved — the
-    veto's safe direction."""
-    if source != _NOTIFICATION_REF_NAMESPACE or not ref:
+    veto's safe direction. A legacy ``ios-shortcut`` ref names its trigger (``wallet-tap`` /
+    ``notif``) in its prefix."""
+    if not ref:
+        return None
+    if source == _LEGACY_SHORTCUT_NAMESPACE:
+        trigger, sep, _ = ref.partition(":")
+        return trigger if sep and trigger in _LEGACY_SHORTCUT_TRIGGERS else None
+    if source != _NOTIFICATION_REF_NAMESPACE:
         return None
     _, sep, app = ref.partition(_NOTIFICATION_APP_SEPARATOR)
     app = app.strip().casefold()
