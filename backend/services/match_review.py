@@ -679,16 +679,17 @@ def merge_transactions_preserving_fields(
     shape. A lookup failure on either id is left for ``ledger_service.merge_transactions``
     itself to raise (unchanged error behavior); this wrapper just skips preservation in that case.
 
-    Raises ConflictError, writing nothing, when either row is a Starting Balance.
+    Raises, writing nothing, whatever ``ledger_service.assert_mergeable`` refuses —
+    ConflictError for a Starting Balance, ValidationError for the rest.
     """
     canonical = ledger_service.transactions.find_by_id(canonical_id)
     absorbed = ledger_service.transactions.find_by_id(absorbed_id)
     info: dict = {"preserved_fields": [], "field_conflicts": {}}
     if canonical is not None and absorbed is not None:
-        # Re-asserted here, not just at the merge choke below: the preservation pass WRITES to
-        # the canonical first, so leaving this to merge_transactions would refuse the merge
-        # while still having mutated a row.
-        ledger_service.assert_merge_allowed(canonical, absorbed)
+        # Every refusal the merge choke can raise, asserted HERE: the preservation pass WRITES
+        # to the canonical first, so leaving any of them to merge_transactions would refuse the
+        # merge while still having mutated a row.
+        ledger_service.assert_mergeable(canonical, absorbed, become_transfer=become_transfer)
         patch, info = _merge_field_preservation(
             canonical, absorbed, become_transfer=become_transfer
         )

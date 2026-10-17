@@ -3540,9 +3540,7 @@ def assert_merge_allowed(canonical: dict | None, absorbed: dict | None) -> None:
     names canonical is not the user's choice, so a one-sided guard would be bypassable by
     argument order.
 
-    Called by ``merge_transactions`` itself and by any wrapper that WRITES before reaching it
-    (``match_review.merge_transactions_preserving_fields`` patches the canonical first), so a
-    refusal leaves both rows byte-unchanged instead of half-preserved.
+    Part of ``assert_mergeable``, the full pre-write refusal set.
     """
     protected = [
         row["id"] for row in (canonical, absorbed) if _is_opening_txn(row) and row is not None
@@ -3552,6 +3550,83 @@ def assert_merge_allowed(canonical: dict | None, absorbed: dict | None) -> None:
             "the Starting Balance transaction can't be merged — change the account's "
             f"opening balance instead: {', '.join(protected)}"
         )
+
+
+def _transfer_legs(canonical: dict, absorbed: dict) -> tuple[dict, dict]:
+    """The (debit, credit) legs a ``become_transfer`` merge rebuilds the canonical from —
+    raising ValidationError when the pair can't form one plausible, non-looping transfer."""
+    debit, credit = _debit_credit_legs([canonical, absorbed])
+    if debit is None or credit is None or debit is credit:
+        # Not a clean pair: need ONE row with only a from-leg (debit) and ONE with only a
+        # to-leg (credit). ``debit is credit`` happens when a row is already a two-leg transfer
+        # (it satisfies both) — refusing prevents silently rebuilding a transfer from its own
+        # legs while ignoring the absorbed row.
+        raise ValidationError(
+            "become_transfer requires one row with only an outgoing (debit) leg and one with "
+            "only an incoming (credit) leg"
+        )
+    # Pairing sanity (defense-in-depth on the direct merge path): the two legs must be the
+    # same movement, so their base amounts must be within tolerance. Refuse reshaping two
+    # unrelated rows of different value into a transfer.
+    if not _legs_compatible(debit, credit):
+        raise ValidationError(
+            "become_transfer requires the two legs to have a matching amount (not a plausible pair)"
+        )
+    # F23(b) — self-transfer guard: debit.from == credit.to is a nonsensical loop.
+    if debit.get("from_account_id") == credit.get("to_account_id"):
+        raise ValidationError(
+            "become_transfer: debit and credit are on the same account — "
+            "merging would create a self-transfer"
+        )
+    return debit, credit
+
+
+def assert_mergeable(
+    canonical: dict,
+    absorbed: dict,
+    *,
+    become_transfer: bool = False,
+    override: bool = False,
+) -> None:
+    """Every refusal ``merge_transactions`` can raise for an existing pair, with no write.
+
+    The ONE definition: the merge choke calls it, and so does any wrapper that WRITES before
+    reaching the choke (``match_review.merge_transactions_preserving_fields`` patches the
+    canonical first) — a check the wrapper skipped would refuse the merge after the canonical
+    had already taken the absorbed row's memo/tags/category/payee.
+
+    Raises ValidationError on an identical/deleted/already-merged row, an F23(a) engine
+    invariant breach (unless ``override``) or an unbuildable ``become_transfer``;
+    ConflictError when either row is a Starting Balance (never bypassable)."""
+    if canonical.get("id") == absorbed.get("id"):
+        raise ValidationError("Cannot merge a transaction into itself")
+    for label, row in (("canonical", canonical), ("absorbed", absorbed)):
+        if row.get("deleted"):
+            raise ValidationError(f"The {label} transaction is deleted")
+        if row.get("merged_into"):
+            raise ValidationError(f"The {label} transaction is already merged")
+
+    # ABOVE the override branch on purpose: ``override`` exists to force past the matching
+    # engine's same-event/same-feed heuristics, not to license destroying an opening balance —
+    # and the delete guard this mirrors has no bypass either.
+    assert_merge_allowed(canonical, absorbed)
+
+    # F23(a) — engine invariant re-checks (LOCAL import breaks ledger→matching→ledger cycle).
+    if not override:
+        from backend.services import matching as _matching  # local import — see module docstring
+
+        if _matching._same_source_event_veto(canonical, absorbed):
+            raise ValidationError(
+                "cannot merge: both rows carry distinct authoritative ids from the same source "
+                "namespace — they are two real events (override=True to force)"
+            )
+        if _matching._same_feed(canonical, absorbed):
+            raise ValidationError(
+                "cannot merge: both rows are from the same import batch — "
+                "the feed already de-duplicated its own statement (override=True to force)"
+            )
+    if become_transfer:
+        _transfer_legs(canonical, absorbed)
 
 
 def merge_transactions(
@@ -3565,10 +3640,10 @@ def merge_transactions(
     """Fold ``absorbed_id`` into ``canonical_id`` and return the updated canonical row.
 
     Steps (each reversible by ``unmerge_transactions``):
-      1. Validate both exist, are distinct, and neither is already deleted/merged. Refuse
-         OUTRIGHT — before any write — when EITHER row is a Starting Balance
-         (``assert_merge_allowed``; not bypassable by override). Refuse if the engine's
-         invariants flag the pair (unless override=True).
+      1. Validate both exist, then ``assert_mergeable``: distinct, neither already
+         deleted/merged, neither a Starting Balance (not bypassable by override), the engine's
+         invariants don't flag the pair (unless override=True), and a ``become_transfer`` pair
+         forms one plausible transfer. All before any write.
       2. Snapshot both rows + the expected POST-merge canonical into the merge journal
          (byte-exact undo; unmerge refuses if the live row was edited/deleted).
       3. If ``become_transfer``: rebuild the canonical as a two-leg transfer spanning both
@@ -3599,31 +3674,7 @@ def merge_transactions(
         raise ValidationError(f"Canonical transaction {canonical_id} not found")
     if absorbed is None:
         raise ValidationError(f"Absorbed transaction {absorbed_id} not found")
-    for label, row in (("canonical", canonical), ("absorbed", absorbed)):
-        if row.get("deleted"):
-            raise ValidationError(f"The {label} transaction is deleted")
-        if row.get("merged_into"):
-            raise ValidationError(f"The {label} transaction is already merged")
-
-    # ABOVE the override branch on purpose: ``override`` exists to force past the matching
-    # engine's same-event/same-feed heuristics, not to license destroying an opening balance —
-    # and the delete guard this mirrors has no bypass either.
-    assert_merge_allowed(canonical, absorbed)
-
-    # F23(a) — engine invariant re-checks (LOCAL import breaks ledger→matching→ledger cycle).
-    if not override:
-        from backend.services import matching as _matching  # local import — see module docstring
-
-        if _matching._same_source_event_veto(canonical, absorbed):
-            raise ValidationError(
-                "cannot merge: both rows carry distinct authoritative ids from the same source "
-                "namespace — they are two real events (override=True to force)"
-            )
-        if _matching._same_feed(canonical, absorbed):
-            raise ValidationError(
-                "cannot merge: both rows are from the same import batch — "
-                "the feed already de-duplicated its own statement (override=True to force)"
-            )
+    assert_mergeable(canonical, absorbed, become_transfer=become_transfer, override=override)
 
     import copy
 
@@ -3667,29 +3718,7 @@ def merge_transactions(
         patch["batch_id"] = absorbed["batch_id"]
 
     if become_transfer:
-        debit, credit = _debit_credit_legs([canonical, absorbed])
-        if debit is None or credit is None or debit is credit:
-            # Not a clean pair: need ONE row with only a from-leg (debit) and ONE with only a
-            # to-leg (credit). ``debit is credit`` happens when a row is already a two-leg transfer
-            # (it satisfies both) — refusing prevents silently rebuilding a transfer from its own
-            # legs while ignoring the absorbed row. Back out the journal entry and refuse.
-            raise ValidationError(
-                "become_transfer requires one row with only an outgoing (debit) leg and one with "
-                "only an incoming (credit) leg"
-            )
-        # Pairing sanity (defense-in-depth on the direct merge path): the two legs must be the
-        # same movement, so their base amounts must be within tolerance. Refuse reshaping two
-        # unrelated rows of different value into a transfer.
-        if not _legs_compatible(debit, credit):
-            raise ValidationError(
-                "become_transfer requires the two legs to have a matching amount (not a plausible pair)"
-            )
-        # F23(b) — self-transfer guard: debit.from == credit.to is a nonsensical loop.
-        if debit.get("from_account_id") == credit.get("to_account_id"):
-            raise ValidationError(
-                "become_transfer: debit and credit are on the same account — "
-                "merging would create a self-transfer"
-            )
+        debit, credit = _transfer_legs(canonical, absorbed)
         earlier = min(canonical.get("date", ""), absorbed.get("date", ""))
         patch |= {
             "kind": "transfer",

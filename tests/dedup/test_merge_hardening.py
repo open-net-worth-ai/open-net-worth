@@ -881,3 +881,47 @@ def test_merge_never_overwrites_the_canonical_own_batch_id(two_accounts):
     merged = ledger_service.merge_transactions(canonical["id"], absorbed["id"])
 
     assert merged["batch_id"] == "imp_canonical"
+
+
+def _refused_merge_left_canonical_untouched(canonical_id, absorbed_id, **kw):
+    from backend.services import audit as audit_service
+
+    canonical_before = ledger_service.transactions.find_by_id(canonical_id)
+    trail_before = audit_service.trace(canonical_id)
+    with pytest.raises(ValidationError) as exc:
+        match_review.merge_transactions_preserving_fields(canonical_id, absorbed_id, **kw)
+    assert ledger_service.transactions.find_by_id(canonical_id) == canonical_before
+    assert audit_service.trace(canonical_id) == trail_before
+    absorbed = ledger_service.transactions.find_by_id(absorbed_id)
+    assert not absorbed.get("deleted") and not absorbed.get("merged_into")
+    return exc.value
+
+
+def test_refused_merge_writes_no_preserved_fields_to_the_canonical(two_accounts):
+    """Two wallet taps are two purchases (F23(a) same-emitter veto), so the merge is refused —
+    and the preservation pass must not have already copied the absorbed row's memo/tags onto the
+    canonical. It used to: the wrapper wrote that patch before the choke's veto ran."""
+    meridian, _ = two_accounts
+    canonical = _expense(
+        meridian["id"], 3.00, external_id="ios-wallet:wallet-tap:2026-10-15T12:26:14+08:00"
+    )
+    absorbed = _expense(
+        meridian["id"], 3.00, external_id="ios-wallet:wallet-tap:2026-10-15T12:26:40+08:00"
+    )
+    ledger_service.transactions.update_by_id(
+        absorbed["id"], {"memo": "second cup", "tags": ["synthetic"]}
+    )
+
+    err = _refused_merge_left_canonical_untouched(canonical["id"], absorbed["id"])
+    assert "distinct authoritative ids" in str(err)
+
+
+def test_refused_become_transfer_writes_no_preserved_fields(two_accounts):
+    """A become_transfer that would loop back onto one account is refused before any write."""
+    meridian, _ = two_accounts
+    out = _expense(meridian["id"], 10.00, external_id="email:abc")
+    back = _income(meridian["id"], 10.00, external_id="csv:xyz")
+    ledger_service.transactions.update_by_id(back["id"], {"memo": "synthetic memo"})
+
+    err = _refused_merge_left_canonical_untouched(out["id"], back["id"], become_transfer=True)
+    assert "self-transfer" in str(err)
