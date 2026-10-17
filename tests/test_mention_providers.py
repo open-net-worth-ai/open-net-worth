@@ -862,9 +862,14 @@ def test_search_watchlist_no_match(watchlist_store):
 
 
 @pytest.fixture
-def skill_store():
+def skill_store(tmp_path, monkeypatch):
+    from backend.db import skill_store as skill_store_mod
     from backend.db.skill_store import SkillStore
 
+    # Skills are files, not Tier-2 rows: a starter skill another test seeded into the shared
+    # SKILLS_DIR would turn "budget-review" below into "budget-review-2".
+    monkeypatch.setattr(skill_store_mod, "SKILLS_DIR", tmp_path / "skills")
+    monkeypatch.setattr(skill_store_mod, "SKILLS_STATE_JSON", tmp_path / "skills_state.json")
     store = SkillStore()
     store.create(
         {

@@ -81,6 +81,28 @@ _EVAL_ENV_KEYS = (
 _PYTEST_OWNED_ENV_KEYS = frozenset({"PYTEST_CURRENT_TEST"})
 
 
+def _restore_env(env_before: dict[str, str | None]) -> None:
+    import backend.core.config as _config
+
+    for key, value in env_before.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+    _config._settings = None
+
+
+def pytest_collection_finish(session):
+    """Undo ``_isolate()``'s import-time env writes as soon as collection ends. The fixture
+    below only restores in an EVAL test's teardown, so every test that ran before the first
+    eval test — and, under xdist, a whole worker that drew no eval test — ran with
+    ``AUTH_DISABLED=true`` and ``ONW_QA_MODE=1`` (auth gates answered 200, backfill never
+    spawned). Each eval test re-enters isolation itself."""
+    from tests.conftest import PRISTINE_ENV
+
+    _restore_env({key: PRISTINE_ENV.get(key) for key in _EVAL_ENV_KEYS})
+
+
 def _clear_seeded_files(path_str: str) -> None:
     """Remove the seeded FILES under a throwaway data/cache dir, leaving the tree intact.
 
@@ -171,12 +193,7 @@ def _contain_eval_harness_globals():
     # to None (rather than restoring a saved reference) is the unconditionally correct
     # move here: the saved reference may ITSELF have been latched at collection time, when
     # os.environ was already dirty.
-    for key, value in env_before.items():
-        if value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = value
-    _config._settings = None
+    _restore_env(env_before)
 
     # 3+4. Drop the seeded book and the seeded fx_cache.json. DATA_DIR/CACHE_DIR are read
     # from the RESTORED env above, so this always targets the suite's throwaway root even
