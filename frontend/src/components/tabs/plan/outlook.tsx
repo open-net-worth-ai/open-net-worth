@@ -470,7 +470,7 @@ const INIT_STREAMS: IncomeStream[] = []
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export function OutlookTab(props: OutlookTabProps) {
-  const { onAskLucius: onAsk, toast, onOpenSettings } = props
+  const { onAskLucius: onAsk, toast } = props
   // "What if?" is a full sidebar on desktop but too tall/cramped to scroll to on a phone —
   // it opens as a bottom sheet there instead (same PlanningModal primitive as every other
   // mobile sheet in this tab), never inline in the page flow.

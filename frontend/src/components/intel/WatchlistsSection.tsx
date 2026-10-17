@@ -3,7 +3,7 @@ import { Skeleton } from '../ui'
 import { authFetch } from '../../api/client'
 import { ChevronRight, ArrowRight } from '../../ui/icons'
 import type { TickerMeta } from './StoryArcCard'
-import { fPct, fPrice, getCurrencySymbol, getBaseCurrency, priceDigits } from '../../utils/format'
+import { fPct, fPrice, getCurrencySymbol, getBaseCurrency } from '../../utils/format'
 import { AssetLink } from './AssetLink'
 import { toneColor } from './pulseHelp'
 import { alertChipText } from './priceAlerts/alertModel'
@@ -165,7 +165,7 @@ function AssetRow({
           {meta?.price != null ? (
             <>
               {sym}
-              {fPrice(meta.price, priceDigits(meta.asset_class))}
+              {fPrice(meta.price)}
             </>
           ) : (
             '—'

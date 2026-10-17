@@ -53,6 +53,10 @@ Automation — change it on the Automation."* Change it in the Automation's edit
 - **Any tool you've explicitly set to Needs approval** on a connector's page (see below).
 - **Tools from an external MCP server** you added, unless you set them to Always allow — they
   follow their own level in every mode.
+- **Opening a web address Lucius didn't get from you or a web search.** A link you typed and the
+  results of a web search open straight away. Any other address, such as a link found inside an
+  email or a page, shows a card first. Something Lucius read could be trying to send your data to
+  it, hidden in the address. **Always allow** on that card stops the check for every chat.
 
 Everything Lucius changes, whether or not he asked first, can be undone: see
 [Undoing a change](#undoing-a-change).

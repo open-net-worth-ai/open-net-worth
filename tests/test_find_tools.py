@@ -83,7 +83,6 @@ def test_core_contains_expected_tools():
         "update_transactions",
         "import_transactions",
         "list_accounts",
-        "get_net_worth",
         "get_portfolio",
         "get_live_prices",
         "get_profile",

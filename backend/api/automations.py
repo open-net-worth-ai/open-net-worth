@@ -25,6 +25,7 @@ class AutomationCreate(BaseModel):
     trigger: dict[str, Any]
     permission_mode: str = "manual"
     always_allowed: list[dict[str, Any]] = Field(default_factory=list)
+    fetch_hosts: list[str] = Field(default_factory=list)
     model: str = ""
     effort: str = "medium"
     status: str = "active"
@@ -38,6 +39,7 @@ class AutomationPatch(BaseModel):
     trigger: Optional[dict[str, Any]] = None
     permission_mode: Optional[str] = None
     always_allowed: Optional[list[dict[str, Any]]] = None
+    fetch_hosts: Optional[list[str]] = None
     model: Optional[str] = None
     effort: Optional[str] = None
     status: Optional[str] = None

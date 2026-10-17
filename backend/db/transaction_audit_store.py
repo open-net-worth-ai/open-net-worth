@@ -323,6 +323,27 @@ class TransactionAuditStore:
                 self._append_one(conn, event)
         return event
 
+    # What an erased event keeps: that something happened, when, and by whom — never what.
+    _STUB_KEYS = ("id", "txn_id", "op", "ts", "actor", "surface", "source")
+
+    def redact_for_txns(self, txn_ids: list[str], *, conn: Connection | None = None) -> int:
+        """Cut every event of ``txn_ids`` to a stub (``_STUB_KEYS``): the before/after images,
+        the user's intent preview, notes, session and automation names go. The permanent-delete
+        choke's half of erasing a transaction (``services.transaction_purge``). Returns the
+        number of events rewritten."""
+        if not txn_ids:
+            return 0
+        with self._use_conn(conn) as conn:
+            rows = conn.execute(
+                select(self._table).where(self._table.c.txn_id.in_(list(txn_ids)))
+            ).all()
+            for row in rows:
+                stub = {k: row.payload.get(k) for k in self._STUB_KEYS if k in row.payload}
+                conn.execute(
+                    sa_update(self._table).where(self._table.c.id == row.id).values(payload=stub)
+                )
+        return len(rows)
+
     def append_many(self, events: list[dict], *, conn: Connection | None = None) -> list[dict]:
         """Append many events in ONE transaction (the bulk import/delete path —
         avoids an O(N) write per row). No-op on an empty list.

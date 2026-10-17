@@ -47,6 +47,9 @@ def _fake_public_dns(monkeypatch):
         return [(None, None, None, None, ("93.184.216.34", 0))]
 
     monkeypatch.setattr("backend.core.net_guard.socket.getaddrinfo", fake_getaddrinfo)
+    # These pin SANITISING a fetched page; whether a URL may be fetched unasked is the
+    # provenance gate's question, pinned in tests/test_fetch_provenance_gate.py.
+    monkeypatch.setattr("backend.ai.tools._fetch_gate.check", lambda url: None)
 
 
 class _StubProvider:

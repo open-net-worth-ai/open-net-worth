@@ -3,6 +3,7 @@ import {
   Check,
   Clock3,
   FastForward,
+  Globe,
   Hand,
   Pencil,
   Play,
@@ -243,6 +244,14 @@ export function AutomationDetail({
               )
             })()}
           </DetailSection>
+          {(automation.fetch_hosts ?? []).length > 0 && (
+            <DetailSection title="Websites it may open" odId="fetch-hosts">
+              <div className="a3-model-detail">
+                <Globe size={14} aria-hidden="true" />
+                <span>{(automation.fetch_hosts ?? []).join(', ')}</span>
+              </div>
+            </DetailSection>
+          )}
           <DetailSection title="Cost & usage" odId="cost-and-usage">
             <AutomationCostPanel automation={automation} runs={runs} />
           </DetailSection>

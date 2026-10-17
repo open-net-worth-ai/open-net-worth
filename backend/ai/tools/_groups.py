@@ -48,6 +48,11 @@ event — 24 sessions that hand-booked 1,597 rows one at a time with zero
 ``import_transactions`` calls, because the tool was find_tools-gated and
 undiscoverable) — low PRE-core usage is not evidence against a fix that changes
 future discoverability, so it stays core pending a fresh measurement.
+
+**CORE-diet follow-up 2026-10-17:** ``get_net_worth`` (6.8%, also below the bar and not
+structurally pinned) was demoted when the per-turn offer crossed the 50K budget after
+``recall_memory`` joined. It is reachable the same way — find_tools, the flat catalog, or any
+starter skill that names it.
 """
 
 from __future__ import annotations
@@ -101,7 +106,10 @@ CORE_TOOL_NAMES: frozenset[str] = frozenset(
         "import_transactions",
         # Accounts
         "list_accounts",  # 36.2% — the #1 tool in the corpus
-        "get_net_worth",  # 6.8%
+        # get_net_worth (6.8% — below the ~7% evidence bar) demoted 2026-10-17: nothing structural
+        # pins it, and its schema is what put the offer over the 50K per-turn budget once
+        # recall_memory (owner call 2026-10-14) joined CORE. Reachable as before via find_tools +
+        # the system prompt's flat catalog, and any starter skill that names it auto-loads it.
         # Portfolio
         "get_portfolio",  # 24.9% — the #3 tool in the corpus
         "get_live_prices",  # 14.7%

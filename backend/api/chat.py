@@ -23,6 +23,7 @@ from backend.ai import (
 from backend.ai.attachments import build_user_content
 from backend.ai.prompts import build_system_prompt
 from backend.ai.tool_text import ONBOARDING_INIT
+from backend.ai.tools import _fetch_gate
 from backend.api import demo_visitor
 from backend.api._deps import _bearer_token
 from backend.core.errors import ConfigurationError, ValidationError
@@ -506,6 +507,9 @@ async def chat(req: ChatRequest, request: Request):
             new_messages.append({"role": "user", "content": content})
         else:
             new_messages.append({"role": msg.role, "content": msg.content})
+    # Links the person typed may be fetched without a card. Recorded HERE, from the typed text
+    # alone: the mention, brief and screen blocks merged below are third-party text.
+    _fetch_gate.note_user_messages(session_id, [{"content": _original_user_text}])
 
     # Resolve any structured @-mentions into a compact current-data block and merge it onto
     # the last user turn. Pure read (services/mentions composes existing read services); a bad

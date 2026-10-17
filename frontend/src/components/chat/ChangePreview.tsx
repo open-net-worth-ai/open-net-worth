@@ -152,6 +152,7 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
         tool: change.grant_tool as string,
         scope,
         session_id: change.session_id,
+        tool_use_id: change.id,
       })
     } catch {
       // The approval for THIS call still stands — the user tapped it and the card showed

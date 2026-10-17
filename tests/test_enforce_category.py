@@ -702,12 +702,11 @@ def test_delete_account_opening_only_survives_a_stale_soft_deleted_reference(iso
     assert svc.transactions.find_by_id(stale["id"]) is None
 
 
-def test_delete_account_force_cascade_audit_keeps_the_full_row_as_before(isolated):
-    """MEDIUM-5 regression: unlike bulk_delete_transactions's own batched audit call (which
-    correctly writes before=None, since ITS rows stay soft-deleted and reconstructable), the
-    force-delete cascade hard-deletes every row with nothing left behind — so its audit event
-    must carry the FULL row as `before`, the only place the deleted transaction's own fields
-    survive at all."""
+def test_delete_account_force_cascade_audit_records_the_delete_but_not_the_row(isolated):
+    """The force-delete cascade hard-deletes every row, and since 2026-10-17 it erases them the
+    way Delete permanently does (ADR 2026-10-17-delete-permanently-erases-a-transactions-
+    contents, superseding MEDIUM-5's full-row `before`): the trail still says the row was
+    deleted, and keeps none of what it said."""
     txn = svc.create_transaction(
         {
             "kind": "expense",
@@ -722,10 +721,8 @@ def test_delete_account_force_cascade_audit_keeps_the_full_row_as_before(isolate
     trace = audit_svc.trace(txn["id"])
     delete_events = [e for e in trace["events"] if e["op"] == "delete"]
     assert delete_events
-    before = delete_events[0]["before"]
-    assert before is not None
-    assert before.get("from_amount") == 42.0
-    assert before.get("description") == "groceries"
+    assert all(not e.get("before") and not e.get("after") for e in trace["events"])
+    assert "groceries" not in repr(trace["events"])
 
 
 def test_delete_account_refusal_carries_structured_count_and_other_accounts(isolated):
@@ -959,12 +956,10 @@ def test_delete_transactions_where_then_delete_account_does_not_500(isolated):
     assert svc.accounts.find_by_id(isolated["a"]) is None
 
 
-def test_delete_account_audit_covers_a_row_already_soft_deleted_before_this_cascade(isolated):
-    """MEDIUM-5 residual gap (second review pass): a row the hard-delete sweep finds ALREADY
-    soft-deleted (not soft-deleted by THIS cascade's own loop) must still get a delete audit
-    event carrying its full row as `before` — otherwise it hard-deletes with only its ORIGINAL
-    delete event (before=None) as a trace, and this is the last moment its fields exist
-    anywhere."""
+def test_delete_account_erases_a_row_already_soft_deleted_before_this_cascade(isolated):
+    """A row the hard-delete sweep finds ALREADY soft-deleted (not part of this cascade's own
+    loop) still gets a delete event — and, like the rows the cascade deletes itself, keeps no
+    contents in the trail (ADR 2026-10-17-delete-permanently-erases-a-transactions-contents)."""
     pre_existing = svc.create_transaction(
         {
             "kind": "expense",
@@ -988,17 +983,11 @@ def test_delete_account_audit_covers_a_row_already_soft_deleted_before_this_casc
 
     svc.delete_account(isolated["a"], force=True)
 
-    trace = audit_svc.trace(pre_existing["id"])
-    delete_events = [e for e in trace["events"] if e["op"] == "delete"]
-    assert delete_events, "the already-soft-deleted row must still get a delete audit event"
-    full_snapshot_events = [e for e in delete_events if e.get("before") is not None]
-    assert full_snapshot_events, "at least one delete event must carry the FULL row as before"
-    assert full_snapshot_events[-1]["before"].get("from_amount") == 7.5
-
-    # The row this cascade itself soft-deleted still gets its own full-snapshot event too.
-    fresh_trace = audit_svc.trace(fresh["id"])
-    fresh_delete = [e for e in fresh_trace["events"] if e["op"] == "delete"]
-    assert fresh_delete and fresh_delete[0]["before"].get("from_amount") == 12.0
+    for txn_id, text in ((pre_existing["id"], "swept before"), (fresh["id"], "live at cascade")):
+        events = audit_svc.trace(txn_id)["events"]
+        assert [e for e in events if e["op"] == "delete"], txn_id
+        assert all(not e.get("before") for e in events)
+        assert text not in repr(events)
 
 
 # ── DELETE /api/accounts/{id} — TestClient smoke, the `force` query param ────────────

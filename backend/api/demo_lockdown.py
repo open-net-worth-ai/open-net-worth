@@ -96,6 +96,8 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/data/(export|import)(/.*)?$",
     ),
     *_rules(_WRITE, r"^/api/reset$", r"^/api/demo/seed$"),
+    # Delete permanently: no undo, and every visitor shares the one fabricated book.
+    *_rules(_WRITE, r"^/api/transactions/purge$"),
     # spend and outbound reach
     *_rules(
         _WRITE,

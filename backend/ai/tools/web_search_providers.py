@@ -61,6 +61,7 @@ from backend.ai.search.base import (
     build_provider,
     fetch_result_payload,
 )
+from backend.ai.tools._fetch_gate import note_search_results
 from backend.ai.tools.misc import FetchPageInput, WebSearchInput, sanitize_search_results
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import schema_of
@@ -106,7 +107,9 @@ async def _search_via(spec: ProviderSpec, input_data: dict) -> tuple[str, None]:
         logger.error("%s_search failed: %s", spec.id, exc)
         raise
     logger.info("%s_search returned %d results", spec.id, len(results))
-    return json.dumps(sanitize_search_results(results), ensure_ascii=False), None
+    clean = sanitize_search_results(results)
+    note_search_results(clean)  # their URLs may now be fetched without a card
+    return json.dumps(clean, ensure_ascii=False), None
 
 
 async def _fetch_via(spec: ProviderSpec, input_data: dict) -> tuple[str, None]:
@@ -127,6 +130,12 @@ async def _fetch_via(spec: ProviderSpec, input_data: dict) -> tuple[str, None]:
     reason = _unusable_reason(spec)
     if reason is not None:
         return json.dumps({"error": reason}, ensure_ascii=False), None
+    # The same provenance gate as fetch_page: naming a provider must not be a way around it.
+    from backend.ai.tools import _fetch_gate
+
+    gated = _fetch_gate.check(url, tool=f"{spec.id}_fetch_page")
+    if gated is not None:
+        return gated
 
     from backend.db.search_config_store import SearchConfigStore
 

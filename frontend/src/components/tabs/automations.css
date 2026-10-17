@@ -1299,6 +1299,11 @@
   margin-bottom: 6px;
   display: block;
 }
+.a3-field-hint {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin: 6px 0 0;
+}
 .a3-field-label .req,
 .a3-trow-label .req {
   color: var(--bad);

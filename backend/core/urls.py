@@ -95,3 +95,49 @@ def canonical_url(url: str) -> str:
         return urlunparse(((p.scheme or "https").lower(), netloc, path, "", urlencode(kept), ""))
     except Exception:
         return url.strip()
+
+
+def fetch_key(url: str) -> str:
+    """The identity two URLs share only when fetching one sends exactly what the other sends:
+    host and port lowercased, scheme and #fragment dropped (neither reaches the server's log
+    differently), path and query kept BYTE-FOR-BYTE. Deliberately NOT ``canonical_url`` —
+    dropping tracking params would let ``?utm_x=<data>`` match a URL the user gave, which is
+    the exact channel the fetch provenance gate exists to close. '' for anything not http(s)."""
+    try:
+        p = urlparse((url or "").strip())
+        port = p.port
+    except ValueError:
+        return ""
+    host = (p.hostname or "").lower().rstrip(".")
+    if p.scheme.lower() not in ("http", "https") or not host:
+        return ""
+    netloc = host if port in (None, 80, 443) else f"{host}:{port}"
+    return urlunparse(("", netloc, p.path or "/", p.params, p.query, ""))
+
+
+def normalize_host(value: str) -> str:
+    """A bare lowercase hostname from what someone typed — ``Store.Example.com``,
+    ``https://store.example.com/x`` and ``*.example.com`` all give the host. '' when it is not
+    a plausible DNS name (no dot, a space, a port, a path segment left over)."""
+    text = (value or "").strip().lower()
+    if "://" in text:
+        text = urlparse(text).hostname or ""
+    text = text.split("/", 1)[0].removeprefix("*.").strip(".")
+    labels = text.split(".")
+    if len(labels) < 2 or any(
+        not label or not all(c.isalnum() or c == "-" for c in label) for label in labels
+    ):
+        return ""
+    return text
+
+
+def host_allowed(url: str, allowed_hosts) -> bool:
+    """Whether ``url``'s host is one of ``allowed_hosts`` or a subdomain of one (``example.com``
+    covers ``store.example.com``, never ``badexample.com``)."""
+    try:
+        host = (urlparse((url or "").strip()).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False
+    if not host:
+        return False
+    return any(host == h or host.endswith("." + h) for h in allowed_hosts if h)

@@ -546,7 +546,9 @@ def blocked_result(tool_name: str) -> tuple[str, None]:
     )
 
 
-def stage_generic(tool_name: str, args: dict) -> tuple[Optional[str], Optional[dict]]:
+def stage_generic(
+    tool_name: str, args: dict, *, reason: Optional[str] = None
+) -> tuple[Optional[str], Optional[dict]]:
     """Stage a gated call that has no resolved preview of its own — RFC §14.1's tier 3.
 
     The RFC's fidelity table is explicit that not every card can promise an outcome. A ledger
@@ -609,7 +611,7 @@ def stage_generic(tool_name: str, args: dict) -> tuple[Optional[str], Optional[d
         "type": "tool_permission",
         "grant_tool": tool_name,
         "display": outcome,
-        "reason": f"{tool_name} needs your approval before it runs.",
+        "reason": reason or f"{tool_name} needs your approval before it runs.",
         "tool_use_id": tool_use_id,
         "session_id": get_session_id(),
     }

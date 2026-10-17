@@ -175,7 +175,12 @@ describe('tool-permission card — what each scope records', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Standing permission' }))
     fireEvent.click(screen.getByRole('menuitem', { name: /Always/ }))
     await waitFor(() => expect(resolved.length).toBe(1))
-    expect(grantBody()).toEqual({ level: 'always_allow', session_id: 'sess-1' })
+    expect(grantBody()).toEqual({
+      level: 'always_allow',
+      session_id: 'sess-1',
+      // The card itself, so an Automation's fetch_page *Always* allows that card's website.
+      tool_use_id: TOOL_USE_ID,
+    })
   })
 
   it('records the grant BEFORE resolving the pending tool_use', async () => {
@@ -288,7 +293,7 @@ describe('tool-permission card — a failed grant', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Standing permission' }))
     fireEvent.click(screen.getByRole('menuitem', { name: /Always/ }))
     await waitFor(() => expect(resolved.length).toBe(1))
-    expect(grantBody()).toEqual({ level: 'always_allow' })
+    expect(grantBody()).toEqual({ level: 'always_allow', tool_use_id: TOOL_USE_ID })
     const err = container.querySelector('.change-grant-error')?.textContent ?? ''
     expect(err).toMatch(/couldn't save/i)
     expect(err).toMatch(/asked again/i)

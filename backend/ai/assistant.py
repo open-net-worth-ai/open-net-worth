@@ -3091,6 +3091,7 @@ def _drain_injected_messages(
         skill_events: list[dict] = []
         _abort_stale_pending(history)
         for qm in queued:
+            _note_typed_urls(session_id, [{"content": qm.text}])
             clean = sanitize_untrusted(qm.text)
             fenced = fence_untrusted_block(_USER_MSG_FENCE_LABEL, clean, nonce)
             history.append({"role": "user", "content": [{"type": "text", "text": fenced}]})
@@ -3603,6 +3604,24 @@ def _resolve_style(new_messages: list) -> str:
     return SMALLTALK_STYLE if is_smalltalk_turn(new_messages) else ""
 
 
+def _note_typed_urls(session_id: str, messages: list[dict], *, web: bool = True) -> None:
+    """Links a person typed may be fetched without a card (``ai/tools/_fetch_gate``). Only on a
+    surface where a person types — web chat, a chat connector — never an Automation run, a
+    capture or a scheduled headless turn, whose "user" message is a prompt or trigger payload.
+    The COST surface, not ``surface``: the headless runner leaves ``surface`` at its default.
+    ``web=False`` for a web turn's opening messages: ``api/chat`` recorded their typed text
+    before it merged the mention and screen blocks onto them."""
+    from backend.core.automation_runner import get_automation_approval
+    from backend.core.cost_context import get_cost_surface
+
+    cost_surface = get_cost_surface() or ""
+    typed_here = (web and cost_surface == "web") or cost_surface.startswith("connector")
+    if messages and typed_here and get_automation_approval() is None:
+        from backend.ai.tools import _fetch_gate
+
+        _fetch_gate.note_user_messages(session_id, messages)
+
+
 async def run(
     session_id: str,
     new_messages: list[dict],
@@ -3671,6 +3690,8 @@ async def run(
     reached.
     """
     turn_id = turn_id or f"turn_{uuid.uuid4().hex[:12]}"
+    _note_typed_urls(session_id, new_messages, web=False)
+    _note_typed_urls(session_id, [{"content": q.text} for q in recovered_injections])
     async with _get_session_lock(session_id):
         gen = _run_turn(
             session_id,

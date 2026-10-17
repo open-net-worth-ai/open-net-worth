@@ -147,7 +147,9 @@ When the balance in the app doesn't match your bank:
 3. If it still has other transactions, a second window says how many and asks you to
    **Force delete and remove N transaction(s)**. That permanently removes the account **and**
    those transactions. If any are transfers, the other account loses its side of them too — the
-   window names those accounts. This can't be undone.
+   window names those accounts. This can't be undone. The transactions are erased the way
+   [Delete permanently](transactions.md#delete-or-erase-a-transaction) erases one, including
+   their history's contents.
 
 Some accounts can't be deleted until you deal with what's tied to them. You'll see a message
 naming the problem:

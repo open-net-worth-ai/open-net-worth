@@ -6,10 +6,18 @@ element, any model-emitted CSP meta stripped, and — for html — the height pr
 to size its frame (the parent cannot measure a null-origin frame). It is served from a route
 rather than injected as ``srcdoc`` because a ``srcdoc`` document INHERITS the app page's CSP,
 whose ``script-src 'self'`` would stop every artifact's inline script.
+
+The route serves that document inside a SHELL (``frame_shell``). CSP cannot stop a document
+from navigating ITSELF — ``location.href = 'https://…?d=' + data`` — and a frame's navigations
+are checked against its PARENT's ``frame-src``, which on the app page is ``https:`` (the Embed
+widget needs it). So the model's document lives one level down, as the shell's ``srcdoc``
+child, and the shell's own ``frame-src 'none'`` refuses every navigation of it. The shell holds
+no model content of its own, only a relay that forwards the height probe to the app page.
 """
 
 from __future__ import annotations
 
+import html as _html
 import re
 
 _CSP_HTML = (
@@ -20,10 +28,14 @@ _CSP_SVG = "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; 
 
 # The same policy as the in-document meta, as a response header: ``sandbox`` makes even a direct
 # navigation to the frame URL a null-origin document (no cookies, no same-origin fetch).
+# ``frame-src``/``child-src 'none'`` is what pins the shell's srcdoc child in place (an
+# about:srcdoc frame is not fetched, so the directive never blocks the child itself).
+_NO_NAVIGATION = "frame-src 'none'; child-src 'none'"
 RESPONSE_CSP = {
-    "html": f"sandbox allow-scripts; {_CSP_HTML}; base-uri 'none'; form-action 'none'; "
+    "html": f"sandbox allow-scripts; {_CSP_HTML}; {_NO_NAVIGATION}; base-uri 'none'; "
+    "form-action 'none'; frame-ancestors 'self'",
+    "svg": f"sandbox; {_CSP_SVG}; {_NO_NAVIGATION}; base-uri 'none'; form-action 'none'; "
     "frame-ancestors 'self'",
-    "svg": f"sandbox; {_CSP_SVG}; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
 }
 
 _CSP_META_RE = re.compile(
@@ -87,3 +99,32 @@ def _prepare_svg(svg: str) -> str:
 
 def prepare_frame_document(content: str, artifact_type: str) -> str:
     return _prepare_svg(content) if artifact_type == "svg" else _prepare_html(content)
+
+
+# Forwards ONLY a well-formed height report, and only from the shell's own child, so the app
+# page's ``event.source`` check (it is this shell's window) keeps meaning what it did.
+_HEIGHT_RELAY = (
+    "<script>(function(){var f=document.getElementById('onw-artifact');"
+    "window.addEventListener('message',function(e){if(e.source!==f.contentWindow)return;"
+    "var d=e.data;if(!d||d.__onwArtifact!=='height')return;var h=Number(d.height);"
+    "if(h>0&&isFinite(h))parent.postMessage({__onwArtifact:'height',height:h},'*')})})()"
+    "</script>"
+)
+_SHELL_STYLE = (
+    "<style>html,body{margin:0;height:100%;overflow:hidden}"
+    "iframe{border:0;display:block;width:100%;height:100%}</style>"
+)
+
+
+def frame_shell(content: str, artifact_type: str) -> str:
+    """The document the frame route serves: the prepared artifact as a sandboxed ``srcdoc``
+    child that cannot navigate anywhere (see the module docstring). SVG runs no script, so its
+    shell carries no relay and its child no ``allow-scripts``."""
+    child = _html.escape(prepare_frame_document(content, artifact_type), quote=True)
+    svg = artifact_type == "svg"
+    sandbox = "" if svg else "allow-scripts"
+    return (
+        f"<!doctype html><html><head><meta charset='utf-8'>{_SHELL_STYLE}</head><body>"
+        f'<iframe id="onw-artifact" sandbox="{sandbox}" srcdoc="{child}"></iframe>'
+        f"{'' if svg else _HEIGHT_RELAY}</body></html>"
+    )

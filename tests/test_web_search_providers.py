@@ -205,6 +205,8 @@ def test_named_fetch_tool_caps_at_15k_chars_with_honest_signal(monkeypatch):
         return [(None, None, None, None, ("93.184.216.34", 0))]
 
     monkeypatch.setattr("backend.core.net_guard.socket.getaddrinfo", fake_getaddrinfo)
+    # The URL's provenance is ``tests/test_fetch_provenance_gate.py``'s concern; this pins the cap.
+    monkeypatch.setattr("backend.ai.tools._fetch_gate.check", lambda url, tool="fetch_page": None)
 
     store = SearchConfigStore()
     store.update_provider("tavily", {"enabled": True, "api_key": "k"})

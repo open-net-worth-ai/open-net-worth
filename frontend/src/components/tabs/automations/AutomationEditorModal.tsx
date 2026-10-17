@@ -39,6 +39,7 @@ interface FormState {
   model: string
   effort: string
   permission_mode: PermissionMode
+  fetch_hosts: string
 }
 
 function initialState(
@@ -54,6 +55,8 @@ function initialState(
     model: automation?.model ?? seed?.model ?? '',
     effort: automation?.effort ?? seed?.effort ?? 'medium',
     permission_mode: automation?.permission_mode ?? seed?.permission_mode ?? 'manual',
+    // The owner's list only: never pre-filled from a draft Lucius proposed.
+    fetch_hosts: (automation?.fetch_hosts ?? []).join(', '),
   }
 }
 
@@ -107,6 +110,7 @@ export function AutomationEditorModal({
         effort: form.effort,
         permission_mode: form.permission_mode,
         always_allowed: automation?.always_allowed ?? seed?.always_allowed,
+        fetch_hosts: form.fetch_hosts.split(/[\s,]+/).filter(Boolean),
         // A finished one is never re-sent as `completed`; a new trigger re-arms it server-side.
         status:
           automation?.status === 'completed'
@@ -242,6 +246,22 @@ export function AutomationEditorModal({
           }
           onChange={(trigger) => update('trigger', trigger)}
         />
+        <div>
+          <label className="a3-field-label" htmlFor="automation-fetch-hosts">
+            Websites it may open without asking
+          </label>
+          <input
+            id="automation-fetch-hosts"
+            className="rd-input"
+            value={form.fetch_hosts}
+            placeholder="store.steampowered.com, receipts.example.com"
+            onChange={(event) => update('fetch_hosts', event.target.value)}
+          />
+          <p className="a3-field-hint">
+            Lucius asks before opening any other link it found in an email or a page, because a
+            planted link can carry your data out. Subdomains are included.
+          </p>
+        </div>
         {submitError && (
           <div className="a3-inline-error" role="alert">
             {submitError}

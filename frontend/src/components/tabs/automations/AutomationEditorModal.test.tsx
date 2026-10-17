@@ -7,6 +7,20 @@ import { AutomationEditorModal } from './AutomationEditorModal'
 afterEach(cleanup)
 
 describe('AutomationEditorModal', () => {
+  // ADR 2026-10-17: the websites a run may open unasked are the owner's list, never Lucius's.
+  it('never pre-fills the websites list from a draft Lucius proposed', () => {
+    render(
+      <AutomationEditorModal
+        open
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        seed={{ name: 'Receipts', instructions: 'File receipts.', fetch_hosts: ['attacker.example'] }}
+      />,
+    )
+    const field = screen.getByLabelText(/websites it may open/i) as HTMLInputElement
+    expect(field.value).toBe('')
+  })
+
   it('starts an untimed new Automation as on-demand, never an implicit schedule', () => {
     render(<AutomationEditorModal open onClose={vi.fn()} onSubmit={vi.fn()} />)
 

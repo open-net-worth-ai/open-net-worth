@@ -109,12 +109,27 @@ redirects are re-checked at every hop. Set `ONW_ALLOW_PRIVATE_ENDPOINTS=0` to re
 home-network addresses too; on a hosted (gateway) instance they're always refused. Addresses that
 come from a model or a web page (search results, page fetches) may only ever be public sites.
 
+## Deleting something for good
+
+**Delete** on a transaction keeps a record of it, so Lucius's undo still works and the same bank
+email isn't booked twice. **Delete permanently** erases its contents everywhere the app keeps
+them, except backups made before (until they expire) and files you uploaded. Details:
+[Delete or erase a transaction](../features/transactions.md#delete-or-erase-a-transaction).
+Deleting a conversation or something Lucius remembers erases it straight away.
+
 ## Untrusted content
 
 Anything from outside the app — an email, a web page, a news article, a price feed, another MCP
 server's output — is treated as information for Lucius to read, never as instructions to follow.
-Text written to look like a command ("ignore your instructions and…") can't make Lucius do
-anything; what he may do is decided by you, in [Permissions](../lucius/permissions.md).
+No AI model ignores planted instructions every time, so the app doesn't rely on that alone. The
+ways out of the app are locked down too:
+
+- **Opening a web address** happens without asking only for a link you typed or a web search
+  returned, or, in an Automation, a website on that Automation's own list. Any other address shows
+  a card first, because a planted instruction could hide your data in it. See
+  [Permissions](../lucius/permissions.md).
+- **Reports and charts Lucius makes** can't load or open anything on the internet.
+- **Sending, posting and changing things** follow your [Permissions](../lucius/permissions.md).
 
 ## Hiding amounts on screen
 

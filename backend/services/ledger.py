@@ -5547,6 +5547,11 @@ def _cascade_delete_account_transactions(
     to outlive its account; here the account itself is being deleted, so its own opening row
     is not history worth protecting, it goes with it.
 
+    The caller (``delete_account``) then ERASES every row this removes
+    (``transaction_purge.erase_traces``), cutting the full-row audit events below to stubs: the
+    MEDIUM-5 reasoning that follows is superseded by ADR
+    ``2026-10-17-delete-permanently-erases-a-transactions-contents``, and kept for its history.
+
     Audit events are written ONE AT A TIME with the row's OWN fields as ``before`` (unlike
     ``bulk_delete_transactions``'s batched call, which always writes ``before=None`` because
     its rows stay soft-deleted and so stay reconstructable from the live table). This is the
@@ -5661,15 +5666,30 @@ def delete_account(account_id: str, *, force: bool = False) -> bool:
             other_accounts=others,
         )
 
+    from backend.services import transaction_purge
+
     balance_before = _capture_automation_balance_snapshot()
-    with locked_unit_of_work(
-        transactions_table,
-        accounts_table,
-        txn_audit_table,
-        rejected_identities_table,
-        commitments_table,
-    ) as conn:
+    with (
+        locked_unit_of_work(
+            transactions_table,
+            accounts_table,
+            commitments_table,
+            *transaction_purge.trace_tables(),
+        ) as conn,
+        transaction_purge.secure_delete(conn),
+    ):
+        # Every row the cascade hard-deletes, live or long since soft-deleted, plus the merge
+        # tombstones folded into them: deleting the account erases them the way "Delete
+        # permanently" erases one (ADR 2026-10-17-delete-permanently-erases-a-transactions-
+        # contents, superseding the full-row audit images 2026-09-06's MEDIUM-5 kept here).
+        # Read under the lock, so no row booked meanwhile escapes the erase.
+        erased = transactions.query_txns(account_id=account_id, include_deleted=True)
+        folded = transaction_purge.tombstones_of(conn, [r["id"] for r in erased])
         deleted_rows = _cascade_delete_account_transactions(account_id, refs, conn=conn)
+        for row in folded:
+            transactions.delete(row["id"], conn=conn)
+        erased += folded
+        transaction_purge.erase_traces(conn, [r["id"] for r in erased], erased)
         _unlink_account_from_commitments(account_id, conn=conn)
         try:
             deleted = bool(accounts.delete(account_id, conn=conn))
@@ -5686,4 +5706,5 @@ def delete_account(account_id: str, *, force: bool = False) -> bool:
     _publish_transaction_events_after_commit(
         False, "delete", deleted_rows, balance_before=balance_before
     )
+    transaction_purge.after_commit([r["id"] for r in erased])
     return deleted
