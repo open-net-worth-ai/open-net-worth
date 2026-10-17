@@ -4,14 +4,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 const authFetch = vi.hoisted(() => vi.fn())
 vi.mock('../../../api/client', () => ({ authFetch }))
-vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => false }))
+const mobile = vi.hoisted(() => ({ value: false }))
+vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => mobile.value }))
 
+import { thisMonth } from '../../../hooks/useBudget'
 import { fMonth } from '../../../utils/format'
 import { MoneyFlowModal } from './moneyFlowModal'
 
 afterEach(() => {
   cleanup()
   authFetch.mockReset()
+  mobile.value = false
 })
 
 // The real GET /api/cashflow/flow shape (services/cash_flow_graph.py), an overspent month.
@@ -100,6 +103,33 @@ describe('MoneyFlowModal', () => {
     await waitFor(() =>
       expect(authFetch.mock.calls.some(([u]) => String(u).includes('month=2026-07'))).toBe(true),
     )
+  })
+
+  it('labels the current month as month to date, and only that month', async () => {
+    serve({ ...OVERSPENT, nodes: [], links: [], flow_total: 0 })
+    render(<MoneyFlowModal initialMonth={thisMonth()} onClose={vi.fn()} />)
+
+    expect(screen.getByText(`${fMonth(thisMonth())} to date`)).toBeTruthy()
+    expect((screen.getByLabelText('Next month') as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByLabelText('Previous month'))
+    expect(screen.queryByText(/ to date$/)).toBeNull()
+  })
+})
+
+describe('MoneyFlowModal on a phone', () => {
+  it('keeps the breakdown table shut until asked, so the chart has the sheet', async () => {
+    mobile.value = true
+    serve(OVERSPENT)
+    render(<MoneyFlowModal initialMonth="2026-08" onClose={vi.fn()} />)
+
+    const toggle = await screen.findByRole('button', { name: /Breakdown/ })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(document.querySelector('.mf-table')).toBeNull()
+    expect(document.querySelector('.mf-chart--fill')).not.toBeNull()
+
+    fireEvent.click(toggle)
+    expect(document.querySelector('.mf-table')).not.toBeNull()
+    expect(document.querySelector('.mf-chart--fill')).toBeNull()
   })
 })
 

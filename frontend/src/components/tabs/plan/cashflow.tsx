@@ -21,7 +21,7 @@ import { useRegisterScreenFacts, useRegisterScreenPrompts } from '../../../luciu
 import { PlanningModal } from './PlanningModal'
 import { FilterSelect } from './budgetParts'
 import { useIsMobile } from '../../../hooks/useIsMobile'
-import { prevMonth, thisMonth } from '../../../hooks/useBudget'
+import { thisMonth } from '../../../hooks/useBudget'
 import { MoneyFlowModal } from './moneyFlowModal'
 import { cardCaveat } from '../../../utils/cardCaveat'
 import type { RegisterFilter } from './budget'
@@ -340,10 +340,10 @@ function LedgerRow({
   expanded: boolean
   onToggle: () => void
   isMobile?: boolean
-  /** Actual months only — a projected month has no transactions to trace. */
+  /** Actual months and the current one (month to date) — a future month has no transactions. */
   onOpenFlow?: (ym: string) => void
 }) {
-  const flowBtn = onOpenFlow && row.isHistory && (
+  const flowBtn = onOpenFlow && (row.isHistory || row.isCurrent) && (
     <button
       type="button"
       className="cfx-flow-btn"
@@ -1020,9 +1020,9 @@ export function CashFlowTab(props: CashFlowTabProps) {
               <Button
                 variant="secondary"
                 size="dense"
-                onClick={() => setFlowMonth(prevMonth(thisMonth()))}
+                onClick={() => setFlowMonth(thisMonth())}
                 aria-label="Money flow"
-                title="Money flow — where last month's income went"
+                title="Money flow — where this month's income has gone so far"
               >
                 <FlowIcon />
                 {!isMobile && 'Money flow'}

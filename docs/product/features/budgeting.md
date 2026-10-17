@@ -201,7 +201,10 @@ built from your regular income and bills.
   your real situation.
 - **Export CSV** downloads the projection.
 - **Money flow** opens a diagram of one month: income flowing to spending groups and savings,
-  with a **Flow** / **Table** switch and a month stepper. It starts on the last full month.
+  with a **Flow** / **Table** switch (on a phone, tap **Breakdown** under the diagram for the
+  table) and a month stepper. It starts on the current month, which
+  shows what has happened so far ("to date"); step back for a full month. Each actual month's
+  row, and the current month's, has its own money-flow button.
   Categories under 2% are folded into "Other", and an overspent month adds a "From savings"
   source.
 

@@ -15,6 +15,12 @@ export interface FlowLayoutOptions {
   nodePadding: number
   /** Minimum vertical distance between two labels in one column. */
   labelGap: number
+  /** Labels sit between the columns instead of in gutters, so the flow can span the full
+   *  width: the income side (up to the total) labels to the right of its bars, the spending
+   *  side to the left. A gap both sides label into is split between them. */
+  labelsInside?: boolean
+  /** The total draws no label (the compact graph), so its gap belongs to the next column. */
+  totalUnlabelled?: boolean
 }
 
 export interface LaidNode extends CashFlowNode {
@@ -112,8 +118,21 @@ export function layoutMoneyFlow(
   })
   const labelY = spreadLabels(g.nodes, o.labelGap, o.labelGap / 2, o.height - o.labelGap / 2)
   const colX = new Map<number, number>()
-  for (const n of g.nodes) colX.set(n.column, Math.min(colX.get(n.column) ?? Infinity, n.x0 ?? 0))
+  const colX1 = new Map<number, number>()
+  for (const n of g.nodes) {
+    colX.set(n.column, Math.min(colX.get(n.column) ?? Infinity, n.x0 ?? 0))
+    colX1.set(n.column, Math.max(colX1.get(n.column) ?? -Infinity, n.x1 ?? 0))
+  }
+  const split = Math.max(0, ...g.nodes.filter((n) => n.kind === 'total').map((n) => n.column))
+  const toRight = (c: number) => (o.labelsInside ? c <= split : c !== 0)
   const path = sankeyLinkHorizontal<N, L>()
+  const insideLabelRoom = (c: number, left: boolean, x0: number, x1: number) => {
+    const across = left ? c - 1 : c + 1
+    const room = left ? x0 - (colX1.get(across) ?? 0) : (colX.get(across) ?? o.width) - x1
+    const shared =
+      colX.has(across) && toRight(across) === left && !(o.totalUnlabelled && across === split)
+    return (shared ? room / 2 : room) - 14
+  }
 
   const nodes: LaidNode[] = g.nodes.map((n) => {
     const x0 = n.x0 ?? 0
@@ -121,9 +140,12 @@ export function layoutMoneyFlow(
     const y0 = n.y0 ?? 0
     const y1 = n.y1 ?? 0
     const ly = labelY.get(n) ?? (y0 + y1) / 2
-    const left = n.column === 0
-    const nextX = colX.get(n.column + 1)
-    const labelMax = left ? x0 - 10 : (nextX ?? o.width) - x1 - 14
+    const left = !toRight(n.column)
+    const labelMax = o.labelsInside
+      ? insideLabelRoom(n.column, left, x0, x1)
+      : left
+        ? x0 - 10
+        : (colX.get(n.column + 1) ?? o.width) - x1 - 14
     return {
       ...(n as CashFlowNode),
       x0,

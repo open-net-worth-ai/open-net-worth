@@ -18613,6 +18613,12 @@ body.hide-amounts .money * {
   position: relative;
   width: 100%;
 }
+/* Sized by its flex parent, never by the SVG: a box that grew with its content could only ever
+   grow. A smaller-than-minimum box lets the SVG overflow into the scrolling body. */
+.mf-chart--fill {
+  flex: 1 1 0;
+  min-height: 0;
+}
 .mf-svg {
   display: block;
   overflow: visible;
@@ -18639,6 +18645,9 @@ body.hide-amounts .money * {
   stroke-opacity: 0.55;
 }
 .mf-svg--dim .mf-node {
+  opacity: 0.35;
+}
+.mf-svg--dim .mf-leader:not(.is-hot) {
   opacity: 0.35;
 }
 .mf-svg--dim .mf-node.is-hot {

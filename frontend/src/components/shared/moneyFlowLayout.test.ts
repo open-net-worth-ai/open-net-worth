@@ -77,6 +77,38 @@ describe('layoutMoneyFlow', () => {
     expect(housing.labelX).toBeGreaterThan(housing.x1)
   })
 
+  it('labels between the columns and spans the full width when labelsInside', () => {
+    const { nodes } = layoutMoneyFlow(GRAPH, {
+      ...OPTS,
+      labelLeft: 0,
+      labelRight: 0,
+      labelsInside: true,
+    })
+    const at = (id: string) => nodes.find((n) => n.id === id)!
+    expect(at('inc:a').x0).toBe(0)
+    expect(at('sg:h').x1).toBe(OPTS.width)
+    // The income side labels to the right of its bars, the spending side to the left.
+    for (const id of ['inc:a', 'total']) {
+      expect(at(id).anchor).toBe('start')
+      expect(at(id).labelX).toBeGreaterThan(at(id).x1)
+    }
+    expect(at('sg:h').anchor).toBe('end')
+    expect(at('sg:h').labelX).toBeLessThan(at('sg:h').x0)
+    // The total and the groups label into the same gap, so each gets half of it.
+    const gap = at('sg:h').x0 - at('total').x1
+    expect(at('total').labelMax + at('sg:h').labelMax).toBeLessThanOrEqual(gap)
+    expect(at('inc:a').labelMax).toBeGreaterThan(gap / 2)
+  })
+
+  it('gives the whole gap to the groups when the total draws no label', () => {
+    const opts = { ...OPTS, labelLeft: 0, labelRight: 0, labelsInside: true }
+    const shared = layoutMoneyFlow(GRAPH, opts).nodes.find((n) => n.id === 'sg:h')!
+    const alone = layoutMoneyFlow(GRAPH, { ...opts, totalUnlabelled: true }).nodes.find(
+      (n) => n.id === 'sg:h',
+    )!
+    expect(alone.labelMax).toBeGreaterThan(shared.labelMax * 1.5)
+  })
+
   it('returns nothing for an empty month', () => {
     expect(layoutMoneyFlow({ columns: 4, nodes: [], links: [] }, OPTS)).toEqual({
       nodes: [],

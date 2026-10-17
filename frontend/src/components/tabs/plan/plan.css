@@ -9587,6 +9587,18 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
 .mf-body {
   flex: 1 1 auto;
 }
+.mf-body--fill {
+  display: flex;
+  flex-direction: column;
+}
+.mf-body--fill > .mf-kpis,
+.mf-body--fill > .mf-breakdown,
+.mf-body--fill > .mf-drill {
+  flex: none;
+}
+.mf-breakdown {
+  margin-top: 12px;
+}
 .mf-body--stale {
   opacity: 0.5;
   transition: opacity 0.15s;

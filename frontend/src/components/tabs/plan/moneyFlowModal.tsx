@@ -1,9 +1,10 @@
 // plan/moneyFlowModal.tsx — "Money flow": where one month's income went, as a Sankey (or a
-// table). Opened from Cash Flow's hero button or an actual month's row. A phone gets the
+// table). Opened from Cash Flow's hero button, an actual month's row or the current month's
+// (month to date). A phone gets the
 // server's compact 3-column graph in the same PlanningModal (a bottom sheet there).
 
 import { useState } from 'react'
-import { ErrorState, SegmentedControl, Skeleton } from '../../ui'
+import { CollapsibleSection, ErrorState, SegmentedControl, Skeleton } from '../../ui'
 import { useCashFlowGraph } from '../../../hooks/serverState'
 import { nextMonth, prevMonth, thisMonth } from '../../../hooks/useBudget'
 import { useIsMobile } from '../../../hooks/useIsMobile'
@@ -118,11 +119,17 @@ export function MoneyFlowModal({
   const chart = useLastDefined(chartQuery.data)
   const stale = !!g && g.month !== month
   const atLatest = month >= thisMonth()
+  const toDate = month === thisMonth()
   // Phone drill-in: the compact chart stops at spending groups, so tapping one redraws it as
   // that group → its categories. Keyed to the month, so stepping months returns to the overview.
   const [drill, setDrill] = useState<{ month: string; id: string } | null>(null)
   const drilled = compact && g && drill?.month === month ? drillGroup(g, drill.id) : null
   const drilledGroup = drilled?.nodes[0]
+  // A phone parks the table behind a toggle, so the chart can have the sheet.
+  const [tableOpen, setTableOpen] = useState(false)
+  // The chart takes every pixel the KPIs leave: desktop's Flow view, or a phone's with its
+  // table shut.
+  const fillChart = compact ? !tableOpen : view === 'flow'
 
   const openCategory = onOpenRegister
     ? (n: CashFlowNode) => {
@@ -147,7 +154,10 @@ export function MoneyFlowModal({
             <button aria-label="Previous month" onClick={() => setMonth(prevMonth(month))}>
               <Chevron dir="left" size={14} />
             </button>
-            <span aria-live="polite">{fMonth(month)}</span>
+            <span aria-live="polite">
+              {fMonth(month)}
+              {toDate && ' to date'}
+            </span>
             <button
               aria-label="Next month"
               disabled={atLatest}
@@ -173,7 +183,11 @@ export function MoneyFlowModal({
         </div>
       </div>
       <div
-        className={'pl-modal-body mf-body' + (stale ? ' mf-body--stale' : '')}
+        className={
+          'pl-modal-body mf-body' +
+          (fillChart ? ' mf-body--fill' : '') +
+          (stale ? ' mf-body--stale' : '')
+        }
         ref={bodyRef}
         aria-busy={stale || undefined}
       >
@@ -206,6 +220,7 @@ export function MoneyFlowModal({
                   label={`${drilledGroup.label} in ${fMonth(month)}, by category`}
                   shareOf={drilledGroup.label}
                   onOpenCategory={openCategory}
+                  fill={fillChart}
                 />
               </>
             ) : (
@@ -217,10 +232,22 @@ export function MoneyFlowModal({
                   shareOf={chart.shortfall > 0 ? 'spending' : 'income'}
                   onOpenCategory={openCategory}
                   onDrill={compact ? (n) => setDrill({ month, id: n.id }) : undefined}
+                  fill={fillChart}
                 />
               )
             )}
-            {(view === 'table' || compact) && <FlowTable g={g} />}
+            {compact ? (
+              <CollapsibleSection
+                title="Breakdown"
+                className="mf-breakdown"
+                open={tableOpen}
+                onOpenChange={setTableOpen}
+              >
+                <FlowTable g={g} />
+              </CollapsibleSection>
+            ) : (
+              view === 'table' && <FlowTable g={g} />
+            )}
           </>
         )}
       </div>
