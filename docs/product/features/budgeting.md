@@ -205,8 +205,10 @@ built from your regular income and bills.
   table) and a month stepper. It starts on the current month, which
   shows what has happened so far ("to date"); step back for a full month. Each actual month's
   row, and the current month's, has its own money-flow button.
-  Categories under 2% are folded into "Other", and an overspent month adds a "From savings"
-  source.
+  Within a group, several categories under 2% are folded into one "Other" row; a single small
+  category, or a group where every category is small, is shown by name. Spending on categories
+  with no envelope sits under **Not in budget**, each category named. An overspent month adds a
+  "From savings" source.
 
 A bill counts as recurring once it has arrived on a steady rhythm a few times, even if the
 amount changes each month. One-off expenses you haven't entered won't be in the projection.

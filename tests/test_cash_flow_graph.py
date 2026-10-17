@@ -50,6 +50,7 @@ SAVED_MONTH = _summary(
         _row("cat_util", "Utilities", 300.0, "g_home", "Housing", 1),
         _row("cat_groc", "Groceries", 900.0, "g_living", "Everyday living", 2),
         _row("cat_gum", "Gum", 12.5, "g_living", "Everyday living", 2),
+        _row("cat_mints", "Mints", 7.5, "g_living", "Everyday living", 2),
         _row(None, "Uncategorized", 400.0, "__unsorted__", "Uncategorized", 9),
     ],
 )
@@ -103,11 +104,11 @@ def test_a_surplus_month_ends_in_a_saved_node():
     graph = cash_flow_graph.build_graph(SAVED_MONTH)
     by_id = {n["id"]: n for n in graph["nodes"]}
     assert graph["income_total"] == 10120.0
-    assert graph["spend_total"] == 4212.5
-    assert by_id["saved"]["amount"] == 5907.5
+    assert graph["spend_total"] == 4220.0
+    assert by_id["saved"]["amount"] == 5900.0
     assert by_id["saved"]["column"] == 2
     assert by_id["total"]["label"] == "Income"
-    assert graph["savings_rate_pct"] == 58.4
+    assert graph["savings_rate_pct"] == 58.3
     assert "shortfall" not in by_id
 
 
@@ -126,8 +127,8 @@ def test_an_overspent_month_is_covered_by_a_from_savings_node_not_hidden():
 def test_categories_under_two_percent_fold_into_their_groups_other():
     graph = cash_flow_graph.build_graph(SAVED_MONTH)
     labels = {n["label"]: n for n in graph["nodes"] if n["column"] == 3}
-    assert "Gum" not in labels
-    assert labels["Other everyday living"]["amount"] == 12.5
+    assert "Gum" not in labels and "Mints" not in labels
+    assert labels["Other everyday living"]["amount"] == 20.0
     # Interest is 1.4% of the flow: it folds on the income side too, into one "Other income".
     # Income is never folded by size (see test_small_income_sources_are_named_not_folded_into_other_income).
     assert "Interest" in {n["label"] for n in graph["nodes"]}
@@ -207,6 +208,7 @@ def test_folding_inside_a_group_called_other_does_not_say_other_other():
         [
             _row("cat_a", "Alpha", 9000.0, "g_other", "Others"),
             _row("cat_misc", "Misc", 50.0, "g_other", "Others"),
+            _row("cat_odds", "Odds", 40.0, "g_other", "Others"),
             _row("cat_b", "Beta", 3000.0, "g_work", "Work"),
         ],
     )
@@ -328,3 +330,58 @@ def test_a_group_with_real_categories_keeps_its_own_name():
     ]
     assert "Housing" in groups
     assert "Spending" in groups  # history-only rows of a real, ungrouped category
+
+
+def _spend_labels(summary):
+    return {
+        n["label"]: n for n in cash_flow_graph.build_graph(summary)["nodes"] if n["column"] == 3
+    }
+
+
+def test_a_single_small_category_is_named_never_folded_into_other_alone():
+    """An "Other" holding one category only hides its name (owner: "why so many Other?")."""
+    summary = _summary(
+        [_inc("cat_salary", "Salary", 10000.0)],
+        [
+            _row("cat_rent", "Rent", 3000.0, "g_home", "Housing"),
+            _row("cat_wifi", "Wifi", 40.0, "g_home", "Housing"),
+        ],
+    )
+    labels = _spend_labels(summary)
+    assert labels["Wifi"]["amount"] == 40.0
+    assert "Other housing" not in labels
+
+
+def test_a_group_whose_every_category_is_small_names_them_instead_of_one_other():
+    summary = _summary(
+        [_inc("cat_salary", "Salary", 10000.0)],
+        [
+            _row("cat_rent", "Rent", 5000.0, "g_home", "Housing"),
+            _row("cat_book", "Books", 60.0, "g_fun", "Wants"),
+            _row("cat_film", "Films", 50.0, "g_fun", "Wants"),
+            _row("cat_game", "Games", 40.0, "g_fun", "Wants"),
+        ],
+    )
+    labels = _spend_labels(summary)
+    assert {"Books", "Films", "Games"} <= labels.keys()
+    assert "Other wants" not in labels
+
+
+def test_spend_outside_the_budget_is_named_category_by_category():
+    """Planning's derived Unbudgeted group: categories with no envelope. Each is named however
+    small, and the group reads "Not in budget", never as a kind of spending."""
+    summary = _summary(
+        [_inc("cat_salary", "Salary", 10000.0)],
+        [
+            _row("cat_rent", "Rent", 5000.0, "g_home", "Housing"),
+            _row("cat_taxi", "Taxi", 120.0, "__unbudgeted__", "Unbudgeted"),
+            _row("cat_gift", "Gifts", 76.0, "__unbudgeted__", "Unbudgeted"),
+            _row("cat_stamp", "Stamps", 3.0, "__unbudgeted__", "Unbudgeted"),
+        ],
+    )
+    graph = cash_flow_graph.build_graph(summary)
+    groups = {n["label"] for n in graph["nodes"] if n["kind"] == "spend_group"}
+    assert "Not in budget" in groups and "Unbudgeted" not in groups
+    labels = _spend_labels(summary)
+    assert {"Taxi", "Gifts", "Stamps"} <= labels.keys()
+    assert not any(label.startswith("Other") for label in labels)

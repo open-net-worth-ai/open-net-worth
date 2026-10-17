@@ -23,6 +23,9 @@ from backend.services.reports_rollup import month_summary
 
 FOLD_SHARE = 0.02
 MAX_CATEGORIES_PER_GROUP = 8
+# Planning's derived group of LABELED categories linked to no envelope (planning.budget_month).
+UNBUDGETED_GROUP_ID = "__unbudgeted__"
+NOT_IN_BUDGET = "Not in budget"
 COMPACT_MAX_INCOME = 3
 COMPACT_MAX_GROUPS = 5
 _EPSILON = 0.005
@@ -45,9 +48,15 @@ def default_month(today: date | None = None) -> str:
 
 
 def _fold(rows: list[dict], keep_max: int, floor: float) -> tuple[list[dict], float]:
-    """Largest-first rows that clear `floor` (max `keep_max`); the rest summed separately."""
+    """Largest-first rows that clear `floor` (max `keep_max`); the rest summed separately.
+
+    An "Other" must stand for SEVERAL rows beside named ones: a group whose every row is small
+    names its largest instead (a lone "Other needs" was the whole group, anonymised), and a
+    single leftover row is named, never folded alone (owner: "why so many Other here?")."""
     ranked = sorted(rows, key=lambda r: r["amount"], reverse=True)
-    kept = [r for r in ranked if r["amount"] >= floor][:keep_max]
+    kept = [r for r in ranked if r["amount"] >= floor][:keep_max] or ranked[:keep_max]
+    if len(ranked) - len(kept) == 1:
+        kept = ranked
     kept_ids = {id(r) for r in kept}
     rest = _round2(sum(r["amount"] for r in ranked if id(r) not in kept_ids))
     return kept, rest
@@ -79,7 +88,12 @@ def _by_group(rows: list[dict], fallback: str) -> list[tuple[str, str, int, list
         # card, where the compact view stops at groups.
         (
             gid,
-            UNCATEGORIZED_SPENDING if all(not r.get("key") for r in g["rows"]) else g["name"],
+            UNCATEGORIZED_SPENDING
+            if all(not r.get("key") for r in g["rows"])
+            # "Unbudgeted" read as a kind of spending; these are categories with no envelope.
+            else NOT_IN_BUDGET
+            if gid == UNBUDGETED_GROUP_ID
+            else g["name"],
             g["index"],
             g["rows"],
         )
@@ -139,7 +153,9 @@ def _spend(g: _Graph, rows: list[dict], floor: float, compact: bool) -> None:
         g.link("total", group_node, group_total)
         if compact:
             continue
-        kept, rest = _fold(grows, MAX_CATEGORIES_PER_GROUP, floor)
+        # Spend outside the budget is the spend worth noticing: each category is named.
+        group_floor = 0.0 if gid == UNBUDGETED_GROUP_ID else floor
+        kept, rest = _fold(grows, MAX_CATEGORIES_PER_GROUP, group_floor)
         for r in kept:
             node = g.node(
                 f"sp:{r['key'] or 'unsorted'}",
