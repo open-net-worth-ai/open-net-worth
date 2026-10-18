@@ -88,6 +88,16 @@ export async function deleteTransaction(id: string): Promise<void> {
   announceLedgerWrite()
 }
 
+/** Delete PERMANENTLY — no undo. The ordinary delete above stays the soft delete. */
+export async function purgeTransaction(id: string): Promise<void> {
+  const res = await authFetch('/api/transactions/purge', {
+    method: 'POST',
+    body: JSON.stringify({ ids: [id] }),
+  })
+  if (!res.ok) throw await failed(res, 'Delete failed')
+  announceLedgerWrite()
+}
+
 export async function detachTransactionSourceRef(
   txn: Txn,
   source: string,

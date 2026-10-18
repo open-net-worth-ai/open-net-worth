@@ -62,7 +62,7 @@ current base; otherwise recompute via `txn_base_amount()`.
 
 | Domain | Choke |
 |---|---|
-| Transactions | `ledger_service.create_transaction` / `bulk_create_transactions` |
+| Transactions | `ledger_service.create_transaction` / `bulk_create_transactions` (erase: `transaction_purge.purge_transactions`) |
 | Positions / Lots | `positions_service.apply_position_change` / `lots_service.apply_lot_change` |
 | Planning / Equity | `planning.apply_budget_change` / `equity_service.apply_equity_change` |
 | Automations · Income · Receipts | `apply_automation_change` · `apply_income_change` · `receipts_service.apply_receipt_change` |
@@ -115,6 +115,12 @@ One line each — full reasoning and the scar behind each is in
   `docs/INVARIANTS.md` and ADR `2026-09-06-force-delete-account-hard-removes-its-cascaded-transactions`.
   Outside that one exception, the Starting Balance transaction refuses delete/uncleared/edit/merge
   from either side.
+- **Delete permanently** (`transaction_purge.purge_transactions`, `POST /api/transactions/purge`)
+  is the one ERASE: hard delete + tombstones, audit cut to stubs, re-import guard keeps only the
+  ref, `write_log` images nulled so no restore resurrects it. Refused while a lot/vest/income/
+  owned-asset/commitment fact names the row. An account force-delete erases its cascade the same
+  way (`erase_traces`). A plain delete stays soft (ADR
+  `2026-10-17-delete-permanently-erases-a-transactions-contents`).
 - Dedup identity tests the EMITTER, not the namespace — `email` has hundreds of senders, so two msgids are two payments only from ONE sender. Unresolved fails CLOSED.
 - A DELETED identity is remembered (`rejected_identities`, movement-scoped, written at the delete choke) and
   EVERY create choke refuses it as `previously_deleted` regardless of `force` — only `resurrect` / a `create`
@@ -263,6 +269,10 @@ One line each — full reasoning and the scar behind each is in
   67× — ADR `2026-10-05-codex-turns-stay-open-across-tool-rounds`).
 - NEVER add a caller-chosen `fields` param to a money-bearing read (defeats the rate lock).
   `run_sql_query` is the one deliberately-scoped exception.
+- `fetch_page` (and every `<provider>_fetch_page`) runs unasked only for a URL the user typed
+  or a web search returned (`ai/tools/_fetch_gate`); anything else is a card, or a refusal
+  where no card can show. An Automation widens it only by its owner-set `fetch_hosts`, which
+  Lucius can never write (ADR `2026-10-17-a-fetch-runs-unasked-only-for-a-url-the-user-or-a-search-supplied`).
 - First run configures the machine; Lucius onboards the book (two separate predicates).
 - Lucius reads the DB directly, read-only, via `run_sql_query` — the boundary is the connection
   (an allowlist authorizer), never a SQL parser. Denied = `SECRET_TABLES ∪ {sessions}`.

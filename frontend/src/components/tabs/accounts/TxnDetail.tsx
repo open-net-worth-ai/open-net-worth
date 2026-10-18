@@ -95,6 +95,9 @@ export interface TxnDetailProps {
   initialMode?: 'view' | 'edit'
   onSave: (id: string, patch: Record<string, unknown>) => Promise<void> | void
   onDelete: (txn: Txn) => void
+  /** Erase it: the row, its history's contents, everything kept only about it — no undo.
+   *  Omitted (the import review's drafts), the action is not offered. */
+  onPurge?: (txn: Txn) => void
   onMarkReviewed: (txn: Txn) => void
   /** Flip cleared ⇄ uncleared from View, at once — like the register's cleared column. Omitted
    *  (the import review's drafts), the status shows but can't be flipped there. */
@@ -858,6 +861,7 @@ interface ViewBodyProps {
   statementLinks: StatementLink[]
   onEdit: () => void
   onDelete: (txn: Txn) => void
+  onPurge?: (txn: Txn) => void
   onMarkReviewed: (txn: Txn) => void
   onToggleCleared?: (txn: Txn, cleared: boolean) => void
   /** The row itself has not arrived yet — see TxnDetail's `loading`. */
@@ -882,6 +886,7 @@ function ViewBody({
   statementLinks,
   onEdit,
   onDelete,
+  onPurge,
   onMarkReviewed,
   onToggleCleared,
   pending = false,
@@ -1644,6 +1649,11 @@ function ViewBody({
         >
           Delete
         </button>
+        {onPurge && !isStartingBalance && (
+          <button className="acct-detail-del" onClick={() => onPurge(txn)}>
+            Delete permanently
+          </button>
+        )}
       </div>
       {viewStatementId && (
         <StatementViewer stmt={{ id: viewStatementId }} onClose={() => setViewStatementId(null)} />
@@ -1734,6 +1744,7 @@ export default function TxnDetail({
   initialMode,
   onSave,
   onDelete,
+  onPurge,
   onMarkReviewed,
   onToggleCleared,
   onManagePayees,
@@ -2089,6 +2100,7 @@ export default function TxnDetail({
                   statementLinks={statementLinks}
                   onEdit={() => setMode('edit')}
                   onDelete={onDelete}
+                  onPurge={onPurge}
                   onMarkReviewed={onMarkReviewed}
                   onToggleCleared={onToggleCleared}
                   actionError={actionError}

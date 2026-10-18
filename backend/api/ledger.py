@@ -18,7 +18,7 @@ from typing import Annotated, List, Optional
 
 logger = logging.getLogger(__name__)
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, model_validator
 
 from backend.core import audit_context
@@ -33,7 +33,7 @@ from backend.core.user_time import user_today
 from backend.models.transaction import TxnKind
 from backend.services import audit as audit_svc
 from backend.services import categories as cat_svc
-from backend.services import connector_snapshots, email_snapshots, payee_registry
+from backend.services import connector_snapshots, email_snapshots, payee_registry, transaction_purge
 from backend.services import institutions as institution_svc
 from backend.services import ledger as svc
 from backend.services.budgets import EXPENSE_CATEGORIES  # noqa: F401  (re-export for importers)
@@ -1236,6 +1236,25 @@ def delete_transaction(txn_id: str):
         raise HTTPException(404, "Transaction not found")
     logger.info("delete_transaction: soft-deleted txn_id=%s", txn_id)
     return {"ok": True}
+
+
+class PurgeTransactionsBody(BaseModel):
+    ids: list[str] = Field(..., min_length=1, max_length=500)
+
+
+@router.post("/api/transactions/purge")
+def purge_transactions(body: PurgeTransactionsBody, request: Request):
+    """Delete PERMANENTLY: the rows, their edit history's contents, checkpoint images and
+    everything stored only about them (``services.transaction_purge``). No undo. An ordinary
+    ``DELETE`` stays the soft delete. ``X-Requested-With`` is required on top of the
+    app-wide same-origin rule: an irreversible erase must not be reachable by a plain form."""
+    if request.headers.get("x-requested-with", "").lower() != "xmlhttprequest":
+        raise HTTPException(403, "missing X-Requested-With header")
+    try:
+        result = transaction_purge.purge_transactions(body.ids)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+    return {"ok": True, **result}
 
 
 @router.get("/api/transactions/{txn_id}/audit")

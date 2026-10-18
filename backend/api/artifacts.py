@@ -29,7 +29,7 @@ from fastapi.responses import Response
 
 from backend.core.errors import NotFoundError
 from backend.services import artifacts as artifacts_service
-from backend.services.artifact_frame import RESPONSE_CSP, prepare_frame_document
+from backend.services.artifact_frame import RESPONSE_CSP, frame_shell
 
 router = APIRouter()
 
@@ -84,7 +84,8 @@ def get_artifact_frame(artifact_id: str) -> Response:
     what keeps it safe is the response ``CSP: sandbox`` (null origin even when opened
     directly: no cookies, no same-origin requests) plus ``default-src 'none'`` (no egress) and
     ``frame-ancestors 'self'``. It exists because a ``srcdoc`` frame would inherit the app
-    page's CSP and could not run the artifact's inline script."""
+    page's CSP and could not run the artifact's inline script. The artifact itself sits one
+    level down, inside ``frame_shell``, so it cannot navigate its frame to a URL carrying data."""
     try:
         meta = artifacts_service.get_meta(artifact_id)
         artifact_type = meta.get("artifact_type")
@@ -94,7 +95,7 @@ def get_artifact_frame(artifact_id: str) -> Response:
     except NotFoundError as exc:
         raise HTTPException(404, exc.message) from exc
     return Response(
-        content=prepare_frame_document(text, artifact_type),
+        content=frame_shell(text, artifact_type),
         media_type="text/html; charset=utf-8",
         headers={
             "X-Content-Type-Options": "nosniff",

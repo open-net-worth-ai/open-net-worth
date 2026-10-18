@@ -12,6 +12,7 @@ from typing import List, Literal, Optional
 from pydantic import Field
 
 from backend.ai.search import get_search_provider
+from backend.ai.tools._fetch_gate import note_search_results
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of, schema_of_no_required
 from backend.core.untrusted import sanitize_untrusted
@@ -260,7 +261,9 @@ async def web_search(input_data: dict):
         logger.error("web_search failed: %s", exc)
         raise
     logger.info("web_search returned %d results", len(results))
-    return json.dumps(sanitize_search_results(results), ensure_ascii=False), None
+    clean = sanitize_search_results(results)
+    note_search_results(clean)  # their URLs may now be fetched without a card
+    return json.dumps(clean, ensure_ascii=False), None
 
 
 # A site scope that restricts a web search to X/Twitter. Run through whatever provider is
@@ -305,7 +308,9 @@ async def x_search(input_data: dict):
         logger.error("x_search failed: %s", exc)
         raise
     logger.info("x_search returned %d results", len(results))
-    return json.dumps(sanitize_search_results(results), ensure_ascii=False), None
+    clean = sanitize_search_results(results)
+    note_search_results(clean)  # their URLs may now be fetched without a card
+    return json.dumps(clean, ensure_ascii=False), None
 
 
 class FetchPageInput(ToolInput):
@@ -338,6 +343,12 @@ async def fetch_page(input_data: dict):
         return json.dumps(
             {"url": url, "content": f"[fetch blocked: {exc}]"}, ensure_ascii=False
         ), None
+    # The URL itself is outbound data: one the user or a search did not supply asks first.
+    from backend.ai.tools import _fetch_gate
+
+    gated = _fetch_gate.check(url)
+    if gated is not None:
+        return gated
     content = await get_search_provider().fetch_page(url)
     # Sanitized (not fenced — see sanitize_search_results for the full reasoning; this is
     # a JSON tool result, so JSON escaping already delimits the untrusted payload) and

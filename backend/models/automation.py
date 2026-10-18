@@ -51,6 +51,8 @@ class Automation(ONBaseModel):
     # other construction path (AI-tool creation, a stored row missing the field).
     permission_mode: str = "manual"
     always_allowed: list[AutomationPermission] = Field(default_factory=list)
+    # Websites fetch_page may open without asking in this Automation's runs (owner-set only).
+    fetch_hosts: list[str] = Field(default_factory=list)
     model: str = ""
     effort: str = "medium"
     max_runs: Optional[int] = None

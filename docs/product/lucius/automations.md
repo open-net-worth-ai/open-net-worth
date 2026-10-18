@@ -175,13 +175,23 @@ allowed** list. Tapping **Always allow** on a card during a run adds the tool to
 see or remove those, open the Automation: the **Always allowed** section lists each tool with a
 **Revoke** button.
 
+**Websites it may open without asking.** In a run, Lucius opens a web address without asking only
+when a web search returned it, or when its website is on this Automation's list. Set the list in
+the editor under **Websites it may open without asking** (for example `store.steampowered.com`
+for an Automation that reads receipt emails); subdomains are included. Any other address waits for
+your approval, because a link planted in an email could carry your data out. Tapping **Always
+allow** on that card adds the card's website to the list, not every website. An Automation that
+runs with nobody able to approve refuses such an address instead. Lucius can't edit this list;
+only you can.
+
 Details on levels and modes: [Permissions](permissions.md).
 
 ## Managing your Automations
 
 Each Automation's **⋮** menu has **Run now**, **Pause** / **Resume**, **Edit**, **Duplicate** and
 **Delete**. Click an Automation to open it: **Setup** shows its instructions, trigger, model,
-**Permission Mode**, **Cost & usage** and **Always allowed** list; **History** lists every run.
+**Permission Mode**, **Websites it may open**, **Cost & usage** and **Always allowed** list;
+**History** lists every run.
 
 Each run is a conversation. You'll also find them in the Lucius history list under **Automation
 runs**; **Mark all read** there clears the unread ones in one click.

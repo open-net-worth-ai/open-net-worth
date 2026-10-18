@@ -42,7 +42,8 @@ or just by telling Lucius: *"I paid $42.80 for dinner at Nando's on my Visa yest
    household), click **Split into multiple categories** under Category and add a line per
    category. The lines must add up exactly — the editor shows **Balanced** when they do, or the
    amount **Remaining**.
-4. To remove it, click **Delete**.
+4. To remove it, click **Delete**. To erase it for good, click **Delete permanently** — see
+   [Delete or erase](#delete-or-erase-a-transaction).
 
 The drawer also shows the transaction's **Activity** (every change made to it, and by whom) and
 its **Receipts** — see [Attach a receipt](importing.md#attach-a-receipt).
@@ -123,6 +124,31 @@ can add, edit or re-flag a transaction, but can never clear the flag.
 - **Split lines must add up exactly** — a cent off is rejected, not rounded.
 - **Deleting an account that has transactions deletes them too**, after you confirm. To keep the
   history, archive the account instead. See [Accounts](accounts.md).
+
+## Delete or erase a transaction
+
+The drawer has two buttons, and they do different things:
+
+- **Delete** removes the transaction from your balances, budget and reports. The app still keeps
+  a record of it: if Lucius deleted it, [undoing his change](../lucius/permissions.md#undoing-a-change)
+  brings it back, and the same bank email or statement line isn't booked again by accident
+  (Lucius says *"you already deleted this"*). Use it for ordinary clean-up.
+- **Delete permanently** erases it. The transaction, the contents of its **Activity** history,
+  every copy kept for undo, the copy of the email or bank record it came from, and receipts
+  attached only to it are deleted. Its payee goes too when nothing else uses it and you never
+  set it up by hand. Only one line remains in its
+  history: *"Deleted permanently. Its details were erased."* There's no undo. The re-import guard
+  still works, so the same email or statement line isn't booked again; it keeps only that
+  item's reference, not the amount, date or description.
+
+**Delete permanently** doesn't change files you uploaded (a statement still shows the line),
+conversations with Lucius that mention it (delete those separately), or backups made before you
+erased it — they keep it until they expire, after 30 days by default (see
+[Backup and restore](../operations/backup-and-restore.md)). It's refused for a transaction that a
+trade, vest, dividend, asset or commitment payment still uses; undo that first, or use **Delete**.
+If your bank connection fetches that transaction again, the app stores the bank's copy again, but
+doesn't book it.
+A Starting Balance can't be deleted either way.
 
 ## Related pages
 

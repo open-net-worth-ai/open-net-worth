@@ -265,6 +265,7 @@ def request_for_run(
         payload=dict(payload if payload is not None else run.get("context") or {}),
         permission_mode=automation.get("permission_mode") or "manual",
         always_allowed=always_allowed,
+        fetch_hosts=list(automation.get("fetch_hosts") or []),
         configured_trigger=configured_trigger(automation),
         last_completed_run=last_completed_run(automation["id"], run),
     )
@@ -422,18 +423,66 @@ def _merge_steps(existing: list[dict], current: list[dict]) -> list[dict]:
     return result
 
 
-def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
+# ``fetch_page`` and every ``<provider>_fetch_page`` (``ai/tools/_fetch_gate``) — named here because ``services`` cannot import ``ai``.
+_FETCH_TOOL = "fetch_page"
+
+
+def _is_fetch_tool(name: str) -> bool:
+    return name == _FETCH_TOOL or name.endswith("_" + _FETCH_TOOL)
+
+
+def _allow_pending_fetch_host(
+    automation: dict, session_id: str, tool: str, tool_use_id: Optional[str]
+) -> bool:
+    """*Always* on a fetch card means "always THIS website", never "every website": the card
+    is still awaiting when the grant lands (the client saves the grant before it confirms), so
+    its URL names the host to add to ``fetch_hosts``. Only the TAPPED card's host — a second
+    open fetch card in the same run is not consented to by this tap. False when that card
+    cannot be identified; the caller then falls back to the whole-tool grant the owner tapped."""
+    from backend.core.urls import normalize_host
+    from backend.db.pending_plan_store import PendingPlanStore
+
+    cards = [
+        entry
+        for entry in PendingPlanStore().list_awaiting()
+        if entry.get("session_id") == session_id
+        and entry.get("tool") == tool
+        and (tool_use_id is None or entry.get("tool_use_id") == tool_use_id)
+    ]
+    if len(cards) != 1:
+        return False
+    host = normalize_host(str((cards[0].get("args") or {}).get("url") or ""))
+    if not host:
+        return False
+    current = list(automation.get("fetch_hosts") or [])
+    if host not in current:
+        from .service import apply_automation_change
+
+        apply_automation_change(
+            {"op": "update", "id": automation["id"], "changes": {"fetch_hosts": current + [host]}}
+        )
+    return True
+
+
+def grant_automation_tool(
+    session_id: str, tool: str, scope: str, *, tool_use_id: Optional[str] = None
+) -> bool:
     """Persist a grant locally when ``session_id`` belongs to an Automation run.
 
     Two scopes (2026-08-02): ``once`` stores nothing — approving the card IS the grant — and
     ``always`` appends to this Automation's standing ``always_allowed`` list, so the tool stops
     raising a card for it. Keeping the grant on the Automation rather than in the global
     table is what stops an Automation inheriting a permission granted in an unrelated chat.
+    A fetch tool (``fetch_page``, ``<provider>_fetch_page``) is the one exception to the whole-tool grant: see
+    ``_allow_pending_fetch_host``.
     """
     owned = automation_run_for_session(session_id)
     if owned is None:
         return False
     automation, _run = owned
+    if scope == "always" and _is_fetch_tool(tool):
+        if _allow_pending_fetch_host(automation, session_id, tool, tool_use_id):
+            return True
     if scope == "always":
         always_allowed = [
             dict(item) for item in automation.get("always_allowed") or [] if isinstance(item, dict)

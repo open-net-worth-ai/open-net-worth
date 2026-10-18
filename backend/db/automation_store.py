@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import datetime, timezone, tzinfo
 
 from backend.core.ids import new_id
+from backend.core.urls import normalize_host
 from backend.db.payload_store import BookPayloadTableStore
 from backend.db.tables import automations
 
@@ -74,6 +75,13 @@ def _normalize_always_allowed(value: object) -> list[dict]:
     return normalized
 
 
+def _normalize_fetch_hosts(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    hosts = (normalize_host(item) for item in value if isinstance(item, str))
+    return list(dict.fromkeys(host for host in hosts if host))
+
+
 def _make_automation(data: dict) -> dict:
     """Normalize a persisted Automation row and discard unrecognised fields."""
     now = _now()
@@ -91,6 +99,7 @@ def _make_automation(data: dict) -> dict:
         "execution": _normalize_execution(data.get("execution")),
         "permission_mode": str(data.get("permission_mode") or "manual"),
         "always_allowed": _normalize_always_allowed(data.get("always_allowed")),
+        "fetch_hosts": _normalize_fetch_hosts(data.get("fetch_hosts")),
         "model": str(data.get("model") or "").strip(),
         "effort": str(data.get("effort") or "medium").strip() or "medium",
         "max_runs": data.get("max_runs"),

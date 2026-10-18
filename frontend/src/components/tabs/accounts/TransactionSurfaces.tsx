@@ -23,6 +23,7 @@ import { reviewDraftToUpdate, validateReviewDraft, type ReviewDraft } from './tr
 import {
   createCategory,
   deleteTransaction,
+  purgeTransaction,
   detachTransactionSourceRef,
   loadTransactionActivity,
   loadTransactionSourceEntries,
@@ -175,6 +176,7 @@ export function TransactionSurfacesProvider({
     error?: string
   } | null>(null)
   const [confirm, setConfirm] = useState<{ txn: Txn } | null>(null)
+  const [purgeConfirm, setPurgeConfirm] = useState<{ txn: Txn } | null>(null)
   const [catModal, setCatModal] = useState<{
     prefill: string
     kind: CatKind
@@ -326,6 +328,7 @@ export function TransactionSurfacesProvider({
           onClose={() => setDetail(null)}
           onSave={saveDetail}
           onDelete={(txn) => setConfirm({ txn })}
+          onPurge={(txn) => setPurgeConfirm({ txn })}
           onMarkReviewed={(txn) => {
             clearDetailFailure()
             void updateTransaction(txn.id, { needs_review: false })
@@ -381,6 +384,27 @@ export function TransactionSurfacesProvider({
               .catch((e) => noteDetailFailure(txn.id, e, 'Delete failed'))
           }}
           onClose={() => setConfirm(null)}
+        />
+      )}
+      {purgeConfirm && (
+        <ConfirmModal
+          open
+          title="Delete permanently?"
+          body={`“${payeeNames[purgeConfirm.txn.payeeId ?? ''] || purgeConfirm.txn.description || 'This transaction'}” and its edit history will be erased, with receipts attached only to it. This can't be undone, not even by Lucius's undo. Backups made before now keep it until they expire.`}
+          confirmLabel="Delete permanently"
+          danger
+          onConfirm={() => {
+            const txn = purgeConfirm.txn
+            setPurgeConfirm(null)
+            clearDetailFailure()
+            void purgeTransaction(txn.id)
+              .then(() => {
+                setDetail((d) => (d && d.id === txn.id ? null : d))
+                noteRowChange({ ...txn, deleted: true })
+              })
+              .catch((e) => noteDetailFailure(txn.id, e, 'Delete failed'))
+          }}
+          onClose={() => setPurgeConfirm(null)}
         />
       )}
       {catModal && (

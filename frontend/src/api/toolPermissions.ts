@@ -99,6 +99,9 @@ export interface SetToolPermissionRequest {
    *  Automation-owned conversation so `always_allow` is scoped to that Automation instead
    *  of becoming a global decision. */
   session_id?: string
+  /** The card the decision was tapped on. In an Automation run, *Always* on a `fetch_page`
+   *  card allows that card's website only (`fetch_hosts`), never the whole tool. */
+  tool_use_id?: string
 }
 
 /**
@@ -113,6 +116,7 @@ export async function setToolPermission(req: SetToolPermissionRequest): Promise<
       level: req.level,
       ...(req.connector_id ? { connector_id: req.connector_id } : {}),
       ...(req.session_id ? { session_id: req.session_id } : {}),
+      ...(req.tool_use_id ? { tool_use_id: req.tool_use_id } : {}),
     }),
   })
   if (!res.ok) throw new Error(`permission update failed (${res.status})`)
@@ -158,6 +162,8 @@ export interface GrantRequest {
   scope: GrantScope
   /** See `SetToolPermissionRequest.session_id`. */
   session_id?: string
+  /** See `SetToolPermissionRequest.tool_use_id`. */
+  tool_use_id?: string
 }
 
 /**
@@ -175,6 +181,7 @@ export async function grantTool(req: GrantRequest): Promise<void> {
     tool: req.tool,
     level: 'always_allow',
     ...(req.session_id ? { session_id: req.session_id } : {}),
+    ...(req.tool_use_id ? { tool_use_id: req.tool_use_id } : {}),
   })
 }
 

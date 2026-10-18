@@ -135,6 +135,9 @@ class SetLevelRequest(BaseModel):
     # instead of the global table, so an Automation cannot inherit a permission granted in
     # an unrelated chat.
     session_id: Optional[str] = None
+    # The card this decision was tapped on. Only read for a ``fetch_page`` card in an
+    # Automation run, where *Always* allows that card's website rather than the whole tool.
+    tool_use_id: Optional[str] = None
 
 
 class ToolLevelRequest(BaseModel):
@@ -295,7 +298,7 @@ def set_any_tool_permission(tool: str, req: SetLevelRequest) -> DecisionsRespons
     if req.session_id and req.level == "always_allow":
         from backend.services.automations.runs import grant_automation_tool
 
-        if grant_automation_tool(req.session_id, tool, "always"):
+        if grant_automation_tool(req.session_id, tool, "always", tool_use_id=req.tool_use_id):
             return _decisions_response()
 
     try:

@@ -43,6 +43,9 @@ export interface Automation {
   execution: Record<string, unknown>
   permission_mode?: 'manual' | 'auto' | 'skip'
   always_allowed?: AutomationPermission[]
+  /** Websites `fetch_page` may open without asking in this Automation's runs (owner-set only;
+   *  subdomains included). Anything else Lucius tries to open waits for your approval. */
+  fetch_hosts?: string[]
   model: string
   effort: string
   max_runs?: number | null
@@ -184,6 +187,9 @@ export interface AutomationDraft {
   execution?: Record<string, unknown>
   permission_mode?: 'manual' | 'auto' | 'skip'
   always_allowed?: AutomationPermission[]
+  /** Websites `fetch_page` may open without asking in this Automation's runs (owner-set only;
+   *  subdomains included). Anything else Lucius tries to open waits for your approval. */
+  fetch_hosts?: string[]
   model?: string
   effort?: string
   status?: 'active' | 'paused'

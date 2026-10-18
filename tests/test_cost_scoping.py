@@ -83,7 +83,7 @@ def test_default_offer_includes_find_tools():
 def test_default_offer_includes_core_money_tools():
     """Core money-chat tools must be present in the default slim offer."""
     offered = {t["name"] for t in assistant._active_tools()}
-    for tool_name in ("add_transactions", "get_portfolio", "list_accounts", "get_net_worth"):
+    for tool_name in ("add_transactions", "get_portfolio", "list_accounts"):
         assert tool_name in offered, f"core tool '{tool_name}' missing from default offer"
 
 

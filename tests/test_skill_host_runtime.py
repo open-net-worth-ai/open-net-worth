@@ -985,10 +985,10 @@ async def test_skill_tool_metadata_does_not_shape_offer_or_dispatch(monkeypatch)
             "name": "demo",
             "body": "Use the added tool, never the denied tool.",
             "allowed_tools": ["get_returns"],
-            "disallowed_tools": ["get_net_worth"],
+            "disallowed_tools": ["list_categories"],
         }
     )
-    provider = _ScriptedProvider([_tool_round("get_net_worth", {}), _end("handled normally")])
+    provider = _ScriptedProvider([_tool_round("list_categories", {}), _end("handled normally")])
     executed: list[str] = []
 
     async def _spy_execute(name, input_data, tool_use_id=None):
@@ -1011,8 +1011,8 @@ async def test_skill_tool_metadata_does_not_shape_offer_or_dispatch(monkeypatch)
     first_offer = {tool["name"] for tool in provider.calls[0]["tools"]}
     assert "get_returns" not in first_offer
     assert "list_accounts" in first_offer
-    assert "get_net_worth" in first_offer
-    assert executed == ["get_net_worth"]
+    assert "list_categories" in first_offer
+    assert executed == ["list_categories"]
     assert "disallowed" not in json.dumps(provider.calls[1]["messages"]).lower()
 
 
@@ -1310,7 +1310,7 @@ async def test_mid_turn_direct_skill_injects_new_instructions_without_changing_t
         {
             "name": "old-scope",
             "body": "The old skill is active.",
-            "disallowed_tools": ["get_net_worth"],
+            "disallowed_tools": ["get_live_prices"],
         }
     )
     store.create(
@@ -1374,7 +1374,7 @@ async def test_mid_turn_direct_skill_injects_new_instructions_without_changing_t
     second_offer = {tool["name"] for tool in provider.calls[1]["tools"]}
     assert "/new-scope quarterly" in second_messages
     assert "The new skill handles quarterly." in second_messages
-    assert "get_net_worth" in second_offer
+    assert "get_live_prices" in second_offer
     assert "list_accounts" in second_offer
 
 

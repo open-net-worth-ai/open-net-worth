@@ -123,3 +123,92 @@ def test_a_legacy_session_grant_on_disk_never_widens_a_run(run_pair):
 
 def test_the_runtime_store_no_longer_offers_a_session_grant_writer():
     assert not hasattr(AutomationRuntimeStore, "grant_session_tool")
+
+
+# ── fetch_hosts: the websites a run may open without asking ─────────────────
+
+
+def _stage_fetch_card(session_id: str, tool_use_id: str, url: str) -> None:
+    from backend.db.pending_plan_store import PendingPlanStore
+
+    PendingPlanStore().stage_pending(tool_use_id, "fetch_page", {"url": url}, session_id=session_id)
+
+
+def _fetch_hosts(automation_id: str) -> list[str]:
+    return AutomationStore().find_by_id(automation_id).get("fetch_hosts") or []
+
+
+def test_fetch_hosts_are_stored_normalised_and_bad_entries_refused(run_pair):
+    from backend.core.errors import ValidationError
+
+    automation, _run = run_pair
+    apply_automation_change(
+        {
+            "op": "update",
+            "id": automation["id"],
+            "changes": {"fetch_hosts": ["https://Store.SteamPowered.com/x", "*.example.com"]},
+        }
+    )
+    assert _fetch_hosts(automation["id"]) == ["store.steampowered.com", "example.com"]
+    with pytest.raises(ValidationError, match="not a website name"):
+        apply_automation_change(
+            {"op": "update", "id": automation["id"], "changes": {"fetch_hosts": ["localhost"]}}
+        )
+
+
+def test_always_on_a_fetch_card_allows_that_website_not_every_website(run_pair):
+    automation, run = run_pair
+    _stage_fetch_card(run["session_id"], "tu_a", "https://store.steampowered.com/r?sparams=x")
+    _stage_fetch_card(run["session_id"], "tu_b", "https://attacker.example/c?d=1")
+
+    assert grant_automation_tool(run["session_id"], "fetch_page", "always", tool_use_id="tu_a")
+    assert _fetch_hosts(automation["id"]) == ["store.steampowered.com"]
+    assert "fetch_page" not in _granted_tools(automation["id"])
+
+
+def test_an_unidentifiable_fetch_card_falls_back_to_the_whole_tool_grant(run_pair):
+    """Two open fetch cards and no tool_use_id (an old client): one tap must not consent to
+    both websites, so it records exactly what the button has always meant."""
+    automation, run = run_pair
+    _stage_fetch_card(run["session_id"], "tu_a", "https://one.example/a")
+    _stage_fetch_card(run["session_id"], "tu_b", "https://two.example/b")
+
+    assert grant_automation_tool(run["session_id"], "fetch_page", "always")
+    assert _fetch_hosts(automation["id"]) == []
+    assert "fetch_page" in _granted_tools(automation["id"])
+
+
+def test_the_run_request_carries_the_fetch_hosts(run_pair):
+    automation, run = run_pair
+    apply_automation_change(
+        {"op": "update", "id": automation["id"], "changes": {"fetch_hosts": ["example.com"]}}
+    )
+    request = request_for_run(AutomationStore().find_by_id(automation["id"]), run)
+    assert request.fetch_hosts == ["example.com"]
+
+
+def test_lucius_cannot_write_fetch_hosts():
+    """The list widens what a run may send out unasked — an owner decision, never something a
+    prompt-injected create/update can narrate into existence."""
+    from backend.ai.tools.automations import _AI_UPDATABLE_FIELDS
+
+    assert "fetch_hosts" not in _AI_UPDATABLE_FIELDS
+
+
+def test_always_on_a_provider_fetch_card_also_allows_only_that_website(run_pair):
+    """``tavily_fetch_page`` and the other per-provider fetch tools pass the same gate, so their
+    Always means the same thing."""
+    from backend.db.pending_plan_store import PendingPlanStore
+
+    automation, run = run_pair
+    PendingPlanStore().stage_pending(
+        "tu_t",
+        "tavily_fetch_page",
+        {"url": "https://shop.example.com/r"},
+        session_id=run["session_id"],
+    )
+    assert grant_automation_tool(
+        run["session_id"], "tavily_fetch_page", "always", tool_use_id="tu_t"
+    )
+    assert _fetch_hosts(automation["id"]) == ["shop.example.com"]
+    assert "tavily_fetch_page" not in _granted_tools(automation["id"])

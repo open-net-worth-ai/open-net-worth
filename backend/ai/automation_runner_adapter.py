@@ -129,6 +129,7 @@ async def automation_runner(
             session_id=request.session_id,
             mode=request.permission_mode,
             always_allowed_tools=_canonical_always_allowed_tools(request.always_allowed),
+            fetch_hosts=frozenset(request.fetch_hosts),
         )
     )
     skill_scope_snapshot = _skill_scope.snapshot_scope()
@@ -573,6 +574,7 @@ def materialize_automation_session(run: dict, automation: Optional[dict] = None)
                 payload=dict(run.get("context") or {}),
                 permission_mode=str(automation.get("permission_mode") or "manual"),
                 always_allowed=list(automation.get("always_allowed") or []),
+                fetch_hosts=list(automation.get("fetch_hosts") or []),
             )
             history = [_automation_message(request)]
         else:
@@ -721,6 +723,7 @@ async def _stream_continuation(
                 session_id=request.session_id,
                 mode=request.permission_mode,
                 always_allowed_tools=_canonical_always_allowed_tools(request.always_allowed),
+                fetch_hosts=frozenset(request.fetch_hosts),
             )
         )
         audit_token = set_audit_scope(

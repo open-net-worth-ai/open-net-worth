@@ -7,6 +7,7 @@ from typing import Any, Callable, Optional
 
 from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.core.ids import new_id
+from backend.core.urls import normalize_host
 from backend.db.automation_run_store import AutomationRunStore
 from backend.db.automation_runtime_store import AutomationRuntimeStore
 from backend.db.automation_store import DELETING_STATUS, AutomationStore
@@ -26,6 +27,7 @@ _EDITABLE_FIELDS = frozenset(
         "trigger",
         "permission_mode",
         "always_allowed",
+        "fetch_hosts",
         "model",
         "effort",
         "max_runs",
@@ -74,6 +76,7 @@ def validate_automation(
     if permission_mode not in {"manual", "auto", "skip"}:
         raise ValidationError("automation permission_mode must be manual, auto, or skip")
     always_allowed = _validate_always_allowed(clean.get("always_allowed") or [])
+    fetch_hosts = _validate_fetch_hosts(clean.get("fetch_hosts") or [])
     status = clean.get("status") or "active"
     if status not in {"active", "paused", "completed"}:
         raise ValidationError("automation status must be active or paused")
@@ -98,11 +101,32 @@ def validate_automation(
         "execution": execution,
         "permission_mode": permission_mode,
         "always_allowed": always_allowed,
+        "fetch_hosts": fetch_hosts,
         "model": str(clean.get("model") or "").strip(),
         "effort": effort,
         "max_runs": max_runs,
         "provenance": dict(provenance),
     }
+
+
+_MAX_FETCH_HOSTS = 50
+
+
+def _validate_fetch_hosts(value: object) -> list[str]:
+    """The websites ``fetch_page`` may open unasked in this Automation's runs — the owner's
+    list, so a bad entry is refused by name rather than silently dropped or widened."""
+    if not isinstance(value, list):
+        raise ValidationError("automation fetch_hosts must be a list of website names")
+    hosts: list[str] = []
+    for item in value:
+        host = normalize_host(item) if isinstance(item, str) else ""
+        if not host:
+            raise ValidationError(f"not a website name: {item!r} (for example store.example.com)")
+        if host not in hosts:
+            hosts.append(host)
+    if len(hosts) > _MAX_FETCH_HOSTS:
+        raise ValidationError(f"an Automation can list at most {_MAX_FETCH_HOSTS} websites")
+    return hosts
 
 
 def _validate_always_allowed(value: object) -> list[dict]:

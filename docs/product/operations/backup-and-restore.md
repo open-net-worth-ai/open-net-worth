@@ -27,7 +27,9 @@ Daily backups are **on by default**. To check or change them:
    - **Back up daily** — leave it on. The backup runs once a day at about 3:30 in the morning
      (the clock of the computer running Open Net Worth).
    - **Keep for (days)** — how long to keep backups (default 30, anything from 1 to 365). Older
-     ones are deleted automatically the next time a backup runs.
+     ones are deleted automatically the next time a backup runs. A backup is a full copy, so it
+     still holds anything you erased with **Delete permanently** after it was made, until it
+     expires.
 3. Click **Back up now** to take one immediately. The line underneath shows **Last backup** and
    how many are kept, and the new backup appears in the **Restore from a backup** list.
 
