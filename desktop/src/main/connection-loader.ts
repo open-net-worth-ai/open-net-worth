@@ -2,7 +2,8 @@ import { dialog, type BrowserWindow } from 'electron';
 import type { BackendSupervisor } from './backend';
 import { verifyBookFolder, verifyRememberedBookRoot } from './book-folder';
 import { chooseBookFolder } from './book-picker';
-import { validateServer, type ConnectionTarget } from './connections';
+import { setTimeout as delay } from 'node:timers/promises';
+import { validateServer, waitForServer, type ConnectionTarget } from './connections';
 import type { Preferences } from './preferences';
 import type { DesktopWindow } from './window';
 
@@ -19,13 +20,32 @@ interface ConnectionContext {
   switch(target: ConnectionTarget): Promise<void>;
   // The page to show instead of a Private Cloud that can't be opened yet (null: go ahead and load it).
   hostedGate(origin: string, afterFailure: boolean): Promise<string | null>;
+  // Runs after every connection change already queued, so a late reconnect sees the window as it is.
+  serialize(action: () => Promise<void>): Promise<void>;
+  wait?: (ms: number, signal: AbortSignal) => Promise<unknown>;
   qaRoot?: string;
 }
 
+const RECONNECT_FIRST_MS = 2_000;
+const RECONNECT_MAX_MS = 15_000;
+
 export class ConnectionLoader {
+  // The wait for the current server, at startup or on "can't reach your server". Any newer attempt or
+  // connection change aborts it, so a server that answers late never reloads a window it no longer owns.
+  private waiting: AbortController | null = null;
+
   constructor(private readonly context: ConnectionContext) {}
 
+  private get wait() { return this.context.wait ?? ((ms: number, signal: AbortSignal) => delay(ms, undefined, { signal })); }
+
+  private takeOver(): AbortSignal {
+    this.waiting?.abort();
+    this.waiting = new AbortController();
+    return this.waiting.signal;
+  }
+
   async open(target: ConnectionTarget): Promise<void> {
+    this.waiting?.abort();
     const { backend, preferences } = this.context;
     const main = this.context.replaceWindow(target.serverUrl, Boolean(target.mode === 'server' && target.hosted));
     if (target.mode === 'server' && target.hosted) {
@@ -91,17 +111,35 @@ export class ConnectionLoader {
     return result.opened;
   }
 
-  async retry(): Promise<void> {
+  // `patienceMs` is how long to keep the opening splash up for a server that is still starting (login).
+  async retry(patienceMs = 0): Promise<void> {
     const main = this.context.window();
     if (!main.serverOrigin) return;
+    const signal = this.takeOver();
     this.context.setStarting(true);
     await main.showServerRecovery(true);
     if (main.hosted) {
       try { await this.openHosted(main, main.serverOrigin, null); } catch { await main.showServerRecovery().catch(() => {}); } finally { this.context.setStarting(false); }
       return;
     }
-    try { await validateServer(main.serverOrigin, new AbortController().signal); await main.loadServer(); }
-    catch { await main.showServerRecovery(); }
-    finally { this.context.setStarting(false); }
+    try {
+      try { await waitForServer(main.serverOrigin, signal, { patienceMs, sleep: this.wait }); }
+      catch { if (!signal.aborted) await this.showUnreachable(); return; }
+      if (signal.aborted) return;
+      try { await main.loadServer(); } catch { await main.showServerRecovery(); }
+    } finally { if (!signal.aborted) this.context.setStarting(false); }
+  }
+
+  // "Can't reach your server" keeps trying, and opens the server by itself once it answers.
+  async showUnreachable(): Promise<void> {
+    const main = this.context.window();
+    if (!main.serverOrigin || main.hosted) { await main.showServerRecovery(); return; }
+    const signal = this.waiting && !this.waiting.signal.aborted ? this.waiting.signal : this.takeOver();
+    await main.showServerRecovery();
+    const origin = main.serverOrigin;
+    void this.wait(RECONNECT_FIRST_MS, signal)
+      .then(() => waitForServer(origin, signal, { patienceMs: Infinity, firstDelayMs: RECONNECT_FIRST_MS, maxDelayMs: RECONNECT_MAX_MS, sleep: this.wait }))
+      .then(() => this.context.serialize(async () => { if (!signal.aborted && this.context.window() === main) await this.retry(); }))
+      .catch(() => {});
   }
 }

@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { setTimeout as delay } from 'node:timers/promises';
 import type { BookFolder } from './book-folder';
 
 export interface ServerAddress { origin: string; insecure: boolean }
@@ -50,6 +51,31 @@ export async function validateServer(origin: string, signal: AbortSignal, fetche
     if (typeof login.required !== 'boolean' || typeof login.authenticated !== 'boolean') throw new Error();
     if (signal.aborted) throw new Error();
   } catch { throw new Error('Could not reach a compatible Open Net Worth server. Check the URL, connection and server certificate, then try again.'); }
+}
+
+export interface ServerWait {
+  patienceMs: number;
+  firstDelayMs?: number;
+  maxDelayMs?: number;
+  fetcher?: typeof fetch;
+  sleep?: (ms: number, signal: AbortSignal) => Promise<unknown>;
+  now?: () => number;
+}
+
+// A server on this machine (`onw autostart`) boots beside the app at login and refuses connections
+// for its first seconds; one refused probe must not strand the window. Probes with backoff until the
+// server answers, the patience runs out (the last failure is thrown), or the signal aborts.
+export async function waitForServer(origin: string, signal: AbortSignal, wait: ServerWait): Promise<void> {
+  const { patienceMs, fetcher = fetch, sleep = (ms, abort) => delay(ms, undefined, { signal: abort }), now = Date.now } = wait;
+  const deadline = now() + patienceMs;
+  let pause = wait.firstDelayMs ?? 1000;
+  for (;;) {
+    try { return await validateServer(origin, signal, fetcher); }
+    catch (error) { if (signal.aborted || now() + pause > deadline) throw error; }
+    await sleep(pause, signal);
+    if (signal.aborted) throw new Error('Stopped waiting for the server.');
+    pause = Math.min(pause * 2, wait.maxDelayMs ?? 5000);
+  }
 }
 
 interface ConnectionLifecycle {

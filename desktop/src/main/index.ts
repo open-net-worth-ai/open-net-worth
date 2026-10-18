@@ -60,6 +60,8 @@ if (qaInactiveMode(app.isPackaged, process.env) && process.platform === 'darwin'
 if (qaMode && process.env.ONW_DESKTOP_ROOT) app.setPath('userData', resolve(process.env.ONW_DESKTOP_ROOT, 'desktop'));
 else if (PROFILE.settingsFolder) app.setPath('userData', join(app.getPath('appData'), PROFILE.settingsFolder));
 const QUIT_DEADLINE_MS = 40_000;
+// At login a server on this machine starts alongside the app; keep the opening splash up this long for it.
+const SERVER_STARTUP_PATIENCE_MS = 60_000;
 const pendingFiles: string[] = [];
 let main: DesktopWindow | null = null;
 let backend: BackendSupervisor | null = null;
@@ -243,7 +245,7 @@ async function boot(): Promise<void> {
     loadApp: (entry) => main!.loadApp(entry),
     showRecovery: async (loading) => { starting = loading; await main!.showRecovery(loading); },
   }, { drain: drainWorkers, start: startWorkers });
-  connectionLoader = new ConnectionLoader({ backend, preferences, window: () => main!, dialogParent: () => connectionDialog?.dialogParent ?? main!.window, replaceWindow: (origin, isHosted) => { main = createWindow(origin, isHosted); installMenu(); installTray(); return main; }, setStarting: value => { starting = value; }, startWorkers, suggestedRoot: () => suggestedRoot, missingRoot: () => missingBookRoot, switch: target => books!.exclusive(() => connections!.open(target)), hostedGate, qaRoot: explicitQaRoot });
+  connectionLoader = new ConnectionLoader({ backend, preferences, window: () => main!, dialogParent: () => connectionDialog?.dialogParent ?? main!.window, replaceWindow: (origin, isHosted) => { main = createWindow(origin, isHosted); installMenu(); installTray(); return main; }, setStarting: value => { starting = value; }, startWorkers, suggestedRoot: () => suggestedRoot, missingRoot: () => missingBookRoot, switch: target => books!.exclusive(() => connections!.open(target)), serialize: action => books!.exclusive(action), hostedGate, qaRoot: explicitQaRoot });
   connections = new ConnectionSwitcher(savedHosted ? { mode: 'server', serverUrl: savedHosted, hosted: { entryUrl: null } } : savedServer ? { mode: 'server', serverUrl: savedServer } : { mode: 'local', serverUrl: null, bookFolder: root, welcome: firstLaunch }, {
     retire: async () => { starting = true; replacingWindow = true; pendingFiles.length = 0; activity?.destroy(); main?.prepareQuit(); await drainWorkers(); await backend!.stop(); await main?.retire(); },
     open: target => connectionLoader!.open(target),
@@ -252,7 +254,7 @@ async function boot(): Promise<void> {
       if (target.mode === 'local' && !target.welcome) { connections!.current = { mode: 'local', serverUrl: null, bookFolder: target.bookFolder }; firstLaunch = false; missingBookRoot = null; initialSelection = null; startWorkers(); }
       starting = false;
     },
-    recover: async target => { starting = false; if (target.mode === 'server') await main!.showServerRecovery(); else await showLocalRecovery(); },
+    recover: async target => { starting = false; if (target.mode === 'server') await connectionLoader!.showUnreachable(); else await showLocalRecovery(); },
   });
   connectionDialog = new ConnectionDialog({ parent: () => main!.window, currentServer: () => main?.serverOrigin ?? null, currentFolder: () => (main?.serverOrigin ? null : backend?.bookRoot ?? null), currentHosted: () => Boolean(main?.hosted), localRunning: () => Boolean(backend?.origin), connectServer: origin => books!.exclusive(() => connections!.open({ mode: 'server', serverUrl: origin })), connectLocal: alternate => connectionLoader!.selectLocal(alternate), signInHosted: () => hosted!.signIn(), moveBook: () => hosted!.moveBook(), moveBack: () => moves!.moveBack(), currentEmail: () => hosted?.email ?? null });
   flow = new FlowDialog(() => main!.window);
@@ -270,7 +272,7 @@ async function boot(): Promise<void> {
   installMenu();
   installTray();
   powerMonitor.on('resume', () => { if (!starting) { main?.send({ type: 'resume' }, false); void folders?.poll().catch(() => {}); } });
-  if (savedServer || savedHosted) await connectionLoader.retry();
+  if (savedServer || savedHosted) await connectionLoader.retry(SERVER_STARTUP_PATIENCE_MS);
   else if (firstLaunch) await main.showWelcome(suggestedRoot);
   else if (!explicitQaRoot && await bookFolderMissing(backend.bookRoot)) await enterMissingBook();
   else { await startBackend(); await forwardFiles(); }
