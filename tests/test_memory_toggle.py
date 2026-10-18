@@ -299,10 +299,12 @@ def test_cursor_advances_after_extraction(isolated, monkeypatch, tmp_path):
     # on the session row (SessionStore.get_extraction_cursor/set_extraction_cursor), no
     # more per-session _cursor_file to isolate.
 
+    from backend.db.session_store import SessionStore
+
+    # The cursor rides an EXISTING session row; it never creates one.
+    SessionStore().upsert_meta("test-sess", {"title": "t"})
     history = _history(5)  # 10 messages
     asyncio.run(memory_mod.extract_and_merge(history, session_id="test-sess"))
-
-    from backend.db.session_store import SessionStore
 
     doc = SessionStore().get_extraction_cursor("test-sess")
     assert doc is not None, "cursor must be written after extraction"
@@ -329,6 +331,9 @@ def test_cursor_only_sends_new_turns(isolated, monkeypatch, tmp_path):
     # autouse Tier-2 table clear — no per-session _cursor_file to isolate any more.
 
     sid = "incremental-test"
+    from backend.db.session_store import SessionStore
+
+    SessionStore().upsert_meta(sid, {"title": "t"})
     # Build a first history long enough that early messages fall outside the overlap window.
     # EXTRACT_OVERLAP=4, so we need >4 messages before the new ones.
     old_messages = []
@@ -406,6 +411,7 @@ def test_cursor_reset_on_truncated_history(isolated, monkeypatch, tmp_path):
     sid = "truncate-test"
     # sessions is DB-backed now (Wave 5F, JSON->DB) — seed the extraction cursor directly
     # through the store's column, no more per-session _cursor_file to isolate.
+    SessionStore().upsert_meta(sid, {"title": "t"})
     SessionStore().set_extraction_cursor(sid, {"last_extracted_len": 1000})
 
     # Short history (much less than cursor says)
@@ -511,6 +517,7 @@ def test_extract_noop_when_no_new_messages(isolated, monkeypatch, tmp_path):
     # Simulate cursor already at len(history) — nothing new to extract. sessions is
     # DB-backed now (Wave 5F, JSON->DB) — seed the extraction cursor directly.
     sid = "no-new-test"
+    SessionStore().upsert_meta(sid, {"title": "t"})
     SessionStore().set_extraction_cursor(sid, {"last_extracted_len": len(history)})
 
     asyncio.run(memory_mod.extract_and_merge(history, session_id=sid))

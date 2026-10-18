@@ -189,6 +189,9 @@ class TestTrivialTurnSkip:
                 return '{"new": [], "updates": [], "remove": []}'
 
         monkeypatch.setattr(memory, "_provider", lambda: _Prov())
+        from backend.db.session_store import SessionStore
+
+        SessionStore().upsert_meta("s1", {"title": "t"})
         memory._save_cursor("s1", cursor)
         asyncio.run(memory.extract_and_merge(history, session_id="s1"))
         return calls

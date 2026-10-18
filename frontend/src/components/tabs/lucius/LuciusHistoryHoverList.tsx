@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { ChevronRight, ListChecks, MessageSquare } from '../../../ui/icons'
 import {
   ConversationRow,
+  ConversationIcon,
   groupByAge,
   selectVisibleRows,
   sortWithinSection,
@@ -69,7 +70,7 @@ export function LuciusHistoryHoverList({
       onCancelRename={() => setEditingId(null)}
       onDelete={onDelete}
       onStop={onStop}
-      icon={conv.source === 'automation' ? <ListChecks size={14} /> : <MessageSquare size={14} />}
+      icon={<ConversationIcon conv={conv} />}
       onMenuOpenChange={onMenuOpenChange}
     />
   )

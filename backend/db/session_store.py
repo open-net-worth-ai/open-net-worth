@@ -432,12 +432,19 @@ class SessionStore:
             row = self._row(conn, session_id)
         return row["extraction_cursor"] if row is not None else None
 
-    def set_extraction_cursor(self, session_id: str, data: dict) -> None:
-        """Persist the extraction cursor. Raises on failure, like ``set_fold``/
-        ``set_transcript`` — ``ai/memory.py``'s own ``_save_cursor`` is the best-effort
-        layer (mirrors its pre-migration file-write try/except exactly), not this one."""
+    def set_extraction_cursor(self, session_id: str, data: dict) -> bool:
+        """Persist the extraction cursor onto an EXISTING row; returns whether one was there.
+
+        Never inserts: extraction runs as a background task that can finish after the
+        session was deleted (a capture turn clears its throwaway session at once), and an
+        upsert here resurrected it as an empty "New conversation" in the history list.
+        Raises on failure, like ``set_fold``/``set_transcript`` — ``ai/memory.py``'s own
+        ``_save_cursor`` is the best-effort layer, not this one."""
         with self._use_conn(None) as conn:
+            if self._row(conn, session_id) is None:
+                return False
             self._upsert(conn, session_id, extraction_cursor=data)
+            return True
 
     # ── Session metadata (was index.json) ────────────────────────────────────────
 

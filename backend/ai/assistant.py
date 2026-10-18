@@ -892,6 +892,7 @@ def upsert_session_meta(
     screen_handles: Optional[list] = None,
     screen_commands: Optional[list] = None,
     channel: Optional[str] = None,
+    origin: Optional[str] = None,
     last_turn_status: Optional[str] = None,
     last_turn_error: Optional[str] = None,
     fail_loud: bool = False,
@@ -921,6 +922,10 @@ def upsert_session_meta(
     a TRANSPORT, and an Automation run can perfectly well notify to Telegram. Briefly
     (2026-08-21) connector conversations were stamped into ``source`` instead, which both
     conflated the axes and wrote a novel value into the field that security gate reads.
+
+    ``origin`` is a third axis: WHAT STARTED the conversation, read only by the list UI to
+    hide background ones (``"capture"`` — a Shortcut / Apple Pay booking turn) behind a
+    toggle. UNSET means a chat the person opened. Never a security input.
 
     ``fail_loud`` is reserved for ownership metadata that is itself part of a
     durable data invariant. Ordinary Chat listing metadata retains its historical
@@ -998,6 +1003,8 @@ def upsert_session_meta(
         patch["source"] = source
     if channel is not None:
         patch["channel"] = channel
+    if origin is not None:
+        patch["origin"] = origin
     if message_count is not None:
         patch["message_count"] = message_count
     if model is not None:
@@ -1399,7 +1406,16 @@ def clear_session(session_id: str) -> None:
     from backend.ai import turns as _turns_mod
 
     _turns_mod.cancel_session(session_id)
+    release_session(session_id)
+    # Wave 5E: transcript/fold/proactive/meta are one row now — a single atomic DELETE
+    # replaces the old four independent best-effort file deletes.
+    _delete_session_row(session_id)
 
+
+def release_session(session_id: str) -> None:
+    """Drop a session's in-process state (cached history, extract debounce, idle turn lock)
+    and KEEP its stored row — for a one-shot turn whose conversation stays readable, like a
+    capture. ``clear_session`` is this plus cancelling its turns and deleting the row."""
     SESSIONS.pop(session_id, None)
     _last_memory_extract_len.pop(session_id, None)
     # Drop this session's turn lock too (finding 3) — a scheduled/dispatched run mints a
@@ -1420,9 +1436,6 @@ def clear_session(session_id: str) -> None:
     _lock = _SESSION_LOCKS.get(session_id)
     if _lock is not None and not _lock.locked():
         _SESSION_LOCKS.pop(session_id, None)
-    # Wave 5E: transcript/fold/proactive/meta are one row now — a single atomic DELETE
-    # replaces the old four independent best-effort file deletes.
-    _delete_session_row(session_id)
 
 
 def clear_interactive_session(session_id: str) -> bool:

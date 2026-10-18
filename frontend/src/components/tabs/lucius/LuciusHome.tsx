@@ -5,6 +5,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { ChatPanel, conversationGroups, conversationWhen } from '../../chat/ChatPanel'
+import { useShowBackgroundConversations } from '../../../hooks/useShowBackgroundConversations'
 import { ConversationBrowser } from '../../chat/ConversationBrowser'
 import { LuciusHistorySidebar } from './LuciusHistorySidebar'
 import { LuciusHistoryHoverList } from './LuciusHistoryHoverList'
@@ -299,7 +300,8 @@ export function LuciusHome({
   })
 
   const [browsingConvs, setBrowsingConvs] = useState<'chat' | 'automation' | null>(null)
-  const groups = conversationGroups(conversations)
+  const [showBackground] = useShowBackgroundConversations()
+  const groups = conversationGroups(conversations, showBackground)
 
   // A `persist: false` conversation is never added to `conversations` (that's the whole
   // point — it stays out of the sidebar/server until it has real content), so "the active

@@ -39,6 +39,7 @@ _log = logging.getLogger(__name__)
 # Generous enough for a dictated paragraph, small enough that a stuck client
 # loop cannot turn one tap into an unbounded prompt.
 MAX_TEXT = 2000
+_TITLE_CHARS = 60
 
 _PROMPT = """Money movement was captured by {source} and may need to go into the ledger.
 
@@ -115,7 +116,7 @@ async def run_capture(
     not post-process — so this is checked rather than assumed, and a False here
     means a retry of this same capture would double-book.
     """
-    from backend.ai.assistant import clear_session
+    from backend.ai.assistant import mark_sessions_read, release_session, upsert_session_meta
     from backend.ai.assistant import run as assistant_run
     from backend.ai.prompts import build_system_prompt
     from backend.ai.tools import _skill_scope
@@ -146,6 +147,10 @@ async def run_capture(
     prompt = _PROMPT.format(source=source, text=text, today=_today())
     if ref:
         prompt += _REF_CLAUSE.format(source=source, ref=ref)
+
+    # The conversation is KEPT — it is the record of what came in and what Lucius booked —
+    # but stays out of the chat list unless the person asks to see background conversations.
+    upsert_session_meta(session_id, title=capture_title(text), origin="capture")
 
     try:
         async for event in assistant_run(
@@ -183,7 +188,9 @@ async def run_capture(
         _skill_scope.restore_scope(snapshot)
         clear_cost_surface()
         reset_unattended(_unattended_token)
-        clear_session(session_id)
+        release_session(session_id)
+        # Nobody was waiting on this reply, so it never shows as a new one.
+        mark_sessions_read([session_id])
 
     # The model is ASKED to stamp external_refs on its own create call (``_REF_CLAUSE``), but
     # a tool argument it can simply omit is not idempotency — observed live: a real capture's
@@ -242,6 +249,14 @@ async def run_capture(
         "idempotent": already_captured(source, ref) if ref else False,
         "error": error,
     }
+
+
+def capture_title(text: str) -> str:
+    """``"Capture · Citi: $12.40 at Blue Bottle"`` — the captured text on one line, clipped."""
+    line = " ".join((text or "").split())
+    if len(line) > _TITLE_CHARS:
+        line = line[: _TITLE_CHARS - 1].rstrip() + "…"
+    return f"Capture · {line}" if line else "Capture"
 
 
 def _created_ids(result: object) -> list[str]:

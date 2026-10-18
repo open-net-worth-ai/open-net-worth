@@ -16,7 +16,9 @@ import {
   SquarePen,
 } from '../../../ui/icons'
 import {
+  BackgroundConversationsToggle,
   ConversationRow,
+  ConversationIcon,
   groupByAge,
   selectVisibleRows,
   shortWhen,
@@ -95,7 +97,7 @@ export function LuciusHistorySidebar({
       onCancelRename={() => setEditingId(null)}
       onDelete={onDelete}
       onStop={onStop}
-      icon={conv.source === 'automation' ? <ListChecks size={14} /> : <MessageSquare size={14} />}
+      icon={<ConversationIcon conv={conv} />}
     />
   )
 
@@ -150,6 +152,7 @@ export function LuciusHistorySidebar({
             <MessageSquare size={14} />
             <span>Chats</span>
             {markAllRead(unreadChats)}
+            <BackgroundConversationsToggle />
             <button
               type="button"
               className="conv-menu-viewall"

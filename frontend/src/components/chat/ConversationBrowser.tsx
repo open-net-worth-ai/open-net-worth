@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ListChecks, MessageSquare, Search, X } from '../../ui/icons'
+import { Search, X } from '../../ui/icons'
 import { ConversationRenameInput, ConversationRowMenu } from './ConversationRowActions'
+import { BackgroundConversationsToggle, ConversationIcon } from './ConversationMenu'
+import { useShowBackgroundConversations } from '../../hooks/useShowBackgroundConversations'
 import { ConversationStatusBadge, conversationStatusLabel } from './ConversationStatusBadge'
-import type { ConversationMeta } from '../../hooks/useConversations'
+import { isBackgroundConversation, type ConversationMeta } from '../../hooks/useConversations'
 import type { ConvRowStatus } from '../../types/chat'
 
 /**
@@ -54,17 +56,19 @@ export function ConversationBrowser({
   const [kind, setKind] = useState<'all' | 'chat' | 'automation'>(initialKind)
   const [editingId, setEditingId] = useState<string | null>(null)
 
+  const [showBackground] = useShowBackgroundConversations()
   const rows = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase()
     return conversations.filter((conv) => {
       const isRun = conv.source === 'automation'
+      if (!showBackground && isBackgroundConversation(conv)) return false
       // Same rule as `conversationGroups`: "chat" means IN-APP — neither runner-owned
       // (`source`) nor arriving over a transport (`channel`).
       if (kind === 'chat' && (conv.source || conv.channel)) return false
       if (kind === 'automation' && !isRun) return false
       return !needle || conv.title.toLocaleLowerCase().includes(needle)
     })
-  }, [conversations, query, kind])
+  }, [conversations, query, kind, showBackground])
 
   return (
     <div className="conv-browser" role="dialog" aria-label="All conversations">
@@ -76,16 +80,19 @@ export function ConversationBrowser({
       </div>
 
       <div className="conv-browser-tools">
-        <label className="conv-browser-search">
-          <Search size={13} aria-hidden="true" />
-          <span className="ui-visually-hidden">Search conversations</span>
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search…"
-            autoFocus
-          />
-        </label>
+        <div className="conv-browser-searchrow">
+          <label className="conv-browser-search">
+            <Search size={13} aria-hidden="true" />
+            <span className="ui-visually-hidden">Search conversations</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search…"
+              autoFocus
+            />
+          </label>
+          <BackgroundConversationsToggle />
+        </div>
         <div className="conv-seg conv-seg--browser" role="tablist" aria-label="Filter">
           {(
             [
@@ -138,11 +145,7 @@ export function ConversationBrowser({
                     onClick={() => onSelect(conv.id)}
                   >
                     <span className="conv-browser-ic" aria-hidden="true">
-                      {conv.source === 'automation' ? (
-                        <ListChecks size={14} />
-                      ) : (
-                        <MessageSquare size={14} />
-                      )}
+                      <ConversationIcon conv={conv} />
                     </span>
                     <ConversationStatusBadge status={status} />
                     <span className="conv-browser-title">{conv.title}</span>

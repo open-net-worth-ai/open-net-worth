@@ -24,6 +24,9 @@ export interface ConversationMeta {
   readOnly?: boolean
   /** Transport the human is on ('telegram', …). UNSET = in-app. */
   channel?: string
+  /** What started it: 'capture' (a Shortcut / Apple Pay booking turn) is a background
+   *  conversation, hidden from the lists unless the person turns them on. UNSET = a chat. */
+  origin?: string
   /** Who wrote the title: 'ai' (generated from the opening message), 'user' (a rename) or
    *  'auto'/absent (derived by this client). The server's copy wins for 'ai'/'user'. */
   titleSource?: string
@@ -46,6 +49,12 @@ export interface ConversationMeta {
    *  unread marker is `lastTurnAt` after this; it lives on the server so reading a reply on
    *  one device clears it on every other. */
   lastReadAt?: string
+}
+
+/** A conversation nobody typed into — a capture's booking turn. Kept as a record, listed only
+ *  when the person turns background conversations on, and never opened by default. */
+export function isBackgroundConversation(conv: Pick<ConversationMeta, 'origin'>): boolean {
+  return !!conv.origin && conv.origin !== 'chat'
 }
 
 const ACTIVE_KEY = 'lucius_active_conversation'
@@ -281,6 +290,7 @@ async function apiFetchSessions(): Promise<ConversationMeta[] | null> {
         source?: string
         read_only?: boolean
         channel?: string
+        origin?: string
         title_source?: string
         last_turn_status?: string
         run_status?: string
@@ -302,6 +312,7 @@ async function apiFetchSessions(): Promise<ConversationMeta[] | null> {
           source: s.source,
           ...(s.read_only === true && { readOnly: true }),
           channel: s.channel,
+          ...(s.origin && { origin: s.origin }),
           titleSource: s.title_source,
           lastTurnStatus: lastTurnStatusOf(s.last_turn_status),
           ...(s.run_status && { runStatus: s.run_status }),
@@ -427,7 +438,8 @@ export function useConversations() {
       }
       // A read-only row (a public demo's shared Automation run) takes no message, so it is
       // never the default; with only those, open a fresh chat and keep them listed.
-      const first = sessions.find((s) => !s.readOnly)
+      // Nor is a background capture: it is a record, not where you left off.
+      const first = sessions.find((s) => !s.readOnly && !isBackgroundConversation(s))
       if (!first) {
         mintFirstConversation(sessions)
         return
@@ -748,7 +760,7 @@ export function useConversations() {
       setConversations((prev) => {
         let updated = prev.filter((c) => c.id !== id)
         if (id === activeIdRef.current) {
-          let next = updated[0]
+          let next = updated.find((c) => !isBackgroundConversation(c))
           if (!next) {
             next = makeConversation()
             apiPatchSession(next.id, next.title, { auto: true }).catch(() => {})
