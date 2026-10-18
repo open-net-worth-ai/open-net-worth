@@ -4410,6 +4410,15 @@ select.acct-addin {
 .acct-reg.overflow:not(.cards) .acct-reg-head > .acct-h:last-child {
   justify-content: flex-end;
 }
+/* The full cell of its track, over the row's 6px vertical padding: a cell only as big as its figure
+   drew a separate smudge of shadow per row, each at its own x, instead of one edge down the column. */
+.acct-reg.overflow:not(.cards) .acct-tr .acct-td-amt {
+  justify-self: stretch;
+  align-self: stretch;
+  justify-content: center;
+  margin-top: -6px;
+  margin-bottom: -6px;
+}
 @media (hover: hover) {
   .acct-reg.overflow:not(.cards) .acct-tr:hover .acct-td-amt {
     background: linear-gradient(var(--hover), var(--hover)), var(--surface);
@@ -4419,16 +4428,19 @@ select.acct-addin {
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
 /* With the Source column set aside (a narrow register) a row that needs review keeps a dot beside
-   its amount in place of the Review pill; the amount is the one cell always in view. The cell
-   shrinks to its figure (justify-self: end), so the dot needs its own gutter or it covers the sign. */
+   its amount in place of the Review pill; the amount is the one cell always in view. The dot hangs
+   off the figure itself, never the cell's edge: a cell shrunk to its figure put the dot on the sign,
+   and a pinned cell spanning its track put it a column-width away from a short amount. */
 .acct-reg.no-source:not(.overflow) .acct-tr.needs-review .acct-td-amt {
-  position: relative;
   padding-left: 12px;
 }
-.acct-reg.no-source .acct-tr.needs-review .acct-td-amt::before {
+.acct-reg.no-source .acct-tr.needs-review .acct-amt-main {
+  position: relative;
+}
+.acct-reg.no-source .acct-tr.needs-review .acct-amt-main::before {
   content: '';
   position: absolute;
-  left: 2px;
+  right: calc(100% + 5px);
   top: 50%;
   width: 6px;
   height: 6px;
