@@ -65,14 +65,19 @@ export class ConnectionDialog {
     const isolated = session.fromPartition('onw-connection-choice');
     isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     isolated.setPermissionCheckHandler(() => false);
-    this.window = new BrowserWindow({ width: 760, height: 600, minWidth: 560, show: false, parent: this.actions.parent(), modal: true, title: 'Connection — Open Net Worth', backgroundColor: nativeTheme.shouldUseDarkColors ? '#0e1014' : '#ffffff', webPreferences: { preload: join(__dirname, '..', 'client-preload.js'), session: isolated, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, devTools: false } });
+    const parent = this.actions.parent();
+    this.window = new BrowserWindow({ width: 760, height: 600, minWidth: 560, show: false, parent, modal: true, title: 'Connection — Open Net Worth', backgroundColor: nativeTheme.shouldUseDarkColors ? '#0e1014' : '#ffffff', webPreferences: { preload: join(__dirname, '..', 'client-preload.js'), session: isolated, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, devTools: false } });
     const owned = this.window;
     owned.once('ready-to-show', () => setTimeout(() => { if (!owned.isDestroyed() && !owned.isVisible()) owned.show(); }, 300));
     owned.webContents.on('will-navigate', event => event.preventDefault());
     owned.webContents.on('will-attach-webview', event => event.preventDefault());
     owned.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     owned.on('close', event => { if (this.applying || this.submission.connecting) event.preventDefault(); });
-    owned.once('closed', () => { this.abort(); if (this.window === owned) this.window = null; });
+    // A switch retires the main window and builds another. A modal orphaned from its parent can never
+    // become key again, and neither can an alert sheeted onto it, so it goes with its parent.
+    const orphaned = () => { if (!owned.isDestroyed()) owned.destroy(); };
+    parent.once('closed', orphaned);
+    owned.once('closed', () => { parent.removeListener('closed', orphaned); this.abort(); if (this.window === owned) this.window = null; });
     this.url = `data:text/html;charset=utf-8,${encodeURIComponent(connectionPage(this.actions.currentServer(), nativeTheme.shouldUseDarkColors ? 'dark' : 'light', serverForm, this.actions.localRunning(), { folder: this.actions.currentFolder(), hosted: this.actions.currentHosted(), email: this.actions.currentEmail() }))}`;
     await owned.loadURL(this.url);
     await new Promise<void>(resolve => owned.once('closed', resolve));
