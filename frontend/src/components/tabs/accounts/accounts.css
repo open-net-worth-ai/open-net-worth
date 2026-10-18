@@ -4419,9 +4419,11 @@ select.acct-addin {
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
 }
 /* With the Source column set aside (a narrow register) a row that needs review keeps a dot beside
-   its amount in place of the Review pill; the amount is the one cell always in view. */
+   its amount in place of the Review pill; the amount is the one cell always in view. The cell
+   shrinks to its figure (justify-self: end), so the dot needs its own gutter or it covers the sign. */
 .acct-reg.no-source:not(.overflow) .acct-tr.needs-review .acct-td-amt {
   position: relative;
+  padding-left: 12px;
 }
 .acct-reg.no-source .acct-tr.needs-review .acct-td-amt::before {
   content: '';

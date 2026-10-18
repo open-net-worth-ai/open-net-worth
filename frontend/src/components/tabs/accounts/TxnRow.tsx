@@ -174,7 +174,6 @@ export function TxnRow({
     ccy,
     pos,
     baseVal,
-    isForeign,
     amtTitle,
     nativeMain,
     baseMain,
@@ -182,7 +181,7 @@ export function TxnRow({
     primaryAcct,
     isTransfer,
     isSplit,
-    xccyOther,
+    amtSub,
     payeeText,
     payeeFromName,
     payeeToName,
@@ -527,17 +526,7 @@ export function TxnRow({
             title={amtTitle}
           >
             <span className="acct-amt-main">{showAccount ? baseMain : nativeMain}</span>
-            {(() => {
-              const parts: string[] = []
-              if (showAccount && isForeign) parts.push(fCur(Math.abs(amount), ccy, { cents: true }))
-              if (t.origCurrency && t.origCurrency !== ccy)
-                parts.push(fCur(t.origAmount ?? 0, t.origCurrency))
-              if (xccyOther && xccyOther.amt != null) {
-                const other = fCur(Math.abs(xccyOther.amt), xccyOther.ccy, { cents: true })
-                parts.push(xccyOther.sent ? other + ' →' : '→ ' + other)
-              }
-              return parts.length > 0 && <span className="acct-amt-orig">{parts.join(' • ')}</span>
-            })()}
+            {amtSub && <span className="acct-amt-orig">{amtSub}</span>}
           </span>
         )}
       </EntityRow>

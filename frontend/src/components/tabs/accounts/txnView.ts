@@ -28,6 +28,9 @@ export interface TxnView {
   isAdjustment: boolean
   isSplit: boolean
   xccyOther: { amt: number | null | undefined; ccy: string; sent: boolean } | null
+  /** The faint line under the amount (native figure, original charge, a transfer's other leg),
+   *  or undefined when there is nothing to add. */
+  amtSub: string | undefined
   /** Non-transfer payee headline (payee name, else description, else em-dash). */
   payeeText: string
   /** Transfer-only from/to account names (null when unresolved). */
@@ -103,6 +106,8 @@ export function buildTxnView(
         : { amt: t.toAmount, ccy: t.toCurrency, sent: false }
       : null
 
+  const amtSub = amountSubLine(t, amount, ccy, showAccount && isForeign, xccyOther)
+
   const isAdjustment = t.kind === 'adjustment'
   const from = t.fromAccountId ? acctMap[t.fromAccountId] : null
   const to = t.toAccountId ? acctMap[t.toAccountId] : null
@@ -138,9 +143,32 @@ export function buildTxnView(
     isAdjustment,
     isSplit,
     xccyOther,
+    amtSub,
     payeeText,
     payeeFromName,
     payeeToName,
     mentionSub,
   }
+}
+
+/** A cross-currency transfer's two legs read as ONE flow in send order (`€5,000.00 → $5,610.00`);
+ *  joining them with the bullet that separates unrelated facts put a dot before the arrow. */
+function amountSubLine(
+  t: Txn,
+  amount: number,
+  ccy: string,
+  showNative: boolean,
+  xccyOther: TxnView['xccyOther'],
+): string | undefined {
+  const native = showNative ? fCur(Math.abs(amount), ccy, { cents: true }) : null
+  let flow = native
+  if (xccyOther && xccyOther.amt != null) {
+    const other = fCur(Math.abs(xccyOther.amt), xccyOther.ccy, { cents: true })
+    if (xccyOther.sent) flow = native ? `${other} → ${native}` : `${other} →`
+    else flow = native ? `${native} → ${other}` : `→ ${other}`
+  }
+  const parts: string[] = []
+  if (flow) parts.push(flow)
+  if (t.origCurrency && t.origCurrency !== ccy) parts.push(fCur(t.origAmount ?? 0, t.origCurrency))
+  return parts.length ? parts.join(' • ') : undefined
 }

@@ -59,11 +59,9 @@ export function TxnCard({
   showDate = true,
 }: TxnCardProps) {
   const {
-    amount,
     ccy,
     pos,
     baseVal,
-    isForeign,
     amtTitle,
     nativeMain,
     baseMain,
@@ -71,7 +69,7 @@ export function TxnCard({
     isTransfer,
     isAdjustment,
     isSplit,
-    xccyOther,
+    amtSub,
     payeeText,
     payeeFromName,
     payeeToName,
@@ -95,15 +93,6 @@ export function TxnCard({
   const askSearch = [t.description, t.memo, payeeName, primaryAcct?.name, t.category]
     .filter(Boolean)
     .join(' ')
-
-  const amtSubParts: string[] = []
-  if (showAccount && isForeign) amtSubParts.push(fCur(Math.abs(amount), ccy, { cents: true }))
-  if (t.origCurrency && t.origCurrency !== ccy)
-    amtSubParts.push(fCur(t.origAmount ?? 0, t.origCurrency))
-  if (xccyOther && xccyOther.amt != null) {
-    const other = fCur(Math.abs(xccyOther.amt), xccyOther.ccy, { cents: true })
-    amtSubParts.push(xccyOther.sent ? other + ' →' : '→ ' + other)
-  }
 
   return (
     <>
@@ -152,9 +141,7 @@ export function TxnCard({
               title={amtTitle}
             >
               <span className="acct-amt-main">{showAccount ? baseMain : nativeMain}</span>
-              {amtSubParts.length > 0 && (
-                <span className="acct-amt-orig">{amtSubParts.join(' • ')}</span>
-              )}
+              {amtSub && <span className="acct-amt-orig">{amtSub}</span>}
             </span>
           </span>
           <span className="acct-card-meta">
@@ -171,7 +158,7 @@ export function TxnCard({
               </button>
             ) : t.category && !isAdjustment ? (
               categoryPill(t.category, catMap)
-            ) : !isTransfer ? (
+            ) : !isTransfer && (t.kind === 'expense' || t.kind === 'income') ? (
               <span
                 className="acct-unsorted"
                 title="No category — this won't count toward any budget envelope"
