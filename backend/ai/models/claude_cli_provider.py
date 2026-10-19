@@ -53,6 +53,7 @@ from backend.core.errors import ConfigurationError, ExternalServiceError, Provid
 
 from . import claude_live_session
 from .base import AIProvider
+from .cli_call_grace import PostCallWatch, grace_seconds
 from .cli_tool_protocol import (
     ToolCallScanner,
     flatten_messages_with_images,
@@ -545,6 +546,7 @@ class ClaudeCliProvider(AIProvider):
                 # this is recoverable — see the poisoned-session branch after the loop.
                 cli_error: Optional[str] = None
                 reused = False
+                watch = PostCallWatch(grace_seconds())
 
                 session = None
                 if use_sessions:
@@ -593,7 +595,7 @@ class ClaudeCliProvider(AIProvider):
                     )
 
                 try:
-                    async for ev in source:
+                    async for ev in _until_call_grace(source, scanner, watch):
                         etype = ev.get("type")
                         if etype == "system" and ev.get("subtype") == "init":
                             api_key_source = ev.get("apiKeySource") or ""
@@ -629,6 +631,7 @@ class ClaudeCliProvider(AIProvider):
                                             "input": call["input"],
                                         }
                                         emitted_call_count += 1
+                                        watch.call_parsed()
                             elif inner.get("type") == "message_delta":
                                 stop_reason = (inner.get("delta") or {}).get(
                                     "stop_reason"
@@ -641,6 +644,7 @@ class ClaudeCliProvider(AIProvider):
                             usage_event = _usage_event(ev, model, ttft_ms, t0, api_key_source)
 
                 except ProviderTimeoutError as exc:
+                    log.warning("claude_cli: %s — %s", exc, watch.summary())
                     # Nothing reached the user, so a fresh process is invisible to them. Once
                     # something was shown, retrying would duplicate it.
                     if not exc.stalled or emitted_anything or stall_retries_left <= 0:
@@ -656,6 +660,17 @@ class ClaudeCliProvider(AIProvider):
                         await claude_live_session.release(
                             key_argv, session, turn_messages, ok=usage_event is not None
                         )
+
+                if watch.cut:
+                    # No result event will come, so this round's usage is unknown; the CLI
+                    # session was retired above (mid-reply, it cannot take the next send).
+                    log.warning(
+                        "claude_cli: round wrote its tool call(s) but no result event "
+                        "followed within %.0fs — running them (%s)",
+                        watch.grace,
+                        watch.summary(),
+                    )
+                    usage_event = _usage_event({}, model, ttft_ms, t0, api_key_source)
 
                 if cli_error is not None:
                     # A REUSED session can be poisoned by the model's OWN reply. The CLI holds
@@ -1245,6 +1260,31 @@ def cost_basis_for(api_key_source: str) -> str:
     reader can tell an estimate from an invoice.
     """
     return "plan_included" if (api_key_source or "").lower() in ("none", "") else "estimate"
+
+
+async def _until_call_grace(
+    source: AsyncGenerator[dict, None], scanner: ToolCallScanner, watch: PostCallWatch
+) -> AsyncGenerator[dict, None]:
+    """``source``'s events, ending early (``watch.cut``) once the round's newest parsed tool
+    call is older than the grace — see ``cli_call_grace``."""
+    try:
+        while True:
+            wait = watch.remaining(scanner.mid_block)
+            if wait is not None and wait <= 0:
+                watch.cut = True
+                return
+            pending = source.__anext__()
+            try:
+                ev = await (pending if wait is None else asyncio.wait_for(pending, wait))
+            except StopAsyncIteration:
+                return
+            except asyncio.TimeoutError:
+                watch.cut = True
+                return
+            watch.saw(ev)
+            yield ev
+    finally:
+        await source.aclose()
 
 
 def _usage_event(

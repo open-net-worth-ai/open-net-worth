@@ -652,6 +652,11 @@ class ToolCallScanner:
         # so the fence's closing ``` after it is dropped the same way.
         self._fenced = False
 
+    @property
+    def mid_block(self) -> bool:
+        """True while a call block has opened and not yet closed."""
+        return self._in_block
+
     def _eat_trailing_fence(self) -> bool:
         """Drop a lone ``` line at the head of the buffer. False = need more text to decide."""
         stripped = self._buf.lstrip(" \t\n")
