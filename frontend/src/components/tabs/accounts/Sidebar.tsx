@@ -182,6 +182,7 @@ export function Sidebar({
     (s, g) => s + (groupMap[g] ?? []).reduce((t, a) => t + accountValue(a), 0),
     0,
   )
+  const accountsCount = TYPE_ORDER.reduce((n, g) => n + (groupMap[g]?.length ?? 0), 0)
 
   return (
     <aside
@@ -248,7 +249,9 @@ export function Sidebar({
             <span className="gl">▤</span>
             <span className="acct-all-id">
               All accounts
-              <span className="acct-all-sub">Accounts only, not net worth</span>
+              <span className="acct-all-sub">
+                {accountsCount} {accountsCount === 1 ? 'account' : 'accounts'}
+              </span>
             </span>
           </span>
           <span className={'acct-all-v mask' + (accountsTotal < 0 ? ' neg' : '')}>
