@@ -35,6 +35,7 @@ No runs at all? The History section says **Hasn't run yet** and when it will fir
 | The Automation card shows **Paused**, or the detail says "Paused — nothing will fire it." | Open its menu and choose **Resume**. |
 | The detail says "Finished — no runs left on this schedule." | Its schedule has ended (for example a one-off). Edit the schedule to run again. |
 | The app wasn't running at the scheduled time. | Automations run only while the app is running — a closed laptop or stopped server misses them. When the app starts again, an overdue Automation runs **once** to catch up; it doesn't replay every missed run. To keep them on time, leave the app running: the desktop app can keep working in the background, or install a boot service with `onw autostart install`. |
+| The computer was asleep at the scheduled time. | A sleeping computer runs nothing. Turn on the **Keep awake** switch at the top of **Automations** — it stops idle sleep while Open Net Worth runs (macOS and Windows; on Linux and in Docker, set the machine's own power settings). A closed laptop lid still sleeps unless the laptop is plugged in with an external display. |
 | No AI provider is connected, or its key stopped working. | Fix it in **Settings → AI**. Every run needs a model. |
 
 ## It failed

@@ -94,7 +94,12 @@ turn them on. Change them later in **Settings → Desktop → Background activit
 
 **Keep computer awake** (Settings → Desktop → Background activity, or the **Keep awake** switch on
 Automations) stops idle sleep while the app runs, so Automations run on time. The display can
-still turn off; closing a laptop lid still sleeps. Off by default; local books only.
+still turn off; closing a laptop lid still sleeps (unless it's plugged in with an external display,
+where Keep awake still holds). Off by default.
+
+Running the server yourself (`onw`) on macOS or Windows? The same **Keep awake** switch appears on
+Automations in the browser and holds that computer awake while the server runs. It isn't offered
+on Linux or in Docker — use the machine's own power settings there.
 
 With background mode off, closing the window quits the app on Windows and Linux. On macOS,
 closing the window only hides it; the app keeps running until you quit.

@@ -192,7 +192,7 @@ jobs:
           tests/test_desktop_file.py tests/test_sandbox.py tests/test_run_source.py
           tests/test_run_code_tool.py tests/test_mcp_client.py tests/test_autostart.py
           tests/test_skill_store.py tests/test_skill_bundles.py tests/test_skills_service.py
-          tests/test_desktop_runtime_build.py
+          tests/test_desktop_runtime_build.py tests/test_keep_awake.py
       - name: Full suite (informational)
         if: always()
         continue-on-error: true

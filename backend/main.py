@@ -680,6 +680,9 @@ async def lifespan(app: FastAPI):
     # appear after the first notify() call, so /api/notify-channels (the "Send to" picker)
     # would miss it on a fresh boot.
     import backend.services.notify  # noqa: F401 — registers the "in_app" channel
+    from backend.services import keep_awake as _keep_awake
+
+    _keep_awake.apply_saved()
 
     # Loop-lag watchdog. Runs in every worker; see core.loop_watch for why measuring beat
     # reading code here. Held on the app so shutdown can cancel it.
@@ -837,6 +840,7 @@ async def lifespan(app: FastAPI):
     await shutdown_turns()
     unregister_automation_adapters()
     await telegram_bot.stop()
+    _keep_awake.release()
     # Release the working-folder claim last, so the folder stays owned for the whole of a
     # graceful shutdown rather than freeing up while turns are still being journalled.
     from backend.core.instance_lock import release as _release_instance

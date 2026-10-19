@@ -125,6 +125,11 @@ NOTIFY_UNATTENDED_WRITE_FLAG = "notify_unattended_write_enabled"
 # provider can take minutes per call, and the owner, not a constant, decides how long to wait.
 TURN_TIME_LIMIT_KEY = "turn_time_limit_s"
 
+# Keep the computer from idle-sleeping while the server runs (services/keep_awake.py). Default
+# False: holding a machine awake is the owner's call. Instance config, so it stays with this
+# computer rather than travelling in a book export.
+KEEP_AWAKE_FLAG = "keep_awake_enabled"
+
 
 def _seed_from_env() -> dict:
     """Seed branding from APP_* env vars — used once, when the row doesn't exist yet."""

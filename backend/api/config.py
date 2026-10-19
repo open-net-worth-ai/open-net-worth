@@ -34,6 +34,7 @@ from backend.db.app_config_store import (
     set_sql_query_enabled,
     sql_query_enabled,
 )
+from backend.services import keep_awake
 
 router = APIRouter()
 
@@ -127,6 +128,19 @@ def put_notify_unattended_write(body: ScriptSkillsEnabledPatch):
     row nor sends an outbound push — only the agent's own end-of-run summary remains."""
     value = AppConfigStore().set_flag(NOTIFY_UNATTENDED_WRITE_FLAG, body.enabled)
     return {"enabled": value}
+
+
+@router.get("/api/config/keep-awake")
+def get_keep_awake():
+    """Whether this server holds off idle sleep while it runs. ``supported`` is false in a
+    container, on Linux, and under the desktop app (which keeps its own switch)."""
+    return keep_awake.state()
+
+
+@router.put("/api/config/keep-awake")
+def put_keep_awake(body: ScriptSkillsEnabledPatch):
+    """Turn keep awake on or off (human-only, auth-gated; no Lucius tool writes it)."""
+    return keep_awake.set_enabled(body.enabled)
 
 
 # ── Ad-hoc code execution (RFC ad-hoc-code-execution) ─────────────────────────────────────
