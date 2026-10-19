@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { DesktopBridge, DesktopSettings } from '../../../../../desktop/src/contracts'
 import { clearQueryCache } from '../../../state/queryCache'
-import { KeepAwakeBanner } from './KeepAwakeBanner'
+import { KeepAwakeBanner, useKeepAwakeSettled } from './KeepAwakeBanner'
 
 const authFetch = vi.fn()
 vi.mock('../../../api/client', () => ({ authFetch: (...args: unknown[]) => authFetch(...args) }))
@@ -48,5 +48,42 @@ it('inside the desktop app, uses the app switch and never asks the server', asyn
   const toggle = await screen.findByRole('switch', { name: 'Keep computer awake' })
   expect((toggle as HTMLInputElement).checked).toBe(true)
   expect(screen.getByText('Automations only run while this computer is awake.')).toBeTruthy()
+  expect(authFetch).not.toHaveBeenCalled()
+})
+
+function Settled() {
+  return <span>{useKeepAwakeSettled() ? 'settled' : 'waiting'}</span>
+}
+
+it('settles once the server answers, so the list and the banner appear together', async () => {
+  let answer: (value: unknown) => void = () => {}
+  authFetch.mockReturnValue(new Promise((resolve) => (answer = resolve)))
+  render(<Settled />)
+  expect(screen.getByText('waiting')).toBeTruthy()
+  answer(json({ supported: true, enabled: false, active: false }))
+  await screen.findByText('settled')
+})
+
+it('settles on a server without the route, so an older server never holds the list back', async () => {
+  authFetch.mockResolvedValue({ ok: false, status: 404, json: async () => ({}) })
+  render(<Settled />)
+  await screen.findByText('settled')
+})
+
+it('settles when the request fails outright', async () => {
+  authFetch.mockRejectedValue(new TypeError('Failed to fetch'))
+  render(<Settled />)
+  await screen.findByText('settled')
+})
+
+it('settles inside the desktop app even if the app cannot read its settings', async () => {
+  window.onwDesktop = {
+    version: 1,
+    getSettings: async () => {
+      throw new Error('desktop unavailable')
+    },
+  } as unknown as DesktopBridge
+  render(<Settled />)
+  await screen.findByText('settled')
   expect(authFetch).not.toHaveBeenCalled()
 })

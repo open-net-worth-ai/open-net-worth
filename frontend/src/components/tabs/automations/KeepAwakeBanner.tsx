@@ -15,6 +15,15 @@ export function KeepAwakeBanner() {
   return desktopBridge() ? <DesktopKeepAwake /> : <ServerKeepAwake />
 }
 
+/** True once the banner knows what to show (an error counts), so the page shows the list and the
+ *  banner together — fetched late, the banner pushed the cards down after they appeared. */
+export function useKeepAwakeSettled(): boolean {
+  const desktop = Boolean(desktopBridge())
+  const app = useQueryCache(DESKTOP_SETTINGS_KEY, fetchDesktopSettings, { enabled: desktop })
+  const server = useQueryCache(KEEP_AWAKE_KEY, getKeepAwake, { enabled: !desktop })
+  return !(desktop ? app.initialLoading : server.initialLoading)
+}
+
 function DesktopKeepAwake() {
   const bridge = desktopBridge()!
   const settings = useQueryCache(DESKTOP_SETTINGS_KEY, fetchDesktopSettings)

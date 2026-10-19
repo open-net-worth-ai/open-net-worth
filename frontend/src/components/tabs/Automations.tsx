@@ -20,6 +20,7 @@ import { Button, ErrorState, Modal, PageHeader, TabSkeleton } from '../ui'
 import { AutomationDetail } from './automations/AutomationDetail'
 import { AutomationEditorModal } from './automations/AutomationEditorModal'
 import { AutomationList, type AutomationSort } from './automations/AutomationList'
+import { useKeepAwakeSettled } from './automations/KeepAwakeBanner'
 import { ALL_TEMPLATES } from './automations/automationTemplates'
 import {
   EMPTY_AUTOMATION_OPTIONS,
@@ -48,6 +49,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
   const [options, setOptions] = useState<AutomationOptions>(EMPTY_AUTOMATION_OPTIONS)
   const [optionsError, setOptionsError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const keepAwakeSettled = useKeepAwakeSettled()
   const [loadError, setLoadError] = useState<string | null>(null)
   const [runs, setRuns] = useState<AutomationRun[]>([])
   const [runsLoading, setRunsLoading] = useState(false)
@@ -452,7 +454,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           {actionError}
         </div>
       )}
-      {loading ? (
+      {loading || !keepAwakeSettled ? (
         <div className="a3-wrap">
           <TabSkeleton variant="automations" label="Loading automations…" header={false} />
         </div>
