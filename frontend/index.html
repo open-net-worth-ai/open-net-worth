@@ -34,18 +34,29 @@
       body {
         background: inherit;
       }
-      /* iOS 27 tints the `default` status bar from the background-color of the element at
-         the very top of the page; it has to be a real element (a pseudo-element is invisible
-         to the sampler). Inherits the theme background above. */
+      /* iOS 27 draws a system blur over the top of an installed web app unless WebKit finds an
+         opaque position:fixed box at the top edge — at least ~6px tall, 80% wide, within 4px
+         of the top (a 1px strip was ignored). It also tints the status bar from that box's
+         background-color, so it inherits the theme background. `background-clip: text` with
+         no text paints nothing, so the box never covers the page (FreshRSS#9382, tested on
+         iPhone and iPad). A real element: a pseudo-element is invisible to the check. */
       #status-bar-sampler {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        height: 1px;
-        z-index: 2147483647;
-        pointer-events: none;
-        background: inherit;
+        display: none;
+      }
+      @media (display-mode: standalone) {
+        #status-bar-sampler {
+          display: block;
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 11px;
+          z-index: 2147483647;
+          pointer-events: none;
+          background-color: inherit;
+          -webkit-background-clip: text;
+          background-clip: text;
+        }
       }
     </style>
     <!-- Pre-paint theme stamp: resolve the persisted palette preference
