@@ -55,7 +55,10 @@ when you open it later.
 
 Inside an [Automation](automations.md) run, **Always allow** adds the tool to that Automation's
 own **Always allowed** list rather than changing it everywhere. It is listed under the
-Automation's [Tool permissions](automations.md#tool-permissions).
+Automation's [Tool permissions](automations.md#tool-permissions). If that Automation has been
+deleted since the card appeared, **Always allow** saves nothing at all — it never turns into an
+everywhere setting — and the card says so; this one call is still approved, and recorded as
+**✓ Approved**.
 
 A card never blocks a tool. **Deny** is "not this time" and Lucius may ask again next time; to
 refuse a tool for good, set it to **Block** in **Settings → Permissions**, on the connector's page,

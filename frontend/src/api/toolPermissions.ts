@@ -117,9 +117,27 @@ export async function setToolPermission(
       ...(req.session_id ? { session_id: req.session_id } : {}),
     }),
   })
-  if (!res.ok) throw new Error(`permission update failed (${res.status})`)
+  if (!res.ok) {
+    const detail = res.status === 409 ? await refusalDetail(res) : null
+    if (detail) throw new PermissionRefusedError(detail)
+    throw new Error(`permission update failed (${res.status})`)
+  }
   invalidateQueryCache(TOOL_PERMISSIONS_KEY)
   return res.json()
+}
+
+/** The server understood the request and refused it on purpose (HTTP 409), writing nothing —
+ *  e.g. a card's Always allow whose Automation was deleted meanwhile. `message` is the server's
+ *  own sentence, written to be shown to the owner as is. */
+export class PermissionRefusedError extends Error {}
+
+async function refusalDetail(res: Response): Promise<string | null> {
+  try {
+    const body = (await res.json()) as { detail?: unknown }
+    return typeof body.detail === 'string' && body.detail ? body.detail : null
+  } catch {
+    return null
+  }
 }
 
 /**

@@ -28,6 +28,11 @@ from .run_context import configured_trigger, last_completed_run
 from .schedules import compute_next_run, ran_slot_floor
 
 logger = logging.getLogger(__name__)
+
+# An Automation run's conversation id is always minted as ``automation-run-{run_id}``, so a
+# session id with this prefix names an Automation run even after the run or its Automation is gone.
+AUTOMATION_SESSION_PREFIX = "automation-run-"
+
 _tasks: set[asyncio.Task] = set()
 _tasks_by_run: dict[str, asyncio.Task] = {}
 _ALL_STATUSES = frozenset({"running", "waiting", "completed", "failed", "cancelled"})
@@ -105,7 +110,7 @@ async def run_automation(
     draft = {
         "id": run_id,
         "automation_id": automation_id,
-        "session_id": f"automation-run-{run_id}",
+        "session_id": f"{AUTOMATION_SESSION_PREFIX}{run_id}",
         "status": "running",
         "trigger": trigger_data,
         "execution": automation.get("execution") or {},
@@ -269,6 +274,12 @@ def request_for_run(
         configured_trigger=configured_trigger(automation),
         last_completed_run=last_completed_run(automation["id"], run),
     )
+
+
+def is_automation_session(session_id: Optional[str]) -> bool:
+    """Whether ``session_id`` is an Automation run's conversation id, whether or not the run row
+    (or the Automation behind it) still exists."""
+    return bool(session_id) and str(session_id).startswith(AUTOMATION_SESSION_PREFIX)
 
 
 def automation_run_for_session(session_id: str) -> tuple[dict, dict] | None:

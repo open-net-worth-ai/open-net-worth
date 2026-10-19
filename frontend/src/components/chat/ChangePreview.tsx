@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { grantTool, type GrantScope } from '../../api/toolPermissions'
+import { grantTool, PermissionRefusedError, type GrantScope } from '../../api/toolPermissions'
 import type { ProposedChange } from '../../types/chat'
 import {
   mcpConnectorId,
@@ -150,27 +150,33 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
     setGrantBusy(scope)
     setGrantedScope(scope)
     setGrantError(null)
+    let answered: GrantScope = scope
     try {
       await grantTool({
         tool: change.grant_tool as string,
         scope,
         session_id: change.session_id,
       })
-    } catch {
+    } catch (err) {
       // The approval for THIS call still stands — the user tapped it and the card showed
       // exactly what will happen. Only the STANDING part failed, so we proceed and say so
       // rather than either silently pretending it stuck or discarding an approval the user
       // actually gave. A failed standing grant costs the user a belief about their own
-      // permissions that is not true, so it is reported rather than swallowed.
+      // permissions that is not true, so it is reported rather than swallowed — and the call
+      // is recorded as Approved (once), never "Always allowed", since nothing was allowed.
+      answered = 'once'
+      setGrantedScope('once')
       setGrantError(
-        scope === 'always'
-          ? "Couldn't save the permanent permission — this call is approved, but you'll be asked again."
-          : "Couldn't save the session permission — this call is approved, but you'll be asked again.",
+        err instanceof PermissionRefusedError
+          ? `${err.message} This call is approved this once.`
+          : scope === 'always'
+            ? "Couldn't save the permanent permission — this call is approved, but you'll be asked again."
+            : "Couldn't save the session permission — this call is approved, but you'll be asked again.",
       )
     } finally {
       setGrantBusy(null)
     }
-    handleConfirm(scope)
+    handleConfirm(answered)
   }
 
   function handleDeny() {

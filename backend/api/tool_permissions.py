@@ -328,7 +328,10 @@ def set_any_tool_permission(tool: str, req: SetLevelRequest) -> ToolPermissionsR
 
     ``session_id`` names the CONVERSATION, not a scope. When it belongs to an Automation run,
     ``always_allow`` is routed to that Automation's own Always allowed list, so a tap on a run's
-    card never changes the tool anywhere else. A Block is never written from a card: it is set
+    card never changes the tool anywhere else. If that Automation (or the run) no longer exists
+    the request is refused with a 409 and nothing is written: it is never widened into a global
+    decision. A chat conversation (no Automation behind it) still writes the global row. A Block
+    is never written from a card: it is set
     deliberately, here (Settings → Permissions), on a connector's page, or on the Automation's
     Tool permissions section.
     """
@@ -348,6 +351,13 @@ def set_any_tool_permission(tool: str, req: SetLevelRequest) -> ToolPermissionsR
 
             publish(["automations"])
             return _list_response()
+        if runs.is_automation_session(req.session_id):
+            # The card outlived its Automation (or its run). Falling through would turn "allow
+            # for this Automation" into "allow everywhere" without anyone choosing that.
+            raise HTTPException(
+                status_code=409,
+                detail="This Automation no longer exists, so nothing was changed.",
+            )
 
     try:
         permissions_service.set_tool_permission(owner, tool, req.level)

@@ -27,6 +27,11 @@ const permissionCard: ProposedChange = {
   from: { account_id: 'acc_chk', account_name: 'Checking', amount: 12.4, currency: 'SGD' },
 }
 
+// What the server answers when a grant lands: the refreshed permissions list. An empty body
+// would make the client's `res.json()` throw, which the card reports as a failed grant.
+const savedResponse = () =>
+  new Response(JSON.stringify({ permissions: [], total: 0 }), { status: 200 })
+
 let resolved: Array<[string, 'approve' | 'deny']>
 let fetchMock: ReturnType<typeof vi.fn>
 
@@ -43,7 +48,7 @@ function mount(change: ProposedChange = permissionCard) {
 
 beforeEach(() => {
   resolved = []
-  fetchMock = vi.fn(async () => new Response(null, { status: 200 }))
+  fetchMock = vi.fn(async () => savedResponse())
   vi.stubGlobal('fetch', fetchMock)
 })
 
@@ -184,7 +189,7 @@ describe('tool-permission card — what each scope records', () => {
     const order: string[] = []
     fetchMock.mockImplementation(async () => {
       order.push('grant')
-      return new Response(null, { status: 200 })
+      return savedResponse()
     })
     render(
       createElement(ChangePreview, {
@@ -303,7 +308,7 @@ describe('tool-permission card — a failed grant', () => {
     fetchMock.mockImplementation(
       () =>
         new Promise((resolve) => {
-          releaseBox.current = () => resolve(new Response(null, { status: 200 }))
+          releaseBox.current = () => resolve(savedResponse())
         }),
     )
     mount()
@@ -389,6 +394,36 @@ describe('the three card outcomes are distinct — live, stored and after a relo
     expect(answers).toEqual([[TOOL_USE_ID, 'deny', undefined]])
     expect(grantBody()).toBeNull()
     expect(screen.getByText('✗ Denied')).toBeTruthy()
+  })
+
+  it("a refused Always allow shows the server's sentence and is recorded as Approved, not Always allowed", async () => {
+    const detail = 'This Automation no longer exists, so nothing was changed.'
+    fetchMock.mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ detail }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+    const { container } = mountRecording(automationCard)
+    fireEvent.click(screen.getByRole('button', { name: 'Standing permission' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Always/ }))
+    await waitFor(() => expect(answers.length).toBe(1))
+    expect(container.querySelector('.change-grant-error')?.textContent).toContain(detail)
+    expect(answers[0]).toEqual([TOOL_USE_ID, 'approve', { always: false }])
+    expect(screen.getByText('✓ Approved')).toBeTruthy()
+    expect(screen.queryByText('✓ Always allowed')).toBeNull()
+  })
+
+  it('any other failed Always allow keeps its own wording and is also recorded as Approved', async () => {
+    fetchMock.mockImplementation(async () => new Response(null, { status: 500 }))
+    const { container } = mountRecording(permissionCard)
+    fireEvent.click(screen.getByRole('button', { name: 'Standing permission' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Always/ }))
+    await waitFor(() => expect(answers.length).toBe(1))
+    expect(container.querySelector('.change-grant-error')?.textContent).toMatch(/couldn't save/i)
+    expect(answers[0]).toEqual([TOOL_USE_ID, 'approve', { always: false }])
+    expect(screen.getByText('✓ Approved')).toBeTruthy()
   })
 
   it('there is no Block action on the card, in a chat or in an Automation run', () => {

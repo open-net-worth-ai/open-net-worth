@@ -472,6 +472,8 @@ def automation_cleanup(context: dict, *, phase: str) -> dict:
         else []
     )
     durable_proof = durable_owned == session_ids
+    from backend.services.automations.runs import AUTOMATION_SESSION_PREFIX
+
     metadata = {row.get("id"): row for row in assistant.list_sessions()}
     # A run's session is minted as ``automation-run-{run_id}`` (runs.py), so that exact
     # id, referenced by that same run row, proves ownership even when the index entry lost
@@ -481,7 +483,7 @@ def automation_cleanup(context: dict, *, phase: str) -> dict:
         for row in rows
         if isinstance(row, dict)
         and row.get("id")
-        and str(row.get("session_id")) == f"automation-run-{row.get('id')}"
+        and str(row.get("session_id")) == f"{AUTOMATION_SESSION_PREFIX}{row.get('id')}"
     }
     owned = sorted(
         session_id
@@ -537,7 +539,9 @@ def materialize_automation_session(run: dict, automation: Optional[dict] = None)
     run_id = str(run.get("id") or "").strip()
     if not run_id:
         raise ValueError("automation run id is required to materialize its conversation")
-    session_id = str(run.get("session_id") or f"automation-run-{run_id}")
+    from backend.services.automations.runs import AUTOMATION_SESSION_PREFIX
+
+    session_id = str(run.get("session_id") or f"{AUTOMATION_SESSION_PREFIX}{run_id}")
     existing = assistant.load_session_durable(session_id)
     created_transcript = existing is None
     if not isinstance(existing, list) or not existing:
