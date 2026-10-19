@@ -25,8 +25,8 @@ export const DEFAULT_PERMISSION: PermissionLevel = 'needs_approval'
  *  IS the menu order in the group control. */
 export const LEVELS: Record<GroupPermissionLevel, { label: string; icon: string; tone: string }> = {
   always_allow: { label: 'Always allow', icon: 'checkcircle', tone: 'good' },
-  needs_approval: { label: 'Needs approval', icon: 'hand', tone: 'warn' },
-  blocked: { label: 'Blocked', icon: 'blocked', tone: 'bad' },
+  needs_approval: { label: 'Ask', icon: 'hand', tone: 'warn' },
+  blocked: { label: 'Block', icon: 'blocked', tone: 'bad' },
   custom: { label: 'Custom', icon: 'dots', tone: '' },
 }
 

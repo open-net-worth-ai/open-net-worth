@@ -591,7 +591,13 @@ def test_reset_wipes_all_config_and_settings_tables(db_isolated):
         assert cio.export_namespaced(conn, "preferred_models") == {}
         # the settings table itself is fully empty, not just its two known namespaces
         assert conn.execute(select(settings)).all() == []
-    assert ToolPermissionStore(engine=get_engine()).all() == []
+    # reset means reset: the owner's decision is gone and every tool is back at its seed
+    # (the wipe empties the table; the same call re-seeds it).
+    rows = ToolPermissionStore(engine=get_engine()).all()
+    assert rows and all(row["source"] == "seed" for row in rows)
+    assert ToolPermissionStore(engine=get_engine()).get_level("core", "add_transactions") == (
+        "needs_approval"
+    )
 
 
 def _reset_client(tmp_path, monkeypatch):
@@ -764,7 +770,13 @@ def test_tool_permissions_and_signals_wipe_fires_hook_but_checkpoint_exclusion_m
     with get_engine().connect() as conn:
         assert cio.export_payload_list(conn, notification_log) == []
         assert cio.export_payload_list(conn, payees) == []
-    assert ToolPermissionStore(engine=get_engine()).all() == []  # reset means reset
+    # reset means reset: the owner's decision is gone and every tool is back at its seed
+    # (the wipe empties the table; the same call re-seeds it).
+    rows = ToolPermissionStore(engine=get_engine()).all()
+    assert rows and all(row["source"] == "seed" for row in rows)
+    assert ToolPermissionStore(engine=get_engine()).get_level("core", "add_transactions") == (
+        "needs_approval"
+    )
 
     assert entry is not None
     assert "payees" in entry["db_tables"], "a non-excluded config wipe must be captured"

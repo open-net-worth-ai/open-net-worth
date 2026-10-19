@@ -58,6 +58,9 @@ RENAMES: dict[str, str] = {
     # apply_budget_operation, Zero-Based targets via set_envelope_targets.
     "set_spending_limits": "retired — apply_budget_operation (50/30/20 set_caps / copy_targets_to_caps) or set_envelope_targets (Zero-Based)",
     "set_spending_limit_rollovers": "retired — Zero-Based envelopes carry their balance on their own",
+    # 2026-10-11: it was web_search with the X scope appended — the guidance now lives in
+    # web_search's description, and web_search is the search connector's tool.
+    "x_search": "retired — web_search with (site:x.com OR site:twitter.com) in the query",
     # Savings goals are "Goals" in the app; "target" also named Zero-Based's per-envelope
     # target and the investment target mix — three meanings for one word.
     "get_targets": "get_goals",

@@ -73,9 +73,18 @@ model. Chat itself always uses your default (or the chat's own choice).
 
 | Group | Tasks |
 |---|---|
-| **Assistant** | **Memory**, **Chat suggestions**, **Conversation titles**, **Image reading** (needs a model that can see images) |
+| **Assistant** | **Memory**, **Chat suggestions**, **Conversation titles**, **Image reading** (needs a model that can see images), **Auto-approval judge** |
 | **Insights** | **Intel & watchlist**, **Daily briefing** (the morning note on the Dashboard), **News screening**, **Alert analysis**, **Price alerts** |
 | **Statement import** | **Statement import** — reading statements end to end |
+
+**Auto-approval judge** only matters when a conversation or Automation is in **Automatically
+approve** mode: before each call that would otherwise ask, this task decides whether Lucius must
+ask you first (see [Permissions](permissions.md#how-automatically-approve-decides)). Unlike the
+others, leaving it on **Same as chat model** uses the model your conversation is running on, not
+your default — a Claude Code or Codex model judges like any other. Each judgement waits at most 10
+seconds, then asks you instead. A fast, non-reasoning model keeps Auto snappy. The judge is sent the pending call (the
+tool's name and description, and the arguments) and your last few typed messages; if you pick a
+different provider than your chat model, that provider receives them too.
 
 A good pattern: a strong model for chat and **Alert analysis**, a cheap fast one for
 **Conversation titles**, **Chat suggestions** and **Memory**. **Reset** puts every task back on

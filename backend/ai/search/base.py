@@ -19,6 +19,32 @@ _MAX_FETCH_BYTES = 4_000_000
 MAX_FETCH_PAGE_CHARS = 15_000
 
 
+# Providers whose fetch_page uses a paid API endpoint (~$0.002/page, Tavily). Firecrawl's own
+# /scrape is 1 credit/page, ~$0.001 at the same plan tier — the two are NOT the same per-call
+# cost, hence the per-provider dict rather than one constant for both. Plain-GET readers
+# (duckduckgo, serper, google_pse, perplexity) cost ~$0.
+PAID_FETCH_PROVIDERS: frozenset[str] = frozenset({"tavily", "firecrawl"})
+_PAID_FETCH_COST_USD = 0.002
+_PAID_FETCH_COST_USD_BY_PROVIDER: dict[str, float] = {"firecrawl": 0.001}
+
+
+def record_paid_fetch(provider_id: str, source: str) -> None:
+    """Log one page read to ``cost_log`` as the ``fetch:<id>`` pseudo-model when ``provider_id``
+    reads through a paid extract API (a no-op for a plain-GET reader). Shared by asset_brief's
+    full-text fetch and the web-search top-result reads so both account a read identically."""
+    if provider_id not in PAID_FETCH_PROVIDERS:
+        return
+    from backend.ai.cost_tracker import record
+
+    record(
+        source=source,
+        model=f"fetch:{provider_id}",
+        input_tokens=0,
+        output_tokens=0,
+        cost_usd=_PAID_FETCH_COST_USD_BY_PROVIDER.get(provider_id, _PAID_FETCH_COST_USD),
+    )
+
+
 def fetch_result_payload(url: str, content: str) -> dict:
     """Build the standard ``{url, content, ...}`` fetch_page result dict.
 
@@ -62,6 +88,9 @@ class SearchProvider(ABC):
     async def fetch_page(self, url: str) -> str:
         """Fetch and return the readable text content of a URL."""
         ...
+
+    # The registry id this instance was built for ("tavily", …); stamped by ``build_provider``.
+    provider_id: str = ""
 
     # True for a provider whose ``fetch_page`` is the plain GET (``plain_get_fetch``): the
     # page's og:image then comes from the SAME download. A provider with its own extract API
@@ -317,4 +346,6 @@ def build_provider(provider_id: str, cfg: dict) -> SearchProvider:
     spec = PROVIDER_BY_ID.get(provider_id)
     if spec is None:
         raise ValueError(f"Unknown search provider: {provider_id!r}")
-    return spec.factory(cfg)
+    provider = spec.factory(cfg)
+    provider.provider_id = provider_id
+    return provider

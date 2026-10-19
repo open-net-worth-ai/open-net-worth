@@ -77,8 +77,8 @@ def test_connector_tool_has_no_legacy_permission_field(svc):
 
 def test_every_family_carries_a_real_level_defaulting_to_ask(svc, perms):
     """Native AND MCP tools alike carry a level, and an undecided WRITE reads
-    ``needs_approval`` — EXCEPT a read-shaped one (``email_search_messages``/``email_get_messages``,
-    ``GATE_EXEMPT_READ_SHAPED``), which reads ``always_allow`` even undecided, because
+    ``needs_approval`` — EXCEPT a read (``email_search_messages``/``email_get_messages``), which reads
+    ``always_allow`` even undecided, because
     that is what dispatch (``ai.tools._confirm_gate.effective_level``) actually does with
     it (security review finding #4 / ADR
     ``2026-08-17-connector-ladder-shows-the-real-effective-default`` — the ladder used to
@@ -117,11 +117,11 @@ def test_a_stored_level_reaches_the_view(svc, perms):
 
 
 def test_a_fetch_tools_default_level_is_always_allow_but_a_stored_level_still_governs(svc, perms):
-    """PERMISSION DEFAULT (design intent, confirmed with the owner): the nine bank/broker
-    fetch tools (RFC connectors-as-data-sources) are read-shaped exactly like
-    email_search_messages/email_get_messages and must default to always_allow, or every
-    template Automation run parks on an approval card for what the user experiences as
-    "Lucius checked my bank." A user-RAISED level still overrides the exemption."""
+    """PERMISSION DEFAULT: the nine bank/broker fetch tools (RFC connectors-as-data-sources)
+    are reads exactly like email_search_messages/email_get_messages and default to
+    always_allow — by the same rule as every other read, with no list — or every template
+    Automation run parks on an approval card for what the user experiences as "Lucius checked
+    my bank." A user-RAISED level still overrides the default."""
     from backend.db.plaid_config_store import PlaidConfigStore
 
     PlaidConfigStore().update({"enabled": True, "client_id": "cid", "secret": "shh"})
@@ -140,12 +140,12 @@ def test_a_level_is_never_written_onto_the_shared_native_bundle(svc, perms):
     connector's decision into every other view built from it."""
     from backend.services import connector_copy
 
-    perms.set_tool_permission("web_search:tavily", "tavily_search", "always_allow")
+    perms.set_tool_permission("web_search:tavily", "tavily_search", "blocked")
     view = svc.get_connector("web_search:tavily")
-    assert {t.name: t.level for t in view.tools}["tavily_search"] == "always_allow"
+    assert {t.name: t.level for t in view.tools}["tavily_search"] == "blocked"
     assert [t.level for t in connector_copy.TOOLS["web_search:tavily"]] == ["ask", "ask"]
     other = svc.get_connector("web_search:serper")
-    assert {t.name: t.level for t in other.tools}["serper_search"] == "needs_approval"
+    assert {t.name: t.level for t in other.tools}["serper_search"] == "always_allow"
 
 
 def test_read_only_grouping_prefers_the_servers_own_hint(svc):
@@ -206,7 +206,10 @@ def test_get_connector_tools_groups_read_vs_write_with_derived_aggregate(svc, pe
 
     out = _call("get_connector_tools", {"connector_id": "email"})
     groups = {g["group"]: g for g in out["groups"]}
-    assert out["default_level"] == "needs_approval"
+    # A native connector's undecided READS run; its send is the one tool that asks.
+    assert out["default_level"] == "always_allow"
+    assert groups["write"]["tools"][0]["default"] == "needs_approval"
+    assert groups["read"]["tools"][0]["default"] == "always_allow"
     # Uniform group -> that level.
     assert groups["read"]["level"] == "always_allow"
     assert [t["name"] for t in groups["read"]["tools"]] == [

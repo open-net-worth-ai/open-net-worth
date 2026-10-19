@@ -1,4 +1,4 @@
-"""Prompt-injection hardening: fetch_page/web_search/x_search sanitize fetched web content.
+"""Prompt-injection hardening: fetch_page/web_search sanitize fetched web content.
 
 A fetched page's full text, and a search result's title/content, are third-party web text
 a hostile page author fully controls (classic prompt-injection: a poisoned page written to
@@ -23,7 +23,7 @@ import asyncio
 import json
 import re
 
-from backend.ai.tools.misc import fetch_page, web_search, x_search
+from backend.ai.tools.misc import fetch_page, web_search
 from backend.core.untrusted import UNTRUSTED_CONTENT_NOTICE
 
 # Any «label:32-hex»...«/label:32-hex» fence marker — must never appear in a JSON tool result.
@@ -155,7 +155,7 @@ def test_web_search_json_is_valid_and_hostile_payload_cannot_break_out(monkeypat
     rows = [{"url": "https://e.com/1", "title": _HOSTILE_CONTENT, "content": _HOSTILE_CONTENT}]
     stub = _StubProvider(rows=rows)
     monkeypatch.setattr("backend.ai.tools.misc.get_search_provider", lambda: stub)
-    text, _ = asyncio.run(web_search({"query": "q"}))
+    text, _ = asyncio.run(web_search({"query": "q", "read_top": 0}))
     out = json.loads(text)  # raises if the hostile payload broke the JSON structure
     assert isinstance(out, list) and len(out) == 1
     assert set(out[0].keys()) == {"url", "title", "content"}
@@ -169,23 +169,6 @@ def test_web_search_no_untrusted_notice_or_fence_markers(monkeypatch):
     stub = _StubProvider(rows=rows)
     monkeypatch.setattr("backend.ai.tools.misc.get_search_provider", lambda: stub)
     text, _ = asyncio.run(web_search({"query": "q"}))
-    assert UNTRUSTED_CONTENT_NOTICE not in text
-    assert not _ANY_FENCE_RE.search(text)
-
-
-# ── x_search (same result shape + same sanitize helper as web_search) ────────────
-
-
-def test_x_search_sanitizes_and_carries_no_fence(monkeypatch):
-    rows = [{"url": "https://x.com/u/status/1", "title": "post", "content": _HOSTILE_CONTENT}]
-    stub = _StubProvider(rows=rows)
-    monkeypatch.setattr("backend.ai.tools.misc.get_search_provider", lambda: stub)
-    text, _ = asyncio.run(x_search({"query": "q"}))
-    out = json.loads(text)
-    assert out[0]["url"] == "https://x.com/u/status/1"
-    content = out[0]["content"]
-    assert "\x07" not in content
-    assert "«" not in content
     assert UNTRUSTED_CONTENT_NOTICE not in text
     assert not _ANY_FENCE_RE.search(text)
 

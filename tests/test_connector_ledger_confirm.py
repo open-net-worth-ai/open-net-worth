@@ -54,12 +54,7 @@ def env(tmp_path, monkeypatch, db_isolated):
     # machinery directly (mirrors test_ledger_confirm_gate.py's own fixture), independent of
     # whichever surface predicate ai.tools._confirm_gate.should_gate currently enforces.
     #
-    # Since the write-then-verify chip shipped (2026-07-20) `GATED_TOOL_NAMES` is EMPTY in
-    # production, so the set is patched too — otherwise these would silently degrade into
-    # tests of the ungated path while still claiming to cover connector confirm. The
-    # connector-side redemption path they pin stays real and re-armable.
     _gated = frozenset({"add_transactions", "update_transactions"})
-    monkeypatch.setattr(gate, "GATED_TOOL_NAMES", _gated)
     monkeypatch.setattr(gate, "should_gate", lambda name: name in _gated)
     # The resolve step's resume round-trips the model once — stub it (no LLM, no network).
     monkeypatch.setattr(assistant, "get_provider", lambda: _TextOnlyProvider())

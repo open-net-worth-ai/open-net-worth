@@ -796,6 +796,14 @@ def reset_bridged_stores() -> None:
     with locked_unit_of_work(*portable_bridge.MONEY_TABLES) as conn:
         paths_to_unlink = portable_bridge.wipe_all(conn)
     _unlink_best_effort(paths_to_unlink)
+    # The wipe empties the permission table; every tool is back at its seed value only once it
+    # has its row again (a missing row is never read as permission, so this is not a security gap).
+    from backend.services import tool_permissions
+
+    try:
+        tool_permissions.sync_seeds()
+    except Exception:  # noqa: BLE001 — dispatch falls back to the seed rule; boot re-seeds
+        logger.exception("tool-permission re-seed after reset failed")
 
 
 def reset_sessions() -> None:

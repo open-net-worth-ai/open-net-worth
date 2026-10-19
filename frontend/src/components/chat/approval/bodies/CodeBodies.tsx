@@ -1,5 +1,5 @@
 import type { ProposedChange } from '../../../../types/chat'
-import { humanizeType } from '../cardTypes'
+import { humanizeType, permissionArguments } from '../cardTypes'
 import {
   ApprovalCode,
   ApprovalFact,
@@ -43,15 +43,17 @@ export function ExternalMcpCallPreview({ change }: { change: ProposedChange }) {
   )
 }
 
-/** code_run — Lucius's own short script, run in the sandbox. The user approves the source
- * itself, so it is never folded. */
+/** run_code — Lucius's own short script, run in the sandbox. The user approves the source
+ * itself, so it is never folded. Read off the generic permission card's own arguments. */
 export function CodeRunPreview({ change }: { change: ProposedChange }) {
-  const d = change.display || {}
+  const args = permissionArguments(change)
+  const purpose = typeof args.purpose === 'string' ? args.purpose : ''
+  const source = typeof args.source === 'string' ? args.source : ''
   return (
     <>
-      <ApprovalLead>{d.purpose || 'Run a script'}</ApprovalLead>
-      <ApprovalMeta items={[languageName(d.language)]} />
-      {d.source && <ApprovalCode>{d.source}</ApprovalCode>}
+      <ApprovalLead>{purpose || 'Run a script'}</ApprovalLead>
+      <ApprovalMeta items={[languageName(args.language)]} />
+      {source && <ApprovalCode>{source}</ApprovalCode>}
       <ApprovalNote>Runs sandboxed: no internet, ledger or secrets.</ApprovalNote>
     </>
   )

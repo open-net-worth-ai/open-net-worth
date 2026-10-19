@@ -31,7 +31,7 @@ Design authority: `frontend/design_handoffs/ask_lucius_handoff/` (prototype `men
 - **AL4.6** GIVEN an envelope, category, or account with a display color THEN its drag ghost dot, composer chip glyph, sent-message chip glyph, and picker icon all tint with that color (transaction chips keep the green/red direction tint instead); a colorless entity falls back to its type color.
 
 ## AL5 — Plumbing intact (regression)
-- **AL5.1** Tool-call pills, `code_run` boxes, fetch pills, ChangePreview (confirm-before-run incl. money-movement), and ArtifactCards still render inside the conversation, unchanged in behavior.
+- **AL5.1** Tool-call pills, run-code permission cards, fetch pills, ChangePreview (confirm-before-run incl. money-movement), and ArtifactCards still render inside the conversation, unchanged in behavior.
 - **AL5.2** Streaming, conversations (new/switch/rename/delete), model picker, effort levels, suggestions, scroll-pin, and side-panel resize all still work.
 
 ## States

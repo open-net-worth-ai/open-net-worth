@@ -89,7 +89,6 @@ def env(tmp_path, monkeypatch, db_isolated):
     # PendingPlanStore is DB-backed now (WAVE 5D2b, JSON->DB) — db_isolated already covers
     # its isolation, no class-level __init__ override needed.
     monkeypatch.setattr("backend.core.cost_context.get_cost_surface", lambda: "web")
-    monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
     monkeypatch.setattr(assistant, "_active_tools", lambda: list(assistant.TOOL_SCHEMAS))
     # Never let a real memory/fold background task survive past the test.
     monkeypatch.setattr(assistant, "_run_memory_extraction", lambda *a, **k: _noop(), raising=False)

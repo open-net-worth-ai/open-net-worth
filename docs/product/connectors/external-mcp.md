@@ -17,7 +17,7 @@ connecting one gives Lucius whatever tools that server offers.
 
 This is the most powerful connector in the app, and the one that deserves the most care: **a
 server you connect is someone else's software, and what it returns goes straight into Lucius's
-conversation.** Only connect servers you trust, and start every tool at **Needs approval** (the
+conversation.** Only connect servers you trust, and start every tool at **Ask** (the
 default).
 
 There are two kinds:
@@ -47,8 +47,8 @@ QuickBooks Online, Xero, Mercury, Expensify, Avalara AvaTax, Twelve Data, SEC ED
 4. Click **Connect**. The app starts the server, checks it answers, and lists its tools — *Testing
    connection to … and listing tools…*. A local command can take a few minutes the first time
    while its package downloads.
-5. Review the tools it found. Each starts at **Needs approval**; change any to **Always allow** or
-   **Blocked** if you want. Click **Add server**.
+5. Review the tools it found. Each starts at **Ask**; change any to **Always allow** or
+   **Block** if you want. Click **Add server**.
 
 The toast *"… added — N tools ready for Lucius"* confirms it. Nothing is saved until the
 connection test succeeds.
@@ -79,7 +79,7 @@ Ask Lucius to use it, for example after adding Playwright:
 
 > *Open example.com in the browser and tell me what the page says.*
 
-The first time he uses each tool, you'll get a card to approve it. The server's page under
+Unless you've chosen otherwise, you'll get a card to approve each tool (in **Manually approve**). The server's page under
 **Connectors** lists its tools and their levels under **Tool permissions**.
 
 ## Managing a server
@@ -97,8 +97,11 @@ Open the server under **Connectors**:
 
 ## Permissions — start cautious
 
-Every tool from an MCP server starts at **Needs approval**: Lucius shows you exactly what he's
-about to call and waits for you. You can change each tool's level under **Tool permissions**, or
+Every tool from an MCP server starts at **Ask**, the moment the server reports it. Ask then follows
+the conversation's approval mode like any other tool: in **Manually approve** Lucius shows you
+exactly what he's about to call and waits for you; in **Automatically approve** a small judge decides
+(and is told the tool's name, description and parameters come from a third party); in **Skip all
+approvals** it just runs. You can change each tool's setting under **Tool permissions**, in **Settings → Permissions**, or
 by choosing **Always allow** on an approval card. See [Permissions](../lucius/permissions.md).
 
 Tools are listed under **Read-only tools** or **Write & delete tools**. When the server marks a
@@ -159,6 +162,6 @@ been quiet for a long time, click **‹ Back** at the top, check the command, an
 
 ## Related pages
 
-- [Permissions](../lucius/permissions.md) — Needs approval, Always allow and Blocked
+- [Permissions](../lucius/permissions.md) — Always allow, Ask and Block
 - [Confirm cards](../lucius/confirm-cards.md) — what approving a call does
 - [Web search](web-search.md) — built-in search, no MCP server needed

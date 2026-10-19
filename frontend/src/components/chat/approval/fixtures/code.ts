@@ -44,16 +44,19 @@ export const CODE_FIXTURES: CardFixture[] = [
     },
   },
   {
-    name: 'code_run · savings-rate script',
+    name: 'run_code · savings-rate script',
     change: {
-      type: 'code_run',
+      type: 'tool_permission',
       id: 'toolu_code_run',
       grant_tool: 'run_code',
       session_id: 'sess_demo',
       display: {
-        purpose: 'Compute the monthly savings rate',
-        source: SAVINGS_SCRIPT,
-        language: 'python',
+        tool: 'run_code',
+        arguments: {
+          purpose: 'Compute the monthly savings rate',
+          source: SAVINGS_SCRIPT,
+          language: 'python',
+        },
       },
     },
   },

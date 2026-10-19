@@ -61,11 +61,39 @@ from backend.ai.search.base import (
     build_provider,
     fetch_result_payload,
 )
-from backend.ai.tools.misc import FetchPageInput, WebSearchInput, sanitize_search_results
+from backend.ai.tools.misc import (
+    ACTIVE_PROVIDER_VERBS,
+    FetchPageInput,
+    WebSearchInput,
+    search_and_read,
+)
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import schema_of
 
 logger = logging.getLogger(__name__)
+
+
+# (provider id, "search" | "fetch") -> the tool name minted for it by ``_register`` below — the
+# one place those names are built, so the gate never re-spells them.
+_PROVIDER_TOOLS: dict[tuple[str, str], str] = {}
+
+
+def active_provider_tool(generic: str) -> str | None:
+    """The tool name of the ACTIVE provider that ``generic`` (``web_search`` or ``fetch_page``)
+    runs, or ``None`` for any other tool or when no provider is active.
+
+    These two belong to the search connector: their permission IS the provider's own tool's
+    (``_connector_gate.permission_key``), so the connector's page is their one control and a
+    ``Blocked`` or ``Needs approval`` on ``tavily_search`` cannot be bypassed by calling
+    ``web_search``.
+    """
+    verb = ACTIVE_PROVIDER_VERBS.get(generic)
+    if verb is None:
+        return None
+    from backend.db.search_config_store import SearchConfigStore
+
+    provider_id = SearchConfigStore().default_provider()
+    return _PROVIDER_TOOLS.get((provider_id, verb)) if provider_id else None
 
 
 def _unusable_reason(spec: ProviderSpec) -> str | None:
@@ -101,12 +129,10 @@ async def _search_via(spec: ProviderSpec, input_data: dict) -> tuple[str, None]:
     provider = build_provider(spec.id, cfg)
     logger.info("%s_search: %s", spec.id, query)
     try:
-        results = await provider.search(query, max_results)
+        return await search_and_read(provider, query, input_data, max_results=max_results), None
     except Exception as exc:
         logger.error("%s_search failed: %s", spec.id, exc)
         raise
-    logger.info("%s_search returned %d results", spec.id, len(results))
-    return json.dumps(sanitize_search_results(results), ensure_ascii=False), None
 
 
 async def _fetch_via(spec: ProviderSpec, input_data: dict) -> tuple[str, None]:
@@ -149,6 +175,8 @@ def _register(spec: ProviderSpec) -> None:
     """
     search_name = f"{spec.id}_search"
     fetch_name = f"{spec.id}_fetch_page"
+    _PROVIDER_TOOLS[(spec.id, "search")] = search_name
+    _PROVIDER_TOOLS[(spec.id, "fetch")] = fetch_name
 
     @tool(
         search_name,

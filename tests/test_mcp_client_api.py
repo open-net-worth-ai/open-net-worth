@@ -674,9 +674,13 @@ def test_the_add_flow_leaves_the_ladder_populated_at_the_chosen_levels(app_clien
         "place_order": "blocked",  # the step-4 choice, visible on the ladder it was made on
         "cancel_order": "needs_approval",
     }
-    # …and the stored map agrees with what the ladder renders.
+    # …and the stored map agrees with what the ladder renders: every discovered tool has a row,
+    # seeded Ask the moment the server reported it, and the owner's one choice on top.
     assert c.get("/api/connectors/mcp:repro/permissions").json()["permissions"] == {
-        "place_order": "blocked"
+        "get_quote": "needs_approval",
+        "list_orders": "needs_approval",
+        "place_order": "blocked",
+        "cancel_order": "needs_approval",
     }
     # D4: configured + enabled + reachable is "active" — never "not_configured", and never
     # the MCP-only `last_status` vocabulary ("ok") in a field that holds the shared one.

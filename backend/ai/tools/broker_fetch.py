@@ -65,7 +65,7 @@ def _with_positions(result: dict) -> tuple[list[dict], dict, dict]:
         f"returns secrets. {_ALPACA.note}"
     ),
     input_schema=schema_of(FetchTransactionsInput, tool_name="alpaca_fetch_positions"),
-    mutates=("config",),
+    refreshes=("config",),
     connector="alpaca",
 )
 async def alpaca_fetch_positions(input_data: dict):
@@ -106,7 +106,7 @@ async def alpaca_fetch_positions(input_data: dict):
         f"secrets. {_IBKR.note}"
     ),
     input_schema=schema_of(FetchTransactionsInput, tool_name="ibkr_fetch_activity"),
-    mutates=("config",),
+    refreshes=("config",),
     connector="ibkr",
 )
 async def ibkr_fetch_activity(input_data: dict):

@@ -99,26 +99,32 @@ describe('external_mcp_call card', () => {
   })
 })
 
-describe('code_run card', () => {
+describe('run_code card', () => {
   it('leads with the purpose and shows the FULL source, unfolded', () => {
-    const change = fixture('code_run')
+    const change = fixture('run_code · savings-rate script')
     const { container } = mount(change)
     expect(container.querySelector('.ac-lead')?.textContent).toBe(
       'Compute the monthly savings rate',
     )
-    expect(container.querySelector('.ac-code')?.textContent).toBe(change.display?.source)
+    expect(container.querySelector('.ac-code')?.textContent).toBe(
+      (change.display?.arguments as { source: string }).source,
+    )
   })
 
   it('carries the sandbox note as one short line', () => {
-    const { container } = mount(fixture('code_run'))
+    const { container } = mount(fixture('run_code · savings-rate script'))
     const note = container.querySelector('.ac-note')
     expect(note?.textContent).toMatch(/sandboxed/i)
     expect(note?.textContent).toMatch(/no internet, ledger or secrets/i)
   })
 
   it('falls back to a plain lead when the purpose is missing', () => {
-    const base = fixture('code_run')
-    const { container } = mount({ ...base, display: { ...base.display, purpose: '' } })
+    const base = fixture('run_code · savings-rate script')
+    const display = base.display as { arguments: Record<string, unknown> }
+    const { container } = mount({
+      ...base,
+      display: { ...display, arguments: { ...display.arguments, purpose: '' } },
+    })
     expect(container.querySelector('.ac-lead')?.textContent).toBe('Run a script')
   })
 })

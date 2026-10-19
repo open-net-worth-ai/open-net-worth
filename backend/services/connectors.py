@@ -103,23 +103,51 @@ def _default_row(builtin: Builtin, kind: ConnectorKind) -> Row:
     }
 
 
-def _level_of(stored: dict[str, str], yolo: bool):
-    """A tool's EFFECTIVE level — what dispatch (``ai.tools._confirm_gate.effective_level``) will
-    actually do, not the raw stored-or-default read. Every tool reaching here is
-    connector-owned, so this mirrors that function's connector-owned branch (it lives in ``ai/``,
-    which ``services`` may not import): a stored decision always wins; failing that, a
-    read-shaped exemption (``email_search_messages`` et al — a bookkeeping write, never a
-    user-meaningful mutation) is ``always_allow``; failing that, YOLO substitutes
-    ``always_allow`` for the otherwise-cautious default. ADR
-    ``2026-08-17-connector-ladder-shows-the-real-effective-default``."""
+def _seed_for_kind(kind: str, tool_name: str) -> str:
+    """The seed value of a tool of a connector of this kind: an external MCP tool starts at Ask
+    (nothing says what it does); a native tool follows what it does — a read runs, a change or a
+    send asks (``tool_permissions.seed_level``, the one seed rule)."""
+    if kind == "mcp":
+        return tool_permissions.DEFAULT_LEVEL
+    return tool_permissions.seed_level(tool_name)
+
+
+def view_default_levels(view: ConnectorView) -> tuple[str, dict[str, str]]:
+    """``(default_level, {tool: seed})`` for one connector — the value each tool is seeded with
+    and Reset restores, so a client can show "default" beside a value the owner changed.
+
+    ``default_level`` is what a tool NOT in the map takes: ``needs_approval`` for an external MCP
+    server, ``always_allow`` (a read) for a native connector. The map carries every tool the
+    connector lists, so a native connector's sends read ``needs_approval`` there."""
+    fallback = tool_permissions.DEFAULT_LEVEL if view.kind == "mcp" else "always_allow"
+    return fallback, {t.name: _seed_for_kind(view.kind, t.name) for t in view.tools}
+
+
+def default_levels(connector_id: str) -> tuple[str, dict[str, str]]:
+    """``view_default_levels`` by id. Never raises on an unknown id: a connector that does not
+    exist has no tools to list (an ``mcp:`` id still reads the cautious default)."""
+    try:
+        return view_default_levels(get_connector(connector_id))
+    except NotFoundError:
+        mcp = connector_id.startswith(MCP_CONNECTOR_PREFIX)
+        return (tool_permissions.DEFAULT_LEVEL if mcp else "always_allow"), {}
+
+
+def _level_of(kind: ConnectorKind, stored: dict[str, str]):
+    """A tool's value — what dispatch (``ai.tools._confirm_gate.effective_level``, or
+    ``mcp.client_manager`` for an external MCP tool) will actually do. Its row, and failing that
+    (a tool not yet seeded) the seed it will be given: an external MCP tool asks, a native tool
+    follows what it does — a real change or a send asks, a read runs, so the ladder shows
+    ``plaid_get_status`` and ``duckduckgo_search`` as ``always_allow`` and ``email_send_message``
+    as ``needs_approval``.
+
+    Cannot literally call ``effective_level`` (it lives in ``ai/``, which ``services`` may not
+    import) — ``seed_level`` is the tier-legal route to the same answer, so the page and
+    dispatch cannot disagree (ADR ``2026-08-17-connector-ladder-shows-the-real-effective-
+    default``)."""
 
     def level(name: str) -> str:
-        explicit = stored.get(name)
-        if explicit:
-            return explicit
-        if name in tool_permissions.GATE_EXEMPT_READ_SHAPED:
-            return "always_allow"
-        return "always_allow" if yolo else tool_permissions.DEFAULT_LEVEL
+        return stored.get(name) or _seed_for_kind(kind.kind, name)
 
     return level
 
@@ -196,7 +224,6 @@ def list_connectors() -> List[ConnectorView]:
     # ONE bulk permission read for the whole list — this sits under ``enabled_connector_ids()``'s
     # sibling hot paths, where a per-connector read would be a per-connector table scan.
     levels = tool_permissions.get_all_permissions()
-    yolo = tool_permissions.yolo_enabled()
     ctx: dict = {}
     none: frozenset = frozenset()
     return [
@@ -205,7 +232,7 @@ def list_connectors() -> List[ConnectorView]:
             row,
             secrets.get(row["id"], none),
             ctx,
-            _level_of(levels.get(row["id"]) or {}, yolo),
+            _level_of(kind, levels.get(row["id"]) or {}),
         )
         for kind, row in _entries(rows)
     ]
@@ -335,7 +362,7 @@ def remove_connector(connector_id: str) -> None:
         kind.remove(connector_id)
     else:
         ConnectorStore().delete(connector_id)
-    tool_permissions.clear_connector_permissions(connector_id)
+    tool_permissions.reset_connector_permissions(connector_id)
     _reconcile_notify_channel(kind)
 
 

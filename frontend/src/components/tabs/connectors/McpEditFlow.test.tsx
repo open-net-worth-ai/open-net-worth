@@ -604,20 +604,14 @@ describe('the edit review step', () => {
     await reachReview()
 
     expect(
-      screen
-        .getByRole('button', { name: 'firecrawl_scrape: Blocked' })
-        .getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: 'firecrawl_scrape: Block' }).getAttribute('aria-pressed'),
     ).toBe('true')
     expect(
-      screen
-        .getByRole('button', { name: 'firecrawl_search: Needs approval' })
-        .getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: 'firecrawl_search: Ask' }).getAttribute('aria-pressed'),
     ).toBe('true')
     // A newly discovered tool is cautious, with no tiering (spec §4).
     expect(
-      screen
-        .getByRole('button', { name: 'firecrawl_map: Needs approval' })
-        .getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: 'firecrawl_map: Ask' }).getAttribute('aria-pressed'),
     ).toBe('true')
   })
 
@@ -781,20 +775,20 @@ describe('the permission ladder is not allowed to lie', () => {
     const kebab = await openDetail()
     const detail = kebab.closest('.rd-modal') as HTMLElement
 
-    fireEvent.click(within(detail).getByRole('button', { name: 'firecrawl_search: Blocked' }))
+    fireEvent.click(within(detail).getByRole('button', { name: 'firecrawl_search: Block' }))
 
     // The fail-open scar: the grid kept rendering "Blocked" while the backend held no row,
     // so the operator read a tool as off while Lucius was still being offered it.
     await waitFor(() =>
       expect(
         within(detail)
-          .getByRole('button', { name: 'firecrawl_search: Blocked' })
+          .getByRole('button', { name: 'firecrawl_search: Block' })
           .getAttribute('aria-pressed'),
       ).toBe('false'),
     )
     expect(
       within(detail)
-        .getByRole('button', { name: 'firecrawl_search: Needs approval' })
+        .getByRole('button', { name: 'firecrawl_search: Ask' })
         .getAttribute('aria-pressed'),
     ).toBe('true')
     expect(screen.getByText('permission store unavailable')).toBeTruthy()

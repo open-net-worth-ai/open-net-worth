@@ -515,18 +515,14 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           onRunNow={() => void runNow(selected)}
           onStopRun={(run) => void stopRun(run)}
           onStatusChange={(status) => void toggle(selected, status)}
-          onRevoke={async (index) => {
+          onSaveToolLists={async (lists) => {
             setBusyId(selected.id)
             setActionError(null)
             try {
-              const saved = await updateAutomation(selected.id, {
-                always_allowed: (selected.always_allowed ?? []).filter(
-                  (_, itemIndex) => itemIndex !== index,
-                ),
-              })
+              const saved = await updateAutomation(selected.id, lists)
               setAutomations((rows) => rows.map((row) => (row.id === saved.id ? saved : row)))
             } catch (error) {
-              setActionError(messageOf(error, 'Permission could not be revoked.'))
+              setActionError(messageOf(error, 'Tool permissions could not be saved.'))
             } finally {
               setBusyId(null)
             }

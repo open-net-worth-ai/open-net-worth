@@ -31,12 +31,9 @@ logger = logging.getLogger(__name__)
 
 # ── Unattended-write guard — the ONE call site every ledger write goes through ──────────────
 #
-# ``_gate.enforce_unattended_write`` (backend/ai/tools/_confirm_gate.py) composes the hardline
-# block + the running agent's per-agent envelope + best-effort surfacing, and self-guards on
-# ``is_unattended()`` — a plain interactive/connector/skill turn always gets ``None`` back
-# immediately, so calling it unconditionally here never changes behavior on those surfaces
-# (non-negotiable: interactive must not change AT ALL — no second "is this unattended" check
-# of our own gates the WRITE).
+# ``_gate.enforce_unattended_write`` (backend/ai/tools/_confirm_gate.py) is an INERT stub that
+# always returns ``None`` — the hardline block and the per-agent envelope it once composed are
+# gone, so calling it unconditionally here never changes behavior on any surface.
 #
 # The after-the-fact notice this comment used to describe (``report_unattended_write``) is
 # GONE — it was left with zero call sites when the unattended concept was removed
@@ -1739,11 +1736,6 @@ async def delete_transactions_where(input_data: dict):
         k: input_data.get(k) or None
         for k in ("date_from", "date_to", "account_id", "kind", "category", "batch_id")
     }
-    # Hardline: a filtered bulk delete is a "model chose the set" write (the selection can't
-    # be verified after it runs) — HARDLINE_UNATTENDED_TOOLS names this tool specifically, so
-    # an unattended caller is refused unconditionally here, no envelope, no override, no
-    # config (ai._confirm_gate.is_hardline_blocked short-circuits before any envelope check).
-    # Self-guards on is_unattended() — a no-op on every interactive/connector/skill turn.
     guard = await _gate.enforce_unattended_write(
         "delete_transactions_where",
         account_id=filters.get("account_id"),
@@ -1754,8 +1746,8 @@ async def delete_transactions_where(input_data: dict):
     if guard is not None:
         return guard
     # OPT-IN PREVIEW. This is the one ledger write whose SELECTION the caller cannot verify
-    # from the arguments: they name a FILTER, not rows — which is exactly why it is the one
-    # tool on HARDLINE_UNATTENDED_TOOLS.
+    # from the arguments: they name a FILTER, not rows — which is why the Auto judge is told
+    # to ask on a bulk delete through a filter whose reach it cannot see.
     #
     # It used to be a `confirm=true` the MODEL set to authorise its own call, with the
     # preview as the un-confirmed branch. That was the second confirm mechanism, deleted

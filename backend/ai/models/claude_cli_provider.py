@@ -52,7 +52,7 @@ from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConfigurationError, ExternalServiceError, ProviderTimeoutError
 
 from . import claude_live_session
-from .base import AIProvider
+from .base import AIProvider, log_text_cap
 from .cli_call_grace import PostCallWatch, grace_seconds
 from .cli_tool_protocol import (
     ToolCallScanner,
@@ -956,7 +956,7 @@ class ClaudeCliProvider(AIProvider):
         # a call that ran unusually long but still succeeded had nothing to show what it
         # actually produced. Bounded, logged only — see openai_provider.complete's matching
         # comment for why this isn't in cost_log.
-        _LOG_TEXT_CAP = 8000
+        _LOG_TEXT_CAP = log_text_cap(source)
         log.info(
             "complete_done  source=%s  transport=claude_cli  model=%s  basis=%s  input=%d  "
             "cache_write=%d  cache_read=%d  output=%d  cost_usd=%.5f  content_chars=%d\n"

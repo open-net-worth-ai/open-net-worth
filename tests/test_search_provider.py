@@ -306,7 +306,7 @@ def test_duckduckgo_empty_body_yields_no_rows(monkeypatch):
 # string; httpx.HTTPStatusError's own message embeds the full request URL. Left
 # unhandled, a 4xx/5xx from Google (expired key, quota, disabled project) would put the
 # raw key into the tool result JSON, the persisted session transcript, and app logs —
-# every caller (web_search when this provider is active, x_search, search_via_google_pse)
+# every caller (web_search when this provider is active, google_pse_search)
 # just re-raises/logs the bare exception. These tests exercise the REAL httpx exception
 # path (a genuine HTTPStatusError raised by a stubbed response), not a mocked message
 # string, so a future refactor that stops calling raise_for_status() the same way trips.

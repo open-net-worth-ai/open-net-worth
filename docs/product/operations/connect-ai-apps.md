@@ -123,8 +123,8 @@ header.
 An app holding your API token **acts as you**: it can read your whole book and make changes.
 
 - **No approval cards.** When Lucius wants to make a change that needs your approval, he shows you
-  a card first. Other apps don't get those cards: a tool set to **Needs approval** runs straight
-  away when another app calls it. Only tools set to **Blocked** in
+  a card first. Other apps don't get those cards: a tool set to **Ask** runs straight
+  away when another app calls it. Only tools set to **Block** in
   [Settings → Permissions](../lucius/permissions.md) are refused. If you'd rather an app couldn't
   change something, block that tool.
 - **Changes are recorded.** Each change another app makes is logged and saved as a checkpoint, so

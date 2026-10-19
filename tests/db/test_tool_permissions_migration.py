@@ -187,9 +187,8 @@ def test_the_yolo_star_row_lands_at_core_star(upgraded_to_0039):
 
     _upgrade_to_head(cfg)
 
-    from backend.services import tool_permissions as svc
-
-    assert svc.yolo_enabled() is True
+    # The row lands as it always did; the boot sync (`sync_seeds`) later carries the retired
+    # switch forward as per-tool Always allow rows (tests/test_tool_permission_seeding.py).
     store = ToolPermissionStore(engine=engine)
     assert store.get_level("core", "*") == "always_allow"
 

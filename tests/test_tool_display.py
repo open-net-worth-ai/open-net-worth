@@ -212,42 +212,34 @@ def test_every_registered_tool_gets_a_label_and_a_known_verb_class():
 
 
 def test_a_real_write_can_never_wear_a_read_shaped_icon():
-    """Structural, not a list of exceptions — and it reads the exceptions from the app.
+    """Structural, not a list of exceptions.
 
     `open_option` is a trade writing options + portfolio + ledger, and trusting its `open_`
     prefix rendered a money-moving call with the globe glyph a fetched web page gets. The fix
     is not an entry for `open_option`: `_icon_class` refuses a read-shaped icon for anything
     that writes, so a future write tool named `get_…` is handled the day it is added.
 
-    The carve-out is the permission gate's OWN reviewed allowlist. `get_live_prices` memoizes
-    into a price cache, and a pencil beside "Get live prices" told a person their data was
-    edited when nothing they care about changed (owner report on mobile). That judgement —
-    "this write is bookkeeping, not a mutation" — is already made, reviewed and maintained in
-    `GATE_EXEMPT_READ_SHAPED`, which the confirm gate consults to decide not to ask the user
-    about the very same calls. Reading it means no second opinion here to drift from it.
+    "Writes" is the registry's `mutates=` and nothing else: a read that only makes a screen
+    refresh (`refreshes=`) is a read — the same fact that decides whether the tool asks by
+    default — so a pencil never appears beside "Fetch transactions".
     """
     import backend.ai.tools as tools_pkg  # noqa: F401  (populates the registry)
     from backend.ai.tools.display import _READ_SHAPED_ICONS
-    from backend.ai.tools.registry import _REGISTRY, mutated_domains
-    from backend.services.tool_permissions import GATE_EXEMPT_READ_SHAPED
+    from backend.ai.tools.registry import _REGISTRY, written_domains
 
     offenders = sorted(
-        (name, describe_tool_call(name, {})["verb"], mutated_domains(name))
+        (name, describe_tool_call(name, {})["verb"], written_domains(name))
         for name in _REGISTRY
-        if mutated_domains(name)
-        and name not in GATE_EXEMPT_READ_SHAPED
-        and describe_tool_call(name, {})["verb"] in _READ_SHAPED_ICONS
+        if written_domains(name) and describe_tool_call(name, {})["verb"] in _READ_SHAPED_ICONS
     )
     assert not offenders, f"a real write is wearing a read icon: {offenders}"
 
 
-def test_a_bookkeeping_write_still_reads_as_a_read():
+def test_a_refreshing_read_still_reads_as_a_read():
     """The other direction, so neither rule can quietly swallow the other."""
-    from backend.services.tool_permissions import GATE_EXEMPT_READ_SHAPED
+    from backend.ai.tools.registry import refreshing_tool_domains
 
-    # `get_live_prices` used to be the example here; it stopped writing entirely on
-    # 2026-08-23, so a still-bookkeeping member stands in.
-    assert "diff_statement" in GATE_EXEMPT_READ_SHAPED, "the premise of this test moved"
+    assert "diff_statement" in refreshing_tool_domains(), "the premise of this test moved"
     assert describe_tool_call("diff_statement", {})["verb"] == "read"
     # ...while a genuine trade does not.
     assert describe_tool_call("open_option", {})["verb"] not in {"read", "search", "browse"}

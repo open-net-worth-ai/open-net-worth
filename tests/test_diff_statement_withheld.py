@@ -1,7 +1,7 @@
 """``diff_statement`` (the AI tool) must never hand out "these need to be deleted" guidance off
 the back of a parse that never finished reading every page, a statement whose own printed
 balances don't reconcile, or a statement cached before completeness tracking existed at all —
-this is `GATE_EXEMPT_READ_SHAPED` (services/tool_permissions.py), so the model can act on its own
+this is a read (`refreshes=`, so it does not ask by default), so the model can act on its own
 "extra" list without a confirm gate in the way. Its own reconcile path
 (services/reconcile.py::parse_bank_statement) used to drop the parse's meta/reconcile entirely,
 so the completeness gate (docs/adr/2026-09-09-an-incomplete-parse-withholds-the-ledger-diff.md)

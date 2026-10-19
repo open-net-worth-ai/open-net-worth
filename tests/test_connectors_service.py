@@ -524,12 +524,14 @@ def test_remove_connector_clears_tool_permissions_for_a_web_search_provider():
     from backend.services import tool_permissions
 
     svc = _svc()
-    tool_permissions.set_tool_permission("web_search:tavily", "web_search", "always_allow")
+    tool_permissions.set_tool_permission("web_search:tavily", "tavily_search", "blocked")
 
     svc.remove_connector("web_search:tavily")
 
+    # Re-adding starts from the seed (a search is a read), not from what the old one was given —
+    # and the row stays: every tool has one.
     assert (
-        tool_permissions.get_tool_permission("web_search:tavily", "web_search") == "needs_approval"
+        tool_permissions.stored_tool_level("web_search:tavily", "tavily_search") == "always_allow"
     )
 
 
@@ -566,7 +568,10 @@ def test_remove_connector_clears_all_three_email_tools_via_real_owner_resolution
     svc.remove_connector("email")
 
     for tool in ("email_send_message", "email_search_messages", "email_get_messages"):
-        assert tool_permissions.stored_tool_level("email", tool) is None
+        # Back to the seed — the row stays, since every tool has one.
+        assert tool_permissions.stored_tool_level("email", tool) == tool_permissions.seed_level(
+            tool
+        )
         # And nothing was ever (or is now) hiding under the unrelated core bucket either.
         assert tool_permissions.stored_tool_level("core", tool) is None
 
@@ -1421,8 +1426,8 @@ def _tool_level(view, name: str) -> str:
 
 
 def test_undecided_read_shaped_tool_shows_always_allow_not_the_raw_default():
-    """email_search_messages/email_get_messages are GATE_EXEMPT_READ_SHAPED — effective_level resolves
-    an undecided one to always_allow. Before the fix, the ladder fell back to the raw
+    """email_search_messages/email_get_messages are reads — effective_level resolves an undecided
+    one to always_allow. Before the fix, the ladder fell back to the raw
     DEFAULT_LEVEL ("needs_approval") instead, disagreeing with what actually dispatches."""
     svc = _svc()
 
@@ -1441,31 +1446,6 @@ def test_an_explicit_stored_decision_still_wins_over_the_exemption():
 
     email = svc.get_connector("email")
     assert _tool_level(email, "email_search_messages") == "blocked"
-
-
-def test_yolo_armed_shows_always_allow_for_an_otherwise_undecided_write_tool():
-    """YOLO (the reserved core:* row) substitutes always_allow for the cautious default at
-    dispatch time (ai.tools._confirm_gate.effective_level) — the ladder must show the same
-    thing, not the raw "needs_approval" default, or the two disagree exactly like the
-    read-shaped case above."""
-    svc = _svc()
-    from backend.services import tool_permissions
-
-    tool_permissions.set_tool_permission("core", "*", "always_allow")
-
-    email = svc.get_connector("email")
-    assert _tool_level(email, "email_send_message") == "always_allow"
-
-
-def test_yolo_never_overrides_an_explicit_blocked_row():
-    svc = _svc()
-    from backend.services import tool_permissions
-
-    tool_permissions.set_tool_permission("core", "*", "always_allow")
-    tool_permissions.set_tool_permission("email", "email_send_message", "blocked")
-
-    email = svc.get_connector("email")
-    assert _tool_level(email, "email_send_message") == "blocked"
 
 
 # ── market data (Yahoo Finance / CoinGecko) — the migration off the standalone "Data"

@@ -136,8 +136,9 @@ class ScanIntelInput(ToolInput):
         "you're kicking it off. Returns the number of story arcs created or updated."
     ),
     input_schema=schema_of(ScanIntelInput, tool_name="scan_intel"),
-    # Upserts story-arc signals AND re-syncs the holdings watchlist (run_intel_scan).
-    mutates=("intel", "watchlist"),
+    # Refreshes the machine-made Intel feed (story-arc signals) and re-syncs the auto-managed
+    # holdings watchlist (run_intel_scan) — the same action as the Intel tab's "Scan now".
+    refreshes=("intel", "watchlist"),
 )
 async def scan_intel(input_data: dict):
     from backend.monitoring.intel_agent import run_intel_scan

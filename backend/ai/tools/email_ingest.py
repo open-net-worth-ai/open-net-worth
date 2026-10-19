@@ -228,17 +228,15 @@ class SearchMessagesInput(ToolInput):
         "between calls. Requires IMAP credentials (Connectors → Email)."
     ),
     input_schema=schema_of(SearchMessagesInput, tool_name="email_search_messages"),
-    # Read-SHAPED but writes: stashes a lightweight (body-less) provenance snapshot per
-    # match, same as fetch_emails, so email_get_messages can later locate it by message_id.
-    mutates=("config",),
+    # A read that leaves a lightweight (body-less) provenance snapshot per match behind, so
+    # email_get_messages can later locate it by message_id — it refreshes a screen, it changes
+    # nothing the owner would call a change.
+    refreshes=("config",),
     # Scoped to the Email connector's IMAP leg — the JOIN onto tool_permissions (a
-    # `blocked`/`always_allow` set via the Email connector's own ladder now actually
+    # `blocked`/`always_allow`/`needs_approval` set via the Email connector's own ladder
     # governs dispatch instead of silently landing under the unrelated `core` bucket) and
-    # onto Remove's `clear_connector_permissions("email")`. Its default LEVEL is unchanged
-    # by this tag (still `always_allow`, never asks) — `GATE_EXEMPT_READ_SHAPED` is
-    # consulted by `effective_level` regardless of owner precisely so a tag that only
-    # changes WHO a decision is filed under can't also start carding this read; see that
-    # function's docstring.
+    # onto Remove's `reset_connector_permissions("email")`. The tag says WHOSE decision
+    # applies; it does not change the default, which follows what the tool does (a read runs).
     connector="email",
 )
 async def email_search_messages(input_data: dict):
@@ -460,9 +458,9 @@ class GetMessagesInput(ToolInput):
         "(Connectors → Email)."
     ),
     input_schema=schema_of(GetMessagesInput, tool_name="email_get_messages"),
-    # Read-SHAPED but writes: stashes/completes a provenance snapshot per fetched message.
-    mutates=("config",),
-    # See email_search_messages' identical comment — same connector, same default-level guarantee.
+    # A read that completes a provenance snapshot per fetched message — see
+    # email_search_messages' identical comment.
+    refreshes=("config",),
     connector="email",
 )
 async def email_get_messages(input_data: dict):
@@ -655,6 +653,7 @@ class SendEmailInput(ToolInput):
     # id from the URL) but dispatch resolved the owner as "core" — so it was silently NEVER
     # consulted. This tag makes the write and read paths agree.
     connector="email",
+    external_effect=True,
 )
 async def email_send_message(input_data: dict):
     import asyncio

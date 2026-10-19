@@ -80,7 +80,7 @@ async def test_the_cost_surface_is_bound_inside_the_run_s_own_task(monkeypatch):
     """Confirm-gate fail-open regression (security review finding 1).
 
     ``should_gate`` fails OPEN on an unrecognised surface by design, and with
-    ``GATE_ALL_WRITES`` that means every mutating tool executing with no approval card. The
+    the gate always armed that means every mutating tool executing with no approval card. The
     surface must therefore be set before the run's first tool call. This asserts the value
     observed FROM INSIDE the turn, which is the only place it matters.
     """

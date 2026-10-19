@@ -10,11 +10,11 @@ happened.
 
 Three properties this turn does NOT share with an interactive chat turn:
 
-* **Nobody is watching.** ``set_unattended(True)`` is a statement of fact about
-  the caller, and the hardline tier reads it: ``delete_transactions_where`` and
-  ``apply_payee_rules`` refuse outright, because a "model chose the set"
-  operation cannot be verified after it runs with no human present. Routine
-  writes proceed — see the ADR for why no envelope is imposed here.
+* **Nobody is watching.** A capture is fire-and-forget: the sender is not sitting in a
+  turn waiting on it. (A hardline tier once refused ``delete_transactions_where`` and
+  ``apply_payee_rules`` on it; that tier is gone — ADR
+  ``2026-10-10-auto-approval-is-a-per-call-judge``.) Routine writes proceed — see
+  the ADR for why no envelope is imposed here.
 * **The surface cannot render a confirm card.** ``capture:<source>`` is neither
   ``web`` nor ``connector*``, so ``_confirm_gate`` correctly declines to stage a
   card nobody could ever tap.
@@ -121,14 +121,11 @@ async def run_capture(
     from backend.ai.prompts import build_system_prompt
     from backend.ai.tools import _skill_scope
     from backend.core.cost_context import clear_cost_surface, set_cost_surface
-    from backend.core.unattended import reset_unattended, set_unattended
     from backend.db.model_config_store import ModelConfigStore
 
     session_id = f"capture-{uuid.uuid4().hex[:8]}"
     snapshot = _skill_scope.snapshot_scope()
     set_cost_surface("capture")
-    # A capture is fire-and-forget: the sender is not sitting in a turn waiting on it.
-    _unattended_token = set_unattended(True)
 
     parts: list[str] = []
     # Text since the last tool call — the final round, which is where the prompt asks for the
@@ -187,7 +184,6 @@ async def run_capture(
     finally:
         _skill_scope.restore_scope(snapshot)
         clear_cost_surface()
-        reset_unattended(_unattended_token)
         release_session(session_id)
         # Nobody was waiting on this reply, so it never shows as a new one.
         mark_sessions_read([session_id])
@@ -419,7 +415,7 @@ def start_capture(
 ) -> asyncio.Task:
     """Run ``run_capture`` in a server-owned task and return it (joining one already in flight).
 
-    Safe as a plain task: ``run_capture`` sets its cost surface and unattended flag as its
+    Safe as a plain task: ``run_capture`` sets its cost surface as its
     first statements, before any ``await``, so the copied request context is never read.
     """
     existing = in_flight(source, ref)

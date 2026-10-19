@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { authFetch } from '../../api/client'
-import { GRANT_RESOLVED_SUFFIX, grantTool, type GrantScope } from '../../api/toolPermissions'
+import { grantTool, type GrantScope } from '../../api/toolPermissions'
 import type { ProposedChange } from '../../types/chat'
 import {
   mcpConnectorId,
@@ -24,7 +23,11 @@ interface Props {
   // from prose, and on the position/lot cards it could not, so a ✓ drew a second card and
   // wrote nothing. Removing the prop is what stops that being re-addable one branch at a
   // time.
-  onResolvePendingToolUse?: (toolUseId: string, decision: 'approve' | 'deny') => void
+  onResolvePendingToolUse?: (
+    toolUseId: string,
+    decision: 'approve' | 'deny',
+    options?: { always?: boolean },
+  ) => void
   // Persist the user's response so the card stays resolved across re-renders /
   // reloads. Without it, ChangePreview only tracks an optimistic local response.
   onRespond?: (status: 'confirmed' | 'dismissed') => void
@@ -51,10 +54,10 @@ export function ProposedChangeDiff({ change }: { change: ProposedChange }) {
 // the conversation replaced it, or it was already answered — so nothing ran and nothing ever
 // can via this card again (the backend consumes/replaces a pending tool_use once; there is no
 // second redemption). Every button-bearing layout below (the grant_tool/external_mcp_call
-// split button, and code_run's three-way row) must render this SAME terminal row instead of
-// its live buttons, or a re-armed "Allow once" sits over the error that just explained why the
-// first tap did nothing — the mobile incident this fixes (2026-09-06). Reuses `.change-confirmed`,
-// the row the card already shows for "✓ Approved"/"✗ Dismissed", so no new className is needed.
+// split button) must render this SAME terminal row instead of its live buttons, or a re-armed
+// "Allow once" sits over the error that just explained why the first tap did nothing — the
+// mobile incident this fixes (2026-09-06). Reuses `.change-confirmed`, the row the card already
+// shows for "✓ Approved"/"✗ Dismissed", so no new className is needed.
 function RefusedRow() {
   return (
     <div className="change-confirmed" role="status" style={{ color: 'var(--muted)' }}>
@@ -91,8 +94,8 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
   // FAILED standing grant — the call still went ahead (the user approved it), but the
   // standing permission did not stick and saying so is the whole point (see api/toolPermissions.ts).
   const [grantBusy, setGrantBusy] = useState<GrantScope | null>(null)
-  // The scope the user actually chose, so the resolved card can name it ("✓ Approved · this
-  // session") instead of a bare "✓ Confirmed" that hides which grant was given.
+  // The scope the user actually chose, so the card answers "✓ Approved" or "✓ Always allowed"
+  // at once; once a reload has run, the persisted `change.resolution` says the same.
   const [grantedScope, setGrantedScope] = useState<GrantScope | null>(null)
 
   const preview = previewFromDisplay(change.display)
@@ -101,9 +104,9 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
   const [grantError, setGrantError] = useState<string | null>(null)
 
   // handleGrant records the standing grant (if any), then calls this, which resolves the
-  // SAME tool_use_id regardless of scope — the scope only decided whether a standing grant
-  // was written, not how this ONE call resolves, so handleConfirm itself takes no scope arg.
-  function handleConfirm() {
+  // SAME tool_use_id regardless of scope. The scope only decided whether a standing grant was
+  // written; it is passed on so the answered card remembers WHICH answer it was (`resolution`).
+  function handleConfirm(scope: GrantScope = 'once') {
     setLocalResponse('confirmed')
     onRespond?.('confirmed')
     // A permission card is checked FIRST and resolves EVERY gated tool the SAME way,
@@ -113,7 +116,7 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
     // against the SAME tool_use_id this card is bound to (RFC 2026-07-22) — never a model
     // re-call, so there is nothing to tell the model and no token to hand back.
     if (change.grant_tool) {
-      onResolvePendingToolUse?.(change.id ?? '', 'approve')
+      onResolvePendingToolUse?.(change.id ?? '', 'approve', { always: scope === 'always' })
       return
     }
     // external_mcp_call migrated onto the SAME tool_use_id-keyed resolve path 2026-08-22
@@ -125,7 +128,7 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
     // rather than falling into the grant_tool check above; it still resolves the SAME way,
     // by tool_use_id, with a bare Confirm/Dismiss (not the four-way grant card).
     if (change.type === 'external_mcp_call') {
-      onResolvePendingToolUse?.(change.id ?? '', 'approve')
+      onResolvePendingToolUse?.(change.id ?? '', 'approve', { always: scope === 'always' })
       return
     }
     // EVERY confirm card resolves server-side now (ADR
@@ -157,9 +160,8 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
       // The approval for THIS call still stands — the user tapped it and the card showed
       // exactly what will happen. Only the STANDING part failed, so we proceed and say so
       // rather than either silently pretending it stuck or discarding an approval the user
-      // actually gave. Deliberately unlike handleCodeAllow's silent `catch {}`: there a
-      // failed grant costs one extra prompt, here it costs the user a belief about their own
-      // permissions that is not true.
+      // actually gave. A failed standing grant costs the user a belief about their own
+      // permissions that is not true, so it is reported rather than swallowed.
       setGrantError(
         scope === 'always'
           ? "Couldn't save the permanent permission — this call is approved, but you'll be asked again."
@@ -168,7 +170,7 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
     } finally {
       setGrantBusy(null)
     }
-    handleConfirm()
+    handleConfirm(scope)
   }
 
   function handleDeny() {
@@ -213,46 +215,12 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
     } finally {
       setGrantBusy(null)
     }
-    handleConfirm()
+    handleConfirm('always')
   }
 
   function handleMcpAllowOnce() {
     setGrantedScope('once')
-    handleConfirm()
-  }
-
-  // ── code_run permission card actions (RFC ad-hoc-code-execution §4.1) ──────────────────
-  function handleCodeReject() {
-    setLocalResponse('dismissed')
-    onRespond?.('dismissed')
-    // Resolve the PAUSED tool_use, exactly like every other Deny. Sending Lucius a sentence
-    // was correct while run_code returned a real result; it stages and pauses now (ADR
-    // 2026-08-25-one-confirm-mechanism-for-every-tool), so a text-only reject would leave
-    // that tool_use result-less and the turn waiting on it forever.
-    onResolvePendingToolUse?.(change.id ?? '', 'deny')
-  }
-
-  async function handleCodeAllow(scope: 'once' | 'always') {
-    setLocalResponse('confirmed')
-    onRespond?.('confirmed')
-    // Set the standing grant via REST FIRST (human-authenticated) so the next run_code in
-    // scope auto-runs without a card. "once" sets nothing.
-    try {
-      if (scope === 'always') {
-        await authFetch('/api/config/code-execution', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ auto_run: true }),
-        })
-      }
-    } catch {
-      /* grant-set is best-effort; the resolve below still runs THIS script */
-    }
-    // Resolve the paused tool_use, like every other card. It used to send Lucius
-    // "…(call apply_run_code with nonce X)" — the nonce kept the SOURCE honest, but it still
-    // routed the approval through the model, and a card the model never answered simply never
-    // ran (ADR 2026-08-25-one-confirm-mechanism-for-every-tool).
-    onResolvePendingToolUse?.(change.id ?? '', 'approve')
+    handleConfirm('once')
   }
 
   return (
@@ -274,7 +242,10 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
         responded === 'confirmed' ? (
           <div className="change-confirmed">
             {isPermissionCard || isExternalMcpCard
-              ? `✓ Approved${grantedScope ? GRANT_RESOLVED_SUFFIX[grantedScope] : ''}`
+              ? change.resolution === 'always_allowed' ||
+                (!change.resolution && grantedScope === 'always')
+                ? '✓ Always allowed'
+                : '✓ Approved'
               : '✓ Confirmed'}
           </div>
         ) : (
@@ -299,34 +270,12 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
             isExternalMcpCard ? void handleMcpAlwaysAllow() : void handleGrant('always')
           }
           onDeny={handleDeny}
+          inAutomation={Boolean(change.automation_id)}
         />
-      ) : change.type === 'code_run' ? (
-        // Three-way permission card (RFC ad-hoc-code-execution §4.1): Allow once / Always
-        // allow … Reject — the same order as every other permission card. The per-conversation tier was removed on 2026-08-02. The standing-grant
-        // button sets the grant via REST (human-authenticated) BEFORE sending the apply
-        // message, so the model can never escalate its own permission — it only ever runs the
-        // staged nonce.
-        <div className="change-preview-actions change-actions-wrap">
-          <button
-            className="change-confirm-btn change-grant-btn change-grant-btn--once"
-            onClick={() => handleCodeAllow('once')}
-          >
-            Allow once
-          </button>
-          <button
-            className="change-confirm-btn change-grant-btn change-grant-btn--always"
-            onClick={() => handleCodeAllow('always')}
-          >
-            Always allow
-          </button>
-          <button className="change-discard-btn change-grant-btn--deny" onClick={handleCodeReject}>
-            Reject
-          </button>
-        </div>
       ) : (
-        // Unreachable: every staged card carries `grant_tool`, is `external_mcp_call`, or is
-        // `code_run` — all three handled above. A card with none of them never resolves, so
-        // it is a bug to surface, not a bare Confirm to fall back on.
+        // Unreachable: every staged card carries `grant_tool` or is `external_mcp_call` — both
+        // handled above. A card with neither never resolves, so it is a bug to surface, not a
+        // bare Confirm to fall back on.
         <div className="change-preview-actions">
           <span className="change-grant-error">
             This change has no way to be applied — please report it.

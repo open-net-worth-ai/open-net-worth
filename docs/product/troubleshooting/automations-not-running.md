@@ -86,7 +86,7 @@ Each Automation has its own approval setting:
 In **Manually approve**, an action still runs without asking if it's on that Automation's own
 **Always allowed** list (tapping **Always allow** on a card during a run adds it there). To review
 everything first, use **Edit automation** and choose **Manually approve**, then open the
-Automation and **Revoke** anything in its **Always allowed** section. Transactions an Automation
+Automation and **Remove** anything set to **Always allow** under its **Tool permissions**. Transactions an Automation
 logs still wait in your review queue (**N to review** in Accounts) in every mode. See
 [Automations](../lucius/automations.md#approval-mode)
 and [Permissions](../lucius/permissions.md).

@@ -299,9 +299,9 @@ export function ConnectorDetail({
                 ? `the ${entry.tools.length} tool${entry.tools.length === 1 ? '' : 's'} it offers`
                 : 'access to it'}
               , and every permission level you set for them is forgotten — so adding this server
-              again starts it back at Needs approval rather than inheriting what you allowed before.
-              Nothing else on this instance is touched. This can&apos;t be undone. If you just want
-              to pause it without losing your saved credentials, use Pause instead.
+              again starts it back at Ask rather than inheriting what you allowed before. Nothing
+              else on this instance is touched. This can&apos;t be undone. If you just want to pause
+              it without losing your saved credentials, use Pause instead.
             </>
           ) : (
             <>

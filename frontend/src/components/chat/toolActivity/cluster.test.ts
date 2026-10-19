@@ -95,6 +95,11 @@ describe('failureOf', () => {
 
   it('does not call a plain-text or successful result a failure', () => {
     expect(failureOf(tool({ result: 'just some text' })).failed).toBe(false)
+    // A call the owner denied did not run, but it did not FAIL either.
+    expect(
+      failureOf(tool({ result: '{"ok":false,"declined_by":"user","error":"THE USER DECLINED"}' }))
+        .failed,
+    ).toBe(false)
     expect(failureOf(tool({ result: '{"ok":true}' })).failed).toBe(false)
     expect(failureOf(tool({ result: '{"error":null}' })).failed).toBe(false)
   })

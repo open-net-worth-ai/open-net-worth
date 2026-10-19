@@ -5,10 +5,8 @@ writer — ``core.txn_sources.TRUSTED_WRITERS``) and may flag a row, never appro
 is the owner's glance; a run that clears the flag on what it just wrote empties the queue before
 anyone has looked.
 
-The signal is the audit scope's ``surface``, not ``core.unattended``: that flag has exactly one
-sanctioned reader (``run_script``'s gate, pinned by a test) and was deleted once for growing into
-a tool ceiling. This is not a tool permission either — it holds in every approval mode,
-"Skip all approvals" included.
+The signal is the audit scope's ``surface``. This is not a tool permission — it holds in every
+approval mode, "Skip all approvals" included.
 """
 
 from __future__ import annotations

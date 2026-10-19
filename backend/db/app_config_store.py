@@ -16,9 +16,8 @@ without a ``.env`` edit + restart.
 
 Also holds the **script-bundling-skills kill switch** (S4):
 ``script_skills_enabled`` (default ``False``) — when off, NO script-skill run ever
-reaches the sandbox subprocess. Unattended execution also requires the separate
-``script_skills_unattended_enabled`` instance flag. The enforcement gate is the
-``run_script`` tool dispatch. Human-only: no Lucius tool writes either flag.
+reaches the sandbox subprocess. The enforcement gate is the ``run_script`` tool dispatch.
+Human-only: no Lucius tool writes the flag.
 
 Dumb storage: validation (e.g. accent must be ``#rrggbb``) lives in the API route,
 not here — this layer only reads/merges/persists.
@@ -64,23 +63,14 @@ _FIELDS = ("app_name", "accent_color", "logo_url")
 # enforcement gate is the ``run_script`` tool dispatch (S3).
 SCRIPT_SKILLS_FLAG = "script_skills_enabled"
 
-# Caller-level unattended gate: when ON (and the instance kill switch is also ON),
-# headless callers (agents / scheduled tasks / MCP) may trigger script-bearing skills.
-# Default False — headless execution of script skills is blocked until explicitly enabled
-# here. Human-only: no Lucius tool may write this flag. Interactive chat turns only need
-# the instance kill switch above; this gate is checked only for headless callers.
-SCRIPT_SKILLS_UNATTENDED_FLAG = "script_skills_unattended_enabled"
-
-# Ad-hoc code execution (RFC ad-hoc-code-execution §4.3): two ORTHOGONAL instance flags.
-#   CODE_EXEC_ENABLED_FLAG — the KILL SWITCH: does the feature exist at all. Default False
-#     → ``run_code`` hard-refuses regardless of any grant. The operator's global off-ramp.
-#   CODE_EXEC_AUTO_RUN_FLAG — "ALWAYS ALLOW": when the feature is on, skip the per-run
-#     permission prompt for EVERY conversation. Default False. Set by the human tapping
-#     "Always allow" on a run_code card (an explicit human action) or in Settings.
-# Both are human-only (no Lucius tool writes them) and kept OUT of the public branding
-# ``get()`` projection so they never ride the auth-exempt ``GET /api/config``.
+# Ad-hoc code execution (RFC ad-hoc-code-execution §4.3): ONE instance flag, the KILL SWITCH —
+# does the feature exist at all. Default False → ``run_code`` hard-refuses regardless of its
+# permission value. The operator's global off-ramp: an enable/disable, not an approval layer.
+# (Whether the owner is asked is the ordinary Always allow / Ask / Block value on the tool; the
+# old instance-wide "always allow" flag became a stored ``run_code`` row — revision
+# ``202610201400``.) Human-only (no Lucius tool writes it) and kept OUT of the public branding
+# ``get()`` projection so it never rides the auth-exempt ``GET /api/config``.
 CODE_EXEC_ENABLED_FLAG = "code_execution_enabled"
-CODE_EXEC_AUTO_RUN_FLAG = "code_execution_auto_run"
 
 # Read-only SQL access (docs/superpowers/specs/2026-08-23-lucius-sql-access-design.md): the
 # instance KILL SWITCH for `run_sql_query` / `describe_db_schema`. Human-only, like every flag
@@ -269,32 +259,14 @@ def script_skills_enabled() -> bool:
     return AppConfigStore().get_flag(SCRIPT_SKILLS_FLAG, default=False)
 
 
-def script_skills_unattended_enabled() -> bool:
-    """The caller-level unattended gate. Default ``False`` — when off, headless callers
-    (agents / scheduled tasks / MCP) cannot trigger script-bearing skills, even if the
-    instance kill switch is ON. Interactive chat turns are unaffected by this flag.
-    Human-only: no Lucius tool may set this flag."""
-    # A public demo's visitors are all the operator: the sandbox is no jail, so it stays off.
-    if get_settings().demo_mode:
-        return False
-    return AppConfigStore().get_flag(SCRIPT_SKILLS_UNATTENDED_FLAG, default=False)
-
-
 def code_execution_enabled() -> bool:
     """The ad-hoc code-execution KILL SWITCH (RFC §4.3). Default ``False`` — when off,
     ``run_code`` hard-refuses before reaching the sandbox, regardless
-    of any per-conversation or instance grant. Human-only; no Lucius tool writes it."""
+    of the tool's permission value. Human-only; no Lucius tool writes it."""
     # A public demo's visitors are all the operator: the sandbox is no jail, so it stays off.
     if get_settings().demo_mode:
         return False
     return AppConfigStore().get_flag(CODE_EXEC_ENABLED_FLAG, default=False)
-
-
-def code_execution_auto_run() -> bool:
-    """The instance-wide "always allow" preference (RFC §4.2/§4.3). Default ``False`` —
-    when on (AND the kill switch is on), ``run_code`` skips the per-run permission prompt
-    in every conversation. Set by an explicit human action; subordinate to the kill switch."""
-    return AppConfigStore().get_flag(CODE_EXEC_AUTO_RUN_FLAG, default=False)
 
 
 def sql_query_enabled() -> bool:

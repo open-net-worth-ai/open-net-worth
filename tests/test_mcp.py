@@ -747,3 +747,31 @@ def test_resources_read_missing_uri_invalid_params(mcp_env):
     res = _client().post("/mcp", json=_rpc("resources/read", {}), headers=_bearer())
     assert res.status_code == 200
     assert res.json()["error"]["code"] == -32602
+
+
+def test_the_inbound_surface_is_unchanged_by_seeding_ask_runs_and_block_refuses(
+    seeded_positions, mcp_env
+):
+    """Inbound MCP is not card-capable (Bearer caller = the operator), so a tool seeded Ask has no
+    card to stage and runs, exactly as before seeding. A tool set to Block is still refused —
+    the one value every surface honours."""
+    from backend.db.position_store import PositionStore
+    from backend.services import tool_permissions
+
+    configure, _ = mcp_env
+    configure()
+    inst, _instruments, _positions = seeded_positions
+    tool_permissions.sync_seeds()
+    assert tool_permissions.stored_tool_level("core", "add_positions") == "needs_approval"
+    call = {"name": "add_positions", "arguments": {"instrument_id": inst["id"], "quantity": 5}}
+
+    ran = _client().post("/mcp", json=_rpc("tools/call", call), headers=_bearer()).json()["result"]
+    assert ran["isError"] is False and "proposedChange" not in ran
+    assert len(PositionStore().all()) == 1
+
+    tool_permissions.set_tool_permission("core", "add_positions", "blocked")
+    refused = (
+        _client().post("/mcp", json=_rpc("tools/call", call), headers=_bearer()).json()["result"]
+    )
+    assert "BLOCKED by tool permissions" in refused["content"][0]["text"]
+    assert len(PositionStore().all()) == 1

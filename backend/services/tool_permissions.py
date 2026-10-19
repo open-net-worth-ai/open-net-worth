@@ -1,99 +1,75 @@
-"""The permission ladder — `always_allow` / `needs_approval` / `blocked`.
+"""The permission table — one value per tool: `always_allow` / `needs_approval` / `blocked`.
 
-THE service that answers "may this tool run": every tool of every connector — Channels,
-Data sources, Web AND MCP — plus every unscoped internal tool, resolves to exactly one
-of three levels, stored per (owner, tool) by `db.tool_permission_store`.
+THE service that answers "what is this tool set to": every tool of every connector — Channels,
+Data sources, Web AND MCP — plus every unscoped internal tool, holds exactly ONE of three
+values, stored per (owner, tool) by `db.tool_permission_store`. In the UI they read
+**Always allow / Ask / Block**; the stored names are unchanged.
 
-## One store, one answer, two surfaces
+## One value per tool, seeded with a meaningful default (ADR 2026-10-11-permissions-are-one-value-per-tool)
 
-Until 2026-08-14 this module answered only for connectors, and `services.tool_grants` /
-`db.tool_grant_store` answered for everything else with a binary grant. Two records for
-one question, able to disagree with no way for the user to tell which won. `tool_grants`
-is ABSORBED and DELETED (revision 0040, ADR
-`2026-08-14-one-permission-store-for-every-tool`); Settings › Permissions and the
-Connectors ladder are now two views of this one table.
+There is no "undecided" state on any screen. A tool gets a row the day it appears — `sync_seeds`
+at boot for the registry's tools, `seed_discovered_tools` when an external MCP server reports its
+tools — and the row holds the level the tool starts at (`seed_level`): a read runs, a change or a
+send asks, an external MCP tool asks. The owner changes any row; Reset puts the seed back.
 
-`connector_id` is therefore the tool's OWNER — a connector id, `mcp:<server_id>`, or
-`CORE_CONNECTOR_ID` (`"core"`) for an unscoped tool. Resolving a tool NAME to its owner
-needs the `ai/` registry, which `services` sits below and cannot import, so that join
-lives one layer up in `ai.tools._connector_gate.permission_owner`. This module stores and
-reads decisions about a pair of opaque strings; it never decides which pair a call maps to.
+Each row remembers whether it is still the seed (`source: "seed" | "user"`, never shown). A seed
+row follows a changed seed rule on the next boot and is removed when its tool no longer exists; a
+user row is never rewritten by a sync. The seed rule is ONE function, `seed_level` — what a fresh
+row is seeded with, what Reset restores, and what dispatch falls back to for a registry tool that
+has no row yet (a test, a table wiped a moment ago). It reaches the registry through
+`core.tool_registry_seam` (`services` cannot import `ai`).
+
+## The mode only decides what Ask means
+
+`always_allow` runs and `blocked` is refused in EVERY mode, in chat and in an Automation alike.
+`needs_approval` is the only level a mode touches (`ai.tools._confirm_gate`): manual shows a card,
+auto asks the Auto judge, skip runs it. This module stores and reads levels about a pair of opaque
+strings; it never decides which pair a call maps to or what a mode does with Ask.
+
+`connector_id` is the tool's OWNER — a connector id, `mcp:<server_id>`, or `CORE_CONNECTOR_ID`
+(`"core"`) for an unscoped tool. Resolving a tool NAME to its owner needs the `ai/` registry, so
+that join lives one layer up in `ai.tools._connector_gate.permission_owner`.
 
 ## The contract
 
-  * `get_tool_permission(connector_id, tool_name)` never raises on an unknown pair and
-    never returns anything but a real level — an unset tool reads `DEFAULT_LEVEL`
-    (`"needs_approval"`), so a newly discovered connector tool is never callable without
-    a human click until someone says otherwise.
-  * `stored_tool_level` is the same read WITHOUT that substitution: `None` means the user
-    has never decided. The gate needs the distinction, because an unset `core` tool falls
-    back to the approval model's own verdict (write -> ask, read -> run) rather than to
-    `DEFAULT_LEVEL` — that is what keeps every untagged tool behaving as it always did.
-  * `set_tool_permission` records one tool's level; `clear_tool_permission` forgets it
-    (back to UNSET, which is not the same as storing `needs_approval`).
-  * `set_group_permission` stamps one level onto EVERY tool named — deliberately lossy
-    (§4: the group control overwrites per-tool overrides rather than layering above
-    them), and atomic (a half-applied stamp is the non-uniform state the user just acted
-    to leave).
-  * `get_connector_permissions` returns only the tools that have a STORED value; the
-    caller applies the appropriate default to the rest.
-  * `yolo_enabled` reads the reserved `(core, "*")` row — the blanket "stop asking me",
-    an ordinary row so it is listed and revoked through the same surface as every other
-    decision (the absorbed `tool_grants`' own reasoning, inherited intact).
-
-## Three levels, and the fourth that must never exist
-
-The GROUP aggregate — "Custom" — is DERIVED by whoever displays it: uniform group ->
-that level, non-uniform group -> Custom. It is never stored, never returned by this
-module, and there is structurally nowhere in the table to write it (see
-`db/tool_permission_store.py`). `derive_group_level()` below is the one shared
-implementation of that computation, offered so a second caller cannot quietly invent a
-second answer — it is a pure function of the levels handed to it and touches no store.
+  * `get_tool_permission(connector_id, tool_name)` never raises on an unknown pair and never
+    returns anything but a real level — a pair with no row reads `DEFAULT_LEVEL`
+    (`"needs_approval"`). It is the EXTERNAL MCP dispatcher's read: an MCP tool is not in the
+    `ai/` registry, so a tool nobody has seeded is never callable without a human click.
+  * `stored_tool_level` is the same read WITHOUT the substitution: `None` means no row. The gate
+    needs the distinction because a registry tool with no row falls back to `seed_level`
+    (a read runs), where an MCP tool falls back to `DEFAULT_LEVEL`.
+  * `set_tool_permission` / `set_group_permission` record a decision (`source: "user"`).
+    `reset_tool_permission` puts the seed back (`source: "seed"`).
+  * `get_connector_permissions` returns the tools that have a row.
 
 ## Decisions that are settled — do not reintroduce them
 
-**No tiering by tool type inside a connector, no exceptions.** Every connector tool
-defaults to `needs_approval`, read or write. A trade or payment tool is an ordinary
-write tool: cautious by default, configurable up to `always_allow` through the same
-control as everything else. The former `is_money_movement` hard floor and the MCP
-server-level `trusted` flag are both gone (ADR
-`2026-08-13-mcp-permission-config-is-the-single-authority`). One narrower, pre-existing
-exception survives this rule unchanged: `ai.tools._confirm_gate._default_level` also
-honors `GATE_EXEMPT_READ_SHAPED` below (a curated, reviewed "this write is bookkeeping,
-not a mutation" allowlist) for a connector-owned tool, not only a `core`-owned one — see
-ADR `2026-08-17-read-shaped-exemption-survives-connector-tagging`. That is a statement
-about a specific tool's SHAPE (already reviewed, already narrow), never a category-wide
-carve-out by type.
+**One permission model for every tool.** A trade or payment tool is an ordinary write tool:
+seeded Ask, configurable up to `always_allow` through the same control as everything else. There
+is no hard floor, no MCP `trusted` flag (ADR `2026-08-13-mcp-permission-config-is-the-single-
+authority`), no blanket "stop asking" switch (YOLO, retired by ADR
+`2026-10-11-permissions-are-one-value-per-tool`: `sync_seeds` carries it forward ONCE as
+per-tool Always allow rows), and no hand-kept list of reads that write bookkeeping — a read that
+only makes a screen refresh declares `refreshes=` on its `@tool`, not `mutates=`.
 
-`GATE_EXEMPT_READ_SHAPED` lives HERE, not in `ai/`, even though every one of its members
-is an AI tool name and its whole reasoning is about tool-call shape — because the
-Connectors detail page's permission ladder (`services.connectors._level_of`) needs the
-identical exemption to DISPLAY the level that will actually fire, and `services` cannot
-import `ai` (the dependency rule). `ai._confirm_gate.needs_approval` and
-`ai.tools._confirm_gate._default_level` both import the set from here rather than
-defining their own copy — ADR
-`2026-08-17-connector-ladder-shows-the-real-effective-default` records the move (a
-displayed-default bug: the ladder was falling back to the raw `DEFAULT_LEVEL` instead of
-this exemption, so `email_search_messages`/`email_get_messages` showed "Needs approval"
-while actually dispatching `always_allow`).
+**`always_allow` means allow EVERYWHERE, unattended included.** It is never silently degraded to a
+prompt because nobody is watching. See `CLAUDE.md`, Security-critical areas.
 
-**`always_allow` means allow EVERYWHERE, unattended included.** It is never silently
-degraded to a prompt because nobody is watching — that would be the unconfigurable floor
-above in a new costume. See `CLAUDE.md`, Security-critical areas.
+**The read-vs-write grouping is LABELLING ONLY.** It decides which heading a tool is listed
+under, never its seed and never its storage.
 
-**The read-vs-write grouping is LABELLING ONLY.** It decides which heading a tool is
-listed under, never its default and never its storage. Nothing in this module knows or
-cares which group a tool is displayed in.
+**The GROUP aggregate — "Custom" — is DERIVED**, never stored and never returned by this module:
+`derive_group_level()` is the one shared implementation, a pure function of the levels handed to
+it.
 
 ## Deliberately NOT here
 
-Whether a `connector_id` or `tool_name` actually exists. This module validates only the
-level. Two reasons, both real: an MCP server's tools are live-advertised by the server
-(`tools/list`) and are not in the `ai/` tool registry at all; and the add-an-MCP-server
-flow permissions the tools it discovered at step 4, before anything about that server is
-necessarily resolvable. A registry check would fail exactly the lane the redesign insists
-must have no special case. `api/tool_permissions.py` joins the live tool list at the API
-layer, where that information exists.
+Whether a `connector_id` or `tool_name` actually exists. This module validates only the level.
+An MCP server's tools are live-advertised and are not in the `ai/` registry at all, and the
+add-an-MCP-server flow permissions the tools it discovered before anything about that server is
+necessarily resolvable. `api/tool_permissions.py` joins the live tool list at the API layer,
+where that information exists.
 """
 
 from __future__ import annotations
@@ -102,62 +78,19 @@ import logging
 from typing import Literal, Optional, Sequence
 
 from backend.core.errors import ValidationError
-from backend.db.tool_permission_store import LEVELS, ToolPermissionStore
+from backend.core.tool_registry_seam import tool_asks_by_default, tool_catalog
+from backend.core.tool_registry_seam import tool_names as registry_tool_names
+from backend.db.tool_permission_store import LEVELS, SEED, USER, PermissionKey, ToolPermissionStore
+from backend.models.mcp_client import MCP_CONNECTOR_PREFIX
 
 logger = logging.getLogger(__name__)
 
 PermissionLevel = Literal["always_allow", "needs_approval", "blocked"]
 
-#: Cautious by default — an unconfigured connector tool always needs a human click.
-#: Uniform for every tool of every connector; there is no per-type tiering and no
-#: exception list. An unscoped (`core`) tool's default is NOT this — see
-#: `ai.tools._confirm_gate.effective_level`, which keeps the approval model's own
-#: read/write answer for tools that never belonged to a connector.
+#: Ask. What an external MCP tool is seeded with, what a pair with no row reads
+#: (`get_tool_permission`), and what `seed_level` answers for a registry tool that changes
+#: something or sends something out.
 DEFAULT_LEVEL: PermissionLevel = "needs_approval"
-
-#: READ-SHAPED tools: they carry `mutates=(...)` so their views REFRESH (the freshness
-#: signal), but their only writes are internal BOOKKEEPING — a cursor, a price/diff cache,
-#: a membership re-sync, a zombie sweep, a feed refresh — never a user-meaningful mutation
-#: anyone would approve. Owner incident 2026-07-21: "why is fetch_emails required
-#: permissions? reading your own inbox is a read." Exempt from confirmation (and, since
-#: ADR `2026-08-17-read-shaped-exemption-survives-connector-tagging`, from a
-#: connector-owned tool's usual uniform `DEFAULT_LEVEL` too) regardless of who ends up
-#: owning it. CURATED + REVIEWED, not a name heuristic (`propose_position_update` is
-#: read-named but find-or-CREATEs an account, so it is deliberately NOT here) — trace each
-#: handler before adding one. Canonical home: `ai._confirm_gate.needs_approval` (the
-#: dispatch-time consumer) and `ai.tools._confirm_gate._default_level` (the undecided-owner
-#: default) both import this SAME set rather than defining their own; so does
-#: `services.connectors._level_of` (the permission ladder's DISPLAYED default), which is
-#: why it lives at this layer rather than in `ai/` — see the module docstring's "Decisions
-#: that are settled" section. Enforced by `tests/test_tool_domains.py::
-#: test_read_shaped_writers_stay_tagged` (each entry must carry `mutates=` and write only a
-#: bookkeeping domain).
-GATE_EXEMPT_READ_SHAPED: frozenset[str] = frozenset(
-    {
-        "email_search_messages",  # stashes a body-less provenance snapshot per searched message
-        "email_get_messages",  # fills in the body + stashes provenance snapshots
-        "diff_statement",  # memoizes the diff onto the statement record
-        "verify_statement_balance",  # memoizes onto the batch record
-        "scan_intel",  # refreshes the intel feed (news signals) — a read from the user's seat
-        # The nine bank/broker fetch tools (RFC connectors-as-data-sources) — the same
-        # "reading your own inbox is a read" argument the incident above makes for email:
-        # each stashes a raw-evidence snapshot per row + the connector's own
-        # last_synced_at/last_status/last_error, books NOTHING itself, and would otherwise
-        # park every template Automation run on an approval card for what the user
-        # experiences as "Lucius checked my bank." Design intent confirmed with the owner;
-        # without this, `always_allow` would have to be set by hand for a feature that is
-        # supposed to work out of the box.
-        "simplefin_fetch_transactions",
-        "plaid_fetch_transactions",
-        "lunch_money_fetch_transactions",
-        "lunch_flow_fetch_transactions",
-        "ynab_fetch_transactions",
-        "enable_banking_fetch_transactions",
-        "yodlee_fetch_transactions",
-        "alpaca_fetch_positions",
-        "ibkr_fetch_activity",
-    }
-)
 
 #: The DERIVED group label for a group whose tools disagree. Never a stored value — it
 #: exists only as the return of `derive_group_level` and as a menu entry the UI treats as
@@ -171,33 +104,31 @@ CUSTOM_GROUP_LEVEL = "custom"
 #: `tests/test_tool_permissions.py` pins that no real connector ever claims this id.
 CORE_CONNECTOR_ID = "core"
 
-#: The reserved tool name for YOLO ("stop asking me, about anything"), stored as an
-#: ordinary `(core, "*")` row — the absorbed `tool_grants`' design, inherited whole,
-#: because a blanket permission that is listed and revoked through the same surface as
-#: every other one is the only kind a user can take back. A real tool can never collide:
-#: tool names are Python identifiers.
-YOLO_TOOL = "*"
+#: The retired YOLO switch's row: `(core, "*")`. Read once, by `sync_seeds`, to carry the old
+#: behaviour forward and delete the row. A real tool can never collide: names are identifiers.
+_RETIRED_YOLO_TOOL = "*"
 
 __all__ = [
     "CORE_CONNECTOR_ID",
     "CUSTOM_GROUP_LEVEL",
     "DEFAULT_LEVEL",
-    "GATE_EXEMPT_READ_SHAPED",
     "LEVELS",
     "PermissionLevel",
-    "YOLO_TOOL",
-    "clear_connector_permissions",
-    "clear_tool_permission",
+    "delete_connector_permissions",
     "derive_group_level",
     "get_all_permissions",
     "get_connector_permissions",
     "get_tool_permission",
     "list_decisions",
+    "reset_connector_permissions",
+    "reset_tool_permission",
     "revoke_allowed_tools",
+    "seed_discovered_tools",
+    "seed_level",
     "set_group_permission",
     "set_tool_permission",
     "stored_tool_level",
-    "yolo_enabled",
+    "sync_seeds",
 ]
 
 
@@ -229,16 +160,46 @@ def _validate_ref(connector_id: str, tool_name: str) -> tuple[str, str]:
     return connector_id, tool_name
 
 
+def _is_mcp(connector_id: str) -> bool:
+    return connector_id.startswith(MCP_CONNECTOR_PREFIX)
+
+
+def seed_level(tool_name: str) -> PermissionLevel:
+    """The level a registry tool STARTS at — the one seed rule.
+
+    It follows what the tool DOES: one that changes something of the owner's, or sends text out of
+    this install, asks (`DEFAULT_LEVEL`); anything else runs (`always_allow`). The same answer for
+    a built-in tool and a connector's own — the owner of a tool decides WHOSE row applies, never
+    what it is seeded with. `sync_seeds` seeds with it, Reset restores it, a row that still
+    carries it follows a change to it, and dispatch falls back to it for a tool with no row.
+    Answers the cautious level if the registry provider is not installed.
+    """
+    return DEFAULT_LEVEL if tool_asks_by_default(tool_name) else "always_allow"
+
+
+def _seed_for(connector_id: str, tool_name: str) -> Optional[PermissionLevel]:
+    """The seed for this pair, or `None` when its tool no longer exists in the registry.
+
+    An external MCP tool is always seeded Ask and is not judged against the registry. An empty
+    registry means "cannot say" (`core.tool_registry_seam.tool_names`), never "no tools".
+    """
+    if _is_mcp(connector_id):
+        return DEFAULT_LEVEL
+    known = registry_tool_names()
+    if known and tool_name not in known:
+        return None
+    return seed_level(tool_name)
+
+
 def stored_tool_level(connector_id: str, tool_name: str) -> Optional[PermissionLevel]:
-    """This pair's STORED level, or `None` when the user has never decided about it.
+    """This pair's STORED level, or `None` when it has no row.
 
-    `get_tool_permission` without the default substituted in — the read the dispatch gate
-    makes, because the two callers need different things from "no row". A connector tool
-    with no row is `DEFAULT_LEVEL`; a `core` tool with no row falls back to the approval
-    model's own verdict for its shape, and collapsing both into `DEFAULT_LEVEL` here would
-    silently start carding every read tool in the app.
+    `get_tool_permission` without the default substituted in — the read the dispatch gate makes,
+    because the two callers need different things from "no row". An MCP tool with no row is
+    `DEFAULT_LEVEL`; a registry tool falls back to `seed_level`, and collapsing both into
+    `DEFAULT_LEVEL` here would silently start carding every read tool in the app.
 
-    Fails CLOSED on an unrecognised stored value — reported as UNSET (so the caller's
+    Fails CLOSED on an unrecognised stored value — reported as having no row (so the caller's
     default applies) rather than honoured, the one direction that cannot be walked back.
     """
     connector_id = (connector_id or "").strip()
@@ -259,64 +220,46 @@ def stored_tool_level(connector_id: str, tool_name: str) -> Optional[PermissionL
 
 
 def get_tool_permission(connector_id: str, tool_name: str) -> PermissionLevel:
-    """This tool's level, or `DEFAULT_LEVEL` when unset.
+    """This tool's level, or `DEFAULT_LEVEL` when it has no row.
 
-    Never raises on an unknown connector or an unknown tool — an unrecognised pair is
-    simply undecided, which is what `DEFAULT_LEVEL` means. This is the read the EXTERNAL
-    MCP dispatcher makes on every call (an MCP tool is never `core`-owned, so the
-    connector default is the right one for it), so "I have never heard of this tool" and
-    "the user has not decided about this tool" have to be the same, cautious answer.
+    Never raises on an unknown connector or an unknown tool. This is the read the EXTERNAL MCP
+    dispatcher makes on every call (an MCP tool is not in the `ai/` registry, so nothing can say
+    it is a read), so "I have never heard of this tool" and "nobody has seeded this tool" have to
+    be the same, cautious answer. A registry tool with no row takes `seed_level`, not this.
     """
     return stored_tool_level(connector_id, tool_name) or DEFAULT_LEVEL
 
 
-def yolo_enabled() -> bool:
-    """True when the owner has told this install to stop asking, about anything.
-
-    THE one definition, shared by the gate and by every surface that reports it, so "is
-    yolo on?" can never disagree between the thing that skips the prompt and the screen
-    that describes it (a real, shipped failure the absorbed `tool_grants` fixed once: an
-    env-var implementation reported OFF while a stored row skipped confirmations).
-
-    Deliberately does NOT override a `blocked` row — see
-    `ai.tools._confirm_gate.effective_level`. Yolo means "stop ASKING me"; it has never
-    meant "ignore what I refused".
-    """
-    return stored_tool_level(CORE_CONNECTOR_ID, YOLO_TOOL) == "always_allow"
-
-
 def set_tool_permission(connector_id: str, tool_name: str, level: PermissionLevel) -> None:
-    """Record one tool's level. An unknown level raises `ValidationError`."""
+    """Record one tool's level as the owner's decision. An unknown level raises `ValidationError`."""
     connector_id, tool_name = _validate_ref(connector_id, tool_name)
     _validate_level(level)
-    _store().set_level(connector_id, tool_name, level)
-    logger.info("connector permission set: %s/%s -> %s", connector_id, tool_name, level)
+    _store().set_level(connector_id, tool_name, level, source=USER)
+    logger.info("tool permission set: %s/%s -> %s", connector_id, tool_name, level)
 
 
-def clear_tool_permission(connector_id: str, tool_name: str) -> bool:
-    """Forget one tool's decision; True when a row was actually removed.
+def reset_tool_permission(connector_id: str, tool_name: str) -> Optional[PermissionLevel]:
+    """Put one tool back to its seed value; returns it, or `None` when the tool no longer exists.
 
-    The tool returns to UNSET — its default — not to a stored `needs_approval`. That
-    distinction is the whole reason this is a delete: a future default change should move
-    an undecided tool, and nothing should be left claiming the user made a decision they
-    took back. Idempotent (a double-tap in the UI returns False, never an error).
+    The row becomes a seed again, so it follows the seed rule from here on. A row whose tool has
+    been retired (a rename removed it) has no seed to return to, so Reset deletes it — the
+    decision was already inert, and the owner can finally clear it.
     """
     connector_id, tool_name = _validate_ref(connector_id, tool_name)
-    removed = _store().clear_level(connector_id, tool_name)
-    if removed:
-        logger.info("connector permission cleared: %s/%s", connector_id, tool_name)
-    return removed
+    seed = _seed_for(connector_id, tool_name)
+    if seed is None:
+        _store().clear_level(connector_id, tool_name)
+        return None
+    _store().set_many({(connector_id, tool_name): (seed, SEED)})
+    logger.info("tool permission reset: %s/%s -> %s", connector_id, tool_name, seed)
+    return seed
 
 
 def list_decisions() -> list[dict]:
-    """Every stored decision, newest first — the Settings › Permissions list.
-
-    Rows verbatim (`connector_id`/`tool`/`level`/`updated_at`), including the reserved
-    `(core, "*")` yolo row: it is an ordinary decision and must be revocable through the
-    ordinary path, which is what makes "one revoke surface" true rather than aspirational.
-    This is the WHOLE table — a decision made through the Connectors ladder shows up here
-    too, because after the 2026-08-14 merge there is only one place for it to live.
-    """
+    """Every row, newest first — rows verbatim (`connector_id`/`tool`/`level`/`source`/
+    `updated_at`). The WHOLE table: a decision made through the Connectors ladder shows up here
+    too, because there is only one place for it to live. `api.tool_permissions` joins it onto the
+    registry to build the Settings › Permissions list."""
     return sorted(_store().all(), key=lambda r: r.get("updated_at") or "", reverse=True)
 
 
@@ -343,19 +286,19 @@ def set_group_permission(
         raise ValidationError("tool_name is required", tools=list(tool_names))
     if not tools:
         return
-    _store().set_levels(connector_id, tools, level)
+    _store().set_levels(connector_id, tools, level, source=USER)
     logger.info(
         "connector group permission set: %s -> %s (%d tools)", connector_id, level, len(tools)
     )
 
 
 def get_connector_permissions(connector_id: str) -> dict[str, PermissionLevel]:
-    """Every tool of this connector that has a STORED value: `{tool_name: level}`.
+    """Every tool of this connector that has a row: `{tool_name: level}`.
 
-    Tools ABSENT from the result are at `DEFAULT_LEVEL` — the caller applies it. Returning
-    only real decisions (rather than pre-filling every known tool) is what keeps this
-    honest for MCP, whose tool list is the server's to advertise and can change between
-    two reads of this map.
+    A tool ABSENT from the result has not been seeded yet — the caller applies the seed
+    (`seed_level`, or `DEFAULT_LEVEL` for an external MCP tool). Returning only real rows
+    (rather than pre-filling every known tool) is what keeps this honest for MCP, whose tool
+    list is the server's to advertise and can change between two reads of this map.
     """
     connector_id = (connector_id or "").strip()
     if not connector_id:
@@ -378,9 +321,8 @@ def get_all_permissions() -> dict[str, dict[str, PermissionLevel]]:
     whole table (see its own docstring), so joining per connector would have re-read the
     table once per connector for a map that one read already contains.
 
-    Same honesty rule as the per-connector read: only tools with a REAL stored decision
-    appear, and an unrecognised stored level is dropped rather than passed through — a
-    caller applies `DEFAULT_LEVEL` to everything absent.
+    Same honesty rule as the per-connector read: an unrecognised stored level is dropped
+    rather than passed through — a caller applies the tool's seed to everything absent.
     """
     out: dict[str, dict[str, PermissionLevel]] = {}
     for row in _store().all():
@@ -390,13 +332,34 @@ def get_all_permissions() -> dict[str, dict[str, PermissionLevel]]:
     return out
 
 
-def clear_connector_permissions(connector_id: str) -> int:
-    """Forget every stored decision for one connector; returns how many rows were dropped.
+def reset_connector_permissions(connector_id: str) -> int:
+    """Put every row of one connector back to its seed value; returns how many rows it touched.
 
-    Its tools return to their DEFAULT (unset), NOT to a stored `needs_approval`. Intended for a
-    connector being removed, so that re-adding one with the same id starts cautious
-    instead of silently inheriting the trust its predecessor was given.
+    For a connector being removed or reset: re-adding it starts from the defaults instead of
+    silently inheriting the trust (or the refusals) its predecessor was given. The rows stay —
+    every tool keeps a row — and a row whose tool no longer exists is dropped. An external MCP
+    server that is deleted outright uses `delete_connector_permissions` instead.
     """
+    connector_id = (connector_id or "").strip()
+    if not connector_id:
+        return 0
+    store = _store()
+    rows = store.for_connector(connector_id)
+    reseeded: dict[PermissionKey, tuple[str, str]] = {}
+    for row in rows:
+        tool = row.get("tool") or ""
+        seed = _seed_for(connector_id, tool)
+        if seed is None:
+            store.clear_level(connector_id, tool)
+        else:
+            reseeded[(connector_id, tool)] = (seed, SEED)
+    store.set_many(reseeded)
+    return len(rows)
+
+
+def delete_connector_permissions(connector_id: str) -> int:
+    """Drop every row of one connector; returns how many were removed. For an external MCP
+    server that was deleted — its tools are gone, so are their rows."""
     connector_id = (connector_id or "").strip()
     if not connector_id:
         return 0
@@ -404,28 +367,126 @@ def clear_connector_permissions(connector_id: str) -> int:
 
 
 def revoke_allowed_tools(connector_id: str) -> int:
-    """Forget every `always_allow` for one connector; returns how many rows were dropped.
+    """Put every `always_allow` of one connector back to Ask; returns how many rows changed.
 
-    The narrow twin of `clear_connector_permissions`, for the case where the THING being
-    trusted changed underneath a decision that was made about it — editing an MCP server's
-    `url`/`command`/`args` keeps the same id, so without this the `always_allow` rows silently
-    transfer to a different endpoint. You are trusting the endpoint, not the label.
+    For the case where the THING being trusted changed underneath a decision that was made about
+    it — editing an MCP server's `url`/`command`/`args` keeps the same id, so without this the
+    `always_allow` rows silently transfer to a different endpoint. You are trusting the endpoint,
+    not the label.
 
-    Deliberately NOT a full clear: dropping a `blocked` row would move that tool from refused
-    to `needs_approval`, which is the permissive direction, and nothing about "the endpoint changed"
-    argues for weakening a refusal. `needs_approval` rows are left alone for the same reason — they
-    already mean the cautious thing. Only the grant that could now fire against an endpoint
-    nobody vetted is withdrawn, back to `DEFAULT_LEVEL`.
+    Deliberately NOT a full reset: dropping a `blocked` row would move that tool from refused to
+    Ask, which is the permissive direction, and nothing about "the endpoint changed" argues for
+    weakening a refusal. `needs_approval` rows are left alone for the same reason. Only the grant
+    that could now fire against an endpoint nobody vetted is withdrawn.
     """
     connector_id = (connector_id or "").strip()
     if not connector_id:
         return 0
-    dropped = _store().clear_connector_level(connector_id, "always_allow")
-    if dropped:
+    changed = _store().reseed_connector_level(connector_id, "always_allow", DEFAULT_LEVEL)
+    if changed:
         logger.info(
-            "connector 'always_allow' permissions revoked: %s (%d rows)", connector_id, dropped
+            "connector 'always_allow' permissions revoked: %s (%d rows)", connector_id, changed
         )
-    return dropped
+    return changed
+
+
+# ── Seeding ──────────────────────────────────────────────────────────────────────────
+
+
+def _discovered_mcp_tools() -> tuple[set[PermissionKey], set[str]]:
+    """`({(mcp:<id>, tool)}, {mcp:<id>})` — what the external MCP servers last reported.
+
+    Read from the servers' cached `discovered_tools` (`McpClientStore.record_discovery` is its
+    only writer), so an install upgrading from before seeding gets its existing servers' tools
+    seeded without waiting for a reconnect."""
+    from backend.db.mcp_client_store import McpClientStore
+
+    keys: set[PermissionKey] = set()
+    owners: set[str] = set()
+    for server in McpClientStore().all():
+        owner = f"{MCP_CONNECTOR_PREFIX}{server.id}"
+        owners.add(owner)
+        for tool in server.discovered_tools or []:
+            name = tool.get("name") if isinstance(tool, dict) else None
+            if name:
+                keys.add((owner, name))
+    return keys, owners
+
+
+def sync_seeds() -> dict[str, int]:
+    """Give every tool a row at its seed value, and keep still-seed rows on the current rule.
+
+    Idempotent, and safe to run on every boot: a missing row is inserted; a row that is still a
+    seed follows `seed_level` (so a changed rule reaches it); a row the owner set is never
+    touched; a seed row for a tool that no longer exists is removed (a decision about one is
+    kept, so the owner can see and Reset it). Registry tools come from the
+    `core.tool_registry_seam` catalog, external MCP tools from the servers' discovered tools.
+
+    **The retired YOLO switch is carried forward here, once.** If a `(core, "*")` row says
+    Always allow, every tool that would be seeded Ask is written as the owner's own Always allow
+    instead (an external MCP tool never was covered by it), then the row is deleted. Only a
+    sync can do this — it is the one place that sees every tool — and with the row gone the
+    branch never runs again.
+
+    An empty catalog (no registry installed) seeds only the MCP tools and prunes nothing: it
+    means "cannot say", never "no tools exist". Returns the counts for the boot log.
+    """
+    store = _store()
+    catalog = tool_catalog()
+    mcp_keys, mcp_owners = _discovered_mcp_tools()
+
+    yolo = store.get_row(CORE_CONNECTOR_ID, _RETIRED_YOLO_TOOL)
+    carry_yolo = bool(yolo and yolo.get("level") == "always_allow")
+
+    desired: dict[PermissionKey, tuple[str, str]] = {}
+    for owner, tool, asks in catalog:
+        if asks and carry_yolo:
+            desired[(owner, tool)] = ("always_allow", USER)
+        else:
+            desired[(owner, tool)] = (DEFAULT_LEVEL if asks else "always_allow", SEED)
+    for key in mcp_keys:
+        desired[key] = (DEFAULT_LEVEL, SEED)
+
+    prune: list[PermissionKey] = []
+    for row in store.all():
+        owner, tool = row.get("connector_id") or "", row.get("tool") or ""
+        key = (owner, tool)
+        if key in desired or row.get("source") != SEED:
+            continue
+        if _is_mcp(owner):
+            if owner not in mcp_owners:
+                prune.append(key)
+        elif catalog:
+            prune.append(key)
+
+    counts = store.sync(desired, prune=prune)
+    if yolo is not None:
+        store.clear_level(CORE_CONNECTOR_ID, _RETIRED_YOLO_TOOL)
+        logger.info(
+            "retired the YOLO switch (%s): %s",
+            yolo.get("level"),
+            "every tool seeded Ask is now Always allow" if carry_yolo else "it was off",
+        )
+    if any(counts.values()):
+        logger.info("tool permissions seeded: %s", counts)
+    return counts
+
+
+def seed_discovered_tools(connector_id: str, names: Sequence[str]) -> None:
+    """Seed an external MCP server's freshly discovered tools at Ask and prune its seed rows for
+    tools it no longer reports. An empty list does nothing (a failed connect reports none, and
+    that is not the server withdrawing its tools)."""
+    names = [n for n in dict.fromkeys(names) if n]
+    connector_id = (connector_id or "").strip()
+    if not names or not connector_id:
+        return
+    store = _store()
+    stale = [
+        (connector_id, row["tool"])
+        for row in store.for_connector(connector_id)
+        if row.get("tool") not in names
+    ]
+    store.sync({(connector_id, n): (DEFAULT_LEVEL, SEED) for n in names}, prune=stale)
 
 
 def derive_group_level(levels: Sequence[Optional[str]]) -> str:
@@ -435,7 +496,8 @@ def derive_group_level(levels: Sequence[Optional[str]]) -> str:
     means "no stored value", which is `DEFAULT_LEVEL` for this purpose — so a group where
     one tool is explicitly `needs_approval` and its sibling has never been touched is UNIFORM, not
     Custom: the user sees one state because there is one effective state. An EMPTY group
-    reads `DEFAULT_LEVEL` (nothing disagrees with nothing).
+    reads `DEFAULT_LEVEL` (nothing disagrees with nothing). A caller that knows a tool's
+    real seed (`seed_level`) passes that instead of `None`, as the connector views do.
 
     Offered here, next to the storage it is derived from, so the backend and the UI cannot
     drift into two different definitions of Custom. Nothing calls this to decide whether a

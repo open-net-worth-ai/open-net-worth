@@ -111,8 +111,8 @@ def test_revoked_grant_survives_restore(isolated):
     backup = backup_service.run_backup(now=_NOW)
     assert backup["ok"] is True, backup
 
-    perms.clear_tool_permission(perms.CORE_CONNECTOR_ID, "add_transactions")
-    assert perms.stored_tool_level(perms.CORE_CONNECTOR_ID, "add_transactions") is None
+    perms.set_tool_permission(perms.CORE_CONNECTOR_ID, "add_transactions", "needs_approval")
+    assert perms.stored_tool_level(perms.CORE_CONNECTOR_ID, "add_transactions") == "needs_approval"
 
     result = _restore_and_reconnect(backup["name"])
     assert result["ok"] is True, result
@@ -120,7 +120,7 @@ def test_revoked_grant_survives_restore(isolated):
     # Pre-fix: restore swaps onw.db wholesale, resurrecting the permission that existed at
     # backup time — privilege escalation through an unrelated feature. Post-fix:
     # NON_RESTORABLE_TABLES keeps the revoke.
-    assert perms.stored_tool_level(perms.CORE_CONNECTOR_ID, "add_transactions") is None
+    assert perms.stored_tool_level(perms.CORE_CONNECTOR_ID, "add_transactions") == "needs_approval"
 
 
 # ── 2. The audit trail is never erased by a restore ────────────────────────────────────────

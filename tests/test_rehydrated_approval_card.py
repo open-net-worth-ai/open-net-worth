@@ -13,6 +13,8 @@ parked — and there are two gates, each with its own record.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
+
 import pytest
 
 from backend.ai import assistant
@@ -86,6 +88,28 @@ def test_a_parked_automation_run_rebuilds_its_card(transcript, no_staged_plan, m
         lambda _sid: ({}, {"status": "waiting", "pending_tool_ids": ["call_1"]}),
     )
     assert _card(assistant.rehydrate_messages(SESSION))["tool_use_id"] == "call_1"
+
+
+def test_a_parked_automation_runs_card_names_its_automation_so_always_allow_lands_on_it(
+    transcript, no_staged_plan, monkeypatch
+):
+    monkeypatch.setattr(
+        "backend.services.automations.runs.automation_run_for_session",
+        lambda _sid: (
+            {"id": "automation_a"},
+            {"status": "waiting", "pending_tool_ids": ["call_1"]},
+        ),
+    )
+    assert _card(assistant.rehydrate_messages(SESSION))["automation_id"] == "automation_a"
+
+
+def test_a_plain_conversations_card_names_no_automation(transcript, not_an_automation, monkeypatch):
+    class _Store:
+        def get_pending(self, _tool_use_id):
+            return {"state": "awaiting_approval"}
+
+    monkeypatch.setattr("backend.db.pending_plan_store.PendingPlanStore", lambda: _Store())
+    assert "automation_id" not in _card(assistant.rehydrate_messages(SESSION))
 
 
 def test_the_message_is_marked_awaiting_so_the_bubble_reads_as_unfinished(
@@ -210,3 +234,127 @@ def test_an_ordinary_conversation_gets_no_header(transcript, monkeypatch):
     monkeypatch.setattr(assistant, "_read_index", lambda: [{"id": SESSION, "source": "chat"}])
 
     assert "automationBrief" not in assistant.rehydrate_messages(SESSION)[0]
+
+
+# ── An ANSWERED card comes back with the answer the owner gave ─────────────────────────────
+
+_ANSWERED = [
+    {"role": "user", "content": "do the thing"},
+    {
+        "role": "assistant",
+        "content": [
+            {"type": "tool_use", "id": "call_a", "name": "create_payees", "input": {"n": 1}},
+            {"type": "tool_use", "id": "call_b", "name": "create_payees", "input": {"n": 2}},
+            {"type": "tool_use", "id": "call_c", "name": "create_payees", "input": {"n": 3}},
+            {"type": "tool_use", "id": "call_d", "name": "get_net_worth", "input": {}},
+        ],
+    },
+    {
+        "role": "user",
+        "content": [
+            {"type": "tool_result", "tool_use_id": "call_a", "content": "{}"},
+            {"type": "tool_result", "tool_use_id": "call_b", "content": "{}"},
+            {"type": "tool_result", "tool_use_id": "call_c", "content": "declined"},
+            {"type": "tool_result", "tool_use_id": "call_d", "content": "{}"},
+        ],
+    },
+    {"role": "assistant", "content": [{"type": "text", "text": "Done."}]},
+]
+
+
+@pytest.fixture
+def answered(monkeypatch, db_isolated):
+    monkeypatch.setattr(assistant, "_load_session", lambda _sid: [dict(m) for m in _ANSWERED])
+    monkeypatch.setattr(assistant, "_read_index", lambda: [])
+    monkeypatch.setattr(assistant, "_rehydrated_turn_usage", lambda *a, **k: {})
+    monkeypatch.setattr(
+        "backend.services.automations.runs.automation_run_for_session", lambda _sid: None
+    )
+
+
+def _cards(messages):
+    return {c["id"]: c for m in messages for c in (m.get("proposedChanges") or [])}
+
+
+def test_each_answer_is_stored_and_comes_back_as_its_own_label(answered):
+    from backend.services import tool_resolutions as tr
+
+    tr.record(SESSION, "call_a", tr.APPROVED)
+    tr.record(SESSION, "call_b", tr.ALWAYS_ALLOWED)
+    tr.record(SESSION, "call_c", tr.DENIED)
+
+    cards = _cards(assistant.rehydrate_messages(SESSION))
+
+    assert {k: (v["status"], v["resolution"]) for k, v in cards.items()} == {
+        "call_a": ("confirmed", "approved"),
+        "call_b": ("confirmed", "always_allowed"),
+        "call_c": ("dismissed", "denied"),
+    }
+    assert cards["call_a"]["grant_tool"] == "create_payees"
+    assert cards["call_a"]["display"]["arguments"] == {"n": 1}
+
+
+def test_a_call_nobody_answered_gets_no_card(answered):
+    assert _cards(assistant.rehydrate_messages(SESSION)) == {}
+
+
+def test_the_card_sits_right_after_its_tool_pill(answered):
+    from backend.services import tool_resolutions as tr
+
+    tr.record(SESSION, "call_b", tr.APPROVED)
+    message = next(m for m in assistant.rehydrate_messages(SESSION) if m.get("blocks"))
+    kinds = [(b["type"], (b.get("id") or b.get("change", {}).get("id"))) for b in message["blocks"]]
+    assert kinds.index(("change", "call_b")) == kinds.index(("tool", "call_b")) + 1
+
+
+def test_a_stored_answer_for_a_call_with_no_result_makes_no_answered_card(
+    transcript, not_an_automation, no_staged_plan
+):
+    from backend.services import tool_resolutions as tr
+
+    tr.record(SESSION, "call_1", tr.APPROVED)
+    assert _card(assistant.rehydrate_messages(SESSION)) is None
+
+
+def test_the_resolve_route_stores_the_answer_only_for_a_call_that_is_waiting(
+    monkeypatch, db_isolated
+):
+    """A stale or superseded tap must not leave a label claiming something ran."""
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+    from backend.services import tool_resolutions as tr
+
+    monkeypatch.setattr(assistant, "_is_awaiting_approval", lambda _sid, tid: tid == "call_wait")
+    monkeypatch.setattr(
+        "backend.services.automations.runs.automation_run_for_session", lambda _sid: None
+    )
+    monkeypatch.setattr(assistant, "resolve_pending_tool_use", _empty_stream)
+    # No lifespan: booting the app would seed the starter skills into the shared skills dir.
+    with nullcontext(TestClient(app)) as client:
+        client.post(
+            "/api/chat/sess-r/resolve",
+            json={"tool_use_id": "call_wait", "decision": "approve", "always": True},
+        )
+        client.post(
+            "/api/chat/sess-r/resolve", json={"tool_use_id": "call_gone", "decision": "deny"}
+        )
+        client.post(
+            "/api/chat/sess-r/resolve", json={"tool_use_id": "call_wait", "decision": "nope"}
+        )
+
+    assert tr.for_session("sess-r") == {"call_wait": tr.ALWAYS_ALLOWED}
+
+
+async def _empty_stream(*_a, **_k):
+    return
+    yield  # pragma: no cover — makes this an async generator
+
+
+def test_resolution_for_maps_the_three_answers():
+    from backend.services import tool_resolutions as tr
+
+    assert tr.resolution_for("approve", always=False) == tr.APPROVED
+    assert tr.resolution_for("approve", always=True) == tr.ALWAYS_ALLOWED
+    assert tr.resolution_for("deny", always=True) == tr.DENIED  # nothing is stored on a Deny
+    assert tr.resolution_for("shrug", always=False) is None

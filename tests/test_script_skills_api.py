@@ -158,78 +158,12 @@ def test_script_skills_enabled_helper_reflects_store(db_isolated):
     assert script_skills_enabled() is False
 
 
-# ── Unattended gate (/api/config/script-skills-unattended) ────────────────────
+# ── The unattended gate is gone ────────────────────────────────────────────────
 
 
-def test_get_script_skills_unattended_defaults_off(cfg_env):
-    """A fresh instance returns enabled=false for the unattended gate."""
-    r = _client().get("/api/config/script-skills-unattended")
-    assert r.status_code == 200
-    assert r.json() == {"enabled": False}
-
-
-def test_put_script_skills_unattended_enable(cfg_env):
-    """PUT {enabled: true} turns the unattended gate on."""
-    r = _client().put("/api/config/script-skills-unattended", json={"enabled": True})
-    assert r.status_code == 200
-    assert r.json() == {"enabled": True}
-
-
-def test_put_script_skills_unattended_disable(cfg_env):
-    """PUT {enabled: false} turns the unattended gate off."""
+def test_the_unattended_routes_are_gone(cfg_env):
     client = _client()
-    client.put("/api/config/script-skills-unattended", json={"enabled": True})
-    r = client.put("/api/config/script-skills-unattended", json={"enabled": False})
-    assert r.status_code == 200
-    assert r.json() == {"enabled": False}
-
-
-def test_unattended_round_trips_independent_of_instance_switch(cfg_env):
-    """Instance kill switch and unattended gate are orthogonal — toggling one does
-    not affect the other."""
-    client = _client()
-    client.put("/api/config/script-skills", json={"enabled": True})
-    client.put("/api/config/script-skills-unattended", json={"enabled": True})
-    # Turn off the instance switch; unattended should still read True.
-    client.put("/api/config/script-skills", json={"enabled": False})
-    r = client.get("/api/config/script-skills-unattended")
-    assert r.json()["enabled"] is True
-    # And the instance switch reads False independently.
-    r2 = client.get("/api/config/script-skills")
-    assert r2.json()["enabled"] is False
-
-
-def test_unattended_flag_absent_from_public_branding(cfg_env):
-    """The unattended gate flag must never ride GET /api/config."""
-    client = _client()
-    client.put("/api/config/script-skills-unattended", json={"enabled": True})
-    branding = client.get("/api/config").json()
-    assert set(branding.keys()) == {"app_name", "accent_color", "logo_url"}
-
-
-def test_get_script_skills_unattended_gated_remote(cfg_env):
-    """GET /api/config/script-skills-unattended is auth-gated."""
-    r = _client(remote=True).get("/api/config/script-skills-unattended")
-    assert r.status_code == 401
-
-
-def test_put_script_skills_unattended_gated_remote(cfg_env):
-    """PUT /api/config/script-skills-unattended is auth-gated."""
-    r = _client(remote=True).put("/api/config/script-skills-unattended", json={"enabled": True})
-    assert r.status_code == 401
-
-
-def test_script_skills_unattended_helper_reflects_store(db_isolated):
-    """The module-level helper ``script_skills_unattended_enabled()`` reads the flag
-    off the (DB-backed) store."""
-    from backend.db.app_config_store import (
-        SCRIPT_SKILLS_UNATTENDED_FLAG,
-        AppConfigStore,
-        script_skills_unattended_enabled,
-    )
-
-    assert script_skills_unattended_enabled() is False  # absent row → default off
-    AppConfigStore().set_flag(SCRIPT_SKILLS_UNATTENDED_FLAG, True)
-    assert script_skills_unattended_enabled() is True
-    AppConfigStore().set_flag(SCRIPT_SKILLS_UNATTENDED_FLAG, False)
-    assert script_skills_unattended_enabled() is False
+    assert client.get("/api/config/script-skills-unattended").status_code in (404, 405)
+    assert client.put(
+        "/api/config/script-skills-unattended", json={"enabled": True}
+    ).status_code in (404, 405)

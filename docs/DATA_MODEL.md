@@ -276,13 +276,21 @@ becomes a `level: "always_allow"` row; an absent grant stays absent — absence 
 decision) and deletes `tool_grants`, at which point the `connector_` prefix was simply false,
 so the table is renamed `tool_permissions`. **The three levels are renamed in the same
 revision**: `allow` → `always_allow`, `ask` → `needs_approval`, `block` → `blocked` — still
-one uniform default (`needs_approval`) for an absent row. ADR
-`2026-08-14-one-permission-store-for-every-tool`.
+no stored row for an undecided tool **at the time** — superseded by ADR
+`2026-10-11-permissions-are-one-value-per-tool`: EVERY tool now has a row, seeded at boot with a
+default that follows what the tool does (a change or a send asks, a read runs; an external MCP tool
+asks — `services.tool_permissions.seed_level`, ADR `2026-10-11-tool-defaults-follow-what-a-tool-does`).
+`web_search` and `fetch_page` never get a `core` row: they key onto the ACTIVE search provider's own
+tool (revision `202610201200` carried any stored restriction onto every provider's tool and deleted
+the `core` rows). ADR `2026-08-14-one-permission-store-for-every-tool`.
 
 **Shape.** Generic `payload_table()`, Tier-3 (no `book_id` — a permission is this
-INSTALLATION's trust posture, `tool_grants`' own tenancy): ONE row per (owner, tool) pair a
-human actually decided about, `id = f"{connector_id}:{tool}"` (a deterministic surrogate,
-`budget_assignments`' precedent), payload `{id, connector_id, tool, level, updated_at}`. The
+INSTALLATION's trust posture, `tool_grants`' own tenancy): ONE row per (owner, tool) pair — every tool in the app — `id = f"{connector_id}:{tool}"`
+(a deterministic surrogate, `budget_assignments`' precedent), payload
+`{id, connector_id, tool, level, source, updated_at}`. `source` is `"seed"` (the app's default,
+which `sync_seeds` may move to a changed rule or remove with its tool) or `"user"` (a decision,
+never rewritten by a sync; a row with no `source` reads as the owner's — revision `202610201300`
+stamped every pre-existing row `"user"`). Reset writes the seed value back with `source: "seed"`. The
 `connector_id` column (name kept across the rename) is the tool's OWNER, not necessarily a
 connector: its `@tool(connector=...)` id, `mcp:<server_id>` for an external-MCP tool, or the
 reserved bucket `core` (`services.tool_permissions.CORE_CONNECTOR_ID`) for everything else —
@@ -291,12 +299,16 @@ reserved bucket `core` (`services.tool_permissions.CORE_CONNECTOR_ID`) for every
 DERIVED and has nowhere here to live** — "Custom" is "these tools disagree", computed at
 display time by `services.tool_permissions.derive_group_level()`; a group-level pick is a
 deliberately LOSSY stamp onto every tool in the group, in ONE transaction (a half-stamped
-group would read as Custom — the state the user just acted to leave). ABSENT = `DEFAULT_LEVEL`
-(`needs_approval`) for a connector-owned tool; an unset `core`-owned tool instead falls back to
-the approval model's own read/write verdict (`ai.tools._confirm_gate.effective_level`) rather
-than to `DEFAULT_LEVEL` — the one asymmetry that keeps every untagged tool behaving exactly as
-it did before this table existed. `clear_connector_permissions` (delete the rows) stays
-distinct from "decide on `needs_approval`" (write it explicitly).
+group would read as Custom — the state the user just acted to leave). A pair with no row (a
+test, a tool added at runtime, a table wiped a moment ago and not yet re-seeded) reads
+`DEFAULT_LEVEL` (`needs_approval`) for an external MCP tool and `seed_level` for a registry tool
+(`ai.tools._confirm_gate.effective_level`) — never as permission and never as a refusal.
+**Seeding** runs from `services.tool_permissions.sync_seeds()` at boot (and after `/api/reset`),
+reading the registry's tools through `core.tool_registry_seam.tool_catalog`; an external MCP
+server's tools are seeded Ask when discovered (`seed_discovered_tools`). It also carries the
+retired YOLO switch (`(core, "*")`) forward once, as per-tool Always allow rows, then deletes it.
+`reset_connector_permissions` puts a connector's rows back to their seeds;
+`delete_connector_permissions` (an MCP server being removed) deletes them.
 
 **Enforcement is now universal.** `effective_level()` (`ai/tools/_confirm_gate.py`) is the
 ONE dispatch-time read, consumed once in `registry.dispatch`, for every tool of every

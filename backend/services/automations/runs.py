@@ -265,6 +265,7 @@ def request_for_run(
         payload=dict(payload if payload is not None else run.get("context") or {}),
         permission_mode=automation.get("permission_mode") or "manual",
         always_allowed=always_allowed,
+        blocked=[str(tool) for tool in automation.get("blocked") or []],
         configured_trigger=configured_trigger(automation),
         last_completed_run=last_completed_run(automation["id"], run),
     )
@@ -428,7 +429,9 @@ def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
     Two scopes (2026-08-02): ``once`` stores nothing — approving the card IS the grant — and
     ``always`` appends to this Automation's standing ``always_allowed`` list, so the tool stops
     raising a card for it. Keeping the grant on the Automation rather than in the global
-    table is what stops an Automation inheriting a permission granted in an unrelated chat.
+    table is what stops one card tap changing a tool for every other caller.
+
+    A tool is never on both lists: allowing it here takes it off this Automation's Blocked list.
     """
     owned = automation_run_for_session(session_id)
     if owned is None:
@@ -438,6 +441,8 @@ def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
         always_allowed = [
             dict(item) for item in automation.get("always_allowed") or [] if isinstance(item, dict)
         ]
+        blocked = [name for name in automation.get("blocked") or [] if name != tool]
+        changes: dict = {}
         if not any(tool in (item.get("tools") or []) for item in always_allowed):
             always_allowed.append(
                 {
@@ -446,15 +451,13 @@ def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
                     "tools": [tool],
                 }
             )
+            changes["always_allowed"] = always_allowed
+        if len(blocked) != len(automation.get("blocked") or []):
+            changes["blocked"] = blocked
+        if changes:
             from .service import apply_automation_change
 
-            apply_automation_change(
-                {
-                    "op": "update",
-                    "id": automation["id"],
-                    "changes": {"always_allowed": always_allowed},
-                }
-            )
+            apply_automation_change({"op": "update", "id": automation["id"], "changes": changes})
         return True
     return scope == "once"
 

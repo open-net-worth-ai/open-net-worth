@@ -12,6 +12,13 @@ from typing import List, Literal, Optional
 from pydantic import Field
 
 from backend.ai.search import get_search_provider
+from backend.ai.search.base import SearchProvider
+from backend.ai.search.page_reader import (
+    DEFAULT_READ_TOP,
+    MAX_READ_TOP,
+    attach_page_excerpts,
+    clamp_read_top,
+)
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of, schema_of_no_required
 from backend.core.untrusted import sanitize_untrusted
@@ -193,7 +200,7 @@ def sanitize_search_results(results: list[dict]) -> list[dict]:
 
     Shared (public, not module-private) so ``ai.tools.web_search_providers``' per-provider
     ``<id>_search`` tools apply the exact same sanitization as this module's generic
-    ``web_search``/``x_search`` — one policy, not two copies that could drift.
+    ``web_search`` — one policy, not two copies that could drift.
 
     NO nonce fence here, deliberately (2026-07-19). A fence defends against boundary
     FORGERY — untrusted text closing its own container to escape into instruction context.
@@ -218,11 +225,21 @@ def sanitize_search_results(results: list[dict]) -> list[dict]:
     cleaned = []
     for r in results:
         r = dict(r)
-        for field in ("title", "content"):
+        for field in ("title", "content", "excerpt"):
             if field in r:
                 r[field] = sanitize_untrusted(str(r.get(field) or ""))
         cleaned.append(r)
     return cleaned
+
+
+# The tools that run the ACTIVE search provider instead of naming one, and which of that
+# provider's own tools (``<id>_search`` / ``<id>_fetch_page``) each one IS for permission
+# purposes: they belong to the search connector, so its page is their one control
+# (``web_search_providers.active_provider_tool``, ``_connector_gate.permission_key``).
+ACTIVE_PROVIDER_VERBS: dict[str, str] = {
+    "web_search": "search",
+    "fetch_page": "fetch",
+}
 
 
 class WebSearchInput(ToolInput):
@@ -230,6 +247,27 @@ class WebSearchInput(ToolInput):
         description="Search query — be specific, include tickers/company names/locations",
     )
     max_results: int = Field(default=8, description="Number of results (default 8, max 15)")
+    read_top: int = Field(
+        default=DEFAULT_READ_TOP,
+        description=(
+            f"Top results to read for excerpts (0-{MAX_READ_TOP}, default {DEFAULT_READ_TOP}; "
+            "0 = snippets only)"
+        ),
+    )
+
+
+async def search_and_read(
+    provider: SearchProvider, query: str, input_data: dict, *, max_results: int
+) -> str:
+    """The one search path every search tool shares: search, read the top ``read_top`` result
+    pages (``ai.search.page_reader``), sanitize, serialize. A JSON LIST — the chat UI's source
+    chips and ``_fill_search_block_results`` parse it as one — with an ``excerpt`` on each row
+    that was read."""
+    results = await provider.search(query, max_results)
+    logger.info("search returned %d results", len(results))
+    read_top = clamp_read_top(input_data.get("read_top", DEFAULT_READ_TOP))
+    results = await attach_page_excerpts(provider, results, query, read_top)
+    return json.dumps(sanitize_search_results(results), ensure_ascii=False)
 
 
 @tool(
@@ -238,6 +276,7 @@ class WebSearchInput(ToolInput):
         "Search the web for current information — news, analyst reports, market data, "
         "property market trends, macro events. Use for anything requiring up-to-date knowledge "
         "beyond the portfolio data. Run multiple targeted searches to cover a topic thoroughly. "
+        "Top results include page `excerpt`s; fetch_page reads a whole page. "
         "This is the 'just search, let the system pick' DEFAULT — it routes to whichever "
         "provider the user marked active in Connectors → Web search (Tavily, Perplexity, "
         "Serper, Google, or the key-free DuckDuckGo fallback), so it works with zero "
@@ -246,7 +285,9 @@ class WebSearchInput(ToolInput):
         "currently active), call that engine's own tool — tavily_search, "
         "perplexity_search, serper_search, google_pse_search, "
         "duckduckgo_search — same result shape, one specific provider, no active-selection "
-        "involved. There is still no `mcp__perplexity__*`/`mcp__tavily__*` tool for any of this."
+        "involved. There is still no `mcp__perplexity__*`/`mcp__tavily__*` tool for any of this. "
+        "For X/Twitter posts and chatter add (site:x.com OR site:twitter.com) to the query; "
+        "posts are unverified opinion — weigh them as sentiment, not fact."
     ),
     input_schema=schema_of(WebSearchInput, tool_name="web_search"),
 )
@@ -255,57 +296,12 @@ async def web_search(input_data: dict):
     max_results = min(int(input_data.get("max_results", 8)), 15)
     logger.info("web_search: %s", query)
     try:
-        results = await get_search_provider().search(query, max_results)
+        return await search_and_read(
+            get_search_provider(), query, input_data, max_results=max_results
+        ), None
     except Exception as exc:
         logger.error("web_search failed: %s", exc)
         raise
-    logger.info("web_search returned %d results", len(results))
-    return json.dumps(sanitize_search_results(results), ensure_ascii=False), None
-
-
-# A site scope that restricts a web search to X/Twitter. Run through whatever provider is
-# active (DuckDuckGo, Tavily, Perplexity, …) so x_search is zero-config and works everywhere — no
-# dedicated X/Twitter API key required. The two-host OR covers posts under both domains.
-_X_SITE_SCOPE = "(site:x.com OR site:twitter.com)"
-
-
-class XSearchInput(ToolInput):
-    query: str = Field(
-        description=(
-            "What to look for on X — a ticker/cashtag ($NVDA), company, person, or topic. "
-            "Don't add 'site:' yourself; the X scope is applied automatically."
-        ),
-    )
-    max_results: int = Field(default=8, description="Number of results (default 8, max 15)")
-
-
-@tool(
-    "x_search",
-    description=(
-        "Search X (formerly Twitter) for social posts and chatter. Use this for SOCIAL "
-        "SENTIMENT and BREAKING finance chatter — ticker/cashtag sentiment, what traders and "
-        "analysts are posting RIGHT NOW, rumors and reactions ahead of mainstream coverage, "
-        "or a company/person's own posts. Prefer `web_search` for articles, reports, and "
-        "official/primary sources; reach for `x_search` when you specifically want the X "
-        "conversation. It runs your active web-search provider scoped to x.com/twitter.com, so "
-        "it needs no extra key. Results have the same shape as web_search "
-        "(url/title/content). Posts are public, unverified opinion — weigh them as sentiment, "
-        "not fact."
-    ),
-    input_schema=schema_of(XSearchInput, tool_name="x_search"),
-)
-async def x_search(input_data: dict):
-    query = str(input_data["query"]).strip()
-    max_results = min(int(input_data.get("max_results", 8)), 15)
-    scoped = f"{query} {_X_SITE_SCOPE}".strip()
-    logger.info("x_search: %s", scoped)
-    try:
-        results = await get_search_provider().search(scoped, max_results)
-    except Exception as exc:
-        logger.error("x_search failed: %s", exc)
-        raise
-    logger.info("x_search returned %d results", len(results))
-    return json.dumps(sanitize_search_results(results), ensure_ascii=False), None
 
 
 class FetchPageInput(ToolInput):

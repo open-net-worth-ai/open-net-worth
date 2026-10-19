@@ -90,11 +90,9 @@ class _CreatePayeeProvider:
 
 @pytest.fixture
 def gated_env(tmp_path, monkeypatch, db_isolated):
-    """A card-capable, GATE_ALL_WRITES posture with NO cost_surface stub — see the module
+    """A card-capable posture with NO cost_surface stub — see the module
     docstring for why that omission is the entire point of this fixture."""
-    from backend.ai.tools import _confirm_gate as gate
 
-    monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
     monkeypatch.setattr(assistant, "_active_tools", lambda: list(assistant.TOOL_SCHEMAS))
     monkeypatch.setattr(assistant, "_run_memory_extraction", lambda *a, **k: _noop(), raising=False)
     provider = _CreatePayeeProvider()

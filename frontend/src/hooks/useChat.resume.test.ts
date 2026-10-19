@@ -193,6 +193,40 @@ describe('useChat: a turn paused on a permission card', () => {
     expect(result.current.messages.filter((m) => m.role === 'assistant')).toHaveLength(1)
   })
 
+  it.each([
+    ['approve', undefined, 'approved'],
+    ['approve', { always: true }, 'always_allowed'],
+    ['deny', undefined, 'denied'],
+  ] as const)(
+    'stores WHICH answer %s %j was on the card (%s), so a reload can say so',
+    async (decision, options, resolution) => {
+      mockRoutes(PAUSED_TURN)
+      const { result } = renderHook(() => useChat(`conv-outcome-${resolution}`, vi.fn()))
+      await act(async () => {})
+      await act(async () => {
+        await result.current.sendMessage('delete the duplicate')
+      })
+      await waitFor(() => expect(assistantMessage(result)?.awaitingApproval).toBe(true))
+
+      await act(async () => {
+        await result.current.resolvePendingToolUse('toolu_1', decision, options)
+      })
+
+      const change = assistantMessage(result)?.proposedChanges?.[0] as
+        | { status?: string; resolution?: string }
+        | undefined
+      expect(change?.status).toBe(decision === 'approve' ? 'confirmed' : 'dismissed')
+      expect(change?.resolution).toBe(resolution)
+      // The server is told too, so a reload rebuilds the card with the same label.
+      const call = mockAuthFetch.mock.calls.find((c) => String(c[0]).endsWith('/resolve'))
+      expect(JSON.parse((call?.[1] as RequestInit).body as string)).toEqual({
+        tool_use_id: 'toolu_1',
+        decision,
+        ...(options?.always ? { always: true } : {}),
+      })
+    },
+  )
+
   it('answering the card by other means (legacy propose flow) releases the cost chip', async () => {
     mockRoutes(PAUSED_TURN)
     const { result } = renderHook(() => useChat('conv-respond', vi.fn()))

@@ -268,6 +268,15 @@ One line each — full reasoning and the scar behind each is in
   (an allowlist authorizer), never a SQL parser. Denied = `SECRET_TABLES ∪ {sessions}`.
 - One confirm mechanism for every tool: a gated tool stages its OWN call arguments under the
   `tool_use_id`; approval resolves server-side and re-runs the same handler.
+- Every tool has ONE permission value — Always allow / Ask / Block, a seeded row (`services.tool_permissions.sync_seeds`):
+  `mutates=` (or a send) is seeded Ask, a read Always allow (`refreshes=` marks a read that only refreshes a screen),
+  built-in or connector alike; the owner's value wins and the mode only decides what Ask means (ADRs
+  `2026-10-11-tool-defaults-follow-what-a-tool-does`, `2026-10-11-permissions-are-one-value-per-tool`).
+- Approval is ONE chain for every tool, native or external: Block → the Automation's Blocked list →
+  its Always-allowed list → Always allow → Ask resolved by the mode (manual card / Auto judge / Skip
+  runs). No tool, owner kind or name is exempt (ADR `2026-10-11-permissions-are-one-value-per-tool`);
+  what stays is the judge failing closed, a gate error refusing, feature switches, and a surface that
+  cannot show a card (capture, headless, inbound `/mcp`, REST apply), where Ask runs and is logged.
 - Every turn goes through `ai/turns.py`, never a bare `asyncio.create_task` (confirm gate fails
   open without it) — server-owned, not request-owned; a second call mid-turn enqueues.
 - A transcript is a table of messages (`session_messages`), not a JSON column. NEVER
@@ -401,9 +410,10 @@ frontend/src/
   `2026-10-03-terminal-is-a-gated-shell-with-the-providers-env-filter`.
 - MCP inbound: Bearer-only auth. Nonce staging fires server-STORED args — approve-then-substitute
   is structurally impossible.
-- External MCP: `tool_permissions` is the SINGLE authority on whether a call fires — no
-  unconfigurable floor, for every tool in the app. `discovered_tools` is what WE observed in a
-  handshake, never a client-supplied value.
+- External MCP: a tool's `tool_permissions` value plus the approval mode decide whether a call
+  fires, through the SAME chain as every registry tool (`_confirm_gate.external_decision`) — no
+  floor and no exception. Its name, description and parameters reach the Auto judge only inside the
+  nonce fences. `discovered_tools` is what WE observed in a handshake, never a client-supplied value.
 - A stdio MCP connection persists for the app's LIFETIME, one child per server, serialized by a
   per-server lock; its stderr is a pipe that MUST stay drained (`StderrTail`).
 - `always_allow` means allow everywhere, including unattended — never silently degraded.

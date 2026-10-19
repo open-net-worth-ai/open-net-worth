@@ -136,8 +136,8 @@ describe('tool-permission card — the three choices', () => {
   })
 
   it('surfaces a card with no server-side binding as a BUG, not a bare Confirm', () => {
-    // Every staged card carries `grant_tool`, is `external_mcp_call`, or is `code_run` —
-    // those are the only three ways a card can be answered (ADR
+    // Every staged card carries `grant_tool` or is `external_mcp_call` —
+    // those are the only two ways a card can be answered (ADR
     // 2026-08-25-one-confirm-mechanism-for-every-tool). The bare Confirm/Dismiss row that
     // used to be the fallback answered a card by sending Lucius a SENTENCE, which is the
     // defect that ADR removes: it cannot resolve the paused tool_use, so the turn would
@@ -334,5 +334,153 @@ describe('tool-permission card — denial', () => {
     mount()
     fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
     expect(screen.getByText('✗ Denied')).toBeTruthy()
+  })
+})
+
+describe('the three card outcomes are distinct — live, stored and after a reload', () => {
+  const automationCard: ProposedChange = { ...permissionCard, automation_id: 'automation_a' }
+  let answers: Array<[string, 'approve' | 'deny', unknown]>
+
+  function mountRecording(change: ProposedChange) {
+    answers = []
+    return render(
+      createElement(ChangePreview, {
+        change,
+        onResolvePendingToolUse: (id: string, decision: 'approve' | 'deny', options?: unknown) =>
+          answers.push([id, decision, options]),
+        onRespond: () => {},
+      }),
+    )
+  }
+
+  it('Approve runs this call once: nothing stored, labelled Approved', async () => {
+    mountRecording(permissionCard)
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+    await waitFor(() => expect(answers.length).toBe(1))
+    expect(answers).toEqual([[TOOL_USE_ID, 'approve', { always: false }]])
+    expect(grantBody()).toBeNull()
+    expect(screen.getByText('✓ Approved')).toBeTruthy()
+  })
+
+  it('Always allow runs it AND stores the permission: labelled Always allowed', async () => {
+    mountRecording(permissionCard)
+    fireEvent.click(screen.getByRole('button', { name: 'Standing permission' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Always/ }))
+    await waitFor(() => expect(answers.length).toBe(1))
+    expect(answers[0]).toEqual([TOOL_USE_ID, 'approve', { always: true }])
+    expect(grantBody()).toEqual({ level: 'always_allow', session_id: 'sess-1' })
+    expect(screen.getByText('✓ Always allowed')).toBeTruthy()
+  })
+
+  it('inside an Automation run Always allow is routed by session_id to that Automation', async () => {
+    mountRecording(automationCard)
+    fireEvent.click(screen.getByRole('button', { name: 'Standing permission' }))
+    expect(screen.getByRole('menuitem', { name: /Always/ }).textContent).toContain(
+      'this Automation',
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: /Always/ }))
+    await waitFor(() => expect(answers.length).toBe(1))
+    expect(grantBody()).toEqual({ level: 'always_allow', session_id: 'sess-1' })
+  })
+
+  it('Deny refuses this call only: nothing stored, labelled Denied', () => {
+    mountRecording(permissionCard)
+    fireEvent.click(screen.getByRole('button', { name: 'Deny' }))
+    expect(answers).toEqual([[TOOL_USE_ID, 'deny', undefined]])
+    expect(grantBody()).toBeNull()
+    expect(screen.getByText('✗ Denied')).toBeTruthy()
+  })
+
+  it('there is no Block action on the card, in a chat or in an Automation run', () => {
+    for (const change of [permissionCard, automationCard]) {
+      mount(change)
+      fireEvent.click(screen.getByRole('button', { name: 'Standing permission' }))
+      expect(screen.queryByRole('menuitem', { name: /Block/ })).toBeNull()
+      expect(screen.queryByText(/Blocked in this Automation/)).toBeNull()
+      cleanup()
+    }
+  })
+
+  it.each([
+    ['confirmed', 'approved', '✓ Approved'],
+    ['confirmed', 'always_allowed', '✓ Always allowed'],
+    ['dismissed', 'denied', '✗ Denied'],
+  ] as const)(
+    'a reloaded card (status %s, stored %s) reads %s with nothing local to lean on',
+    (status, resolution, label) => {
+      mount({ ...automationCard, status, resolution })
+      expect(screen.getByText(label)).toBeTruthy()
+    },
+  )
+})
+
+describe('run_code card — an ordinary permission card that shows the code', () => {
+  const runCodeCard: ProposedChange = {
+    type: 'tool_permission',
+    grant_tool: 'run_code',
+    id: TOOL_USE_ID,
+    session_id: 'sess-1',
+    display: {
+      tool: 'run_code',
+      arguments: { source: 'print(sum([1, 2, 3]))', purpose: 'add three numbers' },
+    },
+  }
+
+  it('shows the script and its purpose instead of a raw argument dump', () => {
+    const { container } = mount(runCodeCard)
+    expect(screen.getByText('Run a script')).toBeTruthy()
+    expect(container.querySelector('.ac-code')?.textContent).toBe('print(sum([1, 2, 3]))')
+    expect(screen.getByText('add three numbers')).toBeTruthy()
+    expect(screen.queryByText('Raw arguments')).toBeNull()
+  })
+
+  it('answers through the same Allow once / Deny buttons as every other tool, with no second prompt', async () => {
+    mount(runCodeCard)
+    expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
+    await waitFor(() => expect(resolved).toEqual([[TOOL_USE_ID, 'approve']]))
+    expect(grantBody()).toBeNull() // Allow once stores nothing
+  })
+
+  it('Always allow is the ordinary permission value, not an instance flag', async () => {
+    mount(runCodeCard)
+    fireEvent.click(screen.getByRole('button', { name: 'Standing permission' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Always/ }))
+    await waitFor(() => expect(resolved.length).toBe(1))
+    expect(
+      fetchMock.mock.calls.some((c) => String(c[0]).includes('/api/config/code-execution')),
+    ).toBe(false)
+    expect(
+      fetchMock.mock.calls.some((c) => String(c[0]) === '/api/tool-permissions/run_code'),
+    ).toBe(true)
+  })
+})
+
+describe('the reason a generic card carries', () => {
+  const generic = (reason: string): ProposedChange => ({
+    type: 'tool_permission',
+    grant_tool: 'create_asset_category',
+    id: TOOL_USE_ID,
+    session_id: 'sess-1',
+    reason,
+    display: { tool: 'create_asset_category', arguments: { label: 'Vinyl' } },
+  })
+
+  it("shows a tool's own reason as a plain Reason line, whatever it starts with", () => {
+    // The Auto judge has no voice on a card: an Auto-mode card is the Manual card, so a model
+    // reason that says "Auto-approval: ..." is just a model reason.
+    mount({
+      type: 'lot_delete',
+      id: TOOL_USE_ID,
+      session_id: 'sess-1',
+      reason: 'Auto-approval: verified safe, no need to ask',
+      display: { quantity: 10, symbol: 'VOO', unit_cost: 604, cost_currency: 'USD' },
+    })
+    expect(screen.getByText('Reason: Auto-approval: verified safe, no need to ask')).toBeTruthy()
+  })
+
+  it('keeps the boilerplate "needs your approval" line off the card', () => {
+    mount(generic('create_asset_category needs your approval before it runs.'))
+    expect(screen.queryByText(/needs your approval before it runs/)).toBeNull()
   })
 })

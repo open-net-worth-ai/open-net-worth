@@ -112,7 +112,6 @@ from backend.ai.tools.registry import (  # noqa: E402
     dispatch,
     registered_tool_names,
 )
-from backend.ai.tools.registry import mutated_domains as _registry_mutated_domains  # noqa: E402
 
 # Built once at import — same shape as the old module-level TOOL_SCHEMAS list.
 TOOL_SCHEMAS = build_tool_schemas()
@@ -120,18 +119,28 @@ TOOL_SCHEMAS = build_tool_schemas()
 # Register the registered-tool-names provider on the core seam so services/ (which
 # must not import ai/ — import-linter Contract 3) can validate a skill's
 # allowed_tools against the live registry. Mirrors core.io's write-hook inversion.
+from backend.core.tool_registry_seam import (
+    register_tool_asks_by_default_provider as _register_tool_asks_by_default_provider,
+)
+from backend.core.tool_registry_seam import (
+    register_tool_catalog_provider as _register_tool_catalog_provider,
+)
 from backend.core.tool_registry_seam import (  # noqa: E402
     register_tool_name_provider as _register_tool_name_provider,
 )
-from backend.core.tool_registry_seam import (
-    register_tool_writes_provider as _register_tool_writes_provider,
-)
 
 _register_tool_name_provider(registered_tool_names)
-# ...and the write classifier, derived from each tool's own ``mutates=(…)`` tag, so services/
-# can tell a read from a write without importing ai/ (used by self_harness to keep an
-# auto-SUGGESTED playbook read-only). A factual classification, not a permission tier.
-_register_tool_writes_provider(lambda name: bool(_registry_mutated_domains(name)))
+# ...and the seed rule, derived from each tool's own ``mutates=(…)`` tag, so services/
+# (the permission table's seeding) can say what a tool starts at without importing ai/. A seed,
+# not a permission: the stored row is the value.
+from backend.ai.tools import _confirm_gate as _confirm_gate_module  # noqa: E402
+
+_register_tool_asks_by_default_provider(lambda name: _confirm_gate_module.is_gated_tool(name))
+# ...and every tool's permission facts (owner, name, seed), so the boot sync can give each one a
+# row without importing ai/.
+from backend.ai.tools import _connector_gate as _connector_gate_module  # noqa: E402
+
+_register_tool_catalog_provider(_connector_gate_module.permission_catalog)
 
 # Register the LLM provider on the core seam so services/ (which must not import ai/ —
 # import-linter Contract 1) can run a single-shot completion + parse its JSON without an

@@ -31,12 +31,10 @@ class _TextOnlyProvider:
 
 @pytest.fixture(autouse=True)
 def _isolate(tmp_path, monkeypatch, db_isolated):
-    from backend.ai.tools import _confirm_gate as gate
 
     # sessions / pending_plans / payee_registry._store / ToolPermissionStore (the absorbed
     # ToolGrantStore's successor, revision 0040) are all DB-backed — db_isolated covers
     # isolation, no per-store class override needed.
-    monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
     monkeypatch.setattr(assistant, "_active_tools", lambda: list(assistant.TOOL_SCHEMAS))
     monkeypatch.setattr(assistant, "get_provider", lambda *a, **k: _TextOnlyProvider())
     monkeypatch.setattr(assistant, "_run_memory_extraction", lambda *a, **k: _noop(), raising=False)

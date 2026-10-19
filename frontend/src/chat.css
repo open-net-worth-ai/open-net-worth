@@ -1121,10 +1121,8 @@
     gap: 10px;
     margin-top: 8px;
   }
-  /* Any 4-button permission row — the code_run card (Reject / Allow once / conversation /
-   always) and the tool-permission card (Allow once / This session / Always / Deny). Wraps on
-   a narrow chat panel rather than overflowing. Promoted from the code_run-only rule this
-   replaces, when the tool-permission card adopted the same four-button shape. */
+  /* Any 4-button permission row — the tool-permission card (Allow once / This session /
+   Always / Deny). Wraps on a narrow chat panel rather than overflowing. */
   .change-actions-wrap {
     flex-wrap: wrap;
     gap: 8px;
@@ -2585,18 +2583,18 @@
 .change-grant-btn--always {
   color: var(--primary);
 }
-/* Declining must never look like the dangerous option. It sits apart, at the row's right
-   end, so it is never the button under the thumb that reached for "Allow". */
+/* Deny on the left as a real outlined button; the allow scopes grouped at the right end
+   (owner, 2026-10-12: a borderless faint Deny didn't read as a button). */
 .change-grant-btn--deny {
-  border-color: transparent;
-  color: var(--faint);
-  margin-left: auto;
+  padding: 6px 14px;
+  border-radius: 8px;
+  color: var(--ink);
 }
-@media (hover: hover) {
-  .change-grant-btn--deny:not(:disabled):hover {
-    border-color: var(--line);
-    color: var(--muted);
-  }
+.change-grant-allow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 /* ── Grant split button ──────────────────────────────────────────────────────────────────

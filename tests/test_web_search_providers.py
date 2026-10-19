@@ -11,7 +11,7 @@ Covers:
     named tool still hits its own provider
   - an unconfigured / disabled provider fails with a clean, provider-named message
     instead of the generic active-chain error
-  - search results are sanitized (same helper web_search/x_search already use)
+  - search results are sanitized (same helper web_search already uses)
   - <id>_fetch_page still SSRF-guards before ever touching the store/provider
   - the bulk web_search/fetch_page tools are untouched and carry no connector tag
 

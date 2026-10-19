@@ -1,15 +1,14 @@
-"""``/api/tool-permissions`` — the app-wide revocation surface (Settings › Permissions,
-approval model RFC 2026-07-20 §15.4/§16). Ports the REST-half coverage of the retired
-``/api/grants`` (``ToolGrantStore``/``services.tool_grants``, DELETED at the 2026-08-14
-one-permission-store merge, ADR ``2026-08-14-one-permission-store-for-every-tool``) onto
-this one endpoint family.
+"""``/api/tool-permissions`` — every tool and its one value (Settings › Permissions, the Automation
+tool picker). Approval model RFC 2026-07-20 §15.4/§16; one value per tool, ADR
+``2026-10-11-permissions-are-one-value-per-tool``.
 
 Covers the properties this surface exists to guarantee:
-  - a decision is listable and revocable (the tab has something real behind it);
-  - revoking returns a tool to its DEFAULT, never to a stored ``needs_approval`` row;
-  - yolo arms/disarms through this SAME ordinary route — no side channel;
-  - a stale (renamed-away) tool's row is still listed, still shows ``tool_exists: false``,
-    and is still clearable;
+  - EVERY registry tool is listed with a real value and its seed (``default_level``), whether or
+    not a row exists yet — there is no "undecided" row;
+  - ``web_search`` / ``fetch_page`` are not listed (the active provider's own tool is their row);
+  - a value is settable and Reset puts the SEED back (a row, never a deleted one);
+  - a stale (renamed-away) tool's row is still listed, still shows ``tool_exists: false``, and
+    Reset clears it;
   - an unknown level 422s at the edge;
   - a decision made through the connector-scoped ladder and one made through this app-wide
     route are the SAME row — "one revoke surface" is a fact about the table, not a
@@ -37,25 +36,68 @@ def client(db_isolated):
     return TestClient(app)
 
 
-# ── GET: the empty shape, and listing a real decision ──────────────────────────
+def _row(client, tool: str, owner: str | None = None) -> dict:
+    rows = client.get("/api/tool-permissions").json()["permissions"]
+    return next(
+        r for r in rows if r["tool"] == tool and (owner is None or r["connector_id"] == owner)
+    )
 
 
-def test_get_empty_shape(client):
-    r = client.get("/api/tool-permissions")
-    assert r.status_code == 200
-    assert r.json() == {"permissions": [], "total": 0, "yolo": False}
+# ── GET: every tool, with a value and a seed ───────────────────────────────────
 
 
-def test_get_lists_a_decision_with_its_owner_and_level(client):
-    client.put("/api/tool-permissions/add_transactions", json={"level": "always_allow"})
+def test_get_lists_every_registry_tool_with_its_seed_before_anything_is_stored(client):
     body = client.get("/api/tool-permissions").json()
-    assert body["total"] == 1
-    row = body["permissions"][0]
-    assert row["tool"] == "add_transactions"
-    assert row["connector_id"] == svc.CORE_CONNECTOR_ID
+    assert body["total"] == len(body["permissions"]) > 150
+
+    write = _row(client, "add_transactions")
+    assert write["connector_id"] == svc.CORE_CONNECTOR_ID
+    assert write["level"] == write["default_level"] == "needs_approval"
+    assert write["tool_exists"] is True
+    assert write["description"]
+
+    read = _row(client, "get_net_worth")
+    assert read["level"] == read["default_level"] == "always_allow"
+
+    # A connector tool is listed under its connector, with the same rule.
+    assert _row(client, "plaid_get_status")["connector_id"] == "plaid"
+    assert _row(client, "email_send_message")["level"] == "needs_approval"
+
+
+def test_get_does_not_list_the_generic_search_tools(client):
+    """``web_search`` / ``fetch_page`` have no row of their own: they run the active search
+    provider's tool, which IS listed (under its connector)."""
+    tools = {r["tool"] for r in client.get("/api/tool-permissions").json()["permissions"]}
+    assert not {"web_search", "fetch_page"} & tools
+    assert {"duckduckgo_search", "duckduckgo_fetch_page"} <= tools
+
+
+def test_get_lists_built_in_tools_first(client):
+    owners = [r["connector_id"] for r in client.get("/api/tool-permissions").json()["permissions"]]
+    first_other = next(i for i, owner in enumerate(owners) if owner != svc.CORE_CONNECTOR_ID)
+    assert set(owners[:first_other]) == {svc.CORE_CONNECTOR_ID}
+    assert svc.CORE_CONNECTOR_ID not in owners[first_other:]
+
+
+def test_a_stored_decision_shows_its_value_beside_the_seed(client):
+    client.put("/api/tool-permissions/add_transactions", json={"level": "always_allow"})
+    row = _row(client, "add_transactions")
     assert row["level"] == "always_allow"
-    assert row["tool_exists"] is True
+    assert row["default_level"] == "needs_approval"
     assert row["updated_at"]
+
+
+def test_a_withdrawn_connectors_tools_are_not_listed(client):
+    """Yodlee is withdrawn by policy: dispatch refuses its tools, so they get no row."""
+    tools = {r["tool"] for r in client.get("/api/tool-permissions").json()["permissions"]}
+    assert not {t for t in tools if t.startswith("yodlee_")}
+
+
+def test_external_mcp_tools_with_rows_are_listed_and_ask_by_default(client):
+    svc.seed_discovered_tools("mcp:drive", ["list_files", "delete_file"])
+    row = _row(client, "delete_file", "mcp:drive")
+    assert row["level"] == row["default_level"] == "needs_approval"
+    assert row["tool_exists"] is True
 
 
 # ── PUT: owner resolution, canonicalization, validation ────────────────────────
@@ -65,11 +107,11 @@ def test_put_resolves_the_owner_from_the_tools_connector_tag(client):
     """``plaid_fetch_transactions`` carries ``@tool(connector="plaid")`` — the route must resolve
     that owner itself so no client has to know (or guess) which bucket a tool belongs to."""
     body = client.put(
-        "/api/tool-permissions/plaid_fetch_transactions", json={"level": "always_allow"}
+        "/api/tool-permissions/plaid_fetch_transactions", json={"level": "blocked"}
     ).json()
     row = next(r for r in body["permissions"] if r["tool"] == "plaid_fetch_transactions")
     assert row["connector_id"] == "plaid"
-    assert row["level"] == "always_allow"
+    assert row["level"] == "blocked"
 
 
 def test_put_resolves_email_send_message_to_the_email_connector_not_core(client):
@@ -84,6 +126,7 @@ def test_put_resolves_email_send_message_to_the_email_connector_not_core(client)
     row = next(r for r in body["permissions"] if r["tool"] == "email_send_message")
     assert row["connector_id"] == "email"
     assert row["level"] == "always_allow"
+    assert svc.stored_tool_level("email", "email_send_message") == "always_allow"
 
 
 def test_put_refuses_a_retired_name_rather_than_storing_an_unreachable_decision(client):
@@ -96,7 +139,7 @@ def test_put_refuses_a_retired_name_rather_than_storing_an_unreachable_decision(
         ).status_code
         == 422
     )
-    assert client.get("/api/tool-permissions").json()["permissions"] == []
+    assert svc.stored_tool_level(svc.CORE_CONNECTOR_ID, "add_transaction") is None
 
 
 def test_put_rejects_an_unknown_tool_with_no_explicit_owner(client):
@@ -128,39 +171,39 @@ def test_put_accepts_an_explicit_owner_for_a_name_the_registry_cannot_resolve(cl
     assert row["connector_id"] == "mcp:drive"
 
 
-# ── Revoke returns a tool to its DEFAULT, not to a stored decision ─────────────
+# ── Reset puts the SEED back — a row, not an absence ───────────────────────────
 
 
-def test_delete_revokes_and_the_tool_returns_to_its_default(client):
+def test_delete_resets_a_tool_to_its_seed(client):
     # email_send_message carries @tool(connector="email") — the route must resolve THAT owner
     # (never CORE_CONNECTOR_ID) with no explicit connector_id supplied.
-    client.put("/api/tool-permissions/email_send_message", json={"level": "blocked"})
-    assert svc.stored_tool_level("email", "email_send_message") == "blocked"
+    client.put("/api/tool-permissions/email_send_message", json={"level": "always_allow"})
 
     r = client.delete("/api/tool-permissions/email_send_message")
     assert r.status_code == 200
-    assert r.json() == {"cleared": "email_send_message"}
+    assert r.json() == {"reset": "email_send_message", "level": "needs_approval"}
 
-    # UNSET, not a stored "needs_approval" row — the distinction that makes a future
-    # default change move this tool along with every other undecided one.
-    assert svc.stored_tool_level("email", "email_send_message") is None
-    assert client.get("/api/tool-permissions").json()["total"] == 0
+    assert svc.stored_tool_level("email", "email_send_message") == "needs_approval"
+    row = _row(client, "email_send_message")
+    assert row["level"] == row["default_level"]
 
 
-def test_delete_unknown_decision_is_404(client):
-    """A NAMED owner with nothing stored for it is a 404 (no such decision); an unknown
-    NAME with no owner supplied can't even be resolved and is a 422 instead — the same
-    edge ``test_put_rejects_an_unknown_tool_with_no_explicit_owner`` covers on write."""
-    assert (
-        client.delete(
-            f"/api/tool-permissions/nope?connector_id={svc.CORE_CONNECTOR_ID}"
-        ).status_code
-        == 404
-    )
+def test_a_reset_row_follows_a_changed_seed_rule_again(client):
+    """Reset hands the row back to the app: it is a seed from then on, so a later change of the
+    rule reaches it — which a set value never does."""
+    from backend.db.tool_permission_store import ToolPermissionStore
+
+    client.put("/api/tool-permissions/get_net_worth", json={"level": "blocked"})
+    assert ToolPermissionStore().get_row("core", "get_net_worth")["source"] == "user"
+    client.delete("/api/tool-permissions/get_net_worth")
+    assert ToolPermissionStore().get_row("core", "get_net_worth")["source"] == "seed"
+
+
+def test_delete_an_unknown_tool_with_no_owner_is_422(client):
     assert client.delete("/api/tool-permissions/nope").status_code == 422
 
 
-def test_a_stale_tool_can_still_be_revoked(client):
+def test_a_stale_tool_can_still_be_reset_which_removes_it(client):
     """Leaving the user unable to clear a row is the complaint this tab exists to answer —
     a stale row's owner cannot be re-derived from a registry that no longer knows the
     name, so the caller hands back the ``connector_id`` it was shown."""
@@ -172,6 +215,9 @@ def test_a_stale_tool_can_still_be_revoked(client):
         f"/api/tool-permissions/a_tool_that_no_longer_exists?connector_id={svc.CORE_CONNECTOR_ID}"
     )
     assert r.status_code == 200
+    assert r.json() == {"reset": "a_tool_that_no_longer_exists", "level": None}
+    tools = {r["tool"] for r in client.get("/api/tool-permissions").json()["permissions"]}
+    assert "a_tool_that_no_longer_exists" not in tools
 
 
 # ── tool_exists: a rename is a visible revocation, not a silent one ────────────
@@ -182,50 +228,25 @@ def test_a_renamed_away_tool_is_shown_as_no_longer_available(client):
         "/api/tool-permissions/a_tool_that_no_longer_exists",
         json={"level": "always_allow", "connector_id": svc.CORE_CONNECTOR_ID},
     )
-    row = client.get("/api/tool-permissions").json()["permissions"][0]
+    row = _row(client, "a_tool_that_no_longer_exists")
     assert row["tool_exists"] is False
+    assert row["default_level"] == ""
 
 
 def test_a_live_tool_reports_tool_exists_true(client):
     client.put("/api/tool-permissions/add_transactions", json={"level": "always_allow"})
-    row = client.get("/api/tool-permissions").json()["permissions"][0]
-    assert row["tool_exists"] is True
+    assert _row(client, "add_transactions")["tool_exists"] is True
 
 
-# ── Yolo arms/disarms through this SAME ordinary route ─────────────────────────
+# ── One surface: the connector ladder and this route are ONE table ────────────
 
 
-def test_yolo_arms_through_the_star_tool_name(client):
-    r = client.put(f"/api/tool-permissions/{svc.YOLO_TOOL}", json={"level": "always_allow"})
-    assert r.status_code == 200
-    assert r.json()["yolo"] is True
-    assert client.get("/api/tool-permissions").json()["yolo"] is True
-
-
-def test_yolo_is_listed_and_revocable_like_any_other_decision(client):
-    """One revoke surface: arming and disarming the single most powerful permission must
-    not be a second code path."""
-    client.put(f"/api/tool-permissions/{svc.YOLO_TOOL}", json={"level": "always_allow"})
-    listed = client.get("/api/tool-permissions").json()["permissions"]
-    assert any(
-        r["tool"] == svc.YOLO_TOOL and r["connector_id"] == svc.CORE_CONNECTOR_ID for r in listed
-    )
-
-    r = client.delete(f"/api/tool-permissions/{svc.YOLO_TOOL}?connector_id={svc.CORE_CONNECTOR_ID}")
-    assert r.status_code == 200
-    assert client.get("/api/tool-permissions").json()["yolo"] is False
-
-
-# ── One revoke surface: the connector ladder and this route are ONE table ─────
-
-
-def test_a_decision_made_through_the_connector_ladder_is_listed_and_revocable_here(client):
+def test_a_decision_made_through_the_connector_ladder_is_listed_and_resettable_here(client):
     client.put(
         "/api/connectors/plaid/permissions/plaid_fetch_transactions", json={"level": "blocked"}
     )
 
-    listed = client.get("/api/tool-permissions").json()["permissions"]
-    row = next(r for r in listed if r["tool"] == "plaid_fetch_transactions")
+    row = _row(client, "plaid_fetch_transactions")
     assert row["connector_id"] == "plaid" and row["level"] == "blocked"
 
     assert (
@@ -234,14 +255,23 @@ def test_a_decision_made_through_the_connector_ladder_is_listed_and_revocable_he
         ).status_code
         == 200
     )
-    assert svc.stored_tool_level("plaid", "plaid_fetch_transactions") is None
+    assert svc.stored_tool_level("plaid", "plaid_fetch_transactions") == "always_allow"
 
 
 def test_a_decision_made_through_this_route_is_visible_on_the_connector_ladder(client):
-    client.put("/api/tool-permissions/plaid_fetch_transactions", json={"level": "always_allow"})
+    client.put("/api/tool-permissions/plaid_fetch_transactions", json={"level": "blocked"})
     assert (
         client.get("/api/connectors/plaid/permissions").json()["permissions"][
             "plaid_fetch_transactions"
         ]
-        == "always_allow"
+        == "blocked"
     )
+
+
+def test_the_connector_reset_route_puts_every_tool_back_to_its_seed(client):
+    client.put(
+        "/api/connectors/plaid/permissions/plaid_fetch_transactions", json={"level": "blocked"}
+    )
+    body = client.delete("/api/connectors/plaid/permissions").json()
+    assert body["permissions"]["plaid_fetch_transactions"] == "always_allow"
+    assert body["tool_defaults"]["plaid_fetch_transactions"] == "always_allow"

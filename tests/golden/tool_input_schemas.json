@@ -5028,23 +5028,10 @@
         "default": 8,
         "description": "Number of results (default 8, max 15)",
         "type": "integer"
-      }
-    },
-    "required": [
-      "query"
-    ],
-    "type": "object"
-  },
-  "x_search": {
-    "additionalProperties": false,
-    "properties": {
-      "query": {
-        "description": "What to look for on X — a ticker/cashtag ($NVDA), company, person, or topic. Don't add 'site:' yourself; the X scope is applied automatically.",
-        "type": "string"
       },
-      "max_results": {
-        "default": 8,
-        "description": "Number of results (default 8, max 15)",
+      "read_top": {
+        "default": 3,
+        "description": "Top results to read for excerpts (0-5, default 3; 0 = snippets only)",
         "type": "integer"
       }
     },
@@ -9617,6 +9604,11 @@
         "default": 8,
         "description": "Number of results (default 8, max 15)",
         "type": "integer"
+      },
+      "read_top": {
+        "default": 3,
+        "description": "Top results to read for excerpts (0-5, default 3; 0 = snippets only)",
+        "type": "integer"
       }
     },
     "required": [
@@ -9647,6 +9639,11 @@
       "max_results": {
         "default": 8,
         "description": "Number of results (default 8, max 15)",
+        "type": "integer"
+      },
+      "read_top": {
+        "default": 3,
+        "description": "Top results to read for excerpts (0-5, default 3; 0 = snippets only)",
         "type": "integer"
       }
     },
@@ -9679,6 +9676,11 @@
         "default": 8,
         "description": "Number of results (default 8, max 15)",
         "type": "integer"
+      },
+      "read_top": {
+        "default": 3,
+        "description": "Top results to read for excerpts (0-5, default 3; 0 = snippets only)",
+        "type": "integer"
       }
     },
     "required": [
@@ -9709,6 +9711,11 @@
       "max_results": {
         "default": 8,
         "description": "Number of results (default 8, max 15)",
+        "type": "integer"
+      },
+      "read_top": {
+        "default": 3,
+        "description": "Top results to read for excerpts (0-5, default 3; 0 = snippets only)",
         "type": "integer"
       }
     },
@@ -9741,6 +9748,11 @@
         "default": 8,
         "description": "Number of results (default 8, max 15)",
         "type": "integer"
+      },
+      "read_top": {
+        "default": 3,
+        "description": "Top results to read for excerpts (0-5, default 3; 0 = snippets only)",
+        "type": "integer"
       }
     },
     "required": [
@@ -9771,6 +9783,11 @@
       "max_results": {
         "default": 8,
         "description": "Number of results (default 8, max 15)",
+        "type": "integer"
+      },
+      "read_top": {
+        "default": 3,
+        "description": "Top results to read for excerpts (0-5, default 3; 0 = snippets only)",
         "type": "integer"
       }
     },
@@ -10058,7 +10075,7 @@
               "skip"
             ],
             "type": "string",
-            "description": "How much this Automation asks before acting: manual asks every time, auto proceeds except on hardline operations, skip proceeds regardless. Omit unless the user explicitly requested one."
+            "description": "How much this Automation asks before acting: manual asks every time, auto has each call judged and asks only when it looks unsafe, skip proceeds regardless. Omit unless the user explicitly requested one."
           },
           "model": {
             "type": "string",

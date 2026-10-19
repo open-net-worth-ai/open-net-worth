@@ -1,10 +1,10 @@
 """ToolPermissionStore — THE permission table: one level per tool, for every tool in
 the app (Connectors redesign §4, design handoff §10; approval model RFC 2026-07-20 §16).
 
-One row per tool the user has actually decided about:
+One row per tool in the app, each holding exactly ONE level:
 
     {"id": "plaid:plaid_sync_now", "connector_id": "plaid", "tool": "plaid_sync_now",
-     "level": "always_allow", "updated_at": iso}
+     "level": "always_allow", "source": "seed", "updated_at": iso}
 
 ## One store, because two answers to one question is the bug
 
@@ -47,22 +47,24 @@ every named tool, in ONE transaction. Lossy is the specified behaviour ("this is
 a half-applied stamp would leave the group non-uniform, i.e. reading *Custom*, which is
 precisely the state the user just asked to leave.
 
-## Absent means default
+## Every tool has a row, and a row remembers whether it is still the seed
 
-A tool with no row is UNDECIDED. For a connector-owned tool that reads
-`services.tool_permissions.DEFAULT_LEVEL` (`"needs_approval"`) uniformly, read or write
-alike; for a `core`-owned tool the gate applies the approval model's own answer instead
-(`ai.tools._confirm_gate.effective_level` — a write asks, a read runs), which is what
-keeps every untagged tool behaving exactly as it did before this table existed. A fresh
-install stores NOTHING either way: there is no seeding pass, no per-connector row set
-minted on connect, and no tiering by tool type inside a connector.
+A tool appears -> it is SEEDED (`sync`, called by `services.tool_permissions.sync_seeds` at boot
+for the registry's tools and for an external MCP server's discovered tools) with a meaningful
+level: a read runs, a change or a send asks (`services.tool_permissions.seed_level`), and an
+external MCP tool asks. There is no "undecided" state on any screen, and one value per tool is
+the whole model (ADR `2026-10-11-permissions-are-one-value-per-tool`).
 
-`always_allow` is a decision; `blocked` is a decision; `needs_approval` written
-explicitly is also a decision (round-trip fidelity: what you set is what
-`get_connector_tools` reports) — but the *absence* of a row is what every
-unconfigured tool starts from. Deleting a row (`clear_level`/`clear_connector`) is
-therefore a real operation: it returns the tool to its default rather than pinning it
-at today's value.
+`source` is `"seed"` or `"user"` and is never shown. A SEED row follows a changed seed rule on
+the next boot sync and is removed when its tool no longer exists; a USER row (anything the owner
+set, or any row without the marker) is never rewritten by a sync. Reset puts the seed value back
+and the row becomes `"seed"` again (`set_many`). A row is written with `"user"` unless the caller
+says otherwise, so a stray write cannot masquerade as a default.
+
+`always_allow` is a decision; `blocked` is a decision; `needs_approval` ("Ask") is the seed for
+a change. Dispatch still falls back to the seed rule for a registry tool that has no row yet (a
+test, a tool added at runtime, a freshly wiped table before the next sync) so a missing row is
+never read as permission and never as a refusal.
 
 ## Ids
 
@@ -97,8 +99,8 @@ live rows across the `onw.db` swap instead.
 unattended" is instance-local trust and must not travel to another machine inside a
 backup. It holds no credential, so it is not a `SECRET_TABLES` member and needs no
 chmod-600-equivalent; security-relevant but not confidential. `/api/reset` DOES wipe it
-(`portable_bridge._wipe_tool_permissions`) — "reset means reset", and the direction of
-that wipe is back to the cautious default.
+(`portable_bridge._wipe_tool_permissions`) — "reset means reset"; the caller re-seeds
+(`services.portability`), so every tool is back at its seed value.
 
 All three classifications are inherited UNCHANGED from both merged predecessors: they
 were identical (that is stated verbatim in `tool_grants`' own retired docstring), which
@@ -109,7 +111,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Mapping, Optional, Sequence
 
 from backend.db.payload_store import PayloadTableStore
 from backend.db.tables import tool_permissions
@@ -121,6 +123,13 @@ logger = logging.getLogger(__name__)
 # module docstring. Defined here, beside the table, exactly as `tool_grant_store`'s
 # VALID_SCOPES is; `services.tool_permissions` re-exports it as the caller-facing name.
 LEVELS: tuple[str, ...] = ("always_allow", "needs_approval", "blocked")
+
+# Who last wrote a row. "seed" = the app's default, which a sync may move; "user" = a decision.
+SEED = "seed"
+USER = "user"
+SOURCES: tuple[str, ...] = (SEED, USER)
+
+PermissionKey = tuple[str, str]
 
 
 def _now() -> str:
@@ -140,15 +149,18 @@ class ToolPermissionStore(PayloadTableStore):
 
     # ── Reads ─────────────────────────────────────────────────────────────────
 
-    def get_level(self, connector_id: str, tool: str) -> Optional[str]:
-        """This pair's STORED level, or ``None`` when the user has never decided about it.
+    def get_row(self, connector_id: str, tool: str) -> Optional[dict]:
+        """This pair's whole row, or ``None`` when there is no row (a tool not yet seeded)."""
+        return self.find_by_id(permission_key(connector_id, tool))
 
-        ``None`` is not "denied" and not "allowed" — it is *unset*, and the caller
-        (`services.tool_permissions.get_tool_permission`) is what turns it into
-        ``DEFAULT_LEVEL``. Keeping the store honest about "no row" rather than
-        manufacturing a default here is what lets `clear_connector` mean something.
+    def get_level(self, connector_id: str, tool: str) -> Optional[str]:
+        """This pair's STORED level, or ``None`` when it has no row.
+
+        ``None`` is not "denied" and not "allowed" — it is *not seeded yet*, and the caller
+        (`services.tool_permissions.stored_tool_level`) decides what that means: a registry
+        tool takes its seed rule, an external MCP tool takes `DEFAULT_LEVEL`.
         """
-        row = self.find_by_id(permission_key(connector_id, tool))
+        row = self.get_row(connector_id, tool)
         return row.get("level") if row else None
 
     def for_connector(self, connector_id: str) -> list[dict]:
@@ -156,20 +168,21 @@ class ToolPermissionStore(PayloadTableStore):
 
         A Python-side equality filter over `all()` (`PayloadTableStore.query`'s
         documented shape — no JSON-path SQL). This table is bounded by
-        connectors x tools and only ever holds rows for pairs a human decided about,
-        so it stays small by construction; the hot path (one tool's level, on
+        connectors x tools (a few hundred rows), and the hot path (one tool's level, on
         dispatch) is a primary-key lookup, not this scan.
         """
         return self.query(connector_id=connector_id)
 
     # ── Writes ────────────────────────────────────────────────────────────────
 
-    def set_level(self, connector_id: str, tool: str, level: str) -> dict:
+    def set_level(self, connector_id: str, tool: str, level: str, *, source: str = USER) -> dict:
         """Record ONE tool's level. Re-setting the same pair REPLACES its row."""
         with self._use_conn(None) as conn:
-            return self._stamp(conn, connector_id, tool, level)
+            return self._stamp(conn, connector_id, tool, level, source)
 
-    def set_levels(self, connector_id: str, tools: list[str], level: str) -> list[dict]:
+    def set_levels(
+        self, connector_id: str, tools: list[str], level: str, *, source: str = USER
+    ) -> list[dict]:
         """Stamp ``level`` onto every named tool in ONE transaction — the group control.
 
         Deliberately lossy: an existing per-tool override is overwritten, not merged.
@@ -183,16 +196,64 @@ class ToolPermissionStore(PayloadTableStore):
         if not tools:
             return []
         with self._use_conn(None) as conn:
-            return [self._stamp(conn, connector_id, tool, level) for tool in tools]
+            return [self._stamp(conn, connector_id, tool, level, source) for tool in tools]
+
+    def set_many(self, rows: Mapping[PermissionKey, tuple[str, str]]) -> None:
+        """Write ``{(owner, tool): (level, source)}`` unconditionally, in ONE transaction.
+
+        The Reset path: it overwrites a user row with the seed value and marks it ``"seed"``
+        again, which `sync` deliberately never does.
+        """
+        if not rows:
+            return
+        with self._use_conn(None) as conn:
+            for (connector_id, tool), (level, source) in rows.items():
+                self._stamp(conn, connector_id, tool, level, source)
+
+    def sync(
+        self,
+        desired: Mapping[PermissionKey, tuple[str, str]],
+        *,
+        prune: Sequence[PermissionKey] = (),
+    ) -> dict[str, int]:
+        """Bring the table in line with the seed rule, touching ONLY what is still a seed.
+
+        ``desired`` is ``{(owner, tool): (level, source)}``. A pair with no row is inserted. A
+        pair whose row is still a ``"seed"`` follows the rule: rewritten when its level (or
+        source) differs, left byte-identical otherwise — so a second run changes nothing and no
+        ``updated_at`` moves. A USER row (including a row with no ``source`` at all) is never
+        touched: a sync cannot undo a decision.
+
+        ``prune`` lists pairs whose tool no longer exists; each is deleted only if its row is
+        still a seed — a decision about a retired tool is kept, so the owner can see and Reset it.
+
+        One transaction, so a crash leaves either the old seeds or the new ones. Returns
+        ``{"added", "updated", "pruned"}`` for the boot log.
+        """
+        counts = {"added": 0, "updated": 0, "pruned": 0}
+        with self._use_conn(None) as conn:
+            existing = {r.get("id"): r for r in self.all(conn=conn)}
+            for (connector_id, tool), (level, source) in desired.items():
+                row = existing.get(permission_key(connector_id, tool))
+                if row is None:
+                    self._stamp(conn, connector_id, tool, level, source)
+                    counts["added"] += 1
+                elif row.get("source") == SEED and (row.get("level") != level or source != SEED):
+                    self._stamp(conn, connector_id, tool, level, source)
+                    counts["updated"] += 1
+            for connector_id, tool in prune:
+                key = permission_key(connector_id, tool)
+                row = existing.get(key)
+                if row is not None and row.get("source") == SEED:
+                    self.delete(key, conn=conn)
+                    counts["pruned"] += 1
+        return counts
 
     def clear_level(self, connector_id: str, tool: str) -> bool:
-        """Forget ONE pair's decision; True when a row was actually removed.
+        """Delete ONE pair's row; True when a row was actually removed.
 
-        The single-pair sibling of `clear_connector`, and the absorbed `tool_grants`'
-        `revoke()` in its new spelling: Settings › Permissions calls it to take a decision
-        back, and the tool returns to its DEFAULT rather than to a stored
-        `needs_approval` — same distinction `clear_connector` draws, and the reason a
-        revoke is a DELETE here rather than a downgrade.
+        Not "reset": a tool with no row falls back to its seed rule at dispatch, but nothing
+        lists it until the next sync. Used for a stale row (its tool no longer exists).
         """
         removed = self.delete(permission_key(connector_id, tool))
         if removed:
@@ -202,11 +263,8 @@ class ToolPermissionStore(PayloadTableStore):
     def clear_connector(self, connector_id: str) -> int:
         """Drop every stored row for one connector; returns how many were removed.
 
-        Returns its tools to the DEFAULT (unset), which is NOT the same as stamping them
-        all to ``needs_approval``: a future default change would move them, and nothing is left
-        claiming the user made a decision they didn't. The intended caller is a connector
-        being removed — a re-added connector of the same id must not silently inherit the
-        levels of the one it replaced.
+        The caller is an external MCP server being removed — its tools are gone, and a
+        re-added server of the same id must not inherit the levels of the one it replaced.
 
         Reads INSIDE its own transaction (``all(conn=...)``) rather than through
         ``for_connector``'s lock-free read: a row written for this connector between a
@@ -221,14 +279,13 @@ class ToolPermissionStore(PayloadTableStore):
             logger.info("connector permissions cleared: %s (%d rows)", connector_id, len(rows))
         return len(rows)
 
-    def clear_connector_level(self, connector_id: str, level: str) -> int:
-        """Drop every stored row for one connector that sits AT ``level``; returns the count.
+    def reseed_connector_level(self, connector_id: str, level: str, to_level: str) -> int:
+        """Rewrite every row of one connector that sits AT ``level`` to ``to_level`` as a seed.
 
-        `clear_connector`'s selective sibling, for the one caller that must withdraw grants
-        without touching refusals (`services.tool_permissions.revoke_allowed_tools` — an MCP
-        server whose endpoint was edited). Same in-transaction read-then-delete as
-        `clear_connector`, for the same reason: a row written between a lock-free read and
-        the delete would survive as the one decision the caller just erased.
+        For the one caller that must withdraw a grant without touching refusals
+        (`services.tool_permissions.revoke_allowed_tools` — an MCP server whose endpoint was
+        edited): ``always_allow`` goes back to the seed, ``blocked`` and ``needs_approval`` stay.
+        Same in-transaction read-then-write as `clear_connector`, for the same reason.
         """
         with self._use_conn(None) as conn:
             rows = [
@@ -237,11 +294,12 @@ class ToolPermissionStore(PayloadTableStore):
                 if r.get("connector_id") == connector_id and r.get("level") == level
             ]
             for row in rows:
-                self.delete(row["id"], conn=conn)
+                self._stamp(conn, connector_id, row["tool"], to_level, SEED)
         if rows:
             logger.info(
-                "connector permissions cleared at level %s: %s (%d rows)",
+                "connector permissions at level %s reseeded to %s: %s (%d rows)",
                 level,
+                to_level,
                 connector_id,
                 len(rows),
             )
@@ -249,22 +307,25 @@ class ToolPermissionStore(PayloadTableStore):
 
     # ── Internals ─────────────────────────────────────────────────────────────
 
-    def _stamp(self, conn, connector_id: str, tool: str, level: str) -> dict:
+    def _stamp(self, conn, connector_id: str, tool: str, level: str, source: str) -> dict:
         """Upsert one pair's row THROUGH the caller's open transaction.
 
-        Validates the level here as well as in `services.tool_permissions` — belt over
-        the service's own check (`ToolGrantStore.grant`'s identical precedent for an
+        Validates the level and source here as well as in `services.tool_permissions` — belt
+        over the service's own check (`ToolGrantStore.grant`'s identical precedent for an
         unknown scope), because this is the only write path into the table and an
-        unrecognised level stored here would be read back as a level nothing knows how
-        to enforce.
+        unrecognised level stored here would be read back as a level nothing knows how to
+        enforce.
         """
         if level not in LEVELS:
             raise ValueError(f"unknown permission level {level!r} — expected one of {LEVELS}")
+        if source not in SOURCES:
+            raise ValueError(f"unknown permission source {source!r} — expected one of {SOURCES}")
         row = {
             "id": permission_key(connector_id, tool),
             "connector_id": connector_id,
             "tool": tool,
             "level": level,
+            "source": source,
             "updated_at": _now(),
         }
         self.upsert(row, conn=conn)

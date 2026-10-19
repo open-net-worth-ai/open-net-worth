@@ -2,28 +2,21 @@ import { authFetch } from './client'
 import { fetchCachedQuery, invalidateQueryCache } from '../state/queryCache'
 
 // The ONE client seam for tool permissions — the confirm card's grant buttons, Settings ›
-// Permissions, AND the Connectors tab's per-connector ladder all answer through this one
-// table now (backend ADR `2026-08-14-one-permission-store-for-every-tool`). Before that
-// merge there were two client modules (`api/grants.ts` for the confirm card + Settings,
-// `components/tabs/connectors/permissions.ts` for the connector-scoped routes) because
-// there were two backend stores that could disagree. The connector-scoped module still
-// exists — its routes are unchanged — but this file is now the only one that can answer
-// "what has the user decided about this tool, anywhere".
+// Permissions, the Automation page's tool picker AND the Connectors tab's per-connector ladder
+// all answer through this one table (backend ADR `2026-08-14-one-permission-store-for-every-tool`;
+// the one-value model is ADR `2026-10-11-permissions-are-one-value-per-tool`).
 //
 // Mirrors backend/api/tool_permissions.py:
 //   GET    /api/tool-permissions
 //   PUT    /api/tool-permissions/{tool}
-//   DELETE /api/tool-permissions/{tool}
+//   DELETE /api/tool-permissions/{tool}          (Reset to the seed value)
 //
-// Three levels, renamed from the old binary-grant vocabulary and the old connector-ladder
-// vocabulary at once: `always_allow` (was `allow`/a stored grant), `needs_approval` (was
-// `ask`/no grant), `blocked` (was `block` — a level the old grant table had no way to
-// express at all). An ABSENT row reads as `needs_approval`.
-//
-// The model: every READ tool runs free, every WRITE tool (plus `send_email`, which has an
-// effect outside this install) confirms EVERY time until set to `always_allow`. A decision
-// names a TOOL and nothing else — no amount ceiling, no account set, no argument matching,
-// ever (§13.3b of the approval-model RFC). The only knob on the confirm card is SCOPE.
+// EVERY tool has exactly one value: Always allow, Ask or Block (stored as `always_allow` /
+// `needs_approval` / `blocked`). There is no "not set" state: a tool is seeded with a default —
+// a read runs, a change or a send asks, an external MCP tool asks — and `default_level` names
+// it, so a client shows Reset exactly when the value differs from it. A decision names a TOOL and
+// nothing else — no amount ceiling, no account set, no argument matching, ever (§13.3b of the
+// approval-model RFC). The mode (manual / auto / skip) only decides what Ask means.
 //
 // **Failure is REPORTED, never swallowed.** An earlier sibling of this flow
 // (`handleCodeAllow`'s `catch {}` in ChangePreview) treats a failed grant as best-effort and
@@ -36,45 +29,52 @@ import { fetchCachedQuery, invalidateQueryCache } from '../state/queryCache'
 /** The three real levels. Matches `backend/api/tool_permissions.py`'s `Level` exactly. */
 export type PermissionLevel = 'always_allow' | 'needs_approval' | 'blocked'
 
+/** What each level is called on screen. The stored names are unchanged. */
+export const LEVEL_LABELS: Record<PermissionLevel, string> = {
+  always_allow: 'Always allow',
+  needs_approval: 'Ask',
+  blocked: 'Block',
+}
+
+/** The levels in menu order. */
+export const LEVEL_ORDER: PermissionLevel[] = ['always_allow', 'needs_approval', 'blocked']
+
 /** The owner bucket for a tool that belongs to no connector — `add_transactions`,
- *  `send_email`, every unscoped write tool. */
+ *  `email_send_message`, every unscoped write tool. */
 export const CORE_CONNECTOR_ID = 'core'
 
-/** The reserved tool name for yolo. A real tool can never collide: names are identifiers. */
-export const YOLO_TOOL = '*'
-
-/** One stored decision, app-wide — a Settings › Permissions row. */
-export interface DecisionRow {
-  /** The CANONICAL tool name at decision time — the name the user saw on the confirm card,
-   *  or the registry name a connector ladder addressed. */
+/** One tool and its value — a Settings › Permissions row, an Automation picker entry. */
+export interface ToolPermission {
+  /** The CANONICAL tool name — the name the user saw on the confirm card, or the registry
+   *  name a connector ladder addressed. */
   tool: string
   /** The tool's OWNER: a connector id, `mcp:<server_id>`, or `core` for an unscoped tool. */
   connector_id: string
   level: PermissionLevel | string
+  /** The seed: what the tool starts at and what Reset restores. Empty for a row whose tool no
+   *  longer exists (Reset deletes it). */
+  default_level: PermissionLevel | ''
+  /** The tool's own first sentence; empty for an external MCP tool. */
+  description: string
   updated_at: string
   /** False when the stored tool name no longer resolves in the registry — a rename retired
    *  it, so the decision is already inert. Rendered rather than hidden: a permission the
-   *  user set and can no longer see is the failure this surface exists to fix. Always true
-   *  for the reserved `*` yolo row and for an MCP-owned tool, neither of which the registry
-   *  can speak for. */
+   *  user set and can no longer see is the failure this surface exists to fix. */
   tool_exists: boolean
 }
 
-export interface DecisionsResponse {
-  permissions: DecisionRow[]
+export interface ToolPermissionsResponse {
+  permissions: ToolPermission[]
   total: number
-  /** Whether the blanket "stop asking me" row is armed. Read off the STORED row rather
-   *  than inferred, so this can never disagree with the gate it describes (a real, shipped
-   *  failure the old grant table fixed once: an env-var implementation reported OFF while
-   *  a stored row skipped confirmations). */
-  yolo: boolean
 }
 
-export async function listToolPermissions(): Promise<DecisionsResponse> {
+export const TOOL_PERMISSIONS_KEY = '/api/tool-permissions'
+
+export async function listToolPermissions(): Promise<ToolPermissionsResponse> {
   return fetchCachedQuery(
-    '/api/tool-permissions',
+    TOOL_PERMISSIONS_KEY,
     async () => {
-      const res = await authFetch('/api/tool-permissions')
+      const res = await authFetch(TOOL_PERMISSIONS_KEY)
       if (!res.ok) throw new Error(`Failed to load permissions (${res.status})`)
       return res.json()
     },
@@ -86,7 +86,7 @@ export interface SetToolPermissionRequest {
   /** The CANONICAL tool name. A decision deliberately does NOT survive a tool rename
    *  (§15.1): a rename in this codebase is frequently a semantic change —
    *  `delete_account` → `delete_accounts` turned a single-target call into a batch — so
-   *  the old key simply stops resolving and the user is asked again rather than a
+   *  the old key simply stops resolving and the tool is seeded afresh rather than a
    *  decision quietly widening. */
   tool: string
   level: PermissionLevel
@@ -96,8 +96,8 @@ export interface SetToolPermissionRequest {
    *  e.g. the confirm card. */
   connector_id?: string
   /** Which conversation this decision was made in — NOT a scope. Sent for an
-   *  Automation-owned conversation so `always_allow` is scoped to that Automation instead
-   *  of becoming a global decision. */
+   *  Automation-owned conversation so Always allow / Block land on THAT Automation's own
+   *  lists instead of becoming a global decision. */
   session_id?: string
 }
 
@@ -105,7 +105,9 @@ export interface SetToolPermissionRequest {
  * Set one tool's level. Throws on a non-OK response so a failed standing permission is
  * reported, never silently swallowed (see the module note).
  */
-export async function setToolPermission(req: SetToolPermissionRequest): Promise<DecisionsResponse> {
+export async function setToolPermission(
+  req: SetToolPermissionRequest,
+): Promise<ToolPermissionsResponse> {
   const res = await authFetch(`/api/tool-permissions/${encodeURIComponent(req.tool)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -116,26 +118,44 @@ export async function setToolPermission(req: SetToolPermissionRequest): Promise<
     }),
   })
   if (!res.ok) throw new Error(`permission update failed (${res.status})`)
-  invalidateQueryCache('/api/tool-permissions')
+  invalidateQueryCache(TOOL_PERMISSIONS_KEY)
   return res.json()
 }
 
 /**
- * Forget one tool's decision — it returns to its default (`needs_approval` for a connector
- * tool). `connectorId` is REQUIRED: the server cannot re-derive a stale or MCP-owned row's
- * owner from a registry that no longer knows the name, so the caller hands back the one it
- * was shown (`DecisionRow.connector_id`).
+ * Reset one tool to its seed value. `connectorId` is REQUIRED: the server cannot re-derive a
+ * stale or MCP-owned row's owner from a registry that no longer knows the name, so the caller
+ * hands back the one it was shown (`ToolPermission.connector_id`). `level` is the value the tool
+ * is back at, or null when the row was deleted because its tool no longer exists.
  */
-export async function clearToolPermission(
+export async function resetToolPermission(
   tool: string,
   connectorId: string,
-): Promise<{ cleared: string }> {
+): Promise<{ reset: string; level: PermissionLevel | null }> {
   const res = await authFetch(
     `/api/tool-permissions/${encodeURIComponent(tool)}?connector_id=${encodeURIComponent(connectorId)}`,
     { method: 'DELETE' },
   )
-  if (!res.ok) throw new Error(`Failed to clear ${tool} (${res.status})`)
+  if (!res.ok) throw new Error(`Failed to reset ${tool} (${res.status})`)
+  invalidateQueryCache(TOOL_PERMISSIONS_KEY)
   return res.json()
+}
+
+/** A tool's name in words ("delete_transactions_where" → "Delete transactions where"). The raw
+ *  identifier is an implementation detail; it stays available as a tooltip, never as the label. */
+export function toolTitle(tool: string): string {
+  const words = tool.replace(/_/g, ' ')
+  return words ? words[0]!.toUpperCase() + words.slice(1) : words
+}
+
+/** A tool's OWNER, in words — `connector_id` is an opaque id (`core`, `plaid`, `mcp:firecrawl`,
+ *  `web_search:tavily`), and a bare `plaid_fetch_transactions` with no context is a puzzle. */
+export function ownerLabel(connectorId: string): string {
+  const cap = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s)
+  if (connectorId === CORE_CONNECTOR_ID) return 'Built-in'
+  if (connectorId.startsWith('mcp:')) return `MCP • ${connectorId.slice(4)}`
+  if (connectorId.startsWith('web_search:')) return `Web search • ${cap(connectorId.slice(11))}`
+  return cap(connectorId.replace(/_/g, ' '))
 }
 
 // ── The confirm card's grant buttons ────────────────────────────────────────────────────
@@ -144,13 +164,11 @@ export async function clearToolPermission(
 //
 //  - `once`   — this call only. Nothing is stored; the card's ✓ already IS that grant,
 //               redeemed by the single-use confirm token.
-//  - `always` — durable, until reset in Settings › Permissions. NO tool is excluded from
+//  - `always` — durable, until changed in Settings › Permissions. NO tool is excluded from
 //               this scope (D8/D9 were proposed and withdrawn) — `restore_checkpoint`
 //               included, which is safe only because the permission table is
-//               checkpoint-EXCLUDED and so cannot be restored back into existence.
-//
-// There was a third, `session` (until the conversation ends). Removed 2026-08-02: a card
-// offers Allow once and Always allow, nothing else.
+//               checkpoint-EXCLUDED and so cannot be restored back into existence. Inside an
+//               Automation run it lands on THAT Automation's own Always allowed list.
 export type GrantScope = 'once' | 'always'
 
 export interface GrantRequest {
@@ -185,14 +203,4 @@ export async function grantTool(req: GrantRequest): Promise<void> {
 export const GRANT_SCOPE_LABELS: Record<GrantScope, string> = {
   once: 'Allow once',
   always: 'Always allow',
-}
-
-/**
- * The suffix appended to a resolved "✓ Approved" chip so it names the grant that was given.
- * `once` adds nothing — it is the default and the common case, and "✓ Approved" already reads
- * as a one-off. A dot-separated tail keeps the standing scope visible without shouting.
- */
-export const GRANT_RESOLVED_SUFFIX: Record<GrantScope, string> = {
-  once: '',
-  always: ' • always',
 }

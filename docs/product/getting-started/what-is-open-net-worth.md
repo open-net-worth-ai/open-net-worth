@@ -34,7 +34,7 @@ tools the app's own screens use:
 
 You stay in charge. Lucius reads freely, but anything that changes your book shows you a card
 with exactly what he'll do, and waits for you to approve it. Each tool can be set to **Always
-allow**, **Needs approval** or **Blocked** — read [How Lucius's permissions work](../lucius/permissions.md)
+allow**, **Ask** or **Block** — read [How Lucius's permissions work](../lucius/permissions.md)
 before you set anything to Always allow, because that applies to scheduled runs with nobody
 watching too.
 

@@ -93,36 +93,36 @@ describe('the fixed two-way grouping', () => {
 })
 
 describe('defaults', () => {
-  it('starts every tool at Needs approval, trade tools included', () => {
+  it('starts every tool at Ask, trade tools included', () => {
     setup()
     for (const t of TOOLS) {
-      expect(toolBtn(t, 'Needs approval').getAttribute('aria-pressed')).toBe('true')
+      expect(toolBtn(t, 'Ask').getAttribute('aria-pressed')).toBe('true')
       expect(toolBtn(t, 'Always allow').getAttribute('aria-pressed')).toBe('false')
     }
   })
 
-  it('reads both group controls as Needs approval', () => {
+  it('reads both group controls as Ask', () => {
     const { container } = setup()
-    expect(groupControl(container, 0).textContent).toContain('Needs approval')
-    expect(groupControl(container, 1).textContent).toContain('Needs approval')
+    expect(groupControl(container, 0).textContent).toContain('Ask')
+    expect(groupControl(container, 1).textContent).toContain('Ask')
   })
 })
 
 describe('the derived Custom aggregate', () => {
   it('flips the group control to Custom when ONE tool diverges', () => {
     const { container } = setup()
-    expect(groupControl(container, 0).textContent).toContain('Needs approval')
+    expect(groupControl(container, 0).textContent).toContain('Ask')
 
     fireEvent.click(toolBtn('list_accounts', 'Always allow'))
 
     expect(groupControl(container, 0).textContent).toContain('Custom')
     // the sibling group is unaffected
-    expect(groupControl(container, 1).textContent).toContain('Needs approval')
+    expect(groupControl(container, 1).textContent).toContain('Ask')
   })
 
   it('never persists `custom` — only the diverging tool is written', () => {
     const { persisted } = setup()
-    fireEvent.click(toolBtn('list_accounts', 'Blocked'))
+    fireEvent.click(toolBtn('list_accounts', 'Block'))
     expect(persisted.tool).toEqual([{ tool: 'list_accounts', level: 'blocked' }])
     expect(persisted.group).toEqual([])
   })
@@ -133,23 +133,23 @@ describe('the derived Custom aggregate', () => {
     expect(groupControl(container, 0).textContent).toContain('Custom')
 
     fireEvent.click(groupControl(container, 0))
-    fireEvent.click(within(groupMenu(container)).getByText('Needs approval'))
+    fireEvent.click(within(groupMenu(container)).getByText('Ask'))
 
-    expect(groupControl(container, 0).textContent).toContain('Needs approval')
+    expect(groupControl(container, 0).textContent).toContain('Ask')
   })
 })
 
 describe('the group stamp', () => {
   it('overwrites a per-tool override — deliberately lossy', () => {
     const { container } = setup()
-    fireEvent.click(toolBtn('get_positions', 'Blocked'))
-    expect(toolBtn('get_positions', 'Blocked').getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(toolBtn('get_positions', 'Block'))
+    expect(toolBtn('get_positions', 'Block').getAttribute('aria-pressed')).toBe('true')
 
     fireEvent.click(groupControl(container, 0))
     fireEvent.click(within(groupMenu(container)).getByText('Always allow'))
 
     expect(toolBtn('get_positions', 'Always allow').getAttribute('aria-pressed')).toBe('true')
-    expect(toolBtn('get_positions', 'Blocked').getAttribute('aria-pressed')).toBe('false')
+    expect(toolBtn('get_positions', 'Block').getAttribute('aria-pressed')).toBe('false')
     expect(toolBtn('list_accounts', 'Always allow').getAttribute('aria-pressed')).toBe('true')
   })
 
@@ -166,9 +166,9 @@ describe('the group stamp', () => {
   it('leaves the other group untouched', () => {
     const { container } = setup()
     fireEvent.click(groupControl(container, 0))
-    fireEvent.click(within(groupMenu(container)).getByText('Blocked'))
+    fireEvent.click(within(groupMenu(container)).getByText('Block'))
 
-    expect(toolBtn('place_order', 'Needs approval').getAttribute('aria-pressed')).toBe('true')
+    expect(toolBtn('place_order', 'Ask').getAttribute('aria-pressed')).toBe('true')
   })
 
   it('lets a trade tool be raised to Always allow like any other write tool', () => {
@@ -196,7 +196,7 @@ describe('Custom is selectable but inert', () => {
     expect(persisted.group).toEqual([])
     expect(persisted.tool).toEqual([])
     expect(toolBtn('list_accounts', 'Always allow').getAttribute('aria-pressed')).toBe('true')
-    expect(toolBtn('get_positions', 'Needs approval').getAttribute('aria-pressed')).toBe('true')
+    expect(toolBtn('get_positions', 'Ask').getAttribute('aria-pressed')).toBe('true')
     expect(groupControl(container, 0).textContent).toContain('Custom')
   })
 
@@ -262,7 +262,7 @@ describe('the ladder holds no permission state of its own', () => {
         onSetGroup={noop}
       />,
     )
-    expect(toolBtn('get_positions', 'Blocked').getAttribute('aria-pressed')).toBe('true')
+    expect(toolBtn('get_positions', 'Block').getAttribute('aria-pressed')).toBe('true')
 
     rerender(
       <PermissionLadder

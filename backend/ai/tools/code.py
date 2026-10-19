@@ -10,27 +10,21 @@ SECURITY (the new boundary vs. the bundle path — see RFC §7):
   * The sandbox makes blast radius PURE-COMPUTE regardless of who wrote the code — no
     secrets, no DATA_DIR, no network, clamped CPU/mem (the same S2 isolation ``run_script``
     relies on). This is the load-bearing control.
-  * Interactive-INTENT (RFC D2), but NOT interactive-enforced. This bullet used to claim
-    ``run_code`` "refuses on a headless/unattended turn AND is never placed on
-    ``HEADLESS_ALLOWED_TOOLS``/``_T0`` — agents/cron/MCP can never reach it". Neither leg
-    holds: there is no ``is_unattended()`` check in the handler below (``run_script`` has
-    one; this does not), and the ``HEADLESS_ALLOWED_TOOLS``/``_T0`` ceiling was REMOVED
-    (ADR ``2026-07-18-remove-layered-ai-permission-system``). What actually gates an
-    unattended call today is the kill switch (default OFF) plus the permission card
-    below — and a standing "Always allow" grant clears the card. Corrected 2026-08-28.
-  * Run-time human review (RFC D1): the FIRST run in a conversation returns a permission
-    card (``code_run`` proposed_change) showing the source; the user picks Reject / Allow
-    once / Always allow. The standing grant is set by the HUMAN via REST
-    (``code_execution_auto_run``, instance-wide) — NEVER by a tool arg, so the model can't
-    self-escalate the prompt away.
+  * ONE permission value, decided by the ordinary gate (ADR
+    ``2026-10-11-permissions-are-one-value-per-tool``). ``run_code`` declares
+    ``external_effect=True`` (it executes code on the owner's machine), so it is seeded **Ask**
+    like any other tool that acts outside the owner's data: a card in Manual, the Auto judge in
+    Auto, runs in Skip, and the owner can set it to Always allow or Block in Settings →
+    Permissions. This handler has NO approval logic of its own any more — it used to stage its
+    own ``code_run`` card on "the first run in a conversation" and honour an instance-wide
+    ``code_execution_auto_run`` flag, a second, hidden permission the Permissions list could not
+    show. That flag became a stored ``core:run_code`` Always allow (revision
+    ``202610201400``); an approval runs the arguments the SERVER staged under the tool_use_id,
+    so the model cannot substitute different code on apply.
   * Kill switch (RFC §4.3): ``app_config.code_execution_enabled`` (default OFF) hard-blocks
-    everything.
-  * Approval runs the STAGED source: the confirm card pauses this tool_use and the server
-    re-runs it on the arguments IT stored — the model cannot substitute
-    different code on apply. (External-MCP's own confirm→apply used to mirror this same
-    shape; it migrated 2026-08-22 onto the app's generic tool_use_id-keyed paused-tool-use
-    mechanism instead — see ``backend/mcp/client_manager.py``. This tool's OWN nonce
-    mechanism is unrelated and unchanged by that migration.)
+    everything. It is the feature's enable/disable, not an approval layer, and it applies to
+    every call whatever the permission value: Always allow on a switched-off feature still
+    refuses.
 
 Pure compute: a script NEVER touches the ledger/DB. Any mutation is still Lucius calling the
 normal add_transaction / apply_* tools after reading the result.
@@ -45,6 +39,7 @@ from typing import Any, Dict, Literal, Optional
 
 from pydantic import Field
 
+from backend.ai.tools import _confirm_gate as _gate
 from backend.ai.tools import registry
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, bare_object_schema, schema_of
@@ -62,19 +57,19 @@ def _kill_switch_on() -> bool:
     return code_execution_enabled()
 
 
-def _auto_run_on() -> bool:
-    from backend.db.app_config_store import code_execution_auto_run
+_CODE_OFF = (
+    "Code execution is off. Ask the user to turn on the "
+    "'Code execution (Lucius scripts)' toggle in Settings → Developer — note "
+    "this is a DIFFERENT toggle from 'Bundled script skills' in the same section. "
+    "Once it's on, ask me again."
+)
 
-    return code_execution_auto_run()
 
-
-def _standing_grant() -> bool:
-    """Whether run_code may proceed with no card.
-
-    ONE grant now (2026-08-02): the instance-wide always-allow flag. The per-conversation
-    tier was removed with the card's middle button, so an ungranted call always prompts.
-    """
-    return _auto_run_on()
+def _code_execution_off() -> Optional[str]:
+    """The refusal while the kill switch is off, else ``None``. Registered as the tool's
+    ``unavailable=`` (so dispatch refuses before any card or judge call) and re-checked by the
+    handler (so an approval redeemed after the switch went off still refuses)."""
+    return None if _kill_switch_on() else _CODE_OFF
 
 
 async def _run_and_format(source: str, script_input: object):
@@ -137,25 +132,19 @@ class RunCodeInput(ToolInput):
         "NOT a filesystem jail, so treat anything it prints as potentially sensitive. The script "
         "MUST read its input as JSON from the file path in the SKILL_INPUT "
         "env var and print its result as JSON to stdout. Be transparent: tell the user you're "
-        "running a quick script. The first run in a conversation asks the user for permission."
+        "running a quick script. The user may be asked to approve the script before it runs."
     ),
     input_schema=schema_of(RunCodeInput, tool_name="run_code"),
+    external_effect=True,
+    unavailable=_code_execution_off,
 )
 async def run_code(input_data: dict):
-    """Run model-authored code in the sandbox, gated by the kill switch + per-conversation /
-    instance grant. No grant → stage the source + return a ``code_run`` permission card."""
+    """Run model-authored code in the sandbox, behind the kill switch. Whether the owner is asked
+    first is the ordinary permission gate's question, answered before this handler runs."""
     # Gate B — kill switch (RFC §4.3).
-    if not _kill_switch_on():
-        return json.dumps(
-            {
-                "error": (
-                    "Code execution is off. Ask the user to turn on the "
-                    "'Code execution (Lucius scripts)' toggle in Settings → Developer — note "
-                    "this is a DIFFERENT toggle from 'Bundled script skills' in the same section. "
-                    "Once it's on, ask me again and I'll show you the script for approval."
-                )
-            }
-        ), None
+    off = _code_execution_off()
+    if off is not None:
+        return json.dumps({"error": off}), None
 
     source = (input_data.get("source") or "").strip()
     if not source:
@@ -170,46 +159,15 @@ async def run_code(input_data: dict):
     except (TypeError, ValueError) as e:
         return json.dumps({"error": f"input is not JSON-serializable: {e}"}), None
 
-    purpose = (input_data.get("purpose") or "").strip()
-
-    from backend.core.chat_session import get_session_id
-
-    session_id = get_session_id()
-
-    # Grant check (RFC §4.1 precedence: kill switch → instance always-allow → otherwise
-    # prompt). A standing grant → run immediately, no card.
-    if _standing_grant():
-        return await _run_and_format(source, script_input)
-
-    # Ask the SAME gate every other tool asks. ``should_preview_write`` is False both for a
-    # redemption (the user already answered this card) and for an unattended caller (there is
-    # no card to show) — and both must WRITE. Staging unconditionally here handed an
-    # unattended caller "nothing to bind this confirmation to" instead of running the script.
-    if not registry.should_preview_write():
-        return await _run_and_format(source, script_input)
-
-    # No grant → stage the EXACT approved source under this call's tool_use_id and return
-    # the permission card. The turn ends; the user picks an option on the card.
-    proposed = {
-        "type": "code_run",
-        # The conversation this card belongs to, so the frontend can route its response
-        # without prop-drilling. Not a secret, and not a grant target.
-        "session_id": session_id or "",
-        "display": {
-            "purpose": purpose,
-            "source": source,
-            "language": "python",
-        },
-    }
-    return registry.stage_write(proposed)
+    return await _run_and_format(source, script_input)
 
 
 # ── Save-as-skill bridge (RFC C5 — the "write a tool" half) ───────────────────────────────
 # Turns an ad-hoc script into a reusable SCRIPT-SKILL bundle (parent RFC docs/rfc/
 # script-bundling-skills.md). Approve-tier propose → apply, mirroring create_skill /
 # apply_skill_change. SECURITY: confirmed authoring creates an ordinary enabled skill but grants
-# ZERO code-execution authority: run_script still requires the human-only instance switch (and the
-# separate unattended switch outside interactive chat). The model cannot change either switch.
+# ZERO code-execution authority: run_script still requires the human-only instance switch and is an
+# ordinary tool for permissions (seeded Ask). The model cannot change the switch.
 
 MAX_SKILL_SCRIPT_BYTES = MAX_SOURCE_BYTES
 _SCRIPT_TIMEOUT_S = 30  # per-script wall budget baked into the manifest (≤ runner ceiling)
@@ -268,10 +226,21 @@ class SaveCodeAsSkillInput(ToolInput):
         "requires its separate operator switch. Do not imply it will run automatically."
     ),
     input_schema=schema_of(SaveCodeAsSkillInput, tool_name="save_code_as_skill"),
+    mutates=("skills",),
+    self_stages=True,
 )
 async def save_code_as_skill(input_data: dict):
     from backend.db.skill_files import INTERPRETER_BY_EXT
     from backend.services import skills as skills_service
+
+    gated = False
+    if input_data.get(_gate.CONFIRM_TOKEN_KEY):
+        entry = _gate.redeem(input_data[_gate.CONFIRM_TOKEN_KEY], "save_code_as_skill")
+        if entry is None:
+            return _gate.unknown_token_result("save_code_as_skill")
+        input_data = _gate.staged_args(entry)
+    else:
+        gated = registry.should_preview_write()
 
     name = (input_data.get("name") or "").strip()
     source = (input_data.get("source") or "").strip()
@@ -316,9 +285,9 @@ async def save_code_as_skill(input_data: dict):
             "language": language,
         },
     }
-    # See run_code above: not-previewing means WRITE, whether that is a redemption or an
-    # unattended caller with no card to show.
-    if not registry.should_preview_write():
+    # Not gated means WRITE: a redemption, an Always allow, or an unattended caller with no card
+    # to show.
+    if not gated:
         return _apply_code_skill(change)
     return registry.stage_write(change)
 

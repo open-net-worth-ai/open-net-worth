@@ -19,7 +19,7 @@ from __future__ import annotations
 from typing import Callable, Optional
 
 _provider: Optional[Callable[[], list[str]]] = None
-_writes_provider: Optional[Callable[[str], bool]] = None
+_asks_by_default_provider: Optional[Callable[[str], bool]] = None
 
 
 def register_tool_name_provider(fn: Optional[Callable[[], list[str]]]) -> None:
@@ -44,27 +44,61 @@ def tool_names() -> set[str]:
         return set()
 
 
-def register_tool_writes_provider(fn: Optional[Callable[[str], bool]]) -> None:
-    """Install the "does this tool write?" provider (``ai/tools`` registers it at import).
+def register_tool_asks_by_default_provider(fn: Optional[Callable[[str], bool]]) -> None:
+    """Install the "does an undecided call to this tool ask first?" provider (``ai/tools``
+    registers it at import).
 
-    This is a FACTUAL classification derived from each tool's own ``mutates=(…)`` registry
-    tag — a tool that declares no mutated data domain writes nothing persistent. It is NOT a
-    permission tier and nothing consults it to refuse a call; it exists so ``services`` can
-    answer "is this suggested playbook read-only?" without importing ``ai``."""
-    global _writes_provider
-    _writes_provider = fn
+    The answer follows what the tool DOES — a real change, or a send out of this install,
+    asks; a read runs (``ai.tools._confirm_gate.is_gated_tool``, itself derived from each
+    tool's own ``mutates=`` tag). It is a DEFAULT, not a permission: a level the owner stored
+    always outranks it. It exists so ``services`` — the Connectors page's permission ladder,
+    which must DISPLAY the level that will actually fire — can ask the question without
+    importing ``ai``."""
+    global _asks_by_default_provider
+    _asks_by_default_provider = fn
 
 
-def tool_writes(name: str) -> bool:
-    """True when ``name`` is a WRITE tool (declares a mutated domain).
+def tool_asks_by_default(name: str) -> bool:
+    """True when an undecided call to ``name`` asks the owner first.
 
     Fails CLOSED — an unregistered provider or a raising one answers ``True`` ("assume it
-    writes"), so a caller filtering for read-only tools gets an empty result rather than
-    silently treating every tool as safe."""
-    fn = _writes_provider
+    asks"), so a display that cannot reach the registry shows the cautious level rather than
+    promising a tool runs freely."""
+    fn = _asks_by_default_provider
     if fn is None:
         return True
     try:
         return bool(fn(name))
     except Exception:  # pragma: no cover - defensive; fail closed
         return True
+
+
+#: One native tool as the permission table sees it: ``(owner, tool, asks_by_default)``.
+ToolCatalogEntry = tuple[str, str, bool]
+
+_catalog_provider: Optional[Callable[[], list[ToolCatalogEntry]]] = None
+
+
+def register_tool_catalog_provider(fn: Optional[Callable[[], list[ToolCatalogEntry]]]) -> None:
+    """Install the provider of every native tool's permission facts (``ai/tools`` registers it at
+    import): its permission owner, its name, and whether its seed level is Ask.
+
+    It is what lets ``services.tool_permissions.sync_seeds`` give every tool a row at boot
+    without importing ``ai`` — the same inversion as the two providers above. A tool that
+    belongs to no row of its own (``web_search`` / ``fetch_page`` resolve to the active search
+    provider's tool) or whose connector is withdrawn is left out by the provider."""
+    global _catalog_provider
+    _catalog_provider = fn
+
+
+def tool_catalog() -> list[ToolCatalogEntry]:
+    """Every native tool that has its own permission row, or ``[]`` if no provider is installed.
+
+    ``[]`` means "cannot say", never "no tools exist" — a caller must not prune rows on it."""
+    fn = _catalog_provider
+    if fn is None:
+        return []
+    try:
+        return list(fn())
+    except Exception:  # pragma: no cover - defensive; a broken provider seeds nothing
+        return []

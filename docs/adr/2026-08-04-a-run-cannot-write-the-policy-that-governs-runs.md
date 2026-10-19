@@ -1,7 +1,7 @@
 # A run cannot write the policy that governs runs
 
 - **Date:** 2026-08-04
-- **Status:** Accepted
+- **Status:** Accepted — the `AUTOMATION_POLICY_TOOLS` guard it introduced was removed 2026-10-11 (`2026-10-11-permissions-are-one-value-per-tool`, item 6): the four tools follow the mode, and the Auto judge is told an Automation call's consequence in a trusted line.
 - **Areas:** `backend/ai/tools/_confirm_gate.py`, `backend/ai/tools/automations.py`
 
 ## Context

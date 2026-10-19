@@ -25,11 +25,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.db.app_config_store import (
-    CODE_EXEC_AUTO_RUN_FLAG,
     CODE_EXEC_ENABLED_FLAG,
     NOTIFY_UNATTENDED_WRITE_FLAG,
     SCRIPT_SKILLS_FLAG,
-    SCRIPT_SKILLS_UNATTENDED_FLAG,
     AppConfigStore,
     set_sql_query_enabled,
     sql_query_enabled,
@@ -92,25 +90,6 @@ def put_script_skills_enabled(body: ScriptSkillsEnabledPatch):
     return {"enabled": value}
 
 
-@router.get("/api/config/script-skills-unattended")
-def get_script_skills_unattended():
-    """The caller-level unattended gate for script skills. Default ``false`` — when off,
-    headless callers (agents / scheduled tasks / MCP) cannot trigger script-bearing skills
-    even if the instance kill switch is on. Interactive chat turns are unaffected.
-    Auth-gated; never on the public branding GET /api/config."""
-    return {"enabled": AppConfigStore().get_flag(SCRIPT_SKILLS_UNATTENDED_FLAG, default=False)}
-
-
-@router.put("/api/config/script-skills-unattended")
-def put_script_skills_unattended(body: ScriptSkillsEnabledPatch):
-    """Turn the unattended script-skills gate on or off (human-only, auth-gated).
-    When off, agents / scheduled tasks / MCP clients cannot run script-bearing skills.
-    When on (AND the instance kill switch is also on), headless callers may trigger them.
-    Turning this off instantly blocks all unattended script execution."""
-    value = AppConfigStore().set_flag(SCRIPT_SKILLS_UNATTENDED_FLAG, body.enabled)
-    return {"enabled": value}
-
-
 @router.get("/api/config/notify-unattended-write")
 def get_notify_unattended_write():
     """Whether a routine unattended agent write (inside its envelope) surfaces a Signals row
@@ -130,42 +109,37 @@ def put_notify_unattended_write(body: ScriptSkillsEnabledPatch):
 
 
 # ── Ad-hoc code execution (RFC ad-hoc-code-execution) ─────────────────────────────────────
-# Two orthogonal instance flags + a per-conversation grant. All human-only (auth-gated via the
-# app-wide require_auth dependency); no Lucius tool may write any of them — keeping the
-# permission decision in the human's hands (the model can only RUN what was approved, never
-# grant itself permission). Never exposed via the auth-exempt branding GET /api/config.
+# ONE instance flag, the kill switch: human-only (auth-gated via the app-wide require_auth
+# dependency), and no Lucius tool may write it. Whether the owner is asked before a script runs is
+# the ordinary permission value on ``run_code`` (Settings → Permissions), not a flag here. Never
+# exposed via the auth-exempt branding GET /api/config.
 
 
 class CodeExecConfigPatch(BaseModel):
     enabled: Optional[bool] = None  # the kill switch
-    auto_run: Optional[bool] = None  # "always allow" — skip the per-run prompt everywhere
 
 
 def _code_exec_state() -> dict:
     s = AppConfigStore()
     return {
         "enabled": s.get_flag(CODE_EXEC_ENABLED_FLAG, default=False),
-        "auto_run": s.get_flag(CODE_EXEC_AUTO_RUN_FLAG, default=False),
     }
 
 
 @router.get("/api/config/code-execution")
 def get_code_execution_config():
-    """The ad-hoc code-execution kill switch + "always allow" preference. Both default
-    ``false``. Auth-gated; never on the public branding GET /api/config."""
+    """The ad-hoc code-execution kill switch (default ``false``). Auth-gated; never on the
+    public branding GET /api/config."""
     return _code_exec_state()
 
 
 @router.put("/api/config/code-execution")
 def put_code_execution_config(body: CodeExecConfigPatch):
-    """Set the kill switch and/or the "always allow" preference (human-only, auth-gated).
-    ``enabled=false`` instantly blocks all run_code. ``auto_run=true`` skips the
-    per-run permission prompt in every conversation (subordinate to ``enabled``)."""
+    """Set the kill switch (human-only, auth-gated). ``enabled=false`` instantly blocks all
+    run_code, whatever its permission value."""
     s = AppConfigStore()
     if body.enabled is not None:
         s.set_flag(CODE_EXEC_ENABLED_FLAG, body.enabled)
-    if body.auto_run is not None:
-        s.set_flag(CODE_EXEC_AUTO_RUN_FLAG, body.auto_run)
     return _code_exec_state()
 
 

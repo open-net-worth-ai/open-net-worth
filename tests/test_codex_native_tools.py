@@ -525,12 +525,10 @@ async def test_a_native_call_that_is_gated_stages_a_card_and_does_not_execute(
     """The event the provider emits is fed to the REAL ``registry.dispatch`` with its id,
     exactly as ``assistant.run`` does for a parsed ``<tool_call>``: a write pauses on a
     permission card keyed to that id and nothing is written."""
-    from backend.ai.tools import _confirm_gate as gate
     from backend.ai.tools import registry
 
     monkeypatch.setattr("backend.core.cost_context.get_cost_surface", lambda: "web")
     monkeypatch.setattr("backend.core.chat_session.get_session_id", lambda: "sess-native")
-    monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
 
     cli, _ = _server(tmp_path, [[_call("w1", "create_payees", {"name": "Acme"})]])
     events = await _stream(

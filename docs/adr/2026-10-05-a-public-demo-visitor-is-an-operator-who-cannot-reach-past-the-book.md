@@ -39,7 +39,7 @@ past it. This is enforced in two places, both inert unless `settings.demo_mode` 
 2. **Stores**, for the paths that never pass through a route (Lucius tools):
    `ModelConfigStore.update` / `update_provider` / `remove_provider` / `remove_provider_key`
    raise `ConfigurationError`. `code_execution_enabled`, `script_skills_enabled` and
-   `script_skills_unattended_enabled` read `False` whatever is stored.
+   `script_skills_unattended_enabled` read `False` whatever is stored. (Amended 2026-10-11: that switch no longer exists.)
 
 The demo's host is still the operator. It changes AI settings from a shell on the host with
 `DEMO_MODE=0` for that one process (`demo-aws.sh lucius` does exactly this).

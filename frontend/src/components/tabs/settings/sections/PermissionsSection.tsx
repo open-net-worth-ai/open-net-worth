@@ -1,133 +1,151 @@
-// Settings → Permissions. Ported from
-// design_handoffs/settings_handoff/prototype/redesign/settings-permissions.jsx, then updated
-// for the 2026-08-14 permission-store merge (ADR
-// `2026-08-14-one-permission-store-for-every-tool`): this list used to show only durable
-// `tool_grants` rows (always "Always"). The shared API now returns every stored decision in
-// the app, but this Settings surface deliberately shows only built-in (`core`) tools. Connector,
-// web-search, and MCP decisions stay on their owning connector pages.
+// Settings → Permissions: every BUILT-IN tool, one value each — Always allow, Ask or Block (ADR
+// `2026-10-11-permissions-are-one-value-per-tool`). Ported from
+// design_handoffs/settings_handoff/prototype/redesign/settings-permissions.jsx, then reshaped:
+// the list used to show only the decisions the owner had made; now every tool has a row (it is
+// seeded with a sensible default — a read runs, a change or a send asks), so the list is the
+// whole built-in catalogue, searchable. A connector's or an MCP server's tools are set on that
+// connector's own page in the Connectors tab, not here.
 //
-// Reads never ask; writes (and send_email) confirm every time until a tool is set to
-// `always_allow` here or elsewhere. Revoking here resets a tool to its DEFAULT
-// (`needs_approval`) — it is the only way to undo a decision (decisions survive a checkpoint
-// restore).
+// The mode (manual / auto / skip) only decides what Ask means. Reset puts a tool back to its
+// default and is offered only when the value differs from it.
 import { useState } from 'react'
 import {
-  CORE_CONNECTOR_ID,
-  YOLO_TOOL,
-  clearToolPermission,
+  LEVEL_LABELS,
+  LEVEL_ORDER,
+  TOOL_PERMISSIONS_KEY,
   listToolPermissions,
+  resetToolPermission,
+  setToolPermission,
+  toolTitle,
 } from '../../../../api/toolPermissions'
-import type { DecisionRow, DecisionsResponse } from '../../../../api/toolPermissions'
+import type {
+  PermissionLevel,
+  ToolPermission,
+  ToolPermissionsResponse,
+} from '../../../../api/toolPermissions'
 import { useCachedFetchState } from '../../../../state/queryCache'
-import { fDate } from '../../../../utils/format'
-import { Badge, Btn, Empty, Panel, useSectionBusy } from '../ds'
-import type { BadgeTone, SectionProps } from '../ds'
+import { Badge, Btn, Empty, Panel, Select, useSectionBusy } from '../ds'
+import type { SectionProps } from '../ds'
 
-/** Level → [badge text, badge tone]. The text is the real level — never a hardcoded
- *  "Always", which is what this row rendered before the merge when every row here really
- *  was a durable grant. It no longer is: a "Blocked" set under Connectors shows up here too. */
-const LEVEL_META: Record<string, { label: string; tone: BadgeTone }> = {
-  always_allow: { label: 'Always allow', tone: 'good' },
-  needs_approval: { label: 'Needs approval', tone: '' },
-  blocked: { label: 'Blocked', tone: 'bad' },
+function isLevel(level: string): level is PermissionLevel {
+  return level in LEVEL_LABELS
 }
 
-function levelMeta(level: string): { label: string; tone: BadgeTone } {
-  return LEVEL_META[level] ?? { label: level, tone: '' }
+/** True when the owner has moved this tool off its default — or its tool is gone, which Reset
+ *  also clears. */
+function isChanged(row: ToolPermission): boolean {
+  return !row.tool_exists || row.level !== row.default_level
 }
 
-function capitalize(s: string): string {
-  return s ? s[0]!.toUpperCase() + s.slice(1) : s
-}
-
-/** A decision's OWNER, in words — `connector_id` is an opaque id (`core`, `plaid`,
- *  `mcp:firecrawl`, `web_search:tavily`), and a bare `sync_plaid_now` row with no context
- *  is a puzzle now that a Connectors-tab decision shows up here too. */
-function ownerLabel(connectorId: string): string {
-  if (connectorId === CORE_CONNECTOR_ID) return 'Built-in'
-  if (connectorId.startsWith('mcp:')) return `MCP • ${connectorId.slice(4)}`
-  if (connectorId.startsWith('web_search:'))
-    return `Web search • ${capitalize(connectorId.slice(11))}`
-  return capitalize(connectorId.replace(/_/g, ' '))
+function matches(row: ToolPermission, needle: string): boolean {
+  if (!needle) return true
+  return [toolTitle(row.tool), row.tool, row.description].join(' ').toLowerCase().includes(needle)
 }
 
 function PermissionRow({
   row,
   onReset,
+  onChange,
 }: {
-  row: DecisionRow
-  onReset: (row: DecisionRow) => void
+  row: ToolPermission
+  onReset: (row: ToolPermission) => void
+  onChange: (row: ToolPermission, level: PermissionLevel) => void
 }) {
-  const [armed, setArmed] = useState(false)
-  const isYolo = row.tool === YOLO_TOOL
-  const meta = levelMeta(row.level)
+  const title = toolTitle(row.tool)
+  const editable = row.tool_exists && isLevel(row.level)
   return (
     <div className="rd-permrow" role="row">
-      <div className="rd-permrow-tool">
-        {isYolo ? 'All tools (confirmation off)' : row.tool}
+      <div className="rd-permrow-tool" title={row.tool}>
+        {title}
+        {row.description && row.tool_exists ? (
+          <div className="rd-permrow-desc">{row.description}</div>
+        ) : null}
         {/* A rename retired this tool — the decision is inert but still real, so it is
             RENDERED rather than filtered out: a permission the user set and can no longer
             see is the failure this list exists to fix. */}
-        {!isYolo && !row.tool_exists && (
-          <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--faint)', marginTop: 2 }}>
-            No longer available — renamed or removed
-          </div>
+        {!row.tool_exists && (
+          <div className="rd-permrow-desc">No longer available — renamed or removed</div>
         )}
       </div>
-      <span className="rd-permrow-owner">{ownerLabel(row.connector_id)}</span>
       <span>
-        {/* Yolo is always flagged `bad` regardless of its (always `always_allow`) level —
-            it is the one decision that silences every confirmation in the app, which
-            deserves the loud tone even though the level itself is the "safe" one. */}
-        <Badge tone={isYolo ? 'bad' : meta.tone}>{meta.label}</Badge>
+        {editable ? (
+          <Select
+            aria-label={`Permission for ${title}`}
+            value={row.level}
+            onChange={(e) => onChange(row, e.target.value as PermissionLevel)}
+          >
+            {LEVEL_ORDER.map((level) => (
+              <option key={level} value={level}>
+                {LEVEL_LABELS[level]}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <Badge>{isLevel(row.level) ? LEVEL_LABELS[row.level] : row.level}</Badge>
+        )}
       </span>
-      <span className="rd-permrow-when">{fDate(row.updated_at, 'short', 'always')}</span>
       <span>
-        <Btn
-          size="xs"
-          variant={armed ? 'danger' : 'ghost'}
-          onClick={() => {
-            if (!armed) {
-              setArmed(true)
-              setTimeout(() => setArmed(false), 4000)
-            } else {
-              setArmed(false)
-              onReset(row)
-            }
-          }}
-          aria-label={`Reset ${isYolo ? 'all tools' : row.tool} to the default`}
-        >
-          {armed ? 'Confirm reset?' : 'Reset'}
-        </Btn>
+        {isChanged(row) ? (
+          <Btn
+            size="xs"
+            variant="ghost"
+            onClick={() => onReset(row)}
+            aria-label={`Reset ${title} to the default`}
+          >
+            Reset
+          </Btn>
+        ) : (
+          <span className="rd-permrow-default">Default</span>
+        )}
       </span>
     </div>
   )
 }
 
 export function PermissionsSection({ toast }: SectionProps) {
-  const { data, initialLoading, refresh } = useCachedFetchState<DecisionsResponse>(
-    '/api/tool-permissions',
+  const { data, initialLoading, refresh } = useCachedFetchState<ToolPermissionsResponse>(
+    TOOL_PERMISSIONS_KEY,
     listToolPermissions,
     { staleTime: 0 },
   )
   useSectionBusy(initialLoading && !data)
+  const [query, setQuery] = useState('')
+  const [changedOnly, setChangedOnly] = useState(false)
 
-  const rows = (data?.permissions ?? []).filter((row) => row.connector_id === CORE_CONNECTOR_ID)
+  // Built-in tools only — a connector's and an MCP server's tools live on their Connectors page.
+  const all = (data?.permissions ?? []).filter((row) => row.connector_id === 'core')
+  const changedCount = all.filter(isChanged).length
+  const needle = query.trim().toLowerCase()
+  const shown = all.filter((row) => matches(row, needle) && (!changedOnly || isChanged(row)))
 
-  const reset = async (row: DecisionRow) => {
+  const reset = async (row: ToolPermission) => {
     try {
-      await clearToolPermission(row.tool, row.connector_id)
+      const { level } = await resetToolPermission(row.tool, row.connector_id)
       void refresh()
-      toast('Reset — takes effect on the next call')
+      toast(
+        level && isLevel(level)
+          ? `${toolTitle(row.tool)}: back to ${LEVEL_LABELS[level]} — takes effect on the next call`
+          : `${toolTitle(row.tool)}: removed`,
+      )
     } catch {
       toast('Could not reset — try again')
     }
   }
 
+  const change = async (row: ToolPermission, level: PermissionLevel) => {
+    try {
+      await setToolPermission({ tool: row.tool, level, connector_id: row.connector_id })
+      void refresh()
+      toast(`${toolTitle(row.tool)}: ${LEVEL_LABELS[level]} — takes effect on the next call`)
+    } catch {
+      toast('Could not change that — try again')
+    }
+  }
+
   return (
     <Panel
-      title={<span>Tool permissions {rows.length ? <Badge>{rows.length}</Badge> : null}</span>}
-      sub="What Lucius’s built-in tools can do without asking you first"
+      title={<span>Tool permissions {all.length ? <Badge>{all.length}</Badge> : null}</span>}
+      sub="Lucius's built-in tools, and whether each runs, asks you first, or is blocked. In Auto mode a tool set to Ask is judged by the Auto judge; in Skip mode it runs. A connector's tools are set on its page in Connectors."
       actions={
         <Btn
           size="xs"
@@ -141,27 +159,50 @@ export function PermissionsSection({ toast }: SectionProps) {
         </Btn>
       }
     >
-      {rows.length ? (
+      <div className="rd-permtoolbar">
+        <input
+          className="rd-input"
+          type="search"
+          value={query}
+          placeholder="Search tools…"
+          aria-label="Search tools"
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <Btn
+          size="xs"
+          variant={changedOnly ? 'primary' : 'ghost'}
+          aria-pressed={changedOnly}
+          onClick={() => setChangedOnly((on) => !on)}
+        >
+          {changedOnly ? 'Showing changed' : `Changed (${changedCount})`}
+        </Btn>
+      </div>
+      {shown.length ? (
         <>
           <div className="rd-permrow head" role="row">
             <span>Tool</span>
-            <span>Owner</span>
-            <span>Level</span>
-            <span>Updated</span>
+            <span>Value</span>
             <span></span>
           </div>
-          {rows.map((r) => (
+          {shown.map((r) => (
             <PermissionRow
-              key={`${r.connector_id}:${r.tool}`}
+              key={r.tool}
               row={r}
               onReset={(row) => void reset(row)}
+              onChange={(row, level) => void change(row, level)}
             />
           ))}
         </>
       ) : (
         <Empty
-          title="No built-in permissions set yet"
-          body="Built-in write tools ask first until you choose “Always allow” on a confirmation prompt. You can reset those decisions here."
+          title={initialLoading ? 'Loading tools…' : 'No tools match'}
+          body={
+            initialLoading
+              ? undefined
+              : changedOnly && !query
+                ? 'Nothing has been changed from its default.'
+                : 'Try another word — you can search by name or what it does.'
+          }
         />
       )}
     </Panel>

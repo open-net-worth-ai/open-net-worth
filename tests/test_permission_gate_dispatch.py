@@ -21,6 +21,7 @@ redemption directly via ``registry.dispatch`` — never a model-initiated re-cal
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -38,7 +39,6 @@ def armed(db_isolated, monkeypatch):
     """
     monkeypatch.setattr("backend.core.cost_context.get_cost_surface", lambda: "web")
     monkeypatch.setattr("backend.core.chat_session.get_session_id", lambda: "sess-gate")
-    monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
 
 
 _next_id = iter(f"toolu_test_{i}" for i in range(1, 100_000))
@@ -149,10 +149,10 @@ async def test_a_granted_tool_executes_with_no_card(armed):
 
 
 @pytest.mark.asyncio
-async def test_yolo_short_circuits_every_tool(armed):
-    from backend.services.tool_permissions import CORE_CONNECTOR_ID, YOLO_TOOL, set_tool_permission
+async def test_a_tool_set_to_always_allow_runs_without_a_card(armed):
+    from backend.services.tool_permissions import CORE_CONNECTOR_ID, set_tool_permission
 
-    set_tool_permission(CORE_CONNECTOR_ID, YOLO_TOOL, "always_allow")
+    set_tool_permission(CORE_CONNECTOR_ID, "create_payees", "always_allow")
     text, proposed = await _dispatch("create_payees", {"name": "Acme"})
     assert proposed is None
     assert text is not None
@@ -202,12 +202,36 @@ async def test_a_token_is_single_use(armed):
 
 
 @pytest.mark.asyncio
-async def test_an_unknown_token_refuses_rather_than_executing_the_raw_args(armed):
-    """A token that does not resolve must never degrade into an ungated write."""
-    text, _ = await _dispatch(
-        "create_payees", {"name": "Smuggled Co", "confirm_token": "not-a-real-tool-use-id"}
+async def test_a_confirm_token_that_is_not_the_calls_own_id_is_dropped_and_the_call_stages(armed):
+    """The token is the SERVER's redemption channel and only ever equals the call's own
+    tool_use_id. A model-supplied one — however it learned a staged id — is dropped, and the call
+    is the fresh Ask it is: a card, nothing written, the other card still waiting."""
+    from backend.db.pending_plan_store import PendingPlanStore
+
+    staged_text, staged = await _dispatch("create_payees", {"name": "Staged Co"}, "toolu_A")
+    assert staged_text is None and staged is not None
+
+    text, proposed = await _dispatch(
+        "create_payees", {"name": "Smuggled Co", "confirm_token": "toolu_A"}, "toolu_B_model"
     )
-    assert json.loads(text)["ok"] is False
+
+    assert text is None and proposed is not None
+    assert proposed["tool_use_id"] == "toolu_B_model"
+    assert PendingPlanStore().get_pending("toolu_A") is not None
+    assert PendingPlanStore().get_pending("toolu_B_model") is not None
+    from backend.db.payee_store import PayeeStore
+
+    names = {row.get("name") for row in PayeeStore().all()}
+    assert not names & {"Staged Co", "Smuggled Co"}
+
+
+@pytest.mark.asyncio
+async def test_the_servers_own_redemption_with_its_own_id_still_runs_the_staged_args(armed):
+    await _dispatch("create_payees", {"name": "Staged Co"}, "toolu_A")
+    text, proposed = await _dispatch(
+        "create_payees", {"confirm_token": "toolu_A"}, tool_use_id="toolu_A"
+    )
+    assert proposed is None and json.loads(text)["ok"] is True
 
 
 # ── Structural coverage: the point of moving the gate to dispatch ─────────────
@@ -219,13 +243,17 @@ def test_every_tool_needing_approval_is_reached_by_the_gate(monkeypatch):
     A tool is covered if dispatch gates it OR it stages its own (richer, resolved) card.
     Nothing may be in neither set.
     """
-    monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
     from backend.ai import _confirm_gate as policy
 
     uncovered = [
         name
         for name, t in registry._REGISTRY.items()
-        if policy.needs_approval(name, writes=bool(t.mutates))
+        if policy.needs_approval(
+            name,
+            writes=bool(t.mutates),
+            domains=t.mutates,
+            external_effect=t.external_effect,
+        )
         and not gate.is_gated_tool(name)
         and not gate.self_stages(name)
     ]
@@ -262,36 +290,47 @@ def test_read_tools_never_need_approval():
 
 
 def test_email_send_message_needs_approval_despite_declaring_no_mutated_domain():
-    """The gap a bool(mutates) predicate misses — it sends mail that cannot be unsent."""
+    """The gap a bool(mutates) predicate misses — it sends mail that cannot be unsent. It is
+    caught by the tool's own ``external_effect=`` declaration, not by a name list."""
     from backend.ai import _confirm_gate as policy
+    from backend.ai.tools.registry import has_external_effect, is_write_tool
 
-    assert policy.needs_approval("email_send_message", writes=False) is True
+    assert is_write_tool("email_send_message") is False
+    assert has_external_effect("email_send_message") is True
+    assert policy.needs_approval("email_send_message", writes=False, external_effect=True) is True
+    assert gate.is_gated_tool("email_send_message") is True
 
 
 def test_every_no_domain_write_tool_has_a_gating_verdict():
     """A new NO_DOMAIN_WRITE_TOOLS entry must not ship without deciding if it is gated.
 
-    ``email_send_message`` is gated (real outbound SMTP). The rest are sandboxed or turn-local, and
-    each is named here so adding another fails until someone rules on it.
+    A tool in this set writes no local data domain, so ``mutates=`` cannot ask for it: it asks only
+    if it declares ``external_effect=`` (it sends something out of this install or runs code on the
+    owner's machine). The rest are turn-local, and each is named here so adding another fails until
+    someone rules on it.
 
     Ruling for add_run_tasks / update_run_task (2026-08-02): UNGATED. They write the running
     Automation's own task checklist — turn-local, no store, no external effect, and the
     thing they report on is a run the owner already approved. A card there would ask for
     permission to draw a progress bar.
     """
-    from backend.ai import _confirm_gate as policy
+    from backend.ai.tools.registry import has_external_effect
     from tests.test_tool_domains import NO_DOMAIN_WRITE_TOOLS
 
+    asks = {name for name in NO_DOMAIN_WRITE_TOOLS if has_external_effect(name)}
     ungated = {
         "find_tools",
         "activate_skill",
-        "run_script",
-        "run_code",
         "run_screen_command",
         "add_run_tasks",
         "update_run_task",
     }
-    assert set(NO_DOMAIN_WRITE_TOOLS) == policy.EXTERNAL_EFFECT_TOOLS | ungated
+    assert asks == {"email_send_message", "run_script", "run_code"}
+    assert set(NO_DOMAIN_WRITE_TOOLS) == asks | ungated
+    for name in asks:
+        assert gate.is_gated_tool(name) is True, name
+    for name in ungated:
+        assert gate.is_gated_tool(name) is False, name
 
 
 def test_the_write_set_is_read_from_the_registry_not_a_second_list():
@@ -305,17 +344,69 @@ def test_the_write_set_is_read_from_the_registry_not_a_second_list():
     assert not policy.needs_approval("get_portfolio", writes=bool(tagged.get("get_portfolio")))
 
 
-def test_the_write_set_is_ARMED_and_reads_are_still_free():
-    """Pins the armed state (the RFC's sequencing precondition — the Permissions surface
-    must exist before the gate flips — is long since met) and that reads stay free."""
-    assert gate.GATE_ALL_WRITES is True
+def test_the_write_set_is_always_armed_and_reads_are_still_free():
+    """There is no switch to disarm the gate, and reads stay free."""
+    assert not hasattr(gate, "GATE_ALL_WRITES")
     assert gate.is_gated_tool("get_transactions") is False
     assert gate.is_gated_tool("get_portfolio") is False
 
 
-def test_arming_the_write_set_gates_writes_and_leaves_reads_alone(monkeypatch):
-    monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
+def test_the_write_set_gates_writes_and_leaves_reads_alone():
     assert gate.is_gated_tool("add_transactions") is True
     assert gate.is_gated_tool("email_send_message") is True
     assert gate.is_gated_tool("get_transactions") is False
     assert gate.is_gated_tool("get_portfolio") is False
+
+
+@pytest.mark.asyncio
+async def test_a_gate_that_errors_refuses_the_call_instead_of_running_it(armed, monkeypatch):
+    """The gate fails CLOSED. Not being able to tell whether a call is allowed is never a reason
+    to run it — the handler must not execute."""
+    ran: list[str] = []
+
+    def boom(_name):
+        raise RuntimeError("permission table unreadable")
+
+    async def handler(_input):
+        ran.append("ran")
+        return "{}", None
+
+    monkeypatch.setattr(gate, "effective_level", boom)
+    entry = registry._REGISTRY["get_net_worth"]
+    monkeypatch.setitem(registry._REGISTRY, "get_net_worth", replace(entry, handler=handler))
+    text, proposed = await _dispatch("get_net_worth", {})
+
+    assert proposed is None and text is not None
+    assert "permission check" in json.loads(text)["error"] and "nothing ran" in text
+    assert ran == []
+
+
+@pytest.mark.asyncio
+async def test_a_surface_that_cannot_show_a_card_runs_an_ask_and_says_so_in_the_log(
+    armed, monkeypatch, caplog
+):
+    """The one place a stored Ask does not stop a call is by SURFACE, and it is announced."""
+    monkeypatch.setattr("backend.core.cost_context.get_cost_surface", lambda: "capture")
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="backend.ai.tools._confirm_gate"):
+        set_id = "toolu_nocard"
+        from backend.core.tool_use_context import set_tool_use_id
+
+        set_tool_use_id(set_id)
+        assert gate.should_gate("create_payees") is False
+    assert "cannot show a card" in caplog.text
+
+
+def test_a_deny_is_told_to_lucius_as_this_call_only_not_as_a_block():
+    """Deny and Block are different things and read differently to the model: a Deny is the
+    owner declining THIS call (ask again later is fine, nothing stored); a Block is a standing
+    decision to route around nothing."""
+    from backend.ai import _confirm_gate as policy
+
+    denied = json.loads(policy.declined_result("email_send_message")[0])["error"]
+    blocked = json.loads(gate.blocked_result("email_send_message")[0])["error"]
+    assert "THE USER DECLINED" in denied and "BLOCKED" not in denied
+    # The UI reads this marker to tell a denial from a failure ("1 failed" beside "Denied").
+    assert json.loads(policy.declined_result("email_send_message")[0])["declined_by"] == "user"
+    assert "BLOCKED" in blocked and "DECLINED" not in blocked

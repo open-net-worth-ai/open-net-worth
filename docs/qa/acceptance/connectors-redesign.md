@@ -366,15 +366,17 @@ section makes the two concepts distinct and both real, for every connector famil
   read group.
 
 ### CNR-PERM-DEFAULT
-- GIVEN a newly discovered tool of ANY kind — including a trade/payment tool on an MCP server
-- WHEN I read its level
-- THEN it is **Needs approval**. No tiering by tool type, no exceptions, nothing pre-set to
-  Always allow.
+- GIVEN a newly discovered tool on an external MCP server — including a trade/payment tool
+- WHEN I read its value
+- THEN it is **Ask** (stored `needs_approval`), seeded the moment the server reports it. No tiering
+  by tool type, nothing pre-set to Always allow. (A native connector's tools are seeded by what
+  they do — a read is Always allow, a change or a send is Ask — ADR
+  `2026-10-11-permissions-are-one-value-per-tool`.)
 
 ### CNR-PERM-TOOL-LEVELS
 - GIVEN a single tool's control
 - WHEN I open it
-- THEN it offers exactly three options — Always allow / Needs approval / Blocked. **"Custom" must
+- THEN it offers exactly three options — Always allow / Ask / Block. **"Custom" must
   NOT appear at tool level.**
 
 ### CNR-PERM-GROUP-STAMP

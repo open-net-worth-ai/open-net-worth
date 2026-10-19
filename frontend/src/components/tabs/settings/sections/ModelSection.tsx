@@ -123,6 +123,11 @@ const TASK_GROUPS: [string, [string, string, string, boolean?][]][] = [
         'Reads images you paste into chat — needs a vision model',
         true,
       ],
+      [
+        'approval',
+        'Auto-approval judge',
+        'Decides whether Auto mode must ask before a call. Unset uses the model your conversation is running on — pin a fast, non-reasoning model for snappier Auto. The pending call and your last few messages are sent to it.',
+      ],
     ],
   ],
   [
@@ -740,12 +745,16 @@ function TaskModels({
                     models={models}
                     value={over[k] || ''}
                     defaultLabel={
-                      'Default' +
-                      (vision && modelRejectsImages(defaultModel, models, defaultModel)
-                        ? ' (no vision)'
-                        : '')
+                      k === 'approval'
+                        ? 'Same as chat model'
+                        : 'Default' +
+                          (vision && modelRejectsImages(defaultModel, models, defaultModel)
+                            ? ' (no vision)'
+                            : '')
                     }
-                    defaultModelId={defaultModel}
+                    // The judge, unset, follows the CONVERSATION's model, not the instance
+                    // default — naming the default here would be wrong whenever they differ.
+                    defaultModelId={k === 'approval' ? undefined : defaultModel}
                     annotate={
                       vision ? (m) => (m.vision === false ? '— no vision' : undefined) : undefined
                     }

@@ -50,7 +50,7 @@ Realized gain                    +$424.92     ← ApprovalFact rows: muted label
 Cash                           not booked     ←   (ApprovalChange for an edit: old → new)
 ▸ 3 lots · all long-term                      ← ApprovalDetails: tables / raw args, folded
 Reason: Duplicate of the October 9 buy        ← a card's own reason, last, one muted line
-[Allow once] [Always allow]    Deny         ← actions (GrantActions): grouped [Allow once ▾] when narrow
+[Deny]      [Allow once] [Always allow]    ← actions (GrantActions): grouped [Allow once ▾] when narrow
 ```
 
 - **Header.** The action ("Record sale", "Update automations") and its subject pill. A generic
@@ -63,13 +63,19 @@ Reason: Duplicate of the October 9 buy        ← a card's own reason, last, one
 - **Facts.** Only what the user is deciding on. A fact the lead already states is not repeated.
 - **Details.** Anything tabular or long goes behind a disclosure. Its summary still carries the
   decision-relevant fact: "3 lots · all long-term", not "Lots".
-- **Actions** (`approval/GrantActions.tsx`). The allow scopes sit on the left and **Deny** at
-  the right end. With room (a row of at least 300px), **Allow once** and **Always allow** are
+- **Actions** (`approval/GrantActions.tsx`). **Deny** sits on the left as an outlined button,
+  and the allow scopes are grouped at the right end. With room (a row of at least 300px), **Allow once** and **Always allow** are
   separate buttons. On a narrow card they group into one `[Allow once ▾]` split button, with
   **Always allow** behind the caret. The row measures itself, so one card adapts across the
   side panel, the dock and the Lucius tab. **Allow once** is the filled primary button.
   **Always allow** is a quiet button with primary-coloured text, never the warning tint;
-  what it commits you to is in its title.
+  what it commits you to is in its title. Inside an Automation run **Always allow** adds the tool
+  to that Automation's own list, and its title says so. Once answered, the actions give way to
+  one label that survives a reload: **✓ Approved**, **✓ Always allowed** or **✗ Denied**.
+- **Reason.** A generic gate card's reason is boilerplate and is not shown. A tool's own
+  reason (why a lot is being deleted) is a `Reason:` line. The Auto judge has no part in a card: in
+  Automatically approve the card is the Manual card, and a reason that merely says "Auto-approval"
+  is a tool's reason like any other.
 
 The other primitives are `ApprovalTable` (compact table: one rule under the headings and none between rows; cells wrap
 at spaces, never mid-word; `numeric` columns align right and never wrap; a table still too

@@ -23,6 +23,7 @@ import {
   HANDLED_TYPES,
   isBudgetChange,
   isBudgetOperationGrant,
+  isCodeRunGrant,
   permissionTextEdits,
   previewFromDisplay,
 } from './cardTypes'
@@ -57,7 +58,7 @@ export function CardBody({ change }: { change: ProposedChange }) {
       {change.type === 'record_income' && <IncomeBody change={change} />}
       {change.type === 'agent_create' && <AgentCreatePreview change={change} />}
       {change.type === 'agent_update' && <AgentUpdatePreview change={change} />}
-      {change.type === 'code_run' && <CodeRunPreview change={change} />}
+      {isCodeRunGrant(change) && <CodeRunPreview change={change} />}
       {change.type === 'code_skill_create' && <CodeSkillPreview change={change} />}
       {isBudgetChange(change) && <BudgetChangePreview change={change} />}
       {change.type === 'txn_create' && <TxnCreateBody change={change} />}
@@ -69,6 +70,7 @@ export function CardBody({ change }: { change: ProposedChange }) {
 
       {!HANDLED_TYPES.includes(change.type) &&
         !isBatch &&
+        !isCodeRunGrant(change) &&
         (preview ? (
           <ToolPreviewBody preview={preview} />
         ) : isBudgetOperationGrant(change) ? (

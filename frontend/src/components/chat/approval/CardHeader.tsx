@@ -6,6 +6,7 @@ import {
   humanizeType,
   isBudgetChange,
   isBudgetOperationGrant,
+  isCodeRunGrant,
   isDestructive,
   isTxnChange,
   stagedTitle,
@@ -39,7 +40,7 @@ export function CardHeader({ change }: { change: ProposedChange }) {
       {change.type === 'record_income' && (d.is_drp ? 'Record DRP reinvestment' : 'Record income')}
       {change.type === 'agent_create' && 'Create agent'}
       {change.type === 'agent_update' && 'Update agent'}
-      {change.type === 'code_run' && 'Run a script'}
+      {isCodeRunGrant(change) && 'Run a script'}
       {change.type === 'code_skill_create' && 'Save as script-skill'}
       {change.type === 'external_mcp_call' && 'Tool permission'}
       {isBudgetChange(change) && budgetOpLabel(change)}
@@ -47,6 +48,7 @@ export function CardHeader({ change }: { change: ProposedChange }) {
       {isTxnChange(change) && txnHeaderLabel(change)}
       {!HANDLED_TYPES.includes(change.type) &&
         !isBudgetOperationGrant(change) &&
+        !isCodeRunGrant(change) &&
         (stagedTitle(change) ??
           humanizeType(
             change.type === 'tool_permission' && change.grant_tool

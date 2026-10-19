@@ -74,6 +74,12 @@ def _normalize_always_allowed(value: object) -> list[dict]:
     return normalized
 
 
+def _normalize_blocked(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return list(dict.fromkeys(str(tool).strip() for tool in value if str(tool).strip()))
+
+
 def _make_automation(data: dict) -> dict:
     """Normalize a persisted Automation row and discard unrecognised fields."""
     now = _now()
@@ -91,6 +97,7 @@ def _make_automation(data: dict) -> dict:
         "execution": _normalize_execution(data.get("execution")),
         "permission_mode": str(data.get("permission_mode") or "manual"),
         "always_allowed": _normalize_always_allowed(data.get("always_allowed")),
+        "blocked": _normalize_blocked(data.get("blocked")),
         "model": str(data.get("model") or "").strip(),
         "effort": str(data.get("effort") or "medium").strip() or "medium",
         "max_runs": data.get("max_runs"),

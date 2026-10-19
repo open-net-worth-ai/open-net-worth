@@ -1376,10 +1376,10 @@ session_messages = Table(
 # `mcp:<slug>` — and `models.mcp_client._SERVER_ID_ALPHABET` is a-z/0-9/-), so the pair
 # also round-trips through one rsplit(":", 1) if anything ever needs it from the id alone.
 #
-# ABSENT means UNDECIDED, never "denied": a connector-owned tool reads
-# `services.tool_permissions.DEFAULT_LEVEL` ("needs_approval"), a `core`-owned one reads
-# the approval model's own verdict for its shape (write -> ask, read -> run) so every
-# untagged tool keeps behaving exactly as it did. Only a real decision becomes a row.
+# ABSENT means UNDECIDED, never "denied": a registry tool (built-in or connector-owned)
+# takes the default that follows what it does (`services.tool_permissions.undecided_level`
+# — a change or a send asks, a read runs), an external MCP tool reads `DEFAULT_LEVEL`
+# ("needs_approval"). Only a real decision becomes a row, and it outranks the default.
 #
 # Checkpoint-EXCLUDED (ai.checkpoint._policy._EXCLUDED_TABLES) + NON_RESTORABLE
 # (core.sensitive.NON_RESTORABLE_TABLES) + NOT portable — inherited unchanged from BOTH

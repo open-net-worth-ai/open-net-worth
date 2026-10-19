@@ -231,12 +231,9 @@ async def _headless_turn_runner(
     The live caller is ``services.self_harness``, reached from an Automation executor. (It was
     also the named-agent path until Agents were retired on 2026-08-02.)
 
-    THE TURN IS MARKED UNATTENDED (``set_unattended``) — nobody is in the loop to answer a
-    prompt or tap a confirm card. That is a plain fact about the caller, and the features that
-    genuinely need it read it directly (``run_script``'s instance-level unattended switch and
-    ``run_code``'s interactive-only rule). It is NOT a permission ceiling. The external-MCP
-    offer was listed here once and does NOT read it: an external tool's permission level
-    decides whether it fires, identically on every surface.
+    Nobody is in the loop to answer a prompt or tap a confirm card, so a tool set to Ask runs
+    here (a surface that cannot show a card — see ``ai.tools._confirm_gate.should_gate``). A
+    tool's permission level decides whether it fires, identically on every surface.
 
     Kept as a module-level function (like ``_headless_user_messages`` above) so it is
     unit-testable without booting the lifespan.
@@ -261,7 +258,6 @@ async def _headless_turn_runner(
     from backend.ai.prompts import build_lean_system_prompt, build_system_prompt
     from backend.ai.tools import _skill_scope
     from backend.core.cost_context import clear_cost_surface, set_cost_surface
-    from backend.core.unattended import reset_unattended, set_unattended
     from backend.db.model_config_store import ModelConfigStore
 
     # Snapshot BEFORE narrowing (finding 2): this runner is usually the top-level owner, but
@@ -278,8 +274,6 @@ async def _headless_turn_runner(
     short_id = str(uuid.uuid4())[:8]
     session_id = f"headless-{short_id}"
     set_cost_surface("scheduled")
-    # Nobody is watching a scheduled run — see core.unattended. Reset in the finally below.
-    _unattended_token = set_unattended(True)
     parts: list[str] = []
     try:
         async for event in _assistant_run(
@@ -297,7 +291,6 @@ async def _headless_turn_runner(
     finally:
         _skill_scope.restore_scope(_snap)
         clear_cost_surface()
-        reset_unattended(_unattended_token)
         clear_session(session_id)
     return "".join(parts).strip()
 
@@ -439,6 +432,17 @@ async def lifespan(app: FastAPI):
                 _log.info("seeded %d starter skill(s)", inserted)
     except Exception:
         _log.exception("starter-skill seeding failed (non-fatal)")
+
+    # Every tool gets a permission row at its seed value (ADR
+    # 2026-10-11-permissions-are-one-value-per-tool): idempotent, follows a changed seed rule for
+    # rows the owner never touched, and carries the retired YOLO switch forward once. Non-fatal —
+    # dispatch falls back to the same seed rule for a tool with no row.
+    try:
+        from backend.services.tool_permissions import sync_seeds as _sync_tool_permission_seeds
+
+        _sync_tool_permission_seeds()
+    except Exception:
+        _log.exception("tool-permission seeding failed (non-fatal)")
 
     # A starter the owner never edited still carries whatever body it was first seeded with;
     # replace a SUPERSEDED built-in body with the current one (edited copies are untouched).

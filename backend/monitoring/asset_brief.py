@@ -21,6 +21,7 @@ from typing import Optional
 from pydantic import BaseModel, Field, field_validator
 
 from backend.ai.search import get_search_provider
+from backend.ai.search.base import record_paid_fetch
 from backend.ai.structured import complete_model
 from backend.core.jsonsafe import none_if_null_string
 from backend.core.llm_seam import LLMUnavailable
@@ -73,14 +74,6 @@ _SEARCH_COST_USD: dict[str, float] = {
     "firecrawl": 0.002,
     # duckduckgo and searxng are free / self-hosted — no cost
 }
-
-# Providers whose fetch_page uses a paid API endpoint (~$0.002/page, Tavily). Firecrawl's own
-# /scrape is 1 credit/page, ~$0.001 at the same plan tier — the two are NOT the same per-call
-# cost, hence the per-provider dict rather than reusing _PAID_FETCH_COST_USD for both.
-# Plain-GET readers (duckduckgo, searxng, and fallback mode for others) cost ~$0.
-_PAID_FETCH_PROVIDERS: frozenset[str] = frozenset({"tavily", "firecrawl"})
-_PAID_FETCH_COST_USD = 0.002
-_PAID_FETCH_COST_USD_BY_PROVIDER: dict[str, float] = {"firecrawl": 0.001}
 
 # `_recency_hours`/`_news_sort_key`/`_is_stale_news`/`_has_known_publish_date`/
 # `_is_generic_reference_title`/`_is_filename_shaped_title` (RFC intel-signals-data-model, §5.2)
@@ -587,7 +580,6 @@ async def _fetch_full_text(news_items: list[dict], active_pid: str = "") -> None
     ``_drop_failed_extractions``) is what actually removes it before synthesis.
     """
     reader = get_search_provider()
-    is_paid_fetch = active_pid in _PAID_FETCH_PROVIDERS
 
     fetchable = [i for i in news_items if (i.get("url") or "").startswith(("http://", "https://"))]
     total = len(fetchable)
@@ -626,19 +618,7 @@ async def _fetch_full_text(news_items: list[dict], active_pid: str = "") -> None
                 _mark_extraction_failed_if_thin(item)
                 return
         # The API call happened — record paid-fetch cost regardless of content quality.
-        if is_paid_fetch:
-            try:
-                from backend.ai.cost_tracker import record as _record_cost
-
-                _record_cost(
-                    source="asset_brief",
-                    model=f"fetch:{active_pid}",
-                    input_tokens=0,
-                    output_tokens=0,
-                    cost_usd=_PAID_FETCH_COST_USD_BY_PROVIDER.get(active_pid, _PAID_FETCH_COST_USD),
-                )
-            except Exception:
-                pass
+        record_paid_fetch(active_pid, source="asset_brief")
         # Collapse excessive whitespace and trim to the ceiling.
         text = re.sub(r"[ \t]+", " ", text)
         text = re.sub(r"\n{3,}", "\n\n", text).strip()

@@ -701,9 +701,9 @@ def test_manager_offers_every_advertised_tool(manager, monkeypatch):
         "mcp__drive__place_order",
     }
     assert all("UNVERIFIED" in sc["description"] for sc in schemas)
-    # Every tool is at the ``needs_approval`` default, so every description says an approval is coming.
+    # Every tool is at the ``needs_approval`` default, so every description says it may pause for approval.
     # place_order gets NO special banner — it is an ordinary write tool now.
-    assert all("Needs the user's approval" in sc["description"] for sc in schemas)
+    assert all("Set to Ask" in sc["description"] for sc in schemas)
     trade = next(sc for sc in schemas if sc["name"].endswith("place_order"))
     assert "MONEY" not in trade["description"].upper()
 
@@ -836,7 +836,7 @@ def test_allowed_tool_carries_no_approval_hint(manager, monkeypatch):
     _allow("drive", "get_portfolio")
 
     schema = next(iter(mgr.external_tool_schemas()))
-    assert "Needs the user's approval" not in schema["description"]
+    assert "Set to Ask" not in schema["description"]
     assert "UNVERIFIED" in schema["description"]  # still fenced as third-party
 
 

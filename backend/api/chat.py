@@ -769,6 +769,9 @@ async def stop_chat(session_id: str, request: Request, body: StopRequest = StopR
 class ResolvePendingRequest(BaseModel):
     tool_use_id: str
     decision: str  # "approve" | "deny"
+    # The card's Always allow: the standing permission was written by its own request; this only
+    # says which answer the card was, so a reload can label it (``services.tool_resolutions``).
+    always: bool = False
 
 
 @router.post("/api/chat/{session_id}/resolve")
@@ -785,9 +788,15 @@ async def resolve_pending(session_id: str, req: ResolvePendingRequest):
     message for this, it calls this endpoint.
     """
     system = build_system_prompt()
+    from backend.services import tool_resolutions
     from backend.services.automations.runs import automation_run_for_session
 
     automation_owned = automation_run_for_session(session_id) is not None
+    # Remember WHICH answer this was — only for a call that is really waiting on one, so a stale or
+    # superseded tap never leaves a label claiming something ran.
+    answer = tool_resolutions.resolution_for(req.decision, always=req.always)
+    if answer is not None and assistant._is_awaiting_approval(session_id, req.tool_use_id):
+        tool_resolutions.record(session_id, req.tool_use_id, answer)
 
     async def _events(turn_id: str) -> AsyncGenerator[dict, None]:
         if automation_owned:

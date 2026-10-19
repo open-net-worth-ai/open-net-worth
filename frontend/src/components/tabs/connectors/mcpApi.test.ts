@@ -195,7 +195,7 @@ describe('createMcpServer', () => {
     })
 
     expect(res.ok).toBe(false)
-    expect(res.ok === false && res.error).toContain('still at Needs approval')
+    expect(res.ok === false && res.error).toContain('still at Ask')
   })
 })
 
