@@ -30,12 +30,17 @@ it('the apple-touch-icon is inlined as a data: URI at build time', async () => {
 it('the installed app has a fixed top box iOS 27 accepts in place of its blur', () => {
   const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8')
   expect(html).toMatch(/<body>\s*<div id="status-bar-sampler" aria-hidden="true"><\/div>/)
-  const rule =
-    html.match(/@media \(display-mode: standalone\) \{\s*#status-bar-sampler \{([^}]*)\}/)?.[1] ??
-    ''
+  const rule = html.match(/\n\s*#status-bar-sampler \{([^}]*)\}/)?.[1] ?? ''
   expect(rule).toContain('position: fixed;')
   expect(rule).toContain('top: 0;')
   expect(Number(rule.match(/height: (\d+)px;/)?.[1])).toBeGreaterThanOrEqual(8)
   expect(rule).toContain('background-color: inherit;')
   expect(rule).toContain('background-clip: text;')
+  // Shown in the installed app by EITHER signal — iOS does not always report display-mode.
+  expect(html).toMatch(
+    /@media \(display-mode: standalone\) \{\s*#status-bar-sampler \{\s*display: block;/,
+  )
+  expect(html).toMatch(
+    /:root\[data-onw-display-mode='standalone'\] #status-bar-sampler \{\s*display: block;/,
+  )
 })
