@@ -144,7 +144,6 @@ type SourceState =
   | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'ok'; data: SourceEntry[] }
-  | { status: 'unavailable' }
   | { status: 'error' }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1374,7 +1373,7 @@ function ViewBody({
           )}
         </DRow>
       </div>
-      {hasSourceRef && (
+      {hasSourceRef && source.status !== 'idle' && (
         <>
           <div className="acct-detail-sec">
             {source.status === 'ok' && source.data.length > 1
@@ -1525,18 +1524,6 @@ function ViewBody({
                 </Fragment>
               )
             })}
-          {source.status === 'unavailable' &&
-            (txn.externalRefs.every((r) => r.source === 'email') ? (
-              <div className="acct-detail-email-empty">
-                Snapshot unavailable — this transaction was booked from email before snapshots were
-                kept (or the original message is no longer stored).
-              </div>
-            ) : (
-              <div className="acct-detail-email-empty">
-                Snapshot unavailable — this transaction was booked before evidence was kept (or the
-                original record is no longer stored).
-              </div>
-            ))}
           {source.status === 'error' && (
             <div className="acct-detail-email-empty">
               Couldn't load the source details.{' '}
@@ -1844,7 +1831,9 @@ export default function TxnDetail({
     onLoadSourceEntries(id)
       .then((data) => {
         if (currentTxnIdRef.current !== id) return
-        setSource(data && data.length ? { status: 'ok', data } : { status: 'unavailable' })
+        // Nothing to show (404) means no ref behind this row carries evidence — an iOS
+        // shortcut's key, a vest id. A pruned snapshot still arrives as its own entry.
+        setSource(data && data.length ? { status: 'ok', data } : { status: 'idle' })
       })
       .catch(() => {
         if (currentTxnIdRef.current !== id) return

@@ -278,9 +278,17 @@ describe('TxnDetail — Source section, kind: email (CDS-UI-22 Unlink source)', 
   })
 })
 
-describe('TxnDetail — Source section, kind: email (EM1-05 unavailable / 404)', () => {
+const goneEmail: SourceEntry = {
+  kind: 'email',
+  source: 'email',
+  ref: 'm1aaaa',
+  messageId: 'm1aaaa',
+  unavailable: true,
+}
+
+describe('TxnDetail — Source section, kind: email (EM1-05 unavailable)', () => {
   it('shows the verbatim unavailable message with no rows/toggle', async () => {
-    renderDrawer(emailTxn(), () => Promise.resolve(null))
+    renderDrawer(emailTxn(), () => Promise.resolve([goneEmail]))
     await waitFor(() =>
       expect(
         screen.getByText(
@@ -307,7 +315,7 @@ describe('TxnDetail — Source section, kind: email (EM1-06 loading)', () => {
     expect(screen.queryByText('Show full email ▾')).toBeNull()
     expect(screen.queryByText(/Snapshot unavailable/)).toBeNull()
     // Resolve to avoid an unhandled-state warning after the test.
-    resolve(null)
+    resolve([goneEmail])
     await waitFor(() => expect(screen.getByText(/Snapshot unavailable/)).toBeTruthy())
   })
 })

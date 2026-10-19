@@ -53,7 +53,6 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Callable
 
-from backend.core.txn_sources import FILE_IMPORT_NAMESPACES
 from backend.db.connector_snapshot_store import ConnectorSnapshotStore, snapshot_key
 
 logger = logging.getLogger(__name__)
@@ -440,12 +439,18 @@ def snapshots_for_transaction(txn_id: str) -> list[dict] | None:
 
 
 def _connector_pairs(txn: dict) -> list[tuple[str, str]]:
+    # Only a connector-fetch provider ever stashes a snapshot (``connector_fetch``). Every other
+    # namespace — statement fingerprints, the iOS shortcuts' idempotency keys, vest ids, a ref
+    # Lucius coined — is an identity with no evidence behind it, so listing it would only ever
+    # say "Snapshot unavailable" (owner report 2026-10-19: every iOS-captured row did).
+    from backend.services.aggregation.providers import PROVIDERS
+
     pairs: list[tuple[str, str]] = []
     for entry in txn.get("external_refs") or []:
         if not isinstance(entry, dict):
             continue
         source, ref = entry.get("source"), str(entry.get("ref") or "").strip()
-        if not ref or source in (None, "email") or source in FILE_IMPORT_NAMESPACES:
+        if not ref or source not in PROVIDERS:
             continue
         pair = (source, ref)
         if pair not in pairs:

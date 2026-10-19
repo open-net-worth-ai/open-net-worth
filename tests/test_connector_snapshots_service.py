@@ -394,6 +394,41 @@ def test_statement_file_refs_are_not_connector_snapshots(db_isolated):
     assert [e["source"] for e in entries] == ["plaid"]
 
 
+def test_refs_from_namespaces_that_never_stash_are_not_connector_snapshots(db_isolated):
+    """Only a connector-fetch provider stashes evidence. An iOS shortcut's idempotency key, a vest
+    id or a ref Lucius coined has none, and must not surface as 'Snapshot unavailable' (owner
+    report 2026-10-19: every iOS-captured row showed Source (2) with two unavailable blocks)."""
+    _seed_accounts()
+    stored = ledger.create_transaction(
+        _txn("ios-wallet", "wallet-tap:2026-09-01T00:36:19+07:00", from_currency="SGD")
+    )
+    stored = ledger.update_transaction(
+        stored["id"],
+        {
+            "external_refs": [
+                {"source": "ios-wallet", "ref": "wallet-tap:2026-09-01T00:36:19+07:00"},
+                {"source": "ios-notification", "ref": "notif:2026-09-01T00:36:22+07:00@Bank"},
+                {"source": "ios-shortcut", "ref": "notif:2026-09-01T00:40:00+07:00@Bank"},
+                {"source": "vest", "ref": "vest_1"},
+                {"source": "receipt-vendor", "ref": "receipt:0001"},
+            ]
+        },
+    )
+    assert snapshots.snapshots_for_transaction(stored["id"]) is None
+
+    stored = ledger.update_transaction(
+        stored["id"],
+        {
+            "external_refs": [
+                {"source": "ios-wallet", "ref": "wallet-tap:2026-09-01T00:36:19+07:00"},
+                {"source": "plaid", "ref": "never-stashed"},
+            ]
+        },
+    )
+    entries = snapshots.snapshots_for_transaction(stored["id"])
+    assert [(e["source"], e["unavailable"]) for e in entries] == [("plaid", True)]
+
+
 def test_a_transaction_with_only_statement_refs_has_no_connector_snapshots(db_isolated):
     _seed_accounts()
     stored = ledger.create_transaction(

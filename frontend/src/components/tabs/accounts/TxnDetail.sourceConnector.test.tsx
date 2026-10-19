@@ -242,18 +242,25 @@ describe('TxnDetail — Source section, kind: connector unavailable (CDS-UI-18)'
   })
 })
 
-describe('TxnDetail — Source section, connector-only, sources call resolves null (CDS-UI-18)', () => {
-  it('shows the generic (never the email-worded) unavailable copy — every pre-existing connector-booked row hits this, not a per-entry unavailable', async () => {
-    renderDrawer(makeTxn(), null)
-
-    await waitFor(() =>
-      expect(
-        screen.getByText(
-          'Snapshot unavailable — this transaction was booked before evidence was kept (or the original record is no longer stored).',
-        ),
-      ).toBeTruthy(),
+describe('TxnDetail — Source section, nothing to show (sources call resolves null)', () => {
+  it('an iOS-captured row shows no Source section — its refs are keys, not evidence', async () => {
+    const load = vi.fn(() => Promise.resolve(null))
+    renderDrawer(
+      makeTxn({
+        externalRefs: [
+          { source: 'ios-wallet', ref: 'wallet-tap:2026-09-01T00:36:19+07:00' },
+          { source: 'ios-notification', ref: 'notif:2026-09-01T00:36:22+07:00@Bank' },
+        ],
+      }),
+      null,
+      () => Promise.resolve(),
+      load,
     )
-    expect(screen.queryByText(/booked from email/)).toBeNull()
+
+    await waitFor(() => expect(load).toHaveBeenCalled())
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByText(/^Source/, { selector: '.acct-detail-sec' })).toBeNull()
+    expect(screen.queryByText(/Snapshot unavailable/)).toBeNull()
   })
 })
 
