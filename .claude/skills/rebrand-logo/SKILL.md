@@ -21,7 +21,8 @@ checkout is on someone else's branch)
 - `frontend/public/`: `logo.svg` (tile), `logo-light.svg`, `logo-mark.svg` (mark only),
   `favicon.svg`, `favicon.ico`, `manifest.webmanifest`
 - `frontend/public/icons/`: `icon-192.png`, `icon-512.png`, `icon-maskable-192.png`,
-  `icon-maskable-512.png`, `apple-touch-icon.png`
+  `icon-maskable-512.png`, `apple-touch-icon.png` (inlined into `index.html` as a data: URI at
+  build time by `vite.config.ts`'s `inlineAppleTouchIcon` — iOS 27 ignores a URL one; no cache-bust tag)
 - Cache-bust tags (`?v=<name>`) — bump all of them or browsers keep the old mark:
   `frontend/index.html`, `frontend/public/manifest.webmanifest`, `frontend/src/RouterShell.tsx`,
   `frontend/src/components/firstrun/Mark.tsx`, `docs-site/astro.config.mjs`

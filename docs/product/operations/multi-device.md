@@ -28,7 +28,9 @@ your instance and knows the password can sign in.
    another computer you can use the desktop app instead: **On your own server** at first launch,
    or **File → Connection…** — see [Connect to a server](desktop.md#connect-to-a-server).
 5. **On a phone**, add it to your home screen (Safari: **Share → Add to Home Screen**; Chrome:
-   **⋮ → Add to Home screen**) so it opens like an app.
+   **⋮ → Add to Home screen**) so it opens like an app. The phone keeps the icon it captured
+   when you added it, so if an older shortcut shows a plain letter **N** instead of the logo,
+   delete it and add it again.
 
 ## Signing in
 
