@@ -17673,6 +17673,26 @@ body.hide-amounts .money * {
   }
 }
 
+/* An installed iOS app with the `default` status bar (index.html) lays out BELOW the status
+   bar, but iOS still resolves 100vh/100dvh to the FULL screen height — so the shell ran a
+   status bar's height past the bottom and pushed the tab bar off the screen (owner,
+   2026-10-19). Percentages resolve against the initial containing block, which IS the real
+   web view, so size the shell from it: every ancestor of the shell (whatever wrappers sit
+   between it and #root) fills its parent, and the shell fills that. */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 639.98px) {
+    :root[data-onw-display-mode='standalone']:has(.app-shell.mb-shell),
+    :root[data-onw-display-mode='standalone'] body:has(.app-shell.mb-shell),
+    :root[data-onw-display-mode='standalone'] body *:has(.app-shell.mb-shell) {
+      height: 100%;
+    }
+    :root[data-onw-display-mode='standalone'] .app-shell.mb-shell {
+      height: 100%;
+      min-height: 0;
+    }
+  }
+}
+
 /* An Automation run's opening message is its instruction sheet — collapsed to one line so
    the run itself is what you see on opening the conversation. A BUTTON, not a label: it
    links through to the run in the Automations tab, because the panel is usually open over

@@ -2088,6 +2088,17 @@
     border-radius: 0;
   }
 }
+/* …except in an installed iOS app: it has no browser chrome to hide behind, and with the
+   `default` status bar iOS resolves 100dvh to the FULL screen while the web view starts below
+   the status bar, so the pane's bottom fell off the screen. The fixed overlay IS the web view. */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 1023.98px) {
+    :root[data-onw-display-mode='standalone'] .ui-modal-card--workspace.onw-settings {
+      height: 100%;
+      max-height: 100%;
+    }
+  }
+}
 
 /* ── safe areas ────────────────────────────────────────────────────────────
    Edge to edge means edge to edge: the dialog now runs under the status bar, the home
