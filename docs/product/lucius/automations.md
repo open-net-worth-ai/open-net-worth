@@ -224,7 +224,9 @@ An unattended run can do anything a conversation you're watching can. What prote
 Check both before pointing an **Auto** or **Skip** Automation at anything that changes your
 money.
 
-Open Net Worth has to be running (and the computer awake) for a scheduled run to happen.
+Open Net Worth has to be running (and the computer awake) for a scheduled run to happen. In the
+desktop app, the **Keep awake** switch at the top of the Automations list stops the computer
+from idling to sleep while the app runs — see [Keep computer awake](../operations/desktop.md#keep-it-running-in-the-background).
 
 ## Troubleshooting
 
