@@ -629,6 +629,16 @@
   .app-layout--wide {
     max-width: none;
   }
+  /* List pages (Automations, Skills, Inbox, Connectors) read as a centred column, not a
+     full-width spread: side space grows with the window and the column caps at 960px. Phones
+     keep the shared 16px gutter (the max-width: 640px block below). */
+  @media (min-width: 641px) {
+    .app-layout--narrow {
+      --narrow-gutter: clamp(24px, 6vw, 96px);
+      max-width: calc(960px + 2 * var(--narrow-gutter));
+      padding-inline: var(--narrow-gutter);
+    }
+  }
   /* Two-panel tabs (Accounts): bound the height so panels scroll independently. The bound is
      on .app-main — .app-layout is no longer the top of the column, so its own `height: 100vh`
      would overflow by the topbar's height. */

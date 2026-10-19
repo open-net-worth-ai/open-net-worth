@@ -119,6 +119,7 @@ import {
   CONFIG_TABS,
   TAB_LABELS,
   TAB_DISPLAY_NAMES,
+  NARROW_TABS,
   SELF_HEADER_TABS,
   TAB_SUBTITLES,
 } from './tabs'
@@ -1450,7 +1451,7 @@ function RouterShellInner() {
                       tabToRender === 'investments' || tabToRender === 'plan'
                         ? ' app-layout--wide'
                         : ''
-                    }${phoneLucius ? ' app-layout--lucius' : ''}`}
+                    }${NARROW_TABS.has(tabToRender) ? ' app-layout--narrow' : ''}${phoneLucius ? ' app-layout--lucius' : ''}`}
                   >
                     {!SELF_HEADER_TABS.has(tabToRender) && !isSingleAssetRoute && !phoneLucius && (
                       <div className="tab-header">

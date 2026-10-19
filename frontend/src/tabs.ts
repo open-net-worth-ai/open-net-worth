@@ -90,6 +90,10 @@ export const TAB_DISPLAY_NAMES: Record<TabId, string> = {
   intel: 'Intelligence',
 }
 
+// List pages that read as a centred column (`.app-layout--narrow`), like a settings page —
+// not the data tabs, whose tables and charts are built to use the width.
+export const NARROW_TABS = new Set<TabId>(['automations', 'skills', 'inbox', 'connectors'])
+
 export const SELF_HEADER_TABS = new Set<TabId>([
   'lucius',
   'intel',
