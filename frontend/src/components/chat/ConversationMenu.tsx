@@ -1,35 +1,16 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Eye, EyeOff, ListChecks, MessageSquare, SquarePen, X, Zap } from '../../ui/icons'
+import { ListChecks, MessageSquare, Plus, SquarePen, X, Zap } from '../../ui/icons'
 import { ConversationRenameInput, ConversationRowMenu } from './ConversationRowActions'
 import { ConversationStatusBadge, conversationStatusLabel } from './ConversationStatusBadge'
 import type { ConversationMeta } from '../../hooks/useConversations'
 import type { ConvRowStatus } from '../../types/chat'
 import { fDateTime } from '../../utils/format'
-import { useShowBackgroundConversations } from '../../hooks/useShowBackgroundConversations'
 
 /** The row's type glyph: an Automation run, a capture, or a chat. */
 export function ConversationIcon({ conv }: { conv: ConversationMeta }) {
   if (conv.source === 'automation') return <ListChecks size={14} />
   if (conv.origin === 'capture') return <Zap size={14} />
   return <MessageSquare size={14} />
-}
-
-/** Section-header switch for background conversations (captures) — hidden by default. */
-export function BackgroundConversationsToggle() {
-  const [on, setOn] = useShowBackgroundConversations()
-  const label = on ? 'Hide background conversations' : 'Show background conversations'
-  return (
-    <button
-      type="button"
-      className={`conv-menu-bgtoggle${on ? ' on' : ''}`}
-      onClick={() => setOn(!on)}
-      aria-pressed={on}
-      aria-label={label}
-      title={label}
-    >
-      {on ? <Eye size={14} /> : <EyeOff size={14} />}
-    </button>
-  )
 }
 
 /**
@@ -219,14 +200,13 @@ export function ConversationMenu({
           <div className="conv-menu-sec-h">
             <MessageSquare size={14} />
             <span>Chats</span>
-            <BackgroundConversationsToggle />
             <button
               type="button"
               className="conv-menu-plus"
               onClick={onNewChat}
               aria-label="New chat"
             >
-              +
+              <Plus size={14} />
             </button>
           </div>
           {chats.length === 0 ? (

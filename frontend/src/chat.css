@@ -2743,13 +2743,7 @@
   padding: 0 16px 10px;
   border-bottom: 1px solid var(--line);
 }
-/* Search box with the background-conversations switch at its end. */
-.conv-browser-searchrow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.conv-browser-searchrow .conv-browser-search {
+.conv-browser-search {
   flex: 1;
   min-width: 0;
 }
@@ -3108,15 +3102,15 @@
 }
 .conv-menu-plus {
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
   height: 22px;
   border: none;
   border-radius: 6px;
   background: none;
   color: var(--muted);
-  font: inherit;
-  font-size: 16px;
-  line-height: 1;
   cursor: pointer;
 }
 @media (hover: hover) {
@@ -3324,29 +3318,4 @@
   border-radius: var(--radius-sm);
   color: var(--muted);
   font-size: var(--text-xs);
-}
-/* "Show background conversations" — an icon switch in the Chats header (and the browser's
-   tools row), same 22px footprint as .conv-menu-viewall. Lit while captures are listed. */
-.conv-menu-bgtoggle {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 6px;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
-}
-.conv-menu-bgtoggle.on {
-  color: var(--ink);
-  background: var(--hover);
-}
-@media (hover: hover) {
-  .conv-menu-bgtoggle:hover {
-    background: var(--hover);
-    color: var(--ink);
-  }
 }

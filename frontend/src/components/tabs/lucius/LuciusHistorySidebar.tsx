@@ -16,7 +16,6 @@ import {
   SquarePen,
 } from '../../../ui/icons'
 import {
-  BackgroundConversationsToggle,
   ConversationRow,
   ConversationIcon,
   groupByAge,
@@ -152,7 +151,6 @@ export function LuciusHistorySidebar({
             <MessageSquare size={14} />
             <span>Chats</span>
             {markAllRead(unreadChats)}
-            <BackgroundConversationsToggle />
             <button
               type="button"
               className="conv-menu-viewall"

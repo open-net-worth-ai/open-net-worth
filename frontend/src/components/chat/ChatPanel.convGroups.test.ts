@@ -32,20 +32,17 @@ describe('conversationGroups', () => {
     ])
   })
 
-  it('hides background conversations (captures) unless they are switched on', () => {
+  it('lists captures with the chats', () => {
     const rows = [
       conv({ id: 'chat', title: 'What did I spend on food?' }),
       conv({ id: 'cap', title: 'Capture · Citi: $12.40 at Blue Bottle', origin: 'capture' }),
-      conv({ id: 'old', origin: 'chat' }),
     ]
-    const ids = (show: boolean) =>
-      conversationGroups(rows, show)
-        .find((g) => g.key === 'chat')!
-        .items.map((c) => c.id)
-        .sort()
+    const ids = conversationGroups(rows)
+      .find((g) => g.key === 'chat')!
+      .items.map((c) => c.id)
+      .sort()
 
-    expect(ids(false)).toEqual(['chat', 'old'])
-    expect(ids(true)).toEqual(['cap', 'chat', 'old'])
+    expect(ids).toEqual(['cap', 'chat'])
   })
 
   it('puts chats first — they are the ones you came here to switch between', () => {

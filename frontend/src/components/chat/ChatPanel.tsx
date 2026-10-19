@@ -53,7 +53,7 @@ import { LuciusHomeStart } from '../intro/LuciusHomeStart'
 import { dataChangeTurns } from './dataChangeTurns'
 import { takeSendIntent } from '../../state/luciusSendIntent'
 import { useNavigate } from '@tanstack/react-router'
-import { isBackgroundConversation, type ConversationMeta } from '../../hooks/useConversations'
+import type { ConversationMeta } from '../../hooks/useConversations'
 import { ChevronRight, Eraser, FolderLock, Menu, SquarePen } from '../../ui/icons'
 import { ModelPicker, Skeleton } from '../ui'
 import { ConversationApprovalPicker } from './ConversationApprovalPicker'
@@ -65,7 +65,6 @@ import { isOnboardingInit, ONBOARDING_INIT_SENTINEL } from '../../utils/onboardi
 import { applyScrollbarGutter } from '../../utils/scrollbarGutter'
 import { composerDensity } from './composerDensity'
 import { usePointerResize } from '../../hooks/usePointerResize'
-import { useShowBackgroundConversations } from '../../hooks/useShowBackgroundConversations'
 
 // Documents from the side panel on any tab — loaded only when opened, so the chat that every
 // tab carries doesn't carry the document viewer too.
@@ -176,16 +175,14 @@ export function runBrief(
  * chats read as twenty duplicates of the same thread and the list becomes unusable for
  * both. Split, and each side gets a label that says what you are looking at.
  */
-export function conversationGroups(conversations: ConversationMeta[], showBackground = false) {
+export function conversationGroups(conversations: ConversationMeta[]) {
   const runs = conversations.filter((c) => c.source === 'automation')
   // "Chats" means IN-APP conversations. Two different axes decide that, and conflating them
   // is what put the owner's Telegram thread in this sidebar (2026-08-21): `source` is an
   // ownership claim ('automation' — a RUNNER, and a security gate reads it), while `channel`
   // is the TRANSPORT the human is on. In-app is the absence of both — it needs no name of
   // its own, and naming it 'web' would be wrong the moment this runs in the desktop app.
-  const chats = conversations.filter(
-    (c) => !c.source && !c.channel && (showBackground || !isBackgroundConversation(c)),
-  )
+  const chats = conversations.filter((c) => !c.source && !c.channel)
   return [
     {
       key: 'chat' as const,
@@ -438,11 +435,7 @@ export function ChatPanel({
   // One ordering for the header, the sidebar and the browser — they disagreed for a build,
   // and a switcher that orders its rows differently from the list behind it is worse than
   // either ordering on its own.
-  const [showBackground] = useShowBackgroundConversations()
-  const convGroups = useMemo(
-    () => conversationGroups(conversations, showBackground),
-    [conversations, showBackground],
-  )
+  const convGroups = useMemo(() => conversationGroups(conversations), [conversations])
 
   // Tapping the run header (inside a message bubble the user is already reading) sends the
   // MAIN content area to that run, leaving the panel on the conversation you are reading —

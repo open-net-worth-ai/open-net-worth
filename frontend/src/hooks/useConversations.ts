@@ -51,8 +51,8 @@ export interface ConversationMeta {
   lastReadAt?: string
 }
 
-/** A conversation nobody typed into — a capture's booking turn. Kept as a record, listed only
- *  when the person turns background conversations on, and never opened by default. */
+/** A conversation nobody typed into — a capture's booking turn. Kept as a record and listed
+ *  with the chats, but never opened by default. */
 export function isBackgroundConversation(conv: Pick<ConversationMeta, 'origin'>): boolean {
   return !!conv.origin && conv.origin !== 'chat'
 }

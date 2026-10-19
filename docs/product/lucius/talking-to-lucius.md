@@ -151,10 +151,8 @@ Automation runs can pile up unread. **Mark all read** (the check-mark button in 
 clears them all at once; it never touches a conversation that is **Working…** or **Needs you**.
 
 Each purchase your [phone shortcut](../features/phone-shortcuts.md) sends is booked in a
-conversation of its own, titled **Capture · …** with the text that came in. They're hidden from the
-list. To see one, press the eye button in the **Chats** header, or in **View all conversations**.
-They're marked with a lightning bolt and never show **New reply**. The setting applies only to this
-device.
+conversation of its own, titled **Capture · …** with the text that came in. They're listed under
+**Chats**, marked with a lightning bolt, and never show **New reply**.
 
 To stop a reply partway, press **Stop** in the message box.
 
