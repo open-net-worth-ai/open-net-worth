@@ -29,8 +29,9 @@ your instance and knows the password can sign in.
    or **File → Connection…** — see [Connect to a server](desktop.md#connect-to-a-server).
 5. **On a phone**, add it to your home screen (Safari: **Share → Add to Home Screen**; Chrome:
    **⋮ → Add to Home screen**) so it opens like an app. The phone keeps the icon it captured
-   when you added it, so if an older shortcut shows a plain letter **N** instead of the logo,
-   delete it and add it again.
+   and status bar style from when you added it, so if an older shortcut shows a plain letter
+   **N** instead of the logo, or a blur across the top of the screen on iOS 27, delete it and
+   add it again.
 
 ## Signing in
 

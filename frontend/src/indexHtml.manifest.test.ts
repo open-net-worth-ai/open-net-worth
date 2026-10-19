@@ -23,3 +23,15 @@ it('the apple-touch-icon is inlined as a data: URI at build time', async () => {
   expect(out).not.toContain('%APPLE_TOUCH_ICON%')
   expect(() => transform('<head></head>')).toThrow(/placeholder/)
 })
+
+// iOS 27 draws a progressive blur over the top edge of a Home Screen app whose status bar is
+// black-translucent. `default` has no blur, and iOS tints it from the background of a REAL
+// element at the very top of the page (a pseudo-element is invisible to its sampler).
+it('the status bar is opaque and tinted from a real top element', () => {
+  const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8')
+  expect(html).toMatch(/<meta name="apple-mobile-web-app-status-bar-style" content="default"/)
+  expect(html).toMatch(/<body>\s*<div id="status-bar-sampler" aria-hidden="true"><\/div>/)
+  expect(html).toMatch(
+    /#status-bar-sampler \{[^}]*position: fixed;[^}]*top: 0;[^}]*background: inherit;/,
+  )
+})

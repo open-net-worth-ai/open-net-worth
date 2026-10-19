@@ -34,6 +34,19 @@
       body {
         background: inherit;
       }
+      /* iOS 27 tints the `default` status bar from the background-color of the element at
+         the very top of the page; it has to be a real element (a pseudo-element is invisible
+         to the sampler). Inherits the theme background above. */
+      #status-bar-sampler {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 1px;
+        z-index: 2147483647;
+        pointer-events: none;
+        background: inherit;
+      }
     </style>
     <!-- Pre-paint theme stamp: resolve the persisted palette preference
          before any stylesheet applies, so a reload never flashes the wrong theme.
@@ -43,13 +56,17 @@
     <!-- iOS standalone (add-to-home-screen) -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- `default`, not `black-translucent`: since iOS 27 beta 5 a translucent status bar gets
+         a progressive blur drawn over the top edge of the app. The value is frozen when the
+         app is added to the Home Screen, so an existing shortcut must be re-added. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Net Worth" />
     <!-- Inlined as a data: URI by vite.config.ts (inlineAppleTouchIcon). iOS 27 ignores a
          URL-referenced touch icon and shows a letter tile; an inline one still works. -->
     <link rel="apple-touch-icon" sizes="180x180" href="%APPLE_TOUCH_ICON%" />
   </head>
   <body>
+    <div id="status-bar-sampler" aria-hidden="true"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
