@@ -28,6 +28,8 @@ All HTTP is mocked with a fixture feed — there is no live-network call here.
 
 from __future__ import annotations
 
+import json as jsonlib
+
 import httpx
 import pytest
 
@@ -80,6 +82,44 @@ _TXNS = [
         "deleted": False,
     },
 ]
+
+
+class _StreamOf:
+    """Presents a ``httpx.get``-style fake response as the stream ``_safe_get`` now reads."""
+
+    headers: dict = {}
+
+    def __init__(self, resp):
+        self._resp = resp
+        self.status_code = resp.status_code
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def raise_for_status(self):
+        self._resp.raise_for_status()
+
+    def iter_bytes(self):
+        try:
+            yield jsonlib.dumps(self._resp.json()).encode()
+        except (ValueError, AssertionError):
+            yield self._resp.content
+
+
+@pytest.fixture(autouse=True)
+def stream_from_fake_get(monkeypatch):
+    """The tests below fake ``svc.httpx.get``; route the streaming call through whatever fake is
+    installed at call time so they keep exercising the same behaviour."""
+    monkeypatch.setattr(
+        svc.httpx,
+        "stream",
+        lambda method, url, params=None, headers=None, timeout=None: _StreamOf(
+            svc.httpx.get(url, params=params, headers=headers, timeout=timeout)
+        ),
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -861,3 +901,55 @@ class TestClassifyError:
 
     def test_generic_on_unknown_exception(self):
         assert svc.classify_error(RuntimeError("unexpected")) == "error"
+
+
+def test_safe_get_abandons_a_stream_that_passes_the_cap_without_reading_it_all(monkeypatch):
+    store = _token_only_store()
+    pulled = []
+
+    class _Endless:
+        status_code = 200
+        headers: dict = {}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def raise_for_status(self):
+            return None
+
+        def iter_bytes(self):
+            for _ in range(1000):
+                pulled.append(1)
+                yield b"x" * 1024
+
+    monkeypatch.setattr(svc.httpx, "stream", lambda *a, **k: _Endless())
+    with pytest.raises(ExternalServiceError, match="too large"):
+        svc._safe_get(store, "/plans", {}, max_bytes=4096)
+    assert len(pulled) <= 6
+
+
+def test_safe_get_refuses_a_declared_oversize_body_before_reading_it(monkeypatch):
+    store = _token_only_store()
+
+    class _Declared:
+        status_code = 200
+        headers = {"content-length": "999999999"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def raise_for_status(self):
+            return None
+
+        def iter_bytes(self):
+            raise AssertionError("must not read a body declared too large")
+
+    monkeypatch.setattr(svc.httpx, "stream", lambda *a, **k: _Declared())
+    with pytest.raises(ExternalServiceError, match="too large"):
+        svc._safe_get(store, "/plans", {})
