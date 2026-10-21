@@ -132,6 +132,7 @@ See docs/prd/ynab-planning.md.
 from __future__ import annotations
 
 import logging
+import math
 import re
 from datetime import date, datetime, timezone
 
@@ -2635,8 +2636,9 @@ def undo_fresh_start(token: str) -> None:
     (or a stale token from another tab) raises ``ConflictError`` rather than re-writing stale
     amounts over whatever the user has done since.
 
-    ``allow_negative`` is passed here and NOWHERE else, and only over values this function read
-    back out of ``plan_state`` — amounts the server itself wrote at ``fresh_start``. A negative
+    ``allow_negative`` is passed here — only over values this function read back out of
+    ``plan_state``, amounts the server itself wrote at ``fresh_start`` — and by the YNAB
+    migration (``ynab_migration.apply.apply_budget``), over YNAB's own month figures. A negative
     assigned slot is a real state (``move_money`` out of a row produces one), so a byte-identical
     restore needs it; what it must never be is a door a caller can push its own numbers through.
 
@@ -3971,14 +3973,16 @@ def _op_assign(
     out of a row legitimately drives assigned negative (its docstring), so a negative slot is a
     real state a book can be in. ``undo_fresh_start`` therefore needs it to put a snapshot back
     byte-identically. Keyword-only and never set from a wire payload — but the guarantee is the
-    SOURCE of the values, not the kwarg's un-nameability: its only caller is ``undo_fresh_start``,
-    replaying a before-image the server itself wrote."""
+    SOURCE of the values, not the kwarg's un-nameability: its callers are ``undo_fresh_start``,
+    replaying a before-image the server itself wrote, and the YNAB migration, writing YNAB's figures."""
     month = _valid_month(change.get("month"))
     env_id = _require_envelope_id(change.get("envelope_id"))
     try:
         amount = round(float(change.get("amount")), 2)
     except (TypeError, ValueError):
         raise ValidationError("amount must be a number")
+    if not math.isfinite(amount):
+        raise ValidationError("amount must be a finite number")
     if amount < 0 and not allow_negative:
         raise ValidationError("assigned amount cannot be negative (use move_money to pull back)")
     _set_assigned_amt(month, env_id, amount, conn=conn)

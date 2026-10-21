@@ -1714,6 +1714,7 @@ def resolve_transaction_row(
     account_rows: list[dict] | None = None,
     base: str | None = None,
     force_transfer_rate: bool = False,
+    labels_as_given: bool = False,
 ) -> tuple[dict, dict]:
     """Run the full create-time RESOLUTION pipeline on ``data`` and return ``(row, meta)``
     WITHOUT persisting anything.
@@ -1921,7 +1922,7 @@ def resolve_transaction_row(
     # a payee_id. Ordered AFTER the rules engine and BEFORE the None-when-absent path, so
     # precedence is: explicit > rule > payee (per-kind) > None.
     category_before_payee_default = row.get("category") or None
-    if kind != "adjustment":
+    if kind != "adjustment" and not labels_as_given:
         pid = row.get("payee_id")
         if pid and not row.get("category"):
             row["category"] = payee_registry.default_category_for(
@@ -2131,6 +2132,7 @@ def bulk_create_transactions(
     meta_out: dict | None = None,
     force_transfer_rate: bool = False,
     resurrect_refs: set[tuple[str | None, str]] | None = None,
+    labels_as_given: bool = False,
 ) -> tuple[list[dict], list[dict]]:
     """Normalise and persist multiple transactions in a single file write.
 
@@ -2161,6 +2163,10 @@ def bulk_create_transactions(
     the ``(source, ref)`` pairs an explicit ``create`` decision re-books; those rows pass and
     their records are forgotten in the write transaction (ADR
     2026-09-02-a-deleted-identity-is-remembered).
+
+    ``labels_as_given`` books each row's category exactly as sent — no Automation, no payee
+    default — for a migration copying another app's labels, where a blank category is a
+    decision (YNAB's Ready to Assign inflow), not a gap to fill.
     """
     from backend.core.audit_context import get_audit_scope as _get_audit_scope
     from backend.services import categories as categories_service
@@ -2307,7 +2313,8 @@ def bulk_create_transactions(
             data = {**data, "source": "agent"}
         row, resolution_meta = resolve_transaction_row(
             data,
-            automations=automation_set,
+            automations=[] if labels_as_given else automation_set,
+            labels_as_given=labels_as_given,
             category_rows=category_rows,
             rates=rates,
             account_rows=account_rows,

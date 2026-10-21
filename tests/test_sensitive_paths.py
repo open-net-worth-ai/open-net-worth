@@ -244,6 +244,7 @@ def test_non_restorable_tables_matches_db_resident_non_restorable_files():
     db_native_non_restorable = {
         "desktop_access_grants",
         "desktop_ingest_jobs",
+        "import_runs",
         # THE permission table — one level per (owner, tool), for every tool in the app
         # (revision 0039, renamed from `connector_tool_permissions` and given the absorbed
         # `tool_grants` rows at 0040). Set a tool back to "needs_approval" (or "blocked")

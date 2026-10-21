@@ -103,7 +103,14 @@ def ensure_builtins_seeded() -> int:
 
     store = CategoryStore()
     with locked_unit_of_work(categories_table, envelope_groups_table) as conn:
-        if store.all(conn=conn):
+        existing = store.all(conn=conn)
+        if existing:
+            # A book that lost the structural sentinel refuses every split write; restore it.
+            if not any(r.get("id") in STRUCTURAL_KEYS for r in existing):
+                store.bulk_insert(
+                    [c for c in STARTER_CATEGORIES if c["id"] in STRUCTURAL_KEYS], conn=conn
+                )
+                logger.warning("restored the missing structural 'split' category")
             return 0
         store.bulk_insert(list(STARTER_CATEGORIES), conn=conn)
         if not groups_store.all(conn=conn):
