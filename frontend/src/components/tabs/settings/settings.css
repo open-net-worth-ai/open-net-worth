@@ -524,6 +524,12 @@
   margin-top: 3px;
   line-height: 1.5;
 }
+/* a one-click fix for the setting sits under its caption, in the label column — as a bare
+   child of .rd-formgrid it became a borderless full-width "row" of its own */
+.onw-settings .rd-set-body .rd-help-action {
+  display: flex;
+  margin-top: 8px;
+}
 /* A TOGGLE is excluded from the stretch: it is a fixed-size switch, not a field control, and
    width:100% turned it into a full-width blue slab across the 264px column (owner,
    2026-08-24). Excluded HERE rather than overridden below because :not() carries its

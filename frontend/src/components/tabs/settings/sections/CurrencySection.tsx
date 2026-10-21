@@ -202,11 +202,22 @@ export function CurrencySection({ toast }: SectionProps) {
           <Field
             label="Time zone"
             help={
-              profile?.timezone_source === 'user'
-                ? 'Set by you'
-                : profile?.timezone
-                  ? 'Detected from this browser — change it if that is wrong'
-                  : 'Not set yet — the server clock is used until one is saved'
+              <>
+                <span>
+                  {profile?.timezone_source === 'user'
+                    ? 'Set by you'
+                    : profile?.timezone
+                      ? 'Detected from this browser — change it if that is wrong'
+                      : 'Not set yet — the server clock is used until one is saved'}
+                </span>
+                {browserZone && profile?.timezone && profile.timezone !== browserZone && (
+                  <span className="rd-help-action">
+                    <Btn size="xs" onClick={() => void saveTimezone(browserZone)}>
+                      Use this browser's ({browserZone})
+                    </Btn>
+                  </span>
+                )}
+              </>
             }
           >
             <Select value={zone} onChange={(e) => void saveTimezone(e.target.value)}>
@@ -217,11 +228,6 @@ export function CurrencySection({ toast }: SectionProps) {
               ))}
             </Select>
           </Field>
-          {browserZone && profile?.timezone && profile.timezone !== browserZone && (
-            <Btn onClick={() => void saveTimezone(browserZone)}>
-              Use this browser's ({browserZone})
-            </Btn>
-          )}
         </div>
       </Panel>
 
