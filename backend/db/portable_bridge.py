@@ -463,6 +463,10 @@ from backend.db.tables import (
     txn_audit,
     vest_events,
     watchlists,
+    ynab_sync_baselines,
+    ynab_sync_conflicts,
+    ynab_sync_mirror,
+    ynab_sync_state,
 )
 
 
@@ -1251,6 +1255,15 @@ def _wipe_tool_permissions(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, tool_permissions, "id")
 
 
+def _wipe_ynab_sync(conn: Connection) -> list[Path]:
+    """A reset forgets the sync with the book it described: its baselines and mirror would
+    otherwise be reconciled against a ledger that no longer holds the rows they describe."""
+    paths: list[Path] = []
+    for table in (ynab_sync_conflicts, ynab_sync_baselines, ynab_sync_mirror, ynab_sync_state):
+        paths.extend(_capture_then_delete(conn, table, "id"))
+    return paths
+
+
 def _wipe_settings_namespace(conn: Connection, namespace: str) -> list[Path]:
     """The namespace-scoped counterpart to ``_capture_then_delete``: ``memory_settings``
     and ``preferred_models`` share ONE physical ``settings`` table (keyed by
@@ -1431,6 +1444,7 @@ _WIPE_FNS: dict[str, Callable[[Connection], list[Path]]] = {
     # absorbed `tool_grants.json` key is GONE with its table (revision 0040) — a reset that
     # still named it would be reaching for a table that no longer exists.
     "tool_permissions.json": _wipe_tool_permissions,
+    "ynab_sync.json": _wipe_ynab_sync,
     "memory_settings.json": _wipe_memory_settings,
     "preferred_models.json": _wipe_preferred_models,
     # Misc stores (plan 4e task 1) — the three BRIDGED misc stores, reached via the
@@ -1572,6 +1586,7 @@ def wipe_all(conn: Connection) -> list[Path]:
         "statement_formats.json",
         "signals.json",
         "tool_permissions.json",
+        "ynab_sync.json",
     ):
         paths_to_unlink.extend(wipe(conn, filename))
     paths_to_unlink.extend(wipe(conn, "pending_pushes.json"))

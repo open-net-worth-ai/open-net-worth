@@ -20,6 +20,8 @@
     { "glob": "backend/*/import_runs*", "docs": ["docs/product/features/imports-and-sync.md"] },
     { "glob": "frontend/src/components/tabs/connectors/**", "docs": ["docs/product/connectors"] },
     { "glob": "backend/connectors/**", "docs": ["docs/product/connectors"] },
+    { "glob": "backend/services/ynab_sync/**", "docs": ["docs/product/connectors/bank-brokerage.md"] },
+    { "glob": "backend/services/ynab_migration/**", "docs": ["docs/product/connectors/bank-brokerage.md"] },
     { "glob": "frontend/src/components/tabs/settings/sections/[Mm]cp*", "docs": ["docs/product/operations/connect-ai-apps.md", "docs/product/features/settings.md"] },
     { "glob": "frontend/src/components/tabs/settings/sections/Shortcuts*", "docs": ["docs/product/features/phone-shortcuts.md", "docs/product/features/settings.md"] },
     { "glob": "backend/services/shortcuts/**", "docs": ["docs/product/features/phone-shortcuts.md"] },

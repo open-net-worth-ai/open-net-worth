@@ -9,6 +9,10 @@ Thin router over ``db.YnabConfigStore`` + ``services.aggregation.ynab``:
     one-shot plan migration, a server-owned background job (``services.ynab_migration``): poll
     the GET for the newest run (each run is a persisted record — see ``api/import_runs_api``); a
     second POST while one runs is a 409.
+  * ``GET /api/ynab/sync`` / ``PUT /api/ynab/sync/settings`` / ``POST /api/ynab/sync/run`` /
+    ``POST /api/ynab/sync/conflicts/{id}/resolve`` — the scheduled two-way sync
+    (``services.ynab_sync``): status with last/next run and the review list, schedule + enable,
+    "Sync now", and the keep-this-side choice that settles a review item on both sides.
   * ``PUT  /api/ynab/config``  — set the YNAB **personal access token**, pick a budget,
     enable/disable. A blank access token leaves the saved one unchanged (write-only-secret
     discipline); picking a budget is VALIDATED live against the token (mirrors SimpleFIN's
@@ -32,7 +36,7 @@ from pydantic import BaseModel
 
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.db.ynab_config_store import YnabConfigStore
-from backend.services import ynab_migration
+from backend.services import ynab_migration, ynab_sync
 from backend.services.aggregation import ynab as ynab_service
 
 router = APIRouter()
@@ -163,3 +167,43 @@ def ynab_migration_start(body: MigrationRequest):
 def ynab_migration_verify(body: MigrationRequest):
     """Re-check an earlier import against YNAB's current figures; writes nothing."""
     return _migration("verify", body)
+
+
+class SyncSettings(BaseModel):
+    enabled: Optional[bool] = None
+    interval: Optional[str] = None
+    # The migrated plan to keep in sync; changing it forgets the previous plan's sync state.
+    plan_id: Optional[str] = None
+
+
+class SyncResolution(BaseModel):
+    keep: str  # "onw" | "ynab"
+
+
+def _sync(call, *args):
+    try:
+        return call(*args)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+
+
+@router.get("/api/ynab/sync")
+def ynab_sync_status():
+    """Schedule, last and next run, what the last run did, and the review list. Never the token."""
+    return ynab_sync.status()
+
+
+@router.put("/api/ynab/sync/settings")
+def ynab_sync_settings(body: SyncSettings):
+    return _sync(ynab_sync.update_settings, body.enabled, body.interval, body.plan_id)
+
+
+@router.post("/api/ynab/sync/run", status_code=202)
+def ynab_sync_run():
+    """Sync now: starts a run in the background (409 while one is running); poll the status."""
+    return _sync(ynab_sync.start_now)
+
+
+@router.post("/api/ynab/sync/conflicts/{conflict_id}/resolve")
+def ynab_sync_resolve(conflict_id: str, body: SyncResolution):
+    return _sync(ynab_sync.resolve.resolve, conflict_id, body.keep)

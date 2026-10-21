@@ -639,6 +639,17 @@ match_decisions = book_payload_table("match_decisions")
 match_reviews = book_payload_table("match_reviews")
 rejected_identities = book_payload_table("rejected_identities")
 
+# YNAB two-way sync (ADR 2026-10-20-ynab-two-way-sync-reconciles-against-per-entity-baselines):
+# book-scoped bookkeeping, no credentials. `ynab_sync_state` holds two documents (`state` — plan,
+# schedule, cursors, last run — and `meta` — YNAB's accounts/categories/payees as last seen);
+# `ynab_sync_mirror` is YNAB's transactions as last synced (id = YNAB transaction id);
+# `ynab_sync_baselines` the last-agreed state per ledger transaction (`t:<id>`) and per month +
+# category Assigned (`a:<month>:<category>`); `ynab_sync_conflicts` the review list.
+ynab_sync_state = book_payload_table("ynab_sync_state")
+ynab_sync_mirror = book_payload_table("ynab_sync_mirror")
+ynab_sync_baselines = book_payload_table("ynab_sync_baselines")
+ynab_sync_conflicts = book_payload_table("ynab_sync_conflicts")
+
 # owned_assets / owned_asset_categories: the Assets tab domain (ADR 2026-09-06-assets-tab-
 # faithful-port) — things you own that are valued by a dated manual mark, not a ledger balance
 # or a price feed (property, vehicles, watches, art, precious metals, cash-value policies, and

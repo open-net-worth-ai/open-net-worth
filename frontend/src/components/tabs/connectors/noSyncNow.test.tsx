@@ -3,6 +3,11 @@
 // CDS-UI-1/2 (docs/qa/acceptance/connectors-data-sources.md): a cross-cutting regression guard
 // over all 8 provider config sections — none of them may render "Sync now" or fire a request
 // to a `*/sync` URL. Sync now the mechanism is gone; fetching is a Lucius turn now.
+//
+// The one deliberate exception (owner decision, 2026-10-20): YNAB's scheduled two-way sync card
+// has its own "Sync now" and lives under /api/ynab/sync. It is not the retired fetch-and-book
+// button — it reconciles both ways — so for YNAB exactly that one button and that one URL are
+// allowed, and nothing else.
 
 import type { JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -81,6 +86,18 @@ const STATUS_BY_PATH: Record<string, unknown> = {
     last_status: 'ok',
     last_error: null,
   },
+  '/api/ynab/sync': {
+    token_saved: true,
+    enabled: false,
+    interval: '1h',
+    intervals: ['15m', '30m', '1h', '6h', 'daily', 'manual'],
+    plan_id: null,
+    plan_name: null,
+    running: false,
+    last_run: null,
+    next_run_at: null,
+    conflicts: [],
+  },
   '/api/enable-banking/status': {
     configured: true,
     enabled: true,
@@ -143,10 +160,14 @@ describe.each(SECTIONS)(
       render(<Component />)
 
       await waitFor(() => expect(screen.getByText('Accounts')).toBeTruthy())
-      expect(screen.queryByRole('button', { name: /sync now/i })).toBeNull()
-      expect(screen.queryByText(/sync now/i)).toBeNull()
+      const twoWay = provider === 'ynab' ? 1 : 0
+      if (twoWay) await waitFor(() => expect(screen.getByText('Two-way sync')).toBeTruthy())
+      expect(screen.queryAllByRole('button', { name: /sync now/i })).toHaveLength(twoWay)
+      expect(screen.queryAllByText(/sync now/i)).toHaveLength(twoWay)
       expect(screen.queryByText(/poll interval/i)).toBeNull()
-      const syncCalls = mockAuthFetch.mock.calls.filter((c) => String(c[0]).includes('/sync'))
+      const syncCalls = mockAuthFetch.mock.calls.filter(
+        (c) => String(c[0]).includes('/sync') && !(twoWay && String(c[0]) === '/api/ynab/sync'),
+      )
       expect(syncCalls).toEqual([])
       // Sanity: the status endpoint for THIS provider was actually hit (proves the mock wired
       // through and the assertion above isn't vacuously true from an early error state).

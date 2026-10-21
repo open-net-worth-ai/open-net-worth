@@ -1,5 +1,6 @@
-"""Reads one YNAB plan for the migration, through the importer's own guarded GET
-(``aggregation.ynab._safe_get``: stored token, size cap, sanitized errors). Read-only."""
+"""Reads one YNAB plan for the migration, through the importer's own guarded request
+(``aggregation.ynab._safe_send``: stored token, size cap, sanitized errors). Read-only here;
+``call`` is also how the two-way sync writes."""
 
 from __future__ import annotations
 
@@ -20,14 +21,27 @@ _RATE_LIMIT_RETRIES = 3
 _RATE_LIMIT_SLEEP = 60.0  # YNAB allows 200 requests/hour; a 429 clears slowly
 
 
-def _data(store: YnabConfigStore, path: str, params: dict | None = None, *, max_bytes=None) -> dict:
+def call(
+    store: YnabConfigStore,
+    method: str,
+    path: str,
+    params: dict | None = None,
+    body: dict | None = None,
+    *,
+    max_bytes=None,
+    retry: bool = True,
+) -> dict:
+    """One guarded YNAB request (``aggregation.ynab._safe_send``: fixed base URL, stored token,
+    size cap, sanitized errors) retried on HTTP 429 unless ``retry=False`` (the sync fails fast and waits for its next run); returns the response's ``data``. The two-way
+    sync sends its writes through here too."""
     kwargs = {"max_bytes": max_bytes} if max_bytes else {}
-    for attempt in range(_RATE_LIMIT_RETRIES + 1):
+    retries = _RATE_LIMIT_RETRIES if retry else 0
+    for attempt in range(retries + 1):
         try:
-            resp = ynab_service._safe_get(store, path, params or {}, **kwargs)
+            resp = ynab_service._safe_send(store, method, path, params or {}, body, **kwargs)
             break
         except ExternalServiceError as exc:
-            if "HTTP 429" not in str(exc) or attempt == _RATE_LIMIT_RETRIES:
+            if "HTTP 429" not in str(exc) or attempt == retries:
                 raise
             logger.info("YNAB rate limit; waiting before retrying %s", path)
             time.sleep(_RATE_LIMIT_SLEEP)
@@ -38,6 +52,10 @@ def _data(store: YnabConfigStore, path: str, params: dict | None = None, *, max_
     if not isinstance(data, dict):
         raise ExternalServiceError(f"YNAB returned an unexpected response for {path}")
     return data
+
+
+def _data(store: YnabConfigStore, path: str, params: dict | None = None, *, max_bytes=None) -> dict:
+    return call(store, "GET", path, params, max_bytes=max_bytes)
 
 
 def list_plans(store: YnabConfigStore) -> list[dict]:

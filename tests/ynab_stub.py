@@ -80,6 +80,9 @@ def build(today: date, negative_assignment: bool = False) -> dict:
         ),
     ]
 
+    for a in accounts:
+        a["transfer_payee_id"] = "tp-" + a["id"]
+
     def cat(key, name, gkey, hidden=False, internal=False):
         return dict(
             id=C[key],
@@ -329,15 +332,30 @@ def build(today: date, negative_assignment: bool = False) -> dict:
         month_detail=month_detail,
         acct_out=acct_out,
         d=d,
+        # --- mutable server state for the two-way sync tests ---
+        knowledge=1,
+        budget=budget,
+        month=month,
+        C=C,
+        A=A,
+        cat_ids=cat_ids,
+        budget_sk={},  # (month offset, category key) -> knowledge of its last change
+        next_id=[0],
+        today=today,
     )
 
 
-def _export(state: dict) -> dict:
-    """The full-plan export's flat shape: payees by id, split lines and categories in lists."""
+def _export(state: dict, since: int | None = None) -> dict:
+    """The full-plan export's flat shape: payees by id, split lines and categories in lists.
+    With ``since`` (``last_knowledge_of_server``) only what changed after it: transactions (and
+    their lines), categories, and per month only the categories whose Assigned changed."""
     payees: dict[str, str] = {}
 
     def payee_id(name):
         return payees.setdefault(name, f"payee-{len(payees)}") if name else None
+
+    def changed(row):
+        return since is None or row.get("_sk", 0) > since
 
     txns, subs = [], []
     for t in state["txns"]:
@@ -345,23 +363,193 @@ def _export(state: dict) -> dict:
         txns.append({**flat, "payee_id": payee_id(t.get("payee_name"))})
         subs += [{**s, "transaction_id": t["id"]} for s in t.get("subtransactions") or []]
     groups = state["groups"]
+    cats = [{**c, "category_group_id": g["id"]} for g in groups for c in g.get("categories", [])]
+    months = []
+    for off in (-2, -1, 0, 1):
+        detail = state["month_detail"](off)
+        if since is not None:
+            keys = {
+                state["C"][k]
+                for (o, k), sk in state["budget_sk"].items()
+                if o == off and sk > since
+            }
+            detail = {**detail, "categories": [c for c in detail["categories"] if c["id"] in keys]}
+            if not keys:
+                continue
+        months.append(detail)
     return {
-        "accounts": state["acct_out"](),
+        "accounts": state["acct_out"]() if since is None else [],
         # YNAB's real export flags every group internal; only the category flag is reliable.
         "category_groups": [
-            {**{k: v for k, v in g.items() if k != "categories"}, "internal": True} for g in groups
+            {**{k: v for k, v in g.items() if k != "categories"}, "internal": True}
+            for g in groups
+            if changed(g)
         ],
-        "categories": [
-            {**c, "category_group_id": g["id"]} for g in groups for c in g.get("categories", [])
+        "categories": [c for c in cats if changed(c)],
+        "months": months,
+        "transactions": [t for t in txns if changed(t)],
+        "subtransactions": [
+            s for s in subs if changed(next(t for t in txns if t["id"] == s["transaction_id"]))
         ],
-        "months": [state["month_detail"](o) for o in (-2, -1, 0, 1)],
-        "transactions": txns,
-        "subtransactions": subs,
         "payees": [{"id": i, "name": n} for n, i in payees.items()],
     }
 
 
-def _handler(state: dict, calls: list):
+# --- the write side: what YNAB does with a request, and what its own app does by hand ---
+
+
+def _bump(state: dict, *rows: dict) -> int:
+    state["knowledge"] += 1
+    for r in rows:
+        r["_sk"] = state["knowledge"]
+    return state["knowledge"]
+
+
+def _row(state: dict, txn_id: str) -> dict | None:
+    return next((t for t in state["txns"] if t["id"] == txn_id and not t["deleted"]), None)
+
+
+def _detail(state: dict, t: dict) -> dict:
+    name = next(a["name"] for a in state["accounts"] if a["id"] == t["account_id"])
+    subs = [{**s, "payee_name": None} for s in t.get("subtransactions") or []]
+    return {**t, "account_name": name, "category_name": None, "subtransactions": subs}
+
+
+def _set(state: dict, t: dict, fields: dict) -> list[dict]:
+    """Apply a save to a transaction the way YNAB does: a split keeps its date, amount and lines,
+    and a transfer's other leg follows its date and amount."""
+    split = bool(t.get("subtransactions"))
+    for k in ("memo", "cleared", "flag_color", "approved", "payee_name", "account_id"):
+        if k in fields:
+            t[k] = fields[k]
+    if "category_id" in fields and not split:
+        t["category_id"] = fields["category_id"]
+    if not split:
+        for k in ("date", "amount"):
+            if k in fields:
+                t[k] = fields[k]
+    touched = [t]
+    twin = _row(state, t.get("transfer_transaction_id") or "")
+    if twin is not None:
+        twin["date"], twin["amount"] = t["date"], -t["amount"]
+        touched.append(twin)
+    _bump(state, *touched)
+    return touched
+
+
+def ynab_edit(state: dict, txn_id: str, **fields) -> None:
+    """The person editing a transaction in YNAB itself."""
+    _set(state, _row(state, txn_id), fields)
+
+
+def ynab_delete(state: dict, txn_id: str) -> None:
+    t = _row(state, txn_id)
+    twin = _row(state, t.get("transfer_transaction_id") or "")
+    for r in [t, twin] if twin else [t]:
+        r["deleted"] = True
+    _bump(state, *([t, twin] if twin else [t]))
+
+
+def ynab_add(
+    state: dict,
+    account: str,
+    date_: str,
+    milli: int,
+    payee: str,
+    category: str | None = None,
+    memo=None,
+) -> str:
+    state["next_id"][0] += 1
+    t = dict(
+        id=f"ynab-new-{state['next_id'][0]:03d}",
+        account_id=state["A"][account],
+        date=date_,
+        amount=milli,
+        payee_name=payee,
+        memo=memo,
+        category_id=state["C"][category] if category else None,
+        cleared="uncleared",
+        approved=True,
+        deleted=False,
+        transfer_account_id=None,
+        transfer_transaction_id=None,
+        subtransactions=[],
+    )
+    state["txns"].append(t)
+    _bump(state, t)
+    return t["id"]
+
+
+def ynab_budget(state: dict, offset: int, category: str, milli: int) -> None:
+    state["budget"].setdefault(offset, {})[category] = milli
+    state["budget_sk"][(offset, category)] = _bump(state)
+
+
+def find(state: dict, **match) -> dict:
+    """The one live YNAB transaction whose fields match."""
+    rows = [
+        t
+        for t in state["txns"]
+        if not t["deleted"] and all(t.get(k) == v for k, v in match.items())
+    ]
+    assert len(rows) == 1, (match, len(rows))
+    return rows[0]
+
+
+def _create(state: dict, body: dict) -> dict:
+    state["next_id"][0] += 1
+    n = state["next_id"][0]
+    payee = body.get("payee_id") or ""
+    twin_acct = next((a for a in state["accounts"] if a["transfer_payee_id"] == payee), None)
+    main = dict(
+        id=f"ynab-new-{n:03d}",
+        account_id=body["account_id"],
+        date=body["date"],
+        amount=body["amount"],
+        payee_name=body.get("payee_name"),
+        memo=body.get("memo"),
+        category_id=body.get("category_id"),
+        cleared=body.get("cleared", "uncleared"),
+        approved=body.get("approved", False),
+        flag_color=body.get("flag_color"),
+        deleted=False,
+        transfer_account_id=twin_acct["id"] if twin_acct else None,
+        transfer_transaction_id=None,
+        subtransactions=[
+            dict(
+                id=f"ynab-sub-{n:03d}-{i}",
+                transaction_id=f"ynab-new-{n:03d}",
+                deleted=False,
+                transfer_account_id=None,
+                transfer_transaction_id=None,
+                payee_name=None,
+                **{k: sub.get(k) for k in ("amount", "category_id", "memo")},
+            )
+            for i, sub in enumerate(body.get("subtransactions") or [])
+        ],
+    )
+    state["txns"].append(main)
+    touched = [main]
+    if twin_acct:
+        back = dict(
+            main,
+            id=f"ynab-new-{n:03d}b",
+            account_id=twin_acct["id"],
+            amount=-main["amount"],
+            payee_name="Transfer",
+            transfer_account_id=main["account_id"],
+            transfer_transaction_id=main["id"],
+            subtransactions=[],
+            category_id=None,
+        )
+        main["transfer_transaction_id"] = back["id"]
+        state["txns"].append(back)
+        touched.append(back)
+    _bump(state, *touched)
+    return main
+
+
+def _handler(state: dict, calls: list, writes: list):
     month_detail, d = state["month_detail"], state["d"]
 
     class Handler(BaseHTTPRequestHandler):
@@ -382,6 +570,8 @@ def _handler(state: dict, calls: list):
             calls.append(path)
             if self.headers.get("Authorization") != f"Bearer {TOKEN}":
                 return self._send({"error": {"id": "401", "name": "unauthorized"}}, 401)
+            if state.get("rate_limit"):
+                return self._send({"error": {"id": "429"}}, 429)
             base = f"/v1/plans/{PLAN}"
             fmt = dict(iso_code="USD", currency_symbol="$", decimal_digits=2)
             if path == "/v1/plans":
@@ -389,7 +579,16 @@ def _handler(state: dict, calls: list):
                     {"data": {"plans": [dict(id=PLAN, name="Synthetic Plan", currency_format=fmt)]}}
                 )
             if path == base:
-                return self._send({"data": {"plan": _export(state), "server_knowledge": 1}})
+                since = query.get("last_knowledge_of_server")
+                since = int(since[0]) if since else None
+                return self._send(
+                    {
+                        "data": {
+                            "plan": _export(state, since),
+                            "server_knowledge": state["knowledge"],
+                        }
+                    }
+                )
             if path == base + "/accounts":
                 return self._send(
                     {"data": {"accounts": state["acct_out"](), "server_knowledge": 1}}
@@ -422,14 +621,111 @@ def _handler(state: dict, calls: list):
                         return self._send({"data": {"month": month_detail(o)}})
             self._send({"error": {"id": "404"}}, 404)
 
+        def _write(self, method):
+            u = urlparse(self.path)
+            length = int(self.headers.get("Content-Length") or 0)
+            body = json.loads(self.rfile.read(length)) if length else {}
+            calls.append(u.path)
+            writes.append((method, u.path, body))
+            if self.headers.get("Authorization") != f"Bearer {TOKEN}":
+                return self._send({"error": {"id": "401", "name": "unauthorized"}}, 401)
+            if method in state.get("fail_after", ()):
+                # YNAB saves the write, then the answer is lost (a timeout / 5xx)
+                if method == "POST":
+                    [_create(state, b) for b in body["transactions"]]
+                return self._send({"error": {"id": "500"}}, 500)
+            if method in state.get("fail_before", ()):
+                return self._send({"error": {"id": "500"}}, 500)
+            if state.get("reject_writes"):
+                return self._send({"error": {"id": "400", "detail": state["reject_writes"]}}, 400)
+            base = f"/v1/plans/{PLAN}"
+            path = u.path
+            if path == base + "/transactions" and method == "POST":
+                made = [_create(state, b) for b in body["transactions"]]
+                ids = [t["id"] for t in made]
+                return self._send(
+                    {
+                        "data": {
+                            "transaction_ids": ids,
+                            "transactions": [_detail(state, t) for t in made],
+                            "server_knowledge": state["knowledge"],
+                        }
+                    },
+                    201,
+                )
+            if path == base + "/transactions" and method == "PATCH":
+                saved = []
+                for op in body["transactions"]:
+                    t = _row(state, op["id"])
+                    if t is None:
+                        return self._send(
+                            {"error": {"id": "400", "detail": "unknown transaction"}}, 400
+                        )
+                    saved += _set(state, t, op)
+                return self._send(
+                    {
+                        "data": {
+                            "transaction_ids": [t["id"] for t in saved],
+                            "transactions": [_detail(state, t) for t in saved],
+                            "server_knowledge": state["knowledge"],
+                        }
+                    }
+                )
+            if path.startswith(base + "/transactions/") and method == "DELETE":
+                t = _row(state, path.rsplit("/", 1)[1])
+                if t is None:
+                    return self._send({"error": {"id": "404"}}, 404)
+                ynab_delete(state, t["id"])
+                return self._send(
+                    {
+                        "data": {
+                            "transaction": _detail(state, t),
+                            "server_knowledge": state["knowledge"],
+                        }
+                    }
+                )
+            if "/months/" in path and method == "PATCH":
+                wanted, cid = path.split("/months/")[1].split("/categories/")
+                for o in (-2, -1, 0, 1):
+                    if month_detail(o)["month"] == wanted:
+                        key = state["cat_ids"][cid]
+                        ynab_budget(state, o, key, body["category"]["budgeted"])
+                        cat = next(c for c in month_detail(o)["categories"] if c["id"] == cid)
+                        return self._send(
+                            {"data": {"category": cat, "server_knowledge": state["knowledge"]}}
+                        )
+            if path.startswith(base + "/categories/") and method == "PATCH":
+                cid = path.rsplit("/", 1)[1]
+                for g in state["groups"]:
+                    for c in g["categories"]:
+                        if c["id"] == cid:
+                            c["note"] = body["category"].get("note")
+                            _bump(state, c)
+                            return self._send(
+                                {"data": {"category": c, "server_knowledge": state["knowledge"]}}
+                            )
+            self._send({"error": {"id": "404"}}, 404)
+
+        def do_POST(self):
+            self._write("POST")
+
+        def do_PATCH(self):
+            self._write("PATCH")
+
+        def do_DELETE(self):
+            self._write("DELETE")
+
     return Handler
 
 
 def serve(today: date | None = None, port: int = 0, negative_assignment: bool = False):
     """Start the stub on a daemon thread. Returns ``(server, base_url, calls)``; call
-    ``server.shutdown()`` when done. ``calls`` records every request path."""
+    ``server.shutdown()`` when done. ``calls`` records every request path; ``server.writes`` the
+    (method, path, body) of each write and ``server.state`` is the live YNAB (see ``ynab_edit``)."""
     state = build(today or date.today(), negative_assignment)
     calls: list = []
-    server = ThreadingHTTPServer(("127.0.0.1", port), _handler(state, calls))
+    writes: list = []
+    server = ThreadingHTTPServer(("127.0.0.1", port), _handler(state, calls, writes))
+    server.state, server.writes = state, writes  # tests edit "YNAB" and read what was sent
     threading.Thread(target=server.serve_forever, daemon=True).start()
     return server, f"http://127.0.0.1:{server.server_address[1]}/v1", calls

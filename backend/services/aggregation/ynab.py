@@ -124,17 +124,35 @@ class _TooLarge(Exception):
     """Internal: the response body passed the caller's byte cap."""
 
 
-def _safe_get(
-    store: YnabConfigStore, path: str, params: dict, *, max_bytes: int = _MAX_RESPONSE_BYTES
+def _error_detail(resp: httpx.Response) -> str:
+    """YNAB's own validation message ("date cannot be in the future"), for a 4xx. Third-party
+    text, so it is sanitized and capped; never anything from the request, so never the token."""
+    try:
+        detail = resp.json()["error"]["detail"]
+    except (ValueError, KeyError, TypeError):
+        return ""
+    return sanitize_untrusted(str(detail or ""), max_len=200).strip()
+
+
+def _safe_send(
+    store: YnabConfigStore,
+    method: str,
+    path: str,
+    params: dict | None = None,
+    body: dict | None = None,
+    *,
+    max_bytes: int = _MAX_RESPONSE_BYTES,
 ) -> httpx.Response:
-    """GET wrapper for the YNAB API that NEVER lets a raw exception escape (mirrors
-    ``lunch_money._safe_get``) and bounds the response body at ``_MAX_RESPONSE_BYTES``.
-    Raises ``ValidationError`` when no token is saved, ``ExternalServiceError`` (status code
-    / exception class only — no token) on a transport/HTTP failure OR any other unexpected
-    exception raised while building/sending the request (a non-ASCII token raising
-    ``UnicodeEncodeError`` out of httpx's own header encoding, for instance — not an
-    ``httpx.HTTPError`` subclass, so it would otherwise reach ``last_error``/logs
-    unsanitized; see the Lunch Money security-review finding this mirrors)."""
+    """The ONE way this app talks to YNAB. Request wrapper that NEVER lets a raw exception
+    escape (mirrors ``lunch_money._safe_get``) and bounds the response body at ``max_bytes``.
+    The base URL is the fixed ``API_BASE`` and the Bearer token comes from the stored config,
+    so a caller can neither redirect a request nor see the credential. Raises
+    ``ValidationError`` when no token is saved, ``ExternalServiceError`` (status code / exception
+    class / YNAB's own validation message only — no token) on a transport/HTTP failure OR any
+    other unexpected exception raised while building/sending the request (a non-ASCII token
+    raising ``UnicodeEncodeError`` out of httpx's own header encoding, for instance — not an
+    ``httpx.HTTPError`` subclass, so it would otherwise reach ``last_error``/logs unsanitized;
+    see the Lunch Money security-review finding this mirrors)."""
     token = store.access_token()
     if not token:
         raise ValidationError("YNAB is not configured (no access token)")
@@ -142,32 +160,41 @@ def _safe_get(
         # Streamed, so the cap bounds MEMORY: the body is abandoned the moment it passes
         # ``max_bytes`` instead of being fully buffered before a length check.
         with httpx.stream(
-            "GET",
+            method,
             f"{API_BASE}{path}",
             params=params,
             headers={"Authorization": f"Bearer {token}"},
             timeout=_HTTP_TIMEOUT,
+            **({"json": body} if body is not None else {}),
         ) as resp:
-            resp.raise_for_status()
             if int(resp.headers.get("content-length") or 0) > max_bytes:
                 raise _TooLarge
-            body = bytearray()
+            payload = bytearray()
             for chunk in resp.iter_bytes():
-                body += chunk
-                if len(body) > max_bytes:
+                payload += chunk
+                if len(payload) > max_bytes:
                     raise _TooLarge
             status = resp.status_code
     except _TooLarge:
         raise ExternalServiceError(
             f"YNAB response too large (> {max_bytes} bytes); refused."
         ) from None
-    except httpx.HTTPStatusError as exc:
-        raise ExternalServiceError(f"YNAB HTTP {exc.response.status_code}") from None
     except httpx.HTTPError as exc:
         raise ExternalServiceError(f"YNAB request failed ({type(exc).__name__})") from None
     except Exception as exc:
         raise ExternalServiceError(f"YNAB request failed ({type(exc).__name__})") from None
-    return httpx.Response(status, content=bytes(body))
+    response = httpx.Response(status, content=bytes(payload))
+    if status >= 400:
+        detail = _error_detail(response)
+        raise ExternalServiceError(f"YNAB HTTP {status}" + (f": {detail}" if detail else ""))
+    return response
+
+
+def _safe_get(
+    store: YnabConfigStore, path: str, params: dict, *, max_bytes: int = _MAX_RESPONSE_BYTES
+) -> httpx.Response:
+    """GET through ``_safe_send``."""
+    return _safe_send(store, "GET", path, params, max_bytes=max_bytes)
 
 
 def list_budgets(store: YnabConfigStore) -> list[dict]:
@@ -394,6 +421,13 @@ def fetch_window(
     YNAB's transactions endpoint is not paginated."""
     cfg = store.get()
     budget_id = cfg.get("budget_id") or _resolve_single_budget(store)
+    from backend.services import ynab_sync
+
+    if ynab_sync.plan_in_sync(budget_id):
+        raise ValidationError(
+            "The two-way YNAB sync is on for this plan and already brings its transactions in "
+            "(and sends yours back); fetching them again would book each one twice."
+        )
     currency = (store.get().get("budget_currency") or ledger_service.base_currency()).upper()
 
     if accounts_only:
