@@ -3,12 +3,13 @@ import { authFetch } from '../../../api/client'
 import { invalidateQueryCache, useQueryCache } from '../../../state/queryCache'
 import { fDateTime } from '../../../utils/format'
 import type { BadgeTone } from '../../ui'
+import type { Version } from './sync'
 
 // Import runs: every Import / Verify / Preview of a provider's importer is a record on the
 // server (GET /api/imports/runs), so a reload, another device or a restart finds it again. The
 // list carries summaries; a run opened as a report carries the whole record.
 
-export type RunKind = 'import' | 'verify' | 'preview'
+export type RunKind = 'import' | 'verify' | 'preview' | 'sync'
 export type RunStatus = 'running' | 'done' | 'failed' | 'interrupted'
 
 export interface RunSummary {
@@ -80,7 +81,59 @@ export interface Preview {
   money_data: string[]
   prune: { categories: string[]; groups: string[] }
 }
+export interface FieldChange {
+  name: string
+  before: string
+  after: string
+}
+export interface TxnChange {
+  direction: 'sent' | 'pulled'
+  txn_id: string | null
+  date: string | null
+  payee: string | null
+  account: string | null
+  amount: number | null
+  currency: string
+  action: 'created' | 'updated' | 'deleted'
+  fields: FieldChange[]
+}
+export interface AssignedChange {
+  direction: 'sent' | 'pulled'
+  category: string
+  month: string
+  before: number
+  after: number
+}
+export interface SyncConflict {
+  id: string
+  description: string
+  reason: string
+  onw_value: Version | null
+  ynab_value: Version | null
+  status: 'open'
+}
+export interface Note {
+  item: string
+  reason: string
+}
+export interface SyncTotals {
+  sent: number
+  pulled: number
+  assigned: number
+  conflicts: number
+  deferred: number
+  errors: number
+}
 export interface RunRecord extends RunSummary {
+  // a sync run's itemized record (kind === 'sync')
+  requests_used?: number
+  totals?: SyncTotals
+  txn_changes?: TxnChange[]
+  assigned_changes?: AssignedChange[]
+  conflicts?: SyncConflict[]
+  deferred?: Note[]
+  errors?: Note[]
+  not_stored?: Record<string, number>
   log: { at: string; line: string }[]
   counts: Record<string, Counts>
   problems: Problem[]
@@ -95,6 +148,7 @@ export const KIND_LABEL: Record<RunKind, string> = {
   import: 'Import',
   verify: 'Verify',
   preview: 'Preview',
+  sync: 'Sync',
 }
 export const STATUS_LABEL: Record<RunStatus, string> = {
   running: 'Running',

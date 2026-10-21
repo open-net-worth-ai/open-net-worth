@@ -14,6 +14,7 @@ import {
 } from '../../ui'
 import { fTime } from '../../../utils/format'
 import { ProblemList, ResultsTable, VerificationBody } from './ReportTables'
+import { SyncSections } from './SyncReport'
 import {
   KIND_LABEL,
   STATUS_LABEL,
@@ -88,6 +89,9 @@ export function RunReport({ runId, onBack }: { runId: string; onBack: () => void
           { label: 'Started', value: formatWhen(r.started_at) },
           { label: 'Duration', value: formatDuration(r) },
           { label: 'Plan', value: r.plan_name || r.plan_id },
+          ...(r.kind === 'sync' && r.requests_used != null
+            ? [{ label: 'YNAB requests', value: String(r.requests_used) }]
+            : []),
         ]}
       />
       {r.outcome && <Text size="sm">{r.outcome}</Text>}
@@ -125,6 +129,7 @@ function Progress({ run }: { run: RunRecord }) {
 }
 
 function Sections({ run }: { run: RunRecord }) {
+  if (run.kind === 'sync') return <SyncSections run={run} />
   const problems = [...run.problems, ...run.warnings]
   return (
     <>

@@ -32,6 +32,7 @@ const FILTERS: { value: KindFilter; label: string }[] = [
   { value: 'import', label: KIND_LABEL.import },
   { value: 'verify', label: KIND_LABEL.verify },
   { value: 'preview', label: KIND_LABEL.preview },
+  { value: 'sync', label: KIND_LABEL.sync },
 ]
 
 // Run history: every import, verify and preview of the provider, newest first. Archiving only
@@ -105,6 +106,7 @@ export function RunHistory(props: {
                   <td data-label="Kind">
                     <Cluster gap="--space-2">
                       <Badge tone="muted">{KIND_LABEL[run.kind]}</Badge>
+                      {run.trigger === 'scheduled' && <Tag tone="muted">Scheduled</Tag>}
                       {run.archived_at && <Tag tone="muted">Archived</Tag>}
                     </Cluster>
                   </td>

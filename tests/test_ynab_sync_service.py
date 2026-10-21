@@ -34,7 +34,7 @@ def enable(interval="1h"):
 
 
 def sync():
-    runner._locked_run("test")
+    runner._locked_run("manual")
     run = ynab_sync.status()["last_run"]
     assert run["ok"], run["error"]
     return run
@@ -475,7 +475,7 @@ def test_a_read_that_would_delete_most_of_the_ledger_is_refused(world, monkeypat
     for t in list(world.state["txns"]):
         if not t["deleted"]:
             ynab_stub.ynab_delete(world.state, t["id"])
-    runner._locked_run("test")
+    runner._locked_run("manual")
     run = ynab_sync.status()["last_run"]
     assert not run["ok"] and "would delete" in run["error"]
     assert len([t for t in ledger_service.transactions.all() if not t.get("deleted")]) > 15
@@ -502,7 +502,7 @@ def test_the_token_never_appears_in_status_errors_or_logs(world, caplog):
     enable()
     sync()
     YnabConfigStore().update({"access_token": "SUPER-SECRET-TOKEN"})
-    runner._locked_run("test")
+    runner._locked_run("manual")
     run = ynab_sync.status()["last_run"]
     assert not run["ok"] and "401" in run["error"]
     blob = json.dumps(ynab_sync.status()) + caplog.text
@@ -548,7 +548,7 @@ def test_a_second_run_while_one_is_running_is_refused(world):
 def test_the_scheduler_tick_runs_a_due_sync_once(world):
     enable("15m")
     assert ynab_sync.run_if_due() is True
-    assert ynab_sync.status()["last_run"]["trigger"] == "schedule"
+    assert ynab_sync.status()["last_run"]["trigger"] == "scheduled"
     assert ynab_sync.status()["next_run_at"] and ynab_sync.run_if_due() is False
 
 
@@ -645,7 +645,7 @@ def test_a_failure_after_the_creates_cannot_orphan_them(world):
     new_expense("Kiosk")
     ledger_service.bulk_delete_transactions([row("Bistro")["id"]])
     world.state["fail_before"] = ["DELETE"]
-    runner._locked_run("test")
+    runner._locked_run("manual")
     assert not ynab_sync.status()["last_run"]["ok"]
     (kiosk,) = ledger_rows("Kiosk")
     assert [r["ref"] for r in kiosk["external_refs"]]  # linked the moment YNAB confirmed it
@@ -660,7 +660,7 @@ def test_a_create_whose_answer_was_lost_is_claimed_not_sent_twice(world):
     sync()
     new_expense("Kiosk")
     world.state["fail_after"] = ["POST"]
-    runner._locked_run("test")
+    runner._locked_run("manual")
     assert not ynab_sync.status()["last_run"]["ok"] and not ledger_rows("Kiosk")[0]["external_refs"]
     world.state["fail_after"] = []
     run = sync()
@@ -747,7 +747,7 @@ def test_a_rate_limit_fails_fast_charges_the_send_and_defers(world, monkeypatch)
     monkeypatch.setattr(time, "sleep", lambda *_: (_ for _ in ()).throw(AssertionError("slept")))
     enable()
     world.state["rate_limit"] = True
-    runner._locked_run("test")
+    runner._locked_run("manual")
     run = ynab_sync.status()["last_run"]
     assert not run["ok"] and "rate limit" in run["error"] and run["requests"] == 1
 

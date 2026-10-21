@@ -43,7 +43,11 @@ def blank() -> dict:
 
 
 def load() -> dict:
-    return {**blank(), **_store.doc("state")}
+    state = {**blank(), **_store.doc("state")}
+    last = state["last_run"]
+    if last and last.get("trigger") == "schedule":  # the value before the run records existed
+        state["last_run"] = {**last, "trigger": "scheduled"}
+    return state
 
 
 def save(state: dict) -> None:

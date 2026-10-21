@@ -8,6 +8,7 @@ import hashlib
 from datetime import datetime, timezone
 
 from backend.db.ynab_sync_store import YnabConflictStore
+from backend.services.ynab_sync import recorder
 
 CONFLICT = "conflict"  # both sides changed it and they disagree
 UNSUPPORTED = "unsupported"  # one side changed it in a way the other side's API cannot take
@@ -37,7 +38,9 @@ def file(kind: str, key: str, title: str, reason: str, onw, ynab, **extra) -> di
         "resolved_at": None,
         **extra,
     }
-    return _store.upsert(item)
+    saved = _store.upsert(item)
+    recorder.conflict(item)
+    return saved
 
 
 def close(key: str) -> None:

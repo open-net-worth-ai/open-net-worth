@@ -9,7 +9,7 @@ from collections import Counter
 from backend.core.errors import ConflictError, OpenNetWorthError
 from backend.services import ledger as ledger_service
 from backend.services.ynab_migration.mapping import SOURCE
-from backend.services.ynab_sync import conflicts, pull, push, units
+from backend.services.ynab_sync import conflicts, pull, push, recorder, units
 from backend.services.ynab_sync.baselines import Baselines
 from backend.services.ynab_sync.canon import canon, view
 from backend.services.ynab_sync.client import YnabClient
@@ -81,6 +81,10 @@ def _file(ctx: Context, unit: Unit, kind: str, reason: str) -> None:
     )
 
 
+def _title(unit: Unit) -> str:
+    return ((unit.row or {}).get("description") or "").strip() or "(no payee)"
+
+
 def _apply_pull(ctx: Context, unit: Unit, base: Baselines, tally: Counter) -> None:
     try:
         now, row_id = pull.apply(unit.row, unit.rendered if unit.ynab is not None else None)
@@ -96,6 +100,7 @@ def _apply_pull(ctx: Context, unit: Unit, base: Baselines, tally: Counter) -> No
         base.drop_txn(row_id) if row_id else None
     else:
         base.set_txn(row_id, unit.refs, now)
+    recorder.txn_change("pulled", ctx, row_id, unit.onw, unit.ynab)
     tally["pulled"] += 1
 
 
@@ -190,12 +195,15 @@ def _push_all(
     for u, reason in out.failed:
         _file(ctx, u, conflicts.FAILED, f"YNAB did not accept it: {reason}")
     tally["sent"] += len(out.sent)
+    for u in out.deferred:
+        recorder.deferred(_title(u), "Waiting for the next run (YNAB request limit).")
     return [u.onw_id for u in out.deferred if u.onw_id]
 
 
 def _recorded(ctx: Context, unit: Unit, out: push.Outcome, base: Baselines) -> None:
     """Link and baseline one confirmed unit now. If the ledger refuses the link, YNAB still holds
     the row: file it, and the unowned row is claimed by the ledger row on the next read."""
+    recorder.txn_change("sent", ctx, unit.onw_id, unit.base, unit.onw)
     try:
         _record_sent(unit, out, base)
     except OpenNetWorthError as exc:

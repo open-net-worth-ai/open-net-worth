@@ -40,6 +40,15 @@ DETAIL = (
     "backup_name",
     "preview",
     "verification",
+    # a sync run's itemized record (services/ynab_sync/recorder.py)
+    "requests_used",
+    "totals",
+    "txn_changes",
+    "assigned_changes",
+    "conflicts",
+    "deferred",
+    "errors",
+    "not_stored",
 )
 
 
@@ -92,13 +101,11 @@ class ImportRunStore:
             row = conn.execute(select(import_runs).where(import_runs.c.id == run_id)).first()
         return _join(row) if row else None
 
-    def latest(self, provider: str) -> dict | None:
-        query = (
-            select(import_runs)
-            .where(import_runs.c.provider == provider)
-            .order_by(import_runs.c.started_at.desc(), import_runs.c.id.desc())
-            .limit(1)
-        )
+    def latest(self, provider: str, kinds: tuple[str, ...] | None = None) -> dict | None:
+        query = select(import_runs).where(import_runs.c.provider == provider)
+        if kinds:
+            query = query.where(import_runs.c.kind.in_(kinds))
+        query = query.order_by(import_runs.c.started_at.desc(), import_runs.c.id.desc()).limit(1)
         with self._eng().connect() as conn:
             row = conn.execute(query).first()
         return _join(row) if row else None

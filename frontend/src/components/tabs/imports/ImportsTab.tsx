@@ -3,6 +3,7 @@ import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { Container, PageTabs, Stack } from '../../ui'
 import { RunHistory } from './RunHistory'
 import { RunReport } from './RunReport'
+import { SyncPanel } from './SyncPanel'
 import { YnabImport } from './YnabImport'
 import { useRuns } from './runs'
 
@@ -45,6 +46,7 @@ export function ImportsTab() {
               ariaLabel="Providers"
             />
             <YnabImport runs={runs.data} onStarted={() => void runs.refresh()} onOpen={open} />
+            <SyncPanel onOpen={open} />
             <RunHistory
               runs={runs.data}
               error={runs.error}

@@ -263,13 +263,20 @@ function PlanPicker(props: {
   )
 }
 
+const STRIP_LABEL = {
+  preview: 'Reading your plan',
+  import: 'Working',
+  verify: 'Working',
+  sync: 'Syncing',
+}
+
 function LiveStrip({ run, onOpen }: { run: RunSummary; onOpen: (id: string) => void }) {
   const { done, total } = run.progress
   return (
     <Stack gap="--space-2">
       <Cluster justify="between" gap="--space-3">
         <Text size="sm" weight={600}>
-          {run.kind === 'preview' ? 'Reading your plan' : 'Working'}: {run.phase}
+          {STRIP_LABEL[run.kind]}: {run.phase}
         </Text>
         <Button size="sm" variant="secondary" onClick={() => onOpen(run.id)}>
           View live report

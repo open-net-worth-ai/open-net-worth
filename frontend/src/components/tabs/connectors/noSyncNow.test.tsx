@@ -4,10 +4,10 @@
 // over all 8 provider config sections — none of them may render "Sync now" or fire a request
 // to a `*/sync` URL. Sync now the mechanism is gone; fetching is a Lucius turn now.
 //
-// The one deliberate exception (owner decision, 2026-10-20): YNAB's scheduled two-way sync card
-// has its own "Sync now" and lives under /api/ynab/sync. It is not the retired fetch-and-book
-// button — it reconciles both ways — so for YNAB exactly that one button and that one URL are
-// allowed, and nothing else.
+// The one deliberate exception (owner decision, 2026-10-20) lives on the Imports & sync page, not
+// on a connector card: YNAB's scheduled two-way sync has its own "Sync now" under
+// /api/ynab/sync (imports/SyncPanel.test.tsx). The YNAB card only READS that status for its
+// one-line summary, so for YNAB exactly that one GET is allowed, and no button.
 
 import type { JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -160,13 +160,11 @@ describe.each(SECTIONS)(
       render(<Component />)
 
       await waitFor(() => expect(screen.getByText('Accounts')).toBeTruthy())
-      const twoWay = provider === 'ynab' ? 1 : 0
-      if (twoWay) await waitFor(() => expect(screen.getByText('Two-way sync')).toBeTruthy())
-      expect(screen.queryAllByRole('button', { name: /sync now/i })).toHaveLength(twoWay)
-      expect(screen.queryAllByText(/sync now/i)).toHaveLength(twoWay)
+      expect(screen.queryByRole('button', { name: /sync now/i })).toBeNull()
+      expect(screen.queryByText(/sync now/i)).toBeNull()
       expect(screen.queryByText(/poll interval/i)).toBeNull()
       const syncCalls = mockAuthFetch.mock.calls.filter(
-        (c) => String(c[0]).includes('/sync') && !(twoWay && String(c[0]) === '/api/ynab/sync'),
+        (c) => String(c[0]).includes('/sync') && String(c[0]) !== '/api/ynab/sync',
       )
       expect(syncCalls).toEqual([])
       // Sanity: the status endpoint for THIS provider was actually hit (proves the mock wired

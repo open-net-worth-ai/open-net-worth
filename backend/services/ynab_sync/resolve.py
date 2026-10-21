@@ -4,11 +4,13 @@ YNAB; "Keep YNAB's" writes YNAB's current version into the ledger."""
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from backend.core import audit_context, data_events
 from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.db.ynab_sync_store import YnabMirrorStore
+from backend.services import import_runs, planning
 from backend.services import ledger as ledger_service
-from backend.services import planning
 from backend.services.ynab_sync import (
     assigned,
     conflicts,
@@ -16,6 +18,7 @@ from backend.services.ynab_sync import (
     delta,
     pull,
     push,
+    recorder,
     runner,
     units,
 )
@@ -38,7 +41,13 @@ def resolve(conflict_id: str, keep: str) -> dict:
         raise NotFoundError("That review item is already resolved.")
     if not runner._lock.acquire(blocking=False):
         raise ConflictError("A YNAB sync is running; resolve this when it finishes.")
+    if import_runs.has_running("ynab"):
+        runner._lock.release()
+        raise ConflictError("A YNAB import is running; resolve this when it finishes.")
     token = audit_context.set_audit_scope("user", sync_state.SURFACE, note="review list")
+    rec = recorder.Recorder()
+    rec_token = recorder.activate(rec)
+    started = datetime.now(timezone.utc)
     try:
         st = sync_state.load()
         meta, mirror_store = sync_state.load_meta(), YnabMirrorStore()
@@ -56,8 +65,13 @@ def resolve(conflict_id: str, keep: str) -> dict:
         sync_state.save_meta(meta)
         conflicts.close(item["key"])
     finally:
+        recorder.deactivate(rec_token)
         audit_context.clear_audit_scope(token)
         runner._lock.release()
+    if rec.sent_to_ynab():
+        runner.store_record(
+            st, rec, "manual", started, None, "Resolved a review item", client.budget.used
+        )
     data_events.publish(["*"])
     return runner.status()
 
@@ -82,6 +96,8 @@ def _assigned(item: dict, keep: str, client: YnabClient, base: Baselines, meta: 
     if rejected:
         raise ConflictError(f"YNAB did not accept it: {rejected[0][1]}")
     base.set_assigned(it.month, it.cid, it.onw)
+    name = next((c["name"] for c in meta["categories"] if c["id"] == it.cid), "Category")
+    recorder.assigned_change("sent", name, it.month, it.ynab, it.onw)
 
 
 def _unit(ctx, item: dict, base: Baselines) -> Unit:
@@ -142,4 +158,5 @@ def _transaction(ctx, item: dict, keep: str, client: YnabClient, base: Baselines
         raise ConflictError(f"YNAB cannot take this change: {why}")
     if out.deferred:
         raise ConflictError("Out of YNAB requests for now; try again shortly.")
+    recorder.txn_change("sent", ctx, send.onw_id, send.base, send.onw)
     _record_sent(send, out, base)

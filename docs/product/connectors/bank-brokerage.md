@@ -193,7 +193,7 @@ once as a labelled balance adjustment. Goals and scheduled transactions are not 
 
 ### Keep the plan in sync both ways
 
-After the migration, **Two-way sync** (the next card on the same page) keeps this book and that
+After the migration, the **Sync** panel on [Imports & sync](../features/imports-and-sync.md) keeps this book and that
 YNAB plan in step, on a schedule: **transactions** (new, edited, deleted, categorized, memo,
 cleared, splits, transfers) and each **month's Assigned per category**, in both directions. Accounts,
 goals and scheduled transactions are not synced, and a card's payment category is read from YNAB
@@ -202,8 +202,10 @@ only — its Assigned is never sent.
 1. Pick the migrated plan, choose a **Schedule** (every 15 or 30 minutes, hourly — the default —
    every 6 hours, daily, or **Manual only**) and switch **Sync automatically** on. The first run
    starts within a minute. **Sync now** runs it on demand; only one run happens at a time.
-2. The card shows the **last run** and what it did ("3 sent to YNAB, 1 pulled, 1 needs review")
-   and the **next run**.
+2. The panel shows the **last run** and what it did ("3 sent to YNAB, 1 pulled, 1 needs review")
+   and the **next run**; the YNAB connector card carries the one-line version. Each run's full
+   report (every transaction and Assigned figure it moved) is in the
+   [run history](../features/imports-and-sync.md#reading-a-report).
 
 **What a run does.** It reads only what changed in YNAB since the last run (one request), compares
 it with what changed here, and applies each side's changes to the other. Your first run also picks

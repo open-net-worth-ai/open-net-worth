@@ -108,3 +108,106 @@ export function importRun(over: Partial<RunRecord> = {}): RunRecord {
     ...over,
   })
 }
+
+export const SYNC_ITEM = {
+  id: 'c_1',
+  kind: 'conflict' as const,
+  entity: 'txn' as const,
+  title: 'Bistro',
+  reason: 'Changed in both Open Net Worth and YNAB since the last sync.',
+  onw: { date: '2026-10-01', account: 'Visa', payee: 'Bistro', memo: 'mine', amount: -60 },
+  ynab: { date: '2026-10-01', account: 'Visa', payee: 'Bistro', memo: 'theirs', amount: -60 },
+}
+
+export function syncStatus(over: Record<string, unknown> = {}) {
+  return {
+    token_saved: true,
+    enabled: true,
+    interval: '1h',
+    intervals: ['15m', '30m', '1h', '6h', 'daily', 'manual'],
+    plan_id: 'p1',
+    plan_name: 'Household',
+    running: false,
+    run_id: null,
+    last_run: {
+      trigger: 'scheduled',
+      started_at: new Date().toISOString(),
+      finished_at: new Date().toISOString(),
+      ok: true,
+      error: null,
+      requests: 2,
+      summary: '3 sent to YNAB, 1 pulled, 1 needs review',
+      run_id: null,
+    },
+    next_run_at: new Date(Date.now() + 3600_000).toISOString(),
+    conflicts: [SYNC_ITEM],
+    ...over,
+  }
+}
+
+const TOTALS = { sent: 2, pulled: 1, assigned: 1, conflicts: 1, deferred: 1, errors: 1 }
+
+export function syncRun(over: Partial<RunRecord> = {}): RunRecord {
+  return run({
+    kind: 'sync',
+    outcome: '2 sent to YNAB, 1 pulled',
+    requests_used: 3,
+    preview: null,
+    totals: TOTALS,
+    txn_changes: [
+      {
+        direction: 'sent',
+        txn_id: 't1',
+        date: '2026-10-02',
+        payee: 'Bistro',
+        account: 'Visa',
+        amount: -60,
+        currency: 'USD',
+        action: 'updated',
+        fields: [
+          { name: 'Amount', before: '-60.00', after: '-62.50' },
+          { name: 'Cleared', before: 'no', after: 'yes' },
+        ],
+      },
+      {
+        direction: 'sent',
+        txn_id: 't2',
+        date: '2026-10-03',
+        payee: 'Cafe',
+        account: 'Checking',
+        amount: -4.5,
+        currency: 'USD',
+        action: 'created',
+        fields: [],
+      },
+      {
+        direction: 'pulled',
+        txn_id: 't3',
+        date: '2026-10-04',
+        payee: 'Grocer',
+        account: 'Checking',
+        amount: -80.5,
+        currency: 'USD',
+        action: 'deleted',
+        fields: [],
+      },
+    ],
+    assigned_changes: [
+      { direction: 'sent', category: 'Rent', month: '2026-10', before: 1200, after: 1300 },
+    ],
+    conflicts: [
+      {
+        id: 'c_1',
+        description: 'Bistro',
+        reason: 'Changed in both Open Net Worth and YNAB since the last sync.',
+        onw_value: SYNC_ITEM.onw,
+        ynab_value: SYNC_ITEM.ynab,
+        status: 'open',
+      },
+    ],
+    deferred: [{ item: 'Lunch', reason: 'Waiting for the next run (YNAB request limit).' }],
+    errors: [{ item: 'Taxi', reason: 'YNAB did not accept it: bad date' }],
+    not_stored: {},
+    ...over,
+  })
+}

@@ -8,7 +8,7 @@ import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 import { ImportsTab } from './ImportsTab'
 import { clearQueryCache } from '../../../state/queryCache'
-import { PLANS, PREVIEW, importRun, run } from './importsFixtures'
+import { PLANS, PREVIEW, importRun, run, syncRun, syncStatus } from './importsFixtures'
 import type { RunRecord } from './runs'
 
 const authFetch = vi.hoisted(() => vi.fn())
@@ -74,6 +74,7 @@ beforeEach(() => {
     if (path === '/api/ynab/status')
       return ok({ has_access_token: hasToken, budget_name: 'Household' })
     if (path === '/api/ynab/budgets') return ok(PLANS)
+    if (path === '/api/ynab/sync') return ok(syncStatus({ conflicts: [], token_saved: hasToken }))
     if (path === '/api/imports/runs') return ok({ runs: summaries(url.includes('archived=true')) })
     const one = /\/api\/imports\/runs\/(\w+)$/.exec(path)?.[1]
     if (one) return ok(runs.find((r) => r.id === one))
@@ -232,6 +233,25 @@ describe('Run history', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Preview' }))
     expect(screen.queryByText('an import')).toBeNull()
     expect(screen.getByText('a preview')).toBeTruthy()
+  })
+
+  it('lists a scheduled sync run and filters to sync runs', async () => {
+    runs = [
+      importRun({ outcome: 'an import' }),
+      syncRun({ trigger: 'scheduled', outcome: 'a sync' }),
+    ]
+    render(<ImportsTab />)
+    await screen.findByText('a sync')
+    expect(screen.getByText('Scheduled')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Sync' }))
+    expect(screen.queryByText('an import')).toBeNull()
+    expect(screen.getByText('a sync')).toBeTruthy()
+  })
+
+  it('shows the Sync panel on the page', async () => {
+    render(<ImportsTab />)
+    expect(await screen.findByLabelText('Schedule')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Sync now' })).toBeTruthy()
   })
 
   it('hides archived runs until asked, then mutes them with a tag', async () => {

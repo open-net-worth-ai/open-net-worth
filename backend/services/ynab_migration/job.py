@@ -29,6 +29,7 @@ from backend.services.ynab_migration import apply, guards, mapping, report, sour
 logger = logging.getLogger(__name__)
 
 PROVIDER = "ynab"
+KINDS = ("import", "verify", "preview")  # a sync run is the sync's, not the migration's
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ynab-migration")
 
@@ -58,7 +59,10 @@ class _Run:
 
 def status() -> dict:
     """The newest run, plus whether a token is saved. Safe to poll."""
-    return {"token_saved": YnabConfigStore().is_configured(), "job": import_runs.latest(PROVIDER)}
+    return {
+        "token_saved": YnabConfigStore().is_configured(),
+        "job": import_runs.latest(PROVIDER, KINDS),
+    }
 
 
 def _foreign_accounts_exist() -> bool:
@@ -69,8 +73,8 @@ def _foreign_accounts_exist() -> bool:
 
 
 def start(kind: str, plan_id: str, confirm_nonempty: bool = False) -> dict:
-    if kind not in import_runs.KINDS:
-        raise ValidationError(f"kind must be one of {', '.join(import_runs.KINDS)}")
+    if kind not in KINDS:
+        raise ValidationError(f"kind must be one of {', '.join(KINDS)}")
     if not (plan_id or "").strip():
         raise ValidationError("pick the YNAB plan to migrate")
     if not YnabConfigStore().is_configured():
@@ -80,6 +84,10 @@ def start(kind: str, plan_id: str, confirm_nonempty: bool = False) -> dict:
             "This book already has accounts that did not come from YNAB. Confirm to import "
             "alongside them."
         )
+    from backend.services.ynab_sync import runner  # lazily: the sync imports this package
+
+    if runner.is_running():
+        raise ConflictError("A YNAB sync is running; start the import when it finishes.")
     run = import_runs.start(PROVIDER, kind, plan_id.strip())
     try:
         _POOL.submit(_run, run["id"], kind, plan_id.strip(), confirm_nonempty)

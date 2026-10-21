@@ -53,7 +53,7 @@ def test_one_run_per_provider_at_a_time(db_isolated):
 
 def test_kind_and_trigger_are_validated(db_isolated):
     with pytest.raises(ValidationError):
-        import_runs.start("ynab", "sync", "plan-1")
+        import_runs.start("ynab", "bogus", "plan-1")
     with pytest.raises(ValidationError):
         import_runs.start("ynab", "import", "plan-1", trigger="hourly")
 
@@ -218,3 +218,13 @@ def test_a_refused_row_carries_a_plain_language_hint():
         "refused": 2,
         "failed": 1,
     }
+
+
+def test_a_finished_run_can_be_recorded_without_taking_the_running_slot(db_isolated):
+    import_runs.start("ynab", "import", "plan-1")  # an import is in progress
+    run = import_runs.record(
+        "ynab", "sync", "plan-1", "scheduled", "done", "2026-10-21T08:00:00+00:00", outcome="x"
+    )
+    stored = import_runs.get(run["id"])
+    assert (stored["kind"], stored["trigger"], stored["status"]) == ("sync", "scheduled", "done")
+    assert stored["started_at"] == "2026-10-21T08:00:00+00:00" and stored["finished_at"]

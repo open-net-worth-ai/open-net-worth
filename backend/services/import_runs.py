@@ -22,7 +22,7 @@ from backend.core import data_events
 from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.db.import_run_store import COLUMNS, ImportRunStore
 
-KINDS = ("import", "verify", "preview")
+KINDS = ("import", "verify", "preview", "sync")
 TRIGGERS = ("manual", "scheduled")
 LIST_LIMIT = 200
 _lock = threading.Lock()
@@ -32,41 +32,71 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def start(provider: str, kind: str, plan_id: str, trigger: str = "manual") -> dict:
-    """Open a ``running`` record. At most one run per provider is in progress at a time."""
+def _validated(kind: str, trigger: str) -> None:
     if kind not in KINDS:
         raise ValidationError(f"kind must be one of {', '.join(KINDS)}")
     if trigger not in TRIGGERS:
         raise ValidationError(f"trigger must be one of {', '.join(TRIGGERS)}")
+
+
+def _blank(provider: str, kind: str, plan_id: str, trigger: str, plan_name: str) -> dict:
+    return {
+        "id": uuid.uuid4().hex,
+        "provider": provider,
+        "kind": kind,
+        "trigger": trigger,
+        "status": "running",
+        "started_at": _now(),
+        "finished_at": None,
+        "plan_id": plan_id,
+        "plan_name": plan_name,
+        "outcome": "",
+        "archived_at": None,
+        "phase": "starting",
+        "progress": {"done": 0, "total": 0},
+        "error": None,
+        "log": [],
+        "counts": {},
+        "problems": [],
+        "warnings": [],
+        "book_state": None,
+        "backup_name": None,
+        "preview": None,
+        "verification": None,
+    }
+
+
+def start(
+    provider: str, kind: str, plan_id: str, trigger: str = "manual", plan_name: str = ""
+) -> dict:
+    """Open a ``running`` record. At most one run per provider is in progress at a time."""
+    _validated(kind, trigger)
     store = ImportRunStore()
     with _lock:
         if store.has_running(provider):
-            raise ConflictError(f"A {provider} import is already running.")
-        run = {
-            "id": uuid.uuid4().hex,
-            "provider": provider,
-            "kind": kind,
-            "trigger": trigger,
-            "status": "running",
-            "started_at": _now(),
-            "finished_at": None,
-            "plan_id": plan_id,
-            "plan_name": "",
-            "outcome": "",
-            "archived_at": None,
-            "phase": "starting",
-            "progress": {"done": 0, "total": 0},
-            "error": None,
-            "log": [],
-            "counts": {},
-            "problems": [],
-            "warnings": [],
-            "book_state": None,
-            "backup_name": None,
-            "preview": None,
-            "verification": None,
-        }
+            raise ConflictError(f"A {provider} run is already in progress.")
+        run = _blank(provider, kind, plan_id, trigger, plan_name)
         store.insert(run)
+    return run
+
+
+def record(
+    provider: str,
+    kind: str,
+    plan_id: str,
+    trigger: str,
+    status: str,
+    started_at: str,
+    plan_name: str = "",
+    **fields,
+) -> dict:
+    """Store a run that already finished (a scheduled one is only recorded once it has something
+    to report), so it never holds the one-running slot."""
+    _validated(kind, trigger)
+    run = {**_blank(provider, kind, plan_id, trigger, plan_name), "started_at": started_at}
+    run.update(status=status, finished_at=_now(), phase="done", **fields)
+    ImportRunStore().insert(run)
+    data_events.publish(["*"])
     return run
 
 
@@ -86,8 +116,12 @@ def get(run_id: str) -> dict:
     return run
 
 
-def latest(provider: str) -> dict | None:
-    return ImportRunStore().latest(provider)
+def latest(provider: str, kinds: tuple[str, ...] | None = None) -> dict | None:
+    return ImportRunStore().latest(provider, kinds)
+
+
+def has_running(provider: str) -> bool:
+    return ImportRunStore().has_running(provider)
 
 
 def summary(run: dict) -> dict:
