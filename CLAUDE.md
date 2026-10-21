@@ -295,6 +295,10 @@ One line each — full reasoning and the scar behind each is in
   `services/connector_catalog.py`; never add a connector list anywhere else. Data access is
   `db/connector_store.ConnectorStore`. Connectors read no environment variables.
   ADR `2026-10-10-connectors-live-in-a-connectors-table-and-secrets-in-connector-secrets`.
+- The YNAB two-way sync (`services/ynab_sync/`) writes only through the chokes above, always under
+  the audit surface `ynab_sync` (that is how its own writes are skipped on the next scan); its YNAB
+  traffic is `aggregation.ynab._safe_send` and nothing else. ADR
+  `2026-10-20-ynab-two-way-sync-reconciles-against-per-entity-baselines`.
 
 ## AI tools
 

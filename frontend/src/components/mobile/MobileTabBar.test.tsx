@@ -156,6 +156,7 @@ describe('MobileTabBar', () => {
       'Automations',
       'Skills',
       'Connectors',
+      'Imports',
       // No 'Profile' row: since the 2026-08-05 redesign Profile is the first SECTION of the
       // Settings overlay, not a tab of its own, so the sheet offers one way in, not two.
       // No 'Help' row either: Help is a SECTION of Settings, not a tab — same reasoning

@@ -525,6 +525,18 @@ async def _run_watchlist_sync() -> None:
         logger.exception("scheduler: watchlist_sync error: %s", exc)
 
 
+async def _run_ynab_sync() -> None:
+    """Tick of the two-way YNAB sync: runs it when its schedule says it is due (and none is
+    running). Cheap when it is not — one small state read."""
+    try:
+        from backend.services import ynab_sync
+
+        if await asyncio.to_thread(ynab_sync.run_if_due):
+            logger.info("scheduler: ynab_sync ran")
+    except Exception as exc:
+        logger.exception("scheduler: ynab_sync error: %s", exc)
+
+
 def _outward_jobs_allowed() -> bool:
     """False on a QA/isolated run (ONW_QA_MODE) unless it opts in with ONW_QA_RUN_SCHEDULES=1.
 
@@ -596,6 +608,19 @@ def start() -> None:
     # `enabled` flag (P2-SK2) — but not on a QA run (see _outward_jobs_allowed).
     if outward:
         _schedule_automations_job()
+
+    # Two-way YNAB sync — one tick a minute; the schedule itself (15 min … daily, or manual
+    # only) lives in the sync's state, so changing it needs no re-registration here.
+    if outward:
+        _scheduler.add_job(
+            _run_ynab_sync,
+            trigger=IntervalTrigger(seconds=60),
+            id="two_way_budget_sync",  # not a provider ingest poll (see test_scheduler_no_ingest_job)
+            replace_existing=True,
+            misfire_grace_time=120,
+            max_instances=1,
+        )
+        logger.info("scheduler: ynab_sync scheduled — checked every 60s")
 
     # Batch reap sweep — polls pending batch ledger rows and applies results.
     # Runs every 5 minutes; no-op when the ledger is empty.

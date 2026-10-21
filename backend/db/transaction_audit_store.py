@@ -149,6 +149,44 @@ class TransactionAuditStore:
                 found.setdefault(txn_id, payload)
         return found
 
+    def max_seq(self) -> int:
+        """The newest event's ``seq`` (-1 on an empty table). ``seq`` only grows, even when the
+        cap drops the oldest events, so it is a safe cursor for "what happened since"."""
+        with self._eng().connect() as conn:
+            return conn.execute(select(func.coalesce(func.max(self._table.c.seq), -1))).scalar_one()
+
+    def since(self, seq: int, *, upto: int, not_surface: str) -> list[dict]:
+        """Events with ``seq`` in (``seq``, ``upto``] not written through ``not_surface``, oldest
+        first, each payload carrying its ``seq``. The sync reads ledger edits this way."""
+        stmt = (
+            select(self._table.c.seq, self._table.c.payload)
+            .where(
+                self._table.c.seq > seq,
+                self._table.c.seq <= upto,
+                self._table.c.surface != not_surface,
+            )
+            .order_by(self._table.c.seq)
+        )
+        with self._eng().connect() as conn:
+            return [{**payload, "seq": n} for n, payload in conn.execute(stmt)]
+
+    def edits_of(self, txn_ids: set[str], *, not_surface: str) -> dict[str, list[dict]]:
+        """Every update/delete/restore event of the given transactions, oldest first."""
+        stmt = (
+            select(self._table.c.seq, self._table.c.txn_id, self._table.c.payload)
+            .where(
+                self._table.c.payload["op"].as_string().in_(["update", "delete", "restore"]),
+                self._table.c.surface != not_surface,
+            )
+            .order_by(self._table.c.seq)
+        )
+        out: dict[str, list[dict]] = {}
+        with self._eng().connect() as conn:
+            for n, txn_id, payload in conn.execute(stmt):
+                if txn_id in txn_ids:
+                    out.setdefault(txn_id, []).append({**payload, "seq": n})
+        return out
+
     # ── Write API (JsonStore parity — never cap-enforced; see _enforce_cap) ─────
 
     def insert(self, item: dict, *, conn: Connection | None = None) -> dict:

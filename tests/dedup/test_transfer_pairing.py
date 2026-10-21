@@ -149,6 +149,26 @@ def test_known_routes_helper_reads_confirmed_transfers(isolate_stores):
     assert frozenset(("a", "b")) in routes
 
 
+def test_known_routes_skip_deleted_and_merged_transfers(isolate_stores):
+    """The routes come from indexed columns, not the JSON payload (decoding every row made a
+    large bulk import O(ledger) per call) — the deleted/merged exclusions must still hold."""
+    _, txns = isolate_stores
+    base = {
+        "kind": "transfer",
+        "date": "2026-01-01",
+        "description": "x",
+        "from_amount": 1.0,
+        "from_currency": "SGD",
+        "to_amount": 1.0,
+        "to_currency": "SGD",
+    }
+    txns.append({**base, "from_account_id": "a", "to_account_id": "b"})
+    txns.append({**base, "from_account_id": "c", "to_account_id": "d", "deleted": True})
+    txns.append({**base, "from_account_id": "e", "to_account_id": "f", "merged_into": "x"})
+    txns.append({**base, "kind": "expense", "from_account_id": "g", "to_account_id": None})
+    assert matching.known_transfer_routes() == frozenset({frozenset(("a", "b"))})
+
+
 # ── #1 (owner decision 2026-07-16): pair FORMATION max gap ≤ TRANSFER_PAIR_MAX_GAP_DAYS ──
 #
 # A reported case (2026-07-16, a false-pair incident): a PayNow income and

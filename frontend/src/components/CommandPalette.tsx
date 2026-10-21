@@ -24,6 +24,7 @@ type PaletteTab =
   | 'build'
   | 'profile'
   | 'connectors'
+  | 'imports'
   | 'settings'
 
 const TAB_DESTINATIONS: { tab: PaletteTab; label: string; hint: string }[] = [
@@ -39,6 +40,7 @@ const TAB_DESTINATIONS: { tab: PaletteTab; label: string; hint: string }[] = [
   { tab: 'automations', label: 'Automations', hint: 'Scheduled and event-driven conversations' },
   { tab: 'profile', label: 'Profile', hint: 'Personal, income, FIRE' },
   { tab: 'connectors', label: 'Connectors', hint: 'Channels, data sources, tools' },
+  { tab: 'imports', label: 'Imports & sync', hint: 'Bring your history in from another app' },
   { tab: 'settings', label: 'Settings', hint: 'AI model, appearance, data' },
 ]
 
