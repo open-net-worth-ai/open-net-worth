@@ -1,38 +1,36 @@
 """The migration as ONE server-owned background job (ADR
 ``2026-10-19-ynab-migration-is-a-one-shot-job-beside-the-importer``).
 
-A single-worker pool runs it off the request, so a long import survives the browser tab; the
-UI polls ``status()``. At most one job exists at a time (a second ``start`` is a 409), its state
-lives in memory, and a restart mid-run loses only progress — every write is idempotent, so
-running again finishes the work. Modes: ``preview`` (read + map, writes nothing), ``import``
-(write, then verify), ``verify`` (re-check an earlier import against YNAB's current figures).
+A single-worker pool runs it off the request, so a long import survives the browser tab. Each job
+is a persisted run record (``services/import_runs``, ADR
+``2026-10-21-import-runs-are-persisted-records-archived-not-deleted``) that the worker updates as
+it goes: the UI polls it, and a restart mid-run leaves it ``interrupted`` rather than lost. At
+most one job runs at a time (a second ``start`` is a 409); every write is idempotent, so running
+again finishes the work. Kinds: ``preview`` (read + map, writes nothing), ``import`` (write, then
+verify), ``verify`` (re-check an earlier import against YNAB's current figures).
 
-The YNAB token is read from ``YnabConfigStore`` inside the worker and never enters job state.
+The YNAB token is read from ``YnabConfigStore`` inside the worker and never enters a run record.
 """
 
 from __future__ import annotations
 
-import copy
 import logging
 import re
-import threading
-import time
-import uuid
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 from backend.core import data_events
 from backend.core.errors import ConflictError, OpenNetWorthError, ValidationError
 from backend.db.ynab_config_store import YnabConfigStore
+from backend.services import import_runs
 from backend.services.budget_engines import service as budget_engines_service
-from backend.services.ynab_migration import apply, guards, mapping, source, verify
+from backend.services.ynab_migration import apply, guards, mapping, report, source, verify
 
 logger = logging.getLogger(__name__)
 
+PROVIDER = "ynab"
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
-MODES = ("preview", "import", "verify")
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ynab-migration")
-_lock = threading.Lock()
-_job: dict | None = None
 
 
 class ConfirmationRequired(ConflictError):
@@ -40,31 +38,27 @@ class ConfirmationRequired(ConflictError):
 
 
 class _Run:
-    """Writes to ONE job's state. A finished job's late writes (its ``finally``) must never land
-    on the next job, so every write names the job it belongs to and is dropped on a mismatch."""
+    """The worker's handle on ONE run record: every update lands on that run's row, and the log
+    is kept here so a line is appended without re-reading the record."""
 
-    def __init__(self, job_id: str):
-        self.id = job_id
+    def __init__(self, run_id: str):
+        self.id = run_id
+        self._log: list[dict] = []
 
     def update(self, **fields) -> None:
-        with _lock:
-            if _job is not None and _job["id"] == self.id:
-                _job.update(fields)
+        import_runs.update(self.id, **fields)
 
     def log(self, line: str) -> None:
-        with _lock:
-            if _job is not None and _job["id"] == self.id:
-                _job["log"].append(line)
+        self._log.append({"at": datetime.now(timezone.utc).isoformat(), "line": line})
+        self.update(log=self._log)
 
     def progress(self, phase: str, done: int = 0, total: int = 0) -> None:
         self.update(phase=phase, progress={"done": done, "total": total})
 
 
 def status() -> dict:
-    """The current (or last) job, plus whether a token is saved. Safe to poll."""
-    with _lock:
-        job = copy.deepcopy(_job)
-    return {"token_saved": YnabConfigStore().is_configured(), "job": job}
+    """The newest run, plus whether a token is saved. Safe to poll."""
+    return {"token_saved": YnabConfigStore().is_configured(), "job": import_runs.latest(PROVIDER)}
 
 
 def _foreign_accounts_exist() -> bool:
@@ -74,60 +68,63 @@ def _foreign_accounts_exist() -> bool:
     )
 
 
-def start(mode: str, plan_id: str, confirm_nonempty: bool = False) -> dict:
-    global _job
-    if mode not in MODES:
-        raise ValidationError(f"mode must be one of {', '.join(MODES)}")
+def start(kind: str, plan_id: str, confirm_nonempty: bool = False) -> dict:
+    if kind not in import_runs.KINDS:
+        raise ValidationError(f"kind must be one of {', '.join(import_runs.KINDS)}")
     if not (plan_id or "").strip():
         raise ValidationError("pick the YNAB plan to migrate")
     if not YnabConfigStore().is_configured():
         raise ValidationError("save a YNAB access token first")
-    if mode == "import" and not confirm_nonempty and _foreign_accounts_exist():
+    if kind == "import" and not confirm_nonempty and _foreign_accounts_exist():
         raise ConfirmationRequired(
             "This book already has accounts that did not come from YNAB. Confirm to import "
             "alongside them."
         )
-    with _lock:
-        if _job is not None and _job["status"] == "running":
-            raise ConflictError("A YNAB migration is already running.")
-        _job = {
-            "id": uuid.uuid4().hex,
-            "mode": mode,
-            "plan_id": plan_id.strip(),
-            "status": "running",
-            "phase": "starting",
-            "progress": {"done": 0, "total": 0},
-            "log": [],
-            "counts": {},
-            "problems": [],
-            "warnings": [],
-            "backup": None,
-            "preview": None,
-            "verification": None,
-            "error": None,
-            "started_at": time.time(),
-            "finished_at": None,
-        }
-        job_id = _job["id"]
-    _POOL.submit(_run, job_id, mode, plan_id.strip(), confirm_nonempty)
-    return status()["job"]
-
-
-def _run(job_id: str, mode: str, plan_id: str, confirm: bool) -> None:
-    run = _Run(job_id)
+    run = import_runs.start(PROVIDER, kind, plan_id.strip())
     try:
-        _execute(run, mode, plan_id, confirm)
-        run.update(status="done", phase="done")
+        _POOL.submit(_run, run["id"], kind, plan_id.strip(), confirm_nonempty)
+    except Exception:
+        logger.exception("YNAB migration run %s could not be queued", run["id"])
+        _settle(run["id"], "failed", error="The run could not be started.", outcome="Failed")
+        raise
+    return run
+
+
+def _settle(run_id: str, status: str, **fields) -> None:
+    """Close a run's record. A failure to write it is logged, never raised: the worker has
+    nothing left to do with it, and the next boot marks a run left ``running`` interrupted."""
+    try:
+        import_runs.finish(run_id, status, **fields)
+    except Exception:
+        logger.exception("YNAB migration run %s could not be recorded as %s", run_id, status)
+
+
+def _outcome(kind: str, run_id: str) -> str:
+    """The history line is a courtesy: a report that cannot be summarized must not fail a run
+    that completed."""
+    try:
+        return report.outcome(kind, import_runs.get(run_id))
+    except Exception:
+        logger.exception("YNAB migration run %s outcome could not be summarized", run_id)
+        return ""
+
+
+def _run(run_id: str, kind: str, plan_id: str, confirm: bool) -> None:
+    run = _Run(run_id)
+    try:
+        _execute(run, kind, plan_id, confirm)
     except OpenNetWorthError as exc:
-        run.update(status="failed", error=exc.message or str(exc))
+        _settle(run_id, "failed", error=exc.message or str(exc), outcome="Failed")
     except Exception as exc:
-        logger.exception("YNAB migration job %s crashed", job_id)
-        run.update(
-            status="failed", error=f"Unexpected error ({type(exc).__name__}); see the server log."
+        logger.exception("YNAB migration run %s crashed", run_id)
+        _settle(
+            run_id,
+            "failed",
+            error=f"Unexpected error ({type(exc).__name__}); see the server log.",
+            outcome="Failed",
         )
-    finally:
-        run.update(finished_at=time.time())
-        data_events.publish(["*"])
+    else:
+        _settle(run_id, "done", phase="done", outcome=_outcome(kind, run_id))
 
 
 def _load_plan(run: _Run, store: YnabConfigStore, plan_id: str) -> dict:
@@ -175,20 +172,28 @@ def _book_changes(plan: dict, state: str) -> dict:
     return changes
 
 
-def _execute(run: _Run, mode: str, plan_id: str, confirm: bool) -> None:
+def _execute(run: _Run, kind: str, plan_id: str, confirm: bool) -> None:
     store = YnabConfigStore()
     plan = _load_plan(run, store, plan_id)
     state, existing = apply.book_state(plan)
     run.update(
-        preview={**mapping.preview_summary(plan), "book_state": state, **_book_changes(plan, state)}
+        plan_name=plan["name"],
+        book_state=state,
+        preview={
+            **mapping.preview_summary(plan),
+            "book_state": state,
+            **_book_changes(plan, state),
+        },
     )
-    if mode == "preview":
+    if kind == "preview":
         return
-    if mode == "verify":
+    if kind == "verify":
         env_ids, _ = apply.resolve_envelopes(plan, create=False)
         run.progress("verifying")
         env_ids |= apply.card_envelopes(plan)
-        run.update(verification=verify.verify(store, plan_id, plan, env_ids, True))
+        run.update(
+            verification=report.verification(verify.verify(store, plan_id, plan, env_ids, True))
+        )
         return
     if state == "foreign" and not confirm:
         raise ConfirmationRequired("This book has accounts that did not come from YNAB.")
@@ -201,7 +206,7 @@ def _import(run: _Run, store, plan_id: str, plan: dict, state: str, existing: li
         apply.ensure_base_currency(plan["currency"], money)  # refuses, before anything is written
     run.progress("backing up")
     backup = apply.take_backup()
-    run.update(backup=backup)
+    run.update(backup_name=backup)
     run.log(f"Backup taken: {backup}. Restore it from Settings → Data → Backup & restore.")
 
     apply.categories_service.ensure_builtins_seeded()  # split rows need the 'split' sentinel
@@ -210,24 +215,38 @@ def _import(run: _Run, store, plan_id: str, plan: dict, state: str, existing: li
         run.log(note)
     run.progress("creating accounts")
     rows, created = apply.sync_accounts(plan, existing)
+    counts = {"accounts": report.count(created=created, existing=len(rows) - created)}
+    run.update(counts=counts)
     run.log(f"Accounts: {created} created, {len(rows) - created} already there.")
     data_events.publish(["*"])
 
     run.progress("creating categories and envelopes")
     env_ids, made = apply.resolve_envelopes(plan, create=True)
+    total = len(plan["categories"])
+    for item in ("categories", "envelopes"):
+        counts[item] = report.count(created=made[item], existing=total - made[item])
     run.log(f"Categories and envelopes: {dict(made) or 'all already there'}.")
     cat_ids = {k: v["category"] for k, v in env_ids.items()}
 
     tally, problems = apply.send_transactions(
         plan, {k: v["id"] for k, v in rows.items()}, cat_ids, run.progress
     )
-    run.update(counts=dict(tally), problems=problems[:100])
+    counts["transactions"] = report.transaction_counts(tally)
+    run.update(counts=counts, problems=[report.problem(p) for p in problems[:100]])
     run.log(f"Transactions: {dict(tally)}.")
     run.progress("marking cleared")
     run.log(f"Cleared set on {apply.mark_cleared(plan)} transaction(s).")
     archived = apply.archive_closed(plan, rows)
     if archived:
         run.log(f"Archived {archived} closed account(s).")
+    budget_envs = _budget(run, plan, state, env_ids, counts)
+    run.progress("verifying")
+    verified = verify.verify(store, plan_id, plan, budget_envs, True)
+    run.update(verification=report.verification(verified))
+
+
+def _budget(run: _Run, plan: dict, state: str, env_ids: dict, counts: dict) -> dict:
+    """The budget half of an import; returns the envelopes verification compares."""
     if state == "fresh":
         budget_engines_service.set_home_engine("zero_based")  # YNAB is zero-based budgeting
         run.log("Budget method set to zero-based, as in YNAB.")
@@ -236,19 +255,14 @@ def _import(run: _Run, store, plan_id: str, plan: dict, state: str, existing: li
         removed = apply.prune_starter(prune, guards.starter_groups_left_empty(prune, kept))
         run.log(f"Removed unused starter budget items: {dict(removed) or 'none'}.")
     budget_envs = {**env_ids, **apply.card_envelopes(plan)}
-    changed, warnings = apply.apply_budget(plan, budget_envs, run.progress)
-    run.log(f"Budget: {changed} monthly assignment(s) written.")
-    run.update(warnings=warnings[:50])
+    tally, problems = apply.apply_budget(plan, budget_envs, run.progress)
+    counts["assigned"] = report.count(
+        created=tally["created"], existing=tally["existing"], failed=tally["failed"]
+    )
+    run.update(counts=counts, warnings=[report.problem(p) for p in problems[:50]])
+    run.log(f"Budget: {tally['created']} monthly assignment(s) written.")
     # What boot does: retire the payment envelopes of cards this import archived, as YNAB
     # shows a closed card's payment category at zero.
     apply.planning.sync_card_payment_envelopes()
     data_events.publish(["*"])
-
-    run.progress("verifying")
-    run.update(verification=verify.verify(store, plan_id, plan, budget_envs, True))
-
-
-def reset_for_tests() -> None:
-    global _job
-    with _lock:
-        _job = None
+    return budget_envs

@@ -8,7 +8,7 @@ from backend.services.ynab_migration import apply, source
 from backend.services.ynab_migration.mapping import RTA_CATEGORY, SOURCE, amt
 
 
-def _row(group, label, expected, actual, note=""):
+def _row(group, label, expected, actual, note="", unit="money"):
     ok = (
         expected == actual
         if isinstance(expected, (int, str))
@@ -21,6 +21,7 @@ def _row(group, label, expected, actual, note=""):
         "actual": actual,
         "ok": ok,
         "note": note,
+        "unit": unit,
     }
 
 
@@ -76,6 +77,7 @@ def verify_accounts(plan: dict, ynab_accounts: list[dict]) -> list[dict]:
                 pa["expected_rows"],
                 count,
                 f"YNAB has {pa['ynab_rows']}",
+                unit="count",
             )
         )
     return out

@@ -190,7 +190,9 @@ def _book_chunk(rows: list[dict], batch_id: str, tally: Counter, problems: list[
         if len(rows) == 1:
             logger.warning("ynab migration row refused: %s", exc.message)
             tally["failed"] += 1
-            problems.append({"ref": rows[0]["external_refs"][0]["ref"], "reason": exc.message})
+            problems.append(
+                {"ref": rows[0]["external_refs"][0]["ref"], "reason": exc.message, "kind": "failed"}
+            )
             return
         mid = len(rows) // 2
         _book_chunk(rows[:mid], batch_id, tally, problems)
@@ -207,7 +209,11 @@ def _book_chunk(rows: list[dict], batch_id: str, tally: Counter, problems: list[
             continue
         tally[key] += 1
         problems.append(
-            {"ref": sk["external_refs"][0]["ref"], "reason": sk.get("_duplicate_reason", "")}
+            {
+                "ref": sk["external_refs"][0]["ref"],
+                "reason": sk.get("_duplicate_reason", ""),
+                "kind": key,
+            }
         )
 
 
@@ -276,11 +282,15 @@ def card_envelopes(plan: dict) -> dict[str, dict]:
     }
 
 
-def apply_budget(plan: dict, env_ids: dict[str, dict], progress: Progress) -> tuple[int, list[str]]:
+def apply_budget(
+    plan: dict, env_ids: dict[str, dict], progress: Progress
+) -> tuple[Counter, list[dict]]:
     """Per month, per envelope: set Assigned to YNAB's budgeted, negatives included — YNAB lets
     a month's Assigned go below zero (money moved out), and ``move_money`` cannot reproduce that
-    past what the envelope had available, so the figure is written as-is."""
-    changed, warnings = 0, []
+    past what the envelope had available, so the figure is written as-is. Counts the figures
+    written (``created``), already right (``existing``) and refused (``failed``)."""
+    tally: Counter = Counter()
+    problems: list[dict] = []
     months = sorted(plan["assigned"])
     for n, month in enumerate(months, 1):
         _, rows = month_rows(month)
@@ -290,14 +300,16 @@ def apply_budget(plan: dict, env_ids: dict[str, dict], progress: Progress) -> tu
                 continue
             target = round(milli / 1000, 2)
             if abs(target - rows[env]["assigned"]) < TOL:
+                tally["existing"] += 1
                 continue
             try:
                 planning.apply_budget_change(
                     {"type": "assign", "month": month, "envelope_id": env, "amount": target},
                     allow_negative=True,
                 )
-                changed += 1
+                tally["created"] += 1
             except OpenNetWorthError as exc:
-                warnings.append(f"{month}: {exc.message}")
+                tally["failed"] += 1
+                problems.append({"ref": month, "reason": exc.message, "kind": "assigned"})
         progress("setting monthly assignments", n, len(months))
-    return changed, warnings
+    return tally, problems

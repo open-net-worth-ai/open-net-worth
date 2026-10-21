@@ -26,10 +26,8 @@ def ynab(db_isolated, monkeypatch):
     categories_service.ensure_builtins_seeded()  # what boot does
     envelopes_service.ensure_envelopes_migrated()
     YnabConfigStore().update({"access_token": ynab_stub.TOKEN})
-    ynab_migration.reset_for_tests()
     yield calls
     server.shutdown()
-    ynab_migration.reset_for_tests()
 
 
 def run(mode="import", **kw):
@@ -64,9 +62,16 @@ def test_preview_reads_and_writes_nothing(ynab):
 def test_import_verifies_clean_and_a_second_run_books_nothing(ynab):
     job = run()
     assert job["status"] == "done", job["error"]
-    assert job["verification"]["ok"], [r for r in job["verification"]["rows"] if not r["ok"]]
-    assert job["counts"] == {"created": 19}
-    assert "Cleared set on 0 transaction(s)." in job["log"]  # booked cleared; no per-row pass
+    assert job["verification"]["ok"], job["verification"]["mismatches"]
+    assert job["counts"]["transactions"] == {
+        "created": 19,
+        "existing": 0,
+        "refused": 0,
+        "failed": 0,
+    }
+    assert job["counts"]["accounts"]["created"] == 5 and job["book_state"] == "fresh"
+    lines = [e["line"] for e in job["log"]]
+    assert "Cleared set on 0 transaction(s)." in lines  # booked cleared; no per-row pass
     from backend.services.budget_engines import service as budget_engines_service
 
     engines = budget_engines_service.list_engines()
@@ -82,7 +87,13 @@ def test_import_verifies_clean_and_a_second_run_books_nothing(ynab):
 
     again = run()
     assert again["status"] == "done" and again["verification"]["ok"]
-    assert again["counts"] == {"created": 0, "already_present": 19}
+    assert again["counts"]["transactions"] == {
+        "created": 0,
+        "existing": 19,
+        "refused": 0,
+        "failed": 0,
+    }
+    assert again["book_state"] == "rerun"
     assert len(ynab_ids()) == before
     assert len(ledger_service.accounts.query_accounts(include_archived=True)) == 5
 
@@ -108,7 +119,8 @@ def test_a_deleted_row_is_not_booked_again(ynab):
     victim = next(t for t in ledger_service.transactions.all() if t.get("description") == "Mystery")
     ledger_service.bulk_delete_transactions([victim["id"]])
     job = run()
-    assert job["counts"]["previously_deleted"] == 1
+    assert job["counts"]["transactions"]["refused"] == 1
+    assert "deleted this transaction" in job["problems"][0]["hint"]
     assert job["verification"]["ok"] is False  # the missing row is surfaced, not hidden
 
 
@@ -144,7 +156,6 @@ def test_the_plan_must_be_picked_and_visible(ynab):
 
 
 def test_start_needs_a_saved_token(db_isolated):
-    ynab_migration.reset_for_tests()
     with pytest.raises(ValidationError):
         ynab_migration.start("preview", ynab_stub.PLAN)
 
@@ -212,7 +223,7 @@ def test_a_book_with_money_data_but_no_accounts_keeps_its_currency_and_budget(yn
 
 def test_an_import_takes_a_backup_first_and_names_it(ynab):
     job = run()
-    assert job["backup"] and job["backup"] in " ".join(job["log"])
+    assert job["backup_name"] and job["backup_name"] in " ".join(e["line"] for e in job["log"])
 
 
 def test_no_backup_means_nothing_is_written(ynab, monkeypatch):
@@ -324,8 +335,8 @@ def test_a_budget_mismatch_names_the_first_month_it_appears(ynab):
     )
 
     job = run("verify")
-    history = [r for r in job["verification"]["rows"] if r["group"] == "history"]
-    assert any(r["label"].endswith(f"first differs {month}") for r in history), history
+    history = job["verification"]["mismatches"]
+    assert any(r["check"].endswith(f"first differs {month}") for r in history), history
 
 
 def test_a_negative_month_assignment_is_written_as_is(db_isolated, monkeypatch):
@@ -334,7 +345,6 @@ def test_a_negative_month_assignment_is_written_as_is(db_isolated, monkeypatch):
     categories_service.ensure_builtins_seeded()
     envelopes_service.ensure_envelopes_migrated()
     YnabConfigStore().update({"access_token": ynab_stub.TOKEN})
-    ynab_migration.reset_for_tests()
     try:
         job = run()
         assert job["status"] == "done", job["error"]
@@ -345,10 +355,9 @@ def test_a_negative_month_assignment_is_written_as_is(db_isolated, monkeypatch):
         month = f"{i // 12:04d}-{i % 12 + 1:02d}"
         rows = [r for g in planning.budget_month(month)["groups"] for r in g["categories"]]
         assert next(r for r in rows if r["label"] == "Fun Money")["assigned"] == -10.0
-        assert job["verification"]["ok"], [r for r in job["verification"]["rows"] if not r["ok"]]
+        assert job["verification"]["ok"], job["verification"]["mismatches"]
     finally:
         server.shutdown()
-        ynab_migration.reset_for_tests()
 
 
 @pytest.mark.parametrize("as_given,expected", [(True, None), (False, "learned")])
@@ -394,3 +403,33 @@ def test_a_card_payment_category_maps_to_the_cards_payment_envelope(ynab):
     assert apply.card_envelopes(plan) == {
         "ynab-cat": {"category": None, "envelope": visa["payment_envelope_id"]}
     }
+
+
+def test_a_run_that_cannot_be_queued_is_failed_not_left_running(ynab, monkeypatch):
+    def refuse(*a, **k):
+        raise RuntimeError("pool is shut down")
+
+    monkeypatch.setattr(job_module._POOL, "submit", refuse)
+    with pytest.raises(RuntimeError):
+        ynab_migration.start("preview", ynab_stub.PLAN)
+    assert ynab_migration.status()["job"]["status"] == "failed"
+    monkeypatch.undo()
+    ynab_migration.start("preview", ynab_stub.PLAN)  # not blocked by a stuck "running" row
+
+
+def test_a_failure_to_record_the_finish_is_contained(ynab, monkeypatch):
+    from backend.services import import_runs
+
+    def boom(*a, **k):
+        raise RuntimeError("db gone")
+
+    monkeypatch.setattr(import_runs, "finish", boom)
+    job_module._run(
+        import_runs.start("ynab", "preview", ynab_stub.PLAN)["id"], "preview", "x", False
+    )
+
+
+def test_an_unsummarizable_report_does_not_fail_a_completed_run(ynab, monkeypatch):
+    monkeypatch.setattr(job_module.report, "outcome", lambda *a: 1 / 0)
+    job = run("preview")
+    assert job["status"] == "done" and job["outcome"] == ""

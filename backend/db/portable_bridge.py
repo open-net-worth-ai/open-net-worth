@@ -423,6 +423,7 @@ from backend.db.tables import (
     evidence_subjects,
     grants,
     import_batches,
+    import_runs,
     income_events,
     institutions,
     instruments,
@@ -1309,6 +1310,10 @@ def _wipe_pending_pushes(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, pending_pushes, "id")
 
 
+def _wipe_import_runs(conn: Connection) -> list[Path]:
+    return _capture_then_delete(conn, import_runs, "id")
+
+
 # Checkpoints (plan 4e task 2) — wipe-only, like pending_pushes above; reuses
 # _capture_then_delete directly, uniform with every other wipe fn (the actual no-op comes
 # from ai.checkpoint._EXCLUDED_TABLES + the store's own checkpointed=False, not a special
@@ -1452,6 +1457,8 @@ _WIPE_FNS: dict[str, Callable[[Connection], list[Path]]] = {
     # `for filename in BRIDGED` loop — mirrors pending_pushes.json's own wipe-only
     # precedent.
     "checkpoints.json": _wipe_checkpoints,
+    # wipe-only — an import report describes the book Reset just emptied; not portable.
+    "import_runs.json": _wipe_import_runs,
     # Wave 5C (JSON->DB) — the two BRIDGED runtime-state stores, reached via the ordinary
     # `for filename in BRIDGED` loop below like every other non-money entry.
     "skills_state.json": _wipe_skills_state,
@@ -1569,6 +1576,7 @@ def wipe_all(conn: Connection) -> list[Path]:
         paths_to_unlink.extend(wipe(conn, filename))
     paths_to_unlink.extend(wipe(conn, "pending_pushes.json"))
     paths_to_unlink.extend(wipe(conn, "checkpoints.json"))
+    paths_to_unlink.extend(wipe(conn, "import_runs.json"))
     paths_to_unlink.extend(wipe(conn, "daily_digests.json"))
     paths_to_unlink.extend(wipe(conn, "claims.json"))
     for filename in _MONEY_WIPE_ORDER:

@@ -18944,3 +18944,69 @@ body.hide-amounts .mf-lbl-amt {
   font-weight: 600;
   user-select: text;
 }
+
+/* Imports & sync: the run history and report tables. A row is a <tr>; on a phone it stacks into
+   labelled lines (each cell carries its column name in data-label). */
+.imp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.imp-table th,
+.imp-table td {
+  text-align: left;
+  white-space: normal;
+  vertical-align: top;
+  padding: var(--space-3) var(--space-4);
+}
+.imp-table th {
+  cursor: default;
+}
+.imp-table .imp-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.imp-table__wrap {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.imp-table__actions {
+  text-align: right;
+}
+.imp-table__row--archived {
+  opacity: 0.6;
+}
+@media (max-width: 639.98px) {
+  .imp-table thead {
+    display: none;
+  }
+  .imp-table,
+  .imp-table tbody,
+  .imp-table tr,
+  .imp-table td {
+    display: block;
+    width: 100%;
+  }
+  .imp-table tr {
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .imp-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-1) 0;
+    border: 0;
+    text-align: right;
+  }
+  .imp-table td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    color: var(--faint);
+    font-size: var(--text-xs);
+    text-align: left;
+  }
+  .imp-table .imp-table__num {
+    text-align: right;
+  }
+}

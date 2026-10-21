@@ -7,7 +7,8 @@ Thin router over ``db.YnabConfigStore`` + ``services.aggregation.ynab``:
     form's picker. Requires a saved token.
   * ``GET  /api/ynab/migration`` / ``POST /api/ynab/migration/{preview,start,verify}`` — the
     one-shot plan migration, a server-owned background job (``services.ynab_migration``): poll
-    the GET for progress and the final verification report; a second POST while one runs is a 409.
+    the GET for the newest run (each run is a persisted record — see ``api/import_runs_api``); a
+    second POST while one runs is a 409.
   * ``PUT  /api/ynab/config``  — set the YNAB **personal access token**, pick a budget,
     enable/disable. A blank access token leaves the saved one unchanged (write-only-secret
     discipline); picking a budget is VALIDATED live against the token (mirrors SimpleFIN's
@@ -128,9 +129,9 @@ class MigrationRequest(BaseModel):
     confirm_nonempty: bool = False
 
 
-def _migration(mode: str, body: MigrationRequest) -> dict:
+def _migration(kind: str, body: MigrationRequest) -> dict:
     try:
-        return ynab_migration.start(mode, body.plan_id, body.confirm_nonempty)
+        return ynab_migration.start(kind, body.plan_id, body.confirm_nonempty)
     except ynab_migration.ConfirmationRequired as exc:
         raise HTTPException(
             409, detail={"error": "confirm_nonempty", "message": exc.message}
@@ -141,13 +142,13 @@ def _migration(mode: str, body: MigrationRequest) -> dict:
 
 @router.get("/api/ynab/migration")
 def ynab_migration_status():
-    """The current (or last) migration job and whether a token is saved. Never the token."""
+    """The newest migration run and whether a token is saved. Never the token."""
     return ynab_migration.status()
 
 
 @router.post("/api/ynab/migration/preview", status_code=202)
 def ynab_migration_preview(body: MigrationRequest):
-    """Read the plan and map it; writes nothing. The result lands on the job's ``preview``."""
+    """Read the plan and map it; writes nothing. The result lands on the run's ``preview``."""
     return _migration("preview", body)
 
 

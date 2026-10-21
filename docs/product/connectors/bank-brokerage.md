@@ -175,34 +175,21 @@ move your whole plan across instead, use the migration below.
 
 ### Move your whole YNAB plan
 
-On the same YNAB connector page, under the accounts list, **Move your whole YNAB plan across**
-imports your accounts, categories, envelopes, every transaction and each month's budgeted amounts,
-then checks the result against YNAB.
+To move your accounts, categories, envelopes, every transaction and each month's budgeted amounts
+across, and check the result against YNAB, use **Import & sync…** on the YNAB connector page. It
+opens [Imports & sync](../features/imports-and-sync.md), which uses the token you saved here.
+Take a [backup](../operations/backup-and-restore.md) first if you can; a fresh book is the
+cleanest target (the app also takes one before it writes anything).
 
-1. Save your token above (step 1–3).
-2. Take a [backup](../operations/backup-and-restore.md); a fresh book is the cleanest target.
-3. Choose your plan and click **Preview**. You see the accounts (and the type each becomes), the
-   counts, any warnings, whether the base currency would change (only in a book with no money
-   data yet), and which unused starter categories would be removed. Nothing has been written yet.
-4. Click **Import into Open Net Worth**. If the book already has accounts that didn't come from
-   YNAB, tick the confirmation first. The app takes a backup before it writes anything (the name
-   is shown, and you can restore it from **Settings → Data → Backup & restore**); if the backup
-   fails, nothing is imported. Progress shows live; you can close the page and come back.
-5. Read **Checked against YNAB**: each account's balance, cleared balance and transaction count,
-   and, for this month, every envelope's assigned and available amounts and Ready to Assign. A ✗
-   on a count usually means a transaction wasn't booked (it is listed above); a ✗ on a budget
-   figure means the two apps' budget rules disagree for your history.
-
-It is safe to run again: nothing is booked twice, and **Re-check** compares with YNAB's current
-figures at any time. Accounts and transactions keep their YNAB ids, so the connector attaches to
-them afterwards. A transfer between two accounts is one transfer; a split with a transfer line
-becomes a split plus a separate transfer; a closed YNAB account is created and then archived;
-Ready to Assign inflows become uncategorized income. Categories are copied exactly as YNAB has
-them: payee defaults and Automations don't relabel imported rows. Each month's assigned amounts
-come across (including negative ones and what you assigned to a card's payment category), and the
-budget is set to zero-based. Where YNAB's balance for an account isn't the sum of its transactions
-(typically loan interest YNAB calculates), the difference is booked once as a labelled balance
-adjustment. Goals and scheduled transactions are not migrated.
+It is safe to run again: nothing is booked twice. Accounts and transactions keep their YNAB ids,
+so the connector attaches to them afterwards. A transfer between two accounts is one transfer; a
+split with a transfer line becomes a split plus a separate transfer; a closed YNAB account is
+created and then archived; Ready to Assign inflows become uncategorized income. Categories are
+copied exactly as YNAB has them: payee defaults and Automations don't relabel imported rows. Each
+month's assigned amounts come across (including negative ones and what you assigned to a card's
+payment category), and the budget is set to zero-based. Where YNAB's balance for an account isn't
+the sum of its transactions (typically loan interest YNAB calculates), the difference is booked
+once as a labelled balance adjustment. Goals and scheduled transactions are not migrated.
 
 ## Alpaca
 

@@ -15,7 +15,6 @@ from backend.db.ynab_config_store import YnabConfigStore
 from backend.services import accounts as accounts_service
 from backend.services import categories as categories_service
 from backend.services import envelopes as envelopes_service
-from backend.services import ynab_migration
 from backend.services.aggregation import ynab as ynab_service
 from backend.services.ynab_migration import job as job_module
 from tests import ynab_stub
@@ -29,12 +28,10 @@ def client(db_isolated, monkeypatch):
     monkeypatch.setattr(ynab_service, "API_BASE", base_url)
     categories_service.ensure_builtins_seeded()
     envelopes_service.ensure_envelopes_migrated()
-    ynab_migration.reset_for_tests()
     app = FastAPI()
     app.include_router(router)
     yield TestClient(app)
     server.shutdown()
-    ynab_migration.reset_for_tests()
 
 
 def finish(client):
@@ -68,7 +65,7 @@ def test_the_plan_is_required(client):
 def test_preview_then_start_runs_as_a_job_and_reports_verification(client):
     save_token()
     r = client.post("/api/ynab/migration/preview", json=BODY)
-    assert r.status_code == 202 and r.json()["mode"] == "preview"
+    assert r.status_code == 202 and r.json()["kind"] == "preview"
     job = finish(client)
     assert job["preview"]["transactions"] == 19 and job["verification"] is None
 

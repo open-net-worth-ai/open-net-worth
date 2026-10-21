@@ -827,6 +827,32 @@ statement_formats = payload_table("statement_formats")
 notification_log = payload_table("notification_log")  # runtime cache — checkpoint-EXCLUDED
 desktop_access_grants = payload_table("desktop_access_grants")
 desktop_ingest_jobs = payload_table("desktop_ingest_jobs")
+# One row per Import / Verify / Preview run of a provider's importer (services/import_runs.py):
+# the stored report the Imports & sync screen reads. The columns are what the history list and the
+# polls look up; `detail` holds the heavy parts (log, counts, problems, preview, verification) that
+# only a run opened as a report reads. No credential in it. Checkpoint-EXCLUDED, non-restorable,
+# wiped by Reset.
+import_runs = Table(
+    "import_runs",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("provider", Text, nullable=False),
+    Column("kind", Text, nullable=False),
+    Column("trigger", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("started_at", Text, nullable=False),
+    Column("finished_at", Text, nullable=True),
+    Column("plan_id", Text, nullable=False),
+    Column("plan_name", Text, nullable=False),
+    Column("outcome", Text, nullable=False),
+    Column("archived_at", Text, nullable=True),
+    Column("phase", Text, nullable=False),
+    Column("progress", JSON, nullable=False),
+    Column("error", Text, nullable=True),
+    Column("detail", JSON, nullable=False),
+    Index("ix_import_runs_provider_started", "provider", "started_at"),
+    Index("ix_import_runs_status", "status"),
+)
 # ── intel_stories / signal_timeline_entries / daily_digests (RFC intel-signals-data-model)
 # Split of the old multi-writer `intel_signals` (stories + digests): three shapes shared one
 # table with a name collision (`summary` meant two different things) and an unbounded JSON
