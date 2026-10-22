@@ -171,8 +171,9 @@ type:
 ## outside the gate until 2026-08-06, and a commit that broke 10 MobileTabBar
 ## tests landed on main under a green `make check` precisely because of that.
 ## `make type` only proves the types compile; nothing ran the 3200 unit tests.
+## pytest runs on every core (-n auto): one process took ~16 min for ~21k tests.
 test:
-	$(PY) -m pytest -q -m "not integration"
+	$(PY) -m pytest -q -m "not integration" -n auto
 	cd frontend && npm run test
 
 ## build: frontend production build (vite build — exits, no dev server) + CSS class/token guards
