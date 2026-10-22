@@ -91,7 +91,7 @@ def _expense(desc: str) -> dict:
 def test_create_transaction_matches_automation_and_resolves_payee_without_deadlock(env):
     automation = AutomationStore().insert(_transform_automation())
 
-    row = svc.create_transaction(_expense("Cafe on Cecil Street"), force=True)
+    row = svc.create_transaction(_expense("Cafe on Cecil Street"), allow_duplicate=True)
 
     # Automation match applied AND its usage stats were durably written (record_committed_matches).
     assert row["category"] == _CAT_FOOD
@@ -110,7 +110,7 @@ def test_bulk_create_transactions_matches_automation_and_resolves_payee_without_
     automation = AutomationStore().insert(_transform_automation())
 
     created, skipped = svc.bulk_create_transactions(
-        [_expense("Cafe #1"), _expense("Cafe #2")], force=True
+        [_expense("Cafe #1"), _expense("Cafe #2")], allow_duplicate=True
     )
 
     assert skipped == []
@@ -129,7 +129,7 @@ def test_update_transaction_rebuild_matches_automation_without_deadlock(env):
     (the rebuild) and then records automation usage in its OWN follow-up step — the third,
     previously-separate self-deadlock site."""
     automation = AutomationStore().insert(_transform_automation())
-    row = svc.create_transaction(_expense("Corner store"), force=True)
+    row = svc.create_transaction(_expense("Corner store"), allow_duplicate=True)
     assert row["category"] is None  # doesn't match "cafe" yet
 
     updated = svc.update_transaction(row["id"], {"description": "Cafe on Cecil Street"})

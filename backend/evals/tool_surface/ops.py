@@ -465,7 +465,7 @@ def _txn_add(params: dict) -> dict:
             "type": "boolean",
             "description": "Skip any row any of whose external_refs pairs is already in the ledger.",
         },
-        "force": {
+        "allow_duplicate": {
             "type": "boolean",
             "description": (
                 "Book every row even if it looks like a transaction already in the ledger. "
@@ -486,7 +486,7 @@ def _txn_add_many(params: dict) -> dict:
         created, skipped = _svc().bulk_create_transactions(
             [dict(r) for r in rows],
             dedup_by_external_ref=bool(params.get("dedup_by_external_ref")),
-            force=bool(params.get("force")),
+            allow_duplicate=bool(params.get("allow_duplicate")),
         )
     except ValidationError as exc:
         return _err(f"validation: {exc}")

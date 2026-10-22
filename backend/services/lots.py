@@ -811,7 +811,9 @@ def _book_funding_debit(
             fees=change.get("fees"),
         )
     )
-    txn = ledger_service.create_transaction(txn_data, conn=conn)
+    txn = ledger_service.create_transaction(
+        txn_data, allow_duplicate=bool(change.get("allow_duplicate")), conn=conn
+    )
     return txn.get("id")
 
 
@@ -1216,7 +1218,9 @@ def _book_deposit_proceeds(
         )
     )
 
-    txn = ledger_service.create_transaction(txn_data, conn=conn)
+    txn = ledger_service.create_transaction(
+        txn_data, allow_duplicate=bool(change.get("allow_duplicate")), conn=conn
+    )
     return txn.get("id")
 
 

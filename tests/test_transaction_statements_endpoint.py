@@ -51,7 +51,7 @@ def _txn(acct, **kw):
         "from_currency": "SGD",
         **kw,
     }
-    return ledger_service.create_transaction(data, force=True)
+    return ledger_service.create_transaction(data, allow_duplicate=True)
 
 
 def test_a_row_on_no_statement_returns_an_empty_list_not_a_404(client):

@@ -54,7 +54,7 @@ class DuplicateTransactionError(ConflictError):
     (scheduled agents, connectors, the AI tool surface). The engine's own review CAP is
     deliberately NOT the bar: a cap means "never auto-MERGE unattended", which is a statement
     about a destructive irreversible edit, not about whether the rows are the same event.
-    Refusing is neither destructive nor irreversible — ``force=True`` books the row anyway —
+    Refusing is neither destructive nor irreversible — ``allow_duplicate=True`` books the row anyway —
     so it is safe in exactly the cases where auto-merge is not (``TRANSFER_LEG_ECHO``, capped
     to 0.75 forever, is the motivating one).
 
@@ -325,7 +325,7 @@ def duplicate_hint(
     existing_id: str,
     *,
     facts: Iterable[str] = (),
-    force_hint: str = "force=true",
+    force_hint: str = "allow_duplicate=true",
     tool_hint: str = "get_transactions",
     attach_hint: str = "",
 ) -> str:

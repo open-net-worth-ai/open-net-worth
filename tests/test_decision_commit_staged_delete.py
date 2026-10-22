@@ -379,7 +379,7 @@ def _row_sharing_ref(description, amount, ref, date="2026-05-15"):
                 "external_refs": [{"source": "email", "ref": ref}],
             }
         ],
-        force=True,
+        allow_duplicate=True,
     )
     return created[0]
 

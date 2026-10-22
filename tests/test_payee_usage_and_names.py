@@ -33,7 +33,7 @@ def book(monkeypatch, db_isolated):
         _expense("2026-06-15", cafe),
         _expense("2026-06-20", None),  # no explicit payee — one is minted from the text
     ]
-    created = [svc.create_transaction(r, force=True) for r in rows]
+    created = [svc.create_transaction(r, allow_duplicate=True) for r in rows]
     svc.transactions.soft_delete(created[2]["id"])
     return {"grab": grab, "cafe": cafe, "ids": [c["id"] for c in created]}
 

@@ -228,10 +228,10 @@ def test_e2e_cross_source_duplicate_review(stores, checking):
             "from_amount": 25.50,
             "from_currency": "SGD",
             "source": "manual",
-            # force: the owner is deliberately booking a charge the guard matches
+            # allow_duplicate: the owner is deliberately booking a charge the guard matches
             # against the imported one (ADR 2026-08-01). The row lands, and the
             # review queue still surfaces the pair — which is what this test is about.
-            "force": True,
+            "allow_duplicate": True,
         },
     )
     assert r_manual.status_code == 200
@@ -321,7 +321,7 @@ def test_e2e_dismiss_remembers(stores, checking):
             "external_refs": [{"source": "csv", "ref": "fp001"}],
             "source": "csv_import",
         },
-        force=True,
+        allow_duplicate=True,
     )
 
     # Near-duplicate from a different source.
@@ -336,7 +336,7 @@ def test_e2e_dismiss_remembers(stores, checking):
             "external_refs": [{"source": "email", "ref": "fp001"}],
             "source": "email",
         },
-        force=True,
+        allow_duplicate=True,
     )
 
     # Engine surfaces the pair.

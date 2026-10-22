@@ -1452,8 +1452,8 @@ def _apply_splits(row: dict, *, category_rows: list[dict] | None = None) -> dict
 
 def create_transaction(
     data: dict,
-    force: bool = False,
     *,
+    allow_duplicate: bool = False,
     force_transfer_rate: bool = False,
     _skip_payee_resolve: bool = False,
     meta_out: dict | None = None,
@@ -1466,7 +1466,7 @@ def create_transaction(
 
     ``resurrect`` is the ONLY way past a remembered deletion: the row's ref identity was deleted
     on purpose (``rejected_identities``), the caller has an explicit ``create`` decision for it,
-    and the record is forgotten in the same transaction that re-books it. ``force`` does not
+    and the record is forgotten in the same transaction that re-books it. ``allow_duplicate`` does not
     reach it — "skip duplicate detection" is about a second booking of a live event, not about
     overriding the user's delete (ADR 2026-09-02-a-deleted-identity-is-remembered).
 
@@ -1543,15 +1543,15 @@ def create_transaction(
     # arriving under a different id — which is the normal case for a book fed by statements,
     # connectors, scheduled agents and hand entry at once. "Created-then-flagged" only protects
     # a book whose queue is READ, and most of those paths have no reader.
-    # ``force`` is the documented escape hatch (add_transaction's own schema already promises
-    # "set to true to skip duplicate detection"); it is checked FIRST so a forced write never
+    # ``allow_duplicate`` is the documented escape hatch (add_transactions' own schema promises
+    # "set to true to skip duplicate detection"); it is checked FIRST so an allowed duplicate never
     # pays for the candidate scan.
     # ``_suppress_create_audit`` marks an INNER REBUILD (update_transaction, and the merge that
     # rides on it) rather than a new event. Such a rebuild is by construction identical to the
     # row it replaces, so the guard would match it against its own original and refuse — which
     # is exactly what broke two live statement merges ("merge failed for row=13/14", surfacing
     # to the user as an unexplained "2 left out"). A rebuild is not a second booking.
-    if not force and not _suppress_create_audit.get():
+    if not allow_duplicate and not _suppress_create_audit.get():
         dup = matching.blocking_duplicate(matching.check(data, profile=matching.FULL))
         if dup is not None and not _dedup_decided_different(dup, data):
             raise _duplicate_error(dup, data)
@@ -1750,7 +1750,7 @@ def resolve_transaction_row(
 
     ``force_transfer_rate`` bypasses ONLY ``_assert_transfer_amount_converted`` (the
     equal-amount guard) — never ``_assert_transfer_rate_plausible`` (the 10x magnitude guard),
-    which has no escape hatch by design. Same shape as ``create_transaction``'s ``force``,
+    which has no escape hatch by design. Same shape as ``create_transaction``'s ``allow_duplicate``,
     kept as a separate flag because the two refusals mean different things to a caller: a
     duplicate is "this event already exists", an implausible transfer amount is "these two
     numbers don't square with each other" — a caller confident about one is not thereby
@@ -2125,8 +2125,8 @@ def _promote_source_snapshots(stored: dict) -> None:
 def bulk_create_transactions(
     data_list: list[dict],
     batch_id: str | None = None,
-    force: bool = False,
     *,
+    allow_duplicate: bool = False,
     dedup_by_external_ref: bool = False,
     meta_out: dict | None = None,
     force_transfer_rate: bool = False,
@@ -2156,7 +2156,7 @@ def bulk_create_transactions(
     sync mutex) — never the primary dedup mechanism.
 
     A row whose ref identity the user DELETED (``rejected_identities``) is skipped on every
-    path, ``force`` included — a forced write skips duplicate detection, not the user's delete
+    path, ``allow_duplicate`` included — an allowed duplicate skips duplicate detection, not the user's delete
     — and returned in ``skipped`` with ``_previously_deleted: True``. ``resurrect_refs`` names
     the ``(source, ref)`` pairs an explicit ``create`` decision re-books; those rows pass and
     their records are forgotten in the write transaction (ADR
@@ -2236,7 +2236,7 @@ def bulk_create_transactions(
     # different row and slips the guard. Intra-batch pairs are deliberately NOT compared against
     # each other — a statement legitimately lists two identical charges, which is exactly what
     # the engine's own same-feed veto already encodes.
-    if not force and indexed:
+    if not allow_duplicate and indexed:
         from datetime import timedelta as _td
 
         from backend.services import matching as _matching

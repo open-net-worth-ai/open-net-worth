@@ -19,6 +19,7 @@ from __future__ import annotations
 import pytest
 
 from backend.core import fx as core_fx
+from backend.core.errors import DuplicateTransactionError
 from backend.db.account_store import AccountStore
 from backend.db.institution_store import InstitutionStore
 from backend.db.payee_store import PayeeStore
@@ -390,3 +391,44 @@ def test_dispose_refuses_an_ambiguous_account_name(isolated):
     with pytest.raises(ValidationError):
         _dispose(pos["id"], "Brokerage")
     assert TransactionStore().all() == []
+
+
+def _sell_ten_at_130(pos_id, cash_id, day, **extra):
+    return svc.apply_lot_change(
+        {
+            "type": "dispose",
+            "position_id": pos_id,
+            "quantity": 10,
+            "proceeds_per_unit": 130,
+            "proceeds_currency": "USD",
+            "disposed_at": day,
+            "proceeds_account_id": cash_id,
+            **extra,
+        }
+    )
+
+
+def test_allow_duplicate_books_a_second_identical_sale_with_its_cash_leg(isolated):
+    """Two real executions of the same size and price on consecutive days. The ledger guard
+    matches the second sale's proceeds against the first's, and ``dispose_lots`` has no other
+    flag to answer it with — so ``allow_duplicate`` must reach the cash leg, and the refusal
+    must name it (it used to say ``force=true``, which the tool does not take)."""
+    pos = _seed_position()
+    _acquire(pos["id"], qty=20)
+    cash = AccountStore().create(
+        {"name": "Brokerage cash", "kind": "asset", "type": "investment", "currency": "USD"}
+    )
+    _sell_ten_at_130(pos["id"], cash["id"], "2026-10-14", source="email")
+
+    with pytest.raises(DuplicateTransactionError) as refused:
+        _sell_ten_at_130(pos["id"], cash["id"], "2026-10-15", source="ai")
+    assert "allow_duplicate=true" in refused.value.message
+    assert "force=true" not in refused.value.message
+    assert PositionStore().find_by_id(pos["id"])["quantity"] == 10
+
+    out = _sell_ten_at_130(pos["id"], cash["id"], "2026-10-15", source="ai", allow_duplicate=True)
+
+    legs = [t for t in TransactionStore().all() if t.get("to_account_id") == cash["id"]]
+    assert out["cash_leg_id"] in {t["id"] for t in legs}
+    assert sorted(t["to_amount"] for t in legs) == [1300.0, 1300.0]
+    assert PositionStore().find_by_id(pos["id"])["quantity"] == 0

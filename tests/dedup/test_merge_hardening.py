@@ -85,7 +85,7 @@ def _expense(
     # test. The pre-write duplicate refusal is the thing many of these tests exist to merge
     # PAST, so arrangement must be able to write what the guard would refuse — exactly the
     # escape hatch force exists for. The guard itself is covered in test_duplicate_write_block.
-    return ledger_service.create_transaction(data, force=True)
+    return ledger_service.create_transaction(data, allow_duplicate=True)
 
 
 def _income(
@@ -113,7 +113,7 @@ def _income(
         ]
     if batch_id:
         data["batch_id"] = batch_id
-    return ledger_service.create_transaction(data, force=True)  # see _expense's note
+    return ledger_service.create_transaction(data, allow_duplicate=True)  # see _expense's note
 
 
 # ── F16(a): become_transfer must clear splits and payee_id ──────────────────────

@@ -39,7 +39,7 @@ def _arrange_create(data, **kw):
     ``force=True`` is the sanctioned escape hatch for exactly that."""
     from backend.services import ledger as _l
 
-    return _l.create_transaction(data, force=True, **kw)
+    return _l.create_transaction(data, allow_duplicate=True, **kw)
 
 
 @pytest.fixture

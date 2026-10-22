@@ -839,6 +839,7 @@ def _maybe_book_premium_leg(
                     "to_currency": currency,
                     "external_refs": [{"source": "option-premium", "ref": contract["id"]}],
                 },
+                allow_duplicate=bool(change.get("allow_duplicate")),
                 conn=conn,
             )
         else:
@@ -854,6 +855,7 @@ def _maybe_book_premium_leg(
                     "from_currency": currency,
                     "external_refs": [{"source": "option-premium", "ref": contract["id"]}],
                 },
+                allow_duplicate=bool(change.get("allow_duplicate")),
                 conn=conn,
             )
     except Exception:

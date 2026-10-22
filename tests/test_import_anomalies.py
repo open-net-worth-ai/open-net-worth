@@ -57,7 +57,7 @@ def _existing_expense(
 
     source, ref = _split_ext(external_id)
     return ledger_service.create_transaction(
-        force=True,
+        allow_duplicate=True,
         data={
             "date": date,
             "kind": "expense",

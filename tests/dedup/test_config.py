@@ -135,7 +135,7 @@ def _seed_dup(acct_id, n):
                 "external_refs": [{"source": "email", "ref": f"r{i}"}],
                 "source": "email",
             },
-            force=True,
+            allow_duplicate=True,
         )
         inc = ledger_service.create_transaction(
             {
@@ -148,7 +148,7 @@ def _seed_dup(acct_id, n):
                 "external_refs": [{"source": "csv", "ref": f"s{i}"}],
                 "source": "csv_import",
             },
-            force=True,
+            allow_duplicate=True,
         )
         match_review.review_created_rows([inc])
 

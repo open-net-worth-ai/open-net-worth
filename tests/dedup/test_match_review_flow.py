@@ -18,7 +18,7 @@ def _arrange_create(data, **kw):
     ``force=True`` is the sanctioned escape hatch for exactly that."""
     from backend.services import ledger as _l
 
-    return _l.create_transaction(data, force=True, **kw)
+    return _l.create_transaction(data, allow_duplicate=True, **kw)
 
 
 @pytest.fixture(autouse=True)
@@ -202,10 +202,10 @@ def test_manual_rest_add_surfaces_duplicate(isolate):
             "from_amount": 42.0,
             "from_currency": "SGD",
             "source": "manual",
-            # force: the owner deliberately books a charge the guard matches against the
+            # allow_duplicate: the owner deliberately books a charge the guard matches against the
             # imported one (ADR 2026-08-01). The row lands and the review queue still surfaces
             # the pair — which is what this test asserts.
-            "force": True,
+            "allow_duplicate": True,
         },
     )
     assert resp.status_code == 200

@@ -357,15 +357,6 @@ def _unverified_equal_amount_warning(txn: dict) -> dict | None:
     }
 
 
-def _names_the_tool_flag(message: str | None) -> str | None:
-    """The choke's duplicate refusal names the SERVICE kwarg (``force=true`` — also the REST
-    body flag); this tool's parameter is ``allow_duplicate``. Rewritten at the boundary so the
-    advice the model reads is advice it can act on (ADR 2026-09-02 follow-up)."""
-    if not message:
-        return message
-    return message.replace("force=true", "allow_duplicate=true")
-
-
 async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | None = None):
     """Book exactly ONE transaction — the single-row path of ``add_transactions``.
 
@@ -388,7 +379,7 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
             {"ok": False, "error": str(e), "results": [{"index": 0, "error": str(e)}]},
             ensure_ascii=False,
         ), None
-    force = bool(input_data.get("allow_duplicate", False))
+    allow_duplicate = bool(input_data.get("allow_duplicate", False))
     force_transfer_rate = bool(input_data.get("force_transfer_rate", False))
     # A duplicate transfer is the MATCH ENGINE's call (F14d: same route, same amount, near
     # date), reached through this tool's router — a lone row the engine matches is handed to
@@ -396,7 +387,7 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
     # used to sit here pre-dated F14d and, once the router existed, could only fire on rows the
     # engine had DELIBERATELY cleared (e.g. F03 vetoing two same-source writes as distinct):
     # it contradicted the engine and resolved the contradiction toward "re-call with
-    # force=true" — the one piece of advice that put nine duplicate rows in the ledger.
+    # allow_duplicate=true" — the one piece of advice that put nine duplicate rows in the ledger.
     # Confirm gate: on an interactive turn a single booking PREVIEWS first (resolved category
     # + WHY, resolved accounts, base amount) and commits only when re-called with the token
     # staged here. Placed after validation and the duplicate check so an unbookable draft
@@ -424,7 +415,10 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
     write_meta: dict = {}
     try:
         new = svc.create_transaction(
-            data, force=force, force_transfer_rate=force_transfer_rate, meta_out=write_meta
+            data,
+            allow_duplicate=allow_duplicate,
+            force_transfer_rate=force_transfer_rate,
+            meta_out=write_meta,
         )
     except PreviouslyDeletedError as e:
         return json.dumps(_previously_deleted_single(e), ensure_ascii=False), None
@@ -436,13 +430,13 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
             {
                 "ok": False,
                 "refused_duplicates": 1,
-                "error": _names_the_tool_flag(str(e)),
+                "error": str(e),
                 "duplicate_of": e.context.get("existing_id"),
                 "existing": e.context.get("existing"),
                 "results": [
                     {
                         "index": 0,
-                        "error": _names_the_tool_flag(str(e)),
+                        "error": str(e),
                         "duplicate_of": e.context.get("existing_id"),
                     }
                 ],
@@ -2079,7 +2073,7 @@ async def add_transactions(input_data: dict):
     # Phase 1.5 — duplicate pre-flight (RFC batch-aware-dedup, Phase 3): classify the WHOLE
     # batch against the ledger AND itself in one pass, BEFORE anything is booked, so a
     # near-certain duplicate is caught before insert instead of flagged after the fact.
-    # force=True skips this entirely — today's escape hatch, unchanged. A pasted/dictated
+    # allow_duplicate=True skips this entirely — today's escape hatch, unchanged. A pasted/dictated
     # batch claims no completeness (BatchContext(complete=False)), so books-close promotion
     # never fires here — only pair-level evidence (shared reference, exact wording) can band
     # strong.
@@ -2368,7 +2362,7 @@ async def add_transactions(input_data: dict):
                                 "`blocked_but_unmatched` had NO problem — it was not written only "
                                 "because this abort is all-or-nothing, and it will be created "
                                 "when you re-submit. Deciding later "
-                                "is fine — nothing is lost by aborting. Do NOT use force to get "
+                                "is fine — nothing is lost by aborting. Do NOT use allow_duplicate to get "
                                 "past this: it books every row blind, duplicates included."
                             ),
                         },
@@ -2474,7 +2468,7 @@ async def add_transactions(input_data: dict):
             svc.bulk_create_transactions(
                 to_create,
                 batch_id=batch_id,
-                force=allow_duplicate,
+                allow_duplicate=allow_duplicate,
                 meta_out=bulk_meta,
                 force_transfer_rate=force_transfer_rate,
                 resurrect_refs=resurrect_refs or None,
@@ -2632,7 +2626,7 @@ async def add_transactions(input_data: dict):
                 {
                     "index": i,
                     "status": "refused",
-                    "error": _names_the_tool_flag(r.get("_duplicate_reason")),
+                    "error": r.get("_duplicate_reason"),
                     "duplicate_of": r.get("_duplicate_of"),
                 }
             )

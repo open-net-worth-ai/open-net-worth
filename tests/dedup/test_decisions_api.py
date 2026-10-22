@@ -69,7 +69,7 @@ def _make_txn(acct_id, date, desc, amount, *, external_id=None, source="csv_impo
             "external_refs": [{"source": ext_source, "ref": ext_ref}],
             "source": source,
         },
-        force=True,
+        allow_duplicate=True,
     )
 
 

@@ -155,7 +155,7 @@ def test_automation_queue_uses_creation_origin_before_count_and_pagination(clien
                     "source": source,
                     "needs_review": review,
                 },
-                force=True,
+                allow_duplicate=True,
             )
         finally:
             clear_audit_scope(token)
@@ -326,7 +326,7 @@ def test_origin_backfill_preserves_only_proven_creates(env, monkeypatch):
                     "from_currency": "SGD",
                     "source": "ai",
                 },
-                force=True,
+                allow_duplicate=True,
             )
         finally:
             clear_audit_scope(token)

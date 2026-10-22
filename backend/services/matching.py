@@ -233,7 +233,7 @@ class Candidate:
     # The score BEFORE any review-band cap (None when this tier never capped — read via the
     # ``evidence`` property, never directly). The caps exist to gate AUTO-MERGE, a destructive
     # irreversible edit; they are not a claim that the rows are different events. A caller
-    # deciding something NON-destructive — the pre-write duplicate refusal, which ``force=True``
+    # deciding something NON-destructive — the pre-write duplicate refusal, which ``allow_duplicate=True``
     # overrides — must weigh the evidence the cap flattened, or TRANSFER_LEG_ECHO (pinned at
     # 0.75 forever) is invisible to it no matter how exact the match. Ranking and banding keep
     # using ``score``: this never widens what may auto-merge.

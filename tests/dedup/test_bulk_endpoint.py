@@ -111,7 +111,7 @@ def test_f24a_no_external_ref_rows_need_force_to_repeat(client):
 
     A row without an external_ref still bypasses the L0 floor — that part is unchanged. What
     changed is the SEMANTIC guard above it: an identical second row now matches the first and
-    is refused, so "always created" is no longer true unbypassably. ``force=true`` is the
+    is refused, so "always created" is no longer true unbypassably. ``allow_duplicate=true`` is the
     escape hatch, and with it the original F24(a) property holds exactly as before."""
     cl, acc_store, txn_store, _ = client
     acct = _make_account(acc_store)
@@ -127,7 +127,7 @@ def test_f24a_no_external_ref_rows_need_force_to_repeat(client):
     r2 = cl.post("/api/transactions/bulk", json={"transactions": [row]})
     assert r1.json()["created"] == 1
     assert r2.json()["created"] == 0  # refused: same amount/date/description as r1
-    r3 = cl.post("/api/transactions/bulk", json={"transactions": [row], "force": True})
+    r3 = cl.post("/api/transactions/bulk", json={"transactions": [row], "allow_duplicate": True})
     assert r3.json()["created"] == 1  # the caller confirmed it is a separate charge
     all_rows = [t for t in txn_store.all() if not t.get("deleted")]
     assert len(all_rows) == 2

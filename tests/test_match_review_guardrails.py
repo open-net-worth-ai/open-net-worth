@@ -50,7 +50,7 @@ def _arrange_create(data, **kw):
     pre-write duplicate guard (ADR 2026-08-01) so those fixtures still build."""
     from backend.services import ledger as _l
 
-    return _l.create_transaction(data, force=True, **kw)
+    return _l.create_transaction(data, allow_duplicate=True, **kw)
 
 
 def test_transfer_pair_become_transfer_recommends_accept():

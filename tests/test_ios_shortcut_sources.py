@@ -187,7 +187,7 @@ def _booked_pair(account_id: str, first: tuple[str, str], second: tuple[str, str
                 "date": "2026-10-15",
                 "external_refs": [{"source": ref[0], "ref": ref[1]}],
             },
-            force=True,
+            allow_duplicate=True,
         )
         ids.append(row["id"])
     return ids

@@ -2209,7 +2209,7 @@ def _decision_commit_locked(
     creates: list[dict] = []
     # Rows the owner EXPLICITLY chose to create, having already seen the preview's duplicate
     # flag for them (the review's Include toggle). That choice IS the confirmation the
-    # pre-write duplicate guard exists to ask for, so these are booked with force=True —
+    # pre-write duplicate guard exists to ask for, so these are booked with allow_duplicate=True —
     # otherwise the guard silently overrules a decision the user made with the same evidence
     # the guard would have shown them ("default-skip is a DEFAULT, not a refusal").
     creates_explicit: list[dict] = []
@@ -2672,10 +2672,10 @@ def _apply_rows(
             creates, batch_id=batch["id"] if batch else None
         )
     if creates_explicit:
-        # force=True: the owner ticked Include on these rows with the duplicate flag already in
+        # allow_duplicate=True: the owner ticked Include on these rows with the duplicate flag already in
         # front of them. Guarding them again would refuse a decision made on the same evidence.
         forced_rows, forced_refused = ledger_service.bulk_create_transactions(
-            creates_explicit, batch_id=batch["id"] if batch else None, force=True
+            creates_explicit, batch_id=batch["id"] if batch else None, allow_duplicate=True
         )
         created_rows = created_rows + forced_rows
         refused_rows = refused_rows + forced_refused

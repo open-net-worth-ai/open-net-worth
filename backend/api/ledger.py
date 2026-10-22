@@ -210,7 +210,7 @@ class TransactionCreate(BaseModel):
     # payload. The pre-write duplicate guard (ADR 2026-08-01) refuses a row matching an
     # existing one; the AI tool has carried this escape hatch since day one, and without it a
     # REST/UI caller is refused with no way to say "yes, book it anyway".
-    force: bool = False
+    allow_duplicate: bool = False
     resurrect: bool = False
     date: str
     kind: str = "expense"  # expense | income | transfer | adjustment
@@ -297,7 +297,7 @@ class BulkTransactionImport(BaseModel):
     # Book every row even when the pre-write duplicate guard (ADR 2026-08-01) matches it
     # against an existing one. Same escape hatch the AI tool and the single-row POST carry;
     # without it a REST caller can be refused with no way to proceed.
-    force: bool = False
+    allow_duplicate: bool = False
 
 
 class BulkTxnChanges(BaseModel):
@@ -1107,10 +1107,12 @@ def get_transactions(
 @router.post("/api/transactions")
 def add_transaction(body: TransactionCreate):
     payload = body.model_dump()
-    force = bool(payload.pop("force", False))
+    allow_duplicate = bool(payload.pop("allow_duplicate", False))
     resurrect = bool(payload.pop("resurrect", False))
     try:
-        created = svc.create_transaction(payload, force=force, resurrect=resurrect)
+        created = svc.create_transaction(
+            payload, allow_duplicate=allow_duplicate, resurrect=resurrect
+        )
     except PreviouslyDeletedError as exc:
         raise HTTPException(
             to_http_status(exc),
@@ -1134,7 +1136,7 @@ def add_transaction(body: TransactionCreate):
                 "message": exc.message,
                 "duplicate_of": exc.context.get("existing_id"),
                 "existing": exc.context.get("existing"),
-                "retry_with": {"force": True},
+                "retry_with": {"allow_duplicate": True},
             },
         ) from exc
     except OpenNetWorthError as exc:
@@ -1451,7 +1453,7 @@ def bulk_add_transactions(body: BulkTransactionImport):
         rows_to_create.append(d)
 
     created, refused = svc.bulk_create_transactions(
-        rows_to_create, batch_id=batch_id, force=bool(body.force)
+        rows_to_create, batch_id=batch_id, allow_duplicate=bool(body.allow_duplicate)
     )
 
     # Security-review fix: `refused` (the semantic-duplicate / previously-deleted guard's
