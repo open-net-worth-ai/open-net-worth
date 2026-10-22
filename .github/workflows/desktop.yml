@@ -95,7 +95,7 @@ jobs:
           ONW_DESKTOP_UPDATES: '0'
         run: |
           cd desktop
-          python3 -c 'from pathlib import Path; import subprocess; app = next(Path("out").glob("*/Open Net Worth.app/Contents/MacOS/open-net-worth")); subprocess.run(["node", "qa/packaged-smoke.mjs", str(app.resolve())], check=True)'
+          python3 -c 'from pathlib import Path; import subprocess; app = next(Path("out").glob("*/Open Net Worth.app/Contents/MacOS/Open Net Worth")); subprocess.run(["node", "qa/packaged-smoke.mjs", str(app.resolve())], check=True)'
       - name: Verify Gatekeeper acceptance and stage release files
         if: inputs.signed == true
         run: |

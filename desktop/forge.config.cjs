@@ -17,7 +17,9 @@ module.exports = {
   packagerConfig: {
     asar: true,
     name: 'Open Net Worth',
-    executableName: 'open-net-worth',
+    // Packager writes executableName into CFBundleDisplayName (Force Quit, Activity Monitor), after
+    // extendInfo, so on macOS the binary must carry the product name.
+    ...(process.platform === 'darwin' ? {} : { executableName: 'open-net-worth' }),
     appBundleId: 'app.opennetworth.desktop',
     protocols: [{ name: 'Open Net Worth sign-in', schemes: ['onw'] }],
     ...(process.platform === 'darwin' ? { icon: path.resolve(__dirname, 'resources', 'icon.icns') } : {}),

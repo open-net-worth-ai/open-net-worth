@@ -305,7 +305,7 @@ preferences and the book. The profile flag alone does not change the default boo
 fuses disable inspector/Node launch
 modes, so Playwright's Electron debugger is used against the source host with the exact bundled
 runtime; the installed executable is additionally tested as a standalone process.
-`node qa/packaged-smoke.mjs /absolute/App.app/Contents/MacOS/open-net-worth` relocates the
+`node qa/packaged-smoke.mjs "/absolute/App.app/Contents/MacOS/Open Net Worth"` relocates the
 app into a temporary path containing spaces, removes developer tools from PATH, and checks
 local browser access, host/origin guards, desktop-only native APIs, isolated data and graceful
 shutdown. Run it against an app in a mounted

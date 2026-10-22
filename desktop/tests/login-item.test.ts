@@ -4,7 +4,7 @@ import { win32 } from 'node:path';
 import { loginItemOptions, squirrelUpdateExe } from '../src/main/login-item';
 
 test('only Windows needs explicit login-item options', () => {
-  assert.deepEqual(loginItemOptions('darwin', '/Applications/Open Net Worth.app/Contents/MacOS/open-net-worth', () => true), {});
+  assert.deepEqual(loginItemOptions('darwin', '/Applications/Open Net Worth.app/Contents/MacOS/Open Net Worth', () => true), {});
   assert.deepEqual(loginItemOptions('linux', '/opt/onw/open-net-worth', () => true), {});
 });
 
