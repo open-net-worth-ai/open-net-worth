@@ -665,6 +665,76 @@ def test_a_narration_retry_is_cost_reported_only_if_both_rounds_were():
     assert merge(reported, unreported)["cost_reported"] is False
 
 
+def _message_start(input_tokens: int, cache_creation: int, cache_read: int) -> dict:
+    return {
+        "type": "stream_event",
+        "event": {
+            "type": "message_start",
+            "message": {
+                "usage": {
+                    "input_tokens": input_tokens,
+                    "cache_creation_input_tokens": cache_creation,
+                    "cache_read_input_tokens": cache_read,
+                }
+            },
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_usage_carries_the_largest_single_request_and_the_reported_window(tmp_path):
+    # Regression (2026-10-22): the compaction check read the round's SUMMED usage as one
+    # prompt, against a 200K table fallback for the bare "sonnet" alias — while the CLI
+    # was really running a 1M-window model. The usage event now carries both facts.
+    result = _result_event("x")
+    result["modelUsage"] = {
+        "claude-haiku-5-5": {"inputTokens": 50, "contextWindow": 200_000},
+        "claude-sonnet-5-5": {
+            "inputTokens": 4,
+            "cacheReadInputTokens": 400,
+            "cacheCreationInputTokens": 300,
+            "contextWindow": 1_000_000,
+        },
+    }
+    cli = _fake_cli(
+        tmp_path,
+        [
+            _init_event(),
+            _message_start(2, 100, 200),
+            _message_start(2, 200, 200),
+            *_text_deltas("x"),
+            result,
+        ],
+    )
+    events = await _collect(
+        ClaudeCliProvider(cli_path=str(cli)),
+        messages=[{"role": "user", "content": "hi"}],
+        tools=[],
+        system="",
+        model="sonnet",
+    )
+    usage = next(e for e in events if e["type"] == "usage")
+    assert usage["prompt_tokens"] == 402
+    assert usage["context_window"] == 1_000_000
+
+
+def test_a_result_without_model_usage_reports_no_window_or_peak():
+    usage = ccp._usage_event({"usage": {}}, "sonnet", None, 0.0)
+    assert usage["prompt_tokens"] is None
+    assert usage["context_window"] is None
+
+
+def test_a_narration_retry_keeps_the_larger_prompt_not_the_sum():
+    merge = ccp._merge_narration_retry_usage
+    merged = merge(
+        {"prompt_tokens": 300, "context_window": 1_000_000},
+        {"prompt_tokens": 250, "context_window": 1_000_000},
+    )
+    assert merged["prompt_tokens"] == 300
+    assert merged["context_window"] == 1_000_000
+    assert merge({"prompt_tokens": None}, {"prompt_tokens": 7})["prompt_tokens"] == 7
+
+
 def test_cost_basis_classification():
     assert cost_basis_for("none") == "plan_included"
     assert cost_basis_for("") == "plan_included"

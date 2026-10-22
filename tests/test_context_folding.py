@@ -189,12 +189,12 @@ class TestLocalEstimateFallback:
 
 class TestTokenTrigger:
     """Steady state: a session WITH recorded usage is judged on real token pressure —
-    `history` is irrelevant here (real rows always win over the estimate)."""
+    the last row's largest single-request prompt (`peak_prompt_tokens`) against the
+    model's window. `history` is irrelevant here (real rows always win over the estimate)."""
 
     def test_fires_when_last_usage_exceeds_the_fraction_of_the_models_window(self):
         fold_data = {"folded_through_idx": 10}
-        # window budget 1000 tokens; last recorded usage well past FOLD_TRIGGER_FRACTION
-        row = {"input_tokens": 600, "cache_creation_tokens": 0, "cache_read_tokens": 0}
+        row = {"model": "m", "peak_prompt_tokens": 600}
         with (
             patch("backend.services.cost.session_chat_records", return_value=[row]),
             patch("backend.ai.models.price_map.max_input_tokens", return_value=1000),
@@ -203,28 +203,49 @@ class TestTokenTrigger:
 
     def test_does_not_fire_when_under_the_fraction(self):
         fold_data = {"folded_through_idx": 10}
-        row = {"input_tokens": 100, "cache_creation_tokens": 0, "cache_read_tokens": 0}
+        row = {"model": "m", "peak_prompt_tokens": 100}
         with (
             patch("backend.services.cost.session_chat_records", return_value=[row]),
             patch("backend.ai.models.price_map.max_input_tokens", return_value=1000),
         ):
             assert _should_refold("sid", "m", "", 200, fold_data, []) is False
 
-    def test_sums_input_plus_cache_creation_plus_cache_read(self):
+    def test_a_turns_summed_buckets_are_not_a_prompt_size(self):
+        """Regression (2026-10-22): a row's token buckets SUM every request of a turn —
+        two 300-token requests recorded 600, read as one prompt over the line, so every
+        multi-round turn re-folded. Only the largest single request counts."""
         fold_data = {"folded_through_idx": 10}
-        row = {"input_tokens": 100, "cache_creation_tokens": 100, "cache_read_tokens": 400}
+        row = {
+            "model": "m",
+            "input_tokens": 4,
+            "cache_creation_tokens": 300,
+            "cache_read_tokens": 296,
+            "peak_prompt_tokens": 300,
+        }
         with (
             patch("backend.services.cost.session_chat_records", return_value=[row]),
             patch("backend.ai.models.price_map.max_input_tokens", return_value=1000),
         ):
-            # 100+100+400 = 600 > 0.55 * 1000 — fires; any ONE field alone would not.
-            assert _should_refold("sid", "m", "", 11, fold_data, []) is True
+            assert _should_refold("sid", "m", "", 11, fold_data, []) is False
+
+    def test_a_row_without_a_peak_falls_back_to_the_local_estimate(self):
+        """A pre-fix row carries only summed buckets — never trusted as a prompt size."""
+        fold_data = {"folded_through_idx": 10}
+        legacy = {"model": "m", "input_tokens": 900, "cache_creation_tokens": 0}
+        small_history = [{"role": "user", "content": "hi"}]
+        big_history = [{"role": "user", "content": "x" * 5000}]
+        with (
+            patch("backend.services.cost.session_chat_records", return_value=[legacy]),
+            patch("backend.ai.models.price_map.max_input_tokens", return_value=1000),
+        ):
+            assert _should_refold("sid", "m", "", 11, fold_data, small_history) is False
+            assert _should_refold("sid", "m", "", 11, fold_data, big_history) is True
 
     def test_uses_the_most_recent_row_when_several_exist(self):
         fold_data = {"folded_through_idx": 10}
         rows = [
-            {"input_tokens": 900, "cache_creation_tokens": 0, "cache_read_tokens": 0},
-            {"input_tokens": 50, "cache_creation_tokens": 0, "cache_read_tokens": 0},  # latest
+            {"model": "m", "peak_prompt_tokens": 900},
+            {"model": "m", "peak_prompt_tokens": 50},  # latest
         ]
         with (
             patch("backend.services.cost.session_chat_records", return_value=rows),
@@ -243,23 +264,90 @@ class TestTokenTrigger:
         budget = 1000
         at_boundary = round(FOLD_TRIGGER_FRACTION * budget)
         with patch("backend.ai.models.price_map.max_input_tokens", return_value=budget):
-            row_at = [
-                {"input_tokens": at_boundary, "cache_creation_tokens": 0, "cache_read_tokens": 0}
-            ]
+            row_at = [{"model": "m", "peak_prompt_tokens": at_boundary}]
             with patch("backend.services.cost.session_chat_records", return_value=row_at):
                 assert (
                     _should_refold("sid", "m", "", 11, fold_data, []) is False
                 )  # not STRICTLY over
 
-            row_over = [
-                {
-                    "input_tokens": at_boundary + 1,
-                    "cache_creation_tokens": 0,
-                    "cache_read_tokens": 0,
-                }
-            ]
+            row_over = [{"model": "m", "peak_prompt_tokens": at_boundary + 1}]
             with patch("backend.services.cost.session_chat_records", return_value=row_over):
                 assert _should_refold("sid", "m", "", 11, fold_data, []) is True
+
+
+class TestReportedContextWindow:
+    """The window the provider REPORTED serving the turn beats the price table — the
+    CLI's bare ``sonnet`` alias is in no table (200K fallback) but runs a 1M model."""
+
+    def test_reported_window_beats_the_table_fallback(self):
+        """Regression (2026-10-22): a 120K prompt on a 1M-window model is ~12% full,
+        not over 55% of a guessed 200K."""
+        fold_data = {"folded_through_idx": 10}
+        # The live turn that kept compacting: two requests summing to 221K.
+        row = {
+            "model": "sonnet",
+            "input_tokens": 4,
+            "cache_creation_tokens": 114_428,
+            "cache_read_tokens": 106_593,
+            "peak_prompt_tokens": 120_000,
+            "context_window": 1_000_000,
+        }
+        with (
+            patch("backend.services.cost.session_chat_records", return_value=[row]),
+            patch("backend.ai.models.price_map.max_input_tokens", return_value=200_000),
+        ):
+            assert _should_refold("sid", "sonnet", "", 11, fold_data, []) is False
+
+    def test_reported_window_still_triggers_when_genuinely_full(self):
+        fold_data = {"folded_through_idx": 10}
+        row = {"model": "sonnet", "peak_prompt_tokens": 600_000, "context_window": 1_000_000}
+        with (
+            patch("backend.services.cost.session_chat_records", return_value=[row]),
+            patch("backend.ai.models.price_map.max_input_tokens", return_value=200_000),
+        ):
+            assert _should_refold("sid", "sonnet", "", 11, fold_data, []) is True
+
+    def test_a_window_reported_for_another_model_is_ignored(self):
+        """The user switched models since that row — its window says nothing now."""
+        fold_data = {"folded_through_idx": 10}
+        row = {"model": "sonnet", "peak_prompt_tokens": 600, "context_window": 1_000_000}
+        with (
+            patch("backend.services.cost.session_chat_records", return_value=[row]),
+            patch("backend.ai.models.price_map.max_input_tokens", return_value=1000),
+        ):
+            assert _should_refold("sid", "other-model", "", 11, fold_data, []) is True
+
+
+def test_round_prompt_tokens_prefers_the_providers_own_single_request_figure():
+    from backend.ai.assistant import _round_prompt_tokens
+
+    summed = {"input_tokens": 4, "cache_creation_tokens": 300, "cache_read_tokens": 400}
+    # One round of an API provider IS one request — its buckets are that prompt.
+    assert _round_prompt_tokens(summed) == 704
+    # A provider that made several requests in the round reports the largest itself.
+    assert _round_prompt_tokens({**summed, "prompt_tokens": 402}) == 402
+    assert _round_prompt_tokens({**summed, "prompt_tokens": None}) == 704
+
+
+def test_cost_record_persists_the_peak_prompt_and_window(db_isolated):
+    from backend.ai.cost_tracker import record
+    from backend.services.cost import session_chat_records
+
+    record(
+        "chat",
+        "sonnet",
+        4,
+        10,
+        300,
+        400,
+        "sid-peak",
+        cost_usd=0.0,
+        peak_prompt_tokens=402,
+        context_window=1_000_000,
+    )
+    row = session_chat_records("sid-peak")[-1]
+    assert row["peak_prompt_tokens"] == 402
+    assert row["context_window"] == 1_000_000
 
 
 # ── _prepare_messages: fold summary injection ─────────────────────────────────
@@ -446,7 +534,7 @@ def test_maybe_update_fold_end_to_end_on_real_token_pressure():
     has advanced by just 1 message — proof the trigger is genuinely token-driven end
     to end, not just in _should_refold isolation."""
     fold_data = {"summary": "existing summary", "folded_through_idx": 20, "generated_at_len": 40}
-    row = {"input_tokens": 600, "cache_creation_tokens": 0, "cache_read_tokens": 0}
+    row = {"model": "m", "peak_prompt_tokens": 600}
 
     def fake_conversation_text(h):
         return " ".join(m.get("content", "") for m in h)

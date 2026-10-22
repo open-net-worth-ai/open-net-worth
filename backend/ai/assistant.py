@@ -3207,6 +3207,8 @@ def _record_cost(
     turn_index: int | None = None,
     cost_basis: str | None = None,
     provider: str | None = None,
+    peak_prompt_tokens: int | None = None,
+    context_window: int | None = None,
 ) -> None:
     from backend.ai.cost_tracker import record
     from backend.core.cost_context import get_cost_surface
@@ -3227,6 +3229,25 @@ def _record_cost(
         turn_index=turn_index,
         cost_basis=cost_basis,
         provider=provider,
+        peak_prompt_tokens=peak_prompt_tokens,
+        context_window=context_window,
+    )
+
+
+def _round_prompt_tokens(event: dict) -> int:
+    """Largest single-request prompt in one usage round.
+
+    A provider that makes several requests per round reports ``prompt_tokens`` itself
+    (the CLI); otherwise one round is one request and its three input buckets ARE that
+    request's prompt.
+    """
+    reported = event.get("prompt_tokens")
+    if isinstance(reported, int) and not isinstance(reported, bool) and reported > 0:
+        return reported
+    return (
+        (event.get("input_tokens") or 0)
+        + (event.get("cache_creation_tokens") or 0)
+        + (event.get("cache_read_tokens") or 0)
     )
 
 
@@ -3277,16 +3298,26 @@ def _token_pressure_over_fraction(
     from backend.services.cost import session_chat_records
 
     rows = session_chat_records(session_id)
-    if rows:
-        last = rows[-1]
-        current_tokens = (
-            (last.get("input_tokens") or 0)
-            + (last.get("cache_creation_tokens") or 0)
-            + (last.get("cache_read_tokens") or 0)
-        )
-    else:
+    last = rows[-1] if rows else {}
+    # A row's input buckets SUM every request of its turn — a three-round turn read as
+    # one 3x-sized prompt, so every turn looked over the line (live, 2026-10-22). Only
+    # the turn's largest single request is a prompt size; a row from before that was
+    # recorded falls back to the local estimate.
+    current_tokens = _positive_int(last.get("peak_prompt_tokens"))
+    if current_tokens is None:
         current_tokens = _approx_token_count(json.dumps(history, ensure_ascii=False, default=str))
-    return current_tokens > fraction * max_input_tokens(model, base_url)
+    # The window the provider itself reported wins over the table: the CLI's bare
+    # ``sonnet`` alias is in no table (→ 200K fallback) yet runs a 1M-window model.
+    window = _positive_int(last.get("context_window")) if last.get("model") == model else None
+    if window is None:
+        window = max_input_tokens(model, base_url)
+    return current_tokens > fraction * window
+
+
+def _positive_int(value: object) -> Optional[int]:
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    return None
 
 
 def _should_refold(
@@ -4216,6 +4247,8 @@ async def _run_turn(
         turn_cost_usd = 0.0
         turn_cost_rounds = 0
         turn_cost_reported_rounds = 0
+        turn_peak_prompt_tokens = 0
+        turn_context_window: int | None = None
         # What this turn's dollar figure MEANS. Set only by a provider that knows it is
         # not metered spend (the Claude Code CLI on a Pro/Max login reports a list-price
         # estimate for usage already covered by the plan); absent everywhere else, which
@@ -4420,6 +4453,12 @@ async def _run_turn(
                     turn_output_tokens += event["output_tokens"]
                     turn_cost_usd += event["cost_usd"]
                     turn_cost_rounds += 1
+                    turn_peak_prompt_tokens = max(
+                        turn_peak_prompt_tokens, _round_prompt_tokens(event)
+                    )
+                    turn_context_window = (
+                        _positive_int(event.get("context_window")) or turn_context_window
+                    )
                     if event.get("cost_reported"):
                         turn_cost_reported_rounds += 1
                     if event.get("cost_basis"):
@@ -5035,6 +5074,8 @@ async def _run_turn(
                                 cost_basis=turn_cost_basis,
                                 turn_index=history_snapshot_len,
                                 provider=_turn_provider_label,
+                                peak_prompt_tokens=turn_peak_prompt_tokens or None,
+                                context_window=turn_context_window,
                             )
                             if _mutated_domains:
                                 yield {"type": "data_changed", "domains": sorted(_mutated_domains)}
@@ -5183,6 +5224,8 @@ async def _run_turn(
                             cost_basis=turn_cost_basis,
                             turn_index=history_snapshot_len,
                             provider=_turn_provider_label,
+                            peak_prompt_tokens=turn_peak_prompt_tokens or None,
+                            context_window=turn_context_window,
                         )
                         if _mutated_domains:
                             yield {"type": "data_changed", "domains": sorted(_mutated_domains)}

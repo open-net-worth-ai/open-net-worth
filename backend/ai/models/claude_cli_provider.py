@@ -528,6 +528,7 @@ class ClaudeCliProvider(AIProvider):
                 t0 = time.monotonic()
                 ttft_ms = None
                 usage_event = None
+                peak_prompt_tokens: Optional[int] = None
                 stop_reason = "end_turn"
                 emitted_any_delta = False
                 emitted_anything = False
@@ -636,12 +637,18 @@ class ClaudeCliProvider(AIProvider):
                                 stop_reason = (inner.get("delta") or {}).get(
                                     "stop_reason"
                                 ) or stop_reason
+                            elif inner.get("type") == "message_start":
+                                peak_prompt_tokens = _max_prompt(
+                                    peak_prompt_tokens, _message_start_prompt(inner)
+                                )
                         elif etype == "result":
                             fallback_text = ev.get("result") or ""
                             if ev.get("is_error"):
                                 cli_error = _result_error(ev)
                                 break
-                            usage_event = _usage_event(ev, model, ttft_ms, t0, api_key_source)
+                            usage_event = _usage_event(
+                                ev, model, ttft_ms, t0, api_key_source, peak_prompt_tokens
+                            )
 
                 except ProviderTimeoutError as exc:
                     log.warning("claude_cli: %s — %s", exc, watch.summary())
@@ -670,7 +677,9 @@ class ClaudeCliProvider(AIProvider):
                         watch.grace,
                         watch.summary(),
                     )
-                    usage_event = _usage_event({}, model, ttft_ms, t0, api_key_source)
+                    usage_event = _usage_event(
+                        {}, model, ttft_ms, t0, api_key_source, peak_prompt_tokens
+                    )
 
                 if cli_error is not None:
                     # A REUSED session can be poisoned by the model's OWN reply. The CLI holds
@@ -1287,17 +1296,70 @@ async def _until_call_grace(
         await source.aclose()
 
 
+def _message_start_prompt(inner: dict) -> Optional[int]:
+    """Prompt size of ONE API request, from its ``message_start`` stream event."""
+    usage = (inner.get("message") or {}).get("usage")
+    if not isinstance(usage, dict):
+        return None
+    return (
+        (usage.get("input_tokens") or 0)
+        + (usage.get("cache_creation_input_tokens") or 0)
+        + (usage.get("cache_read_input_tokens") or 0)
+    )
+
+
+def _max_prompt(a: Optional[int], b: Optional[int]) -> Optional[int]:
+    if a is None:
+        return b
+    if b is None:
+        return a
+    return max(a, b)
+
+
+def _reported_context_window(result: dict) -> Optional[int]:
+    """The context window the CLI says served this round (``modelUsage[*].contextWindow``).
+
+    A bare alias like ``sonnet`` is in no price table, so a table lookup falls back to
+    200K while the CLI really runs a 1M-window model. With more than one model in the
+    envelope (the CLI may call a small helper model), the one that read the most input
+    is the conversation's model.
+    """
+    best: Optional[tuple[int, int]] = None
+    for entry in (result.get("modelUsage") or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        window = entry.get("contextWindow")
+        if not isinstance(window, int) or isinstance(window, bool) or window <= 0:
+            continue
+        read = (
+            (entry.get("inputTokens") or 0)
+            + (entry.get("cacheReadInputTokens") or 0)
+            + (entry.get("cacheCreationInputTokens") or 0)
+        )
+        if best is None or read > best[0]:
+            best = (read, window)
+    return best[1] if best else None
+
+
 def _usage_event(
     result: dict,
     model: str,
     ttft_ms: Optional[float],
     t0: float,
     api_key_source: str = "",
+    peak_prompt_tokens: Optional[int] = None,
 ) -> dict:
-    """Build the normalised ``usage`` event from the CLI's final ``result`` envelope."""
+    """Build the normalised ``usage`` event from the CLI's final ``result`` envelope.
+
+    ``result.usage`` sums every API request the CLI made this round; ``prompt_tokens`` is
+    the largest SINGLE request's prompt (from ``message_start``), which is what context
+    pressure means.
+    """
     usage = result.get("usage") or {}
     cache_creation = usage.get("cache_creation") or {}
     return {
+        "prompt_tokens": peak_prompt_tokens,
+        "context_window": _reported_context_window(result),
         "cost_basis": cost_basis_for(api_key_source),
         "type": "usage",
         "input_tokens": usage.get("input_tokens", 0) or 0,
@@ -1342,4 +1404,6 @@ def _merge_narration_retry_usage(first: dict, second: dict) -> dict:
         first.get("ttft_ms") if first.get("ttft_ms") is not None else second.get("ttft_ms")
     )
     merged["cost_reported"] = bool(first.get("cost_reported") and second.get("cost_reported"))
+    merged["prompt_tokens"] = _max_prompt(first.get("prompt_tokens"), second.get("prompt_tokens"))
+    merged["context_window"] = second.get("context_window") or first.get("context_window")
     return merged
