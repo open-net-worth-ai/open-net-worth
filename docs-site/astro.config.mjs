@@ -5,6 +5,7 @@ import starlight from '@astrojs/starlight';
 import { buildSidebar } from './src/lib/corpus.mjs';
 import { remarkStripLeadingH1 } from './src/lib/remark-strip-leading-h1.mjs';
 import { remarkResolveCorpusLinks } from './src/lib/remark-resolve-corpus-links.mjs';
+import { rehypeEmailOff } from './src/lib/rehype-email-off.mjs';
 
 // The PUBLIC repo, which is not where this code lives today: the working repo is
 // private and carries personal financial data in its history, so the plan is a
@@ -34,6 +35,14 @@ const site = process.env.SITE_URL || 'https://docs.opennetworth.ai';
 const EMBED = process.env.EMBED_IN_APP === '1';
 const base = process.env.SITE_BASE || (EMBED ? '/docs/' : '/');
 
+// Google Analytics 4 is for the PUBLIC site only. The embed ships inside the app, which promises
+// "no analytics, no usage tracking" (docs/product/operations/security-and-privacy.md), so it never
+// gets an ID — decided here, once, rather than trusted to whoever runs the build. Unset = no tag.
+const rawGaId = EMBED ? '' : (process.env.PUBLIC_GA_MEASUREMENT_ID || '').trim();
+if (rawGaId && !/^G-[A-Z0-9]{4,}$/.test(rawGaId)) {
+  throw new Error(`PUBLIC_GA_MEASUREMENT_ID must look like G-XXXXXXX, got "${rawGaId}".`);
+}
+
 // https://astro.build/config
 export default defineConfig({
   // Kept out of dist/ so one build never clobbers the other — the published site and the
@@ -44,6 +53,12 @@ export default defineConfig({
   prefetch: { prefetchAll: true, defaultStrategy: 'hover' },
   site,
   base,
+  vite: {
+    define: {
+      'import.meta.env.ONW_DOCS_EMBED': JSON.stringify(EMBED),
+      'import.meta.env.ONW_GA_ID': JSON.stringify(rawGaId),
+    },
+  },
   markdown: {
     processor: unified({
       remarkPlugins: [
@@ -54,6 +69,8 @@ export default defineConfig({
         // (docs/product's frozen "Cross-links" contract) become real site routes.
         [remarkResolveCorpusLinks, { base }],
       ],
+      // rehype-email-off.mjs: keeps Cloudflare from turning addresses into 404ing links.
+      rehypePlugins: [rehypeEmailOff],
     }),
   },
   integrations: [
