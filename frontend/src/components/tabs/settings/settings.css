@@ -138,7 +138,7 @@
   width: 100%;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -212,7 +212,7 @@
   background: var(--selected);
 }
 .onw-settings .rd-set-navitem.on .ic {
-  color: var(--accent);
+  color: var(--ink);
 }
 .onw-settings .rd-set-nohits {
   font-size: var(--text-xs);
@@ -945,7 +945,7 @@
   width: 100%;
   background: var(--surface2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -1073,7 +1073,7 @@
   overflow: hidden;
   display: flex;
   align-items: center;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--surface2);
   border: 1px solid var(--line);
 }
@@ -1130,14 +1130,13 @@
   transition: transform 0.15s;
 }
 .onw-settings .rd-toggle.on {
-  background: var(--accent);
+  background: var(--ink);
 }
-/* Same contract as the design system's .ui-switch: the ON track owns the accent, so its thumb
-   uses the on-accent token. --ink here put a near-black knob on a blue track in LIGHT theme
-   (#23262e on #3b86dd) and the switch read as muddy/off; dark theme hid it. */
+/* The ON track is ink, so its thumb is the page background — the off thumb (--ink) would
+   vanish into it. */
 .onw-settings .rd-toggle.on::after {
   transform: translateX(14px);
-  background: var(--ink-on-accent);
+  background: var(--bg);
 }
 
 /* ── rows / lists ─────────────────────────────────────────────────────────── */
@@ -1580,7 +1579,7 @@
   color: var(--ink);
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -1649,7 +1648,8 @@
 }
 .onw-settings .rd-seg-b.on {
   color: var(--ink);
-  background: var(--selected);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 /* a long tab row (the MCP client list) must stay inside its card and scroll, not be
    amputated by the dialog's overflow — narrow rows like the cost window are unaffected */
@@ -2890,7 +2890,7 @@
 .onw-settings .rd-nroutes input[type='checkbox'] {
   width: 15px;
   height: 15px;
-  accent-color: var(--accent);
+  accent-color: var(--ink);
   cursor: pointer;
 }
 .onw-settings .rd-nroutes input[type='checkbox']:disabled {

@@ -401,7 +401,7 @@
   transition: background 0.12s ease;
 }
 .bgl-pickrow--on .bgl-pickrow__track {
-  background: var(--accent);
+  background: var(--ink);
 }
 .bgl-pickrow__thumb {
   display: block;

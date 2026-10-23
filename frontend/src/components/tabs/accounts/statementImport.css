@@ -138,7 +138,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   color: var(--ink);
 }
 .imp3-crumb.on i {
-  background: var(--accent);
+  background: var(--ink);
 }
 .imp3-crumb.done {
   color: var(--muted);
@@ -256,7 +256,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -313,7 +313,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   font-weight: 600;
   cursor: pointer;
   padding: 4px 6px;
-  border-radius: 6px;
+  border-radius: 50%;
 }
 @media (hover: hover) {
   .imp3-file-x:hover {
@@ -371,7 +371,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   white-space: nowrap;
 }
 .imp3-known-cb input {
-  accent-color: var(--primary);
+  accent-color: var(--ink);
   cursor: pointer;
   margin: 0;
 }
@@ -502,7 +502,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -527,7 +527,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   cursor: pointer;
 }
 .imp3-remember input {
-  accent-color: var(--primary);
+  accent-color: var(--ink);
   cursor: pointer;
   margin: 0;
 }
@@ -1091,10 +1091,10 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 .imp3-kindfilter-pop button.sel {
   background: var(--selected);
   font-weight: 600;
-  color: var(--accent);
+  color: var(--ink);
 }
 .imp3-kindfilter-pop button.sel i {
-  color: var(--accent);
+  color: var(--ink);
 }
 .imp3-kindfilter-pop button i {
   font-style: normal;
@@ -1210,17 +1210,17 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   width: 100px;
   background: var(--bg-2);
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
   padding: 7px 10px;
 }
 .imp3-fixgo {
-  background: var(--primary);
+  background: var(--cta);
   border: none;
-  border-radius: 8px;
-  color: #fff;
+  border-radius: var(--radius-lg);
+  color: var(--ink-on-cta);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -1307,8 +1307,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 }
 @media (hover: hover) {
   .imp3-cmp-lk:hover {
-    color: var(--primary);
-    text-decoration-color: var(--primary);
+    text-decoration-color: var(--ink);
   }
 }
 .imp3-cmp-lk:disabled {
@@ -1666,6 +1665,9 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   font-weight: 600;
   color: var(--primary);
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .imp3-arow-main {
   display: flex;
@@ -2049,8 +2051,8 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   }
 }
 .imp3-seg button.on {
-  background: var(--primary);
-  color: #fff;
+  background: var(--selected);
+  color: var(--ink);
   font-weight: 700;
 }
 
@@ -2142,7 +2144,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12px;
@@ -2344,7 +2346,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   align-items: center;
   gap: 6px;
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   padding: 6px 12px;
   background: transparent;
   text-decoration: none;
@@ -2437,7 +2439,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 .imp3-teach-edit textarea {
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -2451,10 +2453,10 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 }
 .imp3-teach-save {
   align-self: flex-start;
-  background: var(--primary);
+  background: var(--cta);
   border: none;
-  border-radius: 8px;
-  color: #fff;
+  border-radius: var(--radius-lg);
+  color: var(--ink-on-cta);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -2512,7 +2514,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   flex: none;
   padding: 10px 18px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: var(--surface2);
   color: var(--muted);
   font: inherit;
@@ -2523,15 +2525,15 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     background 0.15s,
     color 0.15s;
 }
-/* Primary blue like every other primary action in this flow (Read the statement, Done). The
+/* The ink CTA like every other primary action in this flow (Read the statement, Done). The
    handoff painted the ready state green, which read as a different kind of button. */
 .imp3-commit.ready {
-  background: var(--primary);
-  color: #fff;
+  background: var(--cta);
+  color: var(--ink-on-cta);
 }
 @media (hover: hover) {
   .imp3-commit.ready:hover {
-    background: color-mix(in srgb, var(--primary) 88%, #000);
+    background: var(--cta-hover);
   }
 }
 .imp3-commit:disabled {
@@ -2550,14 +2552,14 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   flex: none;
 }
 .imp3-commit:not(.ready):not(:disabled) {
-  background: var(--primary);
-  color: #fff;
+  background: var(--cta);
+  color: var(--ink-on-cta);
 }
 .imp3-btn2 {
   flex: none;
   padding: 9px 14px;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--muted);
   font: inherit;
@@ -2571,24 +2573,24 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     border-color: var(--fg-3);
   }
 }
-/* The Booked screen's primary action (prototype DoneStep) — the app's primary color. */
+/* The Booked screen's primary action (prototype DoneStep) — the ink CTA. */
 .imp3-lubtn {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   padding: 9px 16px;
   border: none;
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   font: inherit;
   font-size: 13px;
   font-weight: 700;
-  color: #fff;
-  background: var(--primary);
+  color: var(--ink-on-cta);
+  background: var(--cta);
 }
 @media (hover: hover) {
   .imp3-lubtn:hover {
-    background: color-mix(in srgb, var(--primary) 88%, #000);
+    background: var(--cta-hover);
   }
 }
 .imp3-lubtn:disabled {
@@ -3044,7 +3046,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     display: inline-flex;
     align-items: center;
     border: 1px solid var(--line-strong);
-    border-radius: 9px;
+    border-radius: var(--radius-lg);
     color: var(--muted);
   }
   .imp3-lc-acts .imp3-lc-btn.imp,

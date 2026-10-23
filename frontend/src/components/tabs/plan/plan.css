@@ -260,7 +260,7 @@
   }
 }
 .pl-budget-rail-handle:active::after {
-  background: var(--accent, var(--line-strong));
+  background: var(--ink);
 }
 @media (pointer: coarse) {
   .pl-budget-rail-handle {
@@ -1147,7 +1147,7 @@ body.hide-amounts .mask::after {
   color: var(--muted);
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 7px 13px;
   cursor: pointer;
   white-space: nowrap;
@@ -1348,6 +1348,7 @@ body.hide-amounts .mask::after {
 .pl-wchip--reset {
   color: var(--faint);
   border-style: dashed;
+  gap: 4px;
 }
 
 /* month nav */
@@ -1498,7 +1499,7 @@ body.hide-amounts .mask::after {
   color: var(--faint);
 }
 .pl-menu-item.on {
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 600;
 }
 @container (max-width: 840px) {
@@ -1762,7 +1763,7 @@ body.hide-amounts .mask::after {
   color: var(--muted);
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   padding: 3px 9px 3px 7px;
   cursor: pointer;
   transition:
@@ -1782,7 +1783,7 @@ body.hide-amounts .mask::after {
 }
 @media (hover: hover) {
   .pl-thead-addbtn:hover {
-    color: var(--accent);
+    color: var(--ink);
     border-color: var(--hover-line);
   }
 }
@@ -1953,7 +1954,7 @@ body.hide-amounts .mask::after {
   height: 20px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 50%;
   background: transparent;
   color: var(--faint);
   cursor: pointer;
@@ -2068,7 +2069,7 @@ body.hide-amounts .mask::after {
   font: inherit;
   font-size: 11.5px;
   font-weight: 600;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   padding: 5px 11px;
   cursor: pointer;
   border: 1px solid var(--line-strong);
@@ -2187,11 +2188,10 @@ body.hide-amounts .mask::after {
   }
 }
 @media (hover: hover) {
-  /* Owner ask, 2026-09-15: a tappable figure goes PRIMARY under the cursor — the app's one
-     "this is interactive" colour, already carried by the rail's Auto-Assign rows and every
-     link. The underline follows the text (currentColor) so the two never disagree. */
+  /* Owner ask, 2026-09-15: a tappable figure goes INK under the cursor — blue is kept for
+     links, so interactivity here reads as the text darkening. The underline follows the text (currentColor) so the two never disagree. */
   .pl-alink:hover {
-    color: var(--primary);
+    color: var(--ink);
     border-bottom-color: currentColor;
   }
 }
@@ -2269,7 +2269,7 @@ body.hide-amounts .mask::after {
   font-variant-numeric: tabular-nums;
   color: var(--pl-num);
   cursor: text;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 3px 7px;
   margin-right: -8px;
   border: 1px solid transparent;
@@ -2285,8 +2285,8 @@ body.hide-amounts .mask::after {
   }
   /* Same promise as .pl-alink above: the figure you're pointing at is the one you can act on. */
   .pl-assign:hover {
-    color: var(--primary);
-    border-color: var(--primary);
+    color: var(--ink);
+    border-color: var(--line-strong);
   }
 }
 .pl-assign.zero {
@@ -2301,7 +2301,7 @@ body.hide-amounts .mask::after {
   margin-right: -8px;
   background: var(--bg);
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 2px 6px;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
 }
@@ -3192,7 +3192,7 @@ body.hide-amounts .mask::after {
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -3209,14 +3209,14 @@ body.hide-amounts .mask::after {
   opacity: 0.4;
 }
 .pl-crow.over-top {
-  box-shadow: inset 0 2px 0 0 var(--accent);
+  box-shadow: inset 0 2px 0 0 var(--ink);
 }
 .pl-crow.over-bottom {
-  box-shadow: inset 0 -2px 0 0 var(--accent);
+  box-shadow: inset 0 -2px 0 0 var(--ink);
 }
 .pl-grow.grow-over {
-  background: color-mix(in srgb, var(--accent) 13%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent);
 }
 .pl-crow.cat-hidden {
   opacity: 0.5;
@@ -3226,7 +3226,7 @@ body.hide-amounts .mask::after {
   flex: none;
   width: 20px;
   height: 20px;
-  border-radius: 6px;
+  border-radius: 50%;
   border: 1px solid var(--line);
   background: var(--bg-2);
   color: var(--muted);
@@ -3271,7 +3271,7 @@ body.hide-amounts .mask::after {
 .pl-kebab {
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: 50%;
   border: none;
   background: transparent;
   color: var(--fg-3);
@@ -3338,7 +3338,7 @@ body.hide-amounts .mask::after {
 .pl-inline-input {
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -3350,7 +3350,7 @@ body.hide-amounts .mask::after {
   border-color: var(--accent);
 }
 .pl-addrow {
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  background: var(--hover);
 }
 .pl-addrow .pl-cname {
   padding: 8px 0;
@@ -3414,7 +3414,7 @@ body.hide-amounts .mask::after {
   justify-content: center;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: 50%;
   color: var(--muted);
   background: var(--surface2);
   border: 1px solid var(--line);
@@ -3619,6 +3619,9 @@ body.hide-amounts .mask::after {
   cursor: pointer;
   padding: 0;
   margin-top: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 .pl-foot {
   font-size: 11px;
@@ -3646,7 +3649,7 @@ body.hide-amounts .mask::after {
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -3737,7 +3740,7 @@ body.hide-amounts .mask::after {
   border: 1px solid transparent;
   padding: 3px 6px;
   margin: -4px -7px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: text;
   line-height: 1.2;
 }
@@ -3771,7 +3774,7 @@ body.hide-amounts .mask::after {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--primary, #3b86dd);
+  background: var(--ink);
   border: 2px solid var(--surface);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   cursor: pointer;
@@ -3784,7 +3787,7 @@ body.hide-amounts .mask::after {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: var(--primary, #3b86dd);
+  background: var(--ink);
   border: 2px solid var(--surface);
   cursor: pointer;
 }
@@ -3832,6 +3835,9 @@ body.hide-amounts .mask::after {
   padding: 0;
   white-space: nowrap;
   flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 /* At a narrow-but-not-narrow-enough card width, .pl-trust-txt (flex: 1, min-width: 200px)
    and .pl-trust-toggle (flex: none) technically both "fit" side by side per flexbox's own
@@ -4118,9 +4124,9 @@ body.hide-amounts .mask::after {
   }
 }
 .pl-wchip.on {
-  border-color: var(--accent);
   color: var(--ink);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: var(--selected);
+  border-color: var(--line-strong);
 }
 
 /* unify every chip under Events & income — same height, pill radius, type size */
@@ -4381,7 +4387,7 @@ body.hide-amounts .mask::after {
   user-select: none;
 }
 .pl-rbd-toggle input {
-  accent-color: var(--primary);
+  accent-color: var(--ink);
 }
 
 /* ── Mini inline checkbox (conditional retirement) ── */
@@ -4414,14 +4420,14 @@ body.hide-amounts .mask::after {
     border-color 0.14s;
 }
 .pl-checkrow input:checked + .pl-checkbox {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--ink);
+  border-color: var(--ink);
 }
 .pl-checkbox::after {
   content: '';
   width: 5px;
   height: 9px;
-  border: solid var(--ink-on-accent);
+  border: solid var(--bg);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg) scale(0);
   transition: transform 0.14s;
@@ -4672,7 +4678,7 @@ body.hide-amounts .mask::after {
 }
 /* Track the LIVE nav width (--lx-sidebar-w: 52px collapsed → 200px expanded). The old
    --onw-nav-w was never defined, so it fell back to 52px and the FAB hid under an expanded nav.
-   Primary-colored so it actually stands out against the dark chrome around it (it used to
+   Ink-filled (the CTA fill) so it actually stands out against the dark chrome around it (it used to
    match --surface and all but disappeared); the label is desktop-only — on a phone it opens
    the "What if?" bottom sheet instead of the inline rail, and space is tighter there. */
 .pl-rail-fab {
@@ -4681,24 +4687,19 @@ body.hide-amounts .mask::after {
   bottom: 20px;
   z-index: 60; /* z-local: FAB above sticky nav but below plan popovers */
   padding: 12px 20px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   gap: 8px;
-  background: linear-gradient(
-    180deg,
-    color-mix(in srgb, var(--primary) 92%, #fff) 0%,
-    var(--primary) 100%
-  );
+  background: var(--cta);
   border: none;
-  color: var(--ink-on-accent);
+  color: var(--ink-on-cta);
   font: inherit;
   font-size: 13.5px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
     0 2px 6px rgba(0, 0, 0, 0.3),
     0 10px 26px rgba(0, 0, 0, 0.5);
   transition:
@@ -4712,7 +4713,7 @@ body.hide-amounts .mask::after {
 }
 @media (hover: hover) {
   .pl-rail-fab:hover {
-    filter: brightness(1.08);
+    background: var(--cta-hover);
     transform: translateY(-1px);
   }
 }
@@ -4722,7 +4723,7 @@ body.hide-amounts .mask::after {
     width: 44px;
     height: 44px;
     justify-content: center;
-    border-radius: 12px;
+    border-radius: 50%;
   }
   .pl-rail-fab-label {
     display: none;
@@ -4738,6 +4739,9 @@ body.hide-amounts .mask::after {
   cursor: pointer;
   padding: 0 6px 0 0;
   margin: -2px 2px 0 -2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 @media (hover: hover) {
   .pl-needle-collapse:hover {
@@ -4829,8 +4833,9 @@ body.hide-amounts .mask::after {
   font-size: 14px;
   line-height: 1;
   transition: transform 0.16s ease;
-  display: inline-block;
   align-self: center;
+  display: inline-flex;
+  align-items: center;
 }
 .pl-sec.open .pl-sec-caret {
   transform: rotate(90deg);
@@ -4969,7 +4974,7 @@ body.hide-amounts .mask::after {
   color: var(--muted);
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: 50%;
   width: 24px;
   height: 24px;
   padding: 0;
@@ -5054,8 +5059,8 @@ body.hide-amounts .mask::after {
   }
 }
 .pl-scenrow.on {
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-  border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+  background: var(--hover);
+  border-color: var(--line-strong);
 }
 .pl-scenrow-load {
   flex: 1;
@@ -5089,7 +5094,7 @@ body.hide-amounts .mask::after {
   color: var(--ink);
   background: var(--bg);
   border: 1px solid var(--primary);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 3px 7px;
   outline: none;
 }
@@ -5109,7 +5114,7 @@ body.hide-amounts .mask::after {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--primary);
+  color: var(--ink);
 }
 .pl-scenrow-tag.edited {
   color: var(--warn);
@@ -5156,7 +5161,7 @@ body.hide-amounts .mask::after {
 }
 @media (hover: hover) {
   .pl-scenrow-pencil:hover {
-    color: var(--primary);
+    color: var(--ink);
   }
 }
 .pl-scenrow-save {
@@ -5164,10 +5169,10 @@ body.hide-amounts .mask::after {
   font: inherit;
   font-size: 11px;
   font-weight: 700;
-  color: var(--primary);
-  background: transparent;
-  border: 1px solid color-mix(in srgb, var(--primary) 40%, var(--line));
-  border-radius: 7px;
+  color: var(--ink-on-cta);
+  background: var(--cta);
+  border: 1px solid var(--cta);
+  border-radius: var(--radius-md);
   padding: 3px 9px;
   cursor: pointer;
   white-space: nowrap;
@@ -5175,7 +5180,8 @@ body.hide-amounts .mask::after {
 }
 @media (hover: hover) {
   .pl-scenrow-save:hover {
-    background: color-mix(in srgb, var(--primary) 14%, transparent);
+    background: var(--cta-hover);
+    border-color: var(--cta-hover);
   }
 }
 .pl-compare-lbl {
@@ -5786,9 +5792,9 @@ body.chat-resizing .onw-root {
   }
 }
 .cfx-scenario.on {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line-strong));
+  color: var(--ink);
+  background: var(--hover);
+  border-color: var(--ink);
 }
 .cfx-assets {
   display: flex;
@@ -5815,8 +5821,8 @@ body.chat-resizing .onw-root {
   }
 }
 .cfx-asset.on {
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--line-strong));
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-color: var(--ink);
+  background: var(--hover);
 }
 .cfx-check {
   width: 18px;
@@ -5833,9 +5839,9 @@ body.chat-resizing .onw-root {
     border-color 0.14s;
 }
 .cfx-asset.on .cfx-check {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--ink-on-accent);
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
 }
 .cfx-check svg {
   flex: none;
@@ -7036,7 +7042,7 @@ body.chat-resizing .onw-root {
   color: var(--faint);
   cursor: pointer;
   padding: 4px;
-  border-radius: 7px;
+  border-radius: 50%;
 }
 @media (hover: hover) {
   .pl-modal-x:hover {
@@ -7093,7 +7099,7 @@ body.chat-resizing .onw-root {
   -webkit-appearance: none;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -7191,7 +7197,7 @@ body.chat-resizing .onw-root {
   padding: 7px 12px;
   background: transparent;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--faint);
   font: inherit;
   font-size: 12px;
@@ -7321,10 +7327,10 @@ body.chat-resizing .onw-root {
   width: calc(100% - 16px);
   margin: 4px 8px 10px;
   padding: 9px;
-  background: color-mix(in srgb, var(--accent) 16%, var(--bg-2));
-  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line-strong));
-  border-radius: 9px;
-  color: var(--accent);
+  background: var(--cta);
+  border: 1px solid var(--cta);
+  border-radius: var(--radius-lg);
+  color: var(--ink-on-cta);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -7332,8 +7338,7 @@ body.chat-resizing .onw-root {
 }
 @media (hover: hover) {
   .pl-hidpop-all:hover {
-    background: color-mix(in srgb, var(--accent) 26%, var(--bg-2));
-    color: var(--ink-on-accent);
+    background: var(--cta-hover);
   }
 }
 
@@ -7349,7 +7354,7 @@ body.chat-resizing .onw-root {
 }
 @media (hover: hover) {
   .pl-tbar-wrap.is-target:hover .pl-tbar {
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+    box-shadow: 0 0 0 2px var(--hover-line);
   }
 }
 
@@ -7399,7 +7404,7 @@ body.chat-resizing .onw-root {
   gap: 7px;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   padding: 0 11px;
   max-width: 200px;
 }
@@ -7455,8 +7460,8 @@ body.chat-resizing .onw-root {
   }
 }
 .pl-tgt-opt.on {
-  border-color: color-mix(in srgb, var(--accent) 60%, var(--line-strong));
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-color: var(--ink);
+  background: var(--hover);
 }
 .pl-tgt-opt-body {
   display: flex;
@@ -7578,7 +7583,7 @@ body.chat-resizing .onw-root {
 .pl-tgt-date {
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -7601,7 +7606,7 @@ body.chat-resizing .onw-root {
   width: 100%;
   font-size: 12.5px;
   padding: 7px 32px 7px 11px;
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
 }
 .pl-tgt-repeat {
   display: flex;
@@ -7637,12 +7642,12 @@ body.chat-resizing .onw-root {
     background 0.16s;
 }
 .pl-tgt-switch.on {
-  background: color-mix(in srgb, var(--accent) 80%, transparent);
-  border-color: var(--accent);
+  background: var(--ink);
+  border-color: var(--ink);
 }
 .pl-tgt-switch.on > span {
   transform: translateX(14px);
-  background: var(--ink-on-accent);
+  background: var(--bg);
 }
 .pl-tgt-every-wrap {
   display: inline-flex;
@@ -7653,7 +7658,7 @@ body.chat-resizing .onw-root {
   width: 46px;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -7680,7 +7685,7 @@ body.chat-resizing .onw-root {
   width: 100%;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -7740,7 +7745,7 @@ body.chat-resizing .onw-root {
   }
 }
 .pl-tgt-wantopt.on {
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  background: var(--hover);
   border-color: transparent;
 }
 .pl-tgt-wantopt + .pl-tgt-wantopt {
@@ -7758,7 +7763,7 @@ body.chat-resizing .onw-root {
   justify-content: center;
 }
 .pl-tgt-wantopt-title--on {
-  color: var(--accent);
+  color: var(--ink);
 }
 .pl-crow .pl-cname {
   cursor: pointer;
@@ -7831,7 +7836,7 @@ body.chat-resizing .onw-root {
   color: var(--ink-on-accent);
   background: var(--warn);
   border: none;
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   padding: 9px;
   cursor: pointer;
   transition: filter 0.14s;
@@ -7862,16 +7867,6 @@ body.chat-resizing .onw-root {
   margin-top: 16px;
   padding: 9px;
   font-size: 12.5px;
-  color: var(--accent);
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-@media (hover: hover) {
-  .pl-tgt-editbtn:hover {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-    color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-  }
 }
 .pl-tgt-snooze {
   display: flex;
@@ -7888,8 +7883,8 @@ body.chat-resizing .onw-root {
 }
 /* inline row-expansion panel */
 .pl-crow.expanded {
-  background: color-mix(in srgb, var(--accent) 9%, transparent);
-  box-shadow: inset 2px 0 0 0 var(--accent);
+  background: var(--hover);
+  box-shadow: inset 2px 0 0 0 var(--ink);
 }
 @keyframes pl-inline-open {
   from {
@@ -8153,7 +8148,7 @@ body.chat-resizing .onw-root {
   gap: 5px;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   padding: 9px 12px;
 }
 .pl-mvpop-amt:focus-within {
@@ -8437,7 +8432,7 @@ body.chat-resizing .onw-root {
   color: var(--ink);
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 10px 13px;
   cursor: pointer;
   text-align: left;
@@ -8513,7 +8508,7 @@ body.chat-resizing .onw-root {
    other money figure. Group labels reuse .pl-menu-lbl, rows reuse .pl-menu-item.indent —
    both already defined (Kebab's own submenu convention) — no parallel class family. */
 .pl-menu-check {
-  color: var(--accent);
+  color: var(--ink);
   font-size: 12px;
 }
 .pl-catsel-right {
@@ -8682,7 +8677,7 @@ body.chat-resizing .onw-root {
   resize: vertical;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -8776,7 +8771,7 @@ body.chat-resizing .onw-root {
 .pl-tgt-unit {
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -9015,13 +9010,13 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
     justify-content: space-between;
     gap: var(--space-2);
   }
-  /* Same add-in-progress signal as .pl-catmgr-addrow (5% accent tint + inset accent bar),
+  /* Same add-in-progress signal as .pl-catmgr-addrow (5% ink tint + inset ink bar),
      recomposited over --panel: the base card paints an opaque background, so mixing over
      `transparent` here would drop the elevation instead of tinting it. */
   .pl-catmgr-addcard {
-    background: color-mix(in srgb, var(--accent) 5%, var(--panel));
+    background: color-mix(in srgb, var(--ink) 5%, var(--panel));
     box-shadow:
-      inset 3px 0 0 0 var(--accent),
+      inset 3px 0 0 0 var(--ink),
       var(--shadow-sm);
   }
 }
@@ -9049,7 +9044,7 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
   gap: 7px;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
   padding: 5px 11px;
   color: var(--faint);
   transition: border-color 0.12s;
@@ -9087,6 +9082,9 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
   font-size: 10px;
   padding: 0 0 0 2px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 @media (hover: hover) {
   .pl-tsearch-x:hover {
@@ -9153,7 +9151,7 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--ink);
 }
 .pl-catfilter-menu {
   min-width: 200px;
@@ -9185,8 +9183,10 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
   flex: none;
   width: 1.1em;
   text-align: right;
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
 }
 .pl-catfilter-item.on .pl-catfilter-item-label {
   font-weight: 600;
@@ -9225,15 +9225,15 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
 }
 /* "+ New category" inline create row */
 .pl-catmgr-addrow {
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-  box-shadow: inset 3px 0 0 0 var(--accent);
+  background: var(--hover);
+  box-shadow: inset 3px 0 0 0 var(--ink);
 }
 .pl-catmgr-kindsel {
   font-size: 11.5px;
   padding: 4px 8px;
   width: 100%;
   max-width: 96px;
-  border-radius: 7px;
+  border-radius: var(--radius-md);
 }
 .pl-catmgr-addactions {
   display: inline-flex;
@@ -9382,7 +9382,7 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
   box-sizing: border-box;
   background: var(--bg-1);
   border: 1px solid var(--line-strong);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -9406,7 +9406,7 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
   color: var(--muted);
   background: color-mix(in srgb, var(--bad) 7%, transparent);
   border: 1px dashed color-mix(in srgb, var(--bad) 35%, var(--line));
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   padding: 9px 12px;
   cursor: pointer;
   transition:
@@ -9549,7 +9549,7 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
   height: 26px;
   flex: none;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   background: transparent;
   color: var(--faint);
   cursor: pointer;
@@ -9792,7 +9792,7 @@ body:has(.app-shell.chat-open) .pl-panel.pl-chart-full {
   height: 30px;
   padding: 0 12px 0 8px;
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
   background: transparent;
   color: var(--ink);
   font: inherit;

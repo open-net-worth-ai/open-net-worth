@@ -10,16 +10,20 @@ function rule(selector: string): string {
 }
 
 describe('composer primary controls', () => {
-  it('uses the primary token for screen-awareness active states', () => {
-    expect(rule('.lx-aw.on .lx-aw-toggle')).toContain('color: var(--primary)')
-    expect(rule('.lx-scope-ic')).toContain('color: var(--primary)')
-    expect(rule('.lx-switch.on')).toContain('background: var(--primary)')
-    expect(rule('.lx-switch.on')).toContain('border-color: var(--primary)')
-    expect(rule('.lx-scope-peek.open')).toContain('border-color: var(--primary)')
+  it('uses ink for screen-awareness active states', () => {
+    expect(rule('.lx-aw.on .lx-aw-toggle')).toContain('color: var(--ink)')
+    expect(rule('.lx-scope-ic')).toContain('color: var(--ink)')
+    expect(rule('.lx-switch.on')).toContain('background: var(--ink)')
+    expect(rule('.lx-switch.on')).toContain('border-color: var(--ink)')
+    expect(rule('.lx-scope-peek.open')).toContain('border-color: var(--ink)')
   })
 
-  it('uses the primary token for the send control', () => {
-    expect(rule('.lx-send')).toContain('background: var(--primary)')
+  it('uses the CTA tokens for the send control, neutral when disabled', () => {
+    expect(rule('.lx-send')).toContain('background: var(--cta)')
+    expect(rule('.lx-send')).toContain('color: var(--ink-on-cta)')
+    const disabled = rule(".lx-send:disabled:not([aria-busy='true'])")
+    expect(disabled).toContain('background: var(--bg-2)')
+    expect(disabled).toContain('color: var(--faint)')
   })
 
   it('keeps the STOP state off the accent entirely', () => {

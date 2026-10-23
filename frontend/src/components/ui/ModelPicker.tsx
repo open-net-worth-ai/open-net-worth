@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useIsMobile } from '../../hooks/useIsMobile'
-import { X } from '../../ui/icons'
+import { X, ChevronLeft, ChevronRight, ChevronDown, Check } from '../../ui/icons'
 import type { ModelOption } from '../../api/models'
 
 // The ONE model chooser. Every surface that lets a human pick a model uses it: the chat
@@ -136,7 +136,7 @@ function PaneHead({ title, onBack }: { title: string; onBack: () => void }) {
   return (
     <div className="mp-pane-head">
       <button type="button" className="mp-pane-back" aria-label="Back" onClick={onBack}>
-        ‹
+        <ChevronLeft size={16} aria-hidden="true" />
       </button>
       <span className="mp-pane-title">{title}</span>
     </div>
@@ -479,7 +479,7 @@ export function ModelPicker(props: ModelPickerProps) {
                 <em className="mp-opt-note">{annotate(row.model)}</em>
               )}
               <span className="mp-opt-tick" aria-hidden="true">
-                ✓
+                <Check size={14} />
               </span>
             </button>
           ),
@@ -500,7 +500,7 @@ export function ModelPicker(props: ModelPickerProps) {
         <span className="mp-menu-row-l">Model</span>
         <span className="mp-menu-row-v">{triggerParts.text}</span>
         <span className="mp-menu-row-chev" aria-hidden="true">
-          ›
+          <ChevronRight size={14} />
         </span>
       </button>
       {panes?.map((p) => (
@@ -514,7 +514,7 @@ export function ModelPicker(props: ModelPickerProps) {
           <span className="mp-menu-row-l">{p.label}</span>
           <span className="mp-menu-row-v">{p.value}</span>
           <span className="mp-menu-row-chev" aria-hidden="true">
-            ›
+            <ChevronRight size={14} />
           </span>
         </button>
       ))}
@@ -558,7 +558,7 @@ export function ModelPicker(props: ModelPickerProps) {
               aria-label="Back"
               onClick={() => setPane(null)}
             >
-              ‹
+              <ChevronLeft size={16} aria-hidden="true" />
             </button>
           )}
           <span className="mp-sheet-title">{paneTitle}</span>
@@ -610,7 +610,7 @@ export function ModelPicker(props: ModelPickerProps) {
                   )
                 }
               >
-                ×
+                <X size={12} aria-hidden="true" />
               </button>
             </span>
           ))}
@@ -632,7 +632,7 @@ export function ModelPicker(props: ModelPickerProps) {
         {triggerParts.provider && <span className="mp-trigger-prov">{triggerParts.provider}</span>}
         {trailing && <span className="mp-trigger-trail">{trailing}</span>}
         <span className="mp-trigger-chev" aria-hidden="true">
-          ▾
+          <ChevronDown size={14} />
         </span>
       </button>
       {panel ? createPortal(panel, document.body) : null}

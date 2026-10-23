@@ -38,10 +38,10 @@ describe('ScreenContextPanel', () => {
     expect(getByText('NVIDIA Corporation')).toBeTruthy() // the Screen fact
     expect(getByText('170 USD')).toBeTruthy()
     expect(getByText('Reuters')).toBeTruthy() // a handle
-    expect(getByText('+ attach')).toBeTruthy()
+    expect(getByText('attach')).toBeTruthy()
   })
 
-  it('tapping "+ attach" pins the handle', () => {
+  it('tapping "attach" pins the handle', () => {
     const onPin = vi.fn()
     const { getByText } = render(
       <ScreenContextPanel
@@ -52,7 +52,7 @@ describe('ScreenContextPanel', () => {
         onPin={onPin}
       />,
     )
-    fireEvent.click(getByText('+ attach'))
+    fireEvent.click(getByText('attach'))
     expect(onPin).toHaveBeenCalledWith('news-0')
   })
 
@@ -66,7 +66,7 @@ describe('ScreenContextPanel', () => {
         onPin={() => {}}
       />,
     )
-    expect(getByText('✓ attached')).toBeTruthy()
+    expect(getByText('attached')).toBeTruthy()
   })
 
   it('toggling the switch fires onToggle', () => {

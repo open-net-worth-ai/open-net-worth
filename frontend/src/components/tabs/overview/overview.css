@@ -138,7 +138,7 @@
 .ov-view-tab--active {
   color: var(--ink);
   font-weight: 600;
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--ink);
 }
 
 .ov-view-tab-close {
@@ -146,6 +146,9 @@
   font-size: 14px;
   line-height: 1;
   padding: 0 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 @media (hover: hover) {
@@ -164,7 +167,7 @@
 .ov-view-tab-input {
   font-size: 13px;
   padding: 5px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--accent);
   background: var(--surface);
   color: var(--ink);
@@ -460,7 +463,7 @@
   background: none;
   border: none;
   padding: 2px;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: 50%;
   cursor: pointer;
   transition:
     transform 0.16s cubic-bezier(0.2, 0.7, 0.2, 1),
@@ -501,7 +504,7 @@
 
 @media (hover: hover) {
   .ov-grid:not(.ov-grid--editing) .ov-section-divider:hover .ov-section-title {
-    color: var(--accent);
+    color: var(--ink);
   }
 }
 
@@ -527,7 +530,7 @@
   box-sizing: border-box;
   background: var(--bg-2, var(--surface));
   border: 1px solid var(--accent);
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-md);
   color: var(--ink);
   font: inherit;
   font-size: 12px;
@@ -554,7 +557,7 @@
 @media (hover: hover) {
   .ov-grid--editing .ov-griditem--section:hover .ov-section-divider {
     background: var(--hover);
-    box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent) 45%, transparent);
+    box-shadow: 0 0 0 1.5px var(--line-strong);
     border-radius: var(--radius-md, 8px);
   }
 }
@@ -982,7 +985,7 @@
   gap: 4px;
   background: none;
   border: 1px solid var(--line);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-md);
   color: var(--text);
   font-size: var(--text-xs, 11px);
   font-weight: 600;
@@ -1018,7 +1021,7 @@
 }
 
 .ov-charttoggle__item--active {
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -1036,7 +1039,7 @@
   text-transform: inherit;
   background: var(--bg-2, var(--surface));
   border: 1px solid var(--accent);
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-md);
   outline: none;
   padding: 3px 8px;
   margin: -3px 0;
@@ -1352,9 +1355,9 @@
 }
 
 .ov-picker-tab.active {
-  background: var(--accent);
-  color: var(--on-accent, #fff);
-  border-color: var(--accent);
+  color: var(--ink);
+  background: var(--selected);
+  border-color: var(--line-strong);
 }
 
 .ov-picker-lucius-card {
@@ -1422,10 +1425,10 @@
 }
 
 /* Hover richness (item 18): border AND background AND the icon swatch all
-   shift to accent together, not just the border. */
+   shift to ink together, not just the border. */
 @media (hover: hover) {
   .ov-picker-tile:hover {
-    border-color: var(--accent);
+    border-color: var(--line-strong);
     background: var(--hover);
   }
 }
@@ -1446,7 +1449,7 @@
 
 @media (hover: hover) {
   .ov-picker-tile:hover .ov-picker-tile-icon {
-    color: var(--accent);
+    color: var(--ink);
     background: var(--hover-surface);
   }
 }
@@ -1508,7 +1511,7 @@
 
 @media (hover: hover) {
   .ov-picker-tile:hover .ov-picker-tile-plus {
-    color: var(--accent);
+    color: var(--ink);
   }
 }
 
@@ -1703,9 +1706,9 @@
 }
 
 .ov-display-limit-opt.active {
-  background: var(--accent);
-  color: var(--on-accent, #fff);
-  border-color: var(--accent);
+  color: var(--ink);
+  background: var(--selected);
+  border-color: var(--line-strong);
 }
 
 .ov-display-swatches {
@@ -1837,7 +1840,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: 50%;
   border: 1px solid var(--line);
   background: var(--surface2, rgba(0, 0, 0, 0.3));
   color: var(--muted);
@@ -2008,7 +2011,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 6px;
+    border-radius: 50%;
     border: 1px solid var(--line);
     background: var(--surface2, rgba(0, 0, 0, 0.3));
     color: var(--muted);
@@ -2343,7 +2346,7 @@
 
 .ov-fs-chip {
   padding: 5px 13px;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-md);
   border: 1px solid var(--line);
   background: none;
   color: var(--muted);
@@ -2361,9 +2364,9 @@
 }
 
 .ov-fs-chip.on {
-  color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
+  color: var(--ink);
+  background: var(--selected);
+  border-color: var(--line-strong);
 }
 
 .ov-fs-chip--viz {
@@ -2378,7 +2381,7 @@
 
 .ov-fs-input {
   padding: 7px 10px;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink);
@@ -2463,7 +2466,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9px;
+  border-radius: 50%;
   border: 1px solid var(--line);
   background: var(--surface2, rgba(255, 255, 255, 0.06));
   color: var(--muted);
@@ -2496,7 +2499,7 @@
   min-height: 88px;
   resize: vertical;
   padding: 8px 10px;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink);
@@ -2583,7 +2586,7 @@
   flex: 1 1 auto;
   min-width: 0;
   padding: 3px 5px;
-  border-radius: var(--radius-sm, 6px);
+  border-radius: var(--radius-md);
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--ink);
@@ -2597,10 +2600,10 @@
 
 .ov-fs-pairbtn {
   padding: 3px 9px;
-  border-radius: var(--radius-sm, 6px);
-  border: 1px solid var(--accent);
-  background: var(--accent);
-  color: #fff;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--cta);
+  background: var(--cta);
+  color: var(--ink-on-cta);
   font: inherit;
   font-size: 11.5px;
   font-weight: 600;
@@ -2609,6 +2612,7 @@
 
 @media (hover: hover) {
   .ov-fs-pairbtn:hover {
-    filter: brightness(1.08);
+    background: var(--cta-hover);
+    border-color: var(--cta-hover);
   }
 }

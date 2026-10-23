@@ -336,7 +336,7 @@ describe('LotsPanel — write controls', () => {
     const { findByText, findAllByText, findAllByDisplayValue } = render(
       <LotsPanel positionId="pos-1" symbol="AAPL" costCcy="USD" base={20000} costBase={18520} />,
     )
-    fireEvent.click(await findByText('+ Add lot'))
+    fireEvent.click(await findByText('Add lot'))
     expect((await findAllByText('Add lot')).length).toBeGreaterThan(0)
     expect(await findByText('Symbol')).toBeTruthy()
     expect((await findAllByDisplayValue('AAPL')).length).toBeGreaterThan(0)
@@ -470,7 +470,7 @@ describe('LotsPanel — write controls', () => {
         ]}
       />,
     )
-    fireEvent.click(await findByText('+ Add lot'))
+    fireEvent.click(await findByText('Add lot'))
     expect(queryByText('Which account?')).toBeNull()
     expect(await findByText('Account')).toBeTruthy()
     expect(await findByText('+ New account…')).toBeTruthy()

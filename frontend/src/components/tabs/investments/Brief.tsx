@@ -13,7 +13,7 @@ import { useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import type { InvestmentSignal } from '../../../types/investmentSignals'
 import type { DerivedBook } from './useInvestmentsBook'
-import { Sparkles } from '../../../ui/icons'
+import { Sparkles, ArrowRight, ChevronRight } from '../../../ui/icons'
 import { Skeleton } from '../../ui/Skeleton'
 import { usePortfolioDrivers } from '../../../hooks/usePortfolioDrivers'
 import { DriverChips } from '../../shared/DriverChips'
@@ -176,7 +176,10 @@ export function Brief({
               onNavigate('intel')
             }}
           >
-            Intel <span className="intel-brief-ask-spark">→</span>
+            Intel{' '}
+            <span className="intel-brief-ask-spark">
+              <ArrowRight size={12} aria-hidden="true" />
+            </span>
           </a>
         )}
         <span className="intel-brief-updated">{formatTime(mountedAt.current)}</span>
@@ -202,7 +205,7 @@ export function Brief({
               onClick={() => setMoreOpen((o) => !o)}
             >
               <span className={`brief-more-caret${moreOpen ? ' is-open' : ''}`} aria-hidden>
-                ▸
+                <ChevronRight size={12} />
               </span>
               {moreOpen ? 'Show less' : `${shownMore.length} more`}
             </button>

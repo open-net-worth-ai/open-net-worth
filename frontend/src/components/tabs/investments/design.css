@@ -462,7 +462,7 @@
   .mk-col-handle:hover::after {
     width: 1.5px;
     right: 2.75px;
-    background: var(--accent);
+    background: var(--ink);
   }
 }
 /* Suppress sort + set resize cursor while dragging */
@@ -946,10 +946,11 @@
   border-radius: 4px;
 }
 .brief-more-caret {
-  display: inline-block;
   font-size: 9px;
   color: var(--fg-3);
   transition: transform 0.14s;
+  display: inline-flex;
+  align-items: center;
 }
 .brief-more-caret.is-open {
   transform: rotate(90deg);
@@ -1028,9 +1029,10 @@
   }
 }
 .eq-caret {
-  display: inline-block;
   color: var(--faint);
   transition: transform 0.15s;
+  display: inline-flex;
+  align-items: center;
 }
 .eq-caret.open {
   transform: rotate(90deg);
@@ -1361,7 +1363,7 @@
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -1381,7 +1383,7 @@
   background-repeat: no-repeat;
   background-position: right 11px center;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -2462,7 +2464,7 @@ body.hide-amounts .mask::after {
   width: 100%;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font-family: inherit;
   font-weight: inherit;
@@ -2485,7 +2487,7 @@ body.hide-amounts .mask::after {
   background-repeat: no-repeat;
   background-position: right 12px center;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--muted);
   font-family: inherit;
   font-weight: inherit;
@@ -2583,7 +2585,7 @@ body.hide-amounts .mask::after {
     min-width: 0;
     height: 100%;
     font-size: var(--text-md);
-    border-radius: 9px;
+    border-radius: var(--radius-lg);
     padding: 0 10px 0 30px;
   }
   /* Content-sized — filters must not eat the row search needs. */
@@ -2593,7 +2595,7 @@ body.hide-amounts .mask::after {
     min-width: 0;
     max-width: 30%;
     font-size: var(--text-md); /* 14px — matches the body scale on a phone */
-    border-radius: 9px;
+    border-radius: var(--radius-lg);
     padding: 0 20px 0 8px;
     background-position: right 6px center;
     text-overflow: ellipsis;
@@ -2618,7 +2620,7 @@ body.hide-amounts .mask::after {
     box-sizing: border-box;
     height: 34px;
     padding: 0 12px;
-    border-radius: 9px;
+    border-radius: var(--radius-lg);
     white-space: nowrap;
   }
   .intel-brief-head {
@@ -2661,7 +2663,7 @@ body.hide-amounts .mask::after {
   padding: 0;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: 50%;
   color: var(--muted);
   cursor: pointer;
 }
@@ -2683,7 +2685,7 @@ body.hide-amounts .mask::after {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--ink);
 }
 .mk-filter-popover {
   position: absolute;
@@ -2774,8 +2776,10 @@ body.hide-amounts .mask::after {
   font-variant-numeric: tabular-nums;
 }
 .mk-filter-item-tick {
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
 }
 .mk-filter-item--on .mk-filter-item-label {
   color: var(--ink);
@@ -2833,7 +2837,7 @@ body.hide-amounts .mask::after {
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: var(--accent);
+    background: var(--ink);
     pointer-events: none;
   }
 }
@@ -2886,7 +2890,7 @@ body.hide-amounts .mask::after {
     width: 5px;
     height: 5px;
     border-radius: 50%;
-    background: var(--accent);
+    background: var(--ink);
     pointer-events: none;
   }
 }
@@ -3920,7 +3924,7 @@ button.inc-src-row--agg {
   width: 100%;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -4260,9 +4264,9 @@ button.inc-src-row--agg {
   white-space: nowrap;
 }
 .mk-chip.is-on {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--bg);
+  color: var(--ink);
+  background: var(--selected);
+  border-color: var(--line-strong);
 }
 .mk-chip-n {
   font-weight: 500;

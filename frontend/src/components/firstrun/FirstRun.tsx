@@ -21,6 +21,7 @@ import { StepPassword } from './StepPassword'
 import { StepRestore } from './StepRestore'
 import { FirstRunMark } from './Mark'
 import { defaultCurrencyFromLocale } from './currencies'
+import { ArrowLeft } from '../../ui/icons'
 
 const TITLES = ['Your wealth, kept privately.', 'Lucius, your wealth manager.', 'Secure the vault.']
 
@@ -274,7 +275,7 @@ export function FirstRun({
               disabled={desktop && step === 0 && busy}
               onClick={() => void goBack()}
             >
-              ← Back
+              <ArrowLeft size={14} aria-hidden="true" /> Back
             </button>
           )}
         </div>

@@ -134,11 +134,12 @@ describe('CategoryKindFilter — mobile bottom sheet', () => {
       const expense = screen.getByRole('option', { name: /Expense/ })
       expect(expense.querySelector('.pl-catfilter-item-label')?.textContent).toBe('Expense')
       expect(expense.querySelector('.pl-catfilter-item-count')?.textContent).toBe('16')
-      expect(expense.querySelector('.pl-catfilter-item-tick')?.textContent).toBe('✓')
+      expect(expense.querySelector('.pl-catfilter-item-tick svg')).not.toBeNull()
       expect(expense.classList.contains('on')).toBe(true)
       const all = screen.getByRole('option', { name: /^All/ })
       // The slot is there on every row, empty — so the tick never shifts the count column.
-      expect(all.querySelector('.pl-catfilter-item-tick')?.textContent).toBe('')
+      expect(all.querySelector('.pl-catfilter-item-tick')).not.toBeNull()
+      expect(all.querySelector('.pl-catfilter-item-tick svg')).toBeNull()
       expect(all.classList.contains('on')).toBe(false)
     } finally {
       restore()

@@ -1,6 +1,15 @@
 import { useState } from 'react'
 import { authFetch } from '../../api/client'
-import { Archive, ArrowRight, Check, ChevronRight, Link2, RotateCcw, X } from '../../ui/icons'
+import {
+  Archive,
+  ArrowRight,
+  Check,
+  ChevronRight,
+  Link2,
+  RotateCcw,
+  X,
+  ArrowUpRight,
+} from '../../ui/icons'
 import { fDateTime, safeHref, timeAgo } from '../../utils/format'
 import { AssetLink } from './AssetLink'
 import { ExplainedBlock, ReadBlock } from './WatchWriteups'
@@ -226,7 +235,9 @@ export function StoryArcCard({
                       aria-hidden
                     />
                     {src.name}
-                    <span className="intel-story-source-arrow">↗</span>
+                    <span className="intel-story-source-arrow">
+                      <ArrowUpRight size={12} aria-hidden="true" />
+                    </span>
                   </a>
                 )
               })}

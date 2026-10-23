@@ -22,6 +22,7 @@ import { authFetch } from '../../../api/client'
 import type { Account, AccountCreate, AccountUpdate, AccountPrefill, ExternalId } from './types'
 import { ACCOUNT_TYPES, TYPE_LABELS, TYPE_MEANING, LIABILITY_TYPES } from './categories'
 import type { AccountType } from './categories'
+import { ChevronRight } from '../../../ui/icons'
 
 export interface AccountModalProps {
   open: boolean
@@ -458,7 +459,9 @@ export default function AccountModal({
                     <span className="acct-type-chosen-lbl">{TYPE_LABELS[form.type]}</span>
                     <span className="acct-type-chosen-grp">{TYPE_MEANING[form.type]}</span>
                   </span>
-                  <span className="acct-type-chosen-change">›</span>
+                  <span className="acct-type-chosen-change">
+                    <ChevronRight size={16} aria-hidden="true" />
+                  </span>
                 </button>
               </FormField>
               <FormField label="Currency" htmlFor="f-ccy" required reserveMessageSpace>

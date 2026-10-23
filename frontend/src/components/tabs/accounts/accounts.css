@@ -1134,11 +1134,11 @@ body.hide-amounts .mask.l::after {
   touch-action: none;
 }
 .acct-side-resize.drag {
-  background: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--ink) 25%, transparent);
 }
 @media (hover: hover) {
   .acct-side-resize:hover {
-    background: color-mix(in srgb, var(--accent) 55%, transparent);
+    background: color-mix(in srgb, var(--ink) 25%, transparent);
   }
 }
 .acct-side-collapse {
@@ -1151,7 +1151,7 @@ body.hide-amounts .mask.l::after {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md);
+  border-radius: 50%;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--muted);
@@ -1172,7 +1172,7 @@ body.hide-amounts .mask.l::after {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-md);
+  border-radius: 50%;
   border: 1px solid var(--line);
   background: var(--surface);
   color: var(--muted);
@@ -1467,7 +1467,7 @@ body.hide-amounts .mask.l::after {
   gap: 8px;
   padding: 10px;
   border: 1px dashed var(--line-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--muted);
   font-size: 12.5px;
   font-weight: 600;
@@ -1510,7 +1510,7 @@ body.hide-amounts .mask.l::after {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
 }
 @media (hover: hover) {
   .acct-managepayees:hover {
@@ -1637,7 +1637,7 @@ body.hide-amounts .mask.l::after {
   width: 29px;
   height: 29px;
   padding: 0;
-  border-radius: var(--radius-md);
+  border-radius: 50%;
 }
 
 /* kebab menu */
@@ -2475,7 +2475,7 @@ body.hide-amounts .mask.l::after {
   box-sizing: border-box !important;
   background-color: var(--bg-2) !important;
   border: 1px solid var(--line) !important;
-  border-radius: 9px !important;
+  border-radius: var(--radius-lg) !important;
   padding: 0 11px !important;
   font-size: 13px !important;
   line-height: 1.15 !important;
@@ -2493,7 +2493,7 @@ body.hide-amounts .mask.l::after {
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -2518,7 +2518,7 @@ body.hide-amounts .mask.l::after {
   background-repeat: no-repeat;
   background-position: right 12px center;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--radius-lg);
   color: var(--muted);
   font: inherit;
   font-size: 12.5px;
@@ -2650,7 +2650,7 @@ body.hide-amounts .mask.l::after {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--ink);
   display: inline-block;
   margin-left: 6px;
   vertical-align: middle;
@@ -2694,7 +2694,7 @@ body.hide-amounts .mask.l::after {
   color: var(--muted);
 }
 .acct-viewbtn.on .acct-viewcal {
-  color: var(--accent);
+  color: var(--ink);
 }
 .acct-viewlbl {
   flex: 0 0 auto;
@@ -2724,7 +2724,7 @@ body.hide-amounts .mask.l::after {
   height: 29px;
   box-sizing: border-box;
   padding: 0 14px;
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   background: var(--bg-2);
   border: 1px solid var(--line);
   color: var(--muted);
@@ -2742,7 +2742,7 @@ body.hide-amounts .mask.l::after {
 }
 .acct-advbtn.on {
   color: var(--ink);
-  border-color: var(--accent);
+  border-color: var(--ink);
 }
 /* Columns picker button — mirrors the date-range .acct-viewbtn treatment (muted glyph, accent when
    any column is hidden). */
@@ -2754,7 +2754,7 @@ body.hide-amounts .mask.l::after {
   color: var(--muted);
 }
 .acct-colbtn.on svg {
-  color: var(--accent);
+  color: var(--ink);
 }
 /* The column picker is meaningless on mobile: the register renders as CARDS there, not a
    table, so there are no columns to show or hide — the control only took toolbar width away
@@ -2779,10 +2779,10 @@ body.hide-amounts .mask.l::after {
   height: 29px;
   box-sizing: border-box;
   padding: 0 14px;
-  border-radius: 9px;
-  background: var(--accent);
-  border: 1px solid var(--accent);
-  color: #fff;
+  border-radius: var(--radius-lg);
+  background: var(--cta);
+  border: 1px solid var(--cta);
+  color: var(--ink-on-cta);
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -2793,7 +2793,7 @@ body.hide-amounts .mask.l::after {
 }
 @media (hover: hover) {
   .acct-filter-add:hover {
-    background: color-mix(in srgb, var(--accent) 86%, #000);
+    background: var(--cta-hover);
   }
 }
 .acct-filter-add svg {
@@ -2837,8 +2837,8 @@ body.hide-amounts .mask.l::after {
   height: 16px;
   padding: 0 4px;
   border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
+  background: var(--ink);
+  color: var(--bg);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3115,14 +3115,14 @@ body.hide-amounts .mask.l::after {
   }
 }
 .acct-advdone {
-  background: var(--accent);
+  background: var(--cta);
   border: none;
-  color: #fff;
+  color: var(--ink-on-cta);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: 7px 16px;
 }
 .acct-chip-row {
@@ -3222,18 +3222,18 @@ body.hide-amounts .mask.l::after {
     color: var(--muted);
   }
 }
-/* Accent, not the neutral --selected grey — a picked date range is the primary decision this
-   sheet exists for, and the neutral fill read as barely different from an unselected chip
-   (owner, 2026-08-24). Tinted rather than a solid fill: solid accent is this app's CTA
-   language (see .acct-advdone), and six solid-filled chips in a row would compete with it. */
+/* A picked date range is the primary decision this sheet exists for, and the plain --selected
+   grey read as barely different from an unselected chip (owner, 2026-08-24), so it takes an ink
+   border too. Tinted rather than a solid fill: the solid ink fill is this app's CTA language (see
+   .acct-advdone), and six solid-filled chips in a row would compete with it. */
 .acct-preset.on {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--ink);
+  background: var(--selected);
+  border-color: var(--line-strong);
 }
 /* No focus ring on TOUCH. The shell's a11y rule uses :focus-visible (never :focus) so the
    ring stays off for mouse users, but iOS Safari's :focus-visible heuristic fires it on a
-   plain tap — and the ring is --accent, exactly what `.on` above uses to mean SELECTED. The
+   plain tap — and the ring reads as a second selected chip beside the one `.on` marks. The
    result: the chip you last tapped looked as selected as the one that actually is (owner,
    2026-08-24: "This month" and "All time" both ringed). `hover: none` scopes this to touch
    devices, so keyboard users keep the ring everywhere it matters. Same call, same reason as
@@ -3386,10 +3386,10 @@ body.hide-amounts .mask.l::after {
   flex: none;
 }
 .acct-sort-ind.desc {
-  border-top: 4.5px solid var(--accent);
+  border-top: 4.5px solid var(--ink);
 }
 .acct-sort-ind.asc {
-  border-bottom: 4.5px solid var(--accent);
+  border-bottom: 4.5px solid var(--ink);
 }
 /* Divider line at the cell's right edge. Moving it into the gap (to look like a mid-column
    boundary) stole breathing room from the left-aligned columns, so it stays at the edge and the
@@ -3423,7 +3423,7 @@ body.hide-amounts .mask.l::after {
   .acct-col-resize:hover::after {
     opacity: 1;
     width: 2px;
-    background: var(--accent);
+    background: var(--muted);
   }
 }
 .acct-reg-reset {
@@ -3468,7 +3468,7 @@ body.hide-amounts .mask.l::after {
   }
 }
 .acct-tr.sel {
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
 }
 .acct-tr:last-child {
   border-bottom: none;
@@ -3487,14 +3487,14 @@ body.hide-amounts .mask.l::after {
   font-size: 10px;
 }
 .acct-cb.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
 }
 .acct-cb.part {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
 }
 .acct-clr {
   width: 16px;
@@ -3721,21 +3721,21 @@ select.acct-editin {
   width: 15px;
   height: 15px;
   border-radius: 4px;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--accent);
+  background: var(--hover-strong);
+  color: var(--ink);
   font-size: 13px;
   font-weight: 700;
   line-height: 1;
   flex: none;
 }
 .acct-addrow-plus.on {
-  background: var(--accent);
-  color: #fff;
+  background: var(--ink);
+  color: var(--bg);
 }
 .acct-addrow {
   border-bottom: 1px solid var(--line);
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
-  box-shadow: inset 3px 0 0 var(--accent);
+  background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--ink);
   width: 100%;
   min-width: min-content;
 }
@@ -3746,8 +3746,8 @@ select.acct-editin {
   padding: 10px 14px;
   width: 100%;
   min-width: min-content;
-  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
-  box-shadow: inset 3px 0 0 var(--accent);
+  background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+  box-shadow: inset 3px 0 0 var(--ink);
 }
 .acct-addrow-cell {
   min-width: 0;
@@ -3899,7 +3899,7 @@ select.acct-addin {
   margin-bottom: 4px;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -3957,9 +3957,11 @@ select.acct-addin {
 .acct-acctsel-check {
   width: 13px;
   flex: none;
-  color: var(--accent);
+  color: var(--ink);
   font-size: 11px;
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
 }
 /* dark date picker (inline add row) */
 .acct-datef {
@@ -4023,6 +4025,9 @@ select.acct-addin {
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 @media (hover: hover) {
   .acct-datef-nav:hover {
@@ -4073,8 +4078,8 @@ select.acct-addin {
   box-shadow: inset 0 0 0 1px var(--accent);
 }
 .acct-datef-day.sel {
-  background: var(--accent);
-  color: #fff;
+  background: var(--ink);
+  color: var(--bg);
   font-weight: 700;
 }
 .acct-datef-foot {
@@ -4305,10 +4310,10 @@ select.acct-addin {
 }
 .acct-catnew-add {
   flex: none;
-  background: var(--accent);
-  color: #fff;
+  background: var(--cta);
+  color: var(--ink-on-cta);
   border: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -4425,7 +4430,7 @@ select.acct-addin {
   }
 }
 .acct-reg.overflow:not(.cards) .acct-tr.sel .acct-td-amt {
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
 }
 /* With the Source column set aside (a narrow register) a row that needs review keeps a dot beside
    its amount in place of the Review pill; the amount is the one cell always in view. The dot hangs
@@ -4631,7 +4636,7 @@ select.acct-addin {
   }
 }
 .acct-card.sel {
-  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+  background: color-mix(in srgb, var(--ink) 8%, var(--surface));
 }
 .acct-card.needs-review {
   box-shadow: inset 2px 0 0 var(--warn, #e0a032);
@@ -4973,7 +4978,7 @@ select.acct-addin {
   gap: 7px;
   height: 32px;
   padding: 0 12px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   border: none;
   background: transparent;
   color: var(--ink);
@@ -5181,7 +5186,7 @@ select.acct-addin {
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -5205,7 +5210,7 @@ select.acct-addin {
   font-size: 12px;
   font-weight: 600;
   padding: 5px 10px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   cursor: pointer;
 }
 @media (hover: hover) {
@@ -5215,8 +5220,8 @@ select.acct-addin {
   }
 }
 .acct-bm-textbtn.primary {
-  background: var(--accent);
-  color: #fff;
+  background: var(--cta);
+  color: var(--ink-on-cta);
 }
 .acct-bm-flag {
   flex: none;
@@ -5728,7 +5733,7 @@ select.acct-addin {
 }
 .acct-ccyp-check {
   margin-left: auto;
-  color: var(--accent);
+  color: var(--ink);
   font-size: 12px;
   flex: none;
 }
@@ -5764,7 +5769,7 @@ select.acct-addin {
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13.5px;
@@ -5873,7 +5878,7 @@ select.acct-addin {
 }
 @media (hover: hover) {
   .acct-modal-back:hover {
-    color: var(--accent);
+    color: var(--ink);
   }
 }
 .acct-modal-back-ic {
@@ -5882,14 +5887,14 @@ select.acct-addin {
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: 50%;
   background: var(--surface2);
   font-size: 17px;
   line-height: 1;
 }
 @media (hover: hover) {
   .acct-modal-back:hover .acct-modal-back-ic {
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    background: var(--hover-strong);
   }
 }
 .acct-type {
@@ -5932,8 +5937,8 @@ select.acct-addin {
   }
 }
 .acct-type.on {
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border-color: var(--ink);
+  background: var(--hover-surface);
 }
 .acct-type .ti {
   width: 26px;
@@ -5948,7 +5953,7 @@ select.acct-addin {
   transition: background 0.12s;
 }
 .acct-type.on .ti {
-  background: color-mix(in srgb, var(--accent) 22%, var(--surface));
+  background: var(--hover-bg-2);
 }
 /* Type and edit views share a stable, scrollable frame. */
 .acct-wizard {
@@ -6621,7 +6626,7 @@ select.acct-addin {
   text-overflow: ellipsis;
 }
 .pm-item.sel .pm-item-nm {
-  color: var(--accent);
+  color: var(--ink);
   font-weight: 600;
 }
 .pm-item.hid .pm-item-nm {
@@ -6804,6 +6809,9 @@ select.acct-addin {
   opacity: 0.5;
   font-size: 14px;
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 @media (hover: hover) {
   .pm-chip-x:hover {
@@ -6848,7 +6856,7 @@ select.acct-addin {
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -7417,11 +7425,11 @@ select.acct-addin {
   }
 }
 .acct-detail-resize.drag::after {
-  background: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--ink) 25%, transparent);
 }
 @media (hover: hover) {
   .acct-detail-resize:hover::after {
-    background: color-mix(in srgb, var(--accent) 60%, transparent);
+    background: color-mix(in srgb, var(--ink) 25%, transparent);
   }
 }
 @keyframes acct-detail-slide {
@@ -7449,7 +7457,7 @@ select.acct-addin {
   border: none;
   background: transparent;
   color: var(--faint);
-  border-radius: var(--radius-sm);
+  border-radius: 50%;
   cursor: pointer;
   font-size: 14px;
   display: inline-flex;
@@ -7590,6 +7598,9 @@ select.acct-addin {
   border: 0;
   padding: 0;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 @media (hover: hover) {
   .acct-detail-email-toggle:hover {
@@ -7643,6 +7654,9 @@ select.acct-addin {
   border: 0;
   padding: 0;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 @media (hover: hover) {
   .acct-detail-raw-toggle:hover {
@@ -7795,7 +7809,7 @@ select.acct-addin {
   font: inherit;
   font-size: 11.5px;
   font-weight: 600;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-lg);
   padding: 7px 10px;
   cursor: pointer;
   transition:
@@ -7990,16 +8004,16 @@ select.acct-addin {
   font: inherit;
   font-size: 13px;
   font-weight: 600;
-  color: #fff;
-  background: var(--accent);
+  color: var(--ink-on-cta);
+  background: var(--cta);
   border: none;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: 10px;
   cursor: pointer;
 }
 @media (hover: hover) {
   .acct-detail-edit:hover {
-    filter: brightness(1.06);
+    background: var(--cta-hover);
   }
 }
 .acct-detail-del {
@@ -8009,7 +8023,7 @@ select.acct-addin {
   color: var(--bad, #e2554f);
   background: transparent;
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: 10px 14px;
   cursor: pointer;
 }
@@ -8252,7 +8266,7 @@ select.acct-addin {
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -8268,7 +8282,7 @@ select.acct-addin {
   gap: 8px;
   background: var(--bg-2);
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: 7px 11px;
 }
 .acct-edit-amt:focus-within {
@@ -8536,6 +8550,9 @@ select.acct-addin {
   border: none;
   padding: 0;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 @media (hover: hover) {
   .acct-edit-splitadd:hover {
@@ -8557,9 +8574,9 @@ select.acct-addin {
   color: var(--bad, #e2554f);
 }
 .acct-detail-edit:disabled {
-  opacity: 0.5;
+  background: var(--bg-2);
+  color: var(--faint);
   cursor: not-allowed;
-  filter: none;
 }
 /* actor colors + activity timeline */
 .acct-src-ic.agent {
@@ -8901,9 +8918,9 @@ select.acct-addin {
   }
 }
 .imp-seg.on {
-  color: #fff;
-  background: var(--accent);
-  border-color: var(--accent);
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line-strong);
 }
 .imp-structured {
   display: flex;
@@ -9232,7 +9249,7 @@ select.acct-addin {
   gap: 6px;
   padding: 6px 11px;
   border: 1px solid var(--line-strong);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--ink);
   font-size: 12.5px;
@@ -9242,7 +9259,7 @@ select.acct-addin {
 @media (hover: hover) {
   .pm-newbtn:hover {
     border-color: var(--hover-line);
-    color: var(--accent);
+    color: var(--ink);
   }
 }
 /* Statements history (RFC statement-import-unified D8) */
@@ -9323,6 +9340,8 @@ select.acct-addin {
 .acct-stmt-err-caret {
   color: var(--faint);
   font-size: 10px;
+  display: inline-flex;
+  align-items: center;
 }
 .acct-stmt-err-detail {
   flex-basis: 100%;
@@ -9370,6 +9389,9 @@ select.acct-addin {
   padding: 0;
   font: inherit;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 @media (hover: hover) {
   .acct-detail-stmt:hover {
@@ -9660,6 +9682,8 @@ button.acct-alert-src {
 }
 .acct-stmtview-check-caret {
   color: var(--faint);
+  display: inline-flex;
+  align-items: center;
 }
 .acct-stmtview-check-row {
   display: flex;

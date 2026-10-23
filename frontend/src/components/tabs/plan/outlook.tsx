@@ -46,7 +46,7 @@ import { useDataVersion } from '../../../hooks/useDataVersion'
 import { buildWhatifState } from './stageWhatif'
 import { useScenarioOdds } from './scenarioOdds'
 import { Button, MoneyField, NumberField } from '../../ui'
-import { SquarePen } from '../../../ui/icons'
+import { SquarePen, ChevronsLeft, RotateCcw } from '../../../ui/icons'
 import { PlanningModal } from './PlanningModal'
 import { OutlookWhatIfAsk } from './OutlookWhatIfAsk'
 
@@ -261,7 +261,7 @@ function Section({
       <div className="pl-sec-head">
         <button className="pl-sec-btn" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           <span className="pl-sec-caret" aria-hidden="true">
-            ›
+            <Chevron dir="right" size={13} />
           </span>
           {mark && (
             <span className="pl-sec-mark" aria-hidden="true">
@@ -1676,7 +1676,7 @@ export function OutlookTab(props: OutlookTabProps) {
                         onClick={resetToBaseline}
                         title={'Reset to ' + baselineLabel}
                       >
-                        ↺ Reset
+                        <RotateCcw size={11} aria-hidden="true" /> Reset
                       </button>
                     )}
                   </div>
@@ -2341,8 +2341,8 @@ export function OutlookTab(props: OutlookTabProps) {
               >
                 <line x1="4" y1="9" x2="20" y2="9" />
                 <line x1="4" y1="15" x2="20" y2="15" />
-                <circle cx="10" cy="9" r="2.5" fill="var(--primary)" />
-                <circle cx="15" cy="15" r="2.5" fill="var(--primary)" />
+                <circle cx="10" cy="9" r="2.5" fill="var(--cta)" />
+                <circle cx="15" cy="15" r="2.5" fill="var(--cta)" />
               </svg>
               <span className="pl-rail-fab-label">What if?</span>
             </button>
@@ -2357,7 +2357,7 @@ export function OutlookTab(props: OutlookTabProps) {
                     title="Collapse the levers"
                     aria-label="Collapse"
                   >
-                    «
+                    <ChevronsLeft size={16} aria-hidden="true" />
                   </button>
                   <span className="pl-panel-title">
                     What if? <Info text="Drag any lever — the chart and odds update live." />
@@ -2370,7 +2370,7 @@ export function OutlookTab(props: OutlookTabProps) {
                         onClick={resetToBaseline}
                         title={'Reset to ' + baselineLabel}
                       >
-                        ↺ Reset
+                        <RotateCcw size={11} aria-hidden="true" /> Reset
                       </button>
                     )}
                     <button
@@ -2997,7 +2997,12 @@ export function OutlookTab(props: OutlookTabProps) {
                     . The net-worth line swings with markets, so treat it as a guide, not a promise.
                   </span>
                   <button className="pl-trust-toggle" onClick={() => setShowTrack((s) => !s)}>
-                    {showTrack ? 'Hide track record ▾' : 'See track record ▸'}
+                    {showTrack ? 'Hide track record' : 'See track record'}{' '}
+                    {showTrack ? (
+                      <Chevron dir="down" size={12} />
+                    ) : (
+                      <Chevron dir="right" size={12} />
+                    )}
                   </button>
                 </>
               )}
@@ -3107,7 +3112,12 @@ export function OutlookTab(props: OutlookTabProps) {
                     </span>
                   </div>
                   <button className="pl-tech-toggle" onClick={() => setShowTech((s) => !s)}>
-                    {showTech ? 'Hide the technical numbers ▾' : 'Show the technical numbers ▸'}
+                    {showTech ? 'Hide the technical numbers' : 'Show the technical numbers'}{' '}
+                    {showTech ? (
+                      <Chevron dir="down" size={12} />
+                    ) : (
+                      <Chevron dir="right" size={12} />
+                    )}
                   </button>
                   {showTech && (
                     <div className="pl-tiles pl-tiles--tech" style={{ marginTop: 14 }}>

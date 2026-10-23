@@ -19,7 +19,7 @@ import { Button } from '../../ui'
 import { BottomSheet } from '../../ui/BottomSheet'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { CheckboxGroup } from '../../ui/CheckboxGroup'
-import { X } from '../../../ui/icons'
+import { X, ChevronDown } from '../../../ui/icons'
 import { useCategories, usePlanningSummary } from '../../../hooks/serverState'
 import { ColorPicker } from '../accounts/ds'
 import { AUTOH_IDS, fitMode } from './grid'
@@ -231,7 +231,7 @@ function PairsEditor({
             <span className="ov-fs-pairchip" key={p[0] + p[1]}>
               {p[0]}/{p[1]}
               <button type="button" onClick={() => remove(i)} aria-label={`Remove ${p[0]}/${p[1]}`}>
-                ×
+                <X size={12} aria-hidden="true" />
               </button>
             </span>
           ))}
@@ -895,7 +895,7 @@ function CategoryPickerRow({
           justifyContent: 'space-between',
         }}
       >
-        {display} <span style={{ fontSize: 10, opacity: 0.6 }}>▼</span>
+        {display} <ChevronDown size={12} style={{ opacity: 0.6 }} aria-hidden="true" />
       </button>
 
       {open && (

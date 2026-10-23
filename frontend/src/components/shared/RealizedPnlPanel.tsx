@@ -3,6 +3,7 @@ import type { RealizedPnl } from '../../types/portfolio'
 import { fBase, fDate, plClass } from '../../utils/format'
 import { authFetch } from '../../api/client'
 import { Panel, SummaryBar, Text, type StatTone } from '../ui'
+import { ChevronDown, ChevronRight } from '../../ui/icons'
 
 // Map a P&L sign → a SummaryBar tone (gain green / loss red), matching the sibling panels.
 function plTone(n: number): StatTone | undefined {
@@ -116,7 +117,13 @@ export function RealizedPnlPanel({ instrumentNames }: Props) {
                     style={{ cursor: 'pointer' }}
                   >
                     <td>
-                      <span className="realized-caret">{open ? '▾' : '▸'}</span>
+                      <span className="realized-caret">
+                        {open ? (
+                          <ChevronDown size="1em" aria-hidden="true" />
+                        ) : (
+                          <ChevronRight size="1em" aria-hidden="true" />
+                        )}
+                      </span>
                       {fDate(ev.disposed_at, 'short', 'always')}
                     </td>
                     <td>

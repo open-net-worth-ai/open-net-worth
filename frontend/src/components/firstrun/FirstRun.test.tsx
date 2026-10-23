@@ -191,7 +191,7 @@ describe('FirstRun — the restore branch', () => {
   it('returns to the folder step from the restore Back action', async () => {
     mockApi()
     render(<FirstRun onDone={() => {}} initialStep={-1} />)
-    fireEvent.click(screen.getByRole('button', { name: '← Back' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
     expect(await screen.findByRole('button', { name: /backup to restore/i })).toBeTruthy()
   })
 
@@ -349,7 +349,7 @@ describe('FirstRun — the browser owns the history', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: '← Back' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Back' }))
 
     // No local state to move: it emits, the router navigates, the new url comes back as a
     // prop. Two writers for one fact is what broke this the first time.
@@ -380,7 +380,7 @@ describe('FirstRun — Back from the password step', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: '← Back' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Back' }))
 
     await waitFor(() => expect(onStepChange).toHaveBeenCalledWith('model-pick', { replace: true }))
   })
@@ -397,7 +397,7 @@ describe('FirstRun — Back from the password step', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: '← Back' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Back' }))
 
     await waitFor(() => expect(onStepChange).toHaveBeenCalledWith('model', undefined))
   })

@@ -91,6 +91,7 @@ import {
 import { SeriesLegend, type LegendGroup } from './seriesLegend'
 import { fitMode } from '../grid'
 import { vizOf } from '../vizModel'
+import { ArrowRight } from '../../../../ui/icons'
 
 Chart.register(
   ArcElement,
@@ -818,7 +819,7 @@ const TopMerchants: ComponentType<WidgetContentProps> = ({
             className="ov-rep-link"
             onClick={() => onNavigate(def.source?.tab || 'accounts')}
           >
-            All transactions →
+            All transactions <ArrowRight size={12} aria-hidden="true" />
           </button>
         )
       }

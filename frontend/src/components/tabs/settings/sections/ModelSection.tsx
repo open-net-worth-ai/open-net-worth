@@ -24,7 +24,7 @@ import { CliSubscriptionHelp } from '../../../shared/CliSubscriptionHelp'
 import type { CliHostPlatform } from '../../../shared/CliSubscriptionHelp'
 import { NO_LOCAL_MODELS_NOTE, isLocalOnlyProvider } from '../../../shared/privateCloudCopy'
 import { ModelPicker } from '../../../ui'
-import { ChevronRight, Eye, EyeOff, TriangleAlert } from '../../../../ui/icons'
+import { ChevronRight, Eye, EyeOff, TriangleAlert, Plus } from '../../../../ui/icons'
 import { Badge, Btn, Empty, Field, Modal, Panel, Select, Toggle, useSectionBusy } from '../ds'
 import type { SectionProps } from '../ds'
 import { TurnTimeLimitPanel } from './TurnTimeLimitPanel'
@@ -1057,7 +1057,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
         sub="Credentials and endpoints, and the model Lucius runs by default"
         actions={
           <Btn size="xs" onClick={() => setEditor({ mode: 'add' })}>
-            ＋ Add provider
+            <Plus size={12} aria-hidden="true" /> Add provider
           </Btn>
         }
       >

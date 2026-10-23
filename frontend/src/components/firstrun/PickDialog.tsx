@@ -18,6 +18,7 @@ import {
   useState,
 } from 'react'
 import { Modal, Text, TextField } from '../ui'
+import { Check } from '../../ui/icons'
 
 export interface PickOption {
   value: string
@@ -133,7 +134,7 @@ export function PickDialog({
               {o.name && <span className="firstrun-pick__name">{o.name}</span>}
               {o.value === value && (
                 <span className="firstrun-pick__tick" aria-hidden="true">
-                  ✓
+                  <Check size={16} />
                 </span>
               )}
             </button>

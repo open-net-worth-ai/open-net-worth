@@ -129,7 +129,7 @@ describe('TxnDetail — editing a split transaction', () => {
     fireEvent.click(screen.getByText('Edit transaction'))
     // The editor is present (Unsplit + Add line controls), not the single category picker.
     expect(screen.getByText('Unsplit')).toBeTruthy()
-    expect(screen.getByText('+ Add line')).toBeTruthy()
+    expect(screen.getByText('Add line')).toBeTruthy()
     // Each line shows its category label.
     expect(screen.getByText('Groceries')).toBeTruthy()
     expect(screen.getByText('Household')).toBeTruthy()

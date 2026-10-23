@@ -650,7 +650,7 @@
 
   @media (hover: hover) {
     .upload-dropzone:hover {
-      border-color: var(--accent);
+      border-color: var(--hover-line);
       background: var(--hover-surface);
     }
   }

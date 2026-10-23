@@ -2,6 +2,7 @@ import { Badge, Button, Loading, Text, TextField } from '../ui'
 import type { SelectedFile, Skill, SkillBundle } from '../../types/skills'
 import { FileTree } from './FileTree'
 import { EntityRow } from '../../lucius/EntityRow'
+import { ChevronRight } from '../../ui/icons'
 
 interface SkillsTreeProps {
   skills: Skill[]
@@ -190,14 +191,14 @@ function SkillTreeRow({
             tabIndex={-1}
             aria-label={isExpanded ? 'Collapse' : 'Expand'}
           >
-            ›
+            <ChevronRight size="1em" />
           </span>
         ) : (
           <span
             className="skill-tree-row__chevron skill-tree-row__chevron--placeholder"
             aria-hidden
           >
-            ›
+            <ChevronRight size="1em" />
           </span>
         )}
 

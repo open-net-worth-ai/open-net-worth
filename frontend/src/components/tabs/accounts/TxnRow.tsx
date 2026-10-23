@@ -22,6 +22,7 @@ import {
   type PayeeOption,
 } from './pickers'
 import { SourceIcon, IconCheck } from './pickers'
+import { ChevronUp, ChevronDown, Check, Circle } from '../../../ui/icons'
 
 export interface RowPatch {
   date?: string
@@ -270,7 +271,11 @@ export function TxnRow({
             onUpdate(t.id, { cleared: !t.cleared })
           }}
         >
-          {t.cleared ? <span className="c">✓</span> : <span className="o">○</span>}
+          {t.cleared ? (
+            <Check className="c" size={12} aria-hidden="true" />
+          ) : (
+            <Circle className="o" size={12} aria-hidden="true" />
+          )}
         </span>
         {has('account') && (
           <span className="acct-td-acct" data-edit="" onDoubleClick={editCell('account')}>
@@ -359,7 +364,12 @@ export function TxnRow({
                   onSplit(t.id)
                 }}
               >
-                Split • {t.splits.length} {splitOpen ? '▴' : '▾'}
+                Split • {t.splits.length}{' '}
+                {splitOpen ? (
+                  <ChevronUp size={12} aria-hidden="true" />
+                ) : (
+                  <ChevronDown size={12} aria-hidden="true" />
+                )}
               </button>
             ) : t.category && t.kind !== 'adjustment' ? (
               categoryPill(t.category, catMap)

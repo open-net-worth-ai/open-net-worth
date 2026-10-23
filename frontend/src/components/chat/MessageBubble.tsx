@@ -22,7 +22,16 @@ import { useAnchoredPopover } from './anchoredPopover'
 import { ScreenCommandChip } from './ScreenCommandChip'
 import { ChangePreview } from './ChangePreview'
 import { DuplicateReview } from './DuplicateReview'
-import { Search, Check, Clock, Copy, FileText, RotateCcw } from '../../ui/icons'
+import {
+  Search,
+  Check,
+  Clock,
+  Copy,
+  FileText,
+  RotateCcw,
+  ChevronUp,
+  ChevronDown,
+} from '../../ui/icons'
 import { makeMentionTokenRE } from '../../types/mentions'
 import type { MentionRef, MentionType } from '../../types/mentions'
 import { CitationChips } from './lucius/CitationChips'
@@ -214,7 +223,12 @@ function SearchCallItem({ s }: { s: SearchCall }) {
         <span className="msg-search-query">{s.query}</span>
         {!s.loading && s.results.length > 0 && (
           <span className="msg-search-count">
-            {s.results.length} sources {open ? '▲' : '▼'}
+            {s.results.length} sources{' '}
+            {open ? (
+              <ChevronUp size={11} aria-hidden="true" />
+            ) : (
+              <ChevronDown size={11} aria-hidden="true" />
+            )}
           </span>
         )}
       </button>
@@ -1103,7 +1117,7 @@ export function MessageBubble({
           )}
           {onRetry && (
             <button className="msg-retry-btn" onClick={onRetry}>
-              ↺ Retry
+              <RotateCcw size={12} aria-hidden="true" /> Retry
             </button>
           )}
         </div>

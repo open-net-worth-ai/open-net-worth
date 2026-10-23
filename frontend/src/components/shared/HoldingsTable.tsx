@@ -15,6 +15,7 @@ import {
 import { sortRows } from '../../hooks/usePortfolio'
 import { LuciusAskButton } from './AskLucius'
 import { EntityRow } from '../../lucius/EntityRow'
+import { ChevronDown, ChevronRight } from '../../ui/icons'
 
 // Human label + badge tone for each bond subtype.
 const BOND_TYPE_LABEL: Record<string, string> = {
@@ -264,7 +265,15 @@ export function HoldingsTable({
       <>
         {canExpand && (
           <td className="hold-drill-caret-col">
-            {drillable && <span className="hold-drill-caret">{isOpen ? '▾' : '▸'}</span>}
+            {drillable && (
+              <span className="hold-drill-caret">
+                {isOpen ? (
+                  <ChevronDown size="1em" aria-hidden="true" />
+                ) : (
+                  <ChevronRight size="1em" aria-hidden="true" />
+                )}
+              </span>
+            )}
           </td>
         )}
         <td
@@ -594,7 +603,13 @@ export function HoldingsTable({
                     {/* Span everything up to the Value column, then carry the subtotal in
                         Value (+ Wt%) so the group's number sits under its column header. */}
                     <td colSpan={colCount - (showWeight ? 2 : 1)} className="hold-group-label">
-                      <span className="hold-group-caret">{isCollapsed ? '▸' : '▾'}</span>
+                      <span className="hold-group-caret">
+                        {isCollapsed ? (
+                          <ChevronRight size="1em" aria-hidden="true" />
+                        ) : (
+                          <ChevronDown size="1em" aria-hidden="true" />
+                        )}
+                      </span>
                       <span className="hold-group-name">{g.label}</span>
                       <span className="hold-group-count">{g.rows.length}</span>
                     </td>

@@ -29,6 +29,7 @@ import {
   isMaskableAmountOrQuantity,
 } from '../../../utils/mentionable'
 import { labelFor } from '../../../lucius/entityRegistry'
+import { Plus } from '../../../ui/icons'
 
 export interface AutocompleteProps {
   mode: '@' | '/'
@@ -510,7 +511,7 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
                   }}
                   title="Attach as context instead of routing"
                 >
-                  + as context
+                  <Plus size={11} aria-hidden="true" /> as context
                 </button>
               )}
               {mode === '@' && row.type !== 'agent' && row.type !== 'source' && (

@@ -15,6 +15,7 @@ import { canHaveLoan, purchaseCopy, showsInsured } from './assetCategoryRules'
 import { catOf, equityOf, fmt, loanOf, monthYear, shareOf } from './assetsData'
 import { labelList, splitFacts, type Fact } from './detailsFacts'
 import { EditorFooter, SaveError, useEditorSave } from './editorKit'
+import { Icons } from './icons'
 
 export type Section = 'ownership' | 'purchase' | 'details' | 'notes'
 /** What an Edit or a "+" chip opens: a group's editor, or Details with a new row of your own. */
@@ -222,7 +223,7 @@ export function AssetSections(props: AssetSectionsProps) {
             aria-label={m.aria}
             onClick={() => onEdit(m.opens)}
           >
-            <span aria-hidden="true">+</span>
+            <span aria-hidden="true">{Icons.plus!({ width: 12, height: 12 })}</span>
             {m.label}
           </button>
         ))}

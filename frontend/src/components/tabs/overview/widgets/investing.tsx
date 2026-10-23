@@ -45,7 +45,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { ComponentType } from 'react'
-import { ArrowLeftRight } from 'lucide-react'
+import { ArrowLeftRight, ArrowRight } from 'lucide-react'
 import { authFetch } from '../../../../api/client'
 import { fetchReturns } from '../../../../api/portfolio'
 import { useDataVersion } from '../../../../hooks/useDataVersion'
@@ -113,7 +113,7 @@ function sourceFooter(
   const tab = def.source.tab
   return (
     <button type="button" className="ov-panel-link" onClick={() => onNavigate(tab)}>
-      {label} →
+      {label} <ArrowRight size={12} aria-hidden="true" />
     </button>
   )
 }

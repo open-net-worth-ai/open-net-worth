@@ -228,7 +228,7 @@
   bottom: -1px;
   height: 2px;
   border-radius: 2px 2px 0 0;
-  background: var(--accent);
+  background: var(--ink);
 }
 .cn-page .rd-tab-count {
   font-size: 10.5px;
@@ -371,7 +371,7 @@
   width: 100%;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 13px;
@@ -515,7 +515,7 @@
 }
 .cn-page .rd-search input {
   height: 30px;
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   padding-left: 32px;
   width: 100%;
 }
@@ -556,7 +556,8 @@
 }
 .cn-page .rd-seg-b.on {
   color: var(--ink);
-  background: var(--selected);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 
 /* ── connector list rows (compact list, replaces card grid) ────────────────── */
@@ -754,14 +755,14 @@
 }
 .cn-page .cn-chip.on {
   color: var(--ink);
-  background: color-mix(in srgb, var(--accent) 16%, var(--surface2));
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: var(--selected);
+  border-color: var(--line-strong);
 }
 .cn-page .rd-select.cn-sortselect {
   height: 30px;
   padding: 0 28px 0 13px;
   font-size: 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
 }
 .cn-page .cn-sublabel {
   font-size: 10px;
@@ -1029,7 +1030,7 @@
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
   padding: 6px 13px;
   cursor: pointer;
 }

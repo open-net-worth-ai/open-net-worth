@@ -13,6 +13,7 @@
 
 import { useState } from 'react'
 import type { DashboardView } from './types'
+import { X, Plus } from '../../../ui/icons'
 
 export interface ViewTabsProps {
   views: DashboardView[]
@@ -114,7 +115,7 @@ export function ViewTabs({
                   }
                 }}
               >
-                ×
+                <X size={12} aria-hidden="true" />
               </span>
             )}
           </button>
@@ -127,7 +128,7 @@ export function ViewTabs({
           aria-label="Add view"
           onClick={() => onAdd('New view')}
         >
-          +
+          <Plus size={14} aria-hidden="true" />
         </button>
       )}
     </div>

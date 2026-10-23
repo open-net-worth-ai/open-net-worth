@@ -47,9 +47,10 @@
   }
 }
 .eq-caret {
-  display: inline-block;
   color: var(--faint);
   transition: transform 0.15s;
+  display: inline-flex;
+  align-items: center;
 }
 .eq-caret.open {
   transform: rotate(90deg);

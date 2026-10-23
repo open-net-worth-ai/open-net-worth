@@ -515,8 +515,8 @@
 @media (hover: hover) {
   .as-add:hover {
     color: var(--ink);
-    border-color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    border-color: var(--hover-line);
+    background: var(--hover);
   }
 }
 
@@ -1164,7 +1164,7 @@
 }
 @media (hover: hover) {
   .as-pick button:hover {
-    border-color: var(--accent);
+    border-color: var(--hover-line);
     background: var(--hover);
   }
 }
@@ -1175,7 +1175,7 @@
   color: var(--muted);
 }
 .as-pick .as-pick-new[aria-expanded='true'] {
-  border-color: var(--accent);
+  border-color: var(--ink);
   color: var(--ink);
 }
 .as-form {
@@ -1316,7 +1316,7 @@
   background: var(--line-strong);
 }
 .as-wizard-progress > span.on {
-  background: var(--accent);
+  background: var(--ink);
 }
 .as-wizard-back {
   margin-right: auto;
@@ -1409,6 +1409,8 @@
   color: var(--faint);
   font-size: var(--text-lg);
   line-height: 1;
+  display: inline-flex;
+  align-items: center;
 }
 button.as-row-chevron {
   background: none;
@@ -1895,10 +1897,11 @@ button.as-row-chevron {
 .as-modal .ui-segmented__seg {
   border-radius: 999px;
 }
-/* The chosen side in the primary blue — the kit's --surface2 all but vanished on the dark
-   page (owner: "the color is so off"); blue reads the same in light and dark. */
+/* The chosen side is a raised thumb — the kit's --surface2 all but vanished on the dark
+   page (owner: "the color is so off"); --surface with a line and a shadow stays legible. */
 .as-modal .ui-segmented__seg--active {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--ink-on-accent);
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: var(--shadow-sm);
+  color: var(--ink);
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { MoreVertical } from 'lucide-react'
+import { MoreVertical, Check } from 'lucide-react'
 
 export interface AutomationMenuItem {
   label: string
@@ -70,7 +70,9 @@ export function AutomationMenu({
               }}
             >
               {item.checked !== undefined ? (
-                <span className="a3-menu-check">{item.checked ? '✓' : ''}</span>
+                <span className="a3-menu-check">
+                  {item.checked ? <Check size={14} aria-hidden="true" /> : null}
+                </span>
               ) : null}
               {item.icon}
               {item.label}

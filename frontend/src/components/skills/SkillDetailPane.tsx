@@ -8,6 +8,7 @@ import { authFetch } from '../../api/client'
 import { fDate } from '../../utils/format'
 import { getBundleFileContent, isCodeOnlyFile } from './fileTreeUtils'
 import type { SelectedFile, Skill, SkillBundle } from '../../types/skills'
+import { ArrowLeft } from '../../ui/icons'
 
 interface SkillDetailPaneProps {
   skill: Skill | null
@@ -72,8 +73,13 @@ export function SkillDetailPane({
     <div className={paneClass}>
       {/* Mobile back button */}
       <div className="skill-detail-back">
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          ← Back
+        <Button
+          variant="ghost"
+          size="sm"
+          iconLeft={<ArrowLeft size={14} aria-hidden="true" />}
+          onClick={onBack}
+        >
+          Back
         </Button>
       </div>
 

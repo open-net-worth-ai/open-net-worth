@@ -33,6 +33,7 @@ import {
   TextField,
 } from './index'
 import type { ButtonVariant, ButtonSize, CheckboxGroupOption, TextSize, TextTone } from './index'
+import { Plus } from '../../ui/icons'
 
 // Dev-only gallery: renders every primitive × every variant/state on one
 // scrollable screen so the whole vocabulary can be reviewed in a single
@@ -330,7 +331,7 @@ export function Gallery() {
           <Button variant="secondary" loading>
             loading
           </Button>
-          <Button variant="secondary" iconLeft={<span aria-hidden>＋</span>}>
+          <Button variant="secondary" iconLeft={<Plus size={14} aria-hidden="true" />}>
             iconLeft
           </Button>
         </div>

@@ -22,6 +22,7 @@ import { fDate } from '../../../utils/format'
 import { buildTxnView } from './txnView'
 import { categoryPill } from './TxnRow'
 import { SourceIcon, IconCheck } from './pickers'
+import { ChevronUp, ChevronDown, Check, Circle } from '../../../ui/icons'
 
 export interface TxnCardProps {
   t: Txn
@@ -154,7 +155,12 @@ export function TxnCard({
                   onSplit(t.id)
                 }}
               >
-                Split • {t.splits.length} {splitOpen ? '▴' : '▾'}
+                Split • {t.splits.length}{' '}
+                {splitOpen ? (
+                  <ChevronUp size={12} aria-hidden="true" />
+                ) : (
+                  <ChevronDown size={12} aria-hidden="true" />
+                )}
               </button>
             ) : t.category && !isAdjustment ? (
               categoryPill(t.category, catMap)
@@ -178,7 +184,11 @@ export function TxnCard({
                 onUpdate(t.id, { cleared: !t.cleared })
               }}
             >
-              {t.cleared ? <span className="c">✓</span> : <span className="o">○</span>}
+              {t.cleared ? (
+                <Check className="c" size={12} aria-hidden="true" />
+              ) : (
+                <Circle className="o" size={12} aria-hidden="true" />
+              )}
             </span>
             {!t.needsReview && <SourceIcon source={t.source} />}
           </span>

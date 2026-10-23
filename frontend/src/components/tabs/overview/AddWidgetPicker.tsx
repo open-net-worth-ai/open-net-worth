@@ -26,6 +26,7 @@ import { Button, Modal, TextArea, TextField } from '../../ui'
 import { WIDGET_GROUPS } from './definitions'
 import type { WidgetDefinition } from './types'
 import { Spark } from '../../../lucius/identity'
+import { ArrowLeft } from '../../../ui/icons'
 
 export interface AddWidgetPickerProps {
   open: boolean
@@ -124,7 +125,7 @@ export function AddWidgetPicker({
             </div>
             <div className="ov-picker-build-actions ov-picker-build-actions--split">
               <button type="button" className="ov-picker-back" onClick={() => setBuildMode(false)}>
-                ← All widgets
+                <ArrowLeft size={14} aria-hidden="true" /> All widgets
               </button>
               <span className="ov-picker-build-actions">
                 <Button

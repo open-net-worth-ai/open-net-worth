@@ -113,7 +113,7 @@
   padding: 0 10px 0 30px;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   font: inherit;
   font-size: 12.5px;
@@ -203,7 +203,7 @@
   align-items: center;
   gap: 6px;
   padding: 0 11px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-lg);
   border: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
@@ -231,9 +231,9 @@
   gap: 7px;
   padding: 0 12px;
   border: none;
-  border-radius: var(--radius-md);
-  color: #fff;
-  background: var(--accent);
+  border-radius: var(--radius-lg);
+  color: var(--ink-on-cta);
+  background: var(--cta);
   font: inherit;
   font-size: 12.5px;
   font-weight: 600;
@@ -242,7 +242,7 @@
 }
 @media (hover: hover) {
   .a3-new-button:hover {
-    filter: brightness(1.08);
+    background: var(--cta-hover);
   }
 }
 .a3-new-pop {
@@ -284,9 +284,10 @@
   }
 }
 .a3-menu-check {
-  display: inline-block;
   width: 10px;
   flex: none;
+  display: inline-flex;
+  align-items: center;
 }
 .a3-empty {
   padding: 38px 8px;
@@ -538,7 +539,7 @@
 }
 @media (hover: hover) {
   .a3-tpl:hover .a3-tpl-ic {
-    color: var(--accent);
+    color: var(--ink);
     border-color: color-mix(in srgb, var(--hover-line) 45%, var(--line));
   }
 }
@@ -775,6 +776,9 @@
   cursor: pointer;
   padding: 0;
   align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 @media (hover: hover) {
   .a3-linkbtn:hover {
@@ -814,7 +818,7 @@
   }
 }
 .a3-hist-row.on {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: var(--selected);
 }
 .a3-hist-row .when {
   font-size: 12.5px;
@@ -1170,9 +1174,9 @@
   font-size: 9.5px;
 }
 .a3-step.done .box {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
 }
 .a3-step.done .l {
   color: var(--fg-3);
@@ -1309,7 +1313,7 @@
   box-sizing: border-box;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   color: var(--ink);
   padding: 0 10px;
   font: inherit;
@@ -1428,7 +1432,7 @@
   padding: 3px;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--radius-lg);
 }
 .a3-seg-btn {
   display: inline-flex;
@@ -1437,7 +1441,7 @@
   height: 27px;
   padding: 0 13px;
   border: none;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   background: none;
   color: var(--muted);
   font: inherit;
@@ -1457,9 +1461,9 @@
   }
 }
 .a3-seg-btn.on {
-  background: var(--selected);
+  background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--shadow-sm);
 }
 .a3-trows {
   display: flex;
@@ -1851,7 +1855,7 @@
     padding: 0;
     gap: 0;
     justify-content: center;
-    border-radius: var(--radius-md);
+    border-radius: 50%;
   }
   .a3-toolbar .a3-toolbar-label,
   .a3-toolbar .a3-toolbar-chevron {

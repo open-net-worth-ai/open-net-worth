@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button, Panel, Stack, Text } from '../ui'
-import { ArrowRight } from '../../ui/icons'
+import { ArrowRight, Plus } from '../../ui/icons'
 import { fPrice } from '../../utils/format'
 import { PriceAlertsModal } from './PriceAlertsModal'
 import type { PriceAlertCondition } from '../../types/assetDetail'
@@ -117,10 +117,11 @@ export function AssetAlertsCard({
             <Button
               variant="primary"
               size="sm"
+              iconLeft={<Plus size={14} aria-hidden="true" />}
               onClick={() => void openEditor()}
               className="asd-alerts-btn"
             >
-              + Add price alert
+              Add price alert
             </Button>
           </>
         )}

@@ -17,6 +17,7 @@ import { useNarrow } from './useNarrow'
 import { entityRefProps } from '../../../utils/mentionable'
 import { buildCtxFields } from '../../../lucius/ctxFields'
 import { filterByDescriptor } from '../../../lucius/entityRegistry'
+import { ArrowRight } from '../../../ui/icons'
 
 // ── a synthetic checklist item derived from a not-yet-promoted funding draw (a loan draw-
 //    down, an asset sale, a windfall receipt) — never persisted on its own; checking it off or
@@ -188,7 +189,7 @@ export function Actions({ commitment: c, fx, m }: ActionsProps) {
                 )
               }
             >
-              Manage with Lucius →
+              Manage with Lucius <ArrowRight size={13} aria-hidden="true" />
             </button>
             <button
               className={
@@ -241,7 +242,7 @@ export function Actions({ commitment: c, fx, m }: ActionsProps) {
                 )
               }
             >
-              Manage with Lucius →
+              Manage with Lucius <ArrowRight size={13} aria-hidden="true" />
             </button>
           </span>
         )}
@@ -429,7 +430,8 @@ export function Actions({ commitment: c, fx, m }: ActionsProps) {
                         iconLeft={<Spark size={15} />}
                         onClick={() => m.onAskLucius(missPrompt(a, fundBase))}
                       >
-                        Plan the fix with Lucius →
+                        Plan the fix with Lucius
+                        <ArrowRight size={14} aria-hidden="true" />
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => setMissed(a, false)}>
                         Undo

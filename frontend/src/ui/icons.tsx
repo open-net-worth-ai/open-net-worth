@@ -21,8 +21,10 @@ export {
   // ── App chrome ──
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
   ChevronsRight,
   ChevronDown,
+  ChevronUp,
   Menu,
   MoreHorizontal,
   MoreVertical,
@@ -43,6 +45,9 @@ export {
   LogOut,
   // ── Intel "markets desk" redesign ──
   ArrowRight,
+  ArrowUpRight,
+  CircleDot,
+  Circle,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,

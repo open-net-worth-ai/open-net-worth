@@ -333,7 +333,7 @@
 
 @media (hover: hover) {
   .ov-mv-row:hover .ov-mv-nm {
-    color: var(--accent);
+    color: var(--ink);
   }
 }
 

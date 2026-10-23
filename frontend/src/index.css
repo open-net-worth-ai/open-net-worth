@@ -173,7 +173,7 @@
   select {
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 8px 12px;
     color: var(--ink);
     font: inherit;
@@ -1521,7 +1521,7 @@
     min-width: 140px;
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 9px 13px;
     color: var(--ink);
     font: inherit;
@@ -1533,7 +1533,7 @@
   .toolbar select {
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 9px 12px;
     color: var(--ink);
     font: inherit;
@@ -2101,7 +2101,7 @@ body.hide-amounts .money * {
     flex-shrink: 0;
   }
   .ui-switch input:checked + .ui-switch__track {
-    background: var(--accent);
+    background: var(--ink);
   }
   .ui-switch__thumb {
     position: absolute;
@@ -2115,10 +2115,9 @@ body.hide-amounts .money * {
   }
   .ui-switch input:checked + .ui-switch__track .ui-switch__thumb {
     transform: translateX(0.875rem);
-    /* The active track owns the accent colour, so its thumb uses the dedicated
-     on-accent token. In light mode a dark --ink thumb disappeared into the
-     blue track; this remains the same near-white treatment in dark mode. */
-    background: var(--ink-on-accent);
+    /* The active track is ink, so its thumb is the page background: a --ink thumb
+     would vanish into it in either theme. */
+    background: var(--bg);
   }
   .ui-switch__label {
     font-size: var(--text-sm);
@@ -2157,8 +2156,9 @@ body.hide-amounts .money * {
     }
   }
   .preset-chip--active {
-    border-color: var(--accent);
     color: var(--ink);
+    background: var(--selected);
+    border-color: var(--line-strong);
   }
 
   .profile-field {
@@ -2178,7 +2178,7 @@ body.hide-amounts .money * {
   .profile-field textarea {
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 9px 13px;
     color: var(--ink);
     font: inherit;
@@ -2446,7 +2446,7 @@ body.hide-amounts .money * {
     color: var(--ink);
   }
   .cmdk-item.active {
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
   }
   .cmdk-item-label {
     font-size: var(--text-base);
@@ -2554,12 +2554,12 @@ body.hide-amounts .money * {
       width 0.2s;
   }
   .onb-progress__dot.is-done {
-    background: color-mix(in srgb, var(--accent, #3b86dd) 55%, transparent);
+    background: color-mix(in srgb, var(--ink) 55%, transparent);
   }
   .onb-progress__dot.is-current {
     width: 22px;
     border-radius: var(--radius-pill);
-    background: var(--accent, #3b86dd);
+    background: var(--ink);
   }
   /* Onboarding: decorative icons on welcome and done steps. */
   .onb-welcome-icon,
@@ -2885,6 +2885,9 @@ body.hide-amounts .money * {
     border: none;
     cursor: pointer;
     transition: color 0.15s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
   .firstrun-back:focus-visible {
     color: var(--fr-gold-soft);
@@ -3082,6 +3085,8 @@ body.hide-amounts .money * {
   .firstrun-pick__tick {
     flex-shrink: 0;
     color: var(--fr-gold-soft);
+    display: inline-flex;
+    align-items: center;
   }
   .firstrun-pick__row.is-current .firstrun-pick__name {
     color: inherit;
@@ -3377,12 +3382,12 @@ body.hide-amounts .money * {
   @media (hover: hover) {
     .onb-choice-card:hover {
       border-color: var(--hover-line);
-      background: color-mix(in srgb, var(--accent, #3b86dd) 4%, var(--surface2, #1a1f2a));
+      background: color-mix(in srgb, var(--ink) 4%, var(--surface2, #1a1f2a));
     }
   }
   .onb-choice-card.is-selected {
-    border-color: var(--accent, #3b86dd);
-    background: color-mix(in srgb, var(--accent, #3b86dd) 8%, var(--surface2, #1a1f2a));
+    border-color: var(--ink);
+    background: color-mix(in srgb, var(--ink) 6%, var(--surface2, #1a1f2a));
   }
   .onb-choice-card__tag {
     font-size: var(--text-xs, 11px);
@@ -3396,7 +3401,7 @@ body.hide-amounts .money * {
   textarea {
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 9px 13px;
     color: var(--ink);
     font: inherit;
@@ -3501,6 +3506,9 @@ body.hide-amounts .money * {
     border-radius: 4px;
     transition: color 0.15s;
     line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   @media (hover: hover) {
     .briefing-refresh-btn:hover:not(:disabled) {
@@ -3518,6 +3526,9 @@ body.hide-amounts .money * {
     cursor: pointer;
     font-size: 0.68rem;
     padding: 2px 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   /* Settings popover */
   .briefing-settings-wrap {
@@ -3535,13 +3546,16 @@ body.hide-amounts .money * {
     border-radius: 4px;
     line-height: 1;
     transition: color 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .briefing-settings-btn.active {
-    color: color-mix(in srgb, var(--muted) 50%, var(--primary));
+    color: var(--ink);
   }
   @media (hover: hover) {
     .briefing-settings-btn:hover {
-      color: color-mix(in srgb, var(--muted) 50%, var(--primary));
+      color: var(--ink);
     }
   }
   .briefing-settings-pop {
@@ -3584,12 +3598,12 @@ body.hide-amounts .money * {
   }
   @media (hover: hover) {
     .briefing-toggle:hover {
-      background: color-mix(in srgb, var(--primary) 9%, var(--surface2));
+      background: color-mix(in srgb, var(--ink) 6%, var(--surface2));
     }
   }
   .briefing-toggle input {
     margin: 2px 0 0;
-    accent-color: var(--primary);
+    accent-color: var(--ink);
     cursor: pointer;
     flex-shrink: 0;
   }
@@ -3613,7 +3627,7 @@ body.hide-amounts .money * {
     box-sizing: border-box;
     background: color-mix(in srgb, var(--primary) 5%, var(--bg-2));
     border: 1px solid var(--modal-border);
-    border-radius: 6px;
+    border-radius: var(--radius-lg);
     color: color-mix(in srgb, var(--ink) 75%, var(--primary));
     font: inherit;
     font-size: 13px;
@@ -3853,11 +3867,11 @@ body.hide-amounts .money * {
     z-index: var(--z-sticky);
   }
   .acct-list-resize-handle:active {
-    background: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--ink) 25%, transparent);
   }
   @media (hover: hover) {
     .acct-list-resize-handle:hover {
-      background: color-mix(in srgb, var(--accent) 40%, transparent);
+      background: color-mix(in srgb, var(--ink) 25%, transparent);
     }
   }
   .acct-list-toggle {
@@ -4263,11 +4277,11 @@ body.hide-amounts .money * {
     padding: 14px 18px;
     min-width: 140px;
   }
-  /* Net Balance is the headline figure (= the sum of the other cards) — give it a quiet accent so
+  /* Net Balance is the headline figure (= the sum of the other cards) — give it a quiet tint so
    it leads the same row instead of needing its own. */
   .acct-overview-card--primary {
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-    background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+    border-color: var(--line-strong);
+    background: color-mix(in srgb, var(--ink) 4%, var(--surface));
   }
   .acct-overview-label {
     font-size: 11px;
@@ -4378,7 +4392,7 @@ body.hide-amounts .money * {
   @media (hover: hover) {
     .acct-txn-resize:hover::after {
       width: 2px;
-      background: var(--accent, #3b86dd);
+      background: var(--muted);
     }
   }
   .acct-txn-row {
@@ -4396,7 +4410,7 @@ body.hide-amounts .money * {
     }
   }
   .acct-txn-row.selected {
-    background: color-mix(in srgb, var(--accent, #3b86dd) 8%, transparent);
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
   }
   .acct-txn-check {
     display: flex;
@@ -4608,7 +4622,7 @@ body.hide-amounts .money * {
     gap: 6px;
     padding: 6px 8px;
     border: 1px solid var(--modal-border);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--bg-2);
   }
   .txn-tag-input input {
@@ -4763,7 +4777,7 @@ body.hide-amounts .money * {
     .acct-txn-ask-lucius:hover,
     .acct-txn-rule:hover,
     .acct-txn-edit:hover {
-      color: var(--accent, #3b86dd) !important;
+      color: var(--ink) !important;
     }
   }
   /* Touch devices never fire hover → keep the ✦ tappable (UI spec adds this carve-out). */
@@ -4804,7 +4818,7 @@ body.hide-amounts .money * {
   }
   @media (hover: hover) {
     .sumcard-ask-btn:hover {
-      color: var(--accent);
+      color: var(--ink);
     }
   }
   @media (hover: none) {
@@ -4841,7 +4855,7 @@ body.hide-amounts .money * {
   }
   @media (hover: hover) {
     .hold-ask-btn:hover {
-      color: var(--accent);
+      color: var(--ink);
     }
   }
   @media (hover: none) {
@@ -4892,9 +4906,9 @@ body.hide-amounts .money * {
     }
   }
   .acct-date-preset.active {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--ink-on-accent);
+    color: var(--ink);
+    background: var(--selected);
+    border-color: var(--line-strong);
   }
   /* Custom-range popup anchored to the Custom chip. */
   .acct-date-custom-wrap {
@@ -4996,8 +5010,8 @@ body.hide-amounts .money * {
     gap: 4px;
     padding: 3px 6px 3px 10px;
     border-radius: 20px;
-    border: 1px solid var(--accent);
-    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    border: 1px solid var(--line-strong);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
     color: var(--ink);
     font-size: 12px;
     white-space: nowrap;
@@ -5019,8 +5033,8 @@ body.hide-amounts .money * {
   }
   @media (hover: hover) {
     .acct-filter-chip-x:hover {
-      background: var(--accent);
-      color: var(--ink-on-accent);
+      background: var(--ink);
+      color: var(--bg);
     }
   }
   .acct-filter-clear-all {
@@ -5072,8 +5086,8 @@ body.hide-amounts .money * {
     height: 16px;
     padding: 0 4px;
     border-radius: var(--radius-pill);
-    background: var(--accent);
-    color: var(--ink-on-accent);
+    background: var(--ink);
+    color: var(--bg);
     font-size: 10px;
     font-weight: 700;
     line-height: 1;
@@ -5122,7 +5136,7 @@ body.hide-amounts .money * {
     width: 120px;
     background: var(--surface2);
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     padding: 6px 8px;
     color: var(--text);
   }
@@ -5215,9 +5229,10 @@ body.hide-amounts .money * {
     color: var(--muted);
   }
   .realized-caret {
-    display: inline-block;
     width: 14px;
     color: var(--faint);
+    display: inline-flex;
+    align-items: center;
   }
   .realized-detail-row > td {
     background: var(--surface2);
@@ -5293,10 +5308,16 @@ body.hide-amounts .money * {
     text-align: center;
   }
   .hold-drill-caret {
-    display: inline-block;
     width: 14px;
     color: var(--faint);
     font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .hold-group-caret {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
   }
   @media (hover: hover) {
     .hold-drill-row:hover {
@@ -5342,6 +5363,9 @@ body.hide-amounts .money * {
     cursor: pointer;
     padding: 0 6px 0 0;
     font-size: 11px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .lots-consumption-row > td {
     padding-top: 0;
@@ -6519,7 +6543,7 @@ body.hide-amounts .money * {
     cursor: not-allowed;
   }
 
-  /* Switch: 34×20 bordered track on --bg-2, grey thumb, translucent-accent on. */
+  /* Switch: 34×20 bordered track on --bg-2, grey thumb, ink track on. */
   .ui-switch--dense .ui-switch__track {
     width: 34px;
     height: 20px;
@@ -6536,11 +6560,11 @@ body.hide-amounts .money * {
       background 0.16s;
   }
   .ui-switch--dense input:checked + .ui-switch__track {
-    background: color-mix(in srgb, var(--accent) 80%, transparent);
-    border-color: var(--accent);
+    background: var(--ink);
+    border-color: var(--ink);
   }
   .ui-switch--dense input:checked + .ui-switch__track .ui-switch__thumb {
-    background: var(--ink-on-accent);
+    background: var(--bg);
   }
 
   /* Select: 13px field on --bg-2 with a --line-strong border + accent focus glow.
@@ -6550,7 +6574,7 @@ body.hide-amounts .money * {
     -webkit-appearance: none;
     background: var(--bg-2);
     border: 1px solid var(--line-strong);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     color: var(--ink);
     font: inherit;
     font-size: 13px;
@@ -6626,7 +6650,8 @@ body.hide-amounts .money * {
     cursor: pointer;
   }
   /* Custom rounded-square checkbox (promoted from the accounts register's .acct-cb) — the canonical
-   design-system checkbox: 16px rounded box, accent fill + white tick when on. */
+   design-system checkbox: 16px rounded box, ink fill + a tick that contrasts with it when on
+   (dark tick on the dark theme's light ink, white on the light/warm themes' dark ink). */
   .ui-check input[type='checkbox'] {
     appearance: none;
     -webkit-appearance: none;
@@ -6651,13 +6676,21 @@ body.hide-amounts .money * {
   }
   .ui-check input[type='checkbox']:checked,
   .ui-check input[type='checkbox']:indeterminate {
-    background-color: var(--accent);
-    border-color: var(--accent);
+    background-color: var(--ink);
+    border-color: var(--ink);
   }
   .ui-check input[type='checkbox']:checked {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%230e1014' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
   }
   .ui-check input[type='checkbox']:indeterminate {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='%230e1014' stroke-width='3.5' stroke-linecap='round'%3E%3Cline x1='5' y1='12' x2='19' y2='12'/%3E%3C/svg%3E");
+  }
+  :root:is([data-theme='light'], [data-theme='warm']) .ui-check input[type='checkbox']:checked {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E");
+  }
+  :root:is([data-theme='light'], [data-theme='warm'])
+    .ui-check
+    input[type='checkbox']:indeterminate {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round'%3E%3Cline x1='5' y1='12' x2='19' y2='12'/%3E%3C/svg%3E");
   }
   .ui-check input[type='checkbox']:focus-visible {
@@ -6707,7 +6740,7 @@ body.hide-amounts .money * {
       background 0.15s;
   }
   .ui-radiogroup__opt:has(input:checked) {
-    border-color: var(--accent);
+    border-color: var(--ink);
     background: var(--surface2);
   }
   @media (hover: hover) {
@@ -6721,7 +6754,7 @@ body.hide-amounts .money * {
     width: 1.125rem;
     height: 1.125rem;
     cursor: pointer;
-    accent-color: var(--accent);
+    accent-color: var(--ink);
   }
   .ui-radiogroup__opt input[type='radio']:disabled {
     cursor: default;
@@ -6821,7 +6854,7 @@ body.hide-amounts .money * {
     margin-top: 2px;
     flex: none;
     cursor: pointer;
-    accent-color: var(--accent);
+    accent-color: var(--ink);
   }
   .ui-checkgroup__opt-text {
     display: flex;
@@ -7133,6 +7166,8 @@ body.hide-amounts .money * {
   .equity-add-advanced__chevron {
     color: var(--muted);
     font-size: var(--text-xs);
+    display: inline-flex;
+    align-items: center;
   }
   .equity-add-advanced__body {
     padding: var(--space-4) var(--space-5);
@@ -7187,7 +7222,7 @@ body.hide-amounts .money * {
     gap: var(--space-2);
     padding: var(--space-2) var(--space-3);
     border: 1px solid var(--modal-border);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     background: var(--bg);
   }
   .ui-taginput input {
@@ -7278,9 +7313,8 @@ body.hide-amounts .money * {
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
   }
   .ui-segmented--primary .ui-segmented__seg--active {
-    background: var(--primary);
-    border-color: var(--primary);
-    color: var(--ink-on-accent);
+    border-color: var(--line-strong);
+    box-shadow: var(--shadow-sm);
   }
 
   /* ── PageTabs ── underline tab bar for primary page-section navigation.
@@ -7335,7 +7369,7 @@ body.hide-amounts .money * {
   }
   .ui-page-tabs__tab--active {
     color: var(--ink);
-    border-bottom-color: var(--accent);
+    border-bottom-color: var(--ink);
   }
   .ui-page-tabs__tab:focus-visible {
     outline: 2px solid var(--accent);
@@ -7353,8 +7387,8 @@ body.hide-amounts .money * {
       color 0.15s;
   }
   .ui-page-tabs__badge--active {
-    background: var(--accent);
-    color: var(--ink-on-accent);
+    background: var(--ink);
+    color: var(--bg);
   }
   @media (max-width: 640px) {
     /* Subtle right-edge fade hints at horizontal overflow without hiding tabs */
@@ -10130,12 +10164,12 @@ body.hide-amounts .money * {
     height: 16px;
     border-radius: var(--radius-xs);
     border: 1.5px solid var(--line-strong);
-    color: var(--ink-on-accent);
+    color: var(--bg);
   }
 
   .asd-wl-check--on {
-    background: var(--primary);
-    border-color: var(--primary);
+    background: var(--ink);
+    border-color: var(--ink);
   }
 
   .asd-wl-nm {
@@ -10237,7 +10271,7 @@ body.hide-amounts .money * {
     bottom: -1px;
     height: 2px;
     border-radius: 2px 2px 0 0;
-    background: var(--accent);
+    background: var(--ink);
   }
 
   .asd-subtabs .rd-tab-count {
@@ -10880,11 +10914,11 @@ body.hide-amounts .money * {
     opacity: 0.5;
   }
   .asd-cht-row--active {
-    background: color-mix(in srgb, var(--primary) 12%, transparent);
-    color: var(--primary);
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    color: var(--ink);
   }
   .asd-cht-row--active .asd-cht-icon {
-    color: var(--primary);
+    color: var(--ink);
   }
 
   .asd-cht-icon {
@@ -11456,7 +11490,7 @@ body.hide-amounts .money * {
     gap: var(--space-1);
     min-height: 22px;
     padding: 1px 8px 1px 4px;
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-md);
     border: 1px solid var(--line);
     background: var(--bg-2);
     color: var(--muted);
@@ -11678,6 +11712,8 @@ body.hide-amounts .money * {
     color: var(--muted);
     flex-shrink: 0;
     transition: transform 0.2s;
+    display: inline-flex;
+    align-items: center;
   }
 
   .asd-ki-question {
@@ -12651,6 +12687,9 @@ body.hide-amounts .money * {
     /* Plain navigation, NOT an AI affordance — --lucius is reserved for Lucius identity. */
     color: var(--accent);
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
 
   @media (hover: hover) {
@@ -13533,6 +13572,8 @@ body.hide-amounts .money * {
   }
   .intel-brief-ask-spark {
     color: var(--lucius);
+    display: inline-flex;
+    align-items: center;
   }
   /* Pushes Ask Lucius and the time to the right of the shared card header (IntelCardHead). */
   .intel-brief-head-gap {
@@ -13726,8 +13767,8 @@ body.hide-amounts .money * {
   }
   .intel-story--active {
     background: var(--surface2);
-    border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent);
+    border-color: color-mix(in srgb, var(--ink) 45%, var(--line));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 8%, transparent);
     opacity: 1;
   }
   /* Lifecycle dimming — read cards recede; archived (dismissed/resolved) recede more. */
@@ -14416,7 +14457,7 @@ body.hide-amounts .money * {
     display: inline-flex;
     align-items: center;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-lg);
     background: var(--surface);
     color: var(--muted);
     transition:
@@ -14803,6 +14844,8 @@ body.hide-amounts .money * {
   .intel-story-source-arrow {
     color: var(--fg-3);
     font-size: 10px;
+    display: inline-flex;
+    align-items: center;
   }
   /* footer */
   .intel-story-foot {
@@ -15431,6 +15474,9 @@ body.hide-amounts .money * {
     color: var(--faint);
     background: none;
     border: 1px solid var(--line);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
   .intel-lx-empty {
     padding: 12px 14px;
@@ -15445,6 +15491,9 @@ body.hide-amounts .money * {
     border: none;
     cursor: pointer;
     padding: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .intel-lx-sugs {
     display: flex;
@@ -15503,18 +15552,23 @@ body.hide-amounts .money * {
   }
   .intel-lx-sug-add {
     padding: 5px 12px;
-    border-radius: 7px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     font: inherit;
     font-size: 12px;
     font-weight: 600;
-    color: var(--ink-on-accent);
-    background: var(--primary);
+    color: var(--ink-on-cta);
+    background: var(--cta);
     border: none;
+  }
+  @media (hover: hover) {
+    .intel-lx-sug-add:hover {
+      background: var(--cta-hover);
+    }
   }
   .intel-lx-sug-skip {
     padding: 4px 12px;
-    border-radius: 7px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     font: inherit;
     font-size: 11.5px;
@@ -15748,8 +15802,8 @@ body.hide-amounts .money * {
     }
   }
   .intel-mm-rail-item--active {
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
-    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    border-color: var(--line-strong);
   }
   .intel-mm-rail-label {
     font-size: 12.5px;
@@ -15860,7 +15914,7 @@ body.hide-amounts .money * {
   }
   .intel-mm-subtab--active {
     color: var(--ink);
-    border-bottom-color: var(--accent);
+    border-bottom-color: var(--ink);
   }
   .intel-mm-find {
     margin-bottom: 12px;
@@ -15886,9 +15940,9 @@ body.hide-amounts .money * {
     cursor: pointer;
   }
   .intel-mm-review-filter--active {
-    border-color: var(--accent);
-    color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+    color: var(--ink);
+    background: var(--selected);
+    border-color: var(--line-strong);
   }
   .intel-mm-detail-tabs-spacer {
     flex: 1;
@@ -16161,15 +16215,20 @@ body.hide-amounts .money * {
     font: inherit;
     font-size: 12.5px;
     font-weight: 500;
-    color: var(--ink-on-accent);
-    background: var(--accent);
+    color: var(--ink-on-cta);
+    background: var(--cta);
     border: none;
     white-space: nowrap;
   }
+  @media (hover: hover) {
+    .intel-wlc-add-btn:hover:not(:disabled) {
+      background: var(--cta-hover);
+    }
+  }
   .intel-wlc-add-btn:disabled {
     cursor: default;
-    color: var(--fg-3);
-    background: var(--surface2);
+    color: var(--faint);
+    background: var(--bg-2);
   }
 
   /* INTEL-REDESIGN-END */
@@ -16550,7 +16609,7 @@ body.hide-amounts .money * {
 }
 .inv-seg-chip.active {
   background: var(--selected);
-  border-color: var(--accent, #3b86dd);
+  border-color: var(--ink);
   color: var(--ink);
 }
 
@@ -17299,7 +17358,7 @@ body.hide-amounts .money * {
     right: 22%;
     height: 2px;
     border-radius: var(--radius-pill);
-    background: var(--primary);
+    background: var(--ink);
     opacity: 0;
   }
   .mb-tab.active .mb-tab-indicator {
@@ -17831,7 +17890,7 @@ body.hide-amounts .money * {
      different tone from the effort <select> sitting right beside it in the chat toolbar. */
   background: var(--surface2);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   cursor: pointer;
 }
 .mp-trigger[aria-expanded='true'] {
@@ -17873,6 +17932,8 @@ body.hide-amounts .money * {
   flex: none;
   color: var(--faint);
   font-size: 10px;
+  display: inline-flex;
+  align-items: center;
 }
 /* Trigger suffix — the chat surfaces put the effort tier here so one control reads
    `sonnet High ⌄`. Never truncates: it is two to five characters and it is the second half of
@@ -17929,6 +17990,8 @@ body.hide-amounts .money * {
 .mp-menu-row-chev {
   flex: none;
   color: var(--faint);
+  display: inline-flex;
+  align-items: center;
 }
 
 /* Pane header — back to the root. flex:none so it stays put while the pane's list scrolls. */
@@ -18081,7 +18144,7 @@ body.hide-amounts .money * {
   font-size: var(--text-sm);
   background: var(--bg);
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
 }
 .mp-search:focus {
   border-color: var(--accent);
@@ -18154,8 +18217,10 @@ body.hide-amounts .money * {
 .mp-opt-tick {
   flex: none;
   margin-left: auto;
-  color: var(--accent);
+  color: var(--ink);
   opacity: 0;
+  display: inline-flex;
+  align-items: center;
 }
 .mp-opt.is-on .mp-opt-tick {
   opacity: 1;
@@ -18331,7 +18396,7 @@ body.hide-amounts .money * {
   gap: 7px;
   padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--surface2);
   color: var(--ink);
   font: inherit;
@@ -18447,7 +18512,7 @@ body.hide-amounts .money * {
 .pm-mode-check {
   flex: none;
   margin-left: auto;
-  color: var(--accent);
+  color: var(--ink);
 }
 .pm-mode-tooltip-target[data-tooltip]::after {
   content: attr(data-tooltip);
@@ -18481,6 +18546,10 @@ body.hide-amounts .money * {
   top: 50%;
   left: calc(100% + 8px);
   transform: translateY(-50%);
+}
+.pm-mode-menu--tips-left .pm-mode-option[data-tooltip]::after {
+  left: auto;
+  right: calc(100% + 8px);
 }
 .pm-mode-tooltip-target[data-tooltip]:focus-visible::after {
   opacity: 1;

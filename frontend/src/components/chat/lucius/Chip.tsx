@@ -18,6 +18,7 @@ import { iconFor } from '../../../lucius/entityRegistry'
 import { colorFor, C } from '../../../lucius/mentionColors'
 import { isSafeCssColor, renderMaskableSublabel } from '../../../utils/mentionable'
 import { labelFor } from '../../../lucius/entityRegistry'
+import { X } from '../../../ui/icons'
 
 export interface ChipProps {
   mention: MentionRef
@@ -184,7 +185,7 @@ export function Chip({
 
       {onRemove && (
         <button className="chip-x" onClick={handleRemove} aria-label={'Remove ' + label}>
-          ×
+          <X size={10} aria-hidden="true" />
         </button>
       )}
     </span>

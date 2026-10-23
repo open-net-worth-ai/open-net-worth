@@ -10,6 +10,7 @@ import type { EnvelopeAccrual } from '../../../utils/commitments'
 import type { PositionMeta } from './fundingValue'
 import type { DetailMutations } from './detailTypes'
 import { CheckIcon, XIcon } from './icons'
+import { ArrowRight } from '../../../ui/icons'
 
 const STATUS_LABEL: Record<string, string> = {
   paid: 'Paid',
@@ -54,7 +55,8 @@ export function OverviewTab({ commitment: c, fx, envelope, positions, goTo, m }:
           <span className="c2-exp-sec-t">{tracker ? 'Next contributions' : 'Next payments'}</span>
           <span className="c2-exp-sec-note">
             <button className="c2-link" onClick={() => goTo('schedule')}>
-              Full {tracker ? 'contributions' : 'schedule'} →
+              Full {tracker ? 'contributions' : 'schedule'}{' '}
+              <ArrowRight size={13} aria-hidden="true" />
             </button>
           </span>
         </div>
@@ -112,7 +114,7 @@ export function OverviewTab({ commitment: c, fx, envelope, positions, goTo, m }:
               ))}
             <button className="c2-link" onClick={() => goTo('funding')}>
               {(c.funding_plan || []).length} source{(c.funding_plan || []).length === 1 ? '' : 's'}{' '}
-              →
+              <ArrowRight size={13} aria-hidden="true" />
             </button>
           </span>
         </div>
@@ -142,7 +144,7 @@ export function OverviewTab({ commitment: c, fx, envelope, positions, goTo, m }:
           <span className="c2-exp-sec-t">Coming up</span>
           <span className="c2-exp-sec-note">
             <button className="c2-link" onClick={() => goTo('actions')}>
-              All actions →
+              All actions <ArrowRight size={13} aria-hidden="true" />
             </button>
           </span>
         </div>

@@ -11,7 +11,7 @@ import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { LuciusCta } from '../../intro/LuciusCta'
 import { Badge, Cluster, EmptyState, ErrorState, Loading, Money, Stack } from '../../ui'
-import { Download, FileText } from '../../../ui/icons'
+import { Download, FileText, ChevronDown, ChevronRight, ArrowRight } from '../../../ui/icons'
 import { fCur } from './data'
 import { formatElapsed } from './importHelpers'
 import { useDocumentVisible, useStatementParseStatus } from '../../../hooks/useImportProgress'
@@ -261,7 +261,7 @@ export function StatementViewer({
             a.click()
           }}
         >
-          ↓ Download original
+          <Download size={14} aria-hidden="true" /> Download original
         </Button>
       }
     >
@@ -279,7 +279,13 @@ export function StatementViewer({
               period {diff.length === 1 ? 'is' : 'are'} not on this statement — duplicates to
               remove, or worth a closer look.
             </span>
-            <span className="acct-stmtview-check-caret">{diffOpen ? '▾' : '▸'}</span>
+            <span className="acct-stmtview-check-caret">
+              {diffOpen ? (
+                <ChevronDown size="1em" aria-hidden="true" />
+              ) : (
+                <ChevronRight size="1em" aria-hidden="true" />
+              )}
+            </span>
           </button>
           {diffOpen &&
             diff.map((d) => (
@@ -379,7 +385,13 @@ function LifecycleStatementRow({
                   aria-expanded={errorOpen}
                 >
                   <span className="imp-metafact">Couldn’t read this file</span>
-                  <span className="acct-stmt-err-caret">{errorOpen ? '▾' : '▸'}</span>
+                  <span className="acct-stmt-err-caret">
+                    {errorOpen ? (
+                      <ChevronDown size="1em" aria-hidden="true" />
+                    ) : (
+                      <ChevronRight size="1em" aria-hidden="true" />
+                    )}
+                  </span>
                 </button>
               ) : (
                 <span className="imp-metafact">Couldn’t read this file</span>
@@ -398,7 +410,8 @@ function LifecycleStatementRow({
             size="sm"
             onClick={() => onReview?.(s.id, s.filename)}
           >
-            Review →
+            Review
+            <ArrowRight size={14} aria-hidden="true" />
           </Button>
         )}
         {(s.parse_status === 'interrupted' || s.parse_status === 'failed') && (

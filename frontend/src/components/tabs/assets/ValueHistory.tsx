@@ -11,6 +11,7 @@ import * as api from './api'
 import { canRemoveMark, fmt, fullDate } from './assetsData'
 import { SaveError, useEditorSave } from './editorKit'
 import { CorrectValueDialog } from './ValueDialogs'
+import { ChevronRight } from '../../../ui/icons'
 
 export interface ValueHistoryProps {
   a: OwnedAsset
@@ -99,7 +100,7 @@ function HistoryTable({ rows, onOpen }: HistoryViewProps) {
                 <td>
                   {/* Its click bubbles to the row, which opens the editor. */}
                   <button type="button" className="as-row-chevron" aria-label={label}>
-                    ›
+                    <ChevronRight size="1em" aria-hidden="true" />
                   </button>
                 </td>
               </tr>
@@ -133,7 +134,7 @@ function HistoryList({ rows, onOpen }: HistoryViewProps) {
             {fmt(m.value)}
           </Text>
           <span className="as-row-chevron" aria-hidden="true">
-            ›
+            <ChevronRight size="1em" />
           </span>
           {note && (
             <Text size="xs" tone="faint" truncate title={note} className="as-history-note">

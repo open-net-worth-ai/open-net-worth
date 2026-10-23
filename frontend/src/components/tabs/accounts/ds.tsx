@@ -7,6 +7,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo, useId } from 'react'
 import { createPortal } from 'react-dom'
 import { DRAG_IGNORE_PROPS } from '../../../hooks/useSheetDragToDismiss'
+import { Check, Plus } from '../../../ui/icons'
 
 // ── Icon paths (Lucide-style) ─────────────────────────────────────────────
 
@@ -401,7 +402,9 @@ export function InstitutionPicker({
                 <span className="acct-ccyp-name" style={{ color: 'var(--ink)' }}>
                   {o.name}
                 </span>
-                {o.name === value && <span className="acct-ccyp-check">✓</span>}
+                {o.name === value && (
+                  <Check className="acct-ccyp-check" size={12} aria-hidden="true" />
+                )}
               </button>
             ))}
             {showCreate && (
@@ -416,7 +419,7 @@ export function InstitutionPicker({
                   acceptInst(value)
                 }}
               >
-                <span className="acct-payf-plus">+</span>
+                <Plus className="acct-payf-plus" size={12} aria-hidden="true" />
                 <span>
                   Use “<b>{value.trim()}</b>”
                 </span>
@@ -813,7 +816,9 @@ export function CurrencyPicker({ value, onChange, defaultOpen }: CurrencyPickerP
                 >
                   <span className="acct-ccyp-code">{c}</span>
                   <span className="acct-ccyp-name">{n}</span>
-                  {c === value && <span className="acct-ccyp-check">✓</span>}
+                  {c === value && (
+                    <Check className="acct-ccyp-check" size={12} aria-hidden="true" />
+                  )}
                 </button>
               ))}
             </div>
@@ -961,7 +966,9 @@ export function CcyPicker({ value, onChange }: CcyPickerProps) {
               >
                 <span className="acct-ccyp-code">{o.code || '—'}</span>
                 <span className="acct-ccyp-name">{o.name}</span>
-                {o.code === value && <span className="acct-ccyp-check">✓</span>}
+                {o.code === value && (
+                  <Check className="acct-ccyp-check" size={12} aria-hidden="true" />
+                )}
               </button>
             ))}
           </div>
@@ -1159,7 +1166,9 @@ export function PMSelect({
                 setOpen(false)
               }}
             >
-              <span className="acct-acctsel-check">{o.value === value ? '✓' : ''}</span>
+              <span className="acct-acctsel-check">
+                {o.value === value ? <Check size={12} aria-hidden="true" /> : null}
+              </span>
               <span className="acct-acctsel-nm">{o.label}</span>
             </button>
           ))}

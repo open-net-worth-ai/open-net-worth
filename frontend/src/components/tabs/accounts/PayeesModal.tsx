@@ -9,6 +9,7 @@ import { PMSelect } from './ds'
 import { fDate } from '../../../utils/format'
 import { AddCategoryField } from './pickers'
 import { usePayeeUsage } from './usePayeeUsage'
+import { Plus, ChevronRight, ChevronLeft, X } from '../../../ui/icons'
 
 // Format ISO date for display; returns '' for null/undefined.
 function fmtDate(s: string | null | undefined): string {
@@ -341,7 +342,7 @@ export function PayeesModal({
                 setNewName('')
               }}
             >
-              + New
+              <Plus size={13} aria-hidden="true" /> New
             </Button>
           </div>
           {creating && (
@@ -459,7 +460,7 @@ export function PayeesModal({
                 <span className="pm-item-ct">{p.txnCount}</span>
                 {isMobile && (
                   <span className="pm-item-chev" aria-hidden="true">
-                    ›
+                    <ChevronRight size={16} />
                   </span>
                 )}
               </EntityRow>
@@ -511,7 +512,7 @@ export function PayeesModal({
                 onClick={() => setMobileView('list')}
                 aria-label="Back to payees"
               >
-                <span aria-hidden="true">‹</span> Payees
+                <ChevronLeft size={14} aria-hidden="true" /> Payees
               </Button>
             </div>
           )}
@@ -545,7 +546,7 @@ export function PayeesModal({
                     setNewName('')
                   }}
                 >
-                  + New payee
+                  <Plus size={14} aria-hidden="true" /> New payee
                 </Button>
               </div>
             ) : (
@@ -666,7 +667,7 @@ export function PayeesModal({
                           aria-label={`Remove auto-match ${a}`}
                           onClick={() => removeAlias(a)}
                         >
-                          ×
+                          <X size={11} aria-hidden="true" />
                         </button>
                       )}
                     </span>
@@ -694,7 +695,7 @@ export function PayeesModal({
                           aria-label="Remove rule"
                           onClick={() => removeRule(i)}
                         >
-                          ×
+                          <X size={11} aria-hidden="true" />
                         </button>
                       </span>
                     ))

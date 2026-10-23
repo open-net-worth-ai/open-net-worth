@@ -23,6 +23,7 @@ import {
   type ConditionField,
   type TxnCondition,
 } from './txnConditions'
+import { Plus } from '../../../ui/icons'
 
 export function TransactionConditionFields({
   when,
@@ -74,7 +75,7 @@ export function TransactionConditionFields({
           className="a3-linkbtn"
           onClick={() => write([...conditions, newCondition('payee')])}
         >
-          + Add condition
+          <Plus size={13} aria-hidden="true" /> Add condition
         </button>
       </Row>
     </>

@@ -10,7 +10,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { KeyboardEvent } from 'react'
 import { authFetch } from '../../../api/client'
-import { X } from './icons'
+import { X, Plus } from './icons'
 import { ColorDot } from './budgetParts'
 import { DeleteCategoryModal, AddToEnvelopeModal } from './budgetEnvelopeOps'
 import type { DeleteCategoryOption } from './budgetEnvelopeOps'
@@ -405,7 +405,7 @@ export function CategoriesManager({
                 onClick={() => setSearch('')}
                 aria-label="Clear search"
               >
-                ✕
+                <X size={10} />
               </button>
             )}
           </span>
@@ -561,8 +561,13 @@ export function CategoriesManager({
           </>
         ) : (
           <>
-            <Button variant="secondary" size="dense" onClick={startAdd}>
-              + New category
+            <Button
+              variant="secondary"
+              size="dense"
+              iconLeft={<Plus size={12} />}
+              onClick={startAdd}
+            >
+              New category
             </Button>
             <Button variant="primary" size="dense" onClick={onClose}>
               Done

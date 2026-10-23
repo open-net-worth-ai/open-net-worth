@@ -7,6 +7,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { dispatchScreenCommand } from '../../lucius/bus'
 import type { ScreenCommandInvocation } from '../../lucius/bus'
+import { ArrowRight } from '../../ui/icons'
 
 // `to` must be the URL slug (router.tsx), NOT the tab id — the legacy alias routes
 // (e.g. /transactions) redirect WITHOUT forwarding search params, which would drop
@@ -45,7 +46,7 @@ export function ScreenCommandChip({
       </span>
       {target.label}
       <span className="screen-cmd-chip-arrow" aria-hidden="true">
-        →
+        <ArrowRight size={12} />
       </span>
     </button>
   )

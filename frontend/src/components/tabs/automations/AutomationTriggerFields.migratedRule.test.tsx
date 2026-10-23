@@ -57,7 +57,7 @@ describe('migrated transaction Automation predicates', () => {
 
     expect((screen.getByLabelText(/^Event/) as HTMLSelectElement).value).toBe('custom')
     expect(screen.getByText(exactConditions)).toBeTruthy()
-    expect(screen.queryByText('+ Add condition')).toBeNull()
+    expect(screen.queryByText('Add condition')).toBeNull()
   })
 
   it('a direction is no longer editable, so a trigger carrying one is Custom', () => {

@@ -128,7 +128,7 @@ export function YourPositionCard({ position, symbol, income, assetClass }: Props
                 navigate({ to: '/investments', search: { sub: 'equity' } } as never)
               }}
             >
-              View grant in Equity Comp →
+              View grant in Equity Comp <ArrowRight size={13} aria-hidden="true" />
             </button>
           </div>
         )}

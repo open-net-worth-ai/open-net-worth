@@ -8,6 +8,7 @@
 import { fCur } from './data'
 import type { Category } from './types'
 import { AddCategoryField } from './pickers'
+import { X, Plus } from '../../../ui/icons'
 
 /** One editable split line. Amount is a STRING while typing (allows "12." mid-entry); the
  *  parent parses to a number on save. */
@@ -99,7 +100,7 @@ export function SplitEditor({
                 title="Remove this line"
                 aria-label="Remove split line"
               >
-                ✕
+                <X size={12} aria-hidden="true" />
               </button>
             </div>
             <input
@@ -114,7 +115,7 @@ export function SplitEditor({
       </div>
       <div className="acct-edit-splitfoot">
         <button type="button" className="acct-edit-splitadd" onClick={addLine}>
-          + Add line
+          <Plus size={12} aria-hidden="true" /> Add line
         </button>
         <span className={`acct-edit-splitremain${balanced ? ' ok' : ''}`}>
           {balanced ? 'Balanced' : `Remaining ${fCur(remaining, currency, { cents: true })}`}

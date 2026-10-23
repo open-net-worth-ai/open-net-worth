@@ -7,6 +7,7 @@ import { Button } from '../../ui/Button'
 import { fmtDay } from './TxnDetail'
 import { ReceiptViewer } from './ReceiptViewer'
 import { useTransactionReceipts, type ReceiptEntry } from '../../../hooks/useTransactionReceipts'
+import { Plus } from '../../../ui/icons'
 
 function ReceiptThumb({ receipt, onClick }: { receipt: ReceiptEntry; onClick: () => void }) {
   const [broken, setBroken] = useState(false)
@@ -95,7 +96,13 @@ export function ReceiptsSection({ txnId }: { txnId: string }) {
       disabled={attaching}
       onClick={() => fileInputRef.current?.click()}
     >
-      {attaching ? 'Attaching…' : '+ Attach receipt'}
+      {attaching ? (
+        'Attaching…'
+      ) : (
+        <>
+          <Plus size={13} aria-hidden="true" /> Attach receipt
+        </>
+      )}
     </button>
   )
 

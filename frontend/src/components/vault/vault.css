@@ -132,7 +132,7 @@
   height: 34px;
   padding: 0 10px;
   border: 1px solid var(--line);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--bg);
   color: var(--muted);
 }
@@ -210,9 +210,9 @@
   cursor: pointer;
 }
 .vault-filter.is-on {
-  border-color: var(--ink);
-  background: var(--ink);
-  color: var(--bg);
+  color: var(--ink);
+  background: var(--selected);
+  border-color: var(--line-strong);
 }
 /* A tag chip in the filter row: "#" then its name, after a thin rule that ends the kinds. */
 .vault-filter-sep {

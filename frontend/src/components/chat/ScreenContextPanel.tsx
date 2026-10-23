@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import type { ScreenSnapshot } from '../../state/screenSnapshot'
 import { Switch } from '../ui'
+import { Check, Plus } from '../../ui/icons'
 
 interface Props {
   snapshot: ScreenSnapshot | null
@@ -102,7 +103,15 @@ export function ScreenContextPanel({ snapshot, enabled, onToggle, pinnedIds, onP
                         aria-pressed={pinned}
                         onClick={() => onPin(h.id)}
                       >
-                        {pinned ? '✓ attached' : '+ attach'}
+                        {pinned ? (
+                          <>
+                            <Check size={12} aria-hidden="true" /> attached
+                          </>
+                        ) : (
+                          <>
+                            <Plus size={12} aria-hidden="true" /> attach
+                          </>
+                        )}
                       </button>
                     </div>
                   )

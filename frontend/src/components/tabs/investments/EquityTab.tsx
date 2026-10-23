@@ -10,7 +10,7 @@ import {
   ErrorState,
 } from '../../ui'
 import type { BadgeTone } from '../../ui'
-import { Building2 } from '../../../ui/icons'
+import { Building2, Plus, ChevronRight } from '../../../ui/icons'
 import { fNum, fCurrency, fDate } from '../../../utils/format'
 import type { Grant, PendingReleaseItem, Tranche } from '../../../types/equity'
 import type { ComputedRow } from '../../../types/portfolio'
@@ -499,8 +499,13 @@ export function EquityTab({ rows = [], onAskLucius }: Props) {
           <span className="mk-panel-title">Grants</span>
           <span className="mk-panel-spacer" />
           {!isEmpty && (
-            <Button variant="primary" size="sm" onClick={() => setAddOpen(true)}>
-              + Add grant
+            <Button
+              variant="primary"
+              size="sm"
+              iconLeft={<Plus size={14} aria-hidden="true" />}
+              onClick={() => setAddOpen(true)}
+            >
+              Add grant
             </Button>
           )}
         </div>
@@ -577,7 +582,7 @@ export function EquityTab({ rows = [], onAskLucius }: Props) {
                         </td>
                         <td>
                           <span className={`eq-caret${open ? ' open' : ''}`} aria-hidden="true">
-                            ▸
+                            <ChevronRight size={14} />
                           </span>
                         </td>
                       </EntityRow>

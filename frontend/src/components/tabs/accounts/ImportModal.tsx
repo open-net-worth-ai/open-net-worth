@@ -12,7 +12,7 @@ import { AddCategoryField, AddPayeeField, type PayeeOption } from './pickers'
 import { catOptionsFor } from './categories'
 import TxnDetail from './TxnDetail'
 import { useIsMobile } from '../../../hooks/useIsMobile'
-import { X } from '../../../ui/icons'
+import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight } from '../../../ui/icons'
 import { fDate } from '../../../utils/format'
 import type { TxnDetailProps } from './TxnDetail'
 import type { Account, ApiTxn, Category, FxRates, Txn, TxnActivity, SourceEntry } from './types'
@@ -504,7 +504,7 @@ function LinkPicker({
         aria-expanded={open}
         onClick={toggle}
       >
-        ⇄ {label}
+        <ArrowLeftRight size={13} aria-hidden="true" /> {label}
       </button>
       {open && isMobile && (
         <>
@@ -3184,7 +3184,7 @@ export function ImportModal({
                             aria-label={`Remove ${a.name}`}
                             onClick={() => removeAccount(id)}
                           >
-                            ✕
+                            <X size={11} aria-hidden="true" />
                           </button>
                         </span>
                       )
@@ -3196,7 +3196,13 @@ export function ImportModal({
                           className="imp3-achip add"
                           onClick={() => setAcctPickOpen(!acctPickOpen)}
                         >
-                          {acctIds.length ? '+ Add account' : 'Select account'}
+                          {acctIds.length ? (
+                            <>
+                              <Plus size={12} aria-hidden="true" /> Add account
+                            </>
+                          ) : (
+                            'Select account'
+                          )}
                         </button>
                         {acctPickOpen && (
                           <div className="imp3-lpick-pop" role="listbox" aria-label="Accounts">
@@ -3931,7 +3937,13 @@ export function ImportModal({
                         {boundary.length} entr{boundary.length === 1 ? 'y sits' : 'ies sit'} near
                         the cut-off — likely the previous/next statement.
                       </span>
-                      <span className="acct-stmtview-check-caret">{boundaryOpen ? '▾' : '▸'}</span>
+                      <span className="acct-stmtview-check-caret">
+                        {boundaryOpen ? (
+                          <ChevronDown size="1em" aria-hidden="true" />
+                        ) : (
+                          <ChevronRight size="1em" aria-hidden="true" />
+                        )}
+                      </span>
                     </button>
                     {boundaryOpen && (
                       <>
@@ -4279,7 +4291,9 @@ export function ImportModal({
                         aria-label={`Open matched ledger entry ${ex.note || 'transaction'}`}
                         onClick={() => openExistingTxn(resolved.id)}
                       >
-                        <span className="imp3-arow-match-ic">⇄</span>
+                        <span className="imp3-arow-match-ic">
+                          <ArrowLeftRight size={13} aria-hidden="true" />
+                        </span>
                         <span className="imp3-arow-match-main">
                           <span className="imp3-arow-match-name">
                             <span className="imp3-arow-match-tag">Ledger</span>
@@ -5002,7 +5016,7 @@ export function ImportModal({
                         return (
                           <div className="imp3-arow-match imp-rowmatch">
                             <span className="imp3-arow-match-ic" aria-hidden="true">
-                              ⇄
+                              <ArrowLeftRight size={13} />
                             </span>
                             <span className="imp3-arow-match-main">
                               <span className="imp3-arow-match-name">
@@ -5084,7 +5098,13 @@ export function ImportModal({
                             </span>
                             <span className="imp3-lo-t">{reason}</span>
                             <span className="imp3-lo-open" aria-hidden="true">
-                              {drawerLoading[d.dupOf] ? 'Opening…' : 'Open ›'}
+                              {drawerLoading[d.dupOf] ? (
+                                'Opening…'
+                              ) : (
+                                <>
+                                  Open <ChevronRight size={12} />
+                                </>
+                              )}
                             </span>
                           </button>
                         ) : (
@@ -6448,7 +6468,7 @@ export function ImportModal({
                                     Off by {offByAmount} <i>{chipPop.offby}</i>
                                     {chip === 'offby' && (
                                       <span className="x" aria-hidden="true">
-                                        ✕
+                                        <X size={10} />
                                       </span>
                                     )}
                                   </button>
@@ -6470,7 +6490,7 @@ export function ImportModal({
                                     Possible matches <i>{chipPop.weak}</i>
                                     {chip === 'weak' && (
                                       <span className="x" aria-hidden="true">
-                                        ✕
+                                        <X size={10} />
                                       </span>
                                     )}
                                   </button>

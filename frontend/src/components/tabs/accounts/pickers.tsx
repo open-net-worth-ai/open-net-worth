@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Sparkles } from '../../../ui/icons'
+import { Sparkles, Plus, X, Check, ChevronLeft, ChevronRight, Settings } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import type { Account, Category } from './types'
 import { TYPE_LABELS, TYPE_ORDER } from './categories'
@@ -496,7 +496,8 @@ export function EditCombo({
             >
               {it.type === 'create' ? (
                 <>
-                  <span className="acct-combo-plus">+</span>Create "<b>{it.label}</b>"
+                  <Plus className="acct-combo-plus" size={12} aria-hidden="true" />
+                  Create "<b>{it.label}</b>"
                 </>
               ) : (
                 <>
@@ -632,7 +633,7 @@ export function FilterCombo({
             onChange('')
           }}
         >
-          ×
+          <X size={12} aria-hidden="true" />
         </button>
       ) : (
         <svg
@@ -870,7 +871,9 @@ export function AddAccountSelect({
                       commit(a)
                     }}
                   >
-                    <span className="acct-acctsel-check">{a.id === value ? '✓' : ''}</span>
+                    <span className="acct-acctsel-check">
+                      {a.id === value ? <Check size={12} aria-hidden="true" /> : null}
+                    </span>
                     <span className="acct-acctsel-nm">{a.name}</span>
                   </button>
                 )
@@ -1053,7 +1056,7 @@ export function AddDateField({ value, onChange, advance, autoFocus }: AddDateFie
               }}
               aria-label="Previous month"
             >
-              ‹
+              <ChevronLeft size={14} aria-hidden="true" />
             </button>
             <span className="acct-datef-title">
               {MONF[vm]} {vy}
@@ -1067,7 +1070,7 @@ export function AddDateField({ value, onChange, advance, autoFocus }: AddDateFie
               }}
               aria-label="Next month"
             >
-              ›
+              <ChevronRight size={14} aria-hidden="true" />
             </button>
           </div>
           <div className="acct-datef-dow">
@@ -1274,7 +1277,7 @@ export function AddPayeeField({
     >
       {it.type === 'create' ? (
         <>
-          <span className="acct-payf-plus">+</span>
+          <Plus className="acct-payf-plus" size={12} aria-hidden="true" />
           <span>
             Create "<b>{it.label}</b>"
           </span>
@@ -1346,7 +1349,8 @@ export function AddPayeeField({
               onManagePayees?.()
             }}
           >
-            <span className="acct-payf-mic">⚙</span>Manage payees
+            <Settings className="acct-payf-mic" size={12} aria-hidden="true" />
+            Manage payees
           </button>
         </div>
       )}
@@ -1565,7 +1569,8 @@ export function AddCategoryField({
                 })
               }}
             >
-              <span className="acct-catnew-plus">+</span> New category{q ? ` “${q}”` : ''}
+              <Plus className="acct-catnew-plus" size={12} aria-hidden="true" /> New category
+              {q ? ` “${q}”` : ''}
             </button>
           )}
           {grouped.length === 0 && !onCreate && (
@@ -1591,7 +1596,9 @@ export function AddCategoryField({
                       commit(o)
                     }}
                   >
-                    <span className="acct-acctsel-check">{o.id === value ? '✓' : ''}</span>
+                    <span className="acct-acctsel-check">
+                      {o.id === value ? <Check size={12} aria-hidden="true" /> : null}
+                    </span>
                     <i className="acct-acctsel-dot" style={{ background: o.color }} />
                     <span className="acct-acctsel-nm">{o.label}</span>
                   </button>

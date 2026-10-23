@@ -19,6 +19,7 @@ import type { DetailMutations } from './detailTypes'
 import { ACCOUNTS_KEY, fetchJson } from '../../../hooks/serverState'
 import { fetchCachedQuery } from '../../../state/queryCache'
 import { Button, DateField } from '../../ui'
+import { ArrowDown, ArrowUp, ArrowRight, ArrowUpRight } from '../../../ui/icons'
 
 const STATUS_LABEL: Record<string, string> = {
   paid: 'Paid',
@@ -349,7 +350,7 @@ function InstRow({ c, i, fx, m, split }: InstRowProps) {
               {' '}
               ·{' '}
               <button className="c2-link" onClick={() => m.onOpenTxn(i.paid_txn_id as string)}>
-                txn ↗
+                txn <ArrowUpRight size={12} aria-hidden="true" />
               </button>
             </>
           )}
@@ -476,7 +477,8 @@ function InstRow({ c, i, fx, m, split }: InstRowProps) {
                 )
               }
             >
-              Cover the gap with Lucius →
+              Cover the gap with Lucius
+              <ArrowRight size={14} aria-hidden="true" />
             </Button>
           )}
         </div>
@@ -527,7 +529,7 @@ export function Schedule({ commitment: c, fx, envelope, m }: ScheduleProps) {
               )
             }
           >
-            Manage with Lucius →
+            Manage with Lucius <ArrowRight size={13} aria-hidden="true" />
           </button>
         </span>
       </div>
@@ -538,9 +540,14 @@ export function Schedule({ commitment: c, fx, envelope, m }: ScheduleProps) {
             style={{ marginBottom: 10 }}
             onClick={() => setShowAll(true)}
           >
-            {hiddenAbove > 0
-              ? `↑ ${hiddenAbove} earlier • show all ${c.installments.length}`
-              : `Show all ${c.installments.length} payments…`}
+            {hiddenAbove > 0 ? (
+              <>
+                <ArrowUp size={12} aria-hidden="true" /> {hiddenAbove} earlier • show all{' '}
+                {c.installments.length}
+              </>
+            ) : (
+              `Show all ${c.installments.length} payments…`
+            )}
           </button>
         )}
         {list.map((i) => (
@@ -551,7 +558,7 @@ export function Schedule({ commitment: c, fx, envelope, m }: ScheduleProps) {
             <span>
               {hiddenBelow} more payment{hiddenBelow > 1 ? 's' : ''}
             </span>
-            <span aria-hidden="true">↓</span>
+            <ArrowDown size={12} aria-hidden="true" />
           </button>
         )}
         {many && showAll && (

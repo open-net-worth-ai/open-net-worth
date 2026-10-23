@@ -172,8 +172,8 @@
 }
 
 .builder-engine--selected {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  box-shadow: inset 2px 0 0 var(--accent);
+  border-color: var(--line-strong);
+  box-shadow: inset 2px 0 0 var(--ink);
 }
 
 .builder-engine__icon {

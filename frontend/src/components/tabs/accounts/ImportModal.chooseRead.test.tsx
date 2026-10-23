@@ -289,7 +289,7 @@ describe('Choose step — "Into accounts" chips', () => {
     expect(document.body.querySelector('.imp3-achip:not(.add)')!.textContent).toContain(
       'Riverside Bank',
     )
-    fireEvent.click(screen.getByRole('button', { name: '+ Add account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
     fireEvent.click(screen.getByRole('option', { name: /PocketPay Wallet/ }))
     expect(document.body.querySelectorAll('.imp3-achip:not(.add)').length).toBe(2)
     fireEvent.click(screen.getByRole('button', { name: /Read the statement/ }))
@@ -303,7 +303,7 @@ describe('Choose step — "Into accounts" chips', () => {
     await screen.findByRole('button', { name: /Read the statement/ })
     fireEvent.click(screen.getByRole('button', { name: 'Select account' }))
     fireEvent.click(screen.getByRole('option', { name: /Riverside Bank/ }))
-    fireEvent.click(screen.getByRole('button', { name: '+ Add account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
     fireEvent.click(screen.getByRole('option', { name: /PocketPay Wallet/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Remove Riverside Bank' }))
     const chips = Array.from(document.body.querySelectorAll('.imp3-achip:not(.add)'))
@@ -329,7 +329,7 @@ describe('Choose step — "Into accounts" chips', () => {
     await screen.findByRole('button', { name: /Read the statement/ })
     fireEvent.click(screen.getByRole('button', { name: 'Select account' }))
     fireEvent.click(screen.getByRole('option', { name: /Riverside Bank/ }))
-    fireEvent.click(screen.getByRole('button', { name: '+ Add account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
     fireEvent.click(screen.getByRole('option', { name: /PocketPay Wallet/ }))
     // → configure, re-point the anchor at the account already held as an extra chip, → back
     fireEvent.click(screen.getByRole('button', { name: /map the columns yourself/ }))
@@ -426,7 +426,7 @@ describe('Choose step — "Into accounts" chips', () => {
     await screen.findByRole('button', { name: /Read the statement/ })
     fireEvent.click(screen.getByRole('button', { name: 'Select account' }))
     fireEvent.click(screen.getByRole('option', { name: /Riverside Bank/ }))
-    fireEvent.click(screen.getByRole('button', { name: '+ Add account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
     fireEvent.click(screen.getByRole('option', { name: /Compass USD/ }))
     fireEvent.click(screen.getByRole('button', { name: /Read the statement/ }))
     await screen.findByText('UNROUTED USD')
@@ -496,7 +496,7 @@ describe('Choose step — "Into accounts" chips', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Select account' }))
     fireEvent.click(screen.getByRole('option', { name: /Riverside Bank/ }))
     // A chip in the OUT leg's own currency — the exact shape that would tempt the fill.
-    fireEvent.click(screen.getByRole('button', { name: '+ Add account' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
     fireEvent.click(screen.getByRole('option', { name: /Compass USD/ }))
     fireEvent.click(screen.getByRole('button', { name: /Read the statement/ }))
     await screen.findByText('FX OUT LEG')

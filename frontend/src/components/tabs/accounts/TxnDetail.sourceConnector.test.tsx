@@ -299,7 +299,7 @@ describe('TxnDetail — Source section, mixed email + connector entries', () => 
     )
 
     await waitFor(() => expect(screen.getByText('Source (2)')).toBeTruthy())
-    expect(screen.getByText('Show full email ▾')).toBeTruthy()
+    expect(screen.getByText('Show full email')).toBeTruthy()
     expect(screen.getByRole('button', { name: /show raw fields/i })).toBeTruthy()
     expect(document.querySelectorAll('.acct-detail-email-div').length).toBe(1)
   })

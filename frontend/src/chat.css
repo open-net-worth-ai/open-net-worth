@@ -62,9 +62,9 @@
     }
   }
   .conv-seg-btn.on {
-    background: var(--selected);
+    background: var(--surface);
     color: var(--ink);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--shadow-sm);
   }
 
   /* ── Message bubbles ── */
@@ -1031,6 +1031,9 @@
     cursor: pointer;
     transition: all 0.15s;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   @media (hover: hover) {
     .msg-retry-btn:hover {
@@ -1149,7 +1152,7 @@
     font-size: var(--ac-text);
     font-weight: 600;
     padding: 5px 14px;
-    border-radius: 7px;
+    border-radius: var(--radius-lg);
     cursor: pointer;
     transition: all 0.15s;
   }
@@ -1167,7 +1170,7 @@
     background: none;
     border: 1px solid var(--line);
     color: var(--muted);
-    border-radius: 5px;
+    border-radius: var(--radius-lg);
     padding: 5px 14px;
     font-size: var(--ac-text);
     cursor: pointer;
@@ -1489,7 +1492,7 @@
   }
   .dup-review-table input[type='checkbox'] {
     cursor: pointer;
-    accent-color: var(--accent, #9a7fd0);
+    accent-color: var(--ink);
   }
   .dup-row--selected td {
     background: color-mix(in srgb, var(--lucius) 8%, transparent);
@@ -1742,6 +1745,9 @@
     font-size: 10px;
     margin-top: 2px;
     white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .msg-search-loading {
     display: flex;
@@ -2005,29 +2011,37 @@
   .msg-restore-actions button {
     font-size: 11.5px;
     padding: 5px 9px;
-    border-radius: 5px;
+    border-radius: var(--radius-md);
     cursor: pointer;
     text-align: left;
-    border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
-    background: var(--accent, #9a7fd0);
-    color: var(--ink-on-accent);
+    border: 1px solid var(--cta);
+    background: var(--cta);
+    color: var(--ink-on-cta);
     transition: all 0.15s;
   }
   .msg-restore-actions button:nth-child(2) {
     background: transparent;
+    border-color: var(--line);
     color: var(--text);
   }
   @media (hover: hover) {
-    .msg-restore-actions button:hover:not(:disabled) {
-      filter: brightness(1.1);
+    .msg-restore-actions button:first-child:hover:not(:disabled) {
+      background: var(--cta-hover);
+      border-color: var(--cta-hover);
+    }
+    .msg-restore-actions button:nth-child(2):hover:not(:disabled) {
+      background: var(--hover);
     }
   }
   .msg-restore-actions button:disabled {
-    opacity: 0.5;
+    background: var(--bg-2);
+    border-color: var(--bg-2);
+    color: var(--faint);
     cursor: default;
   }
   .msg-restore-cancel {
     background: transparent !important;
+    border-color: var(--line) !important;
     color: var(--muted) !important;
   }
   .msg-restore-hint {
@@ -2097,6 +2111,8 @@
   }
   .screen-cmd-chip-arrow {
     font-size: 12px;
+    display: inline-flex;
+    align-items: center;
   }
 
   /* ── Inline artifact (Lucius-generated HTML/SVG document) ──────────────────────
@@ -2145,7 +2161,7 @@
      touching that shared, much-higher-blast-radius message-bubble hover CSS, not this file. */
   @media (hover: hover) {
     .artifact-chip:hover {
-      border-color: var(--accent);
+      border-color: var(--line-strong);
       background: var(--hover-surface2);
     }
   }
@@ -2209,7 +2225,7 @@
   @media (hover: hover) {
     .artifact-chip-open:hover {
       border-color: var(--hover-line);
-      color: var(--accent);
+      color: var(--ink);
       background: var(--hover-surface);
     }
   }
@@ -2431,6 +2447,9 @@
     color: var(--lucius);
     padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-pill);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   @media (hover: hover) {
     .screen-ctx__attach:hover {
@@ -2492,6 +2511,8 @@
 .wr-chip__glyph {
   color: var(--pos, #3fb950);
   font-size: 10px;
+  display: inline-flex;
+  align-items: center;
 }
 .wr-chip__counts {
   white-space: nowrap;
@@ -2501,6 +2522,8 @@
   padding-left: 2px;
   color: var(--faint);
   font-size: 9px;
+  display: inline-flex;
+  align-items: center;
 }
 .wr-chip__detail {
   border-top: 1px solid var(--border);
@@ -2564,26 +2587,32 @@
    checkpoint-excluded, so nothing else takes it back. */
 .change-grant-btn {
   padding: 6px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   letter-spacing: 0.01em;
 }
 .change-grant-btn--once {
-  background: color-mix(in srgb, var(--accent) 88%, black);
-  border-color: color-mix(in srgb, var(--accent) 88%, black);
-  color: var(--ink-on-accent);
+  background: var(--cta);
+  border-color: var(--cta);
+  color: var(--ink-on-cta);
 }
 @media (hover: hover) {
   .change-grant-btn--once:not(:disabled):hover {
-    background: var(--accent);
-    border-color: var(--hover-line);
+    background: var(--cta-hover);
+    border-color: var(--cta-hover);
   }
+}
+.change-grant-btn--once:disabled {
+  background: var(--bg-2);
+  border-color: var(--bg-2);
+  color: var(--faint);
+  opacity: 1;
 }
 /* `--session` / `--always` modifiers lived here until the split-button redesign moved both
    scopes behind the caret menu, where they are styled as menu items rather than buttons. */
-/* Standing permission, as its own button on a wide card: a quiet secondary in the primary
-   colour (owner, 2026-10-11: a warn tint read as an error). Its durability is in the title. */
+/* Standing permission, as its own button on a wide card: a quiet secondary in plain ink
+   (owner, 2026-10-11: a warn tint read as an error). Its durability is in the title. */
 .change-grant-btn--always {
-  color: var(--primary);
+  color: var(--ink);
 }
 /* Declining must never look like the dangerous option. It sits apart, at the row's right
    end, so it is never the button under the thumb that reached for "Allow". */
@@ -2619,26 +2648,29 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--accent) 88%, black);
-  border: 1px solid color-mix(in srgb, var(--accent) 88%, black);
-  border-left-color: color-mix(in srgb, #fff 22%, transparent);
-  color: var(--ink-on-accent);
+  background: var(--cta);
+  border: 1px solid var(--cta);
+  border-left-color: color-mix(in srgb, var(--ink-on-cta) 22%, transparent);
+  color: var(--ink-on-cta);
   padding: 0 9px;
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
-  border-top-right-radius: 8px;
-  border-bottom-right-radius: 8px;
+  border-top-right-radius: var(--radius-lg);
+  border-bottom-right-radius: var(--radius-lg);
   cursor: pointer;
   transition: all 0.15s;
 }
 @media (hover: hover) {
   .grant-split__caret:not(:disabled):hover {
-    background: var(--accent);
-    border-color: var(--hover-line);
+    background: var(--cta-hover);
+    border-color: var(--cta-hover);
+    border-left-color: color-mix(in srgb, var(--ink-on-cta) 22%, transparent);
   }
 }
 .grant-split__caret:disabled {
-  opacity: 0.4;
+  background: var(--bg-2);
+  border-color: var(--bg-2);
+  color: var(--faint);
   cursor: default;
 }
 .grant-split__menu {
@@ -2673,7 +2705,7 @@
 }
 @media (hover: hover) {
   .grant-split__item:not(:disabled):hover {
-    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    background: var(--hover);
   }
 }
 .grant-split__item:disabled {
@@ -2685,10 +2717,9 @@
   font-weight: 600;
   color: var(--ink);
 }
-/* "Always" in the primary colour, matching the wide card's button; the note underneath says
-   what it commits you to. */
+/* "Always" matches the wide card's button; the note underneath says what it commits you to. */
 .grant-split__item--always .grant-split__item-label {
-  color: var(--primary);
+  color: var(--ink);
 }
 .grant-split__item-note {
   font-size: var(--ac-text);
@@ -2750,7 +2781,7 @@
   padding: 0 10px;
   height: 34px;
   border: 1px solid var(--line);
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   background: var(--bg-2);
   color: var(--faint);
 }
@@ -2811,7 +2842,7 @@
   }
 }
 .conv-browser-row.on {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: var(--selected);
 }
 .conv-browser-ic {
   flex: none;
@@ -2819,7 +2850,7 @@
   color: var(--faint);
 }
 .conv-browser-row.on .conv-browser-ic {
-  color: var(--accent);
+  color: var(--ink);
 }
 .conv-browser-title {
   flex: 1;
@@ -2887,7 +2918,7 @@
   margin: 4px 0 4px 10px;
   padding: 5px 8px;
   border: 1px solid var(--accent);
-  border-radius: 7px;
+  border-radius: var(--radius-md);
   background: var(--bg-2);
   color: var(--ink);
   font: inherit;
@@ -3222,7 +3253,7 @@
   }
 }
 .conv-menu-row.on {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  background: var(--selected);
 }
 /* Per-row type glyph — same treatment as .conv-browser-ic (View all), optional so the dock's
    own ConversationMenu (which never passes ConversationRow's `icon` prop) is unaffected. */
@@ -3232,7 +3263,7 @@
   color: var(--faint);
 }
 .conv-menu-row.on .conv-menu-row-ic {
-  color: var(--accent);
+  color: var(--ink);
 }
 .conv-menu-row-ic svg {
   display: block;

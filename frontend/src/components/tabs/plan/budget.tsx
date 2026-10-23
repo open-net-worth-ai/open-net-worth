@@ -22,7 +22,7 @@ import { RtaFloat } from './budgetRtaFloat'
 import { CardPaymentPanel } from './budgetCardPayment'
 import { useBreakpoint } from '../../../hooks/useBreakpoint'
 import { usePointerResize } from '../../../hooks/usePointerResize'
-import { Chevron, Arrow, Grip, Plus } from './icons'
+import { Chevron, Arrow, Grip, Plus, X } from './icons'
 import { Spark } from '../../../lucius/identity'
 import {
   ColorDot,
@@ -922,7 +922,7 @@ export function EnvCatsBadge({
                     onRemove(n.key, n.label)
                   }}
                 >
-                  ✕
+                  <X size={11} />
                 </button>
               </div>
             ))}

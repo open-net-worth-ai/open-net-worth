@@ -88,6 +88,9 @@
   padding: 0;
   white-space: nowrap;
   font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 @media (hover: hover) {
   .c2-link:hover {
@@ -946,9 +949,9 @@
   }
 }
 .c2-seg button.on {
-  background: var(--selected);
+  background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-sm);
 }
 .c2-seg .pill {
   font-size: 9.5px;
@@ -967,7 +970,7 @@
   border: 1px solid var(--line);
   background: var(--surface2);
   color: var(--muted);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   font: inherit;
   font-size: 11.5px;
   padding: 0 7px;
@@ -2063,7 +2066,7 @@
 @media (hover: hover) {
   .c2-kindopt:hover {
     border-color: var(--hover-line);
-    background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+    background: var(--hover);
   }
 }
 .c2-kindopt svg {
@@ -2184,8 +2187,8 @@
 }
 .c3-hz button.on {
   color: var(--ink);
-  background: var(--selected);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
 }
 /* needs-attention rows open their commitment on click (buttons excepted) */
 .c3-need-open {
@@ -2199,7 +2202,7 @@
 }
 @media (hover: hover) {
   .c3-need-open:hover .c2-need-t {
-    color: var(--primary);
+    color: var(--ink);
   }
 }
 /* needs-lane expander (cap at 3, expand to all) */
@@ -2478,7 +2481,7 @@
   color: var(--primary);
 }
 .c3-menu-it.on {
-  color: var(--primary);
+  color: var(--ink);
   font-weight: 600;
 }
 .c3-menu-label {
@@ -3269,7 +3272,7 @@
   border: 1px solid var(--line-strong);
   background: var(--bg);
   color: var(--ink);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font: inherit;
   font-size: 12.5px;
   padding: 0 10px;
@@ -3324,7 +3327,7 @@
   color: var(--muted);
   background: var(--surface2);
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   white-space: nowrap;
   transition: 0.12s;
@@ -3336,13 +3339,15 @@
   }
 }
 .c2-mini-btn.pri {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
+  background: var(--cta);
+  border-color: var(--cta);
+  color: var(--ink-on-cta);
 }
 @media (hover: hover) {
   .c2-mini-btn.pri:hover {
-    background: color-mix(in srgb, var(--primary) 88%, #fff);
+    background: var(--cta-hover);
+    border-color: var(--cta-hover);
+    color: var(--ink-on-cta);
   }
 }
 .c2-mini-btn.danger {

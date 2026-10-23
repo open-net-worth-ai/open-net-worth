@@ -59,7 +59,7 @@ it('returns from currency to the native folder choice through Back', async () =>
   await waitFor(() => expect(authFetch).toHaveBeenCalledWith('/api/setup-status/data-location'))
   expect(screen.queryByText('/synthetic/chosen-book')).toBeNull()
   expect(screen.queryByRole('button', { name: 'Change book folder' })).toBeNull()
-  fireEvent.click(screen.getByRole('button', { name: '← Back' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }))
   await waitFor(() => expect(showBookChoice).toHaveBeenCalledOnce())
   expect(screen.queryByRole('button', { name: /^get started$/i })).toBeNull()
 })
@@ -68,12 +68,12 @@ it('returns from native restore directly to the currency decision', async () => 
   render(<FirstRun onDone={() => {}} initialStep={-1} />)
   fireEvent.click(screen.getByRole('button', { name: /set up instead/i }))
   expect(screen.getByRole('heading', { name: /choose your app currency/i })).toBeTruthy()
-  expect(screen.getByRole('button', { name: '← Back' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy()
 })
 
 it('keeps the native restore Back action inside setup instead of opening a second greeting', () => {
   render(<FirstRun onDone={() => {}} initialStep={-1} />)
-  fireEvent.click(screen.getByRole('button', { name: '← Back' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }))
   expect(screen.getByRole('heading', { name: /choose your app currency/i })).toBeTruthy()
   expect(screen.queryByRole('button', { name: /^get started$/i })).toBeNull()
 })
@@ -82,19 +82,19 @@ it('still lets a native user revisit currency from the model step', async () => 
   render(<FirstRun onDone={() => {}} initialStep={0} />)
   fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
   await waitFor(() => expect(screen.getByText(/step 2 of 3/i)).toBeTruthy())
-  fireEvent.click(screen.getByRole('button', { name: '← Back' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }))
   expect(screen.getByRole('heading', { name: /choose your app currency/i })).toBeTruthy()
-  expect(screen.getByRole('button', { name: '← Back' })).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Back' })).toBeTruthy()
 })
 
 it('keeps currency visible and permits retry when native Back fails', async () => {
   showBookChoice.mockRejectedValueOnce(new Error('Unavailable'))
   render(<FirstRun onDone={() => {}} initialStep={0} />)
-  fireEvent.click(screen.getByRole('button', { name: '← Back' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }))
   expect((await screen.findByRole('alert')).textContent).toContain(
     'Could not return to book folders. Try again.',
   )
   expect(screen.getByRole('heading', { name: /choose your app currency/i })).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: '← Back' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Back' }))
   await waitFor(() => expect(showBookChoice).toHaveBeenCalledTimes(2))
 })

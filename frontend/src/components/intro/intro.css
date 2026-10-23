@@ -126,7 +126,7 @@
 .fi-progress-dot--on {
   width: 16px;
   border-radius: 3px;
-  background: var(--primary);
+  background: var(--ink);
 }
 /* Anything that hands work to Lucius wears Lucius's colour, not the action blue. */
 .ui-btn.fi-lucius {
@@ -252,7 +252,7 @@
 .pt-dot--on {
   width: 16px;
   border-radius: 3px;
-  background: var(--primary);
+  background: var(--ink);
 }
 .pt-actions {
   display: flex;

@@ -17,7 +17,7 @@ import {
 import { toBase, fBase } from './format'
 import { txnMentionSublabel, fDate } from '../../../utils/format'
 import { EntityRow } from '../../../lucius/EntityRow'
-import { Minus, Plus, X } from '../../../ui/icons'
+import { Minus, Plus, X, ChevronUp, ChevronDown } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { usePointerResize } from '../../../hooks/usePointerResize'
 import { DRAG_SURFACE_PROPS, useSheetDragToDismiss } from '../../../hooks/useSheetDragToDismiss'
@@ -1431,7 +1431,12 @@ function ViewBody({
                             aria-controls={`src-email-body-${key}`}
                             onClick={toggle}
                           >
-                            {open ? 'Hide full email ▴' : 'Show full email ▾'}
+                            {open ? 'Hide full email' : 'Show full email'}{' '}
+                            {open ? (
+                              <ChevronUp size={12} aria-hidden="true" />
+                            ) : (
+                              <ChevronDown size={12} aria-hidden="true" />
+                            )}
                           </button>
                           {open && (
                             <pre id={`src-email-body-${key}`} className="acct-detail-email-body">
@@ -1489,7 +1494,12 @@ function ViewBody({
                           aria-controls={`src-raw-${key}`}
                           onClick={toggle}
                         >
-                          {open ? 'Hide raw fields ▴' : 'Show raw fields ▾'}
+                          {open ? 'Hide raw fields' : 'Show raw fields'}{' '}
+                          {open ? (
+                            <ChevronUp size={12} aria-hidden="true" />
+                          ) : (
+                            <ChevronDown size={12} aria-hidden="true" />
+                          )}
                         </button>
                         {open && (
                           <div id={`src-raw-${key}`} className="acct-detail-raw-body">

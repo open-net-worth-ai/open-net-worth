@@ -13,6 +13,7 @@ import { EntityRow } from '../../../lucius/EntityRow'
 import type { Account, AccountGroup } from './types'
 import { accountValue, fBase, fCur } from './data'
 import { TYPE_ORDER, typeLabel } from './categories'
+import { ChevronRight, LayoutGrid } from '../../../ui/icons'
 
 // ── Local icon helpers (SVG, pixel-centered) ─────────────────────────────────
 
@@ -246,7 +247,9 @@ export function Sidebar({
           title="The accounts below added together, debts included. Net worth also counts what you own on the Assets page, so the two differ."
         >
           <span className="acct-all-name">
-            <span className="gl">▤</span>
+            <span className="gl">
+              <LayoutGrid size={14} aria-hidden="true" />
+            </span>
             <span className="acct-all-id">
               All accounts
               <span className="acct-all-sub">
@@ -310,7 +313,9 @@ export function Sidebar({
                       <span className="acct-row-v">
                         <span className="acct-row-bal mask">
                           {fBaseCompact(sub)}
-                          <span className={'acct-venue-caret' + (open ? ' open' : '')}>›</span>
+                          <span className={'acct-venue-caret' + (open ? ' open' : '')}>
+                            <ChevronRight size="1em" aria-hidden="true" />
+                          </span>
                         </span>
                       </span>
                     </div>

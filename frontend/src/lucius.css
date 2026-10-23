@@ -345,7 +345,7 @@
     display: block;
   }
   .lx-aw.on .lx-aw-toggle {
-    color: var(--primary);
+    color: var(--ink);
   }
   .lx-aw-label {
     white-space: nowrap;
@@ -911,10 +911,10 @@
     width: 28px;
     height: 28px;
     padding: 0;
-    border-radius: 6px;
+    border-radius: 50%;
     border: none;
-    background: var(--primary);
-    color: var(--ink-on-accent);
+    background: var(--cta);
+    color: var(--ink-on-cta);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -944,8 +944,17 @@
       border-color: var(--hover-line);
     }
   }
+  @media (hover: hover) {
+    .lx-send:not(:disabled, .lx-stop):hover {
+      background: var(--cta-hover);
+    }
+  }
+  /* A queued send (aria-busy) is disabled too but keeps its ink — it is working, not unavailable. */
+  .lx-send:disabled:not([aria-busy='true']) {
+    background: var(--bg-2);
+    color: var(--faint);
+  }
   .lx-send:disabled {
-    opacity: 0.4;
     cursor: default;
   }
 
@@ -1278,7 +1287,7 @@
     padding: 7px 9px;
   }
   .lx-scope-ic {
-    color: var(--primary);
+    color: var(--ink);
     font-size: 12px;
     flex: none;
     line-height: 1;
@@ -1313,7 +1322,7 @@
     border: 1px solid var(--line);
     background: transparent;
     color: var(--muted);
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-md);
     font: inherit;
     font-size: 10.5px;
     font-weight: 600;
@@ -1337,7 +1346,7 @@
   /* open / peeking — filled pill + eye-off icon (the momentary-disclosure tapped state) */
   .lx-scope-peek.open {
     background: var(--selected);
-    border-color: var(--primary);
+    border-color: var(--ink);
     color: var(--ink);
   }
   .lx-scope-peek.open .ic-eye {
@@ -1382,8 +1391,8 @@
       border-color 0.15s;
   }
   .lx-switch.on {
-    background: var(--primary);
-    border-color: var(--primary);
+    background: var(--ink);
+    border-color: var(--ink);
   }
   .lx-switch-knob {
     position: absolute;
@@ -1397,6 +1406,7 @@
     transition: transform 0.16s cubic-bezier(0.32, 0.72, 0, 1);
   }
   .lx-switch.on .lx-switch-knob {
+    background: var(--bg);
     transform: translateX(13px);
   }
   .lx-scope.off .lx-scope-ic,
@@ -1576,6 +1586,9 @@
     font-size: 10.5px;
     font-weight: 700;
     color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .lx-handle.on .lx-handle-act {
     color: var(--lucius);
@@ -1978,12 +1991,13 @@
     }
   }
   /* Flat filled pill, not an underline — same "on" treatment as .imp3-seg button.on
-     (statementImport.css) — and --primary (genuine blue), not --lucius (the AI-brand
+     (statementImport.css) — in ink, not --lucius (the AI-brand
      purple used everywhere else in this file): this is a plain UI selection state, not
      a Lucius-branded affordance (owner correction 2026-08-11). */
   .ac-tab.active {
-    background: var(--primary);
-    color: #fff;
+    color: var(--ink);
+    background: var(--selected);
+    border-color: var(--line-strong);
   }
   .ac-zone {
     font-size: 10px;
@@ -2174,6 +2188,9 @@
     cursor: pointer;
     opacity: 0;
     transition: opacity 0.12s;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   .ac-item.hi .ac-item-add {
     opacity: 1;

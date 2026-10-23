@@ -13,6 +13,7 @@ import { Button, Loading, Panel } from '../ui'
 import { AcquireLotForm } from './AcquireLotForm'
 import { DisposalForm } from './DisposalForm'
 import { WhichAccountModal, type WriteTarget } from './WhichAccountModal'
+import { Plus, ChevronDown, ChevronRight } from '../../ui/icons'
 
 export type { WriteTarget }
 
@@ -190,8 +191,13 @@ export function LotsPanel({
       <Panel
         title={lotsTitle}
         actions={
-          <Button variant="ghost" size="sm" onClick={startAddLot}>
-            + Add lot
+          <Button
+            variant="ghost"
+            size="sm"
+            iconLeft={<Plus size={13} aria-hidden="true" />}
+            onClick={startAddLot}
+          >
+            Add lot
           </Button>
         }
       >
@@ -212,8 +218,13 @@ export function LotsPanel({
       <Panel
         title={realizedCount != null ? `Realized history (${realizedCount})` : 'Realized history'}
         actions={
-          <Button variant="ghost" size="sm" onClick={startRecordSale}>
-            + Record sale
+          <Button
+            variant="ghost"
+            size="sm"
+            iconLeft={<Plus size={13} aria-hidden="true" />}
+            onClick={startRecordSale}
+          >
+            Record sale
           </Button>
         }
       >
@@ -531,7 +542,11 @@ function RealizedSection({
                             toggle(ev.id)
                           }}
                         >
-                          {isOpen ? '▾' : '▸'}
+                          {isOpen ? (
+                            <ChevronDown size={12} aria-hidden="true" />
+                          ) : (
+                            <ChevronRight size={12} aria-hidden="true" />
+                          )}
                         </button>
                       )}
                       {fDate(ev.disposed_at, 'short', 'always')}

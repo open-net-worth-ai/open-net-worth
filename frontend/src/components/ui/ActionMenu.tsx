@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { createPortal } from 'react-dom'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { useSheetDragToDismiss } from '../../hooks/useSheetDragToDismiss'
-import { X } from '../../ui/icons'
+import { X, MoreHorizontal } from '../../ui/icons'
 import { swallowNextClick } from '../../utils/swallowNextClick'
 
 export interface ActionMenuItem {
@@ -33,7 +33,7 @@ export function ActionMenu({
   items,
   label = 'More actions',
   title,
-  trigger = '⋯',
+  trigger = <MoreHorizontal size={16} aria-hidden="true" />,
   className,
   onOpenChange,
 }: ActionMenuProps) {

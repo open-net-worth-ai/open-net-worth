@@ -469,11 +469,11 @@ function WantToSelect({
               <span className="pl-tgt-wantopt-check" aria-hidden="true">
                 {o.key === value && (
                   <svg viewBox="0 0 20 20" width="18" height="18">
-                    <circle cx="10" cy="10" r="9" fill="var(--accent)" />
+                    <circle cx="10" cy="10" r="9" fill="var(--ink)" />
                     <path
                       d="M6 10.5l2.5 2.5L14 7.5"
                       fill="none"
-                      stroke="#fff"
+                      stroke="var(--bg)"
                       strokeWidth="2"
                       strokeLinecap="round"
                       strokeLinejoin="round"

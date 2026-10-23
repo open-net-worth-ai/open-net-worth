@@ -134,7 +134,7 @@ body.lucius-resizing iframe {
 }
 @media (hover: hover) {
   .lucius-home-side-resizer:hover {
-    background: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--ink) 20%, transparent);
   }
 }
 
@@ -366,7 +366,7 @@ body.lucius-resizing iframe {
 }
 @media (hover: hover) {
   .lucius-home-artifact-resizer:hover {
-    background: color-mix(in srgb, var(--accent) 35%, transparent);
+    background: color-mix(in srgb, var(--ink) 20%, transparent);
   }
 }
 /* ChatPanel's base .lx-side assumes a FIXED floating dock (position:fixed, translateX(100%)

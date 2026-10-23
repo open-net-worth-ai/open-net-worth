@@ -151,7 +151,7 @@ describe('TxnDetail — Source section, kind: email (EM1-02/03/04 ok state + dis
     )
     expect(screen.getByText('Your Northgate statement is ready')).toBeTruthy()
     expect(screen.getByText('alerts@northgatecard.example')).toBeTruthy()
-    const toggle = screen.getByText('Show full email ▾')
+    const toggle = screen.getByText('Show full email')
     expect(toggle).toBeTruthy()
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
     // "Source" renders after "Provenance" in document order.
@@ -161,9 +161,9 @@ describe('TxnDetail — Source section, kind: email (EM1-02/03/04 ok state + dis
 
   it('expand reveals the scrollable plain-text body with line breaks preserved, no links', async () => {
     renderDrawer(emailTxn(), () => Promise.resolve([data]))
-    await waitFor(() => screen.getByText('Show full email ▾'))
-    fireEvent.click(screen.getByText('Show full email ▾'))
-    expect(screen.getByText('Hide full email ▴')).toBeTruthy()
+    await waitFor(() => screen.getByText('Show full email'))
+    fireEvent.click(screen.getByText('Show full email'))
+    expect(screen.getByText('Hide full email')).toBeTruthy()
     const body = document.getElementById('src-email-body-m1aaaa')
     expect(body).toBeTruthy()
     expect(body!.tagName).toBe('PRE')
@@ -173,11 +173,11 @@ describe('TxnDetail — Source section, kind: email (EM1-02/03/04 ok state + dis
 
   it('collapse reverts the toggle and hides the body', async () => {
     renderDrawer(emailTxn(), () => Promise.resolve([data]))
-    await waitFor(() => screen.getByText('Show full email ▾'))
-    fireEvent.click(screen.getByText('Show full email ▾'))
-    expect(screen.getByText('Hide full email ▴')).toBeTruthy()
-    fireEvent.click(screen.getByText('Hide full email ▴'))
-    expect(screen.getByText('Show full email ▾')).toBeTruthy()
+    await waitFor(() => screen.getByText('Show full email'))
+    fireEvent.click(screen.getByText('Show full email'))
+    expect(screen.getByText('Hide full email')).toBeTruthy()
+    fireEvent.click(screen.getByText('Hide full email'))
+    expect(screen.getByText('Show full email')).toBeTruthy()
     expect(document.getElementById('src-email-body-m1aaaa')).toBeNull()
   })
 
@@ -201,7 +201,7 @@ describe('TxnDetail — Source section, kind: email (EM1-02/03/04 ok state + dis
 
   it('keeps the email rows, disclosure, and unlink action in one source block', async () => {
     renderDrawer(emailTxn(), () => Promise.resolve([data]))
-    await waitFor(() => screen.getByText('Show full email ▾'))
+    await waitFor(() => screen.getByText('Show full email'))
     const heading = screen.getByText('Source', { selector: '.acct-detail-sec' })
     const sourceBlock = heading.nextElementSibling as HTMLElement
     expect(sourceBlock.classList.contains('acct-detail-source-block')).toBe(true)
@@ -242,7 +242,7 @@ describe('TxnDetail — Source section, kind: email (CDS-UI-22 Unlink source)', 
     )
     await waitFor(() => expect(screen.queryByText('Unlink source')).toBeNull())
     expect(screen.queryByText('Your Northgate statement is ready')).toBeNull()
-    expect(screen.queryByText('Show full email ▾')).toBeNull()
+    expect(screen.queryByText('Show full email')).toBeNull()
   })
 
   it('a failed unlink shows an inline error in the email block and can be retried', async () => {
@@ -312,7 +312,7 @@ describe('TxnDetail — Source section, kind: email (EM1-06 loading)', () => {
       expect(screen.getByText('Source', { selector: '.acct-detail-sec' })).toBeTruthy(),
     )
     // Loading state: no real Subject/From row text yet, no toggle, no unavailable copy.
-    expect(screen.queryByText('Show full email ▾')).toBeNull()
+    expect(screen.queryByText('Show full email')).toBeNull()
     expect(screen.queryByText(/Snapshot unavailable/)).toBeNull()
     // Resolve to avoid an unhandled-state warning after the test.
     resolve([goneEmail])
@@ -392,8 +392,8 @@ describe('TxnDetail — Source section, kind: email (EM1-08 reset on txn change)
       />,
     )
     await waitFor(() => expect(screen.getByText('Txn A email')).toBeTruthy())
-    fireEvent.click(screen.getByText('Show full email ▾'))
-    expect(screen.getByText('Hide full email ▴')).toBeTruthy()
+    fireEvent.click(screen.getByText('Show full email'))
+    expect(screen.getByText('Hide full email')).toBeTruthy()
 
     rerender(
       <TxnDetail
@@ -416,7 +416,7 @@ describe('TxnDetail — Source section, kind: email (EM1-08 reset on txn change)
     )
     await waitFor(() => expect(screen.getByText('Txn B email')).toBeTruthy())
     // Starts collapsed again, with B's own data — never A's.
-    expect(screen.getByText('Show full email ▾')).toBeTruthy()
+    expect(screen.getByText('Show full email')).toBeTruthy()
     expect(screen.queryByText('Txn A email')).toBeNull()
   })
 })
@@ -435,8 +435,8 @@ describe('TxnDetail — Source section, kind: email (EM1-09 HTML-looking body re
       unavailable: false,
     }
     renderDrawer(emailTxn(), () => Promise.resolve([hostile]))
-    await waitFor(() => screen.getByText('Show full email ▾'))
-    fireEvent.click(screen.getByText('Show full email ▾'))
+    await waitFor(() => screen.getByText('Show full email'))
+    fireEvent.click(screen.getByText('Show full email'))
     const body = document.getElementById('src-email-body-m1aaaa')!
     // The raw text is visible verbatim...
     expect(body.textContent).toContain('<a href="https://evil.example">click me</a>')
@@ -589,11 +589,11 @@ describe('TxnDetail — Source section, kind: email (multi-source-email drawer, 
 
   it('each email expands independently (per-message-id toggle state)', async () => {
     renderDrawer(multiTxn(), () => Promise.resolve([em1, em2]))
-    await waitFor(() => expect(screen.getAllByText('Show full email ▾').length).toBe(2))
-    fireEvent.click(screen.getAllByText('Show full email ▾')[1]!)
+    await waitFor(() => expect(screen.getAllByText('Show full email').length).toBe(2))
+    fireEvent.click(screen.getAllByText('Show full email')[1]!)
     // Only the SECOND email expanded — one Hide, one Show, and only body two is in the DOM.
-    expect(screen.getAllByText('Show full email ▾').length).toBe(1)
-    expect(screen.getByText('Hide full email ▴')).toBeTruthy()
+    expect(screen.getAllByText('Show full email').length).toBe(1)
+    expect(screen.getByText('Hide full email')).toBeTruthy()
     expect(document.getElementById('src-email-body-m2bbbb')).toBeTruthy()
     expect(document.getElementById('src-email-body-m1aaaa')).toBeNull()
     expect(screen.getByText('Body two')).toBeTruthy()
@@ -626,7 +626,7 @@ describe('TxnDetail — Source section, kind: email (multi-source-email drawer, 
     expect(screen.getByText('Order confirmation')).toBeTruthy()
     expect(screen.getByText(/Snapshot unavailable/)).toBeTruthy()
     // The available email still has its toggle; the unavailable slot has none.
-    expect(screen.getAllByText('Show full email ▾').length).toBe(1)
+    expect(screen.getAllByText('Show full email').length).toBe(1)
   })
 
   it('single-email header stays "Source" (no count suffix)', async () => {

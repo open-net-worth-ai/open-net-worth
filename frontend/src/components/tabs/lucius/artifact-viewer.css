@@ -227,7 +227,7 @@ html[data-desktop-chrome='mac']
 .artifact-viewer-menu-check {
   margin-left: auto;
   flex: none;
-  color: var(--accent);
+  color: var(--ink);
 }
 .artifact-viewer-menu-divider {
   height: 1px;

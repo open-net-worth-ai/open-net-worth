@@ -19,7 +19,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { Eye, EyeOff } from '../../../ui/icons'
+import { Eye, EyeOff, Check, Plus } from '../../../ui/icons'
 import { getScreenSnapshot } from '../../../lucius/screenContract'
 import { hSvg } from '../../../lucius/identity'
 import { useScreenSnapshot } from '../../../state/screenSnapshot'
@@ -447,7 +447,17 @@ export function ScreenContextBar({
                           </span>
                           <span className="lx-handle-d">{h.descriptor}</span>
                         </span>
-                        <span className="lx-handle-act">{pinned ? '✓ pinned' : '+ pin'}</span>
+                        <span className="lx-handle-act">
+                          {pinned ? (
+                            <>
+                              <Check size={12} aria-hidden="true" /> pinned
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={12} aria-hidden="true" /> pin
+                            </>
+                          )}
+                        </span>
                       </button>
                     )
                   })}

@@ -1,6 +1,9 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronDown, FastForward, Hand, TriangleAlert, type LucideIcon } from 'lucide-react'
+
+// Tooltip max-width (260px) + its 8px gap + an 8px margin from the window edge.
+const TOOLTIP_REACH = 276
 
 export type PermissionMode = 'manual' | 'auto' | 'skip'
 
@@ -87,6 +90,10 @@ export function PermissionModeControl({
   const triggerRef = useRef<HTMLButtonElement>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const focusOnOpen = useRef<'selected' | 'last' | null>(null)
+  // The option descriptions open to the menu's right. A composer pinned to the window's right
+  // edge (the Lucius side panel) has no room there, so they flip to the left instead of
+  // running off-screen — measured, because only the rendered menu knows where it landed.
+  const [tipsLeft, setTipsLeft] = useState(false)
   const active = APPROVAL_OPTIONS.find((option) => option.value === value) ?? APPROVAL_OPTIONS[0]!
   const ActiveIcon = active.Icon
 
@@ -103,6 +110,12 @@ export function PermissionModeControl({
     document.addEventListener('pointerdown', onPointerDown)
     return () => document.removeEventListener('pointerdown', onPointerDown)
   }, [open])
+
+  useLayoutEffect(() => {
+    if (!open || !menuRef.current) return
+    const right = menuRef.current.getBoundingClientRect().right
+    setTipsLeft(right + TOOLTIP_REACH > window.innerWidth)
+  }, [open, anchor])
 
   useEffect(() => {
     if (!open || !focusOnOpen.current) return
@@ -153,7 +166,7 @@ export function PermissionModeControl({
     <div
       ref={menuRef}
       id={`${idBase}-menu`}
-      className={`pm-mode-menu${tone === 'bare' ? ' pm-mode-menu--fixed' : ''}`}
+      className={`pm-mode-menu${tone === 'bare' ? ' pm-mode-menu--fixed' : ''}${tipsLeft ? ' pm-mode-menu--tips-left' : ''}`}
       role="menu"
       aria-label={subject}
       data-portal-layer={tone === 'bare' ? true : undefined}

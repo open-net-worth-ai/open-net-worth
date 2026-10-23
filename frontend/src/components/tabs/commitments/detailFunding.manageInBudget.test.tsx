@@ -102,7 +102,7 @@ describe('Funding tab — Manage in Budget deep-link', () => {
     const { getByRole } = render(
       <Funding commitment={commitment} fx={{ SGD: 1 }} envelope={envelope} positions={{}} m={m} />,
     )
-    fireEvent.click(getByRole('button', { name: 'Manage in Budget →' }))
+    fireEvent.click(getByRole('button', { name: 'Manage in Budget' }))
     expect(mockNavigate).toHaveBeenCalledWith(
       expect.objectContaining({ to: '/plan', search: { sub: 'budget' } }),
     )
@@ -119,7 +119,7 @@ describe('Funding tab — Manage in Budget deep-link', () => {
         m={m}
       />,
     )
-    fireEvent.click(getByRole('button', { name: 'Manage in Budget →' }))
+    fireEvent.click(getByRole('button', { name: 'Manage in Budget' }))
     expect(mockNavigate).toHaveBeenCalledWith(
       expect.objectContaining({ to: '/plan', search: { sub: 'budget' } }),
     )

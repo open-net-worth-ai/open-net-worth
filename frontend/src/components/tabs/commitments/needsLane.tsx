@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import { Button, Money } from '../../ui'
 import { fBase } from '../../../utils/format'
 import { BellIcon, CheckIcon, LinkIcon, TaskIcon } from './icons'
+import { ArrowDown } from '../../../ui/icons'
 
 export interface NeedItem {
   key: string
@@ -139,7 +140,7 @@ export function NeedsLane({
             'Show less'
           ) : (
             <>
-              Show {items.length - CAP} more <span aria-hidden="true">↓</span>
+              Show {items.length - CAP} more <ArrowDown size={12} aria-hidden="true" />
             </>
           )}
         </button>
