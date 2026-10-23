@@ -2215,23 +2215,33 @@ body.hide-amounts .money * {
   .btn-primary {
     font-size: 14px;
     font-weight: 600;
-    color: var(--ink-on-accent);
-    background: var(--primary);
+    color: var(--ink-on-cta);
+    background: var(--cta);
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 11px 24px;
     cursor: pointer;
     font-family: inherit;
-    transition: opacity 0.15s;
+    transition:
+      background 0.15s,
+      opacity 0.15s;
   }
   @media (hover: hover) {
-    .btn-primary:hover {
-      opacity: 0.87;
+    .btn-primary:hover:not(:disabled) {
+      background: var(--cta-hover);
     }
   }
+  /* A faded ink fill reads as "almost ready", so an unavailable CTA drops to a quiet grey
+     well instead. A loading one (aria-busy) keeps its ink so the spinner stays legible. */
   .btn-primary:disabled {
-    opacity: 0.5;
     cursor: not-allowed;
+  }
+  .btn-primary:disabled:not([aria-busy]) {
+    color: var(--faint);
+    background: var(--bg-2);
+  }
+  .btn-primary[aria-busy]:disabled {
+    opacity: 0.7;
   }
   .btn-danger {
     font-size: 14px;
@@ -2239,7 +2249,7 @@ body.hide-amounts .money * {
     color: var(--ink-on-accent);
     background: var(--bad);
     border: none;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 11px 24px;
     cursor: pointer;
     font-family: inherit;
@@ -2260,7 +2270,7 @@ body.hide-amounts .money * {
     color: var(--text);
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     padding: 11px 24px;
     cursor: pointer;
     font-family: inherit;
@@ -5764,7 +5774,7 @@ body.hide-amounts .money * {
   .ui-btn--sm {
     font-size: var(--text-sm);
     padding: var(--space-2) var(--space-5);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
   }
   .ui-btn--ghost {
     background: none;
@@ -6457,7 +6467,7 @@ body.hide-amounts .money * {
   .ui-btn--dense {
     font-size: 12.5px;
     padding: 8px 13px;
-    border-radius: 10px;
+    border-radius: var(--radius-lg);
     gap: 7px;
     transition:
       color 0.14s,
@@ -6479,19 +6489,18 @@ body.hide-amounts .money * {
   .ui-btn--dense.btn-secondary:disabled {
     opacity: 0.4;
   }
-  /* dense primary = accent fill + 1px accent border, color-mix hover. */
+  /* dense primary = CTA fill + 1px CTA border (the border keeps its height equal to the
+     bordered secondary beside it). */
   .ui-btn--dense.btn-primary {
-    border: 1px solid var(--accent);
+    border: 1px solid var(--cta);
   }
   @media (hover: hover) {
     .ui-btn--dense.btn-primary:hover:not(:disabled) {
-      background: color-mix(in srgb, var(--accent) 86%, var(--ink-on-accent));
-      border-color: var(--hover-line);
-      opacity: 1;
+      border-color: var(--cta-hover);
     }
   }
-  .ui-btn--dense.btn-primary:disabled {
-    opacity: 0.45;
+  .ui-btn--dense.btn-primary:disabled:not([aria-busy]) {
+    border-color: var(--line);
   }
   /* dense danger = tinted --bad fill on --bg-2, 10px radius, --bad-light text. */
   .ui-btn--dense.btn-danger {

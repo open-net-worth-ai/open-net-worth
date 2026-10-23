@@ -711,7 +711,7 @@
   align-items: center;
   justify-content: center;
   gap: 7px;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   font-size: 12.5px;
   font-weight: 600;
   padding: 7px 13px;
@@ -725,12 +725,12 @@
     border-color 0.12s ease;
 }
 .onw-settings .rd-btn.primary {
-  background: var(--accent);
-  color: var(--ink-on-accent);
+  background: var(--cta);
+  color: var(--ink-on-cta);
 }
 @media (hover: hover) {
-  .onw-settings .rd-btn.primary:hover {
-    background: color-mix(in srgb, var(--accent) 88%, #fff);
+  .onw-settings .rd-btn.primary:hover:not(:disabled) {
+    background: var(--cta-hover);
   }
 }
 .onw-settings .rd-btn.secondary {
@@ -770,10 +770,15 @@
   opacity: 0.45;
   cursor: not-allowed;
 }
+.onw-settings .rd-btn.primary:disabled {
+  opacity: 1;
+  color: var(--faint);
+  background: var(--bg-2);
+}
 .onw-settings .rd-btn.xs {
   padding: 4px 9px;
   font-size: 11.5px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
 }
 
 /* ── badges ───────────────────────────────────────────────────────────────── */
