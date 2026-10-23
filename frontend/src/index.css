@@ -8847,6 +8847,14 @@ body.hide-amounts .money * {
     gap: var(--space-3);
     flex: none;
   }
+  /* A header CTA is one size on every screen — the 30px Automations / Connectors toolbar button. */
+  .ui-page-header__actions .ui-btn--sm {
+    height: 30px;
+    box-sizing: border-box;
+    padding: 0 13px;
+    gap: 7px;
+    font-size: 12.5px;
+  }
   @media (max-width: 640px) {
     /* Actions drop below the title on phones. */
     .ui-page-header {

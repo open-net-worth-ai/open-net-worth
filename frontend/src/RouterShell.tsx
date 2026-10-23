@@ -1281,10 +1281,12 @@ function RouterShellInner() {
               aria-label={hidden ? 'Show amounts' : 'Hide amounts'}
             >
               <span className="sidebar-icon">
+                {/* The icon is the current STATE (the collapsed rail has no label to say
+                    which action it is) — the label and tooltip carry the action. */}
                 {hidden ? (
-                  <Eye size={16} strokeWidth={1.6} aria-hidden="true" />
-                ) : (
                   <EyeOff size={16} strokeWidth={1.6} aria-hidden="true" />
+                ) : (
+                  <Eye size={16} strokeWidth={1.6} aria-hidden="true" />
                 )}
               </span>
               <span className="sidebar-label">{hidden ? 'Show amounts' : 'Hide amounts'}</span>

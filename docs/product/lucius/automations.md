@@ -145,6 +145,9 @@ as **Paused**, which is only ever your choice. To run a finished one again, choo
 again** and give it a new date or schedule. **Clear finished** deletes all of them, with their run
 history, after you confirm.
 
+**Sort by** orders your list by **Next run**, **Recently run**, **Cost this month** or **Name**
+(A→Z). Paused Automations always sit at the bottom, whatever the sort.
+
 ## Approval mode
 
 Each Automation has its own approval mode. Inside a run, it decides — not the mode of any chat.

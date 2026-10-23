@@ -62,7 +62,7 @@ export function AutomationMenu({
               type="button"
               role="menuitem"
               disabled={item.disabled}
-              className={`rd-kebab-item${item.danger ? ' danger' : ''}${item.icon ? ' a3-menu-row' : ''}`}
+              className={`rd-kebab-item${item.danger ? ' danger' : ''}${item.icon || item.checked !== undefined ? ' a3-menu-row' : ''}`}
               onClick={(event) => {
                 event.stopPropagation()
                 setOpen(false)

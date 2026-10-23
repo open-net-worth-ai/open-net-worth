@@ -229,7 +229,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 0 12px;
+  padding: 0 13px;
   border: none;
   border-radius: var(--radius-lg);
   color: var(--ink-on-cta);
@@ -284,10 +284,13 @@
   }
 }
 .a3-menu-check {
-  width: 10px;
+  width: 14px;
+  height: 14px;
   flex: none;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  color: var(--ink);
 }
 .a3-empty {
   padding: 38px 8px;

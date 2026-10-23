@@ -26,7 +26,8 @@ wherever this page says <kbd>Ctrl</kbd>.
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>/</kbd> | Show the keyboard shortcuts. |
 
 Hide amounts stays on after a reload until you turn it off. You can also switch it from the
-sidebar footer (**Hide amounts** / **Show amounts**).
+sidebar footer (**Hide amounts** / **Show amounts**). Its eye icon shows the current state: an
+open eye while amounts are showing, a crossed-out eye while they're hidden.
 
 ## In an account's register
 

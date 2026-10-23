@@ -17,7 +17,14 @@ const FIRST_AUTOMATION_MESSAGE =
   'Help me set up a useful automation, like logging transactions from my bank emails or a ' +
   'daily briefing. Ask me one thing at a time.'
 
-export type AutomationSort = 'next' | 'recent' | 'cost'
+export type AutomationSort = 'next' | 'recent' | 'cost' | 'name'
+
+const SORT_LABELS: Record<AutomationSort, string> = {
+  next: 'Next run',
+  recent: 'Recently run',
+  cost: 'Cost this month',
+  name: 'Name',
+}
 
 function parkedRank(automation: Automation): number {
   if (automation.status === 'completed') return 2
@@ -50,6 +57,9 @@ export function filterAndSortAutomations(
     if (parked !== 0) return parked
     if (sort === 'recent') return timestamp(right.last_run_at) - timestamp(left.last_run_at)
     if (sort === 'cost') return stat(right, 'cost_this_month') - stat(left, 'cost_this_month')
+    if (sort === 'name') {
+      return left.name.localeCompare(right.name, undefined, { sensitivity: 'base', numeric: true })
+    }
     return (
       timestamp(left.next_run_at, Number.POSITIVE_INFINITY) -
       timestamp(right.next_run_at, Number.POSITIVE_INFINITY)
@@ -125,14 +135,7 @@ export function AutomationList({
                 aria-hidden="true"
               />
               <span className="a3-toolbar-label">
-                Sort by{' '}
-                <b>
-                  {sort === 'next'
-                    ? 'Next run'
-                    : sort === 'recent'
-                      ? 'Recently run'
-                      : 'Cost this month'}
-                </b>
+                Sort by <b>{SORT_LABELS[sort]}</b>
               </span>
               <ChevronDown
                 className="a3-toolbar-chevron"
@@ -142,19 +145,11 @@ export function AutomationList({
               />
             </>
           }
-          items={[
-            { label: 'Next run', checked: sort === 'next', onSelect: () => onSortChange('next') },
-            {
-              label: 'Recently run',
-              checked: sort === 'recent',
-              onSelect: () => onSortChange('recent'),
-            },
-            {
-              label: 'Cost this month',
-              checked: sort === 'cost',
-              onSelect: () => onSortChange('cost'),
-            },
-          ]}
+          items={(Object.keys(SORT_LABELS) as AutomationSort[]).map((key) => ({
+            label: SORT_LABELS[key],
+            checked: sort === key,
+            onSelect: () => onSortChange(key),
+          }))}
         />
         <AutomationMenu
           triggerClassName="a3-new-button"
@@ -162,7 +157,7 @@ export function AutomationList({
           label="New automation"
           trigger={
             <>
-              <Plus className="a3-toolbar-ic" size={13} aria-hidden="true" />
+              <Plus className="a3-toolbar-ic" size={14} aria-hidden="true" />
               <span className="a3-toolbar-label">New automation</span>
               <ChevronDown
                 className="a3-toolbar-chevron"

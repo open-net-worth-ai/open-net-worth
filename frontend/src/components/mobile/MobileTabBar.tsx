@@ -364,9 +364,9 @@ function MobileMoreSheet({
               {actionRow(
                 'privacy',
                 amountsHidden ? (
-                  <Eye size={17} strokeWidth={1.6} aria-hidden="true" />
-                ) : (
                   <EyeOff size={17} strokeWidth={1.6} aria-hidden="true" />
+                ) : (
+                  <Eye size={17} strokeWidth={1.6} aria-hidden="true" />
                 ),
                 amountsHidden ? 'Show amounts' : 'Hide amounts',
                 onTogglePrivacy,
