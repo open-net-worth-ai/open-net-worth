@@ -752,25 +752,15 @@ def _ensure_acquire_position(change: dict) -> dict | None:
     if not inst:
         return None
     from backend.db.account_store import AccountStore
-    from backend.db.grant_store import GrantStore
     from backend.services import positions as positions_service
-    from backend.services.positions import vesting_state_of
 
     if not AccountStore().find_by_id(acct_id):
         return None
-    active = positions_service.find_active_liquid_position(inst_id, acct_id)
-    if active:
-        return active
-    grant_owned: set[str] = set()
-    for grant in GrantStore().all():
-        for key in ("locked_position_id", "pending_position_id"):
-            if grant.get(key):
-                grant_owned.add(grant[key])
-    for pos in PositionStore().query_positions(instrument_id=inst_id, account_id=acct_id):
-        if pos["id"] in grant_owned:
-            continue
-        if vesting_state_of(pos) == "vested":
-            return pos
+    existing = positions_service.find_active_liquid_position(
+        inst_id, acct_id
+    ) or positions_service.find_sold_out_liquid_position(inst_id, acct_id)
+    if existing:
+        return existing
     return positions_service.add_position(
         instrument_id=inst_id,
         account_id=acct_id,

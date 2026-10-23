@@ -114,7 +114,9 @@ def test_add_refuses_a_hand_made_unvested_position(isolated):
     assert PositionStore().all() == []
 
 
-def test_add_allows_reopen_after_position_closed(isolated):
+def test_add_reopens_the_position_after_it_closed(isolated):
+    """A sold-out holding's buy lands on its own closed row, never a sibling — the rebuy
+    keeps its sales and dividends (2026-10-24)."""
     inst = _seed_instrument()
     acc = _seed_account()
     first = _add(inst, acc)
@@ -135,7 +137,8 @@ def test_add_allows_reopen_after_position_closed(isolated):
 
     reopened = _add(inst, acc, quantity=3)
     assert reopened["ok"] is True
-    assert reopened["position_id"] != first["position_id"]
+    assert reopened["position_id"] == first["position_id"]
+    assert reopened["reopened"] is True
 
 
 def test_add_allows_same_instrument_in_other_account(isolated):

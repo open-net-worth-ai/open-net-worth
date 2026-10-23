@@ -1,4 +1,4 @@
-"""A sell-out then rebuy keeps the holding's history on the new position (synthetic data only).
+"""A book split by a sell-out then rebuy keeps its history on the new position (synthetic data).
 
 Live 2026-10-24: 60 shares were sold and 50 bought back minutes later at the same broker. The
 rebuy is a real add (the duplicate-holding guard skips a closed record), so it minted a second
@@ -85,12 +85,37 @@ def _dividend(position_id, paid_at):
     assert res.get("ok"), res
 
 
+def _legacy_rebuy(old_id, qty, cost, acquired_at):
+    """The split book an add left before it reopened sold-out rows (2026-10-24): a fresh
+    position beside the closed one, its buy lot on the new row."""
+    from backend.services import lots
+    from backend.services import positions as ps
+
+    old = PositionStore().find_by_id(old_id)
+    new = ps.add_position(
+        instrument_id=old["instrument_id"], account_id=old["account_id"], cost_currency="SGD"
+    )
+    res = lots.apply_lot_change(
+        {
+            "type": "acquire",
+            "position_id": new["id"],
+            "quantity": qty,
+            "unit_cost": cost,
+            "cost_currency": "SGD",
+            "acquired_at": acquired_at,
+            "kind": "buy",
+        }
+    )
+    assert not res.get("error"), res
+    return new["id"]
+
+
 def _sold_then_rebought():
     inst = _instrument()
     old = _add(inst["id"], 10, 100.0, "2026-06-01")
     _dividend(old, "2026-07-01")
     _sell_all(old, 10, 150.0, "2026-10-16")
-    new = _add(inst["id"], 8, 150.0, "2026-10-16")
+    new = _legacy_rebuy(old, 8, 150.0, "2026-10-16")
     assert new != old  # the rebuy is its own position — the case this file covers
     return inst, old, new
 
