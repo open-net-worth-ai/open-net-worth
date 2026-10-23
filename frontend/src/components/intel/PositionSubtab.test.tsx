@@ -251,7 +251,9 @@ describe('PositionSubtab', () => {
     )
     await waitFor(() =>
       expect(
-        mockAuthFetch.mock.calls.some(([u]) => u === '/api/realized-pnl?position_id=pos-1'),
+        mockAuthFetch.mock.calls.some(
+          ([u]) => u === '/api/realized-pnl?position_id=pos-1&with_predecessors=true',
+        ),
       ).toBe(true),
     )
     expect(await findByText('2 disposals')).toBeTruthy()

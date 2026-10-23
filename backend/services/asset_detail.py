@@ -497,21 +497,33 @@ def _lot_rows(position_id: str) -> list[dict]:
     return lots_for_position(position_id)
 
 
-def _realized_rows(position_id: str, account_names: dict[str, str], base: str) -> list[dict]:
+def _realized_rows(
+    position_id: str, account_names: dict[str, str], base: str, with_predecessors: bool = False
+) -> list[dict]:
     """Realized disposals for ONE liquid position, tagged with account_name (looked up by the
     event's own account_id) — realized_pnl doesn't hydrate that label itself, and a merged
     multi-account read can no longer imply the account from a single position_id."""
-    events = realized_pnl(position_id=position_id, base=base).get("events") or []
+    events = (
+        realized_pnl(position_id=position_id, base=base, with_predecessors=with_predecessors).get(
+            "events"
+        )
+        or []
+    )
     return [
         {**ev, "account_name": account_names.get(ev.get("account_id") or "", "")} for ev in events
     ]
 
 
-def _income_rows(position_id: str, base: str) -> list[dict]:
+def _income_rows(position_id: str, base: str, with_predecessors: bool = False) -> list[dict]:
     """Dividend/interest/distribution income for ONE liquid position — already hydrated with
     account_name by income_summary's own label join (keyed off the event's own account_id)."""
     return (
-        income_summary(position_id=position_id, base=base, include_event_labels=True).get("events")
+        income_summary(
+            position_id=position_id,
+            base=base,
+            include_event_labels=True,
+            with_predecessors=with_predecessors,
+        ).get("events")
         or []
     )
 
@@ -770,12 +782,15 @@ def _position_block(inst: dict, rows: list[dict], fx: dict, base: str) -> dict |
     # single-position copy there instead (unchanged, and cheaper than computing this for data
     # nobody reads). `position_ids` here deliberately excludes the locked/unvested bucket's own
     # position — a disposal/dividend on the unvested grant must never bleed into the sellable
-    # holding's tables (mirrors LotsPanel's own position_id-not-instrument_id scoping).
+    # holding's tables (mirrors LotsPanel's own position_id-not-instrument_id scoping). Each
+    # live position brings its sold-out predecessors at its own account, as LotsPanel's does.
     realized: list[dict] = []
     income: list[dict] = []
     if position_id is None and len(position_ids) > 1:
-        realized = [ev for pid in position_ids for ev in _realized_rows(pid, account_names, base)]
-        income = [ev for pid in position_ids for ev in _income_rows(pid, base)]
+        realized = [
+            ev for pid in position_ids for ev in _realized_rows(pid, account_names, base, True)
+        ]
+        income = [ev for pid in position_ids for ev in _income_rows(pid, base, True)]
 
     return {
         "held": True,

@@ -100,8 +100,9 @@ export function LotsPanel({
     let alive = true
     // Scope realized history to THIS position — not the instrument — so a disposal never
     // bleeds onto a sibling position of the same instrument (e.g. the unvested-grant row
-    // showing a sale that came from the sellable holding).
-    const params = new URLSearchParams({ position_id: positionId })
+    // showing a sale that came from the sellable holding). with_predecessors keeps the sale of
+    // a holding sold out and rebought at the same account, which the rebuy left on its old row.
+    const params = new URLSearchParams({ position_id: positionId, with_predecessors: 'true' })
     authFetch(`/api/realized-pnl?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: RealizedPnl) => {
@@ -121,9 +122,9 @@ export function LotsPanel({
   useEffect(() => {
     if (merged || !positionId) return
     let alive = true
-    // Scoped to THIS position, same as lots/realized above — a position-scoped path, not a
-    // query param (income.py's GET /api/positions/{id}/income).
-    authFetch(`/api/positions/${positionId}/income`)
+    // Scoped to THIS position (and its sold-out predecessors), same as realized above — a
+    // position-scoped path, not a query param (income.py's GET /api/positions/{id}/income).
+    authFetch(`/api/positions/${positionId}/income?with_predecessors=true`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: IncomeSummary) => {
         if (alive) {

@@ -78,8 +78,11 @@ export async function fetchIncome(): Promise<IncomeSummary> {
 
 /** Income summary scoped to ONE position (asset detail's Position tab / "Your Position" rail) —
  *  same shape as fetchIncome, filtered server-side to just this holding's events. */
+/** A position's received income, its sold-out-then-rebought predecessors included. */
 export async function fetchPositionIncome(positionId: string): Promise<IncomeSummary> {
-  return asJson<IncomeSummary>(await authFetch(`/api/positions/${positionId}/income`))
+  return asJson<IncomeSummary>(
+    await authFetch(`/api/positions/${positionId}/income?with_predecessors=true`),
+  )
 }
 
 /** Annualized forward-income estimate (P2-INV2). An estimate, not a dated schedule. */

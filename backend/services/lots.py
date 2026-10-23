@@ -1603,6 +1603,7 @@ def realized_pnl(
     account_id: str | None = None,
     position_id: str | None = None,
     base: str | None = None,
+    with_predecessors: bool = False,
 ) -> dict:
     """Realized gains over a date range / instrument / account / position. Walks the
     realized-event ledger. Each event's base figure follows the historical-rate lock
@@ -1616,17 +1617,25 @@ def realized_pnl(
     fully-sold holding — which has left the live portfolio — still labels by name, not its
     raw UUID).
 
+    `with_predecessors` widens a `position_id` read to the holding's sold-out predecessors
+    (`position_lineage.history_position_ids`) — a sell-out then rebuy keeps its sale.
+
     AC-14: an empty ledger returns [] + realized_total_base 0.0 (no crash / div-by-zero).
     """
+    from backend.services.position_lineage import history_position_ids
+
     base = (base or base_currency()).upper()
     rates = _load_rates()
+    lineage = history_position_ids(position_id) if with_predecessors and position_id else None
     events = RealizedEventStore().query_events(
         date_from=date_from,
         date_to=date_to,
         instrument_id=instrument_id,
         account_id=account_id,
-        position_id=position_id,
+        position_id=None if lineage else position_id,
     )
+    if lineage:
+        events = [ev for ev in events if ev.get("position_id") in lineage]
 
     # Hydrate instrument name/symbol HERE so the read is self-sufficient: a fully-sold
     # holding (qty→0) drops out of the live portfolio, so the UI can no longer resolve its

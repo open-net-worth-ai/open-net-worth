@@ -121,6 +121,7 @@ def income_summary(
     position_id: str | None = None,
     base: str | None = None,
     include_event_labels: bool = False,
+    with_predecessors: bool = False,
 ) -> dict:
     """Income over a date range / instrument / account / position. Walks the income-event
     ledger and RECOMPUTES each event's base figure from its native net (gross − tax) +
@@ -131,16 +132,24 @@ def income_summary(
 
     An event whose currency has no FX rate degrades honestly: its ``base_amount`` is None, it
     is left out of every base total/breakdown, and ``base_totals_available`` is False with the
-    currency named in ``missing_fx_currencies`` — never the native figure relabelled as base."""
+    currency named in ``missing_fx_currencies`` — never the native figure relabelled as base.
+
+    ``with_predecessors`` widens a ``position_id`` read to the holding's sold-out predecessors,
+    as ``lots.realized_pnl`` does."""
+    from backend.services.position_lineage import history_position_ids
+
     base = (base or base_currency()).upper()
     rates = lots_service._load_rates()
+    lineage = history_position_ids(position_id) if with_predecessors and position_id else None
     rows = events.query_events(
         date_from=date_from,
         date_to=date_to,
         instrument_id=instrument_id,
         account_id=account_id,
-        position_id=position_id,
+        position_id=None if lineage else position_id,
     )
+    if lineage:
+        rows = [r for r in rows if r.get("position_id") in lineage]
 
     today = user_today()
     trailing_cutoff = (today.fromordinal(today.toordinal() - TRAILING_DAYS)).isoformat()

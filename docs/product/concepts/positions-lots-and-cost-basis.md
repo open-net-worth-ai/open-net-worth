@@ -102,6 +102,10 @@ the **Not a sale** option.
   holding periods shows its term as **Mixed**.
 - Click a sale under **Realized history** to edit it. The app undoes the old sale and records
   the new one in one step, so lots, gains and cash stay in agreement.
+- Sold everything and bought back later at the same account? The holding keeps its past:
+  **Realized history**, **Realized P&L**, **Dividends** and **Dividends received** include the
+  sales and payouts from before you sold out. **Acquisition lots** lists only the lots you've
+  bought since.
 - An older lot whose purchase date was never known shows an empty **Acquired date** when you
   edit it. Saving a note or cost leaves the date unknown rather than setting it to today.
 

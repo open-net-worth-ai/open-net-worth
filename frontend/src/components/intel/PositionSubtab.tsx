@@ -72,7 +72,7 @@ export function PositionSubtab({
     // below instead of fetched.
     if (!positionId) return
     let alive = true
-    const params = new URLSearchParams({ position_id: positionId })
+    const params = new URLSearchParams({ position_id: positionId, with_predecessors: 'true' })
     authFetch(`/api/realized-pnl?${params.toString()}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: RealizedPnl) => {
