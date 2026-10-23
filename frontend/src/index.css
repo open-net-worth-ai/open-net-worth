@@ -630,11 +630,17 @@
     max-width: none;
   }
   /* List pages (Automations, Skills, Inbox, Connectors) read as a centred column, not a
-     full-width spread: side space grows with the window and the column caps at 960px. Phones
-     keep the shared 16px gutter: the max-width: 640px block below sets .app-layout's padding
-     later in this file, so it wins. */
+     full-width spread: the column caps at 960px and side space grows with the room the PAGE
+     has — not the window, which still counted the rail and the docked Lucius panel and left a
+     narrow page boxed in. Below ~800px of page it is the shared 24px gutter and nothing more,
+     reaching 96px at ~1400px. Phones keep the shared 16px gutter: the max-width: 640px block
+     below sets .app-layout's padding later in this file, so it wins. The container is scoped
+     to these tabs so no other tab's unnamed @container query starts matching .app-main. */
+  .app-main:has(> .app-layout--narrow) {
+    container-type: inline-size;
+  }
   .app-layout--narrow {
-    --narrow-gutter: clamp(24px, 6vw, 96px);
+    --narrow-gutter: clamp(24px, calc(12cqi - 72px), 96px);
     max-width: calc(960px + 2 * var(--narrow-gutter));
     padding-inline: var(--narrow-gutter);
   }
