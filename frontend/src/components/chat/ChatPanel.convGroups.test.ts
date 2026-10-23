@@ -32,17 +32,14 @@ describe('conversationGroups', () => {
     ])
   })
 
-  it('lists captures with the chats', () => {
-    const rows = [
+  it('lists captures in a section of their own, never among the chats', () => {
+    const groups = conversationGroups([
       conv({ id: 'chat', title: 'What did I spend on food?' }),
       conv({ id: 'cap', title: 'Capture · Citi: $12.40 at Blue Bottle', origin: 'capture' }),
-    ]
-    const ids = conversationGroups(rows)
-      .find((g) => g.key === 'chat')!
-      .items.map((c) => c.id)
-      .sort()
+    ])
+    const ids = (key: string) => groups.find((g) => g.key === key)?.items.map((c) => c.id)
 
-    expect(ids).toEqual(['cap', 'chat'])
+    expect([ids('chat'), ids('capture')]).toEqual([['chat'], ['cap']])
   })
 
   it('puts chats first — they are the ones you came here to switch between', () => {

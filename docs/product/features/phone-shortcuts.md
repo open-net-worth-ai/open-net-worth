@@ -260,6 +260,6 @@ The reply carries Lucius's own summary in `reply`, which is what the iPhone shor
   your AI bill; wait and retry.
 - **"Already logged" for a purchase that isn't**: your `ref` repeats across payments. See the capture API section above.
 - **What did Lucius do with a capture?** Every capture keeps its conversation: the text that came
-  in, what Lucius booked, and why. Find it in the Lucius **Chats** list, under **Capture · …**.
+  in, what Lucius booked, and why. Find it in the Lucius **Captures** list, under **Capture · …**.
 - **It booked to the wrong account**: name the card the way your account is named, e.g.
   `… with the Meridian Multiplier card`, or rename the account to match the card.

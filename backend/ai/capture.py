@@ -149,7 +149,7 @@ async def run_capture(
         prompt += _REF_CLAUSE.format(source=source, ref=ref)
 
     # The conversation is KEPT — it is the record of what came in and what Lucius booked —
-    # but stays out of the chat list unless the person asks to see background conversations.
+    # but is listed under Captures, never among the chats you switch between.
     upsert_session_meta(session_id, title=capture_title(text), origin="capture")
 
     try:

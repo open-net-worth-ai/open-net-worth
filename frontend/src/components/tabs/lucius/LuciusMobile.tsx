@@ -11,7 +11,7 @@
 
 import { useEffect, useState } from 'react'
 import { ChatPanel, conversationGroups, conversationWhen } from '../../chat/ChatPanel'
-import { ConversationMenu, shortWhen } from '../../chat/ConversationMenu'
+import { ConversationMenu, shortWhen, type ConversationKind } from '../../chat/ConversationMenu'
 import { ConversationBrowser } from '../../chat/ConversationBrowser'
 import { useLuciusChat } from '../../../state/luciusChat'
 import { FolderLock, Menu, SquarePen } from '../../../ui/icons'
@@ -70,7 +70,7 @@ export function LuciusMobile({
     return () => window.removeEventListener('lx-dock-open', showChat)
   }, [setDocumentsFlag])
   const [vaultArtifact, setVaultArtifact] = useState<ArtifactRef | null>(null)
-  const [browsingConvs, setBrowsingConvs] = useState<'chat' | 'automation' | null>(null)
+  const [browsingConvs, setBrowsingConvs] = useState<ConversationKind | null>(null)
   const groups = conversationGroups(conversations)
   // Same resolution as the docked panel's header (ChatPanel's `activeConversation`), so the
   // two surfaces never name different conversations. An unpersisted draft has no row, so the

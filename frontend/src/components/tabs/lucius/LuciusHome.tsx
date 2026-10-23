@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChatPanel, conversationGroups, conversationWhen } from '../../chat/ChatPanel'
 import { ConversationBrowser } from '../../chat/ConversationBrowser'
+import type { ConversationKind } from '../../chat/ConversationMenu'
 import { LuciusHistorySidebar } from './LuciusHistorySidebar'
 import { LuciusHistoryHoverList } from './LuciusHistoryHoverList'
 import { ArtifactSidePanel } from './ArtifactSidePanel'
@@ -298,7 +299,7 @@ export function LuciusHome({
     },
   })
 
-  const [browsingConvs, setBrowsingConvs] = useState<'chat' | 'automation' | null>(null)
+  const [browsingConvs, setBrowsingConvs] = useState<ConversationKind | null>(null)
   const groups = conversationGroups(conversations)
 
   // A `persist: false` conversation is never added to `conversations` (that's the whole

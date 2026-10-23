@@ -26,7 +26,7 @@ import { followsBottom, newScrollIntent, useChatScrollPin } from '../../utils/ch
 import { fUsd, sumSessionCost } from '../../utils/costFormat'
 import { fDateTime } from '../../utils/format'
 import { ConversationBrowser } from './ConversationBrowser'
-import { ConversationMenu, shortWhen } from './ConversationMenu'
+import { ConversationMenu, shortWhen, type ConversationKind } from './ConversationMenu'
 import {
   TRANSCRIPT_WINDOW_INITIAL,
   TRANSCRIPT_WINDOW_STEP,
@@ -53,7 +53,7 @@ import { LuciusHomeStart } from '../intro/LuciusHomeStart'
 import { dataChangeTurns } from './dataChangeTurns'
 import { takeSendIntent } from '../../state/luciusSendIntent'
 import { useNavigate } from '@tanstack/react-router'
-import type { ConversationMeta } from '../../hooks/useConversations'
+import { isBackgroundConversation, type ConversationMeta } from '../../hooks/useConversations'
 import { ChevronRight, Eraser, FolderLock, Menu, SquarePen } from '../../ui/icons'
 import { ModelPicker, Skeleton } from '../ui'
 import { ConversationApprovalPicker } from './ConversationApprovalPicker'
@@ -182,7 +182,11 @@ export function conversationGroups(conversations: ConversationMeta[]) {
   // ownership claim ('automation' — a RUNNER, and a security gate reads it), while `channel`
   // is the TRANSPORT the human is on. In-app is the absence of both — it needs no name of
   // its own, and naming it 'web' would be wrong the moment this runs in the desktop app.
-  const chats = conversations.filter((c) => !c.source && !c.channel)
+  const inApp = conversations.filter((c) => !c.source && !c.channel)
+  // A capture is in-app too, but nobody typed into it — a dozen a day buried the chats you
+  // actually switch between, so they get a section of their own.
+  const captures = inApp.filter(isBackgroundConversation)
+  const chats = inApp.filter((c) => !isBackgroundConversation(c))
   return [
     {
       key: 'chat' as const,
@@ -195,6 +199,12 @@ export function conversationGroups(conversations: ConversationMeta[]) {
       label: 'Automation runs',
       items: [...runs].sort(byRecency),
       total: runs.length,
+    },
+    {
+      key: 'capture' as const,
+      label: 'Captures',
+      items: [...captures].sort(byRecency),
+      total: captures.length,
     },
   ].filter((group) => group.items.length > 0)
 }
@@ -431,7 +441,7 @@ export function ChatPanel({
   // with, so "View all runs" lands on runs rather than making you pick again.
   const [menuOpen, setMenuOpen] = useState(false)
   const [documentsOpen, setDocumentsOpen] = useState(false)
-  const [browsingConvs, setBrowsingConvs] = useState<'chat' | 'automation' | null>(null)
+  const [browsingConvs, setBrowsingConvs] = useState<ConversationKind | null>(null)
   // One ordering for the header, the sidebar and the browser — they disagreed for a build,
   // and a switcher that orders its rows differently from the list behind it is worse than
   // either ordering on its own.

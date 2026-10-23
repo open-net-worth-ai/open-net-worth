@@ -14,14 +14,17 @@ import {
   ListChecks,
   MessageSquare,
   SquarePen,
+  Zap,
 } from '../../../ui/icons'
 import {
   ConversationRow,
   ConversationIcon,
   groupByAge,
+  RECENT_CAPTURES,
   selectVisibleRows,
   shortWhen,
   sortWithinSection,
+  type ConversationKind,
 } from '../../chat/ConversationMenu'
 import type { ConversationMeta } from '../../../hooks/useConversations'
 import type { ConvRowStatus } from '../../../types/chat'
@@ -42,7 +45,7 @@ export function LuciusHistorySidebar({
   onMarkAllRead,
   onCollapse,
 }: {
-  groups: { key: 'chat' | 'automation'; items: ConversationMeta[]; total: number }[]
+  groups: { key: ConversationKind; items: ConversationMeta[]; total: number }[]
   activeId: string
   statusFor: (id: string) => ConvRowStatus
   onNewChat: () => void
@@ -50,21 +53,24 @@ export function LuciusHistorySidebar({
   onRename: (id: string, title: string) => void
   onDelete: (id: string) => void
   onStop: (id: string) => void
-  onViewAll: (kind: 'chat' | 'automation') => void
+  onViewAll: (kind: ConversationKind) => void
   onMarkAllRead: (ids: string[]) => void
   onCollapse: () => void
 }) {
   const [editingId, setEditingId] = useState<string | null>(null)
 
   const runs = groups.find((g) => g.key === 'automation')?.items ?? []
+  const captures = groups.find((g) => g.key === 'capture')?.items ?? []
   const chats = groups.find((g) => g.key === 'chat')?.items ?? []
   const visibleRuns = sortWithinSection(selectVisibleRows(runs, statusFor, RECENT_RUNS), statusFor)
+  const visibleCaptures = selectVisibleRows(captures, statusFor, RECENT_CAPTURES)
   const visibleChats = selectVisibleRows(chats, statusFor, RECENT_CHATS)
   // Every unread row in the section — not just the ones the rail shows. A run you never
   // open is otherwise unread forever, and "View all runs" is the only other way to clear it.
   const unreadIds = (items: ConversationMeta[]) =>
     items.filter((c) => ['done', 'failed'].includes(statusFor(c.id))).map((c) => c.id)
   const unreadRuns = unreadIds(runs)
+  const unreadCaptures = unreadIds(captures)
   const unreadChats = unreadIds(chats)
   const markAllRead = (ids: string[]) =>
     ids.length > 0 && (
@@ -142,6 +148,29 @@ export function LuciusHistorySidebar({
               onClick={() => onViewAll('automation')}
             >
               View all runs
+            </button>
+          </div>
+        )}
+
+        {captures.length > 0 && (
+          <div className="conv-menu-sec">
+            <div className="conv-menu-sec-h">
+              <Zap size={14} />
+              <span>Captures</span>
+              {markAllRead(unreadCaptures)}
+              <button
+                type="button"
+                className="conv-menu-viewall"
+                onClick={() => onViewAll('capture')}
+                aria-label="View all captures"
+                title="View all captures"
+              >
+                <ChevronRight size={14} />
+              </button>
+            </div>
+            {visibleCaptures.map(row)}
+            <button type="button" className="conv-menu-more" onClick={() => onViewAll('capture')}>
+              View all captures
             </button>
           </div>
         )}
