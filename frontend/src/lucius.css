@@ -1382,7 +1382,7 @@
     border: 1px solid var(--line-strong);
     /* OFF track is --line, not --surface2: the field it sits on IS --surface2 now, so the old
        fill left a surface-on-surface pill in bright themes with only its outline to read. */
-    background: var(--line);
+    background: var(--line-strong);
     position: relative;
     cursor: pointer;
     padding: 0;
@@ -1391,8 +1391,8 @@
       border-color 0.15s;
   }
   .lx-switch.on {
-    background: var(--ink);
-    border-color: var(--ink);
+    background: var(--primary);
+    border-color: var(--primary);
   }
   .lx-switch-knob {
     position: absolute;
@@ -1406,7 +1406,6 @@
     transition: transform 0.16s cubic-bezier(0.32, 0.72, 0, 1);
   }
   .lx-switch.on .lx-switch-knob {
-    background: var(--bg);
     transform: translateX(13px);
   }
   .lx-scope.off .lx-scope-ic,

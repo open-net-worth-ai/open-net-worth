@@ -2096,12 +2096,12 @@ body.hide-amounts .money * {
     width: 2rem;
     height: 1.125rem;
     border-radius: var(--radius-pill);
-    background: var(--line);
+    background: var(--line-strong);
     transition: background 0.15s;
     flex-shrink: 0;
   }
   .ui-switch input:checked + .ui-switch__track {
-    background: var(--ink);
+    background: var(--accent);
   }
   .ui-switch__thumb {
     position: absolute;
@@ -2110,14 +2110,17 @@ body.hide-amounts .money * {
     width: 0.875rem;
     height: 0.875rem;
     border-radius: 50%;
-    background: var(--ink);
+    /* Every switch shares one knob: white with a soft shadow, on or off. */
+    background: var(--ink-on-accent);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
     transition: transform 0.15s;
   }
   .ui-switch input:checked + .ui-switch__track .ui-switch__thumb {
     transform: translateX(0.875rem);
-    /* The active track is ink, so its thumb is the page background: a --ink thumb
-     would vanish into it in either theme. */
-    background: var(--bg);
+    /* The active track owns the accent colour, so its thumb uses the dedicated
+     on-accent token. In light mode a dark --ink thumb disappeared into the
+     blue track; this remains the same near-white treatment in dark mode. */
+    background: var(--ink-on-accent);
   }
   .ui-switch__label {
     font-size: var(--text-sm);
@@ -6543,28 +6546,28 @@ body.hide-amounts .money * {
     cursor: not-allowed;
   }
 
-  /* Switch: 34×20 bordered track on --bg-2, grey thumb, ink track on. */
+  /* Switch: 34×20 grey track, white thumb, accent on. */
   .ui-switch--dense .ui-switch__track {
     width: 34px;
     height: 20px;
-    background: var(--bg-2);
+    background: var(--line-strong);
     border: 1px solid var(--line-strong);
     transition:
       background 0.16s,
       border-color 0.16s;
   }
   .ui-switch--dense .ui-switch__thumb {
-    background: var(--muted);
+    background: var(--ink-on-accent);
     transition:
       transform 0.16s,
       background 0.16s;
   }
   .ui-switch--dense input:checked + .ui-switch__track {
-    background: var(--ink);
-    border-color: var(--ink);
+    background: var(--accent);
+    border-color: var(--accent);
   }
   .ui-switch--dense input:checked + .ui-switch__track .ui-switch__thumb {
-    background: var(--bg);
+    background: var(--ink-on-accent);
   }
 
   /* Select: 13px field on --bg-2 with a --line-strong border + accent focus glow.

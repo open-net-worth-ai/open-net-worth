@@ -7620,7 +7620,7 @@ body.chat-resizing .onw-root {
   width: 34px;
   height: 20px;
   border-radius: var(--radius-pill);
-  background: var(--bg-2);
+  background: var(--line-strong);
   border: 1px solid var(--line-strong);
   cursor: pointer;
   padding: 0;
@@ -7636,18 +7636,19 @@ body.chat-resizing .onw-root {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--muted);
+  background: var(--ink-on-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   transition:
     transform 0.16s,
     background 0.16s;
 }
 .pl-tgt-switch.on {
-  background: var(--ink);
-  border-color: var(--ink);
+  background: var(--accent);
+  border-color: var(--accent);
 }
 .pl-tgt-switch.on > span {
   transform: translateX(14px);
-  background: var(--bg);
+  background: var(--ink-on-accent);
 }
 .pl-tgt-every-wrap {
   display: inline-flex;

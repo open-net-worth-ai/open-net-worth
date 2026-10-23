@@ -401,14 +401,15 @@
   transition: background 0.12s ease;
 }
 .bgl-pickrow--on .bgl-pickrow__track {
-  background: var(--ink);
+  background: var(--accent);
 }
 .bgl-pickrow__thumb {
   display: block;
   width: 14px;
   height: 14px;
   border-radius: var(--radius-pill);
-  background: var(--surface);
+  background: var(--ink-on-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   transition: transform 0.12s ease;
 }
 .bgl-pickrow--on .bgl-pickrow__thumb {

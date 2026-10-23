@@ -1111,7 +1111,7 @@
   width: 32px;
   height: 18px;
   border-radius: 999px;
-  background: var(--line);
+  background: var(--line-strong);
   border: none;
   cursor: pointer;
   flex: none;
@@ -1126,17 +1126,19 @@
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: var(--ink);
+  background: var(--ink-on-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
   transition: transform 0.15s;
 }
 .onw-settings .rd-toggle.on {
-  background: var(--ink);
+  background: var(--accent);
 }
-/* The ON track is ink, so its thumb is the page background — the off thumb (--ink) would
-   vanish into it. */
+/* Same contract as the design system's .ui-switch: the ON track owns the accent, so its thumb
+   uses the on-accent token. --ink here put a near-black knob on a blue track in LIGHT theme
+   (#23262e on #3b86dd) and the switch read as muddy/off; dark theme hid it. */
 .onw-settings .rd-toggle.on::after {
   transform: translateX(14px);
-  background: var(--bg);
+  background: var(--ink-on-accent);
 }
 
 /* ── rows / lists ─────────────────────────────────────────────────────────── */
