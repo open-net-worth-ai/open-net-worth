@@ -2744,10 +2744,6 @@
   border-bottom: 1px solid var(--line);
 }
 .conv-browser-search {
-  flex: 1;
-  min-width: 0;
-}
-.conv-browser-search {
   display: flex;
   align-items: center;
   gap: 8px;
