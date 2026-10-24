@@ -2553,9 +2553,18 @@ body.hide-amounts .mask::after {
   background: var(--selected);
   box-shadow: inset 0 0 0 1px var(--line-strong);
 }
-/* The row's height is set by the select and density toggle; sm padding alone sat ~6px short. */
+/* One 34px row at every width (the .mk-wtool height; the phone block below repeats it).
+   Left to font + padding, search, select, density and Add landed anywhere from 27 to 34.5px. */
+.mk-toolbar > * {
+  height: 34px;
+}
+.mk-toolbar .mk-search,
+.mk-toolbar .mk-density button {
+  height: 100%;
+}
+.mk-toolbar .mk-search,
+.mk-toolbar .mk-toolsel,
 .mk-toolbar > .mk-add-holding {
-  align-self: stretch;
   padding-block: 0;
 }
 
