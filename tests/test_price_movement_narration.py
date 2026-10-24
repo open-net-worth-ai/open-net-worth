@@ -810,7 +810,7 @@ def test_sweep_narrates_live_milestones_for_held_and_watched_names(monkeypatch):
             {"state": "REGULAR"},
         ),
     }
-    monkeypatch.setattr(mon, "_observe", lambda iid: notes[iid])
+    monkeypatch.setattr(mon, "_observe", lambda iid, live=None: notes[iid])
     seen = []
 
     async def fake_ensure(iid, **kw):
@@ -829,7 +829,9 @@ def test_sweep_narrates_candidates_concurrently(monkeypatch):
     would take hours. The sweep fans candidates out under NARRATION_CONCURRENCY."""
     cands = [{"instrument_id": f"i{n}"} for n in range(6)]
     monkeypatch.setattr(mon, "_candidates", lambda: cands)
-    monkeypatch.setattr(mon, "_observe", lambda iid: ({"final": True}, {"state": "POST"}))
+    monkeypatch.setattr(
+        mon, "_observe", lambda iid, live=None: ({"final": True}, {"state": "POST"})
+    )
     in_flight = peak = 0
 
     async def fake_ensure(iid, **kw):
@@ -847,12 +849,64 @@ def test_sweep_narrates_candidates_concurrently(monkeypatch):
     assert peak > 1
 
 
+def test_sweep_fetches_one_quote_batch_for_every_candidate(db_isolated, monkeypatch):
+    """Live server 2026-10-24: each candidate fetched "held + itself", and the price cache is
+    keyed on the ticker set — so every watched or crypto name was a full provider fetch of the
+    whole book, every sweep (~230/h). One batch now covers held + every candidate, and each
+    candidate still reads its own quote from it."""
+    from backend.db.instrument_store import InstrumentStore
+    from backend.services import price_movements as svc
+
+    for sym, source, pid in (
+        ("AAPL", "yahoo", "AAPL"),
+        ("BTC", "coingecko", "bitcoin"),
+        ("NFLX", "yahoo", "NFLX"),
+    ):
+        InstrumentStore().upsert(
+            {
+                "id": f"i-{sym}",
+                "symbol": sym,
+                "name": sym,
+                "asset_class": "equity",
+                "quote_currency": "USD",
+                "price_source": source,
+                "price_source_id": pid,
+            }
+        )
+    cands = [{"instrument_id": f"i-{s}"} for s in ("AAPL", "BTC", "NFLX")]
+    monkeypatch.setattr(mon, "_candidates", lambda: cands)
+    monkeypatch.setattr(svc, "held_tickers", lambda: ["AAPL", "BTC"])
+    monkeypatch.setattr(svc, "_market", lambda pid: {"state": "CLOSED"})
+    monkeypatch.setattr(svc, "_intraday_tape", lambda inst: [])
+    fetches = []
+
+    def fake_fetch(tickers):
+        fetches.append(sorted(tickers))
+        return {"prices": {"AAPL": 1.0, "bitcoin": 2.0, "NFLX": 3.0}, "prev_prices": {}}
+
+    monkeypatch.setattr(svc, "fetch_quotes", fake_fetch)
+    observed = {}
+
+    def fake_observe_today(inst, *, live, market, today):
+        observed[inst["id"]] = live["price"]
+
+    monkeypatch.setattr(svc, "observe_today", fake_observe_today)
+
+    async def no_narration(iid, **kw):
+        return 0
+
+    monkeypatch.setattr(mon, "ensure_narrations", no_narration)
+    _run(mon.run_price_movement_sweep())
+    assert fetches == [["AAPL", "BTC", "NFLX", "bitcoin"]]
+    assert observed == {"i-AAPL": 1.0, "i-BTC": 2.0, "i-NFLX": 3.0}
+
+
 def test_sweep_cap_bounds_narrations_but_never_the_cheap_observation(monkeypatch):
     cands = [{"instrument_id": f"i{n}"} for n in range(8)]
     monkeypatch.setattr(mon, "_candidates", lambda: cands)
     observed = []
 
-    def fake_observe(iid):
+    def fake_observe(iid, live=None):
         observed.append(iid)
         return {"final": True, "narrated_final": False}, {"state": "CLOSED"}
 

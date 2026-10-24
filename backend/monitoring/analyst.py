@@ -1593,8 +1593,7 @@ async def run_analysis_sweep() -> int:
         # Background precompute (Problem B point 2) still runs on an otherwise-quiet tick — a
         # QUIET tick (nothing pending) is the COMMON case, so gating precompute behind "there
         # was real work this tick" would mean it almost never runs in a steady-state system.
-        await _run_stale_brief_precompute(pa_store)
-        await _run_stale_facts_peers_precompute()
+        await _run_precomputes(pa_store)
         return 0
 
     # Cross-subject fan-out (Problem A, ADR .../cross-subject-fan-out-and-asset-brief-
@@ -1661,12 +1660,37 @@ async def run_analysis_sweep() -> int:
             if linked_row is not None:
                 pa_store.mark_failed(linked_row["id"], type(exc).__name__)
 
-    await _run_stale_brief_precompute(pa_store)
-    await _run_stale_facts_peers_precompute()
+    await _run_precomputes(pa_store)
     return analyzed
 
 
-async def _run_stale_brief_precompute(pa_store: PendingAnalysisStore) -> None:
+def _held_rows() -> list[dict]:
+    """Held positions with a real instrument — the precomputes' first candidates."""
+    from backend.services.positions import hydrated as read_rows
+
+    return [
+        r
+        for r in read_rows()
+        if (r.get("instrument_id") or "").strip() and float(r.get("quantity") or 0) > 0
+    ]
+
+
+async def _run_precomputes(pa_store: PendingAnalysisStore) -> None:
+    """Both background precomputes, from ONE read of the holdings per tick, taken off the
+    loop. Each used to hydrate the whole book itself, the facts/peers one on the shared loop
+    (live server 2026-10-24: its `hydrated()` was the most frequent >500ms BLOCKED frame)."""
+    try:
+        held = await asyncio.to_thread(_held_rows)
+    except Exception as exc:
+        logger.warning("analyst: precompute holdings read failed: %s", type(exc).__name__)
+        held = None
+    await _run_stale_brief_precompute(pa_store, held)
+    await _run_stale_facts_peers_precompute(held)
+
+
+async def _run_stale_brief_precompute(
+    pa_store: PendingAnalysisStore, held: list[dict] | None = None
+) -> None:
     """Enqueue (never process inline — picked up by the NEXT tick's normal drain, ~60s later) a
     bounded number of held-or-watched instruments whose Asset Brief key_issues have gone stale
     with no news trigger (Problem B point 2, Correction). Best-effort and never allowed to
@@ -1674,7 +1698,7 @@ async def _run_stale_brief_precompute(pa_store: PendingAnalysisStore) -> None:
     `run_analysis_sweep`'s exit paths (the empty-pending early return, where it matters most
     since a quiet tick is the common case, and the normal end-of-drain path)."""
     try:
-        await asyncio.to_thread(_enqueue_stale_briefs, pa_store)
+        await asyncio.to_thread(_enqueue_stale_briefs, pa_store, held)
     except Exception as exc:
         logger.warning("analyst: stale-brief precompute enqueue failed: %s", type(exc).__name__)
 
@@ -1689,7 +1713,7 @@ async def _run_stale_brief_precompute(pa_store: PendingAnalysisStore) -> None:
 _FACTS_PEERS_PRECOMPUTE_CAP = 2
 
 
-async def _run_stale_facts_peers_precompute() -> None:
+async def _run_stale_facts_peers_precompute(held: list[dict] | None = None) -> None:
     """Keep a held/watched instrument's news/facts/peers/description warm in the background —
     the counterpart to `_run_stale_brief_precompute` for the OTHER half of the Asset Brief.
 
@@ -1717,16 +1741,13 @@ async def _run_stale_facts_peers_precompute() -> None:
     candidate's refresh failing (network, LLM) must never stop the rest or raise into the sweep
     tick calling this."""
     from backend.monitoring import asset_brief
-    from backend.services.positions import hydrated as read_rows
+
+    def gather() -> list[dict]:
+        rows = _held_rows() if held is None else held
+        return rows + _watched_not_held_candidates({r["instrument_id"] for r in rows})
 
     try:
-        held = [
-            r
-            for r in read_rows()
-            if (r.get("instrument_id") or "").strip() and float(r.get("quantity") or 0) > 0
-        ]
-        held_iids = {r["instrument_id"] for r in held}
-        candidates = held + _watched_not_held_candidates(held_iids)
+        candidates = await asyncio.to_thread(gather)
     except Exception as exc:
         logger.warning(
             "analyst: facts/peers precompute candidate gather failed: %s", type(exc).__name__
@@ -1741,7 +1762,7 @@ async def _run_stale_facts_peers_precompute() -> None:
         if not iid:
             continue
         try:
-            if not asset_brief.facts_peers_stale(iid):
+            if not await asyncio.to_thread(asset_brief.facts_peers_stale, iid):
                 continue
             await asset_brief.refresh_asset_brief(iid, force=False)
             refreshed += 1
@@ -1851,7 +1872,7 @@ def _watched_not_held_candidates(held_iids: set[str]) -> list[dict]:
     return out
 
 
-def _enqueue_stale_briefs(pa_store: PendingAnalysisStore) -> int:
+def _enqueue_stale_briefs(pa_store: PendingAnalysisStore, held: list[dict] | None = None) -> int:
     """Enqueue up to `_BRIEF_PRECOMPUTE_CAP` "brief_stale" pending rows for held-or-watched
     instruments whose Asset Brief key_issues have gone stale (Problem B point 2, Correction) —
     a lightweight steady-cadence check folded into the existing analysis_sweep tick rather than
@@ -1890,13 +1911,9 @@ def _enqueue_stale_briefs(pa_store: PendingAnalysisStore) -> int:
     reads "never synthesized" forever regardless of whether this correction's news-only framing
     actually produces something for a given asset."""
     from backend.db.asset_brief_store import AssetBriefStore
-    from backend.services.positions import hydrated as read_rows
 
-    held = [
-        r
-        for r in read_rows()
-        if (r.get("instrument_id") or "").strip() and float(r.get("quantity") or 0) > 0
-    ]
+    if held is None:
+        held = _held_rows()
     held_iids = {r["instrument_id"] for r in held}
     candidates = held + _watched_not_held_candidates(held_iids)
     if not candidates:

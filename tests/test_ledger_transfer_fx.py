@@ -56,6 +56,17 @@ class _TxnStore:
     def __init__(self):
         self._rows: dict[str, dict] = {}
 
+    def transfer_routes(self):
+        return frozenset(
+            frozenset((t["from_account_id"], t["to_account_id"]))
+            for t in self._rows.values()
+            if t.get("kind") == "transfer"
+            and not t.get("deleted")
+            and not t.get("merged_into")
+            and t.get("from_account_id")
+            and t.get("to_account_id")
+        )
+
     def by_external_ref(self, source, ref):
         from backend.core.txn_sources import ext_ref_pairs
 

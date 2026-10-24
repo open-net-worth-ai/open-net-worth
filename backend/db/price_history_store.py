@@ -121,29 +121,34 @@ class PriceHistoryStore:
 
     def latest_map(self) -> dict[str, float]:
         """{price_source_id: last_known_price} in a single read — for hot-path callers
-        (hydrated(), /api/prices) that would otherwise do one read per instrument.
+        (hydrated(), /api/prices) that would otherwise do one read per instrument."""
+        return self._latest_per_id(None)
 
-        Index-backed GROUP BY: the composite PK ``(price_source_id, date)`` lets the engine
-        take MAX(date) per instrument straight from the index, so this fetches ONE row per
-        instrument (hundreds) instead of ordering the WHOLE table (hundreds of thousands of
-        points) into Python to keep only the last row per pid. Same result — MAX(date) per pid
-        is exactly "ascending date, last write wins", and ``(pid, date)`` is unique so the join
-        matches one row — but ~10× faster, and it stops the hot path from churning the
-        connection pool + GIL under concurrent tab loads (the super-linear-contention fix)."""
-        latest = (
-            select(price_points.c.price_source_id, func.max(price_points.c.date).label("md"))
-            .group_by(price_points.c.price_source_id)
-            .subquery()
-        )
-        q = select(price_points.c.price_source_id, price_points.c.price).select_from(
-            price_points.join(
-                latest,
-                (price_points.c.price_source_id == latest.c.price_source_id)
-                & (price_points.c.date == latest.c.md),
+    def _latest_per_id(self, before: str | None) -> dict[str, float]:
+        """{price_source_id: price of its newest point (strictly before `before`, if given)}.
+
+        A loose index scan, so the cost follows the number of INSTRUMENTS, not points: a
+        recursive CTE walks the distinct ids off the composite PK ``(price_source_id, date)``
+        one ``MIN(id) > previous`` seek at a time, and each id's newest point is one indexed
+        ``ORDER BY date DESC LIMIT 1`` probe. The ``GROUP BY ... MAX(date)`` join it replaces
+        scanned every point — O(history), on every hydration (live server 2026-10-24:
+        >500ms loop blocks in ``hydration_context`` on a throttled vCPU). Same answer: the
+        PK makes (id, date) unique, and ``price`` is NOT NULL, so a NULL subquery result
+        means exactly "no point before the boundary" and is omitted, as the join omitted it."""
+        pid = price_points.c.price_source_id
+        ids = select(func.min(pid).label("pid")).cte("ids", recursive=True)
+        ids = ids.union_all(
+            select(select(func.min(pid)).where(pid > ids.c.pid).scalar_subquery()).where(
+                ids.c.pid.is_not(None)
             )
         )
+        newest = select(price_points.c.price).where(pid == ids.c.pid)
+        if before is not None:
+            newest = newest.where(price_points.c.date < before)
+        newest = newest.order_by(price_points.c.date.desc()).limit(1).scalar_subquery()
+        q = select(ids.c.pid, newest.label("price")).where(ids.c.pid.is_not(None))
         with self._eng().connect() as conn:
-            return {r.price_source_id: r.price for r in conn.execute(q)}
+            return {r.pid: r.price for r in conn.execute(q) if r.price is not None}
 
     def prior_to(self, price_source_id: str, day: str | None = None) -> dict | None:
         """Most recent point strictly before `day` (default today) — the day-P&L anchor.
@@ -161,21 +166,7 @@ class PriceHistoryStore:
         return _row_to_point(row) if row else None
 
     def _prior_to_map_for_day(self, day: str) -> dict[str, float]:
-        latest = (
-            select(price_points.c.price_source_id, func.max(price_points.c.date).label("md"))
-            .where(price_points.c.date < day)
-            .group_by(price_points.c.price_source_id)
-            .subquery()
-        )
-        q = select(price_points.c.price_source_id, price_points.c.price).select_from(
-            price_points.join(
-                latest,
-                (price_points.c.price_source_id == latest.c.price_source_id)
-                & (price_points.c.date == latest.c.md),
-            )
-        )
-        with self._eng().connect() as conn:
-            return {r.price_source_id: r.price for r in conn.execute(q)}
+        return self._latest_per_id(day)
 
     def prior_to_map(
         self, day: str | None = None, days: dict[str, str] | None = None

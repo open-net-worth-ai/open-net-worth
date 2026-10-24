@@ -3123,6 +3123,20 @@ def _fetch_live_uncached(
     *,
     record_history: bool = True,
 ) -> dict:
+    # One telemetry write per fetch, not one per event (see `observability.batched`).
+    with observability.batched():
+        return _fetch_live_provider_round(
+            tickers, currencies, include_names, record_history=record_history
+        )
+
+
+def _fetch_live_provider_round(
+    tickers: list[str],
+    currencies: list[str],
+    include_names: bool = False,
+    *,
+    record_history: bool = True,
+) -> dict:
     crypto_routes, yf_tickers = _crypto_routing_with_currencies(tickers)
     crypto_pairs = [(request_key, canonical_id) for request_key, canonical_id, _ in crypto_routes]
     canonical_by_request = dict(crypto_pairs)

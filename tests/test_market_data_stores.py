@@ -314,6 +314,32 @@ def test_quota_half_open_success_closes_and_failure_reopens_with_backoff(db_isol
     assert quota.reserve(4, 10_035.0).get("probe", False) is False
 
 
+def test_quota_open_circuit_refuses_without_a_write_transaction(db_isolated, monkeypatch):
+    """While CoinGecko is down every price check (60s, unchanged) asked for a slot, and each
+    ask took the database's write lock just to be refused (live server 2026-10-24). An open
+    circuit now answers from a plain read — the same refusal — and the half-open probe after
+    the cooldown still goes through the serialized path."""
+    from backend.db import price_source_store
+
+    quota = CoinGeckoQuotaStore()
+    quota.record_failure(10, 10_000.0)
+    writes = []
+    real_update = price_source_store.update_state
+    monkeypatch.setattr(
+        price_source_store,
+        "update_state",
+        lambda cid, change: writes.append(cid) or real_update(cid, change),
+    )
+
+    refused = quota.reserve(4, 10_005.0)
+    assert refused == {"allowed": False, "retry_after": 5, "calls_last_minute": 0}
+    assert writes == []
+
+    probe = quota.reserve(4, 10_011.0)
+    assert probe["allowed"] is True and probe["probe"] is True
+    assert len(writes) == 1
+
+
 def test_provider_circuit_admits_one_cross_process_probe_and_success_closes(db_isolated):
     circuit = MarketProviderCircuitStore("yahoo_history")
     circuit.record_failure(10_000.0, retry_after=10)
@@ -554,6 +580,46 @@ def test_observability_retains_bounded_events_without_losing_soak_counts(db_isol
     assert summary["coalesced_requests"] == 0
     assert summary["validation_rejections"] == 0
     assert summary["event_count"] == 6
+
+
+def test_observability_batch_writes_once_and_stores_what_single_records_would(
+    db_isolated, monkeypatch
+):
+    """A live price fetch emits a dozen-plus events; each used to be its own read-modify-write
+    of the 24-hour soak document (live server 2026-10-24). A batch must land the identical
+    events and bucket counts — across a minute boundary — in ONE write."""
+    from backend.services import market_data_observability as observability
+
+    now = 60 * 33_333_333 - 1.0  # the next second opens a new minute bucket
+    events = [
+        ("provider_request", {"provider": "yahoo", "timeframe": "QUOTE", "now": now}),
+        ("quota_denied", {"provider": "coingecko", "cooldown_seconds": 55, "now": now}),
+        ("stale_serve", {"provider": "coingecko", "canonical_id": "bitcoin", "now": now + 1}),
+        (
+            "unavailable",
+            {"canonical_id": "solana", "reason": "upstream_unavailable", "now": now + 1},
+        ),
+        ("provider_success", {"provider": "yahoo", "latency_ms": 250.0, "now": now + 2}),
+    ]
+    store = MarketDataObservabilityStore()
+    for event, fields in events:
+        store.record(event, **fields)
+    expected = store.get()
+    store.save({})
+
+    writes = []
+    real_save = MarketDataObservabilityStore.save
+    monkeypatch.setattr(
+        MarketDataObservabilityStore,
+        "save",
+        lambda self, doc, **kw: writes.append(1) or real_save(self, doc, **kw),
+    )
+    with observability.batched():
+        for event, fields in events:
+            observability.emit(event, **fields)
+        assert writes == []
+    assert len(writes) == 1
+    assert store.get() == expected
 
 
 def test_observability_summary_excludes_events_outside_requested_window(db_isolated):

@@ -407,6 +407,17 @@ def _merge_note(row: dict, note: dict | None) -> None:
         row["narration"] = "pending"
 
 
+def _extended_window(market: dict | None) -> tuple[str, dict] | None:
+    """("pre"|"post", its bounds) while the market sits in an extended window it has bounds
+    for — the only time a tape can stand in for the quote's extended print."""
+    state = (market or {}).get("state") or ""
+    seg = "pre" if state in ("PRE", "PREPRE") else "post" if state in ("POST", "POSTPOST") else None
+    win = ((market or {}).get("session_bounds") or {}).get(seg or "") or {}
+    if not seg or not win.get("start") or not win.get("end"):
+        return None
+    return seg, win
+
+
 def extended_print_from_tape(points: list[dict], market: dict | None, prev_close) -> dict | None:
     """The last 1-minute bar inside the CURRENT extended window (pre while PRE/PREPRE, post
     while POST/POSTPOST), shaped like the quote's own extended print — a stand-in for a quote
@@ -414,11 +425,10 @@ def extended_print_from_tape(points: list[dict], market: dict | None, prev_close
     name even while its tape trades (owner-reproduced live, 2026-09-22, XNDU at 04:37 ET: 16
     pre-market bars on the chart, "Pre-market. No trades yet" on the timeline). None without
     bounds, outside an extended state, or with no bar inside the window. Pure."""
-    state = (market or {}).get("state") or ""
-    seg = "pre" if state in ("PRE", "PREPRE") else "post" if state in ("POST", "POSTPOST") else None
-    win = ((market or {}).get("session_bounds") or {}).get(seg or "") or {}
-    if not seg or not win.get("start") or not win.get("end"):
+    window = _extended_window(market)
+    if window is None:
         return None
+    seg, win = window
     try:
         start = datetime.fromisoformat(win["start"])
         end = datetime.fromisoformat(win["end"])
@@ -461,18 +471,36 @@ def _intraday_tape(inst: dict) -> list[dict]:
         return []
 
 
-def _live_quote(inst: dict, market: dict | None = None) -> dict:
+def held_tickers() -> list[str]:
+    from backend.services.positions import hydrated as hydrated_positions
+
+    return [r.get("ticker") for r in hydrated_positions() if r.get("ticker")]
+
+
+def fetch_quotes(tickers: list[str]) -> dict:
+    """The live batch `_live_quote` reads — one cached `fetch_live` for the given tickers."""
+    from backend.services.prices import fetch_live
+
+    return fetch_live(tickers, [], False, allow_stale=True, record_history=False)
+
+
+def _live_quote(inst: dict, market: dict | None = None, live: dict | None = None) -> dict:
     """Today's live facts for one instrument from the SAME 60s-cached batch the asset-detail
     page warms (held tickers + this one), via the app-wide `resolve_price_quote` chokepoint.
-    A missing pre/post quote print falls back to the day's own tape (`extended_print_from_tape`)."""
-    from backend.services.positions import hydrated as hydrated_positions
-    from backend.services.prices import fetch_live, resolve_price_quote
+    A missing pre/post quote print falls back to the day's own tape (`extended_print_from_tape`).
+
+    `live` (optional): a batch the caller already fetched that covers this instrument. The
+    background sweep passes ONE batch for every candidate: the price cache is keyed on the
+    ticker set, so "held + this one" was a different key — a full provider fetch of the whole
+    book — for every watched and every crypto candidate, every sweep."""
+    from backend.services.prices import resolve_price_quote
 
     pid = inst.get("price_source_id") or ""
-    tickers = [r.get("ticker") for r in hydrated_positions() if r.get("ticker")]
-    if pid not in tickers:
-        tickers.append(pid)
-    live = fetch_live(tickers, [], False, allow_stale=True, record_history=False)
+    if live is None:
+        tickers = held_tickers()
+        if pid not in tickers:
+            tickers.append(pid)
+        live = fetch_quotes(tickers)
     quote = resolve_price_quote(
         pid,
         prices=live.get("prices") or {},
@@ -485,7 +513,13 @@ def _live_quote(inst: dict, market: dict | None = None) -> dict:
     regular_as_of = (live.get("as_of") or {}).get(pid)
     extended = (live.get("extended") or {}).get(pid)
     if not extended or extended.get("price") is None:
-        extended = extended_print_from_tape(_intraday_tape(inst), market, quote.prev_close)
+        # The tape is a provider round-trip, and outside an extended window it cannot yield a
+        # print — don't fetch it for every crypto/closed/regular-hours name each sweep.
+        extended = (
+            extended_print_from_tape(_intraday_tape(inst), market, quote.prev_close)
+            if _extended_window(market)
+            else None
+        )
     return {
         "price": regular,
         "prev_close": quote.prev_close,

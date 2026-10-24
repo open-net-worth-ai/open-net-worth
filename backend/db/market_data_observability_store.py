@@ -48,6 +48,31 @@ def _finite(value: object) -> float | None:
     return number if math.isfinite(number) else None
 
 
+def _count(buckets: list[dict], row: dict) -> None:
+    """Fold one event into its minute bucket (created on first use)."""
+    event = row["event"]
+    provider = row.get("provider")
+    latency = row.get("latency_ms")
+    minute = int(float(row["at"]) // 60) * 60
+    bucket = next((item for item in buckets if item.get("minute") == minute), None)
+    if bucket is None:
+        bucket = {"minute": minute, "counts": {}, "providers": {}, "latency": {}}
+        buckets.append(bucket)
+    counts = bucket.setdefault("counts", {})
+    counts[event] = int(counts.get(event) or 0) + 1
+    if provider is not None:
+        providers = bucket.setdefault("providers", {})
+        per_event = providers.setdefault(event, {})
+        per_event[provider] = int(per_event.get(provider) or 0) + 1
+    if latency is not None and provider is not None:
+        latency_doc = bucket.setdefault("latency", {}).setdefault(
+            provider, {"samples": 0, "total_ms": 0.0, "max_ms": 0.0}
+        )
+        latency_doc["samples"] = int(latency_doc.get("samples") or 0) + 1
+        latency_doc["total_ms"] = float(latency_doc.get("total_ms") or 0.0) + latency
+        latency_doc["max_ms"] = max(float(latency_doc.get("max_ms") or 0.0), latency)
+
+
 class MarketDataObservabilityStore(NamespacedSettingsStore):
     """Keep a diagnostic tail plus minute buckets that survive process restarts.
 
@@ -73,6 +98,36 @@ class MarketDataObservabilityStore(NamespacedSettingsStore):
         cooldown_seconds: int | None = None,
         now: float | None = None,
     ) -> dict:
+        row = self.build_row(
+            event,
+            provider=provider,
+            canonical_id=canonical_id,
+            timeframe=timeframe,
+            reason=reason,
+            latency_ms=latency_ms,
+            status_code=status_code,
+            remaining_budget=remaining_budget,
+            cooldown_seconds=cooldown_seconds,
+            now=now,
+        )
+        self.record_rows([row])
+        return dict(row)
+
+    @staticmethod
+    def build_row(
+        event: str,
+        *,
+        provider: str | None = None,
+        canonical_id: object = None,
+        timeframe: object = None,
+        reason: object = None,
+        latency_ms: object = None,
+        status_code: int | None = None,
+        remaining_budget: int | None = None,
+        cooldown_seconds: int | None = None,
+        now: float | None = None,
+    ) -> dict:
+        """Validate and shape one event without persisting it (see ``record_rows``)."""
         if event not in _EVENTS:
             raise ValueError("unknown market-data observability event")
         if provider is not None and provider not in _PROVIDERS:
@@ -100,37 +155,26 @@ class MarketDataObservabilityStore(NamespacedSettingsStore):
         ):
             if value is not None:
                 row[key] = max(0, int(value))
+        return row
 
-        minute = int(observed // 60) * 60
+    def record_rows(self, rows: list[dict]) -> None:
+        """Persist already-built rows in ONE read-modify-write of the namespace document —
+        the same events and bucket counts as recording each alone, for one write instead of
+        one per event (a price fetch emits a dozen or more)."""
+        if not rows:
+            return
         with self._use_serialized_namespace_conn(None) as conn:
             doc = super().get(conn=conn)
             events = [item for item in doc.get("events", []) if isinstance(item, dict)]
-            events.append(row)
-            events = sorted(events, key=lambda item: float(item.get("at") or 0.0))[-_MAX_EVENTS:]
-
             buckets = [item for item in doc.get("buckets", []) if isinstance(item, dict)]
-            bucket = next((item for item in buckets if item.get("minute") == minute), None)
-            if bucket is None:
-                bucket = {"minute": minute, "counts": {}, "providers": {}, "latency": {}}
-                buckets.append(bucket)
-            counts = bucket.setdefault("counts", {})
-            counts[event] = int(counts.get(event) or 0) + 1
-            if provider is not None:
-                providers = bucket.setdefault("providers", {})
-                per_event = providers.setdefault(event, {})
-                per_event[provider] = int(per_event.get(provider) or 0) + 1
-            if latency is not None and latency >= 0 and provider is not None:
-                latency_doc = bucket.setdefault("latency", {}).setdefault(
-                    provider, {"samples": 0, "total_ms": 0.0, "max_ms": 0.0}
-                )
-                latency_doc["samples"] = int(latency_doc.get("samples") or 0) + 1
-                latency_doc["total_ms"] = float(latency_doc.get("total_ms") or 0.0) + latency
-                latency_doc["max_ms"] = max(float(latency_doc.get("max_ms") or 0.0), latency)
+            for row in rows:
+                events.append(dict(row))
+                _count(buckets, row)
+            events = sorted(events, key=lambda item: float(item.get("at") or 0.0))[-_MAX_EVENTS:]
             buckets = sorted(buckets, key=lambda item: int(item.get("minute") or 0))[
                 -_MAX_MINUTE_BUCKETS:
             ]
             self.save({"events": events, "buckets": buckets}, conn=conn)
-        return dict(row)
 
     def recent_events(self) -> list[dict]:
         return [dict(item) for item in self.get().get("events", []) if isinstance(item, dict)]

@@ -311,6 +311,37 @@ def test_latest_and_prior_maps_pick_max_date_per_instrument(db_isolated):
     assert store.prior_to_map(day="2026-06-02") == {"AAPL": 100.0, "MSFT": 290.0}
 
 
+def test_latest_and_prior_maps_match_a_brute_force_reference(db_isolated):
+    """The loose-index-scan rewrite (cost per instrument, not per point — live server
+    2026-10-24) against a reference computed straight from every point: random series with
+    gaps, ids that sort adjacently, and boundaries before, inside, on and after the data."""
+    import random
+
+    from backend.db.price_history_store import PriceHistoryStore
+
+    rng = random.Random(20261024)
+    store = PriceHistoryStore()
+    points: dict[str, dict[str, float]] = {}
+    for pid in ("A", "AA", "AAPL", "BTC", "bitcoin", "Z9", "^GSPC"):
+        for _ in range(rng.randint(1, 25)):
+            day = f"2026-{rng.randint(1, 12):02d}-{rng.randint(1, 28):02d}"
+            price = round(rng.uniform(1, 500), 4)
+            store.record(pid, price, day=day)
+            points.setdefault(pid, {})[day] = price
+
+    def newest(before: str | None) -> dict[str, float]:
+        out = {}
+        for pid, series in points.items():
+            days = [d for d in series if before is None or d < before]
+            if days:
+                out[pid] = series[max(days)]
+        return out
+
+    assert store.latest_map() == newest(None)
+    for boundary in ("2025-12-31", "2026-01-01", "2026-03-15", "2026-07-01", "2026-12-28", "2027"):
+        assert store.prior_to_map(day=boundary) == newest(boundary), boundary
+
+
 # ── earliest_date / latest_date — global extrema across all series ────────────
 
 

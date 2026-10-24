@@ -116,6 +116,27 @@ def test_extended_print_from_tape_stands_in_when_the_quote_has_none():
     )
 
 
+def test_live_quote_reads_the_tape_only_inside_an_extended_window(monkeypatch):
+    """The tape is a provider round-trip per instrument, and outside a pre/post window it can
+    never yield a print — the background sweep fetched it for every crypto, closed and
+    regular-hours name every 5 minutes (live server 2026-10-24)."""
+    bounds = {"pre": {"start": "2026-09-22T08:00:00+00:00", "end": "2026-09-22T13:30:00+00:00"}}
+    bar = {"date": "2026-09-22T08:06:00+00:00", "price": 7.35}
+    fetched = []
+    monkeypatch.setattr(svc, "_intraday_tape", lambda inst: fetched.append(1) or [bar])
+    live = {"prices": {"XNDU": 7.37}, "prev_prices": {"XNDU": 7.37}}
+    inst = {"price_source_id": "XNDU"}
+
+    for state in ("REGULAR", "CLOSED", "POST"):  # POST without post bounds: no window either
+        market = {"state": state, "session_bounds": bounds}
+        assert svc._live_quote(inst, market, live)["extended"] is None
+    assert fetched == []
+
+    pre = svc._live_quote(inst, {"state": "PRE", "session_bounds": bounds}, live)
+    assert fetched == [1]
+    assert pre["extended"]["price"] == 7.35
+
+
 def test_pre_market_print_is_a_live_row_anchored_on_the_previous_close():
     live = {
         "price": 70.87,

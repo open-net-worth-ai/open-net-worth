@@ -290,6 +290,45 @@ def test_by_external_ref_matches_scan_including_null_source_duplicate_gap(db_iso
         assert found_id == scanned_id, f"mismatch for ({source!r}, {ref!r})"
 
 
+def test_transfer_routes_matches_the_payload_scan(db_isolated):
+    """The column query the matching engine asks on every create (replacing a decode of every
+    row, live server 2026-10-24) must agree with the Python scan it replaced: live transfers
+    only — deleted, merged and non-transfer rows never count (a one-legged transfer cannot be
+    stored at all: ck_transactions_transfer_has_both_legs)."""
+    from tests.conftest import seed_stub_accounts
+
+    seed_stub_accounts([{"from_account_id": f"acc_{x}"} for x in "abcdefg"])
+    store = TransactionStore()
+    transfer = {"kind": "transfer", "from_account_id": "acc_a", "to_account_id": "acc_b"}
+    store.append(_txn(id="t1", **transfer))
+    store.append(
+        _txn(id="t2", **{**transfer, "from_account_id": "acc_b", "to_account_id": "acc_a"})
+    )
+    store.append(_txn(id="t3", **{**transfer, "to_account_id": "acc_c"}))
+    store.append(_txn(id="t4", **{**transfer, "to_account_id": "acc_d", "deleted": True}))
+    store.append(_txn(id="t5", **{**transfer, "to_account_id": "acc_e", "merged_into": "t1"}))
+    store.append(_txn(id="t6", **{**transfer, "to_account_id": "acc_f", "merged_into": ""}))
+    store.append(_txn(id="t9", **{**transfer, "kind": "expense", "to_account_id": "acc_g"}))
+    store.append(_txn(id="t10", **{**transfer, "to_account_id": "acc_a"}))  # self-transfer
+    store.soft_delete("t3")
+
+    scanned = frozenset(
+        frozenset((t["from_account_id"], t["to_account_id"]))
+        for t in store.all()
+        if t.get("kind") == "transfer"
+        and not t.get("deleted")
+        and not t.get("merged_into")
+        and t.get("from_account_id")
+        and t.get("to_account_id")
+    )
+    assert store.transfer_routes() == scanned
+    assert scanned == {
+        frozenset(("acc_a", "acc_b")),
+        frozenset(("acc_a", "acc_f")),
+        frozenset(("acc_a",)),
+    }
+
+
 def test_has_external_ref_true_false_and_blank_ref(db_isolated):
     store = TransactionStore()
     store.append(_txn(external_refs=[{"source": "csv", "ref": "row-1"}]))

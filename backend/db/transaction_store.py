@@ -361,6 +361,29 @@ class TransactionStore:
         with self._eng().connect() as conn:
             return {pid: (int(n), last or "") for pid, n, last in conn.execute(stmt)}
 
+    def transfer_routes(self) -> frozenset:
+        """``frozenset({from_account_id, to_account_id})`` for every live (not deleted, not
+        merged) transfer with both legs set — one DISTINCT over the promoted columns, which
+        every write derives from the payload (``_txn_row``), never a decode of every row.
+        The matching engine asks this on every create (live server 2026-10-24: the full
+        ``all()`` scan it replaces was a recurring >500ms loop block)."""
+        c = transactions.c
+        stmt = (
+            select(c.from_account_id, c.to_account_id)
+            .where(
+                c.kind == "transfer",
+                c.deleted == 0,
+                or_(c.merged_into.is_(None), c.merged_into == ""),
+                c.from_account_id.is_not(None),
+                c.from_account_id != "",
+                c.to_account_id.is_not(None),
+                c.to_account_id != "",
+            )
+            .distinct()
+        )
+        with self._eng().connect() as conn:
+            return frozenset(frozenset((fa, ta)) for fa, ta in conn.execute(stmt))
+
     # ── Domain queries ────────────────────────────────────────────────────────
 
     def query_by_batch(self, batch_id: str, include_deleted: bool = True) -> list[dict]:

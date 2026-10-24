@@ -391,8 +391,10 @@ async def _run_automations() -> None:
 
     from backend.services.automations import events as automation_events
 
+    # Sync store work (a balance observation folds every account's ledger) and a cross-process
+    # file lock — off the shared loop, like every other job here.
     try:
-        replayed = automation_events.replay_automation_event_deliveries()
+        replayed = await asyncio.to_thread(automation_events.replay_automation_event_deliveries)
         if replayed:
             logger.info("scheduler: replayed %d Automation event deliveries", replayed)
     except Exception as exc:
@@ -403,7 +405,7 @@ async def _run_automations() -> None:
         ("price", automation_events.observe_price_events),
     ):
         try:
-            observe()
+            await asyncio.to_thread(observe)
         except Exception as exc:
             logger.exception("scheduler: automation %s observation error: %s", name, exc)
     try:

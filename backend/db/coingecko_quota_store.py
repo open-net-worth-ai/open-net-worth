@@ -63,6 +63,19 @@ class CoinGeckoQuotaStore:
         """Reserve one slot in a shared 60-second rolling window before HTTP I/O."""
         if limit <= 0:
             return {"allowed": False, "retry_after": 60, "calls_last_minute": 0}
+        # An open circuit refuses without the serialized write transaction below: while
+        # CoinGecko is down every price check asked, and each ask took the database's write
+        # lock just to be told no (live server 2026-10-24: `database is locked`). Exact, not a
+        # heuristic — a cooldown is only ever cleared by a probe, which needs it expired first.
+        current = self._state(
+            price_source_store.read(price_source_store.COINGECKO)["state"].get("quota") or {}, now
+        )
+        if current["cooldown_until"] > now:
+            return {
+                "allowed": False,
+                "retry_after": max(1, int(math.ceil(current["cooldown_until"] - now))),
+                "calls_last_minute": len(current["calls"]),
+            }
 
         def work(state: dict) -> tuple[dict, dict]:
             calls = state["calls"]

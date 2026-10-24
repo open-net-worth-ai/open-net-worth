@@ -587,14 +587,24 @@ def _candidates() -> list[dict]:
     return out
 
 
-def _observe(instrument_id: str) -> tuple[dict | None, dict | None]:
+def _sweep_quotes(candidates: list[dict]) -> dict:
+    """ONE live batch for the whole sweep: held tickers + every candidate's own id. Fetched per
+    candidate instead, each watched or crypto name was its own cache key — a full provider fetch
+    of the book per candidate every 5 minutes (live server 2026-10-24: ~230/h)."""
+    ids = {c["instrument_id"] for c in candidates}
+    pids = [i.get("price_source_id") for i in InstrumentStore().all() if i.get("id") in ids]
+    tickers = list(dict.fromkeys([*_svc.held_tickers(), *(p for p in pids if p)]))
+    return _svc.fetch_quotes(tickers) if tickers else {}
+
+
+def _observe(instrument_id: str, live: dict | None = None) -> tuple[dict | None, dict | None]:
     inst = InstrumentStore().find_by_id(instrument_id)
     if not inst or not inst.get("price_source_id"):
         return None, None
     market = _svc._market(inst["price_source_id"])
     today = _svc.local_today((market or {}).get("timezone"))
     try:
-        live = _svc._live_quote(inst, market)
+        live = _svc._live_quote(inst, market, live)
     except Exception:
         live = {}
     return _svc.observe_today(inst, live=live, market=market, today=today), market
@@ -618,10 +628,16 @@ async def run_price_movement_sweep() -> int:
     narrate concurrently (``NARRATION_CONCURRENCY``); returns paragraphs landed."""
     now = time.monotonic()
     due: list[str] = []
-    for cand in _candidates():
+    candidates = await asyncio.to_thread(_candidates)
+    try:
+        live = await asyncio.to_thread(_sweep_quotes, candidates)
+    except Exception:
+        logger.warning("price_movements: sweep quote batch failed", exc_info=True)
+        live = None
+    for cand in candidates:
         iid = cand["instrument_id"]
         try:
-            note, market = await asyncio.to_thread(_observe, iid)
+            note, market = await asyncio.to_thread(_observe, iid, live)
         except Exception:
             logger.warning("price_movements: observe failed for %s", iid, exc_info=True)
             continue
