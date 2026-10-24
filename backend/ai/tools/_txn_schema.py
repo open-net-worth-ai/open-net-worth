@@ -141,15 +141,16 @@ _FIELDS: dict[str, dict[str, Any]] = {
         "description": (
             "Bank/merchant string, e.g. 'STARBUCKS #4412 REF:8837' — keep the merchant name "
             "plus any reference/trace code the bank itself stamped on it. Read by dedup, "
-            "rules and payee matching. Personal detail belongs in memo."
+            "rules and payee matching."
         ),
     },
     "memo": {
         "type": "string",
         "description": (
-            "Personal note, e.g. 'dinner with Sam'. Display-only — never read by dedup, rules "
-            "or payees. Omit when there is no personal detail; never put a bank reference "
-            "code here."
+            "Your own note — what you'd jot down yourself: what was bought, who it was with, "
+            "what it was for. Not a copy of the source: no alert or receipt text, times, card "
+            "or account numbers, fee or fare breakdowns, or anything another field already "
+            "shows. Leave it empty when there's nothing worth noting."
         ),
     },
     "amount": {"type": "number", "description": "Always a positive number (absolute value)."},

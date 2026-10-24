@@ -62,6 +62,10 @@ Book it now. Nobody is watching this turn, so do not ask clarifying questions:
 - Resolve the account from the card, wallet or app name if one is mentioned;
   look up the accounts if you need to.
 - If the text names a date or time, use it — it is when it actually happened.
+- description is the merchant or bank string as the text gives it. Leave memo
+  empty unless the text says something the row doesn't already show (items
+  bought, what it was for) — never a retelling of the notification, its sender,
+  time or card number.
 - A one-time code, a promotion, a statement or balance notice, or anything that
   is not money moving: write nothing and say so.
 - If you genuinely cannot tell what moved, write nothing and say why.

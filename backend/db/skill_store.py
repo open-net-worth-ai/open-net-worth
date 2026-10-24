@@ -1182,6 +1182,9 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             # 2026-10-11 (a607394d3): a fixed 1-day fetch window, sized for a 12-hour
             # schedule — a weekly one missed six days of mail. Now since the last completed run.
             "2fc64121dc4aa07ceb1b347830e04c0184116e90f88bc9b3c5e311b7f5479b53",
+            # 2026-10-25: memo invited "anything worth seeing", so runs retold each email
+            # (alert name, time, card, payee, fare) in memo. Now empty unless it adds something.
+            "c5646e9cf177bf8db1c26e09c6e8ea185d31b5f1c9bf62e7363175c4ded8ee43",
         }
     ),
     # 2026-10-11 (e98c3e2a5): the load step spelled as a find_tools(names=[...]) call.

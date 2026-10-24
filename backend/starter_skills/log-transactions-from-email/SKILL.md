@@ -38,11 +38,11 @@ Work from whatever bank, card and wallet mail actually arrives — there is no f
 - **currency** — as the source states it. A card charged in a foreign currency is logged in that currency, never the bank's converted amount; FX conversion is the system's job.
 - **date** — the transaction's own date, in the profile's timezone.
 - **description** — the raw bank/card string, verbatim, including any reference or trace code. Dedup, spend rules and payee matching all read this field, so a tidied-up version breaks all three.
-- **memo** — detail the raw string doesn't carry: ordered items, the merchant behind a delivery code, an FX rate, a fee, what a transfer was for. Display-only, so anything worth seeing is safe here. Omit it when there is nothing to add. (There is no `note` field on a transaction.)
+- **memo** — empty unless the email says something the row doesn't already show: the items ordered, what a transfer was for. Never a summary of the email — not the bank or alert name, the time, card or account numbers, the counterparty's bank, the payee again, the amount or fare breakdown, or how it was paid; the linked email keeps all of that. (There is no `note` field on a transaction.)
 - **category** — a real label from this run's category list, or unset. Unset is normal; a wrong-but-plausible label is worse, and refusing to log because you're unsure is worst. If a write is rejected for an unknown category, re-read the list, pick the closest real label or leave it unset, and retry at once — that error must not end the turn.
 - **idempotency reference** — on every row (Gotchas).
 
-**Companion-email enrichment.** A card alert is often thin — a merchant code, or just a counterparty and an amount. Before finalising, check the other emails in the same fetch for a receipt describing the same real event (same amount, same or adjacent timestamp). Put what it adds into memo and leave description as the raw string.
+**Companion-email enrichment.** A card alert is often thin — a merchant code, or just a counterparty and an amount. Before finalising, check the other emails in the same fetch for a receipt describing the same real event (same amount, same or adjacent timestamp). Use it to pick the payee and category; put only the memo-worthy part (the items, the purpose) into memo, and leave description as the raw string.
 
 **Duplicates.** The external reference handles re-presented emails. Beyond that, if a write is refused because it matches something already recorded, link the email to that entry — the refusal tells you how. Book it separately only when it is genuinely a different charge.
 
