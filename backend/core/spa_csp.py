@@ -8,9 +8,12 @@ nor send data anywhere. What each non-obvious directive is for:
   ``<style>`` in index.html; styles cannot run code, and nothing sensitive is readable by CSS here.
 * ``img-src 'self' data: blob:`` — every image the app shows is same-origin (uploads, the
   favicon proxy), a data: URI or a blob: URL. A remote image is the classic markdown exfil channel.
-* ``frame-src https: onw-artifact:`` — the Overview "Embed" widget frames a user-chosen https
-  page (sandboxed without allow-same-origin); the desktop shell renders AI artifacts through its
-  ``onw-artifact:`` protocol. Self-hosted artifacts load from this origin's own frame route.
+* ``frame-src blob: https: onw-artifact:`` — statement, receipt and document PDFs render in the
+  browser's PDF viewer from a force-typed blob: URL the app minted itself (``'self'`` does not
+  cover blob:; without it every PDF preview is a blank frame). The Overview "Embed" widget frames
+  a user-chosen https page (sandboxed without allow-same-origin); the desktop shell renders AI
+  artifacts through its ``onw-artifact:`` protocol. Self-hosted artifacts load from this origin's
+  own frame route.
 * ``form-action`` — the Private Cloud sign-out is a same-origin POST that REDIRECTS to the
   portal; Chromium applies ``form-action`` to that redirect, so the portal origin (named per
   request by the gateway) is allowed.
@@ -29,7 +32,7 @@ _BASE = (
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self'",
-    "frame-src 'self' https: onw-artifact:",
+    "frame-src 'self' blob: https: onw-artifact:",
     "object-src 'none'",
     "base-uri 'none'",
     "frame-ancestors 'none'",
