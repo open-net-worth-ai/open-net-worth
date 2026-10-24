@@ -11,6 +11,13 @@ export interface MemoryFact {
 }
 
 export const MEMORY_FACTS_KEY = '/api/memory/facts'
+export const MEMORY_SETTINGS_KEY = '/api/memory/settings'
+
+export async function getMemorySettings(): Promise<{ enabled: boolean }> {
+  const r = await authFetch(MEMORY_SETTINGS_KEY)
+  if (!r.ok) throw new Error(String(r.status))
+  return r.json() as Promise<{ enabled: boolean }>
+}
 
 async function getFacts(): Promise<{ facts: MemoryFact[]; total: number }> {
   const r = await authFetch(MEMORY_FACTS_KEY)
@@ -18,10 +25,10 @@ async function getFacts(): Promise<{ facts: MemoryFact[]; total: number }> {
   return r.json() as Promise<{ facts: MemoryFact[]; total: number }>
 }
 
-/** The stored-memory list and its two deletes, shared by Settings → Chat & Memory and the chat
- *  header's Memory dialog. `notify` gets one short line per outcome. */
+/** The stored-memory list and its two deletes, used by the one stored-memories dialog
+ *  (components/tabs/settings/MemoryDialog). `notify` gets one short line per outcome. */
 export function useMemoryFacts(notify: (message: string) => void) {
-  const { data, refresh, initialLoading } = useCachedFetchState(MEMORY_FACTS_KEY, getFacts, {
+  const { data, refresh } = useCachedFetchState(MEMORY_FACTS_KEY, getFacts, {
     staleTime: 0,
   })
 
@@ -41,7 +48,6 @@ export function useMemoryFacts(notify: (message: string) => void) {
 
   return {
     facts: data?.facts ?? [],
-    loading: initialLoading,
     forget: (id: string) => remove(`${MEMORY_FACTS_KEY}/${encodeURIComponent(id)}`, 'Forgotten'),
     forgetAll: () => remove(MEMORY_FACTS_KEY, 'All memories forgotten'),
   }

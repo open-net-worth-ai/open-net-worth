@@ -11,13 +11,13 @@ import {
 } from '../../../../hooks/useChatSuggestionsEnabled'
 import { authFetch } from '../../../../api/client'
 import { setCachedQueryData, useCachedFetchState } from '../../../../state/queryCache'
-import { fDate } from '../../../../utils/format'
 import {
   MEMORY_FACTS_KEY,
-  memorySourceLabel,
-  useMemoryFacts,
+  MEMORY_SETTINGS_KEY,
+  getMemorySettings,
 } from '../../../../hooks/useMemoryFacts'
-import { Btn, Modal, Panel, Toggle, useSectionBusy } from '../ds'
+import { Btn, Panel, Toggle, useSectionBusy } from '../ds'
+import { MemoryDialog } from '../MemoryDialog'
 import type { SectionProps } from '../ds'
 
 async function getJson<T>(path: string): Promise<T> {
@@ -26,96 +26,8 @@ async function getJson<T>(path: string): Promise<T> {
   return r.json() as Promise<T>
 }
 
-// ── stored memories ──────────────────────────────────────────────────────────
-function MemoryModal({ onClose, toast }: { onClose: () => void; toast: SectionProps['toast'] }) {
-  const { facts, forget, forgetAll } = useMemoryFacts(toast)
-  const [q, setQ] = useState('')
-  // "Forget everything" is destructive and has no undo: a REST delete outside an AI turn
-  // takes no checkpoint, so the only recovery is yesterday's backup. Arm it like every other
-  // destructive control in Settings rather than firing on one click.
-  const [armedAll, setArmedAll] = useState(false)
-  const needle = q.trim().toLowerCase()
-  const shown = needle
-    ? facts.filter((f) => (f.content + ' ' + (f.source || '')).toLowerCase().includes(needle))
-    : facts
-
-  return (
-    <Modal
-      title={'Stored memories (' + facts.length + ')'}
-      size="lg"
-      onClose={onClose}
-      footer={
-        <>
-          <Btn
-            variant={armedAll ? 'danger-solid' : 'danger'}
-            style={{ marginRight: 'auto' }}
-            disabled={!facts.length}
-            onClick={() => {
-              if (!armedAll) {
-                setArmedAll(true)
-                setTimeout(() => setArmedAll(false), 4000)
-              } else {
-                setArmedAll(false)
-                void forgetAll()
-              }
-            }}
-          >
-            {armedAll ? `Confirm — forget all ${facts.length}` : 'Forget everything'}
-          </Btn>
-          <Btn onClick={onClose}>Done</Btn>
-        </>
-      }
-    >
-      <span className="rd-help">
-        Durable facts Lucius carries between conversations. Forgetting one takes effect on the next
-        turn — it does not change your ledger or profile.
-      </span>
-      <input
-        className="rd-input"
-        value={q}
-        placeholder="Search memories…"
-        aria-label="Search memories"
-        onChange={(e) => setQ(e.target.value)}
-      />
-      {shown.length ? (
-        <div className="rd-factlist">
-          {shown.map((f) => (
-            <div className="rd-fact" key={f.id}>
-              <div>
-                <div className="rd-fact-t">{f.content}</div>
-                <div className="rd-fact-meta">
-                  <span>{memorySourceLabel(f.source)}</span>
-                  <span>{f.updated_at ? fDate(f.updated_at) : ''}</span>
-                </div>
-              </div>
-              <Btn
-                size="xs"
-                variant="ghost"
-                onClick={() => void forget(f.id)}
-                aria-label={'Forget: ' + f.content}
-              >
-                Forget
-              </Btn>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <span className="rd-help">
-          {facts.length
-            ? 'Nothing matches “' + q + '”.'
-            : 'No memories stored. Lucius will add facts as you talk.'}
-        </span>
-      )}
-    </Modal>
-  )
-}
-
 export function ChatMemorySection({ toast }: SectionProps) {
-  const memory = useCachedFetchState<{ enabled: boolean }>(
-    '/api/memory/settings',
-    () => getJson<{ enabled: boolean }>('/api/memory/settings'),
-    { staleTime: 0 },
-  )
+  const memory = useCachedFetchState(MEMORY_SETTINGS_KEY, getMemorySettings, { staleTime: 0 })
   const memoryFacts = useCachedFetchState<{ total: number }>(
     MEMORY_FACTS_KEY,
     () => getJson<{ total: number }>(MEMORY_FACTS_KEY),
@@ -344,7 +256,7 @@ export function ChatMemorySection({ toast }: SectionProps) {
         </div>
       </Panel>
 
-      {memOpen && <MemoryModal onClose={() => setMemOpen(false)} toast={toast} />}
+      {memOpen && <MemoryDialog onClose={() => setMemOpen(false)} toast={toast} />}
     </>
   )
 }

@@ -35,7 +35,7 @@ describe('MemorySheet', () => {
     expect(await screen.findByText('Gets paid on the 25th')).toBeTruthy()
     expect(screen.getByText('You told Lucius')).toBeTruthy()
     expect(screen.getByText('Learned in chat')).toBeTruthy()
-    expect(screen.getByText('Memory (2)')).toBeTruthy()
+    expect(screen.getByText('Stored memories (2)')).toBeTruthy()
     expect(screen.queryByText(/Memory is off/)).toBeNull()
   })
 
