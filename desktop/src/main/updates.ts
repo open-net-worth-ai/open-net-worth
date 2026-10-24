@@ -85,7 +85,7 @@ export class UpdateController {
   stop(): void { for (const timer of this.timers) clearTimeout(timer); this.timers = []; }
 
   get menuLabel(): string {
-    if (this.phase === 'ready') return this.readyVersion ? `Restart to Update to Open Net Worth ${this.readyVersion}` : 'Restart to Update';
+    if (this.phase === 'ready') return 'Restart to Update';
     if (this.phase === 'available') return 'Update Available…';
     return this.phase === 'checking' || this.phase === 'downloading' ? 'Downloading Update…' : 'Check for Updates…';
   }
@@ -172,7 +172,8 @@ export class UpdateController {
   private downloaded(name: string | null): void {
     if (!this.requested) return;
     this.requested = false;
-    this.readyVersion = name?.replace(/^v/, '') ?? this.availableVersion;
+    // The release NAME is "Open Net Worth 0.1.25 Beta"; the detected version is the bare number.
+    this.readyVersion = this.availableVersion ?? name?.replace(/^(Open Net Worth\s+)?v?/, '') ?? null;
     this.set('ready');
     this.stop();
     if (this.manual) { this.manual = false; void this.offerRestart(); return; }

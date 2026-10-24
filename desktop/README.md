@@ -346,7 +346,7 @@ Windows and Linux; the unauthenticated 60/h limit is ample at one request per 4 
 BACKGROUND find then calls the updater straight away, quietly — it fetches the ZIP from
 `opennetworth.ai/update/<platform-arch>/<version>`
 (→ `update.electronjs.org/open-net-worth-ai/open-net-worth-releases`) — and on
-`update-downloaded` the menu (and tray) reads **Restart to Update to Open Net Worth X.Y.Z**, which
+`update-downloaded` the menu (and tray) reads **Restart to Update**, which
 installs at once when chosen, plus one notification; nothing installs before a restart or the next
 quit, and it never restarts on its own (ADR `2026-10-17-desktop-updates-download-in-the-background`).
 A MANUAL **Check for Updates…** still asks (**Download and Install** / **Skip This Version** /
@@ -399,7 +399,7 @@ only. `node qa/packaged-smoke-linux.mjs /abs/Open-Net-Worth.AppImage` (or an ins
   4 hours and, from a background check, downloads without asking (a manual check asks first). An
   AppImage in a writable location verifies `SHA256SUMS` against its minisign signature
   (`SHA256SUMS.minisig`, key built into the app), downloads the new AppImage, verifies its SHA-256
-  against `SHA256SUMS`, swaps it in place and offers **Restart to Update to Open Net Worth X.Y.Z**. A `.deb` install (or an
+  against `SHA256SUMS`, swaps it in place and offers **Restart to Update**. A `.deb` install (or an
   AppImage in a read-only folder, a release without a signature, or a build without an embedded key)
   offers **Open Download Page** instead of Download and Install; a signature that does not verify is
   an error and nothing is installed.
@@ -453,7 +453,7 @@ stages the installer for release when it is signed or the repository variable
 - **Updates.** Squirrel.Windows through the same `opennetworth.ai/update/<platform-arch>/<version>`
   feed as macOS (`src/main/updates.ts`), only when the app was installed by Setup.exe (a portable
   folder has no `Update.exe` and does not check). Behaviour matches macOS: background
-  download, **Restart to Update to Open Net Worth X.Y.Z**, install at next quit.
+  download, **Restart to Update**, install at next quit.
 - **Start at login** registers a login item that starts through `Update.exe`, so it survives updates
   (`src/main/login-item.ts`). Background mode uses a system-tray icon; closing the window with
   background mode off quits the app.

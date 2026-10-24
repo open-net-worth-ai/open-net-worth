@@ -150,8 +150,7 @@ The app checks for a new version 30 seconds after it starts and every 4 hours af
 
 1. When one is out, it downloads in the background — nothing to answer — and the menu shows
    **Downloading Update…**.
-2. When it's ready, you get a notification and the menu shows **Restart to Update to Open Net
-   Worth X**. Choose it to restart now, or keep working: the update installs the next time you
+2. When it's ready, you get a notification and the menu shows **Restart to Update**. Choose it to restart now, or keep working: the update installs the next time you
    quit. The app never restarts on its own, and it closes your book safely before installing — a
    small **Installing Open Net Worth X…** window shows while it does.
 3. After restarting, a notification confirms "Open Net Worth was updated to X."
@@ -189,6 +188,9 @@ its own daily backups — see [Backup and restore](backup-and-restore.md).
 On macOS the window has no separate title bar: the traffic-light buttons sit in the app's top bar,
 next to a sidebar toggle and Back / Forward arrows. Drag an empty part of the bar to move the
 window; double-click it to zoom. Windows and Linux use the system title bar and a menu bar.
+
+The window reopens at the size and position you left it, zoomed or maximized if it was. If that
+spot was on a display that is no longer connected, it opens at the same size on the main display.
 
 | Action | macOS | Windows / Linux |
 |---|---|---|

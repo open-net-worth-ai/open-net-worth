@@ -70,7 +70,7 @@ test('the feed is handed to the updater, but a check never calls it: detection i
   assert.equal(updater.checks, 0);
 });
 
-test('a background find downloads quietly, and the menu offers Restart to Update with the version', async () => {
+test('a background find downloads quietly, and the menu offers Restart to Update', async () => {
   const { updater, calls, updates } = started();
   await background(updates);
   assert.equal(updater.checks, 1);
@@ -80,7 +80,7 @@ test('a background find downloads quietly, and the menu offers Restart to Update
   updater.emit('update-downloaded', {}, '', 'v0.2.0');
   await tick();
   assert.equal(updates.phase, 'ready');
-  assert.equal(updates.menuLabel, 'Restart to Update to Open Net Worth 0.2.0');
+  assert.equal(updates.menuLabel, 'Restart to Update');
   assert.equal(updates.pending, true);
   assert.deepEqual(calls.asked, []);
   assert.deepEqual(calls.notified, ['Open Net Worth 0.2.0 is ready. Restart to update, or it installs the next time you quit.']);
@@ -102,7 +102,7 @@ test('Download and Install says the download started, labels the menu, and ends 
   updater.emit('update-downloaded', {}, '', 'v0.2.0');
   await tick();
   assert.equal(updates.phase, 'ready');
-  assert.equal(updates.menuLabel, 'Restart to Update to Open Net Worth 0.2.0');
+  assert.equal(updates.menuLabel, 'Restart to Update');
   assert.equal(calls.asked.at(-1)!.message, 'Open Net Worth 0.2.0 is ready to install.');
   assert.deepEqual(calls.notified, []);
   assert.equal(calls.installed, 0);
@@ -325,4 +325,14 @@ test('the install progress page names the version, runs no script, and escapes w
   assert.doesNotMatch(restart, /<script|script-src|<button|<svg/);
   assert.match(updateProgressPage(null, false, 'light'), /<h1>Installing update…<\/h1><p>Closing your book safely first\.<\/p>/);
   assert.doesNotMatch(updateProgressPage('<b>', true, 'dark'), /<b>/);
+});
+
+test('the progress window stops blocking the quit before the installer is asked to quit and relaunch', async () => {
+  const { handOverToInstaller } = await import('../src/main/update-progress');
+  const steps: string[] = [];
+  handOverToInstaller({ isDestroyed: () => false, setClosable: (closable: boolean) => { steps.push(`closable=${closable}`); } }, () => steps.push('quitAndInstall'));
+  assert.deepEqual(steps, ['closable=true', 'quitAndInstall']);
+  const gone: string[] = [];
+  handOverToInstaller({ isDestroyed: () => true, setClosable: () => { gone.push('setClosable'); } }, () => gone.push('quitAndInstall'));
+  assert.deepEqual(gone, ['quitAndInstall']);
 });

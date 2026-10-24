@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme, session, shell, type IpcMainInvokeEvent, type Session, type WebContents } from 'electron';
+import { app, BrowserWindow, nativeTheme, screen, session, shell, type IpcMainInvokeEvent, type Session, type WebContents } from 'electron';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { desktopEvent } from './desktop-events';
@@ -15,6 +15,7 @@ import { hostedPage } from './hosted-page';
 import { welcomePage, type InitialPage } from './welcome-page';
 import type { BookEntry, BookStartupStage } from './book-switch';
 import { FULLSCREEN_CHANNEL, nativeChrome, qaInactiveMode } from './window-chrome';
+import { readWindowState, restoredBounds, writeWindowState } from './window-state';
 
 const qaInactive = qaInactiveMode(app.isPackaged, process.env);
 const PAGE_LOAD_TIMEOUT_MS = 30_000;
@@ -55,11 +56,16 @@ export class DesktopWindow {
     this.isolated = isolated;
     this.artifactProtocol = new ArtifactProtocolOwner(isolated.protocol);
     const chrome = nativeChrome(process.platform);
+    const statePath = join(app.getPath('userData'), 'window-state.json');
+    const saved = readWindowState(statePath);
+    const placed = saved ? restoredBounds(saved.bounds, screen.getAllDisplays().map(display => display.workArea), { width: 760, height: 560 }) : {};
     this.window = new BrowserWindow({
-      width: 1320, height: 880, minWidth: 760, minHeight: 560, show: startupVisible && !qaInactive, title: 'Open Net Worth', ...(process.platform === 'linux' ? { icon: join(app.getAppPath(), 'resources', 'icon.png') } : {}), backgroundColor: nativeTheme.shouldUseDarkColors ? '#0e1014' : '#ffffff', ...chrome.options, ...(qaInactive ? { opacity: 0 } : {}),
+      width: 1320, height: 880, ...placed, minWidth: 760, minHeight: 560, show: startupVisible && !qaInactive && !saved?.maximized, title: 'Open Net Worth', ...(process.platform === 'linux' ? { icon: join(app.getAppPath(), 'resources', 'icon.png') } : {}), backgroundColor: nativeTheme.shouldUseDarkColors ? '#0e1014' : '#ffffff', ...chrome.options, ...(qaInactive ? { opacity: 0 } : {}),
       webPreferences: { additionalArguments: chrome.arguments, preload: join(__dirname, '..', serverOrigin ? 'client-preload.js' : 'preload.js'), session: isolated, nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true, spellcheck: true, devTools: !app.isPackaged },
     });
     if (qaInactive) this.window.setIgnoreMouseEvents(true);
+    if (saved?.maximized) { this.window.maximize(); if (startupVisible && !qaInactive) this.window.show(); }
+    this.rememberPlacement(statePath);
     this.lifetime = new WindowLifetime(this.window);
     this.installSessionPolicy(isolated);
     this.installNavigationPolicy();
@@ -98,6 +104,22 @@ export class DesktopWindow {
     if (!contents || !origin || !appDocument(origin, contents.getURL())) return;
     if (force) contents.reloadIgnoringCache();
     else contents.reload();
+  }
+
+  // Full screen is left out: the window reopens at the size and maximized state it had before it.
+  private rememberPlacement(path: string): void {
+    let timer: NodeJS.Timeout | null = null;
+    const save = () => {
+      timer = null;
+      if (this.window.isDestroyed() || this.window.isFullScreen() || this.window.isMinimized()) return;
+      writeWindowState(path, { bounds: this.window.getNormalBounds(), maximized: this.window.isMaximized() });
+    };
+    const later = () => { if (timer) clearTimeout(timer); timer = setTimeout(save, 500); };
+    this.window.on('resize', later);
+    this.window.on('move', later);
+    this.window.on('maximize', later);
+    this.window.on('unmaximize', later);
+    this.window.on('close', () => { if (timer) clearTimeout(timer); save(); });
   }
 
   // Fullscreen hides the traffic lights, so the page drops the inset it reserved for them.

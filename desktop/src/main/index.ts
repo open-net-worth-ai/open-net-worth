@@ -11,7 +11,7 @@ import { FolderWatcher } from './folders';
 import { NativeNotifications } from './notifications';
 import { Preferences, settingsPatch, type SettingsPatch } from './preferences';
 import { setKeepAwake } from './keep-awake';
-import { showUpdateProgress } from './update-progress';
+import { handOverToInstaller, showUpdateProgress } from './update-progress';
 import { bundledRuntime, type RuntimeConfig } from './runtime';
 import { externalUrl } from './security';
 import { DesktopWindow } from './window';
@@ -154,11 +154,11 @@ function shutdown(): Promise<void> {
 function installUpdate(): void {
   if (quitting) return;
   installingUpdate = true;
-  showUpdateProgress(updates?.readyVersion ?? null, true);
+  const progress = showUpdateProgress(updates?.readyVersion ?? null, true);
   void shutdown().finally(() => {
     autoUpdater.once('error', () => app.exit(0));
     setTimeout(() => app.exit(0), 30_000).unref();
-    try { autoUpdater.quitAndInstall(); } catch { app.exit(0); }
+    try { handOverToInstaller(progress, () => autoUpdater.quitAndInstall()); } catch { app.exit(0); }
   });
 }
 
