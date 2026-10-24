@@ -1320,6 +1320,32 @@
   color: var(--faint);
   margin-top: 3px;
 }
+/* the memory dialog keeps one height — the list scrolls inside it — so searching never
+   shrinks it; on a phone it is a tall bottom sheet (see the max-width block) */
+.onw-settings .rd-modal.rd-mem-modal {
+  height: min(80vh, 720px);
+}
+.onw-settings .rd-mem-count {
+  margin-top: -6px;
+  font-size: var(--text-xs);
+  color: var(--faint);
+}
+.onw-settings .rd-mem-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px 12px;
+  font-size: 13px;
+  color: var(--faint);
+}
+.onw-settings .rd-fact.rd-fact-skel {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 14px 13px;
+}
 /* "Forget this memory?" — a small confirm above the memory dialog */
 .onw-settings .rd-confirm-scrim {
   position: fixed;
@@ -1372,19 +1398,21 @@
   opacity: 0;
   transition: opacity 0.12s ease;
 }
-.onw-settings .rd-fact:focus-within .rd-fact-acts {
+.onw-settings .rd-fact:focus-within > .rd-fact-acts {
   opacity: 1;
 }
 @media (hover: hover) {
   .onw-settings .rd-fact:not(.rd-fact-edit):hover {
     background: color-mix(in srgb, var(--ink) 5%, var(--surface));
   }
-  .onw-settings .rd-fact:hover .rd-fact-acts {
+  .onw-settings .rd-fact:hover > .rd-fact-acts {
     opacity: 1;
   }
 }
+/* same selector as the hiding rule above — a plain `.rd-fact-acts` lost on specificity and the
+   icons stayed invisible on a phone */
 @media (hover: none) {
-  .onw-settings .rd-fact-acts {
+  .onw-settings .rd-fact > .rd-fact-acts {
     opacity: 1;
   }
 }
@@ -2673,6 +2701,24 @@
     padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
   }
   .onw-settings .rd-modal-foot .rd-btn {
+    flex: 1;
+  }
+  .onw-settings .rd-modal.rd-mem-modal {
+    height: 85vh;
+    height: 85dvh;
+  }
+  /* the forget confirm docks to the bottom edge like the dialog it sits over */
+  .onw-settings .rd-confirm-scrim {
+    padding: 0;
+    right: 0;
+    align-items: flex-end;
+  }
+  .onw-settings .rd-confirm {
+    width: 100%;
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  .onw-settings .rd-confirm-acts .rd-btn {
     flex: 1;
   }
 }

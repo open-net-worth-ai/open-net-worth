@@ -9,19 +9,24 @@
 // approach of rendering the bare ChatPanel (whose own header/resizer are built for a floating
 // dock) and bending it into a full page via `.app-layout--lucius .lx-side` CSS overrides.
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { ChatPanel, conversationGroups, conversationWhen } from '../../chat/ChatPanel'
 import { ConversationMenu, shortWhen, type ConversationKind } from '../../chat/ConversationMenu'
 import { ConversationBrowser } from '../../chat/ConversationBrowser'
 import { useLuciusChat } from '../../../state/luciusChat'
-import { FolderLock, Menu, SquarePen } from '../../../ui/icons'
+import { Brain, FolderLock, Menu, SquarePen } from '../../../ui/icons'
 import type { ArtifactRef } from '../../../types/chat'
 import { VaultPanel } from '../../vault/VaultPanel'
 import { Modal } from '../../ui/Modal'
 import { useSessionState } from '../../../hooks/useSessionState'
 import { DOCUMENTS_OPEN_KEY } from './LuciusHome'
 import { ArtifactFullscreen } from './ArtifactFullscreen'
+import { lazyChunk } from '../../../lazyChunk'
 import './lucius-mobile.css'
+
+const MemorySheet = lazyChunk(() =>
+  import('../../chat/MemorySheet').then((m) => ({ default: m.MemorySheet })),
+)
 
 function noop() {}
 
@@ -59,6 +64,7 @@ export function LuciusMobile({
   // Documents takes the whole screen on a phone; an artifact opened from it goes full screen
   // on top, and closing that lands back on Documents.
   const [documentsFlag, setDocumentsFlag] = useSessionState(DOCUMENTS_OPEN_KEY)
+  const [memoryOpen, setMemoryOpen] = useState(false)
   const vaultOpen = documentsFlag === '1'
   const setVaultOpen = (open: boolean) => setDocumentsFlag(open ? '1' : null)
   // "Ask Lucius about this" from a long-press menu stages the chip and asks for the chat
@@ -154,6 +160,15 @@ export function LuciusMobile({
           <button
             type="button"
             className="lucius-mobile-head-btn"
+            onClick={() => setMemoryOpen(true)}
+            aria-label="Memory"
+            title="Memory"
+          >
+            <Brain size={19} strokeWidth={1.6} />
+          </button>
+          <button
+            type="button"
+            className="lucius-mobile-head-btn"
             onClick={startFresh}
             aria-label="New conversation"
             title="New conversation"
@@ -162,6 +177,12 @@ export function LuciusMobile({
           </button>
         </div>
       </div>
+
+      {memoryOpen && (
+        <Suspense fallback={null}>
+          <MemorySheet onClose={() => setMemoryOpen(false)} />
+        </Suspense>
+      )}
 
       {/* A tall sheet over the chat, like Settings — swipe down, tap the chat or × to close.
           Hidden (not closed) while an artifact opened from it is full screen: that viewer

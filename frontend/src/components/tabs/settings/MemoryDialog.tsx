@@ -190,7 +190,7 @@ function ForgetConfirm({
 }
 
 export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: Toast }) {
-  const { facts, forget, forgetAll, instruct, edit } = useMemoryFacts(toast)
+  const { facts, loading, forget, forgetAll, instruct, edit } = useMemoryFacts(toast)
   const [editingId, setEditingId] = useState<string | null>(null)
   const settings = useCachedFetchState(MEMORY_SETTINGS_KEY, getMemorySettings, { staleTime: 0 })
   const off = settings.data?.enabled === false
@@ -221,8 +221,11 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
   return (
     <>
       <Modal
-        title={'Stored memories (' + facts.length + ')'}
+        title={loading ? 'Stored memories' : 'Stored memories (' + facts.length + ')'}
         size="lg"
+        // A fixed height: sized to its content, the dialog shrank with every keystroke of a
+        // search and all but vanished on a phone when nothing matched.
+        className="rd-mem-modal"
         // The dialog owns Escape (and the X and scrim): an open confirm or edit is cancelled first.
         onClose={() =>
           pendingForget ? setPendingForget(null) : editingId ? setEditingId(null) : onClose()
@@ -292,7 +295,22 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
           aria-label="Search memories"
           onChange={(e) => setQ(e.target.value)}
         />
-        {shown.length ? (
+        {needle && !loading && (
+          <span className="rd-mem-count" role="status">
+            {shown.length} of {facts.length}{' '}
+            {facts.length === 1 ? 'memory matches' : 'memories match'}
+          </span>
+        )}
+        {loading ? (
+          <div className="rd-factlist" aria-busy="true" aria-label="Loading memories">
+            {[0, 1, 2, 3].map((i) => (
+              <div className="rd-fact rd-fact-skel" key={i}>
+                <span className="rd-set-skelbar" />
+                <span className="rd-set-skelbar short" />
+              </div>
+            ))}
+          </div>
+        ) : shown.length ? (
           <div className="rd-factlist">
             {shown.map((f) => (
               <MemoryFactRow
@@ -307,11 +325,11 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
             ))}
           </div>
         ) : (
-          <span className="rd-help">
+          <div className="rd-mem-empty">
             {facts.length
-              ? 'Nothing matches “' + q + '”.'
+              ? 'No memories match “' + q.trim() + '”.'
               : 'No memories stored. Tell Lucius something below, or he’ll pick facts up as you talk.'}
-          </span>
+          </div>
         )}
       </Modal>
       {pendingForget && (

@@ -33,13 +33,13 @@ it follows the conversation's [approval mode](permissions.md) like any other.
 
 ## Review what he knows
 
-Click the **Memory** button (the brain) at the top of the chat side panel, next to
-**Documents**. You can also get there from **Settings → Chat & Memory → Stored memories →
-Review…**.
+Click **Memory** (the brain) next to **Documents** — at the top of the chat side panel, on the
+**Lucius** tab, and in the Lucius header on a phone. You can also get there from **Settings →
+Chat & Memory → Stored memories → Review…**.
 
 1. The list shows each fact, when it changed, and where it came from — **You told Lucius** or
    **Learned in chat**. Use the search box to find one.
-2. Hover a fact and click **Edit** (the pencil) to fix its wording. The whole fact opens in a box; change it, then
+2. Click **Edit** (the pencil — on a computer it shows when you point at a fact) to fix its wording. The whole fact opens in a box; change it, then
    **Save** or press Enter (Shift+Enter starts a new line). **Cancel** or Esc leaves it as it was.
 3. Click **Forget** (the bin) next to anything wrong or out of date, then **Forget** again to
    confirm. It can't be undone.

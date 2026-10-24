@@ -169,4 +169,33 @@ describe('MemorySheet', () => {
     expect(onClose).not.toHaveBeenCalled()
     expect(authFetch).not.toHaveBeenCalledWith(expect.anything(), { method: 'DELETE' })
   })
+
+  it('shows a loading state, not "No memories stored", before the facts arrive', async () => {
+    let release: (r: Response) => void = () => {}
+    authFetch.mockImplementation((url: string) => {
+      if (url === '/api/memory/settings') return json({ enabled: true })
+      return new Promise<Response>((r) => {
+        release = r
+      })
+    })
+    render(<MemorySheet onClose={vi.fn()} />)
+    expect(screen.getByLabelText('Loading memories')).toBeTruthy()
+    expect(screen.queryByText(/No memories stored/)).toBeNull()
+    expect(screen.getByText('Stored memories')).toBeTruthy()
+    release(new Response(JSON.stringify({ facts: [{ id: 'f1', content: 'A fact' }], total: 1 })))
+    expect(await screen.findByText('A fact')).toBeTruthy()
+  })
+
+  it('says how many memories match a search', async () => {
+    serve(true, [
+      { id: 'f1', content: 'Rent goes up every March' },
+      { id: 'f2', content: 'Saving for a house deposit' },
+    ])
+    render(<MemorySheet onClose={vi.fn()} />)
+    await screen.findByText('Rent goes up every March')
+    fireEvent.change(screen.getByLabelText('Search memories'), { target: { value: 'rent' } })
+    expect(screen.getByRole('status').textContent).toBe('1 of 2 memories match')
+    fireEvent.change(screen.getByLabelText('Search memories'), { target: { value: 'zzz' } })
+    expect(screen.getByText('No memories match “zzz”.')).toBeTruthy()
+  })
 })

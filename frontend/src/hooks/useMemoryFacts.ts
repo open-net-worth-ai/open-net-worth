@@ -28,7 +28,7 @@ async function getFacts(): Promise<{ facts: MemoryFact[]; total: number }> {
 /** The stored-memory list and its edits and deletes, used by the one stored-memories dialog
  *  (components/tabs/settings/MemoryDialog). `notify` gets one short line per outcome. */
 export function useMemoryFacts(notify: (message: string) => void) {
-  const { data, refresh } = useCachedFetchState(MEMORY_FACTS_KEY, getFacts, {
+  const { data, refresh, initialLoading } = useCachedFetchState(MEMORY_FACTS_KEY, getFacts, {
     staleTime: 0,
   })
 
@@ -99,6 +99,7 @@ export function useMemoryFacts(notify: (message: string) => void) {
     edit,
     instruct,
     facts: data?.facts ?? [],
+    loading: initialLoading,
     forget: (id: string) => remove(`${MEMORY_FACTS_KEY}/${encodeURIComponent(id)}`, 'Forgotten'),
     forgetAll: () => remove(MEMORY_FACTS_KEY, 'All memories forgotten'),
   }

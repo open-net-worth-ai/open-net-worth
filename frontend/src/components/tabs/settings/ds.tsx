@@ -211,12 +211,15 @@ export function Modal({
   footer,
   children,
   size,
+  className,
 }: {
   title: ReactNode
   onClose: () => void
   footer?: ReactNode
   children: ReactNode
   size?: 'lg'
+  /** A dialog-specific hook on `.rd-modal` (e.g. a fixed height). */
+  className?: string
 }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -238,7 +241,7 @@ export function Modal({
       }}
     >
       <div
-        className={'rd-modal' + (size === 'lg' ? ' lg' : '')}
+        className={'rd-modal' + (size === 'lg' ? ' lg' : '') + (className ? ' ' + className : '')}
         role="dialog"
         aria-label={typeof title === 'string' ? title : undefined}
       >

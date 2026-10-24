@@ -3,7 +3,7 @@
 // see the render-gate note in RouterShell.tsx (mobileNav === 'lucius' still owns the phone's
 // full-screen chat, unchanged).
 
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { ChatPanel, conversationGroups, conversationWhen } from '../../chat/ChatPanel'
 import { ConversationBrowser } from '../../chat/ConversationBrowser'
 import type { ConversationKind } from '../../chat/ConversationMenu'
@@ -14,11 +14,16 @@ import { ArtifactFullscreen } from './ArtifactFullscreen'
 import { ArtifactPanelProvider } from '../../../state/artifactPanel'
 import { VaultPanel } from '../../vault/VaultPanel'
 import { useLuciusChat } from '../../../state/luciusChat'
-import { ChevronRight, FolderLock, SquarePen } from '../../../ui/icons'
+import { Brain, ChevronRight, FolderLock, SquarePen } from '../../../ui/icons'
 import { usePointerResize } from '../../../hooks/usePointerResize'
 import { useSessionState } from '../../../hooks/useSessionState'
 import type { ArtifactRef } from '../../../types/chat'
+import { lazyChunk } from '../../../lazyChunk'
 import './lucius-home.css'
+
+const MemorySheet = lazyChunk(() =>
+  import('../../chat/MemorySheet').then((m) => ({ default: m.MemorySheet })),
+)
 
 const COLLAPSE_KEY = 'luciusSideCollapsed'
 const SIDEBAR_DEFAULT_W = 280
@@ -258,6 +263,7 @@ export function LuciusHome({
   // artifact it is not tied to a conversation, so switching chats leaves it open.
   // Remembered for the browser session, so a refresh brings it back (owner report).
   const [documentsFlag, setDocumentsFlag] = useSessionState(DOCUMENTS_OPEN_KEY)
+  const [memoryOpen, setMemoryOpen] = useState(false)
   const vaultOpen = documentsFlag === '1'
   const setVaultOpen = (open: boolean) => setDocumentsFlag(open ? '1' : null)
   const toggleVault = () => {
@@ -467,17 +473,33 @@ export function LuciusHome({
             </button>
           </div>
         )}
-        <button
-          type="button"
-          className={`lucius-home-vault-btn${vaultOpen && !openArtifact ? ' is-on' : ''}`}
-          onClick={toggleVault}
-          aria-pressed={vaultOpen && !openArtifact}
-          title="Your documents, statements, receipts and saved artifacts"
-          data-tour="lucius-documents"
-        >
-          <FolderLock size={15} strokeWidth={1.6} />
-          Documents
-        </button>
+        <div className="lucius-home-top-actions">
+          <button
+            type="button"
+            className="lucius-home-vault-btn"
+            onClick={() => setMemoryOpen(true)}
+            title="What Lucius remembers about you"
+          >
+            <Brain size={15} strokeWidth={1.6} />
+            Memory
+          </button>
+          <button
+            type="button"
+            className={`lucius-home-vault-btn${vaultOpen && !openArtifact ? ' is-on' : ''}`}
+            onClick={toggleVault}
+            aria-pressed={vaultOpen && !openArtifact}
+            title="Your documents, statements, receipts and saved artifacts"
+            data-tour="lucius-documents"
+          >
+            <FolderLock size={15} strokeWidth={1.6} />
+            Documents
+          </button>
+        </div>
+        {memoryOpen && (
+          <Suspense fallback={null}>
+            <MemorySheet onClose={() => setMemoryOpen(false)} />
+          </Suspense>
+        )}
         <ArtifactPanelProvider onOpen={setOpenArtifact}>
           <ChatPanel
             open

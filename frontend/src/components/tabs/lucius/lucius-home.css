@@ -287,11 +287,16 @@ body.lucius-resizing iframe {
 /* The Vault button — top right of the chat pane, mirroring the collapsed bar's top-left
    controls (same 34px height, 9px radius). It opens the Vault in the right-hand slot the
    artifact panel uses (LuciusHome.tsx). */
-.lucius-home-vault-btn {
+/* Memory + Documents float together over the transcript's top-right corner */
+.lucius-home-top-actions {
   position: absolute;
   top: 14px;
   right: 14px;
   z-index: 2; /* z-local: same layer as .lucius-home-collapsed-bar */
+  display: flex;
+  gap: 8px;
+}
+.lucius-home-vault-btn {
   height: 34px;
   box-sizing: border-box;
   display: inline-flex;
