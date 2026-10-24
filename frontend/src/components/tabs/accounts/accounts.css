@@ -4412,8 +4412,12 @@ select.acct-addin {
   background: var(--surface);
   border-left: 1px solid var(--line);
 }
+/* Above the column resize dividers (.acct-col-resize, z-index 3): a divider belongs to a column
+   that scrolls UNDER the pinned Amount, and at z-index 2 it was drawn straight through the
+   "AMOUNT" label (owner, 2026-10-25). */
 .acct-reg.overflow:not(.cards) .acct-reg-head > .acct-h:last-child {
   justify-content: flex-end;
+  z-index: 4;
 }
 /* The full cell of its track, over the row's 6px vertical padding: a cell only as big as its figure
    drew a separate smudge of shadow per row, each at its own x, instead of one edge down the column. */
