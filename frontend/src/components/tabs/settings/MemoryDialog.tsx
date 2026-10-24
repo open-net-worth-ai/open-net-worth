@@ -58,7 +58,7 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
           ? 'Memory is off — Lucius is not learning new facts or using these. Turn it on in ' +
             'Settings → Chat & Memory.'
           : 'Durable facts Lucius carries between conversations. Forgetting one takes effect on ' +
-            'the next turn — it does not change your ledger or profile.'}
+            'the next turn.'}
       </span>
       <input
         className="rd-input"
