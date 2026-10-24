@@ -114,7 +114,6 @@ def env(tmp_path, monkeypatch, db_isolated):
     the external-MCP dispatcher seam so ``mcp__drive__*`` tool_use names route through it
     exactly as they do in production."""
     monkeypatch.setattr("backend.core.cost_context.get_cost_surface", lambda: "web")
-    monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
     monkeypatch.setattr(assistant, "_run_memory_extraction", lambda *a, **k: _noop(), raising=False)
 
     store = McpClientStore()
@@ -286,3 +285,211 @@ async def test_a_tool_blocked_while_the_card_waited_is_refused_not_fired(env, mo
     ]
     assert len(result_blocks) == 1
     assert "blocked" in result_blocks[0]["content"].lower()
+
+
+# ── 5. One value per tool (ADR 2026-10-11-permissions-are-one-value-per-tool) ───────────────
+
+
+def _bound_chat(mode: str):
+    from backend.core.conversation_approval import (
+        ConversationApprovalContext,
+        bind_conversation_approval,
+        reset_conversation_approval,
+    )
+
+    class _Ctx:
+        def __enter__(self):
+            self.token = bind_conversation_approval(
+                ConversationApprovalContext(session_id="s", mode=mode)
+            )
+
+        def __exit__(self, *exc):
+            reset_conversation_approval(self.token)
+
+    return _Ctx()
+
+
+def _bound_automation(mode: str, *, allowed=(), blocked=()):
+    from backend.core.automation_runner import (
+        AutomationApprovalContext,
+        bind_automation_approval,
+        reset_automation_approval,
+    )
+
+    class _Ctx:
+        def __enter__(self):
+            self.token = bind_automation_approval(
+                AutomationApprovalContext(
+                    automation_id="auto_1",
+                    run_id="run_1",
+                    session_id="s",
+                    mode=mode,
+                    always_allowed_tools=frozenset(allowed),
+                    blocked_tools=frozenset(blocked),
+                )
+            )
+
+        def __exit__(self, *exc):
+            reset_automation_approval(self.token)
+
+    return _Ctx()
+
+
+TOOL = "mcp__drive__transfer"
+
+
+async def _dispatch(judge, tool_use_id: str = "toolu_ext_mode", name: str = TOOL):
+    """What the turn loop does for an external call: the SAME chain as a registry tool."""
+    set_tool_use_id(tool_use_id)
+    manager = mcp_external.get_external_dispatcher()
+    return await assistant._dispatch_external(manager, name, {"to": "cash", "amount": 1})
+
+
+@pytest.mark.asyncio
+async def test_a_discovered_external_tool_is_seeded_ask(env):
+    tool_permissions.seed_discovered_tools(mcp_connector_id("drive"), ["transfer"])
+    assert tool_permissions.stored_tool_level("mcp:drive", "transfer") == "needs_approval"
+    assert gate.effective_level(TOOL) == "needs_approval"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("mode", "judged", "fires"),
+    [
+        ("manual", None, False),
+        ("skip", None, True),
+        ("auto", "allow", True),
+        ("auto", "ask", False),
+    ],
+)
+async def test_an_external_ask_follows_the_mode_like_every_other_tool(
+    env, monkeypatch, mode, judged, fires
+):
+    """Manual: a card. Auto: the judge decides. Skip: it runs. No exception for a third party."""
+    from backend.db.pending_plan_store import PendingPlanStore
+    from tests.auto_judge_support import stub_judge
+
+    _tmp, captured = env
+    tool_permissions.seed_discovered_tools(mcp_connector_id("drive"), ["transfer"])
+    judged_calls: list[str] = []
+    stub_judge(monkeypatch, judged or "ask", judged_calls)
+
+    with _bound_chat(mode):
+        _text, change, _images = await _dispatch(None)
+
+    assert judged_calls == ([TOOL] if mode == "auto" else [])
+    if fires:
+        assert change is None
+        assert captured["call_args"]["arguments"] == {"to": "cash", "amount": 1}
+    else:
+        assert change is not None and change["type"] == "external_mcp_call"
+        assert PendingPlanStore().get_pending("toolu_ext_mode") is not None
+        assert "call_args" not in captured, "nothing may fire before approval"
+        assert change["reason"] == "Run the 'transfer' tool on the external 'Drive' MCP server."
+
+
+@pytest.mark.asyncio
+async def test_with_no_mode_bound_an_external_ask_is_a_card(env):
+    _tmp, captured = env
+    tool_permissions.seed_discovered_tools(mcp_connector_id("drive"), ["transfer"])
+    _text, change, _images = await _dispatch(None)
+    assert change is not None and "call_args" not in captured
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["manual", "auto", "skip"])
+async def test_an_external_always_allow_runs_and_block_is_refused_in_every_mode(
+    env, monkeypatch, mode
+):
+    from tests.auto_judge_support import stub_judge
+
+    _tmp, captured = env
+    judged_calls: list[str] = []
+    stub_judge(monkeypatch, "ask", judged_calls)
+    tool_permissions.seed_discovered_tools(mcp_connector_id("drive"), ["transfer"])
+
+    tool_permissions.set_tool_permission("mcp:drive", "transfer", "always_allow")
+    with _bound_chat(mode):
+        _text, change, _ = await _dispatch(None)
+    assert change is None and captured["call_args"]["arguments"] == {"to": "cash", "amount": 1}
+    assert judged_calls == []
+
+    captured.clear()
+    tool_permissions.set_tool_permission("mcp:drive", "transfer", "blocked")
+    with _bound_chat(mode):
+        text, change, _ = await _dispatch(None, "toolu_ext_blocked")
+    assert change is None and "call_args" not in captured and "blocked" in text.lower()
+    assert judged_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["manual", "auto", "skip"])
+async def test_an_automations_blocked_list_refuses_an_external_tool_in_every_mode(
+    env, monkeypatch, mode
+):
+    from tests.auto_judge_support import stub_judge
+
+    _tmp, captured = env
+    judged_calls: list[str] = []
+    stub_judge(monkeypatch, "allow", judged_calls)
+    tool_permissions.seed_discovered_tools(mcp_connector_id("drive"), ["transfer"])
+    tool_permissions.set_tool_permission("mcp:drive", "transfer", "always_allow")
+
+    with _bound_automation(mode, blocked=[TOOL]):
+        text, change, _ = await _dispatch(None)
+
+    assert change is None and "call_args" not in captured
+    assert "not allowed in this Automation" in text
+    assert judged_calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["manual", "auto"])
+async def test_an_automations_always_allowed_list_runs_an_external_ask(env, monkeypatch, mode):
+    from tests.auto_judge_support import stub_judge
+
+    _tmp, captured = env
+    judged_calls: list[str] = []
+    stub_judge(monkeypatch, "ask", judged_calls)
+    tool_permissions.seed_discovered_tools(mcp_connector_id("drive"), ["transfer"])
+
+    with _bound_automation(mode, allowed=[TOOL]):
+        _text, change, _ = await _dispatch(None)
+
+    assert change is None and captured["call_args"]["arguments"] == {"to": "cash", "amount": 1}
+    assert judged_calls == []
+
+
+def test_an_automation_run_resolves_external_names_on_its_lists(env):
+    from backend.ai.automation_runner_adapter import _canonical_tool_names
+
+    store = McpClientStore()
+    store.record_discovery("drive", [{"name": "transfer"}], "ok", None)
+    assert _canonical_tool_names([TOOL, "mcp__drive__gone", "mcp__nope__x", "no_such"]) == {TOOL}
+
+
+@pytest.mark.asyncio
+async def test_an_external_tool_set_to_always_allow_fires_and_block_refuses(env):
+    _tmp, captured = env
+    manager = mcp_external.get_external_dispatcher()
+    tool_permissions.seed_discovered_tools(mcp_connector_id("drive"), ["transfer"])
+
+    tool_permissions.set_tool_permission("mcp:drive", "transfer", "blocked")
+    _text, change, _ = await manager.call_external_tool("mcp__drive__transfer", {"amount": 1})
+    assert change is None and "call_args" not in captured
+
+    tool_permissions.set_tool_permission("mcp:drive", "transfer", "always_allow")
+    await manager.call_external_tool("mcp__drive__transfer", {"amount": 2})
+    assert captured["call_args"]["arguments"] == {"amount": 2}
+
+
+def test_an_automations_block_on_an_external_tool_outlives_a_server_that_is_not_advertising_it(
+    env,
+):
+    """A Block must hold when the run starts while the server is disabled or has not listed the
+    tool, and the server comes back mid-run. Only the Always-allowed list needs the tool live."""
+    from backend.ai.automation_runner_adapter import _canonical_tool_names
+
+    names = [TOOL, "mcp__ghost__tool", "no_such_native", "mcp__broken"]
+    assert _canonical_tool_names(names, keep_external=True) == {TOOL, "mcp__ghost__tool"}
+    assert _canonical_tool_names(names) == {TOOL}

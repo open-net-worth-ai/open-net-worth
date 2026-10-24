@@ -141,14 +141,14 @@ _USE_DATA_VERSION = re.compile(r"useDataVersion\(\s*(\[[^\]]*\]|'[^']*'|\"[^\"]*
 
 
 def report_domains() -> None:
-    """Write-tool ``mutates`` domains that no frontend view subscribes to.
+    """Write-tool ``mutates`` / ``refreshes`` domains that no frontend view subscribes to.
 
     Not a test: a backend that ships ahead of its UI legitimately declares a domain
     nothing listens to yet. But a domain that stays unsubscribed for long is either dead
     weight or a missing refetch, and this is the only place that is visible.
     """
     import backend.ai.tools  # noqa: F401
-    from backend.ai.tools.registry import mutating_tool_domains
+    from backend.ai.tools.registry import mutating_tool_domains, refreshing_tool_domains
 
     subscribed: set[str] = set()
     src_dir = REPO_ROOT / "frontend" / "src"
@@ -163,7 +163,7 @@ def report_domains() -> None:
             subscribed.update(re.findall(r"['\"]([a-z_]+)['\"]", match.group(1)))
 
     produced: dict[str, list[str]] = {}
-    for name, domains in mutating_tool_domains().items():
+    for name, domains in {**mutating_tool_domains(), **refreshing_tool_domains()}.items():
         for domain in domains:
             produced.setdefault(domain, []).append(name)
 

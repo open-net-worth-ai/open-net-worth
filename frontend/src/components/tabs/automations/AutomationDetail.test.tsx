@@ -1,9 +1,61 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { Automation, AutomationRun } from '../../../api/automations'
+import { clearQueryCache } from '../../../state/queryCache'
 import { AutomationDetail } from './AutomationDetail'
+
+vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
+
+import { authFetch } from '../../../api/client'
+
+const tools = [
+  {
+    tool: 'update_transactions',
+    connector_id: 'core',
+    level: 'needs_approval',
+    default_level: 'needs_approval',
+    description: 'Edit existing transactions.',
+    updated_at: '',
+    tool_exists: true,
+  },
+  {
+    tool: 'email_send_message',
+    connector_id: 'email',
+    level: 'needs_approval',
+    default_level: 'needs_approval',
+    description: 'Send an email.',
+    updated_at: '',
+    tool_exists: true,
+  },
+  {
+    tool: 'get_net_worth',
+    connector_id: 'core',
+    level: 'always_allow',
+    default_level: 'always_allow',
+    description: 'Read net worth.',
+    updated_at: '',
+    tool_exists: true,
+  },
+  {
+    tool: 'browser_click',
+    connector_id: 'mcp:playwright',
+    level: 'needs_approval',
+    default_level: 'needs_approval',
+    description: '',
+    updated_at: '',
+    tool_exists: true,
+  },
+]
+
+beforeEach(() => {
+  clearQueryCache()
+  vi.mocked(authFetch).mockResolvedValue({
+    ok: true,
+    json: async () => ({ permissions: tools, total: tools.length }),
+  } as Response)
+})
 
 const automation: Automation = {
   id: 'automation_a',
@@ -75,7 +127,7 @@ describe('AutomationDetail', () => {
         onRunNow={vi.fn()}
         onStopRun={vi.fn()}
         onStatusChange={vi.fn()}
-        onRevoke={vi.fn()}
+        onSaveToolLists={vi.fn()}
       />,
     )
 
@@ -108,7 +160,7 @@ describe('AutomationDetail', () => {
         onRunNow={vi.fn()}
         onStopRun={vi.fn()}
         onStatusChange={vi.fn()}
-        onRevoke={vi.fn()}
+        onSaveToolLists={vi.fn()}
       />,
     )
     expect(screen.getByText('No context recorded.')).toBeTruthy()
@@ -129,7 +181,7 @@ describe('AutomationDetail', () => {
         onRunNow={vi.fn()}
         onStopRun={vi.fn()}
         onStatusChange={vi.fn()}
-        onRevoke={vi.fn()}
+        onSaveToolLists={vi.fn()}
       />,
     )
     expect(screen.getByText(/Hasn’t run yet\. It first runs/)).toBeTruthy()
@@ -148,7 +200,7 @@ describe('AutomationDetail', () => {
         onRunNow={vi.fn()}
         onStopRun={vi.fn()}
         onStatusChange={vi.fn()}
-        onRevoke={vi.fn()}
+        onSaveToolLists={vi.fn()}
       />,
     )
 
@@ -175,7 +227,7 @@ describe('AutomationDetail', () => {
         onRunNow={onRunNow}
         onStopRun={onStopRun}
         onStatusChange={vi.fn()}
-        onRevoke={vi.fn()}
+        onSaveToolLists={vi.fn()}
       />,
     )
 
@@ -198,11 +250,140 @@ describe('AutomationDetail', () => {
         onRunNow={vi.fn()}
         onStopRun={vi.fn()}
         onStatusChange={vi.fn()}
-        onRevoke={vi.fn()}
+        onSaveToolLists={vi.fn()}
       />,
     )
 
     expect(screen.getByRole('button', { name: /run now/i })).toBeTruthy()
     expect(screen.queryByRole('button', { name: /^stop$/i })).toBeNull()
+  })
+
+  describe('Tool permissions', () => {
+    const withLists: Automation = {
+      ...automation,
+      permission_mode: 'auto',
+      always_allowed: [
+        {
+          src: 'Open Net Worth',
+          desc: 'Allow update transactions',
+          tools: ['update_transactions'],
+        },
+      ],
+      blocked: ['email_send_message'],
+    }
+
+    function mount(onSaveToolLists = vi.fn(), value: Automation = withLists) {
+      render(
+        <AutomationDetail
+          automation={value}
+          runs={[]}
+          selectedRunId={null}
+          onSelectRun={vi.fn()}
+          onCloseRun={vi.fn()}
+          onEdit={vi.fn()}
+          onDelete={vi.fn()}
+          onRunNow={vi.fn()}
+          onStopRun={vi.fn()}
+          onStatusChange={vi.fn()}
+          onSaveToolLists={onSaveToolLists}
+        />,
+      )
+      return onSaveToolLists
+    }
+
+    it('lists what this Automation always allows and blocks, and says what the rest follows', () => {
+      mount()
+      const allowed = screen.getByLabelText('Permission for Update transactions in this Automation')
+      expect((allowed as HTMLSelectElement).value).toBe('always_allow')
+      const blocked = screen.getByLabelText('Permission for Email send message in this Automation')
+      expect((blocked as HTMLSelectElement).value).toBe('blocked')
+      expect(screen.getByText('Everything else: global setting · Auto mode')).toBeTruthy()
+    })
+
+    it('moves a tool between the lists when its value changes', () => {
+      const onSave = mount()
+      fireEvent.change(
+        screen.getByLabelText('Permission for Update transactions in this Automation'),
+        {
+          target: { value: 'blocked' },
+        },
+      )
+      expect(onSave).toHaveBeenCalledWith({
+        always_allowed: [],
+        blocked: ['email_send_message', 'update_transactions'],
+      })
+    })
+
+    it('lists an external MCP tool by its namespaced name', async () => {
+      const onSave = mount(vi.fn(), { ...withLists, always_allowed: [], blocked: [] })
+      fireEvent.click(screen.getByRole('button', { name: /add tool/i }))
+      const picker = await screen.findByRole('dialog', { name: 'Add a tool' })
+      fireEvent.click(
+        await within(picker).findByRole('button', {
+          name: 'Block Browser click · MCP playwright in this Automation',
+        }),
+      )
+      expect(onSave).toHaveBeenCalledWith({
+        always_allowed: [],
+        blocked: ['mcp__playwright__browser_click'],
+      })
+    })
+
+    it('removes a tool from this Automation without touching the other list', () => {
+      const onSave = mount()
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Email send message' }))
+      expect(onSave).toHaveBeenCalledWith({
+        always_allowed: withLists.always_allowed,
+        blocked: [],
+      })
+    })
+
+    it('adds a tool from the searchable picker as Always allow or Block', async () => {
+      const onSave = mount(vi.fn(), { ...withLists, always_allowed: [], blocked: [] })
+      fireEvent.click(screen.getByRole('button', { name: /add tool/i }))
+      const picker = await screen.findByRole('dialog', { name: 'Add a tool' })
+      await within(picker).findByText('Get net worth')
+      // An external MCP tool is offered too, under the name its calls carry.
+      expect(within(picker).getByText('Browser click · MCP playwright')).toBeTruthy()
+
+      fireEvent.change(within(picker).getByLabelText('Search tools'), {
+        target: { value: 'email' },
+      })
+      expect(within(picker).queryByText('Get net worth')).toBeNull()
+      fireEvent.click(
+        within(picker).getByRole('button', { name: 'Block Email send message in this Automation' }),
+      )
+      expect(onSave).toHaveBeenCalledWith({
+        always_allowed: [],
+        blocked: ['email_send_message'],
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: /add tool/i }))
+      const again = await screen.findByRole('dialog', { name: 'Add a tool' })
+      fireEvent.click(
+        await within(again).findByRole('button', {
+          name: 'Always allow Update transactions in this Automation',
+        }),
+      )
+      expect(onSave).toHaveBeenLastCalledWith({
+        always_allowed: [
+          {
+            src: 'Open Net Worth',
+            desc: 'Allow update transactions',
+            tools: ['update_transactions'],
+          },
+        ],
+        blocked: [],
+      })
+    })
+
+    it('keeps an entry that names no tool, and removes it by position', () => {
+      const onSave = mount(vi.fn(), {
+        ...automation,
+        always_allowed: [{ src: 'Telegram', desc: 'Send the daily digest' }],
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Send the daily digest' }))
+      expect(onSave).toHaveBeenCalledWith({ always_allowed: [], blocked: [] })
+    })
   })
 })

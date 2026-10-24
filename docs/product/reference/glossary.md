@@ -118,8 +118,8 @@ Each one is off until you add it. See the Connectors section of this help.
 **Automation** — a job Lucius runs on a schedule without you, such as logging transactions from
 your email. See [Automations](../lucius/automations.md).
 
-**Always allow / Needs approval / Blocked** — the three permission levels for each action Lucius
-can take. See [Permissions](../lucius/permissions.md).
+**Always allow / Ask / Block** — the three settings every action Lucius can take has. The
+approval mode only decides what Ask means. See [Permissions](../lucius/permissions.md).
 
 **Confirm card** — the card Lucius shows before a change, with what will happen and buttons to
 approve or reject it. See [Confirm cards](../lucius/confirm-cards.md).

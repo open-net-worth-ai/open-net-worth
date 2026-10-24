@@ -305,8 +305,8 @@ class VerifyStatementBalanceInput(ToolInput):
         "opening and/or closing balances. Report the result to the user even when it passes."
     ),
     input_schema=schema_of(VerifyStatementBalanceInput, tool_name="verify_statement_balance"),
-    # Read-SHAPED but writes: the computed balance_check is persisted onto the import batch.
-    mutates=("uploads",),
+    # A read whose computed balance_check is remembered on the import batch.
+    refreshes=("uploads",),
 )
 async def verify_statement_balance(input_data: dict):
     account_id = input_data.get("account_id", "")
@@ -595,9 +595,9 @@ def _cached_diff_parse(record: dict) -> tuple[list[dict] | None, dict, dict | No
         "5. Call verify_statement_balance to confirm the closing balance matches."
     ),
     input_schema=schema_of(DiffStatementInput, tool_name="diff_statement"),
-    # Read-SHAPED but writes: parsed rows are memoized onto the statement record (and the
-    # format profile learns from the parse) so a re-diff skips the expensive LLM pass.
-    mutates=("uploads",),
+    # A read whose parsed rows are remembered on the statement record so a re-diff skips the
+    # expensive LLM pass.
+    refreshes=("uploads",),
 )
 async def diff_statement(input_data: dict):
     from backend.services.attachments import get_attachment_for_model, private_refusal

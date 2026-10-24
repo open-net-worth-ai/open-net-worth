@@ -241,7 +241,6 @@ READ_ONLY_TOOLS = frozenset(
         # Validates/normalizes against read-only reference options; it never reaches the
         # Automation mutation choke or any store write.
         "preview_automation",
-        "save_code_as_skill",
         # Federates providers_for_country() + per-bank list_institutions() (Enable Banking
         # only, since GoCardless was removed) — pure reads. Used to carry mutates=("config",)
         # because the GoCardless lookup minted/persisted an OAuth token; that provider is
@@ -252,7 +251,6 @@ READ_ONLY_TOOLS = frozenset(
         "simulate_retirement",
         "trace_transactions",
         "web_search",
-        "x_search",
         # Per-provider web-search tools (2026-08-13, RFC §B3) — same shape as
         # web_search/fetch_page above, just scoped to one named provider each.
         "duckduckgo_search",

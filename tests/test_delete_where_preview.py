@@ -5,8 +5,8 @@
 confirm, then trusted its word that it had. That was the second confirm mechanism, deleted
 everywhere else by ADR `2026-08-25-one-confirm-mechanism-for-every-tool` and missed here
 because it was spelled `confirm` rather than a minted token (owner, 2026-08-27). Asking the
-owner is the HARNESS's job — this tool is on `HARDLINE_UNATTENDED_TOOLS`, so it raises a card
-even in `auto`, and nothing the model passes can skip it.
+owner is the HARNESS's job — `should_gate` stages this call and raises a card (in `auto`, the
+Auto judge decides it like any other call), and nothing the model passes can skip it.
 
 The load-bearing property is not "a preview exists" but that the preview and the delete
 select the SAME ROWS — they share one predicate (`TransactionStore._matches_bulk_filters`)

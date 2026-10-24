@@ -17,20 +17,27 @@ from typing import Optional
 
 from pydantic import ConfigDict, Field
 
-from backend.ai.tools.registry import build_tool_schemas, mutating_tool_domains, tool
+from backend.ai.tools.registry import (
+    build_tool_schemas,
+    mutating_tool_domains,
+    refreshing_tool_domains,
+    tool,
+)
 from backend.ai.tools.schema_from_model import ToolInput, schema_of
 from backend.services import domain_introspect
 
-# A view is a READ tool. The registry already knows which tools write — they self-declare
-# ``mutates`` for the freshness seam — so the read set is derived from that same declaration
-# instead of a second hand-kept list that could disagree with it.
+# A view is a READ tool that leaves nothing behind. The registry already knows which tools
+# write or refresh — they self-declare ``mutates`` / ``refreshes`` for the freshness seam — so
+# the read set is derived from those same declarations instead of a second hand-kept list that
+# could disagree with them.
 _SELF = "describe"
 
 
 def _views() -> list[dict]:
-    """Every registered read tool, as a view. Derived from the registry's own ``mutates``
-    declarations, so a tool that becomes a writer stops being listed as a view automatically."""
-    writers = set(mutating_tool_domains())
+    """Every registered read tool, as a view. Derived from the registry's own ``mutates`` /
+    ``refreshes`` declarations, so a tool that becomes a writer stops being listed as a view
+    automatically."""
+    writers = set(mutating_tool_domains()) | set(refreshing_tool_domains())
     return [
         schema
         for schema in build_tool_schemas()

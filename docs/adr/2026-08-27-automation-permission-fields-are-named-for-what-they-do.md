@@ -132,7 +132,7 @@ The ladder, in order, as implemented in `automation_gate_verdict`:
 | # | Rule | Beats everything below |
 |---|---|---|
 | 0 | `blocked` | refused in `registry.dispatch`, before the gate is consulted at all |
-| 1 | `AUTOMATION_POLICY_TOOLS` | always gate, every mode, every grant — a run must not author the rules that govern runs |
+| 1 | `AUTOMATION_POLICY_TOOLS` *(removed 2026-10-11)* | always gate, every mode, every grant — a run must not author the rules that govern runs |
 | 2 | the Automation's own `always_allowed` | a human tapped *Always* on a card for THIS Automation |
 | 3 | an explicitly STORED `needs_approval` | outranks the `permission_mode` |
 | 4 | `permission_mode` (`manual`/`auto`/`skip`) | the blanket default |

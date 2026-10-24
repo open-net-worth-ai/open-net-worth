@@ -58,7 +58,7 @@ def test_tool_connector_none_for_an_unknown_name():
 def test_tool_connector_none_for_the_bulk_convenience_tools():
     """Documented decision: connector_sync/get_connector_status/web_search/fetch_page span
     (or don't fit) a single connector, so they carry no tag and are never gated."""
-    for name in ("connector_sync", "get_connector_status", "web_search", "fetch_page", "x_search"):
+    for name in ("connector_sync", "get_connector_status", "web_search", "fetch_page"):
         assert tool_connector(name) is None, name
 
 
@@ -95,8 +95,8 @@ def test_email_tools_default_levels_are_unchanged_by_the_tag():
     needs a human click. ``email_send_message`` is a real write with an irreversible external
     effect — it asked before tagging (via the `core` bucket's own approval-model verdict)
     and must still ask now (via the connector default, which is the SAME answer here).
-    ``email_search_messages``/``email_get_messages`` are the read-shaped-exempt pair (owner incident
-    2026-07-21, ``GATE_EXEMPT_READ_SHAPED``) — they ran with NO approval before tagging and
+    ``email_search_messages``/``email_get_messages`` are reads (owner incident 2026-07-21; they
+    declare ``refreshes=``, not ``mutates=``) — they ran with NO approval before tagging and
     must still run with none now; a regression here would silently reintroduce "why does
     reading my own inbox need permission?" for every fresh install."""
     assert effective_level("email_send_message") == "needs_approval"

@@ -1665,12 +1665,21 @@
 }
 
 /* ── permission rows (Settings → Permissions) ─────────────────────────────── */
-/* tool | owner | level | updated | actions — the owner column was added with the 2026-08-14
-   permission-store merge, so a decision made under Connectors ("sync_plaid_now") names
-   whose ladder it came from instead of reading as an unscoped puzzle. */
+/* tool | value | reset — one row per tool, grouped under its owner's heading. Every tool has a
+   value (Always allow / Ask / Block); Reset appears only when it differs from the default. */
+.onw-settings .rd-permtoolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.onw-settings .rd-permtoolbar .rd-input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
 .onw-settings .rd-permrow {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 128px 118px 96px 92px;
+  grid-template-columns: minmax(0, 1fr) 148px 76px;
   align-items: center;
   gap: 12px;
   padding: 10px 0;
@@ -1689,22 +1698,22 @@
   border-bottom: none;
 }
 .onw-settings .rd-permrow-tool {
-  font-size: 12.5px;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 13px;
   color: var(--ink);
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
-.onw-settings .rd-permrow-owner {
+.onw-settings .rd-permrow-desc {
+  margin-top: 2px;
   font-size: var(--text-xs);
+  font-weight: 400;
   color: var(--faint);
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.onw-settings .rd-permrow-when {
+.onw-settings .rd-permrow-default {
   font-size: var(--text-xs);
   color: var(--faint);
-  white-space: nowrap;
 }
 .onw-settings .rd-permrow > span:last-child {
   display: flex;
@@ -2417,8 +2426,7 @@
     grid-column: 1 / -1;
   }
 
-  /* tool (full width) / owner + level (row 2) / updated + actions (row 3) — three lines
-     instead of desktop's five columns, in DOM order tool → owner → level → updated → actions. */
+  /* tool (full width) / value + reset (row 2) — two lines instead of desktop's three columns. */
   .onw-settings .rd-permrow {
     grid-template-columns: minmax(0, 1fr) auto;
     row-gap: 6px;
@@ -2428,23 +2436,6 @@
   }
   .onw-settings .rd-permrow-tool {
     grid-column: 1 / -1;
-  }
-  .onw-settings .rd-permrow-owner {
-    grid-column: 1;
-    grid-row: 2;
-  }
-  .onw-settings .rd-permrow > span:nth-child(3) {
-    grid-column: 2;
-    grid-row: 2;
-    justify-self: end;
-  }
-  .onw-settings .rd-permrow-when {
-    grid-column: 1;
-    grid-row: 3;
-  }
-  .onw-settings .rd-permrow > span:last-child {
-    grid-column: 2;
-    grid-row: 3;
   }
   .onw-settings .rd-prov-head {
     flex-wrap: wrap;

@@ -150,7 +150,7 @@ export interface PositionDisplay {
   // total `count` and a capped `rows` sample, read by BatchBody.
   count?: number
   rows?: unknown[]
-  // Ad-hoc code-execution display (code_run; mirrors backend ai/tools/code.py). `source` is
+  // Script display (code_skill_create; mirrors backend ai/tools/code.py). `source` is
   // the model-authored script the user approves; `purpose` is the one-line reason.
   source?: string
   purpose?: string
@@ -195,7 +195,6 @@ export type ProposedChangeType =
   | 'agent_create'
   | 'agent_update'
   | 'external_mcp_call'
-  | 'code_run'
   | 'code_skill_create'
   | 'txn_create'
   | 'txn_update'
@@ -211,6 +210,12 @@ export interface ProposedChange {
   // disabled ✓/✗ state instead of the Confirm/Dismiss buttons, so a re-render
   // from storage (reload / conversation switch / panel reopen) can't re-fire it.
   status?: 'confirmed' | 'dismissed'
+  // WHICH of the three answers the owner gave, stored with the card so a reload (or a
+  // conversation switch) still reads "Approved", "Always allowed" or "Denied" — `status` alone
+  // cannot tell an approval from an Always allow. Approved runs this call once; Always allowed
+  // runs it AND stores the permission (chat: global; Automation run: that Automation's list);
+  // Denied refuses this call only and stores nothing.
+  resolution?: 'approved' | 'always_allowed' | 'denied'
   // The server REFUSED to redeem this approval (already answered elsewhere, or superseded by a
   // later message) — nothing ran. Set alongside clearing `status`, so a card the user tapped
   // stops claiming "✓ Approved" above the red error (ADR `2026-07-30-approvals-never-expire`).
@@ -243,14 +248,14 @@ export interface ProposedChange {
   // never from what this dict carries.
   //
   // There is NO `nonce` field. It was the second confirm mechanism — a token the MODEL had
-  // to send back — and its last user, code_run's apply_run_code twin, was deleted on
+  // to send back — and its last user, run_code's apply_run_code twin, was deleted on
   // 2026-08-25 (ADR one-confirm-mechanism-for-every-tool). Every card now resolves by `id`
   // (the tool_use_id), server-side. Do not reintroduce it.
   server_id?: string
   tool?: string
   args?: Record<string, unknown>
   is_money_movement?: boolean
-  // Ad-hoc code-execution (code_run): the conversation this card belongs to, so the
+  // The conversation this card belongs to, so the
   // frontend can route its response without prop-drilling. Not a secret, not a grant target.
   session_id?: string
   // Save-as-skill bridge (code_skill_create): the {id, source} script payload echoed back to
@@ -300,11 +305,15 @@ export interface ProposedChange {
   // silently keying off an external server's tool would be exactly the kind of collision
   // this codebase has been burned by.
   grant_tool?: string
+  // Present ONLY when the call belongs to an Automation run: the Automation's id. It is what
+  // makes the card's Always allow write to THIS Automation's own list (routed server-side from
+  // `session_id`), never to the global table.
+  automation_id?: string
 }
 
 // Ledger write-confirm cards (txn_create / txn_update / txn_bulk; mirrors backend
 // ai/tools/ledger.py proposed_change — tool_use_id-keyed like external_mcp_call since
-// 2026-08-22; code_run is the one remaining confirm-token/nonce instance). The whole point
+// 2026-08-22). The whole point
 // of these types is to make the
 // SILENT resolution inside create_transaction (category precedence explicit > rule >
 // payee-default > None; spend rules) visible before the write commits — see the incident

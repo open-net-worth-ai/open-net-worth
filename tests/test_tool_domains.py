@@ -1,11 +1,16 @@
 """Domain tags on write tools — registry mechanics + the classification sweep.
 
 The sweep is the load-bearing part. Every registered production tool must be EXPLICITLY
-classified as one of three things; there is no "unclassified" state a new tool can ship in:
+classified as one of four things; there is no "unclassified" state a new tool can ship in:
 
-  1. ``mutates=(...)`` on its ``@tool`` decorator — it writes those data domains.
-  2. ``READ_ONLY_TOOLS`` — reviewed, writes nothing persistent.
-  3. ``NO_DOMAIN_WRITE_TOOLS`` — it has a real side effect, but no LOCAL data domain a
+  1. ``mutates=(...)`` on its ``@tool`` decorator — it writes those data domains. This is
+     the tag that makes an undecided tool ASK (``registry.is_write_tool``).
+  2. ``refreshes=(...)`` — a READ that makes a screen refresh (a sync status, a cache, a
+     memoized result) and changes nothing the owner would call a change. Reaches
+     ``data_changed`` exactly like ``mutates=`` but does not ask. Because tagging a tool this
+     way removes its approval default, the members are a REVIEWED set pinned below.
+  3. ``READ_ONLY_TOOLS`` — reviewed, writes nothing persistent.
+  4. ``NO_DOMAIN_WRITE_TOOLS`` — it has a real side effect, but no LOCAL data domain a
      frontend view could refetch (outbound-only, sandboxed, or turn-ephemeral).
 
 This replaced a name-prefix sweep that only policed tools whose NAME started with one of
@@ -36,9 +41,12 @@ import re
 
 from backend.ai.tools._write_classification import NO_DOMAIN_WRITE_TOOLS, READ_ONLY_TOOLS
 from backend.ai.tools.registry import (
+    is_write_tool,
     iter_registered_tools,
     mutated_domains,
     mutating_tool_domains,
+    refreshing_tool_domains,
+    written_domains,
 )
 
 
@@ -75,25 +83,58 @@ def _production_tool_names() -> list[str]:
 
 def test_every_tool_is_explicitly_classified():
     """No tool ships unclassified — regardless of what it is NAMED."""
-    tagged = mutating_tool_domains()
+    tagged = set(mutating_tool_domains()) | set(refreshing_tool_domains())
     unclassified = sorted(
         name
         for name in _production_tool_names()
         if name not in tagged and name not in READ_ONLY_TOOLS and name not in NO_DOMAIN_WRITE_TOOLS
     )
     assert unclassified == [], (
-        "these tools declare neither mutates=(...) nor a reviewed read-only marker: "
-        f"{unclassified}. Trace the handler through its services/db calls, then either add "
-        "mutates=(domains) or add it to READ_ONLY_TOOLS / NO_DOMAIN_WRITE_TOOLS in this file."
+        "these tools declare neither mutates=(...) / refreshes=(...) nor a reviewed read-only "
+        f"marker: {unclassified}. Trace the handler through its services/db calls, then either "
+        "add mutates=(domains) (it changes something), refreshes=(domains) (a read that only "
+        "makes a screen refresh) or add it to READ_ONLY_TOOLS / NO_DOMAIN_WRITE_TOOLS."
     )
 
 
 def test_classification_is_unambiguous():
     """A tool is in exactly one bucket — a tag plus a read-only marker is a contradiction."""
-    tagged = set(mutating_tool_domains())
-    assert not (tagged & READ_ONLY_TOOLS), sorted(tagged & READ_ONLY_TOOLS)
-    assert not (tagged & set(NO_DOMAIN_WRITE_TOOLS)), sorted(tagged & set(NO_DOMAIN_WRITE_TOOLS))
+    writes = set(mutating_tool_domains())
+    refreshes = set(refreshing_tool_domains())
+    assert not (writes & refreshes), sorted(writes & refreshes)
+    for tagged in (writes, refreshes):
+        assert not (tagged & READ_ONLY_TOOLS), sorted(tagged & READ_ONLY_TOOLS)
+        assert not (tagged & set(NO_DOMAIN_WRITE_TOOLS)), sorted(
+            tagged & set(NO_DOMAIN_WRITE_TOOLS)
+        )
     assert not (READ_ONLY_TOOLS & set(NO_DOMAIN_WRITE_TOOLS))
+
+
+def test_a_tool_cannot_declare_both_mutates_and_refreshes():
+    """A real change always wins — a tool that is both would be a write that claims to be a
+    read, so registration refuses it outright."""
+    import pytest
+
+    from backend.ai.tools import registry as reg
+
+    name = "zz_declares_both_tags"
+    try:
+        with pytest.raises(ValueError, match="declares both mutates= and refreshes="):
+
+            @reg.tool(
+                name=name,
+                description="x",
+                input_schema={"type": "object"},
+                mutates=("ledger",),
+                refreshes=("config",),
+            )
+            async def _both(_input_data):  # pragma: no cover - never dispatched
+                return "{}", None
+
+        assert name not in reg._REGISTRY
+    finally:
+        reg._REGISTRY.pop(name, None)
+        reg._validator_for.cache_clear()
 
 
 def test_exempt_sets_have_no_stale_entries():
@@ -177,28 +218,75 @@ def test_list_match_reviews_filters_zombies_without_writing():
     assert calls == []
 
 
-def test_read_shaped_writers_stay_tagged():
-    assert mutated_domains("diff_statement") == ("uploads",)
-    assert mutated_domains("verify_statement_balance") == ("uploads",)
-    assert mutated_domains("email_search_messages") == ("config",)
-    assert mutated_domains("email_get_messages") == ("config",)
+# The reads that make a screen refresh but change nothing the owner would call a change —
+# each one traced through its handler (2026-10-11). Tagging a tool ``refreshes=`` instead of
+# ``mutates=`` is what stops it asking by default, so this set is a REVIEW GATE: a new member
+# must be added here deliberately, with the handler traced to bookkeeping only.
+REVIEWED_REFRESHING_READS: dict[str, tuple[str, ...]] = {
+    # a body-less / completed provenance snapshot per message + the mailbox's last-synced stamp
+    "email_search_messages": ("config",),
+    "email_get_messages": ("config",),
+    # the computed result remembered on the statement record / import batch
+    "diff_statement": ("uploads",),
+    "verify_statement_balance": ("uploads",),
+    # the machine-made Intel feed and the auto-managed holdings watchlist (== "Scan now")
+    "scan_intel": ("intel", "watchlist"),
+    # a raw-evidence snapshot per row + the connector's own last-synced stamp
+    "simplefin_fetch_transactions": ("config",),
+    "plaid_fetch_transactions": ("config",),
+    "lunch_money_fetch_transactions": ("config",),
+    "lunch_flow_fetch_transactions": ("config",),
+    "ynab_fetch_transactions": ("config",),
+    "enable_banking_fetch_transactions": ("config",),
+    "yodlee_fetch_transactions": ("config",),
+    "alpaca_fetch_positions": ("config",),
+    "ibkr_fetch_activity": ("config",),
+}
+# Bookkeeping lives in these domains only: connector status/snapshots, the statement/batch
+# record's memo, the derived Intel feed and the auto-managed watchlist.
+BOOKKEEPING_DOMAINS = frozenset({"config", "uploads", "intel", "watchlist"})
+
+
+def test_refreshing_reads_are_exactly_the_reviewed_set():
+    assert refreshing_tool_domains() == REVIEWED_REFRESHING_READS
+
+
+def test_a_refreshing_read_writes_only_bookkeeping_domains():
+    for name, domains in refreshing_tool_domains().items():
+        assert set(domains) <= BOOKKEEPING_DOMAINS, (name, domains)
+
+
+def test_a_refreshing_read_still_refreshes_screens_but_is_not_a_write():
+    """The freshness path is unchanged — ``mutated_domains`` (what the ``data_changed``
+    broadcast reads) still reports the refresh — while the approval default, which keys on
+    ``is_write_tool``, does not see a write."""
+    for name, domains in REVIEWED_REFRESHING_READS.items():
+        assert mutated_domains(name) == domains, name
+        assert written_domains(name) == (), name
+        assert is_write_tool(name) is False, name
+
+
+def test_real_writers_that_look_like_reads_stay_tagged_mutates():
     assert mutated_domains("mark_notifications_read") == ("notification_log",)
     assert mutated_domains("telegram_send_message") == ("notification_log",)
     assert mutated_domains("webhook_send_message") == ("notification_log",)
     assert mutated_domains("resolve_instruments") == ("portfolio",)
-    assert mutated_domains("scan_intel") == ("intel", "watchlist")
-    for fetch_tool in (
-        "simplefin_fetch_transactions",
-        "plaid_fetch_transactions",
-        "lunch_money_fetch_transactions",
-        "lunch_flow_fetch_transactions",
-        "ynab_fetch_transactions",
-        "enable_banking_fetch_transactions",
-        "yodlee_fetch_transactions",
-        "alpaca_fetch_positions",
-        "ibkr_fetch_activity",
+    for name in (
+        "mark_notifications_read",
+        "telegram_send_message",
+        "webhook_send_message",
+        "resolve_instruments",
+        "add_transactions",
+        "set_connector_enabled",
     ):
-        assert mutated_domains(fetch_tool) == ("config",), fetch_tool
+        assert is_write_tool(name) is True, name
+        assert written_domains(name) == mutated_domains(name), name
+
+
+def test_plain_reads_are_neither_a_write_nor_a_refresh():
+    for name in ("get_portfolio", "duckduckgo_search", "plaid_get_status", "no_such_tool"):
+        assert is_write_tool(name) is False, name
+        assert mutated_domains(name) == (), name
 
 
 def test_the_merged_write_tools_carry_their_domain_tag():
@@ -247,3 +335,91 @@ def test_old_frontend_mutating_set_still_covered():
         doms = set(mutated_domains(name))
         assert doms, f"{name} lost its refresh trigger"
         assert doms & ROUTERSHELL_CORE_DOMAINS or "*" in doms, (name, doms)
+
+
+# ── The seed rule reads DECLARATIONS: workspace domains and external_effect ─────────────────
+#
+# ADR 2026-10-11-permissions-are-one-value-per-tool: a write whose domains are ALL Lucius's own
+# workspace is seeded Always allow; any other write, and anything declaring ``external_effect=``,
+# is seeded Ask; a read runs. The workspace is declared once per DOMAIN
+# (``ai._confirm_gate.WORKSPACE_DOMAINS``), never as a list of tools.
+
+WORKSPACE_DOMAINS_EXPECTED = {"memory", "skills", "artifacts", "notification_log"}
+
+
+def test_the_workspace_domains_are_declared_once_and_are_real_domains():
+    from backend.ai._confirm_gate import WORKSPACE_DOMAINS
+
+    assert WORKSPACE_DOMAINS == WORKSPACE_DOMAINS_EXPECTED
+    used = {d for doms in mutating_tool_domains().values() for d in doms}
+    assert WORKSPACE_DOMAINS <= used, sorted(WORKSPACE_DOMAINS - used)
+    # No book domain sneaks in: the owner's ledger, accounts, plan and settings still ask.
+    assert not (WORKSPACE_DOMAINS & {"ledger", "accounts", "portfolio", "budget", "config"})
+
+
+def test_every_write_is_seeded_by_its_declarations():
+    """The whole registry, no names: Ask unless every written domain is workspace."""
+    from backend.ai._confirm_gate import WORKSPACE_DOMAINS
+    from backend.ai.tools import registry as reg
+    from backend.services import tool_permissions as perms
+
+    seen_allow = set()
+    for name, domains in mutating_tool_domains().items():
+        stays_home = set(domains) <= WORKSPACE_DOMAINS and not reg.has_external_effect(name)
+        expected = "always_allow" if stays_home else "needs_approval"
+        assert perms.seed_level(name) == expected, (name, domains)
+        if stays_home:
+            seen_allow.add(name)
+    assert seen_allow == {
+        "remember_fact",
+        "forget_fact",
+        "create_skill",
+        "update_skill",
+        "delete_skill",
+        "save_code_as_skill",
+        "create_artifact",
+        "mark_notifications_read",
+    }
+
+
+def test_a_write_that_mixes_a_workspace_domain_with_a_book_domain_still_asks():
+    from backend.ai import _confirm_gate as policy
+
+    assert policy.needs_approval("t", writes=True, domains=("memory",)) is False
+    assert policy.needs_approval("t", writes=True, domains=("memory", "skills")) is False
+    assert policy.needs_approval("t", writes=True, domains=("memory", "ledger")) is True
+    assert policy.needs_approval("t", writes=True, domains=("skills", "*")) is True
+    # No domain information is never read as "workspace".
+    assert policy.needs_approval("t", writes=True) is True
+
+
+def test_external_effect_asks_whatever_domains_a_tool_writes():
+    """A Telegram send writes ``notification_log`` (a workspace domain) yet reaches outside."""
+    from backend.ai import _confirm_gate as policy
+    from backend.services import tool_permissions as perms
+
+    assert policy.needs_approval(
+        "t", writes=True, domains=("notification_log",), external_effect=True
+    )
+    for name in ("telegram_send_message", "webhook_send_message"):
+        assert perms.seed_level(name) == "needs_approval", name
+    assert perms.seed_level("mark_notifications_read") == "always_allow"
+
+
+def test_external_effect_is_declared_on_the_tools_that_act_outside_the_owners_data():
+    from backend.ai.tools.registry import has_external_effect
+
+    declared = {name for name in _production_tool_names() if has_external_effect(name)}
+    assert declared == {
+        "email_send_message",
+        "telegram_send_message",
+        "webhook_send_message",
+        "run_script",
+        "run_code",
+    }
+
+
+def test_save_code_as_skill_is_tagged_as_the_write_it_is():
+    """It creates a skill record and its bundle — it was filed as READ_ONLY by mistake."""
+    assert mutating_tool_domains()["save_code_as_skill"] == ("skills",)
+    assert "save_code_as_skill" not in READ_ONLY_TOOLS

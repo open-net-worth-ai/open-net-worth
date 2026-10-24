@@ -413,7 +413,7 @@ describe('the permission ladder is on EVERY connector, not just MCP', () => {
     expect(screen.getByText('Write & delete tools')).toBeTruthy()
   })
 
-  it('starts every tool at Needs approval and persists a per-tool override', () => {
+  it('starts every tool at Ask and persists a per-tool override', () => {
     const { onSetToolPermission } = renderDetail(entry())
     const btn = screen.getByRole('button', { name: 'place_order: Always allow' })
     expect(btn.getAttribute('aria-pressed')).toBe('false')
@@ -430,7 +430,7 @@ describe('the permission ladder is on EVERY connector, not just MCP', () => {
   it('reflects levels already stored on the server', () => {
     renderDetail(entry({ perms: { place_order: 'blocked' } }))
     expect(
-      screen.getByRole('button', { name: 'place_order: Blocked' }).getAttribute('aria-pressed'),
+      screen.getByRole('button', { name: 'place_order: Block' }).getAttribute('aria-pressed'),
     ).toBe('true')
   })
 

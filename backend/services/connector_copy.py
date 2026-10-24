@@ -84,59 +84,75 @@ TOOLS: dict[str, list[ConnectorTool]] = {
         _t("fetch_page", "Read the full text of a web page by URL."),
     ],
     "web_search:duckduckgo": [
-        _t("duckduckgo_search", "Search the web via DuckDuckGo specifically.", read_only=True),
+        _t(
+            "duckduckgo_search",
+            "Search the web via DuckDuckGo. Also what Lucius's general web search uses while it is the active provider.",
+            read_only=True,
+        ),
         _t(
             "duckduckgo_fetch_page",
-            "Read the full text of a URL via DuckDuckGo specifically.",
+            "Read the full text of a URL via DuckDuckGo. Also what Lucius's page reading uses while it is the active provider.",
             read_only=True,
         ),
     ],
     "web_search:tavily": [
-        _t("tavily_search", "Search the web via Tavily specifically.", read_only=True),
+        _t(
+            "tavily_search",
+            "Search the web via Tavily. Also what Lucius's general web search uses while it is the active provider.",
+            read_only=True,
+        ),
         _t(
             "tavily_fetch_page",
-            "Read the full text of a URL via Tavily specifically.",
+            "Read the full text of a URL via Tavily. Also what Lucius's page reading uses while it is the active provider.",
             read_only=True,
         ),
     ],
     "web_search:perplexity": [
         _t(
             "perplexity_search",
-            "Search the web via Perplexity (Sonar) specifically.",
+            "Search the web via Perplexity (Sonar). Also what Lucius's general web search uses while it is the active provider.",
             read_only=True,
         ),
         _t(
             "perplexity_fetch_page",
-            "Read the full text of a URL via Perplexity (Sonar) specifically.",
+            "Read the full text of a URL via Perplexity (Sonar). Also what Lucius's page reading uses while it is the active provider.",
             read_only=True,
         ),
     ],
     "web_search:serper": [
-        _t("serper_search", "Search the web via Serper specifically.", read_only=True),
+        _t(
+            "serper_search",
+            "Search the web via Serper. Also what Lucius's general web search uses while it is the active provider.",
+            read_only=True,
+        ),
         _t(
             "serper_fetch_page",
-            "Read the full text of a URL via Serper specifically.",
+            "Read the full text of a URL via Serper. Also what Lucius's page reading uses while it is the active provider.",
             read_only=True,
         ),
     ],
     "web_search:google_pse": [
         _t(
             "google_pse_search",
-            "Search the web via Google Programmable Search specifically.",
+            "Search the web via Google Programmable Search. Also what Lucius's general web search uses while it is the active provider.",
             read_only=True,
         ),
         _t(
             "google_pse_fetch_page",
-            "Read the full text of a URL via Google Programmable Search specifically.",
+            "Read the full text of a URL via Google Programmable Search. Also what Lucius's page reading uses while it is the active provider.",
             read_only=True,
         ),
     ],
     "web_search:firecrawl": [
-        _t("firecrawl_search", "Search the web via Firecrawl specifically.", read_only=True),
+        _t(
+            "firecrawl_search",
+            "Search the web via Firecrawl. Also what Lucius's general web search uses while it is the active provider.",
+            read_only=True,
+        ),
         _t(
             "firecrawl_fetch_page",
-            "Read the full text of a URL via Firecrawl specifically — "
-            "handles JS-rendered pages a plain fetch can't.",
+            "Read the full text of a URL via Firecrawl — handles JS-rendered pages a plain "
+            "fetch can't. Also what Lucius's page reading uses while it is the active provider.",
             read_only=True,
         ),
     ],

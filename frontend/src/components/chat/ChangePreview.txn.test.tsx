@@ -219,7 +219,7 @@ describe('txn_create card', () => {
     // handleGrant awaits the standing-grant POST before resolving — the assertion must wait
     // past that microtask, not check synchronously right after the click.
     await waitFor(() => expect(onResolve).toHaveBeenCalledTimes(1))
-    expect(onResolve).toHaveBeenCalledWith(TOOL_USE_ID, 'approve')
+    expect(onResolve).toHaveBeenCalledWith(TOOL_USE_ID, 'approve', { always: false })
   })
 
   it('denying resolves the same id as a denial — writes nothing', () => {
@@ -241,7 +241,9 @@ describe('txn_update card', () => {
   it('approving resolves the update_transactions tool_use_id', async () => {
     const onResolve = renderCard(UPDATE)
     fireEvent.click(screen.getByRole('button', { name: 'Allow once' }))
-    await waitFor(() => expect(onResolve).toHaveBeenCalledWith(TOOL_USE_ID, 'approve'))
+    await waitFor(() =>
+      expect(onResolve).toHaveBeenCalledWith(TOOL_USE_ID, 'approve', { always: false }),
+    )
   })
 })
 

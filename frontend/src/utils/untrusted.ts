@@ -91,7 +91,7 @@ export function stripScreenContext(text: string | null | undefined): string {
  * uniformly — there's no "the deeper fix belongs on the server" case here the way there was
  * for screen context.
  *
- * Every branch of handleConfirm/handleDismiss/handleCodeAllow/handleCodeReject — for every
+ * Every branch of handleConfirm/handleDismiss — for every
  * change type, including ones added later — begins the string with the literal word
  * "Confirmed" or "Dismissed" followed by an em dash (not a hyphen — not something a person
  * types by hand), so matching that PREFIX rather than enumerating every phrase is what keeps

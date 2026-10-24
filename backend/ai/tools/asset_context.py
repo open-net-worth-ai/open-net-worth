@@ -79,7 +79,7 @@ def _clamp(raw: object, default: int, maximum: int) -> int:
 
 def _clean(value: object) -> str:
     """Sanitize one untrusted free-text value (M5 fix) — the shared helper every field below
-    routes through, mirroring ``ai/tools/misc.py``'s ``web_search``/``x_search`` sanitization
+    routes through, mirroring ``ai/tools/misc.py``'s ``web_search`` sanitization
     and ``ai/tools/docs.py``'s ``search_docs``/``read_doc``. No fence here, deliberately (same
     reasoning as those two): this tool's output is a JSON tool result, and JSON escaping already
     guarantees the boundary — ``sanitize_untrusted`` alone stops this text forging a fence

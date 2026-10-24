@@ -64,10 +64,11 @@ def record_grant(tool_name: str, scope: str, *, session_id: Optional[str] = None
         # called `GrantStore` (the EQUITY-COMP store, a different thing sharing the word)
         # and every tap raised AttributeError into the bare except below — a connector user
         # tapped "Always" and the grant silently never persisted.
-        from backend.ai.tools._connector_gate import permission_owner
+        from backend.ai.tools._connector_gate import permission_key
         from backend.services.tool_permissions import set_tool_permission
 
-        set_tool_permission(permission_owner(tool_name), tool_name, "always_allow")
+        owner, name = permission_key(tool_name)
+        set_tool_permission(owner, name, "always_allow")
         return True
     except Exception:  # noqa: BLE001 — see the module note; a tap must never be lost to this
         log.exception("record_grant: could not persist %s grant for %s", scope, tool_name)

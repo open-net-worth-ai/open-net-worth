@@ -69,8 +69,8 @@ class AutomationDraftInput(NestedInput):
         default=None,
         description=(
             "How much this Automation asks before acting: manual asks every time, auto "
-            "proceeds except on hardline operations, skip proceeds regardless. Omit unless "
-            "the user explicitly requested one."
+            "has each call judged and asks only when it looks unsafe, skip proceeds "
+            "regardless. Omit unless the user explicitly requested one."
         ),
     )
     model: Optional[str] = Field(default=None, description="Optional model override.")

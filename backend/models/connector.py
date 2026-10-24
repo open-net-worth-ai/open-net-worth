@@ -33,12 +33,13 @@ class ConnectorTool(ONBaseModel):
     description: str = ""
     source: str = "native"  # "native" (static map) | "mcp" (live-advertised)
     # This tool's EFFECTIVE permission level, joined from ``services.tool_permissions`` —
-    # the single authority on whether a call fires. "allow" | "ask" | "block", where "ask"
-    # is what an undecided tool reads as (``DEFAULT_LEVEL``), so this is always a real
-    # level and never a "unset" sentinel. Every connector family carries one, no exceptions
-    # and no tiering by tool type (ADR ``2026-08-13-mcp-permission-config-is-the-single-
-    # authority``). The GROUP aggregate ("custom") is NOT here: it is derived at display
-    # time from these values via ``tool_permissions.derive_group_level`` and never stored.
+    # the single authority on whether a call fires: what the owner stored, else the default
+    # that will actually fire (a native tool follows what it does — a read runs, a change or
+    # a send asks; an external MCP tool asks), so this is always a real level and never a
+    # "unset" sentinel. Every connector family carries one (ADR ``2026-10-11-tool-defaults-
+    # follow-what-a-tool-does``). The GROUP aggregate ("custom") is NOT here: it is derived at
+    # display time from these values via ``tool_permissions.derive_group_level`` and never
+    # stored.
     level: str = "ask"
     # Which of the ladder's two headings this tool is listed under — "Read-only tools" vs.
     # "Write & delete tools" (Connectors redesign §4). LABELLING ONLY: it decides nothing

@@ -44,26 +44,18 @@ interception-based gate would be: the server executes exactly ``PendingPlanStore
 cannot commit "$1,240 Rent" no matter what the model (or an injection already in context)
 claims. Single-use pop (``pop_pending``) guards a double-approve from two tabs for free.
 
-## Why an unattended caller is excluded (never card-capable)
+## A surface that cannot show a card
 
-``should_gate`` requires a CARD-CAPABLE surface (``ai._confirm_gate.can_render_card`` — web
-chat AND, since the confirm-gate surface-matrix ADR, any chat-connector turn) AND a user
-actually watching this turn. An unattended caller (``ai/capture.py``'s iOS tap-to-log) has
-nobody to tap ✓ no matter what surface it's on, so gating it would not make it safer — it
-would simply stop it booking anything. That caller's remaining safety net is the HARDLINE
-refusal composed for a ledger write path via ``enforce_unattended_write`` below. The
-per-agent write envelope that used to sit beside it was deleted with the Agent product on
-2026-08-02 (ADR ``2026-08-02-agent-envelope-removed-with-no-successor``). The check here FAILS OPEN to
-today's behavior (execute) rather than closed (stage) when it cannot determine context,
-because failing closed here breaks working automation while failing open merely declines to
-add a new safeguard. Note this is the opposite direction from ``_is_interactive_scope``'s
-own MCP-schema use, where fail-closed means "don't surface"; the shared predicate is the
-same, the consequence differs.
-
-## Rollback
-
-``GATED_TOOL_NAMES`` is both the flag and the policy: removing a name turns the gate off for
-that tool completely, with no other change.
+``should_gate`` stages a card only on a CARD-CAPABLE surface (``ai._confirm_gate.can_render_card``
+— web chat, a durable Automation run, any chat-connector turn) for a call with a bound
+``tool_use_id``. On a surface that physically cannot ask (the iOS tap-to-log capture, a headless
+``core.headless_turn`` run, the inbound ``/mcp`` server and the REST finding-apply, which set no
+surface at all) nobody can tap ✓, so a staged plan could never be answered: an Ask-level tool
+there RUNS, and ``should_gate`` says so in the log each time. That is the one place a stored Ask
+does not stop a call, it is by surface and not by tool, and it is recorded as an open owner
+decision in ADR ``2026-10-11-permissions-are-one-value-per-tool`` rather than left implicit.
+Everything else about the gate fails CLOSED: an error while deciding refuses the call
+(``gate_failed_result``), it never runs it.
 """
 
 from __future__ import annotations
@@ -72,72 +64,35 @@ import json
 import logging
 from typing import Optional
 
+from backend.core import mcp_external
+from backend.models.mcp_client import mcp_connector_id
+from backend.services.tool_permissions import DEFAULT_LEVEL, seed_level
+
 logger = logging.getLogger(__name__)
-
-# EMPTY since 2026-07-20 (ADR ``2026-07-20-write-then-verify-chip``). The staging machinery
-# below is intact and a stored token still redeems; what changed is the POLICY of which tools
-# ask first — and the answer is now "none of the ordinary ones".
-#
-# Owner verdict on the cards this set used to raise: "do we really need to show these confirm
-# cards at all though? ... i would rather see the chip of newly created/updated ones in the ai
-# response and then tap on it to see the details" and, on which were worth it, "bulks, i can
-# understand / the rest, bullshit". So an ordinary add/update WRITES, and the reply carries a
-# differential chip of what landed (``services.write_receipt``) with the turn checkpoint behind
-# its Undo.
-#
-# Confirmation survives exactly where the MODEL chose the SET of rows rather than the user
-# naming them — ``delete_transactions_where`` and the global ``apply_payee_rules``. Those were
-# NEVER in this set: they enforce their own ``confirm=true`` and are additionally in
-# ``ai._confirm_gate.HARDLINE_UNATTENDED_TOOLS``, so emptying this set does not weaken them.
-# The distinction is real: "this matched 847 rows" is information available no other way, while
-# "did you record the $12.40 I just told you about" is answerable from the chip after the fact.
-#
-# Re-adding a name here restores preview-first behavior for that tool with no other change.
-GATED_TOOL_NAMES: frozenset = frozenset()
-
-# ── The approval model's write set (RFC 2026-07-20 §13.1) ───────────────────────────────
-#
-# When ARMED, the gated set stops being the hand-listed ``GATED_TOOL_NAMES`` above and
-# becomes every tool ``ai._confirm_gate.needs_approval`` says needs it — the ~162 tools
-# carrying ``mutates=(...)`` plus ``email_send_message``, read from the registry, never re-listed.
-#
-# **ARMED 2026-07-20**, once the sequencing precondition was actually met. The RFC states the
-# rule twice (§15.4, §16.1): the Settings > Permissions tab must exist BEFORE the gate flips,
-# because grants are checkpoint-EXCLUDED and revoking one there is the ONLY way to take it
-# back. Arming before that would ship a permission a user can grant and cannot lift — the
-# 2026-07-20 envelope outage in a new costume ("fail-closed against an unexpressible policy
-# is not a safety property; it is an outage that calls itself security").
-#
-# That precondition is now REAL rather than merely merged: the tab lane and the store lane
-# had shipped two INCOMPATIBLE ``ToolGrantStore`` implementations, so ``GET /api/grants``
-# raised ``AttributeError`` and the tab was dead on arrival — a grant could be made and never
-# revoked, which is precisely the state this flag was withheld to prevent. E2 consolidated
-# them onto one store and one route family; the tab lists and revokes for real (verified by
-# execution, not by the merge being clean). Only then was this flipped.
-#
-# Rollback is this one line back to ``False``.
-GATE_ALL_WRITES: bool = True
 
 
 def is_gated_tool(tool_name: str) -> bool:
-    """Whether ``tool_name`` is subject to confirmation at all, BEFORE grants are consulted.
+    """Whether ``tool_name`` is SEEDED Ask: it changes the owner's book, or acts outside their data.
 
-    The explicit ``GATED_TOOL_NAMES`` set always applies; the full write set applies only
-    once ``GATE_ALL_WRITES`` is armed. The write classification is read from the registry's
-    own ``mutates=(...)`` tags (aliases resolved), which is the same single source
-    ``tests/test_tool_domains.py`` enforces — there is no second list to drift.
+    The classification is read from the registry's own declarations — ``mutates=(...)`` tags (the
+    single source ``tests/test_tool_domains.py`` enforces), ``external_effect=`` and the
+    workspace-domain rule in ``ai._confirm_gate`` — so there is no list of tool names to drift. A
+    ``refreshes=`` tool (a read that only makes a screen refresh) is not a write here, and a write
+    that stays inside Lucius's own workspace domains is not seeded Ask either.
+
+    This is the tool's SEED rule, not its final word (``services.tool_permissions.seed_level``
+    is the one function that turns it into a level): the tool's row is the value, and the owner
+    can set a read to Ask or a write to Always allow.
     """
-    if tool_name in GATED_TOOL_NAMES:
-        return True
-    if not GATE_ALL_WRITES:
-        return False
     from backend.ai import _confirm_gate as _policy
-    from backend.ai.tools.registry import mutated_domains
+    from backend.ai.tools.registry import has_external_effect, is_write_tool, written_domains
 
-    # Canonicalize so a legacy alias resolves to the same read-shaped exemption / write verdict
-    # its canonical name gets — a grant/exemption is keyed on the canonical name everywhere else.
-    canonical = tool_name
-    return _policy.needs_approval(canonical, writes=bool(mutated_domains(canonical)))
+    return _policy.needs_approval(
+        tool_name,
+        writes=is_write_tool(tool_name),
+        domains=written_domains(tool_name),
+        external_effect=has_external_effect(tool_name),
+    )
 
 
 def effective_level(tool_name: str) -> str:
@@ -145,302 +100,228 @@ def effective_level(tool_name: str) -> str:
     ``blocked``. One store read on the hot path, and the single answer every NATIVE dispatch
     site consults (ADR ``2026-08-14-one-permission-store-for-every-tool``).
 
-    NOT every dispatch site, which this said until 2026-08-27. ``mcp/client_manager.py``
-    reads ``get_tool_permission`` directly for an EXTERNAL MCP tool and therefore never
-    reaches step 2 below, so an armed YOLO does not silence a third-party server's cards.
-    That is deliberate, not an oversight: a permanent, install-wide *stop asking me* switch
-    must not silently extend to servers the owner does not control. The stored decision and
-    the connector default still govern those tools exactly as they do here — only the YOLO
-    step differs. Owner decision, 2026-08-27: correct the claim, not the behaviour.
+    An external MCP tool is answered here too, under its own ``(mcp:<server>, tool)`` row, and
+    then goes through the same chain as any other tool (``external_decision``).
 
-    Resolution, in order:
+    A tool has ONE value (ADR ``2026-10-11-permissions-are-one-value-per-tool``): its row. Only a
+    registry tool that has no row yet — a test, a tool added at runtime, a table wiped a moment
+    ago and not yet re-seeded — takes ``seed_level``, the same function the boot sync seeds
+    with: ``needs_approval`` for a real change or a send (``is_gated_tool``), ``always_allow``
+    for a read. An external MCP tool with no row is ``needs_approval``, as it is seeded. A tool's ``connector=`` tag says WHOSE row governs it (and whose Remove resets
+    it); it never changes what the value is.
 
-    1. **The owner's stored decision** for ``(permission_owner(tool), tool)``. It wins
-       outright — a level the user set is not overridable by anything below, which is the
-       property the merge exists to give ("nothing above or below that may override it",
-       already true for external MCP, now true everywhere). ``always_allow`` fires even
-       unattended; ``blocked`` refuses even with yolo armed, because yolo means *stop
-       asking me*, never *ignore what I refused*.
-    2. **YOLO** — the reserved ``(core, "*")`` row. Only reached when the tool itself is
-       undecided, and only consulted when the fallback would have been to ask, so an
-       ordinary read never pays for it.
-    3. **The tool's own default.** A connector-owned tool takes ``DEFAULT_LEVEL``
-       (``needs_approval``) uniformly, read or write — the ladder's stated rule, and what
-       makes a freshly enabled connector's tools ask before their first run. An unscoped
-       (``core``) tool takes the approval model's own verdict instead: ``is_gated_tool``
-       -> ask, otherwise run. That asymmetry is deliberate and load-bearing — it is the
-       whole of "untagged tools keep behaving exactly as they did", since applying the
-       connector default to them would card every read tool in the app.
+    A level the owner set outranks every mode: ``always_allow`` runs and ``blocked`` is refused
+    everywhere, unattended included. Only ``needs_approval`` is then resolved by a mode
+    (``conversation_gate_verdict`` / ``automation_gate_verdict``).
 
-       **One exception, checked before either branch of 3** (ADR ``2026-08-17-read-shaped-
-       exemption-survives-connector-tagging``): ``GATE_EXEMPT_READ_SHAPED``
-       (a curated, reviewed set whose only "write" is bookkeeping — a cursor, a snapshot —
-       never a user-meaningful mutation) is ``always_allow`` REGARDLESS of owner. Read the
-       reasoning on that set itself; the property that matters here is narrower: a tool's
-       ``connector=`` tag exists to say WHOSE stored decision governs it (and whose
-       Remove clears it), not to change whether an UNDECIDED call needs a human click.
-       Before ``email_search_messages``/``email_get_messages`` carried the tag, they were ``core``-owned
-       and this same exemption already made them ``always_allow`` via ``_core_default``
-       below — tagging them ``connector="email"`` must not, as a side effect, start carding
-       every read of your own inbox (the exact regression ``GATE_EXEMPT_READ_SHAPED`` exists
-       to prevent — owner incident 2026-07-21). This is NOT "no tiering by tool type inside a
-       connector, no exceptions" reopened: that settled rule is about a hard floor for a
-       DANGEROUS action (a trade, a payment) never being exempted from asking; this is the
-       opposite direction — an ALREADY-reviewed, ALREADY-exempt bookkeeping write staying
-       exempt when its owner tag changes for an unrelated reason.
-
-    Fails CLOSED to the default (never to ``always_allow``, never to ``blocked``) if the
-    store cannot be read — the direction the retired ``granted_scope`` failed in, for its
-    reason: an unreadable permission table must never be read as permission, and must
-    never invent a refusal either.
+    If the store cannot be read this RAISES, and the dispatch gate refuses the call
+    (``gate_failed_result``): an unreadable permission table is never read as permission.
     """
-    from backend.services import tool_permissions as perms
-
-    owner = _permission_owner(tool_name)
-    stored = _stored_level(owner, tool_name)
+    stored = _stored_decision(tool_name)
     if stored is not None:
         return stored
-    default = _default_level(tool_name, owner)
-    if default == perms.DEFAULT_LEVEL and _yolo_armed():
-        return "always_allow"
-    return default
+    return DEFAULT_LEVEL if mcp_external.is_external(tool_name) else seed_level(tool_name)
 
 
-def _explicitly_asks(tool_name: str) -> bool:
-    """True only when the owner has STORED ``needs_approval`` for this tool.
+def _stored_decision(tool_name: str) -> Optional[str]:
+    """The stored level for ``tool_name``, or ``None`` when it has no row.
 
-    ``deny > ask > allow``, but **specificity DOES break the tie here** — so a level set to
-    *ask me* outranks an Automation's ``skip``/``auto`` MODE, and does NOT outrank that
-    Automation's own ``always_allowed`` grant, which is checked first.
-
-    That is a deliberate departure from Claude Code's model (where an ``ask`` rule beats an
-    ``allow`` rule regardless of how narrow the allow is). Owner decision, 2026-08-27, on
-    seeing the truth table: a per-Automation grant is MORE SPECIFIC, MORE RECENT, and was
-    made with the confirm card open showing exactly what would run — while the global level
-    is a standing default set elsewhere, at another time, about every caller at once. Letting
-    the global win made a real tap on a real card silently do nothing, which is the worse
-    failure. ``blocked`` is unaffected: it is refused in ``registry.dispatch`` before any of
-    this, so no grant can clear a refusal.
-
-    STORED is the whole point, and the reason this cannot use ``effective_level``:
-    ``needs_approval`` is also what an UNDECIDED tool defaults to (every connector-owned
-    tool, and every gated core tool). Keying on the effective level would make this fire for
-    almost everything, and ``skip``/``auto``/``always_allowed`` would silently stop working
-    altogether — the modes would exist and do nothing. ``stored_tool_level`` returns ``None``
-    for undecided, which is the distinction that makes this safe.
-
-    Consequence worth knowing: if a tool is globally set to ``needs_approval``, tapping
-    *Always* on its card inside an Automation writes to that Automation's ``always_allowed``
-    and then does not take effect. That is contradictory intent — a standing *ask me* and a
-    standing *stop asking me* for the same tool — resolved toward asking.
+    Read from ``_permission_key``: the tool's own ``(owner, name)`` — except ``web_search`` and
+    ``fetch_page``, which BELONG to the active search connector and so resolve to that provider's
+    own tool. The search connector's page is their one control; a ``core:`` row of their own
+    could only disagree with it, so it is never consulted.
     """
-    from backend.services import tool_permissions as perms
-
-    try:
-        return _stored_level(_permission_owner(tool_name), tool_name) == perms.DEFAULT_LEVEL
-    except Exception:  # noqa: BLE001 — an unreadable store must not silently ALLOW
-        return True
+    owner, name = _permission_key(tool_name)
+    return _stored_level(owner, name)
 
 
-def _default_level(tool_name: str, owner: str) -> str:
-    """The level an UNDECIDED (tool, owner) pair takes — see ``effective_level``'s
-    docstring, point 3, for the read-shaped-exemption carve-out this applies FIRST.
+def _permission_key(tool_name: str) -> tuple[str, str]:
+    """``(owner, tool)`` — the permission row a call reads. A failure to work it out PROPAGATES:
+    guessing an owner could miss the row the owner Blocked, so the dispatch gate refuses the call
+    instead (``gate_failed_result``)."""
+    split = mcp_external.split_external(tool_name)
+    if split is not None:
+        return mcp_connector_id(split[0]), split[1]
+    from backend.ai.tools._connector_gate import permission_key
 
-    Canonicalizes ``tool_name`` before either check, matching every other lookup in this
-    file (``is_gated_tool``, ``automation_gate_verdict``): a legacy alias must resolve to
-    the same read-shaped exemption / write verdict its canonical name gets. No live effect
-    today (no alias currently points at a ``GATE_EXEMPT_READ_SHAPED`` member), but leaving
-    this the one lookup that skipped canonicalization would silently break the moment one
-    did.
-    """
-    from backend.services.tool_permissions import (
-        CORE_CONNECTOR_ID,
-        DEFAULT_LEVEL,
-        GATE_EXEMPT_READ_SHAPED,
-    )
-
-    canonical = tool_name
-    if canonical in GATE_EXEMPT_READ_SHAPED:
-        return "always_allow"
-    return DEFAULT_LEVEL if owner != CORE_CONNECTOR_ID else _core_default(canonical)
-
-
-def _core_default(tool_name: str) -> str:
-    """The approval model's own answer for an UNDECIDED unscoped tool — unchanged since
-    the gate was armed: a write (or ``email_send_message``) asks, everything else runs."""
-    from backend.services.tool_permissions import DEFAULT_LEVEL
-
-    return DEFAULT_LEVEL if is_gated_tool(tool_name) else "always_allow"
-
-
-def _permission_owner(tool_name: str) -> str:
-    """``_connector_gate.permission_owner`` with the registry's failures absorbed: an
-    unreadable tag means the tool is treated as unscoped, which is the conservative read
-    (a ``core`` write still asks) and never invents a connector to inherit a level from."""
-    from backend.services.tool_permissions import CORE_CONNECTOR_ID
-
-    try:
-        from backend.ai.tools._connector_gate import permission_owner
-
-        return permission_owner(tool_name)
-    except Exception:  # noqa: BLE001 — see docstring
-        logger.warning("confirm gate: owner lookup failed for %s", tool_name, exc_info=True)
-        return CORE_CONNECTOR_ID
+    return permission_key(tool_name)
 
 
 def _stored_level(owner: str, tool_name: str) -> Optional[str]:
-    """The stored decision, or None when unset OR unreadable — the two collapse here on
-    purpose: a permission table that cannot be read is not permission, and is not a
-    refusal either, so the caller's default applies to both."""
+    """The stored level, or None when there is NO ROW. A table that cannot be read raises: it is
+    neither permission nor a refusal, and falling back to the seed would run a tool the owner
+    Blocked, so the dispatch gate refuses the call (``gate_failed_result``)."""
     from backend.services.tool_permissions import stored_tool_level
 
-    try:
-        return stored_tool_level(owner, tool_name)
-    except Exception:  # noqa: BLE001 — see docstring
-        logger.warning("confirm gate: permission lookup failed for %s", tool_name, exc_info=True)
-        return None
+    return stored_tool_level(owner, tool_name)
 
 
-def _yolo_armed() -> bool:
-    """The blanket "stop asking me" row, consulted ONLY for a tool that is undecided AND
-    would otherwise ask — so an ordinary read never pays for the lookup, and a stored
-    decision (``blocked`` included) is never overridden by it."""
-    from backend.services.tool_permissions import yolo_enabled
+def _ask_verdict(tool_name: str, mode: str, *, stage_only: bool) -> str:
+    """What Ask means under ``mode``: ``gate`` (manual — a confirm card), ``auto`` (the Auto
+    judge decides) or ``allow`` (skip — it runs).
 
-    try:
-        return yolo_enabled()
-    except Exception:  # noqa: BLE001 — an unreadable yolo row is not permission
-        logger.warning("confirm gate: yolo lookup failed; confirming", exc_info=True)
-        return False
+    ``stage_only`` answers WHICH BRANCH the call reaches without consulting the judge, returning
+    ``"auto"`` where the verdict would come from it; ``auto_judgment_needed`` uses it so the "will
+    this be judged?" question and the verdict itself share one code path. An unrecognised mode
+    reads as manual: the direction that asks.
+    """
+    if mode == "skip":
+        return "allow"
+    if mode == "auto":
+        if stage_only:
+            return "auto"
+        from backend.ai import auto_judge
+
+        return auto_judge.gate_verdict_for(tool_name)
+    return "gate"
 
 
-# Writing an Automation IS writing the permission policy — self-escalation, so no mode and no
-# standing grant clears these inside a run. Rollback is deleting a name from this set.
-AUTOMATION_POLICY_TOOLS = frozenset(
-    {"create_automation", "update_automations", "delete_automations", "run_automation"}
-)
+def automation_blocks(tool_name: str) -> bool:
+    """True when the Automation this turn belongs to has put ``tool_name`` on its own Blocked
+    list — refused at dispatch whatever the tool's global value is, and checked before this
+    Automation's Always allowed list."""
+    from backend.core.automation_runner import get_automation_approval
+
+    context = get_automation_approval()
+    return context is not None and tool_name in context.blocked_tools
 
 
-def automation_gate_verdict(tool_name: str, *, level: Optional[str] = None) -> Optional[str]:
-    """Return ``allow|gate`` inside an Automation turn, else ``None``.
+def automation_blocked_result(tool_name: str) -> tuple[str, None]:
+    """The refusal for a tool on the running Automation's Blocked list — NOTHING ran.
 
-    Automation-local authority wins before the global grant table is consulted. An
-    Automation therefore cannot inherit a broad permission granted in an unrelated chat,
-    and its own standing/session choices cannot widen that global table.
+    A tool RESULT rather than a raise, so the run carries on without the tool instead of
+    failing; it says who decided and not to route around it, for the reason ``blocked_result``
+    gives."""
+    return (
+        json.dumps(
+            {
+                "error": (
+                    f"'{tool_name}' is not allowed in this Automation — nothing ran. The owner "
+                    f"blocked it for this Automation, so this is a standing decision, not a tool "
+                    f"failure and not a missing capability. Do not retry it and do not work "
+                    f"around it with another tool; carry on with the rest of the task and "
+                    f"mention in your summary that this step was skipped."
+                ),
+                "blocked_by": "automation",
+                "tool": tool_name,
+            }
+        ),
+        None,
+    )
 
-    The three owner-selected modes are deliberately distinct:
 
-    * ``manual`` pauses on every ungranted approval-tier call;
-    * ``auto`` proceeds without a card except for the hardline operations whose target set
-      cannot be verified after execution;
-    * ``skip`` proceeds even for that hardline tier. It means "skip the approval prompts",
-      never "skip the requested tool call".
+def automation_gate_verdict(
+    tool_name: str, *, level: Optional[str] = None, stage_only: bool = False
+) -> Optional[str]:
+    """Return ``allow|gate`` (or ``auto`` when ``stage_only``) inside an Automation turn, else
+    ``None``.
 
-    A permission listed under this Automation's ``Always allowed`` section wins first in
-    every mode.
+    The Automation order, after ``registry.dispatch`` has refused a ``blocked`` tool and a tool
+    on this Automation's Blocked list:
 
-    **The APPROVAL TIER is "would this call ask, absent this Automation's own opinion?"** —
-    the tool's shape (``is_gated_tool``: a write, or ``email_send_message``) OR its effective level
-    being ``needs_approval``. The OR matters in both directions after the 2026-08-14
-    permission merge:
+    1. the tool is on this Automation's **Always allowed** list -> ``allow``;
+    2. the tool's value is **Always allow** -> ``allow`` (an Automation inherits a global
+       Allow: ``always_allow`` means allow everywhere, unattended included);
+    3. the tool's value is **Ask** -> the Automation's mode decides what Ask means
+       (``_ask_verdict``): ``manual`` pauses, ``auto`` hands the call to ``ai.auto_judge``
+       (a per-call model judgement; no judgement in hand reads as ``gate``), ``skip`` proceeds.
 
-    * a connector-tagged READ is not a write, but its level asks, so an ``auto`` Automation
-      proceeds through it exactly as it does through a connector WRITE — without the OR, a
-      status read would pause a run that its own sync tool sails through;
-    * a write the owner has globally set to ``always_allow`` is still handed to this
-      function, which is what preserves the older, deliberate property that **an Automation
-      never inherits a permission granted in an unrelated chat** (see
-      ``services.automations.runs.grant_automation_tool``, which keeps an Automation's own
-      "always" ON the Automation for the same reason). A ``manual`` Automation therefore
-      still pauses on it. This is the one place a stored ``always_allow`` does not
-      immediately fire, and it is narrower, not broader: the owner configured that
-      Automation to ask.
+    The Automation's own authority comes first, so a tool its owner allowed on it is never
+    re-asked.
 
-    ``blocked`` never reaches here at all — ``registry.dispatch`` refuses it before staging
-    is considered — so no mode, allowed-list entry or verdict below can clear a refusal.
-
-    ``level`` lets a caller that has already resolved one pass it in rather than paying for
-    a second store read.
-
-    EXCEPT for the tools that write the approval policy itself. ``skip`` is a choice the
-    OWNER makes on an Automation they configured; it must not be a choice a RUN can make.
-    Without this, an ``auto`` Automation reading untrusted input (an email body) could be
-    steered to ``create_automation(permission_mode="skip")`` and then ``run_automation`` it,
-    and the
-    child run would clear the hardline tier — a bulk ledger delete reached with no card ever
-    shown. A run must not author the rules that govern runs, so these always gate.
+    ``level`` lets a caller that has already resolved one pass it in rather than paying for a
+    second store read.
     """
     from backend.core.automation_runner import get_automation_approval
 
     context = get_automation_approval()
     if context is None:
         return None
-    if not is_gated_tool(tool_name) and (level or effective_level(tool_name)) != "needs_approval":
-        return None
-    canonical = tool_name
-    if canonical in AUTOMATION_POLICY_TOOLS:
-        return "gate"
-    if canonical in context.always_allowed_tools:
+    if tool_name in context.always_allowed_tools:
         return "allow"
-    if _explicitly_asks(canonical):
-        return "gate"
-    if context.mode == "skip":
+    if (level or effective_level(tool_name)) == "always_allow":
         return "allow"
-    if context.mode == "auto":
-        from backend.ai import _confirm_gate as _policy
-
-        return "gate" if _policy.is_hardline_blocked(canonical) else "allow"
-    return "gate"
+    return _ask_verdict(tool_name, context.mode, stage_only=stage_only)
 
 
-def conversation_gate_verdict(tool_name: str, *, level: str | None = None) -> Optional[str]:
-    """``"allow"`` / ``"gate"`` / ``None`` for the CONVERSATION's own approval mode.
+def conversation_gate_verdict(
+    tool_name: str, *, level: Optional[str] = None, stage_only: bool = False
+) -> Optional[str]:
+    """``"allow"`` / ``"gate"`` (or ``"auto"`` when ``stage_only``) for the CONVERSATION's own
+    approval mode, else ``None`` when no mode is bound.
 
-    The chat twin of ``automation_gate_verdict``, with one deliberate asymmetry that is the
-    whole reason this is a separate function rather than a shared one.
+    The chat twin of ``automation_gate_verdict``, without the Automation's own lists: a chat has
+    no local grant list because tapping *Always allow* on a card writes the GLOBAL row, which
+    ``effective_level`` already returns. A tool whose value is Always allow runs; Ask is resolved
+    by the conversation's mode exactly as in an Automation (``_ask_verdict``).
 
-    **``manual`` returns ``None``, not ``"gate"``.** An Automation in ``manual`` gates even a
-    tool the owner globally set to ``always_allow`` — that is the "an Automation never
-    inherits a permission granted in an unrelated chat" property, and it is correct THERE. In
-    a conversation it would be exactly backwards: a chat *Always allow* tap writes the global
-    row (``api/tool_permissions.py`` routes it there for any non-Automation session), so
-    gating on it would make the app's most-used permission control stop working the moment
-    this feature shipped. ``manual`` is the DEFAULT, so this function must be a no-op there,
-    and ``None`` — "I have no opinion, use the global level" — is how it says so.
-
-    Consequently this only ever WIDENS: the modes below can let something through that would
-    have asked, never the reverse. The two things that outrank the mode are the two that must:
-    a tool that writes the approval policy, and an explicit stored *ask me*.
-
-    There is no ``always_allowed_tools`` here. A conversation has no local grant list because
-    it does not need one — tapping *Always* in chat writes the GLOBAL row, which
-    ``effective_level`` already returns, and the early return below lets it through.
-
-    ``blocked`` never reaches here (``registry.dispatch`` refuses it first), so no mode can
-    clear a refusal.
+    ``blocked`` never reaches here (``registry.dispatch`` refuses it first), so no mode can clear
+    a refusal.
     """
-    from backend.core.conversation_approval import AUTO, SKIP, get_conversation_approval
+    from backend.core.conversation_approval import get_conversation_approval
 
     context = get_conversation_approval()
     if context is None:
         return None
-    if not is_gated_tool(tool_name) and (level or effective_level(tool_name)) != "needs_approval":
-        return None
-    if tool_name in AUTOMATION_POLICY_TOOLS:
-        # A conversation can author an Automation, and an `auto`/`skip` conversation reading
-        # untrusted text (a fetched page, an MCP result) could be steered into writing one
-        # with `permission_mode="skip"` and running it. Same hole as the Automation case,
-        # same closure — the mode must not be able to mint a wider mode.
-        return "gate"
-    if _explicitly_asks(tool_name):
-        return "gate"
-    if context.mode == SKIP:
+    if (level or effective_level(tool_name)) == "always_allow":
         return "allow"
-    if context.mode == AUTO:
-        from backend.ai import _confirm_gate as _policy
+    return _ask_verdict(tool_name, context.mode, stage_only=stage_only)
 
-        return "gate" if _policy.is_hardline_blocked(tool_name) else "allow"
-    return None
+
+def external_decision(tool_name: str) -> str:
+    """What happens to a call to an external MCP tool: ``blocked`` (its own value),
+    ``automation_blocked`` (the running Automation's Blocked list), ``allow`` (it runs) or
+    ``gate`` (a confirm card).
+
+    The SAME chain every other tool takes — Block, the Automation's Blocked list, its Always
+    allowed list, Always allow, then Ask resolved by the Automation's or the conversation's mode —
+    because the chain is written once (``effective_level`` / ``automation_gate_verdict`` /
+    ``conversation_gate_verdict``) and a tool's name only chooses the row it reads. Ask with no
+    mode bound is a card, the manual meaning. Whether the card can be shown is the dispatcher's
+    to refuse (it stages under the tool_use id), never a reason to run.
+    """
+    level = effective_level(tool_name)
+    if level == "blocked":
+        return "blocked"
+    if automation_blocks(tool_name):
+        return "automation_blocked"
+    verdict = automation_gate_verdict(tool_name, level=level)
+    if verdict is None:
+        verdict = conversation_gate_verdict(tool_name, level=level)
+    if level == "always_allow" or verdict == "allow":
+        return "allow"
+    return "gate"
+
+
+def _can_stage_card() -> bool:
+    """Whether this call could actually be staged: a card-capable surface AND a bound
+    ``tool_use_id`` (the pending record's only key). An error reading either propagates to the
+    dispatch gate, which refuses the call (``gate_failed_result``)."""
+    from backend.ai import _confirm_gate as _policy
+    from backend.core.cost_context import get_cost_surface
+    from backend.core.tool_use_context import get_tool_use_id
+
+    return bool(_policy.can_render_card(get_cost_surface()) and get_tool_use_id())
+
+
+def auto_judgment_needed(tool_name: str) -> bool:
+    """True when this call will be decided by an ``auto`` branch, could be staged as a card,
+    and is not already refused — the one question ``auto_judge.prepare`` asks before it
+    spends a model call. Mirrors ``should_gate``'s order (an Automation's own mode first, the
+    conversation's only when no Automation is bound) by calling the same two verdict
+    functions in ``stage_only`` mode, so the predicate cannot drift from the verdict."""
+    from backend.core.automation_runner import get_automation_approval
+    from backend.core.conversation_approval import get_conversation_approval
+
+    if get_automation_approval() is None and get_conversation_approval() is None:
+        return False  # no approval mode bound: nothing can reach an ``auto`` branch
+    level = effective_level(tool_name)
+    if level == "blocked" or automation_blocks(tool_name):
+        return False
+    stage = automation_gate_verdict(tool_name, level=level, stage_only=True)
+    if stage is None:
+        stage = conversation_gate_verdict(tool_name, level=level, stage_only=True)
+    return stage == "auto" and _can_stage_card()
 
 
 # ── E4: the gate is consumed at DISPATCH, so coverage is structural ──────────────────────
@@ -515,6 +396,26 @@ def should_gate_dispatch(tool_name: str, *, level: Optional[str] = None) -> bool
     return should_gate(tool_name, level=level)
 
 
+def gate_failed_result(tool_name: str) -> tuple[str, None]:
+    """The refusal when the permission check itself errored — NOTHING ran.
+
+    The gate fails CLOSED: not being able to tell whether a call is allowed is never a reason to
+    run it. A tool RESULT rather than a raise, so the turn stays healthy enough to say so."""
+    return (
+        json.dumps(
+            {
+                "error": (
+                    f"The permission check for '{tool_name}' failed, so nothing ran. This is "
+                    f"a temporary fault, not the owner's decision: try the call again, and if "
+                    f"it keeps failing tell the user."
+                ),
+                "tool": tool_name,
+            }
+        ),
+        None,
+    )
+
+
 def blocked_result(tool_name: str) -> tuple[str, None]:
     """The refusal for a tool the owner has set to ``blocked`` — NOTHING ran.
 
@@ -544,6 +445,31 @@ def blocked_result(tool_name: str) -> tuple[str, None]:
         ),
         None,
     )
+
+
+def automation_ref(session_id: Optional[str] = None) -> dict:
+    """``{"automation_id": ...}`` when the call belongs to an Automation run, else ``{}``.
+
+    Rides on the staged card so the web card's Always allow lands on this Automation's own list
+    rather than the global table — the card cannot tell from its session id alone. A call
+    in flight reads the run's bound context; a card rebuilt from a parked run's transcript has
+    no context, so ``session_id`` is looked up instead."""
+    from backend.core.automation_runner import get_automation_approval
+
+    context = get_automation_approval()
+    if context is not None:
+        return {"automation_id": context.automation_id}
+    if session_id:
+        from backend.services.automations.runs import automation_run_for_session
+
+        try:
+            owned = automation_run_for_session(session_id)
+        except Exception:  # noqa: BLE001 — a card without the Automation ref is still a working card
+            logger.warning("confirm gate: automation lookup failed", exc_info=True)
+            return {}
+        if owned is not None and owned[0].get("id"):
+            return {"automation_id": owned[0]["id"]}
+    return {}
 
 
 def stage_generic(tool_name: str, args: dict) -> tuple[Optional[str], Optional[dict]]:
@@ -612,6 +538,7 @@ def stage_generic(tool_name: str, args: dict) -> tuple[Optional[str], Optional[d
         "reason": f"{tool_name} needs your approval before it runs.",
         "tool_use_id": tool_use_id,
         "session_id": get_session_id(),
+        **automation_ref(),
     }
     PendingPlanStore().stage_pending(
         tool_use_id,
@@ -657,17 +584,13 @@ def should_gate(tool_name: str, *, level: Optional[str] = None) -> bool:
       * Skill invocation is deliberately NOT a narrowing here. A saved or model-authored
         playbook cannot preapprove money, mutation, or external writes.
 
-    ONE narrowing BEFORE any of that, and it now subsumes what used to be two: the
-    ``effective_level``. Outside an Automation run only ``needs_approval`` can produce a
-    card — ``always_allow`` fires (that is the whole meaning of the level, unattended
-    included) and ``blocked`` never gets this far, because ``registry.dispatch`` refuses it
-    before staging is even considered. This one read replaced the pair ``is_gated_tool`` +
-    ``granted_scope`` when the two permission stores merged (ADR
-    ``2026-08-14-one-permission-store-for-every-tool``): the first is now the DEFAULT for
-    an undecided ``core`` tool, and the second is a stored ``always_allow``. INSIDE an
-    Automation run that Automation's own verdict is consulted first and instead — see
-    ``automation_gate_verdict``, whose precedence over the global table predates the merge
-    and survives it unchanged.
+    ONE narrowing BEFORE any of that: the tool's value. Only ``needs_approval`` (Ask) can
+    produce a card — ``always_allow`` fires, in every mode and unattended included, and
+    ``blocked`` never gets this far because ``registry.dispatch`` refuses it before staging is
+    considered. What Ask then means is the mode's to say (ADR
+    ``2026-10-11-permissions-are-one-value-per-tool``): ``manual`` a card, ``auto`` the Auto
+    judge, ``skip`` it runs. INSIDE an Automation run that Automation's own lists and mode are
+    consulted instead — see ``automation_gate_verdict``.
 
     A THIRD narrowing, added by RFC 2026-07-22: a call with no bound ``tool_use_id``
     (``core.tool_use_context.get_tool_use_id()``) can never be staged (the pending record's
@@ -676,39 +599,24 @@ def should_gate(tool_name: str, *, level: Optional[str] = None) -> bool:
     loop always binds a real id before dispatching. It matters only as a backstop.
     """
     level = level or effective_level(tool_name)
-    # ORDER IS LOAD-BEARING and unchanged from before the permission merge: an Automation's
-    # own authority is consulted FIRST, so a run neither inherits a global `always_allow`
-    # nor is re-asked about something its owner already allowed on it. Only OUTSIDE a run
-    # does the global level decide alone. (`blocked` reaches neither branch — dispatch
-    # refused it already.)
-    #
-    # A CONVERSATION's own mode is consulted only when no Automation context is bound. An
-    # Automation run has a session like any other turn, so without the elif a run's verdict
-    # and its conversation's would both apply and the narrower one would be silently
-    # overridden — the Automation's authority must stay the only one that speaks for a run.
+    if level != "needs_approval":
+        return False
+    # An Automation's own authority is consulted FIRST. A CONVERSATION's own mode is consulted
+    # only when no Automation context is bound: an Automation run has a session like any other
+    # turn, so without the fallthrough a run's verdict and its conversation's would both apply
+    # and the narrower one would be silently overridden. With neither bound (inbound MCP, a
+    # REST caller) Ask is a card, the manual meaning.
     verdict = automation_gate_verdict(tool_name, level=level)
     if verdict is None:
         verdict = conversation_gate_verdict(tool_name, level=level)
-    if verdict is not None:
-        if verdict != "gate":
-            return False
-    elif level != "needs_approval":
+    if verdict is not None and verdict != "gate":
         return False
-    try:
-        from backend.ai import _confirm_gate as _policy
-        from backend.core.cost_context import get_cost_surface
-        from backend.core.tool_use_context import get_tool_use_id
-
-        if not _policy.can_render_card(get_cost_surface()):
-            return False
-        if not get_tool_use_id():
-            return False
-        return True
-    except Exception:  # noqa: BLE001
-        # Fail OPEN to current behavior — see above. A gate that cannot determine its context
-        # must never silently stop a working write path.
-        logger.warning("confirm gate: scope check failed; executing ungated", exc_info=True)
+    if not _can_stage_card():
+        logger.info(
+            "permission: %s is set to Ask but this surface cannot show a card; it runs", tool_name
+        )
         return False
+    return True
 
 
 def redeem(tool_use_id: Optional[str], tool_name: str) -> Optional[dict]:
@@ -888,6 +796,7 @@ def stage(tool_name: str, args: dict, change: dict) -> tuple[Optional[str], Opti
         "tool_use_id": tool_use_id,
         "grant_tool": tool_name,
         "session_id": get_session_id(),
+        **automation_ref(),
     }
     PendingPlanStore().stage_pending(
         tool_use_id,
@@ -913,22 +822,6 @@ def preview_failed_result(error: str) -> tuple[str, None]:
     )
 
 
-# ── Unattended-write guard — the headless half of the confirm gate ─────────────────────────
-#
-# This composes the primitives in ``ai._confirm_gate`` (the hardline block, the per-agent
-# envelope, the best-effort surfacing) into the ONE call a ledger write path should make
-# right before it writes, whenever ``_skill_scope.is_unattended()`` is true. It has nothing
-# to do with ``should_gate``/``stage``/``redeem`` above — that machinery is for a surface
-# that CAN render and apply a card; this is for the surface where nobody is watching at all.
-#
-# Prepared in this module (already imported as ``_gate`` by every gated ledger tool) rather
-# than inside ``ai.tools.ledger`` itself, whose write path is owned by a concurrent lane in
-# this harness run — see ``docs/adr/2026-07-19-confirm-gate-surface-matrix.md``'s Follow-ups.
-# NOT YET CALLED from that write path; proven directly by this module's own tests
-# (``tests/test_unattended_write_envelope.py``), the same way the policy primitives
-# themselves were proven ahead of their call site.
-
-
 async def enforce_unattended_write(
     tool_name: str,
     *,
@@ -937,34 +830,12 @@ async def enforce_unattended_write(
     amount: Optional[float],
     category_id: Optional[str],
 ) -> Optional[tuple[str, None]]:
-    """The composed unattended-write guard. Call from a ledger write path BEFORE the write,
-    whenever a caller reaches it — it is SELF-GUARDING on ``_skill_scope.is_unattended()``, so
-    calling it unconditionally is safe: a plain interactive/connector/skill turn always gets
-    ``None`` back (proceed — this mechanism doesn't apply there at all; the SEPARATE
-    ``should_gate``/``stage``/``redeem`` card machinery above is what governs those).
+    """Inert since 2026-08-10, when the unattended concept was removed: always ``None``.
 
-    INERT since 2026-08-10 — see the ``return None`` below. This docstring describes what the
-    function did before that date; kept as history for the call sites still marked with it,
-    not as a description of current behavior. Do not treat a call to this function as live
-    hardline enforcement — for a scheduled Automation caller, that check now lives in
-    ``automation_gate_verdict``'s ``auto``-mode branch (``is_hardline_blocked``) instead; for a
-    non-Automation unattended caller (e.g. ``ai/capture.py``'s iOS tap-to-log), there is
-    currently no hardline check at this call site at all.
-
-    Historical behavior: returned a tool-result tuple to return VERBATIM when the write must
-    be refused, or ``None`` when the caller should proceed with the write. ONE check remained:
-    the HARDLINE block — an operation whose target set the MODEL chose
-    (``delete_transactions_where``, ``apply_payee_rules``) cannot be verified after it runs
-    with nobody watching, so it was refused outright, with no override and no config.
-
-    The per-agent write ENVELOPE that used to run after it (account/kind/category/max_amount
-    bounds, ``models.Agent.unattended_write_envelope``) is GONE — deleted with the Agent
-    product on 2026-08-02 by owner decision, with no successor. That is recorded in
-    ``docs/adr/2026-08-02-agent-envelope-removed-with-no-successor.md``.
+    Kept only because the ledger write paths still call it unconditionally as a marker of
+    where a headless guard once sat. The hardline refusal it used to compose is gone — in
+    ``auto`` mode ``ai.auto_judge`` decides every call, ``delete_transactions_where`` and
+    ``apply_payee_rules`` included. The per-agent envelope went with the Agent product (ADR
+    ``2026-08-02-agent-envelope-removed-with-no-successor``).
     """
-    # Inert since the unattended concept was removed (2026-08-10). Its only trigger was
-    # `_skill_scope.is_unattended()`; with that gone there is no caller it can distinguish, and
-    # leaving the hardline refusal live would refuse delete_transactions_where on every
-    # INTERACTIVE turn too. Kept as a no-op rather than deleted so the call sites still mark
-    # where the headless envelope used to sit.
     return None

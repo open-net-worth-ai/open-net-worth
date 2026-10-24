@@ -7,6 +7,8 @@ deciders: security-reviewer (Claude) + senior-engineer implementation lane (Clau
 
 # Email connector-tag security review — ladder default, pause reconciliation, capability-toggle refusal, stale-permission cleanup
 
+> **Note:** the principle (the ladder shows the level that will fire) stands; the exempt list it mentions is gone — see [2026-10-11-tool-defaults-follow-what-a-tool-does](2026-10-11-tool-defaults-follow-what-a-tool-does.md).
+
 ## Context
 
 A security review of commit `81cbd7b8` (`docs/adr/

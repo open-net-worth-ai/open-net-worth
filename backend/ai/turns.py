@@ -20,7 +20,7 @@ itself. ``contextvars`` are copied at ``asyncio.create_task`` time, so a task sp
 the route handler's context would start with ``cost_surface`` still ``None`` — and
 ``ai.tools._confirm_gate.should_gate`` fails OPEN on an unrecognised surface by design (a
 gate that cannot determine its context must never silently stop a working write path). With
-``GATE_ALL_WRITES = True`` that would mean every mutating tool, ``send_email``, and
+the gate always armed that would mean every mutating tool, ``send_email``, and
 ``restore_checkpoint`` executing with no approval card. ``_drive`` below calls
 ``set_cost_surface`` as its FIRST statement — before the first ``await`` — precisely so
 this can never happen. See ``tests/test_turn_supervisor.py``'s gate regression test, which
@@ -30,8 +30,8 @@ gate is wide open, which is exactly how this bug hides.
 
 No new surface-fail-closed policy was added to ``can_render_card`` itself (a broader,
 cross-cutting change affecting every headless caller — self_harness, capture, inbound MCP —
-that legitimately runs with no surface at all and is gated by the SEPARATE unattended-
-hardline path instead). Closing this bug does not need that: every path that reaches
+that legitimately runs with no surface at all; the unattended hardline path that once
+covered them is gone). Closing this bug does not need that: every path that reaches
 ``_drive`` goes through ``spawn()`` or ``run_inline()``, whose ``cost_surface`` parameter is
 a plain ``str`` (defaulting to ``"web"`` for ``spawn``, required for ``run_inline``) — there
 is no way to reach a driven turn with an unset surface short of a future caller explicitly

@@ -189,7 +189,11 @@ interface Props {
   // Resolve a paused (awaiting-approval) tool_use — RFC 2026-07-22. Present on every real
   // chat surface; optional only so a read-only render (Inbox / agent findings, which use
   // ProposedChangeDiff instead) never needs to supply one.
-  onResolvePendingToolUse?: (toolUseId: string, decision: 'approve' | 'deny') => void
+  onResolvePendingToolUse?: (
+    toolUseId: string,
+    decision: 'approve' | 'deny',
+    options?: { always?: boolean },
+  ) => void
   onRespondToChange?: (
     messageId: string,
     changeId: string | undefined,
@@ -383,7 +387,11 @@ function renderGroupedBlock(
   i: number,
   onSendMessage: (text: string) => void,
   onRespond?: (changeId: string | undefined, status: 'confirmed' | 'dismissed') => void,
-  onResolvePendingToolUse?: (toolUseId: string, decision: 'approve' | 'deny') => void,
+  onResolvePendingToolUse?: (
+    toolUseId: string,
+    decision: 'approve' | 'deny',
+    options?: { always?: boolean },
+  ) => void,
   sessionId?: string,
   firstUnansweredChange?: string,
 ) {

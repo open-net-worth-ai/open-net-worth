@@ -1,11 +1,13 @@
 ---
 title: The read-shaped-exemption applies regardless of a tool's connector owner
-status: Accepted
+status: Superseded in part by 2026-10-11-tool-defaults-follow-what-a-tool-does
 date: 2026-08-17
 deciders: senior-engineer implementation lane (Claude)
 ---
 
 # The read-shaped-exemption applies regardless of a tool's connector owner
+
+> **Superseded in part** by [2026-10-11-tool-defaults-follow-what-a-tool-does](2026-10-11-tool-defaults-follow-what-a-tool-does.md): the hand-kept GATE_EXEMPT_READ_SHAPED allowlist (deleted; reads simply run by default, a read that only refreshes a screen declares refreshes=).
 
 ## Context
 

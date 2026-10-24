@@ -139,7 +139,7 @@ class GetConnectorToolsInput(ToolInput):
     offset: Optional[int] = Field(default=None, description="Skip this many tools. Default 0.")
 
 
-def _group_block(tools: list, key: str, limit: int, offset: int) -> dict:
+def _group_block(tools: list, key: str, limit: int, offset: int, defaults: dict[str, str]) -> dict:
     """One group's block: the DERIVED aggregate level over the WHOLE group, plus a page.
 
     The aggregate is computed over every tool in the group BEFORE the page is cut — a level
@@ -165,6 +165,7 @@ def _group_block(tools: list, key: str, limit: int, offset: int) -> dict:
             {
                 "name": _clean(t.name),
                 "level": t.level,
+                "default": defaults.get(t.name),
                 "description": _clean(t.description, _MAX_DESCRIPTION_CHARS),
                 "source": t.source,
             }
@@ -183,8 +184,9 @@ def _group_block(tools: list, key: str, limit: int, offset: int) -> dict:
         "What can a connector do, and what needs approval? Lists every tool it contributes, "
         "grouped into read-only vs. write tools, each with its current level — 'always_allow' (runs "
         "without asking, unattended included), 'needs_approval' (raises a confirm card the "
-        "user taps first; the DEFAULT for anything undecided), or 'blocked' (refused "
-        "outright). Each group also reports its aggregate level, which is 'custom' when the "
+        "user taps first) or 'blocked' (refused outright). Until the user decides, a tool's "
+        "level follows what it does: a read runs, a change or a send asks. The user can set "
+        "ANY tool, read or write, to any of the three. Each group also reports its aggregate level, which is 'custom' when the "
         "tools inside it disagree. Every level here is ENFORCED: it is what decides whether "
         "one of this connector's calls fires, on every surface. Use this to explain why a "
         "call needed approval or was refused, and to tell the user exactly which control to "
@@ -197,7 +199,6 @@ def _group_block(tools: list, key: str, limit: int, offset: int) -> dict:
 async def get_connector_tools(input_data: dict):
     from backend.core.errors import NotFoundError
     from backend.services import connectors as connectors_service
-    from backend.services import tool_permissions
 
     connector_id = str(input_data.get("connector_id") or "").strip()
     if not connector_id:
@@ -218,12 +219,19 @@ async def get_connector_tools(input_data: dict):
 
     limit, offset = _page_bounds(input_data, _TOOL_PAGE)
     wanted = input_data.get("group")
+    default_level, tool_defaults = connectors_service.view_default_levels(view)
     blocks = []
     for key, is_read in (("read", True), ("write", False)):
         if wanted and wanted != key:
             continue
         blocks.append(
-            _group_block([t for t in view.tools if t.read_only is is_read], key, limit, offset)
+            _group_block(
+                [t for t in view.tools if t.read_only is is_read],
+                key,
+                limit,
+                offset,
+                tool_defaults,
+            )
         )
 
     total = sum(b["total"] for b in blocks)
@@ -233,8 +241,9 @@ async def get_connector_tools(input_data: dict):
         "connector": _clean(view.name) or view.id,
         "enabled": view.enabled,
         "status": view.status,
-        # Shipped every time so nothing hardcodes what an undecided tool means.
-        "default_level": tool_permissions.DEFAULT_LEVEL,
+        # Shipped every time so nothing hardcodes what an undecided tool means; each tool also
+        # carries its own `default` (a read runs, a change or a send asks).
+        "default_level": default_level,
         "groups": blocks,
         "showing": showing,
         "total": total,

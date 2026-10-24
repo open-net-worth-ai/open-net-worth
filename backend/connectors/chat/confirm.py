@@ -251,7 +251,7 @@ async def _apply_via_confirm_token(tool_name: str, change: dict) -> dict:
     token = change.get(CONFIRM_TOKEN_KEY)
     if not token:
         raise RuntimeError(f"{tool_name} confirm card carries no confirm token — cannot apply")
-    text, _ = await execute_tool(tool_name, {CONFIRM_TOKEN_KEY: token})
+    text, _ = await execute_tool(tool_name, {CONFIRM_TOKEN_KEY: token}, tool_use_id=token)
     import json as _json
 
     return _json.loads(text) if isinstance(text, str) else (text or {})

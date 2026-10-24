@@ -25,11 +25,13 @@ import pytest
 from backend.ai.tools import _confirm_gate as gate
 from backend.ai.tools import registry
 from backend.services import tool_permissions as perms
+from tests.auto_judge_support import stub_judge
 
 # A native, connector-tagged tool: `@tool(connector="plaid")` in ai/tools/connectors.py.
-# Deliberately a READ tool — the ladder has no tiering by tool type, so a read is gated by
-# a stored level exactly like a write, and using one keeps these tests off the write path
-# the old grant store already covered.
+# Deliberately a READ tool — it runs by default, but a level the owner stored gates it exactly
+# like a write, and using one keeps these tests off the write path the old grant store
+# already covered.
+NATIVE_WRITE = "telegram_send_message"
 NATIVE_TOOL = "plaid_get_status"
 NATIVE_OWNER = "plaid"
 
@@ -49,7 +51,6 @@ def armed(db_isolated, monkeypatch):
     """
     monkeypatch.setattr("backend.core.cost_context.get_cost_surface", lambda: "web")
     monkeypatch.setattr("backend.core.chat_session.get_session_id", lambda: "sess-perm")
-    monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
 
 
 _next_id = iter(f"toolu_perm_{i}" for i in range(1, 100_000))
@@ -97,14 +98,28 @@ async def test_needs_approval_produces_a_confirm_card_and_runs_nothing(armed):
 
 
 @pytest.mark.asyncio
-async def test_an_undecided_native_tool_asks_by_default(armed):
-    """No row at all — the ladder's uniform default, read or write, no exceptions."""
+async def test_an_undecided_native_read_runs_by_default(armed):
+    """No row at all — the default follows what the tool does, and a connector's read is a
+    read: enabling the connector was the access grant, so it does not ask again."""
     assert perms.stored_tool_level(NATIVE_OWNER, NATIVE_TOOL) is None
 
     text, proposed = await _dispatch(NATIVE_TOOL, tool_use_id="toolu_default")
 
+    assert proposed is None
+    assert text is not None and "blocked_by" not in text
+
+
+@pytest.mark.asyncio
+async def test_an_undecided_native_write_asks_by_default(armed):
+    """The same rule from the other side: a connector tool that SENDS asks, with no row."""
+    assert perms.stored_tool_level("telegram", NATIVE_WRITE) is None
+
+    text, proposed = await _dispatch(
+        NATIVE_WRITE, {"message": "hi"}, tool_use_id="toolu_default_write"
+    )
+
     assert text is None
-    assert proposed["grant_tool"] == NATIVE_TOOL
+    assert proposed["grant_tool"] == NATIVE_WRITE
 
 
 @pytest.mark.asyncio
@@ -154,18 +169,13 @@ async def test_a_level_on_one_provider_does_not_reach_its_sibling(armed):
     """``ai/tools/connectors.py`` records the incident: a single shared ``connector_sync``
     name meant one NAME-keyed grant, so "always allow Plaid syncs" would silently have
     allowed IBKR too. Per-provider tools plus the (owner, tool) key make that impossible —
-    this pins that the merge kept the property. Uses ``*_get_status`` rather than the
-    fetch tools: the nine fetch tools are GATE_EXEMPT_READ_SHAPED (always_allow by
-    default, PERMISSION DEFAULT design intent) since RFC connectors-as-data-sources, so an
-    UNDECIDED fetch tool no longer stages a card at all — get_status still does, which is
-    what this test needs to demonstrate a leak would look like."""
-    perms.set_tool_permission("plaid", "plaid_get_status", "always_allow")
+    this pins that the merge kept the property: a stored ``needs_approval`` on Plaid's status
+    read does not make IBKR's sibling read ask."""
+    perms.set_tool_permission("plaid", "plaid_get_status", "needs_approval")
 
     assert perms.stored_tool_level("ibkr", "ibkr_get_status") is None
     text, proposed = await _dispatch("ibkr_get_status", tool_use_id="toolu_sibling")
-    assert text is None and proposed["grant_tool"] == "ibkr_get_status", (
-        "IBKR's status inherited Plaid's permission"
-    )
+    assert proposed is None and text is not None, "IBKR's status inherited Plaid's permission"
 
 
 # ── Untagged tools are UNAFFECTED ─────────────────────────────────────────────
@@ -220,30 +230,6 @@ async def test_an_untagged_tool_can_also_be_blocked(armed):
     assert json.loads(text)["blocked_by"] == "tool_permission"
 
 
-# ── Yolo: stop ASKING, never "ignore what I refused" ──────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_yolo_skips_the_card_for_an_undecided_tool(armed):
-    perms.set_tool_permission(perms.CORE_CONNECTOR_ID, perms.YOLO_TOOL, "always_allow")
-
-    text, proposed = await _dispatch(UNTAGGED_WRITE, {"name": "Acme"})
-
-    assert proposed is None and text is not None
-
-
-@pytest.mark.asyncio
-async def test_yolo_does_not_override_a_block(armed):
-    """A blanket "stop asking me" is not a blanket "ignore what I refused". The stored
-    decision wins outright — yolo is only consulted for a tool that is UNDECIDED."""
-    perms.set_tool_permission(perms.CORE_CONNECTOR_ID, perms.YOLO_TOOL, "always_allow")
-    perms.set_tool_permission(NATIVE_OWNER, NATIVE_TOOL, "blocked")
-
-    text, _ = await _dispatch(NATIVE_TOOL)
-
-    assert json.loads(text)["blocked_by"] == "tool_permission"
-
-
 # ── Blocked between the card and the tap ──────────────────────────────────────
 
 
@@ -252,6 +238,7 @@ async def test_a_tool_blocked_while_its_card_waited_is_refused_on_redemption(arm
     """Mirrors the external-MCP apply path, which re-reads the level before firing its
     STORED args. An approval that sat on screen while the owner changed their mind must not
     fire on the old verdict."""
+    perms.set_tool_permission(NATIVE_OWNER, NATIVE_TOOL, "needs_approval")
     text, proposed = await _dispatch(NATIVE_TOOL, tool_use_id="toolu_race")
     assert text is None and proposed is not None
 
@@ -384,9 +371,20 @@ async def test_a_level_set_through_the_connector_route_gates_a_native_tool(armed
         text, proposed = await _dispatch(NATIVE_TOOL)
         assert proposed is None and "blocked_by" not in text
 
+        assert (
+            client.put(
+                f"/api/connectors/{NATIVE_OWNER}/permissions/{NATIVE_TOOL}",
+                json={"level": "needs_approval"},
+            ).status_code
+            == 200
+        )
+        text, proposed = await _dispatch(NATIVE_TOOL, tool_use_id="toolu_e2e_asks")
+        assert text is None and proposed["grant_tool"] == NATIVE_TOOL
+
+        # Clearing returns the read to its DEFAULT, which is to run.
         assert client.delete(f"/api/connectors/{NATIVE_OWNER}/permissions").status_code == 200
         text, proposed = await _dispatch(NATIVE_TOOL, tool_use_id="toolu_e2e_cleared")
-        assert text is None and proposed["grant_tool"] == NATIVE_TOOL
+        assert proposed is None and "blocked_by" not in text
 
 
 @pytest.mark.asyncio
@@ -450,20 +448,26 @@ def in_automation(armed, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_a_manual_automation_still_asks_about_a_globally_allowed_tool(in_automation):
-    """The precedence that predates the merge and must survive it: an Automation's own
-    authority is consulted BEFORE the global permission table, so a run cannot inherit a
-    permission the owner granted in an unrelated chat.
-
-    ``services.automations.runs.grant_automation_tool`` is the other half of the same rule —
-    an "Always allow" tapped INSIDE a run is written to that Automation, not globally. A
-    regression here would let a broad chat-time decision quietly widen every scheduled run,
-    which is the one direction this design has always refused.
-    """
+@pytest.mark.parametrize("mode", ["manual", "auto", "skip"])
+async def test_an_automation_inherits_a_global_always_allow_in_every_mode(in_automation, mode):
+    """``always_allow`` means allow EVERYWHERE, unattended included (CLAUDE.md, Security-critical
+    areas). Until 2026-10-11 a ``manual`` Automation still asked about a tool the owner had
+    allowed globally; with one value per tool, Allow runs in every mode, an Automation's too.
+    The mode only ever decides what ASK means."""
     perms.set_tool_permission(perms.CORE_CONNECTOR_ID, UNTAGGED_WRITE, "always_allow")
-    in_automation("manual")
+    in_automation(mode)
 
     text, proposed = await _dispatch(UNTAGGED_WRITE, {"name": "Acme"}, tool_use_id="toolu_auto1")
+
+    assert proposed is None and text is not None and "blocked_by" not in text
+
+
+@pytest.mark.asyncio
+async def test_a_manual_automation_asks_about_a_tool_set_to_ask(in_automation):
+    perms.set_tool_permission(perms.CORE_CONNECTOR_ID, UNTAGGED_WRITE, "needs_approval")
+    in_automation("manual")
+
+    text, proposed = await _dispatch(UNTAGGED_WRITE, {"name": "Acme"}, tool_use_id="toolu_auto2")
 
     assert text is None and proposed["grant_tool"] == UNTAGGED_WRITE
 
@@ -481,56 +485,23 @@ async def test_an_automation_cannot_clear_a_block_in_any_mode(in_automation):
 
 
 @pytest.mark.asyncio
-async def test_an_auto_automation_passes_a_connector_read_as_it_does_a_connector_write(
-    in_automation,
+async def test_an_auto_automation_does_not_judge_an_undecided_connector_read(
+    in_automation, monkeypatch
 ):
     """The approval TIER is "would this ask, absent the Automation's opinion" — the tool's
-    shape OR its level. Without the OR, a connector status READ (not a write, but asking by
-    level) would pause a run that the connector's own SYNC tool sails through, which is
-    backwards.
-    """
+    shape OR its level. An undecided connector status READ is neither a write nor asking by
+    level, so it runs and the judge is never consulted; the connector's own SEND is a write
+    and does reach the judge."""
+    judged: list[str] = []
+    stub_judge(monkeypatch, "allow", judged)
     in_automation("auto")
 
     text, proposed = await _dispatch(NATIVE_TOOL)
+    assert proposed is None and text is not None and "blocked_by" not in text
+    assert judged == []
 
-    assert proposed is None
-    assert text is not None and "blocked_by" not in text
-
-
-@pytest.mark.asyncio
-async def test_the_yolo_row_is_settable_and_revocable_through_the_ordinary_route(armed):
-    """The blanket permission must be reachable by the SAME surface as every other one —
-    that is what makes "one revoke surface" true rather than aspirational, and turning yolo
-    off is the single most important revoke here.
-
-    The reserved name is ``*``, which a client percent-encodes to ``%2A``; the route is
-    declared ``{tool:path}`` so it survives the round trip. A separate route for it would be
-    a second revoke path in a design whose whole claim is that there is exactly one.
-    """
-    from fastapi.testclient import TestClient
-
-    from backend.main import app
-
-    with TestClient(app) as client:
-        body = client.put("/api/tool-permissions/%2A", json={"level": "always_allow"}).json()
-        assert body["yolo"] is True
-        assert any(
-            r["tool"] == perms.YOLO_TOOL and r["connector_id"] == perms.CORE_CONNECTOR_ID
-            for r in body["permissions"]
-        )
-        # Armed: an undecided write stops asking.
-        text, proposed = await _dispatch(UNTAGGED_WRITE, {"name": "Acme"})
-        assert proposed is None and text is not None
-
-        assert (
-            client.delete(
-                f"/api/tool-permissions/%2A?connector_id={perms.CORE_CONNECTOR_ID}"
-            ).status_code
-            == 200
-        )
-        assert client.get("/api/tool-permissions").json()["yolo"] is False
-        text, proposed = await _dispatch(UNTAGGED_WRITE, {"name": "Beta"}, tool_use_id="toolu_y2")
-        assert text is None and proposed["grant_tool"] == UNTAGGED_WRITE
+    await _dispatch(NATIVE_WRITE, {"message": "hi"})
+    assert judged == [NATIVE_WRITE]
 
 
 @pytest.mark.asyncio
@@ -542,7 +513,7 @@ async def test_a_self_staging_tool_obeys_the_level_and_the_automation_in_that_or
     It is no longer a second mechanism with its own precedence to keep in step: it
     DELEGATES to ``should_gate`` (ADR 2026-08-25-one-confirm-mechanism-for-every-tool), so
     what this pins is that a self-staging tool gets literally the same answer as every
-    other tool — level first, then the Automation's own verdict inside a run.
+    other tool — the value first, then the mode's meaning of Ask inside a run.
     """
     from backend.ai.tools import registry as reg
     from backend.core.tool_use_context import set_tool_use_id
@@ -559,6 +530,9 @@ async def test_a_self_staging_tool_obeys_the_level_and_the_automation_in_that_or
     perms.set_tool_permission(perms.CORE_CONNECTOR_ID, "add_positions", "always_allow")
     assert reg.should_preview_write() is False
 
-    # Inside a manual run the Automation's own answer wins, global allow or not.
+    # Inside a manual run Ask still means a card, and the global Always allow set above still
+    # runs: an Automation inherits Allow (the mode only decides what Ask means).
     in_automation("manual")
+    assert reg.should_preview_write() is False
+    perms.set_tool_permission(perms.CORE_CONNECTOR_ID, "add_positions", "needs_approval")
     assert reg.should_preview_write() is True

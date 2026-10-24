@@ -48,15 +48,10 @@ def env(tmp_path, monkeypatch, db_isolated):
     monkeypatch.setattr(svc, "base_currency", lambda: "SGD")
     # The staged-plan queue is DB-backed (pending_plans table); db_isolated already gives
     # this test its own fresh database, so PendingPlanStore() needs no extra isolation.
-    # Force the gate ON for the two ledger write tools regardless of ContextVar state.
-    #
-    # `GATED_TOOL_NAMES` is EMPTY in production since the write-then-verify chip shipped
-    # (2026-07-20) — ordinary writes no longer ask permission. What lives below is therefore
-    # the MECHANISM, not the policy: preview-writes-nothing, one-card-per-bulk, and above all
-    # the stored-args security property (a card showing $12.40 cannot commit $1,240). That
-    # mechanism is intact and re-enabling any tool is adding its name back to the set, so it
-    # stays fully covered. Which tools the POLICY gates is pinned separately, below.
-    monkeypatch.setattr(gate, "GATED_TOOL_NAMES", frozenset(_MECHANISM_TOOLS))
+    # Force the gate ON for the mechanism tools regardless of ContextVar state. What lives below
+    # is the MECHANISM, not the policy: preview-writes-nothing, one-card-per-bulk, and above all
+    # the stored-args security property (a card showing $12.40 cannot commit $1,240). Which
+    # tools the POLICY gates is pinned separately, below.
     monkeypatch.setattr(gate, "should_gate", lambda name: name in _MECHANISM_TOOLS)
     svc.accounts.insert({"id": "acc_chk", "name": "Checking", "kind": "asset", "currency": "SGD"})
     svc.accounts.insert({"id": "acc_sav", "name": "Savings", "kind": "asset", "currency": "SGD"})
@@ -644,16 +639,6 @@ def web_surface(monkeypatch):
     return True
 
 
-@pytest.fixture
-def armed(monkeypatch):
-    """Re-arm ``GATED_TOOL_NAMES`` so the surface/scope narrowings inside ``should_gate`` are
-    genuinely exercised. Without this every one of the "gate is OFF here" tests below would
-    pass on the empty set alone, asserting nothing about the predicate they name — a live
-    test that has quietly stopped testing anything is worse than a deleted one."""
-    monkeypatch.setattr(gate, "GATED_TOOL_NAMES", frozenset(_MECHANISM_TOOLS))
-    return True
-
-
 @pytest.mark.parametrize("surface", ["web", "connector:telegram", "connector:slack", "connector"])
 def test_an_ordinary_ledger_write_asks_UNTIL_GRANTED_on_every_card_capable_surface(
     monkeypatch, surface, db_isolated
@@ -692,33 +677,16 @@ def test_an_ordinary_ledger_write_asks_UNTIL_GRANTED_on_every_card_capable_surfa
     assert gate.should_gate("update_transactions") is True
 
 
-def test_the_gate_is_empty_by_POLICY_while_the_mechanism_stays_intact():
-    """Rollback is adding a name back to the set — nothing else. Pinning both halves means a
-    future re-enable is a one-line change with live test coverage waiting for it, and that
-    emptying the set was a deliberate policy decision rather than a mechanism that rotted."""
-    assert gate.GATED_TOOL_NAMES == frozenset()
+def test_there_is_no_list_of_gated_tool_names_and_the_mechanism_stays_intact():
+    """What asks is read from each tool's declarations and its stored value — there is no list
+    of names and no switch to arm."""
+    assert not hasattr(gate, "GATED_TOOL_NAMES")
+    assert not hasattr(gate, "GATE_ALL_WRITES")
     assert callable(gate.stage) and callable(gate.redeem)
 
 
-def test_a_model_chose_the_set_write_still_confirms(monkeypatch, web_surface):
-    """The one class of confirmation that SURVIVES: where the model chose the SET of rows
-    rather than the user naming them. "This matched 847 rows" is information available no
-    other way, so it cannot be verified from a chip after the fact — unlike "did you record
-    the $12.40 I just told you about", which can.
-
-    These two enforce it through their own mechanisms (``apply_payee_rules`` requires
-    ``confirm=true``; both are additionally hardline-blocked unattended), never through
-    ``GATED_TOOL_NAMES`` — so emptying that set must not have weakened them."""
-    from backend.ai import _confirm_gate as policy
-
-    assert policy.is_hardline_blocked("delete_transactions_where") is True
-    assert policy.is_hardline_blocked("apply_payee_rules") is True
-
-
 @pytest.mark.parametrize("surface", ["scheduled", None])
-def test_gate_is_OFF_on_every_surface_that_cannot_render_or_apply_the_card(
-    monkeypatch, surface, armed
-):
+def test_gate_is_OFF_on_every_surface_that_cannot_render_or_apply_the_card(monkeypatch, surface):
     """A headless scheduled run has nobody to tap ✓, and an unset surface (inbound MCP, the
     REST finding-apply) would read "staged" as done — neither can render OR apply a card."""
     from backend.core import cost_context
@@ -727,7 +695,7 @@ def test_gate_is_OFF_on_every_surface_that_cannot_render_or_apply_the_card(
     assert gate.should_gate("add_transactions") is False
 
 
-def test_gate_stays_on_inside_a_skill_scope(monkeypatch, web_surface, armed):
+def test_gate_stays_on_inside_a_skill_scope(monkeypatch, web_surface):
     """Skill instructions never preapprove an ONW money or mutation write."""
     from backend.ai.tools import _skill_scope
 
@@ -735,7 +703,7 @@ def test_gate_stays_on_inside_a_skill_scope(monkeypatch, web_surface, armed):
     assert gate.should_gate("add_transactions") is True
 
 
-def test_gate_stays_on_for_an_agent_responder_turn(monkeypatch, web_surface, armed):
+def test_gate_stays_on_for_an_agent_responder_turn(monkeypatch, web_surface):
     from backend.ai.tools import _skill_scope
 
     monkeypatch.setattr(_skill_scope, "offer_tool_names", lambda: frozenset({"add_transactions"}))
@@ -747,8 +715,8 @@ def test_gate_is_off_for_a_READ_and_on_for_every_write(web_surface):
     there is no such thing as an "ungated" write tool.
 
     Its subject, ``delete_transactions``, carries ``mutates=("ledger",)`` — it was only
-    "ungated" in the sense of being absent from the hand-listed ``GATED_TOOL_NAMES``, which
-    was the entire policy at the time. Now the policy is the registry's own write
+    "ungated" in the sense of being absent from a hand-listed set of names, which was the
+    entire policy at the time. Now the policy is the registry's own write
     classification, so the meaningful boundary this test should defend is WRITE vs READ, and
     a read staying free is the half that must never regress.
     """

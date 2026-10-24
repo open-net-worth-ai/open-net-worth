@@ -28,6 +28,7 @@ from backend.ai.tool_text import (
     strip_tool_syntax,
 )
 from backend.ai.tools import TOOL_SCHEMAS, _skill_scope, call_log, execute_tool
+from backend.ai.tools._confirm_gate import automation_ref as _automation_ref
 from backend.ai.tools.display import describe_tool_call
 from backend.ai.tools.registry import external_args_error, mutated_domains, validation_error
 from backend.ai.turn_completion import MAX_COMPLETION_NUDGES, completion_nudge
@@ -261,6 +262,35 @@ def _discovery_gate_verdict(
     if problem is not None:
         return False, "bounced_invalid_args", problem, False
     return True, "executed", None, True
+
+
+async def _dispatch_external(
+    dispatcher: Any, name: str, args: dict
+) -> tuple[str, Optional[dict], list[str]]:
+    """Run one external-MCP call through the SAME permission chain as every registry tool.
+
+    External tools bypass ``registry.dispatch`` (no registered handler), so this is the other
+    half of ``_permission_gate``: Block and the running Automation's Blocked list refuse; Always
+    allow and the Automation's Always-allowed list run; Ask is resolved by the mode — a card in
+    manual, the Auto judge in auto (its verdict parked by ``auto_judge.prepare`` exactly as for an
+    internal call), a straight run in skip. The dispatcher only carries the decision out.
+    """
+    from backend.ai import auto_judge
+    from backend.ai.tools import _confirm_gate as gate
+
+    await auto_judge.prepare(name, args)
+    decision = gate.external_decision(name)
+    if decision == "automation_blocked":
+        text, _ = gate.automation_blocked_result(name)
+        return mcp_external.fence_external_output(_external_label(name), text), None, []
+    if decision == "allow":
+        return await dispatcher.fire_allowed(name, args)
+    return await dispatcher.call(name, args)
+
+
+def _external_label(name: str) -> str:
+    split = mcp_external.split_external(name)
+    return split[0] if split else "?"
 
 
 def _external_gate_verdict(
@@ -1921,14 +1951,23 @@ def _rebuilt_card(session_id: str, block: dict) -> dict:
     staged = _staged_card(block["id"])
     if staged is not None:
         return {**staged, "tool_use_id": block["id"], "id": block["id"]}
+    return _card_from_call(
+        session_id, block, f"{block.get('name')} needs your approval before it runs."
+    )
+
+
+def _card_from_call(session_id: str, block: dict, reason: str) -> dict:
+    """A generic permission card rebuilt from the tool call alone — for a call with no staged
+    card: an Automation park (its ids never reach the pending store) or an answered call."""
     return {
         "type": "tool_permission",
         "grant_tool": block.get("name"),
         "display": {"tool": block.get("name"), "arguments": block.get("input") or {}},
-        "reason": f"{block.get('name')} needs your approval before it runs.",
+        "reason": reason,
         "tool_use_id": block["id"],
         "session_id": session_id,
         "id": block["id"],
+        **_automation_ref(session_id),
     }
 
 
@@ -2512,8 +2551,46 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
         if pending:
             last_assistant["awaitingApproval"] = True
 
+    _rebuild_answered_cards(session_id, messages)
     _append_last_turn_error(session_id, messages)
     return messages
+
+
+def _rebuild_answered_cards(session_id: str, messages: list[dict]) -> None:
+    """Put back the confirm cards the owner already ANSWERED, labelled with the answer they gave.
+
+    The transcript keeps what a call returned, which cannot say whether the owner approved it
+    once or chose Always allow; ``services.tool_resolutions`` stores that, keyed by the card's
+    ``tool_use_id``. A tool block that has a result AND a stored answer gets its card back right
+    after it, resolved (``status`` + ``resolution``), so the label survives a reload and shows
+    when an Automation run's conversation is opened later. A call with no stored answer (every
+    ordinary tool call, and anything answered before the answer was stored) gets no card.
+    """
+    from backend.services import tool_resolutions
+
+    answers = tool_resolutions.for_session(session_id)
+    if not answers:
+        return
+    for message in messages:
+        blocks = message.get("blocks")
+        if message.get("role") != "assistant" or not blocks:
+            continue
+        rebuilt: list[dict] = []
+        for block in blocks:
+            rebuilt.append(block)
+            answer = answers.get(block.get("id") or "")
+            if block.get("type") != "tool" or "result" not in block or answer is None:
+                continue
+            change = {
+                **_card_from_call(
+                    session_id, block, f"{block.get('name')} needed your approval before it ran."
+                ),
+                "status": "dismissed" if answer == tool_resolutions.DENIED else "confirmed",
+                "resolution": answer,
+            }
+            message.setdefault("proposedChanges", []).append(change)
+            rebuilt.append({"type": "change", "change": change})
+        message["blocks"] = rebuilt
 
 
 # Statuses whose stored message is worth showing. "awaiting_approval"/"ok"/"running" are
@@ -4554,6 +4631,21 @@ async def _run_turn(
                         # its OWN verdict (validated, then executed or bounced on its own
                         # merits) instead of inheriting the first one's load as permission.
                         _offer_names = {t.get("name") for t in _active_tools()}
+                        # Auto approval judges this step's Ask calls TOGETHER, once, before the
+                        # first is dispatched (``dispatch`` then finds each verdict parked). A
+                        # call outside this round's offer goes through the discovery gate below,
+                        # which bounces every write, so it is left to the single-call judge.
+                        # Every dispatch path — chat, an Automation run or its continuation, a
+                        # Codex native call — reaches this one loop.
+                        from backend.ai import auto_judge_batch
+
+                        await auto_judge_batch.judge_step(
+                            [
+                                (tu["id"], tu["name"], tu["input"])
+                                for tu in pending_tool_uses
+                                if tu["name"] in _offer_names
+                            ]
+                        )
                         for tu in pending_tool_uses:
                             tool_name = tu["name"]
                             tool_input_summary = redact_summary(tu["input"])
@@ -4763,9 +4855,11 @@ async def _run_turn(
                                         # stage keys its PendingPlanStore entry on the SAME id
                                         # this tool_use will be resolved against.
                                         set_tool_use_id(tu["id"])
-                                        text_result, proposed, _mcp_image_ids = await _ext.call(
-                                            tool_name, tu["input"]
-                                        )
+                                        (
+                                            text_result,
+                                            proposed,
+                                            _mcp_image_ids,
+                                        ) = await _dispatch_external(_ext, tool_name, tu["input"])
                                 else:
                                     text_result, proposed = await execute_tool(
                                         tool_name, tu["input"], tool_use_id=tu["id"]

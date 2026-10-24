@@ -12,12 +12,6 @@ It is intentionally gated at multiple independent layers (S4) — ALL must be ON
      (default ``False``). Human-only (no Lucius tool). When OFF, no script ever reaches
      ``run_sandboxed`` regardless of caller.
 
-  3. **Unattended caller gate** — if the current turn has no user in the loop
-     (``is_unattended()``), the instance-level ``script_skills_unattended_enabled()`` flag
-     (default ``False``) must also be ``True``. Permissions live at the CALLER level:
-     interactive chat turns pass with just switch 1; headless callers (agents / scheduled
-     tasks / MCP) additionally need switch 2. Human-only (no Lucius tool).
-
 Once all gates pass, the tool:
   - Resolves the declared ``script_id`` against the bundle's manifest (unknown id →
     refused; only MANIFEST-DECLARED scripts may run).
@@ -25,9 +19,6 @@ Once all gates pass, the tool:
     ``bundle_dir`` and the manifest's declared ``entry``.
   - Returns the ``SandboxResult`` as a JSON string — stdout is UNTRUSTED model-facing
     data and is size-capped by the runner; the tool never evaluates it (T8).
-
-An unattended turn that hasn't had ``script_skills_unattended_enabled`` set cannot run
-scripts — gate 3 is the only thing standing there, so it is load-bearing on its own.
 
 SECURITY-CRITICAL — this is the first live code-execution path. Flag ``/security-review``
 before shipping. The current isolation level is S2 (Option A bare subprocess): strong
@@ -77,6 +68,27 @@ class RunScriptInput(ToolInput):
     )
 
 
+_SCRIPTS_OFF = (
+    "Script-bundling skills are disabled for this instance "
+    "(Settings → Developer → Bundled script skills is off). "
+    "Ask the operator to enable the feature."
+)
+
+
+def _script_execution_off() -> Optional[str]:
+    """The refusal while the Bundled script skills switch is off, else ``None``.
+
+    Whether a call needs the owner's say is the permission value plus the approval mode, the same
+    in a chat and in an Automation run; this is only the feature's enable/disable (Settings →
+    Developer → Bundled script skills). Registered as the tool's ``unavailable=`` (refused before
+    any card or judge call) and re-checked by the handler (an approval redeemed after the switch
+    went off still refuses).
+    """
+    from backend.db.app_config_store import script_skills_enabled
+
+    return None if script_skills_enabled() else _SCRIPTS_OFF
+
+
 @tool(
     "run_script",
     description=(
@@ -91,6 +103,8 @@ class RunScriptInput(ToolInput):
         "add_transactions / the recording tools after you receive the result."
     ),
     input_schema=schema_of(RunScriptInput, tool_name="run_script"),
+    external_effect=True,
+    unavailable=_script_execution_off,
 )
 async def run_script(input_data: dict):  # noqa: C901 — gate-heavy by design
     """Dispatch a script run through the sandbox after checking all S4 gates."""
@@ -114,45 +128,10 @@ async def run_script(input_data: dict):  # noqa: C901 — gate-heavy by design
 
     skill_id: str = bundle.get("skill_id", "")
 
-    # ── Gate 2: instance kill switch ─────────────────────────────────────────────
-    # Late import keeps the gate check at dispatch time (not at import time), and avoids
-    # a module-level reference to AppConfigStore that would complicate tests.
-    from backend.db.app_config_store import script_skills_enabled, script_skills_unattended_enabled
-
-    if not script_skills_enabled():
-        return json.dumps(
-            {
-                "error": (
-                    "Script-bundling skills are disabled for this instance "
-                    "(Settings → Developer → Bundled script skills is off). "
-                    "Ask the operator to enable the feature."
-                )
-            }
-        ), None
-
-    # ── Gate 3: unsupervised-execution gate ──────────────────────────────────────
-    # Gate 2 above says whether scripts may run AT ALL; this says whether they may run with
-    # nobody watching. An owner can allow scripts in interactive chat and still refuse them
-    # in a job they are not sitting in front of, so this gate is load-bearing on its own.
-    #
-    # It asks who is PRESENT, not whether we could ask them something later — those come
-    # apart at Automations, which can park on a durable card someone taps hours afterwards
-    # (which is why `can_render_card` says True for them, correctly, for its own question).
-    # `core.unattended` answers only the presence question; this is its one reader, pinned
-    # by tests/test_unattended_signal.py.
-    from backend.core.unattended import is_unattended
-
-    if is_unattended() and not script_skills_unattended_enabled():
-        return json.dumps(
-            {
-                "error": (
-                    "Unattended script execution is disabled for this instance "
-                    "(Settings → Developer → Unattended script runs is off). "
-                    "An operator must enable it to allow agents, scheduled tasks, or MCP "
-                    "clients to run script-bearing skills."
-                )
-            }
-        ), None
+    # ── Gate 2: the instance switch (also checked at dispatch, before any card) ──
+    off = _script_execution_off()
+    if off is not None:
+        return json.dumps({"error": off}), None
 
     # ── Resolve the requested script from the manifest ───────────────────────────
     script_id: str = input_data.get("script_id", "").strip()

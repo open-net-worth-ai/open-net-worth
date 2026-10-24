@@ -190,10 +190,6 @@ def test_lucius_tools_cannot_move_the_key_either(demo):
     [
         (app_config_store.code_execution_enabled, app_config_store.CODE_EXEC_ENABLED_FLAG),
         (app_config_store.script_skills_enabled, app_config_store.SCRIPT_SKILLS_FLAG),
-        (
-            app_config_store.script_skills_unattended_enabled,
-            app_config_store.SCRIPT_SKILLS_UNATTENDED_FLAG,
-        ),
     ],
 )
 def test_the_sandbox_stays_off_on_a_demo_even_if_switched_on(book, reader, flag):

@@ -329,37 +329,23 @@ def _icon_class(name: str, tokens: list[str], mutates: tuple[str, ...]) -> str:
     a list of exceptions, so a future write tool named `get_…` is handled the day it is
     added.
 
-    But `mutates` alone over-corrects. `get_live_prices` memoizes fetched points into a price
-    cache, and drawing a pencil beside "Get live prices" tells a person their data was edited
-    when nothing they care about changed (owner report, 2026-08-22, on mobile).
-
-    The distinction already exists in this codebase and is already curated and reviewed:
-    `GATE_EXEMPT_READ_SHAPED` is what the confirm gate consults to decide NOT to ask the user
-    about a write, on exactly the grounds that it is bookkeeping rather than a mutation. The
-    icon asks the same question, so it reads the same answer instead of keeping a second
-    opinion that could drift from it.
+    The fact it trusts is `mutates=` alone: a read that only makes a screen refresh
+    (`refreshes=` — a bank fetch, an email search) is a read, and
+    drawing a pencil beside "Fetch transactions" tells a person their data was edited when
+    nothing they care about changed (owner report, 2026-08-22, on mobile). The same fact
+    decides whether the tool asks by default, so the icon and the approval card cannot
+    disagree about what counts as a change.
     """
     hint = ""
     for token in tokens[:2]:
         if token in _ICON_HINTS:
             hint = _ICON_HINTS[token]
             break
-    if not mutates or _is_read_shaped(name):
+    if not mutates:
         return hint or "read"
     if not hint or hint in _READ_SHAPED_ICONS:
         return "update"
     return hint
-
-
-def _is_read_shaped(name: str) -> bool:
-    """Is this tool's write bookkeeping rather than a mutation? Per the permission gate's own
-    reviewed allowlist — never a second copy of it."""
-    try:
-        from backend.services.tool_permissions import GATE_EXEMPT_READ_SHAPED
-
-        return name in GATE_EXEMPT_READ_SHAPED
-    except Exception:
-        return False
 
 
 def _strip_owner_prefix(tokens: list[str], skip: set[str]) -> list[str]:
@@ -583,12 +569,12 @@ def _with_detail(label: str, detail: str, verb_class: str) -> tuple[str, str]:
 
 
 def _mutates_of(name: str) -> tuple[str, ...]:
-    """What this tool writes, per the registry — the fact `_icon_class` trusts over the name.
+    """What this tool changes, per the registry — the fact `_icon_class` trusts over the name.
     Empty for an unknown tool, which is the safe read-shaped default."""
     try:
-        from backend.ai.tools.registry import mutated_domains
+        from backend.ai.tools.registry import written_domains
 
-        return tuple(mutated_domains(name) or ())
+        return tuple(written_domains(name) or ())
     except Exception:
         return ()
 

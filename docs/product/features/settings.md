@@ -70,7 +70,7 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
 | **Data** | **Backup & restore** (export a full .zip), **Automatic backups** (daily, and how many days to keep), **Restore from a backup**, **Uploaded files** from chat, and resetting the instance. See [Backup & restore](../operations/backup-and-restore.md). |
 | **Terminal** | A shell on the machine the app runs on. Shown only where it is allowed; off by default when you host the app yourself. See [Terminal](../operations/terminal.md). |
 | **Help** | The **Help center** (these pages, available offline), **Ask Lucius**, and **Send feedback**. |
-| **Developer** | **Application logs**, **Code execution** (let Lucius run short Python on this server), **Extensions**, **Bundled script skills**, and **SQL access** (Lucius's read-only queries and their log). See [Logs](../operations/logs.md). |
+| **Developer** | **Application logs**, **Code execution** (the on/off switch for Lucius running short Python on this server; whether he asks first is the **Run code** setting in Permissions), **Extensions**, **Bundled script skills**, and **SQL access** (Lucius's read-only queries and their log). See [Logs](../operations/logs.md). |
 | **Cost & Performance** | **AI spend** over a period you choose, search and page-fetch costs, and model speed and reliability. |
 
 ## Things to know

@@ -150,13 +150,15 @@ history, after you confirm.
 
 ## Approval mode
 
-Each Automation has its own approval mode. Inside a run, it decides — not the mode of any chat.
+Each Automation has its own approval mode. Inside a run, it decides what **Ask** means — not the
+mode of any chat. (Every tool is set to **Always allow**, **Ask** or **Block**; see
+[Permissions](permissions.md).)
 
-| Mode | In a run |
+| Mode | In a run, a tool set to Ask… |
 |---|---|
-| **Manually approve** | Pauses on every change and waits for your approval on a [confirm card](confirm-cards.md). The run's conversation shows **Needs you**. |
-| **Automatically approve** | Runs on its own. Still pauses for the two riskiest operations: deleting a filtered set of transactions, and re-applying a payee rule across your whole ledger. |
-| **Skip all approvals** | *"Lucius never pauses, even for unsafe actions."* Including those two. Use it only for an Automation you've tested. |
+| **Manually approve** | Pauses and waits for your approval on a [confirm card](confirm-cards.md). The run's conversation shows **Needs you**. |
+| **Automatically approve** | Runs on its own. Each call is judged as it comes up, and pauses only if it looks unsafe — see [How Automatically approve decides](#how-automatically-approve-decides). |
+| **Skip all approvals** | *"Lucius never pauses, even for unsafe actions."* Nothing is judged — it just runs. Use it only for an Automation you've tested. |
 
 The **Recommended** and **Sync a connector** templates start in **Automatically approve** — there's
 nobody at the screen at 9am to tap a card. A new Automation you set up yourself starts in
@@ -164,27 +166,83 @@ nobody at the screen at 9am to tap a card. A new Automation you set up yourself 
 
 In every mode:
 
-- A tool set to **Blocked** is refused.
-- A tool you explicitly set to **Needs approval** on a connector's page still asks.
-- Tools from an external MCP server ask unless set to **Always allow**.
-- An Automation can't create, change, delete or run Automations without asking you.
+- A tool set to **Block** is refused, and so is any tool on this Automation's own **Blocked** list.
+- A tool set to **Always allow** runs — an Automation uses your global **Always allow** just like a
+  chat does — and so does any tool on this Automation's own **Always allowed** list.
+- Tools from an external MCP server follow the same rules as any other tool, including this
+  Automation's own lists.
+- The tools that create, change, delete or run Automations are ordinary tools too: they follow the
+  mode. In **Automatically approve** the judge is told when a call would give an Automation
+  unattended access, and lets it through only if your own words clearly asked for it.
 - An Automation **never approves its own transactions.** Rows it logs land in your review queue
   (**N to review** in Accounts), and only you can approve them — even in **Skip all approvals**.
   It can still edit or re-flag those rows.
 
-**An Automation never borrows your chat permissions.** In **Manually approve**, even a tool you've
-set to **Always allow** elsewhere pauses — unless it's on this Automation's own **Always
-allowed** list. Tapping **Always allow** on a card during a run adds the tool to that list. To
-see or remove those, open the Automation: the **Always allowed** section lists each tool with a
-**Revoke** button.
-
 Details on levels and modes: [Permissions](permissions.md).
+
+## Tool permissions
+
+On top of the global setting, each Automation can have its own say about individual tools. Open
+the Automation and find **Tool permissions** on the **Setup** tab:
+
+| Tool | In this Automation | |
+|---|---|---|
+| Update transactions | Always allow ▾ | Remove |
+| Send email | Block ▾ | Remove |
+
+- **Always allow** — this tool never asks in *this* Automation, whatever its global setting and
+  whatever the approval mode. Tapping **Always allow** on a card during a run adds the tool here.
+- **Block** — this tool is refused in this Automation, whatever its global setting. The run gets a
+  note that it isn't allowed here and **carries on without it** — it isn't stopped. You set a
+  Block here, deliberately; a card during a run only offers Allow once, Always allow and Deny.
+- **+ Add tool** opens a search over every tool (the same list as **Settings → Permissions**);
+  choose **Always allow** or **Block** for it. Tools from external MCP servers are listed too, as
+  "<tool> · MCP <server>".
+- **Remove** takes a tool back off the list, so it follows the global setting again.
+- Under the table, **Everything else: global setting · Auto mode** says what governs the tools you
+  haven't listed: their own setting, and — for a tool set to Ask — this Automation's approval mode.
+
+A tool is on at most one of the two lists. The lists belong to this Automation only; they never
+change a tool anywhere else.
+
+## How Automatically approve decides
+
+Before each call that would otherwise ask, a small model reads the tool's name and description,
+what it is about to do (its parameters), and **the instructions you wrote on the Automation**,
+and answers one question: does this need you? It allows a call that is plainly what the
+instructions ask for, touches only what they cover, sends nothing outside the app that you didn't
+ask to send, and is cheap to undo. It pauses — with the ordinary confirm card — for anything
+that goes beyond the instructions, deletes or rewrites in bulk, or sends something to a third
+party. A change to credentials, connectors, Automations or permissions is judged the same way: it
+lets one through only when your instructions clearly asked for exactly that change. When it is
+unsure, it pauses.
+
+What it deliberately does **not** read: the results of earlier tool calls, web pages, or the
+email or webhook that triggered the run. Those are the places an attacker's text can hide, so
+your own instructions are the only statement of intent the judge trusts.
+
+- **It judges a step's calls together.** When a run makes several calls in one step, the judge
+  sees them all at once — one request — and decides each call against your instructions on its own
+  **and** in combination (reading your private data while sending something out of the app pauses
+  both, unless the instructions plainly asked for exactly that). One call can run while another
+  pauses. A single call is judged on its own as before.
+- **It fails closed.** If the model can't answer in time, errors, or gives an unusable answer,
+  the call pauses for you — every call in a group when the whole answer is unusable, only the one
+  the answer skipped or garbled otherwise. It never approves by default.
+- **Your settings still win.** A tool you set to **Block** or **Always allow** — globally or on
+  this Automation — is never judged. Only a tool set to **Ask** reaches the judge.
+- **Which model judges.** The **Auto-approval judge** under **Settings → AI**; unset, it uses the
+  model the run is using — a Claude Code or Codex model included. Each judgement (a group of calls
+  counts as one) waits at most 10 seconds; if the model is slower, the calls pause for you. A small, fast model is plenty. See [Models and
+  cost](models-and-cost.md#send-background-jobs-to-a-cheaper-model).
+- **It is a safety net, not a wall.** For anything you would genuinely never want unattended,
+  keep the Automation on **Manually approve**, or set that tool to **Block**.
 
 ## Managing your Automations
 
 Each Automation's **⋮** menu has **Run now**, **Pause** / **Resume**, **Edit**, **Duplicate** and
 **Delete**. Click an Automation to open it: **Setup** shows its instructions, trigger, model,
-**Permission Mode**, **Cost & usage** and **Always allowed** list; **History** lists every run.
+**Permission Mode**, **Cost & usage** and **Tool permissions**; **History** lists every run.
 
 Each run is a conversation. You'll also find them in the Lucius history list under **Automation
 runs**; **Mark all read** there clears the unread ones in one click.
@@ -223,7 +281,7 @@ default). Each Automation's **Cost & usage** shows what it has spent, the list c
 ## Before you let one run unattended
 
 An unattended run can do anything a conversation you're watching can. What protects you is the
-[permission level](permissions.md) of each tool it might use, plus the approval mode you pick.
+[setting](permissions.md) of each tool it might use, plus the approval mode you pick.
 Check both before pointing an **Auto** or **Skip** Automation at anything that changes your
 money.
 
@@ -250,7 +308,7 @@ threshold. Fill it in under **When it runs**.
 
 ## Related pages
 
-- [Permissions](permissions.md) — levels, modes and Always allow
+- [Permissions](permissions.md) — Always allow, Ask, Block and the modes
 - [Confirm cards](confirm-cards.md) — what a pause looks like
 - [Skills](skills.md) — the playbooks the report and email templates follow
 - [Models and cost](models-and-cost.md) — choosing a model for a run

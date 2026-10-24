@@ -438,7 +438,7 @@ export async function createMcpServer(input: {
  *  the levels are what matters for what Lucius may fire. */
 function permissionWriteError(failed: number): string {
   const changes = `${failed} permission ${failed === 1 ? 'level' : 'levels'}`
-  return `The server was saved, but ${changes} could not be written — those tools are still at Needs approval. Try again.`
+  return `The server was saved, but ${changes} could not be written — those tools are still at Ask. Try again.`
 }
 
 /**

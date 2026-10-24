@@ -102,7 +102,7 @@ Lucius then reads only that folder.
   conversation set to **Manually approve**, Lucius shows you the recipient and message and waits
   for your approval. In **Automatically approve** (what a new conversation starts in) it sends
   without asking. To be asked every time, wherever you are, open the Email connector's **Tool
-  permissions** and set the send tool to **Needs approval** — see
+  permissions** and set the send tool to **Ask** (it starts there) and keep conversations on **Manually approve** — see
   [Permissions](../lucius/permissions.md).
 - **Email content is treated as untrusted.** An email can't instruct Lucius to do anything; it's
   read as data only.

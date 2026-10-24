@@ -34,7 +34,6 @@ from backend.core.automation_runner import (
 from backend.core.email_consumer import get_email_consumer, set_email_consumer
 from backend.core.run_steps import settle_in_flight_steps
 from backend.core.turn_cancel import peek_cancel_reason
-from backend.core.unattended import reset_unattended, set_unattended
 from backend.core.user_time import user_now
 
 logger = logging.getLogger(__name__)
@@ -129,6 +128,7 @@ async def automation_runner(
             session_id=request.session_id,
             mode=request.permission_mode,
             always_allowed_tools=_canonical_always_allowed_tools(request.always_allowed),
+            blocked_tools=_canonical_tool_names(request.blocked, keep_external=True),
         )
     )
     skill_scope_snapshot = _skill_scope.snapshot_scope()
@@ -276,23 +276,6 @@ async def automation_runner(
             )
             last_progress_chars = len(summary_so_far)
 
-    # DELIBERATELY NOT set_unattended(True). Added 2026-08-09 by d2b1d631, it broke every
-    # Automation the next morning: `is_unattended()` gates each tool call against the
-    # caller's pre-existing OFFER (assistant.py), and an Automation's offer comes from its
-    # `always_allowed` list — which is empty by design until the owner grants something from
-    # a real approval tap. Empty offer + unattended = every tool refused, so a run fetched
-    # mail, got refused on everything after, and still reported Completed.
-    #
-    # "Unattended" here has to mean "nobody is awake to answer a prompt" — which the
-    # approval mode already expresses — NOT "authorized to call nothing". The list governs
-    # APPROVAL, never REACHABILITY — which is what its 2026-08-27 rename to `always_allowed`
-    # makes plain. The capture and headless paths still set the flag; they
-    # each ship a real, non-empty offer, which is the precondition the check assumes.
-    # Nobody is watching an Automation run while it executes. This is a statement of FACT,
-    # read by exactly one gate (run_script's unsupervised-execution switch) — deliberately
-    # NOT a tool ceiling. The predecessor flag was both, and as a ceiling it refused every
-    # tool on every run; see core.unattended.
-    _unattended_token = set_unattended(True)
     try:
         turn_status = await turns.run_inline(
             request.session_id,
@@ -326,7 +309,6 @@ async def automation_runner(
         run_plan.reset(plan_token)
         run_context.reset(context_token)
         reset_automation_approval(approval_token)
-        reset_unattended(_unattended_token)
         _skill_scope.restore_scope(skill_scope_snapshot)
         set_email_consumer(prior_email_consumer)
         clear_audit_scope(audit_token)
@@ -490,6 +472,8 @@ def automation_cleanup(context: dict, *, phase: str) -> dict:
         else []
     )
     durable_proof = durable_owned == session_ids
+    from backend.services.automations.runs import AUTOMATION_SESSION_PREFIX
+
     metadata = {row.get("id"): row for row in assistant.list_sessions()}
     # A run's session is minted as ``automation-run-{run_id}`` (runs.py), so that exact
     # id, referenced by that same run row, proves ownership even when the index entry lost
@@ -499,7 +483,7 @@ def automation_cleanup(context: dict, *, phase: str) -> dict:
         for row in rows
         if isinstance(row, dict)
         and row.get("id")
-        and str(row.get("session_id")) == f"automation-run-{row.get('id')}"
+        and str(row.get("session_id")) == f"{AUTOMATION_SESSION_PREFIX}{row.get('id')}"
     }
     owned = sorted(
         session_id
@@ -555,7 +539,9 @@ def materialize_automation_session(run: dict, automation: Optional[dict] = None)
     run_id = str(run.get("id") or "").strip()
     if not run_id:
         raise ValueError("automation run id is required to materialize its conversation")
-    session_id = str(run.get("session_id") or f"automation-run-{run_id}")
+    from backend.services.automations.runs import AUTOMATION_SESSION_PREFIX
+
+    session_id = str(run.get("session_id") or f"{AUTOMATION_SESSION_PREFIX}{run_id}")
     existing = assistant.load_session_durable(session_id)
     created_transcript = existing is None
     if not isinstance(existing, list) or not existing:
@@ -721,6 +707,7 @@ async def _stream_continuation(
                 session_id=request.session_id,
                 mode=request.permission_mode,
                 always_allowed_tools=_canonical_always_allowed_tools(request.always_allowed),
+                blocked_tools=_canonical_tool_names(request.blocked, keep_external=True),
             )
         )
         audit_token = set_audit_scope(
@@ -987,26 +974,46 @@ class _EventProjection:
         )
 
 
-def _canonical_always_allowed_tools(always_allowed: list[dict]) -> frozenset[str]:
+def _canonical_tool_names(names: list[str], *, keep_external: bool = False) -> frozenset[str]:
+    """The live tool names among ``names`` — a registry tool, or an external MCP tool
+    (``mcp__<server>__<tool>``) its enabled server currently advertises. An entry that names no
+    live tool grants and blocks nothing.
+
+    ``keep_external`` is for the BLOCKED list: a Block must outlive a server that is disabled or
+    has not advertised the tool at the moment the run starts, so every well-formed external name
+    is kept (an unknown one matches nothing). Dropping it would let a re-enabled server's tool
+    run past the Automation's own Block."""
     from backend.ai.tools.registry import registered_tool_names
+    from backend.core import mcp_external
 
     live = set(registered_tool_names())
-    result: set[str] = set()
+    dispatcher = mcp_external.get_external_dispatcher()
+
+    def is_live(name: str) -> bool:
+        if name in live:
+            return True
+        if not mcp_external.is_external(name):
+            return False
+        if keep_external and mcp_external.split_external(name) is not None:
+            return True
+        return dispatcher is not None and dispatcher.discovered_tool(name) is not None
+
+    return frozenset(
+        name.strip() for name in names or [] if isinstance(name, str) and is_live(name.strip())
+    )
+
+
+def _canonical_always_allowed_tools(always_allowed: list[dict]) -> frozenset[str]:
+    names: list[str] = []
     for descriptor in always_allowed or []:
         if not isinstance(descriptor, dict):
             continue
         candidates = descriptor.get("tools")
-        names = list(candidates) if isinstance(candidates, list) else []
+        names.extend(candidates if isinstance(candidates, list) else [])
         capability = descriptor.get("capability")
-        if isinstance(capability, str) and capability.strip():
-            names.append(capability.strip())
-        for name in names:
-            if not isinstance(name, str):
-                continue
-            canonical = name.strip()
-            if canonical in live:
-                result.add(canonical)
-    return frozenset(result)
+        if isinstance(capability, str):
+            names.append(capability)
+    return _canonical_tool_names(names)
 
 
 def _progress_patch(

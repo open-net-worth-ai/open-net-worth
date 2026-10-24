@@ -6,7 +6,7 @@ order: 30
 audience: [user]
 status: stable
 related: [lucius/permissions, lucius/confirm-cards, getting-started/connecting-an-ai-provider, troubleshooting/faq]
-keywords: [lucius, permission, blocked, needs approval, always allow, connector, tool, refused]
+keywords: [lucius, permission, blocked, block, ask, needs approval, always allow, connector, tool, refused]
 ---
 
 # Lucius says he can't do that
@@ -43,11 +43,13 @@ you it's blocked and that nothing ran.
 
 - **An action that belongs to a connector** (sending email, syncing a bank, searching the web):
   open **Connectors** in the sidebar, choose that connector, and in its tool list change the
-  action from **Blocked** to **Needs approval** (asks each time) or **Always allow** (never
+  action from **Block** to **Ask** (asks each time) or **Always allow** (never
   asks).
 - **One of Lucius's built-in actions** (transactions, categories, budget and so on): open
-  **Settings → Permissions**, find the action in the list, and click **Reset** (then **Confirm
-  reset?**). It goes back to the default, which is asking you first.
+  **Settings → Permissions**, search for the action, and change it — or click **Reset** to put it
+  back to its starting point: changes ask first, reads just run.
+- **Blocked only in one Automation**: open that Automation and remove the tool from its **Tool
+  permissions**.
 
 Then ask Lucius again.
 

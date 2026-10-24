@@ -753,6 +753,8 @@ class TaskModelsUpdate(BaseModel):
     # pin it — an instruction pointing at a field the API silently drops would be a lie.
     chat_vision: Optional[str] = None
     title: Optional[str] = None
+    # The Auto-approval judge's model; unpinned it runs on the conversation's own model.
+    approval: Optional[str] = None
 
 
 @router.put("/api/model-config/task-models")

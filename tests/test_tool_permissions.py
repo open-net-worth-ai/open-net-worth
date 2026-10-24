@@ -3,17 +3,14 @@ design handoff §10; absorbed ``tool_grants``' own coverage per the one-permissi
 merge, ADR ``2026-08-14-one-permission-store-for-every-tool``).
 
 The properties this lane exists to guarantee:
-  - an UNSET tool reads ``needs_approval`` — cautious by default, uniformly, for every
+  - a pair with no row reads ``needs_approval`` — cautious by default, uniformly, for every
     connector lane (Channels, Data sources, Web AND MCP) with no tiering by tool type and
-    no exceptions;
+    no exceptions (the seeding that gives every tool a row is ``tests/test_tool_permission_seeding.py``);
   - a group pick is a deliberately LOSSY stamp onto every tool named;
   - the group aggregate ("Custom") is DERIVED and NEVER stored — there is no fourth level
     anywhere in the storage or the API;
-  - a level survives what must not undo it (a /rewind) and is dropped by what must
-    (an explicit clear) — a revoke returns a tool to its DEFAULT, never to a stored
-    ``needs_approval``;
-  - the reserved ``(core, "*")`` yolo row is an ordinary row, armed and disarmed through
-    the SAME surface as every other decision — never a special case.
+  - a level survives what must not undo it (a /rewind) and is undone only by Reset, which puts
+    the SEED back (a row, marked as a seed again) — never a deleted row for a live tool.
 """
 
 from __future__ import annotations
@@ -42,7 +39,7 @@ def client(perms):
 # ── Service: the default ──────────────────────────────────────────────────────
 
 
-def test_an_unset_tool_reads_the_cautious_default(perms):
+def test_a_pair_with_no_row_reads_the_cautious_default(perms):
     assert perms.DEFAULT_LEVEL == "needs_approval"
     assert perms.get_tool_permission("plaid", "plaid_sync_now") == "needs_approval"
 
@@ -139,27 +136,51 @@ def test_a_blank_connector_or_tool_is_refused_on_write(perms):
     assert perms.get_connector_permissions("plaid") == {}
 
 
-def test_clear_returns_tools_to_unset_not_to_a_stored_needs_approval(perms):
-    perms.set_tool_permission("mcp:ibkr", "place_order", "always_allow")
-    assert perms.clear_connector_permissions("mcp:ibkr") == 1
-    assert perms.get_connector_permissions("mcp:ibkr") == {}  # no row survives
-    assert perms.get_tool_permission("mcp:ibkr", "place_order") == "needs_approval"  # default
-    assert perms.clear_connector_permissions("mcp:ibkr") == 0
+def test_reset_puts_a_registry_tool_back_to_its_seed_and_keeps_the_row(perms):
+    from backend.db.tool_permission_store import ToolPermissionStore
 
-
-def test_clear_tool_permission_returns_a_single_tool_to_unset(perms):
-    """The absorbed ``ToolGrantStore.revoke``'s new spelling, at the single-tool grain
-    ``clear_connector_permissions`` doesn't cover: revoking ONE tool's decision (not a
-    whole connector's) returns exactly that tool to its DEFAULT."""
     perms.set_tool_permission("core", "add_transactions", "always_allow")
+    perms.set_tool_permission("core", "get_net_worth", "blocked")
     perms.set_tool_permission("core", "email_send_message", "blocked")
 
-    assert perms.clear_tool_permission("core", "add_transactions") is True
-    assert perms.get_tool_permission("core", "add_transactions") == "needs_approval"
+    assert perms.reset_tool_permission("core", "add_transactions") == "needs_approval"
+    assert perms.reset_tool_permission("core", "get_net_worth") == "always_allow"
     # The sibling decision is untouched.
     assert perms.get_tool_permission("core", "email_send_message") == "blocked"
-    # Idempotent — clearing an already-unset pair reports no row removed.
-    assert perms.clear_tool_permission("core", "add_transactions") is False
+    # A reset row is a seed again (it follows the rule), not a "user" decision that merely
+    # happens to equal it.
+    row = ToolPermissionStore().get_row("core", "add_transactions")
+    assert (row["level"], row["source"]) == ("needs_approval", "seed")
+
+
+def test_reset_of_a_tool_that_no_longer_exists_deletes_the_row(perms):
+    perms.set_tool_permission("core", "a_tool_that_no_longer_exists", "always_allow")
+
+    assert perms.reset_tool_permission("core", "a_tool_that_no_longer_exists") is None
+    assert perms.stored_tool_level("core", "a_tool_that_no_longer_exists") is None
+
+
+def test_reset_of_an_external_mcp_tool_goes_to_ask(perms):
+    perms.set_tool_permission("mcp:ibkr", "place_order", "always_allow")
+
+    assert perms.reset_tool_permission("mcp:ibkr", "place_order") == "needs_approval"
+
+
+def test_resetting_a_connector_reseeds_its_rows_and_drops_stale_ones(perms):
+    perms.set_tool_permission("plaid", "plaid_get_status", "blocked")
+    perms.set_tool_permission("plaid", "plaid_sync_now", "always_allow")  # not a tool any more
+
+    assert perms.reset_connector_permissions("plaid") == 2
+    assert perms.get_connector_permissions("plaid") == {"plaid_get_status": "always_allow"}
+    assert perms.reset_connector_permissions("") == 0
+
+
+def test_deleting_an_mcp_servers_permissions_removes_every_row(perms):
+    perms.set_tool_permission("mcp:ibkr", "place_order", "always_allow")
+    assert perms.delete_connector_permissions("mcp:ibkr") == 1
+    assert perms.get_connector_permissions("mcp:ibkr") == {}
+    assert perms.get_tool_permission("mcp:ibkr", "place_order") == "needs_approval"  # no row
+    assert perms.delete_connector_permissions("mcp:ibkr") == 0
 
 
 # ── Service: the DERIVED group aggregate ──────────────────────────────────────
@@ -194,49 +215,34 @@ def test_custom_is_derived_from_the_stored_tools_and_never_itself_stored(perms):
     assert set(stored.values()) == {"always_allow", "blocked"}
 
 
-# ── Service: yolo — the reserved (core, "*") row ───────────────────────────────
-# Absorbed from ``tool_grants``' own yolo coverage: a blanket "stop asking me" stored as
-# an ordinary row under the SAME table every other decision lives in, so it is listed and
-# revoked through the same surface rather than a side channel (E3's own scar — an env-var
-# implementation once reported OFF while a stored row skipped confirmations).
-
-
-def test_yolo_is_off_by_default(perms):
-    assert perms.yolo_enabled() is False
-
-
-def test_yolo_arms_through_the_ordinary_set_call(perms):
-    perms.set_tool_permission(perms.CORE_CONNECTOR_ID, perms.YOLO_TOOL, "always_allow")
-    assert perms.yolo_enabled() is True
-
-
-def test_yolo_disarms_through_the_ordinary_clear_call(perms):
-    perms.set_tool_permission(perms.CORE_CONNECTOR_ID, perms.YOLO_TOOL, "always_allow")
-    assert perms.clear_tool_permission(perms.CORE_CONNECTOR_ID, perms.YOLO_TOOL) is True
-    assert perms.yolo_enabled() is False
-
-
-def test_yolo_row_is_listed_like_any_other_decision(perms):
-    """One revoke surface: the yolo row must not be invisible to the listing a user would
-    revoke it FROM."""
-    perms.set_tool_permission(perms.CORE_CONNECTOR_ID, perms.YOLO_TOOL, "always_allow")
-    rows = perms.list_decisions()
-    assert any(
-        r["connector_id"] == perms.CORE_CONNECTOR_ID and r["tool"] == perms.YOLO_TOOL for r in rows
-    )
-
-
 # ── REST ──────────────────────────────────────────────────────────────────────
 
 
 def test_get_permissions_returns_the_default_and_an_empty_map(client):
+    """A native connector's tools follow what they do — its reads run — and the response says
+    so per tool, so a client can show "default" beside "set by you"."""
     res = client.get("/api/connectors/plaid/permissions")
     assert res.status_code == 200
     assert res.json() == {
         "connector_id": "plaid",
-        "default_level": "needs_approval",
+        "default_level": "always_allow",
+        "tool_defaults": {
+            "plaid_get_status": "always_allow",
+            "plaid_fetch_transactions": "always_allow",
+        },
         "permissions": {},
     }
+
+
+def test_an_external_mcp_connector_reports_the_cautious_default(client):
+    res = client.get("/api/connectors/mcp:ibkr/permissions")
+    assert res.json()["default_level"] == "needs_approval"
+    assert res.json()["permissions"] == {}
+
+
+def test_a_native_connector_reports_its_sends_as_asking_by_default(client):
+    body = client.get("/api/connectors/telegram/permissions").json()
+    assert body["tool_defaults"]["telegram_send_message"] == "needs_approval"
 
 
 def test_put_one_tool_returns_the_whole_updated_map(client):
@@ -260,7 +266,7 @@ def test_put_group_stamps_every_named_tool(client):
     assert res.json()["permissions"] == {"place_order": "blocked", "get_positions": "blocked"}
 
 
-def test_delete_clears_the_connector(client):
+def test_delete_resets_the_connector(client):
     client.put("/api/connectors/plaid/permissions/plaid_sync_now", json={"level": "always_allow"})
     res = client.delete("/api/connectors/plaid/permissions")
     assert res.status_code == 200
@@ -324,7 +330,7 @@ def test_the_api_never_reports_a_group_level(client):
         json={"tools": ["a_tool", "b_tool"], "level": "always_allow"},
     )
     body = client.get("/api/connectors/mcp:ibkr/permissions").json()
-    assert set(body) == {"connector_id", "default_level", "permissions"}
+    assert set(body) == {"connector_id", "default_level", "tool_defaults", "permissions"}
     assert "group" not in body and "groups" not in body
 
 
@@ -342,10 +348,12 @@ def test_revoke_allowed_tools_drops_allows_and_leaves_refusals_alone(perms):
 
     assert perms.revoke_allowed_tools("mcp:srv") == 2
     assert perms.get_connector_permissions("mcp:srv") == {
+        "place_order": "needs_approval",
+        "get_positions": "needs_approval",
         "delete_all": "blocked",
         "read_thing": "needs_approval",
     }
-    # A revoked tool is UNSET, not stamped ``needs_approval`` — it returns to the default.
+    # A revoked tool goes back to Ask (an MCP tool's seed), as a seed row.
     assert perms.get_tool_permission("mcp:srv", "place_order") == "needs_approval"
     # Scoped to its own connector.
     assert perms.get_connector_permissions("mcp:other") == {"place_order": "always_allow"}

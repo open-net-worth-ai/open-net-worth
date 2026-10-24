@@ -1,17 +1,14 @@
 """Per-conversation approval mode (RFC ``2026-08-27-per-conversation-approval-mode``).
 
 Three modes, shared verbatim with an Automation's ``permission_mode``: ``manual`` asks on
-every approval-tier call, ``auto`` proceeds except on hardline operations, ``skip`` proceeds
-regardless. It decides whether the OWNER IS ASKED — never what may be called.
+every approval-tier call, ``auto`` hands each call to the per-call judge (``ai.auto_judge``),
+``skip`` proceeds regardless. It decides whether the OWNER IS ASKED — never what may be called.
 
-The asymmetry that matters, and the reason this is not the Automation function with a
-different context plugged in: **``manual`` is a NO-OP here.** An Automation in ``manual``
-gates even a tool globally set to ``always_allow`` (a run must not inherit a permission
-granted in an unrelated chat). In a conversation that would be exactly backwards — a chat
-*Always allow* tap writes the GLOBAL row, so gating on it would break the app's most-used
-permission control the moment this shipped. ``manual`` is what every EXISTING conversation
-(and any unrecognised/unreadable stored value) resolves to, so it has to change nothing at
-all for them; ``auto`` is what a genuinely brand-new conversation — no row ever
+The mode decides only what **Ask** means (ADR ``2026-10-11-permissions-are-one-value-per-tool``):
+``manual`` a card, ``auto`` the judge, ``skip`` it runs. A tool the owner set to Always allow runs
+in every mode — a chat *Always allow* tap writes the GLOBAL row — and Block is refused at dispatch
+before any of this. ``manual`` is what every EXISTING conversation (and any unrecognised/unreadable
+stored value) resolves to; ``auto`` is what a genuinely brand-new conversation — no row ever
 persisted — starts in instead (2026-09-04).
 """
 
@@ -31,14 +28,16 @@ from backend.core.conversation_approval import (
 from backend.core.errors import ValidationError
 from backend.services import conversation_approval
 from backend.services.tool_permissions import CORE_CONNECTOR_ID, set_tool_permission
+from tests.auto_judge_support import parked_verdict
 
 TOOL = "create_account"
 
 
-def _verdict(tool: str, mode: str):
+def _verdict(tool: str, mode: str, *, judged: str | None = None):
     token = bind_conversation_approval(ConversationApprovalContext(session_id="s1", mode=mode))
     try:
-        return gate.conversation_gate_verdict(tool)
+        with parked_verdict(judged, tool):
+            return gate.conversation_gate_verdict(tool)
     finally:
         reset_conversation_approval(token)
 
@@ -46,21 +45,24 @@ def _verdict(tool: str, mode: str):
 # ── the modes ────────────────────────────────────────────────────────────────────────────
 
 
-def test_manual_is_a_no_op(monkeypatch, db_isolated):
-    """THE guard. ``None`` means "no opinion, use the global level" — NOT "gate".
-
-    If this ever returns ``"gate"``, every tool the owner globally set to ``always_allow``
-    starts carding again in ordinary chat, because a conversation is always in some mode and
-    ``manual`` is the default. That would break the permission control people actually use,
-    for every user, the moment the feature shipped.
-    """
+def test_manual_means_a_card_for_ask(monkeypatch, db_isolated):
+    """THE guard from the other side: ``manual`` is a card for an Ask tool, and a tool set to
+    Always allow never reaches the mode at all (see the Always allow test below), which is what
+    keeps the app's most-used permission control working in the default mode."""
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
-    assert _verdict(TOOL, "manual") is None
+    assert _verdict(TOOL, "manual") == "gate"
 
 
 def test_auto_allows_an_ordinary_write(monkeypatch, db_isolated):
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
-    assert _verdict(TOOL, "auto") == "allow"
+    assert _verdict(TOOL, "auto", judged="allow") == "allow"
+
+
+def test_auto_gates_when_the_judge_asks_or_has_not_spoken(monkeypatch, db_isolated):
+    """Fail closed: only a parked ``allow`` for THIS call opens ``auto``."""
+    monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
+    assert _verdict(TOOL, "auto", judged="ask") == "gate"
+    assert _verdict(TOOL, "auto") == "gate"
 
 
 def test_skip_allows_an_ordinary_write(monkeypatch, db_isolated):
@@ -68,11 +70,12 @@ def test_skip_allows_an_ordinary_write(monkeypatch, db_isolated):
     assert _verdict(TOOL, "skip") == "allow"
 
 
-def test_auto_still_gates_a_hardline_operation(monkeypatch, db_isolated):
-    """``auto`` means "don't ask about the ordinary" — a hardline op whose target set cannot
-    be verified after the fact is not ordinary. Same carve-out an ``auto`` Automation has."""
+def test_auto_judges_a_bulk_delete_like_any_other_call(monkeypatch, db_isolated):
+    """There is no name list: a bulk delete whose target set cannot be verified is the judge's
+    to refuse (it is told to ask on one), not the gate's. ``skip`` still proceeds."""
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
-    assert _verdict("delete_transactions_where", "auto") == "gate"
+    assert _verdict("delete_transactions_where", "auto", judged="ask") == "gate"
+    assert _verdict("delete_transactions_where", "auto", judged="allow") == "allow"
     assert _verdict("delete_transactions_where", "skip") == "allow"
 
 
@@ -85,39 +88,36 @@ def test_no_context_bound_means_no_opinion(monkeypatch, db_isolated):
 # ── what OUTRANKS the mode ───────────────────────────────────────────────────────────────
 
 
-def test_a_policy_tool_gates_in_every_mode(monkeypatch, db_isolated):
-    """A conversation can author an Automation. An ``auto``/``skip`` conversation reading
-    untrusted text could otherwise be steered into writing one with ``permission_mode=skip``
-    and running it — the mode must not be able to mint a wider mode."""
+def test_the_automation_tools_follow_the_mode_like_every_other_tool(monkeypatch, db_isolated):
+    """No tool is exempt from the mode. The tools that author or run an Automation are judged in
+    ``auto`` (the judge is told the consequence in a trusted line — see test_auto_judge), ask in
+    ``manual`` and run in ``skip``."""
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
-    for mode in ("manual", "auto", "skip"):
-        assert _verdict("create_automation", mode) == "gate", mode
-        assert _verdict("update_automations", mode) == "gate", mode
+    for tool in ("create_automation", "update_automations", "delete_automations", "run_automation"):
+        assert _verdict(tool, "auto", judged="allow") == "allow", tool
+        assert _verdict(tool, "auto", judged="ask") == "gate", tool
+        assert _verdict(tool, "manual") == "gate", tool
+        assert _verdict(tool, "skip") == "allow", tool
 
 
-def test_an_explicit_ask_outranks_the_mode(monkeypatch, db_isolated):
+def test_a_stored_ask_means_what_a_seeded_ask_means(monkeypatch, db_isolated):
+    """There is one Ask. The mode decides it the same way whether the row is the seed or the
+    owner's own choice (it used to outrank skip and auto when stored)."""
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
+    seeded = [_verdict(TOOL, "skip"), _verdict(TOOL, "auto", judged="allow")]
     set_tool_permission(CORE_CONNECTOR_ID, TOOL, "needs_approval")
-    assert _verdict(TOOL, "skip") == "gate"
-    assert _verdict(TOOL, "auto") == "gate"
+    assert [_verdict(TOOL, "skip"), _verdict(TOOL, "auto", judged="allow")] == seeded
+    assert seeded == ["allow", "allow"]
 
 
-def test_an_UNDECIDED_tool_is_not_treated_as_an_explicit_ask(monkeypatch, db_isolated):
-    """The same trap the Automation ladder has: ``needs_approval`` is ALSO the default for an
-    undecided tool, so keying on the effective level would gate nearly everything and make
-    ``auto``/``skip`` silently do nothing."""
+def test_a_global_always_allow_runs_in_every_mode(monkeypatch, db_isolated):
+    """A tool the owner set to Always allow runs — ``manual`` included, and a judge ``ask`` or no
+    verdict cannot turn it back into a card."""
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
-    assert gate.effective_level(TOOL) == "needs_approval"  # defaulted, not stored
-    assert _verdict(TOOL, "skip") == "allow"
-
-
-def test_a_global_always_allow_passes_without_the_mode_widening_anything(monkeypatch, db_isolated):
-    """A tool the owner globally allowed returns ``None`` — it never reaches the mode at
-    all, which is what keeps ``manual`` a no-op for it."""
-    monkeypatch.setattr(gate, "is_gated_tool", lambda _name: False)
     set_tool_permission(CORE_CONNECTOR_ID, TOOL, "always_allow")
     for mode in ("manual", "auto", "skip"):
-        assert _verdict(TOOL, mode) is None, mode
+        assert _verdict(TOOL, mode) == "allow", mode
+    assert _verdict(TOOL, "auto", judged="ask") == "allow"
 
 
 # ── an Automation still speaks for its own run ───────────────────────────────────────────
@@ -222,16 +222,14 @@ def test_no_tool_can_set_the_mode():
         if "permission_mode" in json.dumps(s.get("input_schema") or {})
     ]
     # `create_automation`/`update_automations`/`preview_automation` legitimately take a
-    # permission_mode — an AUTOMATION's, which is gated by AUTOMATION_POLICY_TOOLS on every
-    # call. No tool may take the CONVERSATION's.
-    from backend.ai.tools._confirm_gate import AUTOMATION_POLICY_TOOLS
-
+    # permission_mode — an AUTOMATION's, which the judge is told about in a trusted line. No tool
+    # may take the CONVERSATION's.
     unexpected = [
-        n for n in offenders if n not in set(AUTOMATION_POLICY_TOOLS) | {"preview_automation"}
+        n
+        for n in offenders
+        if n not in {"create_automation", "update_automations", "preview_automation"}
     ]
-    assert not unexpected, (
-        f"these tools can set a permission_mode and are not policy-gated: {unexpected}"
-    )
+    assert not unexpected, f"these tools can set a permission_mode: {unexpected}"
 
 
 def test_the_service_is_the_only_writer():

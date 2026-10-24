@@ -61,8 +61,24 @@ Ask Lucius:
 > *Search the web for the latest news on the Fed's interest-rate decision.*
 
 To try one provider specifically, name it: *"Search with Tavily for…"*. Each provider is its own
-tool, so Lucius can use the one you ask for even when it isn't the default — the first time, he
-asks you to approve it (see [Permissions](#permissions) below).
+tool, so Lucius can use the one you ask for even when it isn't the default — he
+uses it straight away (see [Permissions](#permissions) below).
+
+## What a search returns
+
+A search result is normally just a line or two of text from the search engine. So Lucius also
+reads the pages behind the **top three results** at the same moment, and gets back the passages
+that best match what he searched for (up to about 2,500 characters per page) alongside each
+result. He answers from what the pages say, not from the search-engine snippet.
+
+- It adds a second or two to a search, and never more than about five.
+- A page that is slow, blocked or has nothing relevant is skipped: that result keeps its snippet
+  and the search carries on.
+- Lucius can ask for fewer or more pages (up to five) or none, and still reads a whole page when
+  an excerpt isn't enough — see below.
+- With **Tavily** or **Firecrawl**, each page read is billed by the provider like any other page
+  read (a few tenths of a cent each), on top of the search. The other providers download the pages
+  from your machine at no extra charge.
 
 ## Reading a page
 
@@ -76,7 +92,8 @@ public web pages.
 
 ## What's sent
 
-A search sends only the search text to the provider; reading a page sends only its address.
+A search sends only the search text to the provider; reading a page sends only its address
+(this includes the pages read for the top results of each search).
 Nothing about your accounts, balances or holdings is sent — although the search text itself may
 mention a company or ticker you asked about.
 
@@ -85,13 +102,20 @@ paid provider as default means those searches count against its quota and bill t
 
 ## Permissions
 
-An ordinary *"search the web for…"* uses the default provider and runs without asking.
+Searching and reading a page just run — you connected the provider, so Lucius doesn't ask again
+for every search. An ordinary *"search the web for…"* uses the default provider; asking for a
+named one (*"search with Tavily"*) uses that provider's own search tool.
 
-When Lucius uses one **named** provider — because you asked for it, or because he wants that
-provider's strengths — he calls that provider's own tool, and those start at **Needs approval**:
-the first time, you'll see a card asking you to allow it. Choose **Always allow** there, or set
-the level under **Tool permissions** on that provider's connector page. Each provider has its own
-levels, so you can trust one more than another — see [Permissions](../lucius/permissions.md).
+You stay in control from the provider's connector page, under **Tool permissions**: each provider
+has a search tool and a page-reading tool, and you can set either to **Ask** or
+**Block**. The everyday search and page reading follow the levels of whichever provider is active
+— there is nothing separate to set — so blocking Tavily's search also stops Lucius from searching
+through Tavily when it's the default. Each provider has its own levels, so you can trust one more
+than another — see [Permissions](../lucius/permissions.md). The pages read for a search's top
+results are part of that search, so they follow the search tool's level, not the page-reading tool's.
+
+To search X (Twitter), ask Lucius for posts about a topic; he adds the right site filter to an
+ordinary search. Posts are unverified opinion, so he treats them as chatter, not fact.
 
 To stop using a provider, open it and click **Pause**, or choose **⋯ (More actions) → Remove
 connector** to delete its key.

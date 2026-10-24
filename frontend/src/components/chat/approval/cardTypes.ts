@@ -22,8 +22,8 @@ export const BUDGET_TYPES = [
 ] as const
 
 // Ledger write-confirm types (txn_create / txn_update / txn_bulk) — tool_use_id-keyed
-// (RFC 2026-07-22), like external_mcp_call since 2026-08-22; code_run is the one remaining
-// confirm-token/nonce instance. All rendered by the Txn*Body components below.
+// (RFC 2026-07-22), like external_mcp_call since 2026-08-22. All rendered by the Txn*Body
+// components below.
 export const TXN_TYPES = ['txn_create', 'txn_update', 'txn_bulk'] as const
 
 // Change types ChangePreview renders with a bespoke body. Anything NOT here falls through
@@ -40,7 +40,6 @@ export const HANDLED_TYPES: readonly string[] = [
   'record_income',
   ...AGENT_TYPES,
   'external_mcp_call',
-  'code_run',
   'code_skill_create',
   ...BUDGET_TYPES,
   ...TXN_TYPES,
@@ -96,6 +95,13 @@ export function budgetOperationHeaderLabel(change: ProposedChange): string {
   const op = budgetOperationOf(args)
   if (!op) return 'Apply budget change'
   return engineId ? `${humanizeType(op)} (${budgetMethodName(engineId)})` : humanizeType(op)
+}
+
+// run_code is an ordinary gated tool (ADR 2026-10-11-permissions-are-one-value-per-tool): its
+// card is the generic `tool_permission` card, but what the owner is approving is the CODE, so the
+// body renders the source from the card's own arguments instead of a raw JSON dump.
+export function isCodeRunGrant(change: ProposedChange): boolean {
+  return change.grant_tool === 'run_code'
 }
 
 export function isTxnChange(change: ProposedChange): boolean {

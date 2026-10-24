@@ -93,15 +93,18 @@ def test_clear_connector_removes_only_that_connector(store):
     assert store.clear_connector("plaid") == 0  # idempotent
 
 
-def test_clear_connector_level_drops_only_the_matching_level(store):
-    """`clear_connector_level` — the absorbed `revoke_allowed_tools`'s narrow sibling: it
-    must withdraw exactly the named level, never a refusal sitting beside it."""
+def test_reseed_connector_level_rewrites_only_the_matching_level_as_a_seed(store):
+    """`reseed_connector_level` — `revoke_allowed_tools`'s narrow sibling: it must withdraw
+    exactly the named level, never a refusal sitting beside it, and what it writes is a seed."""
     store.set_level("mcp:ibkr", "place_order", "always_allow")
     store.set_level("mcp:ibkr", "get_positions", "always_allow")
     store.set_level("mcp:ibkr", "delete_all", "blocked")
-    assert store.clear_connector_level("mcp:ibkr", "always_allow") == 2
-    assert {r["tool"]: r["level"] for r in store.for_connector("mcp:ibkr")} == {
-        "delete_all": "blocked"
+    assert store.reseed_connector_level("mcp:ibkr", "always_allow", "needs_approval") == 2
+    rows = {r["tool"]: (r["level"], r["source"]) for r in store.for_connector("mcp:ibkr")}
+    assert rows == {
+        "place_order": ("needs_approval", "seed"),
+        "get_positions": ("needs_approval", "seed"),
+        "delete_all": ("blocked", "user"),
     }
 
 
@@ -199,3 +202,68 @@ def test_a_turn_that_only_sets_a_permission_produces_no_checkpoint(db_isolated):
         entry = cp.end_turn(ctx, token)
     assert entry is None  # no checkpoint minted — tool_permissions is the only table touched
     assert store.get_level("core", "add_transactions") == "always_allow"
+
+
+# ── source: seed vs user, and what a sync may touch ────────────────────────────
+
+
+def test_a_write_is_a_user_decision_unless_it_says_otherwise(store):
+    assert store.set_level("core", "add_transactions", "always_allow")["source"] == "user"
+    assert store.set_levels("core", ["a", "b"], "blocked")[0]["source"] == "user"
+
+
+def test_an_unknown_source_is_refused_at_the_store(store):
+    with pytest.raises(ValueError):
+        store.set_level("core", "add_transactions", "blocked", source="app")
+
+
+def test_sync_inserts_missing_rows_and_is_idempotent(store):
+    seeds = {("core", "get_net_worth"): ("always_allow", "seed")}
+    assert store.sync(seeds) == {"added": 1, "updated": 0, "pruned": 0}
+    first = store.get_row("core", "get_net_worth")
+
+    assert store.sync(seeds) == {"added": 0, "updated": 0, "pruned": 0}
+    assert store.get_row("core", "get_net_worth") == first  # byte-identical: updated_at unmoved
+
+
+def test_sync_moves_a_seed_row_to_a_changed_rule_but_never_a_user_row(store):
+    store.sync({("core", "a"): ("always_allow", "seed"), ("core", "b"): ("always_allow", "seed")})
+    store.set_level("core", "b", "always_allow")  # the owner's own choice, same value
+
+    counts = store.sync(
+        {("core", "a"): ("needs_approval", "seed"), ("core", "b"): ("needs_approval", "seed")}
+    )
+
+    assert counts["updated"] == 1
+    assert store.get_level("core", "a") == "needs_approval"
+    assert store.get_level("core", "b") == "always_allow"  # a user row never follows the rule
+
+
+def test_a_row_without_a_source_is_treated_as_the_owners(store):
+    store.upsert(
+        {"id": "core:x", "connector_id": "core", "tool": "x", "level": "blocked", "updated_at": ""}
+    )
+
+    store.sync({("core", "x"): ("always_allow", "seed")})
+
+    assert store.get_level("core", "x") == "blocked"
+
+
+def test_sync_prunes_only_seed_rows(store):
+    store.sync({("core", "gone"): ("always_allow", "seed")})
+    store.set_level("core", "kept", "blocked")
+
+    counts = store.sync({}, prune=[("core", "gone"), ("core", "kept")])
+
+    assert counts["pruned"] == 1
+    assert store.get_level("core", "gone") is None
+    assert store.get_level("core", "kept") == "blocked"  # a decision about a retired tool stays
+
+
+def test_set_many_overwrites_a_user_row_with_a_seed(store):
+    store.set_level("core", "x", "blocked")
+
+    store.set_many({("core", "x"): ("always_allow", "seed")})
+
+    row = store.get_row("core", "x")
+    assert (row["level"], row["source"]) == ("always_allow", "seed")

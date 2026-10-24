@@ -49,8 +49,9 @@ hand and he looks up the rest from what you ask. Describe what you want in plain
 ## When he asks first
 
 Whether Lucius changes something straight away or shows you a card to approve first depends on
-the conversation's approval mode and each tool's permission. A new conversation lets ordinary
-changes through and asks about risky ones; you can make him ask about everything. Every change
+the conversation's approval mode and each tool's setting (Always allow, Ask or Block). A new
+conversation lets ordinary changes through and asks about risky ones; you can make him ask about
+everything. Every change
 can be undone with the **Restore** button on the reply. See [Permissions](permissions.md) and
 [Confirm cards](confirm-cards.md).
 
@@ -64,9 +65,13 @@ can be undone with the **Restore** button on the reply. See [Permissions](permis
   everything lives in your own database on your own machine. The only thing sent out is what goes
   to your AI provider (and to a connector, when he uses one).
 - **Approve the transactions an Automation logged.** Those wait in your review queue for you.
-- **Bulk-delete or re-categorize without showing you.** Deleting a filtered set of transactions
-  or re-applying a payee rule across your whole ledger asks first, unless the conversation is set
-  to **Skip all approvals**.
+- **Skip the check when you ask him to be careful.** In **Automatically approve** mode each
+  change that would otherwise ask is checked against what you actually asked for, and anything
+  that goes further — an email to someone you didn't mention, a settings change — stops for you
+  with the reason. If the check can't be made it stops rather than approving. Only **Skip all
+  approvals** never checks. Creating, changing or running an Automation always stops for you in
+  **Automatically approve**. A tool you set to **Block** is refused in every mode. See
+  [Permissions](permissions.md#how-automatically-approve-decides).
 - **Guarantee the answer is right.** He reasons over what's in your book. A mis-imported
   statement or a stale price gets a confident answer from wrong data — fix the data, then ask
   again.

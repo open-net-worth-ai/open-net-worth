@@ -5,11 +5,9 @@ to tmp_path. Tests cover:
 
   1. tool unreachable outside a script-skill scope (Gate 1)
   2. tool blocked when the instance kill switch is off (Gate 2)
-  3. tool blocked for headless turns when the unattended switch is off (Gate 3)
-  4. tool allowed for a headless turn when the unattended switch is on (Gate 3 pass)
-  5. interactive turn passes with only the instance kill switch on
-  6. trivial echo bundle runs end-to-end when all gates are on
-  7. sha mismatch is refused by the sandbox before exec (when sha is supplied)
+  3. an Automation run takes the same chain as a chat (no unattended switch any more)
+  4. trivial echo bundle runs end-to-end when all gates are on
+  5. sha mismatch is refused by the sandbox before exec (when sha is supplied)
 
 Run:
     .venv/bin/pytest tests/test_run_script_tool.py -v
@@ -130,16 +128,6 @@ def _set_instance_switch(isolated: Path, *, enabled: bool) -> None:
     AppConfigStore().set_flag(SCRIPT_SKILLS_FLAG, enabled)
 
 
-def _set_unattended_switch(isolated: Path, *, enabled: bool) -> None:
-    del isolated
-    from backend.db.app_config_store import SCRIPT_SKILLS_UNATTENDED_FLAG, AppConfigStore
-
-    AppConfigStore().set_flag(SCRIPT_SKILLS_UNATTENDED_FLAG, enabled)
-
-
-# ── Fixtures ──────────────────────────────────────────────────────────────────
-
-
 @pytest.fixture
 def isolated(tmp_path, monkeypatch):
     """Redirect all stores to tmp_path; reset scope ContextVars around each test."""
@@ -162,11 +150,13 @@ class TestGate1_ScopeRequired:
     """Gate 1: run_script is unreachable outside a script-skill turn."""
 
     def test_refused_when_no_active_bundle(self, isolated):
+        _set_instance_switch(isolated, enabled=True)  # an off switch is refused earlier (Gate 2)
         result, proposed = call("run_script", script_id="echo", input={})
         assert proposed is None
         assert "not available outside a script-bundling skill turn" in err(result)
 
     def test_also_refused_after_non_script_skill_scope(self, isolated):
+        _set_instance_switch(isolated, enabled=True)
         _skill_scope.set_offer_scope(["get_portfolio", "run_script"])
         result, _ = call("run_script", script_id="echo", input={})
         assert "not available outside a script-bundling skill turn" in err(result)
@@ -274,39 +264,23 @@ class TestToolRegistered:
         assert "run_script" in names
 
 
-class TestGate3_HeadlessCallerGate:
-    """Gate 3: a caller with nobody watching needs the SECOND instance switch.
+class TestAutomationRunsTakeTheSameChain:
+    """There is no unattended switch: whether a script asks first is the tool's permission value
+    and the approval mode, the same in a chat and in an Automation run. Only the instance switch
+    (Gate 2) decides whether scripts exist at all."""
 
-    Regression for 2026-08-10. Deleting `_skill_scope.is_unattended()` left this gate as
-    `is_headless = False` — dead code — and gate 3 is the only thing between an unsupervised
-    run and arbitrary code execution. Switch 1 means "scripts are allowed at all", not
-    "allowed with no human present", so an owner who enabled scripts for interactive chat had
-    silently also enabled them for every scheduled Automation.
-    """
-
-    def test_an_automation_run_is_refused_without_the_unattended_switch(self, isolated):
-        from backend.core.unattended import reset_unattended, set_unattended
-
+    def test_a_run_with_nobody_watching_is_not_refused_for_being_unattended(self, isolated):
         _set_instance_switch(isolated, enabled=True)
-        _set_unattended_switch(isolated, enabled=False)
         skill = _make_script_skill()
         _skill_scope.set_active_bundle(_bundle_ctx(skill, Path("/tmp/nonexistent")))
         _skill_scope.set_offer_scope(["run_script"])
-        token = set_unattended(True)
-        try:
-            res, _ = call("run_script", script_id="echo", input={})
-        finally:
-            reset_unattended(token)
-        assert "unattended" in err(res).lower()
-
-    def test_an_interactive_turn_still_passes_on_switch_one_alone(self, isolated):
-        """A human is waiting on the web surface, so gate 3 does not apply — the call gets
-        past it and fails later on the script id, not on the caller."""
-        _set_instance_switch(isolated, enabled=True)
-        _set_unattended_switch(isolated, enabled=False)
-        skill = _make_script_skill()
-        _skill_scope.set_active_bundle(_bundle_ctx(skill, Path("/tmp/nonexistent")))
-        _skill_scope.set_offer_scope(["run_script"])
-        # Default is "a human is here" — no flag to set.
         res, _ = call("run_script", script_id="no-such-script", input={})
         assert "unattended" not in err(res).lower()
+
+    def test_the_switch_and_its_reader_are_gone(self):
+        from backend.db import app_config_store
+
+        assert not hasattr(app_config_store, "script_skills_unattended_enabled")
+        assert not hasattr(app_config_store, "SCRIPT_SKILLS_UNATTENDED_FLAG")
+        with pytest.raises(ImportError):
+            import backend.core.unattended  # noqa: F401

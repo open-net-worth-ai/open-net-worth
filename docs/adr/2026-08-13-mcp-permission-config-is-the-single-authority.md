@@ -1,11 +1,13 @@
 ---
 title: The permission config is the single authority — `is_money_movement` and the trusted-server flag are removed
-status: Accepted
+status: Superseded in part by 2026-10-11-tool-defaults-follow-what-a-tool-does
 date: 2026-08-13
 deciders: repo owner (explicit, repeated, in-session) + commissioned design handoff + implementing Claude agent
 ---
 
 # The permission config is the single authority — `is_money_movement` and the trusted-server flag are removed
+
+> **Superseded in part** by [2026-10-11-tool-defaults-follow-what-a-tool-does](2026-10-11-tool-defaults-follow-what-a-tool-does.md): the rule that every connector tool defaults to needs_approval, read or write, no tiering by tool type (external MCP tools keep it).
 
 ## Context
 

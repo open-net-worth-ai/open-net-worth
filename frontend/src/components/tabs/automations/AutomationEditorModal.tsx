@@ -107,6 +107,7 @@ export function AutomationEditorModal({
         effort: form.effort,
         permission_mode: form.permission_mode,
         always_allowed: automation?.always_allowed ?? seed?.always_allowed,
+        blocked: automation?.blocked ?? seed?.blocked,
         // A finished one is never re-sent as `completed`; a new trigger re-arms it server-side.
         status:
           automation?.status === 'completed'

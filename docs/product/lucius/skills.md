@@ -111,10 +111,10 @@ conversation. For a clean slate, start a new conversation.
 
 ## Skills with scripts
 
-A skill that runs its own Python script needs two switches in **Settings → Developer → Bundled
-script skills**: **Bundled script skills** (off by default — nothing runs a script without it)
-and, for scripts inside a scheduled Automation, **Unattended script runs**. These are on top of
-the normal permissions.
+A skill that runs its own Python script needs **Settings → Developer → Bundled script skills**
+switched on (it is off by default — nothing runs a script without it). On top of that, **Run
+script** is an ordinary tool: it starts at **Ask**, and its setting and the approval mode decide
+whether it asks first, the same in a chat and in an Automation run.
 
 ## Troubleshooting
 

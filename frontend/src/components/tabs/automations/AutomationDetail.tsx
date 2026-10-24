@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import {
-  Check,
   Clock3,
   FastForward,
   Hand,
@@ -19,6 +18,8 @@ import { AutomationCostPanel } from './AutomationCostPanel'
 import { AutomationHistory } from './AutomationHistory'
 import { AutomationMenu } from './AutomationMenu'
 import { AutomationRunCard } from './AutomationRunCard'
+import { AutomationToolPermissions } from './AutomationToolPermissions'
+import type { ToolLists } from './toolPermissions'
 import { automationTriggerLabel, type AutomationOptions } from './AutomationTriggerSummary'
 
 export function AutomationDetail({
@@ -34,7 +35,7 @@ export function AutomationDetail({
   onRunNow,
   onStopRun,
   onStatusChange,
-  onRevoke,
+  onSaveToolLists,
   onBack,
 }: {
   automation: Automation
@@ -49,7 +50,7 @@ export function AutomationDetail({
   onRunNow: () => void
   onStopRun: (run: AutomationRun) => void
   onStatusChange: (status: 'active' | 'paused') => void
-  onRevoke: (index: number) => void
+  onSaveToolLists: (lists: ToolLists) => void
   onBack?: () => void
 }) {
   const layoutRef = useRef<HTMLDivElement>(null)
@@ -246,48 +247,13 @@ export function AutomationDetail({
           <DetailSection title="Cost & usage" odId="cost-and-usage">
             <AutomationCostPanel automation={automation} runs={runs} />
           </DetailSection>
-          <DetailSection
-            title={
-              <>
-                Always allowed <Check size={13} aria-hidden="true" />
-              </>
-            }
-            odId="always-allowed"
-          >
-            {(automation.always_allowed ?? []).length > 0 && (
-              <div className="a3-allow">
-                {/* ONE ROW PER TOOL. A grant entry can carry many tools, and collapsing them
-                    onto its ``desc`` ("Tools available to the '…' Automation") told the owner
-                    nothing about what was actually authorised — this list is the only place
-                    those names are visible. Revoke still targets the whole entry, so the row
-                    says which entry it belongs to. */}
-                {(automation.always_allowed ?? []).flatMap((permission, index) =>
-                  (permission.tools?.length ? permission.tools : [null]).map((tool) => (
-                    <div
-                      className={`a3-allow-row${permission.src === 'Open Net Worth' ? ' internal' : ''}`}
-                      key={`${permission.src}-${index}-${tool ?? permission.desc}`}
-                    >
-                      <span className="mark" style={permissionMarkStyle(permission.src)}>
-                        {permission.src === 'Open Net Worth' ? 'ONW' : initials(permission.src)}
-                      </span>
-                      <b>{permission.src}</b>
-                      <span className="d">{tool ?? permission.desc}</span>
-                      <button
-                        type="button"
-                        className="a3-iconbtn danger revoke"
-                        aria-label={`Revoke ${permission.src}: ${tool ?? permission.desc}`}
-                        title="Revoke"
-                        disabled={busy}
-                        onClick={() => onRevoke(index)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  )),
-                )}
-              </div>
-            )}
-            <div className="a3-block-note">Approvals you grant during a run appear here.</div>
+          <DetailSection title="Tool permissions" odId="tool-permissions">
+            <AutomationToolPermissions
+              automation={automation}
+              busy={busy}
+              modeLabel={permissionModeInfo(automation.permission_mode ?? 'auto').short}
+              onSave={onSaveToolLists}
+            />
           </DetailSection>
         </div>
         <div className="a3-block a3-col-history" data-od-id="run-history">
@@ -372,14 +338,6 @@ const PERMISSION_MODE_INFO: Record<
 function permissionModeInfo(mode: PermissionMode) {
   return PERMISSION_MODE_INFO[mode]
 }
-function initials(value: string) {
-  return value
-    .split(/\s+/)
-    .map((part) => part[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase()
-}
 function firstSentence(value: string) {
   return (value.trim().split(/(?<=[.!?])\s|\n/)[0] ?? '').trim()
 }
@@ -391,19 +349,4 @@ function emptyHistoryMessage(automation: Automation) {
   if (automation.trigger.kind === 'schedule')
     return `Hasn’t run yet. It first runs ${automation.next_run_at ? fDateTime(automation.next_run_at) : automationTriggerLabel(automation.trigger)} — or hit Run now.`
   return 'Hasn’t run yet. Hit Run now to start it.'
-}
-function permissionMarkStyle(source: string): React.CSSProperties {
-  const color =
-    source === 'Open Net Worth'
-      ? 'var(--accent)'
-      : source.toLowerCase().includes('telegram')
-        ? '#2aabee'
-        : source.toLowerCase().includes('gmail')
-          ? '#ea4335'
-          : 'var(--lucius)'
-  return {
-    color,
-    background: `color-mix(in srgb, ${color} 16%, transparent)`,
-    borderColor: `color-mix(in srgb, ${color} 40%, transparent)`,
-  }
 }

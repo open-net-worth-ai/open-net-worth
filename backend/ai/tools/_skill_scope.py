@@ -46,19 +46,6 @@ _active_bundles: ContextVar[dict[str, dict]] = ContextVar("skill_active_bundles"
 # mean different things here and must never be collapsed with ``or``.
 _offer_scope: ContextVar[Optional[frozenset]] = ContextVar("offer_scope", default=None)
 
-# Is there a user in the loop this turn? ``False`` (the default) = interactive.
-#
-# Deliberately SEPARATE from the offer above. Unattendedness used to be inferred from "a
-# headless scope is set", which conflated two unrelated facts: what tools to offer, and
-# whether anyone is watching. Several features legitimately need the second one and have
-# nothing to do with tool tiering — ``run_script``'s instance-level unattended switch and
-# ``run_code``'s interactive-only rule. Giving them their own signal keeps each one honest
-# instead of riding on a permission ceiling that no longer exists. The external-MCP offer
-# was once listed here too; it is NOT gated on this and must not be — an external tool's
-# permission level is the single authority on whether it fires, on every surface (ADR
-# ``2026-08-13-mcp-permission-config-is-the-single-authority``; ``CLAUDE.md``,
-# Security-critical areas: do not reintroduce a surface-dependent override).
-
 
 def activate_invocation(skill_id: str) -> None:
     """Mark one inline invocation active, with the newest invocation as current."""

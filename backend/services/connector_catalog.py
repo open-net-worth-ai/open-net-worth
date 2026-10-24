@@ -337,7 +337,7 @@ def remove_mcp_server(server_id: str) -> None:
         raise NotFoundError(f"unknown mcp server: {server_id}", connector_id=server_id)
     oauth_flow.revoke_on_delete(server)
     store.delete(server_id)
-    tool_permissions.clear_connector_permissions(MCP_CONNECTOR_PREFIX + server_id)
+    tool_permissions.delete_connector_permissions(MCP_CONNECTOR_PREFIX + server_id)
     # The row is already gone, so this only EVICTS a pooled connection (ADR
     # 2026-08-22-external-mcp-stdio-connections-persist-for-the-app-lifetime).
     get_manager().reconcile_pooled_connection(server_id)

@@ -1,8 +1,8 @@
 // The permission-persistence seam — ONE file the ladder writes through.
 //
 // The three levels are REAL and family-agnostic: `tool_permissions` holds one row per
-// (owner, tool) with `level` ∈ always_allow/needs_approval/blocked, an ABSENT row reads as
-// `needs_approval`, and — since the 2026-08-14 merge that folded the old binary `tool_grants`
+// (owner, tool) with `level` ∈ always_allow/needs_approval/blocked, an ABSENT row reads as the
+// tool's default (a read runs, a change or a send asks; an external MCP tool asks), and — since the 2026-08-14 merge that folded the old binary `tool_grants`
 // table into this one and made enforcement universal — that config is the single authority on
 // whether ANY tool call fires, native connectors included, not MCP alone (ADR
 // `2026-08-14-one-permission-store-for-every-tool`).

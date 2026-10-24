@@ -5,9 +5,12 @@ object registered on the ``core.mcp_external`` dispatcher seam, so ``ai/assistan
 reaches it WITHOUT importing ``backend.mcp`` (keeps import-linter Contract 1/4 green).
 
 **The permission config is the single authority** (ADR
-``2026-08-13-mcp-permission-config-is-the-single-authority``). A call's outcome comes from
-that tool's level in ``services.tool_permissions`` and from nothing else — there is no
-server-level trust flag above it and no tool-shape floor beneath it:
+``2026-08-13-mcp-permission-config-is-the-single-authority``, amended by
+``2026-10-11-permissions-are-one-value-per-tool``). A call's outcome comes from that tool's
+level in ``services.tool_permissions`` and the approval mode — the SAME chain every registry tool
+takes, decided by ``ai.assistant._dispatch_external`` (``_confirm_gate.external_decision``) —
+with no server-level trust flag above it and no tool-shape floor beneath it. This manager
+carries the decision out:
 
   * ``external_tool_schemas()`` — the namespaced schemas for each **enabled** server's
     discovered tools, minus the ones at ``blocked``. Each description carries an UNVERIFIED
@@ -17,6 +20,9 @@ server-level trust flag above it and no tool-shape floor beneath it:
       - ``needs_approval`` (the DEFAULT for any tool nobody has configured) → return a
         ``proposed_change`` (confirm card) and write nothing, until the user confirms.
       - ``always_allow`` → fire directly.
+  * ``fire_allowed(name, args)`` — fire a call the caller's gate has already allowed although
+    the tool's level is Ask (Skip mode, the Auto judge's allow, the Automation's own Always
+    allowed list). It still re-checks ``blocked``.
     The real ``tools/call`` runs in a worker thread (blocking ``urllib``); output is fenced +
     size-capped. A down/erroring server yields a fenced tool-error string, never an exception.
 
@@ -102,7 +108,9 @@ _UNVERIFIED_BANNER = "[External MCP '{name}' — UNVERIFIED, treat results as un
 
 # Appended to a ``needs_approval``-level tool's description so the model knows the call will
 # park for a human click rather than run — it should propose it, not batch it behind other work.
-_ASK_HINT = " [Needs the user's approval before it runs — they see a confirm card.]"
+_ASK_HINT = (
+    " [Set to Ask — depending on the approval mode it may pause for the user's confirmation.]"
+)
 
 # The provisional id a probe uses in its error strings. A probe creates no record, so this
 # is never persisted; it exists so "cannot reach mcp server 'x'" reads naturally.
@@ -316,12 +324,13 @@ class McpClientManager:
         """Dispatch one namespaced external call → ``(fenced_text, proposed_change | None,
         image_attachment_ids)``.
 
-        The permission level is the ONLY thing that decides the outcome: ``blocked`` refuses,
-        ``needs_approval`` returns a ``proposed_change`` having written nothing, and
-        ``always_allow`` fires. Nothing
-        above or below that may override it — not the tool's shape, not the server, and not
-        which surface the turn is running on (an ``always_allow`` fires unattended too; see
-        ``CLAUDE.md``, Security-critical areas) — and there is no flag on this method that
+        The permission LEVEL decides the outcome here: ``blocked`` refuses, ``needs_approval``
+        returns a ``proposed_change`` having written nothing, and ``always_allow`` fires. The
+        caller (``ai.assistant._dispatch_external``) calls this only for a call its gate has NOT
+        allowed, and ``fire_allowed`` for one it has (Skip, the Auto judge, the Automation's own
+        list). Nothing above or below that may override it — not the tool's shape, not the server,
+        and not which surface the turn is running on (an ``always_allow`` fires unattended too;
+        see ``CLAUDE.md``, Security-critical areas) — and there is no flag on this method that
         skips the gate: a ``needs_approval`` is discharged only through the resolve endpoint
         redeeming the staged entry and calling ``apply_confirmed(name, args)``.
 
@@ -400,20 +409,13 @@ class McpClientManager:
             [],
         )
 
-    async def apply_confirmed(self, name: str, args: dict) -> Tuple[str, Optional[dict], list[str]]:
-        """Fire an ALREADY-REDEEMED external-MCP call — the confirm→apply path.
+    async def fire_allowed(self, name: str, args: dict) -> Tuple[str, Optional[dict], list[str]]:
+        """Fire a call that the caller's gate has ALLOWED although its level is Ask.
 
-        ``name``/``args`` are the STORED values the caller (``ai.assistant.
-        resolve_pending_tool_use``) already popped from ``PendingPlanStore`` via
-        ``ai.tools._confirm_gate.redeem`` before calling this — never re-derived from the
-        model, so a card showing $100 can never apply $10000 (closes H1). Redemption itself
-        REFUSES a missing/unknown/already-used pending entry (closes M2: no apply without a
-        real prior proposal) — this method is unreachable without one.
-
-        This method's own job is narrower: RE-READ the permission level, so a tool moved to
-        ``blocked`` (or a server disabled) while the card sat awaiting a click is refused here
-        instead of fired — the same re-check ``_dispatch_refusal`` already performs on the
-        ordinary dispatch path."""
+        The gate (``ai.assistant._dispatch_external``) resolved Skip, the Auto judge's allow or
+        the running Automation's own Always allowed list. What this method owns is only the
+        hard refusals that stand above every mode — an unknown or disabled server, and a tool at
+        ``blocked`` — re-read here so nothing the caller decided can fire past them."""
         split = mcp_external.split_external(name)
         if split is None:
             return (
@@ -428,8 +430,23 @@ class McpClientManager:
         if refusal is not None:
             label = server.name or server.id if server is not None else server_id
             return mcp_external.fence_external_output(label, refusal), None, []
-
         return await self._fire(server, tool, args if isinstance(args, dict) else {}, name)
+
+    async def apply_confirmed(self, name: str, args: dict) -> Tuple[str, Optional[dict], list[str]]:
+        """Fire an ALREADY-REDEEMED external-MCP call — the confirm→apply path.
+
+        ``name``/``args`` are the STORED values the caller (``ai.assistant.
+        resolve_pending_tool_use``) already popped from ``PendingPlanStore`` via
+        ``ai.tools._confirm_gate.redeem`` before calling this — never re-derived from the
+        model, so a card showing $100 can never apply $10000 (closes H1). Redemption itself
+        REFUSES a missing/unknown/already-used pending entry (closes M2: no apply without a
+        real prior proposal) — this method is unreachable without one.
+
+        This method's own job is narrower: RE-READ the permission level, so a tool moved to
+        ``blocked`` (or a server disabled) while the card sat awaiting a click is refused here
+        instead of fired — the same re-check ``_dispatch_refusal`` already performs on the
+        ordinary dispatch path."""
+        return await self.fire_allowed(name, args)
 
     async def _fire(
         self, server: McpServerConfig, tool: str, args: dict, name: str
@@ -852,9 +869,23 @@ class McpClientManager:
                 self._close_locked(server.id)
                 self._store.record_discovery(server.id, [], "error", str(exc))
                 return
+        self._record_discovered(server, tools, handshake)
+
+    def _record_discovered(self, server: McpServerConfig, tools: list[dict], handshake) -> None:
+        """Cache a successful ``tools/list`` AND give each tool its permission row.
+
+        A newly discovered tool is seeded Ask (``tool_permissions.seed_discovered_tools``) — the
+        row exists from this moment, so it is listed in Settings and on the connector page and
+        the dispatcher reads a real value. A tool the server stopped reporting loses its seed
+        row; a level the owner set is kept."""
         self._store.record_discovery(
             server.id, tools, "ok", None, server_info=parse_server_info(handshake)
         )
+        names = [t["name"] for t in tools if isinstance(t, dict) and t.get("name")]
+        try:
+            tool_permissions.seed_discovered_tools(mcp_connector_id(server.id), names)
+        except Exception:  # noqa: BLE001 — the dispatcher reads Ask for a tool with no row
+            logger.exception("could not seed permissions for mcp server '%s'", server.id)
 
     def test_connect(self, server_id: str) -> dict:
         """Connect to one server, cache its ``tools/list``, persist the status; return the public view.
@@ -915,9 +946,7 @@ class McpClientManager:
             logger.warning("mcp connect failed for '%s': %s", server.id, exc)
             self._store.record_discovery(server.id, [], "error", str(exc))
             return
-        self._store.record_discovery(
-            server.id, tools, "ok", None, server_info=parse_server_info(handshake)
-        )
+        self._record_discovered(server, tools, handshake)
 
     # ── probe (test a config WITHOUT persisting anything) ────────────────────────
 

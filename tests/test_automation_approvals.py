@@ -15,6 +15,7 @@ from backend.core.automation_runner import (
     reset_automation_approval,
 )
 from backend.services.tool_permissions import CORE_CONNECTOR_ID, set_tool_permission
+from tests.auto_judge_support import parked_verdict, stub_judge
 
 
 def _bind(mode: str, *always_allowed: str):
@@ -47,15 +48,23 @@ def test_automation_policy_is_local_and_manual_honours_its_local_grant(monkeypat
         reset_automation_approval(token)
 
 
-def test_manual_gates_an_ungranted_sensitive_tool_even_with_a_global_grant(
-    monkeypatch, db_isolated
-):
-    """The mirror of the test above: a real GLOBAL ``always_allow`` — the kind granted in an
-    unrelated chat — must not leak into a run that never listed the tool as locally allowed.
-    Manual still pauses on it, because the Automation's own (empty) always_allowed list is
-    decides here, not the global table."""
+@pytest.mark.parametrize("mode", ["manual", "auto", "skip"])
+def test_an_automation_inherits_a_global_always_allow_in_every_mode(monkeypatch, db_isolated, mode):
+    """One value per tool (ADR 2026-10-11-permissions-are-one-value-per-tool): ``always_allow``
+    means allow everywhere, unattended included, so a run uses a tool's global Allow like a chat
+    does. Until then a ``manual`` Automation still paused on a tool granted in an unrelated chat;
+    the mode now decides only what ASK means."""
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
     set_tool_permission(CORE_CONNECTOR_ID, "create_payees", "always_allow")
+    token = _bind(mode)
+    try:
+        assert gate.automation_gate_verdict("create_payees") == "allow"
+    finally:
+        reset_automation_approval(token)
+
+
+def test_manual_gates_a_tool_set_to_ask_that_the_run_never_listed(monkeypatch, db_isolated):
+    monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
     token = _bind("manual")
     try:
         assert gate.automation_gate_verdict("create_payees") == "gate"
@@ -88,18 +97,28 @@ def test_notify_permission_descriptor_becomes_an_automation_local_tool_grant():
     assert always_allowed == frozenset({"telegram_send_message", "webhook_send_message"})
 
 
-def test_auto_approves_ordinary_sensitive_tools_but_not_hardline_tools(monkeypatch):
+def test_auto_follows_the_judges_verdict_for_every_tool_and_fails_closed(monkeypatch):
+    """``auto`` has no name list: a bulk delete is decided by the judge like any other tool, and
+    a call the judge has not spoken for (no verdict parked) reads ``gate``."""
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
 
     token = _bind("auto")
     try:
-        assert gate.automation_gate_verdict("create_payees") == "allow"
-        assert gate.automation_gate_verdict("delete_transactions_where") == "gate"
+        for tool in ("create_payees", "delete_transactions_where"):
+            with parked_verdict("allow", tool):
+                assert gate.automation_gate_verdict(tool) == "allow"
+            with parked_verdict("ask", tool):
+                assert gate.automation_gate_verdict(tool) == "gate"
+            with parked_verdict(None, tool):
+                assert gate.automation_gate_verdict(tool) == "gate"
+        # a verdict is bound to the tool it judged: another tool's read finds none
+        with parked_verdict("allow", "create_payees"):
+            assert gate.automation_gate_verdict("delete_transactions_where") == "gate"
     finally:
         reset_automation_approval(token)
 
 
-def test_skip_bypasses_approval_even_for_hardline_tools(monkeypatch):
+def test_skip_bypasses_approval_even_for_a_bulk_delete(monkeypatch):
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
     token = _bind("skip")
     try:
@@ -108,33 +127,50 @@ def test_skip_bypasses_approval_even_for_hardline_tools(monkeypatch):
         reset_automation_approval(token)
 
 
-@pytest.mark.parametrize("mode", ["manual", "auto", "skip"])
+@pytest.mark.parametrize(
+    "automation_tool",
+    ["create_automation", "update_automations", "delete_automations", "run_automation"],
+)
+def test_the_automation_tools_follow_the_mode_like_every_other_tool(
+    monkeypatch, automation_tool, db_isolated
+):
+    """No exception: the tools that write Automations are judged in ``auto`` like any other Ask
+    tool (allow runs, ask or no verdict is a card), gate in ``manual`` and run in ``skip``. What
+    protects the owner is that the judge is TOLD an Automation call grants unattended access
+    (test_auto_judge_consequence), not a rule that it never sees the call."""
+    monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
+    for verdict, expected in (("allow", "allow"), ("ask", "gate"), (None, "gate")):
+        token = _bind("auto")
+        try:
+            with parked_verdict(verdict, automation_tool):
+                assert gate.automation_gate_verdict(automation_tool) == expected, verdict
+                assert gate.automation_gate_verdict(automation_tool, stage_only=True) == "auto"
+        finally:
+            reset_automation_approval(token)
+    for mode, expected in (("manual", "gate"), ("skip", "allow")):
+        token = _bind(mode)
+        try:
+            assert gate.automation_gate_verdict(automation_tool) == expected, mode
+        finally:
+            reset_automation_approval(token)
+
+
 @pytest.mark.parametrize(
     "policy_tool",
     ["create_automation", "update_automations", "delete_automations", "run_automation"],
 )
-def test_a_run_can_never_write_the_policy_that_governs_runs(
-    monkeypatch, mode, policy_tool, db_isolated
-):
-    """Security regression — privilege escalation, found by review before ship.
-
-    ``auto`` allowed every non-hardline tool, and writing an Automation is a non-hardline
-    tool. So an auto-mode Automation reading UNTRUSTED input (an email body it was built to
-    ingest) could be steered to create_automation(permission_mode="skip") and run_automation it —
-    and that child run cleared the hardline tier, reaching delete_transactions_where with no
-    card ever shown. The same call could rewrite a DIFFERENT, manual-mode Automation's
-    approval mode, crossing the owner's own boundary permanently.
-
-    ``skip`` remains the owner's choice to make on an Automation the owner configured. It is
-    not a choice a run may make for itself, in any mode, with any standing grant — a REAL
-    global ``always_allow`` included, which is what makes "even with a global grant" true
-    here rather than merely asserted against a mocked predicate.
-    """
+@pytest.mark.parametrize("mode", ["manual", "auto", "skip"])
+def test_an_explicit_grant_still_runs_a_policy_tool(monkeypatch, policy_tool, mode, db_isolated):
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
-    set_tool_permission(CORE_CONNECTOR_ID, policy_tool, "always_allow")
-    token = _bind(mode, policy_tool)  # even listed as an Always-allowed local grant
+    token = _bind(mode, policy_tool)  # on this Automation's own Always allowed list
     try:
-        assert gate.automation_gate_verdict(policy_tool) == "gate"
+        assert gate.automation_gate_verdict(policy_tool) == "allow"
+    finally:
+        reset_automation_approval(token)
+    set_tool_permission(CORE_CONNECTOR_ID, policy_tool, "always_allow")
+    token = _bind(mode)
+    try:
+        assert gate.automation_gate_verdict(policy_tool) == "allow"
     finally:
         reset_automation_approval(token)
 
@@ -205,18 +241,18 @@ def _dispatch_notify(mode: str, *always_allowed: str):
         reset_automation_approval(token)
 
 
-def _self_staging_preview_verdict(mode: str, tool_name: str, *always_allowed: str) -> bool:
-    from backend.core.tool_use_context import set_tool_use_id
-
+def _self_staging_preview_verdict(
+    mode: str, tool_name: str, *always_allowed: str, judged: str | None = None
+) -> bool:
     approval_token = _bind(mode, *always_allowed)
     call_token = registry._active_call.set({"invoked": tool_name, "canonical": tool_name})
-    # A pending card is KEYED by the tool_use_id, so a call without one can never be staged
-    # and is never promised a card. Dispatch always binds a real id before a handler runs.
-    set_tool_use_id("toolu_automation_test")
     try:
-        return registry.should_preview_write()
+        # A pending card is KEYED by the tool_use_id, so a call without one can never be staged
+        # and is never promised a card. Dispatch always binds a real id before a handler runs
+        # (and, in `auto`, parks the judge's verdict for it first — `judged`).
+        with parked_verdict(judged, tool_name, "toolu_automation_test"):
+            return registry.should_preview_write()
     finally:
-        set_tool_use_id(None)
         registry._active_call.reset(call_token)
         reset_automation_approval(approval_token)
 
@@ -239,143 +275,158 @@ def test_a_manual_local_grant_executes_at_dispatch_without_leaking_global_author
     assert automation_dispatch == [("Commitment due", ["telegram"])]
 
 
-def test_self_staging_tools_obey_the_same_manual_auto_skip_policy(automation_dispatch, monkeypatch):
-    monkeypatch.setattr(surface_policy, "is_hardline_blocked", lambda _name: False)
-
+def test_self_staging_tools_obey_the_same_manual_auto_skip_policy(automation_dispatch):
     assert _self_staging_preview_verdict("manual", "open_option") is True
     assert _self_staging_preview_verdict("manual", "open_option", "open_option") is False
-    assert _self_staging_preview_verdict("auto", "open_option") is False
-
-    monkeypatch.setattr(surface_policy, "is_hardline_blocked", lambda _name: True)
+    assert _self_staging_preview_verdict("auto", "open_option", judged="allow") is False
+    assert _self_staging_preview_verdict("auto", "open_option", judged="ask") is True
+    # No verdict parked (the judge failed or never ran) previews: fail closed.
     assert _self_staging_preview_verdict("auto", "open_option") is True
     assert _self_staging_preview_verdict("skip", "open_option") is False
 
 
-def test_auto_executes_an_ordinary_sensitive_tool_at_dispatch(automation_dispatch):
+def test_auto_executes_an_ordinary_sensitive_tool_at_dispatch(automation_dispatch, monkeypatch):
+    judged: list[str] = []
+    stub_judge(monkeypatch, "allow", judged)
+
     text, proposed = _dispatch_notify("auto")
 
     assert json.loads(text)["ok"] is True
     assert proposed is None
     assert automation_dispatch == [("Commitment due", ["telegram"])]
+    assert judged == ["telegram_send_message"]
 
 
-def test_auto_still_pauses_a_hardline_tool_at_dispatch(automation_dispatch):
+def _dispatch_bulk_delete(tool_use_id: str):
     token = _bind("auto")
     try:
-        text, proposed = asyncio.run(
+        return asyncio.run(
             registry.dispatch(
                 "delete_transactions_where",
-                {"date_from": "2026-08-01"},
-                tool_use_id="toolu_auto_hardline",
+                # `preview` keeps an allowed run from deleting anything.
+                {"date_from": "2026-08-01", "preview": True},
+                tool_use_id=tool_use_id,
             )
         )
     finally:
         reset_automation_approval(token)
 
+
+def test_auto_judges_a_bulk_delete_like_any_other_tool_at_dispatch(
+    automation_dispatch, monkeypatch
+):
+    """No name list: ``delete_transactions_where`` pauses when the judge asks and runs when it
+    allows."""
+    stub_judge(monkeypatch, "ask")
+    text, proposed = _dispatch_bulk_delete("toolu_auto_ask")
+
     assert text is None
     assert proposed and proposed["grant_tool"] == "delete_transactions_where"
+
+    stub_judge(monkeypatch, "allow")
+    text, proposed = _dispatch_bulk_delete("toolu_auto_allow")
+
+    assert proposed is None
+    assert json.loads(text)["ok"] is True
 
 
 def test_skip_executes_instead_of_returning_a_synthetic_skip_result(
     automation_dispatch, monkeypatch
 ):
-    monkeypatch.setattr(surface_policy, "is_hardline_blocked", lambda _name: True)
+    judged: list[str] = []
+    stub_judge(monkeypatch, "ask", judged)
 
     text, proposed = _dispatch_notify("skip")
 
     assert json.loads(text)["ok"] is True
     assert proposed is None
     assert automation_dispatch == [("Commitment due", ["telegram"])]
+    assert judged == [], "skip proceeds without judging anything"
 
 
-# ── deny > ask > allow, with no specificity tiebreak (owner decision, 2026-08-27) ──────────
+# ── the Automation order: Allow runs, Ask is the mode's (ADR 2026-10-11) ───────────────────────
 #
-# An explicitly STORED `needs_approval` outranks both the Automation's own standing
-# `always_allowed` grant and its `skip`/`auto` mode — the same precedence the owner's
-# reference model (Claude Code's) uses, and the same shape `blocked` already had.
-#
-# The load-bearing distinction is EXPLICIT vs DEFAULTED. `needs_approval` is also what an
-# undecided tool falls back to, so keying this on `effective_level` would fire for nearly
-# every tool and silently turn `skip`/`auto`/`always_allowed` into no-ops. The tests below
-# pin BOTH directions, because only the pair proves the rule is the narrow one.
+# A stored Ask no longer outranks an Automation's ``skip`` / ``auto`` mode: Ask means the same
+# thing whoever wrote it, and the mode decides it. The full table, driven through the real
+# dispatch, is ``tests/test_permission_order.py``; the tests below pin the verdict function.
 
 
-def _verdict(tool: str, mode: str, *always_allowed: str):
+def _verdict(tool: str, mode: str, *always_allowed: str, judged: str | None = None):
     token = _bind(mode, *always_allowed)
     try:
-        return gate.automation_gate_verdict(tool)
+        with parked_verdict(judged, tool):
+            return gate.automation_gate_verdict(tool)
     finally:
         reset_automation_approval(token)
 
 
-def test_an_explicit_ask_gates_even_in_a_skip_run(monkeypatch, db_isolated):
+def test_a_stored_ask_means_what_a_seeded_ask_means_in_a_run(monkeypatch, db_isolated):
+    monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
+    seeded = [
+        _verdict("create_account", "skip"),
+        _verdict("create_account", "auto", judged="allow"),
+    ]
+    set_tool_permission(CORE_CONNECTOR_ID, "create_account", "needs_approval")
+
+    assert (
+        [
+            _verdict("create_account", "skip"),
+            _verdict("create_account", "auto", judged="allow"),
+        ]
+        == seeded
+        == ["allow", "allow"]
+    )
+    assert _verdict("create_account", "manual") == "gate"
+    assert _verdict("create_account", "auto") == "gate"  # no verdict: the judge failed closed
+
+
+def test_the_automations_own_always_grant_runs_a_tool_the_owner_set_to_ask(
+    monkeypatch, db_isolated
+):
+    """Step 3 of the order: this Automation's own Always allowed list runs an Ask tool in every
+    mode — it was written by a human tapping Always on a card that showed exactly what would run."""
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
     set_tool_permission(CORE_CONNECTOR_ID, "create_account", "needs_approval")
 
-    assert _verdict("create_account", "skip") == "gate"
-    assert _verdict("create_account", "auto") == "gate"
-
-
-def test_the_automations_own_always_grant_outranks_an_explicit_global_ask(monkeypatch, db_isolated):
-    """Contradictory intent — a standing global *ask me* and a per-Automation *stop asking
-    me* for the same tool — resolved toward the AUTOMATION.
-
-    Specificity breaks this tie, deliberately unlike the mode case above. The local grant is
-    written by a human tapping *Always* on a confirm card that showed exactly what would run,
-    for one named Automation; the global level is a standing default set elsewhere, at
-    another time, about every caller at once. The reverse order was implemented first and
-    rejected on 2026-08-27 once the truth table made its consequence visible: it made a real
-    tap on a real card silently do nothing, with no way for the owner to tell.
-    """
-    monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
-    set_tool_permission(CORE_CONNECTOR_ID, "create_account", "needs_approval")
-
-    assert _verdict("create_account", "skip", "create_account") == "allow"
-    assert _verdict("create_account", "manual", "create_account") == "allow"
-    # …and with NO local grant the global ask still wins over the mode.
-    assert _verdict("create_account", "skip") == "gate"
-
-
-def test_a_policy_tool_still_gates_even_with_a_local_grant(monkeypatch, db_isolated):
-    """The one thing a local grant must NEVER buy. `always_allowed` now sits above the
-    explicit-ask check, so this pins that it did not also climb above the self-escalation
-    guard — a run that could grant itself `update_automations` could rewrite its own mode."""
-    monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
-
-    assert _verdict("update_automations", "skip", "update_automations") == "gate"
-
-
-def test_an_UNDECIDED_tool_is_untouched_by_the_rule(monkeypatch, db_isolated):
-    """THE guard on the guard.
-
-    `needs_approval` is the DEFAULT for every undecided gated tool. If this rule keyed on the
-    effective level instead of a stored row, every one of them would gate and `skip`/`auto`
-    would do nothing at all — the modes would still exist and silently stop working. Nothing
-    is stored here, so the mode must still decide.
-    """
-    monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
-
-    assert gate.effective_level("create_account") == "needs_approval"  # defaulted, not stored
-    assert _verdict("create_account", "skip") == "allow"
-    assert _verdict("create_account", "auto") == "allow"
+    for mode in ("manual", "auto", "skip"):
+        assert _verdict("create_account", mode, "create_account") == "allow", mode
+    # …and with NO local grant, Ask is the mode's to decide.
     assert _verdict("create_account", "manual") == "gate"
 
 
-def test_an_explicit_always_allow_still_runs_in_a_skip_run(monkeypatch, db_isolated):
-    """The rule is about *ask*, not about every stored level: an owner who explicitly said
-    `always_allow` gets `always_allow`. (A `manual` run still pauses on it — that older,
-    deliberate property is covered above and is unchanged by this.)"""
+def test_a_seeded_ask_follows_the_mode(monkeypatch, db_isolated):
+    monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
+
+    assert gate.effective_level("create_account") == "needs_approval"  # the seed, no row
+    assert _verdict("create_account", "skip") == "allow"
+    assert _verdict("create_account", "auto", judged="allow") == "allow"
+    assert _verdict("create_account", "auto") == "gate"  # no verdict yet: the judge decides
+    assert _verdict("create_account", "manual") == "gate"
+
+
+def test_an_explicit_always_allow_runs_in_every_run_mode(monkeypatch, db_isolated):
     monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
     set_tool_permission(CORE_CONNECTOR_ID, "create_account", "always_allow")
 
-    assert _verdict("create_account", "skip") == "allow"
+    for mode in ("manual", "auto", "skip"):
+        assert _verdict("create_account", mode) == "allow", mode
 
 
-def test_an_unreadable_permission_store_gates_rather_than_allows(monkeypatch, db_isolated):
-    """Fail CLOSED — the direction every other read in this file fails in."""
-    monkeypatch.setattr(gate, "is_gated_tool", lambda _name: True)
+def test_an_unreadable_permission_store_raises_so_the_dispatch_gate_refuses(
+    monkeypatch, db_isolated
+):
+    """Fail CLOSED: an unreadable table is neither permission nor the seed (which would run a tool
+    the owner Blocked). ``effective_level`` raises and ``registry.dispatch`` refuses the call."""
+    import asyncio
+    import json
+
+    from backend.ai.tools import registry
+
     monkeypatch.setattr(
-        gate, "_stored_level", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom"))
+        "backend.services.tool_permissions.stored_tool_level",
+        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("boom")),
     )
-
-    assert _verdict("create_account", "skip") == "gate"
+    with pytest.raises(RuntimeError):
+        gate.effective_level("create_account")
+    text, proposed = asyncio.run(registry.dispatch("get_net_worth", {}, tool_use_id="toolu_unread"))
+    assert proposed is None and "nothing ran" in json.loads(text)["error"]

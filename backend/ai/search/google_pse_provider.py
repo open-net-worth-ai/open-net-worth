@@ -42,8 +42,8 @@ class GooglePseProvider(SearchProvider):
                 # verified directly (a real 403 renders "...customsearch/v1?key=AIza...
                 # &cx=...&q=..."). Left as-is, that message propagates raw into the tool
                 # result, the persisted session transcript and app logs (every caller —
-                # web_search when this provider is active, x_search, and
-                # search_via_google_pse — re-raises/logs the bare exception). Re-raise
+                # web_search when this provider is active, and
+                # google_pse_search — re-raises/logs the bare exception). Re-raise
                 # with the key stripped from the URL so the secret never leaves this
                 # function, on ANY status code this provider can return.
                 safe_url = exc.request.url.copy_with(query=b"key=***&cx=***&q=***")

@@ -128,9 +128,9 @@ def _register_fetch_tool(provider_key: str, tool_name: str) -> None:
         tool_name,
         description=description,
         input_schema=schema_of(FetchTransactionsInput, tool_name=tool_name),
-        # Read-SHAPED but writes: stashes a raw-evidence snapshot per row + the connector's
-        # own last_synced_at/last_status/last_error — the email_search_messages precedent.
-        mutates=("config",),
+        # A read that leaves a raw-evidence snapshot per row and the connector's own
+        # last-synced stamp behind — the email_search_messages precedent.
+        refreshes=("config",),
         connector=provider_key,
     )(handler)
 

@@ -26,6 +26,7 @@ _EDITABLE_FIELDS = frozenset(
         "trigger",
         "permission_mode",
         "always_allowed",
+        "blocked",
         "model",
         "effort",
         "max_runs",
@@ -42,6 +43,10 @@ def register_automation_cleanup(handler: Optional[CleanupHandler]) -> None:
     """Register the higher-layer session/artifact/pending-plan cleanup adapter."""
     global _cleanup_handler
     _cleanup_handler = handler
+
+
+#: The mode an Automation gets when nothing says otherwise.
+DEFAULT_PERMISSION_MODE = "auto"
 
 
 def validated_trigger(raw: Any, *, now: datetime | None = None, previous: object = None) -> dict:
@@ -70,10 +75,11 @@ def validate_automation(
         raise ValidationError("automation instructions are required")
     trigger = validated_trigger(clean.get("trigger"), now=now, previous=previous_trigger)
     execution = _validate_execution(clean.get("execution"))
-    permission_mode = str(clean.get("permission_mode") or "auto").strip()
+    permission_mode = str(clean.get("permission_mode") or DEFAULT_PERMISSION_MODE).strip()
     if permission_mode not in {"manual", "auto", "skip"}:
         raise ValidationError("automation permission_mode must be manual, auto, or skip")
     always_allowed = _validate_always_allowed(clean.get("always_allowed") or [])
+    blocked = _validate_blocked(clean.get("blocked") or [], always_allowed)
     status = clean.get("status") or "active"
     if status not in {"active", "paused", "completed"}:
         raise ValidationError("automation status must be active or paused")
@@ -98,6 +104,7 @@ def validate_automation(
         "execution": execution,
         "permission_mode": permission_mode,
         "always_allowed": always_allowed,
+        "blocked": blocked,
         "model": str(clean.get("model") or "").strip(),
         "effort": effort,
         "max_runs": max_runs,
@@ -138,6 +145,27 @@ def _validate_always_allowed(value: object) -> list[dict]:
             permission["tools"] = list(dict.fromkeys(tool.strip() for tool in tools))
         result.append(permission)
     return result
+
+
+def _validate_blocked(value: object, always_allowed: list[dict]) -> list[str]:
+    """The tools this Automation refuses, as plain tool names. A tool cannot be both allowed
+    and blocked on one Automation: the two lists are one control with two answers per tool."""
+    if not isinstance(value, list) or any(
+        not isinstance(tool, str) or not tool.strip() for tool in value
+    ):
+        raise ValidationError("automation blocked must be a list of tool names")
+    blocked = list(dict.fromkeys(tool.strip() for tool in value))
+    allowed = {
+        name
+        for item in always_allowed
+        for name in [*item.get("tools", []), item.get("capability", "")]
+    }
+    both = sorted(allowed.intersection(blocked))
+    if both:
+        raise ValidationError(
+            f"a tool cannot be both always allowed and blocked in one Automation: {', '.join(both)}"
+        )
+    return blocked
 
 
 def _validate_execution(value: object) -> dict:
