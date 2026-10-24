@@ -23,7 +23,6 @@ import { chooseBookFolder } from './book-picker';
 import { BookSwitcher, type BookEntry } from './book-switch';
 import { InitialBookChoice } from './initial-book-choice';
 import { bookFolderMissing } from './startup-decision';
-import { openLocalConnection } from './local-connection-action';
 import { ConnectionSwitcher, savedServerOrigin } from './connections';
 import { ConnectionDialog } from './connection-dialog';
 import { ServerSubmission } from './server-submission';
@@ -346,16 +345,6 @@ async function enterMissingBook(): Promise<void> {
   await main!.showWelcome(suggestedRoot, 'missing', missingBookRoot);
 }
 
-async function useLocalBook(): Promise<void> {
-  await openLocalConnection({
-    select: alternate => connectionLoader!.selectLocal(alternate),
-    showFailure: async (message, offerAlternate) => {
-      const choice = await dialog.showMessageBox(main!.window, { type: 'error', title: 'Local book could not open', message, detail: 'Your server connection has been kept. Choose another local folder to use a different book.', buttons: offerAlternate ? ['Choose another local folder…', 'Keep current connection'] : ['Keep current connection'], defaultId: offerAlternate ? 1 : 0, cancelId: offerAlternate ? 1 : 0 });
-      return offerAlternate && choice.response === 0;
-    },
-  });
-}
-
 async function drainWorkers(): Promise<void> {
   await Promise.all([folders?.drain(), notifications?.drain()]);
 }
@@ -533,7 +522,6 @@ function registerIpc(): void {
     return hosted!.signInFresh(safeReturnPath(returnPath));
   });
   ipcMain.handle('desktop-client:open-browser', event => { main!.authorizeClient(event); return books!.exclusive(async () => { main!.authorizeClient(event); await openBrowser(); }); });
-  ipcMain.handle('desktop-connection:use-local', event => { main!.authorizeServerRetry(event); return useLocalBook(); });
   ipcMain.handle('desktop-connection:retry', event => { main!.authorizeServerRetry(event); return books!.exclusive(async () => { main!.authorizeServerRetry(event); await connectionLoader!.retry(); }); });
   ipcMain.handle('desktop-hosted:sign-in', event => {
     assertPrivateCloudEnabled();

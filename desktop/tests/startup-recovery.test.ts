@@ -29,12 +29,13 @@ test('recovery kind separates a missing folder from an existing folder that fail
   assert.equal(startupRecoveryKind({ serverOrigin: null, failure: null, missing: false }), 'book-failed');
 });
 
-test('the unreachable-server page offers a local book without dropping its other actions', () => {
+test('the unreachable-server page keeps two buttons; reporting is a quiet link, a local book is under Change connection', () => {
   const html = recoveryPage(false, null, '', 'dark', 'opening', 'https://onw.example.com');
   assert.match(html, /Can’t reach your server/);
-  for (const label of ['Try again', 'Change connection…', 'Use a book on this computer']) assert.ok(html.includes(`>${label}</button>`), label);
-  assert.match(html, /id="local"/);
-  assert.match(html, /onwNativeConnection\.useLocal\(\)/);
+  const actions = html.match(/<div class="actions">(.*?)<\/div>/)![1];
+  assert.deepEqual([...actions.matchAll(/>([^<]+)<\/button>/g)].map(match => match[1]), ['Try again', 'Change connection…']);
+  assert.ok(html.includes('<button id="report" class="link">Report this problem</button>'));
+  assert.doesNotMatch(html, /id="local"|useLocal/);
 });
 
 test('the unreachable-server page counts down to its next check; a local failure has no countdown', () => {
@@ -162,7 +163,7 @@ test('a failed first open offers Back to the book choice; a remembered book does
 test('every recovery page can report its own problem; the starting splash has nothing to report', () => {
   const pages = [recoveryPage(false, null, '/Users/example/Book', 'dark', 'opening', null, 'boom'), recoveryPage(false, new BookInUseError(8080), '/Users/example/Book', 'dark'), recoveryPage(false, null, '', 'dark', 'opening', 'https://onw.example.com')];
   for (const html of pages) {
-    assert.ok(html.includes('<button id="report">Report this problem</button>'));
+    assert.match(html, /<button id="report"( class="link")?>Report this problem<\/button>/);
     assert.match(html, /on\('report',\(\)=>window\.onwDesktopClient\.reportProblem\(\)\)/);
     assert.equal((html.match(/class="primary"/g) ?? []).length, 1);
   }
