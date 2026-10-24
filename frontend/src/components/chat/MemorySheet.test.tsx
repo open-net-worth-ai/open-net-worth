@@ -74,7 +74,7 @@ describe('MemorySheet', () => {
     await screen.findByText('Rent goes up every March')
     const box = screen.getByLabelText('Tell Lucius what to remember or change')
     fireEvent.change(box, { target: { value: 'my dog is Beans; rent rises in April now' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Update' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith(
         '/api/memory/instruct',

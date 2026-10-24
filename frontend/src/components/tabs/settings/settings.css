@@ -1320,6 +1320,59 @@
   color: var(--faint);
   margin-top: 3px;
 }
+/* fact row actions: quiet icon buttons that surface on hover (always shown on touch) */
+.onw-settings .rd-fact {
+  transition: background 0.12s ease;
+}
+/* `> .rd-fact-acts` outranks `.rd-fact > div { flex: 1 }`, which would stretch the group */
+.onw-settings .rd-fact > .rd-fact-acts {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.onw-settings .rd-fact:focus-within .rd-fact-acts {
+  opacity: 1;
+}
+@media (hover: hover) {
+  .onw-settings .rd-fact:not(.rd-fact-edit):hover {
+    background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+  }
+  .onw-settings .rd-fact:hover .rd-fact-acts {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .onw-settings .rd-fact-acts {
+    opacity: 1;
+  }
+}
+.onw-settings .rd-fact-ibtn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .onw-settings .rd-fact-ibtn:hover {
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    color: var(--ink);
+  }
+  .onw-settings .rd-fact-ibtn--forget:hover {
+    color: var(--bad);
+  }
+}
+.onw-settings .rd-fact-ibtn:focus-visible,
+.onw-settings .rd-mem-send:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 /* a fact being edited in place: the text field takes the row, Save and Cancel sit after it */
 .onw-settings .rd-fact-edit .rd-input {
   flex: 1;
@@ -1333,13 +1386,66 @@
   flex-direction: column;
   gap: 12px;
 }
+/* Claude-style composer: one pill, the send is a round button inside it */
 .onw-settings .rd-mem-ask {
   display: flex;
+  align-items: center;
   gap: 8px;
+  padding: 5px 5px 5px 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 6%, var(--modal-bg));
+  border: 1px solid var(--line);
+  transition: border-color 0.12s ease;
 }
-.onw-settings .rd-mem-ask .rd-input {
+.onw-settings .rd-mem-ask:focus-within {
+  border-color: var(--line-strong);
+}
+.onw-settings .rd-mem-ask-input {
   flex: 1;
   min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  padding: 7px 0;
+}
+.onw-settings .rd-mem-ask-input::placeholder {
+  color: var(--faint);
+}
+.onw-settings .rd-mem-send {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--ink);
+  color: var(--bg);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+.onw-settings .rd-mem-send:disabled {
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+  color: var(--faint);
+  cursor: default;
+}
+.onw-settings .rd-mem-spin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: rd-mem-spin 0.8s linear infinite;
+}
+@keyframes rd-mem-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .onw-settings .rd-mem-actions {
   display: flex;

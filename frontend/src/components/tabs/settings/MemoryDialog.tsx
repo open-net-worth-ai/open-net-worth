@@ -2,6 +2,7 @@
 // inside the Settings shell; the chat header's Memory button opens it through
 // components/chat/MemorySheet, which supplies the `.onw-settings` scope these classes need.
 import { useState } from 'react'
+import { ArrowUp, Pencil, Trash2 } from '../../../ui/icons'
 import {
   MEMORY_SETTINGS_KEY,
   getMemorySettings,
@@ -74,20 +75,29 @@ function MemoryFactRow({
           <span>{fact.updated_at ? fDate(fact.updated_at) : ''}</span>
         </div>
       </div>
-      <Btn
-        size="xs"
-        variant="ghost"
-        onClick={() => {
-          setDraft(fact.content)
-          onEdit()
-        }}
-        aria-label={'Edit: ' + fact.content}
-      >
-        Edit
-      </Btn>
-      <Btn size="xs" variant="ghost" onClick={onForget} aria-label={'Forget: ' + fact.content}>
-        Forget
-      </Btn>
+      <div className="rd-fact-acts">
+        <button
+          type="button"
+          className="rd-fact-ibtn"
+          title="Edit"
+          aria-label={'Edit: ' + fact.content}
+          onClick={() => {
+            setDraft(fact.content)
+            onEdit()
+          }}
+        >
+          <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          className="rd-fact-ibtn rd-fact-ibtn--forget"
+          title="Forget"
+          aria-label={'Forget: ' + fact.content}
+          onClick={onForget}
+        >
+          <Trash2 size={15} strokeWidth={1.8} aria-hidden="true" />
+        </button>
+      </div>
     </div>
   )
 }
@@ -135,19 +145,30 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
             }}
           >
             <input
-              className="rd-input"
+              className="rd-mem-ask-input"
               value={change}
               disabled={off || applying}
               maxLength={1000}
               placeholder={
-                off ? 'Turn memory on to make changes' : 'Tell Lucius what to remember or change…'
+                off ? 'Turn memory on to make changes' : 'Tell Lucius what to remember or change'
               }
               aria-label="Tell Lucius what to remember or change"
               onChange={(e) => setChange(e.target.value)}
             />
-            <Btn type="submit" variant="primary" disabled={off || applying || !change.trim()}>
-              {applying ? 'Updating…' : 'Update'}
-            </Btn>
+            <button
+              type="submit"
+              className="rd-mem-send"
+              title="Update memory"
+              aria-label="Update memory"
+              aria-busy={applying || undefined}
+              disabled={off || applying || !change.trim()}
+            >
+              {applying ? (
+                <span className="rd-mem-spin" aria-hidden="true" />
+              ) : (
+                <ArrowUp size={16} strokeWidth={2.2} aria-hidden="true" />
+              )}
+            </button>
           </form>
           <div className="rd-mem-actions">
             <Btn
