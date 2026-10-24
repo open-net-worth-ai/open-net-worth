@@ -8,7 +8,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act, cleanup } from '@testing-library/react'
-import { useAssetDetail, _clearDetailCache } from './useAssetDetail'
+import { useAssetDetail, _clearDetailCache, seedDetailCache } from './useAssetDetail'
 
 vi.mock('../api/client', () => ({ authFetch: vi.fn() }))
 import { authFetch } from '../api/client'
@@ -549,6 +549,94 @@ describe('useAssetDetail — on-demand background refresh (backend-initiated top
     await act(async () => {})
 
     expect(result.current.backgroundRefreshing).toBe(true)
+  })
+})
+
+// The Analysis tab dropped to "No key issues yet" while the bull/bear pass was still running:
+// the watch never re-armed after it lapsed or after a Refresh, nor on a cached navigation that
+// changed no has_narrative dependency.
+describe('useAssetDetail — the background watch re-arms when it should', () => {
+  const unnarrated = (stage: string | null = null) => ({
+    ...makeDetail(10),
+    position: { held: true, qty: 5 },
+    has_narrative: false,
+    key_issues_refresh_stage: stage,
+  })
+
+  it('arms for a cached reopen of a second not-yet-narrated asset', async () => {
+    seedDetailCache('nav-b', unnarrated() as never)
+    mockAuthFetch.mockResolvedValue(okJson(unnarrated()))
+
+    const { result, rerender } = renderHook(({ id }) => useAssetDetail(id), {
+      initialProps: { id: 'nav-a' },
+    })
+    await act(async () => {})
+    expect(result.current.backgroundRefreshing).toBe(true)
+
+    rerender({ id: 'nav-b' })
+    await act(async () => {})
+
+    expect(result.current.data).toBeTruthy()
+    expect(result.current.backgroundRefreshing).toBe(true)
+  })
+
+  it('restarts the watch after a Refresh that ends with the narrative still missing', async () => {
+    vi.useFakeTimers()
+    mockAuthFetch.mockImplementation((url: unknown) => {
+      if (typeof url === 'string' && url.includes('/refresh')) {
+        return Promise.resolve(okJson({ refreshed: true }))
+      }
+      return Promise.resolve(okJson(unnarrated()))
+    })
+
+    const { result } = renderHook(() => useAssetDetail('rearm-refresh'))
+    await act(async () => {})
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8 * 60_000)
+    })
+    expect(result.current.backgroundRefreshing).toBe(false)
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(result.current.refreshing).toBe(false)
+    expect(result.current.backgroundRefreshing).toBe(true)
+  })
+
+  it('keeps the fast poll alive while the backend stamps its pass as running, after the watch lapsed', async () => {
+    vi.useFakeTimers()
+    mockAuthFetch.mockResolvedValue(okJson(unnarrated('analysing')))
+
+    const { result } = renderHook(() => useAssetDetail('stage-poll'))
+    await act(async () => {})
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8 * 60_000)
+    })
+    expect(result.current.backgroundRefreshing).toBe(false)
+
+    const calls = mockAuthFetch.mock.calls.length
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(mockAuthFetch.mock.calls.length).toBeGreaterThan(calls)
+  })
+
+  it('does not fast-poll after the watch lapsed once the stage reads ready', async () => {
+    vi.useFakeTimers()
+    mockAuthFetch.mockResolvedValue(okJson(unnarrated('ready')))
+
+    renderHook(() => useAssetDetail('stage-ready'))
+    await act(async () => {})
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(8 * 60_000)
+    })
+
+    const calls = mockAuthFetch.mock.calls.length
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(mockAuthFetch.mock.calls.length).toBe(calls)
   })
 })
 

@@ -175,6 +175,12 @@ trading session: the close, the % change, the after-hours price, and a short par
 moved, with the articles it's based on. While the market is open the top row updates live. A
 session with no coverage says *"No notable coverage found"* instead of guessing.
 
+The **Analysis** tab opens with **Key Issues**: the bull and bear case on each big question for
+the stock. Lucius writes these in the background after you open the page, so a ticker you haven't
+looked at before shows **Generating** until they arrive, even if you click **Refresh** in the
+meantime. Refresh updates the news, facts and peers. If nothing is being written, you see
+*"No key issues yet"*; click **Refresh now** to try again.
+
 ## Run a scan now
 
 Intel scans on a schedule. To scan now, click **Scan** at the top of the page, then **Scan now**.

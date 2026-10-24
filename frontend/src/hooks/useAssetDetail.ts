@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDataVersion } from './useDataVersion'
 import { authFetch } from '../api/client'
-import type { AssetDetail } from '../types/assetDetail'
+import { keyIssuesPassActive, type AssetDetail } from '../types/assetDetail'
 
 // How old a last_refreshed_at can be before we auto-trigger a background refresh.
 const STALE_MS = 60 * 60 * 1000 // 1 hour
@@ -100,14 +100,8 @@ export function useAssetDetail(instrumentId: string): UseAssetDetailResult {
   // See BACKGROUND_REFRESH_WATCH_MS above — true only while this hook is WATCHING a
   // key_issues_refresh_stage it didn't itself trigger via a POST.
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false)
-  const backgroundWatchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const clearBackgroundWatch = useCallback(() => {
-    if (backgroundWatchTimer.current) {
-      clearTimeout(backgroundWatchTimer.current)
-      backgroundWatchTimer.current = null
-    }
-    setBackgroundRefreshing(false)
-  }, [])
+  // Bumped when a refresh settles with the narrative still missing, restarting the watch.
+  const [watchEpoch, setWatchEpoch] = useState(0)
 
   useEffect(() => {
     if (!refreshNotice) return
@@ -176,7 +170,12 @@ export function useAssetDetail(instrumentId: string): UseAssetDetailResult {
             )
           }
         }
-        await fetchData()
+        const fresh = await fetchData()
+        // The POST covers news/facts/peers only; the bull/bear pass the GET kicked off is still
+        // running, and by now the watch may have lapsed — keep watching for it.
+        if (fresh?.has_ticker && !fresh.has_narrative && instrumentId === activeKeyRef.current) {
+          setWatchEpoch((n) => n + 1)
+        }
       } finally {
         refreshingRef.current = false
         setRefreshing(false)
@@ -189,12 +188,6 @@ export function useAssetDetail(instrumentId: string): UseAssetDetailResult {
   // true first load), then revalidate in the background and auto-refresh if stale/empty.
   useEffect(() => {
     let alive = true
-    // A background watch armed for the PREVIOUS instrument (this hook instance is reused
-    // across navigation, not remounted — see activeKeyRef above) must not bleed into this one.
-    // Deferred to a microtask so the setState inside clearBackgroundWatch doesn't run
-    // synchronously in the effect body (react-hooks/set-state-in-effect — same pattern as
-    // useMatchReviews.ts's own load() defer).
-    void Promise.resolve().then(clearBackgroundWatch)
     const cached = detailCache.get(instrumentId)
     if (cached) {
       setData(cached)
@@ -244,7 +237,7 @@ export function useAssetDetail(instrumentId: string): UseAssetDetailResult {
     return () => {
       alive = false
     }
-  }, [instrumentId, fetchData, triggerRefresh, clearBackgroundWatch])
+  }, [instrumentId, fetchData, triggerRefresh])
 
   // Detects the backend's on-demand key_issues top-up (backend.monitoring.analyst.
   // trigger_on_demand_brief_refresh, fired from the GET route itself for a resolvable-ticker
@@ -261,23 +254,30 @@ export function useAssetDetail(instrumentId: string): UseAssetDetailResult {
   // armed the watch. Watching unconditionally is safe — the render layer already ORs
   // `refreshing || backgroundRefreshing`, so both being true at once (the concurrent cold-open
   // case) shows one banner, not two.
+  //
+  // Keyed on `instrumentId` and `watchEpoch` too, with the timer owned by the effect's cleanup:
+  // this hook instance is reused across navigation, and keying on has_narrative alone meant a
+  // cached reopen of a second not-yet-narrated asset changed no dependency, so the mount
+  // effect's clear of the PREVIOUS asset's watch left this one with none at all.
+  const needsWatch = !!data?.has_ticker && !data?.has_narrative
   useEffect(() => {
-    if (data?.has_narrative || !data?.has_ticker) {
-      // Deferred to a microtask — see the matching note on the mount effect's own
-      // clearBackgroundWatch call above (react-hooks/set-state-in-effect).
-      void Promise.resolve().then(clearBackgroundWatch)
-      return
+    let live = true
+    // Deferred to a microtask (react-hooks/set-state-in-effect — same pattern as
+    // useMatchReviews.ts's own load() defer); `live` drops it if a re-run superseded this one.
+    void Promise.resolve().then(() => {
+      if (live) setBackgroundRefreshing(needsWatch)
+    })
+    if (!needsWatch) {
+      return () => {
+        live = false
+      }
     }
-    if (backgroundWatchTimer.current) return // already watching this pass
-    setBackgroundRefreshing(true)
-    backgroundWatchTimer.current = setTimeout(() => {
-      backgroundWatchTimer.current = null
-      setBackgroundRefreshing(false)
-    }, BACKGROUND_REFRESH_WATCH_MS)
-  }, [data?.has_narrative, data?.has_ticker, clearBackgroundWatch])
-
-  // Stop the watch (and its timer) on unmount.
-  useEffect(() => clearBackgroundWatch, [clearBackgroundWatch])
+    const timer = setTimeout(() => setBackgroundRefreshing(false), BACKGROUND_REFRESH_WATCH_MS)
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+  }, [instrumentId, needsWatch, watchEpoch])
 
   // Keep the headline price / "As of" (and the position rail's market value) current
   // while the view stays open: poll the cheap GET every 60s, matching the backend's
@@ -306,14 +306,16 @@ export function useAssetDetail(instrumentId: string): UseAssetDetailResult {
   // asset_brief._land_analysis) become visible on screen as they land, instead of the page
   // sitting on the "Refreshing…" banner until the whole thing resolves. news[] itself is no
   // longer part of this landing sequence — it's served live from the evidence table on every
-  // read (asset_detail._live_news_for_instrument), not written by a refresh at all.
+  // read (asset_detail._live_news_for_instrument), not written by a refresh at all. Also while
+  // the backend stamps its key_issues pass as running, which can outlast both client flags.
+  const keyIssuesPassRunning = keyIssuesPassActive(data)
   useEffect(() => {
-    if (!refreshing && !backgroundRefreshing) return
+    if (!refreshing && !backgroundRefreshing && !keyIssuesPassRunning) return
     const timer = setInterval(() => {
       if (!document.hidden) void fetchData({ quiet: true })
     }, 2000)
     return () => clearInterval(timer)
-  }, [refreshing, backgroundRefreshing, fetchData])
+  }, [refreshing, backgroundRefreshing, keyIssuesPassRunning, fetchData])
 
   const manualRefresh = useCallback(async () => {
     await triggerRefresh(true)

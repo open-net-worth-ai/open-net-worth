@@ -8,6 +8,7 @@ import { useRegisterHandles, useRegisterScreenPrompts } from '../../lucius/useSc
 import type { ScreenHandle } from '../../state/screenSnapshot'
 import { fetchPositionIncome } from '../../api/portfolio'
 import type { IncomeSummary } from '../../types/portfolio'
+import { keyIssuesPassActive } from '../../types/assetDetail'
 import { Button, EmptyState, ErrorState, Panel, Text } from '../ui'
 import { Sunrise, Sunset, RotateCcw, TrendingUp, TrendingDown } from '../../ui/icons'
 // The underline tab bar already used on the Connectors page (`.rd-tabs`/`.rd-tab`) — reused
@@ -395,8 +396,14 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
   // the STOCK, generated for held/watched/ad-hoc alike, so this has no such gate. `refreshing`
   // covers a truly cold ad-hoc open (the news/facts/peers POST and the on-demand key_issues pass
   // both fire from the same page load); `backgroundRefreshing` covers a held/watched reopen
-  // (key_issues top-up only, no POST at all).
-  const keyIssuesGenerating = !hasIssues && (refreshing || backgroundRefreshing) && data.has_ticker
+  // (key_issues top-up only, no POST at all). `keyIssuesPassActive` is the backend's own stamp
+  // for that pass: both client flags can lapse while it still runs (a Refresh POST returns
+  // before the separate key_issues LLM call finishes), which dropped the Analysis tab to the
+  // "No key issues yet" empty state with the bull/bear seconds away.
+  const keyIssuesGenerating =
+    !hasIssues &&
+    (refreshing || backgroundRefreshing || keyIssuesPassActive(data)) &&
+    data.has_ticker
   // Drives the "Generating" state on KeyFactsCard/PeersCard (owner-reproduced live bug,
   // 2026-08-31, KODK/HPE/XOM: neither card had ANY loading state — Key Facts silently showed
   // only Symbol/Exchange with no indication more was coming, Peers rendered nothing at all).
@@ -1071,23 +1078,27 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                 </Panel>
               )}
 
-              {!hasNews && !hasIssues && !refreshing && !backgroundRefreshing && (
-                <EmptyState
-                  title="No news or analysis yet"
-                  body={
-                    data.has_ticker
-                      ? 'Click Refresh to fetch the latest news and key issues for this asset.'
-                      : 'This asset has no ticker symbol, so automated news fetching is unavailable.'
-                  }
-                  action={
-                    data.has_ticker ? (
-                      <Button variant="primary" size="sm" onClick={refresh} disabled={refreshing}>
-                        {refreshing ? 'Refreshing…' : 'Refresh now'}
-                      </Button>
-                    ) : undefined
-                  }
-                />
-              )}
+              {!hasNews &&
+                !hasIssues &&
+                !keyIssuesGenerating &&
+                !refreshing &&
+                !backgroundRefreshing && (
+                  <EmptyState
+                    title="No news or analysis yet"
+                    body={
+                      data.has_ticker
+                        ? 'Click Refresh to fetch the latest news and key issues for this asset.'
+                        : 'This asset has no ticker symbol, so automated news fetching is unavailable.'
+                    }
+                    action={
+                      data.has_ticker ? (
+                        <Button variant="primary" size="sm" onClick={refresh} disabled={refreshing}>
+                          {refreshing ? 'Refreshing…' : 'Refresh now'}
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                )}
             </>
           )}
 
@@ -1123,7 +1134,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
               ) : (
                 <EmptyState
                   title="No key issues yet"
-                  body="Bull and bear key issues will appear after a refresh."
+                  body="Lucius hasn't written the bull and bear case for this asset yet. Refresh to try again."
                   action={
                     data.has_ticker ? (
                       <Button variant="primary" size="sm" onClick={refresh} disabled={refreshing}>

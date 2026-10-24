@@ -302,6 +302,16 @@ export interface AssetDetail {
   key_issues_refresh_stage?: 'analysing' | 'ready' | 'retrying' | null
 }
 
+/** True while the backend's on-demand key_issues pass is genuinely running, per its own stamp.
+ *  Bounded server-side: analyst._reconcile_stuck_refresh_stages resets a stamp orphaned by a
+ *  process death back to "ready". */
+export function keyIssuesPassActive(
+  d: Pick<AssetDetail, 'key_issues_refresh_stage'> | null | undefined,
+): boolean {
+  const stage = d?.key_issues_refresh_stage
+  return stage === 'analysing' || stage === 'retrying'
+}
+
 export interface AssetPriceSeries {
   price_source_id: string
   currency: string
