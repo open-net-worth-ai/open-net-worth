@@ -162,9 +162,6 @@ export function Overview({
             <div className="acct-head-title" data-ctx-title="Accounts">
               Accounts
             </div>
-            <div className="acct-head-sub">
-              All your accounts — balances, debts, and what you're owed
-            </div>
           </div>
         </div>
         <div className="acct-head-actions">
