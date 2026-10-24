@@ -3323,10 +3323,14 @@ body.hide-amounts .mask.l::after {
     var(--bg) var(--radius-xl)
   );
 }
+/* Rounded to the frame's INNER radius so it clips its cells to the curve: the pinned Amount header
+   paints an opaque square, and a square clip let its corner cover the frame's rounded top-right
+   corner and its border (owner, 2026-10-25). */
 .acct-reg-headclip {
   height: 100%;
   overflow: hidden;
   scrollbar-width: none;
+  border-radius: calc(var(--radius-xl) - 1px) calc(var(--radius-xl) - 1px) 0 0;
 }
 .acct-reg-headclip::-webkit-scrollbar {
   width: 0;
