@@ -46,11 +46,54 @@ export function useMemoryFacts(notify: (message: string) => void) {
     }
   }
 
+  /** "Tell Lucius what to change" — one sentence that adds, rewrites or forgets facts. True
+   *  when the server applied it (even if nothing needed changing). */
+  async function instruct(instruction: string): Promise<boolean> {
+    try {
+      const r = await authFetch('/api/memory/instruct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instruction }),
+      })
+      const body = (await r.json().catch(() => ({}))) as Partial<InstructResult> & {
+        detail?: string
+      }
+      if (!r.ok) {
+        notify(
+          typeof body.detail === 'string' ? body.detail : `Could not update (HTTP ${r.status})`,
+        )
+        return false
+      }
+      void refresh()
+      notify(instructSummary(body))
+      return true
+    } catch {
+      notify('Could not reach the server. Try again.')
+      return false
+    }
+  }
+
   return {
+    instruct,
     facts: data?.facts ?? [],
     forget: (id: string) => remove(`${MEMORY_FACTS_KEY}/${encodeURIComponent(id)}`, 'Forgotten'),
     forgetAll: () => remove(MEMORY_FACTS_KEY, 'All memories forgotten'),
   }
+}
+
+interface InstructResult {
+  added: number
+  updated: number
+  removed: number
+}
+
+export function instructSummary(r: Partial<InstructResult>): string {
+  const parts = [
+    r.added ? `Added ${r.added}` : '',
+    r.updated ? `Updated ${r.updated}` : '',
+    r.removed ? `Forgot ${r.removed}` : '',
+  ].filter(Boolean)
+  return parts.length ? parts.join(' · ') : 'Nothing needed changing'
 }
 
 export function memorySourceLabel(source?: string): string {

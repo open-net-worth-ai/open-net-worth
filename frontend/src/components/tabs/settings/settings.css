@@ -1320,6 +1320,27 @@
   color: var(--faint);
   margin-top: 3px;
 }
+/* memory dialog footer: "Tell Lucius what to change" above the dialog's own buttons */
+.onw-settings .rd-mem-foot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.onw-settings .rd-mem-ask {
+  display: flex;
+  gap: 8px;
+}
+.onw-settings .rd-mem-ask .rd-input {
+  flex: 1;
+  min-width: 0;
+}
+.onw-settings .rd-mem-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
 
 .onw-settings a {
   color: var(--accent);

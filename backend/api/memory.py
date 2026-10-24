@@ -5,8 +5,9 @@ PUT    /api/memory/settings   body {"enabled": bool} → updated settings
 GET    /api/memory/facts      → {"facts": [...], "total": n}
 DELETE /api/memory/facts/{id} → {"ok": bool}
 DELETE /api/memory/facts      → {"ok": true, "deleted": n}
+POST   /api/memory/instruct   body {"instruction": str} → {"added", "updated", "removed"}
 
-Thin: validate → store → shape response. No business logic.
+Thin: validate → store (or the one ai.memory_instruct call) → shape response.
 
 Forgetting is deliberately reachable while memory is OFF: the toggle stops extraction and
 injection, but a user who turned memory off and now wants the already-stored facts GONE must
@@ -18,6 +19,9 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from backend.ai.memory import MemoryDisabledError
+from backend.ai.memory_instruct import apply_instruction
+from backend.core.errors import ExternalServiceError, ValidationError
 from backend.db.memory_settings_store import MemorySettingsStore
 from backend.db.memory_store import MemoryStore
 
@@ -26,6 +30,10 @@ router = APIRouter()
 
 class MemorySettingsPatch(BaseModel):
     enabled: bool
+
+
+class MemoryInstruction(BaseModel):
+    instruction: str
 
 
 @router.get("/api/memory/settings")
@@ -59,3 +67,17 @@ def forget_all_memory_facts():
     facts = store.all_facts()
     deleted = sum(1 for f in facts if store.remove_by_id(f.get("id", "")))
     return {"ok": True, "deleted": deleted}
+
+
+@router.post("/api/memory/instruct")
+async def instruct_memory(body: MemoryInstruction):
+    """The memory dialog's "Tell Lucius what to change": add, rewrite or forget facts from one
+    typed sentence. Unlike forgetting, it needs memory ON — it writes."""
+    try:
+        return await apply_instruction(body.instruction)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from exc
+    except MemoryDisabledError as exc:
+        raise HTTPException(status_code=409, detail=exc.message) from exc
+    except ExternalServiceError as exc:
+        raise HTTPException(status_code=502, detail=exc.message) from exc

@@ -678,61 +678,71 @@ If there is nothing worth remembering, return {{"new": [], "updates": [], "remov
         logger.warning("memory extraction returned unparseable reply")
         return
 
-    known_ids = {f["id"] for f in store.all_facts()}
-
-    for upd in parsed.get("updates", []) or []:
-        if not isinstance(upd, dict):
-            continue
-        fid = upd.get("id")
-        if fid not in known_ids:
-            # Model hallucinated an id — treat as new instead of dropping it
-            parsed.setdefault("new", []).append(upd)
-            continue
-        patch = _guard_perishable_durable(
-            {
-                "content": (upd.get("content") or "").strip(),
-                "tier": _coerce_tier(upd.get("tier")),
-                "expires_at": _norm_expiry(upd.get("expires_at")),
-            },
-            today,
-        )
-        store.update_by_id(fid, {**patch, "updated_at": _now()})
-
-    for fid in parsed.get("remove", []) or []:
-        if fid in known_ids:
-            store.remove_by_id(fid)
-
-    for new in parsed.get("new", []) or []:
-        if not isinstance(new, dict):
-            continue
-        content = (new.get("content") or "").strip()
-        if not content:
-            continue
-        guarded = _guard_perishable_durable(
-            {
-                "content": content,
-                "tier": _coerce_tier(new.get("tier")),
-                "expires_at": _norm_expiry(new.get("expires_at")),
-            },
-            today,
-        )
-        store.insert(
-            {
-                "id": new_id("mem"),
-                "content": guarded["content"],
-                "tier": guarded["tier"],
-                "source": "implicit",
-                "expires_at": guarded["expires_at"],
-                "created_at": _now(),
-                "updated_at": _now(),
-            }
-        )
+    apply_memory_ops(store, parsed, today, source="implicit")
 
     if session_id:
         _save_cursor(session_id, len(history))
 
     if _should_consolidate(len(store.active_facts())):
         await consolidate()
+
+
+def apply_memory_ops(
+    store: MemoryStore, parsed: dict, today: str, *, source: str, guard: bool = True
+) -> dict:
+    """Apply one {"new", "updates", "remove"} reply to the store; return what changed.
+
+    Shared by extraction (source "implicit") and a typed instruction from the memory dialog
+    (source "explicit" — the user's own words, so an edited fact becomes theirs and, like
+    ``add_explicit``, is saved without the perishable-figure demotion). An update naming an
+    unknown id is treated as new rather than dropped.
+    """
+    known_ids = {f["id"] for f in store.all_facts()}
+    counts = {"added": 0, "updated": 0, "removed": 0}
+
+    def _shape(raw: dict) -> dict:
+        fact = {
+            "content": (raw.get("content") or "").strip(),
+            "tier": _coerce_tier(raw.get("tier")),
+            "expires_at": _norm_expiry(raw.get("expires_at")),
+        }
+        return _guard_perishable_durable(fact, today) if guard else fact
+
+    new_items = list(parsed.get("new", []) or [])
+    for upd in parsed.get("updates", []) or []:
+        if not isinstance(upd, dict):
+            continue
+        if upd.get("id") not in known_ids:
+            new_items.append(upd)
+            continue
+        patch = _shape(upd)
+        if not patch["content"]:
+            continue
+        extra = {"source": "explicit"} if source == "explicit" else {}
+        store.update_by_id(upd["id"], {**patch, **extra, "updated_at": _now()})
+        counts["updated"] += 1
+
+    for fid in parsed.get("remove", []) or []:
+        if fid in known_ids and store.remove_by_id(fid):
+            counts["removed"] += 1
+
+    for new in new_items:
+        if not isinstance(new, dict):
+            continue
+        fact = _shape(new)
+        if not fact["content"]:
+            continue
+        store.insert(
+            {
+                "id": new_id("mem"),
+                **fact,
+                "source": source,
+                "created_at": _now(),
+                "updated_at": _now(),
+            }
+        )
+        counts["added"] += 1
+    return counts
 
 
 def _norm_expiry(value) -> str | None:

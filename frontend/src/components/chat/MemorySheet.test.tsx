@@ -15,6 +15,7 @@ function serve(enabled: boolean, facts: { id: string; content: string; source?: 
   authFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (url === '/api/memory/settings') return json({ enabled })
     if (init?.method === 'DELETE') return json({ ok: true })
+    if (url === '/api/memory/instruct') return json({ added: 1, updated: 1, removed: 0 })
     return json({ facts, total: facts.length })
   })
 }
@@ -64,5 +65,35 @@ describe('MemorySheet', () => {
     serve(false, [])
     render(<MemorySheet onClose={vi.fn()} />)
     expect(await screen.findByText(/Memory is off/)).toBeTruthy()
+  })
+
+  it('sends a typed change to the instruct route and says what changed', async () => {
+    serve(true, [{ id: 'f1', content: 'Rent goes up every March' }])
+    render(<MemorySheet onClose={vi.fn()} />)
+    await screen.findByText('Rent goes up every March')
+    const box = screen.getByLabelText('Tell Lucius what to remember or change')
+    fireEvent.change(box, { target: { value: 'my dog is Beans; rent rises in April now' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Update' }))
+    await waitFor(() =>
+      expect(authFetch).toHaveBeenCalledWith(
+        '/api/memory/instruct',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ instruction: 'my dog is Beans; rent rises in April now' }),
+        }),
+      ),
+    )
+    expect(await screen.findByText('Added 1 · Updated 1')).toBeTruthy()
+    expect((box as HTMLInputElement).value).toBe('')
+  })
+
+  it('keeps the change box closed while memory is off', async () => {
+    serve(false, [])
+    render(<MemorySheet onClose={vi.fn()} />)
+    await screen.findByText(/Memory is off/)
+    expect(
+      (screen.getByLabelText('Tell Lucius what to remember or change') as HTMLInputElement)
+        .disabled,
+    ).toBe(true)
   })
 })

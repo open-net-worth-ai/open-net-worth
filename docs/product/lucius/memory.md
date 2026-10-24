@@ -1,12 +1,12 @@
 ---
 title: Memory
-description: What Lucius remembers about you between conversations, how to tell him to remember or forget something, and how to review, switch off or clear it.
+description: What Lucius remembers about you between conversations, how to tell him to remember, change or forget something, and how to review, switch off or clear it.
 category: lucius
 order: 50
 audience: [user]
 status: stable
 related: [lucius/overview, lucius/models-and-cost, operations/security-and-privacy]
-keywords: [memory, remember, forget, facts, privacy, stored memories]
+keywords: [memory, remember, forget, edit memory, add memory, facts, privacy, stored memories]
 ---
 
 # Memory
@@ -46,6 +46,21 @@ If memory is switched off, the list says so at the top.
 Forgetting a fact takes effect from Lucius's next reply. It doesn't change your ledger or
 profile.
 
+## Change or add facts
+
+At the bottom of the memory list, type what to change in **Tell Lucius what to remember or
+change…** and click **Update**:
+
+- *"My dog's name is Beans"* — adds a fact.
+- *"Rent goes up in April now, not March"* — rewrites the fact it corrects.
+- *"I paid off the car loan"* — forgets what's no longer true.
+
+One sentence can do all three. The list refreshes and a note says what changed — for example
+**Added 1 · Updated 1**. Anything changed this way shows as **You told Lucius**.
+
+It's one small AI call on the **Memory** task model, billed like the rest of memory. It needs
+memory switched on; forgetting doesn't.
+
 ## Switch it off
 
 In **Settings → Chat & Memory**, turn off **Memory extraction & injection**. Lucius then stops
@@ -76,8 +91,8 @@ configured, as part of a normal request — the same as anything you type in cha
 ## Troubleshooting
 
 **Lucius doesn't remember something I told him.** Check **Memory extraction & injection** is on,
-and look for the fact in the memory list. If it isn't there, tell him directly: *"remember that
-…"*.
+and look for the fact in the memory list. If it isn't there, type it into the box at the bottom
+of the list, or tell him in chat: *"remember that …"*.
 
 **He keeps bringing up something that's no longer true.** Find it in the memory list and click
 **Forget**, or tell him *"forget that …"*.
