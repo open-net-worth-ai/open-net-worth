@@ -5570,18 +5570,10 @@ body.hide-amounts .mask::after {
 
 /* ════════════════════ Lucius docked side panel (resizable) ════════════════════ */
 /* Reflow model: the panel publishes its width as --chat-width; in push mode the whole shell
-   takes margin-right so the Plan content column narrows live as the panel is dragged. While
-   dragging, transitions are killed so the edge tracks the cursor 1:1 — this comment used to
-   name `lx-resizing` for that, but no such class is set anywhere in the app and the rule it
-   described did not exist (owner-reported drag lag, 2026-09-15). The real marker is
-   `body.chat-resizing`, set by ChatPanel's own pointer handlers; see index.css's twin rule on
-   `.app-shell`, which carries the same transition and had the same bug. */
-.onw-root {
-  transition: margin-right 0.26s cubic-bezier(0.32, 0.72, 0, 1);
-}
-body.chat-resizing .onw-root {
-  transition: none;
-}
+   takes margin-right so the Plan content column narrows as the panel opens or is dragged. The
+   margin is deliberately NOT transitioned — same as `.app-shell` in index.css: easing it
+   re-laid-out the whole screen every frame of the panel's slide (owner, 2026-10-25) and lagged
+   the edge behind the cursor while dragging (2026-09-15). */
 
 /* launcher pill (shown when the panel is closed) */
 

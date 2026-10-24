@@ -4397,8 +4397,10 @@ select.acct-addin {
    is too wide (`.overflow`: the Lucius panel open beside the register) do the rows scroll sideways
    — every chosen column stays reachable — and the amount pins to the right edge, so the figure is
    never scrolled out of sight (persona QA 2026-10-14: "amounts off-screen"); the other columns
-   slide under it, and its left shadow says so. The cell paints its own opaque background, one per row state, and
-   reaches over the row's 18px padding so nothing shows beside it. */
+   slide under it, behind a crisp 1px edge in the row-border colour (a soft drop shadow read as a
+   blurred smudge of a line beside the amount — owner, 2026-10-25). The cell paints its own opaque
+   background, one per row state, and reaches over the row's 18px padding so nothing shows beside
+   it. */
 .acct-reg.overflow:not(.cards) .acct-td-amt,
 .acct-reg.overflow:not(.cards) .acct-reg-head > .acct-h:last-child {
   position: sticky;
@@ -4408,7 +4410,7 @@ select.acct-addin {
   padding-right: 26px;
   padding-left: 10px;
   background: var(--surface);
-  box-shadow: -10px 0 8px -8px var(--line-strong);
+  border-left: 1px solid var(--line);
 }
 .acct-reg.overflow:not(.cards) .acct-reg-head > .acct-h:last-child {
   justify-content: flex-end;

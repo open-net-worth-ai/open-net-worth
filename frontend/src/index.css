@@ -301,22 +301,14 @@
     background: var(--bg);
     display: flex;
     min-height: 100vh;
-    transition: margin-right 0.25s ease;
   }
+  /* The margin is NOT transitioned: the content takes its new width ONCE, when the panel opens or
+     closes, while the panel itself slides on a transform (.lx-side). Easing the margin re-laid-out
+     the whole screen every frame for 0.25s — columns re-squeezed, labels folded and cells
+     re-truncated mid-slide, which read as a janky animation (owner, 2026-10-25). It also lagged
+     the shell behind the panel edge during a drag-resize (2026-09-15). */
   .app-shell.chat-open {
     margin-right: var(--chat-width, 400px);
-  }
-  /* The transition above is for the panel OPENING/CLOSING (one discrete 400px move). During a
-     drag-resize it is actively harmful: ChatPanel republishes `--chat-width` on every pointer
-     move, so the margin is forever easing toward a target that already moved, leaving the
-     shell ~0.25s behind the panel edge — a gap that opens while you drag inward and only
-     "settles" once you let go (owner-reported, 2026-09-15). ChatPanel already marks the drag
-     with `body.chat-resizing`; this is the rule that class was missing. Note plan.css's
-     `.onw-root` comment has claimed since it was written that dragging kills transitions "via
-     lx-resizing on body" — no such class is set anywhere in the app, so the kill-switch was
-     described but never implemented. Both selectors are handled now. */
-  body.chat-resizing .app-shell {
-    transition: none;
   }
   @media (max-width: 639.98px) {
     /* Was `16px !important` to stop iOS focus-zoom; redundant because index.html ships
