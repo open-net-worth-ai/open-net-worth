@@ -54,7 +54,7 @@ import { dataChangeTurns } from './dataChangeTurns'
 import { takeSendIntent } from '../../state/luciusSendIntent'
 import { useNavigate } from '@tanstack/react-router'
 import { isBackgroundConversation, type ConversationMeta } from '../../hooks/useConversations'
-import { ChevronRight, Eraser, FolderLock, Menu, SquarePen } from '../../ui/icons'
+import { Brain, ChevronRight, FolderLock, Menu, SquarePen } from '../../ui/icons'
 import { ModelPicker, Skeleton } from '../ui'
 import { ConversationApprovalPicker } from './ConversationApprovalPicker'
 import { computeHomeEmpty } from './homeEmpty'
@@ -71,6 +71,7 @@ import { usePointerResize } from '../../hooks/usePointerResize'
 const DocumentsSheet = lazy(() =>
   import('../vault/DocumentsSheet').then((m) => ({ default: m.DocumentsSheet })),
 )
+const MemorySheet = lazy(() => import('./MemorySheet').then((m) => ({ default: m.MemorySheet })))
 
 /** The kickoff message that makes Lucius speak first on a brand-new instance. Harness-authored:
  *  never rendered, never used to name a conversation. Mirrors `ai.tool_text.ONBOARDING_INIT`. */
@@ -441,6 +442,7 @@ export function ChatPanel({
   // with, so "View all runs" lands on runs rather than making you pick again.
   const [menuOpen, setMenuOpen] = useState(false)
   const [documentsOpen, setDocumentsOpen] = useState(false)
+  const [memoryOpen, setMemoryOpen] = useState(false)
   const [browsingConvs, setBrowsingConvs] = useState<ConversationKind | null>(null)
   // One ordering for the header, the sidebar and the browser — they disagreed for a build,
   // and a switcher that orders its rows differently from the list behind it is worse than
@@ -1201,6 +1203,11 @@ export function ChatPanel({
           <DocumentsSheet onClose={() => setDocumentsOpen(false)} />
         </Suspense>
       )}
+      {!homeMode && memoryOpen && (
+        <Suspense fallback={null}>
+          <MemorySheet onClose={() => setMemoryOpen(false)} />
+        </Suspense>
+      )}
       {!homeMode && menuOpen && (
         <ConversationMenu
           groups={convGroups}
@@ -1277,29 +1284,21 @@ export function ChatPanel({
 
             <button
               className="lx-side-x"
+              onClick={() => setMemoryOpen(true)}
+              title="Memory"
+              aria-label="Memory"
+            >
+              <Brain size={15} />
+            </button>
+
+            <button
+              className="lx-side-x"
               onClick={handleNewConversation}
               title="New conversation"
               aria-label="New conversation"
             >
               <SquarePen size={15} />
             </button>
-
-            {messages.length > 0 && (
-              <button
-                className="lx-side-x"
-                title="Clear conversation"
-                aria-label="Clear conversation"
-                onClick={() => {
-                  // Keep the composer draft — clearing affects history only. Not gated on
-                  // `streaming` (same reasoning as handleNewConversation above). No "already
-                  // empty" guard needed here — this button only renders when
-                  // messages.length > 0, so the conversation being left is always a real one.
-                  createConversation()
-                }}
-              >
-                <Eraser size={15} />
-              </button>
-            )}
 
             <button
               className="lx-side-x"

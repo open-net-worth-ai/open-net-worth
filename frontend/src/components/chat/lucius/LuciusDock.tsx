@@ -29,7 +29,7 @@ import { CompactingActivity } from '../CompactingActivity'
 import { TurnActivity, turnProgress } from '../TurnActivity'
 import { Spark } from '../../../lucius/identity'
 import { useHasAi } from '../../../hooks/useHasAi'
-import { SquarePen, Eraser, PanelRight, ChevronDown } from '../../../ui/icons'
+import { SquarePen, PanelRight, ChevronDown } from '../../../ui/icons'
 import type { Message } from '../../../types/chat'
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -369,10 +369,10 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
         <div className="lx-dock-head">
           <LuciusLabel />
           <div className="lx-dock-head-actions">
-            {/* Trash: clear the conversation — shown only when there are messages.
-                Neither button below gates on `streaming` (RFC concurrent-conversations,
-                acceptance B4): starting or clearing a conversation is a DIFFERENT
-                conversation's slice than whatever is mid-turn, so it can never disturb it. */}
+            {/* New conversation — shown only when there are messages. Not gated on
+                `streaming` (RFC concurrent-conversations, acceptance B4): starting a
+                conversation is a DIFFERENT conversation's slice than whatever is mid-turn, so
+                it can never disturb it. */}
             {messages.length > 0 && (
               <button
                 className="lx-dock-collapse"
@@ -389,21 +389,6 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
                 title="New conversation"
               >
                 <SquarePen size={14} />
-              </button>
-            )}
-            {messages.length > 0 && (
-              <button
-                className="lx-dock-collapse"
-                onMouseDown={(e) => e.preventDefault()}
-                title="Clear conversation"
-                aria-label="Clear conversation"
-                onClick={() => {
-                  // Keep the composer draft — clearing affects history only. `persist: false`,
-                  // same reasoning as the New button above.
-                  createConversation()
-                }}
-              >
-                <Eraser size={14} />
               </button>
             )}
             <button

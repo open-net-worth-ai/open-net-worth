@@ -475,35 +475,20 @@ describe('LuciusDock', () => {
     expect(clearBtn?.title).toBe('New conversation')
   })
 
-  // ── DOCK1: distinct "Clear conversation" button (mirrors the side panel) ────
+  // ── The dock has no "Clear conversation" button: it did exactly what New conversation
+  // does, one button over. The side panel's slot went to Memory instead.
 
-  it('does not show the "Clear conversation" button when messages is empty', () => {
-    mockChatState.messages = []
+  it('has no "Clear conversation" button', () => {
+    mockChatState.messages = [{ id: 'm1', role: 'assistant', text: 'answer' }]
     const { container } = render(<LuciusDock onExpand={vi.fn()} />)
     fireEvent.click(container.querySelector('button.lx-dock-pill') as HTMLButtonElement)
     expect(container.querySelector('button[aria-label="Clear conversation"]')).toBeNull()
   })
 
-  it('shows the "Clear conversation" button when messages exist and calls createConversation on click', () => {
-    mockChatState.messages = [
-      { id: 'm1', role: 'user', text: 'hello' },
-      { id: 'm2', role: 'assistant', text: 'hi' },
-    ]
-    const { container } = render(<LuciusDock onExpand={vi.fn()} />)
-    fireEvent.click(container.querySelector('button.lx-dock-pill') as HTMLButtonElement)
-    const clearBtn = container.querySelector(
-      'button[aria-label="Clear conversation"]',
-    ) as HTMLButtonElement
-    expect(clearBtn).not.toBeNull()
-    expect(clearBtn.title).toBe('Clear conversation')
-    fireEvent.click(clearBtn)
-    expect(mockChatState.createConversation).toHaveBeenCalledOnce()
-  })
-
-  // ── RFC concurrent-conversations, acceptance B4: neither button guards on `streaming`
+  // ── RFC concurrent-conversations, acceptance B4: the New button does not guard on `streaming`
   // any more. A turn belongs to its OWN conversation's slice now (ADR
   // docs/adr/2026-08-06-a-turn-belongs-to-its-conversation-not-to-the-view.md), so starting
-  // or clearing a DIFFERENT conversation can never disturb one that is mid-turn — the old
+  // a DIFFERENT conversation can never disturb one that is mid-turn — the old
   // guard was never protecting the viewed turn, only papering over the ownership bug.
 
   it('calls createConversation via the "New conversation" button even while streaming', () => {
@@ -529,30 +514,6 @@ describe('LuciusDock', () => {
     ) as HTMLButtonElement
     expect(newBtn.disabled).toBe(false)
     fireEvent.click(newBtn)
-    expect(mockChatState.createConversation).toHaveBeenCalledOnce()
-  })
-
-  it('calls createConversation via the "Clear conversation" button even while streaming', () => {
-    mockChatState.messages = [{ id: 'm1', role: 'assistant', text: 'answer' }]
-    mockChatState.streaming = true
-    const { container } = render(<LuciusDock onExpand={vi.fn()} />)
-    fireEvent.click(container.querySelector('button.lx-dock-pill') as HTMLButtonElement)
-    const clearBtn = container.querySelector(
-      'button[aria-label="Clear conversation"]',
-    ) as HTMLButtonElement
-    fireEvent.click(clearBtn)
-    expect(mockChatState.createConversation).toHaveBeenCalledOnce()
-  })
-
-  it('calls createConversation when the "Clear conversation" button is clicked while NOT streaming', () => {
-    mockChatState.messages = [{ id: 'm1', role: 'assistant', text: 'answer' }]
-    mockChatState.streaming = false
-    const { container } = render(<LuciusDock onExpand={vi.fn()} />)
-    fireEvent.click(container.querySelector('button.lx-dock-pill') as HTMLButtonElement)
-    const clearBtn = container.querySelector(
-      'button[aria-label="Clear conversation"]',
-    ) as HTMLButtonElement
-    fireEvent.click(clearBtn)
     expect(mockChatState.createConversation).toHaveBeenCalledOnce()
   })
 

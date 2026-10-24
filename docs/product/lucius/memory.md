@@ -33,11 +33,15 @@ it follows the conversation's [approval mode](permissions.md) like any other.
 
 ## Review what he knows
 
-1. Open **Settings → Chat & Memory**.
-2. Under **Memory**, **Stored memories** shows how many facts there are. Click **Review…**.
-3. The list shows each fact, when it changed, and where it came from — **You told Lucius** or
+Click the **Memory** button (the brain) at the top of the chat side panel, next to
+**Documents**. You can also get there from **Settings → Chat & Memory → Stored memories →
+Review…**.
+
+1. The list shows each fact, when it changed, and where it came from — **You told Lucius** or
    **Learned in chat**. Use the search box to find one.
-4. Click **Forget** next to anything wrong or out of date.
+2. Click **Forget** next to anything wrong or out of date.
+
+If memory is switched off, the list says so at the top.
 
 Forgetting a fact takes effect from Lucius's next reply. It doesn't change your ledger or
 profile.
@@ -52,7 +56,7 @@ remove them, see below.
 
 ## Clear everything
 
-In the **Review…** list, click **Forget everything**, then **Confirm — forget all N**. This
+In the memory list, click **Forget everything**, then **Confirm — forget all N**. This
 works whether memory is on or off.
 
 ## How it works
@@ -72,10 +76,10 @@ configured, as part of a normal request — the same as anything you type in cha
 ## Troubleshooting
 
 **Lucius doesn't remember something I told him.** Check **Memory extraction & injection** is on,
-and look for the fact under **Review…**. If it isn't there, tell him directly: *"remember that
+and look for the fact in the memory list. If it isn't there, tell him directly: *"remember that
 …"*.
 
-**He keeps bringing up something that's no longer true.** Find it under **Review…** and click
+**He keeps bringing up something that's no longer true.** Find it in the memory list and click
 **Forget**, or tell him *"forget that …"*.
 
 ## Related pages

@@ -12,17 +12,13 @@ import {
 import { authFetch } from '../../../../api/client'
 import { setCachedQueryData, useCachedFetchState } from '../../../../state/queryCache'
 import { fDate } from '../../../../utils/format'
+import {
+  MEMORY_FACTS_KEY,
+  memorySourceLabel,
+  useMemoryFacts,
+} from '../../../../hooks/useMemoryFacts'
 import { Btn, Modal, Panel, Toggle, useSectionBusy } from '../ds'
 import type { SectionProps } from '../ds'
-
-interface MemoryFact {
-  id: string
-  content: string
-  source?: string
-  tier?: string
-  updated_at?: string
-  created_at?: string
-}
 
 async function getJson<T>(path: string): Promise<T> {
   const r = await authFetch(path)
@@ -32,49 +28,16 @@ async function getJson<T>(path: string): Promise<T> {
 
 // ── stored memories ──────────────────────────────────────────────────────────
 function MemoryModal({ onClose, toast }: { onClose: () => void; toast: SectionProps['toast'] }) {
-  const { data, refresh } = useCachedFetchState<{ facts: MemoryFact[]; total: number }>(
-    '/api/memory/facts',
-    () => getJson<{ facts: MemoryFact[]; total: number }>('/api/memory/facts'),
-    { staleTime: 0 },
-  )
+  const { facts, forget, forgetAll } = useMemoryFacts(toast)
   const [q, setQ] = useState('')
   // "Forget everything" is destructive and has no undo: a REST delete outside an AI turn
   // takes no checkpoint, so the only recovery is yesterday's backup. Arm it like every other
   // destructive control in Settings rather than firing on one click.
   const [armedAll, setArmedAll] = useState(false)
-  const facts = data?.facts ?? []
   const needle = q.trim().toLowerCase()
   const shown = needle
     ? facts.filter((f) => (f.content + ' ' + (f.source || '')).toLowerCase().includes(needle))
     : facts
-
-  async function forget(id: string) {
-    try {
-      const r = await authFetch(`/api/memory/facts/${encodeURIComponent(id)}`, { method: 'DELETE' })
-      if (!r.ok) {
-        toast(`Could not forget (HTTP ${r.status})`)
-        return
-      }
-      void refresh()
-      toast('Forgotten')
-    } catch {
-      toast('Could not reach the server. Try again.')
-    }
-  }
-
-  async function forgetAll() {
-    try {
-      const r = await authFetch('/api/memory/facts', { method: 'DELETE' })
-      if (!r.ok) {
-        toast(`Could not forget (HTTP ${r.status})`)
-        return
-      }
-      void refresh()
-      toast('All memories forgotten')
-    } catch {
-      toast('Could not reach the server. Try again.')
-    }
-  }
 
   return (
     <Modal
@@ -121,7 +84,7 @@ function MemoryModal({ onClose, toast }: { onClose: () => void; toast: SectionPr
               <div>
                 <div className="rd-fact-t">{f.content}</div>
                 <div className="rd-fact-meta">
-                  <span>{f.source === 'explicit' ? 'You told Lucius' : 'Learned in chat'}</span>
+                  <span>{memorySourceLabel(f.source)}</span>
                   <span>{f.updated_at ? fDate(f.updated_at) : ''}</span>
                 </div>
               </div>
@@ -154,8 +117,8 @@ export function ChatMemorySection({ toast }: SectionProps) {
     { staleTime: 0 },
   )
   const memoryFacts = useCachedFetchState<{ total: number }>(
-    '/api/memory/facts',
-    () => getJson<{ total: number }>('/api/memory/facts'),
+    MEMORY_FACTS_KEY,
+    () => getJson<{ total: number }>(MEMORY_FACTS_KEY),
     { staleTime: 0 },
   )
   const [memOpen, setMemOpen] = useState(false)
