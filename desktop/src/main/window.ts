@@ -241,6 +241,12 @@ export class DesktopWindow {
     try { return { screen: new URL(url).pathname, error: '' }; } catch { return { screen: '', error: '' }; }
   }
 
+  // The countdown on "Can't reach your server": how long until the next check.
+  showReconnectIn(ms: number): void {
+    const contents = this.lifetime.current();
+    if (contents && this.serverOrigin && contents.getURL() === this.recoveryUrl) contents.send('desktop-connection:reconnect-in', ms);
+  }
+
   async showServerRecovery(loading = false): Promise<void> {
     if (this.closing) return;
     this.nativePage = loading ? { screen: 'opening your server', error: '' } : { screen: 'recovery: can’t reach your server', error: 'The server could not be reached.' };

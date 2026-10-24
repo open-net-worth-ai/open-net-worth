@@ -60,6 +60,8 @@ export interface ServerWait {
   fetcher?: typeof fetch;
   sleep?: (ms: number, signal: AbortSignal) => Promise<unknown>;
   now?: () => number;
+  // Told how long until the next probe, before each pause.
+  onPause?: (ms: number) => void;
 }
 
 // A server on this machine (`onw autostart`) boots beside the app at login and refuses connections
@@ -72,6 +74,7 @@ export async function waitForServer(origin: string, signal: AbortSignal, wait: S
   for (;;) {
     try { return await validateServer(origin, signal, fetcher); }
     catch (error) { if (signal.aborted || now() + pause > deadline) throw error; }
+    wait.onPause?.(pause);
     await sleep(pause, signal);
     if (signal.aborted) throw new Error('Stopped waiting for the server.');
     pause = Math.min(pause * 2, wait.maxDelayMs ?? 5000);

@@ -137,8 +137,10 @@ export class ConnectionLoader {
     const signal = this.waiting && !this.waiting.signal.aborted ? this.waiting.signal : this.takeOver();
     await main.showServerRecovery();
     const origin = main.serverOrigin;
+    const onPause = (ms: number) => { if (!signal.aborted) main.showReconnectIn(ms); };
+    onPause(RECONNECT_FIRST_MS);
     void this.wait(RECONNECT_FIRST_MS, signal)
-      .then(() => waitForServer(origin, signal, { patienceMs: Infinity, firstDelayMs: RECONNECT_FIRST_MS, maxDelayMs: RECONNECT_MAX_MS, sleep: this.wait }))
+      .then(() => waitForServer(origin, signal, { patienceMs: Infinity, firstDelayMs: RECONNECT_FIRST_MS, maxDelayMs: RECONNECT_MAX_MS, sleep: this.wait, onPause }))
       .then(() => this.context.serialize(async () => { if (!signal.aborted && this.context.window() === main) await this.retry(); }))
       .catch(() => {});
   }

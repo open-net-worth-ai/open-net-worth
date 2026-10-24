@@ -37,6 +37,15 @@ test('the unreachable-server page offers a local book without dropping its other
   assert.match(html, /onwNativeConnection\.useLocal\(\)/);
 });
 
+test('the unreachable-server page counts down to its next check; a local failure has no countdown', () => {
+  const html = recoveryPage(false, null, '', 'dark', 'opening', 'http://localhost:8080');
+  assert.match(html, /id="reconnect"/);
+  assert.match(html, /onReconnectIn/);
+  assert.ok(html.includes('Trying again in ${left}s…') && html.includes('Checking…'));
+  const local = recoveryPage(false, null, '/Users/example/Book', 'dark');
+  assert.doesNotMatch(local, /id="reconnect"|onReconnectIn/);
+});
+
 test('a generic local failure no longer claims the book was kept and shows its folder', () => {
   const html = recoveryPage(false, null, '/Users/example/Book', 'dark');
   assert.doesNotMatch(html, /has been kept/);

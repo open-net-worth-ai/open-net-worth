@@ -74,8 +74,9 @@ download screens instead. Your last local book is remembered; switch back from t
 When the app starts, it waits up to a minute for the server to answer, so a server on this
 computer that starts at login (`onw autostart install`) has time to come up. If it still can't be
 reached, you see **Can't reach your server.** with **Try again**, **Change connection…** and
-**Use a book on this computer**. The app keeps checking in the background on that screen, and
-opens the server by itself as soon as it answers.
+**Use a book on this computer**. The app keeps checking in the background on that screen — it
+shows **Trying again in 8s…** counting down to the next check, waiting a little longer each time up
+to 15 seconds — and opens the server by itself as soon as it answers.
 
 ## Keep it running in the background
 

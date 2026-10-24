@@ -91,5 +91,6 @@ if (process.isMainFrame) {
     back: () => ipcRenderer.invoke('desktop-connection:back'),
     retry: () => ipcRenderer.invoke('desktop-connection:retry'),
     useLocal: () => ipcRenderer.invoke('desktop-connection:use-local'),
+    onReconnectIn: (callback: (ms: number) => void) => { ipcRenderer.on('desktop-connection:reconnect-in', (_event, ms: unknown) => { if (typeof ms === 'number' && Number.isFinite(ms) && ms >= 0) callback(ms); }); },
   }));
 }
