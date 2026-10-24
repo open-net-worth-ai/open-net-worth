@@ -2677,7 +2677,7 @@ body.hide-amounts .mask::after {
   padding: 0;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 50%;
+  border-radius: 9px;
   color: var(--muted);
   cursor: pointer;
 }
