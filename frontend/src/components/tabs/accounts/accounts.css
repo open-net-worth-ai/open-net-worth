@@ -4408,7 +4408,11 @@ select.acct-addin {
   z-index: 2;
   margin-right: -18px;
   padding-right: 26px;
-  padding-left: 10px;
+  /* Reach back over the 10px column gap, so the edge sits where the neighbouring column's resize
+     divider is drawn (at that column's right edge) and covers it — with the edge at the far side
+     of the gap, the two showed as a double line 10px apart (owner, 2026-10-25). */
+  margin-left: -10px;
+  padding-left: 20px;
   background: var(--surface);
   border-left: 1px solid var(--line);
 }
