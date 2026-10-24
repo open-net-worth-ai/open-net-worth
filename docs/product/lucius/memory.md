@@ -39,9 +39,9 @@ Review…**.
 
 1. The list shows each fact, when it changed, and where it came from — **You told Lucius** or
    **Learned in chat**. Use the search box to find one.
-2. Click **Edit** to fix a fact's wording — change the text, then **Save** (or press Enter).
+2. Hover a fact and click **Edit** (the pencil) to fix its wording — change the text, then **Save** (or press Enter).
    **Cancel** or Esc leaves it as it was.
-3. Click **Forget** next to anything wrong or out of date.
+3. Click **Forget** (the bin) next to anything wrong or out of date.
 
 If memory is switched off, the list says so at the top.
 
@@ -51,7 +51,7 @@ profile.
 ## Change or add facts
 
 At the bottom of the memory list, type what to change in **Tell Lucius what to remember or
-change…** and click **Update**:
+change** and press Enter, or click the arrow:
 
 - *"My dog's name is Beans"* — adds a fact.
 - *"Rent goes up in April now, not March"* — rewrites the fact it corrects.
