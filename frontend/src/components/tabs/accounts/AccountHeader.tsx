@@ -289,9 +289,6 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
 export interface AccountHeaderProps {
   account: Account
   dueInfo: DueInfo | null
-  /** Still fetching this card's statement summary — hold the banner's space so its arrival
-   *  doesn't shove the page down. */
-  dueLoading?: boolean
   stats: AccountStats | null
   menuOpen: boolean
   setMenuOpen: (open: boolean | ((prev: boolean) => boolean)) => void
@@ -321,7 +318,6 @@ export interface AccountHeaderProps {
 export function AccountHeader({
   account,
   dueInfo,
-  dueLoading,
   stats,
   menuOpen,
   setMenuOpen,
@@ -488,7 +484,6 @@ export function AccountHeader({
       {/* Honesty tiers: fully PAID congratulates; an ESTIMATE says so (~ + tag) with an
           Import-statement action; statement-backed shows remaining / paid-so-far / minimum.
           Actions (Import statement · Remind me) sit together on the right. */}
-      {!dueInfo && dueLoading && <div className="acct-alert placeholder" aria-hidden="true" />}
       {dueInfo && dueInfo.settled && (
         <div className="acct-alert paid">
           <span className="mark">✓</span>

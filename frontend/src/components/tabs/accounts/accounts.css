@@ -2034,13 +2034,6 @@ body.hide-amounts .mask.l::after {
   color: var(--ink);
   font-weight: 600;
 }
-/* Holds the due-banner's exact box while its summary loads, so the banner appearing
-   never shoves the register down (owner, 2026-08-09: "it blank then it jump"). */
-.acct-alert.placeholder {
-  border-color: transparent;
-  background: transparent;
-  min-height: 1lh;
-}
 .acct-alert .mark {
   color: var(--warn);
   font-weight: 700;

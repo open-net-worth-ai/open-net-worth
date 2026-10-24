@@ -465,6 +465,51 @@ describe('AccountsTab wires the fetched statement summary into the due banner (C
     await screen.findByText(/S\$42/)
   })
 
+  it('prefetches every card so opening one paints its banner in the same render — no late push', async () => {
+    const CARD_B: ApiAccount = {
+      ...CC_ACCOUNT,
+      id: 'acc-cc-b',
+      name: 'Visa',
+      balance: -9.99,
+      balance_base: -9.99,
+    }
+    const due = (amount: number) =>
+      okJson({
+        currency: 'SGD',
+        days_until_due: 5,
+        last_statement_balance: amount,
+        paid: false,
+        partial: false,
+        payment_amount: null,
+        remaining_amount: remainingAmount(amount, null),
+      })
+    mockAuthFetch.mockImplementation((url: string) => {
+      if (url === `/api/accounts/${CC_ACCOUNT.id}/statement`) return Promise.resolve(due(165.75))
+      if (url === `/api/accounts/${CARD_B.id}/statement`) return Promise.resolve(due(42))
+      if (url.startsWith('/api/accounts')) return Promise.resolve(okJson([CC_ACCOUNT, CARD_B]))
+      if (url.startsWith('/api/categories')) return Promise.resolve(okJson([]))
+      if (url.startsWith('/api/payees')) return Promise.resolve(okJson({ payees: [] }))
+      if (url.startsWith('/api/portfolio')) return Promise.resolve(okJson([]))
+      if (url.startsWith('/api/prices')) return Promise.resolve(okJson({}))
+      if (url.startsWith('/api/transactions'))
+        return Promise.resolve(okJson({ transactions: [], total: 0, has_more: false }))
+      return Promise.resolve(okJson({}))
+    })
+    const statementCalls = (id: string) =>
+      mockAuthFetch.mock.calls.filter(([u]) => u === `/api/accounts/${id}/statement`).length
+
+    const { rerender } = render(<AccountsTab selectedAccountId={CC_ACCOUNT.id} />)
+    await screen.findByText(/S\$165\.75/)
+    // B was never opened, yet its summary is already loaded.
+    await waitFor(() => expect(statementCalls(CARD_B.id)).toBe(1))
+
+    rerender(<AccountsTab selectedAccountId={CARD_B.id} />)
+    // Synchronous: the banner is there in the render that opened the card.
+    expect(screen.getByText(/S\$42/)).toBeTruthy()
+    // …and opening it still revalidates, so a payment made since is picked up.
+    await waitFor(() => expect(statementCalls(CARD_B.id)).toBe(2))
+  })
+
   it('shows the new-cycle estimate + import nudge when the linked statement is older and PAID (never a stale congrats)', async () => {
     // Owner repro 2026-07-16: June statement paid in full, July cycle closed 07-05 without
     // its statement — backend falls through to the ledger estimate for the new cycle.

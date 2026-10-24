@@ -56,6 +56,7 @@ import { Filters, ActiveChips } from './SearchFilter'
 import type { FilterState, FilterToken } from './SearchFilter'
 import { useTransactionSurfaces } from './transactionSurfacesContext'
 import { useDataVersion } from '../../../hooks/useDataVersion'
+import { fetchCachedQuery, useQueryCache } from '../../../state/queryCache'
 import AccountModal from './AccountModal'
 import type { InstitutionOption } from './ds'
 import type { InstitutionDeleteResult } from './InstitutionManager'
@@ -152,6 +153,17 @@ interface StatementSummary {
   /** True when a newer cycle closed but its statement isn't uploaded/linked — the figures
    *  are that cycle's ledger ESTIMATE and the banner nudges for the upload. */
   statement_missing_for_cycle?: boolean
+}
+
+const statementKey = (accountId: string) => `/api/accounts/${accountId}/statement`
+/** Stands in for a non-credit selection, whose banner never fetches. */
+const NO_STATEMENT_KEY = 'accounts:no-statement'
+
+async function fetchStatementSummary(accountId: string): Promise<StatementSummary | null> {
+  const res = await authFetch(statementKey(accountId))
+  if (res.status === 204) return null
+  if (!res.ok) throw new Error('Failed to load the statement summary')
+  return res.json() as Promise<StatementSummary>
 }
 
 // txPrimaryAmount is still needed for CSV export's signed-amount column (unrelated to
@@ -679,46 +691,23 @@ export function AccountsTab({
   // CC1: the due banner must reflect the last CLOSED statement's balance minus any payment
   // already received — never the raw live account.balance, which is negative (liability sign)
   // and folds in brand-new post-payment spending from the still-open cycle.
-  const [statementSummary, setStatementSummary] = useState<StatementSummary | null>(null)
-  // Which account the CURRENT summary describes. `selectedAccount` is a fresh object on every
-  // accounts refetch (toggling cleared, editing a row), so blanking on each run made the
-  // payment-due banner unmount and remount — the page jumped under the cursor. Blank only when
-  // the account genuinely changed; otherwise keep showing the old figures until the new ones
-  // land, which is what a refresh should look like.
-  const summaryFor = useRef<string | null>(null)
-  const [dueLoading, setDueLoading] = useState(false)
+  // Cached per card and prefetched for EVERY credit card each time the accounts list loads (on
+  // open, and after any write — the list reloads then), so opening a card paints its banner in
+  // the first frame. A late banner pushed the page down; a reserved box could only guess its
+  // height — wrong when nothing was due, and far too short once it wrapped on a phone.
+  const selectedCreditId = selectedAccount?.type === 'credit' ? selectedAccount.id : null
+  const summaryQuery = useQueryCache(
+    selectedCreditId ? statementKey(selectedCreditId) : NO_STATEMENT_KEY,
+    selectedCreditId ? () => fetchStatementSummary(selectedCreditId) : async () => null,
+    { enabled: selectedCreditId !== null },
+  )
+  const statementSummary = selectedCreditId ? (summaryQuery.data ?? null) : null
   useEffect(() => {
-    if (!selectedAccount || selectedAccount.type !== 'credit') {
-      summaryFor.current = null
-      setStatementSummary(null)
-      setDueLoading(false)
-      return
+    for (const a of accounts) {
+      if (a.type !== 'credit' || a.archived) continue
+      fetchCachedQuery(statementKey(a.id), () => fetchStatementSummary(a.id)).catch(() => {})
     }
-    if (summaryFor.current !== selectedAccount.id) {
-      summaryFor.current = selectedAccount.id
-      setStatementSummary(null)
-      setDueLoading(true)
-    }
-    let cancelled = false
-    void (async () => {
-      try {
-        const res = await authFetch(`/api/accounts/${selectedAccount.id}/statement`)
-        if (res.status === 204 || !res.ok) {
-          if (!cancelled) setStatementSummary(null)
-          return
-        }
-        const data = await res.json()
-        if (!cancelled) setStatementSummary(data)
-      } catch {
-        if (!cancelled) setStatementSummary(null)
-      } finally {
-        if (!cancelled) setDueLoading(false)
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [selectedAccount])
+  }, [accounts])
 
   const dueInfo = useMemo((): DueInfo | null => {
     if (!selectedAccount || selectedAccount.type !== 'credit') return null
@@ -1944,7 +1933,6 @@ export function AccountsTab({
                   <AccountHeader
                     account={selectedAccount}
                     dueInfo={dueInfo}
-                    dueLoading={dueLoading}
                     stats={stats}
                     menuOpen={menuOpen}
                     setMenuOpen={setMenuOpen}
