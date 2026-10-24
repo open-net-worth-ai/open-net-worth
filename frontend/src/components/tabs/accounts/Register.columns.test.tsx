@@ -153,12 +153,15 @@ describe('Register memo column', () => {
   })
 })
 
+const regTmpl = (c: HTMLElement) =>
+  (c.querySelector('.acct-reg') as HTMLElement).style.getPropertyValue('--reg-tmpl')
+
 describe('Register column-visibility picker', () => {
   it('hiding a column drops it from the header AND every row, and shrinks the grid template', () => {
     const { container } = render(
       <Harness txns={[makeTxn({ id: 't1', memo: 'a' }), makeTxn({ id: 't2', memo: 'b' })]} />,
     )
-    const tmplBefore = head(container).style.gridTemplateColumns
+    const tmplBefore = regTmpl(container)
     const colsBefore = headCols(container)
     expect(container.querySelectorAll('.acct-td-memo2').length).toBe(2)
 
@@ -168,7 +171,7 @@ describe('Register column-visibility picker', () => {
     expect(within(head(container)).queryByText('Memo')).toBeNull()
     expect(container.querySelectorAll('.acct-td-memo2').length).toBe(0)
     expect(headCols(container)).toBe(colsBefore - 1)
-    expect(head(container).style.gridTemplateColumns).not.toBe(tmplBefore)
+    expect(regTmpl(container)).not.toBe(tmplBefore)
     // Amount is structural — untouched by the toggle.
     expect(within(head(container)).getByText('Amount')).toBeTruthy()
   })

@@ -22,11 +22,11 @@ name. The figure beside **All accounts** is only your accounts added together, d
 leaves out what you own on [Assets](assets.md), so it can differ from net worth, even go
 negative while net worth is positive.
 
-On a narrow window (a laptop, or Lucius open beside the register) the register sets the **Memo**
-column aside first, then squeezes the others, then **Source**. A row that needs review shows a
-small dot beside its amount while Source is away. Widen the window and every column you chose
-comes back. If even that is too wide, the register scrolls sideways and the **Amount** column
-stays pinned at the right edge, so amounts are always in view.
+On a narrow window (a laptop, or Lucius open beside the register) the register first squeezes its
+columns. If even that is too wide, it scrolls sideways — every column you chose is still there,
+**Memo** and **Source** included — and the **Amount** column stays pinned at the right edge, so
+amounts are always in view. While it scrolls, a row that needs review also shows a small dot
+beside its amount, in case the **Source** column is out of view.
 
 ## Add an account
 

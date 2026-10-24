@@ -113,7 +113,9 @@ function renderReg() {
 }
 
 const head = (c: HTMLElement) => c.querySelector('.acct-reg-head') as HTMLElement
-const tmplOf = (c: HTMLElement) => head(c).style.gridTemplateColumns
+// The tracks live in `--reg-tmpl` on the register root; every row reads them from there.
+const tmplOf = (c: HTMLElement) =>
+  (c.querySelector('.acct-reg') as HTMLElement).style.getPropertyValue('--reg-tmpl')
 // Collapse "minmax(120px, 1fr)" → a single "FILL" token so the tmpl splits into tracks by space.
 const tracks = (tmpl: string) =>
   tmpl

@@ -4393,11 +4393,11 @@ select.acct-addin {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-/* The register sets aside Memo/Source and squeezes its columns before it overflows (see
-   registerFit.ts). Only when even that is too wide (`.overflow`: the Lucius panel open beside an
-   all-accounts register) does the amount pin to the right edge, so the figure is never scrolled
-   out of sight (persona QA 2026-10-14: "amounts off-screen"); the other columns slide under it,
-   and its left shadow says so. The cell paints its own opaque background, one per row state, and
+/* The register squeezes its columns before it overflows (see registerFit.ts). Only when even that
+   is too wide (`.overflow`: the Lucius panel open beside the register) do the rows scroll sideways
+   — every chosen column stays reachable — and the amount pins to the right edge, so the figure is
+   never scrolled out of sight (persona QA 2026-10-14: "amounts off-screen"); the other columns
+   slide under it, and its left shadow says so. The cell paints its own opaque background, one per row state, and
    reaches over the row's 18px padding so nothing shows beside it. */
 .acct-reg.overflow:not(.cards) .acct-td-amt,
 .acct-reg.overflow:not(.cards) .acct-reg-head > .acct-h:last-child {
@@ -4430,17 +4430,15 @@ select.acct-addin {
 .acct-reg.overflow:not(.cards) .acct-tr.sel .acct-td-amt {
   background: color-mix(in srgb, var(--ink) 8%, var(--surface));
 }
-/* With the Source column set aside (a narrow register) a row that needs review keeps a dot beside
-   its amount in place of the Review pill; the amount is the one cell always in view. The dot hangs
-   off the figure itself, never the cell's edge: a cell shrunk to its figure put the dot on the sign,
-   and a pinned cell spanning its track put it a column-width away from a short amount. */
-.acct-reg.no-source:not(.overflow) .acct-tr.needs-review .acct-td-amt {
-  padding-left: 12px;
-}
-.acct-reg.no-source .acct-tr.needs-review .acct-amt-main {
+/* While the register scrolls sideways the Source column (home of the Review pill) can sit out of
+   view, so a row that needs review also keeps a dot beside its amount — the one cell always in
+   view. The dot hangs off the figure itself, never the cell's edge: a cell shrunk to its figure
+   put the dot on the sign, and a pinned cell spanning its track put it a column-width away from
+   a short amount. */
+.acct-reg.overflow:not(.cards) .acct-tr.needs-review .acct-amt-main {
   position: relative;
 }
-.acct-reg.no-source .acct-tr.needs-review .acct-amt-main::before {
+.acct-reg.overflow:not(.cards) .acct-tr.needs-review .acct-amt-main::before {
   content: '';
   position: absolute;
   right: calc(100% + 5px);

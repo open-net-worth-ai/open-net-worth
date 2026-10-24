@@ -1,14 +1,13 @@
 /**
- * registerFit.ts — which register columns fit the room the register actually has.
+ * registerFit.ts — how the register's columns use the room the register actually has.
  *
  * The register is a fixed-pixel grid, so on a laptop (or with the Lucius panel open beside it)
- * its columns outrun the container and the rows scroll sideways. Instead of letting that happen
- * first, the register gives up the least valuable columns for as long as the window is narrow:
- * Memo (almost always empty), then Source (a row needing review then keeps a dot beside its
- * amount instead of the Review pill that lives in that column), and squeezes the rest toward
- * their resize minimums, always leaving the Description column room to read. Only when even that
- * does not fit does the grid overflow (`overflow`), and the Amount column pins to the right edge.
- * Nothing here is persisted: widening the window brings every column the user chose back.
+ * its columns can outrun the container. First every column except Description is squeezed toward
+ * its resize minimum, always leaving Description room to read. When even that does not fit, the
+ * grid overflows (`overflow`): the rows scroll sideways and the Amount column pins to the right
+ * edge. No column the user chose is ever dropped — Memo and Source used to be set aside here,
+ * which left a scroll that ended at Description with no way to reach them (owner, 2026-10-25).
+ * Nothing here is persisted: widening the window gives every column its own width back.
  */
 
 import type { RegCol } from './Register'
@@ -21,12 +20,9 @@ export const DESCRIPTION_COMFORT = 140
 export const DESCRIPTION_FLOOR = 72
 
 export interface RegisterFit {
-  cols: RegCol[]
   widths: Record<string, number>
   /** True when even the squeezed grid is wider than the container. */
   overflow: boolean
-  /** True when the Source column (home of the Review pill) was set aside. */
-  sourceShed: boolean
 }
 
 const minOf = (c: RegCol): number => c.min ?? c.w
@@ -59,26 +55,16 @@ export function fitRegisterColumns(
   containerWidth: number,
 ): RegisterFit {
   // Unmeasured (first paint, no layout engine): take the user's columns as they are.
-  if (!(containerWidth > 0)) return { cols, widths, overflow: false, sourceShed: false }
-  const without = (...keys: string[]) => cols.filter((c) => !keys.includes(c.key))
-  const withoutMemo = without('memo')
-  const bare = without('memo', 'source')
-  const sourceShed = (list: RegCol[]) =>
-    cols.some((c) => c.key === 'source') && !list.some((c) => c.key === 'source')
-  const room = (list: RegCol[]) => containerWidth - ROW_PADDING - COLUMN_GAP * (list.length - 1)
-  // Each step gives up a little more: comfortable description first, then a cramped one (every
-  // column at its minimum) before a column is dropped, so Memo goes before Source does.
-  const steps: [RegCol[], number][] = [
-    [cols, DESCRIPTION_COMFORT],
-    [withoutMemo, DESCRIPTION_COMFORT],
-    [withoutMemo, DESCRIPTION_FLOOR],
-    [bare, DESCRIPTION_COMFORT],
-    [bare, DESCRIPTION_FLOOR],
-  ]
-  for (const [list, descriptionPx] of steps) {
-    const fitted = squeeze(list, widths, room(list), descriptionPx)
-    if (fitted) return { cols: list, widths: fitted, overflow: false, sourceShed: sourceShed(list) }
-  }
-  const floor = Object.fromEntries(bare.map((c) => [c.key, minOf(c)]))
-  return { cols: bare, widths: floor, overflow: true, sourceShed: sourceShed(bare) }
+  if (!(containerWidth > 0)) return { widths, overflow: false }
+  const room = containerWidth - ROW_PADDING - COLUMN_GAP * (cols.length - 1)
+  // The other columns give way first, keeping Description comfortable…
+  const fitted = squeeze(cols, widths, room, DESCRIPTION_COMFORT)
+  if (fitted) return { widths: fitted, overflow: false }
+  // …then, every one at its minimum, Description (the 1fr track) narrows to its floor. Retrying the
+  // squeeze with the floor instead handed the others width BACK as the room shrank.
+  const floor = Object.fromEntries(cols.map((c) => [c.key, minOf(c)]))
+  const atMinimum = cols.reduce((sum, c) => sum + (c.key === 'description' ? 0 : minOf(c)), 0)
+  const hasDescription = cols.some((c) => c.key === 'description')
+  const overflow = atMinimum + (hasDescription ? DESCRIPTION_FLOOR : 0) > room
+  return { widths: floor, overflow }
 }

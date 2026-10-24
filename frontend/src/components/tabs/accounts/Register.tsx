@@ -7,7 +7,8 @@
  * Presentational — all mutations go via callbacks.
  */
 
-import { Fragment, useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
+import { Fragment, useCallback, useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react'
+import type { CSSProperties } from 'react'
 import type { Txn, Account, Category, FxRates } from './types'
 import type { PayeeOption } from './pickers'
 import { IconCheck, IconMinus } from './pickers'
@@ -60,6 +61,19 @@ const REG_W_KEY = 'acctColW_v1'
 // The fill column (Description) shrinks to this floor as its neighbour grows — small enough to
 // give real resize range, wide enough to stay readable (~10 chars + ellipsis).
 const DESC_FILL_MIN = 72
+
+/** Description is ALWAYS the flexible fill column (minmax(floor,1fr)) — it holds the long bank
+ *  strings, so it absorbs leftover width and the table always fills its container (e.g. when the
+ *  Lucius panel closes) with NO empty gap. It has no fixed width to drag directly; its resize
+ *  handle transfers width to/from the adjacent column (see startResize), so you can still make it
+ *  narrower — the neighbour widens and this 1fr shrinks. */
+function gridTemplate(cols: RegCol[], widths: Record<string, number>): string {
+  return cols
+    .map((c) =>
+      c.key === 'description' ? `minmax(${DESC_FILL_MIN}px, 1fr)` : `${widths[c.key] ?? c.w}px`,
+    )
+    .join(' ')
+}
 // The Description column FILLS by default (minmax(floor,1fr)) so the table always spans its
 // container. Once the user explicitly drags its resize handle it becomes a fixed px (so it can
 // shrink AND grow like every other column) and a trailing 1fr spacer track takes over the fill.
@@ -191,30 +205,21 @@ export function Register({
   const resizeSign = useRef(1)
   const resizeMoved = useRef(false)
   // Visible columns = drop account when not in all-accounts view, drop any the user hid via the
-  // Columns picker. cb/clr/amount can never be hidden (never enter `hiddenCols`). On a narrow
-  // container `fitRegisterColumns` also sets aside Memo/Source and squeezes the rest (see
-  // registerFit.ts) — measured here, never persisted. The header, TxnRow, and AddRow all render
-  // off THIS ordered set (via `colKeys`) so the grid stays aligned.
-  const [bodyWidth, setBodyWidth] = useState(0)
-  const chosenCols = REG_COLS.filter(
-    (c) => (!c.accountOnly || showAccount) && !hiddenCols.has(c.key),
-  )
-  const fit = useMemo(
-    () => fitRegisterColumns(chosenCols, widths, bodyWidth),
-    [chosenCols.map((c) => c.key).join(), widths, bodyWidth], // eslint-disable-line react-hooks/exhaustive-deps
-  )
-  const cols = fit.cols
+  // Columns picker. cb/clr/amount can never be hidden (never enter `hiddenCols`). The header,
+  // TxnRow, and AddRow all render off THIS ordered set (via `colKeys`) so the grid stays aligned.
+  const cols = REG_COLS.filter((c) => (!c.accountOnly || showAccount) && !hiddenCols.has(c.key))
   const colKeys = cols.map((c) => c.key)
-  // Description is ALWAYS the flexible fill column (minmax(floor,1fr)) — it holds the long bank
-  // strings, so it absorbs leftover width and the table always fills its container (e.g. when the
-  // Lucius panel closes) with NO empty gap. It has no fixed width to drag directly; instead its
-  // resize handle transfers width to/from the adjacent column (see startResize), so you can still
-  // make it narrower — the neighbour widens and this 1fr shrinks. `widths.description` is its floor.
-  const tmpl = cols
-    .map((c) =>
-      c.key === 'description' ? 'minmax(' + DESC_FILL_MIN + 'px, 1fr)' : fit.widths[c.key] + 'px',
-    )
-    .join(' ')
+  const colKeyStr = colKeys.join()
+  // Every row reads its tracks from `--reg-tmpl` on the register root. React sets it from the
+  // user's widths; the ResizeObserver below overwrites it with the widths that FIT the room
+  // (registerFit.ts) without a render — the width changes every frame while the Lucius panel
+  // opens or a window is dragged, and re-rendering every row each frame made that stutter
+  // (owner, 2026-10-25). State changes only when the grid starts or stops overflowing.
+  const tmpl = 'var(--reg-tmpl)'
+  const baseTmpl = gridTemplate(cols, widths)
+  const [overflow, setOverflow] = useState(false)
+  const regRef = useRef<HTMLDivElement | null>(null)
+  const fitInput = useRef({ cols, widths })
   const acctMap = useMemo(() => Object.fromEntries(accounts.map((a) => [a.id, a])), [accounts])
   // Category map from server data — used for pill label + colour in the register.
   const catMap = useMemo(
@@ -299,15 +304,27 @@ export function Register({
   const shownAllOn = visible.length > 0 && visibleIds.every((id) => selectedIds.has(id))
   const shownSomeOn = !shownAllOn && visible.some((t) => selectedIds.has(t.id))
 
+  const applyFit = useCallback(() => {
+    const root = regRef.current
+    const body = scrollRef.current
+    if (!root || !body) return
+    const { cols: fitCols, widths: fitWidths } = fitInput.current
+    const fit = fitRegisterColumns(fitCols, fitWidths, body.clientWidth)
+    root.style.setProperty('--reg-tmpl', gridTemplate(fitCols, fit.widths))
+    setOverflow(fit.overflow)
+  }, [])
+  // After React has written the user's widths into --reg-tmpl, fit them to the room again.
+  useLayoutEffect(() => {
+    fitInput.current = { cols, widths }
+    applyFit()
+  }, [colKeyStr, widths, applyFit]) // eslint-disable-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const body = scrollRef.current
     if (!body || typeof ResizeObserver === 'undefined') return
-    const measure = () => setBodyWidth(body.clientWidth)
-    measure()
-    const ro = new ResizeObserver(measure)
+    const ro = new ResizeObserver(applyFit)
     ro.observe(body)
     return () => ro.disconnect()
-  }, [])
+  }, [applyFit])
 
   // When the register overflows horizontally (narrow width / Lucius open), the rows scroll in
   // .acct-reg-scroll; keep the pinned column header aligned by mirroring its scrollLeft.
@@ -395,13 +412,14 @@ export function Register({
 
   return (
     <div
+      ref={regRef}
       className={
         'acct-reg ' +
         (showAccount ? 'all' : 'single') +
         (isMobile ? ' cards' : '') +
-        (fit.overflow ? ' overflow' : '') +
-        (fit.sourceShed ? ' no-source' : '')
+        (overflow ? ' overflow' : '')
       }
+      style={{ '--reg-tmpl': baseTmpl } as CSSProperties}
     >
       {isMobile ? (
         <div className="acct-card-headbar">
