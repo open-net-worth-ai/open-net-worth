@@ -120,7 +120,13 @@ class YnabBudgetSelectionRequired(ValidationError):
 # ── protocol ───────────────────────────────────────────────────────────────────────
 
 
-def _safe_get(store: YnabConfigStore, path: str, params: dict) -> httpx.Response:
+class _TooLarge(Exception):
+    """Internal: the response body passed the caller's byte cap."""
+
+
+def _safe_get(
+    store: YnabConfigStore, path: str, params: dict, *, max_bytes: int = _MAX_RESPONSE_BYTES
+) -> httpx.Response:
     """GET wrapper for the YNAB API that NEVER lets a raw exception escape (mirrors
     ``lunch_money._safe_get``) and bounds the response body at ``_MAX_RESPONSE_BYTES``.
     Raises ``ValidationError`` when no token is saved, ``ExternalServiceError`` (status code
@@ -133,24 +139,35 @@ def _safe_get(store: YnabConfigStore, path: str, params: dict) -> httpx.Response
     if not token:
         raise ValidationError("YNAB is not configured (no access token)")
     try:
-        resp = httpx.get(
+        # Streamed, so the cap bounds MEMORY: the body is abandoned the moment it passes
+        # ``max_bytes`` instead of being fully buffered before a length check.
+        with httpx.stream(
+            "GET",
             f"{API_BASE}{path}",
             params=params,
             headers={"Authorization": f"Bearer {token}"},
             timeout=_HTTP_TIMEOUT,
-        )
-        resp.raise_for_status()
+        ) as resp:
+            resp.raise_for_status()
+            if int(resp.headers.get("content-length") or 0) > max_bytes:
+                raise _TooLarge
+            body = bytearray()
+            for chunk in resp.iter_bytes():
+                body += chunk
+                if len(body) > max_bytes:
+                    raise _TooLarge
+            status = resp.status_code
+    except _TooLarge:
+        raise ExternalServiceError(
+            f"YNAB response too large (> {max_bytes} bytes); refused."
+        ) from None
     except httpx.HTTPStatusError as exc:
         raise ExternalServiceError(f"YNAB HTTP {exc.response.status_code}") from None
     except httpx.HTTPError as exc:
         raise ExternalServiceError(f"YNAB request failed ({type(exc).__name__})") from None
     except Exception as exc:
         raise ExternalServiceError(f"YNAB request failed ({type(exc).__name__})") from None
-    if len(resp.content) > _MAX_RESPONSE_BYTES:
-        raise ExternalServiceError(
-            f"YNAB response too large (> {_MAX_RESPONSE_BYTES} bytes); refused."
-        )
-    return resp
+    return httpx.Response(status, content=bytes(body))
 
 
 def list_budgets(store: YnabConfigStore) -> list[dict]:

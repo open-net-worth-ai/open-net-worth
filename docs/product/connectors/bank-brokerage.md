@@ -170,7 +170,26 @@ If you already budget in YNAB, its transactions can flow in from here.
    one budget, it's picked for you.
 5. Link the accounts in the **Accounts** list.
 
-Categories are not copied from YNAB — they're left for you or an Automation to set.
+Categories are not copied by this connector — they're left for you or an Automation to set. To
+move your whole plan across instead, use the migration below.
+
+### Move your whole YNAB plan
+
+To move your accounts, categories, envelopes, every transaction and each month's budgeted amounts
+across, and check the result against YNAB, use **Import & sync…** on the YNAB connector page. It
+opens [Imports & sync](../features/imports-and-sync.md), which uses the token you saved here.
+Take a [backup](../operations/backup-and-restore.md) first if you can; a fresh book is the
+cleanest target (the app also takes one before it writes anything).
+
+It is safe to run again: nothing is booked twice. Accounts and transactions keep their YNAB ids,
+so the connector attaches to them afterwards. A transfer between two accounts is one transfer; a
+split with a transfer line becomes a split plus a separate transfer; a closed YNAB account is
+created and then archived; Ready to Assign inflows become uncategorized income. Categories are
+copied exactly as YNAB has them: payee defaults and Automations don't relabel imported rows. Each
+month's assigned amounts come across (including negative ones and what you assigned to a card's
+payment category), and the budget is set to zero-based. Where YNAB's balance for an account isn't
+the sum of its transactions (typically loan interest YNAB calculates), the difference is booked
+once as a labelled balance adjustment. Goals and scheduled transactions are not migrated.
 
 ## Alpaca
 

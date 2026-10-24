@@ -176,6 +176,15 @@ const connectorsRoute = createRoute({
   // URL, not the tab id — see SLUG_ALIASES's own comment).
   path: '/connectors',
 })
+const importsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/imports',
+  // ?provider=ynab&run=<id> — the provider tab, and one run opened as a report.
+  validateSearch: (search: Record<string, unknown>) => ({
+    provider: typeof search.provider === 'string' ? search.provider : undefined,
+    run: typeof search.run === 'string' ? search.run : undefined,
+  }),
+})
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/settings',
@@ -281,6 +290,7 @@ const routeTree = rootRoute.addChildren([
   buildRoute,
   profileRoute,
   connectorsRoute,
+  importsRoute,
   settingsRoute,
   helpIndexRoute,
   helpDocRoute,

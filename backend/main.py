@@ -130,6 +130,7 @@ from backend.api.fixed_income import router as fixed_income_router
 from backend.api.forecast_scorecard import router as forecast_scorecard_router
 from backend.api.ibkr_api import router as ibkr_router
 from backend.api.import_api import router as import_router
+from backend.api.import_runs_api import router as import_runs_router
 from backend.api.inbox import router as inbox_router
 from backend.api.income import router as income_router
 from backend.api.instruments import router as instruments_router
@@ -641,6 +642,11 @@ async def lifespan(app: FastAPI):
 
     recover_interrupted_turns()
 
+    # An import run still "running" belonged to the process that just died.
+    from backend.services import import_runs
+
+    import_runs.recover_interrupted()
+
     # Register the significance-screen consumer on the core.news_arrivals seam (INT5,
     # news-ingestion-latency.md §4) — monitoring.collect.gather_rss/gather_matched emit newly-
     # inserted evidence rows here on every RSS/hot-tier fetch; this is the volume-independent
@@ -1110,6 +1116,7 @@ app.include_router(ibkr_router)
 app.include_router(yodlee_router)
 app.include_router(lunch_money_router)
 app.include_router(ynab_router)
+app.include_router(import_runs_router)
 app.include_router(account_linking_router)
 app.include_router(integrations_router)
 app.include_router(setup_router)

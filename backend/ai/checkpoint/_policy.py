@@ -148,6 +148,7 @@ _EXCLUDED_TABLES = frozenset(
         "connector_secrets",  # connector credentials — SECRET + NON_RESTORABLE, never snapshotted
         "desktop_access_grants",  # device decisions: rewinding must never restore revoked file access
         "desktop_ingest_jobs",  # intake identities: rewinding must never replay already delivered files
+        "import_runs",  # operational record of a provider import/verify run, written outside any turn — a rewind must not erase or resurrect what an import report said
         "evidence",  # accumulated news/web evidence — derived cache, rebuildable from sources; a turn rollback must not delete/resurrect news (same rationale as EVIDENCE_JSON above)
         "evidence_subjects",  # evidence's derived subject index — goes with its parent row, not independently meaningful to restore
         "price_points",  # append-only price cache (PriceHistoryStore parity) — excluded by design, like the JSON store it will replace

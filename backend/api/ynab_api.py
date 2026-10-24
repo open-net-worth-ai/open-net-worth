@@ -5,6 +5,10 @@ Thin router over ``db.YnabConfigStore`` + ``services.aggregation.ynab``:
   * ``GET  /api/ynab/budgets`` — list the budgets ("plans", in YNAB's own current API
     vocabulary — see the service module's docstring) this token can see, for the config
     form's picker. Requires a saved token.
+  * ``GET  /api/ynab/migration`` / ``POST /api/ynab/migration/{preview,start,verify}`` — the
+    one-shot plan migration, a server-owned background job (``services.ynab_migration``): poll
+    the GET for the newest run (each run is a persisted record — see ``api/import_runs_api``); a
+    second POST while one runs is a 409.
   * ``PUT  /api/ynab/config``  — set the YNAB **personal access token**, pick a budget,
     enable/disable. A blank access token leaves the saved one unchanged (write-only-secret
     discipline); picking a budget is VALIDATED live against the token (mirrors SimpleFIN's
@@ -28,6 +32,7 @@ from pydantic import BaseModel
 
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.db.ynab_config_store import YnabConfigStore
+from backend.services import ynab_migration
 from backend.services.aggregation import ynab as ynab_service
 
 router = APIRouter()
@@ -114,3 +119,47 @@ async def update_ynab_config(body: YnabConfigUpdate):
             store.update({"budget_id": ""})
 
     return store.public()
+
+
+class MigrationRequest(BaseModel):
+    # The plan is always an explicit pick — a token can see several, and importing the wrong one
+    # writes someone else's money into the book.
+    plan_id: str
+    # The book already holds accounts that did not come from a YNAB migration.
+    confirm_nonempty: bool = False
+
+
+def _migration(kind: str, body: MigrationRequest) -> dict:
+    try:
+        return ynab_migration.start(kind, body.plan_id, body.confirm_nonempty)
+    except ynab_migration.ConfirmationRequired as exc:
+        raise HTTPException(
+            409, detail={"error": "confirm_nonempty", "message": exc.message}
+        ) from exc
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+
+
+@router.get("/api/ynab/migration")
+def ynab_migration_status():
+    """The newest migration run and whether a token is saved. Never the token."""
+    return ynab_migration.status()
+
+
+@router.post("/api/ynab/migration/preview", status_code=202)
+def ynab_migration_preview(body: MigrationRequest):
+    """Read the plan and map it; writes nothing. The result lands on the run's ``preview``."""
+    return _migration("preview", body)
+
+
+@router.post("/api/ynab/migration/start", status_code=202)
+def ynab_migration_start(body: MigrationRequest):
+    """Import the plan, then verify it. Needs ``confirm_nonempty`` when the book already has
+    accounts that did not come from YNAB."""
+    return _migration("import", body)
+
+
+@router.post("/api/ynab/migration/verify", status_code=202)
+def ynab_migration_verify(body: MigrationRequest):
+    """Re-check an earlier import against YNAB's current figures; writes nothing."""
+    return _migration("verify", body)
