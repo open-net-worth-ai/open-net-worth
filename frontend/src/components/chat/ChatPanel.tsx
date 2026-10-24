@@ -65,13 +65,17 @@ import { isOnboardingInit, ONBOARDING_INIT_SENTINEL } from '../../utils/onboardi
 import { applyScrollbarGutter } from '../../utils/scrollbarGutter'
 import { composerDensity } from './composerDensity'
 import { usePointerResize } from '../../hooks/usePointerResize'
+import { lazyChunk } from '../../lazyChunk'
 
 // Documents from the side panel on any tab — loaded only when opened, so the chat that every
 // tab carries doesn't carry the document viewer too.
 const DocumentsSheet = lazy(() =>
   import('../vault/DocumentsSheet').then((m) => ({ default: m.DocumentsSheet })),
 )
-const MemorySheet = lazy(() => import('./MemorySheet').then((m) => ({ default: m.MemorySheet })))
+// lazyChunk: a window left open across a rebuild reloads once instead of crashing on the click.
+const MemorySheet = lazyChunk(() =>
+  import('./MemorySheet').then((m) => ({ default: m.MemorySheet })),
+)
 
 /** The kickoff message that makes Lucius speak first on a brand-new instance. Harness-authored:
  *  never rendered, never used to name a conversation. Mirrors `ai.tool_text.ONBOARDING_INIT`. */
