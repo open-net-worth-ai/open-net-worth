@@ -327,21 +327,25 @@
 }
 /* thin, self-effacing scrollbars — the default chrome is far too heavy in a dialog */
 .onw-settings .rd-set-navlist,
-.onw-settings .rd-modal {
+.onw-settings .rd-modal-body,
+.onw-settings .rd-factlist {
   scrollbar-width: thin;
   scrollbar-color: var(--line-strong) transparent;
 }
 .onw-settings .rd-set-navlist::-webkit-scrollbar,
-.onw-settings .rd-modal::-webkit-scrollbar {
+.onw-settings .rd-modal-body::-webkit-scrollbar,
+.onw-settings .rd-factlist::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 .onw-settings .rd-set-navlist::-webkit-scrollbar-track,
-.onw-settings .rd-modal::-webkit-scrollbar-track {
+.onw-settings .rd-modal-body::-webkit-scrollbar-track,
+.onw-settings .rd-factlist::-webkit-scrollbar-track {
   background: transparent;
 }
 .onw-settings .rd-set-navlist::-webkit-scrollbar-thumb,
-.onw-settings .rd-modal::-webkit-scrollbar-thumb {
+.onw-settings .rd-modal-body::-webkit-scrollbar-thumb,
+.onw-settings .rd-factlist::-webkit-scrollbar-thumb {
   background: var(--line-strong);
   border: 3px solid transparent;
   background-clip: content-box;
@@ -349,7 +353,8 @@
 }
 @media (hover: hover) {
   .onw-settings .rd-set-navlist::-webkit-scrollbar-thumb:hover,
-  .onw-settings .rd-modal::-webkit-scrollbar-thumb:hover {
+  .onw-settings .rd-modal-body::-webkit-scrollbar-thumb:hover,
+  .onw-settings .rd-factlist::-webkit-scrollbar-thumb:hover {
     background: var(--faint);
     background-clip: content-box;
   }
@@ -1278,14 +1283,18 @@
 /* disclosure row (advanced groups) */
 
 /* stored-memory list */
+/* The list, not the dialog body, scrolls: it is the one body child allowed to shrink, so the
+   description and search above it keep their height and stay on screen. */
 .onw-settings .rd-factlist {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  min-height: 0;
+  overflow-y: auto;
 }
 .onw-settings .rd-fact {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1942,10 +1951,11 @@
   justify-content: center;
   padding: 24px;
 }
+/* Only the body scrolls, so the title, close and footer buttons stay on screen (Connectors' dialog). */
 .onw-settings .rd-modal {
   width: min(520px, 100%);
   max-height: min(80vh, 720px);
-  overflow: auto;
+  overflow: hidden;
   background: var(--modal-bg);
   border: 1px solid var(--modal-border);
   border-radius: var(--radius-2xl);
@@ -1962,6 +1972,7 @@
   gap: 10px;
   padding: 16px 20px;
   border-bottom: 1px solid var(--line);
+  flex: none;
 }
 .onw-settings .rd-modal-title {
   flex: 1;
@@ -1994,6 +2005,9 @@
   font-size: 13px;
   color: var(--muted);
   line-height: 1.55;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 .onw-settings .rd-modal-foot {
   display: flex;
@@ -2001,6 +2015,7 @@
   gap: 9px;
   padding: 14px 20px;
   border-top: 1px solid var(--line);
+  flex: none;
 }
 
 /* ── banner (attention / review) ──────────────────────────────────────────── */
