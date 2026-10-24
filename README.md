@@ -86,8 +86,7 @@ accounts, or mobile apps.
 - **Running a server from source:** Python 3.12+ and Node.js 22+ (macOS, Linux or Windows).
 - **An AI model** — first run asks for one, with no skip: an API key (Anthropic, OpenAI, or any
   OpenAI-compatible endpoint), an existing Claude Code, Codex or Antigravity CLI sign-in on the
-  same machine (detected for you), or a free local model through Ollama. If it later becomes
-  unavailable, the ledger, budget and investments keep working; only Lucius stops.
+  same machine (detected for you), or a free local model through Ollama.
 
 ## Getting started
 
