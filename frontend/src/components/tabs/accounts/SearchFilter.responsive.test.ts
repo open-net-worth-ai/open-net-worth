@@ -16,16 +16,21 @@ describe('Accounts filter toolbar responsive contract', () => {
     expect(css).not.toContain('.acct-shell) .topbar')
   })
 
-  it('keeps controls on one row and hides date/column labels on narrow screens', () => {
-    const narrow = css.match(/@media \(max-width: 960px\) \{([\s\S]*?)\n\}/)?.[1] ?? ''
+  // Keyed on the register column's width (`acctmain` container), never the viewport: a wide
+  // window with the rail and Lucius open leaves a narrow column the viewport can't see.
+  const narrowBlock = () =>
+    css.match(/@container acctmain \(max-width: 700px\) \{([\s\S]*?)\n\}/)?.[1] ?? ''
 
-    expect(narrow).toContain('.acct-filters')
-    expect(narrow).toContain('flex-wrap: nowrap')
-    expect(narrow).toContain('.acct-filters .acct-viewlbl')
-    expect(narrow).toContain('display: none')
-    expect(narrow).toContain('.acct-filters .acct-viewcaret')
+  it('keeps controls on one row and hides date/column labels when the column is narrow', () => {
+    const narrow = narrowBlock()
+
+    expect(narrow).toMatch(/\.acct-filters \{\s*flex-wrap: nowrap;/)
+    expect(narrow).toMatch(
+      /\.acct-filters \.acct-viewlbl,\s*\.acct-filters \.acct-viewcaret \{\s*display: none;/,
+    )
     expect(narrow).not.toMatch(/\.acct-filter-add\s*\{[^}]*display:\s*none/)
-    expect(narrow).toContain('.acct-searchwrap .acct-search { min-width: 0')
+    expect(narrow).toMatch(/\.acct-searchwrap \.acct-search \{\s*min-width: 0;/)
+    expect(css).not.toMatch(/@media \(max-width: 960px\) \{\s*\.acct-filters \{/)
   })
 
   it('keeps a dynamic accessible name on the icon-only date control', () => {
@@ -33,14 +38,14 @@ describe('Accounts filter toolbar responsive contract', () => {
     expect(source).toContain('title={`Date range: ${dateLabel}`}')
   })
 
-  it('shortens the add transaction label to Add on narrow screens', () => {
-    const narrow = css.match(/@media \(max-width: 960px\) \{([\s\S]*?)\n\}/)?.[1] ?? ''
+  it('shortens the add transaction label to Add when the column is narrow', () => {
+    const narrow = narrowBlock()
 
     expect(source).toContain('aria-label="Add transaction"')
     expect(source).toContain('<span className="acct-filter-add-full">Add transaction</span>')
     expect(source).toContain('<span className="acct-filter-add-short">Add</span>')
-    expect(css).toContain('.acct-filter-add-short { display: none; }')
-    expect(narrow).toContain('.acct-filter-add-full { display: none; }')
-    expect(narrow).toContain('.acct-filter-add-short { display: inline; }')
+    expect(css).toMatch(/\n\.acct-filter-add-short \{\s*display: none;/)
+    expect(narrow).toMatch(/\.acct-filter-add-full \{\s*display: none;/)
+    expect(narrow).toMatch(/\.acct-filter-add-short \{\s*display: inline;/)
   })
 })

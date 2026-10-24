@@ -2795,7 +2795,12 @@ body.hide-amounts .mask.l::after {
 .acct-filter-add-short {
   display: none;
 }
-@media (max-width: 960px) {
+/* Compact toolbar on ONE row once the register column is too narrow for the labelled one
+   (search ≥ 220px + All time + Columns + Add transaction ≈ 631px with the inset). Keyed on
+   `.acct-main`'s width, not the viewport: a wide window with the account rail and Lucius open
+   left a ~610px column, the viewport query never fired, and Add transaction wrapped to its
+   own line (owner, 2026-10-25). 700px keeps the search box ≥ ~290px while labelled. */
+@container acctmain (max-width: 700px) {
   .acct-filters {
     flex-wrap: nowrap;
   }
