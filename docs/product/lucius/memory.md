@@ -33,9 +33,9 @@ it follows the conversation's [approval mode](permissions.md) like any other.
 
 ## Review what he knows
 
-Click **Memory** (the brain) next to **Documents** — at the top of the chat side panel, on the
-**Lucius** tab, and in the Lucius header on a phone. You can also get there from **Settings →
-Chat & Memory → Stored memories → Review…**.
+Click **Memory** (the brain) next to **Documents** — at the top of the chat side panel, or on
+the **Lucius** tab on a computer. On a phone, and from anywhere, it's also in **Settings → Chat &
+Memory → Stored memories → Review…**.
 
 1. The list shows each fact, when it changed, and where it came from — **You told Lucius** or
    **Learned in chat**. Use the search box to find one.
