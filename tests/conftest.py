@@ -85,10 +85,58 @@ from tests.db.conftest import (  # noqa: F401
 )
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--flag",
+        action="append",
+        default=[],
+        metavar="NAME=on|off",
+        help="force a feature flag for the whole run (repeatable) — docs/FEATURE_FLAGS.md",
+    )
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "integration: requires ANTHROPIC_API_KEY and makes LLM calls"
     )
+    config.addinivalue_line("markers", "flags(**values): force feature flags for this test")
+    config.addinivalue_line(
+        "markers", "flag_both(name): run this test with the feature flag off and on"
+    )
+    from backend.core import feature_flags as _ff
+    from tests.flags import TEST_FLAGS
+
+    _ff.REGISTRY.update(_ff.build_registry(_ff.FLAGS + TEST_FLAGS))
+
+
+def pytest_generate_tests(metafunc):
+    marker = metafunc.definition.get_closest_marker("flag_both")
+    if marker is None:
+        return
+    (name,) = marker.args
+    metafunc.parametrize(
+        "_feature_flags",
+        [{name: False}, {name: True}],
+        ids=[f"{name}=off", f"{name}=on"],
+        indirect=True,
+    )
+
+
+@pytest.fixture(autouse=True)
+def _feature_flags(request, monkeypatch):
+    """Apply ``--flag``, ``@pytest.mark.flags`` and ``flag_both`` (tests/flags.py), most
+    specific last so it wins; clear any ``ONW_FLAG_*`` inherited from the shell."""
+    from backend.core.feature_flags import ENV_PREFIX, override
+    from tests.flags import parse_cli
+
+    for key in [k for k in os.environ if k.startswith(ENV_PREFIX)]:
+        monkeypatch.delenv(key)
+    values = parse_cli(request.config.getoption("--flag"))
+    for marker in reversed(list(request.node.iter_markers("flags"))):
+        values.update(marker.kwargs)
+    values.update(getattr(request, "param", None) or {})
+    with override(**values):
+        yield
 
 
 def pytest_collection_modifyitems(items):

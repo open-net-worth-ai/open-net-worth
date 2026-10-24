@@ -125,6 +125,7 @@ from backend.api.entity_types import router as entity_types_router
 from backend.api.equity import router as equity_router
 from backend.api.extensions import router as extensions_router
 from backend.api.favicon import router as favicon_router
+from backend.api.feature_flags import router as feature_flags_router
 from backend.api.fire import router as fire_router
 from backend.api.fixed_income import router as fixed_income_router
 from backend.api.forecast_scorecard import router as forecast_scorecard_router
@@ -1149,6 +1150,7 @@ app.include_router(mcp_router)
 app.include_router(mcp_client_router)
 app.include_router(mcp_oauth_router)
 app.include_router(config_router)
+app.include_router(feature_flags_router)
 app.include_router(sql_query_router)
 app.include_router(extensions_router)
 app.include_router(mentionables_router)

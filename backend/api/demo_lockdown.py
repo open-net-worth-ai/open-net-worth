@@ -27,6 +27,7 @@ fabricated book; nothing that reaches past it. Two rules, both inert unless ``se
    - automations (create, edit, run: they spend tokens unattended and can send data out),
      skills, memory, notification channels, the monitoring schedule (``/api/watchlist/config``), the match judge's model and cap
      and every provider/connector/integration config;
+   - feature flags (``/api/feature-flags``): the demo always runs the declared defaults;
    - the host's logs and filesystem probes, turn checkpoints (they carry other visitors'
      conversations and restore the shared book), and the QA routes.
 
@@ -74,6 +75,7 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/(connectors|tool-permissions)(/.*)?$",
         r"^/api/search/config(/.*)?$",
         r"^/api/config(/.*)?$",
+        r"^/api/feature-flags(/.*)?$",
     ),
     # code and processes on the host
     *_rules(
