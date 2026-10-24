@@ -132,4 +132,24 @@ describe('MemorySheet', () => {
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledOnce()
   })
+
+  it('Enter saves an edit and Shift+Enter does not', async () => {
+    serve(true, [{ id: 'f1', content: 'A fact' }])
+    render(<MemorySheet onClose={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit: A fact' }))
+    const box = screen.getByRole('textbox', { name: 'Edit: A fact' })
+    fireEvent.change(box, { target: { value: 'A better fact' } })
+    fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })
+    expect(authFetch).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ method: 'PATCH' }),
+    )
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() =>
+      expect(authFetch).toHaveBeenCalledWith(
+        '/api/memory/facts/f1',
+        expect.objectContaining({ method: 'PATCH' }),
+      ),
+    )
+  })
 })

@@ -1353,6 +1353,7 @@
   place-items: center;
   width: 30px;
   height: 30px;
+  padding: 0;
   border: 0;
   border-radius: var(--radius-md);
   background: transparent;
@@ -1373,10 +1374,23 @@
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-/* a fact being edited in place: the text field takes the row, Save and Cancel sit after it */
-.onw-settings .rd-fact-edit .rd-input {
-  flex: 1;
-  min-width: 0;
+/* a fact being edited in place: a box that grows to the whole fact, Save and Cancel under it */
+.onw-settings .rd-fact.rd-fact-edit {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.onw-settings .rd-fact-edit-text {
+  resize: none;
+  overflow: hidden;
+  line-height: 1.45;
+  min-height: 0;
+}
+.onw-settings .rd-fact > .rd-fact-edit-acts {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
 }
 /* memory dialog footer: "Tell Lucius what to change" above the dialog's own buttons */
 .onw-settings .rd-mem-foot {
@@ -1414,12 +1428,15 @@
 .onw-settings .rd-mem-ask-input::placeholder {
   color: var(--faint);
 }
+/* padding: 0 — the base `button` rule pads 6px 14px, which on a 34px circle leaves a 6px
+   content box the 16px arrow overflows, so it sat off-centre. Same for the row icons. */
 .onw-settings .rd-mem-send {
   flex: none;
   display: grid;
   place-items: center;
   width: 34px;
   height: 34px;
+  padding: 0;
   border-radius: 50%;
   border: 0;
   background: var(--ink);

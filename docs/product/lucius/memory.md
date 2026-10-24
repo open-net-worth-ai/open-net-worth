@@ -39,8 +39,8 @@ Review…**.
 
 1. The list shows each fact, when it changed, and where it came from — **You told Lucius** or
    **Learned in chat**. Use the search box to find one.
-2. Hover a fact and click **Edit** (the pencil) to fix its wording — change the text, then **Save** (or press Enter).
-   **Cancel** or Esc leaves it as it was.
+2. Hover a fact and click **Edit** (the pencil) to fix its wording. The whole fact opens in a box; change it, then
+   **Save** or press Enter (Shift+Enter starts a new line). **Cancel** or Esc leaves it as it was.
 3. Click **Forget** (the bin) next to anything wrong or out of date.
 
 If memory is switched off, the list says so at the top.

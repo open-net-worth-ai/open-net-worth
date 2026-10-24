@@ -1,7 +1,7 @@
 // The stored-memories dialog — the ONE implementation. Settings → Chat & Memory → Review opens it
 // inside the Settings shell; the chat header's Memory button opens it through
 // components/chat/MemorySheet, which supplies the `.onw-settings` scope these classes need.
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { ArrowUp, Pencil, Trash2 } from '../../../ui/icons'
 import {
   MEMORY_SETTINGS_KEY,
@@ -14,6 +14,80 @@ import { fDate } from '../../../utils/format'
 import { Btn, Modal } from './ds'
 import type { Toast } from './ds'
 import type { MemoryFact } from '../../../hooks/useMemoryFacts'
+
+/** A fact being edited: a box that grows to show the whole fact (facts run to several lines),
+ *  Save and Cancel under it. Enter saves, Shift+Enter breaks a line; Esc is the dialog's. */
+function MemoryFactEditor({
+  fact,
+  onCancel,
+  onSave,
+}: {
+  fact: MemoryFact
+  onCancel: () => void
+  onSave: (content: string) => Promise<boolean>
+}) {
+  const [draft, setDraft] = useState(fact.content)
+  const [saving, setSaving] = useState(false)
+  const box = useRef<HTMLTextAreaElement>(null)
+
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight + 2}px`
+  }, [draft])
+
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    el.focus()
+    el.setSelectionRange(el.value.length, el.value.length)
+  }, [])
+
+  async function save() {
+    const text = draft.trim()
+    if (!text || saving) return
+    if (text === fact.content.trim()) return onCancel()
+    setSaving(true)
+    if (await onSave(text)) onCancel()
+    setSaving(false)
+  }
+
+  return (
+    <form
+      className="rd-fact rd-fact-edit"
+      onSubmit={(e) => {
+        e.preventDefault()
+        void save()
+      }}
+    >
+      <textarea
+        ref={box}
+        className="rd-textarea rd-fact-edit-text"
+        rows={1}
+        value={draft}
+        maxLength={1000}
+        disabled={saving}
+        aria-label={'Edit: ' + fact.content}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+            e.preventDefault()
+            void save()
+          }
+        }}
+      />
+      <div className="rd-fact-edit-acts">
+        <Btn size="xs" variant="ghost" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Btn>
+        <Btn size="xs" type="submit" variant="primary" disabled={saving || !draft.trim()}>
+          {saving ? 'Saving…' : 'Save'}
+        </Btn>
+      </div>
+    </form>
+  )
+}
 
 function MemoryFactRow({
   fact,
@@ -30,41 +104,7 @@ function MemoryFactRow({
   onSave: (content: string) => Promise<boolean>
   onForget: () => void
 }) {
-  const [draft, setDraft] = useState(fact.content)
-  const [saving, setSaving] = useState(false)
-
-  if (editing) {
-    const unchanged = draft.trim() === fact.content.trim()
-    return (
-      <form
-        className="rd-fact rd-fact-edit"
-        onSubmit={async (e) => {
-          e.preventDefault()
-          if (!draft.trim() || saving) return
-          if (unchanged) return onCancel()
-          setSaving(true)
-          if (await onSave(draft.trim())) onCancel()
-          setSaving(false)
-        }}
-      >
-        <input
-          className="rd-input"
-          value={draft}
-          autoFocus
-          maxLength={1000}
-          disabled={saving}
-          aria-label={'Edit: ' + fact.content}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-        <Btn size="xs" type="submit" variant="primary" disabled={saving || !draft.trim()}>
-          {saving ? 'Saving…' : 'Save'}
-        </Btn>
-        <Btn size="xs" variant="ghost" onClick={onCancel} disabled={saving}>
-          Cancel
-        </Btn>
-      </form>
-    )
-  }
+  if (editing) return <MemoryFactEditor fact={fact} onCancel={onCancel} onSave={onSave} />
 
   return (
     <div className="rd-fact">
@@ -81,10 +121,7 @@ function MemoryFactRow({
           className="rd-fact-ibtn"
           title="Edit"
           aria-label={'Edit: ' + fact.content}
-          onClick={() => {
-            setDraft(fact.content)
-            onEdit()
-          }}
+          onClick={onEdit}
         >
           <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
         </button>
