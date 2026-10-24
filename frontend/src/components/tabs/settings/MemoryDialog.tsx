@@ -176,11 +176,6 @@ function ForgetConfirm({
             ? 'Lucius will no longer remember this. This can’t be undone.'
             : 'Lucius will start again with an empty memory. This can’t be undone.'}
         </p>
-        {one && (
-          <blockquote className="rd-confirm-quote">
-            <span className="rd-confirm-quote-t">{pending.fact.content}</span>
-          </blockquote>
-        )}
         <div className="rd-confirm-acts">
           <Btn autoFocus onClick={onCancel}>
             Cancel

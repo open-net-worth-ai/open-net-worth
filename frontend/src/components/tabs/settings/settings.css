@@ -1354,23 +1354,6 @@
   line-height: 1.5;
   color: var(--muted);
 }
-.onw-settings .rd-confirm-quote {
-  margin: 2px 0 0;
-  padding: 8px 12px;
-  border-left: 2px solid var(--line-strong);
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  color: var(--ink);
-  font-size: 12.5px;
-  line-height: 1.45;
-}
-/* the clamp sits on the text, not the padded quote, or a cut 4th line shows in the padding */
-.onw-settings .rd-confirm-quote-t {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
 .onw-settings .rd-confirm-acts {
   display: flex;
   justify-content: flex-end;
