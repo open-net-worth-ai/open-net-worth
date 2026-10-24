@@ -1081,7 +1081,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                   }
                   action={
                     data.has_ticker ? (
-                      <Button variant="primary" onClick={refresh} disabled={refreshing}>
+                      <Button variant="primary" size="sm" onClick={refresh} disabled={refreshing}>
                         {refreshing ? 'Refreshing…' : 'Refresh now'}
                       </Button>
                     ) : undefined
@@ -1126,7 +1126,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                   body="Bull and bear key issues will appear after a refresh."
                   action={
                     data.has_ticker ? (
-                      <Button variant="primary" onClick={refresh} disabled={refreshing}>
+                      <Button variant="primary" size="sm" onClick={refresh} disabled={refreshing}>
                         {refreshing ? 'Refreshing…' : 'Refresh now'}
                       </Button>
                     ) : undefined
@@ -1180,7 +1180,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                 title="No position in this asset"
                 body={`You don't currently hold ${asset.ticker ?? asset.name}. Record your first acquisition to start tracking it here.`}
                 action={
-                  <Button variant="primary" onClick={() => setAddLotOpen(true)}>
+                  <Button variant="primary" size="sm" onClick={() => setAddLotOpen(true)}>
                     Add lot
                   </Button>
                 }
