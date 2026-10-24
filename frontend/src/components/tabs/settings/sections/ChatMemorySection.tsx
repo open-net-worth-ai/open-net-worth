@@ -79,6 +79,7 @@ function MemoryModal({ onClose, toast }: { onClose: () => void; toast: SectionPr
   return (
     <Modal
       title={'Stored memories (' + facts.length + ')'}
+      size="lg"
       onClose={onClose}
       footer={
         <>
