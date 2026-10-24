@@ -3,6 +3,7 @@
 GET    /api/memory/settings   → {"enabled": bool}
 PUT    /api/memory/settings   body {"enabled": bool} → updated settings
 GET    /api/memory/facts      → {"facts": [...], "total": n}
+PATCH  /api/memory/facts/{id} body {"content": str} → the edited fact
 DELETE /api/memory/facts/{id} → {"ok": bool}
 DELETE /api/memory/facts      → {"ok": true, "deleted": n}
 POST   /api/memory/instruct   body {"instruction": str} → {"added", "updated", "removed"}
@@ -20,8 +21,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from backend.ai.memory import MemoryDisabledError
-from backend.ai.memory_instruct import apply_instruction
-from backend.core.errors import ExternalServiceError, ValidationError
+from backend.ai.memory_instruct import apply_instruction, edit_fact
+from backend.core.errors import ExternalServiceError, NotFoundError, ValidationError
 from backend.db.memory_settings_store import MemorySettingsStore
 from backend.db.memory_store import MemoryStore
 
@@ -34,6 +35,10 @@ class MemorySettingsPatch(BaseModel):
 
 class MemoryInstruction(BaseModel):
     instruction: str
+
+
+class MemoryFactEdit(BaseModel):
+    content: str
 
 
 @router.get("/api/memory/settings")
@@ -52,6 +57,16 @@ def list_memory_facts():
     a distilled fact list, not a log, so there is no window to page through."""
     facts = MemoryStore().all_facts()
     return {"facts": facts, "total": len(facts)}
+
+
+@router.patch("/api/memory/facts/{fact_id}")
+def edit_memory_fact(fact_id: str, body: MemoryFactEdit):
+    try:
+        return edit_fact(fact_id, body.content)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from exc
+    except NotFoundError as exc:
+        raise HTTPException(status_code=404, detail=exc.message) from exc
 
 
 @router.delete("/api/memory/facts/{fact_id}")

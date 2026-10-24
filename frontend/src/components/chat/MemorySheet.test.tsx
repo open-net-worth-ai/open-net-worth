@@ -15,6 +15,7 @@ function serve(enabled: boolean, facts: { id: string; content: string; source?: 
   authFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (url === '/api/memory/settings') return json({ enabled })
     if (init?.method === 'DELETE') return json({ ok: true })
+    if (init?.method === 'PATCH') return json({ id: 'f1', content: 'edited' })
     if (url === '/api/memory/instruct') return json({ added: 1, updated: 1, removed: 0 })
     return json({ facts, total: facts.length })
   })
@@ -95,5 +96,40 @@ describe('MemorySheet', () => {
       (screen.getByLabelText('Tell Lucius what to remember or change') as HTMLInputElement)
         .disabled,
     ).toBe(true)
+  })
+
+  it('edits a fact in place and saves exactly what was typed', async () => {
+    serve(true, [{ id: 'f 1', content: 'Rent goes up every March' }])
+    render(<MemorySheet onClose={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit: Rent goes up every March' }))
+    const field = screen.getByRole('textbox', { name: 'Edit: Rent goes up every March' })
+    fireEvent.change(field, { target: { value: 'Rent goes up every April' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(authFetch).toHaveBeenCalledWith('/api/memory/facts/f%201', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: 'Rent goes up every April' }),
+      }),
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole('textbox', { name: 'Edit: Rent goes up every March' })).toBeNull(),
+    )
+  })
+
+  it('Escape cancels an edit without closing the dialog or saving', async () => {
+    serve(true, [{ id: 'f1', content: 'A fact' }])
+    const onClose = vi.fn()
+    render(<MemorySheet onClose={onClose} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit: A fact' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Edit: A fact' })).toBeNull())
+    expect(onClose).not.toHaveBeenCalled()
+    expect(authFetch).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ method: 'PATCH' }),
+    )
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
   })
 })

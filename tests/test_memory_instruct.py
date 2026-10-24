@@ -165,3 +165,35 @@ def test_route_maps_each_refusal_to_its_status(client, prov):
     MemorySettingsStore().set_enabled(False)
     r = client.post("/api/memory/instruct", json={"instruction": "hi"})
     assert r.status_code == 409 and "Memory is disabled" in r.json()["detail"]
+
+
+# ── Editing one fact directly (PATCH /api/memory/facts/{id}) ────────────────────
+
+
+def test_edit_rewrites_the_text_as_typed_and_makes_it_the_users(db_isolated):
+    MemoryStore().insert(_fact("m_rent", "Rent goes up every March"))
+
+    edited = instruct_mod.edit_fact("m_rent", "  Rent goes up every April  ")
+
+    assert edited["content"] == "Rent goes up every April"
+    assert edited["source"] == "explicit"
+    (stored,) = MemoryStore().all_facts()
+    assert stored["content"] == "Rent goes up every April"
+    assert stored["updated_at"] != "2026-01-01T00:00:00"
+
+
+def test_edit_works_while_memory_is_off(db_isolated):
+    MemoryStore().insert(_fact("m_1", "Old wording"))
+    MemorySettingsStore().set_enabled(False)
+
+    assert instruct_mod.edit_fact("m_1", "New wording")["content"] == "New wording"
+
+
+def test_edit_route_maps_errors(client):
+    MemoryStore().insert(_fact("m_1", "Gets paid on the 25th"))
+
+    ok = client.patch("/api/memory/facts/m_1", json={"content": "Gets paid on the 1st"})
+    assert ok.status_code == 200 and ok.json()["content"] == "Gets paid on the 1st"
+    assert client.patch("/api/memory/facts/m_1", json={"content": "  "}).status_code == 422
+    assert client.patch("/api/memory/facts/nope", json={"content": "x"}).status_code == 404
+    assert [f["content"] for f in MemoryStore().all_facts()] == ["Gets paid on the 1st"]

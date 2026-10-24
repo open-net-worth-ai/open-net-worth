@@ -25,7 +25,7 @@ async function getFacts(): Promise<{ facts: MemoryFact[]; total: number }> {
   return r.json() as Promise<{ facts: MemoryFact[]; total: number }>
 }
 
-/** The stored-memory list and its two deletes, used by the one stored-memories dialog
+/** The stored-memory list and its edits and deletes, used by the one stored-memories dialog
  *  (components/tabs/settings/MemoryDialog). `notify` gets one short line per outcome. */
 export function useMemoryFacts(notify: (message: string) => void) {
   const { data, refresh } = useCachedFetchState(MEMORY_FACTS_KEY, getFacts, {
@@ -43,6 +43,28 @@ export function useMemoryFacts(notify: (message: string) => void) {
       notify(done)
     } catch {
       notify('Could not reach the server. Try again.')
+    }
+  }
+
+  /** Rewrite one fact's text as typed. True when saved. */
+  async function edit(id: string, content: string): Promise<boolean> {
+    try {
+      const r = await authFetch(`${MEMORY_FACTS_KEY}/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      })
+      if (!r.ok) {
+        const body = (await r.json().catch(() => ({}))) as { detail?: unknown }
+        notify(typeof body.detail === 'string' ? body.detail : `Could not save (HTTP ${r.status})`)
+        return false
+      }
+      void refresh()
+      notify('Saved')
+      return true
+    } catch {
+      notify('Could not reach the server. Try again.')
+      return false
     }
   }
 
@@ -74,6 +96,7 @@ export function useMemoryFacts(notify: (message: string) => void) {
   }
 
   return {
+    edit,
     instruct,
     facts: data?.facts ?? [],
     forget: (id: string) => remove(`${MEMORY_FACTS_KEY}/${encodeURIComponent(id)}`, 'Forgotten'),

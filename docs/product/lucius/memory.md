@@ -39,11 +39,13 @@ Review…**.
 
 1. The list shows each fact, when it changed, and where it came from — **You told Lucius** or
    **Learned in chat**. Use the search box to find one.
-2. Click **Forget** next to anything wrong or out of date.
+2. Click **Edit** to fix a fact's wording — change the text, then **Save** (or press Enter).
+   **Cancel** or Esc leaves it as it was.
+3. Click **Forget** next to anything wrong or out of date.
 
 If memory is switched off, the list says so at the top.
 
-Forgetting a fact takes effect from Lucius's next reply. It doesn't change your ledger or
+Editing or forgetting a fact takes effect from Lucius's next reply. It doesn't change your ledger or
 profile.
 
 ## Change or add facts
@@ -56,10 +58,11 @@ change…** and click **Update**:
 - *"I paid off the car loan"* — forgets what's no longer true.
 
 One sentence can do all three. The list refreshes and a note says what changed — for example
-**Added 1 · Updated 1**. Anything changed this way shows as **You told Lucius**.
+**Added 1 · Updated 1**. Anything changed this way — or with **Edit** — shows as **You told
+Lucius**.
 
-It's one small AI call on the **Memory** task model, billed like the rest of memory. It needs
-memory switched on; forgetting doesn't.
+It's one small AI call on the **Memory** task model, billed like the rest of memory, and it
+needs memory switched on. **Edit** and **Forget** make no AI call and work either way.
 
 ## Switch it off
 

@@ -12,9 +12,89 @@ import { useCachedFetchState } from '../../../state/queryCache'
 import { fDate } from '../../../utils/format'
 import { Btn, Modal } from './ds'
 import type { Toast } from './ds'
+import type { MemoryFact } from '../../../hooks/useMemoryFacts'
+
+function MemoryFactRow({
+  fact,
+  editing,
+  onEdit,
+  onCancel,
+  onSave,
+  onForget,
+}: {
+  fact: MemoryFact
+  editing: boolean
+  onEdit: () => void
+  onCancel: () => void
+  onSave: (content: string) => Promise<boolean>
+  onForget: () => void
+}) {
+  const [draft, setDraft] = useState(fact.content)
+  const [saving, setSaving] = useState(false)
+
+  if (editing) {
+    const unchanged = draft.trim() === fact.content.trim()
+    return (
+      <form
+        className="rd-fact rd-fact-edit"
+        onSubmit={async (e) => {
+          e.preventDefault()
+          if (!draft.trim() || saving) return
+          if (unchanged) return onCancel()
+          setSaving(true)
+          if (await onSave(draft.trim())) onCancel()
+          setSaving(false)
+        }}
+      >
+        <input
+          className="rd-input"
+          value={draft}
+          autoFocus
+          maxLength={1000}
+          disabled={saving}
+          aria-label={'Edit: ' + fact.content}
+          onChange={(e) => setDraft(e.target.value)}
+        />
+        <Btn size="xs" type="submit" variant="primary" disabled={saving || !draft.trim()}>
+          {saving ? 'Saving…' : 'Save'}
+        </Btn>
+        <Btn size="xs" variant="ghost" onClick={onCancel} disabled={saving}>
+          Cancel
+        </Btn>
+      </form>
+    )
+  }
+
+  return (
+    <div className="rd-fact">
+      <div>
+        <div className="rd-fact-t">{fact.content}</div>
+        <div className="rd-fact-meta">
+          <span>{memorySourceLabel(fact.source)}</span>
+          <span>{fact.updated_at ? fDate(fact.updated_at) : ''}</span>
+        </div>
+      </div>
+      <Btn
+        size="xs"
+        variant="ghost"
+        onClick={() => {
+          setDraft(fact.content)
+          onEdit()
+        }}
+        aria-label={'Edit: ' + fact.content}
+      >
+        Edit
+      </Btn>
+      <Btn size="xs" variant="ghost" onClick={onForget} aria-label={'Forget: ' + fact.content}>
+        Forget
+      </Btn>
+    </div>
+  )
+}
 
 export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: Toast }) {
-  const { facts, forget, forgetAll, instruct } = useMemoryFacts(toast)
+  const { facts, forget, forgetAll, instruct, edit } = useMemoryFacts(toast)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const settings = useCachedFetchState(MEMORY_SETTINGS_KEY, getMemorySettings, { staleTime: 0 })
   const off = settings.data?.enabled === false
   const [q, setQ] = useState('')
@@ -41,7 +121,8 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
     <Modal
       title={'Stored memories (' + facts.length + ')'}
       size="lg"
-      onClose={onClose}
+      // The dialog owns Escape (and the X and scrim): mid-edit, they cancel the edit first.
+      onClose={() => (editingId ? setEditingId(null) : onClose())}
       footer={
         <div className="rd-mem-foot">
           {/* Edit and add by saying it, as in Claude's memory: one sentence becomes one
@@ -94,8 +175,8 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
         {off
           ? 'Memory is off — Lucius is not learning new facts or using these. Turn it on in ' +
             'Settings → Chat & Memory.'
-          : 'Durable facts Lucius carries between conversations. Forgetting one takes effect on ' +
-            'the next turn.'}
+          : 'Durable facts Lucius carries between conversations. Editing or forgetting one takes ' +
+            'effect on the next turn.'}
       </span>
       <input
         className="rd-input"
@@ -107,23 +188,15 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
       {shown.length ? (
         <div className="rd-factlist">
           {shown.map((f) => (
-            <div className="rd-fact" key={f.id}>
-              <div>
-                <div className="rd-fact-t">{f.content}</div>
-                <div className="rd-fact-meta">
-                  <span>{memorySourceLabel(f.source)}</span>
-                  <span>{f.updated_at ? fDate(f.updated_at) : ''}</span>
-                </div>
-              </div>
-              <Btn
-                size="xs"
-                variant="ghost"
-                onClick={() => void forget(f.id)}
-                aria-label={'Forget: ' + f.content}
-              >
-                Forget
-              </Btn>
-            </div>
+            <MemoryFactRow
+              key={f.id}
+              fact={f}
+              editing={editingId === f.id}
+              onEdit={() => setEditingId(f.id)}
+              onCancel={() => setEditingId(null)}
+              onSave={(content) => edit(f.id, content)}
+              onForget={() => void forget(f.id)}
+            />
           ))}
         </div>
       ) : (

@@ -1,4 +1,5 @@
-"""Change memory from a typed instruction — the memory dialog's "Tell Lucius what to change".
+"""The memory dialog's own edits: rewrite one fact's text, or change memory from a typed
+instruction ("Tell Lucius what to change").
 
 One instruction ("my dog's name is Beans", "I moved out of the Tampines condo", "forget the
 car loan") becomes ONE memory-model call that answers in the same {"new", "updates", "remove"}
@@ -17,6 +18,7 @@ from backend.ai.memory import (
     FACT_LISTING_TRUNCATE,
     MemoryDisabledError,
     _memory_model,
+    _now,
     _parse_json,
     _provider,
     _tokenize,
@@ -24,7 +26,7 @@ from backend.ai.memory import (
     apply_memory_ops,
     purge_expired,
 )
-from backend.core.errors import ExternalServiceError, ValidationError
+from backend.core.errors import ExternalServiceError, NotFoundError, ValidationError
 from backend.core.user_time import user_today
 from backend.db import MemoryStore
 from backend.db.memory_settings_store import memory_writes_enabled
@@ -111,3 +113,22 @@ async def apply_instruction(instruction: str) -> dict:
         logger.warning("memory instruction returned an unparseable reply")
         raise ExternalServiceError("Lucius couldn't make sense of that. Try rewording it.")
     return apply_memory_ops(store, parsed, today, source="explicit", guard=False)
+
+
+def edit_fact(fact_id: str, content: str) -> dict:
+    """Rewrite one fact's text exactly as typed; it becomes the user's own (``explicit``).
+
+    Allowed while memory is off, like forgetting: a user correcting what is already stored is
+    not a new write channel, and the fact stays dormant until memory is back on.
+    """
+    text = (content or "").strip()
+    if not text:
+        raise ValidationError("A memory can't be empty — use Forget to remove it.")
+    if len(text) > INSTRUCTION_MAX_CHARS:
+        raise ValidationError(f"Keep it under {INSTRUCTION_MAX_CHARS} characters.")
+    updated = MemoryStore().update_by_id(
+        fact_id, {"content": text, "source": "explicit", "updated_at": _now()}
+    )
+    if updated is None:
+        raise NotFoundError("unknown memory")
+    return updated

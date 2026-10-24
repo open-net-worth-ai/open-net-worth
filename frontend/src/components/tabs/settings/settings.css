@@ -1320,6 +1320,11 @@
   color: var(--faint);
   margin-top: 3px;
 }
+/* a fact being edited in place: the text field takes the row, Save and Cancel sit after it */
+.onw-settings .rd-fact-edit .rd-input {
+  flex: 1;
+  min-width: 0;
+}
 /* memory dialog footer: "Tell Lucius what to change" above the dialog's own buttons */
 .onw-settings .rd-mem-foot {
   flex: 1;
