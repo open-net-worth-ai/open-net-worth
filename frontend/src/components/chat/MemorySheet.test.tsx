@@ -45,18 +45,21 @@ describe('MemorySheet', () => {
     serve(true, [{ id: 'f 1', content: 'Rent goes up every March' }])
     render(<MemorySheet onClose={vi.fn()} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Forget: Rent goes up every March' }))
+    expect(screen.getByRole('alertdialog', { name: 'Forget this memory?' })).toBeTruthy()
+    expect(authFetch).not.toHaveBeenCalledWith(expect.anything(), { method: 'DELETE' })
+    fireEvent.click(screen.getByRole('button', { name: 'Forget' }))
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith('/api/memory/facts/f%201', { method: 'DELETE' }),
     )
   })
 
-  it('arms "Forget everything" before deleting anything', async () => {
+  it('asks before "Forget everything" deletes anything', async () => {
     serve(true, [{ id: 'f1', content: 'A fact' }])
     render(<MemorySheet onClose={vi.fn()} />)
     await screen.findByText('A fact')
     fireEvent.click(screen.getByRole('button', { name: 'Forget everything' }))
     expect(authFetch).not.toHaveBeenCalledWith('/api/memory/facts', { method: 'DELETE' })
-    fireEvent.click(screen.getByRole('button', { name: 'Confirm — forget all 1' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Forget all' }))
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith('/api/memory/facts', { method: 'DELETE' }),
     )
@@ -151,5 +154,19 @@ describe('MemorySheet', () => {
         expect.objectContaining({ method: 'PATCH' }),
       ),
     )
+  })
+
+  it('Cancel and Escape back out of a forget without deleting or closing', async () => {
+    serve(true, [{ id: 'f1', content: 'A fact' }])
+    const onClose = vi.fn()
+    render(<MemorySheet onClose={onClose} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Forget: A fact' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('alertdialog')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Forget: A fact' }))
+    fireEvent.keyDown(window, { key: 'Escape' })
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(onClose).not.toHaveBeenCalled()
+    expect(authFetch).not.toHaveBeenCalledWith(expect.anything(), { method: 'DELETE' })
   })
 })

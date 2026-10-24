@@ -41,7 +41,8 @@ Review…**.
    **Learned in chat**. Use the search box to find one.
 2. Hover a fact and click **Edit** (the pencil) to fix its wording. The whole fact opens in a box; change it, then
    **Save** or press Enter (Shift+Enter starts a new line). **Cancel** or Esc leaves it as it was.
-3. Click **Forget** (the bin) next to anything wrong or out of date.
+3. Click **Forget** (the bin) next to anything wrong or out of date, then **Forget** again to
+   confirm. It can't be undone.
 
 If memory is switched off, the list says so at the top.
 
@@ -74,7 +75,7 @@ remove them, see below.
 
 ## Clear everything
 
-In the memory list, click **Forget everything**, then **Confirm — forget all N**. This
+In the memory list, click **Forget everything**, then **Forget all** to confirm. This
 works whether memory is on or off.
 
 ## How it works

@@ -1320,6 +1320,63 @@
   color: var(--faint);
   margin-top: 3px;
 }
+/* "Forget this memory?" — a small confirm above the memory dialog */
+.onw-settings .rd-confirm-scrim {
+  position: fixed;
+  inset: 0;
+  right: var(--chat-width, 0px);
+  z-index: calc(var(--z-modal) + 1);
+  background: rgba(6, 8, 12, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.onw-settings .rd-confirm {
+  width: min(400px, 100%);
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-modal);
+  padding: 18px 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.onw-settings .rd-confirm-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.onw-settings .rd-confirm-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.onw-settings .rd-confirm-quote {
+  margin: 2px 0 0;
+  padding: 8px 12px;
+  border-left: 2px solid var(--line-strong);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+/* the clamp sits on the text, not the padded quote, or a cut 4th line shows in the padding */
+.onw-settings .rd-confirm-quote-t {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.onw-settings .rd-confirm-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
 /* fact row actions: quiet icon buttons that surface on hover (always shown on touch) */
 .onw-settings .rd-fact {
   transition: background 0.12s ease;
