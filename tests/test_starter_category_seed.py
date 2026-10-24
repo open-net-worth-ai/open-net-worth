@@ -66,10 +66,21 @@ def test_a_book_with_its_own_categories_does_not_get_the_template():
     CategoryStore().insert(own)
 
     assert ensure_builtins_seeded() == 0
-    assert CategoryStore().all() == [own]
+    assert [c["id"] for c in CategoryStore().all()] == [own["id"], "split"]  # sentinel only
     assert EnvelopeGroupsStore().all() == []
 
 
 def test_starter_labels_are_plain_words():
     # The owner removed the emoji prefixes (2026-10-10): a label starts with a letter.
     assert all(c["label"][0].isalpha() for c in STARTER_CATEGORIES)
+
+
+def test_seed_restores_a_missing_split_sentinel_without_touching_the_rest():
+    ensure_builtins_seeded()
+    store = CategoryStore()
+    store.delete("split")
+    before = store.all()
+
+    assert ensure_builtins_seeded() == 0
+    assert store.get("split")["label"] == "Split"
+    assert [c for c in store.all() if c["id"] != "split"] == before

@@ -1315,13 +1315,7 @@ def known_transfer_routes() -> frozenset:
     """The set of confirmed transfer ROUTES — ``frozenset({from_account, to_account})`` for every
     non-deleted ``transfer`` row in the ledger (Phase 4). A pair on a known route is a real
     transfer corridor the user uses; an unknown route is treated cautiously (review, never auto)."""
-    routes: set[frozenset] = set()
-    for t in ledger_service.transactions.all():
-        if t.get("kind") == "transfer" and not t.get("deleted") and not t.get("merged_into"):
-            fa, ta = t.get("from_account_id"), t.get("to_account_id")
-            if fa and ta:
-                routes.add(frozenset((fa, ta)))
-    return frozenset(routes)
+    return ledger_service.transactions.transfer_routes()
 
 
 def _load_rates() -> dict | None:

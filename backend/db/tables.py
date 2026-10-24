@@ -639,6 +639,17 @@ match_decisions = book_payload_table("match_decisions")
 match_reviews = book_payload_table("match_reviews")
 rejected_identities = book_payload_table("rejected_identities")
 
+# YNAB two-way sync (ADR 2026-10-20-ynab-two-way-sync-reconciles-against-per-entity-baselines):
+# book-scoped bookkeeping, no credentials. `ynab_sync_state` holds two documents (`state` — plan,
+# schedule, cursors, last run — and `meta` — YNAB's accounts/categories/payees as last seen);
+# `ynab_sync_mirror` is YNAB's transactions as last synced (id = YNAB transaction id);
+# `ynab_sync_baselines` the last-agreed state per ledger transaction (`t:<id>`) and per month +
+# category Assigned (`a:<month>:<category>`); `ynab_sync_conflicts` the review list.
+ynab_sync_state = book_payload_table("ynab_sync_state")
+ynab_sync_mirror = book_payload_table("ynab_sync_mirror")
+ynab_sync_baselines = book_payload_table("ynab_sync_baselines")
+ynab_sync_conflicts = book_payload_table("ynab_sync_conflicts")
+
 # owned_assets / owned_asset_categories: the Assets tab domain (ADR 2026-09-06-assets-tab-
 # faithful-port) — things you own that are valued by a dated manual mark, not a ledger balance
 # or a price feed (property, vehicles, watches, art, precious metals, cash-value policies, and
@@ -827,6 +838,32 @@ statement_formats = payload_table("statement_formats")
 notification_log = payload_table("notification_log")  # runtime cache — checkpoint-EXCLUDED
 desktop_access_grants = payload_table("desktop_access_grants")
 desktop_ingest_jobs = payload_table("desktop_ingest_jobs")
+# One row per Import / Verify / Preview run of a provider's importer (services/import_runs.py):
+# the stored report the Imports & sync screen reads. The columns are what the history list and the
+# polls look up; `detail` holds the heavy parts (log, counts, problems, preview, verification) that
+# only a run opened as a report reads. No credential in it. Checkpoint-EXCLUDED, non-restorable,
+# wiped by Reset.
+import_runs = Table(
+    "import_runs",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("provider", Text, nullable=False),
+    Column("kind", Text, nullable=False),
+    Column("trigger", Text, nullable=False),
+    Column("status", Text, nullable=False),
+    Column("started_at", Text, nullable=False),
+    Column("finished_at", Text, nullable=True),
+    Column("plan_id", Text, nullable=False),
+    Column("plan_name", Text, nullable=False),
+    Column("outcome", Text, nullable=False),
+    Column("archived_at", Text, nullable=True),
+    Column("phase", Text, nullable=False),
+    Column("progress", JSON, nullable=False),
+    Column("error", Text, nullable=True),
+    Column("detail", JSON, nullable=False),
+    Index("ix_import_runs_provider_started", "provider", "started_at"),
+    Index("ix_import_runs_status", "status"),
+)
 # ── intel_stories / signal_timeline_entries / daily_digests (RFC intel-signals-data-model)
 # Split of the old multi-writer `intel_signals` (stories + digests): three shapes shared one
 # table with a name collision (`summary` meant two different things) and an unbounded JSON

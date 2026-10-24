@@ -320,6 +320,19 @@ class TransactionStore:
                 for r in read_conn.execute(select(transactions).order_by(transactions.c.seq))
             ]
 
+    def transfer_routes(self) -> frozenset:
+        """``frozenset({from, to})`` for every live, unmerged transfer — read from the indexed
+        columns, never the JSON payload (decoding every row made each bulk import O(ledger))."""
+        t = transactions.c
+        stmt = (
+            select(t.from_account_id, t.to_account_id)
+            .where(t.kind == "transfer", t.deleted == 0, t.merged_into.is_(None))
+            .where(t.from_account_id.is_not(None), t.to_account_id.is_not(None))
+            .distinct()
+        )
+        with self._eng().connect() as read_conn:
+            return frozenset(frozenset(r) for r in read_conn.execute(stmt))
+
     def find_by_id(self, id_val: str, *, conn: Connection | None = None) -> dict | None:
         """``conn`` reads THROUGH the caller's open transaction (same contract as
         ``PayloadTableStore.find_by_id``). ``conn=None`` is a fresh, LOCK-FREE read — never
