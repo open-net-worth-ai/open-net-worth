@@ -1235,8 +1235,9 @@ function ViewBody({
             <span className="acct-payee-sub">—</span>
           )}
         </DRow>
-        {txn.tags.length > 0 && (
-          <DRow label="Tags">
+        {/* Always shown, like Memo — an empty row is how people learn tags exist. */}
+        <DRow label="Tags">
+          {txn.tags.length > 0 ? (
             <span className="acct-detail-tags">
               {txn.tags.map((tg) => (
                 <span key={tg} className="acct-detail-tag">
@@ -1244,8 +1245,10 @@ function ViewBody({
                 </span>
               ))}
             </span>
-          </DRow>
-        )}
+          ) : (
+            <span className="acct-payee-sub">—</span>
+          )}
+        </DRow>
         {txn.origCurrency && txn.origCurrency !== currency && (
           <DRow label="Original charge">
             {fCur(txn.origAmount ?? 0, txn.origCurrency)}
