@@ -487,14 +487,14 @@ def analyst_consensus(instrument_id: str) -> dict:
     return {"currency": currency, "analyst": analyst, "ratings": ratings}
 
 
-def _lot_rows(position_id: str) -> list[dict]:
+def _lot_rows(position_id: str, with_predecessors: bool = False) -> list[dict]:
     """Same shape as GET /api/positions/{id}/lots (raw lot fields + effective_unit_cost/
     remaining_basis/term_to_date, open + closed) — delegates to lots_service so a merged
     multi-account read renders through the SAME LotsSection table columns as the
     single-account fetch, and the term/basis math never drifts from the shared
     implementation. The frontend filters to open lots itself (`openLots`), same as the
     single-account fetch path."""
-    return lots_for_position(position_id)
+    return lots_for_position(position_id, with_predecessors=with_predecessors)
 
 
 def _realized_rows(
@@ -773,7 +773,7 @@ def _position_block(inst: dict, rows: list[dict], fx: dict, base: str) -> dict |
     lots = [
         {**lot, "account_name": account_names.get(lot.get("account_id") or "", "")}
         for pid in position_ids
-        for lot in _lot_rows(pid)
+        for lot in _lot_rows(pid, with_predecessors=True)
     ]
 
     # Merged realized/income across every contributing LIQUID position — computed ONLY for the

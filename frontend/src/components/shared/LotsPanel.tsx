@@ -82,7 +82,9 @@ export function LotsPanel({
   useEffect(() => {
     if (merged || !positionId) return
     let alive = true
-    authFetch(`/api/positions/${positionId}/lots`)
+    // A sold-out-then-rebought holding lists its earlier (sold) lots too, like one that
+    // never split — the same with_predecessors scope as the realized/dividend reads below.
+    authFetch(`/api/positions/${positionId}/lots?with_predecessors=true`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
       .then((d: { lots: Lot[] }) => {
         if (alive) setFetchedLots(d.lots || [])

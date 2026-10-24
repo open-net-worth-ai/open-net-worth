@@ -90,11 +90,15 @@ def _raise_lot_write(result: dict) -> dict:
 
 
 @router.get("/api/positions/{position_id}/lots")
-def get_position_lots(position_id: str):
+def get_position_lots(position_id: str, with_predecessors: bool = False):
     """Open + closed lots for a position, FIFO-ordered, each annotated with effective
     unit cost, remaining basis, and term-to-date (long/short as of today). A pure read:
-    viewing a position never writes a lot (the KSTL placeholder, 2026-10-07)."""
-    return {"position_id": position_id, "lots": lots_service.lots_for_position(position_id)}
+    viewing a position never writes a lot (the KSTL placeholder, 2026-10-07).
+    with_predecessors adds a sold-out-then-rebought holding's earlier lots."""
+    return {
+        "position_id": position_id,
+        "lots": lots_service.lots_for_position(position_id, with_predecessors=with_predecessors),
+    }
 
 
 @router.post("/api/positions/{position_id}/lots")

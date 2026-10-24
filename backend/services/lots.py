@@ -38,7 +38,7 @@ from backend.core.user_time import user_today
 from backend.core.write_receipt import record_write
 from backend.db.engine import locked_unit_of_work
 from backend.db.instrument_store import InstrumentStore
-from backend.db.lot_store import LotStore
+from backend.db.lot_store import LotStore, _fifo_sorted
 from backend.db.position_store import PositionStore
 from backend.db.realized_event_store import RealizedEventStore
 from backend.db.tables import lots as lots_tbl
@@ -1551,16 +1551,24 @@ def _apply_dispose_amend(change: dict) -> dict:
 
 
 def lots_for_position(
-    position_id: str, threshold_days: int = DEFAULT_TERM_THRESHOLD_DAYS
+    position_id: str,
+    threshold_days: int = DEFAULT_TERM_THRESHOLD_DAYS,
+    with_predecessors: bool = False,
 ) -> list[dict]:
     """Open + closed lots for a position, FIFO-ordered, each annotated with its
     effective unit cost, remaining basis, and term-to-date (long/short as of today).
+    `with_predecessors` adds the sold-out positions' lots, as `realized_pnl` adds their sales.
 
     Pure read. Every holding has its lot from the moment it is added (ADR
     2026-10-07-a-position-quantity-is-derived-from-its-records), so nothing is seeded here."""
+    from backend.services.position_lineage import history_position_ids
+
     today = user_today().isoformat()
+    ids = history_position_ids(position_id) if with_predecessors else [position_id]
+    store = LotStore()
+    rows = [lot for pid in ids for lot in store.lots_for_position(pid, include_closed=True)]
     out: list[dict] = []
-    for lot in LotStore().lots_for_position(position_id, include_closed=True):
+    for lot in _fifo_sorted(rows):
         eff = effective_unit_cost(lot)
         rq = float(lot.get("remaining_qty") or 0)
         out.append(

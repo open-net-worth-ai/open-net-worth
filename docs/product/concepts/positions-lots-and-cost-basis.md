@@ -105,9 +105,9 @@ the **Not a sale** option.
 - Sold everything and bought back later at the same account? The buy reopens the same holding,
   however it's recorded — the **Add lot** form, Lucius, or adding the position again — so its
   sales, dividends and sold lots stay with it. A holding split in two by a rebuy recorded
-  before this still shows its earlier sales and dividends under **Realized history**,
-  **Realized P&L**, **Dividends** and **Dividends received**; its **Acquisition lots** lists
-  only the lots bought since.
+  before this still shows its whole past: the earlier sold lots under **Acquisition lots**,
+  and the earlier sales and dividends under **Realized history**, **Realized P&L**,
+  **Dividends** and **Dividends received**.
 - An older lot whose purchase date was never known shows an empty **Acquired date** when you
   edit it. Saving a note or cost leaves the date unknown rather than setting it to today.
 

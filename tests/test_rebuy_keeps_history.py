@@ -173,3 +173,16 @@ def test_an_unvested_row_is_never_a_predecessor(isolated):
     assert ids == [new, old]
     assert locked["id"] not in ids
     assert history_position_ids(locked["id"]) == [locked["id"]]
+
+
+def test_rebought_position_lists_the_sold_out_positions_lots_oldest_first(isolated):
+    from backend.services import lots
+
+    _, old, new = _sold_then_rebought()
+
+    assert [lot["position_id"] for lot in lots.lots_for_position(new)] == [new]
+    history = lots.lots_for_position(new, with_predecessors=True)
+    assert [(lot["position_id"], lot["remaining_qty"]) for lot in history] == [
+        (old, 0.0),  # the sold June lot, still listed — as a never-split holding shows it
+        (new, 8.0),
+    ]
