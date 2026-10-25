@@ -74,6 +74,15 @@ the macOS DMG + ZIP, the Windows `setup.exe` + `RELEASES` + `.nupkg`, the Linux 
 `docker-compose.yml` (pinned to this version), the wheel + sdist, `SHA256SUMS`, `manifest.json`, and
 `SHA256SUMS.minisig` / `manifest.json.minisig`.
 
+### Release notes
+
+Each release's notes list what changed since the previous release: the commit subjects between
+the two `Source:` commits, grouped by `scripts/release_notes.py` (`feat` → New, `fix` → Fixes,
+`style`/`copy`/`perf` → Polish; docs, ci, test, refactor and chore are left out), plus a compare
+link. So a commit subject is release-note copy: write it for a user. The releases repo's
+`release.yml` fetches the script at the source commit; a failure there leaves the list out and
+never blocks the release. Keep the trailing `Source: <sha>` line — the next run reads it.
+
 ### `manifest.json`
 
 Written by `scripts/release_manifest.py` (unit-tested), signed with the same minisign key as

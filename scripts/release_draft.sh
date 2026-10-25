@@ -22,11 +22,23 @@ if [ -n "$existing" ]; then
   gh api -X DELETE "repos/$repo/releases/${existing% *}" >/dev/null
 fi
 
+# What changed since the latest published release, read from the commit it names in its notes.
+prev="$(gh release view --repo "$repo" --json body --jq .body 2>/dev/null | grep -oE 'Source: [0-9a-f]{40}' | cut -c9- || true)"
+changes=""
+if [ -n "$prev" ] && git cat-file -e "$prev^{commit}" 2>/dev/null; then
+  changes="$(git log --format=%s "$prev..$sha" | python3 scripts/release_notes.py)"
+  [ -z "$changes" ] || changes="$changes
+
+**Full changelog:** https://github.com/open-net-worth-ai/open-net-worth/compare/$prev...$sha
+
+"
+fi
+
 notes="Open Net Worth $version.
 
 Download the desktop app for your computer from https://opennetworth.ai - installed apps update themselves. Server installs: \`install-server.sh\` (PyPI) or \`docker-compose.yml\` (pinned image). Verify any file against \`SHA256SUMS\` and its minisign signature; \`manifest.json\` is the signed record of this release (source commit, image digest, checksums).
 
-Source: $sha"
+${changes}Source: $sha"
 gh release create "v$version" "$dir"/* --repo "$repo" --draft \
   --title "Open Net Worth $version Beta" --notes "$notes"
 echo "draft v$version created in $repo"
