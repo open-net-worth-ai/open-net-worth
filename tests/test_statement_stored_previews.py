@@ -157,10 +157,25 @@ def test_deleting_the_statement_drops_its_review():
     assert StatementPreviewStore().get(first["statement_id"]) is None
 
 
-def test_a_successful_commit_drops_the_stored_review():
+def test_a_booked_statement_keeps_its_review_but_never_serves_it_while_imported(heavy_calls):
+    """The review describes the ledger BEFORE the import: while the import stands a reopen
+    recomputes; once it is undone the ledger is back to what the review describes, so it is
+    served again — Review again after Undo is instant (owner, 2026-10-26)."""
+    from backend.services.import_undo import undo_import
+
     first = _preview(filename="s.ofx")
-    svc.decision_commit(first["statement_id"], "acc")
-    assert StatementPreviewStore().get(first["statement_id"]) is None
+    sid = first["statement_id"]
+    out = svc.decision_commit(sid, "acc", [], reviewed=True)
+    assert StatementPreviewStore().get(sid) is not None
+
+    heavy_calls.clear()
+    _preview(filename="s.ofx")
+    assert "_apply_batch_match" in heavy_calls  # imported: recomputed, never the kept review
+
+    undo_import(out["batch_id"])
+    heavy_calls.clear()
+    again = _preview(filename="s.ofx")
+    assert heavy_calls == [] and len(again["rows"]) == 2
 
 
 def test_undoing_lucius_ops_drops_the_stored_review():
@@ -520,3 +535,60 @@ def test_the_review_confirm_endpoint_books_as_reviewed(monkeypatch):
     )
     assert res.status_code == 200, res.text
     assert seen and seen[0].get("reviewed") is True
+
+
+def _merge_setup():
+    """A ledger entry the statement's Coffee row links to, and the committed import."""
+    existing = ledger_service.create_transaction(
+        {
+            "date": "2026-01-02",
+            "kind": "expense",
+            "from_account_id": "acc",
+            "from_amount": 4.5,
+            "description": "COFFEE SHOP",
+            "memo": "before",
+        }
+    )
+    first = _preview(filename="s.ofx")
+    sid = first["statement_id"]
+    decisions = [{"row": 0, "action": "merge", "existing_id": existing["id"]}]
+    out = svc.decision_commit(sid, "acc", decisions, reviewed=True)
+    return existing, sid, out
+
+
+def test_undo_import_removes_added_rows_and_restores_linked_ones():
+    from backend.services.import_undo import undo_import
+
+    existing, sid, out = _merge_setup()
+    assert out["created"] == 1 and out["merged"] == 1
+    merged_now = ledger_service.transactions.find_by_id(existing["id"])
+    assert merged_now != existing  # the link changed the entry
+
+    undone = undo_import(out["batch_id"])
+
+    assert undone["deleted"] == 1 and undone["unmerged"] == 1 and undone["statement_id"] == sid
+    restored = ledger_service.transactions.find_by_id(existing["id"])
+    assert restored.get("external_refs") == existing.get("external_refs")
+    assert restored.get("description") == existing.get("description")
+    live = [t for t in ledger_service.transactions.all() if not t.get("deleted")]
+    assert [t["id"] for t in live] == [existing["id"]]
+
+
+def test_the_rest_rollback_undoes_the_whole_import_not_just_the_added_rows():
+    """The Booked screen's Undo calls this route; it used to soft-delete created rows only and
+    leave every linked entry merged."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from backend.api.ledger import router as ledger_router
+
+    existing, _sid, out = _merge_setup()
+    app = FastAPI()
+    app.include_router(ledger_router)
+    res = TestClient(app).post(
+        f"/api/transactions/batches/{out['batch_id']}/rollback", headers=_HEADERS
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["unmerged"] == 1
+    restored = ledger_service.transactions.find_by_id(existing["id"])
+    assert restored.get("external_refs") == existing.get("external_refs")

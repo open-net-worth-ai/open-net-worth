@@ -8,6 +8,8 @@ import { Spark as LuciusSpark } from '../../../lucius/identity'
 import { fCur, fromApiTxn } from './data'
 import './statementImport.css'
 import { ConfirmModal } from './ConfirmModal'
+import { BookedScreen } from './BookedScreen'
+import { Ic, Spark, I_CHECK, I_WARN } from './importIcons'
 import { AddCategoryField, AddPayeeField, type PayeeOption } from './pickers'
 import { catOptionsFor } from './categories'
 import TxnDetail from './TxnDetail'
@@ -613,30 +615,6 @@ function LuciusNote({ preview }: { preview: ImportPreviewResult }) {
   )
 }
 
-function Ic({ d, size = 16, sw = 1.8 }: { d: string; size?: number; sw?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={sw}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      dangerouslySetInnerHTML={{ __html: d }}
-    />
-  )
-}
-/** The handoff's own Lucius spark, verbatim from `flow3.jsx` (a filled four-point star
- *  with a smaller second sparkle) — the glyph the Choose, Read and Booked steps all use. */
-function Spark({ size = 15 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2l2.1 6.4L20 10l-5.9 1.6L12 18l-2.1-6.4L4 10l5.9-1.6L12 2zm7 12l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z" />
-    </svg>
-  )
-}
 const I_FILE =
   '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/>'
 /** The picked file's size, in the handoff's own `58 KB` / `1.2 MB` shape (`imp3-file-sub`). */
@@ -646,10 +624,6 @@ function fSize(bytes: number): string {
   const kb = bytes / 1024
   return kb < 1024 ? `${Math.round(kb)} KB` : `${(kb / 1024).toFixed(1)} MB`
 }
-const I_CHECK = '<path d="M20 6 9 17l-5-5"/>'
-const I_WARN =
-  '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/>'
-
 export interface ReopenOptions {
   instructions?: string
   rememberInstructions?: boolean
@@ -767,6 +741,9 @@ export interface ImportModalProps {
    *  from the commit; the parent closes this modal and opens the register filtered to that
    *  batch — a filter that unions the batch's created rows with the rows it only linked/merged. */
   onViewImportBatch?: (batchId: string, label?: string) => void
+  /** Undo import on the Booked screen: removes the rows this commit added and restores every
+   *  entry it linked into (POST /api/transactions/batches/{id}/rollback). Omitted, no Undo. */
+  onUndoImport?: (batchId: string) => Promise<{ deleted: number; unmerged: number }>
   /** Existing-transaction drawer (SI-50): clicking a match line's name/sub-line opens the
    *  REAL register drawer (TxnDetail) for that row. All optional — the register (AccountsTab)
    *  wires the same endpoints its own drawer uses; omitted, the drawer still opens (fetched via
@@ -863,6 +840,7 @@ export function ImportModal({
   onDecisionCommit,
   onMarkImportReviewed,
   onViewImportBatch,
+  onUndoImport,
   payeeOptions,
   payeeById,
   importReviewDefault,
@@ -2148,6 +2126,32 @@ export function ImportModal({
   // "Mark all as reviewed" (SI-79 Done-screen action) — a real write, not local-only state
   // (unlike the design handoff's mockup): clears needs_review on every row this commit just
   // created. A failure leaves the button clickable again rather than silently eating it.
+  // "Account · period · N rows" under the Booked title.
+  function bookedContext() {
+    const parts: string[] = []
+    if (result && result.accounts > 1) parts.push(`${result.accounts} accounts`)
+    else if (account?.name) parts.push(account.name)
+    const ps = preview?.meta?.period_start
+    const pe = preview?.meta?.period_end
+    if (ps) parts.push(`${fDate(ps)} – ${pe ? fDate(pe) : '…'}`)
+    const rowsRead = preview ? (preview.total ?? preview.drafts.length) : 0
+    if (rowsRead) parts.push(`${rowsRead} row${rowsRead === 1 ? '' : 's'}`)
+    return parts.join(' · ')
+  }
+
+  // After Undo import the ledger is back to exactly what the review described, so the same
+  // review — with every decision the user made — is shown again rather than re-read.
+  function reviewAgain() {
+    setResult(null)
+    setDoneDiff(null)
+    setDeleteErrors([])
+    setRefusedDuplicates([])
+    setReviewMarkState('idle')
+    setReviewMarkError('')
+    setPendingDelete({})
+    setStep('preview')
+  }
+
   async function markAllReviewed() {
     if (!result?.batchId || !onMarkImportReviewed) return
     setReviewMarkState('pending')
@@ -7071,167 +7075,31 @@ export function ImportModal({
             })()}
 
           {step === 'done' && result && (
-            <div className="imp3-done">
-              <span className="imp3-done-ic">
-                <Ic d={I_CHECK} size={20} sw={2.6} />
-              </span>
-              <div className="imp3-done-t">Booked.</div>
-              <div className="imp3-done-sub">
-                {/* One reconciled sentence — every bucket the statement's rows can land in, in
-                  order. "Already imported" sits next to "left out" since both mean "not
-                  booked", just for different reasons. */}
-                {result.merged ?? 0} linked to entries you had • {result.created} imported new
-                {result.skipped > 0 ? ` • ${result.skipped} left out` : ''}
-                {result.duplicates > 0 ? ` • ${result.duplicates} already imported` : ''}
-                {(result.deleted ?? 0) > 0 ? ` • ${result.deleted} deleted from your ledger` : ''}
-              </div>
-              <div className="imp3-done-facts">
-                {/* A staged delete the server refused is REPORTED, never swallowed — the whole
-                  point of moving deletion behind Confirm is that the user learns the outcome
-                  of what they marked. */}
-                {deleteErrors.length > 0 && (
-                  <span className="imp-heads">
-                    <span className="imp-heads-ic">
-                      <Ic d={I_WARN} size={14} />
-                    </span>
-                    <span>
-                      <b>
-                        {deleteErrors.length} marked transaction
-                        {deleteErrors.length === 1 ? '' : 's'} could not be deleted
-                      </b>
-                      {' — '}
-                      {deleteErrors.map((e) => e.error).join('; ')}. Everything else in this import
-                      was applied.
-                    </span>
-                  </span>
-                )}
-                {/* A row the LEDGER refused as a duplicate is reported for the same reason a
-                  refused delete is: the user asked for it and did not get it. Without this the
-                  Done screen's own sentence contradicts itself — "4 imported new" while only 3
-                  rows exist — which is the silent-shortfall shape the write-block was built to
-                  END, and must not quietly reintroduce at the last screen. */}
-                {refusedDuplicates.length > 0 && (
-                  <span className="imp-heads">
-                    <span className="imp-heads-ic">
-                      <Ic d={I_WARN} size={14} />
-                    </span>
-                    <span>
-                      <b>
-                        {refusedDuplicates.length} row{refusedDuplicates.length === 1 ? '' : 's'}{' '}
-                        not imported — already in your ledger
-                      </b>
-                      {' — '}
-                      {refusedDuplicates
-                        .map(
-                          (r) => `${r.date ?? ''} ${r.description ?? ''}`.trim() || '(unnamed row)',
-                        )
-                        .join('; ')}
-                      . Each matched a transaction you already have, so nothing was double-booked.
-                    </span>
-                  </span>
-                )}
-                {doneDiff !== null && doneDiff.core === 0 && (
-                  <span className="imp-insync">
-                    ✓ In sync — every statement row is accounted for in your ledger, and nothing in
-                    your ledger for this period is missing from the statement
-                    {doneDiff.boundary > 0
-                      ? ` (${doneDiff.boundary} near the cut-off likely belong to the adjacent statement)`
-                      : ''}
-                    .
-                  </span>
-                )}
-                {doneDiff !== null && doneDiff.core > 0 && (
-                  <span className="imp-heads">
-                    <span className="imp-heads-ic">
-                      <Ic d={I_WARN} size={14} />
-                    </span>
-                    <span>
-                      <b>
-                        {doneDiff.core} transaction{doneDiff.core === 1 ? '' : 's'} in your ledger
-                        during this period {doneDiff.core === 1 ? 'is' : 'are'} not on this
-                        statement
-                      </b>{' '}
-                      — likely duplicates (an agent/manual entry the statement settled differently)
-                      or something to look into. Review: account ⋯ menu → Statements → open this
-                      statement.
-                    </span>
-                  </span>
-                )}
-                <span className="imp-done-d">
-                  {result.accounts > 1
-                    ? `Across ${result.accounts} accounts`
-                    : `Your ${account?.name} ledger is updated`}
-                  {(result.transfers ?? 0) > 0 &&
-                    ` • ${result.transfers} FX conversion${result.transfers === 1 ? '' : 's'} booked as transfer${result.transfers === 1 ? '' : 's'} between your accounts`}
-                  {(result.merged ?? 0) > 0 &&
-                    ` • ${result.merged} folded into existing row${result.merged === 1 ? '' : 's'}`}
-                  .
-                  {
-                    /* The review sentence belongs to the Mark-all block below whenever rows were
-                   created; only a zero-created commit needs it stated here. */
-                    result.created === 0 ? ' New rows are marked for review in the register.' : ''
-                  }
-                </span>
-                {/* Handoff: "Mark all N as reviewed" sits right where the user is TOLD the new
-                  rows were flagged — a pill button in the Booked facts, not a trip to the
-                  register. Only when rows were actually CREATED (a linked row never gets the
-                  flag), and backed by the real batch endpoint. */}
-                {result.created > 0 &&
-                  onMarkImportReviewed &&
-                  result.batchId &&
-                  (reviewMarkState === 'done' ? (
-                    <span className="imp3-done-reviewed">
-                      <i aria-hidden="true">✓</i> All {result.created} new row
-                      {result.created === 1 ? '' : 's'} marked as reviewed.
-                    </span>
-                  ) : (
-                    <span className="imp3-done-review">
-                      New rows are marked for review in the register.
-                      <button
-                        type="button"
-                        className="imp3-done-review-btn"
-                        disabled={reviewMarkState === 'pending'}
-                        onClick={markAllReviewed}
-                      >
-                        {reviewMarkState === 'pending'
-                          ? 'Marking…'
-                          : `Mark all ${result.created} as reviewed`}
-                      </button>
-                    </span>
-                  ))}
-                {taught && (
-                  <span className="imp3-done-taught">
-                    <Spark size={14} /> Lucius saved your instruction — the next import applies it
-                    automatically.
-                  </span>
-                )}
-                {reviewMarkError && <span className="imp3-done-err">{reviewMarkError}</span>}
-              </div>
-              <div className="imp3-done-acts">
-                {/* "View linked & imported" — the register filter behind this button unions the
-                  batch's created rows with the rows it only linked. */}
-                {result.batchId && onViewImportBatch && (
-                  <button
-                    type="button"
-                    className="imp3-btn2"
-                    onClick={() =>
+            <BookedScreen
+              result={result}
+              filename={file?.name || resumeFilename || url || 'this statement'}
+              context={bookedContext()}
+              deleteErrors={deleteErrors}
+              refusedDuplicates={refusedDuplicates}
+              doneDiff={doneDiff}
+              taught={taught}
+              reviewMarkState={reviewMarkState}
+              reviewMarkError={reviewMarkError}
+              onMarkAllReviewed={onMarkImportReviewed ? markAllReviewed : undefined}
+              onViewInRegister={
+                result.batchId && onViewImportBatch
+                  ? () =>
                       onViewImportBatch(
                         result.batchId!,
-                        `Import: ${file?.name || url || 'this statement'}`,
+                        `Import: ${file?.name || resumeFilename || url || 'this statement'}`,
                       )
-                    }
-                  >
-                    View linked & imported
-                  </button>
-                )}
-                <button type="button" className="imp3-lubtn" onClick={close}>
-                  Done
-                </button>
-              </div>
-              <button type="button" className="imp3-done-another" onClick={reset}>
-                Import another statement
-              </button>
-            </div>
+                  : undefined
+              }
+              onUndo={onUndoImport}
+              onReviewAgain={reviewAgain}
+              onImportAnother={reset}
+              onDone={close}
+            />
           )}
         </div>
       </Modal>

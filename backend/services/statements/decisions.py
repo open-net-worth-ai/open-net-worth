@@ -2087,8 +2087,10 @@ def decision_commit(
         outcome = _decision_commit_locked(
             statement_id, account_id, decisions, default_action, delete_ids, reviewed=reviewed
         )
-    # The review described a ledger this commit just changed; a reopen builds a fresh one.
-    stored_previews.drop(statement_id)
+    # The stored review is KEPT: while this import stands it is never served (it describes the
+    # ledger before the commit — `stored_previews` checks the statement's live batches), and once
+    # the import is undone the ledger is back to exactly what it describes, so Review again and
+    # Confirm are instant instead of a full recompute (owner, 2026-10-26).
     return outcome
 
 
@@ -2154,7 +2156,7 @@ def _decision_commit_locked(
     # A merge is still only accepted if THAT review proposed it (server-side, never the
     # client's say-so), which is the security role the re-derive used to play.
     stored = (
-        stored_previews.commit_pass(statement_id, (account_id, resolved_default))
+        stored_previews.commit_pass(statement_id, (account_id, resolved_default), record)
         if reviewed
         else None
     )

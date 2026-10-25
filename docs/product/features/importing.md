@@ -83,6 +83,20 @@ Each row gets one of three decisions. Lucius picks a default; you can change any
   doesn't have — often a duplicate you entered by hand. You can mark them for deletion here; they
   are only deleted when you click **Confirm**.
 
+### After you confirm
+
+The **Imported** screen shows what the import did: how many rows were **added** (and how many of
+those as transfers), how many were **linked** to entries you already had, and how many you **left
+out**, plus whether the statement and your ledger now agree for its period. New rows are marked to
+review in the register; **Mark all reviewed** clears that in one step. **View in register** opens
+the register filtered to this import's added and linked rows.
+
+**Undo import** takes the whole import back after asking: the added rows are removed, every entry
+it linked goes back to exactly how it was, and the statement returns to **Ready to review**. Rows
+you marked for deletion stay deleted. **Review again** then reopens the same review, with your
+decisions, so you can change a row and confirm again. You can undo a past import the same way by
+asking Lucius.
+
 ### Book a row as a transfer
 
 When a statement row is really money moving between two of your own accounts — a top-up of your
@@ -157,8 +171,9 @@ which under **Tell Lucius** (*"Dates are DD/MM"*) and read it again.
 
 **"file too large"** — the file is over 25 MB. Split it, or export a shorter date range.
 
-**A row was booked as a duplicate of something you really have twice** — undo the import (ask
-Lucius to roll it back), then import again and set that row to **Import**.
+**A row was booked as a duplicate of something you really have twice** — click **Undo import**
+right after confirming (or ask Lucius to roll back an older import), then **Review again**, set
+that row to **Import** and confirm.
 
 **The balance check fails** — open the statement under **Statements** to see which transactions
 differ. A row missing from your ledger, or one in your ledger that isn't on the statement, is the

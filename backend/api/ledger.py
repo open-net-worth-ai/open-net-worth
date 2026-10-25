@@ -1572,17 +1572,13 @@ def list_import_batches(status: Optional[str] = None):
 
 @router.post("/api/transactions/batches/{batch_id}/rollback")
 def rollback_import_batch(batch_id: str):
-    batch = svc.import_batches.find_by_id(batch_id)
-    if batch is None:
-        raise HTTPException(404, "Batch not found")
-    if batch.get("status") == "rolled_back":
-        raise HTTPException(409, "Batch is already rolled back")
-    txns = svc.transactions.query_by_batch(batch_id, include_deleted=False)
-    txn_ids = [t["id"] for t in txns]
-    deleted, _ = svc.transactions.bulk_soft_delete(txn_ids)
-    svc.import_batches.set_status(batch_id, "rolled_back")
-    logger.info("rollback_import_batch: batch=%s deleted=%d", batch_id, len(deleted))
-    return {"ok": True, "batch_id": batch_id, "deleted": len(deleted)}
+    """Undo the whole import — created rows removed AND linked rows restored (import_undo)."""
+    from backend.services.import_undo import undo_import
+
+    try:
+        return {"ok": True, **undo_import(batch_id)}
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), str(exc))
 
 
 @router.post("/api/transactions/batches/{batch_id}/rollforward")

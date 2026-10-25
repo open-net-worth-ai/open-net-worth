@@ -1739,6 +1739,21 @@ export function AccountsTab({
     return out as { updated: number }
   }
 
+  // Undo import (Booked screen): the whole import — added rows removed, linked entries restored.
+  // A FULL refresh, like the commit's: balances and the review strip moved too.
+  const undoImportBatch = async (batchId: string) => {
+    const res = await authFetch(`/api/transactions/batches/${batchId}/rollback`, {
+      method: 'POST',
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      throw new Error(body?.detail || 'Could not undo this import — try again.')
+    }
+    const out = await res.json()
+    await L.refresh()
+    return { deleted: out.deleted ?? 0, unmerged: out.unmerged ?? 0 }
+  }
+
   // payee ops
   const changePayee = (id: string, patch: Record<string, unknown>) => {
     const body: Record<string, unknown> = {}
@@ -2242,6 +2257,7 @@ export function AccountsTab({
               return result
             }}
             onMarkImportReviewed={markImportBatchReviewed}
+            onUndoImport={undoImportBatch}
             payeeOptions={payeeOptions}
             payeeById={payeeNames}
             importReviewDefault={importReviewDefault}

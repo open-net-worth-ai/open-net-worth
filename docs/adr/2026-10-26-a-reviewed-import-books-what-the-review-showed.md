@@ -44,3 +44,16 @@ it should follow my decision … it's not necessary to have another duplicate ch
 - A transaction that lands in the ledger between review and Confirm by another path (an email
   automation, Lucius) is not caught at booking; the review is where duplicates are shown, and the
   owner can undo the import from the Booked screen.
+
+## Amendment — Undo import (same day)
+
+- Undo is ONE implementation, `services/import_undo.undo_import(batch_id)`: soft-delete the rows
+  the batch created, restore every entry it merged into from the batch's `merges` snapshots, mark
+  the batch `rolled_back`. The Booked screen's **Undo import**, `POST
+  /api/transactions/batches/{id}/rollback` and Lucius's `rollback_import_batch` all call it. The
+  REST route used to delete only the created rows and leave the linked entries merged.
+- The stored review is KEPT after a commit, and is never served while any of the statement's
+  batches still stands (or it was filed with nothing to write). Once the import is undone the
+  ledger is back to what the review describes, so **Review again** and a second Confirm use it as
+  is.
+- Rows the owner deleted in the review stay deleted on undo — a delete is not part of the batch.

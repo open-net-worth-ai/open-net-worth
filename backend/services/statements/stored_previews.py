@@ -23,6 +23,14 @@ from backend.db.statement_preview_store import StatementPreviewStore
 _COMMIT_PASS = "_commit_pass"
 
 
+def _imported(record: dict) -> bool:
+    """An import from this statement still stands: the kept review describes the ledger BEFORE
+    it, so it is not served until that import is undone (then it is exact again)."""
+    from backend.services.statements.statement_list import live_batch_ids
+
+    return bool(live_batch_ids(record) or record.get("filed_at"))
+
+
 def keep(
     statement_id: str,
     *,
@@ -64,6 +72,8 @@ def recall(
     caller naming no account takes the one the review was computed for; naming the one it
     resolved to is the same answer minus the "looks like X" banner an explicit choice never
     gets."""
+    if _imported(record):
+        return None
     row = StatementPreviewStore().get(statement_id)
     if row is None or row["fmt"] != fmt or row["instr_hash"] != instr_hash:
         return None
@@ -80,9 +90,14 @@ def recall(
     return preview
 
 
-def commit_pass(statement_id: str, accounts: tuple[str | None, ...]) -> list[dict] | None:
+def commit_pass(
+    statement_id: str, accounts: tuple[str | None, ...], record: dict
+) -> list[dict] | None:
     """The rows' reviewed verdicts, if the stored review was built for one of ``accounts`` (the
-    commit's account as sent and as resolved); else ``None`` and the commit re-derives."""
+    commit's account as sent and as resolved) and no import from it still stands; else ``None``
+    and the commit re-derives."""
+    if _imported(record):
+        return None
     row = StatementPreviewStore().get(statement_id)
     kept = (row or {}).get("preview", {}).get(_COMMIT_PASS) if row else None
     if not kept or not kept.get("anchor") or kept["anchor"] not in accounts:

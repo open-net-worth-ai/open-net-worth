@@ -100,7 +100,7 @@ async function commitWith(commitResult: Record<string, unknown>) {
   await screen.findByText('Spotify')
 
   fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-  await screen.findByText('Booked.')
+  await screen.findByText(/^Imported /)
 }
 
 describe('Done screen — rows the ledger refused as duplicates', () => {

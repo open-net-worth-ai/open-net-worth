@@ -2609,62 +2609,184 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   cursor: default;
 }
 
-/* ── done ─────────────────────────────────────────────────────────────────── */
-.imp3-done {
+/* ── booked ───────────────────────────────────────────────────────────────── */
+.imp3-booked {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 34px 22px 36px;
-  gap: 6px;
+  gap: 18px;
+  padding: 26px 26px 22px;
 }
-.imp3-done-ic {
-  width: 44px;
-  height: 44px;
+.imp3-booked-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.imp3-booked-ic {
+  flex: none;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--good) 16%, transparent);
   color: var(--good);
-  font-size: 20px;
-  font-weight: 800;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 6px;
 }
-.imp3-done-t {
-  font-size: 19px;
+.imp3-booked-ic.undone {
+  background: var(--hover);
+  color: var(--muted);
+}
+.imp3-booked-titles {
+  min-width: 0;
+}
+.imp3-booked-t {
+  font-size: 17px;
   font-weight: 800;
   color: var(--ink);
   letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
-.imp3-done-sub {
-  font-size: 13px;
+.imp3-booked-sub {
+  margin-top: 2px;
+  font-size: 12.5px;
   color: var(--muted);
 }
-.imp3-done-facts {
+.imp3-booked-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.imp3-booked-stat {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+}
+.imp3-booked-n {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.imp3-booked-l {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.imp3-booked-s {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.imp3-booked-lines {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--faint);
-  margin-top: 8px;
-  max-width: 400px;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
   line-height: 1.5;
 }
-.imp3-done-taught {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--lucius);
-  justify-content: center;
+.imp3-booked-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
 }
-.imp3-done-review {
-  display: inline-flex;
+.imp3-booked-line.review {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.imp3-booked-aside {
+  color: var(--faint);
+  font-weight: 400;
+}
+.imp3-booked-line > svg {
+  flex: none;
+}
+.imp3-booked-line.good,
+.imp3-booked-good {
+  color: var(--good);
+  font-weight: 600;
+}
+.imp3-booked-line.warn {
+  color: var(--warn);
+}
+.imp3-booked-line.warn > svg {
+  margin-top: 3px;
+}
+.imp3-booked-line.lucius {
+  color: var(--lucius);
+}
+.imp3-booked-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.imp3-booked-foot-l,
+.imp3-booked-foot-r {
+  display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
 }
+.imp3-undo-btn {
+  background: none;
+  border: none;
+  border-radius: var(--radius-lg);
+  color: var(--bad);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .imp3-undo-btn:hover {
+    background: color-mix(in srgb, var(--bad) 10%, transparent);
+  }
+}
+.imp3-undo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bad) 7%, transparent);
+}
+.imp3-undo-t {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.imp3-undo-d {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.imp3-undo-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.imp3-undo-go {
+  padding: 9px 14px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--bad);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.imp3-undo-go:disabled,
+.imp3-undo-acts .imp3-btn2:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+/* ── done ─────────────────────────────────────────────────────────────────── */
 .imp3-done-review-btn {
   background: none;
   border: 1px solid var(--line-strong);
@@ -2687,31 +2809,13 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   opacity: 0.6;
   cursor: default;
 }
-.imp3-done-reviewed {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--good);
-  font-weight: 700;
-  justify-content: center;
-}
-.imp3-done-reviewed i {
-  font-style: normal;
-}
-.imp3-done-acts {
-  display: flex;
-  gap: 10px;
-  margin-top: 16px;
-}
-/* A third bordered button made the Booked footer a row of equals; "import another" is the
-   rarer path, so it sits under the two real actions as a quiet text link. */
+/* "Import another" is the rarer path: a quiet text link beside Undo, never a third button. */
 .imp3-done-another {
   background: none;
   border: none;
   color: var(--muted);
   font: inherit;
   font-size: 13px;
-  margin-top: 12px;
   padding: 4px 8px;
   cursor: pointer;
   text-decoration: underline;
@@ -2783,7 +2887,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 /* ── focus visibility (production a11y — the prototype has no focus rules) ─── */
 .imp3-scroll :focus-visible,
 .imp3-foot :focus-visible,
-.imp3-done :focus-visible,
+.imp3-booked :focus-visible,
 .imp3-lpick-pop :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -2977,7 +3081,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   }
   /* One 16px phone gutter for the whole flow. It used to be 25px (Choose), 35px (Decide), 13px
      (Decide footer) and 47px (Booked) from the sheet's edge — padding stacked from the Modal card,
-     the `.imp` wrapper, the pane and `.imp3-done`, each sized for a 960px desktop sheet. */
+     the `.imp` wrapper, the pane and the Booked screen, each sized for a 960px desktop sheet. */
   .ui-modal-card:has(> .ui-modal__body > .imp):not(:has(.imp-pane--ws)) {
     padding: 16px 16px max(16px, env(safe-area-inset-bottom));
     gap: 12px;
@@ -2994,7 +3098,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   .imp3-foot {
     padding-inline: 16px;
   }
-  .imp3-done {
+  .imp3-booked {
     padding-inline: 0;
   }
   /* Filter chips: ONE line, always. Wrapping made the list jump whenever a decision added or
@@ -3102,18 +3206,17 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     justify-content: center;
   }
   /* One action-button size for the whole flow on a phone: Read the statement, Back, Confirm,
-     Done and View linked & imported are all 46px tall with centred labels.
+     Done and View in register are all 46px tall with centred labels.
      Confirm kept its 36px desktop padding and, stretched by the footer, a left-aligned label. */
   .imp3-commit,
   .imp3-foot .imp3-btn2,
   .imp3-drop-cta .ui-btn,
-  .imp3-done-acts .imp3-lubtn,
-  .imp3-done-acts .imp3-btn2 {
+  .imp3-booked-foot-r .imp3-lubtn,
+  .imp3-booked-foot-r .imp3-btn2 {
     min-height: 46px;
     justify-content: center;
     text-align: center;
   }
-  /* Booked: stack the two actions full-width with the primary action first. */
   /* Choose: the reassurance line sits above a full-width primary action instead of squeezing it
      into a two-line pill beside the text. */
   .imp3-drop-cta {
@@ -3129,20 +3232,27 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     margin-right: 0;
     text-align: center;
   }
-  .imp3-done {
+  /* Booked: the two real actions full-width, primary first; Undo and Import another below. */
+  .imp3-booked {
     padding-top: 18px;
+    gap: 14px;
   }
-  .imp3-done-acts {
+  .imp3-booked-stat {
+    padding: 10px 11px;
+  }
+  .imp3-booked-foot {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .imp3-booked-foot-r {
     flex-direction: column;
-    align-self: stretch;
+    align-items: stretch;
   }
-  .imp3-done-acts .imp3-lubtn {
+  .imp3-booked-foot-r .imp3-lubtn {
     order: -1;
-    justify-content: center;
     padding: 13px 16px;
   }
-  .imp3-done-acts .imp3-btn2 {
-    padding: 12px 14px;
-    text-align: center;
+  .imp3-booked-foot-l {
+    justify-content: space-between;
   }
 }

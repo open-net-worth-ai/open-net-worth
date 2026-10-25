@@ -162,7 +162,7 @@ describe('ImportModal — resume by id (B20 async)', () => {
     )
     await screen.findByText('COFFEE')
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Import another statement' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Import another' }))
 
     const fileInput = document.body.querySelector('input[type="file"]') as HTMLInputElement
     const csv = 'date,description,amount\n2026-07-02,TEA,-3.00\n'
@@ -206,7 +206,7 @@ describe('ImportModal — resume by id (B20 async)', () => {
     )
     await screen.findByText('COFFEE')
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'Import another statement' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Import another' }))
     const fileInput = document.body.querySelector('input[type="file"]') as HTMLInputElement
     const csv = 'date,description,amount\n2026-07-02,TEA,-3.00\n'
     const file = new File([csv], 'feb.csv', { type: 'text/csv' })
