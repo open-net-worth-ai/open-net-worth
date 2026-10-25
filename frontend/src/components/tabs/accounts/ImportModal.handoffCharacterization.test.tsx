@@ -246,7 +246,7 @@ describe('ImportModal handoff port — production behavior characterization', ()
     ).toEqual(['Choose', 'Read', 'Decide'])
     expect(
       Array.from(document.querySelectorAll('.imp3-booked-stat')).map((n) => n.textContent),
-    ).toEqual(['2added ', '1linkedto entries you had', '4left outby you'])
+    ).toEqual(['2added ', '1linkedto entries you had', '3left outby you'])
     expect(screen.getByText('2 new rows are marked to review in the register')).toBeTruthy()
     const mark = await screen.findByRole('button', { name: 'Mark all reviewed' })
     fireEvent.click(mark)

@@ -2650,7 +2650,8 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   display: flex;
   flex-direction: column;
   gap: 18px;
-  padding: 26px 26px 22px;
+  /* The sheet already pads its body; only the top needs air under the crumbs. */
+  padding: 26px 26px 0;
 }
 .imp3-booked-head {
   display: flex;
@@ -2756,8 +2757,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
+  margin-top: 4px;
 }
 .imp3-booked-foot-l,
 .imp3-booked-foot-r {
@@ -2774,6 +2774,8 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   font-size: 13px;
   font-weight: 600;
   padding: 8px 10px;
+  /* Text lines up with the content edge; the padding is only the hover wash's room. */
+  margin-left: -10px;
   cursor: pointer;
 }
 @media (hover: hover) {

@@ -10,6 +10,10 @@ export interface BookedResult {
   transfers?: number
   batchId?: string | null
   deleted?: number
+  /** Rows the user (or a default) left out in the review — the "leave out N" it showed. */
+  leftOut?: number
+  /** Rows the reader skipped from the file; never a decision of the user's. */
+  unreadable?: number
 }
 
 export interface UndoOutcome {
@@ -78,7 +82,7 @@ export function BookedScreen(p: BookedScreenProps) {
       <div className="imp3-booked-stats">
         <Stat n={r.created} label="added" sub={transfers > 0 ? `${transfers} as transfers` : ''} />
         <Stat n={linked} label="linked" sub="to entries you had" />
-        <Stat n={r.skipped} label="left out" sub="by you" />
+        <Stat n={r.leftOut ?? r.skipped} label="left out" sub="by you" />
       </div>
 
       <div className="imp3-booked-lines">
@@ -103,6 +107,15 @@ export function BookedScreen(p: BookedScreenProps) {
             {p.doneDiff.core === 1 ? 'is' : 'are'} not on this statement — check them under
             Statements.
           </WarnLine>
+        )}
+        {(r.unreadable ?? 0) > 0 && (
+          <div className="imp3-booked-line">
+            <span aria-hidden="true">·</span>
+            <span>
+              {plural(r.unreadable ?? 0, 'row')} in the file {r.unreadable === 1 ? 'was' : 'were'}{' '}
+              skipped when it was read
+            </span>
+          </div>
         )}
         {r.duplicates > 0 && (
           <div className="imp3-booked-line">

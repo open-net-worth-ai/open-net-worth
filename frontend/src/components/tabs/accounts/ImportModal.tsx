@@ -952,6 +952,8 @@ export function ImportModal({
     transfers?: number
     batchId?: string | null
     deleted?: number
+    leftOut?: number
+    unreadable?: number
   } | null>(null)
   // "Mark all as reviewed" (SI-79 Done-screen action) — only ever offered when this commit
   // created new rows (a merge/link never gets the review flag, so there's nothing to clear).
@@ -2134,6 +2136,11 @@ export function ImportModal({
         transfers: out.transfers ?? 0,
         batchId: out.batchId ?? null,
         deleted: out.deleted ?? 0,
+        // What the review's footer said ("leave out 4"), not the server's skip total — that
+        // also counts rows the reader dropped from the file (owner, 2026-10-26: "21 left out by
+        // me?" after leaving out 4).
+        leftOut: preview.drafts.filter((d, i) => isExcluded(d, i)).length,
+        unreadable: preview.skipped?.length ?? 0,
       })
       // A delete the server refused must SURFACE — the Done screen says so rather than letting
       // "delete 8" quietly become "deleted 7".
