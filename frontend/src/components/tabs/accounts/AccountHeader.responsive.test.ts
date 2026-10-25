@@ -15,7 +15,7 @@ describe('Account header at narrow widths', () => {
 
   it('moves Reconcile into the existing overflow menu', () => {
     expect(header).toMatch(
-      /<ReconcilePopover\s+account=\{account\}\s+onReconcile=\{onReconcile\}\s+menuTrigger\s*\/>/,
+      /<ReconcilePopover\s+account=\{account\}\s+onReconcile=\{onReconcile\}\s+menuTrigger\s+onDone=\{\(\) => setMenuOpen\(false\)\}\s*\/>/,
     )
     expect(css).toMatch(/\.acct-head-reconcile\s*\{[^}]*display: none/)
     expect(css).toMatch(/\.acct-pop-wrap--menu\s*\{[^}]*display: block/)

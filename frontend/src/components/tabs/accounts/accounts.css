@@ -313,6 +313,13 @@
   height: 9px;
   border-radius: 50%;
 }
+/* The same burst over the whole viewport when a reconcile completes. */
+.acct-reconcile-burst {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-toast);
+  pointer-events: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .acct-review-confetti {
     display: none;
@@ -6252,15 +6259,19 @@ select.acct-addin {
   bottom: 84px;
   left: 50%;
   transform: translateX(-50%);
+  /* Sized to its text: centred with a translate, a shrink-to-fit box only gets half the
+     viewport, so a one-sentence toast wrapped onto two lines (same fix as .rd-toast). */
+  width: max-content;
+  max-width: min(520px, calc(100vw - 32px));
   z-index: 80;
-  background: var(--modal-bg);
-  border: 1px solid var(--modal-border);
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
   border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-toast);
   padding: 10px 18px;
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--toast-ink);
   animation: acct-toast-in 0.2s ease;
 }
 /* ── a background statement read finished (BackgroundStatementNotices) ─────────────────
@@ -6290,20 +6301,20 @@ select.acct-addin {
     bottom: calc(57px + env(safe-area-inset-bottom, 0px) + 16px);
   }
 }
-/* The same pill as .acct-toast (and as-toast / ov-toast): modal surface, modal border, pill
-   radius, shadow-lg; actions inside it in the bulk bar's idiom. */
+/* The same pill as .acct-toast (and as-toast / ov-toast): the inverted toast surface, pill
+   radius, shadow-toast; actions inside it in the bulk bar's idiom. */
 .bgst-note {
   display: flex;
   align-items: center;
   gap: 8px;
   max-width: 100%;
   padding: 4px 6px 4px 18px;
-  background: var(--modal-bg);
-  border: 1px solid var(--modal-border);
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
   border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-toast);
   font-size: 12.5px;
-  color: var(--ink);
+  color: var(--toast-ink);
   animation: bgst-in 0.2s ease;
 }
 @keyframes bgst-in {
@@ -6329,7 +6340,7 @@ select.acct-addin {
 }
 .bgst-detail {
   min-width: 0;
-  color: var(--muted);
+  color: var(--toast-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6341,7 +6352,7 @@ select.acct-addin {
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--primary);
+  color: var(--toast-accent);
   font: inherit;
   font-size: 12.5px;
   font-weight: 700;
@@ -6349,7 +6360,7 @@ select.acct-addin {
 }
 @media (hover: hover) {
   .bgst-review:hover {
-    background: var(--hover-surface2);
+    background: color-mix(in srgb, var(--toast-ink) 10%, transparent);
   }
 }
 .bgst-x {
@@ -6363,13 +6374,13 @@ select.acct-addin {
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: var(--faint);
+  color: var(--toast-muted);
   cursor: pointer;
 }
 @media (hover: hover) {
   .bgst-x:hover {
-    color: var(--ink);
-    background: var(--hover);
+    color: var(--toast-ink);
+    background: color-mix(in srgb, var(--toast-ink) 10%, transparent);
   }
 }
 @keyframes acct-toast-in {
@@ -9411,10 +9422,6 @@ select.acct-addin {
   .acct-detail-stmt:hover {
     text-decoration-color: var(--ink);
   }
-}
-/* What this file's parse cost in AI calls (0 on format-memory hits) */
-.imp-aicost {
-  font-variant-numeric: tabular-nums;
 }
 /* Row flags for FX-conversion pairing + unroutable currency */
 .imp-flag.fx_transfer_pair {

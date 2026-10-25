@@ -770,9 +770,11 @@ def list_account_statements(account_id: str) -> dict:
     """The account's statement history — every imported file, its metadata, reconcile badge,
     and the link (batch ids) to the transactions it produced."""
     from backend.db.statement_store import StatementStore
+    from backend.services.statements.statement_list import batches_by_statement, import_facts
 
+    by_statement = batches_by_statement()
     rows = [
-        _statement_summary(r)
+        _statement_summary(r) | import_facts(r, by_statement)
         for r in StatementStore().list_statements()
         if r.get("account_id") == account_id or account_id in (r.get("account_ids") or [])
     ]
@@ -846,6 +848,9 @@ def undo_lucius_ops(request: Request, statement_id: str, row: Optional[int] = No
     ops = list(record.get("lucius_ops") or [])
     remaining = [o for o in ops if o.get("row") != row] if row is not None else []
     store.update_by_id(statement_id, {"lucius_ops": remaining})
+    from backend.services.statements import stored_previews
+
+    stored_previews.drop(statement_id)  # the stored review still shows the undone ops
     return {"undone": True, "removed": len(ops) - len(remaining), "remaining": len(remaining)}
 
 

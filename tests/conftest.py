@@ -85,6 +85,16 @@ from tests.db.conftest import (  # noqa: F401
 )
 
 
+def drop_stored_review(statement_id: str) -> None:
+    """Take a statement's next preview down the RECOMPUTE path. A reopen returns the stored review
+    (ADR 2026-10-25-ready-means-the-review-is-persisted); the retry/heal contracts some tests pin
+    live on the recompute, which a statement with no stored review (read before that ADR) or a
+    re-read takes — so such a test drops the row to take it."""
+    from backend.db.statement_preview_store import StatementPreviewStore
+
+    StatementPreviewStore().delete(statement_id)
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "integration: requires ANTHROPIC_API_KEY and makes LLM calls"

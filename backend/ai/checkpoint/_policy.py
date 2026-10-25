@@ -279,6 +279,10 @@ _EXCLUDED_TABLES = frozenset(
         # reasoning: a rewind must not resurrect stale read-progress for a parse that has
         # since moved on (or been deleted, via this table's own ON DELETE CASCADE).
         "statement_parse_progress",
+        # The finished review of a statement (ADR 2026-10-25-ready-means-the-review-is-persisted)
+        # — derived, rebuildable by a re-read, ON DELETE CASCADE with its statement; a rewind
+        # must not resurrect a review of a ledger that has since moved on.
+        "statement_previews",
         # Notable Price Movement per-session cache (2026-09-20) — deterministic session facts +
         # a cited LLM paragraph, rebuildable from the price provider's bars and `evidence`;
         # same "derived, never snapshotted" class as asset_brief.

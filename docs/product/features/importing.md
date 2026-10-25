@@ -50,6 +50,16 @@ While a statement is being read, click **Continue in background** and carry on a
 app. When the read finishes, a popup says **Ready to review** — tap **Review** to jump back in —
 or **Couldn't read**, in which case re-run it from the account's **Statements** list.
 
+**Ready to review** means the whole review is done and saved with the statement — the rows, the
+matches against your ledger and the check of what your ledger has that the statement doesn't.
+Review opens it straight away, even after a restart, exactly as it was built. If you booked
+something in the meantime, nothing is double-counted: when you commit, each row is checked against
+your ledger again, and a row that is now already booked is left out and listed on the done screen.
+Choosing a different account, changing the instructions or **Re-read** builds a new review.
+**Back** from a reopened statement's review shows that statement's own file, accounts and
+instructions: **Back to review** returns to it exactly as you left it, **Read again** re-reads the
+file with what's on screen and opens the new review when it's done.
+
 ## Review the rows
 
 Each row gets one of three decisions. Lucius picks a default; you can change any of them.
@@ -89,11 +99,16 @@ of one currency conversion are recognised and folded into a single transfer auto
 
 ## Statements history
 
-Every imported statement is kept in the account's **⋯** menu → **Statements**. Each one shows its
-status: **parsing…** while it's being read, **parsed** when it's ready (**Review →**), **imported**
-once booked, or **failed** / **interrupted** (**Re-run**). From there you can download the
-original file, check whether its balance still ties out with your ledger, or **Delete** the
-record — deleting the record keeps its transactions.
+Every imported statement is kept in the account's **⋯** menu → **Statements**. Each one shows one
+status — **Reading…** (with the stage it's on; **Open** shows its progress), **Ready to review**
+(**Review**), **Imported** with the date it was booked, or **Couldn't read** / **Reading stopped**
+(**Re-run**) — and the same facts on every row: the statement period, how many rows it holds
+(and, once booked, how many it added and linked to entries you already had), when you uploaded it
+and what the AI read cost. A booked statement also says whether its balance checks out against
+the closing balance it prints (**Balance matches** or **Balance off by …**); a file that prints no
+balances shows nothing there. Card statements show the amount due. Each booked row's **⋯** menu
+lets you download the original file or **Delete** the record — deleting the record keeps its
+transactions.
 
 **Importing the same file twice is safe.** Rows already booked are left out and the review tells
 you when you imported it before. If there's nothing new, the button reads **Close**. A *new* file

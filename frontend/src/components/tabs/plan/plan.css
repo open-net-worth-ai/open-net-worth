@@ -6897,13 +6897,17 @@ body.hide-amounts .mask::after {
   bottom: 78px;
   left: calc(var(--lx-sidebar-w, 52px) + (100vw - var(--lx-sidebar-w, 52px)) / 2);
   transform: translateX(-50%);
-  background: var(--surface2);
-  border: 1px solid var(--line-strong);
-  color: var(--ink);
+  /* Sized to its text: centred with a translate, a shrink-to-fit box only gets half the
+     viewport, so a one-sentence toast wrapped onto two lines (same fix as .rd-toast). */
+  width: max-content;
+  max-width: min(520px, calc(100vw - 32px));
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
+  color: var(--toast-ink);
   font-size: 12.5px;
   padding: 9px 16px;
   border-radius: 10px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-toast);
   z-index: 65; /* z-local: above sticky headers/FAB, below plan modals */
 }
 
@@ -8609,21 +8613,21 @@ body.hide-amounts .mask::after {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  background: var(--surface2);
-  border: 1px solid var(--line-strong);
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
   border-radius: var(--radius-pill);
   padding: 8px 8px 8px 16px;
   font-size: 12.5px;
-  color: var(--muted);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  color: var(--toast-muted);
+  box-shadow: var(--shadow-toast);
   animation: pl-pop 0.16s ease;
 }
 .pl-undo button {
   font: inherit;
   font-size: 12px;
   font-weight: 700;
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--toast-accent);
+  background: color-mix(in srgb, var(--toast-accent) 14%, transparent);
   border: none;
   border-radius: var(--radius-pill);
   padding: 5px 14px;
@@ -8631,7 +8635,7 @@ body.hide-amounts .mask::after {
 }
 @media (hover: hover) {
   .pl-undo button:hover {
-    background: color-mix(in srgb, var(--accent) 20%, transparent);
+    background: color-mix(in srgb, var(--toast-accent) 24%, transparent);
   }
 }
 /* On a phone the pill is anchored `left: 50%` with no `right`, so its shrink-to-fit width is

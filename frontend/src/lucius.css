@@ -3173,15 +3173,16 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: calc(var(--z-toast) + 20);
+    width: max-content;
     max-width: min(440px, calc(100vw - 32px));
     padding: 10px 14px;
     border-radius: 10px;
     font-size: 12.5px;
     line-height: 1.4;
-    color: var(--ink);
-    background: var(--modal-bg);
-    border: 1px solid color-mix(in srgb, var(--lucius) 45%, var(--line));
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    color: var(--toast-ink);
+    background: var(--toast-bg);
+    border: 1px solid var(--toast-bg);
+    box-shadow: var(--shadow-toast);
     cursor: pointer;
   }
   @media (prefers-reduced-motion: no-preference) {

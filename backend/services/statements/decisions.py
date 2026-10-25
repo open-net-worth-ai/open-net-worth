@@ -28,7 +28,12 @@ from backend.services.import_common import (
     flag_duplicates,
     resolve_account,
 )
-from backend.services.statements import lucius_pass, parse_progress, routed_transfer
+from backend.services.statements import (
+    lucius_pass,
+    parse_progress,
+    routed_transfer,
+    stored_previews,
+)
 from backend.services.statements import match_policy as policy_service
 from backend.services.statements.canonical import CanonicalRow, ParseResult, StatementMeta
 from backend.services.statements.enrich import enrich_drafts
@@ -1419,6 +1424,19 @@ def decision_preview(
             "imported_at": record.get("parsed_at") or record.get("created_at"),
             "batch_ids": record["batch_ids"],
         }
+    # The review this file already finished is returned as it was left; only an explicit ask
+    # (a re-read, a mapping, another account, changed instructions) builds a new one.
+    if mapping is None and not force_reparse and not force_relearn:
+        kept = stored_previews.recall(
+            record["id"],
+            fmt=fmt,
+            instr_hash=instr_hash,
+            account_id=account_id,
+            record=record,
+            one_off=one_off,
+        )
+        if kept is not None:
+            return kept
     if (
         record.get("import_rows")
         and record.get("format") == fmt
@@ -1825,7 +1843,7 @@ def decision_preview(
         except Exception:  # noqa: BLE001 — advisory panel; the preview never fails on it
             logger.exception("decision_preview: ledger check failed")
 
-    return legacy | {
+    response = legacy | {
         "statement_id": record["id"],
         "meta": result.meta.to_dict(),
         "reconcile": result.reconcile,
@@ -1928,6 +1946,14 @@ def decision_preview(
             else None
         ),
     }
+    # Persisted BEFORE this function returns — the caller's `ready` (the progress channel's
+    # mark_done, for an async job and for a sync request alike) comes after it. A payload that
+    # still asks for an account is not a review anyone can act on, so it is never kept.
+    if not response.get("needs_account"):
+        stored_previews.keep(
+            record["id"], fmt=fmt, instr_hash=instr_hash, account_arg=account_id, preview=response
+        )
+    return response
 
 
 def _manual_link_ids(
@@ -2036,9 +2062,12 @@ def decision_commit(
     legitimately be committed more than once with different decisions, so this is NOT an
     "already committed" refusal — just mutual exclusion for the duration of one commit."""
     with _commit_lock:
-        return _decision_commit_locked(
+        outcome = _decision_commit_locked(
             statement_id, account_id, decisions, default_action, delete_ids
         )
+    # The review described a ledger this commit just changed; a reopen builds a fresh one.
+    stored_previews.drop(statement_id)
+    return outcome
 
 
 def _decision_commit_locked(
@@ -2231,6 +2260,11 @@ def _decision_commit_locked(
     skipped = 0
     duplicates = 0
     transfers = 0
+    # An explicit create books a row the owner saw flagged as already booked. When the stored
+    # review did NOT flag it, the ledger gained that entry after the review was built (booked
+    # another way): the owner never saw it, so it is refused and reported, never booked.
+    previewed_duplicates = stored_previews.flagged_duplicates(statement_id)
+    since_review_duplicates: list[dict] = []
     for r, row in zip(results, rows):
         idx = r.line - 1
         decision = by_index.get(idx, {})
@@ -2240,6 +2274,23 @@ def _decision_commit_locked(
             continue
         if r.duplicate and action != "create":
             duplicates += 1
+            continue
+        if (
+            r.duplicate
+            and r.duplicate_of
+            and previewed_duplicates is not None
+            and idx not in previewed_duplicates
+        ):
+            duplicates += 1
+            since_review_duplicates.append(
+                {
+                    "description": row.description,
+                    "date": row.date,
+                    "duplicate_of": r.duplicate_of,
+                    "reason": "Already in your ledger since this review was built — not booked again.",
+                    "previously_deleted": False,
+                }
+            )
             continue
         if idx in absorbed_in_legs and action != "create":
             continue  # folded into its OUT partner's transfer (counted there)
@@ -2463,6 +2514,10 @@ def _decision_commit_locked(
     finally:
         if _owns_scope:
             clear_audit_scope()
+    outcome["refused_duplicates"] = [
+        *(outcome.get("refused_duplicates") or []),
+        *since_review_duplicates,
+    ]
     _record_routing_automation_matches(fired_routing_automations, batch_id=outcome["batch_id"])
     outcome["delete_errors"] = list(outcome.get("delete_errors") or []) + [
         {"id": gone, "error": "already deleted"} for gone in already_gone

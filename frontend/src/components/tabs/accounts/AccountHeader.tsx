@@ -157,9 +157,17 @@ interface ReconcilePopoverProps {
   account: Account
   onReconcile: (account: Account, realBalance: number) => void
   menuTrigger?: boolean
+  /** Finished or dismissed (Escape): the ⋯ menu that hosts it closes too, instead of staying
+   *  open over the register after the reconcile toast. */
+  onDone?: () => void
 }
 
-function ReconcilePopover({ account, onReconcile, menuTrigger = false }: ReconcilePopoverProps) {
+function ReconcilePopover({
+  account,
+  onReconcile,
+  menuTrigger = false,
+  onDone,
+}: ReconcilePopoverProps) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<'ask' | 'input'>('ask')
   const [val, setVal] = useState('')
@@ -171,7 +179,7 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
       if (ref.current && !ref.current.contains(e.target as Node)) close()
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close()
+      if (e.key === 'Escape') finish()
     }
     document.addEventListener('mousedown', onDoc)
     document.addEventListener('keydown', onKey)
@@ -185,6 +193,10 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
     setOpen(false)
     setMode('ask')
     setVal('')
+  }
+  function finish() {
+    close()
+    onDone?.()
   }
 
   const real = parseFloat(val)
@@ -234,7 +246,7 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
                   size="sm"
                   onClick={() => {
                     onReconcile(account, account.clearedBalance)
-                    close()
+                    finish()
                   }}
                 >
                   Yes, it matches
@@ -270,7 +282,7 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
                   disabled={!has}
                   onClick={() => {
                     onReconcile(account, real)
-                    close()
+                    finish()
                   }}
                 >
                   {diff === 0 ? 'Confirm' : 'Add adjustment'}
@@ -305,7 +317,7 @@ export interface AccountHeaderProps {
   onAskLucius?: (text: string) => void
   /** "Review →" on a ready-but-uncommitted statement (B20 async) — opens the import modal
    *  straight at the review step, no re-upload. */
-  onReviewStatement?: (statementId: string, filename?: string) => void
+  onReviewStatement?: (statementId: string, filename?: string, uploadedAt?: string) => void
   onExport: () => void
   /** Called with (account, realBalance) — orchestrator wires to hook's reconcile */
   onReconcile: (account: Account, realBalance: number) => void
@@ -348,8 +360,15 @@ export function AccountHeader({
         setMenuOpen(false)
       }
     }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
     document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', h)
+      document.removeEventListener('keydown', onKey)
+    }
   })
 
   const pending = account.balance - account.clearedBalance
@@ -450,7 +469,12 @@ export function AccountHeader({
                 >
                   Import
                 </AccountMenuItem>
-                <ReconcilePopover account={account} onReconcile={onReconcile} menuTrigger />
+                <ReconcilePopover
+                  account={account}
+                  onReconcile={onReconcile}
+                  menuTrigger
+                  onDone={() => setMenuOpen(false)}
+                />
                 <div className="acct-menu-collapsible sep" />
                 <AccountMenuItem icon="edit" onClick={onEdit}>
                   Edit account
@@ -692,9 +716,9 @@ export function AccountHeader({
           }
           onReviewStatement={
             onReviewStatement &&
-            ((statementId, filename) => {
+            ((statementId, filename, uploadedAt) => {
               setShowStatements(false)
-              onReviewStatement(statementId, filename)
+              onReviewStatement(statementId, filename, uploadedAt)
             })
           }
         />

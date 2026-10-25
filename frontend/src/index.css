@@ -15696,9 +15696,9 @@ body.hide-amounts .money * {
     max-width: min(560px, 92vw);
     padding: 12px 16px;
     border-radius: 12px;
-    background: var(--surface2);
-    border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line-strong));
-    box-shadow: 0 16px 50px rgba(0, 0, 0, 0.5);
+    background: var(--toast-bg);
+    border: 1px solid var(--toast-bg);
+    box-shadow: var(--shadow-toast);
   }
   .intel-scan-pill--done {
     border-color: color-mix(in srgb, var(--good) 40%, var(--line-strong));
@@ -15744,28 +15744,28 @@ body.hide-amounts .money * {
     gap: 6px;
     font-size: 13px;
     font-weight: 600;
-    color: var(--ink);
+    color: var(--toast-ink);
   }
   .intel-scan-spark {
     color: var(--warn);
   }
   .intel-scan-sub {
     font-size: 12px;
-    color: var(--muted);
+    color: var(--toast-muted);
     margin-top: 1px;
   }
   .intel-scan-close {
     margin-left: 8px;
     display: inline-flex;
     padding: 4px;
-    color: var(--muted);
+    color: var(--toast-muted);
     background: none;
     border: none;
     cursor: pointer;
   }
   @media (hover: hover) {
     .intel-scan-close:hover {
-      color: var(--ink);
+      color: var(--toast-ink);
     }
   }
 

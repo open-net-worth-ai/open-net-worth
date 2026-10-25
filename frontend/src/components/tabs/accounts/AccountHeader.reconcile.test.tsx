@@ -79,4 +79,67 @@ describe('Reconcile popover', () => {
 
     expect(screen.getByText('In sync')).toBeTruthy()
   })
+
+  // QA 2026-10-25: reconciling from the ⋯ menu (the header's only route when the Lucius panel
+  // is open) left the menu standing over the register after the toast, and Escape didn't shut it.
+  it('closes the ⋯ menu once the reconcile from it is done', () => {
+    const setMenuOpen = vi.fn()
+    render(
+      <AccountHeader
+        account={ACCOUNT}
+        dueInfo={null}
+        stats={null}
+        menuOpen
+        setMenuOpen={setMenuOpen}
+        collapsed={false}
+        onReopen={noop}
+        onAddTxn={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+        onManagePayees={noop}
+        onManageCategories={noop}
+        onImport={noop}
+        onExport={noop}
+        onReconcile={vi.fn()}
+        onReview={noop}
+        onStartReview={noop}
+      />,
+    )
+    const menuItem = screen
+      .getAllByText('Reconcile')
+      .find((el) => el.closest('.acct-pop-wrap--menu'))
+    if (!menuItem) throw new Error('menu Reconcile item not rendered')
+    fireEvent.click(menuItem)
+    fireEvent.click(screen.getByText('Yes, it matches'))
+    expect(setMenuOpen).toHaveBeenCalledWith(false)
+  })
+
+  it('Escape closes the ⋯ menu', () => {
+    const setMenuOpen = vi.fn()
+    render(
+      <AccountHeader
+        account={ACCOUNT}
+        dueInfo={null}
+        stats={null}
+        menuOpen
+        setMenuOpen={setMenuOpen}
+        collapsed={false}
+        onReopen={noop}
+        onAddTxn={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+        onManagePayees={noop}
+        onManageCategories={noop}
+        onImport={noop}
+        onExport={noop}
+        onReconcile={vi.fn()}
+        onReview={noop}
+        onStartReview={noop}
+      />,
+    )
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(setMenuOpen).toHaveBeenCalledWith(false)
+  })
 })

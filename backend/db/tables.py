@@ -484,6 +484,29 @@ statement_parse_progress = Table(
     Column("updated_at", Text, nullable=False),
 )
 
+# The FINISHED decision preview of a statement (2026-10-25, ADR
+# `2026-10-25-ready-means-the-review-is-persisted`): what the review screen renders, persisted by
+# `decision_preview` BEFORE the record can read `ready`, so "Ready to review" opens the screen
+# instantly and survives a restart. One row per statement, overwritten in place; ON DELETE
+# CASCADE drops it with its statement. `fmt`/`instr_hash`/`account_arg` are the request shape it
+# answers (a different account, new instructions or a re-read recomputes instead of serving it);
+# `resolved_account_id` is the anchor the preview resolved to. Checkpoint-EXCLUDED
+# (`ai.checkpoint._EXCLUDED_TABLES`) and absent from `db.portable_bridge.BRIDGED` — a derived
+# per-statement cache with no rewind/export role, same precedent as `statement_parse_progress`.
+statement_previews = Table(
+    "statement_previews",
+    metadata,
+    Column(
+        "statement_id", Text, ForeignKey("statements_meta.id", ondelete="CASCADE"), primary_key=True
+    ),
+    Column("fmt", Text, nullable=False),
+    Column("instr_hash", Text, nullable=True),
+    Column("account_arg", Text, nullable=True),
+    Column("resolved_account_id", Text, nullable=True),
+    Column("preview", JSON, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+
 # Tier-2-plus, same pattern. `id_field` is `absorbed_id` (db/merge_journal_store.py's own
 # JsonStore id_field, not "id"). The store today has NO query/filter methods beyond
 # find-by-absorbed-id (`pop`) and upsert (`record`) — `canonical_id` is promoted anyway as the

@@ -1581,15 +1581,19 @@
   bottom: 28px;
   left: 50%;
   transform: translateX(-50%);
+  /* Sized to its text: centred with a translate, a shrink-to-fit box only gets half the
+     viewport, so a one-sentence toast wrapped onto two lines (same fix as .rd-toast). */
+  width: max-content;
+  max-width: min(520px, calc(100vw - 32px));
   z-index: 120;
-  background: var(--modal-bg, var(--surface));
-  border: 1px solid var(--modal-border, var(--line));
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
   border-radius: var(--radius-pill, 999px);
-  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.4));
+  box-shadow: var(--shadow-toast);
   padding: 10px 18px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--ink);
+  color: var(--toast-ink);
   animation: ovMenuIn 0.14s ease;
 }
 

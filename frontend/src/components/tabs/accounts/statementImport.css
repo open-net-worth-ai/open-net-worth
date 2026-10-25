@@ -575,6 +575,17 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     animation: none;
   }
 }
+/* Back from a reopened statement's review: "Read again" beside "Back to review", right-aligned
+   like the single "Read the statement" CTA it replaces. */
+.imp3-reopen-acts {
+  justify-content: flex-end;
+  gap: 10px;
+}
+/* A reopen that failed: the account picker sits between the message and the retry. */
+.imp3-reopen-acct {
+  width: min(320px, 100%);
+  margin: 4px 0 14px;
+}
 .imp3-reading-t {
   font-size: 13.5px;
   color: var(--muted);
@@ -2692,6 +2703,26 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   gap: 10px;
   margin-top: 16px;
 }
+/* A third bordered button made the Booked footer a row of equals; "import another" is the
+   rarer path, so it sits under the two real actions as a quiet text link. */
+.imp3-done-another {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  margin-top: 12px;
+  padding: 4px 8px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--muted) 45%, transparent);
+}
+@media (hover: hover) {
+  .imp3-done-another:hover {
+    color: var(--ink);
+  }
+}
 .imp3-done-err {
   color: var(--bad);
 }
@@ -3071,7 +3102,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     justify-content: center;
   }
   /* One action-button size for the whole flow on a phone: Read the statement, Back, Confirm,
-     Done, View linked & imported and Import another are all 46px tall with centred labels.
+     Done and View linked & imported are all 46px tall with centred labels.
      Confirm kept its 36px desktop padding and, stretched by the footer, a left-aligned label. */
   .imp3-commit,
   .imp3-foot .imp3-btn2,
@@ -3082,8 +3113,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     justify-content: center;
     text-align: center;
   }
-  /* Booked: the three actions never fit on one row at phone width, so "Done" was pushed off the
-     sheet's edge. Stack them full-width with the primary action first. */
+  /* Booked: stack the two actions full-width with the primary action first. */
   /* Choose: the reassurance line sits above a full-width primary action instead of squeezing it
      into a two-line pill beside the text. */
   .imp3-drop-cta {

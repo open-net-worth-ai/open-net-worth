@@ -12,6 +12,9 @@ export interface BackgroundStatement {
   id: string
   accountId: string | null
   filename?: string
+  /** When "Continue in background" was tapped — the notice stack shows the read as under way
+   *  for a few seconds from here, in the same spot its "Ready to review" will take. */
+  startedAt?: number
 }
 
 const KEY = 'onw.backgroundStatements'

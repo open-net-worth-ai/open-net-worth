@@ -10,10 +10,11 @@ import { authFetch } from '../../../api/client'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { LuciusCta } from '../../intro/LuciusCta'
-import { Badge, Cluster, EmptyState, ErrorState, Loading, Money, Stack } from '../../ui'
-import { Download, FileText, ChevronDown, ChevronRight, ArrowRight } from '../../../ui/icons'
+import { ActionMenu, Badge, Cluster, EmptyState, ErrorState, Loading, Money, Stack } from '../../ui'
+import { fDate, fDateTime } from '../../../utils/format'
+import { Download, FileText, ChevronDown, ChevronRight } from '../../../ui/icons'
 import { fCur } from './data'
-import { formatElapsed } from './importHelpers'
+import { formatElapsed, progressPhaseLabel } from './importHelpers'
 import { useDocumentVisible, useStatementParseStatus } from '../../../hooks/useImportProgress'
 
 interface StatementRow {
@@ -38,6 +39,79 @@ interface StatementRow {
    *  (legacy/pre-B20 — reads as an ordinary committed row). */
   parse_status?: string | null
   parse_error?: string | null
+  /** Rows the file holds — every state, so a statement waiting for review says its size. */
+  rows_read?: number | null
+  /** When the first booking from it happened; null until something was booked. */
+  imported_at?: string | null
+  /** Transactions it added that are still in the ledger / existing entries it linked to. */
+  added?: number | null
+  linked?: number | null
+}
+
+// The facts every row shows, in the same order whatever its state (owner, 2026-10-25: a
+// statement waiting for review showed no date, period or size). Each returns null when the
+// statement has nothing to say for it.
+function periodFact(s: StatementRow): string | null {
+  if (s.period_start) {
+    return `${fDate(s.period_start)} → ${s.period_end ? fDate(s.period_end, 'short', 'always') : '…'}`
+  }
+  return s.statement_date ? `Statement ${fDate(s.statement_date)}` : null
+}
+function rowsFact(s: StatementRow): string | null {
+  if (!s.rows_read) return null
+  const rows = `${s.rows_read} row${s.rows_read === 1 ? '' : 's'}`
+  if (s.added == null) return rows
+  return s.linked ? `${rows} · ${s.added} new · ${s.linked} linked` : `${rows} · ${s.added} new`
+}
+function uploadedFact(s: StatementRow, withTime = false): string | null {
+  if (!s.created_at) return null
+  return `Uploaded ${withTime ? fDateTime(s.created_at) : fDate(s.created_at)}`
+}
+function aiCostFact(s: StatementRow): string | null {
+  if (typeof s.llm_cost_usd !== 'number') return null
+  return s.llm_cost_usd > 0
+    ? `AI read ≈ $${Math.max(s.llm_cost_usd, 0.01).toFixed(2)}`
+    : 'No AI cost'
+}
+function Facts({ facts }: { facts: (string | null)[] }) {
+  return (
+    <>
+      {facts.filter(Boolean).map((f) => (
+        <span key={f} className="imp-metafact">
+          {f}
+        </span>
+      ))}
+    </>
+  )
+}
+/** The balance check in words, or nothing when the file printed no balances to check. */
+function BalanceBadge({ s }: { s: StatementRow }) {
+  const r = s.reconcile
+  if (!r) return null
+  const hint = 'Opening + money in − money out, against the closing balance the statement prints'
+  if (r.status === 'ok')
+    return (
+      <span title={hint}>
+        <Badge tone="pos">✓ Balance matches</Badge>
+      </span>
+    )
+  if (r.status === 'off')
+    return (
+      <span title={hint}>
+        <Badge tone="warn">
+          {typeof r.delta === 'number'
+            ? `Balance off by ${fCur(Math.abs(r.delta), s.currency || 'SGD', { cents: true })}`
+            : 'Balance off'}
+        </Badge>
+      </span>
+    )
+  if (r.status === 'ok_if_flipped')
+    return (
+      <span title={hint}>
+        <Badge tone="warn">Balance matches with signs flipped</Badge>
+      </span>
+    )
+  return null
 }
 
 /** A row still mid-lifecycle (not yet a plain, committed statement) — these sort ABOVE
@@ -322,7 +396,7 @@ function LifecycleStatementRow({
   onRerun,
 }: {
   s: StatementRow
-  onReview?: (statementId: string, filename?: string) => void
+  onReview?: (statementId: string, filename?: string, uploadedAt?: string) => void
   onRerun: (s: StatementRow) => void
 }) {
   const visible = useDocumentVisible()
@@ -330,11 +404,10 @@ function LifecycleStatementRow({
   const [errorOpen, setErrorOpen] = useState(false)
   const { snapshot } = useStatementParseStatus(isParsing ? s.id : null, isParsing && visible, 4000)
   const stage = snapshot?.progress?.stages[snapshot.progress.stages.length - 1]
+  // The badge already says "Reading…" — the line says which stage, and for how long.
   const liveLine = snapshot?.progress
-    ? stage?.page && stage?.pages
-      ? `Reading… page ${stage.page} of ${stage.pages} · ${formatElapsed(snapshot.progress.elapsed_s)}`
-      : `Reading… ${formatElapsed(snapshot.progress.elapsed_s)}`
-    : 'Reading…'
+    ? `${stage ? progressPhaseLabel(stage.stage, stage.page, stage.pages, stage.label) : 'Starting'} · ${formatElapsed(snapshot.progress.elapsed_s)}`
+    : 'Starting'
 
   return (
     <div className="acct-stmt-row">
@@ -344,11 +417,11 @@ function LifecycleStatementRow({
             <span className="acct-stmt-icon">
               <FileText size={14} strokeWidth={1.5} />
             </span>
-            {s.parse_status === 'ready' ? (
+            {s.parse_status === 'ready' || isParsing ? (
               <button
                 type="button"
                 className="acct-stmt-name"
-                onClick={() => onReview?.(s.id, s.filename)}
+                onClick={() => onReview?.(s.id, s.filename, s.created_at)}
               >
                 {s.filename || 'statement'}
               </button>
@@ -357,22 +430,20 @@ function LifecycleStatementRow({
             )}
             {/* One status badge per row, the same vocabulary as a filed row's "imported"
                 (owner, 2026-10-06: "show clearly the status — parsed, parsing, imported"). */}
-            {isParsing && <Badge tone="neutral">parsing…</Badge>}
-            {s.parse_status === 'ready' && <Badge tone="neutral">parsed</Badge>}
-            {s.parse_status === 'interrupted' && (
-              <span title="Reading was interrupted">
-                <Badge tone="warn">interrupted</Badge>
-              </span>
-            )}
+            {isParsing && <Badge tone="neutral">Reading…</Badge>}
+            {s.parse_status === 'ready' && <Badge tone="warn">Ready to review</Badge>}
+            {s.parse_status === 'interrupted' && <Badge tone="warn">Reading stopped</Badge>}
             {s.parse_status === 'failed' && (
               <span title={s.parse_error || 'Could not read this file'}>
-                <Badge tone="warn">failed</Badge>
+                <Badge tone="neg">Couldn’t read</Badge>
               </span>
             )}
           </Cluster>
           <div className="imp-metaline">
             {isParsing && <span className="acct-stmt-live">{liveLine}</span>}
-            {s.parse_status === 'ready' && <span className="imp-metafact">Ready to review</span>}
+            {s.parse_status === 'ready' && (
+              <Facts facts={[periodFact(s), rowsFact(s), uploadedFact(s), aiCostFact(s)]} />
+            )}
             {s.parse_status === 'interrupted' && (
               <span className="imp-metafact">Reading was interrupted</span>
             )}
@@ -399,19 +470,19 @@ function LifecycleStatementRow({
             {s.parse_status === 'failed' && errorOpen && s.parse_error && (
               <span className="acct-stmt-err-detail">{s.parse_error}</span>
             )}
+            {s.parse_status !== 'ready' && <Facts facts={[uploadedFact(s, isParsing)]} />}
           </div>
         </Stack>
       </div>
       <Cluster gap="--space-2">
-        {s.parse_status === 'ready' && (
+        {(s.parse_status === 'ready' || isParsing) && (
           <Button
             className="acct-stmt-action"
             variant="secondary"
             size="sm"
-            onClick={() => onReview?.(s.id, s.filename)}
+            onClick={() => onReview?.(s.id, s.filename, s.created_at)}
           >
-            Review
-            <ArrowRight size={14} aria-hidden="true" />
+            {isParsing ? 'Open' : 'Review'}
           </Button>
         )}
         {(s.parse_status === 'interrupted' || s.parse_status === 'failed') && (
@@ -447,7 +518,7 @@ export function StatementsModal({
   onAskLucius?: (text: string) => void
   /** "Review →" on a `ready`-but-uncommitted row — opens the import modal straight at the
    *  review step for this statement's already-cached parse (no re-upload). */
-  onReviewStatement?: (statementId: string, filename?: string) => void
+  onReviewStatement?: (statementId: string, filename?: string, uploadedAt?: string) => void
 }) {
   const [rows, setRows] = useState<StatementRow[] | null>(null)
   const [error, setError] = useState('')
@@ -482,12 +553,6 @@ export function StatementsModal({
     ? [...rows.filter(isLifecycleRow), ...rows.filter((r) => !isLifecycleRow(r))]
     : null
 
-  const badgeTone = (status?: string) =>
-    status === 'ok'
-      ? ('pos' as const)
-      : status === 'unknown'
-        ? ('muted' as const)
-        : ('warn' as const)
   const download = (s: StatementRow) => {
     const a = document.createElement('a')
     a.href = `/api/statements/${s.id}/file`
@@ -565,92 +630,48 @@ The file and its record are removed. Transactions it imported STAY in your ledge
                       >
                         {s.filename || 'statement'}
                       </button>
-                      <Badge tone="pos">imported</Badge>
-                      {s.reconcile && (
-                        <span title="opening + money in − money out vs the printed closing balance">
-                          <Badge tone={badgeTone(s.reconcile.status)}>
-                            {s.reconcile.status === 'ok'
-                              ? '✓ reconciled'
-                              : s.reconcile.status === 'off'
-                                ? '⚠ off'
-                                : s.reconcile.status === 'ok_if_flipped'
-                                  ? '⚠ flipped'
-                                  : 'no check'}
-                          </Badge>
-                        </span>
-                      )}
+                      <Badge tone="pos">
+                        {s.imported_at ? `Imported ${fDate(s.imported_at)}` : 'Imported'}
+                      </Badge>
+                      <BalanceBadge s={s} />
                       {(s.account_ids?.length ?? 0) > 1 && (
                         <Badge tone="neutral">{s.account_ids!.length} accounts</Badge>
                       )}
                     </Cluster>
                     <div className="imp-metaline">
-                      <span className="imp-metafact">
-                        {s.period_start
-                          ? `${s.period_start} → ${s.period_end || '…'}`
-                          : (s.created_at || '').slice(0, 10)}
-                      </span>
-                      {s.statement_date && (
-                        <span className="imp-metafact">Issued {s.statement_date}</span>
-                      )}
-                      {s.minimum_payment != null && s.minimum_payment > 0 && (
-                        <span className="imp-metafact">
-                          Min{' '}
-                          <Money>
-                            {fCur(s.minimum_payment, s.currency || 'SGD', { cents: true })}
-                          </Money>
-                        </span>
-                      )}
-                      {s.closing_balance != null && (
-                        <span className="imp-metafact">
-                          Closing{' '}
-                          <Money>
-                            {fCur(s.closing_balance, s.currency || 'SGD', { cents: true })}
-                          </Money>
-                        </span>
-                      )}
-                      {typeof s.llm_cost_usd === 'number' && (
-                        <span
-                          className="imp-metafact imp-aicost"
-                          title="What reading this file cost in AI calls — also counted in Settings → AI costs"
-                        >
-                          {s.llm_cost_usd > 0
-                            ? `AI read cost ≈ $${s.llm_cost_usd.toFixed(3)}`
-                            : 'AI read cost $0 — parsed from memory'}
-                        </span>
-                      )}
+                      <Facts facts={[periodFact(s), rowsFact(s), uploadedFact(s), aiCostFact(s)]} />
                     </div>
                   </Stack>
                 </div>
-                <div className="acct-stmt-figure">
-                  <Stack gap="--space-1">
-                    <Money className="acct-stmt-amt">
-                      {s.amount_due != null
-                        ? fCur(s.amount_due, s.currency || 'SGD', { cents: true })
-                        : '—'}
-                    </Money>
-                    {s.amount_due != null && (
-                      <span className="acct-stmt-due">Due {s.payment_due_date || '—'}</span>
-                    )}
-                  </Stack>
-                </div>
-                <Cluster gap="--space-2">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    iconLeft={<Download size={14} strokeWidth={1.5} aria-hidden />}
-                    onClick={() => download(s)}
-                  >
-                    Download
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    title="Delete this statement (transactions stay)"
-                    onClick={() => removeStatement(s)}
-                  >
-                    Delete
-                  </Button>
-                </Cluster>
+                {/* A card statement's amount due — the only right-hand figure; a bank
+                    statement owes nothing, so it shows none instead of a dash. */}
+                {s.amount_due != null && (
+                  <div className="acct-stmt-figure">
+                    <Stack gap="--space-1">
+                      <Money className="acct-stmt-amt">
+                        {fCur(s.amount_due, s.currency || 'SGD', { cents: true })}
+                      </Money>
+                      {s.payment_due_date && (
+                        <span className="acct-stmt-due">Due {fDate(s.payment_due_date)}</span>
+                      )}
+                    </Stack>
+                  </div>
+                )}
+                <ActionMenu
+                  label={`More actions for ${s.filename || 'statement'}`}
+                  items={[
+                    {
+                      label: 'Download',
+                      icon: <Download size={14} strokeWidth={1.5} aria-hidden />,
+                      onSelect: () => download(s),
+                    },
+                    {
+                      label: 'Delete',
+                      tone: 'danger',
+                      onSelect: () => removeStatement(s),
+                    },
+                  ]}
+                />
               </div>
             ),
           )}

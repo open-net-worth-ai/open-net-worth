@@ -67,12 +67,13 @@ import { CategoriesManager } from '../plan/categoriesManager'
 import { AddCategoryModal } from './AddCategoryModal'
 import type { CatKind } from './AddCategoryModal'
 import { ConfirmModal } from './ConfirmModal'
-import { ImportModal } from './ImportModal'
+import { ImportModal, type ReopenOptions } from './ImportModal'
 import { mapServerPreview } from './importHelpers'
 import { Toast } from './Toast'
 import type { AddData } from './AddRow'
 import type { RowPatch } from './TxnRow'
 import { DataInHero } from '../../dataIn/DataInHero'
+import { ReviewConfetti } from './ReviewConfetti'
 import { useChatComposerOptional } from '../../../state/chatComposer'
 import { SCREEN_INTROS } from '../../intro/screenIntros'
 
@@ -463,6 +464,7 @@ export function AccountsTab({
     /** B20 async: reopen this statement's review by id instead of an upload. */
     resumeStatementId?: string
     resumeFilename?: string
+    resumeUploadedAt?: string
   } | null>(null)
   const nativeImports = useSyncExternalStore(subscribeNativeImports, nativeActionCount)
   const [showPayees, setShowPayees] = useState(showPayeesRoute)
@@ -473,6 +475,14 @@ export function AccountsTab({
   } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const showToast = useCallback((m: string) => setToast(m), [])
+  // A finished reconcile is the moment the book is proven against the bank — it earns the
+  // same burst as clearing the review deck. Keyed so a second reconcile replays it.
+  const [reconcileBurst, setReconcileBurst] = useState(0)
+  useEffect(() => {
+    if (!reconcileBurst) return
+    const timer = window.setTimeout(() => setReconcileBurst(0), 4000)
+    return () => window.clearTimeout(timer)
+  }, [reconcileBurst])
   const [showCategories, setShowCategories] = useState(false)
 
   useEffect(() => {
@@ -634,6 +644,7 @@ export function AccountsTab({
         accountId: pending.accountId,
         resumeStatementId: pending.id,
         resumeFilename: pending.filename,
+        resumeUploadedAt: pending.startedAt ? new Date(pending.startedAt).toISOString() : undefined,
       })
     }
   }, [statementReviewTick, importState])
@@ -1203,9 +1214,10 @@ export function AccountsTab({
 
   const onReconcile = (account: Account, real: number) => {
     void L.reconcile(account.id, { real_balance: real, against: 'cleared' })
-      .then((r) =>
-        showToast(r.adjustment ? 'Reconciled — adjustment booked' : 'Reconciled — in sync'),
-      )
+      .then((r) => {
+        showToast(r.adjustment ? 'Reconciled — adjustment booked' : 'Reconciled — in sync')
+        setReconcileBurst((n) => n + 1)
+      })
       .catch((e) => showToast(e instanceof Error ? e.message : 'Reconcile failed'))
   }
 
@@ -1625,9 +1637,18 @@ export function AccountsTab({
   }
   // B20 async: reopen a statement's review BY ID — no re-upload, reads the record's own
   // file server-side. Same response shape as importPreview (mapServerPreview).
-  const importReopenPreview = async (statementId: string, accountId?: string) => {
+  const importReopenPreview = async (
+    statementId: string,
+    accountId?: string,
+    opts: ReopenOptions = {},
+  ) => {
     const fd = new FormData()
     if (accountId) fd.append('account_id', accountId)
+    if (opts.instructions) fd.append('instructions', opts.instructions)
+    if (opts.rememberInstructions !== undefined)
+      fd.append('remember_instructions', String(opts.rememberInstructions))
+    if (opts.forceReparse) fd.append('force_reparse', 'true')
+    if (opts.background) fd.append('mode', 'async')
     const res = await authFetch(`/api/statements/${statementId}/preview`, {
       method: 'POST',
       body: fd,
@@ -1636,16 +1657,18 @@ export function AccountsTab({
     return mapServerPreview(await res.json())
   }
   // "Continue in background" (B20 async): the server-side parse outlives the connection
-  // regardless of how the modal closes, so this is purely the toast — the statements list's
-  // own polling is what actually shows the row moving from `parsing` to `ready`.
+  // regardless of how the modal closes. Tracked app-wide, BackgroundStatementNotices says it is
+  // reading and then, in the same pill, when it is ready — from any tab. Only an untrackable
+  // read (no statement id) falls back to the register's own toast.
   const importContinueInBackground = (statementId: string | null, filename?: string) => {
-    // Tracked app-wide so BackgroundStatementNotices can say when the read finishes, from any tab.
     if (statementId) {
       trackBackgroundStatement({
         id: statementId,
         accountId: importState?.accountId ?? null,
         filename,
+        startedAt: Date.now(),
       })
+      return
     }
     showToast("We'll keep reading — we'll tell you when it's ready to review.")
   }
@@ -1964,12 +1987,13 @@ export function AccountsTab({
                       setMenuOpen(false)
                       setImportState({ accountId: selectedAccount?.id ?? null })
                     }}
-                    onReviewStatement={(statementId, filename) => {
+                    onReviewStatement={(statementId, filename, uploadedAt) => {
                       setMenuOpen(false)
                       setImportState({
                         accountId: null,
                         resumeStatementId: statementId,
                         resumeFilename: filename,
+                        resumeUploadedAt: uploadedAt,
                       })
                     }}
                     onExport={() => {
@@ -2195,6 +2219,7 @@ export function AccountsTab({
             defaultAccountId={importState.accountId || undefined}
             resumeStatementId={importState.resumeStatementId}
             resumeFilename={importState.resumeFilename}
+            resumeUploadedAt={importState.resumeUploadedAt}
             onReopenPreview={importReopenPreview}
             onContinueInBackground={importContinueInBackground}
             categories={categories}
@@ -2284,12 +2309,14 @@ export function AccountsTab({
           />
         )}
 
-        <Toast
-          message={toast}
-          onDone={() => setToast(null)}
-          anchor="register"
-          railWidth={railCollapsed ? 0 : sideW}
-        />
+        {reconcileBurst > 0 && (
+          <div key={reconcileBurst} className="acct-reconcile-burst">
+            <ReviewConfetti />
+          </div>
+        )}
+        {/* Centred on the app window, the same line as every other floating pill (the
+            background-read notices included) — not on the register (owner, 2026-10-25). */}
+        <Toast message={toast} onDone={() => setToast(null)} />
       </div>
     </>
   )

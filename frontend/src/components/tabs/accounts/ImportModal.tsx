@@ -650,6 +650,13 @@ const I_CHECK = '<path d="M20 6 9 17l-5-5"/>'
 const I_WARN =
   '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/>'
 
+export interface ReopenOptions {
+  instructions?: string
+  rememberInstructions?: boolean
+  forceReparse?: boolean
+  background?: boolean
+}
+
 export interface ImportModalProps {
   open: boolean
   onClose: () => void
@@ -664,9 +671,16 @@ export interface ImportModalProps {
    *  caller (a statements-list row) already has it; resuming never re-reads the record just
    *  to redisplay its own name. */
   resumeFilename?: string
+  /** When the resumed statement was uploaded — its Choose step says "Read 2 Jun". */
+  resumeUploadedAt?: string
   /** Server call backing `resumeStatementId`: `POST /api/statements/{id}/preview` — reads
-   *  the record's own file, no re-upload. */
-  onReopenPreview?: (statementId: string, accountId?: string) => Promise<ImportPreviewResult>
+   *  the record's own file, no re-upload. `opts` carries a "Read again": the typed
+   *  instructions, and `forceReparse` + `background` to re-read it as an async job. */
+  onReopenPreview?: (
+    statementId: string,
+    accountId?: string,
+    opts?: ReopenOptions,
+  ) => Promise<ImportPreviewResult>
   /** "Continue in background" (B20 async) — the processing step's own low-emphasis action,
    *  and, during `processing`, the SAME thing the modal's ✕ / Escape / backdrop now do: the
    *  server-side parse keeps running regardless, so there is nothing left to warn about
@@ -837,6 +851,7 @@ export function ImportModal({
   initialFile,
   resumeStatementId,
   resumeFilename,
+  resumeUploadedAt,
   onReopenPreview,
   onContinueInBackground,
   accounts,
@@ -1055,6 +1070,7 @@ export function ImportModal({
   // back to the `phase`/READ_PHASES timer above exactly as it always has. Named distinctly
   // from the header's own `progress` breadcrumb element further down this component.
   const [progressToken, setProgressToken] = useState<string | null>(null)
+  const [bgPending, setBgPending] = useState(false)
   const {
     progress: previewProgress,
     stale: progressStale,
@@ -1167,6 +1183,15 @@ export function ImportModal({
     return () => clearTimeout(t)
   }, [flashIndex])
   function reset() {
+    // A fresh start ("Import another statement", "Try another file") leaves the reopened
+    // statement behind for good — otherwise the next file is read while the resume path also
+    // reopens the old one, and the two statements' reviews race (QA 2026-10-25).
+    setDroppedResumeId(resumeStatementId ?? null)
+    setPendingAttachId(null)
+    setReopenFailed(null)
+    setReopenAccount('')
+    setRereading(false)
+    reopenArgs.current = {}
     setStep('source')
     setRoute('lucius')
     setFile(null)
@@ -1242,12 +1267,43 @@ export function ImportModal({
   // resolves from whichever source knows it: a resumed statement already carries it; a fresh
   // upload only learns it once the server mints one, riding the live progress snapshot.
   function continueInBackground() {
-    const sid = resumeStatementId || previewProgress?.statementId || null
-    onContinueInBackground?.(sid, resumeFilename || file?.name)
+    const sid = liveResumeId || previewProgress?.statementId || null
+    // Tapped before the server has minted the statement's id (the first second of an upload):
+    // hand off only once it is known, or the app could never say when THIS read is ready
+    // (QA 2026-10-25 — the read went untracked and no "Ready to review" ever came).
+    if (!sid && progressToken) {
+      setBgPending(true)
+      return
+    }
+    handOffToBackground(sid)
+  }
+  function handOffToBackground(sid: string | null) {
+    setBgPending(false)
+    // The reopened statement's name only while it is still the one on screen — after "Import
+    // another" the read in flight is the newly picked file's.
+    onContinueInBackground?.(sid, (liveResumeId ? resumeFilename : undefined) || file?.name)
     close()
   }
   // The Modal's ✕ / backdrop / Escape all funnel through this ONE onClose (Radix's
   // onOpenChange) — intercepting it here covers "tap outside" and "cancel" both, in one place.
+  // Waiting for the id (see continueInBackground): hand off the moment it lands; a read that
+  // finishes first just stays open on its review; after 6s give up and close untracked.
+  const liveStatementId = previewProgress?.statementId || null
+  useEffect(() => {
+    if (!bgPending) return
+    if (step !== 'processing') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the read finished first; drop the wait
+      setBgPending(false)
+      return
+    }
+    if (liveStatementId) {
+      handOffToBackground(liveStatementId)
+      return
+    }
+    const timer = window.setTimeout(() => handOffToBackground(null), 6000)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the id/step only
+  }, [bgPending, liveStatementId, step])
   function requestClose() {
     if (step === 'processing') {
       continueInBackground()
@@ -1260,6 +1316,12 @@ export function ImportModal({
     close()
   }
   function requestBack() {
+    // A reopened statement's Choose step offers "Back to review", which restores this review
+    // exactly as left — nothing is lost, so there is nothing to confirm.
+    if (resuming && !file) {
+      setStep('choose')
+      return
+    }
     setPendingExit('back')
   }
   function confirmExit() {
@@ -1603,24 +1665,79 @@ export function ImportModal({
     setStep('preview')
   }
 
-  async function resumeReopen(statementId: string) {
-    if (!onReopenPreview) return
+  // The reopen is one heavy server call, and two effects below both land on it for the same
+  // `ready` statement (the one-shot status check and the polled snapshot) — a second POST for
+  // an id already in flight only doubles the work the first is waiting on.
+  const reopeningId = useRef<string | null>(null)
+  // A reopen that fails stays ON the reopen — its own message, a retry, and an account picker
+  // only when the server genuinely could not tell. It used to drop to the Choose step with no
+  // file in it: a nameless "CSV" chip and a "Checking if this source is remembered…" probe that
+  // could never finish (owner, 2026-10-25).
+  const [reopenFailed, setReopenFailed] = useState<{ kind: 'account' | 'load' | 'read' } | null>(
+    null,
+  )
+  const [reopenAccount, setReopenAccount] = useState('')
+  const [resumePollEpoch, setResumePollEpoch] = useState(0)
+  // "Read again" on a reopened statement: the instructions it was re-read with, so the review
+  // fetched once it is ready is the one built for them (the stored review is keyed by them).
+  const reopenArgs = useRef<ReopenOptions>({})
+  const [rereading, setRereading] = useState(false)
+  async function resumeReopen(statementId: string, account?: string) {
+    if (!onReopenPreview || reopeningId.current === statementId) return
+    reopeningId.current = statementId
+    setReopenFailed(null)
     try {
-      const res = await onReopenPreview(statementId, accountId || undefined)
-      if (res.needsAccount) {
-        setError(
-          'Couldn’t reopen this statement — choose an account and try again (nothing was re-read).',
-        )
-        setStep('choose')
+      const chosen = account || accountId || undefined
+      const opts = reopenArgs.current
+      const res = await (Object.keys(opts).length
+        ? onReopenPreview(statementId, chosen, opts)
+        : onReopenPreview(statementId, chosen))
+      // The server attached this call to a read still running: watch it again until it ends.
+      if (res.attached) {
+        setResumePollEpoch((e) => e + 1)
         return
       }
-      const acct = res.resolvedAccountId || accountId
-      if (res.resolvedAccountId) setAnchorAccount(res.resolvedAccountId)
+      if (res.needsAccount) {
+        setReopenFailed({ kind: 'account' })
+        return
+      }
+      const acct = res.resolvedAccountId || chosen || accountId
+      if (res.resolvedAccountId || chosen) setAnchorAccount((res.resolvedAccountId || chosen)!)
       await applyReopenedPreview(res, acct)
+      setRereading(false)
     } catch {
-      setError('Could not reopen this statement — try again from the statements list.')
-      setStep('choose')
+      setReopenFailed({ kind: 'load' })
+    } finally {
+      reopeningId.current = null
     }
+  }
+
+  /** "Read again" from a reopened statement's Choose step: re-read the saved file as a
+   *  background job with what is on screen now, then open the review it builds. */
+  async function readAgain() {
+    if (!activeResumeId || !onReopenPreview) return
+    reopenArgs.current = {
+      instructions: instructions.trim() || undefined,
+      rememberInstructions: rememberInstr,
+    }
+    setError('')
+    setReopenFailed(null)
+    setRereading(true)
+    try {
+      await onReopenPreview(activeResumeId, accountId || undefined, {
+        ...reopenArgs.current,
+        forceReparse: true,
+        background: true,
+      })
+    } catch {
+      setRereading(false)
+      setReopenFailed({ kind: 'load' })
+      setStep('processing')
+      return
+    }
+    // Only once the server has the new read: switching first let the status poll see the OLD
+    // "ready" and reopen the review this read is replacing (QA 2026-10-25).
+    setStep('processing')
   }
 
   // A resume target has TWO writers: the `resumeStatementId` prop (opened straight from the
@@ -1629,7 +1746,10 @@ export function ImportModal({
   // second one; see `runServerPreview`'s `res.attached` check below). Same downstream
   // handling either way — once attached, there is no "whose upload was it" left to track.
   const [pendingAttachId, setPendingAttachId] = useState<string | null>(null)
-  const activeResumeId = resumeStatementId || pendingAttachId
+  const [droppedResumeId, setDroppedResumeId] = useState<string | null>(null)
+  const liveResumeId =
+    resumeStatementId && resumeStatementId !== droppedResumeId ? resumeStatementId : null
+  const activeResumeId = liveResumeId || pendingAttachId
   const resuming = !!activeResumeId
   // Polled by the STATEMENT's own id, never a client token — this is what lets reopening
   // survive a page reload the live token-based channel never could. 1s cadence matches the
@@ -1640,8 +1760,9 @@ export function ImportModal({
     elapsedS: resumeElapsedS,
   } = useStatementParseStatus(
     resuming ? (activeResumeId as string) : null,
-    resuming && step === 'processing',
+    resuming && step === 'processing' && !reopenFailed,
     1000,
+    resumePollEpoch,
   )
 
   // Jump to `processing` the moment a resume target appears — react.dev's own "adjusting
@@ -1663,8 +1784,7 @@ export function ImportModal({
       if (cancelled) return
       if (status?.parseStatus === 'ready') await resumeReopen(activeResumeId)
       else if (status && status.parseStatus !== 'parsing') {
-        setError('This statement could not be resumed — re-run it from the statements list.')
-        setStep('choose')
+        setReopenFailed({ kind: 'read' })
       }
       // 'parsing', or a poll miss: stay on `processing` — the effect below drives the
       // eventual auto-transition once the ongoing poll reports `ready`.
@@ -1687,8 +1807,7 @@ export function ImportModal({
       resumeSnapshot?.parseStatus === 'failed' ||
       resumeSnapshot?.parseStatus === 'interrupted'
     ) {
-      setError('This statement could not be read — re-run it from the statements list.')
-      setStep('choose')
+      setReopenFailed({ kind: 'read' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the polled status only
   }, [resumeSnapshot?.parseStatus, resuming, step])
@@ -2830,6 +2949,18 @@ export function ImportModal({
   const activeProgress = resuming ? (resumeSnapshot?.progress ?? null) : previewProgress
   const activeStale = resuming ? resumeStale : progressStale
   const activeElapsedS = resuming ? resumeElapsedS : elapsedS
+  // Reopening a statement whose read is already finished only FETCHES its kept review — no
+  // "Lucius is reading", no stage bar or elapsed clock left over from the finished read, no
+  // "Continue in background". A resume the server still reports as `parsing` reads as before.
+  const openingReview = resuming && !rereading && resumeSnapshot?.parseStatus !== 'parsing'
+  // Back from a reopened statement's review: its own file, not an empty picker.
+  const reopenChoose = resuming && !file
+  const reopenSub = [
+    resumeUploadedAt ? `Read ${fDate(resumeUploadedAt)}` : null,
+    preview ? `${preview.total} row${preview.total === 1 ? '' : 's'}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
   const liveStage = activeProgress?.stages[activeProgress.stages.length - 1] ?? null
   const readingPhase = activeProgress
     ? activeStale
@@ -3097,34 +3228,46 @@ export function ImportModal({
           {/* ── Choose, picked (handoff DropStep, `picked`) ─────────────────────────── */}
           {step === 'choose' && (
             <div className="imp3-body">
-              <div className="imp3-file">
-                <span className="imp3-file-badge">{FORMAT_LABEL[format]}</span>
-                <div>
-                  <div className="imp3-file-nm">{file ? file.name : url}</div>
-                  {!!fileSize && <div className="imp3-file-sub">{fileSize}</div>}
+              {reopenChoose ? (
+                <div className="imp3-file">
+                  <span className="imp3-file-badge">
+                    {FORMAT_LABEL[detectFormat(resumeFilename || '')]}
+                  </span>
+                  <div>
+                    <div className="imp3-file-nm">{resumeFilename || 'Statement'}</div>
+                    {reopenSub && <div className="imp3-file-sub">{reopenSub}</div>}
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  className="imp3-file-x"
-                  onClick={() => {
-                    setStep('source')
-                    setUrlOpen(!file)
-                  }}
-                >
-                  Change
-                </button>
-              </div>
+              ) : (
+                <div className="imp3-file">
+                  <span className="imp3-file-badge">{FORMAT_LABEL[format]}</span>
+                  <div>
+                    <div className="imp3-file-nm">{file ? file.name : url}</div>
+                    {!!fileSize && <div className="imp3-file-sub">{fileSize}</div>}
+                  </div>
+                  <button
+                    type="button"
+                    className="imp3-file-x"
+                    onClick={() => {
+                      setStep('source')
+                      setUrlOpen(!file)
+                    }}
+                  >
+                    Change
+                  </button>
+                </div>
+              )}
               {/* Checking whether this source's format is remembered — this box used to render
                 nothing at all while the probe was in flight, so the "I know this source"
                 banner appeared to pop in from nowhere. Same box shape as the resolved banner
                 below, so there's no layout jump once it resolves. */}
-              {peekState === 'pending' && (
+              {peekState === 'pending' && !reopenChoose && (
                 <div className="imp3-known pending" role="status" aria-live="polite">
                   <span className="imp3-known-spin" aria-hidden="true" />
                   <div className="imp3-known-t">Checking if this source is remembered…</div>
                 </div>
               )}
-              {sourceKnown && (
+              {sourceKnown && !reopenChoose && (
                 <div className="imp3-known">
                   <span className="imp3-known-ic">
                     <Spark />
@@ -3153,7 +3296,7 @@ export function ImportModal({
                 whether this source is remembered. The banner would be a false claim, but
                 withholding its checkbox would take the ONLY control that sets `force_relearn`
                 — the one escape from a stuck format profile — away over a network hiccup. */}
-              {peekState === 'unavailable' && (
+              {peekState === 'unavailable' && !reopenChoose && (
                 <label
                   className="imp3-remember"
                   title="Forget everything remembered about this source for this run: re-detect the format from scratch AND re-read the file instead of reusing the cached parse."
@@ -3288,42 +3431,98 @@ export function ImportModal({
                 `docs/adr/2026-07-27-statement-import-drop-account-auto-detect.md`'s follow-up
                 note and `frontend/design_handoffs/statement_import_handoff/PARITY_AND_GAPS.md`
                 deviation #9. */}
-              <div className="imp3-drop-cta">
-                <span className="imp3-drop-cost">You review everything before it books</span>
-                <Button
-                  variant="primary"
-                  className="fi-lucius"
-                  iconLeft={<LuciusSpark size={15} ariaHidden />}
-                  disabled={!acctIds.length}
-                  onClick={() => runLucius()}
-                >
-                  Read the statement
-                </Button>
-              </div>
+              {reopenChoose ? (
+                <div className="imp3-drop-cta imp3-reopen-acts">
+                  <Button
+                    variant="secondary"
+                    disabled={!acctIds.length || rereading}
+                    onClick={readAgain}
+                  >
+                    {rereading ? 'Starting…' : 'Read again'}
+                  </Button>
+                  <Button variant="primary" disabled={!preview} onClick={() => setStep('preview')}>
+                    Back to review
+                  </Button>
+                </div>
+              ) : (
+                <div className="imp3-drop-cta">
+                  <span className="imp3-drop-cost">You review everything before it books</span>
+                  <Button
+                    variant="primary"
+                    className="fi-lucius"
+                    iconLeft={<LuciusSpark size={15} ariaHidden />}
+                    disabled={!acctIds.length}
+                    onClick={() => runLucius()}
+                  >
+                    Read the statement
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
           {/* ── Read (handoff ReadStep) ─────────────────────────────────────────────── */}
-          {step === 'processing' && (
+          {step === 'processing' && resuming && reopenFailed && (
+            <div className="imp3-body imp3-reading" role="alert">
+              <div className="imp3-reading-t">
+                Couldn’t open <b>{resumeFilename || 'this statement'}</b>
+              </div>
+              <div className="imp3-phase">
+                {reopenFailed.kind === 'account'
+                  ? 'Which account is this statement for? Nothing is re-read — the review opens for it.'
+                  : reopenFailed.kind === 'read'
+                    ? 'Its read didn’t finish. Re-run it from the account’s Statements list.'
+                    : 'The review didn’t load. Nothing was lost — try again.'}
+              </div>
+              {reopenFailed.kind === 'account' && (
+                <div className="imp3-reopen-acct">
+                  <FormField label="Account">
+                    <Select
+                      options={[{ value: '', label: 'Choose an account' }, ...acctOpts]}
+                      value={reopenAccount}
+                      onChange={(e) => setReopenAccount(e.target.value)}
+                    />
+                  </FormField>
+                </div>
+              )}
+              {reopenFailed.kind === 'read' ? (
+                <Button variant="secondary" size="sm" onClick={close}>
+                  Close
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={reopenFailed.kind === 'account' && !reopenAccount}
+                  onClick={() =>
+                    void resumeReopen(activeResumeId as string, reopenAccount || undefined)
+                  }
+                >
+                  {reopenFailed.kind === 'account' ? 'Open review' : 'Try again'}
+                </Button>
+              )}
+            </div>
+          )}
+          {step === 'processing' && !(resuming && reopenFailed) && (
             <div className="imp3-body imp3-reading">
               <div className="imp3-orb">
                 <Spark />
               </div>
               <div className="imp3-reading-t">
-                Lucius is reading{' '}
+                {openingReview ? 'Opening' : 'Lucius is reading'}{' '}
                 <b>{file ? file.name : resuming ? resumeFilename || 'your file' : 'your file'}</b>
               </div>
               <div
                 className={'imp3-phase' + (activeStale ? ' imp3-phase--stale' : '')}
                 role="status"
               >
-                {readingPhase}
+                {openingReview ? 'Opening your review' : readingPhase}
               </div>
               {/* Live stage bar, elapsed clock, retry/hint lines — all feature-detected on
                   `activeProgress`: an old server that never answers the progress endpoint
                   leaves this whole block unrendered, and the phase line above is all there
                   is, exactly like before B20. */}
-              {activeProgress ? (
+              {activeProgress && !openingReview ? (
                 <>
                   <div
                     className="imp3-stagebar"
@@ -3347,14 +3546,17 @@ export function ImportModal({
                   )}
                 </>
               ) : null}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="imp3-bgbtn"
-                onClick={() => continueInBackground()}
-              >
-                Continue in background
-              </Button>
+              {!openingReview && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="imp3-bgbtn"
+                  disabled={bgPending}
+                  onClick={() => continueInBackground()}
+                >
+                  {bgPending ? 'Continuing…' : 'Continue in background'}
+                </Button>
+              )}
             </div>
           )}
 
@@ -7014,13 +7216,13 @@ export function ImportModal({
                     View linked & imported
                   </button>
                 )}
-                <button type="button" className="imp3-btn2" onClick={reset}>
-                  Import another
-                </button>
                 <button type="button" className="imp3-lubtn" onClick={close}>
                   Done
                 </button>
               </div>
+              <button type="button" className="imp3-done-another" onClick={reset}>
+                Import another statement
+              </button>
             </div>
           )}
         </div>
