@@ -69,10 +69,10 @@ def _parse_date(s: str | None) -> date | None:
         return None
 
 
-def _draft_base_amount(draft: dict, rates: dict | None) -> float:
+def _draft_base_amount(draft: dict, rates: dict | None, base: str | None = None) -> float:
     """The draft's reporting magnitude in the CURRENT base (the draft is already a two-leg
     txn shape, so ``txn_base_amount`` consumes it directly — base-change-safe)."""
-    return ledger_service.txn_base_amount(draft, rates=rates)
+    return ledger_service.txn_base_amount(draft, base, rates=rates)
 
 
 def _median(values: list[float]) -> float:
@@ -113,7 +113,7 @@ def detect_anomalies(results, *, lookback_days: int = _LOOKBACK_DAYS) -> dict:
         return summary
 
 
-def _existing_summary(txn: dict | None) -> dict | None:
+def _existing_summary(txn: dict | None, opening_ids: frozenset[str] | None = None) -> dict | None:
     """A compact projection of the EXISTING ledger txn a draft matched — enough for the import
     preview to show the user what they already have (and to drive a skip/merge decision). The
     signed display amount mirrors ``import_common.display_draft`` (income = to-leg positive,
@@ -123,12 +123,15 @@ def _existing_summary(txn: dict | None) -> dict | None:
     every raw feed variant (csv_import/qif_import/api/...) collapses onto the same handful of
     values a caller's phrase map can switch on. ``original_amount``/``original_currency`` are the
     pre-conversion foreign charge (display/audit only) — computed once here so callers (the
-    match-line sub-line, the ledger-diff panel) never re-derive or disagree on it."""
+    match-line sub-line, the ledger-diff panel) never re-derive or disagree on it.
+    ``opening_ids`` is ``ledger.opening_txn_ids()`` read once by a caller summarizing many rows
+    (it is an accounts read)."""
     from backend.services.ledger import opening_txn_ids
 
     if not txn:
         return None
-    opening_ids = opening_txn_ids()
+    if opening_ids is None:
+        opening_ids = opening_txn_ids()
     if txn.get("kind") == "income":
         amount, currency, account_id = (
             txn.get("to_amount"),
@@ -223,12 +226,16 @@ def _detect(results, lookback_days: int, summary: dict) -> dict:
             continue
         if _parse_date(t.get("date")) is None:
             continue
-        amt_base = _draft_base_amount(t, rates)
+        amt_base = _draft_base_amount(t, rates, base)
         key = _payee_key(txn_text(t))
         if key:
             history.setdefault(key, []).append(amt_base)
 
-    prior_drafts: list[dict] = []  # prior draft rows in this file (accumulated as we go)
+    # Ledger rows + PRIOR in-file drafts (accumulated as we go), indexed by date: the engine
+    # only ever scores a candidate within FETCH_WINDOW_DAYS of the draft (the rest of the
+    # 120-day lookback exists for the payee history above), so each draft is handed just those.
+    scope = _DraftScope(ledger_pool)
+    opening_ids = ledger_service.opening_txn_ids()
 
     try:
         for r in candidates:
@@ -241,17 +248,15 @@ def _detect(results, lookback_days: int, summary: dict) -> dict:
             # Exclude any candidate carrying the same (external_source, external_ref) pair as the
             # draft — that is the hard-dedup's domain (exact re-import) and the advisory layer
             # must not double-flag it.
-            pool = [
-                t
-                for t in (ledger_pool + prior_drafts)
-                if not (d_key[1] and d_key in ext_ref_pairs(t))
-            ]
+            pool, ref_freq = scope.candidates_for(draft, d_key)
             result = matching.check(
                 draft,
                 profile=matching.SCAN,
                 candidates=pool,
                 rates=rates,
                 known_routes=known_routes,
+                ref_freq=ref_freq,
+                base=base,
             )
 
             if result.action == "review" and result.best is not None:
@@ -263,7 +268,7 @@ def _detect(results, lookback_days: int, summary: dict) -> dict:
                             "reason": "; ".join(result.reasons)
                             or "Matches an existing transaction (same amount, similar date and description).",
                             "existing_id": result.canonical_id,
-                            "existing": _existing_summary(result.best.txn),
+                            "existing": _existing_summary(result.best.txn, opening_ids),
                             "score": result.best.score,
                             "klass": klass.value,
                             "_alts": _ranked_alts(result, klass),
@@ -277,7 +282,7 @@ def _detect(results, lookback_days: int, summary: dict) -> dict:
                             "reason": "; ".join(result.reasons)
                             or "Possible transfer pair with an existing transaction.",
                             "existing_id": result.canonical_id,
-                            "existing": _existing_summary(result.best.txn),
+                            "existing": _existing_summary(result.best.txn, opening_ids),
                             "score": result.best.score,
                             "klass": klass.value,
                             "_alts": _ranked_alts(result, klass),
@@ -296,7 +301,7 @@ def _detect(results, lookback_days: int, summary: dict) -> dict:
                             "reason": "; ".join(result.reasons)
                             or "Duplicates one leg of an existing transfer.",
                             "existing_id": result.canonical_id,
-                            "existing": _existing_summary(result.best.txn),
+                            "existing": _existing_summary(result.best.txn, opening_ids),
                             "score": result.best.score,
                             "klass": klass.value,
                         }
@@ -304,7 +309,7 @@ def _detect(results, lookback_days: int, summary: dict) -> dict:
                     summary["transfer_leg_echo"] += 1
 
             # amount_anomaly vs the payee's own history (enough observations + clear outlier).
-            d_base = _draft_base_amount(draft, rates)
+            d_base = _draft_base_amount(draft, rates, base)
             key = _payee_key(txn_text(draft))
             hist = history.get(key) or []
             if len(hist) >= _ANOMALY_MIN_HISTORY and d_base >= _ANOMALY_MIN_BASE:
@@ -321,7 +326,7 @@ def _detect(results, lookback_days: int, summary: dict) -> dict:
                     )
                     summary["amount_anomaly"] += 1
 
-            prior_drafts.append(draft)
+            scope.append(draft)
 
     finally:
         # Remove the temporary batch_id so drafts are not mutated past the anomaly pass.
@@ -331,6 +336,47 @@ def _detect(results, lookback_days: int, summary: dict) -> dict:
     _enforce_exclusive_matches(candidates, summary)
     summary["flagged_rows"] = sum(1 for r in candidates if r.flags)
     return summary
+
+
+class _DraftScope:
+    """The engine's comparison scope for one draft — ledger pool + prior drafts, minus rows
+    sharing the draft's primary ``(source, ref)`` — served NARROWED (only rows near the draft's
+    date, in scope order) together with that WHOLE scope's reference-token counts, which is
+    what ``matching.check`` counted itself when it was handed the whole scope. Token sets are
+    tokenized once per row and counted incrementally, never re-counted per draft."""
+
+    def __init__(self, ledger_pool: list[dict]):
+        from backend.services import matching
+
+        self._matching = matching
+        self._dated = matching._DatedPool()
+        self._tokens: list[frozenset[str]] = []
+        self._freq: dict[str, int] = {}
+        self._by_ref: dict[tuple, list[int]] = {}
+        for t in ledger_pool:
+            self.append(t)
+
+    def append(self, row: dict) -> None:
+        pos = len(self._dated.pool)
+        self._dated.append(row)
+        tokens = frozenset(self._matching._reference_token_frequencies([row]))
+        self._tokens.append(tokens)
+        for tok in tokens:
+            self._freq[tok] = self._freq.get(tok, 0) + 1
+        for pair in ext_ref_pairs(row):
+            self._by_ref.setdefault(pair, []).append(pos)
+
+    def candidates_for(self, draft: dict, d_key: tuple) -> tuple[list[dict], dict[str, int]]:
+        m = self._matching
+        excluded = set(self._by_ref.get(d_key, ())) if d_key[1] else set()
+        positions = self._dated.positions(m.parse_date(draft.get("date")), m.FETCH_WINDOW_DAYS)
+        pool = [self._dated.pool[i] for i in positions if i not in excluded]
+        # Only the draft's OWN tokens are ever looked up: a shared reference token is by
+        # definition one the draft prints, so the rest of the scope's counts are never read.
+        freq = m._reference_token_frequencies([draft])
+        for tok in freq:
+            freq[tok] += self._freq.get(tok, 0) - sum(tok in self._tokens[i] for i in excluded)
+        return pool, freq
 
 
 def _ranked_alts(result, klass) -> list:
