@@ -32,6 +32,7 @@ from backend.services.statements import (
     lucius_pass,
     parse_progress,
     routed_transfer,
+    statement_list,
     stored_previews,
 )
 from backend.services.statements import match_policy as policy_service
@@ -1420,11 +1421,13 @@ def decision_preview(
         applied_instructions = profiles.find_instructions(content, fmt)
     instr_hash = _instructions_hash(applied_instructions)
     already = None
-    if record.get("batch_ids") or record.get("filed_at"):
+    # A rolled-back import booked nothing that is still there — not "already imported".
+    live_batches = statement_list.live_batch_ids(record)
+    if live_batches or record.get("filed_at"):
         already = {
             "statement_id": record["id"],
             "imported_at": record.get("parsed_at") or record.get("created_at"),
-            "batch_ids": record["batch_ids"],
+            "batch_ids": live_batches,
         }
     # The review this file already finished is returned as it was left; only an explicit ask
     # (a re-read, a mapping, another account, changed instructions) builds a new one.
@@ -1576,6 +1579,10 @@ def decision_preview(
         force=force_reparse,
     )
     lucius_applied = lucius_pass.apply_lucius_ops(results, result.rows, pass_outcome.ops, ctx)
+    # What the commit books from: every row's verdict exactly as `rederive_match_pass` would
+    # produce it (matcher, then the Lucius ops — nothing after). Kept with the stored review so
+    # Confirm books the reviewed decisions instead of re-matching the ledger (owner, 2026-10-26).
+    commit_pass = {"anchor": anchor, "results": [asdict(r) for r in results]}
     llm_cost["calls"] += pass_outcome.llm_calls
     llm_cost["cost_usd"] += pass_outcome.cost_usd
     # A row Lucius just routed to a transfer carries a STALE match flag from the matcher pass
@@ -1953,7 +1960,12 @@ def decision_preview(
     # still asks for an account is not a review anyone can act on, so it is never kept.
     if not response.get("needs_account"):
         stored_previews.keep(
-            record["id"], fmt=fmt, instr_hash=instr_hash, account_arg=account_id, preview=response
+            record["id"],
+            fmt=fmt,
+            instr_hash=instr_hash,
+            account_arg=account_id,
+            preview=response,
+            commit_pass=commit_pass,
         )
     return response
 
@@ -2059,13 +2071,21 @@ def decision_commit(
     decisions: list[dict] | None = None,
     default_action: str = "create",
     delete_ids: list[str] | None = None,
+    *,
+    reviewed: bool = False,
 ) -> dict:
     """Serializes ``_decision_commit_locked`` — see ``_commit_lock`` for why. A statement may
     legitimately be committed more than once with different decisions, so this is NOT an
-    "already committed" refusal — just mutual exclusion for the duration of one commit."""
+    "already committed" refusal — just mutual exclusion for the duration of one commit.
+
+    ``reviewed`` = the owner confirmed this in the import review (the modal's Confirm): it books
+    the stored review's verdicts and the owner's decisions exactly — no second matching pass and
+    no fuzzy duplicate guard, only the identity floors (owner, 2026-10-26). An unattended commit
+    (Lucius's import tool, the one-shot REST import) keeps re-deriving and the duplicate guard,
+    because nobody looked at what it books."""
     with _commit_lock:
         outcome = _decision_commit_locked(
-            statement_id, account_id, decisions, default_action, delete_ids
+            statement_id, account_id, decisions, default_action, delete_ids, reviewed=reviewed
         )
     # The review described a ledger this commit just changed; a reopen builds a fresh one.
     stored_previews.drop(statement_id)
@@ -2078,6 +2098,8 @@ def _decision_commit_locked(
     decisions: list[dict] | None = None,
     default_action: str = "create",
     delete_ids: list[str] | None = None,
+    *,
+    reviewed: bool = False,
 ) -> dict:
     """Apply the review decisions in ONE batch: creates through the ledger choke, merges via
     ``apply_import_merge`` with pre-merge snapshots recorded on the batch (rollback un-merges),
@@ -2126,9 +2148,25 @@ def _decision_commit_locked(
     # 2026-07-28) — the preview's order, so a re-applied reject_match/force_match sees the SAME
     # verdict it reviewed, and `assigned_by_index` below reflects the FINAL, Lucius-adjusted one.
     meta = StatementMeta(**(record.get("import_meta") or {}))
-    match_pass = rederive_match_pass(record, rows, account_id)
-    ctx, results, lucius_ops = match_pass.ctx, match_pass.results, match_pass.lucius_ops
-    rule_routing = match_pass.routing
+    # The reviewed verdicts, when the stored review was built for this account: Confirm books
+    # what the owner reviewed and decided — no second matching pass over the live ledger
+    # (owner, 2026-10-26: "after i spent minutes reviewing … it should follow my decision").
+    # A merge is still only accepted if THAT review proposed it (server-side, never the
+    # client's say-so), which is the security role the re-derive used to play.
+    stored = (
+        stored_previews.commit_pass(statement_id, (account_id, resolved_default))
+        if reviewed
+        else None
+    )
+    if stored is not None:
+        ctx = _routing_context(rows, account_id)
+        results = [RowResult(**r) for r in stored]
+        lucius_ops = lucius_pass.active_ops(record)
+        rule_routing = import_routing()
+    else:
+        match_pass = rederive_match_pass(record, rows, account_id)
+        ctx, results, lucius_ops = match_pass.ctx, match_pass.results, match_pass.lucius_ops
+        rule_routing = match_pass.routing
     lucius_by_row = {op["row"]: op for op in lucius_ops}
     routed_account_ids = frozenset({a["id"] for a in ctx.route.values()} | ({ctx.resolved} - {""}))
     assigned_by_index: dict[int, str] = {}
@@ -2262,11 +2300,6 @@ def _decision_commit_locked(
     skipped = 0
     duplicates = 0
     transfers = 0
-    # An explicit create books a row the owner saw flagged as already booked. When the stored
-    # review did NOT flag it, the ledger gained that entry after the review was built (booked
-    # another way): the owner never saw it, so it is refused and reported, never booked.
-    previewed_duplicates = stored_previews.flagged_duplicates(statement_id)
-    since_review_duplicates: list[dict] = []
     for r, row in zip(results, rows):
         idx = r.line - 1
         decision = by_index.get(idx, {})
@@ -2276,23 +2309,6 @@ def _decision_commit_locked(
             continue
         if r.duplicate and action != "create":
             duplicates += 1
-            continue
-        if (
-            r.duplicate
-            and r.duplicate_of
-            and previewed_duplicates is not None
-            and idx not in previewed_duplicates
-        ):
-            duplicates += 1
-            since_review_duplicates.append(
-                {
-                    "description": row.description,
-                    "date": row.date,
-                    "duplicate_of": r.duplicate_of,
-                    "reason": "Already in your ledger since this review was built — not booked again.",
-                    "previously_deleted": False,
-                }
-            )
             continue
         if idx in absorbed_in_legs and action != "create":
             continue  # folded into its OUT partner's transfer (counted there)
@@ -2512,14 +2528,11 @@ def _decision_commit_locked(
             transfers=transfers,
             account_map=account_map_used,
             delete_ids=to_delete,
+            reviewed=reviewed,
         )
     finally:
         if _owns_scope:
             clear_audit_scope()
-    outcome["refused_duplicates"] = [
-        *(outcome.get("refused_duplicates") or []),
-        *since_review_duplicates,
-    ]
     _record_routing_automation_matches(fired_routing_automations, batch_id=outcome["batch_id"])
     outcome["delete_errors"] = list(outcome.get("delete_errors") or []) + [
         {"id": gone, "error": "already deleted"} for gone in already_gone
@@ -2612,6 +2625,7 @@ def _apply(
     transfers: int = 0,
     account_map: dict[str, str] | None = None,
     delete_ids: list[str] | None = None,
+    reviewed: bool = False,
     # Defaulted, not required: `_apply` has direct callers (tests, and any future re-apply
     # path) for which "no explicitly-included rows" is the honest default. Making it required
     # broke them for no gain — an empty list means exactly what they meant.
@@ -2692,6 +2706,7 @@ def _apply(
             batch,
             deleted_ids,
             delete_errors,
+            reviewed=reviewed,
         )
     except Exception:
         # The import failed after the rows were already removed. Put them back — a confirmed
@@ -2717,6 +2732,8 @@ def _apply_rows(
     batch: dict | None,
     deleted_ids: list[str],
     delete_errors: list[dict],
+    *,
+    reviewed: bool = False,
 ) -> dict:
     """The row half of a statement commit — everything after the staged deletions have landed.
 
@@ -2725,8 +2742,16 @@ def _apply_rows(
     created_rows: list[dict] = []
     refused_rows: list[dict] = []
     if creates:
+        # A REVIEWED commit books the owner's decisions as decided: no fuzzy duplicate guard (it
+        # once refused three real MoMo top-ups as "already in your ledger" against a transfer
+        # leg it built itself — owner, 2026-10-26). Two floors remain, both identity-exact:
+        # a row whose own statement ref is already booked (a double Confirm, a re-commit), and
+        # a row the owner deleted before (`rejected_identities`, enforced on every path).
         created_rows, refused_rows = ledger_service.bulk_create_transactions(
-            creates, batch_id=batch["id"] if batch else None
+            creates,
+            batch_id=batch["id"] if batch else None,
+            allow_duplicate=reviewed,
+            dedup_by_external_ref=reviewed,
         )
     if creates_explicit:
         # allow_duplicate=True: the owner ticked Include on these rows with the duplicate flag already in

@@ -314,6 +314,31 @@ describe('ImportModal — resume by id (B20 async)', () => {
     expect(onReopenPreview).toHaveBeenCalledTimes(1) // restored from memory, nothing refetched
   })
 
+  it('Back from a reopened review shows the instructions it was read with', async () => {
+    authFetch.mockImplementation(() =>
+      jsonResponse({ parse_status: 'ready', progress: null, error: null }),
+    )
+    const onReopenPreview = vi.fn().mockResolvedValue({
+      ...PREVIEW_RESULT,
+      resolvedAccountId: 'rvb',
+      instructions: {
+        text: 'Top-ups are transfers',
+        lines: 1,
+        used_in_parse: false,
+        remembered: false,
+      },
+    })
+    open('stmt_instr', onReopenPreview)
+    await screen.findByText('COFFEE')
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }))
+    const box = (await screen.findByLabelText('Tell Lucius')) as HTMLTextAreaElement
+    expect(box.value).toBe('Top-ups are transfers')
+    expect(
+      (screen.getByRole('checkbox', { name: /Remember for this source/ }) as HTMLInputElement)
+        .checked,
+    ).toBe(false)
+  })
+
   it('Read again re-reads the saved file in the background, then opens the new review', async () => {
     let status = 'ready'
     authFetch.mockImplementation(() =>

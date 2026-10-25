@@ -1689,6 +1689,8 @@ export function AccountsTab({
         decisions,
         default_action: 'create',
         delete_ids: deleteIds,
+        // The owner's own Confirm on the review: book exactly what it showed and they decided.
+        reviewed: true,
       }),
     })
     if (!res.ok) throw new Error(await res.text())

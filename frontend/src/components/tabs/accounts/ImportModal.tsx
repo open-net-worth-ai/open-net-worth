@@ -1662,6 +1662,14 @@ export function ImportModal({
     setPreview(res)
     setShowSkipped(false)
     setIncludeEarlier(false)
+    // A reopened statement has no file to probe for its source's saved instructions — the
+    // review itself says which ones it was read with, so Back shows (and Read again re-sends)
+    // exactly those.
+    if (res.instructions?.text && !instrTyped.current) {
+      setInstructions(res.instructions.text)
+      setRememberInstr(res.instructions.remembered !== false)
+      setSavedInstructions(res.instructions.remembered === false ? '' : res.instructions.text)
+    }
     setStep('preview')
   }
 

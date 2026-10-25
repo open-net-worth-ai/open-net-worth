@@ -705,6 +705,9 @@ class DecisionCommitBody(BaseModel):
     # statement" panel. Validated server-side against this statement's uncovered set — the
     # list is a request, never an authorization.
     delete_ids: list[str] = []
+    # The import review's own Confirm: book the reviewed verdicts and decisions as shown
+    # (`decision_commit(reviewed=True)`). Absent = an unattended commit, which keeps the guard.
+    reviewed: bool = False
 
 
 @router.post("/api/statements/commit")
@@ -723,6 +726,7 @@ async def commit_decisions(request: Request, body: DecisionCommitBody) -> dict:
             [d.model_dump() for d in body.decisions],
             default_action=body.default_action,
             delete_ids=body.delete_ids,
+            reviewed=body.reviewed,
         )
     except ImportError_ as exc:
         raise HTTPException(422, str(exc))

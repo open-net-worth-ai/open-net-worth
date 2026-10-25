@@ -30,6 +30,17 @@ def batches_by_statement() -> dict[str, list[dict]]:
     return index
 
 
+def live_batch_ids(record: dict) -> list[str]:
+    """The record's import batches that still stand — a rolled-back one booked nothing that is
+    still there, so a statement whose every booking was undone is reviewable again."""
+    live = []
+    for batch_id in record.get("batch_ids") or []:
+        batch = ledger_service.import_batches.find_by_id(batch_id)
+        if batch and batch.get("status") != "rolled_back":
+            live.append(batch_id)
+    return live
+
+
 def import_facts(record: dict, by_statement: dict[str, list[dict]] | None = None) -> dict:
     batches = {b["id"]: b for b in (by_statement or {}).get(record.get("id") or "", [])}
     for batch_id in record.get("batch_ids") or []:
@@ -37,12 +48,18 @@ def import_facts(record: dict, by_statement: dict[str, list[dict]] | None = None
             batch = ledger_service.import_batches.find_by_id(batch_id)
             if batch and batch.get("status") != "rolled_back":
                 batches[batch_id] = batch
+    imported_at = max((b.get("created_at") or "" for b in batches.values()), default="") or (
+        record.get("filed_at")
+    )
     facts: dict = {
         "rows_read": len(record.get("import_rows") or []) or None,
-        "imported_at": max((b.get("created_at") or "" for b in batches.values()), default="")
-        or record.get("filed_at"),
+        "imported_at": imported_at,
         "added": None,
         "linked": None,
+        # Only bookings that still stand: an import undone in full leaves the statement
+        # "Ready to review", not "Imported" with nothing behind it.
+        "batch_ids": sorted(batches),
+        "filed": bool(imported_at),
     }
     if batches:
         facts["added"] = sum(

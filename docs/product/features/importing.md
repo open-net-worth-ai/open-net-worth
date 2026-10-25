@@ -52,9 +52,11 @@ or **Couldn't read**, in which case re-run it from the account's **Statements** 
 
 **Ready to review** means the whole review is done and saved with the statement — the rows, the
 matches against your ledger and the check of what your ledger has that the statement doesn't.
-Review opens it straight away, even after a restart, exactly as it was built. If you booked
-something in the meantime, nothing is double-counted: when you commit, each row is checked against
-your ledger again, and a row that is now already booked is left out and listed on the done screen.
+Review opens it straight away, even after a restart, exactly as it was built. **Confirm books
+exactly what the review showed and what you decided** — nothing is re-checked or second-guessed at
+that point. Only two things are never booked twice: a statement row that is already in your ledger
+by its own reference (so pressing Confirm twice, or importing the same file again, is safe), and a
+row you deleted before.
 Choosing a different account, changing the instructions or **Re-read** builds a new review.
 **Back** from a reopened statement's review shows that statement's own file, accounts and
 instructions: **Back to review** returns to it exactly as you left it, **Read again** re-reads the

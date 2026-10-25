@@ -20,6 +20,8 @@ import json
 
 from backend.db.statement_preview_store import StatementPreviewStore
 
+_COMMIT_PASS = "_commit_pass"
+
 
 def keep(
     statement_id: str,
@@ -28,16 +30,20 @@ def keep(
     instr_hash: str | None,
     account_arg: str | None,
     preview: dict,
+    commit_pass: dict | None = None,
 ) -> None:
     """Persist ``preview`` as this statement's review. Raises on a storage failure: a read that
-    could not keep its review must not go on to report ``ready``."""
+    could not keep its review must not go on to report ``ready``. ``commit_pass`` is what a
+    commit books from (every row's reviewed verdict and the account it was built for) — kept
+    under a private key a reopen never returns."""
+    stored = {**preview, _COMMIT_PASS: commit_pass} if commit_pass is not None else preview
     StatementPreviewStore().put(
         statement_id,
         fmt=fmt,
         instr_hash=instr_hash,
         account_arg=account_arg,
         resolved_account_id=preview.get("resolved_account_id"),
-        preview=json.loads(json.dumps(preview, default=str)),
+        preview=json.loads(json.dumps(stored, default=str)),
     )
 
 
@@ -66,10 +72,22 @@ def recall(
         return None
     if account_id not in (None, row["account_arg"], row["resolved_account_id"]):
         return None
-    preview = _as_reopened(copy.deepcopy(row["preview"]), record, one_off)
+    preview = copy.deepcopy(row["preview"])
+    preview.pop(_COMMIT_PASS, None)
+    preview = _as_reopened(preview, record, one_off)
     if account_id:
         preview["account_suggestion"] = None
     return preview
+
+
+def commit_pass(statement_id: str, accounts: tuple[str | None, ...]) -> list[dict] | None:
+    """The rows' reviewed verdicts, if the stored review was built for one of ``accounts`` (the
+    commit's account as sent and as resolved); else ``None`` and the commit re-derives."""
+    row = StatementPreviewStore().get(statement_id)
+    kept = (row or {}).get("preview", {}).get(_COMMIT_PASS) if row else None
+    if not kept or not kept.get("anchor") or kept["anchor"] not in accounts:
+        return None
+    return kept.get("results")
 
 
 def flagged_duplicates(statement_id: str) -> set[int] | None:

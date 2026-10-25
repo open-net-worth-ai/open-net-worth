@@ -254,13 +254,77 @@ def test_legacy_statement_without_a_stored_review_recomputes_once(heavy_calls):
     assert heavy_calls == []
 
 
-def test_commit_refuses_an_edited_row_whose_twin_was_booked_since_the_review():
-    """Preview → the same transaction is booked another way → the owner edits that row and
-    commits. The edit makes it an explicit create, which skips the near-duplicate guard; the
-    stored review never flagged it, so the commit refuses it and reports it instead."""
+def test_commit_books_a_reviewed_row_even_if_a_lookalike_appeared_since():
+    """Owner, 2026-10-26: "after i spent minutes reviewing and making decisions, it should
+    follow my decision". A row the review showed as new is booked, even though a similar
+    transaction (same account, amount, description, a few days apart — no shared identity)
+    landed in the ledger afterwards. The fuzzy guard used to refuse it as "already in your
+    ledger"; that is how three real MoMo top-ups went missing."""
+    first = _preview(filename="s.ofx")
+    assert first["rows"][0]["duplicate"] is False
+    ledger_service.create_transaction(
+        {
+            "date": "2026-01-05",
+            "kind": "expense",
+            "from_account_id": "acc",
+            "from_amount": 4.5,
+            "description": "Coffee",
+        }
+    )
+
+    out = svc.decision_commit(first["statement_id"], "acc", [], reviewed=True)
+
+    assert out["refused_duplicates"] == []
+    assert out["created"] == 2
+    coffees = [
+        t
+        for t in ledger_service.transactions.all()
+        if not t.get("deleted") and t.get("description") == "Coffee"
+    ]
+    assert len(coffees) == 2
+
+
+def test_commit_books_reviewed_rows_with_only_the_identity_floor(monkeypatch):
+    """The ledger's near-duplicate guard refuses a recurring top-up (same route, same amount,
+    a few days from one already booked) as "already in your ledger" — reproduced 2026-10-26 on
+    synthetic transfers. The commit must never route reviewed rows through it: only the
+    identity floor (`dedup_by_external_ref`) and the deleted-identity rule apply."""
+    seen: list[dict] = []
+    real = ledger_service.bulk_create_transactions
+
+    def spy(rows, **kwargs):
+        seen.append(kwargs)
+        return real(rows, **kwargs)
+
+    monkeypatch.setattr(ledger_service, "bulk_create_transactions", spy)
+    first = _preview(filename="s.ofx")
+    svc.decision_commit(first["statement_id"], "acc", [], reviewed=True)
+
+    assert seen and all(k.get("allow_duplicate") for k in seen)
+    assert seen[0].get("dedup_by_external_ref") is True
+
+
+def test_an_unattended_commit_keeps_the_duplicate_guard(monkeypatch):
+    """Lucius's import tool and the one-shot import commit without anyone reviewing: they keep
+    re-deriving and the near-duplicate guard, because nobody looked at what they book."""
+    seen: list[dict] = []
+    real = ledger_service.bulk_create_transactions
+
+    def spy(rows, **kwargs):
+        seen.append(kwargs)
+        return real(rows, **kwargs)
+
+    monkeypatch.setattr(ledger_service, "bulk_create_transactions", spy)
+    first = _preview(filename="s.ofx")
+    svc.decision_commit(first["statement_id"], "acc", [])
+    assert seen and not seen[0].get("allow_duplicate")
+
+
+def test_commit_never_books_the_same_statement_row_twice():
+    """The floor that stays: a row whose OWN statement identity is already booked (a double
+    Confirm, a re-commit, the same row booked by another path with its ref) is skipped."""
     first = _preview(filename="s.ofx")
     coffee = first["rows"][0]
-    assert coffee["duplicate"] is False and coffee["external_refs"]
     ledger_service.create_transaction(
         {
             "date": "2026-01-02",
@@ -272,21 +336,66 @@ def test_commit_refuses_an_edited_row_whose_twin_was_booked_since_the_review():
         }
     )
 
-    out = svc.decision_commit(
-        first["statement_id"],
-        "acc",
-        [{"row": 0, "action": "create", "edits": {"payee": "Corner Cafe"}}],
-    )
+    svc.decision_commit(first["statement_id"], "acc", [], reviewed=True)
 
-    assert out["created"] == 1  # only the Market row
-    assert [r["description"] for r in out["refused_duplicates"]] == ["Coffee"]
-    assert out["refused_duplicates"][0]["duplicate_of"]
-    live = [
+    coffees = [
         t
         for t in ledger_service.transactions.all()
-        if not t.get("deleted") and "Coffee" in (t.get("description") or "")
+        if not t.get("deleted") and t.get("description") == "Coffee"
     ]
-    assert len(live) == 1
+    assert len(coffees) == 1
+
+
+def _commit_outcome(monkeypatch, use_stored: bool) -> tuple[dict, list[tuple]]:
+    first = _preview(filename="s.ofx")
+    if not use_stored:
+        monkeypatch.setattr(stored_previews, "commit_pass", lambda *_a, **_k: None)
+    out = svc.decision_commit(first["statement_id"], "acc", [], reviewed=True)
+    booked = sorted(
+        (t.get("date"), t.get("kind"), t.get("from_amount"), t.get("description"))
+        for t in ledger_service.transactions.all()
+        if not t.get("deleted")
+    )
+    keys = ("created", "merged", "duplicates", "skipped", "transfers")
+    return {k: out.get(k) for k in keys}, booked
+
+
+def test_booking_from_the_stored_review_equals_re_deriving_it(monkeypatch):
+    stored = _commit_outcome(monkeypatch, use_stored=True)
+    for t in ledger_service.transactions.all():
+        ledger_service.transactions.delete(t["id"])
+    for record in StatementStore().list_statements():
+        StatementStore().delete_statement(record["id"])
+    rederived = _commit_outcome(monkeypatch, use_stored=False)
+    assert stored == rederived
+
+
+def test_booking_from_the_stored_review_skips_the_match_pass(heavy_calls):
+    first = _preview(filename="s.ofx")
+    heavy_calls.clear()
+    svc.decision_commit(first["statement_id"], "acc", [], reviewed=True)
+    assert "_apply_batch_match" not in heavy_calls
+
+
+def test_a_statement_whose_import_was_rolled_back_is_reviewable_again():
+    from backend.services.statements.statement_list import import_facts, live_batch_ids
+
+    first = _preview(filename="s.ofx")
+    sid = first["statement_id"]
+    out = svc.decision_commit(sid, "acc", [])
+    batch_id = out["batch_id"]
+    ledger_service.import_batches.set_status(batch_id, "rolled_back")
+    for t in ledger_service.transactions.query_by_batch(batch_id, include_deleted=False):
+        ledger_service.transactions.bulk_soft_delete([t["id"]])
+
+    record = StatementStore().find_by_id(sid)
+    assert live_batch_ids(record) == []
+    facts = import_facts(record)
+    assert facts["filed"] is False and facts["batch_ids"] == []
+    again = _preview(filename="s.ofx")
+    assert again["already_imported"] is None
+    rebooked = svc.decision_commit(sid, "acc", [])
+    assert rebooked["created"] == 2
 
 
 def test_commit_still_books_an_explicit_create_of_a_row_the_review_flagged():
@@ -385,3 +494,29 @@ def test_a_needs_account_payload_kept_before_the_rule_is_not_served():
         )
         is None
     )
+
+
+def test_the_review_confirm_endpoint_books_as_reviewed(monkeypatch):
+    """The modal's Confirm sends `reviewed: true`; the endpoint must pass it through."""
+    seen: list[dict] = []
+    real = svc.decision_commit
+
+    def spy(*args, **kwargs):
+        seen.append(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(svc, "decision_commit", spy)
+    web = _route_client()
+    sid = web.post(
+        "/api/statements/preview",
+        files={"file": ("s.ofx", _OFX, "application/octet-stream")},
+        data={"account_id": "acc"},
+        headers=_HEADERS,
+    ).json()["statement_id"]
+    res = web.post(
+        "/api/statements/commit",
+        json={"statement_id": sid, "account_id": "acc", "reviewed": True},
+        headers=_HEADERS,
+    )
+    assert res.status_code == 200, res.text
+    assert seen and seen[0].get("reviewed") is True
