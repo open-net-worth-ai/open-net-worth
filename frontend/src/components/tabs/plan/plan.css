@@ -4680,14 +4680,16 @@ body.hide-amounts .mask::after {
    --onw-nav-w was never defined, so it fell back to 52px and the FAB hid under an expanded nav.
    Ink-filled (the CTA fill) so it actually stands out against the dark chrome around it (it used to
    match --surface and all but disappeared); the label is desktop-only — on a phone it opens
-   the "What if?" bottom sheet instead of the inline rail, and space is tighter there. */
+   the "What if?" bottom sheet instead of the inline rail, and space is tighter there.
+   A pill, not the app's square button: it is a floating action that shares the bottom edge with
+   the round Ask Lucius FAB, and two floaters in different shapes read as a mismatch. */
 .pl-rail-fab {
   position: fixed;
   left: calc(var(--lx-sidebar-w, 52px) + 16px);
   bottom: 20px;
   z-index: 60; /* z-local: FAB above sticky nav but below plan popovers */
   padding: 12px 20px;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-pill);
   display: flex;
   align-items: center;
   gap: 8px;
