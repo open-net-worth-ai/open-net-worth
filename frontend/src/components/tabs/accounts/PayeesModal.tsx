@@ -95,7 +95,8 @@ export function PayeesModal({
   onApplyPayeeRules,
   onRemoveAlias,
 }: PayeesModalProps) {
-  const payees = usePayeeUsage(listedPayees)
+  const { payees, status: usageStatus } = usePayeeUsage(listedPayees)
+  const usageKnown = usageStatus === 'ready'
   const isMobile = useIsMobile()
   const [q, setQ] = useState('')
   const [selId, setSelId] = useState<string | null>(payees[0]?.id ?? null)
@@ -457,7 +458,7 @@ export function PayeesModal({
                     {p.hidden ? ' • hidden' : ''}
                   </span>
                 </span>
-                <span className="pm-item-ct">{p.txnCount}</span>
+                <span className="pm-item-ct">{usageKnown ? p.txnCount : '–'}</span>
                 {isMobile && (
                   <span className="pm-item-chev" aria-hidden="true">
                     <ChevronRight size={16} />
@@ -558,10 +559,16 @@ export function PayeesModal({
                 <div className="pm-ed-headtext">
                   <h3 className="pm-ed-title">{sel.name}</h3>
                   <div className="pm-ed-sub">
-                    {fmtDate(sel.lastUsed) ? `Last used ${fmtDate(sel.lastUsed)}` : 'Never used'}
+                    {!usageKnown
+                      ? usageStatus === 'error'
+                        ? 'Usage unavailable'
+                        : 'Counting transactions…'
+                      : fmtDate(sel.lastUsed)
+                        ? `Last used ${fmtDate(sel.lastUsed)}`
+                        : 'Never used'}
                   </div>
                 </div>
-                {sel.txnCount > 0 ? (
+                {!usageKnown ? null : sel.txnCount > 0 ? (
                   <Button
                     size="sm"
                     variant="ghost"
@@ -806,11 +813,21 @@ export function PayeesModal({
                   <div>
                     <div className="pm-danger-lbl">Delete payee</div>
                     <p className="pm-sec-hint" style={{ margin: 0 }}>
-                      {sel.txnCount > 0
-                        ? `Has ${sel.txnCount} transaction${sel.txnCount !== 1 ? 's' : ''} — pick a payee to reassign them to, then delete.`
-                        : 'No transactions; this payee will be permanently removed.'}
+                      {!usageKnown
+                        ? usageStatus === 'error'
+                          ? "Couldn't count this payee's transactions — close and reopen to try again."
+                          : 'Counting transactions…'
+                        : sel.txnCount > 0
+                          ? `Has ${sel.txnCount} transaction${sel.txnCount !== 1 ? 's' : ''} — pick a payee to reassign them to, then delete.`
+                          : 'No transactions; this payee will be permanently removed.'}
                     </p>
-                    {sel.txnCount > 0 ? (
+                    {!usageKnown ? (
+                      <div className="pm-danger-row">
+                        <Button size="sm" variant="danger" disabled>
+                          Delete payee
+                        </Button>
+                      </div>
+                    ) : sel.txnCount > 0 ? (
                       <div className="pm-danger-row">
                         <PMSelect
                           searchable

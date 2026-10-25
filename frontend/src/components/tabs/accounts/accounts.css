@@ -3252,6 +3252,46 @@ body.hide-amounts .mask.l::after {
 .acct-reg {
   padding: 0 0 120px var(--acct-inset);
 }
+/* A refetch over rows already on screen: an indeterminate bar along the pinned header's bottom
+   edge, and the stale rows dimmed until the new page replaces them. */
+.acct-reg-loadbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.acct-reg-loadbar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: acct-reg-loadbar-slide 1.1s ease-in-out infinite;
+}
+@keyframes acct-reg-loadbar-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(350%);
+  }
+}
+.acct-reg.refetching .acct-reg-scroll {
+  opacity: 0.55;
+  transition: opacity 0.15s ease 0.12s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .acct-reg-loadbar::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}
 /* The column header is a SEPARATE pinned bar (rounded top) that floats on the --bg gap, so its
    rounded corners stay clean when pinned mid-scroll. The rows card sits directly beneath it with a
    rounded bottom; overflow:clip rounds the bottom corners (and isn't a scroll container, so nothing

@@ -9,6 +9,10 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, cleanup, screen, fireEvent } from '@testing-library/react'
+
+const authFetch = vi.hoisted(() => vi.fn(() => Promise.reject(new Error('offline'))))
+vi.mock('../../../api/client', () => ({ authFetch }))
+
 import { PayeesModal } from './PayeesModal'
 import type { Category, Payee } from './types'
 
@@ -197,12 +201,53 @@ describe('PayeesModal — apply-to-existing wiring', () => {
 describe('PayeesModal — last-used display', () => {
   // Regression: the editor header hardcoded fmtDate(undefined)||'Never used', so a payee
   // with a real lastUsed date (and a nonzero txnCount) still showed "Never used".
-  it('shows the last-used date instead of "Never used" when the payee has transactions', () => {
+  it('shows the last-used date instead of "Never used" when the payee has transactions', async () => {
     const payee = makePayee({ txnCount: 146, lastUsed: '2026-07-20' })
+    serveUsage(payee)
     render(
       <PayeesModal
         open
         payees={[payee]}
+        categories={categories}
+        onClose={noop}
+        onChange={noop}
+        onMerge={noop}
+        onView={noop}
+        onAdd={() => ''}
+        onDelete={noop}
+      />,
+    )
+    expect(await screen.findByText(/Last used/)).toBeTruthy()
+    expect(screen.queryByText('Never used')).toBeNull()
+  })
+
+  it('shows "Never used" for a payee with no transactions', async () => {
+    const payee = makePayee({ txnCount: 0, lastUsed: null })
+    serveUsage(payee)
+    render(
+      <PayeesModal
+        open
+        payees={[payee]}
+        categories={categories}
+        onClose={noop}
+        onChange={noop}
+        onMerge={noop}
+        onView={noop}
+        onAdd={() => ''}
+        onDelete={noop}
+      />,
+    )
+    expect(await screen.findByText('Never used')).toBeTruthy()
+  })
+
+  // Regression (owner report 2026-10-26): on a busy machine the usage read took ~20s, and
+  // every payee read "0 · Never used" meanwhile — with the no-reassign delete on offer.
+  it('shows counting — never zero or "Never used" — and holds delete until usage lands', () => {
+    authFetch.mockReturnValueOnce(new Promise(() => {}))
+    render(
+      <PayeesModal
+        open
+        payees={[makePayee({ txnCount: 0, lastUsed: null })]}
         categories={categories}
         onClose={noop}
         onChange={noop}
@@ -213,27 +258,22 @@ describe('PayeesModal — last-used display', () => {
       />,
     )
     expect(screen.queryByText('Never used')).toBeNull()
-    expect(screen.getByText(/Last used/)).toBeTruthy()
-  })
-
-  it('shows "Never used" for a payee with no transactions', () => {
-    const payee = makePayee({ txnCount: 0, lastUsed: null })
-    render(
-      <PayeesModal
-        open
-        payees={[payee]}
-        categories={categories}
-        onClose={noop}
-        onChange={noop}
-        onMerge={noop}
-        onView={noop}
-        onAdd={() => ''}
-        onDelete={noop}
-      />,
-    )
-    expect(screen.getByText('Never used')).toBeTruthy()
+    expect(screen.getAllByText('Counting transactions…').length).toBeGreaterThan(0)
+    const del = screen
+      .getByText('Delete payee', { selector: 'button, button *' })
+      .closest('button')!
+    expect(del.disabled).toBe(true)
   })
 })
+
+function serveUsage(p: Payee) {
+  authFetch.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    json: () =>
+      Promise.resolve({ payees: [{ id: p.id, txn_count: p.txnCount, last_used: p.lastUsed }] }),
+  } as unknown as Response)
+}
 
 describe('PayeesModal — auto-matched descriptions', () => {
   // Regression: aliasesFor() used to synthesize chips from the payee NAME instead
