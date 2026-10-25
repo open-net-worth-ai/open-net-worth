@@ -3221,22 +3221,16 @@ export function ImportModal({
         dragToDismiss={false}
         className={fileStatementId && !isMobile && showFile ? 'imp3-modal--file' : undefined}
         headerActions={
-          fileStatementId ? (
-            isMobile ? (
-              <SegmentedControl
-                ariaLabel="Review or statement file"
-                options={[
-                  { value: 'review', label: 'Review' },
-                  { value: 'file', label: 'File' },
-                ]}
-                value={phoneView}
-                onChange={setPhoneView}
-              />
-            ) : (
-              <Button size="sm" variant="secondary" onClick={toggleShowFile}>
-                {showFile ? 'Hide file' : 'Show file'}
-              </Button>
-            )
+          fileStatementId && isMobile ? (
+            <SegmentedControl
+              ariaLabel="Review or statement file"
+              options={[
+                { value: 'review', label: 'Review' },
+                { value: 'file', label: 'File' },
+              ]}
+              value={phoneView}
+              onChange={setPhoneView}
+            />
           ) : undefined
         }
       >
@@ -6839,11 +6833,26 @@ export function ImportModal({
                       doesn't compete visually with the decision chips beside it. Kept OUTSIDE
                       .imp3-filter-scroll: that div's overflow-x:auto implicitly forces
                       overflow-y:auto too, which would clip this button's popover. */}
-                              <KindFilterButton
-                                value={kindFilter}
-                                onChange={setKindFilter}
-                                counts={kindPop}
-                              />
+                              {/* Show file sits with the filter (owner, 2026-10-26: the header
+                      button was "too hidden"); a phone has Review | File tabs instead. */}
+                              <div className="imp3-filter-tools">
+                                <KindFilterButton
+                                  value={kindFilter}
+                                  onChange={setKindFilter}
+                                  counts={kindPop}
+                                />
+                                {fileStatementId && !isMobile && (
+                                  <button
+                                    type="button"
+                                    className={'imp3-filetoggle' + (showFile ? ' on' : '')}
+                                    aria-pressed={showFile}
+                                    onClick={toggleShowFile}
+                                  >
+                                    <Ic d={I_FILE} size={15} />
+                                    {showFile ? 'Hide file' : 'Show file'}
+                                  </button>
+                                )}
+                              </div>
                             </nav>
                           )
                         })()}
@@ -7253,6 +7262,16 @@ export function ImportModal({
                 {filePaneItem?.filename || resumeFilename || file?.name || 'Statement'}
               </span>
               {fileRow && <span className="imp3-filepane-row">Row {fileRow}</span>}
+              {!isMobile && (
+                <button
+                  type="button"
+                  className="imp3-filepane-close"
+                  aria-label="Close the file"
+                  onClick={toggleShowFile}
+                >
+                  <X size={14} />
+                </button>
+              )}
             </div>
             <div className="imp3-filepane-body">
               {filePaneItem ? (

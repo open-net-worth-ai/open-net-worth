@@ -44,6 +44,9 @@
   overflow: hidden;
   background: var(--modal-bg);
 }
+.ui-modal-card:has(.imp-pane--ws) > .ui-modal__body > .imp {
+  container: impreview / inline-size;
+}
 .ui-modal-card:has(.imp-pane--ws) .ui-modal__body {
   min-height: 0;
   /* BUG FIX: this was `overflow-y: auto`, directly contradicting the comment below and giving
@@ -1030,10 +1033,35 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 /* The kind filter (Expense/Income/Transfer) — a second, independent dimension, pushed to the
    far right of the same bar. A single icon trigger rather than standing chips, so it doesn't
    visually compete with the decision chips beside it; expands into a small popover. */
-.imp3-kindfilter {
-  position: relative;
+.imp3-filter-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
   flex-shrink: 0;
+}
+.imp3-kindfilter {
+  position: relative;
+  flex-shrink: 0;
+}
+/* Outlined, unlike the text-only decision chips beside it — it opens a pane, it doesn't filter, and
+   it must be findable (owner, 2026-10-26: "too hidden"). Specific enough to beat
+   `.imp3-filter button`. */
+.imp3-filter .imp3-filetoggle {
+  gap: 7px;
+  flex: none;
+  padding: 5px 12px;
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+@media (hover: hover) {
+  .imp3-filter .imp3-filetoggle:hover {
+    background: var(--hover);
+  }
+}
+.imp3-filter .imp3-filetoggle.on {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 .imp3-kindfilter-btn {
   display: inline-flex;
@@ -1685,8 +1713,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   flex-direction: column;
   gap: 1px;
   min-width: 0;
-  flex: none;
-  width: 252px;
+  flex: 0 1 252px;
 }
 .imp3-arow-status {
   display: flex;
@@ -1705,7 +1732,9 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 .imp3-arow-catcol {
   display: flex;
   align-items: center;
-  flex: 0 1 auto;
+  /* Takes only the room left after the fixed rails (basis 0), never a long label's own width — a
+     "Transfer • A → B" chip would otherwise squeeze its row's name and break the column line. */
+  flex: 1 1 0;
   min-width: 140px;
   max-width: 260px;
 }
@@ -1722,6 +1751,9 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 .imp3-arow-amtwrap {
   margin-left: auto;
   flex: none;
+  /* A fixed floor (wide enough for −$12,500,000.00) so every row splits its width the same way and
+     the columns before it line up; only a rarer, longer figure takes a little from its own name. */
+  min-width: 108px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -2908,34 +2940,6 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     padding-left: 16px;
     padding-right: 16px;
   }
-  .imp3-arow-line {
-    flex-wrap: wrap;
-    row-gap: 6px;
-  }
-  .imp3-arow-main {
-    flex: 1;
-    width: auto;
-    min-width: 140px;
-  }
-  .imp3-arow-status {
-    width: auto;
-    order: 3;
-  }
-  /* The rails are gone here, so the cell hugs its chip again (no 140px floor) and may use the
-     whole wrapped line before the chip ellipsizes. */
-  .imp3-arow-catcol {
-    width: auto;
-    min-width: 0;
-    max-width: 100%;
-    order: 4;
-  }
-  .imp3-arow-amtwrap {
-    order: 2;
-  }
-  .imp3-chev {
-    order: 5;
-    margin-left: auto;
-  }
   .imp3-arow-match {
     margin-left: 16px;
     width: calc(100% - 32px);
@@ -2997,9 +3001,6 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     border-top: 1px dashed var(--line);
     border-bottom: 1px dashed var(--line);
     padding: 6px 0;
-  }
-  .imp3-arow-date {
-    width: auto;
   }
   .imp3-arow-match {
     margin-left: 12px;
@@ -3279,42 +3280,46 @@ html[data-desktop-chrome='mac']:not([data-desktop-fullscreen]) .ui-modal-card:ha
 .ui-modal-card.imp3-modal--file:has(.imp-pane--ws) > .ui-modal__body > .imp {
   flex: 1 1 0;
   min-width: 420px;
-  container: impreview / inline-size;
 }
 /* A review row's fixed rails (date · name · decision · category · pencil · amount · chevron) need
-   about 900px inside the review on one line. Narrower — a dragged divider, a smaller window — every row
-   becomes two lines instead of clipping or reshuffling: date, name, amount and chevron first; the
-   decision, category and pencil below, under the name. The `::after` is a full-width flex item
-   that forces the break. */
+   about 900px inside the review on one line. Narrower — a smaller window, a phone, the file beside
+   it — every row becomes the same two lines, so columns line up row to row: date, name, amount and
+   chevron; then decision, category and pencil under the name. The review measures itself (a
+   container query), so a window between "phone" and "wide" can't fall through a viewport gap, and
+   the `::after` — a full-width flex item — forces the break, so a long amount can never push the
+   chevron onto a line of its own (owner, 2026-10-26: "not good alignment"). */
 @container impreview (max-width: 899px) {
-  .imp3-modal--file .imp3-arow-line {
+  .imp3-arow-line {
     flex-wrap: wrap;
     row-gap: 0;
   }
-  .imp3-modal--file .imp3-arow-line::after {
+  .imp3-arow-line::after {
     content: '';
     order: 4;
     flex-basis: 100%;
     height: 0;
   }
-  .imp3-modal--file .imp3-arow-main {
+  .imp3-arow-date {
+    width: 40px;
+  }
+  .imp3-arow-main {
     order: 1;
     flex: 1 1 0;
     width: auto;
     min-width: 0;
   }
-  .imp3-modal--file .imp3-arow-amtwrap {
+  .imp3-arow-amtwrap {
     order: 2;
   }
-  .imp3-modal--file .imp3-chev {
+  .imp3-chev {
     order: 3;
   }
-  .imp3-modal--file .imp3-arow-status {
+  .imp3-arow-status {
     order: 5;
     width: auto;
-    margin: 5px 0 0 60px;
+    margin: 5px 0 0 52px;
   }
-  .imp3-modal--file .imp3-arow-catcol {
+  .imp3-arow-catcol {
     order: 6;
     width: auto;
     min-width: 0;
@@ -3322,7 +3327,7 @@ html[data-desktop-chrome='mac']:not([data-desktop-fullscreen]) .ui-modal-card:ha
     flex: 0 1 auto;
     margin-top: 5px;
   }
-  .imp3-modal--file .imp3-editpencil {
+  .imp3-editpencil {
     order: 7;
     margin-top: 5px;
   }
@@ -3378,6 +3383,29 @@ html[data-desktop-chrome='mac']:not([data-desktop-fullscreen]) .ui-modal-card:ha
   white-space: nowrap;
   color: var(--ink);
   font-weight: 600;
+}
+.imp3-filepane-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .imp3-filepane-close:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
+}
+.imp3-filepane-row + .imp3-filepane-close {
+  margin-left: 0;
 }
 .imp3-filepane-row {
   margin-left: auto;

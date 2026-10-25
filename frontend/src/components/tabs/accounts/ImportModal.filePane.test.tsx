@@ -155,6 +155,18 @@ describe('ImportModal — the statement file beside the review', () => {
     expect(screen.queryByRole('complementary', { name: 'Statement file' })).toBeNull()
   })
 
+  it('Show file sits beside the filter, and the pane closes from its own ✕', async () => {
+    open()
+    await screen.findByText('COFFEE QA', { selector: '.imp3-arow-name' })
+    const nav = screen.getByRole('navigation', { name: 'Filter statement rows' })
+    fireEvent.click(within(nav).getByRole('button', { name: 'Show file' }))
+    await waitFor(() => expect(fileRegion()).toBeTruthy())
+    expect(within(nav).getByRole('button', { name: 'Hide file' })).toBeTruthy()
+    fireEvent.click(within(fileRegion()).getByRole('button', { name: 'Close the file' }))
+    expect(screen.queryByRole('complementary', { name: 'Statement file' })).toBeNull()
+    expect(within(nav).getByRole('button', { name: 'Show file' })).toBeTruthy()
+  })
+
   it('says the file is loading while it is fetched', async () => {
     vault.fetchVaultItem.mockReturnValue(new Promise(() => {}))
     open()
