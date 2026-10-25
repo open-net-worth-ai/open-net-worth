@@ -1060,6 +1060,7 @@ export function ImportModal({
   const [pendingDelete, setPendingDelete] = useState<Record<string, boolean>>({})
   // Boundary bucket (§4): collapsed by default — a quiet month stays quiet.
   const [boundaryOpen, setBoundaryOpen] = useState(false)
+  const [otherStatementOpen, setOtherStatementOpen] = useState(false)
   // Targeted jump: the DRAFT ARRAY INDEX to scroll to and flash-highlight. A jump into a row
   // the active chip filters out switches back to All first (same handler), so by the time the
   // flash effect runs post-render the target is in the DOM.
@@ -2208,7 +2209,12 @@ export function ImportModal({
         .then(async (r) => (r.ok ? r.json() : null))
         .then((body) => {
           if (body?.status === 'ok')
-            setDoneDiff({ core: (body.rows || []).length, boundary: (body.boundary || []).length })
+            setDoneDiff({
+              // Entries another imported statement backs aren't "not on this statement".
+              core: (body.rows || []).filter((r: { on_statements?: unknown }) => !r.on_statements)
+                .length,
+              boundary: (body.boundary || []).length,
+            })
         })
         .catch(() => {
           /* advisory — the done screen works without it */
@@ -2897,7 +2903,7 @@ export function ImportModal({
   // still uncovered until commit. It stays put, rendered as marked, so the mark is visible and
   // undoable — the row vanishing on click was the old write-through behaviour's tell.
   const releasedIds = new Set(dismissedWeakEntries.map((e) => e.id))
-  const ledgerOnlyRows = preview
+  const allLedgerOnlyRows = preview
     ? [
         ...(preview.ledgerCheck?.rows || []),
         // Deduped by id: harmless today (the server excludes a claimed entry by construction),
@@ -2909,10 +2915,16 @@ export function ImportModal({
         (r) => releasedIds.has(r.id) || (!manualLinkedIds.has(r.id) && !matchOverrideIds.has(r.id)),
       )
     : []
+  // An entry ANOTHER statement we hold already backs isn't "not on this statement" in any sense
+  // that matters — overlapping exports of one account repeat each other's days (owner,
+  // 2026-10-26: "why are these linked to another statement already but still shown here?").
+  // It leaves the count, the warning and Mark all; it stays reachable in a quiet group.
+  const ledgerOnlyRows = allLedgerOnlyRows.filter((r) => !r.on_statements)
+  const onOtherStatementRows = allLedgerOnlyRows.filter((r) => !!r.on_statements)
   // The staged delete set, in panel order — the footer counts it and the commit sends exactly
   // this. Derived from what is ON SCREEN, never from the raw `pendingDelete` map: an entry that
   // left the panel (linked to a row after being marked) must not still be queued for deletion.
-  const markedForDelete = ledgerOnlyRows.filter((r) => pendingDelete[r.id]).map((r) => r.id)
+  const markedForDelete = allLedgerOnlyRows.filter((r) => pendingDelete[r.id]).map((r) => r.id)
   // Coverage question 1's exact residue — a row with NO way into the ledger at all. Its own
   // dedicated, always-visible section (not just a filter chip) so it's directly findable
   // rather than requiring a click-through + scroll to notice (owner: "hard to know, hard to
@@ -4398,6 +4410,33 @@ export function ImportModal({
                         {closing.map(renderBoundaryRow)}
                       </>
                     )}
+                  </div>
+                )
+              }
+              const renderOtherStatementSection = () => {
+                if (!onOtherStatementRows.length) return null
+                const n = onOtherStatementRows.length
+                return (
+                  <div className="acct-stmtview-check-boundary">
+                    <button
+                      type="button"
+                      className="acct-stmtview-check-boundary-head"
+                      onClick={() => setOtherStatementOpen((o) => !o)}
+                      aria-expanded={otherStatementOpen}
+                    >
+                      <span className="acct-stmtview-check-boundary-t">
+                        {n} entr{n === 1 ? 'y is' : 'ies are'} on another statement you imported —
+                        nothing to fix.
+                      </span>
+                      <span className="acct-stmtview-check-caret">
+                        {otherStatementOpen ? (
+                          <ChevronDown size="1em" aria-hidden="true" />
+                        ) : (
+                          <ChevronRight size="1em" aria-hidden="true" />
+                        )}
+                      </span>
+                    </button>
+                    {otherStatementOpen && onOtherStatementRows.map(renderLedgerOnlyRow)}
                   </div>
                 )
               }
@@ -7113,7 +7152,9 @@ export function ImportModal({
                         )}
                         {showLedgerOnly &&
                           !preview.ledgerCheck?.withheld &&
-                          (ledgerOnlyRows.length > 0 || boundary.length > 0) && (
+                          (ledgerOnlyRows.length > 0 ||
+                            boundary.length > 0 ||
+                            onOtherStatementRows.length > 0) && (
                             <section className="imp3-sec ledger imp-pair-sect">
                               <button
                                 type="button"
@@ -7191,6 +7232,7 @@ export function ImportModal({
                                   )}
                                   {ledgerOnlyRows.map(renderLedgerOnlyRow)}
                                   {renderBoundarySection()}
+                                  {renderOtherStatementSection()}
                                 </div>
                               )}
                             </section>
