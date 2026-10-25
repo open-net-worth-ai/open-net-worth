@@ -4419,6 +4419,10 @@ select.acct-addin {
   padding-left: 20px;
   background: var(--surface);
   border-left: 1px solid var(--line);
+  /* Square, so the edge runs as one straight line down the register: the amount is an editable
+     cell, and `.acct-tr [data-edit]`'s hover radius bent the edge into a curve on every row
+     (owner, 2026-10-25). */
+  border-radius: 0;
 }
 /* Above the column resize dividers (.acct-col-resize, z-index 3): a divider belongs to a column
    that scrolls UNDER the pinned Amount, and at z-index 2 it was drawn straight through the

@@ -436,7 +436,10 @@ function IntelFeed({
           onEditAlerts={(item, from) => setEditAsset({ item, from })}
           onEditTopic={setEditTopic}
           onRefresh={loadWatchlist}
-          onClose={() => window.history.back()}
+          // Navigate, never history.back(): the entry behind /intel/monitors is not always /intel.
+          // Opened from Settings' close (…/monitors → /settings → /monitors), back landed in
+          // Settings, whose close pushed /monitors again — the two dialogs trapped each other.
+          onClose={() => void navigate({ to: '/intel', search: { sub: tab } })}
           onOpenSettings={() => void navigate({ to: '/settings', search: { sub: 'intel' } })}
         />
       )}
