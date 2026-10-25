@@ -86,8 +86,12 @@
    NEEDS VISUAL VERIFICATION (screenshot/live check) — this offset is reasoned from the
    original measurement, not confirmed against a running app. */
 /* Scoped away from the Settings overlay: it is a workspace modal too, but it has no bottom
-   action bar to clear, so the lift just parked the pill 74px up the screen for no reason. */
-body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
+   action bar to clear, so the lift just parked the pill 74px up the screen for no reason.
+   Scoped away from the import too: it is no longer a full-height sheet whose footer sits on the
+   window's bottom edge but a centred card, and the lift parked the pill ON its Confirm (owner,
+   2026-10-26: "why ask lucius is that further up?"). The import card keeps clear of the pill's
+   corner instead — see below. */
+body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .lx-dock {
   bottom: calc(22px + 74px);
 }
 
@@ -3270,10 +3274,13 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 .ui-modal-card.imp3-modal--file:has(.imp-pane--ws) .ui-modal__body {
   flex-direction: row;
 }
-/* The Mac app has no title bar: its window buttons sit over the page's top-left 48px. A card this
-   wide reaches that corner, so it keeps clear of the strip top and bottom (owner, 2026-10-26). */
-html[data-desktop-chrome='mac']:not([data-desktop-fullscreen]) .ui-modal-card:has(.imp-pane--ws) {
-  max-height: calc(100vh - 112px);
+/* The card stops 76px short of the window's top and bottom: below it, the Ask Lucius pill (22px
+   up, ~44px tall) keeps its usual corner without ever covering Confirm, and above it the Mac
+   app's window buttons (a 48px title strip) stay clear (owner, 2026-10-26). */
+@media (min-width: 641px) {
+  .ui-modal-card:has(.imp-pane--ws) {
+    max-height: calc(100vh - 152px);
+  }
 }
 /* The review takes whatever the file pane leaves; the divider sets that. It is a size container,
    so narrowing it reflows its rows below. */

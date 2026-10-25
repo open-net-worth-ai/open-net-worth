@@ -3,6 +3,7 @@
 // period, amount due, the reconcile badge, and a download link to the original bytes.
 import { useCallback, useEffect, useState } from 'react'
 import { useDataVersion } from '../../../hooks/useDataVersion'
+import { useQueryCache } from '../../../state/queryCache'
 import { ZoomImage } from '../../ui/ZoomImage'
 import { DocumentReader } from '../../vault/DocumentReader'
 import { useIsMobile } from '../../../hooks/useIsMobile'
@@ -405,16 +406,20 @@ export function StatementViewer({
 
 /** One lifecycle row (B20 async): `parsing` polls its own live line every 4s (paused while
  *  the tab is hidden); `ready`-but-uncommitted offers "Review →"; `interrupted`/`failed`
- *  offer "Re-run". Exactly one action, never the Download/Delete pair a committed row gets —
- *  there is nothing to download or delete about a parse that never finished. */
+ *  offer "Re-run". Every one but a row still being read also has the ⋯ menu a committed row
+ *  has (owner, 2026-10-26: "why can't i delete the ready to review ones?"). */
 function LifecycleStatementRow({
   s,
   onReview,
   onRerun,
+  onDownload,
+  onDelete,
 }: {
   s: StatementRow
   onReview?: (statementId: string, filename?: string, uploadedAt?: string) => void
   onRerun: (s: StatementRow) => void
+  onDownload: (s: StatementRow) => void
+  onDelete: (s: StatementRow) => void
 }) {
   const visible = useDocumentVisible()
   const isParsing = s.parse_status === 'parsing'
@@ -512,6 +517,19 @@ function LifecycleStatementRow({
             Re-run
           </Button>
         )}
+        {!isParsing && (
+          <ActionMenu
+            label={`More actions for ${s.filename || 'statement'}`}
+            items={[
+              {
+                label: 'Download',
+                icon: <Download size={14} strokeWidth={1.5} aria-hidden />,
+                onSelect: () => onDownload(s),
+              },
+              { label: 'Delete', tone: 'danger', onSelect: () => onDelete(s) },
+            ]}
+          />
+        )}
       </Cluster>
     </div>
   )
@@ -537,32 +555,23 @@ export function StatementsModal({
    *  review step for this statement's already-cached parse (no re-upload). */
   onReviewStatement?: (statementId: string, filename?: string, uploadedAt?: string) => void
 }) {
-  const [rows, setRows] = useState<StatementRow[] | null>(null)
-  const [error, setError] = useState('')
   const [viewing, setViewing] = useState<StatementRow | null>(null)
 
-  // diff/verify_statement_balance and uploads written by Lucius → reload the list.
+  // Read through the query cache: reopening shows the last list at once and refreshes it
+  // behind (owner, 2026-10-26: "why loading statement takes so long?"). Any write — Lucius's
+  // diff/verify, an upload, a commit — bumps the version and refetches.
   const anyWriteV = useDataVersion('*')
-  const reload = useCallback(() => {
-    setError('')
-    setRows(null)
-    let alive = true
-    authFetch(`/api/accounts/${accountId}/statements`)
-      .then(async (r) => {
-        if (!r.ok) throw new Error(await r.text())
-        return r.json()
-      })
-      .then((body) => {
-        if (alive) setRows(body.statements || [])
-      })
-      .catch(() => {
-        if (alive) setError('Could not load statements.')
-      })
-    return () => {
-      alive = false
-    }
-  }, [accountId, anyWriteV])
-  useEffect(() => reload(), [reload])
+  const listUrl = `/api/accounts/${accountId}/statements`
+  const fetchList = useCallback(async () => {
+    const r = await authFetch(listUrl)
+    if (!r.ok) throw new Error(await r.text())
+    const body = await r.json()
+    return (body.statements || []) as StatementRow[]
+  }, [listUrl])
+  const list = useQueryCache(listUrl, fetchList, { version: anyWriteV })
+  const rows = list.data ?? null
+  const error = list.error != null && rows === null ? 'Could not load statements.' : ''
+  const reload = () => void list.refresh().catch(() => {})
 
   // Lifecycle rows (parsing/failed/interrupted/ready-not-yet-reviewed) sort ABOVE ordinary
   // committed statements — a stable partition, each group keeping the server's own order.
@@ -630,6 +639,8 @@ The file and its record are removed. Transactions it imported STAY in your ledge
                 s={s}
                 onReview={onReviewStatement}
                 onRerun={rerunStatement}
+                onDownload={download}
+                onDelete={removeStatement}
               />
             ) : (
               <div key={s.id} className="acct-stmt-row">

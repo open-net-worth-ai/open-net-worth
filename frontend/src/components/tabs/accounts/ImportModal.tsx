@@ -632,6 +632,20 @@ function fSize(bytes: number): string {
   const kb = bytes / 1024
   return kb < 1024 ? `${Math.round(kb)} KB` : `${(kb / 1024).toFixed(1)} MB`
 }
+/** The line under "Opening <file>": how long it has been, and — once it is clearly not instant —
+ *  how long it can take (owner, 2026-10-26: the old "Opening your review" only repeated the
+ *  title above it). */
+function OpeningReviewLine() {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const started = Date.now()
+    const id = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [])
+  if (seconds < 4) return <>Usually a few seconds</>
+  return <>Still opening — {seconds}s. A long statement can take up to 30 seconds.</>
+}
+
 export interface ReopenOptions {
   instructions?: string
   rememberInstructions?: boolean
@@ -3646,7 +3660,7 @@ export function ImportModal({
                 className={'imp3-phase' + (activeStale ? ' imp3-phase--stale' : '')}
                 role="status"
               >
-                {openingReview ? 'Opening your review' : readingPhase}
+                {openingReview ? <OpeningReviewLine /> : readingPhase}
               </div>
               {/* Live stage bar, elapsed clock, retry/hint lines — all feature-detected on
                   `activeProgress`: an old server that never answers the progress endpoint

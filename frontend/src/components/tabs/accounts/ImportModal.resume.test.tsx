@@ -105,7 +105,7 @@ describe('ImportModal — resume by id (B20 async)', () => {
     const onReopenPreview = vi.fn(() => new Promise((r) => (release = r)))
     open('stmt_resume_ready', onReopenPreview)
 
-    expect(await screen.findByText('Opening your review')).toBeTruthy()
+    expect(await screen.findByText('Usually a few seconds')).toBeTruthy()
     expect(screen.queryByText(/Lucius is reading/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Continue in background' })).toBeNull()
 

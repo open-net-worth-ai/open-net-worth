@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 //
 // B20 async — the statements list's lifecycle rows: parsing / ready-to-review / interrupted /
-// failed. Each state shows exactly one action (never the ordinary row's Download/Delete
-// menu), and lifecycle rows sort ABOVE plain committed statements. Wording per the
+// failed. Each state shows one action, plus — except while still reading — the same ⋯
+// Download/Delete menu a committed row has; lifecycle rows sort ABOVE plain committed statements. Wording per the
 // 2026-10-25 redesign: one plain status, the same facts on every row.
 
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, cleanup, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { StatementsModal } from './StatementsSection'
 import { fDate } from '../../../utils/format'
+import { clearQueryCache } from '../../../state/queryCache'
 
 const authFetch = vi.hoisted(() => vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>())
 vi.mock('../../../api/client', () => ({ authFetch }))
@@ -16,6 +17,7 @@ vi.mock('../../../api/client', () => ({ authFetch }))
 afterEach(() => {
   cleanup()
   authFetch.mockReset()
+  clearQueryCache()
 })
 
 function jsonResponse(body: unknown, ok = true) {
@@ -72,6 +74,31 @@ function mockList(rows: unknown[]) {
 function open() {
   return render(<StatementsModal accountId="acct1" accountName="Checking" onClose={() => {}} />)
 }
+
+describe('StatementsModal — opening again', () => {
+  // Owner, 2026-10-26: "why loading statement takes so long?" — reopening shows the last list at
+  // once and refreshes it behind, instead of a spinner while the server recomputes.
+  it('shows the last list immediately while it refreshes', async () => {
+    mockList([NORMAL_ROW])
+    const first = open()
+    await screen.findByText('may-normal.csv')
+    first.unmount()
+
+    let release!: () => void
+    authFetch.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({ ok: true, json: async () => ({ statements: [NORMAL_ROW, READY_ROW] }) })
+        }),
+    )
+    open()
+    expect(screen.getByText('may-normal.csv')).toBeTruthy()
+    expect(screen.queryByText('Loading statements…')).toBeNull()
+    release()
+    await screen.findByText('feb-ready.csv')
+  })
+})
 
 describe('StatementsModal — B20 lifecycle rows', () => {
   it('a parsing row shows a live line and Open, which opens its progress', async () => {
@@ -177,6 +204,18 @@ describe('StatementsModal — B20 lifecycle rows', () => {
     const row = screen.getByText('apr-failed.csv').closest('.acct-stmt-row') as HTMLElement
     expect(within(row).queryByRole('button', { name: /Couldn.t read this file/ })).toBeNull()
     expect(within(row).getByText('Couldn’t read this file')).toBeTruthy()
+  })
+
+  it('a ready, interrupted or failed row can be downloaded or deleted from ⋯; a reading row cannot', async () => {
+    mockList([READY_ROW, INTERRUPTED_ROW, FAILED_ROW, PARSING_ROW])
+    open()
+    await screen.findByText('feb-ready.csv')
+    for (const name of ['feb-ready.csv', 'mar-interrupted.csv', 'apr-failed.csv']) {
+      expect(screen.getByRole('button', { name: `More actions for ${name}` })).toBeTruthy()
+    }
+    expect(screen.queryByRole('button', { name: 'More actions for jan-parsing.pdf' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for feb-ready.csv' }))
+    expect(await screen.findByRole('menuitem', { name: /Delete/ })).toBeTruthy()
   })
 
   it('a normal committed row keeps Download/Delete in its ⋯ menu, no lifecycle chrome', async () => {
