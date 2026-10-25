@@ -101,4 +101,46 @@ describe('TablePreview', () => {
     expect(await screen.findByText('No preview for this file')).toBeTruthy()
     expect(screen.getByText(/password-protected/)).toBeTruthy()
   })
+
+  // Owner, 2026-10-26: the import review points at the file row a statement row came from.
+  it('loads pages until a highlighted row exists, then marks that row only', async () => {
+    const page = (offset: number, n: number, more: boolean): VaultTable => ({
+      sheets: [],
+      sheet: '',
+      rows: Array.from({ length: n }, (_, i) => [`row ${offset + i + 1}`]),
+      columns: 1,
+      offset,
+      has_more: more,
+      total_rows: 450,
+      more_columns: false,
+    })
+    fetchVaultTable
+      .mockReset()
+      .mockImplementation(async (_id, _sheet, offset = 0) =>
+        offset === 0
+          ? page(0, 200, true)
+          : offset === 200
+            ? page(200, 200, true)
+            : page(400, 50, false),
+      )
+    render(<TablePreview item={{ ...ITEM, filename: 'history.csv' }} highlightRow={305} />)
+    const cell = await screen.findByRole('cell', { name: 'row 305' }, { timeout: 15000 })
+    const row = cell.closest('tr') as HTMLElement
+    expect(row.getAttribute('aria-current')).toBe('true')
+    expect(document.querySelectorAll('tr[aria-current="true"]')).toHaveLength(1)
+    expect(fetchVaultTable).toHaveBeenCalledWith('statement-stmt_1', undefined, 200)
+    expect(fetchVaultTable).not.toHaveBeenCalledWith('statement-stmt_1', undefined, 400)
+  }, 30000)
+
+  it('highlights only on the first sheet — another sheet has its own numbering', async () => {
+    render(<TablePreview item={ITEM} highlightRow={2} />)
+    expect(
+      (await screen.findByRole('cell', { name: 'Coffee' }))
+        .closest('tr')
+        ?.getAttribute('aria-current'),
+    ).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Summary' }))
+    await screen.findByRole('cell', { name: 'Closing balance' })
+    expect(document.querySelector('tr[aria-current="true"]')).toBeNull()
+  })
 })

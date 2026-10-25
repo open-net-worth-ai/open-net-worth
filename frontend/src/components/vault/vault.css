@@ -671,6 +671,13 @@
   font-weight: 500;
   text-align: right;
 }
+/* The row a statement row came from, pointed at from the import review beside it. The sticky
+   row-number cell takes the same tint so the row reads as one band while scrolled sideways. */
+.vault-grid tr.vault-grid-row--on td,
+.vault-grid tr.vault-grid-row--on th {
+  background: color-mix(in srgb, var(--primary) 18%, var(--surface2));
+  color: var(--ink);
+}
 .vault-grid thead th:first-child {
   left: 0;
   z-index: 2; /* z-local: the corner over both sticky edges */

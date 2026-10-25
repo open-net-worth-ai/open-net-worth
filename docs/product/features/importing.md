@@ -64,6 +64,12 @@ file with what's on screen and opens the new review when it's done.
 
 ## Review the rows
 
+The statement's own file sits beside the rows, shown the same way as in **Documents**: a CSV or
+Excel file as a spreadsheet with its column letters and row numbers, a PDF as its pages. Click a
+row in the review and the file scrolls to the line it came from and highlights it (for a CSV, or
+an Excel file's first sheet). **Hide file** in the header gives the review the full width, and the
+app remembers your choice. On a phone, switch between **Review** and **File** at the top.
+
 Each row gets one of three decisions. Lucius picks a default; you can change any of them.
 
 | Decision | What it does |
@@ -110,7 +116,8 @@ and what the AI read cost. A booked statement also says whether its balance chec
 the closing balance it prints (**Balance matches** or **Balance off by …**); a file that prints no
 balances shows nothing there. Card statements show the amount due. Each booked row's **⋯** menu
 lets you download the original file or **Delete** the record — deleting the record keeps its
-transactions.
+transactions. Click a statement's name to open it in the same viewer **Documents** uses — a CSV or
+Excel statement as a spreadsheet, a PDF as its pages.
 
 **Importing the same file twice is safe.** Rows already booked are left out and the review tells
 you when you imported it before. If there's nothing new, the button reads **Close**. A *new* file

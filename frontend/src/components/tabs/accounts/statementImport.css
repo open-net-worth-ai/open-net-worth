@@ -3146,3 +3146,119 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     text-align: center;
   }
 }
+
+/* ── The statement file beside the review (owner, 2026-10-26) ─────────────────────────────
+   While the pane shows, the Decide step's body (a column above — `.imp` fills it) becomes a
+   row: the review on the left, the file on the right, and the card widens past its 960px cap
+   so the review keeps its own width. Same `:has(.imp-pane--ws)` hook as the rules above, plus
+   the modal's own class, so these win only while the pane is on. */
+.ui-modal-card.imp3-modal--file:has(.imp-pane--ws) {
+  width: min(1480px, calc(100vw - 32px));
+  max-width: none;
+}
+.ui-modal-card.imp3-modal--file:has(.imp-pane--ws) .ui-modal__body {
+  flex-direction: row;
+}
+/* 860px is what the review row's fixed rails (date · name · decision · category · amount) add up
+   to — any narrower and the amount column is clipped at the pane's edge. */
+.ui-modal-card.imp3-modal--file:has(.imp-pane--ws) > .ui-modal__body > .imp {
+  flex: 1 1 55%;
+  min-width: 860px;
+}
+/* Where that floor would squeeze the file to a sliver, the review gives it up and its rows reflow
+   the way they do below 900px: the amount joins the name's line, the rails drop to a second. */
+@media (max-width: 1180px) {
+  .ui-modal-card.imp3-modal--file:has(.imp-pane--ws) > .ui-modal__body > .imp {
+    min-width: 0;
+  }
+  .imp3-modal--file .imp3-arow-line {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+  .imp3-modal--file .imp3-arow-main {
+    flex: 1;
+    width: auto;
+    min-width: 140px;
+  }
+  .imp3-modal--file .imp3-arow-status {
+    width: auto;
+    order: 3;
+  }
+  .imp3-modal--file .imp3-arow-catcol {
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    order: 4;
+  }
+  .imp3-modal--file .imp3-arow-amtwrap {
+    order: 2;
+  }
+  .imp3-modal--file .imp3-chev {
+    order: 5;
+    margin-left: auto;
+  }
+}
+.imp3-filepane {
+  flex: 1 1 45%;
+  min-width: 0;
+  /* A flex item's default min-height is its content — without this a phone's column layout
+     lets the grid grow to every row, so its own frame never scrolls (or centres a row). */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--line);
+}
+.imp3-filepane-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.imp3-filepane-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 600;
+}
+.imp3-filepane-row {
+  margin-left: auto;
+  flex: none;
+  color: var(--muted);
+}
+.imp3-filepane-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  overflow: auto;
+}
+/* The shared previewers keep their Documents sizes elsewhere; here they fill the pane. */
+.imp3-filepane-body .vault-table {
+  flex: 1;
+  min-height: 0;
+}
+.imp3-filepane-body .vault-table-frame {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+.imp3-filepane-hint {
+  padding: 24px 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+/* Phone: Review | File tabs in the header — one pane at a time, full width. */
+@media (max-width: 640px) {
+  .ui-modal-card:has(.imp-pane--ws) > .ui-modal__body > .imp.imp--behind-file {
+    display: none;
+  }
+  .imp3-filepane {
+    flex: 1 1 auto;
+    border-left: none;
+  }
+}
