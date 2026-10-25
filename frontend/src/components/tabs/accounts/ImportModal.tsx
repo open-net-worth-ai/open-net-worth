@@ -5430,7 +5430,10 @@ export function ImportModal({
                     transfer is the one case with no other way back to plain — that lives as
                     ONE line alongside "Books as transfer" below, inside the same expanded
                     detail box rather than a separate standalone block. */}
-                    {excluded && reason && (
+                    {/* Inside the row's collapsible part like everything else in it (owner,
+                    2026-10-26: a left-out row's reason and Import / Link stayed on screen while
+                    its chevron said collapsed). The pill and struck amount still say "left out". */}
+                    {excluded && reason && bodyOpen && (
                       <div className="imp3-arow-body">
                         {d.dup && d.dupOf ? (
                           <button
@@ -5464,7 +5467,7 @@ export function ImportModal({
                         {decisionActions}
                       </div>
                     )}
-                    {excluded && !reason && decisionActions}
+                    {excluded && !reason && bodyOpen && decisionActions}
                     {bodyOpen && (
                       <div className="imp3-arow-body">
                         <div className="imp3-detail-grid">
