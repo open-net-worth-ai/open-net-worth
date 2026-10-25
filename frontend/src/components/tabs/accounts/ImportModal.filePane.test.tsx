@@ -3,10 +3,11 @@
 // Owner, 2026-10-26: "i do need a preview feature like this, where i can scroll or review the
 // files on the left/or right … before making decisions". The Decide step shows the statement's
 // own file beside the review, through the Documents previewer; a click on a review row points
-// the file at the row it came from; "Hide file" collapses it and is remembered.
+// the file at the row it came from. The pane is off until asked for, every time; the divider
+// between the two sets its width, which is remembered.
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, cleanup, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, cleanup, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { ImportModal } from './ImportModal'
 import type { Account } from './types'
 import type { VaultItem, VaultTable } from '../../../api/vault'
@@ -79,6 +80,7 @@ beforeEach(() => {
       json: async () => ({ parse_status: 'ready', progress: null, error: null }),
     }),
   )
+  vault.fetchVaultItem.mockReset()
   vault.fetchVaultItem.mockResolvedValue(ITEM)
   vault.fetchVaultTable.mockResolvedValue({
     sheets: [],
@@ -124,6 +126,7 @@ describe('ImportModal — the statement file beside the review', () => {
   it('shows the statement file in the Documents grid, and a review row points at its row', async () => {
     open()
     await screen.findByText('COFFEE QA', { selector: '.imp3-arow-name' })
+    fireEvent.click(screen.getByRole('button', { name: 'Show file' }))
     expect(vault.fetchVaultItem).toHaveBeenCalledWith('statement-stmt_fp')
     await waitFor(() => expect(fileRegion().textContent).toContain('aug.csv'))
     await waitFor(() => expect(fileRegion().querySelector('table.vault-grid')).toBeTruthy())
@@ -137,12 +140,13 @@ describe('ImportModal — the statement file beside the review', () => {
     expect(fileRegion().textContent).toContain('Row 6')
   })
 
-  it('Hide file collapses the pane and is remembered for next time', async () => {
+  it('the file is off when a review opens, every time — even after it was shown last time', async () => {
     const { unmount } = open()
     await screen.findByText('COFFEE QA', { selector: '.imp3-arow-name' })
-    await waitFor(() => expect(fileRegion()).toBeTruthy())
-    fireEvent.click(screen.getByRole('button', { name: 'Hide file' }))
     expect(screen.queryByRole('complementary', { name: 'Statement file' })).toBeNull()
+    expect(vault.fetchVaultItem).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Show file' }))
+    await waitFor(() => expect(fileRegion()).toBeTruthy())
     unmount()
 
     open()
@@ -151,12 +155,41 @@ describe('ImportModal — the statement file beside the review', () => {
     expect(screen.queryByRole('complementary', { name: 'Statement file' })).toBeNull()
   })
 
+  it('says the file is loading while it is fetched', async () => {
+    vault.fetchVaultItem.mockReturnValue(new Promise(() => {}))
+    open()
+    await screen.findByText('COFFEE QA', { selector: '.imp3-arow-name' })
+    fireEvent.click(screen.getByRole('button', { name: 'Show file' }))
+    expect(within(fileRegion()).getByRole('status').textContent).toContain('Loading the file')
+  })
+
+  it('the divider resizes the file pane from the keyboard, and the width is remembered', async () => {
+    const { unmount } = open()
+    await screen.findByText('COFFEE QA', { selector: '.imp3-arow-name' })
+    fireEvent.click(screen.getByRole('button', { name: 'Show file' }))
+    const divider = screen.getByRole('separator', { name: 'Resize the file pane' })
+    const body = divider.parentElement!
+    Object.defineProperty(body, 'clientWidth', { configurable: true, value: 1400 })
+    fileRegion().getBoundingClientRect = () => ({ width: 500 }) as DOMRect
+    fireEvent.keyDown(divider, { key: 'ArrowLeft' })
+    expect(fileRegion().style.flex).toBe('0 1 532px')
+    expect(localStorage.getItem('onw.import.fileWidth')).toBe('532')
+    unmount()
+
+    open()
+    await screen.findByText('COFFEE QA', { selector: '.imp3-arow-name' })
+    fireEvent.click(screen.getByRole('button', { name: 'Show file' }))
+    expect(fileRegion().style.flex).toBe('0 1 532px')
+    fireEvent.doubleClick(screen.getByRole('separator', { name: 'Resize the file pane' }))
+    expect(fileRegion().style.flex).toBe('')
+    expect(localStorage.getItem('onw.import.fileWidth')).toBeNull()
+  })
+
   // QA 2026-10-26: a row tapped while the file is hidden (a phone's Review tab, or Hide file)
   // was never remembered — showing the file then pointed nowhere.
   it('a row clicked while the file is hidden is the one shown when it comes back', async () => {
     open()
     await screen.findByText('COFFEE QA', { selector: '.imp3-arow-name' })
-    fireEvent.click(screen.getByRole('button', { name: 'Hide file' }))
     fireEvent.click(screen.getByText('TAXI QA', { selector: '.imp3-arow-name' }))
     fireEvent.click(screen.getByRole('button', { name: 'Show file' }))
     await waitFor(() =>

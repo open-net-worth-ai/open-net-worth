@@ -636,6 +636,25 @@
 .vault-table-frame--loading {
   background: var(--surface2);
 }
+.vault-preview-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 100%;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.vault-preview-spin {
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: var(--radius-pill);
+  animation: ui-spin 0.7s linear infinite;
+  flex: none;
+}
 .vault-grid {
   border-collapse: separate;
   border-spacing: 0;

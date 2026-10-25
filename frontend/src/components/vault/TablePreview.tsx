@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type UIEvent } from 'react'
 import { fetchVaultTable, type VaultItem, type VaultTable } from '../../api/vault'
 import { NoPreview } from './NoPreview'
+import { PreviewLoading } from './PreviewLoading'
 
 function columnLetter(index: number): string {
   let n = index + 1
@@ -126,7 +127,12 @@ export function TablePreview({ item, highlightRow }: { item: VaultItem; highligh
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the target and page count
   }, [target, targetLoaded, loadedRows])
 
-  if (!current) return <div className="vault-table-frame vault-table-frame--loading" />
+  if (!current)
+    return (
+      <div className="vault-table-frame vault-table-frame--loading">
+        <PreviewLoading />
+      </div>
+    )
   if ('error' in current) return <NoPreview item={item} reason={current.error} />
   const shown = current
   const onScroll = (e: UIEvent<HTMLDivElement>) => {

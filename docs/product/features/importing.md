@@ -64,11 +64,13 @@ file with what's on screen and opens the new review when it's done.
 
 ## Review the rows
 
-The statement's own file sits beside the rows, shown the same way as in **Documents**: a CSV or
-Excel file as a spreadsheet with its column letters and row numbers, a PDF as its pages. Click a
-row in the review and the file scrolls to the line it came from and highlights it (for a CSV, or
-an Excel file's first sheet). **Hide file** in the header gives the review the full width, and the
-app remembers your choice. On a phone, switch between **Review** and **File** at the top.
+**Show file** puts the statement's own file beside the rows, shown the same way as in
+**Documents**: a CSV or Excel file as a spreadsheet with its column letters and row numbers, a PDF
+as its pages. It's off each time a review opens. Click a row in the review and the file scrolls to
+the line it came from and highlights it (for a CSV, or an Excel file's first sheet). Drag the line
+between the two to give either side more room — the app remembers the width, and double-clicking
+the line puts it back. When the review gets narrow, each row moves its decision and category onto
+a second line. On a phone, switch between **Review** and **File** at the top.
 
 Each row gets one of three decisions. Lucius picks a default; you can change any of them.
 

@@ -3269,54 +3269,99 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 .ui-modal-card.imp3-modal--file:has(.imp-pane--ws) .ui-modal__body {
   flex-direction: row;
 }
-/* 860px is what the review row's fixed rails (date · name · decision · category · amount) add up
-   to — any narrower and the amount column is clipped at the pane's edge. */
-.ui-modal-card.imp3-modal--file:has(.imp-pane--ws) > .ui-modal__body > .imp {
-  flex: 1 1 55%;
-  min-width: 860px;
+/* The Mac app has no title bar: its window buttons sit over the page's top-left 48px. A card this
+   wide reaches that corner, so it keeps clear of the strip top and bottom (owner, 2026-10-26). */
+html[data-desktop-chrome='mac']:not([data-desktop-fullscreen]) .ui-modal-card:has(.imp-pane--ws) {
+  max-height: calc(100vh - 112px);
 }
-/* Where that floor would squeeze the file to a sliver, the review gives it up and its rows reflow
-   the way they do below 900px: the amount joins the name's line, the rails drop to a second. */
-@media (max-width: 1180px) {
-  .ui-modal-card.imp3-modal--file:has(.imp-pane--ws) > .ui-modal__body > .imp {
-    min-width: 0;
-  }
+/* The review takes whatever the file pane leaves; the divider sets that. It is a size container,
+   so narrowing it reflows its rows below. */
+.ui-modal-card.imp3-modal--file:has(.imp-pane--ws) > .ui-modal__body > .imp {
+  flex: 1 1 0;
+  min-width: 420px;
+  container: impreview / inline-size;
+}
+/* A review row's fixed rails (date · name · decision · category · pencil · amount · chevron) need
+   about 900px inside the review on one line. Narrower — a dragged divider, a smaller window — every row
+   becomes two lines instead of clipping or reshuffling: date, name, amount and chevron first; the
+   decision, category and pencil below, under the name. The `::after` is a full-width flex item
+   that forces the break. */
+@container impreview (max-width: 899px) {
   .imp3-modal--file .imp3-arow-line {
     flex-wrap: wrap;
-    row-gap: 6px;
+    row-gap: 0;
+  }
+  .imp3-modal--file .imp3-arow-line::after {
+    content: '';
+    order: 4;
+    flex-basis: 100%;
+    height: 0;
   }
   .imp3-modal--file .imp3-arow-main {
-    flex: 1;
-    width: auto;
-    min-width: 140px;
-  }
-  .imp3-modal--file .imp3-arow-status {
-    width: auto;
-    order: 3;
-  }
-  .imp3-modal--file .imp3-arow-catcol {
+    order: 1;
+    flex: 1 1 0;
     width: auto;
     min-width: 0;
-    max-width: 100%;
-    order: 4;
   }
   .imp3-modal--file .imp3-arow-amtwrap {
     order: 2;
   }
   .imp3-modal--file .imp3-chev {
+    order: 3;
+  }
+  .imp3-modal--file .imp3-arow-status {
     order: 5;
-    margin-left: auto;
+    width: auto;
+    margin: 5px 0 0 60px;
+  }
+  .imp3-modal--file .imp3-arow-catcol {
+    order: 6;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    flex: 0 1 auto;
+    margin-top: 5px;
+  }
+  .imp3-modal--file .imp3-editpencil {
+    order: 7;
+    margin-top: 5px;
   }
 }
+.imp3-filesplit {
+  flex: none;
+  width: 9px;
+  margin-inline: -4px;
+  position: relative;
+  z-index: 1;
+  cursor: col-resize;
+  touch-action: none;
+}
+.imp3-filesplit::before {
+  content: '';
+  position: absolute;
+  inset: 0 4px;
+  background: var(--line);
+  transition: background 0.12s ease;
+}
+.imp3-filesplit:hover::before,
+.imp3-filesplit:active::before,
+.imp3-filesplit:focus-visible::before {
+  inset: 0 3px;
+  background: var(--accent);
+}
+.imp3-filesplit:focus-visible {
+  outline: none;
+}
+/* Until dragged, the review keeps the width it has without the file (the 960px sheet) and the file
+   takes the rest; the inline flex wins once the viewer sets a width. */
 .imp3-filepane {
-  flex: 1 1 45%;
-  min-width: 0;
+  flex: 0 1 calc(100% - 960px);
+  min-width: 280px;
   /* A flex item's default min-height is its content — without this a phone's column layout
      lets the grid grow to every row, so its own frame never scrolls (or centres a row). */
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--line);
 }
 .imp3-filepane-head {
   display: flex;
@@ -3369,6 +3414,6 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   }
   .imp3-filepane {
     flex: 1 1 auto;
-    border-left: none;
+    min-width: 0;
   }
 }

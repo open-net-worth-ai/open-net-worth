@@ -17,6 +17,7 @@ import { useIsMobile } from '../../../hooks/useIsMobile'
 import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight } from '../../../ui/icons'
 import { fDate } from '../../../utils/format'
 import { fetchVaultItem, type VaultItem } from '../../../api/vault'
+import { PreviewLoading } from '../../vault/PreviewLoading'
 import { DocumentPreview } from '../../vault/DocumentPreview'
 import type { TxnDetailProps } from './TxnDetail'
 import type { Account, ApiTxn, Category, FxRates, Txn, TxnActivity, SourceEntry } from './types'
@@ -70,8 +71,10 @@ export type { ImportPreviewDraft, ImportPreviewResult }
 // (`flow3.jsx` READ_PHASES). The real read takes longer than the animation, so the
 // line CLAMPS on the last phase instead of looping — a phase that came back round
 // would claim work that already finished.
-/** Whether the import review shows the statement file beside it — a per-viewer convenience. */
-const SHOW_FILE_KEY = 'onw.import.showFile'
+/** How wide the viewer last dragged the file pane beside the review — a per-viewer convenience. */
+const FILE_WIDTH_KEY = 'onw.import.fileWidth'
+const FILE_MIN_PX = 280
+const REVIEW_MIN_PX = 420
 
 const READ_PHASES = [
   'Reading the statement',
@@ -1055,14 +1058,16 @@ export function ImportModal({
   const [progressToken, setProgressToken] = useState<string | null>(null)
   const [bgPending, setBgPending] = useState(false)
   // The statement file beside the review (owner, 2026-10-26: "a preview … where i can scroll or
-  // review the files … before making decisions"). Shown by default, remembered per viewer;
-  // a phone flips between the two with tabs instead.
+  // review the files … before making decisions"). Off until asked for, every time ("it's not
+  // always needed"); the width it is dragged to is remembered. A phone flips with tabs instead.
   const isMobile = useIsMobile()
-  const [showFile, setShowFile] = useState(() => {
+  const [showFile, setShowFile] = useState(false)
+  const [fileWidth, setFileWidth] = useState<number | null>(() => {
     try {
-      return localStorage.getItem(SHOW_FILE_KEY) !== 'off'
+      const px = Number(localStorage.getItem(FILE_WIDTH_KEY))
+      return px >= FILE_MIN_PX ? px : null
     } catch {
-      return true
+      return null
     }
   })
   const [phoneView, setPhoneView] = useState<'review' | 'file'>('review')
@@ -2349,12 +2354,56 @@ export function ImportModal({
   const filePaneItem =
     fileStatementId && fileItem?.id === fileStatementId ? fileItem.item : undefined
   function toggleShowFile() {
-    const next = !showFile
-    setShowFile(next)
+    setShowFile((v) => !v)
+  }
+  function saveFileWidth(px: number) {
     try {
-      localStorage.setItem(SHOW_FILE_KEY, next ? 'on' : 'off')
+      localStorage.setItem(FILE_WIDTH_KEY, String(Math.round(px)))
     } catch {
-      /* private window / blocked storage — the choice just isn't remembered */
+      /* private window / blocked storage — the width just isn't remembered */
+    }
+  }
+  /** The divider between review and file: drag, arrow keys, double-click for the default split. */
+  function clampFileWidth(px: number, body: HTMLElement) {
+    return Math.max(FILE_MIN_PX, Math.min(px, body.clientWidth - REVIEW_MIN_PX))
+  }
+  function startFileResize(e: React.PointerEvent<HTMLDivElement>) {
+    const handle = e.currentTarget
+    const body = handle.parentElement
+    if (!body) return
+    e.preventDefault()
+    handle.setPointerCapture(e.pointerId)
+    let last = fileWidth
+    const move = (ev: PointerEvent) => {
+      last = clampFileWidth(body.getBoundingClientRect().right - ev.clientX, body)
+      setFileWidth(last)
+    }
+    const end = () => {
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', end)
+      handle.removeEventListener('pointercancel', end)
+      if (last != null) saveFileWidth(last)
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', end)
+    handle.addEventListener('pointercancel', end)
+  }
+  function nudgeFileWidth(e: React.KeyboardEvent<HTMLDivElement>) {
+    const step = e.key === 'ArrowLeft' ? 32 : e.key === 'ArrowRight' ? -32 : 0
+    const body = e.currentTarget.parentElement
+    const pane = body?.querySelector<HTMLElement>('.imp3-filepane')
+    if (!step || !body || !pane) return
+    e.preventDefault()
+    const next = clampFileWidth(pane.getBoundingClientRect().width + step, body)
+    setFileWidth(next)
+    saveFileWidth(next)
+  }
+  function resetFileWidth() {
+    setFileWidth(null)
+    try {
+      localStorage.removeItem(FILE_WIDTH_KEY)
+    } catch {
+      /* nothing remembered to clear */
     }
   }
   /** A click on a review row points the file pane at the row of the file it came from. */
@@ -7177,8 +7226,24 @@ export function ImportModal({
             />
           )}
         </div>
+        {fileWanted && !isMobile && (
+          <div
+            className="imp3-filesplit"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize the file pane"
+            tabIndex={0}
+            onPointerDown={startFileResize}
+            onKeyDown={nudgeFileWidth}
+            onDoubleClick={resetFileWidth}
+          />
+        )}
         {fileWanted && (
-          <aside className="imp3-filepane" aria-label="Statement file">
+          <aside
+            className="imp3-filepane"
+            aria-label="Statement file"
+            style={fileWidth != null && !isMobile ? { flex: `0 1 ${fileWidth}px` } : undefined}
+          >
             <div className="imp3-filepane-head">
               <span className="imp3-file-badge">
                 {FORMAT_LABEL[detectFormat(filePaneItem?.filename || resumeFilename || '')] ||
@@ -7197,7 +7262,7 @@ export function ImportModal({
                   This statement's file isn't stored, so it can't be shown here.
                 </div>
               ) : (
-                <div className="imp3-filepane-hint">Loading the file…</div>
+                <PreviewLoading />
               )}
             </div>
           </aside>
