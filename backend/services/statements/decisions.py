@@ -491,8 +491,22 @@ class _RoutingContext:
         return self.route.get(self.row_currency(row))
 
 
+def _booked_transfer_pool() -> list[dict]:
+    """Every live ledger TRANSFER, in ledger order — read ONCE per statement pass and shared by
+    every row's ``_find_booked_transfers`` (it used to re-read the whole ledger per routed row)."""
+    try:
+        return ledger_service.transactions.query_txns(kind="transfer")
+    except Exception:  # noqa: BLE001 — advisory lookup, never breaks a preview
+        return []
+
+
 def _find_booked_transfers(
-    from_acct: str, to_acct: str, from_amount: float, to_amount: float, date: str
+    from_acct: str,
+    to_acct: str,
+    from_amount: float,
+    to_amount: float,
+    date: str,
+    pool: list[dict] | None = None,
 ) -> list[tuple[int, dict]]:
     """ALL already-booked ledger transfers matching these exact legs (booked earlier by an
     agent/email/hand), as (day_gap, txn) sorted closest-date-first (stable on pool order).
@@ -507,10 +521,8 @@ def _find_booked_transfers(
     def _close(a: float, b: float) -> bool:
         return abs(a - b) <= max(0.01, abs(b) * 0.001)
 
-    try:
-        pool = ledger_service.transactions.query_txns()
-    except Exception:  # noqa: BLE001 — advisory lookup, never breaks a preview
-        return []
+    if pool is None:
+        pool = _booked_transfer_pool()
     out: list[tuple[int, dict]] = []
     for t in pool:
         if t.get("deleted") or t.get("merged_into") or t.get("kind") != "transfer":
@@ -530,15 +542,23 @@ def _find_booked_transfers(
 
 
 def _find_booked_transfer(
-    from_acct: str, to_acct: str, from_amount: float, to_amount: float, date: str
+    from_acct: str,
+    to_acct: str,
+    from_amount: float,
+    to_amount: float,
+    date: str,
+    pool: list[dict] | None = None,
 ) -> dict | None:
     """Single-caller convenience (the FX-pair check): the CLOSEST-date booked transfer."""
-    ranked = _find_booked_transfers(from_acct, to_acct, from_amount, to_amount, date)
+    ranked = _find_booked_transfers(from_acct, to_acct, from_amount, to_amount, date, pool)
     return ranked[0][1] if ranked else None
 
 
 def _existing_pair_transfer(
-    out_row: CanonicalRow, in_row: CanonicalRow, ctx: _RoutingContext
+    out_row: CanonicalRow,
+    in_row: CanonicalRow,
+    ctx: _RoutingContext,
+    pool: list[dict] | None = None,
 ) -> dict | None:
     """The two-leg transfer this FX pair WOULD book, if it already exists in the ledger
     (reported case: the €1,450→S$2,150.00 conversion was already in the book via the email
@@ -549,7 +569,9 @@ def _existing_pair_transfer(
     to_acct = (ctx.route.get(in_ccy) or {}).get("id")
     if not from_acct or not to_acct:
         return None
-    return _find_booked_transfer(from_acct, to_acct, out_row.amount, in_row.amount, out_row.date)
+    return _find_booked_transfer(
+        from_acct, to_acct, out_row.amount, in_row.amount, out_row.date, pool
+    )
 
 
 def _claimed_existing_ids(results: list[RowResult]) -> set[str]:
@@ -718,16 +740,20 @@ def _routed_booked_transfers(results: list[RowResult]) -> dict[int, dict]:
     same-amount routed rows can never both flag the same booking; the loser takes its next
     free candidate or none (imports as its own transfer)."""
     per_row: list[tuple[int, list[tuple[int, dict]]]] = []
+    pool: list[dict] | None = None
     for r in results:
         d = r.draft
         if d is None or not d.get("routing_automation_id"):
             continue
+        if pool is None:
+            pool = _booked_transfer_pool()
         ranked = _find_booked_transfers(
             d["from_account_id"],
             d["to_account_id"],
             float(d.get("from_amount") or 0.0),
             float(d.get("to_amount") or 0.0),
             d.get("date") or "",
+            pool,
         )
         if ranked:
             per_row.append((r.line - 1, ranked))
@@ -753,10 +779,13 @@ def _routed_booked_transfers(results: list[RowResult]) -> dict[int, dict]:
 def _pair_existing_transfers(rows: list[CanonicalRow], ctx: _RoutingContext) -> dict[int, dict]:
     """Row index (either leg) → the already-booked ledger transfer its FX pair duplicates."""
     found: dict[int, dict] = {}
+    pool: list[dict] | None = None
     for idx, p in ctx.pairs.items():
         if p["leg"] != "out":
             continue
-        t = _existing_pair_transfer(rows[idx], rows[p["partner"]], ctx)
+        if pool is None:
+            pool = _booked_transfer_pool()
+        t = _existing_pair_transfer(rows[idx], rows[p["partner"]], ctx, pool)
         if t is not None:
             found[idx] = t
             found[p["partner"]] = t

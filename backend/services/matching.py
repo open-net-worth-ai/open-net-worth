@@ -1361,7 +1361,10 @@ def known_transfer_routes() -> frozenset:
     non-deleted ``transfer`` row in the ledger (Phase 4). A pair on a known route is a real
     transfer corridor the user uses; an unknown route is treated cautiously (review, never auto)."""
     routes: set[frozenset] = set()
-    for t in ledger_service.transactions.all():
+    # Transfer rows only (deleted ones included, filtered below exactly as before) — this runs
+    # on every bulk write and every match pass, and decoding the WHOLE ledger to collect a few
+    # account pairs was a full-table read each time.
+    for t in ledger_service.transactions.query_txns(kind="transfer", include_deleted=True):
         if t.get("kind") == "transfer" and not t.get("deleted") and not t.get("merged_into"):
             fa, ta = t.get("from_account_id"), t.get("to_account_id")
             if fa and ta:

@@ -6694,6 +6694,42 @@ def test_run_stale_facts_peers_precompute_refreshes_a_never_synthesized_held_ins
     assert calls == [("inst-h1", False)]
 
 
+def test_run_stale_facts_peers_precompute_reads_off_the_event_loop(monkeypatch, db_isolated):
+    """Hydrating every position and the per-instrument staleness read are synchronous DB/price
+    work; this coroutine runs on the SHARED loop, so doing them inline stalled every request
+    and stream each ~60s tick (loop_watch, 2026-10-26)."""
+    import threading
+
+    import backend.monitoring.analyst as analyst_mod
+    import backend.monitoring.asset_brief as asset_brief_mod
+    import backend.services.positions as positions_mod
+
+    threads: dict[str, str] = {}
+
+    def _hydrated():
+        threads["hydrated"] = threading.current_thread().name
+        return [{"instrument_id": "inst-h1", "ticker": "H1", "quantity": 5.0}]
+
+    def _stale(_iid):
+        threads["stale"] = threading.current_thread().name
+        return True
+
+    monkeypatch.setattr(positions_mod, "hydrated", _hydrated)
+    monkeypatch.setattr(asset_brief_mod, "facts_peers_stale", _stale)
+    monkeypatch.setattr(analyst_mod, "read_watchlist", lambda: {"items": []})
+    calls = _spy_refresh_asset_brief(monkeypatch)
+
+    async def _run():
+        threads["loop"] = threading.current_thread().name
+        await analyst_mod._run_stale_facts_peers_precompute()
+
+    asyncio.run(_run())
+
+    assert calls == [("inst-h1", False)]
+    assert threads["hydrated"] != threads["loop"]
+    assert threads["stale"] != threads["loop"]
+
+
 def test_run_stale_facts_peers_precompute_skips_a_fresh_held_instrument(monkeypatch, db_isolated):
     import backend.db.asset_brief_store as abs_mod
     import backend.monitoring.analyst as analyst_mod

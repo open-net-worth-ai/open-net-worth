@@ -540,3 +540,68 @@ def test_fetch_feed_caps_all_three_caches_on_every_call(monkeypatch):
     assert len(collect._fetch_failed) <= collect._MAX_CACHE_ENTRIES
     collect._rss_cache.clear()
     collect._fetch_failed.clear()
+
+
+# ── read_back=False: the pollers record + emit, and skip the evidence read-back ─────────────
+
+
+def test_read_back_false_records_and_emits_without_reading_back(store, monkeypatch):
+    """Every poller discards gather_rss's return value, yet each call decoded every evidence
+    row tagged with its subjects (tens of MB of JSON on a real book) — CPU that starved a
+    concurrent statement commit (2026-10-26). read_back=False must change nothing else."""
+    from backend.monitoring import collect
+    from backend.services import evidence as ev
+
+    seen = _capture_arrivals()
+    reads: list = []
+    real_read = ev.read_evidence
+
+    def _counting_read(**kwargs):
+        reads.append(kwargs)
+        return real_read(**kwargs)
+
+    monkeypatch.setattr(collect, "read_evidence", _counting_read)
+    monkeypatch.setattr(
+        collect,
+        "_fetch_feed",
+        lambda url, max_age=None: [
+            {"url": f"https://e/{url}", "title": url, "content": "c", "published_date": "just now"}
+        ],
+    )
+    feeds_in = [{"url": "u1", "subjects": ["asset:i1"], "kind": "news", "via": "rss"}]
+
+    out = asyncio.run(collect.gather_rss(feeds_in, store=store, read_back=False))
+    assert out == [] and reads == []
+    assert [r["url"] for r in seen] == ["https://e/u1"]  # the arrival still fired
+    assert [r["url"] for r in store.for_subjects(["asset:i1"], now="")] == ["https://e/u1"]
+
+    feeds_in[0]["url"] = "u2"
+    out = asyncio.run(collect.gather_rss(feeds_in, store=store))  # default: unchanged contract
+    assert {r["url"] for r in out} == {"https://e/u1", "https://e/u2"} and len(reads) == 1
+
+
+def test_gather_matched_read_back_false_skips_the_read(store, monkeypatch):
+    from backend.monitoring import collect
+
+    seen = _capture_arrivals()
+    monkeypatch.setattr(collect, "read_evidence", lambda **k: pytest.fail("read back"))
+    monkeypatch.setattr(
+        collect,
+        "_fetch_feed",
+        lambda url, max_age=None, user_agent=None, parser=None: [
+            {
+                "url": "https://e/acme",
+                "title": "Acme beats",
+                "content": "Acme",
+                "published_date": "now",
+            }
+        ],
+    )
+    out = asyncio.run(
+        collect.gather_matched(
+            "u", [{"subject": "asset:acme", "terms": ["Acme"]}], store=store, read_back=False
+        )
+    )
+    assert out == []
+    assert [r["url"] for r in seen] == ["https://e/acme"]
+    assert store.for_subjects(["asset:acme"], now="")

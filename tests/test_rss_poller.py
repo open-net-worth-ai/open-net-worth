@@ -88,7 +88,9 @@ def _stub_poller(
     # Capture gather_rss calls — patch on the poller module (it imports gather_rss at module level)
     gather_calls: list[dict] = []
 
-    async def _gather_rss(feeds, *, store=None, limit=None, max_concurrency=5, max_age=None):
+    async def _gather_rss(
+        feeds, *, store=None, limit=None, max_concurrency=5, max_age=None, read_back=True
+    ):
         gather_calls.append({"feeds": feeds, "max_age": max_age})
         return gather_rss_returns or []
 
