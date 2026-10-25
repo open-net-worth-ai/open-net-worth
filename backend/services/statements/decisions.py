@@ -610,6 +610,7 @@ def _match_leftovers(
     row_matches = matching.match_batch(
         [r.draft for r in unlinked], context=context, policy=policy, weak_tier=True
     )
+    opening_ids = ledger_service.opening_txn_ids()
     for r, rm in zip(unlinked, row_matches):
         refused = set((r.draft or {}).get("match_rejected_ids") or ())
         for cand in rm.candidates:
@@ -623,7 +624,7 @@ def _match_leftovers(
                     "type": cand.klass.value,
                     "reason": "; ".join(cand.reasons),
                     "existing_id": cand.id,
-                    "existing": _existing_summary(cand.txn),
+                    "existing": _existing_summary(cand.txn, opening_ids),
                     "score": cand.score,
                     "klass": cand.klass.value,
                     "band": rm.band,
@@ -943,6 +944,7 @@ def _apply_batch_match(
         [r.draft for r in candidates], context=context, policy=policy, weak_tier=True
     )
     derived: dict[int, list[str]] = {}
+    opening_ids = ledger_service.opening_txn_ids()
     for r, rm in zip(candidates, row_matches):
         cand = rm.assigned
         if cand is None or not cand.id:
@@ -957,7 +959,7 @@ def _apply_batch_match(
         # original_currency included, so a foreign charge's two sides are comparable on screen.
         by_id = {c.id: c.txn for c in rm.candidates if c.id}
         alternatives = [
-            {"id": alt_id, "existing": _existing_summary(by_id[alt_id])}
+            {"id": alt_id, "existing": _existing_summary(by_id[alt_id], opening_ids)}
             for alt_id in rm.alternatives
             if alt_id in by_id
         ]
@@ -976,7 +978,7 @@ def _apply_batch_match(
                 # reusing this one.
                 "reason": "; ".join(cand.reasons),
                 "existing_id": cand.id,
-                "existing": _existing_summary(cand.txn),
+                "existing": _existing_summary(cand.txn, opening_ids),
                 "score": cand.score,
                 "klass": cand.klass.value,
                 "band": rm.band,

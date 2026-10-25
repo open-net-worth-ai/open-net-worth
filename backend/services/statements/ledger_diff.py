@@ -346,6 +346,7 @@ def _collect_uncovered(
     boundary: list[dict] = []
     lo_date, hi_date = date.fromisoformat(lo), date.fromisoformat(hi)
     index = StatementRefIndex()
+    opening_ids = ledger_service.opening_txn_ids()
     for t in ledger_service.transactions.all():
         if t.get("deleted") or t.get("id") in covered:
             continue
@@ -361,7 +362,7 @@ def _collect_uncovered(
         # `on_statements` and `near_cutoff` are ledger-check-only (they need the statement store
         # and this window respectively), so they are attached here rather than widening the
         # shared projection every match flag also pays for.
-        summary = _existing_summary(t) or {}
+        summary = _existing_summary(t, opening_ids) or {}
         summary["on_statements"] = on_statements(t, index)
         day = _parse_day(d)
         near = _near_cutoff(day, lo_date, hi_date, boundary_days) if day else None
