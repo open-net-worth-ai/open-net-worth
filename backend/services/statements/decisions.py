@@ -1607,7 +1607,9 @@ def decision_preview(
         meta=result.meta.to_dict(),
         force=force_reparse,
     )
-    lucius_applied = lucius_pass.apply_lucius_ops(results, result.rows, pass_outcome.ops, ctx)
+    lucius_applied = lucius_pass.apply_lucius_ops(
+        results, result.rows, lucius_pass.merge_user_routes(record, pass_outcome.ops), ctx
+    )
     # What the commit books from: every row's verdict exactly as `rederive_match_pass` would
     # produce it (matcher, then the Lucius ops — nothing after). Kept with the stored review so
     # Confirm books the reviewed decisions instead of re-matching the ledger (owner, 2026-10-26).

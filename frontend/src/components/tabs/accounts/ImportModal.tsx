@@ -291,21 +291,42 @@ function EditDraftModal({
   d,
   catList,
   payeeOptions,
+  transferAccounts,
   onManagePayees,
   onCreateCategory,
   onSave,
+  onSetTransfer,
   onClose,
 }: {
   d: ImportPreviewDraft
   catList: Category[]
   payeeOptions: PayeeOption[]
+  /** The accounts this row can be a transfer with: same currency, not the statement's own. */
+  transferAccounts: Account[]
   onManagePayees?: () => void
   onCreateCategory?: (prefill: string, kind: 'income' | 'expense', cb: (id: string) => void) => void
   onSave: (patch: { category?: string | null; payee?: string }) => void
+  /** Type switch: an account books the row as a transfer with it; null books it plain again. */
+  onSetTransfer: (accountId: string | null) => void
   onClose: () => void
 }) {
   const [payee, setPayee] = useState(d.payee || '')
   const [category, setCategory] = useState(d.category || '')
+  const outflow = d.amount < 0
+  // A routed row's OTHER side: money out lands in `to`, money in comes from `from`.
+  const routedTo = d.routed ? (outflow ? d.routed.to_account_id : d.routed.from_account_id) : ''
+  const [type, setType] = useState<'plain' | 'transfer'>(d.routed ? 'transfer' : 'plain')
+  const [transferTo, setTransferTo] = useState(routedTo || '')
+  const plainLabel = outflow ? 'Expense' : 'Income'
+  const save = () => {
+    if (type === 'transfer') {
+      if (transferTo !== routedTo) onSetTransfer(transferTo)
+    } else {
+      if (d.routed) onSetTransfer(null)
+      onSave({ payee, category: category || null })
+    }
+    onClose()
+  }
   return (
     <Modal
       open
@@ -320,10 +341,8 @@ function EditDraftModal({
           <Button
             size="sm"
             variant="primary"
-            onClick={() => {
-              onSave({ payee, category: category || null })
-              onClose()
-            }}
+            disabled={type === 'transfer' && !transferTo}
+            onClick={save}
           >
             Save
           </Button>
@@ -334,35 +353,70 @@ function EditDraftModal({
           not the generic ui/FormField, which doesn't carry the width/spacing rules these
           picker components (.acct-payf/.acct-acctsel) depend on here. */}
       <div className="acct-edit-body">
+        {/* Type (owner, 2026-10-26: "it's a transfer — we are still not allowing to change the
+            type?"): Transfer swaps Payee + Category for the other account — a transfer between
+            your own accounts books no payee or category; the other account is its counterpart. */}
         <div className="acct-edit-field">
-          <div className="acct-edit-label">Payee</div>
-          <AddPayeeField
-            value={payee}
-            onChange={(v) => setPayee(v)}
-            options={payeeOptions}
-            accounts={[]}
-            fromAccountId={null}
-            onSelectTransfer={() => {}}
-            onManagePayees={onManagePayees}
-            advance={() => {}}
+          <div className="acct-edit-label">Type</div>
+          <SegmentedControl
+            ariaLabel="Type"
+            options={[
+              { value: 'plain', label: plainLabel },
+              { value: 'transfer', label: 'Transfer' },
+            ]}
+            value={type}
+            onChange={setType}
           />
         </div>
-        <div className="acct-edit-field">
-          <div className="acct-edit-label">Category</div>
-          <AddCategoryField
-            value={category}
-            onChange={(k) => setCategory(k)}
-            options={catOptionsFor(d.kind === 'income' ? 'income' : 'expense', catList)}
-            onCreate={
-              onCreateCategory
-                ? (prefill, cb) =>
-                    onCreateCategory(prefill, d.kind === 'income' ? 'income' : 'expense', cb)
-                : undefined
-            }
-            advance={() => {}}
-            clearable
-          />
-        </div>
+        {type === 'plain' && (
+          <div className="acct-edit-field">
+            <div className="acct-edit-label">Payee</div>
+            <AddPayeeField
+              value={payee}
+              onChange={(v) => setPayee(v)}
+              options={payeeOptions}
+              accounts={[]}
+              fromAccountId={null}
+              onSelectTransfer={() => {}}
+              onManagePayees={onManagePayees}
+              advance={() => {}}
+            />
+          </div>
+        )}
+        {type === 'transfer' ? (
+          <div className="acct-edit-field">
+            <div className="acct-edit-label">{outflow ? 'To account' : 'From account'}</div>
+            <Select
+              aria-label={outflow ? 'To account' : 'From account'}
+              value={transferTo}
+              onChange={(e) => setTransferTo(e.target.value)}
+              placeholder="Choose an account"
+              options={transferAccounts.map((a) => ({ value: a.id, label: a.name }))}
+            />
+            <div className="imp3-edit-hint">
+              {transferAccounts.length === 0
+                ? `No other ${d.currency} account to transfer with.`
+                : 'Books one transfer between the two accounts — never spending or income.'}
+            </div>
+          </div>
+        ) : (
+          <div className="acct-edit-field">
+            <div className="acct-edit-label">Category</div>
+            <AddCategoryField
+              value={category}
+              onChange={(k) => setCategory(k)}
+              options={catOptionsFor(d.kind === 'income' ? 'income' : 'expense', catList)}
+              onCreate={
+                onCreateCategory
+                  ? (prefill, cb) =>
+                      onCreateCategory(prefill, d.kind === 'income' ? 'income' : 'expense', cb)
+                  : undefined
+              }
+              advance={() => {}}
+              clearable
+            />
+          </div>
+        )}
       </div>
     </Modal>
   )
@@ -2339,6 +2393,36 @@ export function ImportModal({
   // make sense. This used to be a blanket reset of every map on the statement —
   // real, reported data loss on a 100+-row statement (fixing one row's routing silently
   // discarded every other row's Import/Leave-out/merge decision).
+  /** Accounts a row can be a transfer with: same currency, live, not the statement's own. */
+  function transferAccountsFor(d: ImportPreviewDraft): Account[] {
+    const own = d.destId || accountId
+    return accounts.filter(
+      (a) =>
+        a.id !== own &&
+        !a.archived &&
+        (a.currency || '').toUpperCase() === (d.currency || '').toUpperCase(),
+    )
+  }
+  /** The Edit window's Type switch: saved on the statement, then the review re-reads the cached
+   *  parse (no AI) so the row shows — and Confirm books — exactly the chosen type. */
+  async function setRowType(row: number | undefined, accountId: string | null) {
+    if (!preview?.statementId || row == null) return
+    setLuciusUndoing((m) => ({ ...m, [row]: true }))
+    try {
+      const r = await authFetch(`/api/statements/${preview.statementId}/row-type`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ row, account_id: accountId }),
+      })
+      if (!r.ok) throw new Error(await r.text())
+      await runServerPreview(route, undefined, undefined, undefined, undefined, true)
+    } catch {
+      setError('Could not change the row type — try again.')
+    } finally {
+      setLuciusUndoing((m) => ({ ...m, [row]: false }))
+    }
+  }
+
   async function undoLucius(row?: number) {
     if (!preview?.statementId) return
     const key = row ?? -1
@@ -5272,22 +5356,30 @@ export function ImportModal({
                         )}
                       </span>
                       <span className="imp3-arow-catcol">
-                        {!excluded && (
-                          <span className="imp3-cat" title={category}>
-                            <i
-                              style={{
-                                background: d.category
-                                  ? catMapProp[d.category]?.color || 'var(--faint)'
-                                  : 'var(--faint)',
-                              }}
-                            />
-                            <span>{category}</span>
+                        {luciusUndoing[d.rowIndex ?? -1] ? (
+                          <span className="imp3-cat imp3-cat--busy">
+                            <span className="imp3-commit-spin" aria-hidden="true" />
+                            <span>Updating…</span>
                           </span>
+                        ) : (
+                          !excluded && (
+                            <span className="imp3-cat" title={category}>
+                              <i
+                                style={{
+                                  background: d.category
+                                    ? catMapProp[d.category]?.color || 'var(--faint)'
+                                    : 'var(--faint)',
+                                }}
+                              />
+                              <span>{category}</span>
+                            </span>
+                          )
                         )}
                       </span>
-                      {/* Same rule as the pair row: a transfer routes to an account, so there is no
-                      payee/category for the pencil's modal to edit. */}
-                      {!d.dup && !absorbed && !transferCategoryLine && (
+                      {/* The pencil opens Edit payee & category, whose Type switch also turns a row
+                      into a transfer and back — so a routed row keeps it; an engine-paired
+                      transfer (no `routed`) has nothing to edit. */}
+                      {!d.dup && !absorbed && (!transferCategoryLine || !!d.routed) && (
                         <button
                           type="button"
                           className="imp3-editpencil"
@@ -7354,6 +7446,10 @@ export function ImportModal({
           onManagePayees={onManagePayees}
           onCreateCategory={onCreateCategory}
           onSave={(patch) => updateDraft(editingDraftIndex, patch)}
+          transferAccounts={transferAccountsFor(preview.drafts[editingDraftIndex]!)}
+          onSetTransfer={(accountId) =>
+            void setRowType(preview.drafts[editingDraftIndex]!.rowIndex, accountId)
+          }
           onClose={() => setEditingDraftIndex(null)}
         />
       )}

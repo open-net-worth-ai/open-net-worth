@@ -835,6 +835,36 @@ def save_statement_instructions(
     return {"saved": profile is not None, "text": text.strip()}
 
 
+class RowTypeBody(BaseModel):
+    row: int
+    # An account books the row as a transfer with it; None books it as a plain expense/income.
+    account_id: Optional[str] = None
+
+
+@router.post("/api/statements/{statement_id}/row-type")
+def set_row_type(request: Request, statement_id: str, body: RowTypeBody) -> dict:
+    """The review's Edit window Type switch: remember the owner's choice for this row on the
+    statement. The caller re-previews (cached parse, free); the commit re-applies it."""
+    _require_csrf(request)
+    from backend.db.statement_store import StatementStore
+    from backend.services import ledger as ledger_service
+    from backend.services.statements import stored_previews
+
+    store = StatementStore()
+    record = store.find_by_id(statement_id)
+    if record is None:
+        raise HTTPException(404, "statement not found")
+    if body.account_id:
+        account = ledger_service.accounts.find_by_id(body.account_id)
+        if account is None or account.get("archived"):
+            raise HTTPException(400, "That account isn't available for a transfer.")
+    routes = dict(record.get("user_routes") or {})
+    routes[str(body.row)] = body.account_id or ""
+    store.update_by_id(statement_id, {"user_routes": routes})
+    stored_previews.drop(statement_id)
+    return {"ok": True, "row": body.row, "account_id": body.account_id}
+
+
 @router.delete("/api/statements/{statement_id}/lucius-ops")
 def undo_lucius_ops(request: Request, statement_id: str, row: Optional[int] = None) -> dict:
     """Undo the Lucius-pass ops applied to this statement's preview (SI-68): all of them,
@@ -851,7 +881,13 @@ def undo_lucius_ops(request: Request, statement_id: str, row: Optional[int] = No
         raise HTTPException(404, "statement not found")
     ops = list(record.get("lucius_ops") or [])
     remaining = [o for o in ops if o.get("row") != row] if row is not None else []
-    store.update_by_id(statement_id, {"lucius_ops": remaining})
+    # "Not a transfer" on a row the owner routed themselves undoes that choice too.
+    routes = dict(record.get("user_routes") or {})
+    if row is None:
+        routes = {}
+    elif routes.get(str(row)):
+        routes[str(row)] = ""
+    store.update_by_id(statement_id, {"lucius_ops": remaining, "user_routes": routes})
     from backend.services.statements import stored_previews
 
     stored_previews.drop(statement_id)  # the stored review still shows the undone ops

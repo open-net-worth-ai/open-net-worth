@@ -3393,6 +3393,16 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   color: var(--ink);
   font-weight: 600;
 }
+.imp3-cat--busy {
+  color: var(--muted);
+  gap: 7px;
+}
+.imp3-edit-hint {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--faint);
+  line-height: 1.45;
+}
 .imp3-filepane-close {
   flex: none;
   display: inline-flex;
