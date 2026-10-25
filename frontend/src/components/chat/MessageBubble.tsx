@@ -38,6 +38,7 @@ import { CitationChips } from './lucius/CitationChips'
 import { stripFence, stripScreenContext, stripConfirmHandshake } from '../../utils/untrusted'
 import { Chip } from './lucius/Chip'
 import { ToolActivity } from './toolActivity/ToolActivity'
+import { failureOf } from './toolActivity/cluster'
 import type { ActionItem, ThinkingItem } from './toolActivity/cluster'
 import { ThinkingBlock } from './toolActivity/ThinkingRow'
 import { MentionDetail } from './lucius/MentionDetail'
@@ -371,6 +372,19 @@ function firstUnansweredChangeId(m: Message): string | undefined {
   const fromBlocks = (m.blocks || []).flatMap((b) => (b.type === 'change' ? [b.change] : []))
   const changes = fromBlocks.length > 0 ? fromBlocks : m.proposedChanges || []
   return changes.find((c) => !c.status)?.id
+}
+
+/** Each failed call's error, keyed by its tool_use_id — the id its confirm card shares — so an
+ *  approved card whose call then failed says so instead of keeping a green "✓ Approved". */
+function callFailures(m: Message): Map<string, string> {
+  const failures = new Map<string, string>()
+  for (const block of m.blocks || []) {
+    const item = actionItemFor(block)
+    if (item?.type !== 'tool') continue
+    const { failed, message } = failureOf(item)
+    if (failed) failures.set(item.id, message)
+  }
+  return failures
 }
 
 /** Is this card the one to show? Answered cards stay (they carry the ✓ / ✗ record). */
@@ -911,6 +925,7 @@ export function MessageBubble({
 
   // One decision on screen at a time — see firstUnansweredChangeId.
   const firstUnanswered = firstUnansweredChangeId(m)
+  const failures = callFailures(m)
 
   const respond = onRespondToChange
     ? (changeId: string | undefined, status: 'confirmed' | 'dismissed') =>
@@ -989,6 +1004,7 @@ export function MessageBubble({
                       change={block.change}
                       onResolvePendingToolUse={onResolvePendingToolUse}
                       onRespond={respond && ((status) => respond(block.change.id, status))}
+                      failure={failures.get(block.change.id ?? '')}
                     />
                   </div>
                 )

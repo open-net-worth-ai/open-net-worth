@@ -28,6 +28,9 @@ interface Props {
   // Persist the user's response so the card stays resolved across re-renders /
   // reloads. Without it, ChangePreview only tracks an optimistic local response.
   onRespond?: (status: 'confirmed' | 'dismissed') => void
+  // The error the approved call came back with, read from its own tool result. Without it a
+  // card whose call ran and FAILED went on showing a green "✓ Approved" (demo, 2026-10-26).
+  failure?: string
 }
 
 /**
@@ -63,7 +66,7 @@ function RefusedRow() {
   )
 }
 
-export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Props) {
+export function ChangePreview({ change, onRespond, onResolvePendingToolUse, failure }: Props) {
   // Optimistic local response for instant feedback; the persisted `change.status`
   // (written via onRespond) is what survives a reload / conversation switch. Either
   // being set resolves the card and hides the Confirm/Dismiss buttons.
@@ -272,11 +275,17 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse }: Pr
         <RefusedRow />
       ) : responded !== null ? (
         responded === 'confirmed' ? (
-          <div className="change-confirmed">
-            {isPermissionCard || isExternalMcpCard
-              ? `✓ Approved${grantedScope ? GRANT_RESOLVED_SUFFIX[grantedScope] : ''}`
-              : '✓ Confirmed'}
-          </div>
+          failure ? (
+            <div className="change-confirmed change-confirmed--failed" role="status">
+              {`✗ ${isPermissionCard || isExternalMcpCard ? 'Approved' : 'Confirmed'}, but it failed: ${failure}`}
+            </div>
+          ) : (
+            <div className="change-confirmed">
+              {isPermissionCard || isExternalMcpCard
+                ? `✓ Approved${grantedScope ? GRANT_RESOLVED_SUFFIX[grantedScope] : ''}`
+                : '✓ Confirmed'}
+            </div>
+          )
         ) : (
           <div className="change-confirmed" style={{ color: 'var(--muted)' }}>
             {isPermissionCard || isExternalMcpCard ? '✗ Denied' : '✗ Dismissed'}
