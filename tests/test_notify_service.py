@@ -142,8 +142,8 @@ def test_a_channel_with_a_title_slot_gets_the_title_separately(clean_registry):
     assert seen["call"] == ("Overdue vest: ONWAI", "45.8 units")
 
 
-def test_a_plain_text_channel_gets_the_title_as_the_first_line(clean_registry):
-    """It has nowhere else to put it, and that is where a reader expects to see it."""
+def test_a_plain_text_channel_gets_the_message_alone(clean_registry):
+    """The title pasted above the message read as a stray heading line on Telegram."""
     seen = []
 
     async def plain(message: str):
@@ -151,9 +151,22 @@ def test_a_plain_text_channel_gets_the_title_as_the_first_line(clean_registry):
         return {"sent": 1}
 
     channels.register_channel("plain", plain)
-    asyncio.run(notify("45.8 units", channels=["plain"], title="Overdue vest: ONWAI"))
+    asyncio.run(notify("Booked: GRAB, 181,400 VND", channels=["plain"], title="Capture"))
 
-    assert seen == ["Overdue vest: ONWAI\n\n45.8 units"]
+    assert seen == ["Booked: GRAB, 181,400 VND"]
+
+
+def test_an_empty_message_falls_back_to_the_title(clean_registry):
+    seen = []
+
+    async def plain(message: str):
+        seen.append(message)
+        return {"sent": 1}
+
+    channels.register_channel("plain", plain)
+    asyncio.run(notify("  ", channels=["plain"], title="Overdue vest: ONWAI"))
+
+    assert seen == ["Overdue vest: ONWAI"]
 
 
 def test_no_title_leaves_the_message_verbatim(clean_registry):
