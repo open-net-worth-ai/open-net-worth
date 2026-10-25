@@ -976,3 +976,80 @@ def test_row_call_falls_back_to_conservative_cap_when_provider_rejects(monkeypat
     result = asyncio.run(tier2_text("statement text"))
     assert [r.amount for r in result.rows] == [5.0]
     assert attempts == [8192, 4096]  # generous first, conservative retry, then success
+
+
+# ── source_row: the review's "show this row in the file" ───────────────────────────────
+
+
+def _xlsx(sheets: dict[str, list[list]]) -> bytes:
+    import io
+
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    for name, rows in sheets.items():
+        ws = wb.create_sheet(name)
+        for r in rows:
+            ws.append(r)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+_SOURCE_ROW_SCHEMA = {
+    "header_row": 2,
+    "date_col": 0,
+    "desc_col": 1,
+    "debit_col": 2,
+    "credit_col": 2,
+    "signed": True,
+}
+
+
+def test_source_row_is_the_row_number_the_file_preview_shows():
+    """Owner, 2026-10-26: reviewing a statement meant scrolling the spreadsheet by hand to find
+    each row. Every parsed row carries the 1-based row it came from — the same numbering the
+    Documents grid (document_tables) shows — through a title row, a blank row and a blank row
+    between data rows."""
+    from backend.services.document_tables import _read
+
+    content = _xlsx(
+        {
+            "History": [
+                ["Synthetic Wallet — account history"],
+                [],
+                ["Date", "Description", "Amount"],
+                ["2026-08-01", "Coffee QA", -45000],
+                [],
+                ["2026-08-02", "Top-up QA", 500000],
+                ["2026-08-03", "Taxi QA", -63000],
+            ]
+        }
+    )
+    text = to_upload(content, "xlsx")["text"]
+    result = asyncio.run(tiers.tier1_tabular(text, schema=_SOURCE_ROW_SCHEMA))
+    shown = _read(content, "xlsx", None, 0)[2]
+    assert [r.source_row for r in result.rows] == [4, 6, 7]
+    for row in result.rows:
+        assert row.description in [str(c) for c in shown[row.source_row - 1]]
+
+
+def test_source_row_is_left_empty_past_the_first_sheet():
+    """Sheets are read as one concatenated grid, so only the first sheet's indexes are its own
+    row numbers: a later sheet's rows get no source_row rather than a wrong one."""
+    first = [
+        ["Date", "Description", "Amount"],
+        ["2026-08-01", "Coffee QA", -45000],
+    ]
+    content = _xlsx({"One": [[], [], *first], "Two": [[], [], *first[1:]]})
+    text = to_upload(content, "xlsx")["text"]
+    result = asyncio.run(tiers.tier1_tabular(text, schema=_SOURCE_ROW_SCHEMA))
+    assert result.rows[0].source_row == 4
+    assert all(r.source_row is None for r in result.rows[1:])
+
+
+def test_source_row_for_a_csv_counts_every_line():
+    text = "Account history\n\nDate,Description,Amount\n2026-08-01,Coffee QA,-45000\n\n2026-08-02,Taxi QA,-63000\n"
+    result = asyncio.run(tiers.tier1_tabular(text, schema=_SOURCE_ROW_SCHEMA))
+    assert [r.source_row for r in result.rows] == [4, 6]

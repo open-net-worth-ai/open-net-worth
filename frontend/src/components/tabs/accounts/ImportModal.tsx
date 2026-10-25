@@ -3,7 +3,7 @@
 // TEACH (saved as the source's format profile) before the same decision preview runs.
 import { Fragment, useState, useRef, useMemo, useEffect, useLayoutEffect } from 'react'
 import { authFetch } from '../../../api/client'
-import { Modal, Button, FormField, Select, EmptyState } from '../../ui'
+import { Modal, Button, FormField, Select, EmptyState, SegmentedControl } from '../../ui'
 import { Spark as LuciusSpark } from '../../../lucius/identity'
 import { fCur, fromApiTxn } from './data'
 import './statementImport.css'
@@ -16,6 +16,8 @@ import TxnDetail from './TxnDetail'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight } from '../../../ui/icons'
 import { fDate } from '../../../utils/format'
+import { fetchVaultItem, type VaultItem } from '../../../api/vault'
+import { DocumentPreview } from '../../vault/DocumentPreview'
 import type { TxnDetailProps } from './TxnDetail'
 import type { Account, ApiTxn, Category, FxRates, Txn, TxnActivity, SourceEntry } from './types'
 import {
@@ -68,6 +70,9 @@ export type { ImportPreviewDraft, ImportPreviewResult }
 // (`flow3.jsx` READ_PHASES). The real read takes longer than the animation, so the
 // line CLAMPS on the last phase instead of looping — a phase that came back round
 // would claim work that already finished.
+/** Whether the import review shows the statement file beside it — a per-viewer convenience. */
+const SHOW_FILE_KEY = 'onw.import.showFile'
+
 const READ_PHASES = [
   'Reading the statement',
   'Finding the transaction table',
@@ -1049,6 +1054,20 @@ export function ImportModal({
   // from the header's own `progress` breadcrumb element further down this component.
   const [progressToken, setProgressToken] = useState<string | null>(null)
   const [bgPending, setBgPending] = useState(false)
+  // The statement file beside the review (owner, 2026-10-26: "a preview … where i can scroll or
+  // review the files … before making decisions"). Shown by default, remembered per viewer;
+  // a phone flips between the two with tabs instead.
+  const isMobile = useIsMobile()
+  const [showFile, setShowFile] = useState(() => {
+    try {
+      return localStorage.getItem(SHOW_FILE_KEY) !== 'off'
+    } catch {
+      return true
+    }
+  })
+  const [phoneView, setPhoneView] = useState<'review' | 'file'>('review')
+  const [fileItem, setFileItem] = useState<{ id: string; item: VaultItem | null } | null>(null)
+  const [fileRow, setFileRow] = useState<number | undefined>(undefined)
   const {
     progress: previewProgress,
     stale: progressStale,
@@ -2325,6 +2344,39 @@ export function ImportModal({
     }
   }
 
+  const fileStatementId = step === 'preview' ? preview?.statementId : undefined
+  const fileWanted = !!fileStatementId && (isMobile ? phoneView === 'file' : showFile)
+  const filePaneItem =
+    fileStatementId && fileItem?.id === fileStatementId ? fileItem.item : undefined
+  function toggleShowFile() {
+    const next = !showFile
+    setShowFile(next)
+    try {
+      localStorage.setItem(SHOW_FILE_KEY, next ? 'on' : 'off')
+    } catch {
+      /* private window / blocked storage — the choice just isn't remembered */
+    }
+  }
+  /** A click on a review row points the file pane at the row of the file it came from. */
+  function pointFileAtRow(e: React.MouseEvent) {
+    const row = (e.target as HTMLElement).closest('[data-draft-index]')
+    const draft = row && preview?.drafts[Number(row.getAttribute('data-draft-index'))]
+    if (draft && draft.sourceRow) setFileRow(draft.sourceRow)
+  }
+  // The statement's Documents item, fetched once per statement while its pane is wanted. A
+  // statement with no stored file (or a failed fetch) gets null — the pane then says so.
+  useEffect(() => {
+    if (!fileWanted || !fileStatementId || fileItem?.id === fileStatementId) return
+    let alive = true
+    fetchVaultItem(`statement-${fileStatementId}`).then(
+      (item) => alive && setFileItem({ id: fileStatementId, item }),
+      () => alive && setFileItem({ id: fileStatementId, item: null }),
+    )
+    return () => {
+      alive = false
+    }
+  }, [fileWanted, fileStatementId, fileItem?.id])
+
   if (!open) return null
   const canManualPreview = !!accountId && (!needsMapping(format) || mapComplete(currentMap()))
   const earlierRows = preview ? preview.drafts.filter((d) => !d.dup && d.preRecon) : []
@@ -3118,8 +3170,31 @@ export function ImportModal({
         footer={renderFooter()}
         closeOnBackdrop={false}
         dragToDismiss={false}
+        className={fileStatementId && !isMobile && showFile ? 'imp3-modal--file' : undefined}
+        headerActions={
+          fileStatementId ? (
+            isMobile ? (
+              <SegmentedControl
+                ariaLabel="Review or statement file"
+                options={[
+                  { value: 'review', label: 'Review' },
+                  { value: 'file', label: 'File' },
+                ]}
+                value={phoneView}
+                onChange={setPhoneView}
+              />
+            ) : (
+              <Button size="sm" variant="secondary" onClick={toggleShowFile}>
+                {showFile ? 'Hide file' : 'Show file'}
+              </Button>
+            )
+          ) : undefined
+        }
       >
-        <div className="imp">
+        <div
+          className={'imp' + (fileWanted && isMobile ? ' imp--behind-file' : '')}
+          onClick={fileStatementId ? pointFileAtRow : undefined}
+        >
           {error && (
             <div className="imp-error">
               <Ic d={I_WARN} size={14} /> {error}
@@ -7102,6 +7177,31 @@ export function ImportModal({
             />
           )}
         </div>
+        {fileWanted && (
+          <aside className="imp3-filepane" aria-label="Statement file">
+            <div className="imp3-filepane-head">
+              <span className="imp3-file-badge">
+                {FORMAT_LABEL[detectFormat(filePaneItem?.filename || resumeFilename || '')] ||
+                  'FILE'}
+              </span>
+              <span className="imp3-filepane-name">
+                {filePaneItem?.filename || resumeFilename || file?.name || 'Statement'}
+              </span>
+              {fileRow && <span className="imp3-filepane-row">Row {fileRow}</span>}
+            </div>
+            <div className="imp3-filepane-body">
+              {filePaneItem ? (
+                <DocumentPreview item={filePaneItem} highlightRow={fileRow} />
+              ) : filePaneItem === null ? (
+                <div className="imp3-filepane-hint">
+                  This statement's file isn't stored, so it can't be shown here.
+                </div>
+              ) : (
+                <div className="imp3-filepane-hint">Loading the file…</div>
+              )}
+            </div>
+          </aside>
+        )}
       </Modal>
       {/* Existing-transaction drawer (SI-50) — opened from a matched-ledger-entry link INSIDE
         this modal, so it must stack above it, not behind it. TxnDetail and this Modal both

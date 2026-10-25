@@ -35,6 +35,9 @@ class CanonicalRow:
     skip_reason: str | None = None
     account_hint: str | None = None  # multi-account statements: section attribution
     category_hint: str | None = None  # LLM suggestion — preview-only, NEVER auto-applied
+    # The 1-based row of the file this came from (a CSV, or an Excel file's FIRST sheet) — the
+    # review highlights it in the file shown beside the rows. None where no row maps 1:1.
+    source_row: int | None = None
     # Format-NATIVE dedup id (OFX FITID, CAMT AcctSvcrRef…), minted by the deterministic
     # adapters (statements/structured.py) so decision-flow drafts keep the EXACT id shape the
     # per-format importers always used — a re-import of a file booked via either path still

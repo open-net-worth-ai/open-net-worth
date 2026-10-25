@@ -1767,6 +1767,7 @@ def decision_preview(
             "original_amount": (r.draft or {}).get("original_amount"),
             "original_currency": (r.draft or {}).get("original_currency"),
             "reference": row.reference,
+            "source_row": row.source_row,
             "confidence": row.confidence,
             "notes": row.notes,
             "skip": r.draft is None,

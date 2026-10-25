@@ -7,6 +7,8 @@ import { ZoomImage } from '../../ui/ZoomImage'
 import { DocumentReader } from '../../vault/DocumentReader'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { authFetch } from '../../../api/client'
+import { fetchVaultItem, type VaultItem } from '../../../api/vault'
+import { DocumentPreview } from '../../vault/DocumentPreview'
 import { Modal } from '../../ui/Modal'
 import { Button } from '../../ui/Button'
 import { LuciusCta } from '../../intro/LuciusCta'
@@ -245,9 +247,30 @@ export function FileViewerBody({
   return <pre className="acct-stmtview-text">{state.text}</pre>
 }
 
-/** In-app statement viewer: PDFs render in the browser's viewer via a force-typed blob URL
- *  (never served inline from the app origin — uploaded bytes can't become a scriptable
- *  document); text formats preview as text; everything else offers the download.
+/** The statement's own file, through the ONE previewer the Documents tab uses — PDF pages, a
+ *  CSV/Excel spreadsheet grid, images, text (owner, 2026-10-26: "even the statement viewer is
+ *  not supporting full files like we have in that documents tab"). */
+function StatementFile({ statementId }: { statementId: string }) {
+  const [loaded, setLoaded] = useState<{ id: string; item: VaultItem | null } | null>(null)
+  useEffect(() => {
+    let alive = true
+    fetchVaultItem(`statement-${statementId}`).then(
+      (item) => alive && setLoaded({ id: statementId, item }),
+      () => alive && setLoaded({ id: statementId, item: null }),
+    )
+    return () => {
+      alive = false
+    }
+  }, [statementId])
+  if (loaded?.id !== statementId) return <div className="acct-stmtview-hint">Loading…</div>
+  if (!loaded.item)
+    return (
+      <div className="acct-stmtview-hint">Couldn't load the file — try the download instead.</div>
+    )
+  return <DocumentPreview item={loaded.item} />
+}
+
+/** In-app statement viewer: the file (see StatementFile), its facts and the ledger check.
  *  Callers may pass just {id} (the due banner) — the viewer hydrates its own facts. */
 export function StatementViewer({
   stmt: stmtProp,
@@ -273,8 +296,6 @@ export function StatementViewer({
       alive = false
     }
   }, [stmtProp])
-  const ext = (stmt.filename || '').split('.').pop()?.toLowerCase() || ''
-  const state = useFileViewerState(`/api/statements/${stmt.id}/file`, ext, false)
 
   const facts = [
     stmt.period_start ? `${stmt.period_start} → ${stmt.period_end || '…'}` : null,
@@ -377,11 +398,7 @@ export function StatementViewer({
             ))}
         </div>
       )}
-      <FileViewerBody
-        state={state}
-        filename={stmt.filename || 'statement'}
-        pageItemId={`statement-${stmt.id}`}
-      />
+      <StatementFile statementId={stmt.id} />
     </Modal>
   )
 }

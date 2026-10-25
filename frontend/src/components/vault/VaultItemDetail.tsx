@@ -1,19 +1,12 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { VaultItem } from '../../api/vault'
 import { isStandaloneApp, useEdgeSwipeBack } from '../../hooks/useEdgeSwipeBack'
 import type { ArtifactRef } from '../../types/chat'
 import { ArrowLeft, Lock, X } from '../../ui/icons'
-import { Modal } from '../ui/Modal'
-import { ArtifactPreview } from './ArtifactPreview'
-import { DocumentPages } from './DocumentPages'
-import { DocumentReader } from './DocumentReader'
+import { DocumentPreview } from './DocumentPreview'
 import { markFades } from './fades'
-import { ImagePreview } from './ImagePreview'
-import { NoPreview } from './NoPreview'
-import { TablePreview } from './TablePreview'
-import { TextPreview } from './TextPreview'
 import { ActionBar, ManageCard, NoteCard, SettingsCard, TagsRow } from './VaultDetailSections'
-import { formatDay, formatSize, isImage, isPdf, isTable, isText, kindLabel } from './vaultFormat'
+import { formatDay, formatSize, kindLabel } from './vaultFormat'
 
 function artifactRef(item: VaultItem): ArtifactRef {
   return {
@@ -38,36 +31,6 @@ function facts(item: VaultItem): [string, string][] {
     ['File', item.filename],
   ]
   return rows.filter((r): r is [string, string] => !!r[1])
-}
-
-function PdfPreview({ item }: { item: VaultItem }) {
-  const [reading, setReading] = useState(false)
-  return (
-    <>
-      <DocumentPages
-        key={item.id}
-        itemId={item.id}
-        title={item.title}
-        onExpand={() => setReading(true)}
-      />
-      {reading && (
-        <Modal open onClose={() => setReading(false)} title={item.title} size="xl">
-          <div className="vault-modal-content" tabIndex={-1} data-autofocus>
-            <DocumentReader itemId={item.id} title={item.title} />
-          </div>
-        </Modal>
-      )}
-    </>
-  )
-}
-
-function Preview({ item, onOpenArtifact }: { item: VaultItem; onOpenArtifact: () => void }) {
-  if (isPdf(item)) return <PdfPreview item={item} />
-  if (isTable(item)) return <TablePreview key={item.id} item={item} />
-  if (item.kind === 'artifact') return <ArtifactPreview item={item} onOpen={onOpenArtifact} />
-  if (isImage(item) && item.file_url) return <ImagePreview item={item} src={item.file_url} />
-  if (isText(item) && item.file_url) return <TextPreview key={item.id} item={item} />
-  return <NoPreview item={item} />
 }
 
 export function VaultItemDetail({
@@ -121,7 +84,7 @@ export function VaultItemDetail({
         </button>
       </div>
       <div className="vault-detail-body" ref={bodyRef} onScroll={(e) => markFades(e.currentTarget)}>
-        <Preview item={item} onOpenArtifact={() => onOpenArtifact(artifactRef(item))} />
+        <DocumentPreview item={item} onOpenArtifact={() => onOpenArtifact(artifactRef(item))} />
         <ActionBar item={item} artifact={artifactRef(item)} onAsked={onAsked} />
         {item.private && (
           <p className="vault-private-note">
