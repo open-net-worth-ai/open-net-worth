@@ -1717,16 +1717,12 @@ async def _run_stale_facts_peers_precompute() -> None:
     candidate's refresh failing (network, LLM) must never stop the rest or raise into the sweep
     tick calling this."""
     from backend.monitoring import asset_brief
-    from backend.services.positions import hydrated as read_rows
 
     try:
-        held = [
-            r
-            for r in read_rows()
-            if (r.get("instrument_id") or "").strip() and float(r.get("quantity") or 0) > 0
-        ]
-        held_iids = {r["instrument_id"] for r in held}
-        candidates = held + _watched_not_held_candidates(held_iids)
+        # Off the loop: hydrating every position and reading the watchlist are synchronous
+        # DB/price reads, and this coroutine runs on the SHARED loop — every request and stream
+        # stalled behind it each tick (loop_watch, 2026-10-26).
+        candidates = await asyncio.to_thread(_facts_peers_candidates)
     except Exception as exc:
         logger.warning(
             "analyst: facts/peers precompute candidate gather failed: %s", type(exc).__name__
@@ -1741,7 +1737,7 @@ async def _run_stale_facts_peers_precompute() -> None:
         if not iid:
             continue
         try:
-            if not asset_brief.facts_peers_stale(iid):
+            if not await asyncio.to_thread(asset_brief.facts_peers_stale, iid):
                 continue
             await asset_brief.refresh_asset_brief(iid, force=False)
             refreshed += 1
@@ -1751,6 +1747,20 @@ async def _run_stale_facts_peers_precompute() -> None:
             )
     if refreshed:
         logger.info("analyst: refreshed %d stale facts/peers/news brief(s)", refreshed)
+
+
+def _facts_peers_candidates() -> list[dict]:
+    """Held instruments first (a real position claims a cap slot before a watch-only ticker),
+    then watched-not-held ones — synchronous, for ``asyncio.to_thread``."""
+    from backend.services.positions import hydrated as read_rows
+
+    held = [
+        r
+        for r in read_rows()
+        if (r.get("instrument_id") or "").strip() and float(r.get("quantity") or 0) > 0
+    ]
+    held_iids = {r["instrument_id"] for r in held}
+    return held + _watched_not_held_candidates(held_iids)
 
 
 def _key_issues_stale(brief: dict) -> bool:
@@ -2136,7 +2146,7 @@ async def _freshen_rss(subject: str, ticker: str, label: str, asset_class: str) 
             }
         )
         if feeds:
-            await gather_rss(feeds)
+            await gather_rss(feeds, read_back=False)
     except Exception as exc:
         logger.debug("analyst: RSS freshen failed for %s: %s", ticker, type(exc).__name__)
 
