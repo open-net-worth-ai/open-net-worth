@@ -81,10 +81,31 @@ at `http://localhost:5175`, then pipe or paste its token into `demo-aws.sh tunne
 | Tail app logs | `demo-aws.sh logs` |
 | Shell on the VM | `demo-aws.sh ssh` |
 | Roll back | `demo-aws.sh ssh docker images onw-demo`, then set `ONW_DEMO_TAG=<old tag>` in `/srv/onw-demo-stack/.env` and run `docker compose up -d app` there |
-| Fresh book | stop the app, remove `/srv/onw-demo/data`, recreate it owned by `ubuntu`, then `demo-aws.sh book --seed` |
+| Fresh book | `demo-aws.sh book --reset` (keeps Lucius's AI settings) |
 | Change quotas | edit `DEMO_TOKENS_*` / `DEMO_TURNS_*` / `DEMO_TRUSTED_PROXY_HOPS` in `/srv/onw-demo-stack/.env`, then `docker compose up -d app` |
 
 Running more than one VM? `ONW_DEMO_VM=<name>` picks which one; the default is `onw-demo`.
+
+### Daily refresh from your Mac
+
+```bash
+AWS_PROFILE=… AWS_REGION=… deploy/aws-demo/daily.sh install 10:00   # or ONW_DEMO_HOST=<static ip>
+deploy/aws-demo/daily.sh run                                         # the same job, by hand
+deploy/aws-demo/daily.sh uninstall
+```
+
+The agent runs at that local time. Install looks up the VM's static IP once and stores it in the
+agent, so a run needs only SSH, never an AWS sign-in (an `aws login` session expires within a
+day). Each run ships `origin/main` if it differs from the live tag, then runs `book --reset`: a fresh
+fabricated book dated to today, with Lucius's AI settings carried over inside the VM. Visitors'
+edits, conversations and the app's nightly backups of them are discarded. If the new image never
+reports healthy, the job rolls back to the tag that was running and raises a macOS
+notification. It starts Docker Desktop only when it needs to build, deletes the local
+`onw-demo` images and build cache afterwards, and quits Docker again if it started it. A Mac that
+is asleep at the hour runs the job on wake; one that is off skips the day. Log:
+`~/Library/Logs/onw-demo-daily.log`.
+
+It deploys `main` whatever CI said about it — the health check is the only gate.
 
 ## Spend
 
