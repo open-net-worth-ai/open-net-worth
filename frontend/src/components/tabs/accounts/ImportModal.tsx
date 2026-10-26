@@ -2731,7 +2731,9 @@ export function ImportModal({
     !!d.lucius && d.lucius.op !== 'reject_match'
   const canManualLinkRow = (d: ImportPreviewDraft, i: number): boolean =>
     d.rowIndex != null &&
-    !resolveExisting(d) &&
+    // A matched row the owner set to Import has let its entry go, so it may link elsewhere —
+    // including back from the released entry's own "Link to a new row" (owner, 2026-10-26).
+    (!resolveExisting(d) || actionFor(d, i) === 'new') &&
     !d.dup &&
     !d.pair &&
     !d.routed &&
@@ -4354,10 +4356,19 @@ export function ImportModal({
                                 const draftIndex = preview.drafts.findIndex(
                                   (draft) => draft.rowIndex === rowIndex,
                                 )
-                                setManualLink((current) => ({
-                                  ...current,
-                                  [rowIndex]: { id: r.id, summary: r },
-                                }))
+                                // A row that carries an engine match resolves THAT first, so a
+                                // manual link would be ignored — re-point its match instead.
+                                const picked = draftIndex >= 0 ? preview.drafts[draftIndex] : null
+                                if (picked && matchFlag(picked)?.existing_id)
+                                  setMatchOverride((current) => ({
+                                    ...current,
+                                    [rowIndex]: { id: r.id, summary: r },
+                                  }))
+                                else
+                                  setManualLink((current) => ({
+                                    ...current,
+                                    [rowIndex]: { id: r.id, summary: r },
+                                  }))
                                 if (draftIndex >= 0) {
                                   setPlainSkip((current) => {
                                     const next = { ...current }
