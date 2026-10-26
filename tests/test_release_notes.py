@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -80,12 +81,15 @@ def _answer(text, stop_reason="end_turn"):
 
 
 def test_highlights_go_on_top_of_the_full_list(monkeypatch):
-    seen = _fake_anthropic(monkeypatch, _answer("- Edit what Lucius remembers about you"))
+    seen = _fake_anthropic(
+        monkeypatch, _answer('{"highlights": ["Edit what Lucius remembers about you"]}')
+    )
     assert rn.with_highlights(NOTES) == (
         "## Highlights\n\n- Edit what Lucius remembers about you\n\n" + NOTES
     )
     assert seen["model"] == "claude-sonnet-5-5"
     assert seen["messages"] == [{"role": "user", "content": NOTES}]
+    assert seen["output_config"]["format"]["type"] == "json_schema"
 
 
 def test_no_key_an_error_a_refusal_or_prose_leaves_the_notes_alone(monkeypatch):
@@ -93,17 +97,20 @@ def test_no_key_an_error_a_refusal_or_prose_leaves_the_notes_alone(monkeypatch):
     assert rn.with_highlights(NOTES) == NOTES
     _fake_anthropic(monkeypatch, error=RuntimeError("boom"))
     assert rn.with_highlights(NOTES) == NOTES
-    _fake_anthropic(monkeypatch, _answer("- fine", stop_reason="refusal"))
+    _fake_anthropic(monkeypatch, _answer('{"highlights": ["fine"]}', stop_reason="refusal"))
     assert rn.with_highlights(NOTES) == NOTES
     _fake_anthropic(monkeypatch, _answer("Sure! Here is what changed."))
     assert rn.with_highlights(NOTES) == NOTES
 
 
-def test_only_a_clean_bullet_list_is_accepted():
-    assert rn.valid_bullets("- One\n- Two\n") == ["One", "Two"]
-    assert rn.valid_bullets("Intro:\n- One") is None
-    assert rn.valid_bullets("") is None
-    assert rn.valid_bullets("\n".join(f"- {n}" for n in range(rn.MAX_HIGHLIGHTS + 1))) is None
+def test_only_a_usable_list_is_accepted():
+    assert rn.parse_highlights('{"highlights": ["One", "- Two"]}') == ["One", "Two"]
+    many = json.dumps({"highlights": [f"Item {n}" for n in range(rn.MAX_HIGHLIGHTS + 3)]})
+    assert len(rn.parse_highlights(many)) == rn.MAX_HIGHLIGHTS
+    assert rn.parse_highlights("- One\n- Two") is None
+    assert rn.parse_highlights('{"highlights": []}') is None
+    assert rn.parse_highlights('{"highlights": [1, 2]}') is None
+    assert rn.parse_highlights(json.dumps({"highlights": ["x" * 201]})) is None
 
 
 def test_without_the_flag_the_model_is_never_called(monkeypatch, capsys):

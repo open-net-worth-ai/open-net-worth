@@ -15,6 +15,7 @@ Usage: git log --format=%s <previous-sha>..<sha> | python3 scripts/release_notes
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -33,9 +34,18 @@ HIGHLIGHTS_SYSTEM = (
     f"{MAX_HIGHLIGHTS} bullets: first what a user can now do, then the fixes a user would most "
     "notice, each said as what now works. Most valuable first. Merge items that are parts of one "
     "change; leave out items that only matter to the project's developers, its public demo or "
-    "its build. Plain words, no internal names, no hype, no emoji, under 15 words each. Reply "
-    "with only the bullets, one per line, each starting with '- '."
+    "its build. Plain words, no internal names, no hype, no emoji, no Markdown, under 15 words "
+    "each."
 )
+_HIGHLIGHTS_FORMAT = {
+    "type": "json_schema",
+    "schema": {
+        "type": "object",
+        "properties": {"highlights": {"type": "array", "items": {"type": "string"}}},
+        "required": ["highlights"],
+        "additionalProperties": False,
+    },
+}
 _SUBJECT = re.compile(r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?!?:\s*(?P<text>.+)$")
 
 
@@ -64,14 +74,17 @@ def render(subjects: list[str]) -> str:
     return "\n\n".join(parts)
 
 
-def valid_bullets(text: str) -> list[str] | None:
-    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
-    if not 1 <= len(lines) <= MAX_HIGHLIGHTS or not all(line.startswith("- ") for line in lines):
+def parse_highlights(text: str) -> list[str] | None:
+    try:
+        items = json.loads(text)["highlights"]
+    except (ValueError, KeyError, TypeError):
         return None
-    bullets = [line[2:].strip() for line in lines]
-    if any(not bullet or len(bullet) > 160 for bullet in bullets):
+    if not isinstance(items, list) or not all(isinstance(item, str) for item in items):
         return None
-    return bullets
+    bullets = [item.strip().lstrip("-•* ").strip() for item in items if item.strip()]
+    if not bullets or any(len(bullet) > 200 for bullet in bullets):
+        return None
+    return bullets[:MAX_HIGHLIGHTS]
 
 
 def _warn(message: str) -> None:
@@ -89,7 +102,7 @@ def highlights(notes: str, model: str = MODEL) -> list[str] | None:
             model=model,
             max_tokens=2000,
             system=HIGHLIGHTS_SYSTEM,
-            output_config={"effort": "low"},
+            output_config={"effort": "low", "format": _HIGHLIGHTS_FORMAT},
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
             messages=[{"role": "user", "content": notes}],
@@ -100,9 +113,10 @@ def highlights(notes: str, model: str = MODEL) -> list[str] | None:
     if response.stop_reason != "end_turn":
         _warn(f"no highlights (stopped with {response.stop_reason})")
         return None
-    bullets = valid_bullets("".join(b.text for b in response.content if b.type == "text"))
+    text = "".join(b.text for b in response.content if b.type == "text")
+    bullets = parse_highlights(text)
     if bullets is None:
-        _warn("no highlights (the answer was not a bullet list)")
+        _warn(f"no highlights (unusable answer: {text[:300]!r})")
     return bullets
 
 
