@@ -1912,7 +1912,10 @@ export default function TxnDetail({
       .catch(() => {
         if (currentTxnIdRef.current === id) setStatementLinks([])
       })
-  }, [txn?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+    // `hasAnyRef` too: a row opened by id (a Lucius chip) first renders as a ref-less
+    // placeholder, and the real row arrives under the SAME id — keyed on the id alone, the
+    // lookup never re-ran and the drawer showed no statement (owner, 2026-10-26).
+  }, [txn?.id, hasAnyRef]) // eslint-disable-line react-hooks/exhaustive-deps
   // Publish the open drawer's width so the floating Lucius dock can shift left to clear it
   // (Lucius must stay reachable while the drawer is open). Tracks resize; cleared on close.
   // Skipped on phones: the sheet is full-width, and `.lx-dock` is display:none there anyway
