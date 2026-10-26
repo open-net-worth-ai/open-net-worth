@@ -2748,10 +2748,10 @@ export function ImportModal({
   const canManualLinkRow = (d: ImportPreviewDraft, i: number): boolean =>
     // What counts is the row's CURRENT decision, not what the engine first proposed (owner,
     // 2026-10-26): any row not set to Link is unclaimed and may link to an entry the user picks.
-    (!resolveExisting(d) || actionFor(d, i) !== 'merge') && linkableShape(d, i) && !eyesBlocked(d)
-  /** A row whose amount the statement's own running balance doesn't confirm can't be linked
-   *  until it's fixed: a link writes the statement's figure onto the ledger entry. */
-  const eyesBlocked = (d: ImportPreviewDraft): boolean =>
+    (!resolveExisting(d) || actionFor(d, i) !== 'merge') && linkableShape(d, i)
+  /** The statement's running balance didn't confirm this row's amount — information for the
+   *  picker, never a block: the owner can see the file and is the judge (owner, 2026-10-26). */
+  const eyesUnconfirmed = (d: ImportPreviewDraft): boolean =>
     !!d.needsEyes && !(d.rowIndex != null && queueAmountCorrected[d.rowIndex])
   /** A row whose kind can take a link at all — whatever it is linked to right now. */
   const linkableShape = (d: ImportPreviewDraft, i: number): boolean =>
@@ -4151,11 +4151,9 @@ export function ImportModal({
                     line:
                       `${d.date.slice(5)} • ${rowTitle(d)} • ${fCur(d.amount, d.currency, { cents: true })}` +
                       (original ? ` (${original})` : ''),
-                    // Listed, not hidden, so it's clear why it can't be picked yet (owner,
-                    // 2026-10-26: "why don't I see the 4,000 in the list?").
-                    taken: eyesBlocked(d),
-                    hint: eyesBlocked(d)
-                      ? '• amount unconfirmed — fix it first'
+                    taken: false,
+                    hint: eyesUnconfirmed(d)
+                      ? '• statement balance didn’t confirm the amount'
                       : holds
                         ? `• linked to ${holds}`
                         : undefined,
