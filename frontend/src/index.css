@@ -9274,16 +9274,23 @@ body.hide-amounts .money * {
      elementFromPoint over the menu's own box. */
     z-index: var(--z-modal);
   }
+  /* Icon and label sit apart on one line — an icon used to touch its label (owner, 2026-10-26). */
   .kebab-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     background: none;
     border: none;
     text-align: left;
     color: var(--text);
     font-size: var(--text-sm);
-    padding: var(--space-2) var(--space-3);
+    padding: 8px var(--space-3);
     border-radius: var(--radius-xs);
     cursor: pointer;
     white-space: nowrap;
+  }
+  .kebab-item > svg {
+    flex: none;
   }
   @media (hover: hover) {
     .kebab-item:hover:not(:disabled) {

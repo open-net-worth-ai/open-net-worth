@@ -11,11 +11,12 @@ import { authFetch } from '../../../api/client'
 import { fetchVaultItem, type VaultItem } from '../../../api/vault'
 import { DocumentPreview } from '../../vault/DocumentPreview'
 import { Modal } from '../../ui/Modal'
+import { ConfirmModal } from './ConfirmModal'
 import { Button } from '../../ui/Button'
 import { LuciusCta } from '../../intro/LuciusCta'
 import { ActionMenu, Badge, Cluster, EmptyState, ErrorState, Loading, Money, Stack } from '../../ui'
 import { fDate, fDateTime } from '../../../utils/format'
-import { Download, FileText, ChevronDown, ChevronRight } from '../../../ui/icons'
+import { Download, FileText, ChevronDown, ChevronRight, Trash2 } from '../../../ui/icons'
 import { fCur } from './data'
 import { formatElapsed, progressPhaseLabel } from './importHelpers'
 import { useDocumentVisible, useStatementParseStatus } from '../../../hooks/useImportProgress'
@@ -526,7 +527,12 @@ function LifecycleStatementRow({
                 icon: <Download size={14} strokeWidth={1.5} aria-hidden />,
                 onSelect: () => onDownload(s),
               },
-              { label: 'Delete', tone: 'danger', onSelect: () => onDelete(s) },
+              {
+                label: 'Delete',
+                tone: 'danger',
+                icon: <Trash2 size={14} strokeWidth={1.5} aria-hidden />,
+                onSelect: () => onDelete(s),
+              },
             ]}
           />
         )}
@@ -585,13 +591,14 @@ export function StatementsModal({
     a.download = s.filename || 'statement'
     a.click()
   }
-  const removeStatement = async (s: StatementRow) => {
-    if (
-      !window.confirm(`Delete "${s.filename || 'this statement'}"?
-
-The file and its record are removed. Transactions it imported STAY in your ledger (ask Lucius to roll back the import batch to undo those). Re-uploading the same file later will re-read it with AI.`)
-    )
-      return
+  // Asks in the app's own confirm window, in one short line (owner, 2026-10-26: the old browser
+  // dialog was "too long and weird").
+  const [deleting, setDeleting] = useState<StatementRow | null>(null)
+  const removeStatement = (s: StatementRow) => setDeleting(s)
+  const confirmRemove = async () => {
+    const s = deleting
+    setDeleting(null)
+    if (!s) return
     const r = await authFetch(`/api/statements/${s.id}`, { method: 'DELETE' })
     if (r.ok) reload()
   }
@@ -696,6 +703,7 @@ The file and its record are removed. Transactions it imported STAY in your ledge
                     {
                       label: 'Delete',
                       tone: 'danger',
+                      icon: <Trash2 size={14} strokeWidth={1.5} aria-hidden />,
                       onSelect: () => removeStatement(s),
                     },
                   ]}
@@ -706,6 +714,19 @@ The file and its record are removed. Transactions it imported STAY in your ledge
         </div>
       )}
       {viewing && <StatementViewer stmt={viewing} onClose={() => setViewing(null)} />}
+      <ConfirmModal
+        open={deleting !== null}
+        title={`Delete ${deleting?.filename || 'this statement'}?`}
+        body={
+          deleting?.batch_ids?.length
+            ? 'The file is removed. The transactions it added stay in your ledger.'
+            : 'The file and its review are removed.'
+        }
+        confirmLabel="Delete"
+        danger
+        onConfirm={() => void confirmRemove()}
+        onClose={() => setDeleting(null)}
+      />
     </Modal>
   )
 }
