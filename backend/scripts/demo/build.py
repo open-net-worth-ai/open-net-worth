@@ -264,7 +264,7 @@ def build(today: date | None = None, *, offline: bool = False) -> dict:
     A = _seed_accounts(tl)
     report["accounts"] = len(A)
     report["categories"] = len(C)
-    report["owned_assets"] = len(owned_assets.seed(tl, A))
+    report["owned_assets"] = len(owned_assets.seed(tl, A, offline=offline))
 
     # Instruments FIRST: the live-price lookup routes a CoinGecko coin by reading its
     # instrument row, so anchoring the history depends on those rows already existing.

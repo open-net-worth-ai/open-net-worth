@@ -623,6 +623,44 @@ def test_owned_assets_span_multiple_categories(demo_book):
     assert {"property", "vehicle", "watch"} <= categories
 
 
+def test_demo_book_carries_the_watch_and_card_collections(demo_book):
+    """A daily reset rebuilds the hosted demo from this seed, so a collection added by hand to
+    the live book is gone the next morning (2026-10-26). They live in the seed instead."""
+    from backend.db.owned_assets_store import OwnedAssetsStore
+    from backend.services.owned_assets import categories
+
+    assets = OwnedAssetsStore().all()
+    cards = next(c["key"] for c in categories() if c["label"] == "Pokemon Cards")
+    assert sum(a["category"] == "watch" for a in assets) == 11
+    assert sum(a["category"] == cards for a in assets) == 22
+
+
+def test_a_fetched_card_scan_is_that_cards_photo(db_isolated, monkeypatch):
+    """Each card's photo is its own scan; a scan that can't be fetched falls back to the
+    licensed pile photo instead of failing the build."""
+    from backend.db.attachment_store import AttachmentStore
+    from backend.db.owned_assets_store import OwnedAssetsStore
+    from backend.scripts.demo import asset_collections, owned_assets
+    from backend.scripts.demo._timeline import Timeline
+
+    def fake_scan(set_id, number):
+        return None if (set_id, number) == ("basep", "1") else b"\x89PNG fake scan"
+
+    monkeypatch.setattr(asset_collections, "_card_scan", fake_scan)
+    asset_collections.seed(Timeline.anchored_on(ANCHOR), owned_assets._attach_photo)
+
+    photo = {
+        a["name"]: AttachmentStore().find_meta(a["photo_ref"]) for a in OwnedAssetsStore().all()
+    }
+    charizard = photo["Charizard – Base Set (1999, Holo)"]
+    assert (charizard["filename"], charizard["media_type"]) == ("base1-4.png", "image/png")
+    assert (
+        photo["Pikachu – Wizards Black Star Promo #1"]["filename"]
+        == asset_collections.CARD_FALLBACK
+    )
+    assert photo["Rolex Submariner Date"]["filename"] == "rolex-submariner.jpg"
+
+
 def test_owned_assets_exercise_doc_photo_insurance_and_disposal(demo_book):
     """A doc, photo, insured asset, and disposal exercise the richer surfaces."""
     from backend.db.owned_assets_store import OwnedAssetsStore

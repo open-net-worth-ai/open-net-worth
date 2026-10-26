@@ -197,7 +197,7 @@ Anchored on the build date, reaching 30 months back.
 | **Transactions** | ~3,000 — semi-monthly payroll with two raises, an annual bonus, quarterly EUR freelance invoices, an amortizing mortgage split into interest and principal, utilities, groceries, dining, subscriptions, two trips a year, a December gift spike, splits, FX transfers, ATM cash |
 | **Investments** | 10 instruments (VOO, VXUS, SCHD, BND, AAPL, NVDA, GLDM, BTC, ETH + a manually-priced private employer), 291 DCA lots, 2 disposals with realized gains, 38 dividends, daily price history for all of them |
 | **Equity** | A 1,600-unit RSU grant, four-year quarterly vest with a one-year cliff — five tranches vested, the rest excluded from net worth and reported as `unvested_base` |
-| **Owned assets** | 4 — an apartment (property, mortgage-linked), a car (vehicle, with a doc and a re-mark automation), a watch (with a photo), and a disposed e-bike with real sale proceeds — spanning four of the seven builtin categories |
+| **Owned assets** | 36 — an apartment (property, mortgage-linked), a car (vehicle, with a doc and a re-mark automation), a disposed e-bike with real sale proceeds, a watch collection of 11 (Commons photos, credits in `backend/scripts/demo/photos/CREDITS.md`), and a 22-card Pokémon binder in a custom category. Each card's photo is its scan from the Pokémon TCG image CDN, fetched at build time and never committed (card art is copyrighted); an `--offline` build uses one licensed fallback photo |
 | **Plan** | 19 envelopes in five groups, targets derived from the book's own median activity, 30 months of assignments, three sinking funds, 4 goals, 5 commitments |
 | **Elsewhere** | A four-item watchlist and five dashboard views |
 
