@@ -1149,6 +1149,8 @@ export function ImportModal({
     to: string
     /** Overrides the default wording (the row-side move, where an ENTRY changes rows). */
     body?: string
+    title?: string
+    confirmLabel?: string
     run: () => void
   } | null>(null)
   // Targeted jump: the DRAFT ARRAY INDEX to scroll to and flash-highlight. A jump into a row
@@ -2535,8 +2537,8 @@ export function ImportModal({
     }
   }
 
-  async function undoLucius(row?: number) {
-    if (!preview?.statementId) return
+  async function undoLucius(row?: number): Promise<boolean> {
+    if (!preview?.statementId) return false
     const key = row ?? -1
     setLuciusUndoing((m) => ({ ...m, [key]: true }))
     try {
@@ -2559,8 +2561,10 @@ export function ImportModal({
       setQueueFixingIndex(null)
       setQueueFixValue('')
       await runServerPreview(route, undefined, undefined, undefined, undefined, true)
+      return true
     } catch {
       // best-effort — a failed undo leaves the row's provenance chip in place; retry-able
+      return false
     } finally {
       setLuciusUndoing((m) => ({ ...m, [key]: false }))
     }
@@ -2779,8 +2783,10 @@ export function ImportModal({
     d.rowIndex != null &&
     !d.dup &&
     !d.pair &&
-    !d.routed &&
-    !luciusSettlesTheRow(d) &&
+    // A row Lucius routed, skipped or matched is offered too — picking it undoes his call on
+    // that row first (owner, 2026-10-26). A row an Automation routed is not: it re-routes on
+    // every read, so there is nothing per-row to undo.
+    (!d.routed || d.lucius?.op === 'route_transfer') &&
     !isUnrouted(d, i) &&
     !isAbsorbedLeg(d, i)
   /** Outcome/link line (band-agnostic — one function for all three bands whenever the
@@ -3029,6 +3035,31 @@ export function ImportModal({
         setMatchAction(drop)
         apply()
       },
+    })
+  }
+  /** Link a row Lucius routed, skipped or matched: confirm, undo his call on that row, then
+   *  `apply`. Callers re-point via `matchOverride` afterwards — the undo can leave the row an
+   *  engine match, which a plain manual link would lose to. */
+  const withLuciusUndone = (d: ImportPreviewDraft, apply: () => void) => {
+    if (!luciusSettlesTheRow(d) || d.rowIndex == null) return apply()
+    const row = d.rowIndex
+    const label = `${rowTitle(d)} (${fCur(d.amount, d.currency, { cents: true })})`
+    const op = d.lucius?.op
+    const to = accounts.find((a) => a.id === d.lucius?.account_id)?.name
+    const call =
+      op === 'route_transfer'
+        ? `booked ${label} as a transfer${to ? ` with ${to}` : ''}`
+        : op === 'skip'
+          ? `left ${label} out`
+          : `matched ${label} to another entry`
+    setRelinkAsk({
+      row: label,
+      from: '',
+      to: '',
+      title: 'Undo Lucius’s call?',
+      confirmLabel: 'Undo and link',
+      body: `Lucius ${call}. Linking it here undoes that for this row first.`,
+      run: () => void undoLucius(row).then((ok) => ok && apply()),
     })
   }
   // The RE-INSERTION half of the panel (RFC 2026-07-29 §D3 amendment (c)). `ledger_check.rows`
@@ -4477,11 +4508,11 @@ export function ImportModal({
                                   (draft) => draft.rowIndex === rowIndex,
                                 )
                                 const option = linkableDrafts.find((o) => o.id === idx)
-                                const link = () => {
+                                const picked = draftIndex >= 0 ? preview.drafts[draftIndex] : null
+                                const link = (override = false) => {
                                   // A row that carries an engine match resolves THAT first, so a
                                   // manual link would be ignored — re-point its match instead.
-                                  const picked = draftIndex >= 0 ? preview.drafts[draftIndex] : null
-                                  if (picked && matchFlag(picked)?.existing_id)
+                                  if (override || (picked && matchFlag(picked)?.existing_id))
                                     setMatchOverride((current) => ({
                                       ...current,
                                       [rowIndex]: { id: r.id, summary: r },
@@ -4504,6 +4535,10 @@ export function ImportModal({
                                     setQueueDecided((current) => ({ ...current, [rowIndex]: true }))
                                   }
                                 }
+                                const go = () =>
+                                  picked && luciusSettlesTheRow(picked)
+                                    ? withLuciusUndone(picked, () => link(true))
+                                    : link()
                                 if (option?.holds)
                                   setRelinkAsk({
                                     row: option.title,
@@ -4513,9 +4548,9 @@ export function ImportModal({
                                       (r.amount != null
                                         ? ` (${fCur(r.amount, r.currency || account?.currency || 'SGD', { cents: true })})`
                                         : ''),
-                                    run: link,
+                                    run: go,
                                   })
-                                else link()
+                                else go()
                               }}
                             />
                           )}
@@ -5274,16 +5309,18 @@ export function ImportModal({
                                 onPick={(id) => {
                                   const summary = checkRowById.get(id)
                                   if (!summary || d.rowIndex == null) return
-                                  pickWithRelink(d, id, () => {
-                                    setMatchOverride((current) => ({
-                                      ...current,
-                                      [d.rowIndex!]: { id, summary },
-                                    }))
-                                    setMatchAction((current) => ({
-                                      ...current,
-                                      [d.rowIndex!]: 'merge',
-                                    }))
-                                  })
+                                  pickWithRelink(d, id, () =>
+                                    withLuciusUndone(d, () => {
+                                      setMatchOverride((current) => ({
+                                        ...current,
+                                        [d.rowIndex!]: { id, summary },
+                                      }))
+                                      setMatchAction((current) => ({
+                                        ...current,
+                                        [d.rowIndex!]: 'merge',
+                                      }))
+                                    }),
+                                  )
                                 }}
                               />
                             )}
@@ -5558,11 +5595,9 @@ export function ImportModal({
                             onPick={(id) => {
                               const summary = checkRowById.get(id)
                               if (!summary) return
-                              pickWithRelink(d, id, () => {
-                                setManualLink((current) => ({
-                                  ...current,
-                                  [d.rowIndex!]: { id, summary },
-                                }))
+                              const linkRow = (override: boolean) => {
+                                const set = override ? setMatchOverride : setManualLink
+                                set((current) => ({ ...current, [d.rowIndex!]: { id, summary } }))
                                 setPlainSkip((current) => {
                                   const next = { ...current }
                                   delete next[ri]
@@ -5570,7 +5605,12 @@ export function ImportModal({
                                 })
                                 setMatchAction((current) => ({ ...current, [ri]: 'merge' }))
                                 setQueueDecided((current) => ({ ...current, [ri]: true }))
-                              })
+                              }
+                              pickWithRelink(d, id, () =>
+                                luciusSettlesTheRow(d)
+                                  ? withLuciusUndone(d, () => linkRow(true))
+                                  : linkRow(false),
+                              )
                             }}
                           />
                         )}
@@ -6162,7 +6202,7 @@ export function ImportModal({
                 const hasChangeAlternative =
                   !!resolved && changeOptions.some((option) => option.id !== resolved.id)
                 const changeQueueMatch = (id: string) =>
-                  pickWithRelink(d, id, () => applyQueueMatch(id))
+                  pickWithRelink(d, id, () => withLuciusUndone(d, () => applyQueueMatch(id)))
                 const applyQueueMatch = (id: string) => {
                   const summary = checkRowById.get(id)
                   if (!summary || d.rowIndex == null) return
@@ -7812,7 +7852,7 @@ export function ImportModal({
       />
       <ConfirmModal
         open={relinkAsk !== null}
-        title="Move this link?"
+        title={relinkAsk?.title ?? 'Move this link?'}
         body={
           relinkAsk?.body
             ? relinkAsk.body
@@ -7820,10 +7860,13 @@ export function ImportModal({
               ? `${relinkAsk.row} is linked to ${relinkAsk.from}. Link it to ${relinkAsk.to} instead? ${relinkAsk.from} goes back to “In your ledger, not on this statement”.`
               : ''
         }
-        confirmLabel="Move link"
+        confirmLabel={relinkAsk?.confirmLabel ?? 'Move link'}
         onConfirm={() => {
-          relinkAsk?.run()
+          // Cleared BEFORE running: a run may ask the next question (move a link, then undo
+          // Lucius's call on the row it lands on).
+          const run = relinkAsk?.run
           setRelinkAsk(null)
+          run?.()
         }}
         onClose={() => setRelinkAsk(null)}
       />
