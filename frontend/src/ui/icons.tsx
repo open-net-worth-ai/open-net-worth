@@ -38,6 +38,8 @@ export {
   Check,
   CheckCheck,
   Clock,
+  ClockAlert,
+  CircleCheck,
   AlertCircle,
   Info,
   RotateCcw,

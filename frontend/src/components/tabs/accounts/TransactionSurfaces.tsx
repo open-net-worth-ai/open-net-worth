@@ -163,6 +163,7 @@ export function TransactionSurfacesProvider({
   onOpenAccounts?: () => void
 }) {
   const [reviewScope, setReviewScope] = useState<ReviewScope | null>(null)
+  const [reviewAccountId, setReviewAccountId] = useState<string | null>(null)
   // `txn: null` while a row opened by id is still on its way; `hint` is what the caller
   // knew of it (a receipt's label), shown as its title meanwhile. `error`: a write made for the
   // drawer failed — said in the drawer itself; these surfaces show no toast bar (owner,
@@ -217,7 +218,10 @@ export function TransactionSurfacesProvider({
   )
   const fx = useMemo(() => readFxRates(), [])
 
-  const openReview = useCallback((scope: ReviewScope) => setReviewScope(scope), [])
+  const openReview = useCallback((scope: ReviewScope, accountId: string | null = null) => {
+    setReviewAccountId(accountId)
+    setReviewScope(scope)
+  }, [])
   const openTransaction = useCallback(
     (txn: Txn, mode: 'view' | 'edit' = 'view') => setDetail({ id: txn.id, txn, mode }),
     [],
@@ -297,11 +301,13 @@ export function TransactionSurfacesProvider({
       <TransactionReviewMode
         open={reviewScope !== null}
         scope={reviewScope ?? 'all'}
+        accountId={reviewAccountId}
         accounts={accounts}
         categories={categories}
         payeeNames={payeeNames}
         ready={refs !== null}
         onClose={() => setReviewScope(null)}
+        onReviewEverywhere={() => setReviewAccountId(null)}
         onApprove={approve}
         onReject={(txn) => deleteTransaction(txn.id)}
         onViewAll={(txn) => openTransaction(txn, 'view')}

@@ -532,6 +532,7 @@ class TransactionStore:
         needs_review: bool | None = None,
         automation_only: bool = False,
         exclude_ids: frozenset[str] = frozenset(),
+        account_id: str | None = None,
     ) -> tuple[list[dict], int]:
         """One insertion-ordered page plus the matching total.
 
@@ -539,7 +540,7 @@ class TransactionStore:
         older pending rows out of the queue. `exclude_ids` is applied the same way, so skipping
         rows (the accounts' opening balances) never shortens the page.
         """
-        clauses = self._txn_where(needs_review=needs_review)
+        clauses = self._txn_where(needs_review=needs_review, account_id=account_id)
         if exclude_ids:
             clauses.append(transactions.c.id.not_in(list(exclude_ids)))
         if automation_only:

@@ -159,8 +159,10 @@ describe('reconcile line — monthly nudge', () => {
     renderWith('2026-08-09')
     const line = document.querySelector('.acct-recon-line')?.textContent ?? ''
     // The date stays; the age follows in parentheses — no "·" separator (owner, 2026-10-26).
-    expect(line).toMatch(/Reconciled \S*2026 \(78 days ago\)/)
+    expect(line).toMatch(/Reconciled \S+ \(78 days ago\)/)
     expect(line).not.toContain('·')
+    // This year's date is day + month only; the age already says how old it is (owner, 2026-10-26).
+    expect(line).not.toContain('2026')
   })
 
   it('stays a plain check inside the month', () => {

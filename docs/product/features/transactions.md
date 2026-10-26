@@ -82,6 +82,11 @@ holding area.
 3. Click **Approve** to save it and clear the flag, **Skip** to leave it for later, or **Reject**
    to delete it (you confirm first). On a touch screen, swipe right to approve, left to skip.
 
+On **All accounts**, the count and **Start review** cover every account. With one account open
+they cover only that account — a transfer counts in both of its accounts. When that account is
+caught up, the last card offers **Review N in other accounts** beside **Done** if any are still
+waiting elsewhere.
+
 Hovering the **Review** tag on a row says what Review means.
 
 When transactions are waiting, a new Lucius conversation shows a **Needs attention** item such as

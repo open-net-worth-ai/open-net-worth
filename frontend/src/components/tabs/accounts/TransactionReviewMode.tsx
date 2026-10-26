@@ -5,6 +5,7 @@ import { Button, ConfirmDialog, Modal } from '../../ui'
 import { fromApiTxn } from './data'
 import { ReviewConfetti } from './ReviewConfetti'
 import { TransactionReviewCard } from './TransactionReviewCard'
+import { useReviewWaitingElsewhere } from './useReviewWaitingElsewhere'
 import { startingReviewDraft, validateReviewDraft, type ReviewDraft } from './transactionReview'
 import type { Account, ApiTxn, Category, Txn } from './types'
 
@@ -16,10 +17,10 @@ export type { ReviewDraft } from './transactionReview'
  *  attention card both open it (owner decisions 2026-09-20, 2026-10-01). */
 export type ReviewScope = 'automation' | 'all'
 
-function queueUrl(scope: ReviewScope): string {
+function queueUrl(scope: ReviewScope, accountId: string | null): string {
   return `/api/transactions/recently-added?needs_review=true${
     scope === 'automation' ? '&automation_only=true' : ''
-  }&limit=500`
+  }${accountId ? `&account_id=${encodeURIComponent(accountId)}` : ''}&limit=500`
 }
 
 interface ReviewQueueResponse {
@@ -31,6 +32,8 @@ interface ReviewQueueResponse {
 export interface TransactionReviewModeProps {
   open: boolean
   scope: ReviewScope
+  /** One account's flagged rows only — Start review on an account page. */
+  accountId?: string | null
   refreshSignal?: number
   accounts: Account[]
   categories: Category[]
@@ -47,6 +50,8 @@ export interface TransactionReviewModeProps {
   onAskLucius?: (txn: Txn, prompt: string) => Promise<void>
   onViewAll: (txn: Txn) => void
   onEditAll: (txn: Txn) => void
+  /** Reopens the review across every account — offered once an account's own runs out. */
+  onReviewEverywhere?: () => void
   /** A row changed from OUTSIDE the cards — the drawer's Save, Mark as reviewed or Delete —
    *  so the queue patches or drops it in place: a card marked reviewed in the drawer stayed on
    *  the deck, and a reload of the whole queue would flash the loading state (owner report
@@ -69,6 +74,7 @@ function errorMessage(error: unknown): string {
 export function TransactionReviewMode({
   open,
   scope,
+  accountId: scopeAccountId = null,
   refreshSignal = 0,
   accounts,
   categories,
@@ -79,6 +85,7 @@ export function TransactionReviewMode({
   onReject,
   onViewAll,
   onEditAll,
+  onReviewEverywhere,
   rowChanged = null,
 }: TransactionReviewModeProps) {
   const [queue, setQueue] = useState<Txn[]>([])
@@ -151,7 +158,7 @@ export function TransactionReviewMode({
       setLoading(true)
       setLoadError(null)
       try {
-        const url = queueUrl(scope)
+        const url = queueUrl(scope, scopeAccountId)
         const response = await authFetch(offset ? `${url}&offset=${offset}` : url)
         if (!response.ok) throw new Error((await response.text()) || 'Request failed')
         const body = (await response.json()) as ReviewQueueResponse
@@ -176,7 +183,7 @@ export function TransactionReviewMode({
         setLoading(false)
       }
     },
-    [scope],
+    [scope, scopeAccountId],
   )
 
   useEffect(() => {
@@ -195,7 +202,7 @@ export function TransactionReviewMode({
     setSkippedIds(new Set())
     setEdited(null)
     setClearedCount(0)
-  }, [open])
+  }, [open, scopeAccountId])
 
   // The ONE way a row's draft is read, for the front card and the preview behind it alike: the
   // preview read the saved row while the front read the pick, so a card showed one category
@@ -312,8 +319,15 @@ export function TransactionReviewMode({
     }
   }
 
-  if (!open) return null
   const settling = loading || !ready
+  const waitingElsewhere = useReviewWaitingElsewhere(
+    open && onReviewEverywhere ? scopeAccountId : null,
+    !settling && !loadError && (!current || !draft),
+  )
+  if (!open) return null
+  const scopedName = scopeAccountId
+    ? accounts.find((a) => a.id === scopeAccountId)?.name
+    : undefined
   const skippedCount = queue.length - visibleQueue.length
   const displayTotal = hasMore ? Math.max(total, queue.length) : queue.length
   const account = current ? (accounts.find((item) => item.id === accountId(current)) ?? null) : null
@@ -435,12 +449,21 @@ export function TransactionReviewMode({
                 {queue.length === 0
                   ? scope === 'automation'
                     ? 'No automation transactions are waiting for review.'
-                    : 'No transactions are waiting for review.'
+                    : scopedName
+                      ? `Nothing in ${scopedName} is waiting for review.`
+                      : 'No transactions are waiting for review.'
                   : `${skippedCount} skipped transaction${skippedCount === 1 ? '' : 's'} still ${skippedCount === 1 ? 'needs' : 'need'} review.${hasMore ? ' More transactions are waiting beyond this batch.' : ''}`}
               </span>
-              <Button size="sm" variant="primary" onClick={onClose}>
-                Done
-              </Button>
+              <div className="acct-review-complete-actions">
+                {waitingElsewhere > 0 && onReviewEverywhere && (
+                  <Button size="sm" variant="secondary" onClick={onReviewEverywhere}>
+                    Review {waitingElsewhere} in other accounts
+                  </Button>
+                )}
+                <Button size="sm" variant="primary" onClick={onClose}>
+                  Done
+                </Button>
+              </div>
             </div>
           ) : (
             <TransactionReviewCard

@@ -282,16 +282,24 @@ export function AccountsTab({
   // Everything flagged, whatever wrote it — the number beside "Needs review" must be the
   // count of what that filter shows (owner decision 2026-09-20). Lucius's "added by
   // automations" keeps its own, narrower count.
-  const loadReviewTotal = useCallback(async (isCurrent: () => boolean = () => true) => {
-    try {
-      const response = await authFetch('/api/transactions/recently-added?needs_review=true&limit=1')
-      if (!response.ok) return
-      const body = (await response.json()) as { total?: number }
-      if (isCurrent()) setReviewTotal(body.total ?? 0)
-    } catch {
-      /* the count keeps its last value */
-    }
-  }, [])
+  // On an account page both are that account's alone — the filter is scoped to it, so a
+  // book-wide count there promised rows the filter then didn't show (owner report 2026-10-26).
+  const loadReviewTotal = useCallback(
+    async (isCurrent: () => boolean = () => true) => {
+      const scope = selectedId ? `&account_id=${encodeURIComponent(selectedId)}` : ''
+      try {
+        const response = await authFetch(
+          `/api/transactions/recently-added?needs_review=true${scope}&limit=1`,
+        )
+        if (!response.ok) return
+        const body = (await response.json()) as { total?: number }
+        if (isCurrent()) setReviewTotal(body.total ?? 0)
+      } catch {
+        /* the count keeps its last value */
+      }
+    },
+    [selectedId],
+  )
   useEffect(() => {
     let active = true
     void loadReviewTotal(() => active)
@@ -2081,7 +2089,7 @@ export function AccountsTab({
                     }}
                     onReconcile={onReconcile}
                     onReview={addReviewToken}
-                    onStartReview={() => surfaces.openReview('all')}
+                    onStartReview={() => surfaces.openReview('all', selectedAccount.id)}
                   />
                 </>
               ) : (

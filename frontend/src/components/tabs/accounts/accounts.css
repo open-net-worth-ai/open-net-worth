@@ -280,6 +280,12 @@
     transform: rotate(360deg);
   }
 }
+.acct-review-complete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
 .acct-review-complete-icon {
   display: grid;
   place-items: center;
@@ -2315,62 +2321,95 @@ body.hide-amounts .mask.l::after {
   color: var(--warn);
   font-weight: 600;
 }
-/* The backlog count and its action read as ONE group: same baseline and size, a hairline
-   between them rather than a gap, the count in warn (a backlog) and the action in primary.
-   No fills — this is an 11.5px meta line, and a solid chip shouts over the row it annotates. */
-.acct-recon-review {
+/* The line is two groups that never split internally: reconcile (status + Reconcile) on the left,
+   review (count chip + Start review + txn count) on the right. Both actions are the same outlined
+   pill so they read as actions; the backlog count is a soft warn chip, never a solid fill. */
+.acct-recon-group {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.acct-recon-group--review {
+  gap: 6px;
+}
+.acct-recon-group--review > .acct-recon-stat.muted {
+  margin-left: 6px;
+}
+.acct-recon-review {
+  display: contents;
 }
 .acct-recon-count,
-.acct-recon-start {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 20px;
-  padding: 0 9px;
-  white-space: nowrap;
-  background: none;
-  font-weight: 600;
-}
+.acct-recon-start,
 .acct-recon-action.as-btn {
   display: inline-flex;
   align-items: center;
-  min-height: 20px;
-  padding: 0 4px;
-  border: none;
-  background: none;
+  gap: 5px;
+  min-height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
   font: inherit;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--primary);
   white-space: nowrap;
   cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
 }
-@media (hover: hover) {
-  .acct-recon-action.as-btn:hover {
-    color: var(--ink);
-  }
+.acct-recon-start,
+.acct-recon-action.as-btn {
+  border: 1px solid var(--line-strong);
+  background: none;
+  color: var(--ink);
 }
 .acct-recon-count {
-  padding-left: 0;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
   color: var(--warn);
 }
-.acct-recon-start {
-  border-left: 1px solid var(--line-strong);
-  color: var(--primary);
+.acct-recon-count-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 @media (hover: hover) {
-  .acct-recon-count.as-btn:hover,
-  .acct-recon-start.as-btn:hover {
-    color: var(--ink);
+  .acct-recon-start:hover,
+  .acct-recon-action.as-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+  .acct-recon-count:hover {
+    background: color-mix(in srgb, var(--warn) 22%, transparent);
   }
 }
-.acct-recon-stat.as-btn,
-.acct-recon-count.as-btn,
-.acct-recon-start.as-btn {
-  border: none;
-  font: inherit;
-  cursor: pointer;
+.acct-recon-count:focus-visible,
+.acct-recon-start:focus-visible,
+.acct-recon-action.as-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+/* Phone: each group is its own full-width row with its pill on the right — status · Reconcile,
+   then count chip + txns · Start review. */
+@media (max-width: 640px) {
+  .acct-recon-line {
+    row-gap: 10px;
+  }
+  .acct-recon-line > .acct-recon-group {
+    flex: 1 1 100%;
+  }
+  .acct-recon-line > .acct-recon-grow {
+    display: none;
+  }
+  .acct-recon-group > .acct-pop-wrap--line,
+  .acct-recon-group--review .acct-recon-start {
+    margin-left: auto;
+  }
+  .acct-recon-group--review .acct-recon-start {
+    order: 1;
+  }
 }
 .acct-recon-stat.as-btn {
   border: none;

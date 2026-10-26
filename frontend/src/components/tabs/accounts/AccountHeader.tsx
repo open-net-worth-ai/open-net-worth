@@ -15,6 +15,8 @@ import { Spark } from '../../../lucius/identity'
 import {
   Archive,
   ChevronRight,
+  CircleCheck,
+  ClockAlert,
   Download,
   FileText,
   MoreHorizontal,
@@ -746,35 +748,45 @@ export function AccountHeader({
 
           {/* reconcile line + stats */}
           <div className="acct-recon-line">
-            <span className="acct-recon-stat">
-              {account.lastReconciled && isReconcileOverdue(account.lastReconciled) ? (
-                <span title="Reconcile at least once a month, so a gap is still easy to trace.">
-                  <span className="warn">○</span> Reconciled{' '}
-                  {fDate(account.lastReconciled, 'numeric')} (
-                  {daysSinceReconcile(account.lastReconciled)} days ago)
-                </span>
-              ) : account.lastReconciled ? (
-                <>
-                  <span className="ok">✓</span> Reconciled{' '}
-                  {fDate(account.lastReconciled, 'numeric')}
-                </>
-              ) : (
-                <>
-                  <span className="warn">○</span> Never reconciled
-                </>
-              )}
+            <span className="acct-recon-group">
+              <span className="acct-recon-stat">
+                {account.lastReconciled && isReconcileOverdue(account.lastReconciled) ? (
+                  <span
+                    className="acct-recon-stat"
+                    title="Reconcile at least once a month, so a gap is still easy to trace."
+                  >
+                    <ClockAlert size={14} className="warn" aria-hidden="true" />
+                    Reconciled {fDate(account.lastReconciled, 'numeric', 'auto')}{' '}
+                    <span className="warn">
+                      ({daysSinceReconcile(account.lastReconciled)} days ago)
+                    </span>
+                  </span>
+                ) : account.lastReconciled ? (
+                  <>
+                    <CircleCheck size={14} className="ok" aria-hidden="true" />
+                    Reconciled {fDate(account.lastReconciled, 'numeric', 'auto')}
+                  </>
+                ) : (
+                  <>
+                    <ClockAlert size={14} className="warn" aria-hidden="true" />
+                    Never reconciled
+                  </>
+                )}
+              </span>
+              <ReconcilePopover account={account} onReconcile={onReconcile} />
             </span>
-            <ReconcilePopover account={account} onReconcile={onReconcile} />
             {/* Gated on `stats` existing, never on count, so the line doesn't disappear at 0 txns. */}
             {stats && (
               <>
-                <ReviewStrip
-                  count={stats.review}
-                  onReview={onReview}
-                  onStartReview={onStartReview}
-                />
                 <span className="acct-recon-grow" />
-                <span className="acct-recon-stat muted">{stats.count} txns</span>
+                <span className="acct-recon-group acct-recon-group--review">
+                  <ReviewStrip
+                    count={stats.review}
+                    onReview={onReview}
+                    onStartReview={onStartReview}
+                  />
+                  <span className="acct-recon-stat muted">{stats.count} txns</span>
+                </span>
               </>
             )}
           </div>

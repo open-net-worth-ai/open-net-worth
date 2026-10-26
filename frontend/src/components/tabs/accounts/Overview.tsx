@@ -327,9 +327,11 @@ export function Overview({
 
           {/* Always rendered, even at 0 txns, so the card's height doesn't shift. */}
           <div className="acct-recon-line">
-            <ReviewStrip count={stats.review} onReview={onReview} onStartReview={onStartReview} />
             <span className="acct-recon-grow" />
-            <span className="acct-recon-stat muted">{stats.count} txns</span>
+            <span className="acct-recon-group acct-recon-group--review">
+              <ReviewStrip count={stats.review} onReview={onReview} onStartReview={onStartReview} />
+              <span className="acct-recon-stat muted">{stats.count} txns</span>
+            </span>
           </div>
         </div>
       </div>

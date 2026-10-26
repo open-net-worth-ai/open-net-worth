@@ -772,12 +772,15 @@ def get_recently_added_transactions(
     needs_review: Optional[bool] = None,
     automation_only: bool = False,
     exclude_openings: bool = False,
+    account_id: Optional[str] = None,
 ) -> dict:
     """Last `limit` transactions by INSERTION time (`created_at`), not transaction date — the
     "recently added" dashboard widget's feed. A backfilled import lands here even when its own
     date is weeks old; use plain `GET /api/transactions` for "recent by date" instead.
     `exclude_openings` leaves out every account's Starting Balance row, which is a balance, not
-    something that was added or spent."""
+    something that was added or spent. `account_id` keeps rows with either leg in that account —
+    the same predicate the register's account filter uses, so an account's review count and its
+    Needs review filter agree."""
     _opening_ids = svc.opening_txn_ids()
     page, total = svc.transactions.recent_page_by_created_at(
         limit=limit,
@@ -785,6 +788,7 @@ def get_recently_added_transactions(
         needs_review=needs_review,
         automation_only=automation_only,
         exclude_ids=_opening_ids if exclude_openings else frozenset(),
+        account_id=account_id,
     )
     _base = svc.base_currency()
     _rates = load_fx_cache()
