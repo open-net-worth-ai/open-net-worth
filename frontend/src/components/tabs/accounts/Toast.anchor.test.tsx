@@ -52,9 +52,29 @@ describe('Toast anchoring', () => {
     expect(screen.getByRole('status')).toHaveProperty('ariaLive', 'polite')
   })
 
+  it('rises above the bulk bar only while it is up', () => {
+    const { rerender } = render(<Toast message="Reconciled — in sync" />)
+    expect(screen.getByRole('status').className).not.toContain('acct-toast--above-bulk')
+    rerender(<Toast message="13 marked as reviewed" aboveBulkBar />)
+    expect(screen.getByRole('status').className).toContain('acct-toast--above-bulk')
+  })
+
   it('renders nothing without a message', () => {
     const { container } = render(<Toast message={null} />)
     expect(container.firstChild).toBeNull()
+  })
+})
+
+// Owner report 2026-10-26: "Reconciled — in sync" floated over the register rows. The pill sat
+// 84px up — the height that clears the bulk bar — even with nothing selected, while every other
+// screen's toast sits ~24px from the bottom.
+describe('.acct-toast vertical position', () => {
+  it('sits on the same bottom line as the other toasts by default', () => {
+    expect(rule('.acct-toast')).toContain('bottom: 24px')
+  })
+
+  it('clears the bulk bar (bottom 24px + its height) only in the lifted variant', () => {
+    expect(rule('.acct-toast.acct-toast--above-bulk')).toContain('bottom: 84px')
   })
 })
 

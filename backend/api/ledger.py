@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from backend.core import audit_context
 from backend.core.errors import (
+    ConflictError,
     DuplicateTransactionError,
     OpenNetWorthError,
     PreviouslyDeletedError,
@@ -188,6 +189,7 @@ class ReconcileBody(BaseModel):
     real_balance: float  # asserted native-currency balance
     date: Optional[str] = None
     against: str = "cleared"  # "cleared" (YNAB reconcile-to-cleared) | "working" (legacy true-up)
+    expected_balance: Optional[float] = None  # the figure the user was shown; 409 if stale
 
 
 class DescribeAccountBody(BaseModel):
@@ -699,7 +701,16 @@ def reconcile_account(account_id: str, body: ReconcileBody):
     and locks the cleared set. ``against="working"`` diffs the full computed balance."""
     if svc.accounts.find_by_id(account_id) is None:
         raise HTTPException(404, "Account not found")
-    adjustment = svc.reconcile(account_id, body.real_balance, body.date, against=body.against)
+    try:
+        adjustment = svc.reconcile(
+            account_id,
+            body.real_balance,
+            body.date,
+            against=body.against,
+            expected_balance=body.expected_balance,
+        )
+    except ConflictError as e:
+        raise HTTPException(409, e.message) from e
     acct = svc.accounts.find_by_id(account_id)
     txns = svc.transactions.all()
     cutoff = svc.opening_date(acct, txns)

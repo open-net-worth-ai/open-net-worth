@@ -72,6 +72,7 @@ import { ConfirmModal } from './ConfirmModal'
 import { ImportModal, type ReopenOptions } from './ImportModal'
 import { mapServerPreview } from './importHelpers'
 import { Toast } from './Toast'
+import { reconcileToastMessage } from './reconcileCadence'
 import type { AddData } from './AddRow'
 import type { RowPatch } from './TxnRow'
 import { DataInHero } from '../../dataIn/DataInHero'
@@ -1227,9 +1228,15 @@ export function AccountsTab({
   }
 
   const onReconcile = (account: Account, real: number) => {
-    void L.reconcile(account.id, { real_balance: real, against: 'cleared' })
+    // `account` is the row the popover rendered, so its cleared balance is the figure the user
+    // just confirmed or diffed against — sent so a screen one write behind can't book the gap.
+    void L.reconcile(account.id, {
+      real_balance: real,
+      against: 'cleared',
+      expected_balance: account.clearedBalance,
+    })
       .then((r) => {
-        showToast(r.adjustment ? 'Reconciled — adjustment booked' : 'Reconciled — in sync')
+        showToast(reconcileToastMessage(r.adjustment, account.currency))
         setReconcileBurst((n) => n + 1)
       })
       .catch((e) => showToast(e instanceof Error ? e.message : 'Reconcile failed'))
@@ -2391,7 +2398,7 @@ export function AccountsTab({
         )}
         {/* Centred on the app window, the same line as every other floating pill (the
             background-read notices included) — not on the register (owner, 2026-10-25). */}
-        <Toast message={toast} onDone={() => setToast(null)} />
+        <Toast message={toast} onDone={() => setToast(null)} aboveBulkBar={selectedIds.size > 0} />
       </div>
     </>
   )

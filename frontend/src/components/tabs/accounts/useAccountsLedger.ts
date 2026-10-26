@@ -1009,7 +1009,18 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
         method: 'POST',
         body: JSON.stringify(data),
       })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) {
+        const text = await res.text()
+        // A 409 means the shown balance was stale — re-read it so a retry asks the right figure.
+        if (res.status === 409) await refreshAccount(id)
+        let detail: unknown
+        try {
+          detail = JSON.parse(text)?.detail
+        } catch {
+          detail = undefined
+        }
+        throw new Error(typeof detail === 'string' && detail ? detail : text)
+      }
       const result: ReconcileResult = await res.json()
       await refreshAccount(id)
       // The reconcile may create an adjustment txn — reload txns

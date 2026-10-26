@@ -30,6 +30,7 @@ import { fCur } from './data'
 import { ReviewStrip } from './ReviewStrip'
 import { typeLabel } from './categories'
 import { fDate } from '../../../utils/format'
+import { daysSinceReconcile, isReconcileOverdue } from './reconcileCadence'
 
 type MenuIconName =
   | 'payees'
@@ -778,7 +779,13 @@ export function AccountHeader({
           {/* reconcile line + stats */}
           <div className="acct-recon-line">
             <span className="acct-recon-stat">
-              {account.lastReconciled ? (
+              {account.lastReconciled && isReconcileOverdue(account.lastReconciled) ? (
+                <span title="Reconcile at least once a month, so a gap is still easy to trace.">
+                  <span className="warn">○</span> Reconciled{' '}
+                  {fDate(account.lastReconciled, 'numeric')} ·{' '}
+                  {daysSinceReconcile(account.lastReconciled)} days ago
+                </span>
+              ) : account.lastReconciled ? (
                 <>
                   <span className="ok">✓</span> Reconciled{' '}
                   {fDate(account.lastReconciled, 'numeric')}

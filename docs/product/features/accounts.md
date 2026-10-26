@@ -122,6 +122,10 @@ When the balance in the app doesn't match your bank:
 4. If not, click **No**, type the **Real balance**, check the **Adjustment** it shows, and
    click **Add adjustment**. The app books one adjustment transaction for the difference.
 
+The confirmation tells you whether an adjustment was booked and when to check again. Reconcile
+each account about **once a month**: once the last reconcile is more than 30 days old, the
+**Reconciled** line under the balance turns to a warning and shows how many days ago it was.
+
 ## Import a statement or connect a bank
 
 - **Import** (in the account header) reads a CSV, OFX, QIF, PDF or similar statement file — see
@@ -184,6 +188,10 @@ add it again; if it already has transactions, re-import them into the new accoun
 
 **"Is the real balance …?" shows a different figure from the sidebar** — Reconcile asks about
 the cleared balance only. The sidebar includes pending (uncleared) transactions too.
+
+**"The balance changed since this was opened"** — something changed the cleared balance after
+Reconcile showed it (a transaction cleared, edited or added, here or by Lucius). Nothing was
+booked. Open Reconcile again; it now asks about the current figure.
 
 ## Related pages
 

@@ -143,3 +143,45 @@ describe('Reconcile popover', () => {
     expect(setMenuOpen).toHaveBeenCalledWith(false)
   })
 })
+
+describe('reconcile line — monthly nudge', () => {
+  function renderWith(lastReconciled: string) {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 9, 26, 12))
+    const account = { ...ACCOUNT, lastReconciled }
+    render(
+      <AccountHeader
+        account={account}
+        dueInfo={null}
+        stats={null}
+        menuOpen={false}
+        setMenuOpen={noop}
+        collapsed={false}
+        onReopen={noop}
+        onAddTxn={noop}
+        onEdit={noop}
+        onArchive={noop}
+        onDelete={noop}
+        onManagePayees={noop}
+        onManageCategories={noop}
+        onImport={noop}
+        onExport={noop}
+        onReconcile={noop}
+        onReview={noop}
+        onStartReview={noop}
+      />,
+    )
+    vi.useRealTimers()
+  }
+
+  it('warns with the age once the last reconcile is over a month old', () => {
+    renderWith('2026-08-09')
+    expect(screen.getByText(/78 days ago/)).toBeTruthy()
+  })
+
+  it('stays a plain check inside the month', () => {
+    renderWith('2026-10-20')
+    expect(screen.queryByText(/days ago/)).toBeNull()
+    expect(screen.getByText(/Reconciled/)).toBeTruthy()
+  })
+})

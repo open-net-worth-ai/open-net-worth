@@ -3956,6 +3956,7 @@ def reconcile(
     on_date: str | None = None,
     *,
     against: str = "cleared",
+    expected_balance: float | None = None,
 ) -> dict | None:
     """Assert the real-world native balance of an account (cleared/reconcile MVP). If it
     differs from the account's CLEARED balance, emit a single `adjustment` transaction
@@ -3965,7 +3966,11 @@ def reconcile(
 
     ``against`` selects the balance the asserted figure is diffed against — ``"cleared"``
     (the YNAB reconcile-to-cleared flow, the default) or ``"working"`` (the legacy
-    statement-driven true-up that diffs the full computed balance)."""
+    statement-driven true-up that diffs the full computed balance).
+
+    ``expected_balance`` is the figure the caller SHOWED the user. If the book has moved
+    since, the reconcile is refused with nothing written — otherwise a screen one write
+    behind books the gap as a phantom adjustment (owner report 2026-10-26)."""
     account = accounts.find_by_id(account_id)
     if account is None:
         return None
@@ -3978,6 +3983,13 @@ def reconcile(
         if against == "cleared"
         else account_balance(account, txns, cutoff)
     )
+    if expected_balance is not None and round(float(expected_balance) - current, 2) != 0:
+        shown = f"{current:,.2f}".removesuffix(".00")
+        raise ConflictError(
+            f"The balance changed since this was opened — it is now {shown} {currency}. "
+            "Check it again before reconciling.",
+            current_balance=current,
+        )
     delta = round(float(real_balance) - current, 2)
 
     txn = None

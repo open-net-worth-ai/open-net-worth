@@ -422,11 +422,14 @@ export interface ReconcileData {
   real_balance: number
   date?: string | null
   against?: 'cleared' | 'working'
+  /** The balance the user was asked about — the server refuses (409) if the book has moved. */
+  expected_balance?: number
 }
 
 export interface ReconcileResult {
   ok: boolean
-  adjustment: number | null
+  /** The booked `adjustment` txn, or null when the balance already matched. */
+  adjustment: { to_amount?: number | null; from_amount?: number | null } | null
   balance: number
   cleared_balance: number
 }

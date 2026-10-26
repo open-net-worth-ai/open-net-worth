@@ -6311,7 +6311,7 @@ select.acct-addin {
 /* toast */
 .acct-toast {
   position: fixed;
-  bottom: 84px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
   /* Sized to its text: centred with a translate, a shrink-to-fit box only gets half the
@@ -6328,6 +6328,16 @@ select.acct-addin {
   font-weight: 600;
   color: var(--toast-ink);
   animation: acct-toast-in 0.2s ease;
+}
+/* The bulk bar shares that bottom line; while it is up the pill sits above it (24px + the
+   bar's height + a gap) instead of covering it. */
+.acct-toast.acct-toast--above-bulk {
+  bottom: 84px;
+}
+@media (max-width: 640px) {
+  .app-shell.mb-shell .acct-toast.acct-toast--above-bulk {
+    bottom: calc(var(--mobile-tabbar-clearance) + 60px);
+  }
 }
 /* ── a background statement read finished (BackgroundStatementNotices) ─────────────────
    App-wide, so it renders BESIDE .app-shell, not inside it — the phone tab-bar clearance
