@@ -83,6 +83,56 @@ link. So a commit subject is release-note copy: write it for a user. The release
 `release.yml` fetches the script at the source commit; a failure there leaves the list out and
 never blocks the release. Keep the trailing `Source: <sha>` line — the next run reads it.
 
+### Discord announcement
+
+`scripts/release_announce.py` posts a published release to a Discord channel. It reads the
+release's notes and posts whenever New, Fixes or Polish has anything; fixes-only nightlies are
+announced too. Claude (`claude-sonnet-5-5`, low effort, server-side refusal fallback) writes 1–6
+plain bullets for users: new features first, then the fixes a user would most notice. If the API
+key is missing, or the call errors, refuses or answers in anything but bullets, the first six New
+then Fixes lines are posted as written. A closing line counts every fix and polish change and names
+the areas most of them touched ("In all: 35 fixes and 8 polish changes, most in Import, Accounts
+and Chat."), and the post links the download page and the release. Try it locally with
+`--dry-run`: it prints the Discord payload and sends nothing.
+
+To switch it on in the releases repo: create a webhook (Discord channel → Edit Channel →
+Integrations → Webhooks), add the secrets `DISCORD_RELEASE_WEBHOOK` and `ANTHROPIC_API_KEY`, set
+the variable `DISCORD_ANNOUNCE=true`, and add this job to `release.yml`. It fetches the script at
+the source commit, the same way `release_notes.py` is fetched, and can never fail a release:
+
+```yaml
+  announce:
+    name: announce on Discord
+    needs: [plan, publish]
+    if: >-
+      !cancelled() && vars.DISCORD_ANNOUNCE == 'true'
+      && needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      SHA: ${{ needs.plan.outputs.sha }}
+      SOURCE_TOKEN: ${{ secrets.ONW_SOURCE_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install 'anthropic==1.14.0'
+      - name: Post what's new
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_RELEASE_WEBHOOK }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          GH_TOKEN="$SOURCE_TOKEN" gh api "repos/$SOURCE_REPO/contents/scripts/release_announce.py?ref=$SHA" \
+            --jq .content | base64 -d > "$RUNNER_TEMP/release_announce.py"
+          gh release view "v$VERSION" --repo "$REPO" --json body --jq .body > "$RUNNER_TEMP/notes.md"
+          python "$RUNNER_TEMP/release_announce.py" --version "$VERSION" \
+            --release-url "https://github.com/$REPO/releases/tag/v$VERSION" "$RUNNER_TEMP/notes.md"
+```
+
 ### `manifest.json`
 
 Written by `scripts/release_manifest.py` (unit-tested), signed with the same minisign key as
