@@ -2749,10 +2749,6 @@ export function ImportModal({
     // What counts is the row's CURRENT decision, not what the engine first proposed (owner,
     // 2026-10-26): any row not set to Link is unclaimed and may link to an entry the user picks.
     (!resolveExisting(d) || actionFor(d, i) !== 'merge') && linkableShape(d, i)
-  /** The statement's running balance didn't confirm this row's amount — information for the
-   *  picker, never a block: the owner can see the file and is the judge (owner, 2026-10-26). */
-  const eyesUnconfirmed = (d: ImportPreviewDraft): boolean =>
-    !!d.needsEyes && !(d.rowIndex != null && queueAmountCorrected[d.rowIndex])
   /** A row whose kind can take a link at all — whatever it is linked to right now. */
   const linkableShape = (d: ImportPreviewDraft, i: number): boolean =>
     d.rowIndex != null &&
@@ -4152,11 +4148,7 @@ export function ImportModal({
                       `${d.date.slice(5)} • ${rowTitle(d)} • ${fCur(d.amount, d.currency, { cents: true })}` +
                       (original ? ` (${original})` : ''),
                     taken: false,
-                    hint: eyesUnconfirmed(d)
-                      ? '• statement balance didn’t confirm the amount'
-                      : holds
-                        ? `• linked to ${holds}`
-                        : undefined,
+                    hint: holds ? `• linked to ${holds}` : undefined,
                     holds,
                     title: `${rowTitle(d)} (${fCur(d.amount, d.currency, { cents: true })})`,
                   }
