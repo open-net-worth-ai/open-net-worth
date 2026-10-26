@@ -190,14 +190,32 @@ function ImpSelect({
 
 /** Compact "filter by kind" control — a single icon button, not three standing chips, so a
  *  second filter dimension doesn't visually compete with the decision chips it sits beside. */
+/** A category the review's rows carry, for the filter menu — `key` is the category id, or
+ *  UNCATEGORIZED_KEY for rows with none. */
+interface CategoryFilterOption {
+  key: string
+  label: string
+  color: string
+  n: number
+}
+const UNCATEGORIZED_KEY = '__uncategorized__'
+
 function KindFilterButton({
   value,
   onChange,
   counts,
+  categories,
+  category,
+  onCategoryChange,
 }: {
   value: 'all' | 'expense' | 'income' | 'transfer'
   onChange: (v: 'all' | 'expense' | 'income' | 'transfer') => void
   counts: { expense: number; income: number; transfer: number }
+  /** Owner, 2026-10-26: "the filters should support not just type but categories, including the
+   *  uncategorized ones". */
+  categories: CategoryFilterOption[]
+  category: string
+  onCategoryChange: (key: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -223,16 +241,24 @@ function KindFilterButton({
       { v: 'transfer', label: 'Transfer', n: counts.transfer },
     ] satisfies Array<{ v: 'expense' | 'income' | 'transfer'; label: string; n: number }>
   ).filter((o) => o.n > 0)
-  if (options.length < 2) return null
+  const showKinds = options.length >= 2
+  const showCategories = categories.length >= 2 || category !== 'all'
+  if (!showKinds && !showCategories) return null
+  const active = value !== 'all' || category !== 'all'
+  const catLabel = categories.find((c) => c.key === category)?.label
   return (
     <div className="imp3-kindfilter" ref={ref}>
       <button
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label="Filter by kind"
-        title={value === 'all' ? 'Filter by kind' : `Filtering by ${value}`}
-        className={'imp3-kindfilter-btn' + (value !== 'all' ? ' on' : '')}
+        aria-label="Filter by type or category"
+        title={
+          active
+            ? `Filtering by ${[value !== 'all' ? value : null, catLabel].filter(Boolean).join(' · ')}`
+            : 'Filter by type or category'
+        }
+        className={'imp3-kindfilter-btn' + (active ? ' on' : '')}
         onClick={() => setOpen((o) => !o)}
       >
         <svg
@@ -249,34 +275,75 @@ function KindFilterButton({
         </svg>
       </button>
       {open && (
-        <div className="imp3-kindfilter-pop" role="listbox">
-          <button
-            type="button"
-            role="option"
-            aria-selected={value === 'all'}
-            className={value === 'all' ? 'sel' : ''}
-            onClick={() => {
-              onChange('all')
-              setOpen(false)
-            }}
-          >
-            All kinds
-          </button>
-          {options.map((o) => (
-            <button
-              type="button"
-              key={o.v}
-              role="option"
-              aria-selected={value === o.v}
-              className={value === o.v ? 'sel' : ''}
-              onClick={() => {
-                onChange(value === o.v ? 'all' : o.v)
-                setOpen(false)
-              }}
-            >
-              {o.label} <i>{o.n}</i>
-            </button>
-          ))}
+        <div className="imp3-kindfilter-pop">
+          {showKinds && (
+            <div role="listbox" aria-label="Type">
+              <div className="imp3-kindfilter-group">Type</div>
+              <button
+                type="button"
+                role="option"
+                aria-selected={value === 'all'}
+                className={value === 'all' ? 'sel' : ''}
+                onClick={() => {
+                  onChange('all')
+                  setOpen(false)
+                }}
+              >
+                All types
+              </button>
+              {options.map((o) => (
+                <button
+                  type="button"
+                  key={o.v}
+                  role="option"
+                  aria-selected={value === o.v}
+                  className={value === o.v ? 'sel' : ''}
+                  onClick={() => {
+                    onChange(value === o.v ? 'all' : o.v)
+                    setOpen(false)
+                  }}
+                >
+                  {o.label} <i>{o.n}</i>
+                </button>
+              ))}
+            </div>
+          )}
+          {showCategories && (
+            <div role="listbox" aria-label="Category" className="imp3-kindfilter-cats">
+              <div className="imp3-kindfilter-group">Category</div>
+              <button
+                type="button"
+                role="option"
+                aria-selected={category === 'all'}
+                className={category === 'all' ? 'sel' : ''}
+                onClick={() => {
+                  onCategoryChange('all')
+                  setOpen(false)
+                }}
+              >
+                All categories
+              </button>
+              {categories.map((c) => (
+                <button
+                  type="button"
+                  key={c.key}
+                  role="option"
+                  aria-selected={category === c.key}
+                  className={category === c.key ? 'sel' : ''}
+                  onClick={() => {
+                    onCategoryChange(category === c.key ? 'all' : c.key)
+                    setOpen(false)
+                  }}
+                >
+                  <span className="imp3-kindfilter-cat">
+                    <b style={{ background: c.color }} aria-hidden="true" />
+                    {c.label}
+                  </span>
+                  <i>{c.n}</i>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1086,6 +1153,7 @@ export function ImportModal({
   // A second, independent filter dimension (by kind) — ANDed with the decision chip above,
   // not a replacement for it.
   const [kindFilter, setKindFilter] = useState<'all' | 'expense' | 'income' | 'transfer'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({})
   // Handoff queue receipts are explicit user decisions, separate from a band's safe default:
   // cards stay in place after a choice and can be undone without losing their context.
@@ -3048,6 +3116,30 @@ export function ImportModal({
     income: kindCount('income'),
     transfer: kindCount('transfer'),
   }
+  // A transfer has no category (its cell names the other account), so it never joins one —
+  // the Type filter's Transfer finds those.
+  const rowCategoryKey = (d: ImportPreviewDraft, i: number) =>
+    effectiveKind(d, i) === 'transfer' ? null : d.category || UNCATEGORIZED_KEY
+  const categoryPop: CategoryFilterOption[] = (() => {
+    if (!preview) return []
+    const counts = new Map<string, number>()
+    preview.drafts.forEach((d, i) => {
+      const key = rowCategoryKey(d, i)
+      if (key) counts.set(key, (counts.get(key) || 0) + 1)
+    })
+    return Array.from(counts, ([key, n]) => ({
+      key,
+      n,
+      label: key === UNCATEGORIZED_KEY ? 'Uncategorized' : catMapProp[key]?.label || key,
+      color: key === UNCATEGORIZED_KEY ? 'var(--faint)' : catMapProp[key]?.color || 'var(--faint)',
+    })).sort((a, b) =>
+      a.key === UNCATEGORIZED_KEY
+        ? -1
+        : b.key === UNCATEGORIZED_KEY
+          ? 1
+          : b.n - a.n || a.label.localeCompare(b.label),
+    )
+  })()
   // The handoff keeps decision state visible at every list size; a one-row statement still
   // benefits from an explicit Left out / Needs you state instead of an implicit view.
   const chipsEnabled = !!preview
@@ -4053,10 +4145,11 @@ export function ImportModal({
                           chip === 'weak'
                           ? ordered.filter(({ i }) => openWeakIndices.has(i))
                           : ordered.filter(({ d, i }) => effectiveChipKey(d, i) === chip)
-              const visibleStmt =
-                kindFilter === 'all'
-                  ? byDecisionChip
-                  : byDecisionChip.filter(({ d, i }) => effectiveKind(d, i) === kindFilter)
+              const visibleStmt = byDecisionChip.filter(
+                ({ d, i }) =>
+                  (kindFilter === 'all' || effectiveKind(d, i) === kindFilter) &&
+                  (categoryFilter === 'all' || rowCategoryKey(d, i) === categoryFilter),
+              )
               const showLedgerOnly = chip === 'all' || chip === 'ledger'
               // Its own dedicated section only under its OWN chip — not under All too, unlike the
               // ledger-only section — because (unlike a ledger row) an uncovered row already has a
@@ -7038,6 +7131,9 @@ export function ImportModal({
                                   value={kindFilter}
                                   onChange={setKindFilter}
                                   counts={kindPop}
+                                  categories={categoryPop}
+                                  category={categoryFilter}
+                                  onCategoryChange={setCategoryFilter}
                                 />
                                 {fileStatementId && !isMobile && (
                                   <button
