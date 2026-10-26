@@ -1175,6 +1175,9 @@ export function ImportModal({
     Record<number, { amount: number; touched: boolean }>
   >({})
   const [ledgerExpanded, setLedgerExpanded] = useState<Record<string, boolean>>({})
+  // "Leave it" is a decision too: the entry says it stays (owner, 2026-10-26: only "Will delete"
+  // showed, so a row you'd answered looked untouched). Nothing is sent — keeping is the default.
+  const [keptLedger, setKeptLedger] = useState<Record<string, boolean>>({})
   const [sectionOpen, setSectionOpen] = useState({
     needs: true,
     statement: true,
@@ -2352,6 +2355,12 @@ export function ImportModal({
   // per-row confirm dialog. The deletes ride on `confirmImport` with everything else, so the
   // footer's promise holds and the whole set is undoable until then.
   function toggleDeleteMark(id: string) {
+    setKeptLedger((current) => {
+      if (!current[id]) return current
+      const next = { ...current }
+      delete next[id]
+      return next
+    })
     setPendingDelete((current) => {
       const next = { ...current }
       if (next[id]) delete next[id]
@@ -4269,6 +4278,8 @@ export function ImportModal({
                         the same slot every other row uses to say what confirm will do to it. */}
                         {marked ? (
                           <span className="imp3-dchip willdelete">Will delete</span>
+                        ) : keptLedger[r.id] ? (
+                          <span className="imp3-dchip keep">Will keep</span>
                         ) : (
                           <span className="imp3-dchip ledger">Ledger only</span>
                         )}
@@ -4445,17 +4456,33 @@ export function ImportModal({
                               Delete
                             </button>
                           )}
-                          {!marked && (
-                            <button
-                              type="button"
-                              className="imp3-lc-btn"
-                              onClick={() =>
-                                setLedgerExpanded((current) => ({ ...current, [r.id]: false }))
-                              }
-                            >
-                              Leave it
-                            </button>
-                          )}
+                          {!marked &&
+                            (keptLedger[r.id] ? (
+                              <button
+                                type="button"
+                                className="imp3-lc-btn"
+                                onClick={() =>
+                                  setKeptLedger((current) => {
+                                    const next = { ...current }
+                                    delete next[r.id]
+                                    return next
+                                  })
+                                }
+                              >
+                                Undo
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="imp3-lc-btn"
+                                onClick={() => {
+                                  setKeptLedger((current) => ({ ...current, [r.id]: true }))
+                                  setLedgerExpanded((current) => ({ ...current, [r.id]: false }))
+                                }}
+                              >
+                                Leave it
+                              </button>
+                            ))}
                         </div>
                         {drawerFailed[r.id] && (
                           <div className="acct-stmtview-check-err">Couldn’t open — try again.</div>

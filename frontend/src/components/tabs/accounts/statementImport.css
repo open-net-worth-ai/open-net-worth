@@ -1581,6 +1581,10 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 /* production-only decision states with no prototype twin: an L0 duplicate and an FX leg
    folded into its partner transfer. Both are IMMUTABLE outcomes, not user choices, so they
    read as quiet neutral facts rather than one of the three coloured verdicts. */
+.imp3-dchip.keep {
+  color: var(--ink);
+  background: var(--selected);
+}
 .imp3-dchip.dup,
 .imp3-dchip.absorbed,
 .imp3-dchip.ledger {
