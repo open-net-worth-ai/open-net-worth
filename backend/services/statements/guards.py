@@ -52,40 +52,86 @@ def rederive_from_balance(rows: list[CanonicalRow], meta: StatementMeta) -> int:
     dated = [r.date for r in rows if r.date]
     descending = bool(dated) and dated[0] > dated[-1]
     walk = list(reversed(rows)) if descending else rows
+    kept = [i for i, r in enumerate(walk) if not r.skip and r.balance is not None]
     prev = meta.opening_balance
-    for row in walk:
-        if row.skip or row.balance is None:
+    p = 0
+    while p < len(kept):
+        row = walk[kept[p]]
+        if prev is None:
+            prev = row.balance
+            p += 1
             continue
-        if prev is not None:
-            delta = row.balance - prev
-            if abs(delta) <= _TOL:
-                pass  # pass-through: balance genuinely unaffected, not a disagreement
-            else:
-                expected_dir = (
-                    ("OUT" if delta > 0 else "IN")
-                    if out_positive
-                    else ("IN" if delta > 0 else "OUT")
-                )
-                if abs(abs(delta) - row.amount) <= max(_TOL, row.amount * 0.001):
-                    if row.direction != expected_dir:
-                        row.direction = expected_dir
-                        row.notes.append("direction corrected from running balance")
-                        corrections += 1
-                else:
-                    # User-facing (surfaced verbatim in the review UI) — plain language, no
-                    # verdict on WHOSE fault it is: the source's own balance column often can't
-                    # be trusted in isolation (e.g. two transactions settled together, so this
-                    # row's printed balance already includes a later one's deduction too) — that
-                    # is not the same thing as "the amount is wrong". State what's uncertain and
-                    # what to do, not the arithmetic term for it.
-                    row.notes.append(
-                        "The statement's own running balance doesn't confirm this amount — "
-                        "worth a quick check before importing."
-                    )
+        delta = row.balance - prev
+        if abs(delta) <= _TOL:
+            prev = row.balance  # pass-through: balance genuinely unaffected, not a disagreement
+            p += 1
+            continue
+        if abs(abs(delta) - row.amount) <= max(_TOL, row.amount * 0.001):
+            expected_dir = (
+                ("OUT" if delta > 0 else "IN") if out_positive else ("IN" if delta > 0 else "OUT")
+            )
+            if row.direction != expected_dir:
+                row.direction = expected_dir
+                row.notes.append("direction corrected from running balance")
+                corrections += 1
+            prev = row.balance
+            p += 1
+            continue
+        # Two shapes where a source's balance column misleads one row at a time while the
+        # amounts are right (owner, 2026-10-26, a MoMo export — every flag was a false alarm):
+        # 1. Transactions settled together print ONE balance on each of them, so only the
+        #    group as a whole moves the balance from ``prev`` to it.
+        group_end = p + 1
+        while group_end < len(kept) and abs(walk[kept[group_end]].balance - row.balance) <= _TOL:
+            group_end += 1
+        # The shortest run that adds up: a pass-through row printing the same balance right
+        # after the group must not be pulled into it.
+        settled = None
+        for end in range(p + 2, group_end + 1):
+            group = [walk[kept[k]] for k in range(p, end)]
+            moved = sum(_signed(g, out_positive) for g in group)
+            if abs(moved - delta) <= max(_TOL, sum(g.amount for g in group) * 0.001):
+                settled = end
+                break
+        if settled is not None:
+            prev = row.balance
+            p = settled
+            continue
+        # 2. Failed retries beside a completed row: the source can print the completed row's
+        #    true balance on a neighbouring failed (skipped) row instead.
+        expected_balance = prev + _signed(row, out_positive)
+        found = _balance_on_skipped_neighbour(walk, kept[p], expected_balance)
+        if found is not None:
+            prev = found
+            p += 1
+            continue
+        # User-facing (surfaced verbatim in the review UI) — plain language, no verdict on
+        # WHOSE fault it is: state what's uncertain and what to do, not the arithmetic term.
+        row.notes.append(
+            "The statement's own running balance doesn't confirm this amount — "
+            "worth a quick check before importing."
+        )
         prev = row.balance
+        p += 1
     if corrections:
         meta.warnings.append(f"{corrections} row direction(s) corrected from the balance column")
     return corrections
+
+
+def _balance_on_skipped_neighbour(
+    walk: list[CanonicalRow], at: int, expected: float
+) -> float | None:
+    """The balance printed on a skipped row right beside ``walk[at]`` (either side, across a run
+    of skipped rows) that equals ``expected`` — where a failed retry carries the completed row's
+    true balance."""
+    for step in (-1, 1):
+        k = at + step
+        while 0 <= k < len(walk) and walk[k].skip:
+            bal = walk[k].balance
+            if bal is not None and abs(bal - expected) <= _TOL:
+                return bal
+            k += step
+    return None
 
 
 def reconcile(rows: list[CanonicalRow], meta: StatementMeta) -> dict:
