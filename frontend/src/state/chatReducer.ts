@@ -747,7 +747,25 @@ export async function consumeEventStream(
           continue
         }
 
-        if (event.type === 'message_delivered') {
+        if (event.type === 'user_message') {
+          // The message that started this turn, announced for devices that did not send it
+          // (live report 2026-10-26: a phone's photo showed its reply on the desktop, never
+          // itself). The sender already holds it under this same id — or in its queue, when
+          // its send raced the end of a turn — so only a stranger to it adds a bubble.
+          const id: string | undefined = event.message_id
+          if (id) {
+            deliverQueuedMessage(ownerId, id)
+            if (!chatSessions.getSlice(ownerId).messages.some((m) => m.id === id)) {
+              closeOpenAssistant(ownerId)
+              addUserMessage(ownerId, {
+                id,
+                role: 'user',
+                text: event.text ?? '',
+                attachments: event.attachments ?? [],
+              })
+            }
+          }
+        } else if (event.type === 'message_delivered') {
           // Mid-turn injection (concurrent-conversations RFC): the server just spliced a
           // QUEUED message into the running turn (or, on the residue-fold-in path, into a
           // freshly spawned one) — move it out of `queuedMessages` and into the true

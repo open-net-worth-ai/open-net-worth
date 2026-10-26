@@ -22,7 +22,7 @@ from backend.ai import (
 )
 from backend.ai.attachments import build_user_content
 from backend.ai.prompts import build_system_prompt
-from backend.ai.tool_text import ONBOARDING_INIT
+from backend.ai.tool_text import ONBOARDING_INIT, is_harness_note
 from backend.api import demo_visitor
 from backend.api._deps import _bearer_token
 from backend.core.errors import ConfigurationError, ValidationError
@@ -362,6 +362,43 @@ def _merge_mention_context(message: dict, block: str) -> dict:
     return message
 
 
+def _announce_user_message(session_id: str, turn_id: str, req: ChatRequest, text: str) -> None:
+    """Put the message that started this turn on the live stream. A device watching the
+    conversation otherwise sees only the reply — its own bubble never shows the message
+    another device sent (a phone's photo) until the transcript is re-read. Keyed by the
+    sender's own id, so the sending device recognises its optimistic copy."""
+    if req.retry or is_harness_note(text):
+        return
+    from backend.services.attachments import attachment_file_meta
+
+    ref_ids = list(req.attachments or [])
+    meta = attachment_file_meta(ref_ids) if ref_ids else {}
+    attachments = [
+        {
+            "ref_id": ref_id,
+            "kind": "image"
+            if (meta[ref_id].get("media_type") or "").startswith("image/")
+            else "text",
+            "summary": meta[ref_id].get("filename") or "file",
+        }
+        for ref_id in ref_ids
+        if ref_id in meta
+    ]
+    if not text.strip() and not attachments:
+        return
+    live_sessions.publish(
+        session_id,
+        {
+            "type": "user_message",
+            "session_id": session_id,
+            "turn_id": turn_id,
+            "message_id": req.client_message_id or f"srv_{uuid.uuid4().hex[:12]}",
+            "text": text,
+            "attachments": attachments,
+        },
+    )
+
+
 @router.post("/api/chat")
 async def chat(req: ChatRequest, request: Request):
     # Public-demo quotas (inert unless DEMO_MODE). Checked BEFORE anything is spawned, so a
@@ -694,6 +731,7 @@ async def chat(req: ChatRequest, request: Request):
         handle.task.add_done_callback(
             lambda _task, claimed=_residue_claim: pending_injection.nack(claimed)
         )
+    _announce_user_message(session_id, handle.turn_id, req, _original_user_text)
     if _is_opening_message and automation_owned is None and not _residue:
         session_titles.schedule_title(session_id, _original_user_text)
     # Onboarding opens with a hidden trigger and Lucius speaking first, so there is no first
