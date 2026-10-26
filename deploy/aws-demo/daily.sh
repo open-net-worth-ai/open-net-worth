@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Keep the AWS demo current from this Mac: once a day, ship origin/main if it moved, then give
 # visitors a fresh book (yesterday's edits and conversations go; Lucius's AI settings stay).
+# The book being replaced is first saved to ~/.open-net-worth-demo-backups (demo-aws.sh backup);
+# if that save fails, nothing is replaced.
 #
 #   daily.sh install [HH:MM]   install the LaunchAgent (default 10:00, local time)
 #   daily.sh uninstall         remove it
@@ -69,7 +71,8 @@ cmd_run() {
   local want have
   want="$(git -C "${REPO_ROOT}" rev-parse --short=9 origin/main)"
   have="$(deployed_tag)"
-  if [[ "${want}" == "${have}" ]]; then
+  # A live tag is a short SHA of 7 or 9 characters, depending on how it was shipped.
+  if [[ -n "${have}" && ( "${want}" == "${have}"* || "${have}" == "${want}"* ) ]]; then
     echo "==> ${have} is already live"
   else
     echo "==> shipping origin/main ${want} (live: ${have})"
@@ -81,7 +84,7 @@ cmd_run() {
     fi
   fi
 
-  "${DEMO}" book --reset
+  "${DEMO}" book --reset || { notify "Demo book was NOT reset (backup or reset failed). See ${LOG}"; return 1; }
   healthy || { notify "Demo is unhealthy after the daily book reset. See ${LOG}"; return 1; }
   echo "==> done: $(deployed_tag) live, fresh book"
 }
