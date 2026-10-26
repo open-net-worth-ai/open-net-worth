@@ -1,15 +1,18 @@
 // @vitest-environment jsdom
 //
 // The sidebar says which accounts need reconciling, so the owner doesn't open each one to find
-// out (owner, 2026-10-26). In words — "Reconcile due", "Never reconciled", "N need reconciling" —
-// never a clock or a bare "6d ago", which read as the last transaction's age. Accounts inside the
-// month say nothing, and a never-reconciled account gets a month's grace from its opening.
+// out (owner, 2026-10-26). In words — "Needs reconciling", "N need reconciling" — never a clock
+// or a bare "6d ago", which read as the last transaction's age. Overdue and never-reconciled are
+// one state: both ask the same thing. Accounts inside the month say nothing, a never-reconciled
+// account gets a month's grace from its opening, and the row carries no type — its group says it.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { Sidebar, type SidebarTotals } from './Sidebar'
 import { fromApiAccount } from './data'
-import { reconcileDue } from './reconcileDue'
+import { needsReconciling } from './reconcileDue'
 import type { ApiAccount } from './types'
 
 const NOW = new Date(2026, 9, 26, 12)
@@ -50,16 +53,18 @@ afterEach(() => {
   cleanup()
 })
 
-describe('reconcileDue', () => {
+describe('needsReconciling', () => {
   it('flags an overdue reconcile and stays quiet inside the month', () => {
-    expect(reconcileDue(cash('a', 'A', { last_reconciled_at: '2026-06-08' }), NOW)).toBe('due')
-    expect(reconcileDue(cash('a', 'A', { last_reconciled_at: '2026-10-20' }), NOW)).toBeNull()
+    expect(needsReconciling(cash('a', 'A', { last_reconciled_at: '2026-06-08' }), NOW)).toBe(true)
+    expect(needsReconciling(cash('a', 'A', { last_reconciled_at: '2026-10-20' }), NOW)).toBe(false)
   })
 
   it('gives a never-reconciled account a month from its opening', () => {
-    expect(reconcileDue(cash('a', 'A'), NOW)).toBe('never')
-    expect(reconcileDue(cash('a', 'A', { initial_balance_date: '2026-10-10' }), NOW)).toBeNull()
-    expect(reconcileDue(cash('a', 'A', { initial_balance_date: null }), NOW)).toBeNull()
+    expect(needsReconciling(cash('a', 'A'), NOW)).toBe(true)
+    expect(needsReconciling(cash('a', 'A', { initial_balance_date: '2026-10-10' }), NOW)).toBe(
+      false,
+    )
+    expect(needsReconciling(cash('a', 'A', { initial_balance_date: null }), NOW)).toBe(false)
   })
 })
 
@@ -89,15 +94,26 @@ describe('Sidebar — reconcile status', () => {
       cash('v2', 'Pier Everyday', { institution: 'Pier', last_reconciled_at: '2026-10-25' }),
     ])
 
-    expect(screen.getByText('Reconcile due')).toBeTruthy()
-    expect(screen.getByText('Never reconciled')).toBeTruthy()
+    // Overdue (Meridian) and never (Lantern) read the same; Pier's rows sit in its closed group.
+    expect(screen.getAllByText('Needs reconciling')).toHaveLength(2)
+    expect(screen.queryByText(/Reconcile due|Never reconciled/)).toBeNull()
     expect(screen.getByText('1 needs reconciling')).toBeTruthy()
-    expect(container.querySelector('.acct-all-sub')?.textContent).toBe(
-      '5 accounts · 3 need reconciling',
-    )
+    const allSubs = [...container.querySelectorAll('.acct-all-sub')].map((s) => s.textContent)
+    expect(allSubs).toEqual(['5 accounts', '3 need reconciling'])
     const fresh = screen.getByText('Harbor Checking').closest('.acct-row')
     expect(fresh?.querySelector('.acct-due')).toBeNull()
     expect(container.textContent).not.toMatch(/days? ago|\dd ago/)
+  })
+
+  it('shows no type under the name — only card digits and the reconcile status', () => {
+    renderWith([
+      cash('card', 'Harbor Checking', { last_four: '4821', last_reconciled_at: '2026-06-08' }),
+      cash('plain', 'Meridian Wallet', { last_reconciled_at: '2026-10-20' }),
+    ])
+    const card = screen.getByText('Harbor Checking').closest('.acct-row')
+    expect(card?.querySelector('.acct-row-sub')?.textContent).toBe('•••4821 · Needs reconciling')
+    const plain = screen.getByText('Meridian Wallet').closest('.acct-row')
+    expect(plain?.querySelector('.acct-row-sub')).toBeNull()
   })
 
   it('says nothing about reconciling when every account is current', () => {
@@ -106,6 +122,11 @@ describe('Sidebar — reconcile status', () => {
     ])
     expect(container.querySelector('.acct-due')).toBeNull()
     expect(container.querySelector('.acct-all-sub')?.textContent).toBe('1 account')
+  })
+
+  it('keeps a group’s count amber — the grey subtitle rule comes later and would win', () => {
+    const css = readFileSync(resolve(__dirname, './accounts.css'), 'utf8')
+    expect(css).toMatch(/\.acct-row-sub\.acct-due[^{]*\{\s*color: var\(--warn\)/)
   })
 
   it('has no icon on All accounts, so it lines up with the group headings', () => {

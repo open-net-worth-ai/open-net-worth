@@ -14,7 +14,7 @@ import type { Account, AccountGroup } from './types'
 import { accountValue, fBase, fCur } from './data'
 import { TYPE_ORDER, typeLabel } from './categories'
 import { ChevronRight } from '../../../ui/icons'
-import { countReconcileDue, needReconcilingLabel, reconcileDue } from './reconcileDue'
+import { countNeedsReconciling, needReconcilingLabel, needsReconciling } from './reconcileDue'
 
 // ── Local icon helpers (SVG, pixel-centered) ─────────────────────────────────
 
@@ -101,7 +101,7 @@ function AccountRow({ a, sel, onSelect }: AccountRowProps) {
   // A securities account reads in BASE, because `accountValue` sums two base figures
   // (positions + settlement cash); a plain account reads in its own currency.
   const value = accountValue(a)
-  const due = reconcileDue(a)
+  const due = needsReconciling(a)
   const balanceStr = isSec
     ? fBase(value, { cents: true })
     : `${fCur(a.balance, a.currency, { cents: true })} ${a.currency}`
@@ -127,18 +127,14 @@ function AccountRow({ a, sel, onSelect }: AccountRowProps) {
     >
       <span className="acct-row-id">
         <span className="acct-row-name">{a.name}</span>
-        <span className="acct-row-sub">
-          {typeLabel(a.type)}
-          {a.lastFour ? ' •••' + a.lastFour : ''}
-          {due && (
-            <>
-              {' · '}
-              <span className="acct-due">
-                {due === 'never' ? 'Never reconciled' : 'Reconcile due'}
-              </span>
-            </>
-          )}
-        </span>
+        {/* No type: the group heading above already says it. */}
+        {(a.lastFour || due) && (
+          <span className="acct-row-sub">
+            {a.lastFour && '•••' + a.lastFour}
+            {a.lastFour && due && ' · '}
+            {due && <span className="acct-due">Needs reconciling</span>}
+          </span>
+        )}
       </span>
       <span className="acct-row-v">
         {isSec ? (
@@ -199,7 +195,7 @@ export function Sidebar({
   )
   const listed = TYPE_ORDER.flatMap((g) => groupMap[g] ?? [])
   const accountsCount = listed.length
-  const dueCount = countReconcileDue(listed)
+  const dueCount = countNeedsReconciling(listed)
 
   return (
     <aside
@@ -278,13 +274,11 @@ export function Sidebar({
               All accounts
               <span className="acct-all-sub">
                 {accountsCount} {accountsCount === 1 ? 'account' : 'accounts'}
-                {dueCount > 0 && (
-                  <>
-                    {' · '}
-                    <span className="acct-due">{needReconcilingLabel(dueCount)}</span>
-                  </>
-                )}
               </span>
+              {/* Its own line: beside the count it ellipsized in a default-width sidebar. */}
+              {dueCount > 0 && (
+                <span className="acct-all-sub acct-due">{needReconcilingLabel(dueCount)}</span>
+              )}
             </span>
           </span>
           <span className={'acct-all-v mask' + (accountsTotal < 0 ? ' neg' : '')}>
@@ -327,7 +321,7 @@ export function Sidebar({
 
               {venues.map(([p, arr]) => {
                 const sub = arr.reduce((s, a) => s + accountValue(a), 0)
-                const venueDue = countReconcileDue(arr)
+                const venueDue = countNeedsReconciling(arr)
                 const open = !!openVenues[p]
                 return (
                   <div key={p}>

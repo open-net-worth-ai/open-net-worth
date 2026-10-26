@@ -128,11 +128,11 @@ each account about **once a month**: once the last reconcile is more than 30 day
 **Reconciled** line under the balance turns to a warning and shows how many days ago it was,
 right beside the **Reconcile** button.
 
-You don't have to open each account to check. In the accounts list, an account whose last
-reconcile is more than 30 days old says **Reconcile due**, and one that has been open over a
-month without a reconcile says **Never reconciled**. A collapsed group such as a bank with several
-accounts says how many **need reconciling**, and so does **All accounts** at the top. Accounts
-that are up to date show nothing extra.
+You don't have to open each account to check. In the accounts list, an account says **Needs
+reconciling** when its last reconcile is more than 30 days old, or when it has been open over a
+month without one. A collapsed group such as a bank with several accounts says how many **need
+reconciling**, and so does **All accounts** at the top. Accounts that are up to date show nothing
+extra.
 
 ## Import a statement or connect a bank
 

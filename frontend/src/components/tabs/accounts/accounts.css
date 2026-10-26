@@ -1313,7 +1313,8 @@ body.hide-amounts .mask.l::after {
 }
 /* Reconcile status in the sidebar — words, never a bare age or clock, which read as "last
    transaction N days ago" (owner, 2026-10-26). Only accounts that need it say anything. */
-.acct-due {
+.acct-due,
+.acct-row-sub.acct-due {
   color: var(--warn);
 }
 .acct-all-id {
