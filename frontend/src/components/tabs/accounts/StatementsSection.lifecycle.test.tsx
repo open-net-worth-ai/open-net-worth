@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 //
 // B20 async — the statements list's lifecycle rows: parsing / ready-to-review / interrupted /
-// failed. Each state shows exactly one action (never the ordinary row's Download/Delete
-// pair), and lifecycle rows sort ABOVE plain committed statements.
+// failed. Each state shows one action, plus — except while still reading — the same ⋯
+// Download/Delete menu a committed row has; lifecycle rows sort ABOVE plain committed statements. Wording per the
+// 2026-10-25 redesign: one plain status, the same facts on every row.
 
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, cleanup, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { StatementsModal } from './StatementsSection'
+import { fDate } from '../../../utils/format'
+import { clearQueryCache } from '../../../state/queryCache'
 
 const authFetch = vi.hoisted(() => vi.fn<(url: string, init?: RequestInit) => Promise<unknown>>())
 vi.mock('../../../api/client', () => ({ authFetch }))
@@ -14,6 +17,7 @@ vi.mock('../../../api/client', () => ({ authFetch }))
 afterEach(() => {
   cleanup()
   authFetch.mockReset()
+  clearQueryCache()
 })
 
 function jsonResponse(body: unknown, ok = true) {
@@ -71,19 +75,56 @@ function open() {
   return render(<StatementsModal accountId="acct1" accountName="Checking" onClose={() => {}} />)
 }
 
-describe('StatementsModal — B20 lifecycle rows', () => {
-  it('a parsing row shows a live line and no action', async () => {
-    mockList([PARSING_ROW])
+describe('StatementsModal — opening again', () => {
+  // Owner, 2026-10-26: "why loading statement takes so long?" — reopening shows the last list at
+  // once and refreshes it behind, instead of a spinner while the server recomputes.
+  it('shows the last list immediately while it refreshes', async () => {
+    mockList([NORMAL_ROW])
+    const first = open()
+    await screen.findByText('may-normal.csv')
+    first.unmount()
+
+    let release!: () => void
+    authFetch.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () =>
+            resolve({ ok: true, json: async () => ({ statements: [NORMAL_ROW, READY_ROW] }) })
+        }),
+    )
     open()
+    expect(screen.getByText('may-normal.csv')).toBeTruthy()
+    expect(screen.queryByText('Loading statements…')).toBeNull()
+    release()
+    await screen.findByText('feb-ready.csv')
+  })
+})
+
+describe('StatementsModal — B20 lifecycle rows', () => {
+  it('a parsing row shows a live line and Open, which opens its progress', async () => {
+    mockList([PARSING_ROW])
+    const onReviewStatement = vi.fn()
+    render(
+      <StatementsModal
+        accountId="acct1"
+        accountName="Checking"
+        onClose={() => {}}
+        onReviewStatement={onReviewStatement}
+      />,
+    )
     await screen.findByText('jan-parsing.pdf')
     const row = screen.getByText('jan-parsing.pdf').closest('.acct-stmt-row') as HTMLElement
-    expect(within(row).queryByRole('button', { name: /Review|Re-run|Download|Delete/ })).toBeNull()
-    expect(within(row).getByText(/Reading…/)).toBeTruthy()
-    // Plain text, not a link — nothing to view yet.
-    expect(within(row).queryByRole('button', { name: 'jan-parsing.pdf' })).toBeNull()
+    expect(within(row).getByText('Reading…')).toBeTruthy()
+    expect(within(row).queryByRole('button', { name: /Re-run|Download|Delete/ })).toBeNull()
+    fireEvent.click(within(row).getByRole('button', { name: 'Open' }))
+    expect(onReviewStatement).toHaveBeenCalledWith(
+      'stmt_parsing',
+      'jan-parsing.pdf',
+      '2026-01-01T00:00:00Z',
+    )
   })
 
-  it('a ready-but-uncommitted row offers Review → and calls back with its id', async () => {
+  it('a ready-but-uncommitted row offers Review and calls back with its id', async () => {
     mockList([READY_ROW])
     const onReviewStatement = vi.fn()
     render(
@@ -97,7 +138,11 @@ describe('StatementsModal — B20 lifecycle rows', () => {
     const row = screen.getByText('feb-ready.csv').closest('.acct-stmt-row') as HTMLElement
     expect(within(row).getByText('Ready to review')).toBeTruthy()
     fireEvent.click(within(row).getByRole('button', { name: /Review/ }))
-    expect(onReviewStatement).toHaveBeenCalledWith('stmt_ready', 'feb-ready.csv')
+    expect(onReviewStatement).toHaveBeenCalledWith(
+      'stmt_ready',
+      'feb-ready.csv',
+      '2026-02-01T00:00:00Z',
+    )
     expect(within(row).queryByRole('button', { name: 'Download' })).toBeNull()
   })
 
@@ -106,7 +151,7 @@ describe('StatementsModal — B20 lifecycle rows', () => {
     open()
     await screen.findByText('mar-interrupted.csv')
     const row = screen.getByText('mar-interrupted.csv').closest('.acct-stmt-row') as HTMLElement
-    expect(within(row).getByText('interrupted')).toBeTruthy()
+    expect(within(row).getByText('Reading stopped')).toBeTruthy()
     expect(within(row).getByText('Reading was interrupted')).toBeTruthy()
 
     fireEvent.click(within(row).getByRole('button', { name: 'Re-run' }))
@@ -128,7 +173,7 @@ describe('StatementsModal — B20 lifecycle rows', () => {
     open()
     await screen.findByText('apr-failed.csv')
     const row = screen.getByText('apr-failed.csv').closest('.acct-stmt-row') as HTMLElement
-    const badge = within(row).getByText('failed')
+    const badge = within(row).getByText('Couldn’t read')
     expect(badge.closest('[title]')?.getAttribute('title')).toBe(FAILED_ROW.parse_error)
     expect(within(row).getByRole('button', { name: 'Re-run' })).toBeTruthy()
   })
@@ -161,13 +206,26 @@ describe('StatementsModal — B20 lifecycle rows', () => {
     expect(within(row).getByText('Couldn’t read this file')).toBeTruthy()
   })
 
-  it('a normal committed row is untouched — Download/Delete, no lifecycle chrome', async () => {
+  it('a ready, interrupted or failed row can be downloaded or deleted from ⋯; a reading row cannot', async () => {
+    mockList([READY_ROW, INTERRUPTED_ROW, FAILED_ROW, PARSING_ROW])
+    open()
+    await screen.findByText('feb-ready.csv')
+    for (const name of ['feb-ready.csv', 'mar-interrupted.csv', 'apr-failed.csv']) {
+      expect(screen.getByRole('button', { name: `More actions for ${name}` })).toBeTruthy()
+    }
+    expect(screen.queryByRole('button', { name: 'More actions for jan-parsing.pdf' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for feb-ready.csv' }))
+    expect(await screen.findByRole('menuitem', { name: /Delete/ })).toBeTruthy()
+  })
+
+  it('a normal committed row keeps Download/Delete in its ⋯ menu, no lifecycle chrome', async () => {
     mockList([NORMAL_ROW])
     open()
     await screen.findByText('may-normal.csv')
     const row = screen.getByText('may-normal.csv').closest('.acct-stmt-row') as HTMLElement
-    expect(within(row).getByRole('button', { name: 'Download' })).toBeTruthy()
-    expect(within(row).getByRole('button', { name: /Delete/ })).toBeTruthy()
+    fireEvent.click(within(row).getByRole('button', { name: 'More actions for may-normal.csv' }))
+    expect(await screen.findByRole('menuitem', { name: /Download/ })).toBeTruthy()
+    expect(screen.getByRole('menuitem', { name: /Delete/ })).toBeTruthy()
     expect(within(row).queryByText('Ready to review')).toBeNull()
   })
 
@@ -210,35 +268,98 @@ describe('StatementsModal — B20 lifecycle rows', () => {
     open()
     await screen.findByText('legacy.csv')
     const row = screen.getByText('legacy.csv').closest('.acct-stmt-row') as HTMLElement
-    expect(within(row).getByRole('button', { name: 'Download' })).toBeTruthy()
+    expect(within(row).getByRole('button', { name: 'More actions for legacy.csv' })).toBeTruthy()
   })
 })
 
 describe('StatementsModal — one clear status per row (owner, 2026-10-06)', () => {
-  const badgeIn = (filename: string, text: string) => {
+  const badgeIn = (filename: string, text: string | RegExp) => {
     const row = screen.getByText(filename).closest('.acct-stmt-row') as HTMLElement
     return within(row).queryByText(text)
   }
 
-  it('labels every row: parsing…, parsed, imported, failed, interrupted', async () => {
+  it('labels every row: Reading…, Ready to review, Imported, Couldn’t read, Reading stopped', async () => {
     mockList([PARSING_ROW, READY_ROW, INTERRUPTED_ROW, FAILED_ROW, NORMAL_ROW])
     open()
     await screen.findByText('may-normal.csv')
-    expect(badgeIn('jan-parsing.pdf', 'parsing…')).toBeTruthy()
-    expect(badgeIn('feb-ready.csv', 'parsed')).toBeTruthy()
-    expect(badgeIn('mar-interrupted.csv', 'interrupted')).toBeTruthy()
-    expect(badgeIn('apr-failed.csv', 'failed')).toBeTruthy()
-    expect(badgeIn('may-normal.csv', 'imported')).toBeTruthy()
+    expect(badgeIn('jan-parsing.pdf', 'Reading…')).toBeTruthy()
+    expect(badgeIn('feb-ready.csv', 'Ready to review')).toBeTruthy()
+    expect(badgeIn('mar-interrupted.csv', 'Reading stopped')).toBeTruthy()
+    expect(badgeIn('apr-failed.csv', 'Couldn’t read')).toBeTruthy()
+    expect(badgeIn('may-normal.csv', 'Imported')).toBeTruthy()
     // a parsed-but-unfiled statement is never called imported
-    expect(badgeIn('feb-ready.csv', 'imported')).toBeNull()
+    expect(badgeIn('feb-ready.csv', /Imported/)).toBeNull()
   })
 
   it('a statement filed with nothing to write (no batch) reads imported, not parsed', async () => {
     mockList([{ ...READY_ROW, filename: 'jun-filed.csv', filed: true }])
     open()
     await screen.findByText('jun-filed.csv')
-    expect(badgeIn('jun-filed.csv', 'imported')).toBeTruthy()
-    expect(badgeIn('jun-filed.csv', 'parsed')).toBeNull()
+    expect(badgeIn('jun-filed.csv', 'Imported')).toBeTruthy()
+    expect(badgeIn('jun-filed.csv', 'Ready to review')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Review' })).toBeNull()
+  })
+
+  // Owner, 2026-10-25: a statement waiting for review showed no date, period or size, and a
+  // booked one said "no check" and a lone dash. Every row now carries the same facts.
+  it('a ready row says its period, size, upload date and AI cost', async () => {
+    mockList([
+      {
+        ...READY_ROW,
+        period_start: '2026-06-01',
+        period_end: '2026-06-30',
+        rows_read: 210,
+        llm_cost_usd: 0.032,
+      },
+    ])
+    open()
+    await screen.findByText('feb-ready.csv')
+    const row = screen.getByText('feb-ready.csv').closest('.acct-stmt-row') as HTMLElement
+    expect(
+      within(row).getByText(`${fDate('2026-06-01')} → ${fDate('2026-06-30', 'short', 'always')}`),
+    ).toBeTruthy()
+    expect(within(row).getByText('210 rows')).toBeTruthy()
+    expect(within(row).getByText(/^Uploaded /)).toBeTruthy()
+    expect(within(row).getByText('AI read ≈ $0.03')).toBeTruthy()
+  })
+
+  it('a booked row says when, what it added and linked, and the balance in words', async () => {
+    mockList([
+      {
+        ...NORMAL_ROW,
+        imported_at: '2026-07-28T10:00:00Z',
+        rows_read: 96,
+        added: 90,
+        linked: 6,
+        reconcile: { status: 'off', delta: -12000 },
+        currency: 'VND',
+      },
+    ])
+    open()
+    await screen.findByText('may-normal.csv')
+    const row = screen.getByText('may-normal.csv').closest('.acct-stmt-row') as HTMLElement
+    expect(within(row).getByText(`Imported ${fDate('2026-07-28T10:00:00Z')}`)).toBeTruthy()
+    expect(within(row).getByText('96 rows · 90 new · 6 linked')).toBeTruthy()
+    expect(within(row).getByText(/^Balance off by /)).toBeTruthy()
+    expect(within(row).queryByText('—')).toBeNull()
+  })
+
+  it('a balance that cannot be checked shows no badge, never "no check"', async () => {
+    mockList([{ ...NORMAL_ROW, reconcile: { status: 'unknown' } }])
+    open()
+    await screen.findByText('may-normal.csv')
+    const row = screen.getByText('may-normal.csv').closest('.acct-stmt-row') as HTMLElement
+    expect(within(row).queryByText(/no check|Balance/)).toBeNull()
+  })
+
+  it('only a card statement shows an amount due', async () => {
+    mockList([
+      { ...NORMAL_ROW, amount_due: 2450.1, payment_due_date: '2026-10-23', currency: 'USD' },
+    ])
+    open()
+    await screen.findByText('may-normal.csv')
+    const row = screen.getByText('may-normal.csv').closest('.acct-stmt-row') as HTMLElement
+    expect(within(row).getByText(/2,450\.10/)).toBeTruthy()
+    expect(within(row).getByText(/^Due /)).toBeTruthy()
   })
 })

@@ -633,6 +633,15 @@ price provider's daily bars and the live quote, the paragraph from `evidence`, s
 explicit `wipe(conn, "price_movement_notes.json")` call, never `BRIDGED`), and never a source of
 a price. ADR `2026-09-20-notable-price-movement-timeline`.
 
+**`statement_previews` — the finished review of a statement (2026-10-25).** One row per statement
+(`statement_id` PK, FK `ON DELETE CASCADE` to `statements_meta`; `fmt`, `instr_hash`, `account_arg`,
+`resolved_account_id`, `preview` JSON), added by the Alembic revision `…_statement_previews`, access via
+`db/statement_preview_store.py`. `decision_preview` persists its final response here BEFORE the
+record can read `ready` (the progress channel's done fires after it returns), and a reopen returns
+it as-is — only `force_reparse`/`force_relearn`, a different account, changed instructions or a
+mapping recompute. Dropped on a successful commit and on undoing Lucius ops. A derived cache:
+`_EXCLUDED_TABLES`-listed, not in `BRIDGED`. ADR `2026-10-25-ready-means-the-review-is-persisted`.
+
 **The 9 logs/telemetry stores — Tier-2, one checkpoint-included exception, absorbed (stage-4
 cutover, plan 4c Wave C, tasks 1-3).** `automation_run_store`, `automation_runtime_store`,
 `batch_ledger_store`, `harness_suggestion_store`, `mcp_write_log_store`, `model_telemetry_store`,

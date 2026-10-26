@@ -206,7 +206,16 @@ def _totals(
     for acct, entry in per_acct.items():
         ledger_net = _ledger_net(acct, lo, hi)
         uncovered_net = round(sum(float(e.get("amount") or 0.0) for e in check["rows"]), 2)
-        boundary_net = round(sum(float(e.get("amount") or 0.0) for e in check["boundary"]), 2)
+        # Entries pulled in from before the window (`_POSTING_LOOKBACK_DAYS`) are outside
+        # `ledger_net`'s span, so they stay out of its decomposition too.
+        boundary_net = round(
+            sum(
+                float(e.get("amount") or 0.0)
+                for e in check["boundary"]
+                if (e.get("date") or "") >= lo
+            ),
+            2,
+        )
         if len(per_acct) > 1:
             # multi-account statements: uncovered entries carry no account split in their
             # summary — attribute conservatively only in the single-account case
@@ -294,6 +303,14 @@ def preview_ledger_check(
 # happened to land within 3 days of that row's own date, which it always will.
 _BOUNDARY_DAYS = 3
 
+# A card purchase posts a few days AFTER it was made, so a statement's first rows routinely
+# carry charges the ledger dated just before its period (owner, 2026-10-26: a 29 Sep and a
+# 30 Sep purchase posted 1–3 Oct, sat in neither statement's review as linkable, and the row's
+# picker could not find them). Entries this many days before the window that NO statement
+# holds join the opening cut-off bucket — visible, and linkable by hand — without widening the
+# window itself (the totals and every other edge keep it).
+_POSTING_LOOKBACK_DAYS = 5
+
 
 def _window_is_self_referential(meta: dict) -> bool:
     """True when ``_window`` would have to fall back to the rows-derived window (no printed
@@ -345,23 +362,32 @@ def _collect_uncovered(
     core: list[dict] = []
     boundary: list[dict] = []
     lo_date, hi_date = date.fromisoformat(lo), date.fromisoformat(hi)
+    lookback = (
+        (lo_date - timedelta(days=_POSTING_LOOKBACK_DAYS)).isoformat() if boundary_days > 0 else lo
+    )
     index = StatementRefIndex()
+    opening_ids = ledger_service.opening_txn_ids()
     for t in ledger_service.transactions.all():
         if t.get("deleted") or t.get("id") in covered:
             continue
         if t.get("kind") == "adjustment":
             continue
         d = t.get("date") or ""
-        if not (lo <= d <= hi):
+        if not (lookback <= d <= hi):
             continue
         if not ({t.get("from_account_id"), t.get("to_account_id")} & account_ids):
+            continue
+        if d < lo:
+            early = _posted_late(t, d, lo_date, opening_ids, index)
+            if early:
+                boundary.append(early)
             continue
         # source/original_amount/original_currency ride on the base summary itself now
         # (_existing_summary computes them once) — no per-caller override needed here.
         # `on_statements` and `near_cutoff` are ledger-check-only (they need the statement store
         # and this window respectively), so they are attached here rather than widening the
         # shared projection every match flag also pays for.
-        summary = _existing_summary(t) or {}
+        summary = _existing_summary(t, opening_ids) or {}
         summary["on_statements"] = on_statements(t, index)
         day = _parse_day(d)
         near = _near_cutoff(day, lo_date, hi_date, boundary_days) if day else None
@@ -370,6 +396,27 @@ def _collect_uncovered(
     core.sort(key=lambda r: (r.get("date") or "", r.get("id") or ""))
     boundary.sort(key=lambda r: (r.get("date") or "", r.get("id") or ""))
     return {"status": "ok", "period": {"start": lo, "end": hi}, "rows": core, "boundary": boundary}
+
+
+def _posted_late(
+    t: dict, d: str, lo_date: date, opening_ids: frozenset[str], index: StatementRefIndex
+) -> dict | None:
+    """An entry dated just before the window that may have POSTED inside it — offered under
+    the opening cut-off only while no statement holds it (one that does is settled, not news)."""
+    on = on_statements(t, index)
+    day = _parse_day(d)
+    if on or day is None:
+        return None
+    summary = _existing_summary(t, opening_ids) or {}
+    summary["on_statements"] = None
+    days = (lo_date - day).days
+    unit = "day" if days == 1 else "days"
+    summary["near_cutoff"] = {
+        "edge": "start",
+        "days": -days,
+        "label": f"{days} {unit} before opening",
+    }
+    return summary
 
 
 def _covered_ids(

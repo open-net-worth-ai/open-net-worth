@@ -18,9 +18,18 @@ export interface ToastProps {
   /** Accounts sidebar width in px, or 0 when it is collapsed. Read only when
    *  `anchor='register'`; falls back to the CSS default width when omitted. */
   railWidth?: number
+  /** True while the register's bulk bar is up: the pill rises to clear it instead of covering
+   *  it. Otherwise it sits on the same bottom line as every other screen's toast. */
+  aboveBulkBar?: boolean
 }
 
-export function Toast({ message, onDone, anchor = 'viewport', railWidth }: ToastProps) {
+export function Toast({
+  message,
+  onDone,
+  anchor = 'viewport',
+  railWidth,
+  aboveBulkBar = false,
+}: ToastProps) {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -38,7 +47,11 @@ export function Toast({ message, onDone, anchor = 'viewport', railWidth }: Toast
 
   return (
     <div
-      className={'acct-toast mb-anchored' + (anchor === 'register' ? ' anchor-reg' : '')}
+      className={
+        'acct-toast mb-anchored' +
+        (anchor === 'register' ? ' anchor-reg' : '') +
+        (aboveBulkBar ? ' acct-toast--above-bulk' : '')
+      }
       style={
         anchor === 'register' && railWidth !== undefined
           ? ({ '--acct-toast-rail-w': `${railWidth}px` } as CSSProperties)

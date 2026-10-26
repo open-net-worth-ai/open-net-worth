@@ -15,6 +15,7 @@ import {
   invalidateQueryCache,
 } from '../../../state/queryCache'
 import { getBaseCurrency } from '../../../utils/format'
+import { emitDataChanged } from '../../../lucius/bus'
 import { PORTFOLIO_KEY as SHARED_PORTFOLIO_KEY, useNetWorth } from '../../../hooks/serverState'
 import { accountClearedValue, accountValue, fromApiAccount, fromApiTxn } from './data'
 import { retiredEnvelopeNotice } from './retiredPaymentEnvelope'
@@ -842,6 +843,15 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
       // paint has to come back off even though the request itself succeeded.
       const refused = new Set([...result.not_found, ...result.skipped.map((s) => s.id)])
       if (refused.size) restore(refused)
+      // A review flip changes WHICH rows a "Needs review" register holds and the "N to review"
+      // count — the optimistic paint alone left 69 reviewed rows sitting in that view with the
+      // count unchanged (owner, 2026-10-26). Refetch the list (a reviewed row must leave the
+      // view, so page 0 is right) and tell every screen, the count included.
+      if ('needs_review' in data) {
+        await loadTxns(filters, 0, false, true)
+        setOffset(0)
+        emitDataChanged(['ledger'])
+      }
       void refreshAccounts()
       fireMutate()
       return result
@@ -999,7 +1009,18 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
         method: 'POST',
         body: JSON.stringify(data),
       })
-      if (!res.ok) throw new Error(await res.text())
+      if (!res.ok) {
+        const text = await res.text()
+        // A 409 means the shown balance was stale — re-read it so a retry asks the right figure.
+        if (res.status === 409) await refreshAccount(id)
+        let detail: unknown
+        try {
+          detail = JSON.parse(text)?.detail
+        } catch {
+          detail = undefined
+        }
+        throw new Error(typeof detail === 'string' && detail ? detail : text)
+      }
       const result: ReconcileResult = await res.json()
       await refreshAccount(id)
       // The reconcile may create an adjustment txn — reload txns

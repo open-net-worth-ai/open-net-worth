@@ -2,8 +2,9 @@
 # Host a public Open Net Worth demo on one AWS Lightsail VM, reached through a Cloudflare tunnel.
 #
 #   demo-aws.sh provision          create the VM (Ubuntu 24.04, 2 GB, Docker, only SSH open)
-#   demo-aws.sh ship [--worktree]  build the image for linux/amd64 and load it on the VM
+#   demo-aws.sh ship [--worktree | --ref REF]  build the image for linux/amd64 and load it on the VM
 #   demo-aws.sh book --seed        generate a fresh fabricated demo book on the VM
+#   demo-aws.sh book --reset       replace the live book with a fresh one, keeping Lucius's AI settings
 #   demo-aws.sh book [DIR]         or copy an existing hosted demo book (default ~/.open-net-worth-demo)
 #   demo-aws.sh lucius             point Lucius at OpenRouter (key read silently, never echoed)
 #   demo-aws.sh verify             open the VM's demo at http://127.0.0.1:15175 over SSH
@@ -28,7 +29,10 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 confirm() { read -r -p "$1 [y/N] " a; [[ "${a}" == "y" || "${a}" == "Y" ]]; }
 
 IP=""
+# ONW_DEMO_HOST skips the AWS lookup: the VM sits on a static IP, and an unattended job should
+# not depend on an AWS sign-in session that expires.
 need_vm() {
+  [[ -n "${ONW_DEMO_HOST:-}" ]] && { IP="${ONW_DEMO_HOST}"; return 0; }
   IP="$(ls_ get-instance --instance-name "${NAME}" --query 'instance.publicIpAddress' --output text 2>/dev/null)" \
     && [[ -n "${IP}" && "${IP}" != "None" ]] \
     || die "no running Lightsail instance '${NAME}' in ${REGION} — run provision first"
@@ -100,24 +104,26 @@ CLOUDINIT
 }
 
 cmd_ship() {
-  local sha src
+  local sha src ref=HEAD
   BUILD_TMP=""
+  [[ "${1:-}" == "--ref" ]] && ref="${2:?--ref needs a git ref, e.g. origin/main}"
   if [[ "${1:-}" == "--worktree" ]]; then
     src="${REPO_ROOT}"
     sha="$(git -C "${REPO_ROOT}" rev-parse --short HEAD)-dirty-$(date +%Y%m%d%H%M)"
     echo "==> building from the WORKING TREE (uncommitted changes included)"
   else
-    sha="$(git -C "${REPO_ROOT}" rev-parse --short HEAD)"
+    sha="$(git -C "${REPO_ROOT}" rev-parse --short=9 "${ref}")"
     BUILD_TMP="$(mktemp -d "${TMPDIR:-/tmp}/onw-demo-build.XXXXXX")"
-    git -C "${REPO_ROOT}" worktree add --detach "${BUILD_TMP}" HEAD >/dev/null
+    git -C "${REPO_ROOT}" worktree add --detach "${BUILD_TMP}" "${ref}" >/dev/null
     trap 'git -C "${REPO_ROOT}" worktree remove --force "${BUILD_TMP}" >/dev/null 2>&1 || true' EXIT
     src="${BUILD_TMP}"
-    echo "==> building committed HEAD ${sha} (pass --worktree to include uncommitted work)"
+    echo "==> building committed ${ref} ${sha} (pass --worktree to include uncommitted work)"
   fi
   docker buildx build --platform linux/amd64 -t "onw-demo:${sha}" --load "${src}"
   echo "==> uploading the image (a few minutes)..."
   docker save "onw-demo:${sha}" | gzip -1 | remote 'gunzip | docker load'
-  scp "${SSH_OPTS[@]}" -q "${HERE}/compose.yml" "ubuntu@${IP}:${STACK}/compose.yml"
+  # The compose file ships with the code it was written for, not with this checkout's copy.
+  scp "${SSH_OPTS[@]}" -q "${src}/deploy/aws-demo/compose.yml" "ubuntu@${IP}:${STACK}/compose.yml"
   ensure_unpublished_password
   printf '%s' "${sha}" | remote_env_set ONW_DEMO_TAG
   if remote "test -s ${BOOK}/data/onw.db"; then
@@ -156,6 +162,31 @@ cmd_book_seed() {
   compose run --rm --no-deps app python3 -m backend.scripts.seed_demo --commit --quiet
   compose up -d app
   echo "==> demo is starting — next: $0 lucius, then $0 verify"
+}
+
+# Visitors edit the one shared book (a base-currency switch reaches everyone), so the daily job
+# starts each day from a fresh one. The OpenRouter key lives IN the book, so its config is read
+# out of the running container and written into the new book; it never leaves the VM.
+cmd_book_reset() {
+  remote_env_has ONW_DEMO_TAG || die "no image on the VM yet — run ship first"
+  echo "==> replacing the book with a fresh one dated to today (AI settings kept)..."
+  remote "STACK=${STACK} BOOK=${BOOK} bash -s" <<'SH'
+set -euo pipefail
+cd "${STACK}"
+read_py='import json; from backend.db.model_config_store import ModelConfigStore as S; print(json.dumps(S().get() or {}))'
+write_py='import json, sys; from backend.db.model_config_store import ModelConfigStore as S; raw = json.loads(sys.stdin.read()); raw and S().save(raw)'
+# This script arrives on bash's stdin, so every command that could read stdin gets /dev/null.
+ai="$(docker exec -e DEMO_MODE=0 onw-demo python3 -c "${read_py}" </dev/null)"
+[[ "${ai}" == "{}" ]] && echo "    (no AI settings in the old book — run: demo-aws.sh lucius)"
+docker compose stop app </dev/null
+# The app's nightly backups are copies of the old book, conversations included.
+rm -rf "${BOOK}/data" "${BOOK}/backups"
+mkdir -m 755 "${BOOK}/data" "${BOOK}/backups"
+docker compose run --rm --no-deps -T app python3 -m backend.scripts.seed_demo --commit --quiet </dev/null
+printf '%s' "${ai}" | docker compose run --rm --no-deps -T -e DEMO_MODE=0 app python3 -c "${write_py}"
+docker compose up -d app </dev/null
+SH
+  echo "==> fresh book is starting"
 }
 
 cmd_book_copy() {
@@ -267,7 +298,12 @@ esac
 case "${1:-}" in
   provision) cmd_provision ;;
   ship)      shift; cmd_ship "$@" ;;
-  book)      shift; if [[ "${1:-}" == "--seed" ]]; then cmd_book_seed; else cmd_book_copy "${1:-}"; fi ;;
+  book)      shift
+             case "${1:-}" in
+               --seed)  cmd_book_seed ;;
+               --reset) cmd_book_reset ;;
+               *)       cmd_book_copy "${1:-}" ;;
+             esac ;;
   lucius)    cmd_lucius ;;
   verify)    cmd_verify ;;
   tunnel)    cmd_tunnel ;;

@@ -1111,8 +1111,8 @@ async def run_intel_scan(*, raise_on_incomplete: bool = False) -> int:
     )
     opp_rss_feeds = resolve_opportunity_feeds(opportunity_queries)
     await asyncio.gather(
-        gather_rss(rss_feeds, store=evidence_store),
-        gather_rss(opp_rss_feeds, store=evidence_store),
+        gather_rss(rss_feeds, store=evidence_store, read_back=False),
+        gather_rss(opp_rss_feeds, store=evidence_store, read_back=False),
     )
 
     # Structured movers (free) — Yahoo predefined screeners inject top movers as a compact
@@ -1257,7 +1257,7 @@ async def run_opportunity_scan() -> int:
 
     # RSS (free, always runs) — populate scan:opportunity evidence before the optional paid search.
     opp_rss_feeds = resolve_opportunity_feeds(opportunity_queries)
-    await gather_rss(opp_rss_feeds, store=evidence_store)
+    await gather_rss(opp_rss_feeds, store=evidence_store, read_back=False)
 
     # Structured movers (free) — Yahoo screeners inject top movers as compact context for the LLM.
     movers: dict[str, list[dict]] = {}

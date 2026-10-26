@@ -410,6 +410,11 @@ export function Register({
     } catch (_) {}
   }
 
+  // A filter change keeps the old rows on screen until the new page lands, so without this the
+  // table looks finished while the query is still running. load-more has its own trailing row.
+  const refetching = loadingTxns && sorted.length > 0 && !isLoadingMore
+  const loadBar = refetching && <span className="acct-reg-loadbar" aria-hidden="true" />
+
   return (
     <div
       ref={regRef}
@@ -417,9 +422,11 @@ export function Register({
         'acct-reg ' +
         (showAccount ? 'all' : 'single') +
         (isMobile ? ' cards' : '') +
-        (overflow ? ' overflow' : '')
+        (overflow ? ' overflow' : '') +
+        (refetching ? ' refetching' : '')
       }
       style={{ '--reg-tmpl': baseTmpl } as CSSProperties}
+      aria-busy={loadingTxns || undefined}
     >
       {isMobile ? (
         <div className="acct-card-headbar">
@@ -443,9 +450,11 @@ export function Register({
             {total > sorted.length ? ` of ${total}` : ''} transaction
             {sorted.length === 1 ? '' : 's'}
           </span>
+          {loadBar}
         </div>
       ) : (
         <div className="acct-reg-headwrap">
+          {loadBar}
           <div className="acct-reg-headclip" ref={headClipRef}>
             <div className="acct-reg-head" style={{ gridTemplateColumns: tmpl }}>
               {cols.map((c) => (

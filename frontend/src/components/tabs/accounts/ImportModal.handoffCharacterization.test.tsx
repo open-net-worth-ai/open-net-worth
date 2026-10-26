@@ -238,40 +238,58 @@ describe('ImportModal handoff port — production behavior characterization', ()
     await openPreview({ onMarkImportReviewed })
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-    expect(await screen.findByText('Booked.')).toBeTruthy()
+    expect(await screen.findByText(/^Imported /)).toBeTruthy()
     expect(document.querySelector('.ui-modal-card--md')).toBeTruthy()
     expect(document.querySelector('.ui-modal-card--workspace')).toBeNull()
     expect(
       Array.from(document.querySelectorAll('.imp3-crumb')).map((node) => node.textContent),
     ).toEqual(['Choose', 'Read', 'Decide'])
     expect(
-      screen.getByText('1 linked to entries you had • 2 imported new • 4 left out'),
-    ).toBeTruthy()
-    const mark = await screen.findByRole('button', { name: 'Mark all 2 as reviewed' })
+      Array.from(document.querySelectorAll('.imp3-booked-stat')).map((n) => n.textContent),
+    ).toEqual(['2added ', '1linkedto entries you had', '3left outby you'])
+    expect(screen.getByText('2 new rows need review in the register')).toBeTruthy()
+    const mark = await screen.findByRole('button', { name: 'Mark all reviewed' })
     fireEvent.click(mark)
 
     await waitFor(() => expect(onMarkImportReviewed).toHaveBeenCalledWith('imp-characterization'))
-    expect(await screen.findByText('All 2 new rows marked as reviewed.')).toBeTruthy()
+    expect(await screen.findByText('✓ All 2 new rows marked reviewed')).toBeTruthy()
   })
 
-  it('offers "View linked & imported" on the Booked screen, wired to the real batch id', async () => {
-    // Renamed from "View imported" (owner: "now we see all linked ones too, not just import")
-    // once the register filter behind it started unioning merged/linked rows with created ones.
+  it('offers "View in register" on the Booked screen, wired to the real batch id', async () => {
+    // The register filter behind it unions the batch's created rows with the ones it linked.
     const onViewImportBatch = vi.fn()
     await openPreview({ onViewImportBatch })
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-    expect(await screen.findByText('Booked.')).toBeTruthy()
+    expect(await screen.findByText(/^Imported /)).toBeTruthy()
 
-    fireEvent.click(screen.getByRole('button', { name: 'View linked & imported' }))
+    fireEvent.click(screen.getByRole('button', { name: 'View in register' }))
     expect(onViewImportBatch).toHaveBeenCalledWith('imp-characterization', 'Import: statement.csv')
   })
 
-  it('omits "View linked & imported" when no batch id came back, or no callback was wired', async () => {
+  it('omits "View in register" when no batch id came back, or no callback was wired', async () => {
     await openPreview() // no onViewImportBatch at all
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
-    expect(await screen.findByText('Booked.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'View linked & imported' })).toBeNull()
+    expect(await screen.findByText(/^Imported /)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'View in register' })).toBeNull()
+  })
+
+  it('Undo import on the Booked screen undoes the batch and Review again reopens the same review', async () => {
+    const onUndoImport = vi.fn().mockResolvedValue({ deleted: 2, unmerged: 1 })
+    const { onDecisionCommit } = await openPreview({ onUndoImport })
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(await screen.findByText('Imported statement.csv')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Undo import' }))
+    fireEvent.click(document.querySelector('.imp3-undo-go') as HTMLButtonElement)
+    await waitFor(() => expect(onUndoImport).toHaveBeenCalledWith('imp-characterization'))
+    expect(await screen.findByText('Import undone')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review again' }))
+    // The review itself, not a re-read: the rows are back and Confirm books again.
+    expect(document.body.querySelector('.imp3-arow-match')?.textContent).toContain('Strong ledger')
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeTruthy()
+    expect(onDecisionCommit).toHaveBeenCalledTimes(1)
   })
 
   it('shows a loading indicator while the commit round-trip is in flight', async () => {
@@ -305,6 +323,6 @@ describe('ImportModal handoff port — production behavior characterization', ()
     await act(async () => {
       resolveCommit({ created: 1, merged: 0, duplicates: 0, skipped: 0 })
     })
-    expect(await screen.findByText('Booked.')).toBeTruthy()
+    expect(await screen.findByText(/^Imported /)).toBeTruthy()
   })
 })

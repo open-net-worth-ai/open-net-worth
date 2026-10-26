@@ -39,6 +39,7 @@ from backend.services.statements import decisions as svc
 from backend.services.statements import tiers
 from backend.services.statements.canonical import StatementMeta
 from backend.services.statements.parser import run_async
+from tests.conftest import drop_stored_review
 
 
 @pytest.fixture(autouse=True)
@@ -217,6 +218,7 @@ def test_a_flagged_record_repairs_its_metadata_on_the_next_preview(monkeypatch):
 
     monkeypatch.setattr(tiers, "tier2_text", _no_row_tier)
     _succeed_both(monkeypatch)
+    drop_stored_review(first["statement_id"])  # the metadata heal runs on the recompute path
     second = svc.decision_preview(_FAKE_PDF, "pdf", None, filename="eStatement_May2026.pdf")
     assert second["meta"]["statement_date"] == "2026-05-05"
     assert second["meta"]["meta_unavailable"] is False
@@ -229,6 +231,7 @@ def test_the_healed_metadata_persists_on_the_record(monkeypatch):
     _fail_meta_succeed_rows(monkeypatch)
     first = svc.decision_preview(_FAKE_PDF, "pdf", None, filename="eStatement_May2026.pdf")
     _succeed_both(monkeypatch)
+    drop_stored_review(first["statement_id"])  # the metadata heal runs on the recompute path
     svc.decision_preview(_FAKE_PDF, "pdf", None, filename="eStatement_May2026.pdf")
 
     from backend.db.statement_store import StatementStore

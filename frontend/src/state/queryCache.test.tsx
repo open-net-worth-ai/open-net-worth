@@ -258,4 +258,60 @@ describe('fetchCachedQuery (one-shot callers)', () => {
     expect(await b).toBe('rows-v1')
     expect(fetcher).toHaveBeenCalledTimes(1)
   })
+
+  // Regression (owner report 2026-10-26): a txn's cleared box toggled five times in five
+  // seconds. The reload after the last toggle was forced, but joined the accounts GET already
+  // in flight from the toggle BEFORE it — so the header kept the pre-toggle cleared balance,
+  // Reconcile asked about that figure, and "Yes, it matches" booked a phantom adjustment.
+  function deferredFetcher() {
+    const pending: Array<(v: string) => void> = []
+    const fetcher = vi
+      .fn<() => Promise<string>>()
+      .mockImplementation(() => new Promise((r) => pending.push(r)))
+    return { fetcher, pending }
+  }
+
+  it('a forced fetch never joins a request that started before it', async () => {
+    const { fetchCachedQuery } = await import('./queryCache')
+    const { fetcher, pending } = deferredFetcher()
+
+    const before = fetchCachedQuery('accts', fetcher, { force: true })
+    const after = fetchCachedQuery('accts', fetcher, { force: true })
+    expect(fetcher).toHaveBeenCalledTimes(2)
+
+    pending[1]('post-write')
+    pending[0]('pre-write')
+    expect(await after).toBe('post-write')
+    expect(await before).toBe('post-write')
+    expect(getCachedQueryData('accts')).toBe('post-write')
+  })
+
+  it('a superseded request that lands LAST resolves with the newest data, not its own', async () => {
+    const { fetchCachedQuery } = await import('./queryCache')
+    const { fetcher, pending } = deferredFetcher()
+
+    const before = fetchCachedQuery('accts2', fetcher, { force: true })
+    const after = fetchCachedQuery('accts2', fetcher, { force: true })
+
+    pending[1]('post-write')
+    expect(await after).toBe('post-write')
+    pending[0]('pre-write')
+    // Its awaiter applies whatever it resolves with to its own state, AFTER `after`'s
+    // awaiter did — so handing back its own stale body would win the race.
+    expect(await before).toBe('post-write')
+    expect(getCachedQueryData('accts2')).toBe('post-write')
+  })
+
+  it('a superseded request still in flight follows the newer one', async () => {
+    const { fetchCachedQuery } = await import('./queryCache')
+    const { fetcher, pending } = deferredFetcher()
+
+    const before = fetchCachedQuery('accts3', fetcher, { force: true })
+    const after = fetchCachedQuery('accts3', fetcher, { force: true })
+
+    pending[0]('pre-write')
+    pending[1]('post-write')
+    expect(await before).toBe('post-write')
+    expect(await after).toBe('post-write')
+  })
 })

@@ -547,7 +547,7 @@ async def _instant_news_freshen(ticker: str, row: dict, label: str) -> None:
             }
         )
         if feeds:
-            await gather_rss(feeds, max_age=5.0)
+            await gather_rss(feeds, max_age=5.0, read_back=False)
     except Exception as exc:
         logger.debug(
             "price_monitor: instant news freshen failed for %s: %s", ticker, type(exc).__name__

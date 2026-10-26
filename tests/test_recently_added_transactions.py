@@ -138,6 +138,42 @@ def test_review_feed_filters_before_limit_and_reports_the_full_backlog(client, e
     assert second_body["has_more"] is False
 
 
+def test_review_feed_scopes_to_one_account_including_either_transfer_leg(client, env):
+    """On an account page the review count and Start review cover that account only — the
+    same rows its Needs review filter shows (owner report 2026-10-26: "2 to review" on an
+    account whose filter showed 0, both rows belonging to another account)."""
+    acct = env["account_id"]
+    other = svc.accounts.create(
+        {"name": "Harbor Wallet", "kind": "asset", "type": "cash", "currency": "SGD"}
+    )["id"]
+    mine = _seed(acct, "2026-03-01T00:00:00Z", needs_review=True)
+    _seed(other, "2026-03-02T00:00:00Z", needs_review=True)
+    _seed(acct, "2026-03-03T00:00:00Z")
+    inbound = svc.transactions.append(
+        {
+            "date": "2026-01-15",
+            "kind": "transfer",
+            "from_account_id": other,
+            "from_amount": 20.0,
+            "from_currency": "SGD",
+            "to_account_id": acct,
+            "to_amount": 20.0,
+            "to_currency": "SGD",
+            "created_at": "2026-03-04T00:00:00Z",
+            "needs_review": True,
+        }
+    )
+
+    scoped = client.get(
+        f"/api/transactions/recently-added?needs_review=true&account_id={acct}&limit=10"
+    ).json()
+    everywhere = client.get("/api/transactions/recently-added?needs_review=true&limit=10").json()
+
+    assert {row["id"] for row in scoped["transactions"]} == {mine["id"], inbound["id"]}
+    assert scoped["total"] == 2
+    assert everywhere["total"] == 3
+
+
 def test_automation_queue_uses_creation_origin_before_count_and_pagination(client, env):
     from backend.core.audit_context import clear_audit_scope, set_audit_scope
 

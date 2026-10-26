@@ -123,6 +123,20 @@ describe('Register — loadingTxns never overrides rows already on screen', () =
     expect(screen.queryByText(/No transactions yet/i)).toBeNull()
   })
 
+  it('a refetch over existing rows (a filter change) shows the header progress bar and marks the register busy', () => {
+    const { container } = renderReg({ txns: [makeTxn()], loadingTxns: true })
+    expect(container.querySelector('.acct-reg-loadbar')).not.toBeNull()
+    expect(container.querySelector('.acct-reg.refetching[aria-busy="true"]')).not.toBeNull()
+  })
+
+  it('no progress bar once the refetch settles, nor during a load-more append', () => {
+    const settled = renderReg({ txns: [makeTxn()], loadingTxns: false })
+    expect(settled.container.querySelector('.acct-reg-loadbar')).toBeNull()
+    settled.unmount()
+    const appending = renderReg({ txns: [makeTxn()], loadingTxns: true, isLoadingMore: true })
+    expect(appending.container.querySelector('.acct-reg-loadbar')).toBeNull()
+  })
+
   it('a genuinely empty account (loadingTxns=false, no rows) shows the empty-state CTAs', () => {
     renderReg({ txns: [], loadingTxns: false, allEmpty: true })
     expect(screen.getByText(/No transactions yet/i)).toBeTruthy()

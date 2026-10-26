@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import threading
 
-from sqlalchemy import delete, func, insert, select, update
+from sqlalchemy import bindparam, delete, func, insert, select, update
 
 from backend.db.evidence_io import derive_columns, subject_rows
 from backend.db.tables import evidence, evidence_subjects
@@ -33,6 +33,7 @@ from backend.db.tables import evidence, evidence_subjects
 # scope precisely: in-process thread-safety, not multi-process (the old lock never
 # provided that either).
 _write_lock = threading.Lock()
+_IN_CHUNK = 500  # ids per DELETE … IN (…) — well under SQLite's bound-parameter limit
 
 
 def _merge_row(cur: dict, rec: dict) -> dict:
@@ -156,26 +157,52 @@ class EvidenceStore:
             next_seq = (
                 conn.execute(select(func.coalesce(func.max(evidence.c.seq), -1))).scalar_one() + 1
             )
+            # Every row is folded BEFORE the first write: SQLite takes the database-wide write
+            # lock at the first INSERT/UPDATE, and a per-record statement loop held it for
+            # seconds under GIL contention (one RSS scan = hundreds of statements), stalling
+            # every other writer in the app — a statement commit waited ~20s behind it.
+            stored = set(existing)
+            final: dict[str, dict] = {}
+            new_seq: dict[str, int] = {}
             for rec in records:
                 rid = rec.get("id")
                 if rid in existing:
                     row = _merge_row(existing[rid], rec)  # module-level helper, unchanged
-                    conn.execute(
-                        update(evidence).where(evidence.c.id == rid).values(**derive_columns(row))
-                    )
-                    conn.execute(
-                        delete(evidence_subjects).where(evidence_subjects.c.evidence_id == rid)
-                    )
                 else:
                     row = rec
-                    conn.execute(insert(evidence).values(**derive_columns(row), seq=next_seq))
+                    new_seq[rid] = next_seq
                     next_seq += 1
-                subs = subject_rows(row)
-                if subs:
-                    conn.execute(insert(evidence_subjects), subs)
                 existing[rid] = row
+                final[rid] = row
                 merged.append(row)
+            self._write_merged(conn, final, stored, new_seq)
         return merged
+
+    @staticmethod
+    def _write_merged(conn, final: dict, stored: set, new_seq: dict) -> None:
+        """Write each id's FINAL row in a handful of batched statements — the same end state the
+        per-record update/delete/insert sequence produced."""
+        updated = [rid for rid in final if rid in stored]
+        if updated:
+            conn.execute(
+                update(evidence).where(evidence.c.id == bindparam("_id")),
+                [{**derive_columns(final[rid]), "_id": rid} for rid in updated],
+            )
+            for i in range(0, len(updated), _IN_CHUNK):
+                conn.execute(
+                    delete(evidence_subjects).where(
+                        evidence_subjects.c.evidence_id.in_(updated[i : i + _IN_CHUNK])
+                    )
+                )
+        inserted = [rid for rid in final if rid not in stored]
+        if inserted:
+            conn.execute(
+                insert(evidence),
+                [{**derive_columns(final[rid]), "seq": new_seq[rid]} for rid in inserted],
+            )
+        subs = [s for rid in final for s in subject_rows(final[rid])]
+        if subs:
+            conn.execute(insert(evidence_subjects), subs)
 
     def set_image(self, row_id: str, image: str) -> bool:
         """Record an article's og:image on its row — payload only, no seen_count/last_seen

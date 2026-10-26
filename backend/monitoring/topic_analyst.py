@@ -41,7 +41,7 @@ async def freshen_topic_rss(subject: str, payload: dict) -> None:
             }
         )
         if feeds:
-            await gather_rss(feeds)
+            await gather_rss(feeds, read_back=False)
     except Exception as exc:
         logger.debug("analyst: RSS freshen failed for topic %s: %s", subject, type(exc).__name__)
 

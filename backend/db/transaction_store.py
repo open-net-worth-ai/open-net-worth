@@ -364,8 +364,16 @@ class TransactionStore:
     # ── Domain queries ────────────────────────────────────────────────────────
 
     def query_by_batch(self, batch_id: str, include_deleted: bool = True) -> list[dict]:
-        items = self.all()
-        items = [t for t in items if t.get("batch_id") == batch_id]
+        # Filters on the promoted column, so only the batch's own rows are decoded — the
+        # Statements list calls this once per import, and decoding the whole ledger each time
+        # was most of its cost (2026-10-26).
+        query = (
+            select(transactions.c.payload)
+            .where(transactions.c.batch_id == batch_id)
+            .order_by(transactions.c.seq)
+        )
+        with self._eng().connect() as read_conn:
+            items = [r.payload for r in read_conn.execute(query)]
         if not include_deleted:
             items = [t for t in items if not t.get("deleted")]
         return items
@@ -524,6 +532,7 @@ class TransactionStore:
         needs_review: bool | None = None,
         automation_only: bool = False,
         exclude_ids: frozenset[str] = frozenset(),
+        account_id: str | None = None,
     ) -> tuple[list[dict], int]:
         """One insertion-ordered page plus the matching total.
 
@@ -531,7 +540,7 @@ class TransactionStore:
         older pending rows out of the queue. `exclude_ids` is applied the same way, so skipping
         rows (the accounts' opening balances) never shortens the page.
         """
-        clauses = self._txn_where(needs_review=needs_review)
+        clauses = self._txn_where(needs_review=needs_review, account_id=account_id)
         if exclude_ids:
             clauses.append(transactions.c.id.not_in(list(exclude_ids)))
         if automation_only:

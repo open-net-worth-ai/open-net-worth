@@ -92,6 +92,9 @@ export interface OverviewProps {
   baseCurrency: string
   collapsed: boolean
   onReopen: () => void
+  /** Hover on the reopen button floats the accounts rail (AccountsTab's peek). */
+  onReopenHover?: () => void
+  onReopenLeave?: () => void
   onAddTxn: () => void
   onAdd: () => void
   onManagePayees: () => void
@@ -115,6 +118,8 @@ export function Overview({
   baseCurrency,
   collapsed,
   onReopen,
+  onReopenHover,
+  onReopenLeave,
   onAdd,
   onManagePayees,
   onManageCategories,
@@ -154,7 +159,13 @@ export function Overview({
       <div className="acct-head">
         <div className="acct-head-l">
           {collapsed && (
-            <button className="acct-reopen" onClick={onReopen} title="Show accounts">
+            <button
+              className="acct-reopen"
+              onClick={onReopen}
+              onMouseEnter={onReopenHover}
+              onMouseLeave={onReopenLeave}
+              title="Show accounts"
+            >
               <ChevronsRight size={16} strokeWidth={1.75} aria-hidden="true" />
             </button>
           )}
@@ -316,9 +327,11 @@ export function Overview({
 
           {/* Always rendered, even at 0 txns, so the card's height doesn't shift. */}
           <div className="acct-recon-line">
-            <ReviewStrip count={stats.review} onReview={onReview} onStartReview={onStartReview} />
             <span className="acct-recon-grow" />
-            <span className="acct-recon-stat muted">{stats.count} txns</span>
+            <span className="acct-recon-group acct-recon-group--review">
+              <ReviewStrip count={stats.review} onReview={onReview} onStartReview={onStartReview} />
+              <span className="acct-recon-stat muted">{stats.count} txns</span>
+            </span>
           </div>
         </div>
       </div>

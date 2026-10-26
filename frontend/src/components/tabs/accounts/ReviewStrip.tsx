@@ -23,6 +23,7 @@ export function ReviewStrip({
         onClick={onReview}
         title="Show transactions that need review"
       >
+        <span className="acct-recon-count-dot" aria-hidden="true" />
         {count} to review
       </button>
       <button
@@ -31,7 +32,8 @@ export function ReviewStrip({
         onClick={onStartReview}
         title="Approve or skip each one in turn"
       >
-        <WalletCards size={13} aria-hidden="true" /> Start review
+        <WalletCards size={13} aria-hidden="true" />
+        Start review
       </button>
     </span>
   )

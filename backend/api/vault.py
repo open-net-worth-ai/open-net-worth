@@ -94,6 +94,16 @@ def update_vault_file(item_id: str, body: VaultFilePatch):
         _http(exc)
 
 
+@router.get("/api/vault/items/{item_id}")
+def get_vault_item(item_id: str):
+    """One Vault item by id — what a single file preview needs (the import review shows its
+    statement this way) without listing every document."""
+    try:
+        return {"item": vault.get_item(item_id)}
+    except OpenNetWorthError as exc:
+        _http(exc)
+
+
 @router.get("/api/vault/items/{item_id}/table")
 def vault_item_table(item_id: str, sheet: Optional[str] = None, offset: int = 0):
     """One page of a CSV or Excel item's sheet from ``offset``, as strings

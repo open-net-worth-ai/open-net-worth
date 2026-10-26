@@ -22,6 +22,10 @@ name. The figure beside **All accounts** is only your accounts added together, d
 leaves out what you own on [Assets](assets.md), so it can differ from net worth, even go
 negative while net worth is positive.
 
+With the sidebar collapsed, rest the pointer on the **»** button beside the page title to float
+the sidebar over the page: pick an account and it closes again, still collapsed. Its **»** corner
+button keeps it open instead.
+
 On a narrow window (a laptop, or Lucius open beside the register) the register first squeezes its
 columns. If even that is too wide, it scrolls sideways — every column you chose is still there,
 **Memo** and **Source** included — and the **Amount** column stays pinned at the right edge, so
@@ -109,7 +113,8 @@ only goes away when you delete the whole account.
 
 When the balance in the app doesn't match your bank:
 
-1. Open the account and click **Reconcile** (on a narrow screen it's in the **⋯** menu).
+1. Open the account and click **Reconcile** on the line under the balance, next to when the
+   account was last reconciled.
 2. It asks *"Is the real balance …?"* showing the **cleared** balance — the part your bank has
    already posted. Pending (uncleared) transactions aren't included, because they're not on
    your statement yet either.
@@ -117,6 +122,17 @@ When the balance in the app doesn't match your bank:
    date.
 4. If not, click **No**, type the **Real balance**, check the **Adjustment** it shows, and
    click **Add adjustment**. The app books one adjustment transaction for the difference.
+
+The confirmation tells you whether an adjustment was booked and when to check again. Reconcile
+each account about **once a month**: once the last reconcile is more than 30 days old, the
+**Reconciled** line under the balance turns to a warning and shows how many days ago it was,
+right beside the **Reconcile** button.
+
+You don't have to open each account to check. In the accounts list, an account says **Needs
+reconciling** when its last reconcile is more than 30 days old, or when it has been open over a
+month without one. A collapsed group such as a bank with several accounts says how many **need
+reconciling**, and so does **All accounts** at the top. Accounts that are up to date show nothing
+extra.
 
 ## Import a statement or connect a bank
 
@@ -180,6 +196,10 @@ add it again; if it already has transactions, re-import them into the new accoun
 
 **"Is the real balance …?" shows a different figure from the sidebar** — Reconcile asks about
 the cleared balance only. The sidebar includes pending (uncleared) transactions too.
+
+**"The balance changed since this was opened"** — something changed the cleared balance after
+Reconcile showed it (a transaction cleared, edited or added, here or by Lucius). Nothing was
+booked. Open Reconcile again; it now asks about the current figure.
 
 ## Related pages
 

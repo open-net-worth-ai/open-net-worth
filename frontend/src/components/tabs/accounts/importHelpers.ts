@@ -123,6 +123,9 @@ export interface ImportPreviewDraft {
   failed?: boolean
   /** Decision payload (RFC D7): the server-side row index decisions reference. */
   rowIndex?: number
+  /** The 1-based row of the file it came from (CSV, or an Excel file's first sheet) — the
+   *  review's file pane highlights it. Absent where no file row maps 1:1. */
+  sourceRow?: number
   /** Low model confidence / guard note — offered but defaulted to skip, never silent. */
   needsEyes?: boolean
   confidence?: number
@@ -393,6 +396,7 @@ export function mapServerPreview(data: Record<string, unknown>): ImportPreviewRe
           dup: r.duplicate,
           dupOf: (r.duplicate_of as string | null) ?? null,
           rowIndex: r.index,
+          sourceRow: (r.source_row as number | null | undefined) ?? undefined,
           needsEyes: r.needs_eyes,
           confidence: r.confidence,
           destId: (r.account_id as string) || undefined,

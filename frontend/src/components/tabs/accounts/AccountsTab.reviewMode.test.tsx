@@ -269,3 +269,103 @@ describe('AccountsTab — transaction review mode', () => {
     expect(screen.getByRole('dialog', { name: 'Review transactions' })).toBeTruthy()
   })
 })
+
+// Owner report 2026-10-26: an account page said "2 to review" while its Needs review filter
+// showed 0 — both rows were in another account. On an account page the count and Start review
+// are that account's; once its rows run out, the finish screen offers the rest of the book.
+describe('AccountsTab — review on an account page', () => {
+  function mockScopedBook({ mine, book }: { mine: ApiTxn[]; book: number }) {
+    const base = mockAuthFetch.getMockImplementation()!
+    mockAuthFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url.startsWith('/api/transactions/recently-added?needs_review=true')) {
+        const scoped = url.includes('account_id=acc-1')
+        return Promise.resolve(
+          okJson(
+            scoped
+              ? { transactions: mine, total: mine.length, has_more: false }
+              : { transactions: [], total: book, has_more: false },
+          ),
+        )
+      }
+      return base(url, init)
+    })
+  }
+
+  function renderAccountPage() {
+    return render(
+      <TransactionSurfacesProvider onManagePayees={() => {}}>
+        <AccountsTab selectedAccountId="acc-1" />
+      </TransactionSurfacesProvider>,
+    )
+  }
+
+  it('counts and reviews only the selected account’s flagged rows', async () => {
+    mockScopedBook({ mine: [TXN], book: 3 })
+    renderAccountPage()
+
+    expect(await screen.findByRole('button', { name: '1 to review' })).toBeTruthy()
+    expect(mockAuthFetch).toHaveBeenCalledWith(
+      '/api/transactions/recently-added?needs_review=true&account_id=acc-1&limit=1',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start review' }))
+    await waitFor(() =>
+      expect(mockAuthFetch).toHaveBeenCalledWith(
+        '/api/transactions/recently-added?needs_review=true&account_id=acc-1&limit=500',
+      ),
+    )
+  })
+
+  it('shows no review count when only other accounts have flagged rows', async () => {
+    mockScopedBook({ mine: [], book: 2 })
+    renderAccountPage()
+
+    await waitFor(() =>
+      expect(mockAuthFetch).toHaveBeenCalledWith(
+        '/api/transactions/recently-added?needs_review=true&account_id=acc-1&limit=1',
+      ),
+    )
+    expect(screen.queryByRole('button', { name: /to review/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Start review' })).toBeNull()
+  })
+
+  it('offers the other accounts beside Done once this account is caught up', async () => {
+    mockScopedBook({ mine: [], book: 3 })
+    render(
+      <TransactionSurfacesProvider onManagePayees={() => {}}>
+        <OpenAccountReview accountId="acc-1" />
+      </TransactionSurfacesProvider>,
+    )
+
+    expect(
+      await screen.findByText('Nothing in Everyday Checking is waiting for review.'),
+    ).toBeTruthy()
+    fireEvent.click(await screen.findByRole('button', { name: 'Review 3 in other accounts' }))
+    await waitFor(() =>
+      expect(mockAuthFetch).toHaveBeenCalledWith(
+        '/api/transactions/recently-added?needs_review=true&limit=500',
+      ),
+    )
+  })
+
+  it('offers nothing more when the rest of the book is caught up too', async () => {
+    mockScopedBook({ mine: [], book: 0 })
+    render(
+      <TransactionSurfacesProvider onManagePayees={() => {}}>
+        <OpenAccountReview accountId="acc-1" />
+      </TransactionSurfacesProvider>,
+    )
+
+    expect(
+      await screen.findByText('Nothing in Everyday Checking is waiting for review.'),
+    ).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /in other accounts/ })).toBeNull()
+  })
+})
+
+function OpenAccountReview({ accountId }: { accountId: string }) {
+  const { openReview } = useTransactionSurfaces()
+  useEffect(() => openReview('all', accountId), [openReview, accountId])
+  return null
+}

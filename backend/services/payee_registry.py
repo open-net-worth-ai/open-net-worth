@@ -290,7 +290,8 @@ def default_category_for(
 def learn_category(payee_id: str | None, category: str | None, kind: str = "expense") -> None:
     """Silently learn the payee's default category for ``kind`` from transaction activity
     — first-write-wins PER KIND (never overwrites an existing per-kind default). Skips
-    reserved keys and non-categorizable kinds. Best-effort; never raises."""
+    reserved keys, non-categorizable kinds, and kinds the user set to Uncategorized
+    (``uncategorized_kinds``). Best-effort; never raises."""
     if not payee_id or not category or kind not in _DEFAULT_CATEGORY_KINDS:
         return
     try:
@@ -300,6 +301,8 @@ def learn_category(payee_id: str | None, category: str | None, kind: str = "expe
         if not p:
             return
         if (p.get("default_categories") or {}).get(kind):
+            return
+        if kind in (p.get("uncategorized_kinds") or []):
             return
         _store.set_default_category_for_kind(payee_id, kind, category)
     except Exception:
@@ -312,10 +315,37 @@ def set_default_categories(payee_id: str, mapping: dict | None) -> dict:
     if not payee_id:
         raise ValidationError("payee_id required")
     clean = normalize_default_categories(mapping)
-    result = _store.set_default_categories(payee_id, clean)
+    previous = _store.find_by_id(payee_id)
+    if previous is None:
+        raise NotFoundError(f"payee {payee_id!r} not found")
+    result = _store.update_by_id(
+        payee_id,
+        {
+            "default_categories": clean,
+            "uncategorized_kinds": _uncategorized_kinds_after(previous, mapping, clean),
+        },
+    )
     if result is None:
         raise NotFoundError(f"payee {payee_id!r} not found")
     return result
+
+
+def _uncategorized_kinds_after(previous: dict | None, incoming: dict | None, clean: dict) -> list:
+    """The kinds the user has deliberately set to Uncategorized after a user edit of the
+    default map. A cleared slot is otherwise indistinguishable from a never-set one, and
+    ``learn_category`` refills an empty slot from the next categorized transaction. A kind
+    is pinned when the edit sends it blank or drops a default it had (the editor and the AI
+    tool both send the whole map); picking a category unpins it."""
+    previous = previous or {}
+    before = previous.get("default_categories") or {}
+    incoming = incoming or {}
+    pinned = set(previous.get("uncategorized_kinds") or [])
+    for kind in _DEFAULT_CATEGORY_KINDS:
+        if clean.get(kind):
+            pinned.discard(kind)
+        elif (kind in incoming and not incoming[kind]) or before.get(kind):
+            pinned.add(kind)
+    return [k for k in _DEFAULT_CATEGORY_KINDS if k in pinned]
 
 
 def on_category_deleted(category_id: str, reassign_to: str | None = None) -> dict:
@@ -461,6 +491,9 @@ def update_payee(payee_id: str, changes: dict) -> dict:
         clean["name"] = name
     if "default_categories" in changes:
         clean["default_categories"] = normalize_default_categories(changes["default_categories"])
+        clean["uncategorized_kinds"] = _uncategorized_kinds_after(
+            _store.find_by_id(payee_id), changes["default_categories"], clean["default_categories"]
+        )
     if "autocategorize" in changes:
         clean["autocategorize"] = bool(changes["autocategorize"])
     if "hidden" in changes:

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { authFetch } from '../../api/client'
 import type { VaultItem } from '../../api/vault'
 import { NoPreview } from './NoPreview'
+import { PreviewLoading } from './PreviewLoading'
 import { formatSize } from './vaultFormat'
 
 // A text file shown as itself — a note, a bill of sale, a bank's OFX/QIF export (owner: "why txt
@@ -47,17 +48,19 @@ export function TextPreview({ item }: { item: VaultItem }) {
 
   if (shown === 'error')
     return <NoPreview item={item} reason="Couldn't read it here — download it" />
+  if (shown === 'loading')
+    return (
+      <div className="vault-preview vault-preview--text">
+        <PreviewLoading />
+      </div>
+    )
   return (
-    <div className="vault-preview vault-preview--text" aria-busy={shown === 'loading'}>
-      {shown !== 'loading' && (
-        <>
-          <pre className="vault-text">{shown.text}</pre>
-          {shown.cut && (
-            <p className="vault-text-cut">
-              Showing the first {formatSize(LIMIT)} — download it for the rest.
-            </p>
-          )}
-        </>
+    <div className="vault-preview vault-preview--text">
+      <pre className="vault-text">{shown.text}</pre>
+      {shown.cut && (
+        <p className="vault-text-cut">
+          Showing the first {formatSize(LIMIT)} — download it for the rest.
+        </p>
       )}
     </div>
   )

@@ -280,6 +280,12 @@
     transform: rotate(360deg);
   }
 }
+.acct-review-complete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
 .acct-review-complete-icon {
   display: grid;
   place-items: center;
@@ -312,6 +318,13 @@
   width: 9px;
   height: 9px;
   border-radius: 50%;
+}
+/* The same burst over the whole viewport when a reconcile completes. */
+.acct-reconcile-burst {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-toast);
+  pointer-events: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .acct-review-confetti {
@@ -1187,7 +1200,22 @@ body.hide-amounts .mask.l::after {
   }
 }
 .acct-shell {
+  position: relative;
   transition: grid-template-columns 0.16s ease;
+}
+/* Hover peek over a collapsed rail (AccountsTab): the real Sidebar floated over the page, out
+   of the grid, so the register never reflows while it shows. Above the sticky header layers. */
+.acct-side-peek {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  display: flex;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+}
+.acct-side-peek > .acct-side {
+  flex: 1;
 }
 .acct-side.is-collapsed {
   pointer-events: none;
@@ -1283,8 +1311,12 @@ body.hide-amounts .mask.l::after {
   white-space: nowrap;
   min-width: 0;
 }
-.acct-all-name .gl {
-  color: var(--faint);
+/* Reconcile status in the sidebar — words, never a bare age or clock, which read as "last
+   transaction N days ago" (owner, 2026-10-26). Only accounts that need it say anything. */
+.acct-due,
+.acct-row-sub.acct-due,
+.acct-all-sub.acct-due {
+  color: var(--warn);
 }
 .acct-all-id {
   display: flex;
@@ -1828,27 +1860,8 @@ body.hide-amounts .mask.l::after {
   .acct-head-collapsible {
     display: none;
   }
-  .acct-head-reconcile {
-    display: none;
-  }
   .acct-menu-collapsible {
     display: flex;
-  }
-  .acct-pop-wrap--menu {
-    display: block;
-  }
-  .acct-pop-wrap--menu .acct-pop {
-    top: 0;
-    right: calc(100% + 8px);
-  }
-}
-@media (max-width: 640px) {
-  .acct-pop-wrap--menu .acct-pop {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    bottom: auto;
-    left: auto;
   }
 }
 /* ── overview cards ───────────────────────────────────────────────────────── */
@@ -2312,44 +2325,95 @@ body.hide-amounts .mask.l::after {
   color: var(--warn);
   font-weight: 600;
 }
-/* The backlog count and its action read as ONE group: same baseline and size, a hairline
-   between them rather than a gap, the count in warn (a backlog) and the action in primary.
-   No fills — this is an 11.5px meta line, and a solid chip shouts over the row it annotates. */
-.acct-recon-review {
+/* The line is two groups that never split internally: reconcile (status + Reconcile) on the left,
+   review (count chip + Start review + txn count) on the right. Both actions are the same outlined
+   pill so they read as actions; the backlog count is a soft warn chip, never a solid fill. */
+.acct-recon-group {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.acct-recon-group--review {
+  gap: 6px;
+}
+.acct-recon-group--review > .acct-recon-stat.muted {
+  margin-left: 6px;
+}
+.acct-recon-review {
+  display: contents;
 }
 .acct-recon-count,
-.acct-recon-start {
+.acct-recon-start,
+.acct-recon-action.as-btn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 20px;
-  padding: 0 9px;
-  white-space: nowrap;
-  background: none;
+  min-height: 22px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 11px;
   font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    color 0.12s;
+}
+.acct-recon-start,
+.acct-recon-action.as-btn {
+  border: 1px solid var(--line-strong);
+  background: none;
+  color: var(--ink);
 }
 .acct-recon-count {
-  padding-left: 0;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--warn) 14%, transparent);
   color: var(--warn);
 }
-.acct-recon-start {
-  border-left: 1px solid var(--line-strong);
-  color: var(--primary);
+.acct-recon-count-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
 }
 @media (hover: hover) {
-  .acct-recon-count.as-btn:hover,
-  .acct-recon-start.as-btn:hover {
-    color: var(--ink);
+  .acct-recon-start:hover,
+  .acct-recon-action.as-btn:hover {
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+  .acct-recon-count:hover {
+    background: color-mix(in srgb, var(--warn) 22%, transparent);
   }
 }
-.acct-recon-stat.as-btn,
-.acct-recon-count.as-btn,
-.acct-recon-start.as-btn {
-  border: none;
-  font: inherit;
-  cursor: pointer;
+.acct-recon-count:focus-visible,
+.acct-recon-start:focus-visible,
+.acct-recon-action.as-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+/* Phone: each group is its own full-width row with its pill on the right — status · Reconcile,
+   then count chip + txns · Start review. */
+@media (max-width: 640px) {
+  .acct-recon-line {
+    row-gap: 10px;
+  }
+  .acct-recon-line > .acct-recon-group {
+    flex: 1 1 100%;
+  }
+  .acct-recon-line > .acct-recon-grow {
+    display: none;
+  }
+  .acct-recon-group > .acct-pop-wrap--line,
+  .acct-recon-group--review .acct-recon-start {
+    margin-left: auto;
+  }
+  .acct-recon-group--review .acct-recon-start {
+    order: 1;
+  }
 }
 .acct-recon-stat.as-btn {
   border: none;
@@ -2407,9 +2471,30 @@ body.hide-amounts .mask.l::after {
 .acct-bal-tile .v.neg {
   color: var(--bad);
 }
-/* inline reconcile popover */
+/* inline reconcile popover — its trigger sits on the reconcile line, left of centre, so the
+   card opens below it and grows to the right (anchored right it would hang off the card's left
+   edge into the sidebar). */
 .acct-pop-wrap {
   position: relative;
+}
+.acct-pop-wrap--line .acct-pop {
+  top: calc(100% + 6px);
+  right: auto;
+  left: 0;
+}
+/* A narrow column puts the trigger near the card's right edge, where a left-anchored card would
+   run off screen: hang it from the line's right edge instead. */
+@container acctmain (max-width: 600px) {
+  .acct-recon-line {
+    position: relative;
+  }
+  .acct-pop-wrap--line {
+    position: static;
+  }
+  .acct-pop-wrap--line .acct-pop {
+    left: auto;
+    right: 0;
+  }
 }
 .acct-pop {
   position: absolute;
@@ -3244,6 +3329,46 @@ body.hide-amounts .mask.l::after {
 /* ── register ──────────────────────────────────────────────────────────────── */
 .acct-reg {
   padding: 0 0 120px var(--acct-inset);
+}
+/* A refetch over rows already on screen: an indeterminate bar along the pinned header's bottom
+   edge, and the stale rows dimmed until the new page replaces them. */
+.acct-reg-loadbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.acct-reg-loadbar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  animation: acct-reg-loadbar-slide 1.1s ease-in-out infinite;
+}
+@keyframes acct-reg-loadbar-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(350%);
+  }
+}
+.acct-reg.refetching .acct-reg-scroll {
+  opacity: 0.55;
+  transition: opacity 0.15s ease 0.12s;
+}
+@media (prefers-reduced-motion: reduce) {
+  .acct-reg-loadbar::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
 }
 /* The column header is a SEPARATE pinned bar (rounded top) that floats on the --bg gap, so its
    rounded corners stay clean when pinned mid-scroll. The rows card sits directly beneath it with a
@@ -6249,19 +6374,33 @@ select.acct-addin {
 /* toast */
 .acct-toast {
   position: fixed;
-  bottom: 84px;
+  bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
+  /* Sized to its text: centred with a translate, a shrink-to-fit box only gets half the
+     viewport, so a one-sentence toast wrapped onto two lines (same fix as .rd-toast). */
+  width: max-content;
+  max-width: min(520px, calc(100vw - 32px));
   z-index: 80;
-  background: var(--modal-bg);
-  border: 1px solid var(--modal-border);
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
   border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-toast);
   padding: 10px 18px;
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--ink);
+  color: var(--toast-ink);
   animation: acct-toast-in 0.2s ease;
+}
+/* The bulk bar shares that bottom line; while it is up the pill sits above it (24px + the
+   bar's height + a gap) instead of covering it. */
+.acct-toast.acct-toast--above-bulk {
+  bottom: 84px;
+}
+@media (max-width: 640px) {
+  .app-shell.mb-shell .acct-toast.acct-toast--above-bulk {
+    bottom: calc(var(--mobile-tabbar-clearance) + 60px);
+  }
 }
 /* ── a background statement read finished (BackgroundStatementNotices) ─────────────────
    App-wide, so it renders BESIDE .app-shell, not inside it — the phone tab-bar clearance
@@ -6290,20 +6429,20 @@ select.acct-addin {
     bottom: calc(57px + env(safe-area-inset-bottom, 0px) + 16px);
   }
 }
-/* The same pill as .acct-toast (and as-toast / ov-toast): modal surface, modal border, pill
-   radius, shadow-lg; actions inside it in the bulk bar's idiom. */
+/* The same pill as .acct-toast (and as-toast / ov-toast): the inverted toast surface, pill
+   radius, shadow-toast; actions inside it in the bulk bar's idiom. */
 .bgst-note {
   display: flex;
   align-items: center;
   gap: 8px;
   max-width: 100%;
   padding: 4px 6px 4px 18px;
-  background: var(--modal-bg);
-  border: 1px solid var(--modal-border);
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
   border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-toast);
   font-size: 12.5px;
-  color: var(--ink);
+  color: var(--toast-ink);
   animation: bgst-in 0.2s ease;
 }
 @keyframes bgst-in {
@@ -6329,7 +6468,7 @@ select.acct-addin {
 }
 .bgst-detail {
   min-width: 0;
-  color: var(--muted);
+  color: var(--toast-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6341,7 +6480,7 @@ select.acct-addin {
   border: none;
   border-radius: var(--radius-md);
   background: transparent;
-  color: var(--primary);
+  color: var(--toast-accent);
   font: inherit;
   font-size: 12.5px;
   font-weight: 700;
@@ -6349,7 +6488,7 @@ select.acct-addin {
 }
 @media (hover: hover) {
   .bgst-review:hover {
-    background: var(--hover-surface2);
+    background: color-mix(in srgb, var(--toast-ink) 10%, transparent);
   }
 }
 .bgst-x {
@@ -6363,13 +6502,13 @@ select.acct-addin {
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: var(--faint);
+  color: var(--toast-muted);
   cursor: pointer;
 }
 @media (hover: hover) {
   .bgst-x:hover {
-    color: var(--ink);
-    background: var(--hover);
+    color: var(--toast-ink);
+    background: color-mix(in srgb, var(--toast-ink) 10%, transparent);
   }
 }
 @keyframes acct-toast-in {
@@ -8977,22 +9116,6 @@ select.acct-addin {
   min-height: 0;
 }
 /* preview */
-.imp-heads {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--warn);
-  background: color-mix(in srgb, var(--warn) 9%, transparent);
-  border: 1px solid color-mix(in srgb, var(--warn) 26%, transparent);
-  border-radius: var(--radius-md);
-  padding: 9px 12px;
-  line-height: 1.5;
-}
-.imp-heads-ic {
-  flex: none;
-  margin-top: 1px;
-}
 .imp-recon {
   background: color-mix(in srgb, var(--warn) 10%, var(--bg-2));
   border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
@@ -9219,12 +9342,6 @@ select.acct-addin {
   flex: none;
   font-variant-numeric: tabular-nums;
 }
-.imp-done-d {
-  font-size: 12.5px;
-  color: var(--muted);
-  line-height: 1.55;
-  max-width: 380px;
-}
 /* === FE3 additions === */
 .acct-ic {
   display: block;
@@ -9411,10 +9528,6 @@ select.acct-addin {
   .acct-detail-stmt:hover {
     text-decoration-color: var(--ink);
   }
-}
-/* What this file's parse cost in AI calls (0 on format-memory hits) */
-.imp-aicost {
-  font-variant-numeric: tabular-nums;
 }
 /* Row flags for FX-conversion pairing + unroutable currency */
 .imp-flag.fx_transfer_pair {
@@ -9718,16 +9831,6 @@ button.acct-alert-src {
   color: var(--bad);
   font-size: var(--text-xs);
   margin-top: var(--space-1);
-}
-/* The in-sync verdict on the import done screen */
-.imp-insync {
-  margin: 10px 0;
-  padding: 10px 13px;
-  border: 1px solid color-mix(in srgb, var(--pos, #1a9e6a) 35%, var(--line));
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--pos, #1a9e6a) 7%, transparent);
-  color: var(--ink);
-  font-size: 12.5px;
 }
 .acct-stmtview-check-group {
   padding: 7px 12px 3px;

@@ -15,9 +15,10 @@ import { Spark } from '../../../lucius/identity'
 import {
   Archive,
   ChevronRight,
+  CircleCheck,
+  ClockAlert,
   Download,
   FileText,
-  ListChecks,
   MoreHorizontal,
   Pencil,
   Tags,
@@ -30,12 +31,12 @@ import { fCur } from './data'
 import { ReviewStrip } from './ReviewStrip'
 import { typeLabel } from './categories'
 import { fDate } from '../../../utils/format'
+import { daysSinceReconcile, isReconcileOverdue } from './reconcileCadence'
 
 type MenuIconName =
   | 'payees'
   | 'categories'
   | 'import'
-  | 'reconcile'
   | 'edit'
   | 'statements'
   | 'export'
@@ -51,8 +52,6 @@ function MenuIcon({ name }: { name: MenuIconName }) {
       return <Tags {...common} />
     case 'import':
       return <Upload {...common} />
-    case 'reconcile':
-      return <ListChecks {...common} />
     case 'edit':
       return <Pencil {...common} />
     case 'statements':
@@ -156,10 +155,11 @@ export interface AccountStats {
 interface ReconcilePopoverProps {
   account: Account
   onReconcile: (account: Account, realBalance: number) => void
-  menuTrigger?: boolean
 }
 
-function ReconcilePopover({ account, onReconcile, menuTrigger = false }: ReconcilePopoverProps) {
+/** Lives on the "Reconciled …" line under the balance — the action beside the status it
+ *  changes, at every width (owner, 2026-10-26), instead of a header button + ⋯ menu entry. */
+function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<'ask' | 'input'>('ask')
   const [val, setVal] = useState('')
@@ -194,25 +194,15 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
   const diff = has ? Math.round((real - account.clearedBalance) * 100) / 100 : 0
 
   return (
-    <div className={`acct-pop-wrap${menuTrigger ? ' acct-pop-wrap--menu' : ''}`} ref={ref}>
-      {menuTrigger ? (
-        <AccountMenuItem
-          icon="reconcile"
-          className="acct-menu-collapsible"
-          onClick={() => (open ? close() : setOpen(true))}
-        >
-          Reconcile
-        </AccountMenuItem>
-      ) : (
-        <Button
-          className="acct-head-reconcile"
-          size="sm"
-          variant="secondary"
-          onClick={() => (open ? close() : setOpen(true))}
-        >
-          Reconcile
-        </Button>
-      )}
+    <div className="acct-pop-wrap acct-pop-wrap--line" ref={ref}>
+      <button
+        type="button"
+        className="acct-recon-action as-btn"
+        aria-expanded={open}
+        onClick={() => (open ? close() : setOpen(true))}
+      >
+        Reconcile
+      </button>
 
       {open && (
         <div className="acct-pop" role="dialog">
@@ -232,6 +222,7 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
                 </Button>
                 <Button
                   size="sm"
+                  variant="primary"
                   onClick={() => {
                     onReconcile(account, account.clearedBalance)
                     close()
@@ -267,6 +258,7 @@ function ReconcilePopover({ account, onReconcile, menuTrigger = false }: Reconci
                 </Button>
                 <Button
                   size="sm"
+                  variant="primary"
                   disabled={!has}
                   onClick={() => {
                     onReconcile(account, real)
@@ -294,6 +286,9 @@ export interface AccountHeaderProps {
   setMenuOpen: (open: boolean | ((prev: boolean) => boolean)) => void
   collapsed: boolean
   onReopen: () => void
+  /** Hover on the reopen button floats the accounts rail (AccountsTab's peek). */
+  onReopenHover?: () => void
+  onReopenLeave?: () => void
   onAddTxn: () => void
   onEdit: () => void
   onArchive: () => void
@@ -305,7 +300,7 @@ export interface AccountHeaderProps {
   onAskLucius?: (text: string) => void
   /** "Review →" on a ready-but-uncommitted statement (B20 async) — opens the import modal
    *  straight at the review step, no re-upload. */
-  onReviewStatement?: (statementId: string, filename?: string) => void
+  onReviewStatement?: (statementId: string, filename?: string, uploadedAt?: string) => void
   onExport: () => void
   /** Called with (account, realBalance) — orchestrator wires to hook's reconcile */
   onReconcile: (account: Account, realBalance: number) => void
@@ -323,6 +318,8 @@ export function AccountHeader({
   setMenuOpen,
   collapsed,
   onReopen,
+  onReopenHover,
+  onReopenLeave,
   onEdit,
   onArchive,
   onDelete,
@@ -348,8 +345,15 @@ export function AccountHeader({
         setMenuOpen(false)
       }
     }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false)
+    }
     document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', h)
+      document.removeEventListener('keydown', onKey)
+    }
   })
 
   const pending = account.balance - account.clearedBalance
@@ -360,7 +364,13 @@ export function AccountHeader({
       <div className="acct-head">
         <div className="acct-head-l">
           {collapsed && (
-            <button className="acct-reopen" onClick={onReopen} title="Show accounts">
+            <button
+              className="acct-reopen"
+              onClick={onReopen}
+              onMouseEnter={onReopenHover}
+              onMouseLeave={onReopenLeave}
+              title="Show accounts"
+            >
               <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
             </button>
           )}
@@ -408,7 +418,6 @@ export function AccountHeader({
           <Button className="acct-head-collapsible" size="sm" variant="ghost" onClick={onImport}>
             Import
           </Button>
-          <ReconcilePopover account={account} onReconcile={onReconcile} />
           <div className="acct-menu-wrap" ref={menuRef}>
             <button
               className="btn-ghost-icon"
@@ -450,7 +459,6 @@ export function AccountHeader({
                 >
                   Import
                 </AccountMenuItem>
-                <ReconcilePopover account={account} onReconcile={onReconcile} menuTrigger />
                 <div className="acct-menu-collapsible sep" />
                 <AccountMenuItem icon="edit" onClick={onEdit}>
                   Edit account
@@ -692,9 +700,9 @@ export function AccountHeader({
           }
           onReviewStatement={
             onReviewStatement &&
-            ((statementId, filename) => {
+            ((statementId, filename, uploadedAt) => {
               setShowStatements(false)
-              onReviewStatement(statementId, filename)
+              onReviewStatement(statementId, filename, uploadedAt)
             })
           }
         />
@@ -742,28 +750,45 @@ export function AccountHeader({
 
           {/* reconcile line + stats */}
           <div className="acct-recon-line">
-            <span className="acct-recon-stat">
-              {account.lastReconciled ? (
-                <>
-                  <span className="ok">✓</span> Reconciled{' '}
-                  {fDate(account.lastReconciled, 'numeric')}
-                </>
-              ) : (
-                <>
-                  <span className="warn">○</span> Never reconciled
-                </>
-              )}
+            <span className="acct-recon-group">
+              <span className="acct-recon-stat">
+                {account.lastReconciled && isReconcileOverdue(account.lastReconciled) ? (
+                  <span
+                    className="acct-recon-stat"
+                    title="Reconcile at least once a month, so a gap is still easy to trace."
+                  >
+                    <ClockAlert size={14} className="warn" aria-hidden="true" />
+                    Reconciled {fDate(account.lastReconciled, 'numeric', 'auto')}{' '}
+                    <span className="warn">
+                      ({daysSinceReconcile(account.lastReconciled)} days ago)
+                    </span>
+                  </span>
+                ) : account.lastReconciled ? (
+                  <>
+                    <CircleCheck size={14} className="ok" aria-hidden="true" />
+                    Reconciled {fDate(account.lastReconciled, 'numeric', 'auto')}
+                  </>
+                ) : (
+                  <>
+                    <ClockAlert size={14} className="warn" aria-hidden="true" />
+                    Never reconciled
+                  </>
+                )}
+              </span>
+              <ReconcilePopover account={account} onReconcile={onReconcile} />
             </span>
             {/* Gated on `stats` existing, never on count, so the line doesn't disappear at 0 txns. */}
             {stats && (
               <>
-                <ReviewStrip
-                  count={stats.review}
-                  onReview={onReview}
-                  onStartReview={onStartReview}
-                />
                 <span className="acct-recon-grow" />
-                <span className="acct-recon-stat muted">{stats.count} txns</span>
+                <span className="acct-recon-group acct-recon-group--review">
+                  <ReviewStrip
+                    count={stats.review}
+                    onReview={onReview}
+                    onStartReview={onStartReview}
+                  />
+                  <span className="acct-recon-stat muted">{stats.count} txns</span>
+                </span>
               </>
             )}
           </div>

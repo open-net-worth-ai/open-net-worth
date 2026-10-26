@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from backend.core import audit_context
 from backend.core.errors import (
+    ConflictError,
     DuplicateTransactionError,
     OpenNetWorthError,
     PreviouslyDeletedError,
@@ -188,6 +189,7 @@ class ReconcileBody(BaseModel):
     real_balance: float  # asserted native-currency balance
     date: Optional[str] = None
     against: str = "cleared"  # "cleared" (YNAB reconcile-to-cleared) | "working" (legacy true-up)
+    expected_balance: Optional[float] = None  # the figure the user was shown; 409 if stale
 
 
 class DescribeAccountBody(BaseModel):
@@ -699,7 +701,16 @@ def reconcile_account(account_id: str, body: ReconcileBody):
     and locks the cleared set. ``against="working"`` diffs the full computed balance."""
     if svc.accounts.find_by_id(account_id) is None:
         raise HTTPException(404, "Account not found")
-    adjustment = svc.reconcile(account_id, body.real_balance, body.date, against=body.against)
+    try:
+        adjustment = svc.reconcile(
+            account_id,
+            body.real_balance,
+            body.date,
+            against=body.against,
+            expected_balance=body.expected_balance,
+        )
+    except ConflictError as e:
+        raise HTTPException(409, e.message) from e
     acct = svc.accounts.find_by_id(account_id)
     txns = svc.transactions.all()
     cutoff = svc.opening_date(acct, txns)
@@ -761,12 +772,15 @@ def get_recently_added_transactions(
     needs_review: Optional[bool] = None,
     automation_only: bool = False,
     exclude_openings: bool = False,
+    account_id: Optional[str] = None,
 ) -> dict:
     """Last `limit` transactions by INSERTION time (`created_at`), not transaction date — the
     "recently added" dashboard widget's feed. A backfilled import lands here even when its own
     date is weeks old; use plain `GET /api/transactions` for "recent by date" instead.
     `exclude_openings` leaves out every account's Starting Balance row, which is a balance, not
-    something that was added or spent."""
+    something that was added or spent. `account_id` keeps rows with either leg in that account —
+    the same predicate the register's account filter uses, so an account's review count and its
+    Needs review filter agree."""
     _opening_ids = svc.opening_txn_ids()
     page, total = svc.transactions.recent_page_by_created_at(
         limit=limit,
@@ -774,6 +788,7 @@ def get_recently_added_transactions(
         needs_review=needs_review,
         automation_only=automation_only,
         exclude_ids=_opening_ids if exclude_openings else frozenset(),
+        account_id=account_id,
     )
     _base = svc.base_currency()
     _rates = load_fx_cache()
@@ -1572,17 +1587,13 @@ def list_import_batches(status: Optional[str] = None):
 
 @router.post("/api/transactions/batches/{batch_id}/rollback")
 def rollback_import_batch(batch_id: str):
-    batch = svc.import_batches.find_by_id(batch_id)
-    if batch is None:
-        raise HTTPException(404, "Batch not found")
-    if batch.get("status") == "rolled_back":
-        raise HTTPException(409, "Batch is already rolled back")
-    txns = svc.transactions.query_by_batch(batch_id, include_deleted=False)
-    txn_ids = [t["id"] for t in txns]
-    deleted, _ = svc.transactions.bulk_soft_delete(txn_ids)
-    svc.import_batches.set_status(batch_id, "rolled_back")
-    logger.info("rollback_import_batch: batch=%s deleted=%d", batch_id, len(deleted))
-    return {"ok": True, "batch_id": batch_id, "deleted": len(deleted)}
+    """Undo the whole import — created rows removed AND linked rows restored (import_undo)."""
+    from backend.services.import_undo import undo_import
+
+    try:
+        return {"ok": True, **undo_import(batch_id)}
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), str(exc))
 
 
 @router.post("/api/transactions/batches/{batch_id}/rollforward")

@@ -440,8 +440,8 @@ def parse_date(s: str | None) -> date | None:
         return None
 
 
-def _base_amount(row: dict, rates: dict | None) -> float:
-    return ledger_service.txn_base_amount(row, rates=rates)
+def _base_amount(row: dict, rates: dict | None, base: str | None = None) -> float:
+    return ledger_service.txn_base_amount(row, base, rates=rates)
 
 
 def _row_legs(row: dict) -> tuple[str | None, str | None]:
@@ -683,6 +683,7 @@ def _classify(
     *,
     policy: MatchPolicy = MatchPolicy(),
     weak_tier: bool = False,
+    base: str | None = None,
 ) -> Candidate | None:
     """Return a scored Candidate for the pair, or None if they're unrelated or an invariant
     vetoes any match. ``known_routes`` (Phase 4) is the set of confirmed transfer account pairs;
@@ -698,7 +699,10 @@ def _classify(
     below widens to ``TWIN_SETTLED_DRIFT_TOL`` so a drift pair can reach the tier at all, and the
     near-duplicate tight-tolerance rejection falls through to the tier instead of returning None.
     Every OTHER class is re-gated at its own tolerance (``class_gate_ok``), so the wider gate
-    never leaks into a transfer pair, an echo or an ordinary near-duplicate. Pure."""
+    never leaks into a transfer pair, an echo or an ordinary near-duplicate. Pure.
+
+    ``base`` is the base currency, resolved ONCE by a caller classifying many pairs — it is a
+    profile read, and re-reading it per pair was most of a statement preview's DB traffic."""
     if policy.blocks(incoming) or policy.blocks(candidate):
         return None
 
@@ -719,7 +723,7 @@ def _classify(
     ):
         return None
 
-    base = ledger_service.base_currency()
+    base = base or ledger_service.base_currency()
     in_ccy = incoming.get("from_currency") or incoming.get("to_currency")
     ca_ccy = candidate.get("from_currency") or candidate.get("to_currency")
 
@@ -748,8 +752,8 @@ def _classify(
             amt_in, amt_ca = orig_pair
             tol = policy.amount_tol(AMOUNT_REL_TOL)
         else:
-            amt_in = _base_amount(incoming, rates)
-            amt_ca = _base_amount(candidate, rates)
+            amt_in = _base_amount(incoming, rates, base)
+            amt_ca = _base_amount(candidate, rates, base)
             tol = policy.amount_tol(FX_AMOUNT_REL_TOL)
     else:
         # Same native currency — compare native amounts directly, skip FX conversion noise.
@@ -1311,12 +1315,56 @@ def _narrow_candidates(incoming: dict, *, exclude_ids: set[str] | None = None) -
     return out
 
 
+class _DatedPool:
+    """A candidate pool bucketed by day, so a row is classified only against the rows that can
+    clear ``_classify``'s date gate — every candidate dated within the cap, plus every UNDATED
+    one (an unknown date passes that gate). ``near`` keeps POOL ORDER, which the stable
+    ranking sort uses as its last tie-break, so narrowing can never re-rank a survivor.
+
+    Exact, not heuristic: every check ``_classify`` runs before its date gate can only return
+    None, so a pair outside the window was always discarded unscored. Without it a statement
+    classified every row against every row of its 120-day anomaly window (1.37M pairs for a
+    400-row statement)."""
+
+    def __init__(self, pool: list[dict] | None = None):
+        self.pool: list[dict] = []
+        self._by_day: dict[int, list[int]] = {}
+        self._undated: list[int] = []
+        for row in pool or ():
+            self.append(row)
+
+    def append(self, row: dict) -> None:
+        d = parse_date(row.get("date"))
+        if d is None:
+            self._undated.append(len(self.pool))
+        else:
+            self._by_day.setdefault(d.toordinal(), []).append(len(self.pool))
+        self.pool.append(row)
+
+    def positions(self, d: date | None, cap: int) -> list[int]:
+        """Pool positions that can clear a ``cap``-day gate around ``d``, in pool order."""
+        if d is None:
+            return list(range(len(self.pool)))
+        day = d.toordinal()
+        out = list(self._undated)
+        for k in range(day - cap, day + cap + 1):
+            out.extend(self._by_day.get(k, ()))
+        out.sort()
+        return out
+
+    def near(self, d: date | None, cap: int) -> list[dict]:
+        return [self.pool[i] for i in self.positions(d, cap)]
+
+
 def known_transfer_routes() -> frozenset:
     """The set of confirmed transfer ROUTES — ``frozenset({from_account, to_account})`` for every
     non-deleted ``transfer`` row in the ledger (Phase 4). A pair on a known route is a real
     transfer corridor the user uses; an unknown route is treated cautiously (review, never auto)."""
     routes: set[frozenset] = set()
-    for t in ledger_service.transactions.all():
+    # Transfer rows only (deleted ones included, filtered below exactly as before) — this runs
+    # on every bulk write and every match pass, and decoding the WHOLE ledger to collect a few
+    # account pairs was a full-table read each time.
+    for t in ledger_service.transactions.query_txns(kind="transfer", include_deleted=True):
         if t.get("kind") == "transfer" and not t.get("deleted") and not t.get("merged_into"):
             fa, ta = t.get("from_account_id"), t.get("to_account_id")
             if fa and ta:
@@ -1345,6 +1393,8 @@ def check(
     exclude_ids: set[str] | None = None,
     known_routes: frozenset | None = None,
     policy: MatchPolicy = MatchPolicy(),
+    ref_freq: dict[str, int] | None = None,
+    base: str | None = None,
 ) -> MatchResult:
     """Run the engine over one incoming ``row`` and return a recommendation.
 
@@ -1357,6 +1407,12 @@ def check(
     ``policy`` narrows the deterministic gates and can only TIGHTEN them (see ``MatchPolicy``);
     the default is exactly the module constants. It does NOT reach L0 — the exact-external-ref
     floor is unbypassable by construction and no policy may switch it off.
+
+    ``ref_freq`` is for a caller that narrowed ``candidates`` below its real comparison scope
+    (``import_anomalies`` hands only the rows near the draft's date): the reference-token counts
+    over that WHOLE scope, so the merchant-constant guard (REF_TOKEN_MAX_ROWS) still counts every
+    row it always did. None counts over ``[row, *pool]``. ``base`` is the base currency, resolved
+    once by a caller running many checks.
     """
     # L0 — exact idempotency, over EVERY {source, ref} pair the incoming row carries.
     # Pinned ON for every profile; it is the unbypassable floor.
@@ -1375,6 +1431,7 @@ def check(
         return MatchResult(action="create")
 
     rates = rates if rates is not None else _load_rates()
+    base = base or ledger_service.base_currency()
     if known_routes is None:
         known_routes = known_transfer_routes()
     if candidates is not None:
@@ -1384,9 +1441,10 @@ def check(
         pool = _narrow_candidates(row, exclude_ids=skip)
 
     scored: list[Candidate] = []
-    ref_freq = _reference_token_frequencies([row, *pool])
+    if ref_freq is None:
+        ref_freq = _reference_token_frequencies([row, *pool])
     for cand in pool:
-        c = _classify(row, cand, rates, known_routes, ref_freq=ref_freq, policy=policy)
+        c = _classify(row, cand, rates, known_routes, ref_freq=ref_freq, policy=policy, base=base)
         if c is not None:
             scored.append(c)
     # (-score, fidelity, date gap): fidelity breaks a review-cap tie in favor of the truer
@@ -1597,16 +1655,25 @@ def _classify_batch_pairs(
     already persisted) is restored afterward, never just dropped. Siblings are matched by
     OBJECT IDENTITY, not id — a fresh draft has none yet. One reference-token frequency map is
     pre-computed over the WHOLE scope (rows + ledger pool) and threaded to every ``_classify``
-    call — the shared-reference tier's merchant-constant guard (REF_TOKEN_MAX_ROWS)."""
+    call — the shared-reference tier's merchant-constant guard (REF_TOKEN_MAX_ROWS).
+
+    Each row is classified only against the pool + siblings near its date (``_DatedPool`` —
+    exact, see there); the base currency is read once for the whole pass."""
     stamp = f"_match_batch_{id(rows)}"
     ref_freq = _reference_token_frequencies([*rows, *ledger_pool])
+    base = ledger_service.base_currency()
+    scope = _DatedPool([*ledger_pool, *rows])
+    cap = policy.date_cap(FETCH_WINDOW_DAYS)
     originals = [row.get("batch_id") for row in rows]
     for row in rows:
         row["batch_id"] = stamp
     try:
         row_matches: list[RowMatch] = []
         for idx, row in enumerate(rows):
-            pool = list(ledger_pool) + [sib for j, sib in enumerate(rows) if j != idx]
+            own = len(ledger_pool) + idx
+            pool = [
+                scope.pool[i] for i in scope.positions(parse_date(row.get("date")), cap) if i != own
+            ]
             scored = [
                 c
                 for c in (
@@ -1618,6 +1685,7 @@ def _classify_batch_pairs(
                         ref_freq=ref_freq,
                         policy=policy,
                         weak_tier=weak_tier,
+                        base=base,
                     )
                     for cand in pool
                 )

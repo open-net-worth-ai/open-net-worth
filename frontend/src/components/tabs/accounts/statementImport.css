@@ -44,6 +44,9 @@
   overflow: hidden;
   background: var(--modal-bg);
 }
+.ui-modal-card:has(.imp-pane--ws) > .ui-modal__body > .imp {
+  container: impreview / inline-size;
+}
 .ui-modal-card:has(.imp-pane--ws) .ui-modal__body {
   min-height: 0;
   /* BUG FIX: this was `overflow-y: auto`, directly contradicting the comment below and giving
@@ -83,8 +86,12 @@
    NEEDS VISUAL VERIFICATION (screenshot/live check) — this offset is reasoned from the
    original measurement, not confirmed against a running app. */
 /* Scoped away from the Settings overlay: it is a workspace modal too, but it has no bottom
-   action bar to clear, so the lift just parked the pill 74px up the screen for no reason. */
-body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
+   action bar to clear, so the lift just parked the pill 74px up the screen for no reason.
+   Scoped away from the import too: it is no longer a full-height sheet whose footer sits on the
+   window's bottom edge but a centred card, and the lift parked the pill ON its Confirm (owner,
+   2026-10-26: "why ask lucius is that further up?"). The import card keeps clear of the pill's
+   corner instead — see below. */
+body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .lx-dock {
   bottom: calc(22px + 74px);
 }
 
@@ -575,6 +582,17 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     animation: none;
   }
 }
+/* Back from a reopened statement's review: "Read again" beside "Back to review", right-aligned
+   like the single "Read the statement" CTA it replaces. */
+.imp3-reopen-acts {
+  justify-content: flex-end;
+  gap: 10px;
+}
+/* A reopen that failed: the account picker sits between the message and the retry. */
+.imp3-reopen-acct {
+  width: min(320px, 100%);
+  margin: 4px 0 14px;
+}
 .imp3-reading-t {
   font-size: 13.5px;
   color: var(--muted);
@@ -1019,42 +1037,64 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 /* The kind filter (Expense/Income/Transfer) — a second, independent dimension, pushed to the
    far right of the same bar. A single icon trigger rather than standing chips, so it doesn't
    visually compete with the decision chips beside it; expands into a small popover. */
-.imp3-kindfilter {
-  position: relative;
+.imp3-filter-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
   flex-shrink: 0;
 }
-.imp3-kindfilter-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.imp3-kindfilter {
+  position: relative;
+  flex-shrink: 0;
+}
+/* Outlined, unlike the text-only decision chips beside it — it opens a pane, it doesn't filter, and
+   it must be findable (owner, 2026-10-26: "too hidden"). Specific enough to beat
+   `.imp3-filter button`. */
+.imp3-filter .imp3-filetoggle {
+  gap: 7px;
   flex: none;
-  width: 36px;
-  height: 36px;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 999px;
-  background: var(--surface2);
-  color: var(--ink);
-  cursor: pointer;
-}
-.imp3-kindfilter-btn svg {
-  width: 20px;
-  height: 20px;
-}
-@media (hover: hover) {
-  .imp3-kindfilter-btn:hover {
-    color: var(--ink);
-    border-color: var(--line-strong);
-  }
-}
-.imp3-kindfilter-btn.on {
-  background: var(--bg-2);
+  height: 28px;
+  padding: 0 12px;
   border-color: var(--line-strong);
   color: var(--ink);
 }
+@media (hover: hover) {
+  .imp3-filter .imp3-filetoggle:hover {
+    background: var(--hover);
+  }
+}
+.imp3-filter .imp3-filetoggle.on {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+/* Same 28px outlined pill as Show file beside it, so the two tools read as one pair (owner,
+   2026-10-26: the filter looked bigger than everything else in the bar). */
+.imp3-filter .imp3-kindfilter-btn {
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.imp3-kindfilter-btn svg {
+  width: 15px;
+  height: 15px;
+}
+@media (hover: hover) {
+  .imp3-filter .imp3-kindfilter-btn:hover {
+    background: var(--hover);
+  }
+}
+.imp3-filter .imp3-kindfilter-btn.on {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
 .imp3-kindfilter-pop {
   position: absolute;
-  top: 42px;
+  top: 34px;
   right: 0;
   min-width: 150px;
   z-index: 60;
@@ -1065,6 +1105,33 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   padding: 5px;
   display: flex;
   flex-direction: column;
+}
+.imp3-kindfilter-group {
+  padding: 7px 9px 3px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.imp3-kindfilter-cats {
+  max-height: 280px;
+  overflow-y: auto;
+  min-width: 220px;
+}
+.imp3-kindfilter-cat {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.imp3-kindfilter-cat b {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
 }
 .imp3-kindfilter-pop button {
   display: flex;
@@ -1511,6 +1578,10 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 /* production-only decision states with no prototype twin: an L0 duplicate and an FX leg
    folded into its partner transfer. Both are IMMUTABLE outcomes, not user choices, so they
    read as quiet neutral facts rather than one of the three coloured verdicts. */
+.imp3-dchip.keep {
+  color: var(--ink);
+  background: var(--selected);
+}
 .imp3-dchip.dup,
 .imp3-dchip.absorbed,
 .imp3-dchip.ledger {
@@ -1674,8 +1745,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   flex-direction: column;
   gap: 1px;
   min-width: 0;
-  flex: none;
-  width: 252px;
+  flex: 0 1 252px;
 }
 .imp3-arow-status {
   display: flex;
@@ -1694,7 +1764,9 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 .imp3-arow-catcol {
   display: flex;
   align-items: center;
-  flex: 0 1 auto;
+  /* Takes only the room left after the fixed rails (basis 0), never a long label's own width — a
+     "Transfer • A → B" chip would otherwise squeeze its row's name and break the column line. */
+  flex: 1 1 0;
   min-width: 140px;
   max-width: 260px;
 }
@@ -1711,6 +1783,9 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 .imp3-arow-amtwrap {
   margin-left: auto;
   flex: none;
+  /* A fixed floor (wide enough for −$12,500,000.00) so every row splits its width the same way and
+     the columns before it line up; only a rarer, longer figure takes a little from its own name. */
+  min-width: 108px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
@@ -2598,62 +2673,190 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   cursor: default;
 }
 
-/* ── done ─────────────────────────────────────────────────────────────────── */
-.imp3-done {
+/* ── booked ───────────────────────────────────────────────────────────────── */
+.imp3-booked {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  padding: 34px 22px 36px;
-  gap: 6px;
+  gap: 18px;
+  /* The sheet already pads its body; only the top needs air under the crumbs. */
+  padding: 26px 26px 0;
 }
-.imp3-done-ic {
-  width: 44px;
-  height: 44px;
+.imp3-booked-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.imp3-booked-ic {
+  flex: none;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
   background: color-mix(in srgb, var(--good) 16%, transparent);
   color: var(--good);
-  font-size: 20px;
-  font-weight: 800;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 6px;
 }
-.imp3-done-t {
-  font-size: 19px;
+.imp3-booked-ic.undone {
+  background: var(--hover);
+  color: var(--muted);
+}
+.imp3-booked-titles {
+  min-width: 0;
+}
+.imp3-booked-t {
+  font-size: 17px;
   font-weight: 800;
   color: var(--ink);
   letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
 }
-.imp3-done-sub {
-  font-size: 13px;
+.imp3-booked-sub {
+  margin-top: 2px;
+  font-size: 12.5px;
   color: var(--muted);
 }
-.imp3-done-facts {
+.imp3-booked-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.imp3-booked-stat {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+}
+.imp3-booked-n {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.imp3-booked-l {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.imp3-booked-s {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.imp3-booked-lines {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--faint);
-  margin-top: 8px;
-  max-width: 400px;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--muted);
   line-height: 1.5;
 }
-.imp3-done-taught {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--lucius);
-  justify-content: center;
+.imp3-booked-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
 }
-.imp3-done-review {
-  display: inline-flex;
+.imp3-booked-bullet {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0.55em 4px 0;
+  border-radius: 50%;
+  background: var(--faint);
+}
+.imp3-booked-line.review {
+  align-items: center;
+  flex-wrap: wrap;
+}
+.imp3-booked-line > svg {
+  flex: none;
+}
+.imp3-booked-line.good,
+.imp3-booked-good {
+  color: var(--good);
+  font-weight: 600;
+}
+.imp3-booked-line.warn {
+  color: var(--warn);
+}
+.imp3-booked-line.warn > svg {
+  margin-top: 3px;
+}
+.imp3-booked-line.lucius {
+  color: var(--lucius);
+}
+.imp3-booked-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+.imp3-booked-foot-l,
+.imp3-booked-foot-r {
+  display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  justify-content: center;
 }
+.imp3-undo-btn {
+  background: none;
+  border: none;
+  border-radius: var(--radius-lg);
+  color: var(--bad);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 10px;
+  /* Text lines up with the content edge; the padding is only the hover wash's room. */
+  margin-left: -10px;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .imp3-undo-btn:hover {
+    background: color-mix(in srgb, var(--bad) 10%, transparent);
+  }
+}
+.imp3-undo {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--bad) 35%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bad) 7%, transparent);
+}
+.imp3-undo-t {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--ink);
+}
+.imp3-undo-d {
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.imp3-undo-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.imp3-undo-go {
+  padding: 9px 14px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--bad);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.imp3-undo-go:disabled,
+.imp3-undo-acts .imp3-btn2:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+/* ── done ─────────────────────────────────────────────────────────────────── */
 .imp3-done-review-btn {
   background: none;
   border: 1px solid var(--line-strong);
@@ -2676,21 +2879,23 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   opacity: 0.6;
   cursor: default;
 }
-.imp3-done-reviewed {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--good);
-  font-weight: 700;
-  justify-content: center;
+/* "Import another" is the rarer path: a quiet text link beside Undo, never a third button. */
+.imp3-done-another {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 8px;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: color-mix(in srgb, var(--muted) 45%, transparent);
 }
-.imp3-done-reviewed i {
-  font-style: normal;
-}
-.imp3-done-acts {
-  display: flex;
-  gap: 10px;
-  margin-top: 16px;
+@media (hover: hover) {
+  .imp3-done-another:hover {
+    color: var(--ink);
+  }
 }
 .imp3-done-err {
   color: var(--bad);
@@ -2752,7 +2957,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
 /* ── focus visibility (production a11y — the prototype has no focus rules) ─── */
 .imp3-scroll :focus-visible,
 .imp3-foot :focus-visible,
-.imp3-done :focus-visible,
+.imp3-booked :focus-visible,
 .imp3-lpick-pop :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -2772,34 +2977,6 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   .imp3-foot {
     padding-left: 16px;
     padding-right: 16px;
-  }
-  .imp3-arow-line {
-    flex-wrap: wrap;
-    row-gap: 6px;
-  }
-  .imp3-arow-main {
-    flex: 1;
-    width: auto;
-    min-width: 140px;
-  }
-  .imp3-arow-status {
-    width: auto;
-    order: 3;
-  }
-  /* The rails are gone here, so the cell hugs its chip again (no 140px floor) and may use the
-     whole wrapped line before the chip ellipsizes. */
-  .imp3-arow-catcol {
-    width: auto;
-    min-width: 0;
-    max-width: 100%;
-    order: 4;
-  }
-  .imp3-arow-amtwrap {
-    order: 2;
-  }
-  .imp3-chev {
-    order: 5;
-    margin-left: auto;
   }
   .imp3-arow-match {
     margin-left: 16px;
@@ -2862,9 +3039,6 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     border-top: 1px dashed var(--line);
     border-bottom: 1px dashed var(--line);
     padding: 6px 0;
-  }
-  .imp3-arow-date {
-    width: auto;
   }
   .imp3-arow-match {
     margin-left: 12px;
@@ -2946,7 +3120,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   }
   /* One 16px phone gutter for the whole flow. It used to be 25px (Choose), 35px (Decide), 13px
      (Decide footer) and 47px (Booked) from the sheet's edge — padding stacked from the Modal card,
-     the `.imp` wrapper, the pane and `.imp3-done`, each sized for a 960px desktop sheet. */
+     the `.imp` wrapper, the pane and the Booked screen, each sized for a 960px desktop sheet. */
   .ui-modal-card:has(> .ui-modal__body > .imp):not(:has(.imp-pane--ws)) {
     padding: 16px 16px max(16px, env(safe-area-inset-bottom));
     gap: 12px;
@@ -2963,7 +3137,7 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
   .imp3-foot {
     padding-inline: 16px;
   }
-  .imp3-done {
+  .imp3-booked {
     padding-inline: 0;
   }
   /* Filter chips: ONE line, always. Wrapping made the list jump whenever a decision added or
@@ -3071,19 +3245,17 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     justify-content: center;
   }
   /* One action-button size for the whole flow on a phone: Read the statement, Back, Confirm,
-     Done, View linked & imported and Import another are all 46px tall with centred labels.
+     Done and View in register are all 46px tall with centred labels.
      Confirm kept its 36px desktop padding and, stretched by the footer, a left-aligned label. */
   .imp3-commit,
   .imp3-foot .imp3-btn2,
   .imp3-drop-cta .ui-btn,
-  .imp3-done-acts .imp3-lubtn,
-  .imp3-done-acts .imp3-btn2 {
+  .imp3-booked-foot-r .imp3-lubtn,
+  .imp3-booked-foot-r .imp3-btn2 {
     min-height: 46px;
     justify-content: center;
     text-align: center;
   }
-  /* Booked: the three actions never fit on one row at phone width, so "Done" was pushed off the
-     sheet's edge. Stack them full-width with the primary action first. */
   /* Choose: the reassurance line sits above a full-width primary action instead of squeezing it
      into a two-line pill beside the text. */
   .imp3-drop-cta {
@@ -3099,20 +3271,239 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay)) .lx-dock {
     margin-right: 0;
     text-align: center;
   }
-  .imp3-done {
+  /* Booked: the two real actions full-width, primary first; Undo and Import another below. */
+  .imp3-booked {
     padding-top: 18px;
+    gap: 14px;
   }
-  .imp3-done-acts {
+  .imp3-booked-stat {
+    padding: 10px 11px;
+  }
+  .imp3-booked-foot {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+  .imp3-booked-foot-r {
     flex-direction: column;
-    align-self: stretch;
+    align-items: stretch;
   }
-  .imp3-done-acts .imp3-lubtn {
+  .imp3-booked-foot-r .imp3-lubtn {
     order: -1;
-    justify-content: center;
     padding: 13px 16px;
   }
-  .imp3-done-acts .imp3-btn2 {
-    padding: 12px 14px;
-    text-align: center;
+  .imp3-booked-foot-l {
+    justify-content: space-between;
+  }
+}
+
+/* ── The statement file beside the review (owner, 2026-10-26) ─────────────────────────────
+   While the pane shows, the Decide step's body (a column above — `.imp` fills it) becomes a
+   row: the review on the left, the file on the right, and the card widens past its 960px cap
+   so the review keeps its own width. Same `:has(.imp-pane--ws)` hook as the rules above, plus
+   the modal's own class, so these win only while the pane is on. */
+.ui-modal-card.imp3-modal--file:has(.imp-pane--ws) {
+  width: min(1480px, calc(100vw - 32px));
+  max-width: none;
+}
+.ui-modal-card.imp3-modal--file:has(.imp-pane--ws) .ui-modal__body {
+  flex-direction: row;
+}
+/* The card stops 76px short of the window's top and bottom: below it, the Ask Lucius pill (22px
+   up, ~44px tall) keeps its usual corner without ever covering Confirm, and above it the Mac
+   app's window buttons (a 48px title strip) stay clear (owner, 2026-10-26). */
+@media (min-width: 641px) {
+  .ui-modal-card:has(.imp-pane--ws) {
+    max-height: calc(100vh - 152px);
+  }
+}
+/* The review takes whatever the file pane leaves; the divider sets that. It is a size container,
+   so narrowing it reflows its rows below. */
+.ui-modal-card.imp3-modal--file:has(.imp-pane--ws) > .ui-modal__body > .imp {
+  flex: 1 1 0;
+  min-width: 420px;
+}
+/* A review row's fixed rails (date · name · decision · category · pencil · amount · chevron) need
+   about 900px inside the review on one line. Narrower — a smaller window, a phone, the file beside
+   it — every row becomes the same two lines, so columns line up row to row: date, name, amount and
+   chevron; then decision, category and pencil under the name. The review measures itself (a
+   container query), so a window between "phone" and "wide" can't fall through a viewport gap, and
+   the `::after` — a full-width flex item — forces the break, so a long amount can never push the
+   chevron onto a line of its own (owner, 2026-10-26: "not good alignment"). */
+@container impreview (max-width: 899px) {
+  .imp3-arow-line {
+    flex-wrap: wrap;
+    row-gap: 0;
+  }
+  .imp3-arow-line::after {
+    content: '';
+    order: 4;
+    flex-basis: 100%;
+    height: 0;
+  }
+  .imp3-arow-date {
+    width: 40px;
+  }
+  .imp3-arow-main {
+    order: 1;
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+  }
+  .imp3-arow-amtwrap {
+    order: 2;
+  }
+  .imp3-chev {
+    order: 3;
+  }
+  .imp3-arow-status {
+    order: 5;
+    width: auto;
+    margin: 5px 0 0 52px;
+  }
+  .imp3-arow-catcol {
+    order: 6;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    flex: 0 1 auto;
+    margin-top: 5px;
+  }
+  .imp3-editpencil {
+    order: 7;
+    margin-top: 5px;
+  }
+}
+.imp3-filesplit {
+  flex: none;
+  width: 9px;
+  margin-inline: -4px;
+  position: relative;
+  z-index: 1;
+  cursor: col-resize;
+  touch-action: none;
+}
+.imp3-filesplit::before {
+  content: '';
+  position: absolute;
+  inset: 0 4px;
+  background: var(--line);
+  transition: background 0.12s ease;
+}
+.imp3-filesplit:hover::before,
+.imp3-filesplit:active::before,
+.imp3-filesplit:focus-visible::before {
+  inset: 0 3px;
+  background: var(--accent);
+}
+.imp3-filesplit:focus-visible {
+  outline: none;
+}
+/* Until dragged, the review keeps the width it has without the file (the 960px sheet) and the file
+   takes the rest; the inline flex wins once the viewer sets a width. */
+.imp3-filepane {
+  flex: 0 1 calc(100% - 960px);
+  min-width: 280px;
+  /* A flex item's default min-height is its content — without this a phone's column layout
+     lets the grid grow to every row, so its own frame never scrolls (or centres a row). */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.imp3-filepane-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+}
+.imp3-filepane-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-weight: 600;
+}
+.imp3-cat--busy {
+  color: var(--muted);
+  gap: 7px;
+}
+.imp3-edit-hint {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: var(--faint);
+  line-height: 1.45;
+}
+.imp3-filepane-close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  border: none;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .imp3-filepane-close:hover {
+    background: var(--hover);
+    color: var(--ink);
+  }
+}
+.imp3-filepane-row + .imp3-filepane-close {
+  margin-left: 0;
+}
+.imp3-filepane-row {
+  margin-left: auto;
+  flex: none;
+  color: var(--muted);
+}
+.imp3-filepane-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  overflow: auto;
+}
+/* The shared previewers keep their Documents sizes elsewhere; here they fill the pane. */
+.imp3-filepane-body .vault-table {
+  flex: 1;
+  min-height: 0;
+}
+.imp3-filepane-body .vault-table-frame {
+  flex: 1;
+  height: auto;
+  min-height: 0;
+}
+/* Cells wrap here instead of ending in "…" — a bank's detail column carries the very codes you
+   open the file to read, and there was no way to see past 240px (owner, 2026-10-26). Long
+   unbroken references ("UHHT..455722..20260929") break anywhere rather than widen the grid. */
+.imp3-filepane-body .vault-grid td {
+  min-width: 64px;
+  max-width: 320px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  vertical-align: top;
+}
+.imp3-filepane-hint {
+  padding: 24px 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+/* Phone: Review | File tabs in the header — one pane at a time, full width. */
+@media (max-width: 640px) {
+  .ui-modal-card:has(.imp-pane--ws) > .ui-modal__body > .imp.imp--behind-file {
+    display: none;
+  }
+  .imp3-filepane {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 }

@@ -135,6 +135,10 @@ async def reopen_statement_preview(
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), str(exc))
     fmt = record.get("format") or _resolve_format(None, record.get("filename"), content)
+    # A reopen that names no account opens the statement for the account it is FILED under
+    # (stamped at upload by `claim_for_account`) — the Review buttons pass none, and a
+    # statement whose own number can't be matched then came back "needs an account".
+    account_id = account_id or record.get("account_id") or None
     if _clean_mode(mode) == "async":
         # Off the event loop (security review, low #3) — same reasoning as the fresh-upload
         # branch in `preview_import`. No orphan-cleanup concern here: a reopen never mints a

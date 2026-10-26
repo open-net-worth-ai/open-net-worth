@@ -3,17 +3,22 @@
 // TEACH (saved as the source's format profile) before the same decision preview runs.
 import { Fragment, useState, useRef, useMemo, useEffect, useLayoutEffect } from 'react'
 import { authFetch } from '../../../api/client'
-import { Modal, Button, FormField, Select, EmptyState } from '../../ui'
+import { Modal, Button, FormField, Select, EmptyState, SegmentedControl } from '../../ui'
 import { Spark as LuciusSpark } from '../../../lucius/identity'
 import { fCur, fromApiTxn } from './data'
 import './statementImport.css'
 import { ConfirmModal } from './ConfirmModal'
+import { BookedScreen } from './BookedScreen'
+import { Ic, Spark, I_CHECK, I_WARN } from './importIcons'
 import { AddCategoryField, AddPayeeField, type PayeeOption } from './pickers'
 import { catOptionsFor } from './categories'
 import TxnDetail from './TxnDetail'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight } from '../../../ui/icons'
 import { fDate } from '../../../utils/format'
+import { fetchVaultItem, type VaultItem } from '../../../api/vault'
+import { PreviewLoading } from '../../vault/PreviewLoading'
+import { DocumentPreview } from '../../vault/DocumentPreview'
 import type { TxnDetailProps } from './TxnDetail'
 import type { Account, ApiTxn, Category, FxRates, Txn, TxnActivity, SourceEntry } from './types'
 import {
@@ -66,6 +71,11 @@ export type { ImportPreviewDraft, ImportPreviewResult }
 // (`flow3.jsx` READ_PHASES). The real read takes longer than the animation, so the
 // line CLAMPS on the last phase instead of looping — a phase that came back round
 // would claim work that already finished.
+/** How wide the viewer last dragged the file pane beside the review — a per-viewer convenience. */
+const FILE_WIDTH_KEY = 'onw.import.fileWidth'
+const FILE_MIN_PX = 280
+const REVIEW_MIN_PX = 420
+
 const READ_PHASES = [
   'Reading the statement',
   'Finding the transaction table',
@@ -180,14 +190,32 @@ function ImpSelect({
 
 /** Compact "filter by kind" control — a single icon button, not three standing chips, so a
  *  second filter dimension doesn't visually compete with the decision chips it sits beside. */
+/** A category the review's rows carry, for the filter menu — `key` is the category id, or
+ *  UNCATEGORIZED_KEY for rows with none. */
+interface CategoryFilterOption {
+  key: string
+  label: string
+  color: string
+  n: number
+}
+const UNCATEGORIZED_KEY = '__uncategorized__'
+
 function KindFilterButton({
   value,
   onChange,
   counts,
+  categories,
+  category,
+  onCategoryChange,
 }: {
   value: 'all' | 'expense' | 'income' | 'transfer'
   onChange: (v: 'all' | 'expense' | 'income' | 'transfer') => void
   counts: { expense: number; income: number; transfer: number }
+  /** Owner, 2026-10-26: "the filters should support not just type but categories, including the
+   *  uncategorized ones". */
+  categories: CategoryFilterOption[]
+  category: string
+  onCategoryChange: (key: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -213,25 +241,33 @@ function KindFilterButton({
       { v: 'transfer', label: 'Transfer', n: counts.transfer },
     ] satisfies Array<{ v: 'expense' | 'income' | 'transfer'; label: string; n: number }>
   ).filter((o) => o.n > 0)
-  if (options.length < 2) return null
+  const showKinds = options.length >= 2
+  const showCategories = categories.length >= 2 || category !== 'all'
+  if (!showKinds && !showCategories) return null
+  const active = value !== 'all' || category !== 'all'
+  const catLabel = categories.find((c) => c.key === category)?.label
   return (
     <div className="imp3-kindfilter" ref={ref}>
       <button
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label="Filter by kind"
-        title={value === 'all' ? 'Filter by kind' : `Filtering by ${value}`}
-        className={'imp3-kindfilter-btn' + (value !== 'all' ? ' on' : '')}
+        aria-label="Filter by type or category"
+        title={
+          active
+            ? `Filtering by ${[value !== 'all' ? value : null, catLabel].filter(Boolean).join(' · ')}`
+            : 'Filter by type or category'
+        }
+        className={'imp3-kindfilter-btn' + (active ? ' on' : '')}
         onClick={() => setOpen((o) => !o)}
       >
         <svg
-          width="20"
-          height="20"
+          width="15"
+          height="15"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          strokeWidth="2.4"
+          strokeWidth="2.2"
           strokeLinecap="round"
           strokeLinejoin="round"
         >
@@ -239,34 +275,75 @@ function KindFilterButton({
         </svg>
       </button>
       {open && (
-        <div className="imp3-kindfilter-pop" role="listbox">
-          <button
-            type="button"
-            role="option"
-            aria-selected={value === 'all'}
-            className={value === 'all' ? 'sel' : ''}
-            onClick={() => {
-              onChange('all')
-              setOpen(false)
-            }}
-          >
-            All kinds
-          </button>
-          {options.map((o) => (
-            <button
-              type="button"
-              key={o.v}
-              role="option"
-              aria-selected={value === o.v}
-              className={value === o.v ? 'sel' : ''}
-              onClick={() => {
-                onChange(value === o.v ? 'all' : o.v)
-                setOpen(false)
-              }}
-            >
-              {o.label} <i>{o.n}</i>
-            </button>
-          ))}
+        <div className="imp3-kindfilter-pop">
+          {showKinds && (
+            <div role="listbox" aria-label="Type">
+              <div className="imp3-kindfilter-group">Type</div>
+              <button
+                type="button"
+                role="option"
+                aria-selected={value === 'all'}
+                className={value === 'all' ? 'sel' : ''}
+                onClick={() => {
+                  onChange('all')
+                  setOpen(false)
+                }}
+              >
+                All types
+              </button>
+              {options.map((o) => (
+                <button
+                  type="button"
+                  key={o.v}
+                  role="option"
+                  aria-selected={value === o.v}
+                  className={value === o.v ? 'sel' : ''}
+                  onClick={() => {
+                    onChange(value === o.v ? 'all' : o.v)
+                    setOpen(false)
+                  }}
+                >
+                  {o.label} <i>{o.n}</i>
+                </button>
+              ))}
+            </div>
+          )}
+          {showCategories && (
+            <div role="listbox" aria-label="Category" className="imp3-kindfilter-cats">
+              <div className="imp3-kindfilter-group">Category</div>
+              <button
+                type="button"
+                role="option"
+                aria-selected={category === 'all'}
+                className={category === 'all' ? 'sel' : ''}
+                onClick={() => {
+                  onCategoryChange('all')
+                  setOpen(false)
+                }}
+              >
+                All categories
+              </button>
+              {categories.map((c) => (
+                <button
+                  type="button"
+                  key={c.key}
+                  role="option"
+                  aria-selected={category === c.key}
+                  className={category === c.key ? 'sel' : ''}
+                  onClick={() => {
+                    onCategoryChange(category === c.key ? 'all' : c.key)
+                    setOpen(false)
+                  }}
+                >
+                  <span className="imp3-kindfilter-cat">
+                    <b style={{ background: c.color }} aria-hidden="true" />
+                    {c.label}
+                  </span>
+                  <i>{c.n}</i>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -281,21 +358,42 @@ function EditDraftModal({
   d,
   catList,
   payeeOptions,
+  transferAccounts,
   onManagePayees,
   onCreateCategory,
   onSave,
+  onSetTransfer,
   onClose,
 }: {
   d: ImportPreviewDraft
   catList: Category[]
   payeeOptions: PayeeOption[]
+  /** The accounts this row can be a transfer with: same currency, not the statement's own. */
+  transferAccounts: Account[]
   onManagePayees?: () => void
   onCreateCategory?: (prefill: string, kind: 'income' | 'expense', cb: (id: string) => void) => void
   onSave: (patch: { category?: string | null; payee?: string }) => void
+  /** Type switch: an account books the row as a transfer with it; null books it plain again. */
+  onSetTransfer: (accountId: string | null) => void
   onClose: () => void
 }) {
   const [payee, setPayee] = useState(d.payee || '')
   const [category, setCategory] = useState(d.category || '')
+  const outflow = d.amount < 0
+  // A routed row's OTHER side: money out lands in `to`, money in comes from `from`.
+  const routedTo = d.routed ? (outflow ? d.routed.to_account_id : d.routed.from_account_id) : ''
+  const [type, setType] = useState<'plain' | 'transfer'>(d.routed ? 'transfer' : 'plain')
+  const [transferTo, setTransferTo] = useState(routedTo || '')
+  const plainLabel = outflow ? 'Expense' : 'Income'
+  const save = () => {
+    if (type === 'transfer') {
+      if (transferTo !== routedTo) onSetTransfer(transferTo)
+    } else {
+      if (d.routed) onSetTransfer(null)
+      onSave({ payee, category: category || null })
+    }
+    onClose()
+  }
   return (
     <Modal
       open
@@ -310,10 +408,8 @@ function EditDraftModal({
           <Button
             size="sm"
             variant="primary"
-            onClick={() => {
-              onSave({ payee, category: category || null })
-              onClose()
-            }}
+            disabled={type === 'transfer' && !transferTo}
+            onClick={save}
           >
             Save
           </Button>
@@ -324,35 +420,70 @@ function EditDraftModal({
           not the generic ui/FormField, which doesn't carry the width/spacing rules these
           picker components (.acct-payf/.acct-acctsel) depend on here. */}
       <div className="acct-edit-body">
+        {/* Type (owner, 2026-10-26: "it's a transfer — we are still not allowing to change the
+            type?"): Transfer swaps Payee + Category for the other account — a transfer between
+            your own accounts books no payee or category; the other account is its counterpart. */}
         <div className="acct-edit-field">
-          <div className="acct-edit-label">Payee</div>
-          <AddPayeeField
-            value={payee}
-            onChange={(v) => setPayee(v)}
-            options={payeeOptions}
-            accounts={[]}
-            fromAccountId={null}
-            onSelectTransfer={() => {}}
-            onManagePayees={onManagePayees}
-            advance={() => {}}
+          <div className="acct-edit-label">Type</div>
+          <SegmentedControl
+            ariaLabel="Type"
+            options={[
+              { value: 'plain', label: plainLabel },
+              { value: 'transfer', label: 'Transfer' },
+            ]}
+            value={type}
+            onChange={setType}
           />
         </div>
-        <div className="acct-edit-field">
-          <div className="acct-edit-label">Category</div>
-          <AddCategoryField
-            value={category}
-            onChange={(k) => setCategory(k)}
-            options={catOptionsFor(d.kind === 'income' ? 'income' : 'expense', catList)}
-            onCreate={
-              onCreateCategory
-                ? (prefill, cb) =>
-                    onCreateCategory(prefill, d.kind === 'income' ? 'income' : 'expense', cb)
-                : undefined
-            }
-            advance={() => {}}
-            clearable
-          />
-        </div>
+        {type === 'plain' && (
+          <div className="acct-edit-field">
+            <div className="acct-edit-label">Payee</div>
+            <AddPayeeField
+              value={payee}
+              onChange={(v) => setPayee(v)}
+              options={payeeOptions}
+              accounts={[]}
+              fromAccountId={null}
+              onSelectTransfer={() => {}}
+              onManagePayees={onManagePayees}
+              advance={() => {}}
+            />
+          </div>
+        )}
+        {type === 'transfer' ? (
+          <div className="acct-edit-field">
+            <div className="acct-edit-label">{outflow ? 'To account' : 'From account'}</div>
+            <Select
+              aria-label={outflow ? 'To account' : 'From account'}
+              value={transferTo}
+              onChange={(e) => setTransferTo(e.target.value)}
+              placeholder="Choose an account"
+              options={transferAccounts.map((a) => ({ value: a.id, label: a.name }))}
+            />
+            <div className="imp3-edit-hint">
+              {transferAccounts.length === 0
+                ? `No other ${d.currency} account to transfer with.`
+                : 'Books one transfer between the two accounts — never spending or income.'}
+            </div>
+          </div>
+        ) : (
+          <div className="acct-edit-field">
+            <div className="acct-edit-label">Category</div>
+            <AddCategoryField
+              value={category}
+              onChange={(k) => setCategory(k)}
+              options={catOptionsFor(d.kind === 'income' ? 'income' : 'expense', catList)}
+              onCreate={
+                onCreateCategory
+                  ? (prefill, cb) =>
+                      onCreateCategory(prefill, d.kind === 'income' ? 'income' : 'expense', cb)
+                  : undefined
+              }
+              advance={() => {}}
+              clearable
+            />
+          </div>
+        )}
       </div>
     </Modal>
   )
@@ -455,8 +586,18 @@ function LinkPicker({
       window.removeEventListener('scroll', s, true)
     }
   }, [open, isMobile])
+  // Amounts render with the locale's separators ("2.079.620"), while the statement row shows
+  // "2,079,620" — match on the bare digits too, so a pasted amount still finds its entry.
   const ql = q.trim().toLowerCase()
-  const shown = ql ? options.filter((o) => o.line.toLowerCase().includes(ql)) : options
+  const bare = (text: string) => text.toLowerCase().replace(/[\s.,]/g, '')
+  const shown = ql
+    ? options.filter(
+        (o) =>
+          o.line.toLowerCase().includes(ql) ||
+          bare(o.line).includes(bare(ql)) ||
+          (!!o.hint && o.hint.toLowerCase().includes(ql)),
+      )
+    : options
   const list = (
     <>
       {options.length > 4 && (
@@ -613,30 +754,6 @@ function LuciusNote({ preview }: { preview: ImportPreviewResult }) {
   )
 }
 
-function Ic({ d, size = 16, sw = 1.8 }: { d: string; size?: number; sw?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={sw}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      dangerouslySetInnerHTML={{ __html: d }}
-    />
-  )
-}
-/** The handoff's own Lucius spark, verbatim from `flow3.jsx` (a filled four-point star
- *  with a smaller second sparkle) — the glyph the Choose, Read and Booked steps all use. */
-function Spark({ size = 15 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M12 2l2.1 6.4L20 10l-5.9 1.6L12 18l-2.1-6.4L4 10l5.9-1.6L12 2zm7 12l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3z" />
-    </svg>
-  )
-}
 const I_FILE =
   '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/>'
 /** The picked file's size, in the handoff's own `58 KB` / `1.2 MB` shape (`imp3-file-sub`). */
@@ -646,9 +763,26 @@ function fSize(bytes: number): string {
   const kb = bytes / 1024
   return kb < 1024 ? `${Math.round(kb)} KB` : `${(kb / 1024).toFixed(1)} MB`
 }
-const I_CHECK = '<path d="M20 6 9 17l-5-5"/>'
-const I_WARN =
-  '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" x2="12" y1="9" y2="13"/><line x1="12" x2="12.01" y1="17" y2="17"/>'
+/** The line under "Opening <file>": how long it has been, and — once it is clearly not instant —
+ *  how long it can take (owner, 2026-10-26: the old "Opening your review" only repeated the
+ *  title above it). */
+function OpeningReviewLine() {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const started = Date.now()
+    const id = setInterval(() => setSeconds(Math.floor((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [])
+  if (seconds < 4) return <>Usually a few seconds</>
+  return <>Still opening — {seconds}s. A long statement can take up to 30 seconds.</>
+}
+
+export interface ReopenOptions {
+  instructions?: string
+  rememberInstructions?: boolean
+  forceReparse?: boolean
+  background?: boolean
+}
 
 export interface ImportModalProps {
   open: boolean
@@ -664,9 +798,16 @@ export interface ImportModalProps {
    *  caller (a statements-list row) already has it; resuming never re-reads the record just
    *  to redisplay its own name. */
   resumeFilename?: string
+  /** When the resumed statement was uploaded — its Choose step says "Read 2 Jun". */
+  resumeUploadedAt?: string
   /** Server call backing `resumeStatementId`: `POST /api/statements/{id}/preview` — reads
-   *  the record's own file, no re-upload. */
-  onReopenPreview?: (statementId: string, accountId?: string) => Promise<ImportPreviewResult>
+   *  the record's own file, no re-upload. `opts` carries a "Read again": the typed
+   *  instructions, and `forceReparse` + `background` to re-read it as an async job. */
+  onReopenPreview?: (
+    statementId: string,
+    accountId?: string,
+    opts?: ReopenOptions,
+  ) => Promise<ImportPreviewResult>
   /** "Continue in background" (B20 async) — the processing step's own low-emphasis action,
    *  and, during `processing`, the SAME thing the modal's ✕ / Escape / backdrop now do: the
    *  server-side parse keeps running regardless, so there is nothing left to warn about
@@ -736,6 +877,7 @@ export interface ImportModalProps {
     duplicates: number
     skipped: number
     batchId?: string | null
+    linkedNeedsReview?: number
     deleted?: number
     deleteErrors?: Array<{ id: string; error: string }>
     refusedDuplicates?: Array<{
@@ -753,6 +895,11 @@ export interface ImportModalProps {
    *  from the commit; the parent closes this modal and opens the register filtered to that
    *  batch — a filter that unions the batch's created rows with the rows it only linked/merged. */
   onViewImportBatch?: (batchId: string, label?: string) => void
+  /** Undo import on the Booked screen: removes the rows this commit added and restores every
+   *  entry it linked into (POST /api/transactions/batches/{id}/rollback). Omitted, no Undo. */
+  onUndoImport?: (
+    batchId: string,
+  ) => Promise<{ deleted: number; unmerged: number; restored?: number }>
   /** Existing-transaction drawer (SI-50): clicking a match line's name/sub-line opens the
    *  REAL register drawer (TxnDetail) for that row. All optional — the register (AccountsTab)
    *  wires the same endpoints its own drawer uses; omitted, the drawer still opens (fetched via
@@ -837,6 +984,7 @@ export function ImportModal({
   initialFile,
   resumeStatementId,
   resumeFilename,
+  resumeUploadedAt,
   onReopenPreview,
   onContinueInBackground,
   accounts,
@@ -848,6 +996,7 @@ export function ImportModal({
   onDecisionCommit,
   onMarkImportReviewed,
   onViewImportBatch,
+  onUndoImport,
   payeeOptions,
   payeeById,
   importReviewDefault,
@@ -936,7 +1085,10 @@ export function ImportModal({
     accounts: number
     transfers?: number
     batchId?: string | null
+    linkedNeedsReview?: number
     deleted?: number
+    leftOut?: number
+    unreadable?: number
   } | null>(null)
   // "Mark all as reviewed" (SI-79 Done-screen action) — only ever offered when this commit
   // created new rows (a merge/link never gets the review flag, so there's nothing to clear).
@@ -975,7 +1127,6 @@ export function ImportModal({
   >({})
   // The verdict panel collapses to one summary row by default; expand for the per-question detail.
   const [verdictOpen, setVerdictOpen] = useState(false)
-  const [doneDiff, setDoneDiff] = useState<{ core: number; boundary: number } | null>(null)
   // Ledger-only rows the reviewer MARKED for deletion. Staged, like every other decision on
   // this screen — the footer's "nothing is written until you confirm" is a promise Delete used
   // to break, firing an irreversible DELETE per row before the user had committed anything.
@@ -989,6 +1140,19 @@ export function ImportModal({
   const [pendingDelete, setPendingDelete] = useState<Record<string, boolean>>({})
   // Boundary bucket (§4): collapsed by default — a quiet month stays quiet.
   const [boundaryOpen, setBoundaryOpen] = useState(false)
+  const [otherStatementOpen, setOtherStatementOpen] = useState(false)
+  const [deleteAskOpen, setDeleteAskOpen] = useState(false)
+  // "Link to a new row" on a row that is already linked: confirm before moving its link.
+  const [relinkAsk, setRelinkAsk] = useState<{
+    row: string
+    from: string
+    to: string
+    /** Overrides the default wording (the row-side move, where an ENTRY changes rows). */
+    body?: string
+    title?: string
+    confirmLabel?: string
+    run: () => void
+  } | null>(null)
   // Targeted jump: the DRAFT ARRAY INDEX to scroll to and flash-highlight. A jump into a row
   // the active chip filters out switches back to All first (same handler), so by the time the
   // flash effect runs post-render the target is in the DOM.
@@ -1014,6 +1178,7 @@ export function ImportModal({
   // A second, independent filter dimension (by kind) — ANDed with the decision chip above,
   // not a replacement for it.
   const [kindFilter, setKindFilter] = useState<'all' | 'expense' | 'income' | 'transfer'>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [expandedRows, setExpandedRows] = useState<Record<number, boolean>>({})
   // Handoff queue receipts are explicit user decisions, separate from a band's safe default:
   // cards stay in place after a choice and can be undone without losing their context.
@@ -1028,6 +1193,9 @@ export function ImportModal({
     Record<number, { amount: number; touched: boolean }>
   >({})
   const [ledgerExpanded, setLedgerExpanded] = useState<Record<string, boolean>>({})
+  // "Leave it" is a decision too: the entry says it stays (owner, 2026-10-26: only "Will delete"
+  // showed, so a row you'd answered looked untouched). Nothing is sent — keeping is the default.
+  const [keptLedger, setKeptLedger] = useState<Record<string, boolean>>({})
   const [sectionOpen, setSectionOpen] = useState({
     needs: true,
     statement: true,
@@ -1055,6 +1223,23 @@ export function ImportModal({
   // back to the `phase`/READ_PHASES timer above exactly as it always has. Named distinctly
   // from the header's own `progress` breadcrumb element further down this component.
   const [progressToken, setProgressToken] = useState<string | null>(null)
+  const [bgPending, setBgPending] = useState(false)
+  // The statement file beside the review (owner, 2026-10-26: "a preview … where i can scroll or
+  // review the files … before making decisions"). Off until asked for, every time ("it's not
+  // always needed"); the width it is dragged to is remembered. A phone flips with tabs instead.
+  const isMobile = useIsMobile()
+  const [showFile, setShowFile] = useState(false)
+  const [fileWidth, setFileWidth] = useState<number | null>(() => {
+    try {
+      const px = Number(localStorage.getItem(FILE_WIDTH_KEY))
+      return px >= FILE_MIN_PX ? px : null
+    } catch {
+      return null
+    }
+  })
+  const [phoneView, setPhoneView] = useState<'review' | 'file'>('review')
+  const [fileItem, setFileItem] = useState<{ id: string; item: VaultItem | null } | null>(null)
+  const [fileRow, setFileRow] = useState<number | undefined>(undefined)
   const {
     progress: previewProgress,
     stale: progressStale,
@@ -1167,6 +1352,15 @@ export function ImportModal({
     return () => clearTimeout(t)
   }, [flashIndex])
   function reset() {
+    // A fresh start ("Import another statement", "Try another file") leaves the reopened
+    // statement behind for good — otherwise the next file is read while the resume path also
+    // reopens the old one, and the two statements' reviews race (QA 2026-10-25).
+    setDroppedResumeId(resumeStatementId ?? null)
+    setPendingAttachId(null)
+    setReopenFailed(null)
+    setReopenAccount('')
+    setRereading(false)
+    reopenArgs.current = {}
     setStep('source')
     setRoute('lucius')
     setFile(null)
@@ -1242,12 +1436,43 @@ export function ImportModal({
   // resolves from whichever source knows it: a resumed statement already carries it; a fresh
   // upload only learns it once the server mints one, riding the live progress snapshot.
   function continueInBackground() {
-    const sid = resumeStatementId || previewProgress?.statementId || null
-    onContinueInBackground?.(sid, resumeFilename || file?.name)
+    const sid = liveResumeId || previewProgress?.statementId || null
+    // Tapped before the server has minted the statement's id (the first second of an upload):
+    // hand off only once it is known, or the app could never say when THIS read is ready
+    // (QA 2026-10-25 — the read went untracked and no "Ready to review" ever came).
+    if (!sid && progressToken) {
+      setBgPending(true)
+      return
+    }
+    handOffToBackground(sid)
+  }
+  function handOffToBackground(sid: string | null) {
+    setBgPending(false)
+    // The reopened statement's name only while it is still the one on screen — after "Import
+    // another" the read in flight is the newly picked file's.
+    onContinueInBackground?.(sid, (liveResumeId ? resumeFilename : undefined) || file?.name)
     close()
   }
   // The Modal's ✕ / backdrop / Escape all funnel through this ONE onClose (Radix's
   // onOpenChange) — intercepting it here covers "tap outside" and "cancel" both, in one place.
+  // Waiting for the id (see continueInBackground): hand off the moment it lands; a read that
+  // finishes first just stays open on its review; after 6s give up and close untracked.
+  const liveStatementId = previewProgress?.statementId || null
+  useEffect(() => {
+    if (!bgPending) return
+    if (step !== 'processing') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the read finished first; drop the wait
+      setBgPending(false)
+      return
+    }
+    if (liveStatementId) {
+      handOffToBackground(liveStatementId)
+      return
+    }
+    const timer = window.setTimeout(() => handOffToBackground(null), 6000)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the id/step only
+  }, [bgPending, liveStatementId, step])
   function requestClose() {
     if (step === 'processing') {
       continueInBackground()
@@ -1260,6 +1485,12 @@ export function ImportModal({
     close()
   }
   function requestBack() {
+    // A reopened statement's Choose step offers "Back to review", which restores this review
+    // exactly as left — nothing is lost, so there is nothing to confirm.
+    if (resuming && !file) {
+      setStep('choose')
+      return
+    }
     setPendingExit('back')
   }
   function confirmExit() {
@@ -1466,6 +1697,14 @@ export function ImportModal({
     keepRowDecisions?: boolean,
   ) {
     const acct = overrideAccountId || accountId
+    // A reopened statement has no File in this browser — its bytes live with the record. A
+    // Re-read of it is the SAME read "Read again" starts: from the beginning, in the
+    // background, with the reading step's live progress (owner, 2026-10-26).
+    const savedId = !file && !url.trim() ? activeResumeId || preview?.statementId || null : null
+    if (savedId && forceReparse && !keepRowDecisions && !mapping) {
+      await readAgain(savedId)
+      return
+    }
     // Through setAnchorAccount, not setAccountId: this is the THIRD writer of the anchor
     // (the "Preview into {name}" suggestion), and if the suggested account is already an
     // extra chip, a raw write would leave a stale copy of the anchor in the extras.
@@ -1486,18 +1725,27 @@ export function ImportModal({
       // anchor on the next import of this layout. `acct` (not `accountId`) leads: an
       // override picked on this very call is the anchor the user just chose.
       const chips = [acct, ...extraAcctIds.filter((id) => id !== acct)].filter(Boolean)
-      const res = await onPreview(
-        file,
-        url,
-        acct,
-        mapping,
-        instructions.trim() || undefined,
-        rememberInstr,
-        forceReparse,
-        forceRelearnFlag,
-        chips,
-        token || undefined,
-      )
+      // Any other re-preview of a reopened statement (the Type switch's quiet refresh) reopens
+      // it BY ID — the upload route with no file answered "provide a file or a source_url".
+      const res =
+        savedId && onReopenPreview
+          ? await onReopenPreview(savedId, acct || undefined, {
+              instructions: instructions.trim() || undefined,
+              rememberInstructions: rememberInstr,
+              forceReparse,
+            })
+          : await onPreview(
+              file,
+              url,
+              acct,
+              mapping,
+              instructions.trim() || undefined,
+              rememberInstr,
+              forceReparse,
+              forceRelearnFlag,
+              chips,
+              token || undefined,
+            )
       if (res.attached && res.statementId) {
         // Code review round B, M4: this exact file is already `parsing` on the server's own
         // async pool (someone else's upload, or a retry of this one) — the sync request
@@ -1600,27 +1848,92 @@ export function ImportModal({
     setPreview(res)
     setShowSkipped(false)
     setIncludeEarlier(false)
+    // A reopened statement has no file to probe for its source's saved instructions — the
+    // review itself says which ones it was read with, so Back shows (and Read again re-sends)
+    // exactly those.
+    if (res.instructions?.text && !instrTyped.current) {
+      setInstructions(res.instructions.text)
+      setRememberInstr(res.instructions.remembered !== false)
+      setSavedInstructions(res.instructions.remembered === false ? '' : res.instructions.text)
+    }
     setStep('preview')
   }
 
-  async function resumeReopen(statementId: string) {
-    if (!onReopenPreview) return
+  // The reopen is one heavy server call, and two effects below both land on it for the same
+  // `ready` statement (the one-shot status check and the polled snapshot) — a second POST for
+  // an id already in flight only doubles the work the first is waiting on.
+  const reopeningId = useRef<string | null>(null)
+  // A reopen that fails stays ON the reopen — its own message, a retry, and an account picker
+  // only when the server genuinely could not tell. It used to drop to the Choose step with no
+  // file in it: a nameless "CSV" chip and a "Checking if this source is remembered…" probe that
+  // could never finish (owner, 2026-10-25).
+  const [reopenFailed, setReopenFailed] = useState<{ kind: 'account' | 'load' | 'read' } | null>(
+    null,
+  )
+  const [reopenAccount, setReopenAccount] = useState('')
+  const [resumePollEpoch, setResumePollEpoch] = useState(0)
+  // "Read again" on a reopened statement: the instructions it was re-read with, so the review
+  // fetched once it is ready is the one built for them (the stored review is keyed by them).
+  const reopenArgs = useRef<ReopenOptions>({})
+  const [rereading, setRereading] = useState(false)
+  async function resumeReopen(statementId: string, account?: string) {
+    if (!onReopenPreview || reopeningId.current === statementId) return
+    reopeningId.current = statementId
+    setReopenFailed(null)
     try {
-      const res = await onReopenPreview(statementId, accountId || undefined)
-      if (res.needsAccount) {
-        setError(
-          'Couldn’t reopen this statement — choose an account and try again (nothing was re-read).',
-        )
-        setStep('choose')
+      const chosen = account || accountId || undefined
+      const opts = reopenArgs.current
+      const res = await (Object.keys(opts).length
+        ? onReopenPreview(statementId, chosen, opts)
+        : onReopenPreview(statementId, chosen))
+      // The server attached this call to a read still running: watch it again until it ends.
+      if (res.attached) {
+        setResumePollEpoch((e) => e + 1)
         return
       }
-      const acct = res.resolvedAccountId || accountId
-      if (res.resolvedAccountId) setAnchorAccount(res.resolvedAccountId)
+      if (res.needsAccount) {
+        setReopenFailed({ kind: 'account' })
+        return
+      }
+      const acct = res.resolvedAccountId || chosen || accountId
+      if (res.resolvedAccountId || chosen) setAnchorAccount((res.resolvedAccountId || chosen)!)
       await applyReopenedPreview(res, acct)
+      setRereading(false)
     } catch {
-      setError('Could not reopen this statement — try again from the statements list.')
-      setStep('choose')
+      setReopenFailed({ kind: 'load' })
+    } finally {
+      reopeningId.current = null
     }
+  }
+
+  /** "Read again" from a reopened statement's Choose step: re-read the saved file as a
+   *  background job with what is on screen now, then open the review it builds. */
+  async function readAgain(statementId: string | null = activeResumeId) {
+    if (!statementId || !onReopenPreview) return
+    // A review opened some other way than the statements list tracks this id from here on.
+    if (statementId !== activeResumeId) setPendingAttachId(statementId)
+    reopenArgs.current = {
+      instructions: instructions.trim() || undefined,
+      rememberInstructions: rememberInstr,
+    }
+    setError('')
+    setReopenFailed(null)
+    setRereading(true)
+    try {
+      await onReopenPreview(statementId, accountId || undefined, {
+        ...reopenArgs.current,
+        forceReparse: true,
+        background: true,
+      })
+    } catch {
+      setRereading(false)
+      setReopenFailed({ kind: 'load' })
+      setStep('processing')
+      return
+    }
+    // Only once the server has the new read: switching first let the status poll see the OLD
+    // "ready" and reopen the review this read is replacing (QA 2026-10-25).
+    setStep('processing')
   }
 
   // A resume target has TWO writers: the `resumeStatementId` prop (opened straight from the
@@ -1629,7 +1942,10 @@ export function ImportModal({
   // second one; see `runServerPreview`'s `res.attached` check below). Same downstream
   // handling either way — once attached, there is no "whose upload was it" left to track.
   const [pendingAttachId, setPendingAttachId] = useState<string | null>(null)
-  const activeResumeId = resumeStatementId || pendingAttachId
+  const [droppedResumeId, setDroppedResumeId] = useState<string | null>(null)
+  const liveResumeId =
+    resumeStatementId && resumeStatementId !== droppedResumeId ? resumeStatementId : null
+  const activeResumeId = liveResumeId || pendingAttachId
   const resuming = !!activeResumeId
   // Polled by the STATEMENT's own id, never a client token — this is what lets reopening
   // survive a page reload the live token-based channel never could. 1s cadence matches the
@@ -1640,8 +1956,9 @@ export function ImportModal({
     elapsedS: resumeElapsedS,
   } = useStatementParseStatus(
     resuming ? (activeResumeId as string) : null,
-    resuming && step === 'processing',
+    resuming && step === 'processing' && !reopenFailed,
     1000,
+    resumePollEpoch,
   )
 
   // Jump to `processing` the moment a resume target appears — react.dev's own "adjusting
@@ -1663,8 +1980,7 @@ export function ImportModal({
       if (cancelled) return
       if (status?.parseStatus === 'ready') await resumeReopen(activeResumeId)
       else if (status && status.parseStatus !== 'parsing') {
-        setError('This statement could not be resumed — re-run it from the statements list.')
-        setStep('choose')
+        setReopenFailed({ kind: 'read' })
       }
       // 'parsing', or a poll miss: stay on `processing` — the effect below drives the
       // eventual auto-transition once the ongoing poll reports `ready`.
@@ -1687,8 +2003,7 @@ export function ImportModal({
       resumeSnapshot?.parseStatus === 'failed' ||
       resumeSnapshot?.parseStatus === 'interrupted'
     ) {
-      setError('This statement could not be read — re-run it from the statements list.')
-      setStep('choose')
+      setReopenFailed({ kind: 'read' })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the polled status only
   }, [resumeSnapshot?.parseStatus, resuming, step])
@@ -1839,19 +2154,15 @@ export function ImportModal({
     })
   }
 
-  async function confirmImport() {
+  async function confirmImport(opts?: { deletesConfirmed?: boolean }) {
     if (!preview || !account || committing) return
-    // ONE confirmation for the whole destructive set, naming the count — replacing the per-row
-    // dialog the staged flow removed. Deletions are the only irreversible thing this commit
-    // does that the user cannot undo from the import screen afterwards.
-    if (
-      markedForDelete.length > 0 &&
-      !window.confirm(
-        `Delete ${markedForDelete.length} transaction${markedForDelete.length === 1 ? '' : 's'} from your ledger?` +
-          '\n\nThis is part of confirming the import and cannot be undone from this screen.',
-      )
-    )
+    // ONE confirmation for the whole destructive set, naming the count, in the app's own confirm
+    // window. Undo import on the Imported screen brings the deleted entries back (owner,
+    // 2026-10-26), so it says so instead of "cannot be undone".
+    if (markedForDelete.length > 0 && opts?.deletesConfirmed !== true) {
+      setDeleteAskOpen(true)
       return
+    }
     if (preview.statementId) {
       setCommitting(true)
       setError('')
@@ -1951,6 +2262,7 @@ export function ImportModal({
         skipped?: number
         transfers?: number
         batchId?: string | null
+        linkedNeedsReview?: number
         deleted?: number
         deleteErrors?: Array<{ id: string; error: string }>
         refusedDuplicates?: Array<{
@@ -1990,7 +2302,13 @@ export function ImportModal({
         accounts: Math.max(1, acctsTouched),
         transfers: out.transfers ?? 0,
         batchId: out.batchId ?? null,
+        linkedNeedsReview: out.linkedNeedsReview ?? 0,
         deleted: out.deleted ?? 0,
+        // What the review's footer said ("leave out 4"), not the server's skip total — that
+        // also counts rows the reader dropped from the file (owner, 2026-10-26: "21 left out by
+        // me?" after leaving out 4).
+        leftOut: preview.drafts.filter((d, i) => isExcluded(d, i)).length,
+        unreadable: preview.skipped?.length ?? 0,
       })
       // A delete the server refused must SURFACE — the Done screen says so rather than letting
       // "delete 8" quietly become "deleted 7".
@@ -1998,17 +2316,8 @@ export function ImportModal({
       setRefusedDuplicates(out.refusedDuplicates ?? [])
       setReviewMarkState('idle')
       setReviewMarkError('')
-      setDoneDiff(null)
-      // the inverse check: ledger rows in this period the statement does NOT contain
-      authFetch(`/api/statements/${preview.statementId}/ledger-diff`)
-        .then(async (r) => (r.ok ? r.json() : null))
-        .then((body) => {
-          if (body?.status === 'ok')
-            setDoneDiff({ core: (body.rows || []).length, boundary: (body.boundary || []).length })
-        })
-        .catch(() => {
-          /* advisory — the done screen works without it */
-        })
+      // No second "not on this statement" check here (owner, 2026-10-26): the review already
+      // showed it while it could still be acted on; after Confirm it could only worry.
       setCommitting(false)
       setStep('done')
       return
@@ -2021,6 +2330,35 @@ export function ImportModal({
   // "Mark all as reviewed" (SI-79 Done-screen action) — a real write, not local-only state
   // (unlike the design handoff's mockup): clears needs_review on every row this commit just
   // created. A failure leaves the button clickable again rather than silently eating it.
+  // "Account · period · N rows" under the Booked title.
+  function bookedContext() {
+    const parts: string[] = []
+    if (result && result.accounts > 1) parts.push(`${result.accounts} accounts`)
+    else if (account?.name) parts.push(account.name)
+    const ps = preview?.meta?.period_start
+    const pe = preview?.meta?.period_end
+    if (ps) parts.push(`${fDate(ps)} – ${pe ? fDate(pe) : '…'}`)
+    const rowsRead = preview ? (preview.total ?? preview.drafts.length) : 0
+    if (rowsRead) parts.push(`${rowsRead} row${rowsRead === 1 ? '' : 's'}`)
+    return parts.join(' · ')
+  }
+
+  // After Undo import the ledger is back to exactly what the review described, so the same
+  // review — with every decision the user made — is shown again rather than re-read.
+  function reviewAgain() {
+    setResult(null)
+    setDeleteErrors([])
+    setRefusedDuplicates([])
+    setReviewMarkState('idle')
+    setReviewMarkError('')
+    setPendingDelete({})
+    // Rebuilt, not just re-shown: the undo moved the ledger back, and the old review's links
+    // were judged against the ledger as it was — Confirm then refused a link the screen still
+    // offered (owner, 2026-10-26). Same statement, cached read (free), row choices kept.
+    setStep('processing')
+    void runServerPreview(route, undefined, undefined, undefined, undefined, true)
+  }
+
   async function markAllReviewed() {
     if (!result?.batchId || !onMarkImportReviewed) return
     setReviewMarkState('pending')
@@ -2041,6 +2379,12 @@ export function ImportModal({
   // per-row confirm dialog. The deletes ride on `confirmImport` with everything else, so the
   // footer's promise holds and the whole set is undoable until then.
   function toggleDeleteMark(id: string) {
+    setKeptLedger((current) => {
+      if (!current[id]) return current
+      const next = { ...current }
+      delete next[id]
+      return next
+    })
     setPendingDelete((current) => {
       const next = { ...current }
       if (next[id]) delete next[id]
@@ -2163,8 +2507,38 @@ export function ImportModal({
   // make sense. This used to be a blanket reset of every map on the statement —
   // real, reported data loss on a 100+-row statement (fixing one row's routing silently
   // discarded every other row's Import/Leave-out/merge decision).
-  async function undoLucius(row?: number) {
-    if (!preview?.statementId) return
+  /** Accounts a row can be a transfer with: same currency, live, not the statement's own. */
+  function transferAccountsFor(d: ImportPreviewDraft): Account[] {
+    const own = d.destId || accountId
+    return accounts.filter(
+      (a) =>
+        a.id !== own &&
+        !a.archived &&
+        (a.currency || '').toUpperCase() === (d.currency || '').toUpperCase(),
+    )
+  }
+  /** The Edit window's Type switch: saved on the statement, then the review re-reads the cached
+   *  parse (no AI) so the row shows — and Confirm books — exactly the chosen type. */
+  async function setRowType(row: number | undefined, accountId: string | null) {
+    if (!preview?.statementId || row == null) return
+    setLuciusUndoing((m) => ({ ...m, [row]: true }))
+    try {
+      const r = await authFetch(`/api/statements/${preview.statementId}/row-type`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ row, account_id: accountId }),
+      })
+      if (!r.ok) throw new Error(await r.text())
+      await runServerPreview(route, undefined, undefined, undefined, undefined, true)
+    } catch {
+      setError('Could not change the row type — try again.')
+    } finally {
+      setLuciusUndoing((m) => ({ ...m, [row]: false }))
+    }
+  }
+
+  async function undoLucius(row?: number): Promise<boolean> {
+    if (!preview?.statementId) return false
     const key = row ?? -1
     setLuciusUndoing((m) => ({ ...m, [key]: true }))
     try {
@@ -2187,12 +2561,91 @@ export function ImportModal({
       setQueueFixingIndex(null)
       setQueueFixValue('')
       await runServerPreview(route, undefined, undefined, undefined, undefined, true)
+      return true
     } catch {
       // best-effort — a failed undo leaves the row's provenance chip in place; retry-able
+      return false
     } finally {
       setLuciusUndoing((m) => ({ ...m, [key]: false }))
     }
   }
+
+  const fileStatementId = step === 'preview' ? preview?.statementId : undefined
+  const fileWanted = !!fileStatementId && (isMobile ? phoneView === 'file' : showFile)
+  const filePaneItem =
+    fileStatementId && fileItem?.id === fileStatementId ? fileItem.item : undefined
+  function toggleShowFile() {
+    setShowFile((v) => !v)
+  }
+  function saveFileWidth(px: number) {
+    try {
+      localStorage.setItem(FILE_WIDTH_KEY, String(Math.round(px)))
+    } catch {
+      /* private window / blocked storage — the width just isn't remembered */
+    }
+  }
+  /** The divider between review and file: drag, arrow keys, double-click for the default split. */
+  function clampFileWidth(px: number, body: HTMLElement) {
+    return Math.max(FILE_MIN_PX, Math.min(px, body.clientWidth - REVIEW_MIN_PX))
+  }
+  function startFileResize(e: React.PointerEvent<HTMLDivElement>) {
+    const handle = e.currentTarget
+    const body = handle.parentElement
+    if (!body) return
+    e.preventDefault()
+    handle.setPointerCapture(e.pointerId)
+    let last = fileWidth
+    const move = (ev: PointerEvent) => {
+      last = clampFileWidth(body.getBoundingClientRect().right - ev.clientX, body)
+      setFileWidth(last)
+    }
+    const end = () => {
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', end)
+      handle.removeEventListener('pointercancel', end)
+      if (last != null) saveFileWidth(last)
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', end)
+    handle.addEventListener('pointercancel', end)
+  }
+  function nudgeFileWidth(e: React.KeyboardEvent<HTMLDivElement>) {
+    const step = e.key === 'ArrowLeft' ? 32 : e.key === 'ArrowRight' ? -32 : 0
+    const body = e.currentTarget.parentElement
+    const pane = body?.querySelector<HTMLElement>('.imp3-filepane')
+    if (!step || !body || !pane) return
+    e.preventDefault()
+    const next = clampFileWidth(pane.getBoundingClientRect().width + step, body)
+    setFileWidth(next)
+    saveFileWidth(next)
+  }
+  function resetFileWidth() {
+    setFileWidth(null)
+    try {
+      localStorage.removeItem(FILE_WIDTH_KEY)
+    } catch {
+      /* nothing remembered to clear */
+    }
+  }
+  /** A click on a review row points the file pane at the row of the file it came from. */
+  function pointFileAtRow(e: React.MouseEvent) {
+    const row = (e.target as HTMLElement).closest('[data-draft-index]')
+    const draft = row && preview?.drafts[Number(row.getAttribute('data-draft-index'))]
+    if (draft && draft.sourceRow) setFileRow(draft.sourceRow)
+  }
+  // The statement's Documents item, fetched once per statement while its pane is wanted. A
+  // statement with no stored file (or a failed fetch) gets null — the pane then says so.
+  useEffect(() => {
+    if (!fileWanted || !fileStatementId || fileItem?.id === fileStatementId) return
+    let alive = true
+    fetchVaultItem(`statement-${fileStatementId}`).then(
+      (item) => alive && setFileItem({ id: fileStatementId, item }),
+      () => alive && setFileItem({ id: fileStatementId, item: null }),
+    )
+    return () => {
+      alive = false
+    }
+  }, [fileWanted, fileStatementId, fileItem?.id])
 
   if (!open) return null
   const canManualPreview = !!accountId && (!needsMapping(format) || mapComplete(currentMap()))
@@ -2316,16 +2769,24 @@ export function ImportModal({
   // Lucius-op / needs-eyes / unrouted / absorbed row (all of which carry their own controls) —
   // can be user-linked to an existing uncovered entry. Once linked, resolveExisting is truthy,
   // so this returns false and the row is a review-band pair card instead of a plain row.
+  // Only an op that decides what the row IS (a transfer, a skip, a match) settles it. A category
+  // pick or a rejected match leaves it an ordinary row a link can take — excluding every Lucius
+  // touch hid an IRAS row labelled "Tax YA 2026" from its own entry's picker (owner, 2026-10-26).
   const luciusSettlesTheRow = (d: ImportPreviewDraft): boolean =>
-    !!d.lucius && d.lucius.op !== 'reject_match'
+    !!d.lucius && d.lucius.op !== 'reject_match' && d.lucius.op !== 'set_category'
   const canManualLinkRow = (d: ImportPreviewDraft, i: number): boolean =>
+    // What counts is the row's CURRENT decision, not what the engine first proposed (owner,
+    // 2026-10-26): any row not set to Link is unclaimed and may link to an entry the user picks.
+    (!resolveExisting(d) || actionFor(d, i) !== 'merge') && linkableShape(d, i)
+  /** A row whose kind can take a link at all — whatever it is linked to right now. */
+  const linkableShape = (d: ImportPreviewDraft, i: number): boolean =>
     d.rowIndex != null &&
-    !resolveExisting(d) &&
     !d.dup &&
     !d.pair &&
-    !d.routed &&
-    !luciusSettlesTheRow(d) &&
-    !d.needsEyes &&
+    // A row Lucius routed, skipped or matched is offered too — picking it undoes his call on
+    // that row first (owner, 2026-10-26). A row an Automation routed is not: it re-routes on
+    // every read, so there is nothing per-row to undo.
+    (!d.routed || d.lucius?.op === 'route_transfer') &&
     !isUnrouted(d, i) &&
     !isAbsorbedLeg(d, i)
   /** Outcome/link line (band-agnostic — one function for all three bands whenever the
@@ -2526,6 +2987,81 @@ export function ImportModal({
       if (d.rowIndex != null && matchOverride[d.rowIndex])
         matchOverrideIds.add(matchOverride[d.rowIndex]!.id)
     })
+  // Which statement row holds each hand-linked entry — so a row's own picker can offer it too
+  // and MOVE the link after a confirm, like the ledger side does (owner, 2026-10-26).
+  const entryHolder = new Map<string, ImportPreviewDraft>()
+  if (preview)
+    preview.drafts.forEach((d) => {
+      if (d.rowIndex == null) return
+      const held = isManualLinked(d) ? manualLink[d.rowIndex] : matchOverride[d.rowIndex]
+      if (held) entryHolder.set(held.id, d)
+    })
+  const heldByOther = (d: ImportPreviewDraft, entryId: string) => {
+    const holder = entryHolder.get(entryId)
+    return holder && holder.rowIndex !== d.rowIndex ? holder : null
+  }
+  const heldHint = (d: ImportPreviewDraft, entryId: string) => {
+    const holder = heldByOther(d, entryId)
+    return holder
+      ? `• linked to ${rowTitle(holder)} (${fCur(holder.amount, holder.currency, { cents: true })})`
+      : undefined
+  }
+  /** Run a row-side link pick; an entry another row holds is moved only after a confirm, and
+   *  that row drops back to its own match (or none). */
+  const pickWithRelink = (d: ImportPreviewDraft, entryId: string, apply: () => void) => {
+    const holder = heldByOther(d, entryId)
+    if (!holder || holder.rowIndex == null) return apply()
+    const from = holder.rowIndex
+    const entry = checkRowById.get(entryId)
+    const entryLabel =
+      (entry?.note || 'This entry') +
+      (entry?.amount != null
+        ? ` (${fCur(entry.amount, entry.currency || d.currency, { cents: true })})`
+        : '')
+    const holderLabel = `${rowTitle(holder)} (${fCur(holder.amount, holder.currency, { cents: true })})`
+    setRelinkAsk({
+      row: holderLabel,
+      from: entryLabel,
+      to: `${rowTitle(d)} (${fCur(d.amount, d.currency, { cents: true })})`,
+      body: `${entryLabel} is linked to ${holderLabel}. Link it to ${rowTitle(d)} (${fCur(d.amount, d.currency, { cents: true })}) instead? ${holderLabel} loses the link.`,
+      run: () => {
+        const drop = <T,>(current: Record<number, T>) => {
+          const next = { ...current }
+          delete next[from]
+          return next
+        }
+        setManualLink(drop)
+        setMatchOverride(drop)
+        setMatchAction(drop)
+        apply()
+      },
+    })
+  }
+  /** Link a row Lucius routed, skipped or matched: confirm, undo his call on that row, then
+   *  `apply`. Callers re-point via `matchOverride` afterwards — the undo can leave the row an
+   *  engine match, which a plain manual link would lose to. */
+  const withLuciusUndone = (d: ImportPreviewDraft, apply: () => void) => {
+    if (!luciusSettlesTheRow(d) || d.rowIndex == null) return apply()
+    const row = d.rowIndex
+    const label = `${rowTitle(d)} (${fCur(d.amount, d.currency, { cents: true })})`
+    const op = d.lucius?.op
+    const to = accounts.find((a) => a.id === d.lucius?.account_id)?.name
+    const call =
+      op === 'route_transfer'
+        ? `booked ${label} as a transfer${to ? ` with ${to}` : ''}`
+        : op === 'skip'
+          ? `left ${label} out`
+          : `matched ${label} to another entry`
+    setRelinkAsk({
+      row: label,
+      from: '',
+      to: '',
+      title: 'Undo Lucius’s call?',
+      confirmLabel: 'Undo and link',
+      body: `Lucius ${call}. Linking it here undoes that for this row first.`,
+      run: () => void undoLucius(row).then((ok) => ok && apply()),
+    })
+  }
   // The RE-INSERTION half of the panel (RFC 2026-07-29 §D3 amendment (c)). `ledger_check.rows`
   // is a pure set difference, so the server already SUBTRACTED the entry a weak flag claimed;
   // a weak row that books as NEW makes that entry genuinely uncovered again, and it has to come
@@ -2537,16 +3073,31 @@ export function ImportModal({
   // "Not the same" button is gone — owner, 2026-07-31; ADR 2026-07-31-weak-import-releases-
   // the-entry). On a maybe-match, "Import" (keep both) IS the assertion that the two are not
   // the same thing, so it releases; "Same one — link" re-claims it, and "Leave out" keeps the
-  // claim (nothing double-books — the entry already covers the row). WEAK ONLY: strong/review
-  // rows still need a deliberate decision, and releasing their entry off a default would be a
-  // different bug.
+  // claim (nothing double-books — the entry already covers the row). EVERY band now (owner,
+  // 2026-10-26: Import on a strong match booked a second Grab while the first one vanished from
+  // view): a strong/review row's default is Link, so Import on it is always the owner's own
+  // call, never a default. A row re-pointed at a different entry releases its original one too.
   const dismissedWeakEntries: LedgerCheckRow[] = preview
     ? preview.drafts.flatMap((d, i) => {
-        if (pairBand(d) !== 'weak' || verdictInputs[i]?.effect !== 'new') return []
+        const flag = matchFlag(d)
         const resolved = resolveExisting(d)
-        return resolved
-          ? [{ ...resolved.summary, id: resolved.id, note: resolved.summary.note ?? undefined }]
-          : []
+        const bookedNew = verdictInputs[i]?.effect === 'new'
+        const repointed = !!flag?.existing_id && !!resolved && resolved.id !== flag.existing_id
+        if (!bookedNew && !repointed) return []
+        const out: LedgerCheckRow[] = []
+        if (flag?.existing_id && (bookedNew || repointed))
+          out.push({
+            ...(flag.existing ?? {}),
+            id: flag.existing_id,
+            note: flag.existing?.note ?? undefined,
+          } as LedgerCheckRow)
+        if (bookedNew && resolved && resolved.id !== flag?.existing_id)
+          out.push({
+            ...resolved.summary,
+            id: resolved.id,
+            note: resolved.summary.note ?? undefined,
+          })
+        return out
       })
     : []
   // A release beats the two "this entry is spoken for" drops below. They can only collide on ONE
@@ -2560,7 +3111,7 @@ export function ImportModal({
   // still uncovered until commit. It stays put, rendered as marked, so the mark is visible and
   // undoable — the row vanishing on click was the old write-through behaviour's tell.
   const releasedIds = new Set(dismissedWeakEntries.map((e) => e.id))
-  const ledgerOnlyRows = preview
+  const allLedgerOnlyRows = preview
     ? [
         ...(preview.ledgerCheck?.rows || []),
         // Deduped by id: harmless today (the server excludes a claimed entry by construction),
@@ -2572,10 +3123,16 @@ export function ImportModal({
         (r) => releasedIds.has(r.id) || (!manualLinkedIds.has(r.id) && !matchOverrideIds.has(r.id)),
       )
     : []
+  // An entry ANOTHER statement we hold already backs isn't "not on this statement" in any sense
+  // that matters — overlapping exports of one account repeat each other's days (owner,
+  // 2026-10-26: "why are these linked to another statement already but still shown here?").
+  // It leaves the count, the warning and Mark all; it stays reachable in a quiet group.
+  const ledgerOnlyRows = allLedgerOnlyRows.filter((r) => !r.on_statements)
+  const onOtherStatementRows = allLedgerOnlyRows.filter((r) => !!r.on_statements)
   // The staged delete set, in panel order — the footer counts it and the commit sends exactly
   // this. Derived from what is ON SCREEN, never from the raw `pendingDelete` map: an entry that
   // left the panel (linked to a row after being marked) must not still be queued for deletion.
-  const markedForDelete = ledgerOnlyRows.filter((r) => pendingDelete[r.id]).map((r) => r.id)
+  const markedForDelete = allLedgerOnlyRows.filter((r) => pendingDelete[r.id]).map((r) => r.id)
   // Coverage question 1's exact residue — a row with NO way into the ledger at all. Its own
   // dedicated, always-visible section (not just a filter chip) so it's directly findable
   // rather than requiring a click-through + scroll to notice (owner: "hard to know, hard to
@@ -2684,6 +3241,39 @@ export function ImportModal({
     income: kindCount('income'),
     transfer: kindCount('transfer'),
   }
+  // A transfer has no category (its cell names the other account), so it never joins one —
+  // the Type filter's Transfer finds those.
+  // Filters by the category the row SHOWS (owner, 2026-10-26: "Shopping" listed a row showing
+  // Dining out) — a Link row keeps and shows its ledger entry's category, a left-out row none.
+  const rowCategoryKey = (d: ImportPreviewDraft, i: number): string | null => {
+    if (effectiveKind(d, i) === 'transfer' || isExcluded(d, i)) return null
+    const resolved = resolveExisting(d)
+    const shown =
+      resolved && actionFor(d, i) === 'merge'
+        ? ((resolved.summary as { category?: string | null }).category ?? null)
+        : d.category
+    return shown || UNCATEGORIZED_KEY
+  }
+  const categoryPop: CategoryFilterOption[] = (() => {
+    if (!preview) return []
+    const counts = new Map<string, number>()
+    preview.drafts.forEach((d, i) => {
+      const key = rowCategoryKey(d, i)
+      if (key) counts.set(key, (counts.get(key) || 0) + 1)
+    })
+    return Array.from(counts, ([key, n]) => ({
+      key,
+      n,
+      label: key === UNCATEGORIZED_KEY ? 'Uncategorized' : catMapProp[key]?.label || key,
+      color: key === UNCATEGORIZED_KEY ? 'var(--faint)' : catMapProp[key]?.color || 'var(--faint)',
+    })).sort((a, b) =>
+      a.key === UNCATEGORIZED_KEY
+        ? -1
+        : b.key === UNCATEGORIZED_KEY
+          ? 1
+          : b.n - a.n || a.label.localeCompare(b.label),
+    )
+  })()
   // The handoff keeps decision state visible at every list size; a one-row statement still
   // benefits from an explicit Left out / Needs you state instead of an implicit view.
   const chipsEnabled = !!preview
@@ -2830,6 +3420,18 @@ export function ImportModal({
   const activeProgress = resuming ? (resumeSnapshot?.progress ?? null) : previewProgress
   const activeStale = resuming ? resumeStale : progressStale
   const activeElapsedS = resuming ? resumeElapsedS : elapsedS
+  // Reopening a statement whose read is already finished only FETCHES its kept review — no
+  // "Lucius is reading", no stage bar or elapsed clock left over from the finished read, no
+  // "Continue in background". A resume the server still reports as `parsing` reads as before.
+  const openingReview = resuming && !rereading && resumeSnapshot?.parseStatus !== 'parsing'
+  // Back from a reopened statement's review: its own file, not an empty picker.
+  const reopenChoose = resuming && !file
+  const reopenSub = [
+    resumeUploadedAt ? `Read ${fDate(resumeUploadedAt)}` : null,
+    preview ? `${preview.total} row${preview.total === 1 ? '' : 's'}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
   const liveStage = activeProgress?.stages[activeProgress.stages.length - 1] ?? null
   const readingPhase = activeProgress
     ? activeStale
@@ -2947,7 +3549,7 @@ export function ImportModal({
             className={'imp3-commit' + (ready ? ' ready' : '')}
             disabled={(nothingHappens && !canFile) || committing}
             aria-busy={committing}
-            onClick={closeOnly ? close : confirmImport}
+            onClick={closeOnly ? close : () => void confirmImport()}
           >
             {committing && <span className="imp3-commit-spin" aria-hidden="true" />}
             {committing ? 'Booking…' : label}
@@ -2975,8 +3577,25 @@ export function ImportModal({
         footer={renderFooter()}
         closeOnBackdrop={false}
         dragToDismiss={false}
+        className={fileStatementId && !isMobile && showFile ? 'imp3-modal--file' : undefined}
+        headerActions={
+          fileStatementId && isMobile ? (
+            <SegmentedControl
+              ariaLabel="Review or statement file"
+              options={[
+                { value: 'review', label: 'Review' },
+                { value: 'file', label: 'File' },
+              ]}
+              value={phoneView}
+              onChange={setPhoneView}
+            />
+          ) : undefined
+        }
       >
-        <div className="imp">
+        <div
+          className={'imp' + (fileWanted && isMobile ? ' imp--behind-file' : '')}
+          onClick={fileStatementId ? pointFileAtRow : undefined}
+        >
           {error && (
             <div className="imp-error">
               <Ic d={I_WARN} size={14} /> {error}
@@ -3097,34 +3716,46 @@ export function ImportModal({
           {/* ── Choose, picked (handoff DropStep, `picked`) ─────────────────────────── */}
           {step === 'choose' && (
             <div className="imp3-body">
-              <div className="imp3-file">
-                <span className="imp3-file-badge">{FORMAT_LABEL[format]}</span>
-                <div>
-                  <div className="imp3-file-nm">{file ? file.name : url}</div>
-                  {!!fileSize && <div className="imp3-file-sub">{fileSize}</div>}
+              {reopenChoose ? (
+                <div className="imp3-file">
+                  <span className="imp3-file-badge">
+                    {FORMAT_LABEL[detectFormat(resumeFilename || '')]}
+                  </span>
+                  <div>
+                    <div className="imp3-file-nm">{resumeFilename || 'Statement'}</div>
+                    {reopenSub && <div className="imp3-file-sub">{reopenSub}</div>}
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  className="imp3-file-x"
-                  onClick={() => {
-                    setStep('source')
-                    setUrlOpen(!file)
-                  }}
-                >
-                  Change
-                </button>
-              </div>
+              ) : (
+                <div className="imp3-file">
+                  <span className="imp3-file-badge">{FORMAT_LABEL[format]}</span>
+                  <div>
+                    <div className="imp3-file-nm">{file ? file.name : url}</div>
+                    {!!fileSize && <div className="imp3-file-sub">{fileSize}</div>}
+                  </div>
+                  <button
+                    type="button"
+                    className="imp3-file-x"
+                    onClick={() => {
+                      setStep('source')
+                      setUrlOpen(!file)
+                    }}
+                  >
+                    Change
+                  </button>
+                </div>
+              )}
               {/* Checking whether this source's format is remembered — this box used to render
                 nothing at all while the probe was in flight, so the "I know this source"
                 banner appeared to pop in from nowhere. Same box shape as the resolved banner
                 below, so there's no layout jump once it resolves. */}
-              {peekState === 'pending' && (
+              {peekState === 'pending' && !reopenChoose && (
                 <div className="imp3-known pending" role="status" aria-live="polite">
                   <span className="imp3-known-spin" aria-hidden="true" />
                   <div className="imp3-known-t">Checking if this source is remembered…</div>
                 </div>
               )}
-              {sourceKnown && (
+              {sourceKnown && !reopenChoose && (
                 <div className="imp3-known">
                   <span className="imp3-known-ic">
                     <Spark />
@@ -3153,7 +3784,7 @@ export function ImportModal({
                 whether this source is remembered. The banner would be a false claim, but
                 withholding its checkbox would take the ONLY control that sets `force_relearn`
                 — the one escape from a stuck format profile — away over a network hiccup. */}
-              {peekState === 'unavailable' && (
+              {peekState === 'unavailable' && !reopenChoose && (
                 <label
                   className="imp3-remember"
                   title="Forget everything remembered about this source for this run: re-detect the format from scratch AND re-read the file instead of reusing the cached parse."
@@ -3288,42 +3919,98 @@ export function ImportModal({
                 `docs/adr/2026-07-27-statement-import-drop-account-auto-detect.md`'s follow-up
                 note and `frontend/design_handoffs/statement_import_handoff/PARITY_AND_GAPS.md`
                 deviation #9. */}
-              <div className="imp3-drop-cta">
-                <span className="imp3-drop-cost">You review everything before it books</span>
-                <Button
-                  variant="primary"
-                  className="fi-lucius"
-                  iconLeft={<LuciusSpark size={15} ariaHidden />}
-                  disabled={!acctIds.length}
-                  onClick={() => runLucius()}
-                >
-                  Read the statement
-                </Button>
-              </div>
+              {reopenChoose ? (
+                <div className="imp3-drop-cta imp3-reopen-acts">
+                  <Button
+                    variant="secondary"
+                    disabled={!acctIds.length || rereading}
+                    onClick={() => void readAgain()}
+                  >
+                    {rereading ? 'Starting…' : 'Read again'}
+                  </Button>
+                  <Button variant="primary" disabled={!preview} onClick={() => setStep('preview')}>
+                    Back to review
+                  </Button>
+                </div>
+              ) : (
+                <div className="imp3-drop-cta">
+                  <span className="imp3-drop-cost">You review everything before it books</span>
+                  <Button
+                    variant="primary"
+                    className="fi-lucius"
+                    iconLeft={<LuciusSpark size={15} ariaHidden />}
+                    disabled={!acctIds.length}
+                    onClick={() => runLucius()}
+                  >
+                    Read the statement
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
           {/* ── Read (handoff ReadStep) ─────────────────────────────────────────────── */}
-          {step === 'processing' && (
+          {step === 'processing' && resuming && reopenFailed && (
+            <div className="imp3-body imp3-reading" role="alert">
+              <div className="imp3-reading-t">
+                Couldn’t open <b>{resumeFilename || 'this statement'}</b>
+              </div>
+              <div className="imp3-phase">
+                {reopenFailed.kind === 'account'
+                  ? 'Which account is this statement for? Nothing is re-read — the review opens for it.'
+                  : reopenFailed.kind === 'read'
+                    ? 'Its read didn’t finish. Re-run it from the account’s Statements list.'
+                    : 'The review didn’t load. Nothing was lost — try again.'}
+              </div>
+              {reopenFailed.kind === 'account' && (
+                <div className="imp3-reopen-acct">
+                  <FormField label="Account">
+                    <Select
+                      options={[{ value: '', label: 'Choose an account' }, ...acctOpts]}
+                      value={reopenAccount}
+                      onChange={(e) => setReopenAccount(e.target.value)}
+                    />
+                  </FormField>
+                </div>
+              )}
+              {reopenFailed.kind === 'read' ? (
+                <Button variant="secondary" size="sm" onClick={close}>
+                  Close
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={reopenFailed.kind === 'account' && !reopenAccount}
+                  onClick={() =>
+                    void resumeReopen(activeResumeId as string, reopenAccount || undefined)
+                  }
+                >
+                  {reopenFailed.kind === 'account' ? 'Open review' : 'Try again'}
+                </Button>
+              )}
+            </div>
+          )}
+          {step === 'processing' && !(resuming && reopenFailed) && (
             <div className="imp3-body imp3-reading">
               <div className="imp3-orb">
                 <Spark />
               </div>
               <div className="imp3-reading-t">
-                Lucius is reading{' '}
+                {openingReview ? 'Opening' : 'Lucius is reading'}{' '}
                 <b>{file ? file.name : resuming ? resumeFilename || 'your file' : 'your file'}</b>
               </div>
               <div
                 className={'imp3-phase' + (activeStale ? ' imp3-phase--stale' : '')}
                 role="status"
               >
-                {readingPhase}
+                {openingReview ? <OpeningReviewLine /> : readingPhase}
               </div>
               {/* Live stage bar, elapsed clock, retry/hint lines — all feature-detected on
                   `activeProgress`: an old server that never answers the progress endpoint
                   leaves this whole block unrendered, and the phase line above is all there
                   is, exactly like before B20. */}
-              {activeProgress ? (
+              {activeProgress && !openingReview ? (
                 <>
                   <div
                     className="imp3-stagebar"
@@ -3347,14 +4034,17 @@ export function ImportModal({
                   )}
                 </>
               ) : null}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="imp3-bgbtn"
-                onClick={() => continueInBackground()}
-              >
-                Continue in background
-              </Button>
+              {!openingReview && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="imp3-bgbtn"
+                  disabled={bgPending}
+                  onClick={() => continueInBackground()}
+                >
+                  {bgPending ? 'Continuing…' : 'Continue in background'}
+                </Button>
+              )}
             </div>
           )}
 
@@ -3546,19 +4236,36 @@ export function ImportModal({
                       existingTxnLine(r, accounts, catMapProp, d.currency, {
                         anchorAccountId: d.destId || accountId,
                       }),
-                    taken: manualLinkedIds.has(r.id) || matchOverrideIds.has(r.id),
+                    hint: heldHint(d, r.id),
                   }))
+              // Rows already linked are offered too (owner, 2026-10-26): picking one MOVES its link
+              // here after a confirm, and the entry it held goes back to "not on this statement".
+              const linkedTo = (d: ImportPreviewDraft, i: number) => {
+                const resolved = resolveExisting(d)
+                if (!resolved || actionFor(d, i) !== 'merge') return null
+                const amt = resolved.summary.amount
+                return (
+                  (resolved.summary.note || 'another entry') +
+                  (amt != null
+                    ? ` (${fCur(amt, resolved.summary.currency || d.currency, { cents: true })})`
+                    : '')
+                )
+              }
               const linkableDrafts = preview.drafts
                 .map((d, i) => ({ d, i }))
-                .filter(({ d, i }) => canManualLinkRow(d, i))
-                .map(({ d }) => {
+                .filter(({ d, i }) => linkableShape(d, i))
+                .map(({ d, i }) => {
                   const original = originalCharge(d, d.currency)
+                  const holds = linkedTo(d, i)
                   return {
                     id: String(d.rowIndex),
                     line:
                       `${d.date.slice(5)} • ${rowTitle(d)} • ${fCur(d.amount, d.currency, { cents: true })}` +
                       (original ? ` (${original})` : ''),
                     taken: false,
+                    hint: holds ? `• linked to ${holds}` : undefined,
+                    holds,
+                    title: `${rowTitle(d)} (${fCur(d.amount, d.currency, { cents: true })})`,
                   }
                 })
               // Row FORM (unchanged from the sectioned build): a dup (L0), an FX-pair leg (its
@@ -3589,10 +4296,11 @@ export function ImportModal({
                           chip === 'weak'
                           ? ordered.filter(({ i }) => openWeakIndices.has(i))
                           : ordered.filter(({ d, i }) => effectiveChipKey(d, i) === chip)
-              const visibleStmt =
-                kindFilter === 'all'
-                  ? byDecisionChip
-                  : byDecisionChip.filter(({ d, i }) => effectiveKind(d, i) === kindFilter)
+              const visibleStmt = byDecisionChip.filter(
+                ({ d, i }) =>
+                  (kindFilter === 'all' || effectiveKind(d, i) === kindFilter) &&
+                  (categoryFilter === 'all' || rowCategoryKey(d, i) === categoryFilter),
+              )
               const showLedgerOnly = chip === 'all' || chip === 'ledger'
               // Its own dedicated section only under its OWN chip — not under All too, unlike the
               // ledger-only section — because (unlike a ledger row) an uncovered row already has a
@@ -3684,6 +4392,8 @@ export function ImportModal({
                         the same slot every other row uses to say what confirm will do to it. */}
                         {marked ? (
                           <span className="imp3-dchip willdelete">Will delete</span>
+                        ) : keptLedger[r.id] ? (
+                          <span className="imp3-dchip keep">Will keep</span>
                         ) : (
                           <span className="imp3-dchip ledger">Ledger only</span>
                         )}
@@ -3797,19 +4507,50 @@ export function ImportModal({
                                 const draftIndex = preview.drafts.findIndex(
                                   (draft) => draft.rowIndex === rowIndex,
                                 )
-                                setManualLink((current) => ({
-                                  ...current,
-                                  [rowIndex]: { id: r.id, summary: r },
-                                }))
-                                if (draftIndex >= 0) {
-                                  setPlainSkip((current) => {
-                                    const next = { ...current }
-                                    delete next[rowIndex]
-                                    return next
-                                  })
-                                  setMatchAction((current) => ({ ...current, [rowIndex]: 'merge' }))
-                                  setQueueDecided((current) => ({ ...current, [rowIndex]: true }))
+                                const option = linkableDrafts.find((o) => o.id === idx)
+                                const picked = draftIndex >= 0 ? preview.drafts[draftIndex] : null
+                                const link = (override = false) => {
+                                  // A row that carries an engine match resolves THAT first, so a
+                                  // manual link would be ignored — re-point its match instead.
+                                  if (override || (picked && matchFlag(picked)?.existing_id))
+                                    setMatchOverride((current) => ({
+                                      ...current,
+                                      [rowIndex]: { id: r.id, summary: r },
+                                    }))
+                                  else
+                                    setManualLink((current) => ({
+                                      ...current,
+                                      [rowIndex]: { id: r.id, summary: r },
+                                    }))
+                                  if (draftIndex >= 0) {
+                                    setPlainSkip((current) => {
+                                      const next = { ...current }
+                                      delete next[rowIndex]
+                                      return next
+                                    })
+                                    setMatchAction((current) => ({
+                                      ...current,
+                                      [rowIndex]: 'merge',
+                                    }))
+                                    setQueueDecided((current) => ({ ...current, [rowIndex]: true }))
+                                  }
                                 }
+                                const go = () =>
+                                  picked && luciusSettlesTheRow(picked)
+                                    ? withLuciusUndone(picked, () => link(true))
+                                    : link()
+                                if (option?.holds)
+                                  setRelinkAsk({
+                                    row: option.title,
+                                    from: option.holds,
+                                    to:
+                                      (r.note || 'this entry') +
+                                      (r.amount != null
+                                        ? ` (${fCur(r.amount, r.currency || account?.currency || 'SGD', { cents: true })})`
+                                        : ''),
+                                    run: go,
+                                  })
+                                else go()
                               }}
                             />
                           )}
@@ -3833,17 +4574,33 @@ export function ImportModal({
                               Delete
                             </button>
                           )}
-                          {!marked && (
-                            <button
-                              type="button"
-                              className="imp3-lc-btn"
-                              onClick={() =>
-                                setLedgerExpanded((current) => ({ ...current, [r.id]: false }))
-                              }
-                            >
-                              Leave it
-                            </button>
-                          )}
+                          {!marked &&
+                            (keptLedger[r.id] ? (
+                              <button
+                                type="button"
+                                className="imp3-lc-btn"
+                                onClick={() =>
+                                  setKeptLedger((current) => {
+                                    const next = { ...current }
+                                    delete next[r.id]
+                                    return next
+                                  })
+                                }
+                              >
+                                Undo
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="imp3-lc-btn"
+                                onClick={() => {
+                                  setKeptLedger((current) => ({ ...current, [r.id]: true }))
+                                  setLedgerExpanded((current) => ({ ...current, [r.id]: false }))
+                                }}
+                              >
+                                Leave it
+                              </button>
+                            ))}
                         </div>
                         {drawerFailed[r.id] && (
                           <div className="acct-stmtview-check-err">Couldn’t open — try again.</div>
@@ -3961,6 +4718,33 @@ export function ImportModal({
                         {closing.map(renderBoundaryRow)}
                       </>
                     )}
+                  </div>
+                )
+              }
+              const renderOtherStatementSection = () => {
+                if (!onOtherStatementRows.length) return null
+                const n = onOtherStatementRows.length
+                return (
+                  <div className="acct-stmtview-check-boundary">
+                    <button
+                      type="button"
+                      className="acct-stmtview-check-boundary-head"
+                      onClick={() => setOtherStatementOpen((o) => !o)}
+                      aria-expanded={otherStatementOpen}
+                    >
+                      <span className="acct-stmtview-check-boundary-t">
+                        {n} entr{n === 1 ? 'y is' : 'ies are'} on another statement you imported —
+                        nothing to fix.
+                      </span>
+                      <span className="acct-stmtview-check-caret">
+                        {otherStatementOpen ? (
+                          <ChevronDown size="1em" aria-hidden="true" />
+                        ) : (
+                          <ChevronRight size="1em" aria-hidden="true" />
+                        )}
+                      </span>
+                    </button>
+                    {otherStatementOpen && onOtherStatementRows.map(renderLedgerOnlyRow)}
                   </div>
                 )
               }
@@ -4511,6 +5295,35 @@ export function ImportModal({
                               onPick={pickAlternative}
                             />
                           )}
+                          {/* Import on a matched row: its entry is released to "not on this
+                        statement", and the row may link to any entry there instead — the same
+                        uncovered set the commit guard accepts a manual link to. */}
+                          {act !== 'merge' &&
+                            d.rowIndex != null &&
+                            manualLinkOptions(d).length > 0 && (
+                              <LinkPicker
+                                label="Link to existing"
+                                variant="imp3-actbtn"
+                                listLabel="Link this row to a different ledger entry"
+                                options={manualLinkOptions(d)}
+                                onPick={(id) => {
+                                  const summary = checkRowById.get(id)
+                                  if (!summary || d.rowIndex == null) return
+                                  pickWithRelink(d, id, () =>
+                                    withLuciusUndone(d, () => {
+                                      setMatchOverride((current) => ({
+                                        ...current,
+                                        [d.rowIndex!]: { id, summary },
+                                      }))
+                                      setMatchAction((current) => ({
+                                        ...current,
+                                        [d.rowIndex!]: 'merge',
+                                      }))
+                                    }),
+                                  )
+                                }}
+                              />
+                            )}
                           {overridden && d.rowIndex != null && (
                             <button
                               type="button"
@@ -4778,24 +5591,26 @@ export function ImportModal({
                             label="Link to existing"
                             listLabel="Link this row to an existing ledger entry"
                             variant="imp3-actbtn"
-                            options={manualOptions.map((o) => ({
-                              ...o,
-                              hint: o.taken ? '• linked to another row' : undefined,
-                            }))}
+                            options={manualOptions}
                             onPick={(id) => {
                               const summary = checkRowById.get(id)
                               if (!summary) return
-                              setManualLink((current) => ({
-                                ...current,
-                                [d.rowIndex!]: { id, summary },
-                              }))
-                              setPlainSkip((current) => {
-                                const next = { ...current }
-                                delete next[ri]
-                                return next
-                              })
-                              setMatchAction((current) => ({ ...current, [ri]: 'merge' }))
-                              setQueueDecided((current) => ({ ...current, [ri]: true }))
+                              const linkRow = (override: boolean) => {
+                                const set = override ? setMatchOverride : setManualLink
+                                set((current) => ({ ...current, [d.rowIndex!]: { id, summary } }))
+                                setPlainSkip((current) => {
+                                  const next = { ...current }
+                                  delete next[ri]
+                                  return next
+                                })
+                                setMatchAction((current) => ({ ...current, [ri]: 'merge' }))
+                                setQueueDecided((current) => ({ ...current, [ri]: true }))
+                              }
+                              pickWithRelink(d, id, () =>
+                                luciusSettlesTheRow(d)
+                                  ? withLuciusUndone(d, () => linkRow(true))
+                                  : linkRow(false),
+                              )
                             }}
                           />
                         )}
@@ -4919,22 +5734,30 @@ export function ImportModal({
                         )}
                       </span>
                       <span className="imp3-arow-catcol">
-                        {!excluded && (
-                          <span className="imp3-cat" title={category}>
-                            <i
-                              style={{
-                                background: d.category
-                                  ? catMapProp[d.category]?.color || 'var(--faint)'
-                                  : 'var(--faint)',
-                              }}
-                            />
-                            <span>{category}</span>
+                        {luciusUndoing[d.rowIndex ?? -1] ? (
+                          <span className="imp3-cat imp3-cat--busy">
+                            <span className="imp3-commit-spin" aria-hidden="true" />
+                            <span>Updating…</span>
                           </span>
+                        ) : (
+                          !excluded && (
+                            <span className="imp3-cat" title={category}>
+                              <i
+                                style={{
+                                  background: d.category
+                                    ? catMapProp[d.category]?.color || 'var(--faint)'
+                                    : 'var(--faint)',
+                                }}
+                              />
+                              <span>{category}</span>
+                            </span>
+                          )
                         )}
                       </span>
-                      {/* Same rule as the pair row: a transfer routes to an account, so there is no
-                      payee/category for the pencil's modal to edit. */}
-                      {!d.dup && !absorbed && !transferCategoryLine && (
+                      {/* The pencil opens Edit payee & category, whose Type switch also turns a row
+                      into a transfer and back — so a routed row keeps it; an engine-paired
+                      transfer (no `routed`) has nothing to edit. */}
+                      {!d.dup && !absorbed && (!transferCategoryLine || !!d.routed) && (
                         <button
                           type="button"
                           className="imp3-editpencil"
@@ -5084,7 +5907,10 @@ export function ImportModal({
                     transfer is the one case with no other way back to plain — that lives as
                     ONE line alongside "Books as transfer" below, inside the same expanded
                     detail box rather than a separate standalone block. */}
-                    {excluded && reason && (
+                    {/* Inside the row's collapsible part like everything else in it (owner,
+                    2026-10-26: a left-out row's reason and Import / Link stayed on screen while
+                    its chevron said collapsed). The pill and struck amount still say "left out". */}
+                    {excluded && reason && bodyOpen && (
                       <div className="imp3-arow-body">
                         {d.dup && d.dupOf ? (
                           <button
@@ -5118,7 +5944,7 @@ export function ImportModal({
                         {decisionActions}
                       </div>
                     )}
-                    {excluded && !reason && decisionActions}
+                    {excluded && !reason && bodyOpen && decisionActions}
                     {bodyOpen && (
                       <div className="imp3-arow-body">
                         <div className="imp3-detail-grid">
@@ -5374,9 +6200,10 @@ export function ImportModal({
                 // ordinary manual-link list, and a re-point is the ordinary `matchOverride`.
                 const changeOptions = manualLinkOptions(d)
                 const hasChangeAlternative =
-                  !!resolved &&
-                  changeOptions.some((option) => option.id !== resolved.id && !option.taken)
-                const changeQueueMatch = (id: string) => {
+                  !!resolved && changeOptions.some((option) => option.id !== resolved.id)
+                const changeQueueMatch = (id: string) =>
+                  pickWithRelink(d, id, () => withLuciusUndone(d, () => applyQueueMatch(id)))
+                const applyQueueMatch = (id: string) => {
                   const summary = checkRowById.get(id)
                   if (!summary || d.rowIndex == null) return
                   if (isManualLinked(d))
@@ -5617,14 +6444,8 @@ export function ImportModal({
                           options={changeOptions.map((o) => ({
                             id: o.id,
                             line: o.line,
-                            taken: o.taken,
                             selected: o.id === resolved.id,
-                            hint:
-                              o.id === resolved.id
-                                ? '• current'
-                                : o.taken
-                                  ? '• matched to another row'
-                                  : undefined,
+                            hint: o.id === resolved.id ? '• current' : o.hint,
                           }))}
                           onPick={changeQueueMatch}
                         />
@@ -6501,11 +7322,29 @@ export function ImportModal({
                       doesn't compete visually with the decision chips beside it. Kept OUTSIDE
                       .imp3-filter-scroll: that div's overflow-x:auto implicitly forces
                       overflow-y:auto too, which would clip this button's popover. */}
-                              <KindFilterButton
-                                value={kindFilter}
-                                onChange={setKindFilter}
-                                counts={kindPop}
-                              />
+                              {/* Show file sits with the filter (owner, 2026-10-26: the header
+                      button was "too hidden"); a phone has Review | File tabs instead. */}
+                              <div className="imp3-filter-tools">
+                                <KindFilterButton
+                                  value={kindFilter}
+                                  onChange={setKindFilter}
+                                  counts={kindPop}
+                                  categories={categoryPop}
+                                  category={categoryFilter}
+                                  onCategoryChange={setCategoryFilter}
+                                />
+                                {fileStatementId && !isMobile && (
+                                  <button
+                                    type="button"
+                                    className={'imp3-filetoggle' + (showFile ? ' on' : '')}
+                                    aria-pressed={showFile}
+                                    onClick={toggleShowFile}
+                                  >
+                                    <Ic d={I_FILE} size={15} />
+                                    {showFile ? 'Hide file' : 'Show file'}
+                                  </button>
+                                )}
+                              </div>
                             </nav>
                           )
                         })()}
@@ -6650,7 +7489,9 @@ export function ImportModal({
                         )}
                         {showLedgerOnly &&
                           !preview.ledgerCheck?.withheld &&
-                          (ledgerOnlyRows.length > 0 || boundary.length > 0) && (
+                          (ledgerOnlyRows.length > 0 ||
+                            boundary.length > 0 ||
+                            onOtherStatementRows.length > 0) && (
                             <section className="imp3-sec ledger imp-pair-sect">
                               <button
                                 type="button"
@@ -6728,6 +7569,7 @@ export function ImportModal({
                                   )}
                                   {ledgerOnlyRows.map(renderLedgerOnlyRow)}
                                   {renderBoundarySection()}
+                                  {renderOtherStatementSection()}
                                 </div>
                               )}
                             </section>
@@ -6861,169 +7703,87 @@ export function ImportModal({
             })()}
 
           {step === 'done' && result && (
-            <div className="imp3-done">
-              <span className="imp3-done-ic">
-                <Ic d={I_CHECK} size={20} sw={2.6} />
-              </span>
-              <div className="imp3-done-t">Booked.</div>
-              <div className="imp3-done-sub">
-                {/* One reconciled sentence — every bucket the statement's rows can land in, in
-                  order. "Already imported" sits next to "left out" since both mean "not
-                  booked", just for different reasons. */}
-                {result.merged ?? 0} linked to entries you had • {result.created} imported new
-                {result.skipped > 0 ? ` • ${result.skipped} left out` : ''}
-                {result.duplicates > 0 ? ` • ${result.duplicates} already imported` : ''}
-                {(result.deleted ?? 0) > 0 ? ` • ${result.deleted} deleted from your ledger` : ''}
-              </div>
-              <div className="imp3-done-facts">
-                {/* A staged delete the server refused is REPORTED, never swallowed — the whole
-                  point of moving deletion behind Confirm is that the user learns the outcome
-                  of what they marked. */}
-                {deleteErrors.length > 0 && (
-                  <span className="imp-heads">
-                    <span className="imp-heads-ic">
-                      <Ic d={I_WARN} size={14} />
-                    </span>
-                    <span>
-                      <b>
-                        {deleteErrors.length} marked transaction
-                        {deleteErrors.length === 1 ? '' : 's'} could not be deleted
-                      </b>
-                      {' — '}
-                      {deleteErrors.map((e) => e.error).join('; ')}. Everything else in this import
-                      was applied.
-                    </span>
-                  </span>
-                )}
-                {/* A row the LEDGER refused as a duplicate is reported for the same reason a
-                  refused delete is: the user asked for it and did not get it. Without this the
-                  Done screen's own sentence contradicts itself — "4 imported new" while only 3
-                  rows exist — which is the silent-shortfall shape the write-block was built to
-                  END, and must not quietly reintroduce at the last screen. */}
-                {refusedDuplicates.length > 0 && (
-                  <span className="imp-heads">
-                    <span className="imp-heads-ic">
-                      <Ic d={I_WARN} size={14} />
-                    </span>
-                    <span>
-                      <b>
-                        {refusedDuplicates.length} row{refusedDuplicates.length === 1 ? '' : 's'}{' '}
-                        not imported — already in your ledger
-                      </b>
-                      {' — '}
-                      {refusedDuplicates
-                        .map(
-                          (r) => `${r.date ?? ''} ${r.description ?? ''}`.trim() || '(unnamed row)',
-                        )
-                        .join('; ')}
-                      . Each matched a transaction you already have, so nothing was double-booked.
-                    </span>
-                  </span>
-                )}
-                {doneDiff !== null && doneDiff.core === 0 && (
-                  <span className="imp-insync">
-                    ✓ In sync — every statement row is accounted for in your ledger, and nothing in
-                    your ledger for this period is missing from the statement
-                    {doneDiff.boundary > 0
-                      ? ` (${doneDiff.boundary} near the cut-off likely belong to the adjacent statement)`
-                      : ''}
-                    .
-                  </span>
-                )}
-                {doneDiff !== null && doneDiff.core > 0 && (
-                  <span className="imp-heads">
-                    <span className="imp-heads-ic">
-                      <Ic d={I_WARN} size={14} />
-                    </span>
-                    <span>
-                      <b>
-                        {doneDiff.core} transaction{doneDiff.core === 1 ? '' : 's'} in your ledger
-                        during this period {doneDiff.core === 1 ? 'is' : 'are'} not on this
-                        statement
-                      </b>{' '}
-                      — likely duplicates (an agent/manual entry the statement settled differently)
-                      or something to look into. Review: account ⋯ menu → Statements → open this
-                      statement.
-                    </span>
-                  </span>
-                )}
-                <span className="imp-done-d">
-                  {result.accounts > 1
-                    ? `Across ${result.accounts} accounts`
-                    : `Your ${account?.name} ledger is updated`}
-                  {(result.transfers ?? 0) > 0 &&
-                    ` • ${result.transfers} FX conversion${result.transfers === 1 ? '' : 's'} booked as transfer${result.transfers === 1 ? '' : 's'} between your accounts`}
-                  {(result.merged ?? 0) > 0 &&
-                    ` • ${result.merged} folded into existing row${result.merged === 1 ? '' : 's'}`}
-                  .
-                  {
-                    /* The review sentence belongs to the Mark-all block below whenever rows were
-                   created; only a zero-created commit needs it stated here. */
-                    result.created === 0 ? ' New rows are marked for review in the register.' : ''
-                  }
-                </span>
-                {/* Handoff: "Mark all N as reviewed" sits right where the user is TOLD the new
-                  rows were flagged — a pill button in the Booked facts, not a trip to the
-                  register. Only when rows were actually CREATED (a linked row never gets the
-                  flag), and backed by the real batch endpoint. */}
-                {result.created > 0 &&
-                  onMarkImportReviewed &&
-                  result.batchId &&
-                  (reviewMarkState === 'done' ? (
-                    <span className="imp3-done-reviewed">
-                      <i aria-hidden="true">✓</i> All {result.created} new row
-                      {result.created === 1 ? '' : 's'} marked as reviewed.
-                    </span>
-                  ) : (
-                    <span className="imp3-done-review">
-                      New rows are marked for review in the register.
-                      <button
-                        type="button"
-                        className="imp3-done-review-btn"
-                        disabled={reviewMarkState === 'pending'}
-                        onClick={markAllReviewed}
-                      >
-                        {reviewMarkState === 'pending'
-                          ? 'Marking…'
-                          : `Mark all ${result.created} as reviewed`}
-                      </button>
-                    </span>
-                  ))}
-                {taught && (
-                  <span className="imp3-done-taught">
-                    <Spark size={14} /> Lucius saved your instruction — the next import applies it
-                    automatically.
-                  </span>
-                )}
-                {reviewMarkError && <span className="imp3-done-err">{reviewMarkError}</span>}
-              </div>
-              <div className="imp3-done-acts">
-                {/* "View linked & imported" — the register filter behind this button unions the
-                  batch's created rows with the rows it only linked. */}
-                {result.batchId && onViewImportBatch && (
-                  <button
-                    type="button"
-                    className="imp3-btn2"
-                    onClick={() =>
+            <BookedScreen
+              result={result}
+              filename={file?.name || resumeFilename || url || 'this statement'}
+              context={bookedContext()}
+              deleteErrors={deleteErrors}
+              refusedDuplicates={refusedDuplicates}
+              taught={taught}
+              reviewMarkState={reviewMarkState}
+              reviewMarkError={reviewMarkError}
+              onMarkAllReviewed={onMarkImportReviewed ? markAllReviewed : undefined}
+              onViewInRegister={
+                result.batchId && onViewImportBatch
+                  ? () =>
                       onViewImportBatch(
                         result.batchId!,
-                        `Import: ${file?.name || url || 'this statement'}`,
+                        `Import: ${file?.name || resumeFilename || url || 'this statement'}`,
                       )
-                    }
-                  >
-                    View linked & imported
-                  </button>
-                )}
-                <button type="button" className="imp3-btn2" onClick={reset}>
-                  Import another
-                </button>
-                <button type="button" className="imp3-lubtn" onClick={close}>
-                  Done
-                </button>
-              </div>
-            </div>
+                  : undefined
+              }
+              onUndo={onUndoImport}
+              onReviewAgain={reviewAgain}
+              onImportAnother={reset}
+              onDone={close}
+            />
           )}
         </div>
+        {fileWanted && !isMobile && (
+          <div
+            className="imp3-filesplit"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize the file pane"
+            tabIndex={0}
+            onPointerDown={startFileResize}
+            onKeyDown={nudgeFileWidth}
+            onDoubleClick={resetFileWidth}
+          />
+        )}
+        {fileWanted && (
+          <aside
+            className="imp3-filepane"
+            aria-label="Statement file"
+            style={fileWidth != null && !isMobile ? { flex: `0 1 ${fileWidth}px` } : undefined}
+          >
+            <div className="imp3-filepane-head">
+              <span className="imp3-file-badge">
+                {FORMAT_LABEL[detectFormat(filePaneItem?.filename || resumeFilename || '')] ||
+                  'FILE'}
+              </span>
+              <span className="imp3-filepane-name">
+                {filePaneItem?.filename || resumeFilename || file?.name || 'Statement'}
+              </span>
+              {fileRow && <span className="imp3-filepane-row">Row {fileRow}</span>}
+              {!isMobile && (
+                <button
+                  type="button"
+                  className="imp3-filepane-close"
+                  aria-label="Close the file"
+                  onClick={toggleShowFile}
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <div className="imp3-filepane-body">
+              {filePaneItem ? (
+                <DocumentPreview
+                  item={filePaneItem}
+                  highlightRow={fileRow}
+                  pdfReaderIn=".imp3-filepane-body"
+                />
+              ) : filePaneItem === null ? (
+                <div className="imp3-filepane-hint">
+                  This statement's file isn't stored, so it can't be shown here.
+                </div>
+              ) : (
+                <PreviewLoading />
+              )}
+            </div>
+          </aside>
+        )}
       </Modal>
       {/* Existing-transaction drawer (SI-50) — opened from a matched-ledger-entry link INSIDE
         this modal, so it must stack above it, not behind it. TxnDetail and this Modal both
@@ -7068,12 +7828,48 @@ export function ImportModal({
           onManagePayees={onManagePayees}
           onCreateCategory={onCreateCategory}
           onSave={(patch) => updateDraft(editingDraftIndex, patch)}
+          transferAccounts={transferAccountsFor(preview.drafts[editingDraftIndex]!)}
+          onSetTransfer={(accountId) =>
+            void setRowType(preview.drafts[editingDraftIndex]!.rowIndex, accountId)
+          }
           onClose={() => setEditingDraftIndex(null)}
         />
       )}
       {/* `processing` no longer reaches this confirm at all (B20): the read is server-side
         and outlives the connection regardless, so closing during it is "Continue in
         background", not "abandon a paid read" — see requestClose/continueInBackground. */}
+      <ConfirmModal
+        open={deleteAskOpen}
+        title={`Delete ${markedForDelete.length} ${markedForDelete.length === 1 ? 'transaction' : 'transactions'} from your ledger?`}
+        body="They're removed when the import is booked. Undo import on the next screen brings them back."
+        confirmLabel="Delete and import"
+        danger
+        onConfirm={() => {
+          setDeleteAskOpen(false)
+          void confirmImport({ deletesConfirmed: true })
+        }}
+        onClose={() => setDeleteAskOpen(false)}
+      />
+      <ConfirmModal
+        open={relinkAsk !== null}
+        title={relinkAsk?.title ?? 'Move this link?'}
+        body={
+          relinkAsk?.body
+            ? relinkAsk.body
+            : relinkAsk
+              ? `${relinkAsk.row} is linked to ${relinkAsk.from}. Link it to ${relinkAsk.to} instead? ${relinkAsk.from} goes back to “In your ledger, not on this statement”.`
+              : ''
+        }
+        confirmLabel={relinkAsk?.confirmLabel ?? 'Move link'}
+        onConfirm={() => {
+          // Cleared BEFORE running: a run may ask the next question (move a link, then undo
+          // Lucius's call on the row it lands on).
+          const run = relinkAsk?.run
+          setRelinkAsk(null)
+          run?.()
+        }}
+        onClose={() => setRelinkAsk(null)}
+      />
       <ConfirmModal
         open={pendingExit !== null}
         title={

@@ -9,20 +9,20 @@ const css = read('accounts.css')
 describe('Account header at narrow widths', () => {
   it('uses the shared icon seam for every account action', () => {
     expect(header).toMatch(/from '\.\.\/\.\.\/\.\.\/ui\/icons'/)
-    expect(header).toMatch(/ListChecks/)
     expect(header).not.toMatch(/<svg/)
   })
 
-  it('moves Reconcile into the existing overflow menu', () => {
-    expect(header).toMatch(
-      /<ReconcilePopover\s+account=\{account\}\s+onReconcile=\{onReconcile\}\s+menuTrigger\s*\/>/,
-    )
-    expect(css).toMatch(/\.acct-head-reconcile\s*\{[^}]*display: none/)
-    expect(css).toMatch(/\.acct-pop-wrap--menu\s*\{[^}]*display: block/)
+  // Owner, 2026-10-26: the action sits beside the status it changes — on the reconcile line,
+  // at every width — not as a header button that folds into the ⋯ menu.
+  it('keeps Reconcile on the reconcile line, not the header or the ⋯ menu', () => {
+    expect(header).not.toMatch(/menuTrigger/)
+    expect(header.match(/<ReconcilePopover /g)).toHaveLength(1)
+    expect(css).not.toMatch(/acct-head-reconcile|acct-pop-wrap--menu/)
+    expect(css).toMatch(/\.acct-pop-wrap--line \.acct-pop\s*\{[^}]*left: 0/)
+    // …and on a narrow column it hangs from the line's right edge so it can't run off screen.
     expect(css).toMatch(
-      /@media \(max-width: 640px\) \{\s*\.acct-pop-wrap--menu \.acct-pop\s*\{[^}]*position: absolute[^}]*top: calc\(100% \+ 8px\)[^}]*right: 0/,
+      /@container acctmain \(max-width: 600px\) \{[^@]*\.acct-pop-wrap--line \.acct-pop\s*\{[^}]*right: 0/,
     )
-    expect(css).not.toMatch(/\.acct-pop-wrap--menu \.acct-pop\s*\{[^}]*position: fixed/)
   })
 
   it('allows account titles to wrap rather than ellipsize beside the menu', () => {

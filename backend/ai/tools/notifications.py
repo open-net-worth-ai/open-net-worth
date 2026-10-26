@@ -29,13 +29,18 @@ from backend.ai.tools.schema_from_model import ToolInput, schema_of
 
 
 class ChannelMessageInput(ToolInput):
-    message: str = Field(description="The message body (sent verbatim).")
+    message: str = Field(
+        description=(
+            "The message body (sent verbatim). It must make sense on its own — a channel "
+            "without a title slot shows the message alone."
+        )
+    )
     title: Optional[str] = Field(
         default=None,
         description=(
-            "Optional subject line, e.g. 'Overdue vest: KSTL'. Shown as the notification's "
-            "title where the channel has one, and as the message's first line where it "
-            "does not."
+            "Optional subject line, e.g. 'Overdue vest: KSTL'. Shown only where the channel "
+            "has a title slot (the in-app feed), never added to the message — so put any "
+            "fact the reader needs in the message too."
         ),
     )
 

@@ -28,7 +28,13 @@ from backend.services.import_common import (
     flag_duplicates,
     resolve_account,
 )
-from backend.services.statements import lucius_pass, parse_progress, routed_transfer
+from backend.services.statements import (
+    lucius_pass,
+    parse_progress,
+    routed_transfer,
+    statement_list,
+    stored_previews,
+)
 from backend.services.statements import match_policy as policy_service
 from backend.services.statements.canonical import CanonicalRow, ParseResult, StatementMeta
 from backend.services.statements.enrich import enrich_drafts
@@ -485,8 +491,22 @@ class _RoutingContext:
         return self.route.get(self.row_currency(row))
 
 
+def _booked_transfer_pool() -> list[dict]:
+    """Every live ledger TRANSFER, in ledger order — read ONCE per statement pass and shared by
+    every row's ``_find_booked_transfers`` (it used to re-read the whole ledger per routed row)."""
+    try:
+        return ledger_service.transactions.query_txns(kind="transfer")
+    except Exception:  # noqa: BLE001 — advisory lookup, never breaks a preview
+        return []
+
+
 def _find_booked_transfers(
-    from_acct: str, to_acct: str, from_amount: float, to_amount: float, date: str
+    from_acct: str,
+    to_acct: str,
+    from_amount: float,
+    to_amount: float,
+    date: str,
+    pool: list[dict] | None = None,
 ) -> list[tuple[int, dict]]:
     """ALL already-booked ledger transfers matching these exact legs (booked earlier by an
     agent/email/hand), as (day_gap, txn) sorted closest-date-first (stable on pool order).
@@ -501,10 +521,8 @@ def _find_booked_transfers(
     def _close(a: float, b: float) -> bool:
         return abs(a - b) <= max(0.01, abs(b) * 0.001)
 
-    try:
-        pool = ledger_service.transactions.query_txns()
-    except Exception:  # noqa: BLE001 — advisory lookup, never breaks a preview
-        return []
+    if pool is None:
+        pool = _booked_transfer_pool()
     out: list[tuple[int, dict]] = []
     for t in pool:
         if t.get("deleted") or t.get("merged_into") or t.get("kind") != "transfer":
@@ -524,15 +542,23 @@ def _find_booked_transfers(
 
 
 def _find_booked_transfer(
-    from_acct: str, to_acct: str, from_amount: float, to_amount: float, date: str
+    from_acct: str,
+    to_acct: str,
+    from_amount: float,
+    to_amount: float,
+    date: str,
+    pool: list[dict] | None = None,
 ) -> dict | None:
     """Single-caller convenience (the FX-pair check): the CLOSEST-date booked transfer."""
-    ranked = _find_booked_transfers(from_acct, to_acct, from_amount, to_amount, date)
+    ranked = _find_booked_transfers(from_acct, to_acct, from_amount, to_amount, date, pool)
     return ranked[0][1] if ranked else None
 
 
 def _existing_pair_transfer(
-    out_row: CanonicalRow, in_row: CanonicalRow, ctx: _RoutingContext
+    out_row: CanonicalRow,
+    in_row: CanonicalRow,
+    ctx: _RoutingContext,
+    pool: list[dict] | None = None,
 ) -> dict | None:
     """The two-leg transfer this FX pair WOULD book, if it already exists in the ledger
     (reported case: the €1,450→S$2,150.00 conversion was already in the book via the email
@@ -543,7 +569,9 @@ def _existing_pair_transfer(
     to_acct = (ctx.route.get(in_ccy) or {}).get("id")
     if not from_acct or not to_acct:
         return None
-    return _find_booked_transfer(from_acct, to_acct, out_row.amount, in_row.amount, out_row.date)
+    return _find_booked_transfer(
+        from_acct, to_acct, out_row.amount, in_row.amount, out_row.date, pool
+    )
 
 
 def _claimed_existing_ids(results: list[RowResult]) -> set[str]:
@@ -605,6 +633,7 @@ def _match_leftovers(
     row_matches = matching.match_batch(
         [r.draft for r in unlinked], context=context, policy=policy, weak_tier=True
     )
+    opening_ids = ledger_service.opening_txn_ids()
     for r, rm in zip(unlinked, row_matches):
         refused = set((r.draft or {}).get("match_rejected_ids") or ())
         for cand in rm.candidates:
@@ -618,7 +647,7 @@ def _match_leftovers(
                     "type": cand.klass.value,
                     "reason": "; ".join(cand.reasons),
                     "existing_id": cand.id,
-                    "existing": _existing_summary(cand.txn),
+                    "existing": _existing_summary(cand.txn, opening_ids),
                     "score": cand.score,
                     "klass": cand.klass.value,
                     "band": rm.band,
@@ -711,16 +740,25 @@ def _routed_booked_transfers(results: list[RowResult]) -> dict[int, dict]:
     same-amount routed rows can never both flag the same booking; the loser takes its next
     free candidate or none (imports as its own transfer)."""
     per_row: list[tuple[int, list[tuple[int, dict]]]] = []
+    pool: list[dict] | None = None
+    # A transfer another row of THIS statement is already booked under is that row's — never a
+    # candidate for a second one. Two same-day, same-amount top-ups otherwise tied, and the
+    # review could offer row 18 the transfer row 16 already holds; Confirm, re-deriving with
+    # the right one, then refused the link the review proposed (owner, 2026-10-26).
+    held = {r.duplicate_of for r in results if r.duplicate and r.duplicate_of}
     for r in results:
         d = r.draft
         if d is None or not d.get("routing_automation_id"):
             continue
+        if pool is None:
+            pool = [t for t in _booked_transfer_pool() if t.get("id") not in held]
         ranked = _find_booked_transfers(
             d["from_account_id"],
             d["to_account_id"],
             float(d.get("from_amount") or 0.0),
             float(d.get("to_amount") or 0.0),
             d.get("date") or "",
+            pool,
         )
         if ranked:
             per_row.append((r.line - 1, ranked))
@@ -746,10 +784,13 @@ def _routed_booked_transfers(results: list[RowResult]) -> dict[int, dict]:
 def _pair_existing_transfers(rows: list[CanonicalRow], ctx: _RoutingContext) -> dict[int, dict]:
     """Row index (either leg) → the already-booked ledger transfer its FX pair duplicates."""
     found: dict[int, dict] = {}
+    pool: list[dict] | None = None
     for idx, p in ctx.pairs.items():
         if p["leg"] != "out":
             continue
-        t = _existing_pair_transfer(rows[idx], rows[p["partner"]], ctx)
+        if pool is None:
+            pool = _booked_transfer_pool()
+        t = _existing_pair_transfer(rows[idx], rows[p["partner"]], ctx, pool)
         if t is not None:
             found[idx] = t
             found[p["partner"]] = t
@@ -938,6 +979,7 @@ def _apply_batch_match(
         [r.draft for r in candidates], context=context, policy=policy, weak_tier=True
     )
     derived: dict[int, list[str]] = {}
+    opening_ids = ledger_service.opening_txn_ids()
     for r, rm in zip(candidates, row_matches):
         cand = rm.assigned
         if cand is None or not cand.id:
@@ -952,7 +994,7 @@ def _apply_batch_match(
         # original_currency included, so a foreign charge's two sides are comparable on screen.
         by_id = {c.id: c.txn for c in rm.candidates if c.id}
         alternatives = [
-            {"id": alt_id, "existing": _existing_summary(by_id[alt_id])}
+            {"id": alt_id, "existing": _existing_summary(by_id[alt_id], opening_ids)}
             for alt_id in rm.alternatives
             if alt_id in by_id
         ]
@@ -971,7 +1013,7 @@ def _apply_batch_match(
                 # reusing this one.
                 "reason": "; ".join(cand.reasons),
                 "existing_id": cand.id,
-                "existing": _existing_summary(cand.txn),
+                "existing": _existing_summary(cand.txn, opening_ids),
                 "score": cand.score,
                 "klass": cand.klass.value,
                 "band": rm.band,
@@ -1413,12 +1455,27 @@ def decision_preview(
         applied_instructions = profiles.find_instructions(content, fmt)
     instr_hash = _instructions_hash(applied_instructions)
     already = None
-    if record.get("batch_ids") or record.get("filed_at"):
+    # A rolled-back import booked nothing that is still there — not "already imported".
+    live_batches = statement_list.live_batch_ids(record)
+    if live_batches or record.get("filed_at"):
         already = {
             "statement_id": record["id"],
             "imported_at": record.get("parsed_at") or record.get("created_at"),
-            "batch_ids": record["batch_ids"],
+            "batch_ids": live_batches,
         }
+    # The review this file already finished is returned as it was left; only an explicit ask
+    # (a re-read, a mapping, another account, changed instructions) builds a new one.
+    if mapping is None and not force_reparse and not force_relearn:
+        kept = stored_previews.recall(
+            record["id"],
+            fmt=fmt,
+            instr_hash=instr_hash,
+            account_id=account_id,
+            record=record,
+            one_off=one_off,
+        )
+        if kept is not None:
+            return kept
     if (
         record.get("import_rows")
         and record.get("format") == fmt
@@ -1555,7 +1612,13 @@ def decision_preview(
         meta=result.meta.to_dict(),
         force=force_reparse,
     )
-    lucius_applied = lucius_pass.apply_lucius_ops(results, result.rows, pass_outcome.ops, ctx)
+    lucius_applied = lucius_pass.apply_lucius_ops(
+        results, result.rows, lucius_pass.merge_user_routes(record, pass_outcome.ops), ctx
+    )
+    # What the commit books from: every row's verdict exactly as `rederive_match_pass` would
+    # produce it (matcher, then the Lucius ops — nothing after). Kept with the stored review so
+    # Confirm books the reviewed decisions instead of re-matching the ledger (owner, 2026-10-26).
+    commit_pass = {"anchor": anchor, "results": [asdict(r) for r in results]}
     llm_cost["calls"] += pass_outcome.llm_calls
     llm_cost["cost_usd"] += pass_outcome.cost_usd
     # A row Lucius just routed to a transfer carries a STALE match flag from the matcher pass
@@ -1711,6 +1774,7 @@ def decision_preview(
             "original_amount": (r.draft or {}).get("original_amount"),
             "original_currency": (r.draft or {}).get("original_currency"),
             "reference": row.reference,
+            "source_row": row.source_row,
             "confidence": row.confidence,
             "notes": row.notes,
             "skip": r.draft is None,
@@ -1825,7 +1889,7 @@ def decision_preview(
         except Exception:  # noqa: BLE001 — advisory panel; the preview never fails on it
             logger.exception("decision_preview: ledger check failed")
 
-    return legacy | {
+    response = legacy | {
         "statement_id": record["id"],
         "meta": result.meta.to_dict(),
         "reconcile": result.reconcile,
@@ -1928,6 +1992,19 @@ def decision_preview(
             else None
         ),
     }
+    # Persisted BEFORE this function returns — the caller's `ready` (the progress channel's
+    # mark_done, for an async job and for a sync request alike) comes after it. A payload that
+    # still asks for an account is not a review anyone can act on, so it is never kept.
+    if not response.get("needs_account"):
+        stored_previews.keep(
+            record["id"],
+            fmt=fmt,
+            instr_hash=instr_hash,
+            account_arg=account_id,
+            preview=response,
+            commit_pass=commit_pass,
+        )
+    return response
 
 
 def _manual_link_ids(
@@ -2025,20 +2102,41 @@ def _transfer_draft(
     }
 
 
+def _still_flagged(txn_ids) -> int:
+    """How many linked entries still wait for review — a link confirms the entry exists, not
+    its category or payee, so the flag stays and the Booked screen counts it (owner,
+    2026-10-26: 23 to review in the register, "6" on the Booked screen)."""
+    rows = (ledger_service.transactions.find_by_id(i) for i in txn_ids)
+    return sum(1 for t in rows if t and t.get("needs_review") and not t.get("deleted"))
+
+
 def decision_commit(
     statement_id: str,
     account_id: str | None,
     decisions: list[dict] | None = None,
     default_action: str = "create",
     delete_ids: list[str] | None = None,
+    *,
+    reviewed: bool = False,
 ) -> dict:
     """Serializes ``_decision_commit_locked`` — see ``_commit_lock`` for why. A statement may
     legitimately be committed more than once with different decisions, so this is NOT an
-    "already committed" refusal — just mutual exclusion for the duration of one commit."""
+    "already committed" refusal — just mutual exclusion for the duration of one commit.
+
+    ``reviewed`` = the owner confirmed this in the import review (the modal's Confirm): it books
+    the stored review's verdicts and the owner's decisions exactly — no second matching pass and
+    no fuzzy duplicate guard, only the identity floors (owner, 2026-10-26). An unattended commit
+    (Lucius's import tool, the one-shot REST import) keeps re-deriving and the duplicate guard,
+    because nobody looked at what it books."""
     with _commit_lock:
-        return _decision_commit_locked(
-            statement_id, account_id, decisions, default_action, delete_ids
+        outcome = _decision_commit_locked(
+            statement_id, account_id, decisions, default_action, delete_ids, reviewed=reviewed
         )
+    # The stored review is KEPT: while this import stands it is never served (it describes the
+    # ledger before the commit — `stored_previews` checks the statement's live batches), and once
+    # the import is undone the ledger is back to exactly what it describes, so Review again and
+    # Confirm are instant instead of a full recompute (owner, 2026-10-26).
+    return outcome
 
 
 def _decision_commit_locked(
@@ -2047,6 +2145,8 @@ def _decision_commit_locked(
     decisions: list[dict] | None = None,
     default_action: str = "create",
     delete_ids: list[str] | None = None,
+    *,
+    reviewed: bool = False,
 ) -> dict:
     """Apply the review decisions in ONE batch: creates through the ledger choke, merges via
     ``apply_import_merge`` with pre-merge snapshots recorded on the batch (rollback un-merges),
@@ -2095,9 +2195,25 @@ def _decision_commit_locked(
     # 2026-07-28) — the preview's order, so a re-applied reject_match/force_match sees the SAME
     # verdict it reviewed, and `assigned_by_index` below reflects the FINAL, Lucius-adjusted one.
     meta = StatementMeta(**(record.get("import_meta") or {}))
-    match_pass = rederive_match_pass(record, rows, account_id)
-    ctx, results, lucius_ops = match_pass.ctx, match_pass.results, match_pass.lucius_ops
-    rule_routing = match_pass.routing
+    # The reviewed verdicts, when the stored review was built for this account: Confirm books
+    # what the owner reviewed and decided — no second matching pass over the live ledger
+    # (owner, 2026-10-26: "after i spent minutes reviewing … it should follow my decision").
+    # A merge is still only accepted if THAT review proposed it (server-side, never the
+    # client's say-so), which is the security role the re-derive used to play.
+    stored = (
+        stored_previews.commit_pass(statement_id, (account_id, resolved_default), record)
+        if reviewed
+        else None
+    )
+    if stored is not None:
+        ctx = _routing_context(rows, account_id)
+        results = [RowResult(**r) for r in stored]
+        lucius_ops = lucius_pass.active_ops(record)
+        rule_routing = import_routing()
+    else:
+        match_pass = rederive_match_pass(record, rows, account_id)
+        ctx, results, lucius_ops = match_pass.ctx, match_pass.results, match_pass.lucius_ops
+        rule_routing = match_pass.routing
     lucius_by_row = {op["row"]: op for op in lucius_ops}
     routed_account_ids = frozenset({a["id"] for a in ctx.route.values()} | ({ctx.resolved} - {""}))
     assigned_by_index: dict[int, str] = {}
@@ -2143,6 +2259,19 @@ def _decision_commit_locked(
     claimants_by_id: dict[str, set[int]] = {}
     for _idx, _eid in assigned_by_index.items():
         claimants_by_id.setdefault(_eid, set()).add(_idx)
+    # An engine-matched entry whose row the owner booked NEW (or linked elsewhere) is released:
+    # nothing on this statement accounts for it any more, so — exactly like the review shows
+    # it — it may be deleted or linked by another row (owner, 2026-10-26).
+    released_ids: set[str] = set()
+    for _idx, _eid in assigned_by_index.items():
+        _d = by_index.get(_idx)
+        if _d is None:
+            continue
+        if _d.get("action") == "create" or (
+            _d.get("action") == "merge" and str(_d.get("existing_id") or "") != _eid
+        ):
+            released_ids.add(_eid)
+            claimants_by_id.get(_eid, set()).discard(_idx)
     merge_targets: set[str] = set()
     # Staged ledger deletions, VALIDATED HERE — before a single write — against the same
     # uncovered set a manual link is validated against, and executed at the very end. Checking
@@ -2181,7 +2310,9 @@ def _decision_commit_locked(
         ]
         to_delete = [d for d in to_delete if d not in set(already_gone)]
         if manual_link_set is None:
-            manual_link_set = _manual_link_ids(record, rows, results, routed_account_ids, meta)
+            manual_link_set = (
+                _manual_link_ids(record, rows, results, routed_account_ids, meta) | released_ids
+            )
         stray = [d for d in to_delete if d not in manual_link_set]
         if stray:
             raise ValidationError(
@@ -2369,8 +2500,9 @@ def _decision_commit_locked(
                         f"row {min(other_claimants)} — resolve that row's match first"
                     )
                 if manual_link_set is None:
-                    manual_link_set = _manual_link_ids(
-                        record, rows, results, routed_account_ids, meta
+                    manual_link_set = (
+                        _manual_link_ids(record, rows, results, routed_account_ids, meta)
+                        | released_ids
                     )
                 if existing_id not in manual_link_set:
                     raise ValidationError(
@@ -2459,6 +2591,7 @@ def _decision_commit_locked(
             transfers=transfers,
             account_map=account_map_used,
             delete_ids=to_delete,
+            reviewed=reviewed,
         )
     finally:
         if _owns_scope:
@@ -2555,6 +2688,7 @@ def _apply(
     transfers: int = 0,
     account_map: dict[str, str] | None = None,
     delete_ids: list[str] | None = None,
+    reviewed: bool = False,
     # Defaulted, not required: `_apply` has direct callers (tests, and any future re-apply
     # path) for which "no explicitly-included rows" is the honest default. Making it required
     # broke them for no gain — an empty list means exactly what they meant.
@@ -2635,6 +2769,7 @@ def _apply(
             batch,
             deleted_ids,
             delete_errors,
+            reviewed=reviewed,
         )
     except Exception:
         # The import failed after the rows were already removed. Put them back — a confirmed
@@ -2660,6 +2795,8 @@ def _apply_rows(
     batch: dict | None,
     deleted_ids: list[str],
     delete_errors: list[dict],
+    *,
+    reviewed: bool = False,
 ) -> dict:
     """The row half of a statement commit — everything after the staged deletions have landed.
 
@@ -2668,8 +2805,16 @@ def _apply_rows(
     created_rows: list[dict] = []
     refused_rows: list[dict] = []
     if creates:
+        # A REVIEWED commit books the owner's decisions as decided: no fuzzy duplicate guard (it
+        # once refused three real MoMo top-ups as "already in your ledger" against a transfer
+        # leg it built itself — owner, 2026-10-26). Two floors remain, both identity-exact:
+        # a row whose own statement ref is already booked (a double Confirm, a re-commit), and
+        # a row the owner deleted before (`rejected_identities`, enforced on every path).
         created_rows, refused_rows = ledger_service.bulk_create_transactions(
-            creates, batch_id=batch["id"] if batch else None
+            creates,
+            batch_id=batch["id"] if batch else None,
+            allow_duplicate=reviewed,
+            dedup_by_external_ref=reviewed,
         )
     if creates_explicit:
         # allow_duplicate=True: the owner ticked Include on these rows with the duplicate flag already in
@@ -2735,6 +2880,9 @@ def _apply_rows(
     if merge_snapshots:
         if batch:
             ledger_service.import_batches.update_by_id(batch["id"], {"merges": merge_snapshots})
+    # What this import deleted, so Undo import can bring it back (owner, 2026-10-26).
+    if batch and deleted_ids:
+        ledger_service.import_batches.update_by_id(batch["id"], {"deleted_ids": list(deleted_ids)})
 
     store = _statement_store()
     if batch:
@@ -2772,6 +2920,7 @@ def _apply_rows(
     return {
         "created": len(created_rows),
         "merged": merged,
+        "linked_needs_review": _still_flagged(snap["txn_id"] for snap in merge_snapshots),
         "duplicates": duplicates,
         "skipped": skipped,
         "transfers": transfers,

@@ -626,10 +626,7 @@ async def set_payees_default_category(input_data: dict):
                     f"category {cat!r} is structural and cannot be a payee default"
                 )
             existing = dict(payee_registry.require_payee(pid).get("default_categories") or {})
-            if cat:
-                existing[kind] = cat
-            else:
-                existing.pop(kind, None)
+            existing[kind] = cat or None
             result = payee_registry.update_payee(pid, {"default_categories": existing})
             results.append({"index": i, "ok": True, "id": pid})
             single_value = result

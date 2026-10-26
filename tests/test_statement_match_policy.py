@@ -40,6 +40,7 @@ from backend.services.statements import decisions as svc
 from backend.services.statements import match_policy as mp
 from backend.services.statements import skills_service
 from backend.services.statements.tiers import StatementParseError
+from tests.conftest import drop_stored_review
 
 
 def _arrange_create(data, **kw):
@@ -541,10 +542,13 @@ def test_a_persistently_failing_extraction_stops_re_billing(monkeypatch):
     sources: list = []
     _stub_completions(monkeypatch, policy_reply=["not", "an", "object"], sources=sources)
 
-    for _ in range(svc._MAX_POLICY_ATTEMPTS):
+    sid = _preview(instructions=_INSTRUCTIONS)["statement_id"]
+    for _ in range(svc._MAX_POLICY_ATTEMPTS - 1):
+        drop_stored_review(sid)  # the bounded retry lives on the recompute path
         _preview(instructions=_INSTRUCTIONS)
     spent = sources.count(mp.POLICY_SOURCE)
     for _ in range(3):
+        drop_stored_review(sid)
         res = _preview(instructions=_INSTRUCTIONS)
 
     # Counted in PROVIDER calls, not attempts — `complete_json` reasks once per attempt — so the

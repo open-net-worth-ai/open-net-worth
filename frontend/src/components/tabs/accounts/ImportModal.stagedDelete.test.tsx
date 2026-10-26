@@ -394,11 +394,11 @@ describe('staged delete — failures surface', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
 
-    await screen.findByText('Booked.')
+    await screen.findByText(/^Imported /)
     expect(screen.getByText(/1 marked transaction could not be deleted/)).toBeTruthy()
     expect(document.body.textContent).toContain('Starting Balance')
     // and it says what DID happen, so the user is not left guessing
-    expect(document.body.textContent).toContain('1 deleted from your ledger')
+    expect(document.body.textContent).toContain('1 row deleted from your ledger')
   })
 
   it('does not claim a deletion the server never made', async () => {
@@ -412,8 +412,8 @@ describe('staged delete — failures surface', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
 
-    await screen.findByText('Booked.')
-    expect(document.body.textContent).not.toContain('1 deleted from your ledger')
+    await screen.findByText(/^Imported /)
+    expect(document.body.textContent).not.toContain('1 row deleted from your ledger')
     expect(screen.getByText(/1 marked transaction could not be deleted/)).toBeTruthy()
   })
 
@@ -425,8 +425,8 @@ describe('staged delete — failures surface', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
 
-    await screen.findByText('Booked.')
-    expect(document.body.textContent).toContain('2 deleted from your ledger')
+    await screen.findByText(/^Imported /)
+    expect(document.body.textContent).toContain('2 rows deleted from your ledger')
     expect(screen.queryByText(/could not be deleted/)).toBeNull()
   })
 })

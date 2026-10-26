@@ -50,7 +50,9 @@ When a transaction is saved:
 2. If it's still blank, **the payee's default category** for that kind of transaction fills it
    in. Set one in **Manage payees → Default category by kind** — e.g. "Trader Joe's" →
    Groceries — and you never categorize that payee by hand again. An expense default only
-   applies to expenses, an income default only to income.
+   applies to expenses, an income default only to income. A kind with no default picks one up
+   from the first transaction of that kind you categorize for the payee, unless you set it to
+   **Uncategorized**, which keeps it blank.
 3. Otherwise it stays blank.
 
 An [Automation](../lucius/automations.md) that runs on new transactions can also set the

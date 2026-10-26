@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type UIEvent } from 'react'
 import { fetchVaultTable, type VaultItem, type VaultTable } from '../../api/vault'
 import { NoPreview } from './NoPreview'
+import { PreviewLoading } from './PreviewLoading'
 
 function columnLetter(index: number): string {
   let n = index + 1
@@ -50,13 +51,19 @@ function note(grid: Grid, more: 'idle' | 'loading' | 'failed'): string | null {
 
 /** A CSV or Excel file's rows, as the file has them — a small spreadsheet with column letters
  *  and row numbers, one sheet at a time. Scrolls inside its frame and loads the next page of
- *  rows as you near the bottom (owner: "why we show only 200?"). */
-export function TablePreview({ item }: { item: VaultItem }) {
+ *  rows as you near the bottom (owner: "why we show only 200?").
+ *
+ *  `highlightRow` (1-based, the FIRST sheet's numbering) marks one row and scrolls the frame to
+ *  it, loading further pages until it exists — the import review points at the file row a
+ *  statement row came from (owner, 2026-10-26: "scroll or review the files … before making
+ *  decisions"). */
+export function TablePreview({ item, highlightRow }: { item: VaultItem; highlightRow?: number }) {
   const [sheet, setSheet] = useState<string | undefined>(undefined)
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [more, setMore] = useState<'idle' | 'loading' | 'failed'>('idle')
   // Synchronous, unlike `more`: two scroll events in one tick must not fetch a page twice.
   const inFlight = useRef(false)
+  const frameRef = useRef<HTMLDivElement>(null)
   const key = `${item.id}:${sheet ?? ''}`
   useEffect(() => {
     let alive = true
@@ -69,12 +76,14 @@ export function TablePreview({ item }: { item: VaultItem }) {
     }
   }, [item.id, sheet, key])
   const current = loaded?.key === key ? loaded : null
-  if (!current) return <div className="vault-table-frame vault-table-frame--loading" />
-  if ('error' in current) return <NoPreview item={item} reason={current.error} />
-  const grid = current
+  const grid = current && !('error' in current) ? current : null
+  const onFirstSheet = !!grid && (grid.sheets.length === 0 || grid.sheet === grid.sheets[0])
+  const target = onFirstSheet && highlightRow && highlightRow > 0 ? highlightRow : null
+  const loadedRows = grid?.rows.length ?? 0
+  const targetLoaded = target !== null && target <= loadedRows
 
   const loadMore = () => {
-    if (!grid.hasMore || inFlight.current) return
+    if (!grid || !grid.hasMore || inFlight.current) return
     inFlight.current = true
     setMore('loading')
     fetchVaultTable(item.id, sheet, grid.rows.length).then(
@@ -101,20 +110,46 @@ export function TablePreview({ item }: { item: VaultItem }) {
       },
     )
   }
+  // Fetch pages until the highlighted row exists, then centre it inside the frame (never
+  // scrollIntoView — that would scroll the page around the grid too).
+  useEffect(() => {
+    if (target === null) return
+    if (!targetLoaded) {
+      if (grid?.hasMore && more !== 'failed') loadMore()
+      return
+    }
+    const frame = frameRef.current
+    const row = frame?.querySelector<HTMLElement>(`tr[data-row="${target}"]`)
+    if (frame && row) {
+      const offset = row.getBoundingClientRect().top - frame.getBoundingClientRect().top
+      frame.scrollTop += offset - frame.clientHeight / 2 + row.offsetHeight / 2
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reacts to the target and page count
+  }, [target, targetLoaded, loadedRows])
+
+  if (!current)
+    return (
+      <div className="vault-table-frame vault-table-frame--loading">
+        <PreviewLoading />
+      </div>
+    )
+  if ('error' in current) return <NoPreview item={item} reason={current.error} />
+  const shown = current
   const onScroll = (e: UIEvent<HTMLDivElement>) => {
     const el = e.currentTarget
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - LOAD_AHEAD_PX) loadMore()
   }
-  const cols = Array.from({ length: grid.columns }, (_, i) => i)
-  const status = note(grid, more)
+  const cols = Array.from({ length: shown.columns }, (_, i) => i)
+  const status = note(shown, more)
   return (
     <div className="vault-table">
       <div
         className="vault-table-frame"
         role="region"
-        aria-label={`${item.title}${grid.sheet ? ` — ${grid.sheet}` : ''}`}
+        aria-label={`${item.title}${shown.sheet ? ` — ${shown.sheet}` : ''}`}
         tabIndex={0}
         onScroll={onScroll}
+        ref={frameRef}
       >
         <table className="vault-grid">
           <thead>
@@ -128,8 +163,13 @@ export function TablePreview({ item }: { item: VaultItem }) {
             </tr>
           </thead>
           <tbody>
-            {grid.rows.map((row, r) => (
-              <tr key={r}>
+            {shown.rows.map((row, r) => (
+              <tr
+                key={r}
+                data-row={r + 1}
+                className={r + 1 === target ? 'vault-grid-row--on' : undefined}
+                aria-current={r + 1 === target ? 'true' : undefined}
+              >
                 <th scope="row">{r + 1}</th>
                 {cols.map((c) => (
                   <td key={c} title={row[c] || undefined}>
@@ -141,14 +181,14 @@ export function TablePreview({ item }: { item: VaultItem }) {
           </tbody>
         </table>
       </div>
-      {grid.sheets.length > 1 && (
+      {shown.sheets.length > 1 && (
         <div className="vault-sheet-tabs" role="group" aria-label="Sheets">
-          {grid.sheets.map((name) => (
+          {shown.sheets.map((name) => (
             <button
               key={name}
               type="button"
               className="vault-sheet-tab"
-              aria-pressed={name === grid.sheet}
+              aria-pressed={name === shown.sheet}
               onClick={() => {
                 inFlight.current = false
                 setMore('idle')

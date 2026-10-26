@@ -102,6 +102,40 @@ def test_reconcile_to_cleared_emits_adjustment(client):
     assert body["cleared_balance"] == 65.0
 
 
+def test_reconcile_refuses_when_the_shown_balance_is_stale(client):
+    """Regression (owner report 2026-10-26): the screen asked "Is the real balance X?" with a
+    cleared balance one toggle behind; "Yes" booked the gap as an adjustment. The figure the
+    user confirmed travels as `expected_balance` — if the book moved, nothing is written."""
+    cl, acc_store, txn_store = client
+    acct, t = _seed(acc_store, txn_store)
+    shown = cl.get("/api/accounts").json()[0]["cleared_balance"]  # 100 — expense uncleared
+    cl.patch(f"/api/transactions/{t['id']}/cleared", json={"cleared": True})  # cleared → 70
+    before = len(txn_store.all())
+
+    r = cl.post(
+        f"/api/accounts/{acct['id']}/reconcile",
+        json={"real_balance": shown, "expected_balance": shown},
+    )
+
+    assert r.status_code == 409
+    assert "70" in r.json()["detail"]
+    assert len(txn_store.all()) == before
+    assert acc_store.find_by_id(acct["id"]).get("last_reconciled_at") is None
+    assert txn_store.find_by_id(t["id"]).get("reconciled_at") is None
+
+
+def test_reconcile_with_a_current_expected_balance_proceeds(client):
+    cl, acc_store, txn_store = client
+    acct, t = _seed(acc_store, txn_store)
+    cl.patch(f"/api/transactions/{t['id']}/cleared", json={"cleared": True})  # cleared = 70
+    r = cl.post(
+        f"/api/accounts/{acct['id']}/reconcile",
+        json={"real_balance": 65.0, "expected_balance": 70.0},
+    )
+    assert r.status_code == 200
+    assert r.json()["cleared_balance"] == 65.0
+
+
 def test_reconcile_missing_account_404(client):
     cl, _, _ = client
     r = cl.post("/api/accounts/ghost/reconcile", json={"real_balance": 1.0})

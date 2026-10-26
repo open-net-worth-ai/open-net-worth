@@ -1893,7 +1893,11 @@ def resolve_transaction_row(
                 # was learned from the long bank line — which the note still matches. Minting
                 # a fresh payee from the clean name is the LAST resort (it has no default
                 # category, so a silent mint books Uncategorized — seen live).
-                pid = payee_registry.resolve_payee_id(row.get("payee") or "", create=False)
+                # The NAME is matched by payee name first, then aliases: a payee picked by name in
+                # the import review ("Vietcombank") has no alias equal to its own name, so the
+                # alias-only lookup missed it and the note's alias ("INTEREST PAYMENT") booked a
+                # different payee — the user's pick silently lost (owner, 2026-10-26).
+                pid = payee_registry.resolve_payee_id_by_name(row.get("payee") or "", create=False)
                 if not pid:
                     pid = payee_registry.resolve_payee_id(
                         row.get("description") or "", create=False
@@ -3412,15 +3416,19 @@ def approve_transactions(ids: list[str]) -> dict:
 
 
 def mark_batch_reviewed(batch_id: str) -> dict:
-    """Approve every still-flagged, non-deleted transaction booked in this import batch via
-    ``approve_transactions``. A merged/linked row was never tagged with this ``batch_id`` (only a
-    newly CREATED row carries it) and an already-reviewed row is filtered out up front, so this
-    is always safe to re-run — it only ever narrows, never re-flags. Raises ``NotFoundError`` on
-    an unknown batch id. Returns ``{updated: int}``."""
-    if import_batches.find_by_id(batch_id) is None:
+    """Approve every still-flagged, non-deleted transaction this import booked OR linked, via
+    ``approve_transactions``. A linked entry never carries the ``batch_id`` (only a newly
+    CREATED row does) — it is found through the batch's merge snapshots, so the Booked screen's
+    "Mark all reviewed" clears what it counted. An already-reviewed row is filtered out up
+    front, so this is always safe to re-run — it only ever narrows, never re-flags. Raises
+    ``NotFoundError`` on an unknown batch id. Returns ``{updated: int}``."""
+    batch = import_batches.find_by_id(batch_id)
+    if batch is None:
         raise NotFoundError(f"Import batch {batch_id!r} not found")
     txns = transactions.query_by_batch(batch_id, include_deleted=False)
-    ids = [t["id"] for t in txns if t.get("needs_review")]
+    linked = (transactions.find_by_id(m.get("txn_id")) for m in batch.get("merges") or [])
+    txns += [t for t in linked if t and not t.get("deleted")]
+    ids = list(dict.fromkeys(t["id"] for t in txns if t.get("needs_review")))
     if not ids:
         return {"updated": 0}
     return {"updated": approve_transactions(ids)["count"]}
@@ -3948,6 +3956,7 @@ def reconcile(
     on_date: str | None = None,
     *,
     against: str = "cleared",
+    expected_balance: float | None = None,
 ) -> dict | None:
     """Assert the real-world native balance of an account (cleared/reconcile MVP). If it
     differs from the account's CLEARED balance, emit a single `adjustment` transaction
@@ -3957,7 +3966,11 @@ def reconcile(
 
     ``against`` selects the balance the asserted figure is diffed against — ``"cleared"``
     (the YNAB reconcile-to-cleared flow, the default) or ``"working"`` (the legacy
-    statement-driven true-up that diffs the full computed balance)."""
+    statement-driven true-up that diffs the full computed balance).
+
+    ``expected_balance`` is the figure the caller SHOWED the user. If the book has moved
+    since, the reconcile is refused with nothing written — otherwise a screen one write
+    behind books the gap as a phantom adjustment (owner report 2026-10-26)."""
     account = accounts.find_by_id(account_id)
     if account is None:
         return None
@@ -3970,6 +3983,13 @@ def reconcile(
         if against == "cleared"
         else account_balance(account, txns, cutoff)
     )
+    if expected_balance is not None and round(float(expected_balance) - current, 2) != 0:
+        shown = f"{current:,.2f}".removesuffix(".00")
+        raise ConflictError(
+            f"The balance changed since this was opened — it is now {shown} {currency}. "
+            "Check it again before reconciling.",
+            current_balance=current,
+        )
     delta = round(float(real_balance) - current, 2)
 
     txn = None

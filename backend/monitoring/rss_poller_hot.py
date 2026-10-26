@@ -160,6 +160,7 @@ async def _run_feed_registry(
                 user_agent=feed.user_agent,
                 max_age=_HOT_CACHE_TTL,
                 via=key,  # SF-1: stamp the registry's OWN via — never trust the parser's default
+                read_back=False,
             )
         except Exception as exc:
             logger.warning("rss_poller_hot: %s feed %s failed: %s", label, key, type(exc).__name__)
@@ -227,7 +228,12 @@ async def _run_gdelt(entities: list[dict], hot_rows: list[dict]) -> int:
     url = gdelt_doc_url(query)
     try:
         await gather_matched(
-            url, topic_entities, parser=parse_gdelt, max_age=_HOT_CACHE_TTL, via="api:gdelt"
+            url,
+            topic_entities,
+            parser=parse_gdelt,
+            max_age=_HOT_CACHE_TTL,
+            via="api:gdelt",
+            read_back=False,
         )
     except Exception as exc:
         logger.warning("rss_poller_hot: GDELT combined query failed: %s", type(exc).__name__)
@@ -262,7 +268,7 @@ async def _run_custom_sources(entities: list[dict]) -> int:
             continue
         _mark_attempted(key)
         try:
-            await gather_matched(url, entities, max_age=_HOT_CACHE_TTL, via=key)
+            await gather_matched(url, entities, max_age=_HOT_CACHE_TTL, via=key, read_back=False)
         except Exception as exc:
             logger.warning("rss_poller_hot: custom source %s failed: %s", key, type(exc).__name__)
             _record_result(key, ok=False)
@@ -285,7 +291,7 @@ async def _run_custom_feeds(items: list[dict]) -> int:
     if not feeds:
         return 0
     try:
-        await gather_rss(feeds, max_age=_HOT_CACHE_TTL)
+        await gather_rss(feeds, max_age=_HOT_CACHE_TTL, read_back=False)
     except Exception as exc:
         logger.warning("rss_poller_hot: custom feeds failed: %s", type(exc).__name__)
         return 0

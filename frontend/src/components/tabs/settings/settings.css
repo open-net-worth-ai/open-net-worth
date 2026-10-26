@@ -2283,13 +2283,13 @@
   left: calc(50% - var(--chat-width, 0px) / 2);
   transform: translateX(-50%);
   z-index: var(--z-toast);
-  background: var(--modal-bg);
-  border: 1px solid var(--modal-border);
-  color: var(--ink);
+  background: var(--toast-bg);
+  border: 1px solid var(--toast-bg);
+  color: var(--toast-ink);
   font-size: 12.5px;
   font-weight: 600;
   padding: 9px 18px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-toast);
   /* Sized to its text, never squeezed: centred with left 50% + translate, a shrink-to-fit box
      only gets half the viewport, so a long message wrapped into a tall pill-shaped oval. */
   width: max-content;

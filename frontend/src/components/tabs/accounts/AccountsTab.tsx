@@ -27,6 +27,7 @@ import { ErrorState, Modal, ConfirmDialog, TabSkeleton } from '../../ui'
 import type { ConfirmDialogData } from '../../ui'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { usePointerResize } from '../../../hooks/usePointerResize'
+import { useSidebarPeek } from '../../../hooks/useSidebarPeek'
 import { localIso, fDate } from '../../../utils/format'
 import './accounts.css'
 
@@ -56,6 +57,7 @@ import { Filters, ActiveChips } from './SearchFilter'
 import type { FilterState, FilterToken } from './SearchFilter'
 import { useTransactionSurfaces } from './transactionSurfacesContext'
 import { useDataVersion } from '../../../hooks/useDataVersion'
+import { emitDataChanged } from '../../../lucius/bus'
 import { fetchCachedQuery, useQueryCache } from '../../../state/queryCache'
 import AccountModal from './AccountModal'
 import type { InstitutionOption } from './ds'
@@ -67,12 +69,14 @@ import { CategoriesManager } from '../plan/categoriesManager'
 import { AddCategoryModal } from './AddCategoryModal'
 import type { CatKind } from './AddCategoryModal'
 import { ConfirmModal } from './ConfirmModal'
-import { ImportModal } from './ImportModal'
+import { ImportModal, type ReopenOptions } from './ImportModal'
 import { mapServerPreview } from './importHelpers'
 import { Toast } from './Toast'
+import { reconcileToastMessage } from './reconcileCadence'
 import type { AddData } from './AddRow'
 import type { RowPatch } from './TxnRow'
 import { DataInHero } from '../../dataIn/DataInHero'
+import { ReviewConfetti } from './ReviewConfetti'
 import { useChatComposerOptional } from '../../../state/chatComposer'
 import { SCREEN_INTROS } from '../../intro/screenIntros'
 
@@ -278,16 +282,24 @@ export function AccountsTab({
   // Everything flagged, whatever wrote it — the number beside "Needs review" must be the
   // count of what that filter shows (owner decision 2026-09-20). Lucius's "added by
   // automations" keeps its own, narrower count.
-  const loadReviewTotal = useCallback(async (isCurrent: () => boolean = () => true) => {
-    try {
-      const response = await authFetch('/api/transactions/recently-added?needs_review=true&limit=1')
-      if (!response.ok) return
-      const body = (await response.json()) as { total?: number }
-      if (isCurrent()) setReviewTotal(body.total ?? 0)
-    } catch {
-      /* the count keeps its last value */
-    }
-  }, [])
+  // On an account page both are that account's alone — the filter is scoped to it, so a
+  // book-wide count there promised rows the filter then didn't show (owner report 2026-10-26).
+  const loadReviewTotal = useCallback(
+    async (isCurrent: () => boolean = () => true) => {
+      const scope = selectedId ? `&account_id=${encodeURIComponent(selectedId)}` : ''
+      try {
+        const response = await authFetch(
+          `/api/transactions/recently-added?needs_review=true${scope}&limit=1`,
+        )
+        if (!response.ok) return
+        const body = (await response.json()) as { total?: number }
+        if (isCurrent()) setReviewTotal(body.total ?? 0)
+      } catch {
+        /* the count keeps its last value */
+      }
+    },
+    [selectedId],
+  )
   useEffect(() => {
     let active = true
     void loadReviewTotal(() => active)
@@ -463,6 +475,7 @@ export function AccountsTab({
     /** B20 async: reopen this statement's review by id instead of an upload. */
     resumeStatementId?: string
     resumeFilename?: string
+    resumeUploadedAt?: string
   } | null>(null)
   const nativeImports = useSyncExternalStore(subscribeNativeImports, nativeActionCount)
   const [showPayees, setShowPayees] = useState(showPayeesRoute)
@@ -473,6 +486,14 @@ export function AccountsTab({
   } | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const showToast = useCallback((m: string) => setToast(m), [])
+  // A finished reconcile is the moment the book is proven against the bank — it earns the
+  // same burst as clearing the review deck. Keyed so a second reconcile replays it.
+  const [reconcileBurst, setReconcileBurst] = useState(0)
+  useEffect(() => {
+    if (!reconcileBurst) return
+    const timer = window.setTimeout(() => setReconcileBurst(0), 4000)
+    return () => window.clearTimeout(timer)
+  }, [reconcileBurst])
   const [showCategories, setShowCategories] = useState(false)
 
   useEffect(() => {
@@ -517,9 +538,21 @@ export function AccountsTab({
       sidebarResize.current = null
     },
   })
+  // Hover on "Show accounts" floats the rail over the page without re-docking it — the Lucius
+  // chat-history peek's twin, carrying its fixes: a close grace for the dead zone between button
+  // and panel (useSidebarPeek), and a cooldown so a cursor still resting where the collapse
+  // click landed can't fire a stale enter.
+  const peek = useSidebarPeek(!isMobile && collapsed)
+  const collapsedAtRef = useRef(0)
+  const peekEnter = () => {
+    if (Date.now() - collapsedAtRef.current < 400) return
+    peek.enter()
+  }
   const pinCollapse = (v: boolean) => {
     railPinned.current = true
     localStorage.setItem('acctSidePinned', '1')
+    if (v) collapsedAtRef.current = Date.now()
+    peek.close()
     setCollapsed(v)
   }
   const railCollapsed = isMobile || collapsed
@@ -634,6 +667,7 @@ export function AccountsTab({
         accountId: pending.accountId,
         resumeStatementId: pending.id,
         resumeFilename: pending.filename,
+        resumeUploadedAt: pending.startedAt ? new Date(pending.startedAt).toISOString() : undefined,
       })
     }
   }, [statementReviewTick, importState])
@@ -1202,10 +1236,17 @@ export function AccountsTab({
   }
 
   const onReconcile = (account: Account, real: number) => {
-    void L.reconcile(account.id, { real_balance: real, against: 'cleared' })
-      .then((r) =>
-        showToast(r.adjustment ? 'Reconciled — adjustment booked' : 'Reconciled — in sync'),
-      )
+    // `account` is the row the popover rendered, so its cleared balance is the figure the user
+    // just confirmed or diffed against — sent so a screen one write behind can't book the gap.
+    void L.reconcile(account.id, {
+      real_balance: real,
+      against: 'cleared',
+      expected_balance: account.clearedBalance,
+    })
+      .then((r) => {
+        showToast(reconcileToastMessage(r.adjustment, account.currency))
+        setReconcileBurst((n) => n + 1)
+      })
       .catch((e) => showToast(e instanceof Error ? e.message : 'Reconcile failed'))
   }
 
@@ -1625,9 +1666,18 @@ export function AccountsTab({
   }
   // B20 async: reopen a statement's review BY ID — no re-upload, reads the record's own
   // file server-side. Same response shape as importPreview (mapServerPreview).
-  const importReopenPreview = async (statementId: string, accountId?: string) => {
+  const importReopenPreview = async (
+    statementId: string,
+    accountId?: string,
+    opts: ReopenOptions = {},
+  ) => {
     const fd = new FormData()
     if (accountId) fd.append('account_id', accountId)
+    if (opts.instructions) fd.append('instructions', opts.instructions)
+    if (opts.rememberInstructions !== undefined)
+      fd.append('remember_instructions', String(opts.rememberInstructions))
+    if (opts.forceReparse) fd.append('force_reparse', 'true')
+    if (opts.background) fd.append('mode', 'async')
     const res = await authFetch(`/api/statements/${statementId}/preview`, {
       method: 'POST',
       body: fd,
@@ -1636,16 +1686,18 @@ export function AccountsTab({
     return mapServerPreview(await res.json())
   }
   // "Continue in background" (B20 async): the server-side parse outlives the connection
-  // regardless of how the modal closes, so this is purely the toast — the statements list's
-  // own polling is what actually shows the row moving from `parsing` to `ready`.
+  // regardless of how the modal closes. Tracked app-wide, BackgroundStatementNotices says it is
+  // reading and then, in the same pill, when it is ready — from any tab. Only an untrackable
+  // read (no statement id) falls back to the register's own toast.
   const importContinueInBackground = (statementId: string | null, filename?: string) => {
-    // Tracked app-wide so BackgroundStatementNotices can say when the read finishes, from any tab.
     if (statementId) {
       trackBackgroundStatement({
         id: statementId,
         accountId: importState?.accountId ?? null,
         filename,
+        startedAt: Date.now(),
       })
+      return
     }
     showToast("We'll keep reading — we'll tell you when it's ready to review.")
   }
@@ -1666,6 +1718,8 @@ export function AccountsTab({
         decisions,
         default_action: 'create',
         delete_ids: deleteIds,
+        // The owner's own Confirm on the review: book exactly what it showed and they decided.
+        reviewed: true,
       }),
     })
     if (!res.ok) throw new Error(await res.text())
@@ -1677,12 +1731,17 @@ export function AccountsTab({
     // makes the reload actually hit the server. Awaited so the Done screen's counts and the
     // refreshed register can never disagree.
     await L.refresh()
+    // A REST write is not broadcast (ADR 2026-09-29), so only THIS ledger hook reloaded — the
+    // Transactions register, Budget and Dashboard kept pre-import rows until a page reload
+    // (owner, 2026-10-26). One import moves every screen, so tell every screen.
+    emitDataChanged(['*'])
     // refusedDuplicates: rows the LEDGER refused because they duplicate something already
     // booked. Same contract as deleteErrors — the user asked for these and did not get them,
     // so the Done screen names them rather than letting "import 4" quietly become "3 imported".
     return {
       ...out,
       batchId: out.batch_id ?? null,
+      linkedNeedsReview: out.linked_needs_review ?? 0,
       deleteErrors: out.delete_errors ?? [],
       refusedDuplicates: out.refused_duplicates ?? [],
     } as {
@@ -1692,6 +1751,7 @@ export function AccountsTab({
       skipped: number
       transfers?: number
       batchId?: string | null
+      linkedNeedsReview?: number
       deleted?: number
       deleteErrors?: Array<{ id: string; error: string }>
       refusedDuplicates?: Array<{
@@ -1711,7 +1771,24 @@ export function AccountsTab({
     if (!res.ok) throw new Error(await res.text())
     const out = await res.json()
     L.refreshTxns()
+    emitDataChanged(['*'])
     return out as { updated: number }
+  }
+
+  // Undo import (Booked screen): the whole import — added rows removed, linked entries restored.
+  // A FULL refresh, like the commit's: balances and the review strip moved too.
+  const undoImportBatch = async (batchId: string) => {
+    const res = await authFetch(`/api/transactions/batches/${batchId}/rollback`, {
+      method: 'POST',
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => null)
+      throw new Error(body?.detail || 'Could not undo this import — try again.')
+    }
+    const out = await res.json()
+    await L.refresh()
+    emitDataChanged(['*'])
+    return { deleted: out.deleted ?? 0, unmerged: out.unmerged ?? 0, restored: out.restored ?? 0 }
   }
 
   // payee ops
@@ -1901,6 +1978,37 @@ export function AccountsTab({
             onManagePayees={() => setShowPayees(true)}
           />
         )}
+        {peek.open && (
+          <div
+            className="acct-side-peek"
+            style={{ width: sideW }}
+            onMouseEnter={peek.enter}
+            onMouseLeave={peek.leave}
+          >
+            <Sidebar
+              accounts={accounts}
+              groups={L.groups}
+              totals={totals}
+              selectedId={selectedId}
+              netWorth={L.netWorth}
+              peek
+              collapsed={false}
+              onToggleCollapse={() => pinCollapse(false)}
+              onSelect={(id) => {
+                peek.close()
+                selectAccount(id)
+              }}
+              onAdd={() => {
+                peek.close()
+                setAcctModal({ open: true, mode: 'add', account: null })
+              }}
+              onManagePayees={() => {
+                peek.close()
+                setShowPayees(true)
+              }}
+            />
+          </div>
+        )}
 
         <main
           ref={mainRef}
@@ -1938,6 +2046,8 @@ export function AccountsTab({
                     setMenuOpen={setMenuOpen}
                     collapsed={railCollapsed}
                     onReopen={openAccountNavigator}
+                    onReopenHover={peekEnter}
+                    onReopenLeave={peek.leave}
                     onAddTxn={handleAddTxn}
                     onEdit={() => {
                       setMenuOpen(false)
@@ -1964,12 +2074,13 @@ export function AccountsTab({
                       setMenuOpen(false)
                       setImportState({ accountId: selectedAccount?.id ?? null })
                     }}
-                    onReviewStatement={(statementId, filename) => {
+                    onReviewStatement={(statementId, filename, uploadedAt) => {
                       setMenuOpen(false)
                       setImportState({
                         accountId: null,
                         resumeStatementId: statementId,
                         resumeFilename: filename,
+                        resumeUploadedAt: uploadedAt,
                       })
                     }}
                     onExport={() => {
@@ -1978,7 +2089,7 @@ export function AccountsTab({
                     }}
                     onReconcile={onReconcile}
                     onReview={addReviewToken}
-                    onStartReview={() => surfaces.openReview('all')}
+                    onStartReview={() => surfaces.openReview('all', selectedAccount.id)}
                   />
                 </>
               ) : (
@@ -1990,6 +2101,8 @@ export function AccountsTab({
                   baseCurrency={baseCurrency}
                   collapsed={railCollapsed}
                   onReopen={openAccountNavigator}
+                  onReopenHover={peekEnter}
+                  onReopenLeave={peek.leave}
                   onAddTxn={handleAddTxn}
                   onAdd={() => setAcctModal({ open: true, mode: 'add', account: null })}
                   onManagePayees={() => setShowPayees(true)}
@@ -2195,6 +2308,7 @@ export function AccountsTab({
             defaultAccountId={importState.accountId || undefined}
             resumeStatementId={importState.resumeStatementId}
             resumeFilename={importState.resumeFilename}
+            resumeUploadedAt={importState.resumeUploadedAt}
             onReopenPreview={importReopenPreview}
             onContinueInBackground={importContinueInBackground}
             categories={categories}
@@ -2215,6 +2329,7 @@ export function AccountsTab({
               return result
             }}
             onMarkImportReviewed={markImportBatchReviewed}
+            onUndoImport={undoImportBatch}
             payeeOptions={payeeOptions}
             payeeById={payeeNames}
             importReviewDefault={importReviewDefault}
@@ -2284,12 +2399,14 @@ export function AccountsTab({
           />
         )}
 
-        <Toast
-          message={toast}
-          onDone={() => setToast(null)}
-          anchor="register"
-          railWidth={railCollapsed ? 0 : sideW}
-        />
+        {reconcileBurst > 0 && (
+          <div key={reconcileBurst} className="acct-reconcile-burst">
+            <ReviewConfetti />
+          </div>
+        )}
+        {/* Centred on the app window, the same line as every other floating pill (the
+            background-read notices included) — not on the register (owner, 2026-10-25). */}
+        <Toast message={toast} onDone={() => setToast(null)} aboveBulkBar={selectedIds.size > 0} />
       </div>
     </>
   )

@@ -139,6 +139,18 @@ export const tokenGroups = [
     ],
   },
   {
+    // A toast is the theme INVERTED — light on dark, dark on light. On the page's own
+    // surface it disappeared into the register rows behind it (owner, 2026-10-25).
+    label: 'Toast surfaces',
+    category: 'color',
+    tokens: [
+      ['toast-bg', '#f3f5f9', '#2d2a24', '#202124'],
+      ['toast-ink', '#0e1014', '#f8f6f0', '#ffffff'],
+      ['toast-muted', '#5c6370', '#b3ac9f', '#a9adb5'],
+      ['toast-accent', '#2666b8', '#8ab8f0', '#8ab8f0'],
+    ],
+  },
+  {
     // A hover LIFTS whatever is already under the cursor; it never repaints it to a
     // different shade. Mixing against --ink keeps that correct per theme automatically:
     // on dark --ink is near-white so the veil lightens, on light it is near-black so it
@@ -265,6 +277,14 @@ export const tokenGroups = [
         '0 8px 24px rgba(0, 0, 0, 0.4)',
         '0 8px 24px rgba(48, 42, 30, 0.16)',
         '0 8px 24px rgba(17, 24, 39, 0.1)',
+      ],
+      // Every floating toast / nudge pill. Already lifted by its inverted fill, so this only
+      // seats it: a hairline contact shadow plus a short, soft falloff — never a halo.
+      [
+        'shadow-toast',
+        '0 1px 2px rgba(0, 0, 0, 0.24), 0 6px 18px -6px rgba(0, 0, 0, 0.45)',
+        '0 1px 2px rgba(48, 42, 30, 0.08), 0 6px 18px -6px rgba(48, 42, 30, 0.24)',
+        '0 1px 2px rgba(17, 24, 39, 0.06), 0 6px 18px -6px rgba(17, 24, 39, 0.2)',
       ],
       // The quietest lift there is: a hint of depth UNDER a surface that carries its own soft
       // outline (the chat input block). It must not read as a shadow in its own right — the
