@@ -1115,7 +1115,6 @@ export function ImportModal({
   >({})
   // The verdict panel collapses to one summary row by default; expand for the per-question detail.
   const [verdictOpen, setVerdictOpen] = useState(false)
-  const [doneDiff, setDoneDiff] = useState<{ core: number; boundary: number } | null>(null)
   // Ledger-only rows the reviewer MARKED for deletion. Staged, like every other decision on
   // this screen — the footer's "nothing is written until you confirm" is a promise Delete used
   // to break, firing an irreversible DELETE per row before the user had committed anything.
@@ -2280,22 +2279,8 @@ export function ImportModal({
       setRefusedDuplicates(out.refusedDuplicates ?? [])
       setReviewMarkState('idle')
       setReviewMarkError('')
-      setDoneDiff(null)
-      // the inverse check: ledger rows in this period the statement does NOT contain
-      authFetch(`/api/statements/${preview.statementId}/ledger-diff`)
-        .then(async (r) => (r.ok ? r.json() : null))
-        .then((body) => {
-          if (body?.status === 'ok')
-            setDoneDiff({
-              // Entries another imported statement backs aren't "not on this statement".
-              core: (body.rows || []).filter((r: { on_statements?: unknown }) => !r.on_statements)
-                .length,
-              boundary: (body.boundary || []).length,
-            })
-        })
-        .catch(() => {
-          /* advisory — the done screen works without it */
-        })
+      // No second "not on this statement" check here (owner, 2026-10-26): the review already
+      // showed it while it could still be acted on; after Confirm it could only worry.
       setCommitting(false)
       setStep('done')
       return
@@ -2325,7 +2310,6 @@ export function ImportModal({
   // review — with every decision the user made — is shown again rather than re-read.
   function reviewAgain() {
     setResult(null)
-    setDoneDiff(null)
     setDeleteErrors([])
     setRefusedDuplicates([])
     setReviewMarkState('idle')
@@ -4561,7 +4545,10 @@ export function ImportModal({
               const renderBoundarySection = () => {
                 if (!boundary.length) return null
                 const opening = boundary.filter((r) => r.near_cutoff?.edge === 'start')
-                const closing = boundary.filter((r) => r.near_cutoff?.edge !== 'start')
+                const funding = boundary.filter((r) => r.near_cutoff?.edge === 'funding')
+                const closing = boundary.filter(
+                  (r) => r.near_cutoff?.edge !== 'start' && r.near_cutoff?.edge !== 'funding',
+                )
                 return (
                   <div className="acct-stmtview-check-boundary">
                     <button
@@ -4571,8 +4558,8 @@ export function ImportModal({
                       aria-expanded={boundaryOpen}
                     >
                       <span className="acct-stmtview-check-boundary-t">
-                        {boundary.length} entr{boundary.length === 1 ? 'y sits' : 'ies sit'} near
-                        the cut-off — likely the previous/next statement.
+                        {boundary.length} entr{boundary.length === 1 ? 'y' : 'ies'} this file can’t
+                        show — nothing to fix.
                       </span>
                       <span className="acct-stmtview-check-caret">
                         {boundaryOpen ? (
@@ -4596,6 +4583,12 @@ export function ImportModal({
                           </div>
                         )}
                         {closing.map(renderBoundaryRow)}
+                        {funding.length > 0 && (
+                          <div className="acct-stmtview-check-group">
+                            Paid straight from the bank — funded a payment on this statement
+                          </div>
+                        )}
+                        {funding.map(renderBoundaryRow)}
                       </>
                     )}
                   </div>
@@ -7591,7 +7584,6 @@ export function ImportModal({
               context={bookedContext()}
               deleteErrors={deleteErrors}
               refusedDuplicates={refusedDuplicates}
-              doneDiff={doneDiff}
               taught={taught}
               reviewMarkState={reviewMarkState}
               reviewMarkError={reviewMarkError}

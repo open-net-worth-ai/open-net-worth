@@ -95,7 +95,7 @@ Each row gets one of three decisions. Lucius picks a default; you can change any
 
 The **Imported** screen shows what the import did: how many rows were **added** (and how many of
 those as transfers), how many were **linked** to entries you already had, and how many you **left
-out**, plus whether the statement and your ledger now agree for its period. New rows are marked to
+out**. New rows are marked to
 review in the register; **Mark all reviewed** clears that in one step. **View in register** opens
 the register filtered to this import's added and linked rows.
 

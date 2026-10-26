@@ -2770,10 +2770,6 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   align-items: center;
   flex-wrap: wrap;
 }
-.imp3-booked-aside {
-  color: var(--faint);
-  font-weight: 400;
-}
 .imp3-booked-line > svg {
   flex: none;
 }

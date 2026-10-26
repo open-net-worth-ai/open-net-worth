@@ -30,7 +30,6 @@ export interface BookedScreenProps {
   context: string
   deleteErrors: Array<{ id: string; error: string }>
   refusedDuplicates: Array<{ date?: string | null; description?: string | null }>
-  doneDiff: { core: number; boundary: number } | null
   taught: boolean
   reviewMarkState: 'idle' | 'pending' | 'done'
   reviewMarkError: string
@@ -88,28 +87,6 @@ export function BookedScreen(p: BookedScreenProps) {
       </div>
 
       <div className="imp3-booked-lines">
-        {p.doneDiff !== null && p.doneDiff.core === 0 && (
-          <div className="imp3-booked-line good">
-            <span aria-hidden="true">✓</span>
-            <span>
-              Statement and ledger agree for this period
-              {p.doneDiff.boundary > 0 && (
-                <span className="imp3-booked-aside">
-                  {' '}
-                  · {plural(p.doneDiff.boundary, 'entry', 'entries')} near the cut-off belong
-                  {p.doneDiff.boundary === 1 ? 's' : ''} to the statement before or after
-                </span>
-              )}
-            </span>
-          </div>
-        )}
-        {p.doneDiff !== null && p.doneDiff.core > 0 && (
-          <WarnLine>
-            {plural(p.doneDiff.core, 'entry', 'entries')} in your ledger for this period{' '}
-            {p.doneDiff.core === 1 ? 'is' : 'are'} not on this statement — check them under
-            Statements.
-          </WarnLine>
-        )}
         {(r.unreadable ?? 0) > 0 && (
           <div className="imp3-booked-line">
             <span className="imp3-booked-bullet" aria-hidden="true" />

@@ -24,7 +24,6 @@ function renderBooked(over: Partial<BookedScreenProps> = {}) {
     context: 'MoMo · 1 Oct – 25 Oct · 60 rows',
     deleteErrors: [],
     refusedDuplicates: [],
-    doneDiff: { core: 0, boundary: 0 },
     taught: false,
     reviewMarkState: 'idle',
     reviewMarkError: '',
@@ -48,7 +47,6 @@ describe('BookedScreen', () => {
     expect(
       Array.from(document.querySelectorAll('.imp3-booked-stat')).map((n) => n.textContent),
     ).toEqual(['21added3 as transfers', '37linkedto entries you had', '2left outby you'])
-    expect(screen.getByText('Statement and ledger agree for this period')).toBeTruthy()
     expect(screen.getByText('21 new rows are marked to review in the register')).toBeTruthy()
   })
 

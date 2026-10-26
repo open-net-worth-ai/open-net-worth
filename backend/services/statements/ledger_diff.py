@@ -276,8 +276,15 @@ def preview_ledger_check(
             continue
         if ext_ref_pairs(t) & draft_pairs:
             covered.add(t["id"])
-    boundary_days = 0 if _window_is_self_referential(meta) else _BOUNDARY_DAYS
-    out = _collect_uncovered(lo, hi, account_ids, covered, boundary_days=boundary_days)
+    boundary_days = _EDGE_DAY_ONLY if _window_is_self_referential(meta) else _BOUNDARY_DAYS
+    out = _collect_uncovered(
+        lo,
+        hi,
+        account_ids,
+        covered,
+        boundary_days=boundary_days,
+        funded=_bank_funded_payments(rows),
+    )
     out["totals"] = _totals(rows, results, out, lo, hi)
     return out
 
@@ -293,6 +300,42 @@ def preview_ledger_check(
 # either linking or surfacing in "not on statement," because the fallback window's tail
 # happened to land within 3 days of that row's own date, which it always will.
 _BOUNDARY_DAYS = 3
+# A rows-derived window still has one honest edge: an entry dated on the file's own FIRST or
+# LAST day that the file doesn't list happened before the export started or after it ended
+# (owner, 2026-10-26: a MoMo export ending 00:31 on 26 Oct, and a 26 Oct top-up warned as
+# "not on this statement"). Only that day — the 3-day margin is what once hid a real match.
+_EDGE_DAY_ONLY = 1
+
+
+def _bank_funded_payments(rows: list[CanonicalRow]) -> list[tuple[date, float]]:
+    """Payments the source paid straight from a linked bank: its running balance is unchanged
+    across them (e.g. a MoMo payment funded from Vietcombank). The bank side books that money
+    as a transfer INTO this account the statement never lists — it funded this payment.
+
+    A row only counts when the row before it was itself confirmed by its own balance move, so
+    the second row of a pair printing one shared balance isn't mistaken for one."""
+    dated = [r.date for r in rows if r.date]
+    descending = bool(dated) and dated[0] > dated[-1]
+    walk = [
+        r for r in (reversed(rows) if descending else rows) if not r.skip and r.balance is not None
+    ]
+    funded: list[tuple[date, float]] = []
+    prev_balance: float | None = None
+    prev_confirmed = False
+    for row in walk:
+        if prev_balance is None:
+            prev_balance, prev_confirmed = row.balance, True
+            continue
+        delta = row.balance - prev_balance
+        if abs(delta) <= 0.02 and row.direction == "OUT" and row.amount > 0 and prev_confirmed:
+            day = _parse_day(row.date)
+            if day:
+                funded.append((day, row.amount))
+            confirmed = True
+        else:
+            confirmed = abs(abs(delta) - row.amount) <= max(0.02, row.amount * 0.001)
+        prev_balance, prev_confirmed = row.balance, confirmed
+    return funded
 
 
 def _window_is_self_referential(meta: dict) -> bool:
@@ -341,10 +384,12 @@ def _collect_uncovered(
     covered: set[str],
     *,
     boundary_days: int = _BOUNDARY_DAYS,
+    funded: list[tuple[date, float]] | None = None,
 ) -> dict:
     core: list[dict] = []
     boundary: list[dict] = []
     lo_date, hi_date = date.fromisoformat(lo), date.fromisoformat(hi)
+    unclaimed_funding = list(funded or [])
     index = StatementRefIndex()
     opening_ids = ledger_service.opening_txn_ids()
     for t in ledger_service.transactions.all():
@@ -366,11 +411,28 @@ def _collect_uncovered(
         summary["on_statements"] = on_statements(t, index)
         day = _parse_day(d)
         near = _near_cutoff(day, lo_date, hi_date, boundary_days) if day else None
+        if near is None and day and unclaimed_funding:
+            near = _funding_for(t, day, account_ids, unclaimed_funding)
         summary["near_cutoff"] = near
         (boundary if near else core).append(summary)
     core.sort(key=lambda r: (r.get("date") or "", r.get("id") or ""))
     boundary.sort(key=lambda r: (r.get("date") or "", r.get("id") or ""))
     return {"status": "ok", "period": {"start": lo, "end": hi}, "rows": core, "boundary": boundary}
+
+
+def _funding_for(
+    t: dict, day: date, account_ids: set[str], funded: list[tuple[date, float]]
+) -> dict | None:
+    """A transfer INTO the statement's account that funded one of its bank-paid payments (same
+    amount, within a day). Each payment explains at most one transfer."""
+    if t.get("kind") != "transfer" or t.get("to_account_id") not in account_ids:
+        return None
+    amount = float(t.get("to_amount") or t.get("from_amount") or 0)
+    for k, (paid_on, paid) in enumerate(funded):
+        if abs(paid - amount) <= 0.5 and abs((paid_on - day).days) <= 1:
+            funded.pop(k)
+            return {"edge": "funding", "days": 0, "label": "Funded a bank-paid payment"}
+    return None
 
 
 def _covered_ids(
@@ -461,8 +523,15 @@ def uncovered_ledger_rows(statement_id: str) -> dict:
         )
         return {"status": "stale_policy", "rows": []}
 
-    boundary_days = 0 if _window_is_self_referential(meta) else _BOUNDARY_DAYS
-    out = _collect_uncovered(lo, hi, account_ids, covered, boundary_days=boundary_days)
+    boundary_days = _EDGE_DAY_ONLY if _window_is_self_referential(meta) else _BOUNDARY_DAYS
+    out = _collect_uncovered(
+        lo,
+        hi,
+        account_ids,
+        covered,
+        boundary_days=boundary_days,
+        funded=_bank_funded_payments(rows),
+    )
     out["totals"] = _totals(rows, results, out, lo, hi)
     names = {
         a["id"]: a.get("name") for a in ledger_service.accounts.all() if a["id"] in account_ids
