@@ -4119,9 +4119,14 @@ export function ImportModal({
               // here after a confirm, and the entry it held goes back to "not on this statement".
               const linkedTo = (d: ImportPreviewDraft, i: number) => {
                 const resolved = resolveExisting(d)
-                return resolved && actionFor(d, i) === 'merge'
-                  ? resolved.summary.note || 'another entry'
-                  : null
+                if (!resolved || actionFor(d, i) !== 'merge') return null
+                const amt = resolved.summary.amount
+                return (
+                  (resolved.summary.note || 'another entry') +
+                  (amt != null
+                    ? ` (${fCur(amt, resolved.summary.currency || d.currency, { cents: true })})`
+                    : '')
+                )
               }
               const linkableDrafts = preview.drafts
                 .map((d, i) => ({ d, i }))
@@ -4137,7 +4142,7 @@ export function ImportModal({
                     taken: false,
                     hint: holds ? `• linked to ${holds}` : undefined,
                     holds,
-                    title: rowTitle(d),
+                    title: `${rowTitle(d)} (${fCur(d.amount, d.currency, { cents: true })})`,
                   }
                 })
               // Row FORM (unchanged from the sectioned build): a dup (L0), an FX-pair leg (its
@@ -4409,7 +4414,11 @@ export function ImportModal({
                                   setRelinkAsk({
                                     row: option.title,
                                     from: option.holds,
-                                    to: r.note || 'this entry',
+                                    to:
+                                      (r.note || 'this entry') +
+                                      (r.amount != null
+                                        ? ` (${fCur(r.amount, r.currency || account?.currency || 'SGD', { cents: true })})`
+                                        : ''),
                                     run: link,
                                   })
                                 else link()
