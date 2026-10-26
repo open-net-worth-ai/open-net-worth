@@ -2758,6 +2758,14 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   align-items: flex-start;
   gap: 8px;
 }
+.imp3-booked-bullet {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin: 0.55em 4px 0;
+  border-radius: 50%;
+  background: var(--faint);
+}
 .imp3-booked-line.review {
   align-items: center;
   flex-wrap: wrap;

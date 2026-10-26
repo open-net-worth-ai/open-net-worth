@@ -112,7 +112,7 @@ export function BookedScreen(p: BookedScreenProps) {
         )}
         {(r.unreadable ?? 0) > 0 && (
           <div className="imp3-booked-line">
-            <span aria-hidden="true">·</span>
+            <span className="imp3-booked-bullet" aria-hidden="true" />
             <span>
               {plural(r.unreadable ?? 0, 'row')} in the file {r.unreadable === 1 ? 'was' : 'were'}{' '}
               skipped when it was read
@@ -121,13 +121,13 @@ export function BookedScreen(p: BookedScreenProps) {
         )}
         {r.duplicates > 0 && (
           <div className="imp3-booked-line">
-            <span aria-hidden="true">·</span>
+            <span className="imp3-booked-bullet" aria-hidden="true" />
             <span>{plural(r.duplicates, 'row')} already imported earlier — skipped</span>
           </div>
         )}
         {(r.deleted ?? 0) > 0 && (
           <div className="imp3-booked-line">
-            <span aria-hidden="true">·</span>
+            <span className="imp3-booked-bullet" aria-hidden="true" />
             <span>{plural(r.deleted ?? 0, 'row')} deleted from your ledger, as you marked</span>
           </div>
         )}
