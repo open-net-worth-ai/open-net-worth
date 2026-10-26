@@ -239,7 +239,7 @@ export interface OnStatements {
 }
 
 export interface NearCutoff {
-  edge: 'start' | 'end' | 'funding'
+  edge: 'start' | 'end'
   /** Whole days between the entry and that edge; 0 = sitting on it. */
   days: number
   /** Chip-length human form — "Closing cut-off", "2 days before closing". */

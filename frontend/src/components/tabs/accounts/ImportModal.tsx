@@ -4545,10 +4545,7 @@ export function ImportModal({
               const renderBoundarySection = () => {
                 if (!boundary.length) return null
                 const opening = boundary.filter((r) => r.near_cutoff?.edge === 'start')
-                const funding = boundary.filter((r) => r.near_cutoff?.edge === 'funding')
-                const closing = boundary.filter(
-                  (r) => r.near_cutoff?.edge !== 'start' && r.near_cutoff?.edge !== 'funding',
-                )
+                const closing = boundary.filter((r) => r.near_cutoff?.edge !== 'start')
                 return (
                   <div className="acct-stmtview-check-boundary">
                     <button
@@ -4558,8 +4555,8 @@ export function ImportModal({
                       aria-expanded={boundaryOpen}
                     >
                       <span className="acct-stmtview-check-boundary-t">
-                        {boundary.length} entr{boundary.length === 1 ? 'y' : 'ies'} this file can’t
-                        show — nothing to fix.
+                        {boundary.length} entr{boundary.length === 1 ? 'y sits' : 'ies sit'} near
+                        the cut-off — likely the previous/next statement.
                       </span>
                       <span className="acct-stmtview-check-caret">
                         {boundaryOpen ? (
@@ -4583,12 +4580,6 @@ export function ImportModal({
                           </div>
                         )}
                         {closing.map(renderBoundaryRow)}
-                        {funding.length > 0 && (
-                          <div className="acct-stmtview-check-group">
-                            Paid straight from the bank — funded a payment on this statement
-                          </div>
-                        )}
-                        {funding.map(renderBoundaryRow)}
                       </>
                     )}
                   </div>
