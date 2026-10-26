@@ -299,6 +299,12 @@
     display: inline-block;
     max-width: 100%;
     overflow-x: auto;
+    /* `body *` sets scrollbar-width/color, which makes Chromium ignore ::-webkit-scrollbar
+     and fall back to a macOS overlay bar that only appears mid-scroll — a table cut off at
+     the edge then shows nothing a mouse can grab. Back to `auto` so the styled, always-
+     visible bar applies (phones still hide it via the ≤600px rule). */
+    scrollbar-width: auto;
+    scrollbar-color: auto;
     margin: 8px 0;
     border: 1px solid var(--line);
     border-radius: 8px;
@@ -332,10 +338,21 @@
   .msg-assistant .msg-text .table-wrap th:empty::after {
     content: '\00a0';
   }
+  /* Cells wrap so a long one (a note, an amount with its conversion) fits the table to the
+   message width instead of pushing columns off the edge; the wrapper's scroll is only the
+   fallback for tables whose words alone don't fit. Word breaking is reset from .msg-text's
+   `anywhere`, which would otherwise crush columns to a few letters rather than scroll.
+   Left-aligned to sit under their left-aligned headers (the global td rule is right). */
   .msg-assistant .msg-text .table-wrap td {
     padding: 5px 10px;
     border-bottom: 1px solid var(--line);
     color: var(--ink);
+    text-align: left;
+    white-space: normal;
+    overflow-wrap: normal;
+    word-break: normal;
+  }
+  .msg-assistant .msg-text .table-wrap td:first-child {
     white-space: nowrap;
   }
   /* Numeric columns are right-aligned to match the house table convention
