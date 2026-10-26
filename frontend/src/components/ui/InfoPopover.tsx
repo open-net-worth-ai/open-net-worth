@@ -1,4 +1,15 @@
-import { useId, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+
+const GAP = 4
+const EDGE = 8
+
+interface Place {
+  top: number
+  left: number
+  width: number
+  above: boolean
+}
 
 export interface InfoPopoverProps {
   text: string
@@ -23,6 +34,12 @@ export interface InfoPopoverProps {
  * hover-only reveal, so briefly hovering the icon never swallows a click
  * elsewhere on the page. The button gets `aria-expanded` + `aria-controls`;
  * bubble gets `role="tooltip"` and an `id`.
+ *
+ * The bubble is portaled to <body> and fixed to the viewport beside the trigger, clamped inside
+ * the screen and flipped above when there's no room below — an ancestor's overflow can't clip it.
+ * Inline, a scrolling row (the account balance figures on a phone) swallowed it whole: the tap
+ * pinned it open and nothing showed (owner report 2026-10-26). A scroll would leave it behind,
+ * so it closes.
  */
 export function InfoPopover({
   text,
@@ -34,8 +51,35 @@ export function InfoPopover({
   const [revealed, setRevealed] = useState(false)
   const [pinned, setPinned] = useState(false)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const bubbleRef = useRef<HTMLSpanElement>(null)
+  const [place, setPlace] = useState<Place | null>(null)
   const bubbleId = useId()
   const open = revealed || pinned
+
+  useLayoutEffect(() => {
+    if (!open) return
+    const r = triggerRef.current?.getBoundingClientRect()
+    if (!r) return
+    const w = Math.min(width, window.innerWidth - 2 * EDGE)
+    const left = Math.max(EDGE, Math.min(r.left, window.innerWidth - w - EDGE))
+    const h = bubbleRef.current?.offsetHeight ?? 0
+    const above = r.bottom + GAP + h > window.innerHeight - EDGE && r.top - GAP - h >= EDGE
+    setPlace({ top: above ? r.top - GAP : r.bottom + GAP, left, width: w, above })
+  }, [open, width])
+
+  useEffect(() => {
+    if (!open) return
+    const close = () => {
+      setPinned(false)
+      setRevealed(false)
+    }
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [open])
 
   function toggle(e: React.MouseEvent) {
     e.stopPropagation()
@@ -97,9 +141,22 @@ export function InfoPopover({
           {/* The account editor's mobile sheet owns touch gestures, so this must run on the
               intercepted pointer event rather than waiting for its optional synthetic click. */}
           {pinned && <span className="info-pop-scrim" onPointerDown={unpin} />}
-          <span id={bubbleId} role="tooltip" className="info-pop-bubble" style={{ width }}>
-            {text}
-          </span>
+          {createPortal(
+            <span
+              ref={bubbleRef}
+              id={bubbleId}
+              role="tooltip"
+              className={'info-pop-bubble' + (place?.above ? ' info-pop-bubble--above' : '')}
+              style={
+                place
+                  ? { top: place.top, left: place.left, width: place.width }
+                  : { visibility: 'hidden', width }
+              }
+            >
+              {text}
+            </span>,
+            document.body,
+          )}
         </>
       )}
     </span>

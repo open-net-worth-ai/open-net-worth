@@ -9638,10 +9638,11 @@ body.hide-amounts .money * {
   .explain-tip--above {
     transform: translateY(-100%);
   }
+  /* Fixed to the viewport and portaled to <body>; InfoPopover places it beside its trigger,
+     clamped inside the screen — so no ancestor's overflow clips it and no screen needs its own
+     "open leftward" override. */
   .info-pop-bubble {
-    position: absolute;
-    top: calc(100% + var(--space-1));
-    left: 0;
+    position: fixed;
     z-index: var(--z-overlay);
     background: var(--surface2);
     border: 1px solid var(--modal-border);
@@ -9654,7 +9655,10 @@ body.hide-amounts .money * {
     box-shadow: var(--shadow-modal);
     white-space: normal;
     text-wrap: pretty;
-    min-width: 220px;
+    min-width: min(220px, calc(100vw - 16px));
+  }
+  .info-pop-bubble--above {
+    transform: translateY(-100%);
   }
 
   /* ================================================================
@@ -14157,30 +14161,13 @@ body.hide-amounts .money * {
   .intel-pulse-trend--empty .intel-pulse-trend-cap {
     font-style: italic;
   }
-  /* Tap-to-explain (touch): the bubble anchors to the row's grid (or the chip strip), not to the
-     cell or chip that opened it — a cell mid-row would push a 260px bubble off a phone's edge. */
-  .intel-pulse-grid,
-  .intel-pulse-chips {
-    position: relative;
-  }
-  .intel-pulse-grid > .info-pop-wrap,
-  .intel-pulse-chips > .info-pop-wrap,
-  .intel-pulse-today > .info-pop-wrap {
-    position: static;
-  }
+  /* Tap-to-explain (touch): each cell is its own trigger; the bubble keeps itself on screen. */
   .intel-pulse-grid > .info-pop-wrap {
     display: flex;
     min-width: 0;
   }
   .intel-pulse-grid .info-pop-trigger {
     width: 100%;
-  }
-  .intel-pulse-grid .info-pop-bubble {
-    left: auto;
-    right: 0;
-  }
-  .intel-pulse-row .info-pop-bubble {
-    max-width: 100%;
   }
   .intel-pulse-next-main {
     font-size: 12px;

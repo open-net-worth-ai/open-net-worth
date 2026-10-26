@@ -8464,11 +8464,6 @@ select.acct-addin {
 .acct-detail-cleared .ui-check {
   gap: 0;
 }
-.acct-detail-cleared .info-pop-bubble {
-  left: 50%;
-  transform: translateX(-50%);
-  min-width: 0;
-}
 .acct-edit-sign.tog {
   cursor: pointer;
   border: 1px solid var(--line-strong);

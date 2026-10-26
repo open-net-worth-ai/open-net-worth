@@ -3096,14 +3096,6 @@
 .onw-settings .rd-nroutes-wrap {
   position: relative;
 }
-/* The channel header's (i): open down-left so it stays inside the card, in sentence case. */
-.onw-settings .rd-nroutes .info-pop-bubble {
-  left: auto;
-  right: 0;
-  text-align: left;
-  text-transform: none;
-  letter-spacing: normal;
-}
 .onw-settings .rd-nroutes th[scope='row'] {
   text-transform: none;
   letter-spacing: normal;
