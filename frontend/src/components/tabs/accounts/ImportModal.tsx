@@ -2765,8 +2765,11 @@ export function ImportModal({
   // Lucius-op / needs-eyes / unrouted / absorbed row (all of which carry their own controls) —
   // can be user-linked to an existing uncovered entry. Once linked, resolveExisting is truthy,
   // so this returns false and the row is a review-band pair card instead of a plain row.
+  // Only an op that decides what the row IS (a transfer, a skip, a match) settles it. A category
+  // pick or a rejected match leaves it an ordinary row a link can take — excluding every Lucius
+  // touch hid an IRAS row labelled "Tax YA 2026" from its own entry's picker (owner, 2026-10-26).
   const luciusSettlesTheRow = (d: ImportPreviewDraft): boolean =>
-    !!d.lucius && d.lucius.op !== 'reject_match'
+    !!d.lucius && d.lucius.op !== 'reject_match' && d.lucius.op !== 'set_category'
   const canManualLinkRow = (d: ImportPreviewDraft, i: number): boolean =>
     // What counts is the row's CURRENT decision, not what the engine first proposed (owner,
     // 2026-10-26): any row not set to Link is unclaimed and may link to an entry the user picks.
