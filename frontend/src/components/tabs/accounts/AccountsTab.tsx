@@ -1244,7 +1244,7 @@ export function AccountsTab({
       expected_balance: account.clearedBalance,
     })
       .then((r) => {
-        showToast(reconcileToastMessage(r.adjustment, account.currency))
+        showToast(reconcileToastMessage(r.adjustment, r.cleared_balance, account.currency))
         setReconcileBurst((n) => n + 1)
       })
       .catch((e) => showToast(e instanceof Error ? e.message : 'Reconcile failed'))
