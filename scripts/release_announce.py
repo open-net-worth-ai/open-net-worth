@@ -93,7 +93,7 @@ def build_payload(version: str, release_url: str, bullets: list[str], sections: 
                 "url": release_url,
                 "description": "\n".join(lines),
                 "color": EMBED_COLOR,
-                "footer": {"text": "Desktop: update from inside the app"},
+                "footer": {"text": "The desktop app updates itself; restart when it offers"},
             }
         ],
     }
