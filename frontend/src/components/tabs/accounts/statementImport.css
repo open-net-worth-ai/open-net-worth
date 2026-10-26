@@ -1054,7 +1054,8 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
 .imp3-filter .imp3-filetoggle {
   gap: 7px;
   flex: none;
-  padding: 5px 12px;
+  height: 28px;
+  padding: 0 12px;
   border-color: var(--line-strong);
   color: var(--ink);
 }
@@ -1067,37 +1068,33 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   border-color: color-mix(in srgb, var(--accent) 60%, var(--line-strong));
   background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
-.imp3-kindfilter-btn {
-  display: inline-flex;
-  align-items: center;
+/* Same 28px outlined pill as Show file beside it, so the two tools read as one pair (owner,
+   2026-10-26: the filter looked bigger than everything else in the bar). */
+.imp3-filter .imp3-kindfilter-btn {
   justify-content: center;
   flex: none;
-  width: 36px;
-  height: 36px;
-  border: 1.5px solid var(--line-strong);
-  border-radius: 999px;
-  background: var(--surface2);
-  color: var(--ink);
-  cursor: pointer;
-}
-.imp3-kindfilter-btn svg {
-  width: 20px;
-  height: 20px;
-}
-@media (hover: hover) {
-  .imp3-kindfilter-btn:hover {
-    color: var(--ink);
-    border-color: var(--line-strong);
-  }
-}
-.imp3-kindfilter-btn.on {
-  background: var(--bg-2);
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border-color: var(--line-strong);
   color: var(--ink);
 }
+.imp3-kindfilter-btn svg {
+  width: 15px;
+  height: 15px;
+}
+@media (hover: hover) {
+  .imp3-filter .imp3-kindfilter-btn:hover {
+    background: var(--hover);
+  }
+}
+.imp3-filter .imp3-kindfilter-btn.on {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--line-strong));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
 .imp3-kindfilter-pop {
   position: absolute;
-  top: 42px;
+  top: 34px;
   right: 0;
   min-width: 150px;
   z-index: 60;
