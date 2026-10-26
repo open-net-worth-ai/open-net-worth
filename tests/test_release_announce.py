@@ -139,7 +139,7 @@ def test_highlights_alone_are_not_a_reason_to_post(tmp_path, monkeypatch, capsys
 
 def test_the_post_says_how_each_kind_of_user_gets_it():
     description = ra.build_payload("0.1.31", RELEASE_URL, ["One"], {})["embeds"][0]["description"]
-    assert "Desktop app: nothing to do. It updates itself" in description
+    assert "Desktop: updates automatically, or use Check for Updates" in description
     assert "`onw upgrade`" in description and ra.UPGRADE_URL in description
-    assert f"[Download it here]({ra.DOWNLOAD_URL})" in description
+    assert f"[Download]({ra.DOWNLOAD_URL})" in description
     assert description.endswith(f"[Read the full release notes]({RELEASE_URL})")

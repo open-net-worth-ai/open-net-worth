@@ -89,10 +89,9 @@ def build_payload(version: str, release_url: str, bullets: list[str], sections: 
     lines += [
         "",
         "**How to get it**",
-        "- Desktop app: nothing to do. It updates itself and asks you to restart.",
-        "- Self-hosted server: run `onw upgrade` or pull the new Docker image."
-        f" [Upgrade guide]({UPGRADE_URL})",
-        f"- New to Open Net Worth? [Download it here]({DOWNLOAD_URL})",
+        "- Desktop: updates automatically, or use Check for Updates in the app menu",
+        f"- Server: `onw upgrade` or pull the new Docker image ([guide]({UPGRADE_URL}))",
+        f"- New? [Download]({DOWNLOAD_URL})",
         "",
         f"[Read the full release notes]({release_url})",
     ]

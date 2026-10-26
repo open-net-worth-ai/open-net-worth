@@ -97,8 +97,8 @@ bullets are the release's Highlights, so the post and the release page say the s
 without Highlights use their first New, then Fixes, lines as written. A line counts every fix
 and polish change and names the areas most of them touched ("Plus 35 fixes and 8 smaller
 improvements, especially in Import, Accounts and Chat."), then **How to get it** tells each kind
-of user what to do (desktop: nothing, it updates itself; server: `onw upgrade` or a new Docker
-image; new users: the download page) and the post ends with a link to the release. Try it locally with `--dry-run`: it prints the Discord payload and sends nothing.
+of user what to do (desktop: automatic, or Check for Updates; server: `onw upgrade` or a new
+Docker image; new users: the download page) and the post ends with a link to the release. Try it locally with `--dry-run`: it prints the Discord payload and sends nothing.
 
 It runs as the `announce` job of the releases repo's `release.yml`, after `publish`, fetching the
 script at the source commit; it is `continue-on-error`, so it never fails a release. It needs the
