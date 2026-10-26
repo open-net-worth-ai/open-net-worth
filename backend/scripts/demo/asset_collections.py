@@ -1,9 +1,9 @@
-"""Collections: a watch collection beside the seeded Tudor, and a Pokémon card binder in a
-custom category — so the Assets register shows a category with many items, a custom category,
+"""Collections: a watch collection beside the seeded Tudor, a Pokémon card binder in a
+custom category, a painting collection, and two properties in Vietnam — so the Assets register shows a category with many items, a custom category,
 and a long-tail spread of values. Each item is one current valuation and a photo of that exact
 item, written through ``apply_owned_asset_change`` like every other owned asset in the book.
 
-Watch photos are Wikimedia Commons files in photos/ (credits in photos/CREDITS.md). A card's
+Watch, painting and property photos are Wikimedia Commons files in photos/ (credits in photos/CREDITS.md). A card's
 photo is its scan from the Pokémon TCG image CDN, fetched while the book is built: card art is
 copyrighted, so no scan is committed or shipped in the image. An offline build, or a fetch that
 fails, falls back to one freely licensed photo of a card pile (``CARD_FALLBACK``)."""
@@ -30,9 +30,39 @@ WATCHES: tuple[tuple[str, float, str], ...] = (
     ("Patek Philippe Calatrava", 28000.0, "patek-calatrava.jpg"),
 )
 
+# Two properties in Vietnam, owned outright beside the mortgaged Apartment.
+PROPERTIES: tuple[tuple[str, float, str], ...] = (
+    ("Landed House, Thao Dien, Ho Chi Minh City", 650000.0, "vn-thao-dien-house.jpg"),
+    ("Residential Land Plot, Da Lat", 180000.0, "vn-da-lat-land.jpg"),
+)
+
+# Public-domain works, so each photo is the museum's own scan of that exact piece.
+PAINTINGS: tuple[tuple[str, float, str], ...] = (
+    ("Eugène Boudin — Beach Scene at Trouville (1863)", 85000.0, "art-boudin-trouville.jpg"),
+    (
+        "Johan Barthold Jongkind — Norwegian Ship Leaving the Port of Honfleur (1865)",
+        52000.0,
+        "art-jongkind-honfleur.jpg",
+    ),
+    ("Frits Thaulow — Winter at the River Simoa (1883)", 95000.0, "art-thaulow-simoa.jpg"),
+    ("Henri-Edmond Cross — Venice (c. 1903), watercolour", 120000.0, "art-cross-venice.jpg"),
+    (
+        "Katsushika Hokusai — Fine Wind, Clear Morning (Red Fuji), woodblock print",
+        120000.0,
+        "art-hokusai-red-fuji.jpg",
+    ),
+    (
+        "Utagawa Hiroshige — Sudden Shower over Shin-Ōhashi Bridge (1857), woodblock print",
+        22000.0,
+        "art-hiroshige-shower.jpg",
+    ),
+)
+
 # What each item cost at the start of the history, as a share of today's value.
 WATCH_PAID_SHARE = 0.85
 CARD_PAID_SHARE = 0.7
+PROPERTY_PAID_SHARE = 0.8
+PAINTING_PAID_SHARE = 0.75
 
 CARD_FALLBACK = "pokemon-collection.jpg"
 CARD_SCAN_URL = "https://images.pokemontcg.io/{set}/{number}_hires.png"
@@ -135,8 +165,11 @@ def seed(tl, attach_photo, *, offline: bool = False) -> list[dict]:
         return asset
 
     assets = []
-    for name, value, photo in WATCHES:
-        asset = create(name, value, "watch", WATCH_PAID_SHARE)
+    photographed = [(item, "watch", WATCH_PAID_SHARE) for item in WATCHES]
+    photographed += [(item, "property", PROPERTY_PAID_SHARE) for item in PROPERTIES]
+    photographed += [(item, "art", PAINTING_PAID_SHARE) for item in PAINTINGS]
+    for (name, value, photo), category, paid_share in photographed:
+        asset = create(name, value, category, paid_share)
         attach_photo(asset["id"], photo)
         assets.append(asset)
 

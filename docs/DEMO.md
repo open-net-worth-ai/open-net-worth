@@ -197,8 +197,9 @@ Anchored on the build date, reaching 30 months back.
 | **Transactions** | ~3,000 — semi-monthly payroll with two raises, an annual bonus, quarterly EUR freelance invoices, an amortizing mortgage split into interest and principal, utilities, groceries, dining, subscriptions, two trips a year, a December gift spike, splits, FX transfers, ATM cash |
 | **Investments** | 10 instruments (VOO, VXUS, SCHD, BND, AAPL, NVDA, GLDM, BTC, ETH + a manually-priced private employer), 291 DCA lots, 2 disposals with realized gains, 38 dividends, daily price history for all of them |
 | **Equity** | A 1,600-unit RSU grant, four-year quarterly vest with a one-year cliff — five tranches vested, the rest excluded from net worth and reported as `unvested_base` |
-| **Owned assets** | 36 — an apartment (property, mortgage-linked), a car (vehicle, with a doc and a re-mark automation), a disposed e-bike with real sale proceeds, a watch collection of 11 (Commons photos, credits in `backend/scripts/demo/photos/CREDITS.md`), and a 22-card Pokémon binder in a custom category. Each card's photo is its scan from the Pokémon TCG image CDN, fetched at build time and never committed (card art is copyrighted); an `--offline` build uses one licensed fallback photo |
+| **Owned assets** | 44 — an apartment (property, mortgage-linked), a house in Thao Dien and a land plot in Da Lat (owned outright), a car (vehicle, with a doc and a re-mark automation), a disposed e-bike with real sale proceeds, a watch collection of 11 and six public-domain paintings and prints (Commons photos, credits in `backend/scripts/demo/photos/CREDITS.md`), and a 22-card Pokémon binder in a custom category. Each card's photo is its scan from the Pokémon TCG image CDN, fetched at build time and never committed (card art is copyrighted); an `--offline` build uses one licensed fallback photo |
 | **Plan** | 19 envelopes in five groups, targets derived from the book's own median activity, 30 months of assignments, three sinking funds, 4 goals, 5 commitments |
+| **Singapore chapter** | A household that relocated a few months ago and still earns, banks and invests in three currencies — six accounts at a fictional institution (two SGD cash, an SGD card, an SGD and an EUR brokerage, an EUR consulting account), three complete months of payday, rent and small spends plus a EUR invoice and its EUR→SGD conversion, two ETF lots (ES3.SI in SGD, EUNL.DE in EUR) whose settlement legs the acquisition choke books itself, a receipted charge on the build day, a Singapore envelope group with a reserves pot that holds the parked cash, two SGD goals that only earmark it, three saved Outlook scenarios, a research watchlist, the `mail-receipt-rehearsal` skill, three paused rehearsal Automations, and eight Documents — one of them stored Private so a visitor can watch Lucius refuse it. Dates are anchor-relative and the PDFs are rendered on build day, so nothing in it ages |
 | **Elsewhere** | A four-item watchlist and five dashboard views |
 
 Merchant names are invented. That is deliberate on two counts: a public demo should never look
@@ -226,13 +227,17 @@ Everything lives in `backend/scripts/demo/`:
 | `dashboard.py` | The saved Overview views |
 | `automations.py` | Event + scheduled automations, mixed statuses, so the tab looks used rather than empty |
 | `assistant.py` | Watchlist alerts and the assistant's seeded memory |
+| `singapore.py` | The Singapore chapter's money: accounts, categories, the monthly routine, the ETF lots, the receipt link |
+| `singapore_plan.py` | The chapter's envelopes (and the Ready-to-Assign re-balance), goals, Outlook scenarios, watchlist, skill and Automations |
+| `singapore_documents.py` | The chapter's eight Documents, rendered on build day so their dates match the ledger |
 | `build.py` | The orchestrator — the dependency order lives here |
 
 After any change, run:
 
 ```bash
 pytest tests/test_demo_book.py tests/test_demo_prices.py \
-       tests/test_demo_seed_api.py tests/test_demo_launcher.py
+       tests/test_demo_seed_api.py tests/test_demo_launcher.py \
+       tests/test_demo_singapore_chapter.py
 ```
 
 `test_demo_book.py` is the reconciliation the demo has never otherwise had: every leg resolves
@@ -245,3 +250,9 @@ re-tuning the book does not redden the suite — but breaking its arithmetic doe
 The other three cover the price seam, the HTTP seed endpoint's refusal of a populated book, and
 the launcher's two dangerous edges: a provider key must not reach a public instance by
 inheritance, and `--rebuild` must not erase a directory it did not create.
+
+`test_demo_singapore_chapter.py` builds only the chapter, at two anchors, and pins what the
+nightly rebuild must keep producing: the six accounts in their own currencies, a payday and a
+rent debit in every complete month, the ETF lots with their settlement legs, a receipt linked to
+its charge, the Private memo refused to the model, documents that quote the anchor's dates, and
+Ready to Assign back inside its band.

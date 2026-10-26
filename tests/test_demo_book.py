@@ -633,6 +633,9 @@ def test_demo_book_carries_the_watch_and_card_collections(demo_book):
     cards = next(c["key"] for c in categories() if c["label"] == "Pokemon Cards")
     assert sum(a["category"] == "watch" for a in assets) == 11
     assert sum(a["category"] == cards for a in assets) == 22
+    names = {a["name"] for a in assets}
+    assert {"Landed House, Thao Dien, Ho Chi Minh City", "Residential Land Plot, Da Lat"} <= names
+    assert sum(a["category"] == "art" for a in assets) == 6
 
 
 def test_a_fetched_card_scan_is_that_cards_photo(db_isolated, monkeypatch):
