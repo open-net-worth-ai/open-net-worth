@@ -2867,6 +2867,9 @@ def _apply_rows(
     if merge_snapshots:
         if batch:
             ledger_service.import_batches.update_by_id(batch["id"], {"merges": merge_snapshots})
+    # What this import deleted, so Undo import can bring it back (owner, 2026-10-26).
+    if batch and deleted_ids:
+        ledger_service.import_batches.update_by_id(batch["id"], {"deleted_ids": list(deleted_ids)})
 
     store = _statement_store()
     if batch:

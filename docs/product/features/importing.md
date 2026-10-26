@@ -100,8 +100,8 @@ review in the register; **Mark all reviewed** clears that in one step. **View in
 the register filtered to this import's added and linked rows.
 
 **Undo import** takes the whole import back after asking: the added rows are removed, every entry
-it linked goes back to exactly how it was, and the statement returns to **Ready to review**. Rows
-you marked for deletion stay deleted. **Review again** then reopens the same review, with your
+it linked goes back to exactly how it was, ledger entries you deleted in that import come back,
+and the statement returns to **Ready to review**. **Review again** then reopens the same review, with your
 decisions, so you can change a row and confirm again. You can undo a past import the same way by
 asking Lucius.
 

@@ -19,6 +19,8 @@ export interface BookedResult {
 export interface UndoOutcome {
   deleted: number
   unmerged: number
+  /** Ledger entries the import had deleted, brought back. */
+  restored?: number
 }
 
 export interface BookedScreenProps {
@@ -185,7 +187,7 @@ export function BookedScreen(p: BookedScreenProps) {
               ` and the ${plural(linked, 'linked entry', 'linked entries')} go${linked === 1 ? 'es' : ''} back to how ${linked === 1 ? 'it was' : 'they were'}`}
             . The statement returns to Ready to review.
             {(r.deleted ?? 0) > 0 &&
-              ` The ${plural(r.deleted ?? 0, 'row')} you deleted ${r.deleted === 1 ? 'stays' : 'stay'} deleted.`}
+              ` The ${plural(r.deleted ?? 0, 'entry', 'entries')} you deleted ${r.deleted === 1 ? 'comes' : 'come'} back.`}
           </div>
           {undo === 'error' && <div className="imp3-done-err">{undoError}</div>}
           <div className="imp3-undo-acts">
@@ -255,9 +257,10 @@ function WarnLine({ children }: { children: ReactNode }) {
 }
 
 function UndoneScreen(p: BookedScreenProps & { undone: UndoOutcome }) {
-  const { deleted, unmerged } = p.undone
+  const { deleted, unmerged, restored = 0 } = p.undone
   const parts = [`${plural(deleted, 'row')} removed`]
   if (unmerged > 0) parts.push(`${plural(unmerged, 'entry', 'entries')} restored`)
+  if (restored > 0) parts.push(`${plural(restored, 'deleted entry', 'deleted entries')} back`)
   return (
     <div className="imp3-booked">
       <div className="imp3-booked-head">

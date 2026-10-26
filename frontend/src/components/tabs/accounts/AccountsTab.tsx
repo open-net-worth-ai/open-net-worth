@@ -1751,7 +1751,7 @@ export function AccountsTab({
     }
     const out = await res.json()
     await L.refresh()
-    return { deleted: out.deleted ?? 0, unmerged: out.unmerged ?? 0 }
+    return { deleted: out.deleted ?? 0, unmerged: out.unmerged ?? 0, restored: out.restored ?? 0 }
   }
 
   // payee ops

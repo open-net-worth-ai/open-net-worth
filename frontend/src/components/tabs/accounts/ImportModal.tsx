@@ -886,7 +886,9 @@ export interface ImportModalProps {
   onViewImportBatch?: (batchId: string, label?: string) => void
   /** Undo import on the Booked screen: removes the rows this commit added and restores every
    *  entry it linked into (POST /api/transactions/batches/{id}/rollback). Omitted, no Undo. */
-  onUndoImport?: (batchId: string) => Promise<{ deleted: number; unmerged: number }>
+  onUndoImport?: (
+    batchId: string,
+  ) => Promise<{ deleted: number; unmerged: number; restored?: number }>
   /** Existing-transaction drawer (SI-50): clicking a match line's name/sub-line opens the
    *  REAL register drawer (TxnDetail) for that row. All optional — the register (AccountsTab)
    *  wires the same endpoints its own drawer uses; omitted, the drawer still opens (fetched via
@@ -1128,6 +1130,7 @@ export function ImportModal({
   // Boundary bucket (§4): collapsed by default — a quiet month stays quiet.
   const [boundaryOpen, setBoundaryOpen] = useState(false)
   const [otherStatementOpen, setOtherStatementOpen] = useState(false)
+  const [deleteAskOpen, setDeleteAskOpen] = useState(false)
   // "Link to a new row" on a row that is already linked: confirm before moving its link.
   const [relinkAsk, setRelinkAsk] = useState<{
     row: string
@@ -2117,19 +2120,15 @@ export function ImportModal({
     })
   }
 
-  async function confirmImport() {
+  async function confirmImport(opts?: { deletesConfirmed?: boolean }) {
     if (!preview || !account || committing) return
-    // ONE confirmation for the whole destructive set, naming the count — replacing the per-row
-    // dialog the staged flow removed. Deletions are the only irreversible thing this commit
-    // does that the user cannot undo from the import screen afterwards.
-    if (
-      markedForDelete.length > 0 &&
-      !window.confirm(
-        `Delete ${markedForDelete.length} transaction${markedForDelete.length === 1 ? '' : 's'} from your ledger?` +
-          '\n\nThis is part of confirming the import and cannot be undone from this screen.',
-      )
-    )
+    // ONE confirmation for the whole destructive set, naming the count, in the app's own confirm
+    // window. Undo import on the Imported screen brings the deleted entries back (owner,
+    // 2026-10-26), so it says so instead of "cannot be undone".
+    if (markedForDelete.length > 0 && opts?.deletesConfirmed !== true) {
+      setDeleteAskOpen(true)
       return
+    }
     if (preview.statementId) {
       setCommitting(true)
       setError('')
@@ -3434,7 +3433,7 @@ export function ImportModal({
             className={'imp3-commit' + (ready ? ' ready' : '')}
             disabled={(nothingHappens && !canFile) || committing}
             aria-busy={committing}
-            onClick={closeOnly ? close : confirmImport}
+            onClick={closeOnly ? close : () => void confirmImport()}
           >
             {committing && <span className="imp3-commit-spin" aria-hidden="true" />}
             {committing ? 'Booking…' : label}
@@ -7718,6 +7717,18 @@ export function ImportModal({
       {/* `processing` no longer reaches this confirm at all (B20): the read is server-side
         and outlives the connection regardless, so closing during it is "Continue in
         background", not "abandon a paid read" — see requestClose/continueInBackground. */}
+      <ConfirmModal
+        open={deleteAskOpen}
+        title={`Delete ${markedForDelete.length} ${markedForDelete.length === 1 ? 'transaction' : 'transactions'} from your ledger?`}
+        body="They're removed when the import is booked. Undo import on the next screen brings them back."
+        confirmLabel="Delete and import"
+        danger
+        onConfirm={() => {
+          setDeleteAskOpen(false)
+          void confirmImport({ deletesConfirmed: true })
+        }}
+        onClose={() => setDeleteAskOpen(false)}
+      />
       <ConfirmModal
         open={relinkAsk !== null}
         title="Move this link?"
