@@ -63,8 +63,11 @@ def test_payload_names_the_version_and_counts_the_rest():
     embed = payload["embeds"][0]
     assert embed["title"] == "Open Net Worth 0.1.31 is out"
     assert embed["url"] == RELEASE_URL
-    assert embed["description"].startswith("- One\n- Two\n")
-    assert "In all: 2 fixes and 1 polish change, most in Chat and Import." in embed["description"]
+    assert embed["description"].startswith("**What's new**\n- One\n- Two\n")
+    assert (
+        "Plus 2 fixes and 1 smaller improvement, especially in Chat and Import."
+        in embed["description"]
+    )
     assert payload["allowed_mentions"] == {"parse": []}
 
 
@@ -74,9 +77,9 @@ def test_the_fixes_line_names_the_busiest_areas():
         "Polish": ["**UI:** f", "unscoped"],
     }
     assert ra.fixes_line(sections) == (
-        "In all: 5 fixes and 2 polish changes, most in Import, UI and Chat."
+        "Plus 5 fixes and 2 smaller improvements, especially in Import, UI and Chat."
     )
-    assert ra.fixes_line({"Fixes": ["unscoped"]}) == "In all: 1 fix."
+    assert ra.fixes_line({"Fixes": ["unscoped"]}) == "Plus 1 fix."
     assert ra.fixes_line({"New": ["x"]}) == ""
 
 
@@ -88,7 +91,7 @@ def test_a_fixes_only_release_is_announced(tmp_path, monkeypatch):
     assert ra.main([str(notes), "--version", "0.1.32", "--release-url", RELEASE_URL]) == 0
     (payload,) = sent
     assert payload["embeds"][0]["description"].startswith(
-        "- Card charges link to their statement\n\nIn all: 1 fix, most in Import."
+        "**What's new**\n- Card charges link to their statement\n\nPlus 1 fix, especially in Import."
     )
 
 
@@ -108,7 +111,7 @@ def test_without_a_key_it_posts_the_new_lines_as_they_are(tmp_path, monkeypatch)
     ((hook, payload),) = sent
     assert hook == "https://example.test/hook"
     assert payload["embeds"][0]["description"].startswith(
-        "- The sidebar says which accounts need reconciling\n"
+        "**What's new**\n- The sidebar says which accounts need reconciling\n"
     )
 
 
@@ -132,3 +135,11 @@ def test_highlights_alone_are_not_a_reason_to_post(tmp_path, monkeypatch, capsys
     notes = _write(tmp_path, "## Highlights\n\n- Something\n")
     assert ra.main([str(notes), "--version", "0.1.34", "--release-url", RELEASE_URL]) == 0
     assert "no user-facing changes" in capsys.readouterr().out
+
+
+def test_the_post_says_how_each_kind_of_user_gets_it():
+    description = ra.build_payload("0.1.31", RELEASE_URL, ["One"], {})["embeds"][0]["description"]
+    assert "Desktop app: nothing to do. It updates itself" in description
+    assert "`onw upgrade`" in description and ra.UPGRADE_URL in description
+    assert f"[Download it here]({ra.DOWNLOAD_URL})" in description
+    assert description.endswith(f"[Read the full release notes]({RELEASE_URL})")

@@ -94,10 +94,11 @@ error, a refusal or an answer that isn't a bullet list leaves the notes exactly 
 `scripts/release_announce.py` posts each published release to a Discord channel. It posts whenever
 the notes have anything under New, Fixes or Polish, so fixes-only nightlies are announced too. Its
 bullets are the release's Highlights, so the post and the release page say the same thing; notes
-without Highlights use their first New, then Fixes, lines as written. A closing line counts every
-fix and polish change and names the areas most of them touched ("In all: 35 fixes and 8 polish
-changes, most in Import, Accounts and Chat."), and the post links the download page and the
-release. Try it locally with `--dry-run`: it prints the Discord payload and sends nothing.
+without Highlights use their first New, then Fixes, lines as written. A line counts every fix
+and polish change and names the areas most of them touched ("Plus 35 fixes and 8 smaller
+improvements, especially in Import, Accounts and Chat."), then **How to get it** tells each kind
+of user what to do (desktop: nothing, it updates itself; server: `onw upgrade` or a new Docker
+image; new users: the download page) and the post ends with a link to the release. Try it locally with `--dry-run`: it prints the Discord payload and sends nothing.
 
 It runs as the `announce` job of the releases repo's `release.yml`, after `publish`, fetching the
 script at the source commit; it is `continue-on-error`, so it never fails a release. It needs the

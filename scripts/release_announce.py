@@ -25,7 +25,8 @@ import urllib.request
 from collections import Counter
 from pathlib import Path
 
-DOWNLOAD_URL = "https://opennetworth.ai/download"
+DOWNLOAD_URL = "https://opennetworth.ai/#download"
+UPGRADE_URL = "https://docs.opennetworth.ai/operations/upgrading"
 MAX_BULLETS = 6
 EMBED_COLOR = 0x2F6F4F
 _SECTION = re.compile(r"^##\s+(?P<title>.+?)\s*$")
@@ -64,7 +65,7 @@ def fixes_line(sections: dict[str, list[str]]) -> str:
         part
         for part in (
             fixes and f"{len(fixes)} fix{'' if len(fixes) == 1 else 'es'}",
-            polish and f"{len(polish)} polish change{'' if len(polish) == 1 else 's'}",
+            polish and f"{len(polish)} smaller improvement{'' if len(polish) == 1 else 's'}",
         )
         if part
     ]
@@ -74,16 +75,27 @@ def fixes_line(sections: dict[str, list[str]]) -> str:
     top = [area for area, _ in areas.most_common(3)]
     where = ""
     if top:
-        where = ", most in " + (", ".join(top[:-1]) + " and " + top[-1] if len(top) > 1 else top[0])
-    return f"In all: {' and '.join(counts)}{where}."
+        where = ", especially in " + (
+            ", ".join(top[:-1]) + " and " + top[-1] if len(top) > 1 else top[0]
+        )
+    return f"Plus {' and '.join(counts)}{where}."
 
 
 def build_payload(version: str, release_url: str, bullets: list[str], sections: dict) -> dict:
-    lines = [f"- {bullet}" for bullet in bullets]
+    lines = ["**What's new**", *(f"- {bullet}" for bullet in bullets)]
     tail = fixes_line(sections)
     if tail:
         lines += ["", tail]
-    lines += ["", f"[Download]({DOWNLOAD_URL}) · [Full notes]({release_url})"]
+    lines += [
+        "",
+        "**How to get it**",
+        "- Desktop app: nothing to do. It updates itself and asks you to restart.",
+        "- Self-hosted server: run `onw upgrade` or pull the new Docker image."
+        f" [Upgrade guide]({UPGRADE_URL})",
+        f"- New to Open Net Worth? [Download it here]({DOWNLOAD_URL})",
+        "",
+        f"[Read the full release notes]({release_url})",
+    ]
     return {
         "username": "Open Net Worth",
         "allowed_mentions": {"parse": []},
@@ -93,7 +105,6 @@ def build_payload(version: str, release_url: str, bullets: list[str], sections: 
                 "url": release_url,
                 "description": "\n".join(lines),
                 "color": EMBED_COLOR,
-                "footer": {"text": "The desktop app updates itself; restart when it offers"},
             }
         ],
     }
