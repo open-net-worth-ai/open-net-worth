@@ -1128,6 +1128,13 @@ export function ImportModal({
   // Boundary bucket (§4): collapsed by default — a quiet month stays quiet.
   const [boundaryOpen, setBoundaryOpen] = useState(false)
   const [otherStatementOpen, setOtherStatementOpen] = useState(false)
+  // "Link to a new row" on a row that is already linked: confirm before moving its link.
+  const [relinkAsk, setRelinkAsk] = useState<{
+    row: string
+    from: string
+    to: string
+    run: () => void
+  } | null>(null)
   // Targeted jump: the DRAFT ARRAY INDEX to scroll to and flash-highlight. A jump into a row
   // the active chip filters out switches back to All first (same handler), so by the time the
   // flash effect runs post-render the target is in the DOM.
@@ -2730,10 +2737,12 @@ export function ImportModal({
   const luciusSettlesTheRow = (d: ImportPreviewDraft): boolean =>
     !!d.lucius && d.lucius.op !== 'reject_match'
   const canManualLinkRow = (d: ImportPreviewDraft, i: number): boolean =>
-    d.rowIndex != null &&
     // What counts is the row's CURRENT decision, not what the engine first proposed (owner,
     // 2026-10-26): any row not set to Link is unclaimed and may link to an entry the user picks.
-    (!resolveExisting(d) || actionFor(d, i) !== 'merge') &&
+    (!resolveExisting(d) || actionFor(d, i) !== 'merge') && linkableShape(d, i)
+  /** A row whose kind can take a link at all — whatever it is linked to right now. */
+  const linkableShape = (d: ImportPreviewDraft, i: number): boolean =>
+    d.rowIndex != null &&
     !d.dup &&
     !d.pair &&
     !d.routed &&
@@ -4106,17 +4115,29 @@ export function ImportModal({
                       }),
                     taken: manualLinkedIds.has(r.id) || matchOverrideIds.has(r.id),
                   }))
+              // Rows already linked are offered too (owner, 2026-10-26): picking one MOVES its link
+              // here after a confirm, and the entry it held goes back to "not on this statement".
+              const linkedTo = (d: ImportPreviewDraft, i: number) => {
+                const resolved = resolveExisting(d)
+                return resolved && actionFor(d, i) === 'merge'
+                  ? resolved.summary.note || 'another entry'
+                  : null
+              }
               const linkableDrafts = preview.drafts
                 .map((d, i) => ({ d, i }))
-                .filter(({ d, i }) => canManualLinkRow(d, i))
-                .map(({ d }) => {
+                .filter(({ d, i }) => linkableShape(d, i))
+                .map(({ d, i }) => {
                   const original = originalCharge(d, d.currency)
+                  const holds = linkedTo(d, i)
                   return {
                     id: String(d.rowIndex),
                     line:
                       `${d.date.slice(5)} • ${rowTitle(d)} • ${fCur(d.amount, d.currency, { cents: true })}` +
                       (original ? ` (${original})` : ''),
                     taken: false,
+                    hint: holds ? `• linked to ${holds}` : undefined,
+                    holds,
+                    title: rowTitle(d),
                   }
                 })
               // Row FORM (unchanged from the sectioned build): a dup (L0), an FX-pair leg (its
@@ -4356,28 +4377,42 @@ export function ImportModal({
                                 const draftIndex = preview.drafts.findIndex(
                                   (draft) => draft.rowIndex === rowIndex,
                                 )
-                                // A row that carries an engine match resolves THAT first, so a
-                                // manual link would be ignored — re-point its match instead.
-                                const picked = draftIndex >= 0 ? preview.drafts[draftIndex] : null
-                                if (picked && matchFlag(picked)?.existing_id)
-                                  setMatchOverride((current) => ({
-                                    ...current,
-                                    [rowIndex]: { id: r.id, summary: r },
-                                  }))
-                                else
-                                  setManualLink((current) => ({
-                                    ...current,
-                                    [rowIndex]: { id: r.id, summary: r },
-                                  }))
-                                if (draftIndex >= 0) {
-                                  setPlainSkip((current) => {
-                                    const next = { ...current }
-                                    delete next[rowIndex]
-                                    return next
-                                  })
-                                  setMatchAction((current) => ({ ...current, [rowIndex]: 'merge' }))
-                                  setQueueDecided((current) => ({ ...current, [rowIndex]: true }))
+                                const option = linkableDrafts.find((o) => o.id === idx)
+                                const link = () => {
+                                  // A row that carries an engine match resolves THAT first, so a
+                                  // manual link would be ignored — re-point its match instead.
+                                  const picked = draftIndex >= 0 ? preview.drafts[draftIndex] : null
+                                  if (picked && matchFlag(picked)?.existing_id)
+                                    setMatchOverride((current) => ({
+                                      ...current,
+                                      [rowIndex]: { id: r.id, summary: r },
+                                    }))
+                                  else
+                                    setManualLink((current) => ({
+                                      ...current,
+                                      [rowIndex]: { id: r.id, summary: r },
+                                    }))
+                                  if (draftIndex >= 0) {
+                                    setPlainSkip((current) => {
+                                      const next = { ...current }
+                                      delete next[rowIndex]
+                                      return next
+                                    })
+                                    setMatchAction((current) => ({
+                                      ...current,
+                                      [rowIndex]: 'merge',
+                                    }))
+                                    setQueueDecided((current) => ({ ...current, [rowIndex]: true }))
+                                  }
                                 }
+                                if (option?.holds)
+                                  setRelinkAsk({
+                                    row: option.title,
+                                    from: option.holds,
+                                    to: r.note || 'this entry',
+                                    run: link,
+                                  })
+                                else link()
                               }}
                             />
                           )}
@@ -7648,6 +7683,21 @@ export function ImportModal({
       {/* `processing` no longer reaches this confirm at all (B20): the read is server-side
         and outlives the connection regardless, so closing during it is "Continue in
         background", not "abandon a paid read" — see requestClose/continueInBackground. */}
+      <ConfirmModal
+        open={relinkAsk !== null}
+        title="Move this link?"
+        body={
+          relinkAsk
+            ? `${relinkAsk.row} is linked to ${relinkAsk.from}. Link it to ${relinkAsk.to} instead? ${relinkAsk.from} goes back to “In your ledger, not on this statement”.`
+            : ''
+        }
+        confirmLabel="Move link"
+        onConfirm={() => {
+          relinkAsk?.run()
+          setRelinkAsk(null)
+        }}
+        onClose={() => setRelinkAsk(null)}
+      />
       <ConfirmModal
         open={pendingExit !== null}
         title={
