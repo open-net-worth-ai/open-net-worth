@@ -3481,6 +3481,17 @@ body:has(.modal-overlay--workspace:not(.onw-settings-overlay):not(:has(.imp))) .
   height: auto;
   min-height: 0;
 }
+/* Cells wrap here instead of ending in "…" — a bank's detail column carries the very codes you
+   open the file to read, and there was no way to see past 240px (owner, 2026-10-26). Long
+   unbroken references ("UHHT..455722..20260929") break anywhere rather than widen the grid. */
+.imp3-filepane-body .vault-grid td {
+  min-width: 64px;
+  max-width: 320px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  vertical-align: top;
+}
 .imp3-filepane-hint {
   padding: 24px 6px;
   color: var(--muted);
