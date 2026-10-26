@@ -2731,9 +2731,9 @@ export function ImportModal({
     !!d.lucius && d.lucius.op !== 'reject_match'
   const canManualLinkRow = (d: ImportPreviewDraft, i: number): boolean =>
     d.rowIndex != null &&
-    // A matched row the owner set to Import has let its entry go, so it may link elsewhere —
-    // including back from the released entry's own "Link to a new row" (owner, 2026-10-26).
-    (!resolveExisting(d) || actionFor(d, i) === 'new') &&
+    // What counts is the row's CURRENT decision, not what the engine first proposed (owner,
+    // 2026-10-26): any row not set to Link is unclaimed and may link to an entry the user picks.
+    (!resolveExisting(d) || actionFor(d, i) !== 'merge') &&
     !d.dup &&
     !d.pair &&
     !d.routed &&
@@ -5109,7 +5109,7 @@ export function ImportModal({
                           {/* Import on a matched row: its entry is released to "not on this
                         statement", and the row may link to any entry there instead — the same
                         uncovered set the commit guard accepts a manual link to. */}
-                          {act === 'new' &&
+                          {act !== 'merge' &&
                             d.rowIndex != null &&
                             manualLinkOptions(d).length > 0 && (
                               <LinkPicker
