@@ -7729,7 +7729,11 @@ export function ImportModal({
             </div>
             <div className="imp3-filepane-body">
               {filePaneItem ? (
-                <DocumentPreview item={filePaneItem} highlightRow={fileRow} />
+                <DocumentPreview
+                  item={filePaneItem}
+                  highlightRow={fileRow}
+                  pdfReaderIn=".imp3-filepane-body"
+                />
               ) : filePaneItem === null ? (
                 <div className="imp3-filepane-hint">
                   This statement's file isn't stored, so it can't be shown here.

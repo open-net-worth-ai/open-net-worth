@@ -10,8 +10,12 @@ import { TablePreview } from './TablePreview'
 import { TextPreview } from './TextPreview'
 import { isImage, isPdf, isTable, isText } from './vaultFormat'
 
-function PdfPreview({ item }: { item: VaultItem }) {
+function PdfPreview({ item, readerIn }: { item: VaultItem; readerIn?: string }) {
   const [reading, setReading] = useState(false)
+  // A pane that scrolls on its own reads the PDF in place — every page, zoomable — instead of
+  // a one-page thumbnail that opens the reader in a popup (owner, 2026-10-26).
+  if (readerIn)
+    return <DocumentReader key={item.id} itemId={item.id} title={item.title} scroller={readerIn} />
   return (
     <>
       <DocumentPages
@@ -40,12 +44,15 @@ export function DocumentPreview({
   item,
   onOpenArtifact,
   highlightRow,
+  pdfReaderIn,
 }: {
   item: VaultItem
   onOpenArtifact?: () => void
   highlightRow?: number
+  /** Selector of the scrolling container to read a PDF inline in (the import's file pane). */
+  pdfReaderIn?: string
 }) {
-  if (isPdf(item)) return <PdfPreview item={item} />
+  if (isPdf(item)) return <PdfPreview item={item} readerIn={pdfReaderIn} />
   if (isTable(item)) return <TablePreview key={item.id} item={item} highlightRow={highlightRow} />
   if (item.kind === 'artifact' && onOpenArtifact)
     return <ArtifactPreview item={item} onOpen={onOpenArtifact} />

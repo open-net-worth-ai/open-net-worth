@@ -47,12 +47,16 @@ function PageImage({
 }
 
 /** One page's slot: sized before it loads (so the scroll doesn't jump), loaded when near. */
-function ReaderPage(props: {
+function ReaderPage({
+  scroller,
+  ...props
+}: {
   itemId: string
   page: number
   count: number
   title: string
   ratio: number
+  scroller: string
   onRatio?: (ratio: number) => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -62,14 +66,14 @@ function ReaderPage(props: {
     if (near || !el) return
     // Measured against the reader's own scroller: against the page, the modal body clips
     // everything outside its view and the look-ahead margin never applied.
-    const root = el.closest<HTMLElement>('.ui-modal__body')
+    const root = el.closest<HTMLElement>(scroller)
     const observer = new IntersectionObserver(
       (entries) => entries.some((e) => e.isIntersecting) && setNear(true),
       { root, rootMargin: LOAD_AHEAD },
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [near])
+  }, [near, scroller])
   return (
     <div
       ref={ref}
@@ -82,30 +86,39 @@ function ReaderPage(props: {
   )
 }
 
-export function DocumentReader({ itemId, title }: { itemId: string; title: string }) {
+export function DocumentReader({
+  itemId,
+  title,
+  scroller = '.ui-modal__body',
+}: {
+  itemId: string
+  title: string
+  /** The element that scrolls the pages — the modal body, or the import's file pane. */
+  scroller?: string
+}) {
   const first = usePageImage(itemId, 1) // tells us how many pages there are
   const count = first.count ?? 1
   const [ratio, setRatio] = useState(A4)
   const [current, setCurrent] = useState(1)
   const rootRef = useRef<HTMLDivElement>(null)
   const pagesRef = useRef<HTMLDivElement>(null)
-  const zoom = usePinchZoom(pagesRef)
+  const zoom = usePinchZoom(pagesRef, scroller)
 
   // The page you're on: the last whose top has passed the upper third of the view.
   useEffect(() => {
-    const scroller = rootRef.current?.closest<HTMLElement>('.ui-modal__body')
-    if (!scroller) return
+    const view = rootRef.current?.closest<HTMLElement>(scroller)
+    if (!view) return
     const onScroll = () => {
-      const edge = scroller.getBoundingClientRect().top + scroller.clientHeight / 3
+      const edge = view.getBoundingClientRect().top + view.clientHeight / 3
       let on = 1
-      scroller.querySelectorAll<HTMLElement>('.vault-reader-page').forEach((el) => {
+      view.querySelectorAll<HTMLElement>('.vault-reader-page').forEach((el) => {
         if (el.getBoundingClientRect().top <= edge) on = Number(el.dataset.page) || on
       })
       setCurrent(on)
     }
-    scroller.addEventListener('scroll', onScroll, { passive: true })
-    return () => scroller.removeEventListener('scroll', onScroll)
-  }, [count])
+    view.addEventListener('scroll', onScroll, { passive: true })
+    return () => view.removeEventListener('scroll', onScroll)
+  }, [count, scroller])
 
   const jump = (page: number) =>
     rootRef.current
@@ -130,6 +143,7 @@ export function DocumentReader({ itemId, title }: { itemId: string; title: strin
             count={count}
             title={title}
             ratio={ratio}
+            scroller={scroller}
             onRatio={i === 0 ? setRatio : undefined}
           />
         ))}
