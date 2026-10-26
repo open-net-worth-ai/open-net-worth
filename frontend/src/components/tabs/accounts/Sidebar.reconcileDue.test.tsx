@@ -124,9 +124,12 @@ describe('Sidebar — reconcile status', () => {
     expect(container.querySelector('.acct-all-sub')?.textContent).toBe('1 account')
   })
 
-  it('keeps a group’s count amber — the grey subtitle rule comes later and would win', () => {
+  it('keeps the counts amber — the grey subtitle rules come later and would win', () => {
     const css = readFileSync(resolve(__dirname, './accounts.css'), 'utf8')
-    expect(css).toMatch(/\.acct-row-sub\.acct-due[^{]*\{\s*color: var\(--warn\)/)
+    const rule = css.slice(css.indexOf('.acct-due,'), css.indexOf('}', css.indexOf('.acct-due,')))
+    expect(rule).toContain('.acct-row-sub.acct-due')
+    expect(rule).toContain('.acct-all-sub.acct-due')
+    expect(rule).toContain('color: var(--warn)')
   })
 
   it('has no icon on All accounts, so it lines up with the group headings', () => {
