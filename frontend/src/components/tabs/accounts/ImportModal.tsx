@@ -1695,6 +1695,14 @@ export function ImportModal({
     keepRowDecisions?: boolean,
   ) {
     const acct = overrideAccountId || accountId
+    // A reopened statement has no File in this browser — its bytes live with the record. A
+    // Re-read of it is the SAME read "Read again" starts: from the beginning, in the
+    // background, with the reading step's live progress (owner, 2026-10-26).
+    const savedId = !file && !url.trim() ? activeResumeId || preview?.statementId || null : null
+    if (savedId && forceReparse && !keepRowDecisions && !mapping) {
+      await readAgain(savedId)
+      return
+    }
     // Through setAnchorAccount, not setAccountId: this is the THIRD writer of the anchor
     // (the "Preview into {name}" suggestion), and if the suggested account is already an
     // extra chip, a raw write would leave a stale copy of the anchor in the extras.
@@ -1715,10 +1723,8 @@ export function ImportModal({
       // anchor on the next import of this layout. `acct` (not `accountId`) leads: an
       // override picked on this very call is the anchor the user just chose.
       const chips = [acct, ...extraAcctIds.filter((id) => id !== acct)].filter(Boolean)
-      // A reopened statement has no File in this browser — its bytes live with the record, so
-      // a re-read (the review's Re-read, the Type switch's refresh) reopens it BY ID. Sending
-      // the upload route an empty file got "provide a file or a source_url" (owner, 2026-10-26).
-      const savedId = !file && !url.trim() ? activeResumeId || preview?.statementId : null
+      // Any other re-preview of a reopened statement (the Type switch's quiet refresh) reopens
+      // it BY ID — the upload route with no file answered "provide a file or a source_url".
       const res =
         savedId && onReopenPreview
           ? await onReopenPreview(savedId, acct || undefined, {
@@ -1900,8 +1906,10 @@ export function ImportModal({
 
   /** "Read again" from a reopened statement's Choose step: re-read the saved file as a
    *  background job with what is on screen now, then open the review it builds. */
-  async function readAgain() {
-    if (!activeResumeId || !onReopenPreview) return
+  async function readAgain(statementId: string | null = activeResumeId) {
+    if (!statementId || !onReopenPreview) return
+    // A review opened some other way than the statements list tracks this id from here on.
+    if (statementId !== activeResumeId) setPendingAttachId(statementId)
     reopenArgs.current = {
       instructions: instructions.trim() || undefined,
       rememberInstructions: rememberInstr,
@@ -1910,7 +1918,7 @@ export function ImportModal({
     setReopenFailed(null)
     setRereading(true)
     try {
-      await onReopenPreview(activeResumeId, accountId || undefined, {
+      await onReopenPreview(statementId, accountId || undefined, {
         ...reopenArgs.current,
         forceReparse: true,
         background: true,
@@ -3878,7 +3886,7 @@ export function ImportModal({
                   <Button
                     variant="secondary"
                     disabled={!acctIds.length || rereading}
-                    onClick={readAgain}
+                    onClick={() => void readAgain()}
                   >
                     {rereading ? 'Starting…' : 'Read again'}
                   </Button>
