@@ -200,6 +200,16 @@ def test_update_payee_clear_default_category(client, seeded):
     assert resp.json()["default_categories"] == {}
 
 
+def test_update_payee_explicit_null_pins_uncategorized(client, seeded):
+    # The editor sends null for "Uncategorized on purpose" — it must survive request parsing.
+    resp = client.patch(
+        f"/api/payees/{seeded['p1']}", json={"default_categories": {"expense": None}}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["default_categories"] == {}
+    assert resp.json()["uncategorized_kinds"] == ["expense"]
+
+
 def test_update_payee_autocategorize_flag(client, seeded):
     resp = client.patch(f"/api/payees/{seeded['p1']}", json={"autocategorize": False})
     assert resp.status_code == 200

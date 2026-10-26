@@ -213,10 +213,11 @@ export function PayeesModal({
   // The current per-kind map.
   const perKindMap = (p: Payee): Record<string, string> => ({ ...(p.defaultCategories || {}) })
   const setPerKind = (p: Payee, kind: string, catId: string) => {
-    const m = perKindMap(p)
-    if (catId) m[kind] = catId
-    else delete m[kind]
-    onChange(p.id, { defaultCategories: m })
+    // An explicit null tells the server "Uncategorized on purpose", so it stops learning that
+    // kind's default from new transactions; the server stores the map without it.
+    const m: Record<string, string | null> = perKindMap(p)
+    m[kind] = catId || null
+    onChange(p.id, { defaultCategories: m as Payee['defaultCategories'] })
   }
   const aliasesFor = (p: Payee) => (p.aliases.length > 0 ? p.aliases : [p.name.toLowerCase()])
   const rules = sel ? rulesById[sel.id] || [] : []
