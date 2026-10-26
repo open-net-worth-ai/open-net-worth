@@ -2880,16 +2880,31 @@ export function ImportModal({
   // "Not the same" button is gone — owner, 2026-07-31; ADR 2026-07-31-weak-import-releases-
   // the-entry). On a maybe-match, "Import" (keep both) IS the assertion that the two are not
   // the same thing, so it releases; "Same one — link" re-claims it, and "Leave out" keeps the
-  // claim (nothing double-books — the entry already covers the row). WEAK ONLY: strong/review
-  // rows still need a deliberate decision, and releasing their entry off a default would be a
-  // different bug.
+  // claim (nothing double-books — the entry already covers the row). EVERY band now (owner,
+  // 2026-10-26: Import on a strong match booked a second Grab while the first one vanished from
+  // view): a strong/review row's default is Link, so Import on it is always the owner's own
+  // call, never a default. A row re-pointed at a different entry releases its original one too.
   const dismissedWeakEntries: LedgerCheckRow[] = preview
     ? preview.drafts.flatMap((d, i) => {
-        if (pairBand(d) !== 'weak' || verdictInputs[i]?.effect !== 'new') return []
+        const flag = matchFlag(d)
         const resolved = resolveExisting(d)
-        return resolved
-          ? [{ ...resolved.summary, id: resolved.id, note: resolved.summary.note ?? undefined }]
-          : []
+        const bookedNew = verdictInputs[i]?.effect === 'new'
+        const repointed = !!flag?.existing_id && !!resolved && resolved.id !== flag.existing_id
+        if (!bookedNew && !repointed) return []
+        const out: LedgerCheckRow[] = []
+        if (flag?.existing_id && (bookedNew || repointed))
+          out.push({
+            ...(flag.existing ?? {}),
+            id: flag.existing_id,
+            note: flag.existing?.note ?? undefined,
+          } as LedgerCheckRow)
+        if (bookedNew && resolved && resolved.id !== flag?.existing_id)
+          out.push({
+            ...resolved.summary,
+            id: resolved.id,
+            note: resolved.summary.note ?? undefined,
+          })
+        return out
       })
     : []
   // A release beats the two "this entry is spoken for" drops below. They can only collide on ONE
@@ -4987,6 +5002,34 @@ export function ImportModal({
                               onPick={pickAlternative}
                             />
                           )}
+                          {/* Import on a matched row: its entry is released to "not on this
+                        statement", and the row may link to any entry there instead — the same
+                        uncovered set the commit guard accepts a manual link to. */}
+                          {act === 'new' &&
+                            d.rowIndex != null &&
+                            manualLinkOptions(d).length > 0 && (
+                              <LinkPicker
+                                label="Link to existing"
+                                variant="imp3-actbtn"
+                                listLabel="Link this row to a different ledger entry"
+                                options={manualLinkOptions(d).map((o) => ({
+                                  ...o,
+                                  hint: o.taken ? '• linked to another row' : undefined,
+                                }))}
+                                onPick={(id) => {
+                                  const summary = checkRowById.get(id)
+                                  if (!summary || d.rowIndex == null) return
+                                  setMatchOverride((current) => ({
+                                    ...current,
+                                    [d.rowIndex!]: { id, summary },
+                                  }))
+                                  setMatchAction((current) => ({
+                                    ...current,
+                                    [d.rowIndex!]: 'merge',
+                                  }))
+                                }}
+                              />
+                            )}
                           {overridden && d.rowIndex != null && (
                             <button
                               type="button"

@@ -2246,6 +2246,19 @@ def _decision_commit_locked(
     claimants_by_id: dict[str, set[int]] = {}
     for _idx, _eid in assigned_by_index.items():
         claimants_by_id.setdefault(_eid, set()).add(_idx)
+    # An engine-matched entry whose row the owner booked NEW (or linked elsewhere) is released:
+    # nothing on this statement accounts for it any more, so — exactly like the review shows
+    # it — it may be deleted or linked by another row (owner, 2026-10-26).
+    released_ids: set[str] = set()
+    for _idx, _eid in assigned_by_index.items():
+        _d = by_index.get(_idx)
+        if _d is None:
+            continue
+        if _d.get("action") == "create" or (
+            _d.get("action") == "merge" and str(_d.get("existing_id") or "") != _eid
+        ):
+            released_ids.add(_eid)
+            claimants_by_id.get(_eid, set()).discard(_idx)
     merge_targets: set[str] = set()
     # Staged ledger deletions, VALIDATED HERE — before a single write — against the same
     # uncovered set a manual link is validated against, and executed at the very end. Checking
@@ -2284,7 +2297,9 @@ def _decision_commit_locked(
         ]
         to_delete = [d for d in to_delete if d not in set(already_gone)]
         if manual_link_set is None:
-            manual_link_set = _manual_link_ids(record, rows, results, routed_account_ids, meta)
+            manual_link_set = (
+                _manual_link_ids(record, rows, results, routed_account_ids, meta) | released_ids
+            )
         stray = [d for d in to_delete if d not in manual_link_set]
         if stray:
             raise ValidationError(
@@ -2472,8 +2487,9 @@ def _decision_commit_locked(
                         f"row {min(other_claimants)} — resolve that row's match first"
                     )
                 if manual_link_set is None:
-                    manual_link_set = _manual_link_ids(
-                        record, rows, results, routed_account_ids, meta
+                    manual_link_set = (
+                        _manual_link_ids(record, rows, results, routed_account_ids, meta)
+                        | released_ids
                     )
                 if existing_id not in manual_link_set:
                     raise ValidationError(
