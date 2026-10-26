@@ -586,8 +586,18 @@ function LinkPicker({
       window.removeEventListener('scroll', s, true)
     }
   }, [open, isMobile])
+  // Amounts render with the locale's separators ("2.079.620"), while the statement row shows
+  // "2,079,620" — match on the bare digits too, so a pasted amount still finds its entry.
   const ql = q.trim().toLowerCase()
-  const shown = ql ? options.filter((o) => o.line.toLowerCase().includes(ql)) : options
+  const bare = (text: string) => text.toLowerCase().replace(/[\s.,]/g, '')
+  const shown = ql
+    ? options.filter(
+        (o) =>
+          o.line.toLowerCase().includes(ql) ||
+          bare(o.line).includes(bare(ql)) ||
+          (!!o.hint && o.hint.toLowerCase().includes(ql)),
+      )
+    : options
   const list = (
     <>
       {options.length > 4 && (
@@ -1137,6 +1147,8 @@ export function ImportModal({
     row: string
     from: string
     to: string
+    /** Overrides the default wording (the row-side move, where an ENTRY changes rows). */
+    body?: string
     run: () => void
   } | null>(null)
   // Targeted jump: the DRAFT ARRAY INDEX to scroll to and flash-highlight. A jump into a row
@@ -2943,6 +2955,56 @@ export function ImportModal({
       if (d.rowIndex != null && matchOverride[d.rowIndex])
         matchOverrideIds.add(matchOverride[d.rowIndex]!.id)
     })
+  // Which statement row holds each hand-linked entry — so a row's own picker can offer it too
+  // and MOVE the link after a confirm, like the ledger side does (owner, 2026-10-26).
+  const entryHolder = new Map<string, ImportPreviewDraft>()
+  if (preview)
+    preview.drafts.forEach((d) => {
+      if (d.rowIndex == null) return
+      const held = isManualLinked(d) ? manualLink[d.rowIndex] : matchOverride[d.rowIndex]
+      if (held) entryHolder.set(held.id, d)
+    })
+  const heldByOther = (d: ImportPreviewDraft, entryId: string) => {
+    const holder = entryHolder.get(entryId)
+    return holder && holder.rowIndex !== d.rowIndex ? holder : null
+  }
+  const heldHint = (d: ImportPreviewDraft, entryId: string) => {
+    const holder = heldByOther(d, entryId)
+    return holder
+      ? `• linked to ${rowTitle(holder)} (${fCur(holder.amount, holder.currency, { cents: true })})`
+      : undefined
+  }
+  /** Run a row-side link pick; an entry another row holds is moved only after a confirm, and
+   *  that row drops back to its own match (or none). */
+  const pickWithRelink = (d: ImportPreviewDraft, entryId: string, apply: () => void) => {
+    const holder = heldByOther(d, entryId)
+    if (!holder || holder.rowIndex == null) return apply()
+    const from = holder.rowIndex
+    const entry = checkRowById.get(entryId)
+    const entryLabel =
+      (entry?.note || 'This entry') +
+      (entry?.amount != null
+        ? ` (${fCur(entry.amount, entry.currency || d.currency, { cents: true })})`
+        : '')
+    const holderLabel = `${rowTitle(holder)} (${fCur(holder.amount, holder.currency, { cents: true })})`
+    setRelinkAsk({
+      row: holderLabel,
+      from: entryLabel,
+      to: `${rowTitle(d)} (${fCur(d.amount, d.currency, { cents: true })})`,
+      body: `${entryLabel} is linked to ${holderLabel}. Link it to ${rowTitle(d)} (${fCur(d.amount, d.currency, { cents: true })}) instead? ${holderLabel} loses the link.`,
+      run: () => {
+        const drop = <T,>(current: Record<number, T>) => {
+          const next = { ...current }
+          delete next[from]
+          return next
+        }
+        setManualLink(drop)
+        setMatchOverride(drop)
+        setMatchAction(drop)
+        apply()
+      },
+    })
+  }
   // The RE-INSERTION half of the panel (RFC 2026-07-29 §D3 amendment (c)). `ledger_check.rows`
   // is a pure set difference, so the server already SUBTRACTED the entry a weak flag claimed;
   // a weak row that books as NEW makes that entry genuinely uncovered again, and it has to come
@@ -4117,7 +4179,7 @@ export function ImportModal({
                       existingTxnLine(r, accounts, catMapProp, d.currency, {
                         anchorAccountId: d.destId || accountId,
                       }),
-                    taken: manualLinkedIds.has(r.id) || matchOverrideIds.has(r.id),
+                    hint: heldHint(d, r.id),
                   }))
               // Rows already linked are offered too (owner, 2026-10-26): picking one MOVES its link
               // here after a confirm, and the entry it held goes back to "not on this statement".
@@ -5182,21 +5244,20 @@ export function ImportModal({
                                 label="Link to existing"
                                 variant="imp3-actbtn"
                                 listLabel="Link this row to a different ledger entry"
-                                options={manualLinkOptions(d).map((o) => ({
-                                  ...o,
-                                  hint: o.taken ? '• linked to another row' : undefined,
-                                }))}
+                                options={manualLinkOptions(d)}
                                 onPick={(id) => {
                                   const summary = checkRowById.get(id)
                                   if (!summary || d.rowIndex == null) return
-                                  setMatchOverride((current) => ({
-                                    ...current,
-                                    [d.rowIndex!]: { id, summary },
-                                  }))
-                                  setMatchAction((current) => ({
-                                    ...current,
-                                    [d.rowIndex!]: 'merge',
-                                  }))
+                                  pickWithRelink(d, id, () => {
+                                    setMatchOverride((current) => ({
+                                      ...current,
+                                      [d.rowIndex!]: { id, summary },
+                                    }))
+                                    setMatchAction((current) => ({
+                                      ...current,
+                                      [d.rowIndex!]: 'merge',
+                                    }))
+                                  })
                                 }}
                               />
                             )}
@@ -5467,24 +5528,23 @@ export function ImportModal({
                             label="Link to existing"
                             listLabel="Link this row to an existing ledger entry"
                             variant="imp3-actbtn"
-                            options={manualOptions.map((o) => ({
-                              ...o,
-                              hint: o.taken ? '• linked to another row' : undefined,
-                            }))}
+                            options={manualOptions}
                             onPick={(id) => {
                               const summary = checkRowById.get(id)
                               if (!summary) return
-                              setManualLink((current) => ({
-                                ...current,
-                                [d.rowIndex!]: { id, summary },
-                              }))
-                              setPlainSkip((current) => {
-                                const next = { ...current }
-                                delete next[ri]
-                                return next
+                              pickWithRelink(d, id, () => {
+                                setManualLink((current) => ({
+                                  ...current,
+                                  [d.rowIndex!]: { id, summary },
+                                }))
+                                setPlainSkip((current) => {
+                                  const next = { ...current }
+                                  delete next[ri]
+                                  return next
+                                })
+                                setMatchAction((current) => ({ ...current, [ri]: 'merge' }))
+                                setQueueDecided((current) => ({ ...current, [ri]: true }))
                               })
-                              setMatchAction((current) => ({ ...current, [ri]: 'merge' }))
-                              setQueueDecided((current) => ({ ...current, [ri]: true }))
                             }}
                           />
                         )}
@@ -6074,9 +6134,10 @@ export function ImportModal({
                 // ordinary manual-link list, and a re-point is the ordinary `matchOverride`.
                 const changeOptions = manualLinkOptions(d)
                 const hasChangeAlternative =
-                  !!resolved &&
-                  changeOptions.some((option) => option.id !== resolved.id && !option.taken)
-                const changeQueueMatch = (id: string) => {
+                  !!resolved && changeOptions.some((option) => option.id !== resolved.id)
+                const changeQueueMatch = (id: string) =>
+                  pickWithRelink(d, id, () => applyQueueMatch(id))
+                const applyQueueMatch = (id: string) => {
                   const summary = checkRowById.get(id)
                   if (!summary || d.rowIndex == null) return
                   if (isManualLinked(d))
@@ -6317,14 +6378,8 @@ export function ImportModal({
                           options={changeOptions.map((o) => ({
                             id: o.id,
                             line: o.line,
-                            taken: o.taken,
                             selected: o.id === resolved.id,
-                            hint:
-                              o.id === resolved.id
-                                ? '• current'
-                                : o.taken
-                                  ? '• matched to another row'
-                                  : undefined,
+                            hint: o.id === resolved.id ? '• current' : o.hint,
                           }))}
                           onPick={changeQueueMatch}
                         />
@@ -7729,9 +7784,11 @@ export function ImportModal({
         open={relinkAsk !== null}
         title="Move this link?"
         body={
-          relinkAsk
-            ? `${relinkAsk.row} is linked to ${relinkAsk.from}. Link it to ${relinkAsk.to} instead? ${relinkAsk.from} goes back to “In your ledger, not on this statement”.`
-            : ''
+          relinkAsk?.body
+            ? relinkAsk.body
+            : relinkAsk
+              ? `${relinkAsk.row} is linked to ${relinkAsk.from}. Link it to ${relinkAsk.to} instead? ${relinkAsk.from} goes back to “In your ledger, not on this statement”.`
+              : ''
         }
         confirmLabel="Move link"
         onConfirm={() => {
