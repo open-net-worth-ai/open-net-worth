@@ -2350,7 +2350,11 @@ export function ImportModal({
     setReviewMarkState('idle')
     setReviewMarkError('')
     setPendingDelete({})
-    setStep('preview')
+    // Rebuilt, not just re-shown: the undo moved the ledger back, and the old review's links
+    // were judged against the ledger as it was — Confirm then refused a link the screen still
+    // offered (owner, 2026-10-26). Same statement, cached read (free), row choices kept.
+    setStep('processing')
+    void runServerPreview(route, undefined, undefined, undefined, undefined, true)
   }
 
   async function markAllReviewed() {

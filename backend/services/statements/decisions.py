@@ -741,12 +741,17 @@ def _routed_booked_transfers(results: list[RowResult]) -> dict[int, dict]:
     free candidate or none (imports as its own transfer)."""
     per_row: list[tuple[int, list[tuple[int, dict]]]] = []
     pool: list[dict] | None = None
+    # A transfer another row of THIS statement is already booked under is that row's — never a
+    # candidate for a second one. Two same-day, same-amount top-ups otherwise tied, and the
+    # review could offer row 18 the transfer row 16 already holds; Confirm, re-deriving with
+    # the right one, then refused the link the review proposed (owner, 2026-10-26).
+    held = {r.duplicate_of for r in results if r.duplicate and r.duplicate_of}
     for r in results:
         d = r.draft
         if d is None or not d.get("routing_automation_id"):
             continue
         if pool is None:
-            pool = _booked_transfer_pool()
+            pool = [t for t in _booked_transfer_pool() if t.get("id") not in held]
         ranked = _find_booked_transfers(
             d["from_account_id"],
             d["to_account_id"],
