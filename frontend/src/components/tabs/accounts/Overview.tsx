@@ -21,7 +21,7 @@ import {
 } from '../../../ui/icons'
 import type { AccountGroup } from './types'
 import { fCur } from './data'
-import { ReviewStrip } from './ReviewStrip'
+import { ReviewStrip, TxnCount } from './ReviewStrip'
 
 type OverviewMenuIcon = 'payees' | 'categories' | 'import' | 'export' | 'archive' | 'phone'
 
@@ -330,7 +330,7 @@ export function Overview({
             <span className="acct-recon-grow" />
             <span className="acct-recon-group acct-recon-group--review">
               <ReviewStrip count={stats.review} onReview={onReview} onStartReview={onStartReview} />
-              <span className="acct-recon-stat muted">{stats.count} txns</span>
+              <TxnCount count={stats.count} />
             </span>
           </div>
         </div>

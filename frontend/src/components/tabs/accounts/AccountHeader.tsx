@@ -28,7 +28,7 @@ import {
 } from '../../../ui/icons'
 import type { Account } from './types'
 import { fCur } from './data'
-import { ReviewStrip } from './ReviewStrip'
+import { ReviewStrip, TxnCount } from './ReviewStrip'
 import { typeLabel } from './categories'
 import { fDate } from '../../../utils/format'
 import { daysSinceReconcile, isReconcileOverdue } from './reconcileCadence'
@@ -787,7 +787,7 @@ export function AccountHeader({
                     onReview={onReview}
                     onStartReview={onStartReview}
                   />
-                  <span className="acct-recon-stat muted">{stats.count} txns</span>
+                  <TxnCount count={stats.count} />
                 </span>
               </>
             )}
