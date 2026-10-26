@@ -1715,18 +1715,29 @@ export function ImportModal({
       // anchor on the next import of this layout. `acct` (not `accountId`) leads: an
       // override picked on this very call is the anchor the user just chose.
       const chips = [acct, ...extraAcctIds.filter((id) => id !== acct)].filter(Boolean)
-      const res = await onPreview(
-        file,
-        url,
-        acct,
-        mapping,
-        instructions.trim() || undefined,
-        rememberInstr,
-        forceReparse,
-        forceRelearnFlag,
-        chips,
-        token || undefined,
-      )
+      // A reopened statement has no File in this browser — its bytes live with the record, so
+      // a re-read (the review's Re-read, the Type switch's refresh) reopens it BY ID. Sending
+      // the upload route an empty file got "provide a file or a source_url" (owner, 2026-10-26).
+      const savedId = !file && !url.trim() ? activeResumeId || preview?.statementId : null
+      const res =
+        savedId && onReopenPreview
+          ? await onReopenPreview(savedId, acct || undefined, {
+              instructions: instructions.trim() || undefined,
+              rememberInstructions: rememberInstr,
+              forceReparse,
+            })
+          : await onPreview(
+              file,
+              url,
+              acct,
+              mapping,
+              instructions.trim() || undefined,
+              rememberInstr,
+              forceReparse,
+              forceRelearnFlag,
+              chips,
+              token || undefined,
+            )
       if (res.attached && res.statementId) {
         // Code review round B, M4: this exact file is already `parsing` on the server's own
         // async pool (someone else's upload, or a retry of this one) — the sync request
