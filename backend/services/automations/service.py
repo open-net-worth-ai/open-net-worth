@@ -105,6 +105,14 @@ def validate_automation(
     }
 
 
+def validate_new_automation(value: object, *, now: datetime | None = None) -> dict:
+    """Everything the create op refuses, with no write — so a draft that cannot be created
+    is refused before anyone is asked to approve it (the confirm gate's pre-stage check)."""
+    clean = validate_automation(value, now=now)
+    _refuse_caller_completed(clean["status"])
+    return clean
+
+
 def _validate_always_allowed(value: object) -> list[dict]:
     if not isinstance(value, list):
         raise ValidationError("automation always_allowed permissions must be a list")
@@ -152,9 +160,8 @@ def apply_automation_change(change: dict) -> dict:
     store = AutomationStore()
     now = now_utc()
     if op == "create":
-        clean = validate_automation(change.get("automation") or change, now=now)
+        clean = validate_new_automation(change.get("automation") or change, now=now)
         clean["trigger"] = pin_price_instrument(clean["trigger"])
-        _refuse_caller_completed(clean["status"])
         clean["trigger_revision"] = new_id("triggerrev")
         clean["next_run_at"] = (
             compute_next_run(clean["trigger"], now, created_at=clean.get("created_at"))

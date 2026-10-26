@@ -29,6 +29,7 @@ import jsonschema
 logger = logging.getLogger(__name__)
 
 Handler = Callable[[dict], Awaitable[Tuple[str, Optional[dict]]]]
+Precheck = Callable[[dict], None]
 
 
 class PreviewAdapter(Protocol):
@@ -47,6 +48,7 @@ class Tool:
     self_stages: bool = False
     connector: Optional[str] = None
     preview_adapter: Optional[PreviewAdapter] = None
+    precheck: Optional[Precheck] = None
 
 
 _REGISTRY: dict[str, Tool] = {}
@@ -72,6 +74,7 @@ def tool(
     self_stages: bool = False,
     connector: Optional[str] = None,
     preview_adapter: Optional[PreviewAdapter] = None,
+    precheck: Optional[Precheck] = None,
 ) -> Callable[[Handler], Handler]:
     """Register an async tool handler under ``name``. Raises on duplicate name.
 
@@ -123,6 +126,13 @@ def tool(
     unconfigured — e.g. Yodlee, ADR ``2026-08-14-hide-yodlee-enterprise-only-pricing``) IS
     hard-refused at dispatch, below, before its handler ever runs — on top of, not instead of,
     the ``effective_level`` permission check every tool gets.
+
+    ``precheck`` runs the handler's own cheap refusals (a semantic check the type-only schema
+    validation below cannot express — an Automation trigger's shape) on the raw arguments and
+    RAISES on a call the handler would refuse. ``ai.tools._confirm_gate.stage_generic`` calls
+    it before staging, so a call guaranteed to fail returns its error to the model at once
+    instead of drawing an approval card first (demo incident 2026-10-26). It never writes and
+    never rewrites the arguments: what is staged is still exactly what the model sent.
     """
 
     def deco(fn: Handler) -> Handler:
@@ -146,6 +156,7 @@ def tool(
             self_stages,
             connector,
             preview_adapter,
+            precheck,
         )
         _validator_for.cache_clear()  # a name queried before registration cached a None
         return fn
@@ -156,6 +167,11 @@ def tool(
 def tool_preview_adapter(name: str) -> Optional[PreviewAdapter]:
     tool = _REGISTRY.get(name)
     return tool.preview_adapter if tool else None
+
+
+def tool_precheck(name: str) -> Optional[Precheck]:
+    tool = _REGISTRY.get(name)
+    return tool.precheck if tool else None
 
 
 def should_preview_write() -> bool:

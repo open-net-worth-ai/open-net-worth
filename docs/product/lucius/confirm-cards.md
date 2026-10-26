@@ -49,6 +49,8 @@ On a wide card, **Allow once** and **Always allow** are two buttons side by side
 When Lucius wants to run a piece of code, **Reject** takes the place of **Deny**.
 
 After you answer, the card shows **✓ Approved** (or **✓ Approved • always**) or **✗ Denied**.
+If the approved action ran but failed, the card turns red and says so: **✗ Approved, but it
+failed:** followed by the reason. Lucius sees the same error and usually tries again.
 
 Inside an [Automation](automations.md) run, **Always allow** adds the tool to that Automation's
 own **Always allowed** list rather than changing it everywhere.
@@ -75,6 +77,10 @@ On Telegram and other chat channels, cards come with buttons too.
   through. The reply shows what changed instead.
 - **Always allow.** You (or an earlier **Always allow** tap) told this tool not to ask.
 - **A read.** Looking things up — balances, transactions, reports — never needs approval.
+- **The change couldn't have run.** Some changes, such as creating an Automation, are checked
+  before the card appears. If one would fail anyway (say, its schedule is incomplete), Lucius
+  gets the error straight away and corrects it, so you aren't asked to approve something that
+  can't work.
 
 Every change can still be undone with the **Restore** button on the reply — see
 [Undoing a change](permissions.md#undoing-a-change).
