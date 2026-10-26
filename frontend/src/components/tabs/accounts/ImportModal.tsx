@@ -867,6 +867,7 @@ export interface ImportModalProps {
     duplicates: number
     skipped: number
     batchId?: string | null
+    linkedNeedsReview?: number
     deleted?: number
     deleteErrors?: Array<{ id: string; error: string }>
     refusedDuplicates?: Array<{
@@ -1074,6 +1075,7 @@ export function ImportModal({
     accounts: number
     transfers?: number
     batchId?: string | null
+    linkedNeedsReview?: number
     deleted?: number
     leftOut?: number
     unreadable?: number
@@ -2227,6 +2229,7 @@ export function ImportModal({
         skipped?: number
         transfers?: number
         batchId?: string | null
+        linkedNeedsReview?: number
         deleted?: number
         deleteErrors?: Array<{ id: string; error: string }>
         refusedDuplicates?: Array<{
@@ -2266,6 +2269,7 @@ export function ImportModal({
         accounts: Math.max(1, acctsTouched),
         transfers: out.transfers ?? 0,
         batchId: out.batchId ?? null,
+        linkedNeedsReview: out.linkedNeedsReview ?? 0,
         deleted: out.deleted ?? 0,
         // What the review's footer said ("leave out 4"), not the server's skip total — that
         // also counts rows the reader dropped from the file (owner, 2026-10-26: "21 left out by

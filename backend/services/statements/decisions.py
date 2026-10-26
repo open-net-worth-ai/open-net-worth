@@ -2097,6 +2097,14 @@ def _transfer_draft(
     }
 
 
+def _still_flagged(txn_ids) -> int:
+    """How many linked entries still wait for review — a link confirms the entry exists, not
+    its category or payee, so the flag stays and the Booked screen counts it (owner,
+    2026-10-26: 23 to review in the register, "6" on the Booked screen)."""
+    rows = (ledger_service.transactions.find_by_id(i) for i in txn_ids)
+    return sum(1 for t in rows if t and t.get("needs_review") and not t.get("deleted"))
+
+
 def decision_commit(
     statement_id: str,
     account_id: str | None,
@@ -2907,6 +2915,7 @@ def _apply_rows(
     return {
         "created": len(created_rows),
         "merged": merged,
+        "linked_needs_review": _still_flagged(snap["txn_id"] for snap in merge_snapshots),
         "duplicates": duplicates,
         "skipped": skipped,
         "transfers": transfers,

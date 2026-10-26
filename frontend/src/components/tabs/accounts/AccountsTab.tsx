@@ -1713,6 +1713,7 @@ export function AccountsTab({
     return {
       ...out,
       batchId: out.batch_id ?? null,
+      linkedNeedsReview: out.linked_needs_review ?? 0,
       deleteErrors: out.delete_errors ?? [],
       refusedDuplicates: out.refused_duplicates ?? [],
     } as {
@@ -1722,6 +1723,7 @@ export function AccountsTab({
       skipped: number
       transfers?: number
       batchId?: string | null
+      linkedNeedsReview?: number
       deleted?: number
       deleteErrors?: Array<{ id: string; error: string }>
       refusedDuplicates?: Array<{
@@ -1741,6 +1743,7 @@ export function AccountsTab({
     if (!res.ok) throw new Error(await res.text())
     const out = await res.json()
     L.refreshTxns()
+    emitDataChanged(['*'])
     return out as { updated: number }
   }
 

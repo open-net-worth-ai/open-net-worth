@@ -47,7 +47,7 @@ describe('BookedScreen', () => {
     expect(
       Array.from(document.querySelectorAll('.imp3-booked-stat')).map((n) => n.textContent),
     ).toEqual(['21added3 as transfers', '37linkedto entries you had', '2left outby you'])
-    expect(screen.getByText('21 new rows are marked to review in the register')).toBeTruthy()
+    expect(screen.getByText('21 new rows need review in the register')).toBeTruthy()
   })
 
   it('asks before undoing, and Keep it changes nothing', () => {

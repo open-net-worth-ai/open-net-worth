@@ -3412,15 +3412,19 @@ def approve_transactions(ids: list[str]) -> dict:
 
 
 def mark_batch_reviewed(batch_id: str) -> dict:
-    """Approve every still-flagged, non-deleted transaction booked in this import batch via
-    ``approve_transactions``. A merged/linked row was never tagged with this ``batch_id`` (only a
-    newly CREATED row carries it) and an already-reviewed row is filtered out up front, so this
-    is always safe to re-run — it only ever narrows, never re-flags. Raises ``NotFoundError`` on
-    an unknown batch id. Returns ``{updated: int}``."""
-    if import_batches.find_by_id(batch_id) is None:
+    """Approve every still-flagged, non-deleted transaction this import booked OR linked, via
+    ``approve_transactions``. A linked entry never carries the ``batch_id`` (only a newly
+    CREATED row does) — it is found through the batch's merge snapshots, so the Booked screen's
+    "Mark all reviewed" clears what it counted. An already-reviewed row is filtered out up
+    front, so this is always safe to re-run — it only ever narrows, never re-flags. Raises
+    ``NotFoundError`` on an unknown batch id. Returns ``{updated: int}``."""
+    batch = import_batches.find_by_id(batch_id)
+    if batch is None:
         raise NotFoundError(f"Import batch {batch_id!r} not found")
     txns = transactions.query_by_batch(batch_id, include_deleted=False)
-    ids = [t["id"] for t in txns if t.get("needs_review")]
+    linked = (transactions.find_by_id(m.get("txn_id")) for m in batch.get("merges") or [])
+    txns += [t for t in linked if t and not t.get("deleted")]
+    ids = list(dict.fromkeys(t["id"] for t in txns if t.get("needs_review")))
     if not ids:
         return {"updated": 0}
     return {"updated": approve_transactions(ids)["count"]}

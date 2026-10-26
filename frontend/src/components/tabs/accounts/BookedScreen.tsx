@@ -9,6 +9,8 @@ export interface BookedResult {
   accounts: number
   transfers?: number
   batchId?: string | null
+  /** Linked entries that were already waiting for review — a link doesn't clear the flag. */
+  linkedNeedsReview?: number
   deleted?: number
   /** Rows the user (or a default) left out in the review — the "leave out N" it showed. */
   leftOut?: number
@@ -53,6 +55,11 @@ export function BookedScreen(p: BookedScreenProps) {
   const linked = r.merged ?? 0
   const transfers = r.transfers ?? 0
   const batchId = r.batchId
+  const linkedToReview = r.linkedNeedsReview ?? 0
+  const toReview = [
+    r.created > 0 ? plural(r.created, 'new row') : '',
+    linkedToReview > 0 ? plural(linkedToReview, 'linked entry', 'linked entries') : '',
+  ].filter(Boolean)
 
   async function runUndo() {
     if (!batchId || !p.onUndo) return
@@ -122,17 +129,15 @@ export function BookedScreen(p: BookedScreenProps) {
             {p.deleteErrors.map((e) => e.error).join('; ')}
           </WarnLine>
         )}
-        {r.created > 0 && batchId && p.onMarkAllReviewed && (
+        {toReview.length > 0 && batchId && p.onMarkAllReviewed && (
           <div className="imp3-booked-line review">
             {p.reviewMarkState === 'done' ? (
-              <span className="imp3-booked-good">
-                ✓ All {plural(r.created, 'new row')} marked reviewed
-              </span>
+              <span className="imp3-booked-good">✓ {toReview.join(' and ')} marked reviewed</span>
             ) : (
               <>
                 <span>
-                  {plural(r.created, 'new row')} {r.created === 1 ? 'is' : 'are'} marked to review
-                  in the register
+                  {toReview.join(' and ')} {r.created + linkedToReview === 1 ? 'needs' : 'need'}{' '}
+                  review in the register
                 </span>
                 <button
                   type="button"
