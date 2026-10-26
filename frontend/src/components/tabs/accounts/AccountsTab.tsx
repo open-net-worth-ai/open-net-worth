@@ -56,6 +56,7 @@ import { Filters, ActiveChips } from './SearchFilter'
 import type { FilterState, FilterToken } from './SearchFilter'
 import { useTransactionSurfaces } from './transactionSurfacesContext'
 import { useDataVersion } from '../../../hooks/useDataVersion'
+import { emitDataChanged } from '../../../lucius/bus'
 import { fetchCachedQuery, useQueryCache } from '../../../state/queryCache'
 import AccountModal from './AccountModal'
 import type { InstitutionOption } from './ds'
@@ -1702,6 +1703,10 @@ export function AccountsTab({
     // makes the reload actually hit the server. Awaited so the Done screen's counts and the
     // refreshed register can never disagree.
     await L.refresh()
+    // A REST write is not broadcast (ADR 2026-09-29), so only THIS ledger hook reloaded — the
+    // Transactions register, Budget and Dashboard kept pre-import rows until a page reload
+    // (owner, 2026-10-26). One import moves every screen, so tell every screen.
+    emitDataChanged(['*'])
     // refusedDuplicates: rows the LEDGER refused because they duplicate something already
     // booked. Same contract as deleteErrors — the user asked for these and did not get them,
     // so the Done screen names them rather than letting "import 4" quietly become "3 imported".
@@ -1751,6 +1756,7 @@ export function AccountsTab({
     }
     const out = await res.json()
     await L.refresh()
+    emitDataChanged(['*'])
     return { deleted: out.deleted ?? 0, unmerged: out.unmerged ?? 0, restored: out.restored ?? 0 }
   }
 
