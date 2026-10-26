@@ -22,6 +22,10 @@ name. The figure beside **All accounts** is only your accounts added together, d
 leaves out what you own on [Assets](assets.md), so it can differ from net worth, even go
 negative while net worth is positive.
 
+With the sidebar collapsed, rest the pointer on the **»** button beside the page title to float
+the sidebar over the page: pick an account and it closes again, still collapsed. Its **»** corner
+button keeps it open instead.
+
 On a narrow window (a laptop, or Lucius open beside the register) the register first squeezes its
 columns. If even that is too wide, it scrolls sideways — every column you chose is still there,
 **Memo** and **Source** included — and the **Amount** column stays pinned at the right edge, so

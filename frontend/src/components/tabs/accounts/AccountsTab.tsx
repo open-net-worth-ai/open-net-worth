@@ -27,6 +27,7 @@ import { ErrorState, Modal, ConfirmDialog, TabSkeleton } from '../../ui'
 import type { ConfirmDialogData } from '../../ui'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { usePointerResize } from '../../../hooks/usePointerResize'
+import { useSidebarPeek } from '../../../hooks/useSidebarPeek'
 import { localIso, fDate } from '../../../utils/format'
 import './accounts.css'
 
@@ -528,9 +529,21 @@ export function AccountsTab({
       sidebarResize.current = null
     },
   })
+  // Hover on "Show accounts" floats the rail over the page without re-docking it — the Lucius
+  // chat-history peek's twin, carrying its fixes: a close grace for the dead zone between button
+  // and panel (useSidebarPeek), and a cooldown so a cursor still resting where the collapse
+  // click landed can't fire a stale enter.
+  const peek = useSidebarPeek(!isMobile && collapsed)
+  const collapsedAtRef = useRef(0)
+  const peekEnter = () => {
+    if (Date.now() - collapsedAtRef.current < 400) return
+    peek.enter()
+  }
   const pinCollapse = (v: boolean) => {
     railPinned.current = true
     localStorage.setItem('acctSidePinned', '1')
+    if (v) collapsedAtRef.current = Date.now()
+    peek.close()
     setCollapsed(v)
   }
   const railCollapsed = isMobile || collapsed
@@ -1950,6 +1963,37 @@ export function AccountsTab({
             onManagePayees={() => setShowPayees(true)}
           />
         )}
+        {peek.open && (
+          <div
+            className="acct-side-peek"
+            style={{ width: sideW }}
+            onMouseEnter={peek.enter}
+            onMouseLeave={peek.leave}
+          >
+            <Sidebar
+              accounts={accounts}
+              groups={L.groups}
+              totals={totals}
+              selectedId={selectedId}
+              netWorth={L.netWorth}
+              peek
+              collapsed={false}
+              onToggleCollapse={() => pinCollapse(false)}
+              onSelect={(id) => {
+                peek.close()
+                selectAccount(id)
+              }}
+              onAdd={() => {
+                peek.close()
+                setAcctModal({ open: true, mode: 'add', account: null })
+              }}
+              onManagePayees={() => {
+                peek.close()
+                setShowPayees(true)
+              }}
+            />
+          </div>
+        )}
 
         <main
           ref={mainRef}
@@ -1987,6 +2031,8 @@ export function AccountsTab({
                     setMenuOpen={setMenuOpen}
                     collapsed={railCollapsed}
                     onReopen={openAccountNavigator}
+                    onReopenHover={peekEnter}
+                    onReopenLeave={peek.leave}
                     onAddTxn={handleAddTxn}
                     onEdit={() => {
                       setMenuOpen(false)
@@ -2040,6 +2086,8 @@ export function AccountsTab({
                   baseCurrency={baseCurrency}
                   collapsed={railCollapsed}
                   onReopen={openAccountNavigator}
+                  onReopenHover={peekEnter}
+                  onReopenLeave={peek.leave}
                   onAddTxn={handleAddTxn}
                   onAdd={() => setAcctModal({ open: true, mode: 'add', account: null })}
                   onManagePayees={() => setShowPayees(true)}

@@ -74,6 +74,9 @@ export interface SidebarProps {
   selectedId: string | null
   netWorth: number
   sheet?: boolean
+  /** Rendered as the floating hover peek over a collapsed rail: no resize handle, and the
+   *  corner button pins the rail open instead of collapsing it. */
+  peek?: boolean
   collapsed: boolean
   onToggleCollapse?: () => void
   onPointerDown?: PointerEventHandler<HTMLDivElement>
@@ -154,6 +157,7 @@ export function Sidebar({
   selectedId,
   netWorth,
   sheet = false,
+  peek = false,
   collapsed,
   onToggleCollapse,
   onPointerDown,
@@ -187,18 +191,29 @@ export function Sidebar({
 
   return (
     <aside
-      className={'acct-side' + (sheet ? ' is-sheet' : '') + (collapsed ? ' is-collapsed' : '')}
+      className={
+        'acct-side' +
+        (sheet ? ' is-sheet' : '') +
+        (peek ? ' is-peek' : '') +
+        (collapsed ? ' is-collapsed' : '')
+      }
     >
       {!sheet && (
         <>
-          <div className="acct-side-resize" onPointerDown={onPointerDown} title="Drag to resize" />
+          {!peek && (
+            <div
+              className="acct-side-resize"
+              onPointerDown={onPointerDown}
+              title="Drag to resize"
+            />
+          )}
           <button
             className="acct-side-collapse"
             onClick={onToggleCollapse}
-            title="Collapse panel"
-            aria-label="Collapse panel"
+            title={peek ? 'Keep accounts open' : 'Collapse panel'}
+            aria-label={peek ? 'Keep accounts open' : 'Collapse panel'}
           >
-            <IconChevrons dir="left" />
+            <IconChevrons dir={peek ? 'right' : 'left'} />
           </button>
         </>
       )}

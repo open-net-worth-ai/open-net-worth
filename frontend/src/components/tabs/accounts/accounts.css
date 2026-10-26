@@ -1194,7 +1194,22 @@ body.hide-amounts .mask.l::after {
   }
 }
 .acct-shell {
+  position: relative;
   transition: grid-template-columns 0.16s ease;
+}
+/* Hover peek over a collapsed rail (AccountsTab): the real Sidebar floated over the page, out
+   of the grid, so the register never reflows while it shows. Above the sticky header layers. */
+.acct-side-peek {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  display: flex;
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.18);
+}
+.acct-side-peek > .acct-side {
+  flex: 1;
 }
 .acct-side.is-collapsed {
   pointer-events: none;

@@ -306,6 +306,9 @@ export interface AccountHeaderProps {
   setMenuOpen: (open: boolean | ((prev: boolean) => boolean)) => void
   collapsed: boolean
   onReopen: () => void
+  /** Hover on the reopen button floats the accounts rail (AccountsTab's peek). */
+  onReopenHover?: () => void
+  onReopenLeave?: () => void
   onAddTxn: () => void
   onEdit: () => void
   onArchive: () => void
@@ -335,6 +338,8 @@ export function AccountHeader({
   setMenuOpen,
   collapsed,
   onReopen,
+  onReopenHover,
+  onReopenLeave,
   onEdit,
   onArchive,
   onDelete,
@@ -379,7 +384,13 @@ export function AccountHeader({
       <div className="acct-head">
         <div className="acct-head-l">
           {collapsed && (
-            <button className="acct-reopen" onClick={onReopen} title="Show accounts">
+            <button
+              className="acct-reopen"
+              onClick={onReopen}
+              onMouseEnter={onReopenHover}
+              onMouseLeave={onReopenLeave}
+              title="Show accounts"
+            >
               <ChevronRight size={16} strokeWidth={1.75} aria-hidden="true" />
             </button>
           )}

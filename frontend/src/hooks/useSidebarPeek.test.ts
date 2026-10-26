@@ -47,4 +47,14 @@ describe('useSidebarPeek', () => {
     rerender({ on: true })
     expect(result.current.open).toBe(false)
   })
+
+  it('does not reopen by itself when the rail is re-docked and collapsed again', () => {
+    const { result, rerender } = renderHook(({ on }) => useSidebarPeek(on), {
+      initialProps: { on: true },
+    })
+    act(() => result.current.enter())
+    rerender({ on: false })
+    rerender({ on: true })
+    expect(result.current.open).toBe(false)
+  })
 })
