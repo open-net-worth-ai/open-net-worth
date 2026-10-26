@@ -1,17 +1,17 @@
 """Posts a release's "what's new" to a Discord channel, written for users, not as a commit list.
 
 Reads the release's notes (the Markdown `release_notes.py` writes: `## New` / `## Fixes` /
-`## Polish`) and posts one Discord embed; a release with none of the three posts nothing. Claude
-turns the new features and the fixes users would notice into a few plain-language bullets; if that
-fails for any reason (no key, no SDK, an error, a refusal, an answer that isn't bullets) the first
-New, then Fixes, lines are used as they are, so the post never depends on the model. A closing
-line counts every fix and polish change and names the areas most of them touched.
+`## Polish`, and on top the `## Highlights` Claude wrote for it) and posts one Discord embed; a
+release with no New, Fixes or Polish posts nothing. The bullets are the release's Highlights, so
+the post and the release page say the same thing; notes without Highlights (the model was
+unavailable) use their first New, then Fixes, lines as they are. A closing line counts every fix
+and polish change and names the areas most of them touched.
 
     python3 scripts/release_announce.py --version 0.1.31 \
         --release-url https://github.com/<org>/<repo>/releases/tag/v0.1.31 notes.md
 
 `DISCORD_WEBHOOK_URL` is the channel's webhook; without it (or with `--dry-run`) the payload is
-printed instead of sent. `ANTHROPIC_API_KEY` enables the summary. Standalone on purpose: the
+printed instead of sent. Standalone on purpose: the
 releases repo fetches this one file at the source commit, like `release_notes.py`.
 """
 
@@ -21,29 +21,16 @@ import argparse
 import json
 import os
 import re
-import sys
 import urllib.request
 from collections import Counter
 from pathlib import Path
 
 DOWNLOAD_URL = "https://opennetworth.ai/download"
-MODEL = "claude-sonnet-5-5"
 MAX_BULLETS = 6
 EMBED_COLOR = 0x2F6F4F
 _SECTION = re.compile(r"^##\s+(?P<title>.+?)\s*$")
 _SCOPE = re.compile(r"^\*\*(?P<area>[^*]+):\*\*\s*")
 SECTIONS = ("New", "Fixes", "Polish")
-
-SYSTEM = (
-    "You write the release announcement for Open Net Worth, a self-hosted personal finance app "
-    "(ledger, budgeting, investments, an AI assistant called Lucius). Readers are its users in a "
-    "Discord community, not its developers. Given the release's changes, write 1 to "
-    f"{MAX_BULLETS} bullets: first what a user can now do, then the fixes a user would most "
-    "notice, each said as what now works. Most valuable first. Merge items "
-    "that are parts of one change; leave out items that only matter to the project's developers, "
-    "its public demo or its build. Plain words, no internal names, no hype, no emoji, under 15 "
-    "words each. Reply with only the bullets, one per line, each starting with '- '."
-)
 
 
 def parse_sections(notes: str) -> dict[str, list[str]]:
@@ -63,54 +50,11 @@ def plain(item: str) -> str:
     return _SCOPE.sub("", item).strip()
 
 
-def fallback_bullets(sections: dict[str, list[str]]) -> list[str]:
+def bullets_for(sections: dict[str, list[str]]) -> list[str]:
+    if sections.get("Highlights"):
+        return sections["Highlights"][:MAX_BULLETS]
     items = sections.get("New", []) + sections.get("Fixes", [])
     return [plain(item) for item in items[:MAX_BULLETS]]
-
-
-def _prompt(sections: dict[str, list[str]], version: str) -> str:
-    parts = [f"Version {version}."]
-    for title, label in (("New", "New features"), ("Fixes", "Fixes"), ("Polish", "Polish")):
-        if sections.get(title):
-            parts.append(f"{label}:\n" + "\n".join(f"- {item}" for item in sections[title]))
-    return "\n\n".join(parts)
-
-
-def claude_bullets(sections: dict[str, list[str]], version: str, model: str) -> list[str] | None:
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        return None
-    try:
-        import anthropic
-
-        response = anthropic.Anthropic(max_retries=2, timeout=60.0).beta.messages.create(
-            model=model,
-            max_tokens=2000,
-            system=SYSTEM,
-            output_config={"effort": "low"},
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            messages=[{"role": "user", "content": _prompt(sections, version)}],
-        )
-    except Exception as exc:  # any failure falls back; the announcement must not depend on it
-        print(
-            f"release_announce: summary unavailable ({type(exc).__name__}: {exc})", file=sys.stderr
-        )
-        return None
-    if response.stop_reason != "end_turn":
-        print(f"release_announce: summary stopped with {response.stop_reason}", file=sys.stderr)
-        return None
-    text = "".join(block.text for block in response.content if block.type == "text")
-    return valid_bullets(text)
-
-
-def valid_bullets(text: str) -> list[str] | None:
-    lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
-    if not 1 <= len(lines) <= MAX_BULLETS or not all(line.startswith("- ") for line in lines):
-        return None
-    bullets = [line[2:].strip() for line in lines]
-    if any(not bullet or len(bullet) > 160 for bullet in bullets):
-        return None
-    return bullets
 
 
 def fixes_line(sections: dict[str, list[str]]) -> str:
@@ -171,7 +115,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("notes", type=Path, help="the release's notes (Markdown)")
     parser.add_argument("--version", required=True)
     parser.add_argument("--release-url", required=True)
-    parser.add_argument("--model", default=MODEL)
     parser.add_argument("--dry-run", action="store_true", help="print the payload, send nothing")
     args = parser.parse_args(argv)
 
@@ -179,8 +122,7 @@ def main(argv: list[str] | None = None) -> int:
     if not any(sections.get(title) for title in SECTIONS):
         print(f"release_announce: {args.version} has no user-facing changes; not announcing")
         return 0
-    bullets = claude_bullets(sections, args.version, args.model) or fallback_bullets(sections)
-    payload = build_payload(args.version, args.release_url, bullets, sections)
+    payload = build_payload(args.version, args.release_url, bullets_for(sections), sections)
 
     webhook = os.environ.get("DISCORD_WEBHOOK_URL", "")
     if args.dry_run or not webhook:
