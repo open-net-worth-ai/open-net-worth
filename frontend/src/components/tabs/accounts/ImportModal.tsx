@@ -2748,7 +2748,11 @@ export function ImportModal({
   const canManualLinkRow = (d: ImportPreviewDraft, i: number): boolean =>
     // What counts is the row's CURRENT decision, not what the engine first proposed (owner,
     // 2026-10-26): any row not set to Link is unclaimed and may link to an entry the user picks.
-    (!resolveExisting(d) || actionFor(d, i) !== 'merge') && linkableShape(d, i)
+    (!resolveExisting(d) || actionFor(d, i) !== 'merge') && linkableShape(d, i) && !eyesBlocked(d)
+  /** A row whose amount the statement's own running balance doesn't confirm can't be linked
+   *  until it's fixed: a link writes the statement's figure onto the ledger entry. */
+  const eyesBlocked = (d: ImportPreviewDraft): boolean =>
+    !!d.needsEyes && !(d.rowIndex != null && queueAmountCorrected[d.rowIndex])
   /** A row whose kind can take a link at all — whatever it is linked to right now. */
   const linkableShape = (d: ImportPreviewDraft, i: number): boolean =>
     d.rowIndex != null &&
@@ -2756,7 +2760,6 @@ export function ImportModal({
     !d.pair &&
     !d.routed &&
     !luciusSettlesTheRow(d) &&
-    !d.needsEyes &&
     !isUnrouted(d, i) &&
     !isAbsorbedLeg(d, i)
   /** Outcome/link line (band-agnostic — one function for all three bands whenever the
@@ -4148,8 +4151,14 @@ export function ImportModal({
                     line:
                       `${d.date.slice(5)} • ${rowTitle(d)} • ${fCur(d.amount, d.currency, { cents: true })}` +
                       (original ? ` (${original})` : ''),
-                    taken: false,
-                    hint: holds ? `• linked to ${holds}` : undefined,
+                    // Listed, not hidden, so it's clear why it can't be picked yet (owner,
+                    // 2026-10-26: "why don't I see the 4,000 in the list?").
+                    taken: eyesBlocked(d),
+                    hint: eyesBlocked(d)
+                      ? '• amount unconfirmed — fix it first'
+                      : holds
+                        ? `• linked to ${holds}`
+                        : undefined,
                     holds,
                     title: `${rowTitle(d)} (${fCur(d.amount, d.currency, { cents: true })})`,
                   }
