@@ -77,18 +77,25 @@ describe('Overview — the balance card totals cash accounts only, never the who
     expect(screen.queryByText('-S$358,116.24')).toBeNull()
   })
 
-  it('labels the terms a user might not recognize, with an explanation for each', () => {
+  it('labels the terms a user might not recognize, with one explanation of all three', () => {
     const { container } = renderOverview({ cleared: 25000, uncleared: -500, total: 24500 })
 
     expect(balanceLabels(container)).toEqual(['Cleared', 'Uncleared', 'Cash on hand'])
-    // One info-popover trigger per labeled term (Cleared, Uncleared, Cash on hand).
-    expect(screen.getAllByLabelText('More information')).toHaveLength(3)
+    // One "i", beside the title — not one under each 16px label (owner, 2026-10-26).
+    const info = screen.getByRole('button', { name: 'What these figures mean' })
+    expect(container.querySelector('.acct-bal-k')?.contains(info)).toBe(true)
+    expect(container.querySelector('.acct-bal-lbl .info-pop-btn')).toBeNull()
+    fireEvent.click(info)
+    const tip = screen.getByRole('tooltip').textContent ?? ''
+    expect(tip).toContain('Cleared')
+    expect(tip).toContain('Uncleared')
+    expect(tip).toContain('Cash on hand')
   })
 
   it('no longer mentions "Working balance" or the unscoped "Balance" heading', () => {
     const { container } = renderOverview({ cleared: 0, uncleared: 0, total: 0 })
     expect(balanceLabels(container)).not.toContain('Working balance')
-    expect(container.querySelector('.acct-bal-k')?.textContent).toBe('Cash')
+    expect(container.querySelector('.acct-bal-k')?.childNodes[0]?.textContent?.trim()).toBe('Cash')
   })
 
   it('offers archived accounts from the page actions menu', () => {

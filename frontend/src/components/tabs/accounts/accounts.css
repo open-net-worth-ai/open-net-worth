@@ -2106,11 +2106,24 @@ body.hide-amounts .mask.l::after {
   min-width: 260px;
 }
 .acct-bal-k {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--faint);
   font-weight: 700;
+}
+/* The title's one "i": a line per figure. */
+.acct-bal-terms {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.acct-bal-terms b {
+  color: var(--ink);
+  font-weight: 600;
 }
 .acct-bal-v {
   font-size: 22px;

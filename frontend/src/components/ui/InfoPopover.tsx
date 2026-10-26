@@ -12,14 +12,17 @@ interface Place {
 }
 
 export interface InfoPopoverProps {
-  text: string
+  /** The bubble's content — usually a sentence; a short list where one "i" explains several
+   *  figures. */
+  text: ReactNode
   /** Pixel width of the bubble. Default 250. */
   width?: number
   /** A custom trigger in place of the circled "i" — e.g. a flag chip that explains itself. */
   children?: ReactNode
   /** Classes for a custom trigger (it keeps its own look; the button skin is reset). */
   triggerClassName?: string
-  /** Accessible name for a custom trigger whose visible content doesn't say enough. */
+  /** Accessible name for the trigger — a custom one whose visible content doesn't say enough, or
+   *  the "i" when "More information" is too vague. */
   label?: string
 }
 
@@ -130,7 +133,7 @@ export function InfoPopover({
             e.currentTarget.blur()
           }
         }}
-        aria-label={children != null ? label : 'More information'}
+        aria-label={label ?? (children != null ? undefined : 'More information')}
         aria-expanded={open}
         aria-controls={bubbleId}
       >

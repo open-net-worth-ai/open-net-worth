@@ -7,7 +7,8 @@
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Button, InfoPopover } from '../../ui'
+import { Button } from '../../ui'
+import { BalanceTermsInfo } from './BalanceTermsInfo'
 import {
   ChevronsRight,
   Download,
@@ -282,15 +283,19 @@ export function Overview({
           doc comment for why credit cards, loans and investments are deliberately excluded. */}
       <div className="acct-bal">
         <div className="acct-bal-card">
-          <div className="acct-bal-k">Cash</div>
+          <div className="acct-bal-k">
+            Cash
+            <BalanceTermsInfo
+              total="Cash on hand"
+              meaning="the two together, across your bank and e-wallet accounts."
+            />
+          </div>
           <div className="acct-bal-breakdown">
             <div className="acct-bal-part">
               <div className={'acct-bal-fig mask' + (cashBalance.cleared > 0 ? ' pos' : '')}>
                 {fCur(cashBalance.cleared, baseCurrency, { cents: true })}
               </div>
-              <div className="acct-bal-lbl">
-                Cleared <InfoPopover text="Posted — finalized; the amount won't change." />
-              </div>
+              <div className="acct-bal-lbl">Cleared</div>
             </div>
             <div className="acct-bal-grp">
               <span className="acct-bal-op">+</span>
@@ -306,8 +311,7 @@ export function Overview({
                     title="Show uncleared transactions"
                   >
                     Uncleared
-                  </button>{' '}
-                  <InfoPopover text="Pending — a temporary hold; the amount can still change." />
+                  </button>
                 </div>
               </div>
             </div>
@@ -317,10 +321,7 @@ export function Overview({
                 <div className={'acct-bal-fig work mask' + (cashOnHand > 0 ? ' pos' : '')}>
                   {fCur(cashOnHand, baseCurrency, { cents: true })}
                 </div>
-                <div className="acct-bal-lbl">
-                  Cash on hand{' '}
-                  <InfoPopover width={260} text="Bank and e-wallet accounts, cleared + uncleared" />
-                </div>
+                <div className="acct-bal-lbl">Cash on hand</div>
               </div>
             </div>
           </div>
