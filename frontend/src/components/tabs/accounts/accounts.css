@@ -1850,27 +1850,8 @@ body.hide-amounts .mask.l::after {
   .acct-head-collapsible {
     display: none;
   }
-  .acct-head-reconcile {
-    display: none;
-  }
   .acct-menu-collapsible {
     display: flex;
-  }
-  .acct-pop-wrap--menu {
-    display: block;
-  }
-  .acct-pop-wrap--menu .acct-pop {
-    top: 0;
-    right: calc(100% + 8px);
-  }
-}
-@media (max-width: 640px) {
-  .acct-pop-wrap--menu .acct-pop {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    bottom: auto;
-    left: auto;
   }
 }
 /* ── overview cards ───────────────────────────────────────────────────────── */
@@ -2352,6 +2333,24 @@ body.hide-amounts .mask.l::after {
   background: none;
   font-weight: 600;
 }
+.acct-recon-action.as-btn {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 4px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--primary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .acct-recon-action.as-btn:hover {
+    color: var(--ink);
+  }
+}
 .acct-recon-count {
   padding-left: 0;
   color: var(--warn);
@@ -2429,9 +2428,30 @@ body.hide-amounts .mask.l::after {
 .acct-bal-tile .v.neg {
   color: var(--bad);
 }
-/* inline reconcile popover */
+/* inline reconcile popover — its trigger sits on the reconcile line, left of centre, so the
+   card opens below it and grows to the right (anchored right it would hang off the card's left
+   edge into the sidebar). */
 .acct-pop-wrap {
   position: relative;
+}
+.acct-pop-wrap--line .acct-pop {
+  top: calc(100% + 6px);
+  right: auto;
+  left: 0;
+}
+/* A narrow column puts the trigger near the card's right edge, where a left-anchored card would
+   run off screen: hang it from the line's right edge instead. */
+@container acctmain (max-width: 600px) {
+  .acct-recon-line {
+    position: relative;
+  }
+  .acct-pop-wrap--line {
+    position: static;
+  }
+  .acct-pop-wrap--line .acct-pop {
+    left: auto;
+    right: 0;
+  }
 }
 .acct-pop {
   position: absolute;

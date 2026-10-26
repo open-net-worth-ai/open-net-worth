@@ -80,39 +80,20 @@ describe('Reconcile popover', () => {
     expect(screen.getByText('In sync')).toBeTruthy()
   })
 
-  // QA 2026-10-25: reconciling from the ⋯ menu (the header's only route when the Lucius panel
-  // is open) left the menu standing over the register after the toast, and Escape didn't shut it.
-  it('closes the ⋯ menu once the reconcile from it is done', () => {
-    const setMenuOpen = vi.fn()
-    render(
-      <AccountHeader
-        account={ACCOUNT}
-        dueInfo={null}
-        stats={null}
-        menuOpen
-        setMenuOpen={setMenuOpen}
-        collapsed={false}
-        onReopen={noop}
-        onAddTxn={noop}
-        onEdit={noop}
-        onArchive={noop}
-        onDelete={noop}
-        onManagePayees={noop}
-        onManageCategories={noop}
-        onImport={noop}
-        onExport={noop}
-        onReconcile={vi.fn()}
-        onReview={noop}
-        onStartReview={noop}
-      />,
-    )
-    const menuItem = screen
-      .getAllByText('Reconcile')
-      .find((el) => el.closest('.acct-pop-wrap--menu'))
-    if (!menuItem) throw new Error('menu Reconcile item not rendered')
-    fireEvent.click(menuItem)
-    fireEvent.click(screen.getByText('Yes, it matches'))
-    expect(setMenuOpen).toHaveBeenCalledWith(false)
+  it('sits on the reconcile line beside the status, not in the header actions', () => {
+    renderHeader(vi.fn())
+    const trigger = screen.getByRole('button', { name: 'Reconcile' })
+    expect(trigger.closest('.acct-recon-line')).toBeTruthy()
+    expect(trigger.closest('.acct-head-actions')).toBeNull()
+  })
+
+  it('Escape closes the popover without reconciling', () => {
+    const onReconcile = vi.fn()
+    renderHeader(onReconcile)
+    openReconcile()
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(onReconcile).not.toHaveBeenCalled()
   })
 
   it('Escape closes the ⋯ menu', () => {
@@ -176,7 +157,10 @@ describe('reconcile line — monthly nudge', () => {
 
   it('warns with the age once the last reconcile is over a month old', () => {
     renderWith('2026-08-09')
-    expect(screen.getByText(/78 days ago/)).toBeTruthy()
+    const line = document.querySelector('.acct-recon-line')?.textContent ?? ''
+    // The date stays; the age follows in parentheses — no "·" separator (owner, 2026-10-26).
+    expect(line).toMatch(/Reconciled \S*2026 \(78 days ago\)/)
+    expect(line).not.toContain('·')
   })
 
   it('stays a plain check inside the month', () => {

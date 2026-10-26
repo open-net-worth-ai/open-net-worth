@@ -17,7 +17,6 @@ import {
   ChevronRight,
   Download,
   FileText,
-  ListChecks,
   MoreHorizontal,
   Pencil,
   Tags,
@@ -36,7 +35,6 @@ type MenuIconName =
   | 'payees'
   | 'categories'
   | 'import'
-  | 'reconcile'
   | 'edit'
   | 'statements'
   | 'export'
@@ -52,8 +50,6 @@ function MenuIcon({ name }: { name: MenuIconName }) {
       return <Tags {...common} />
     case 'import':
       return <Upload {...common} />
-    case 'reconcile':
-      return <ListChecks {...common} />
     case 'edit':
       return <Pencil {...common} />
     case 'statements':
@@ -157,18 +153,11 @@ export interface AccountStats {
 interface ReconcilePopoverProps {
   account: Account
   onReconcile: (account: Account, realBalance: number) => void
-  menuTrigger?: boolean
-  /** Finished or dismissed (Escape): the ⋯ menu that hosts it closes too, instead of staying
-   *  open over the register after the reconcile toast. */
-  onDone?: () => void
 }
 
-function ReconcilePopover({
-  account,
-  onReconcile,
-  menuTrigger = false,
-  onDone,
-}: ReconcilePopoverProps) {
+/** Lives on the "Reconciled …" line under the balance — the action beside the status it
+ *  changes, at every width (owner, 2026-10-26), instead of a header button + ⋯ menu entry. */
+function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<'ask' | 'input'>('ask')
   const [val, setVal] = useState('')
@@ -180,7 +169,7 @@ function ReconcilePopover({
       if (ref.current && !ref.current.contains(e.target as Node)) close()
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') finish()
+      if (e.key === 'Escape') close()
     }
     document.addEventListener('mousedown', onDoc)
     document.addEventListener('keydown', onKey)
@@ -195,10 +184,6 @@ function ReconcilePopover({
     setMode('ask')
     setVal('')
   }
-  function finish() {
-    close()
-    onDone?.()
-  }
 
   const real = parseFloat(val)
   const has = !Number.isNaN(real)
@@ -207,25 +192,15 @@ function ReconcilePopover({
   const diff = has ? Math.round((real - account.clearedBalance) * 100) / 100 : 0
 
   return (
-    <div className={`acct-pop-wrap${menuTrigger ? ' acct-pop-wrap--menu' : ''}`} ref={ref}>
-      {menuTrigger ? (
-        <AccountMenuItem
-          icon="reconcile"
-          className="acct-menu-collapsible"
-          onClick={() => (open ? close() : setOpen(true))}
-        >
-          Reconcile
-        </AccountMenuItem>
-      ) : (
-        <Button
-          className="acct-head-reconcile"
-          size="sm"
-          variant="secondary"
-          onClick={() => (open ? close() : setOpen(true))}
-        >
-          Reconcile
-        </Button>
-      )}
+    <div className="acct-pop-wrap acct-pop-wrap--line" ref={ref}>
+      <button
+        type="button"
+        className="acct-recon-action as-btn"
+        aria-expanded={open}
+        onClick={() => (open ? close() : setOpen(true))}
+      >
+        Reconcile
+      </button>
 
       {open && (
         <div className="acct-pop" role="dialog">
@@ -247,7 +222,7 @@ function ReconcilePopover({
                   size="sm"
                   onClick={() => {
                     onReconcile(account, account.clearedBalance)
-                    finish()
+                    close()
                   }}
                 >
                   Yes, it matches
@@ -283,7 +258,7 @@ function ReconcilePopover({
                   disabled={!has}
                   onClick={() => {
                     onReconcile(account, real)
-                    finish()
+                    close()
                   }}
                 >
                   {diff === 0 ? 'Confirm' : 'Add adjustment'}
@@ -439,7 +414,6 @@ export function AccountHeader({
           <Button className="acct-head-collapsible" size="sm" variant="ghost" onClick={onImport}>
             Import
           </Button>
-          <ReconcilePopover account={account} onReconcile={onReconcile} />
           <div className="acct-menu-wrap" ref={menuRef}>
             <button
               className="btn-ghost-icon"
@@ -481,12 +455,6 @@ export function AccountHeader({
                 >
                   Import
                 </AccountMenuItem>
-                <ReconcilePopover
-                  account={account}
-                  onReconcile={onReconcile}
-                  menuTrigger
-                  onDone={() => setMenuOpen(false)}
-                />
                 <div className="acct-menu-collapsible sep" />
                 <AccountMenuItem icon="edit" onClick={onEdit}>
                   Edit account
@@ -782,8 +750,8 @@ export function AccountHeader({
               {account.lastReconciled && isReconcileOverdue(account.lastReconciled) ? (
                 <span title="Reconcile at least once a month, so a gap is still easy to trace.">
                   <span className="warn">○</span> Reconciled{' '}
-                  {fDate(account.lastReconciled, 'numeric')} ·{' '}
-                  {daysSinceReconcile(account.lastReconciled)} days ago
+                  {fDate(account.lastReconciled, 'numeric')} (
+                  {daysSinceReconcile(account.lastReconciled)} days ago)
                 </span>
               ) : account.lastReconciled ? (
                 <>
@@ -796,6 +764,7 @@ export function AccountHeader({
                 </>
               )}
             </span>
+            <ReconcilePopover account={account} onReconcile={onReconcile} />
             {/* Gated on `stats` existing, never on count, so the line doesn't disappear at 0 txns. */}
             {stats && (
               <>
