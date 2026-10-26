@@ -933,6 +933,13 @@
     width: max-content;
     max-width: 100%;
   }
+  /* The reader's own photos sit in the same lane as their text bubble — capped at its 82% and
+     wrapped toward the right. At 100% a batch of six screenshots spanned the panel edge to
+     edge and read as Lucius's content, not the owner's message (owner report, 2026-10-26). */
+  .msg-user .msg-attachments {
+    max-width: 82%;
+    justify-content: flex-end;
+  }
   .msg-attachment-pill {
     max-width: 100%;
     overflow: hidden;
