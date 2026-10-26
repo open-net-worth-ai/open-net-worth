@@ -222,6 +222,7 @@ function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
                 </Button>
                 <Button
                   size="sm"
+                  variant="primary"
                   onClick={() => {
                     onReconcile(account, account.clearedBalance)
                     close()
@@ -257,6 +258,7 @@ function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
                 </Button>
                 <Button
                   size="sm"
+                  variant="primary"
                   disabled={!has}
                   onClick={() => {
                     onReconcile(account, real)
