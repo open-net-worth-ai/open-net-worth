@@ -3120,8 +3120,17 @@ export function ImportModal({
   }
   // A transfer has no category (its cell names the other account), so it never joins one —
   // the Type filter's Transfer finds those.
-  const rowCategoryKey = (d: ImportPreviewDraft, i: number) =>
-    effectiveKind(d, i) === 'transfer' ? null : d.category || UNCATEGORIZED_KEY
+  // Filters by the category the row SHOWS (owner, 2026-10-26: "Shopping" listed a row showing
+  // Dining out) — a Link row keeps and shows its ledger entry's category, a left-out row none.
+  const rowCategoryKey = (d: ImportPreviewDraft, i: number): string | null => {
+    if (effectiveKind(d, i) === 'transfer' || isExcluded(d, i)) return null
+    const resolved = resolveExisting(d)
+    const shown =
+      resolved && actionFor(d, i) === 'merge'
+        ? ((resolved.summary as { category?: string | null }).category ?? null)
+        : d.category
+    return shown || UNCATEGORIZED_KEY
+  }
   const categoryPop: CategoryFilterOption[] = (() => {
     if (!preview) return []
     const counts = new Map<string, number>()
