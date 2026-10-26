@@ -1893,7 +1893,11 @@ def resolve_transaction_row(
                 # was learned from the long bank line — which the note still matches. Minting
                 # a fresh payee from the clean name is the LAST resort (it has no default
                 # category, so a silent mint books Uncategorized — seen live).
-                pid = payee_registry.resolve_payee_id(row.get("payee") or "", create=False)
+                # The NAME is matched by payee name first, then aliases: a payee picked by name in
+                # the import review ("Vietcombank") has no alias equal to its own name, so the
+                # alias-only lookup missed it and the note's alias ("INTEREST PAYMENT") booked a
+                # different payee — the user's pick silently lost (owner, 2026-10-26).
+                pid = payee_registry.resolve_payee_id_by_name(row.get("payee") or "", create=False)
                 if not pid:
                     pid = payee_registry.resolve_payee_id(
                         row.get("description") or "", create=False
