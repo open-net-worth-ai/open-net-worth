@@ -5,7 +5,6 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
-from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location(
@@ -50,12 +49,12 @@ def test_parses_the_sections_release_notes_writes():
 
 def test_fallback_lists_new_then_fixes_without_the_scope_label():
     sections = {"New": ["**Accounts:** Reconcile from the sidebar"], "Fixes": ["Unscoped"]}
-    assert ra.fallback_bullets(sections) == ["Reconcile from the sidebar", "Unscoped"]
+    assert ra.bullets_for(sections) == ["Reconcile from the sidebar", "Unscoped"]
 
 
 def test_fallback_stops_at_the_bullet_limit():
     sections = {"Fixes": [f"Fix {n}" for n in range(ra.MAX_BULLETS + 3)]}
-    assert len(ra.fallback_bullets(sections)) == ra.MAX_BULLETS
+    assert len(ra.bullets_for(sections)) == ra.MAX_BULLETS
 
 
 def test_payload_names_the_version_and_counts_the_rest():
@@ -82,7 +81,6 @@ def test_the_fixes_line_names_the_busiest_areas():
 
 
 def test_a_fixes_only_release_is_announced(tmp_path, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://example.test/hook")
     sent = []
     monkeypatch.setattr(ra, "post", lambda hook, payload: sent.append(payload))
@@ -103,7 +101,6 @@ def test_a_release_with_nothing_user_facing_posts_nothing(tmp_path, monkeypatch,
 
 
 def test_without_a_key_it_posts_the_new_lines_as_they_are(tmp_path, monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://example.test/hook")
     sent = []
     monkeypatch.setattr(ra, "post", lambda hook, payload: sent.append((hook, payload)))
@@ -116,7 +113,6 @@ def test_without_a_key_it_posts_the_new_lines_as_they_are(tmp_path, monkeypatch)
 
 
 def test_dry_run_prints_and_sends_nothing(tmp_path, monkeypatch, capsys):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://example.test/hook")
     monkeypatch.setattr(ra, "post", lambda *_: (_ for _ in ()).throw(AssertionError("posted")))
     args = [str(_write(tmp_path, NOTES)), "--version", "0.1.31", "--release-url", RELEASE_URL]
@@ -124,49 +120,15 @@ def test_dry_run_prints_and_sends_nothing(tmp_path, monkeypatch, capsys):
     assert json.loads(capsys.readouterr().out)["embeds"][0]["title"].endswith("is out")
 
 
-def test_only_a_clean_bullet_list_is_accepted_from_the_model():
-    assert ra.valid_bullets("- Reconcile from the sidebar\n- See cleared balances\n") == [
-        "Reconcile from the sidebar",
-        "See cleared balances",
-    ]
-    assert ra.valid_bullets("Here are the bullets:\n- One") is None
-    assert ra.valid_bullets("") is None
-    assert ra.valid_bullets("\n".join(f"- Item {n}" for n in range(ra.MAX_BULLETS + 1))) is None
+def test_the_release_highlights_are_the_bullets():
+    notes = "## Highlights\n\n- Reconcile from the sidebar\n- Imports link card charges\n\n" + NOTES
+    sections = ra.parse_sections(notes)
+    assert ra.bullets_for(sections) == ["Reconcile from the sidebar", "Imports link card charges"]
 
 
-def _fake_anthropic(monkeypatch, response=None, error=None):
-    def create(**_kwargs):
-        if error:
-            raise error
-        return response
-
-    client = SimpleNamespace(beta=SimpleNamespace(messages=SimpleNamespace(create=create)))
-    module = SimpleNamespace(Anthropic=lambda **_kw: client)
-    monkeypatch.setitem(__import__("sys").modules, "anthropic", module)
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-
-
-def _response(text, stop_reason="end_turn"):
-    return SimpleNamespace(
-        stop_reason=stop_reason, content=[SimpleNamespace(type="text", text=text)]
-    )
-
-
-def test_claude_bullets_are_used_when_the_answer_is_clean(monkeypatch):
-    _fake_anthropic(monkeypatch, _response("- Reconcile from the sidebar"))
-    assert ra.claude_bullets({"New": ["x"]}, "0.1.31", ra.MODEL) == ["Reconcile from the sidebar"]
-
-
-def test_a_refusal_an_error_or_prose_falls_back(monkeypatch):
-    _fake_anthropic(monkeypatch, _response("- fine", stop_reason="refusal"))
-    assert ra.claude_bullets({"New": ["x"]}, "0.1.31", ra.MODEL) is None
-    _fake_anthropic(monkeypatch, error=RuntimeError("boom"))
-    assert ra.claude_bullets({"New": ["x"]}, "0.1.31", ra.MODEL) is None
-    _fake_anthropic(monkeypatch, _response("Sure! This release adds a lot."))
-    assert ra.claude_bullets({"New": ["x"]}, "0.1.31", ra.MODEL) is None
-
-
-def test_the_model_sees_fixes_even_when_nothing_is_new():
-    prompt = ra._prompt({"Fixes": ["**Import:** a fix"]}, "0.1.32")
-    assert "Fixes:\n- **Import:** a fix" in prompt
-    assert "New features" not in prompt
+def test_highlights_alone_are_not_a_reason_to_post(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(ra, "post", lambda *_: (_ for _ in ()).throw(AssertionError("posted")))
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://example.test/hook")
+    notes = _write(tmp_path, "## Highlights\n\n- Something\n")
+    assert ra.main([str(notes), "--version", "0.1.34", "--release-url", RELEASE_URL]) == 0
+    assert "no user-facing changes" in capsys.readouterr().out
