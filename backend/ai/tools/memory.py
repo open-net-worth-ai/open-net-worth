@@ -98,7 +98,9 @@ class RecallMemoryInput(ToolInput):
         "Save a fact to long-term memory so it persists across future conversations. Use when "
         "the user says 'remember that…' or shares something worth recalling that no profile "
         "field, instruction, rule or record already holds. Keep it a concise, self-contained "
-        "statement. " + routing_guide_for_tool()
+        "statement. If it comes back refused as forgotten, the user once asked you to forget "
+        "it: ask them before saving it, and set user_asked only when their latest message "
+        "asks you to remember it. " + routing_guide_for_tool()
     ),
     input_schema=schema_of(RememberFactInput, tool_name="remember_fact"),
     mutates=("memory",),
