@@ -134,7 +134,9 @@ async def sweep_idle_conversations(now: datetime | None = None) -> int:
 
 async def memory_sweep_loop() -> None:
     """Sweep at startup, then every ``MEMORY_SWEEP_SECONDS``; the daily tidy rides the same
-    loop. A no-op pass while "Generate memory from chats" is off."""
+    loop, and so does sorting any legacy facts still unsorted. A no-op pass while "Generate
+    memory from chats" is off."""
+    from backend.ai import memory_sort
     from backend.ai.memory_tidy import tidy
 
     while True:
@@ -142,6 +144,8 @@ async def memory_sweep_loop() -> None:
             if memory_writes_enabled():
                 await sweep_idle_conversations()
                 await tidy()
+                if await asyncio.to_thread(memory_sort.has_unsorted):
+                    await memory_sort.sort_remaining()
         except asyncio.CancelledError:
             raise
         except Exception:

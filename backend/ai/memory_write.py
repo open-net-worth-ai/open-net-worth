@@ -304,7 +304,7 @@ class _Plan:
         if given_expiry or "section" in changes:
             expires, valid = _expiry(
                 section,
-                raw["expires_at"] if given_expiry else current.get("expires_at"),
+                raw["expires_at"] if given_expiry else self._carried_expiry(current, section),
                 self.today,
             )
             if not valid and not given_expiry:
@@ -314,6 +314,18 @@ class _Plan:
                 return False
             changes["expires_at"] = expires
         return True
+
+    @staticmethod
+    def _carried_expiry(current: dict, section: str):
+        """The expiry an update keeps when it names none. The 14-day clock belongs to Open
+        items: a fact filed out of them stops expiring, one filed into them from another
+        section starts the clock. A legacy fact with no section keeps whatever it carried."""
+        was = current.get("section")
+        if was == ms.OPEN_ITEMS and section != ms.OPEN_ITEMS:
+            return None
+        if section == ms.OPEN_ITEMS and was not in (None, ms.OPEN_ITEMS):
+            return None
+        return current.get("expires_at")
 
     def remove(self, fid) -> None:
         if not isinstance(fid, str):

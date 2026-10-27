@@ -348,6 +348,36 @@ def test_an_update_into_open_items_drops_the_topic_and_gets_the_default_expiry()
     assert new["topic"] is None and new["expires_at"] == "2026-11-10"
 
 
+def test_moving_a_fact_out_of_open_items_clears_its_expiry():
+    _write({"new": [_new("Call the bank", section="open_items")]})
+    (fact,) = MemoryStore().all_facts()
+    assert fact["expires_at"] == "2026-11-10"
+
+    _write({"updates": [{"id": fact["id"], "section": "money", "topic": "Housing"}]})
+    moved = MemoryStore().find_by_id(fact["id"])
+    assert (moved["section"], moved["expires_at"]) == ("money", None)
+
+    _write({"new": [_new("Waiting on the agent", section="open_items")]})
+    (other,) = [f for f in MemoryStore().all_facts() if f["section"] == "open_items"]
+    _write(
+        {
+            "updates": [
+                {"id": other["id"], "section": "plans", "topic": "Move", "expires_at": "2026-12-01"}
+            ]
+        }
+    )
+    assert MemoryStore().find_by_id(other["id"])["expires_at"] == "2026-12-01"
+
+
+def test_moving_a_fact_into_open_items_without_an_expiry_gets_the_default():
+    _write({"new": [_new("Buy a desk", section="plans", topic="Move", expires_at="2026-11-29")]})
+    (fact,) = MemoryStore().all_facts()
+    assert fact["expires_at"] == "2026-11-29"
+
+    _write({"updates": [{"id": fact["id"], "section": "open_items"}]})
+    assert MemoryStore().find_by_id(fact["id"])["expires_at"] == "2026-11-10"
+
+
 def test_a_section_on_a_legacy_fact_files_it_and_a_content_edit_leaves_it_unsorted():
     MemoryStore().insert(
         {
