@@ -111,7 +111,9 @@ At the top of **Settings → Memory**:
 - **Generate memory from chats** — the main switch (see below).
 - **Include sensitive topics in memory** — lets him keep health, religion, politics and similar
   facts. Off by default; when off, he tells you a sensitive fact wasn't saved.
-- **Import memory from other AI assistants** and **Export memory** — coming soon.
+- **Import memory from other AI assistants** — **Start import** brings over what ChatGPT, Claude
+  or Gemini know about you (see below).
+- **Export memory** — downloads your memory as files you can keep (see below).
 
 Each switch saves as soon as you flip it, and a short note confirms it.
 
@@ -132,6 +134,41 @@ balance that is read live, a sensitive topic while that switch is off).
 
 It's one small AI call on the **Memory** task model, billed like the rest of memory, and it
 needs memory switched on. **Edit** and **Forget** make no AI call and work either way.
+
+## Bring memory from another assistant
+
+If you've used ChatGPT, Claude or Gemini for a while, they may already know things about you.
+**Settings → Memory → Start import** carries that over in three steps:
+
+1. **Copy the prompt** and run it in the other assistant. It asks for everything it knows about
+   you, grouped as Instructions, Identity, Career, Projects and Preferences, one dated line each.
+2. **Paste the answer** into the box. It takes up to 20,000 characters; for more, import it in parts.
+3. **Review.** Lucius sorts every line into where it belongs and says why:
+   - **Profile** — a name, preferred name, marital status, employment or risk tolerance, set on
+     your profile.
+   - **Instructions for Lucius** — standing rules ("always…", "never…"), added as new lines at
+     the end of your instructions. Your own text is never replaced, and a line already there is
+     skipped.
+   - **Memory** — anything else lasting about you, filed by section and topic.
+   - **Skipped** — what your books, payee rules or automations already hold, and anything that
+     isn't a fact about you. These can't be ticked.
+
+Nothing is saved until you click **Import** and then only the lines left ticked. Untick any you
+don't want. Afterwards a note says how many were imported and how many weren't — for example a
+full card number or password is refused, as it always is.
+
+What you paste is treated as plain text to sort, never as instructions to Lucius, so a line in it
+that says "ignore your rules" is just another line to review. Import works even while
+**Generate memory from chats** is off, because you are doing it yourself. Sorting is one small AI
+call on the **Memory** task model. Import isn't available in the public demo.
+
+## Export
+
+**Settings → Memory → Export** downloads `memory-YYYY-MM-DD.zip`: one Markdown file per section and
+topic (for example `money-housing.md`), each with a title and one line per fact with the month it
+was learned — `- Rent is due on the 1st (Sep 2026)`. Open items are in `open-items.md`, and older
+facts that haven't been sorted yet are in `not-sorted-yet.md`. Facts that were moved out of memory
+are left out.
 
 ## Switch it off
 

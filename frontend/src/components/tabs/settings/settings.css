@@ -3570,3 +3570,105 @@
     gap: var(--space-3);
   }
 }
+
+/* Settings → Memory → Start import: the three-step dialog (MemoryImport) */
+.onw-settings .rd-mi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.onw-settings .rd-mi > * {
+  max-width: 100%;
+}
+.onw-settings .rd-mi-lead {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.onw-settings .rd-mi-prompt {
+  align-self: stretch;
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--ink);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+.onw-settings .rd-mi-paste {
+  align-self: stretch;
+  resize: vertical;
+  min-height: 180px;
+}
+.onw-settings .rd-mi-count {
+  align-self: flex-end;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.onw-settings .rd-mi-count.over {
+  color: var(--bad);
+}
+.onw-settings .rd-mi-error {
+  align-self: stretch;
+  padding: 9px 12px;
+  border: 1px solid var(--bad);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  color: var(--bad);
+}
+.onw-settings .rd-mi-group {
+  align-self: stretch;
+}
+.onw-settings .rd-mi-group-h {
+  margin: 0 0 6px;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--ink);
+}
+.onw-settings .rd-mi-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+}
+.onw-settings .rd-mi-item + .rd-mi-item {
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+.onw-settings .rd-mi-item input[type='checkbox'] {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+.onw-settings .rd-mi-item input[type='checkbox']:disabled {
+  cursor: default;
+}
+.onw-settings .rd-mi-item-body {
+  flex: 1;
+  min-width: 0;
+}
+.onw-settings .rd-mi-item-body label {
+  display: block;
+  font-size: var(--text-base);
+  color: var(--ink);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mi-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.onw-settings .rd-mi-foot-gap {
+  flex: 1;
+}

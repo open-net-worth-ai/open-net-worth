@@ -90,12 +90,31 @@ describe('MemorySection', () => {
     expect(sw.getAttribute('aria-checked')).toBe('false')
   })
 
-  it('leaves import and export as coming soon', async () => {
-    const toast = vi.fn()
-    render(<MemorySection toast={toast} />)
+  it('opens the import dialog from Start import', async () => {
+    render(<MemorySection toast={vi.fn()} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Start import' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Export' }))
-    expect(toast).toHaveBeenCalledWith('Import is coming soon')
-    expect(toast).toHaveBeenCalledWith('Export is coming soon')
+    expect(
+      await screen.findByRole('dialog', { name: 'Import memory from another assistant' }),
+    ).toBeTruthy()
+  })
+
+  it('downloads the export through the authenticated fetch', async () => {
+    const toast = vi.fn()
+    URL.createObjectURL = vi.fn(() => 'blob:memory')
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    authFetch.mockImplementation((url: string) =>
+      url === '/api/memory/export'
+        ? Promise.resolve(
+            new Response('zip', {
+              headers: { 'Content-Disposition': 'attachment; filename="memory-2026-10-27.zip"' },
+            }),
+          )
+        : json(SETTINGS),
+    )
+    render(<MemorySection toast={toast} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Export' }))
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Memory exported'))
+    expect(authFetch).toHaveBeenCalledWith('/api/memory/export')
   })
 })

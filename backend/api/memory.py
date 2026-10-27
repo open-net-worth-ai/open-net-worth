@@ -10,6 +10,12 @@ DELETE /api/memory/facts      → {"ok": true, "deleted": n}
 DELETE /api/memory/topics     ?section=&topic= → {"ok": true, "deleted": n}
 POST   /api/memory/instruct   body {"instruction": str, "topic"?: str}
                               → {"added", "updated", "removed", "rejected"}
+GET    /api/memory/import/prompt  → {"prompt"}: what to run in the other assistant
+POST   /api/memory/import/preview body {"text": str} → {"items"}; writes nothing
+POST   /api/memory/import/apply   body {"items": [...]} → {"applied", "rejected"}
+GET    /api/memory/export     → memory-YYYY-MM-DD.zip, one Markdown file per topic
+
+Import and export work while memory is OFF: they are explicit user actions.
 
 Thin: validate → store (or the one ai.memory_instruct call) → shape response.
 
@@ -20,15 +26,21 @@ not have to turn it back on to do that.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Response
+from pydantic import BaseModel, Field
 
 from backend.ai.memory import MemoryDisabledError
+from backend.ai.memory_import import EXPORT_PROMPT, plan_import
+from backend.ai.memory_import_apply import MAX_ITEMS, apply_import
 from backend.ai.memory_instruct import apply_instruction, delete_topic, edit_fact
 from backend.ai.memory_write import apply_memory_change
 from backend.core.errors import ExternalServiceError, NotFoundError, ValidationError
+from backend.core.user_time import user_today
 from backend.db.memory_settings_store import MemorySettingsStore
 from backend.db.memory_store import MemoryStore
+from backend.services.memory_export import build_memory_export
 
 router = APIRouter()
 
@@ -42,6 +54,14 @@ class MemorySettingsPatch(BaseModel):
 class MemoryInstruction(BaseModel):
     instruction: str
     topic: str | None = None
+
+
+class MemoryImportPreview(BaseModel):
+    text: str
+
+
+class MemoryImportApply(BaseModel):
+    items: list[Any] = Field(max_length=MAX_ITEMS)
 
 
 class MemoryFactEdit(BaseModel):
@@ -118,3 +138,35 @@ async def instruct_memory(body: MemoryInstruction):
         raise HTTPException(status_code=409, detail=exc.message) from exc
     except ExternalServiceError as exc:
         raise HTTPException(status_code=502, detail=exc.message) from exc
+
+
+@router.get("/api/memory/import/prompt")
+def memory_import_prompt():
+    return {"prompt": EXPORT_PROMPT}
+
+
+@router.post("/api/memory/import/preview")
+async def preview_memory_import(body: MemoryImportPreview):
+    """Sort a pasted export into items to review. Writes nothing."""
+    try:
+        return {"items": await plan_import(body.text)}
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.message) from exc
+    except ExternalServiceError as exc:
+        raise HTTPException(status_code=502, detail=exc.message) from exc
+
+
+@router.post("/api/memory/import/apply")
+def apply_memory_import(body: MemoryImportApply):
+    """Write the items the user kept, re-validating each one."""
+    return apply_import(body.items)
+
+
+@router.get("/api/memory/export")
+def export_memory():
+    filename = f"memory-{user_today().isoformat()}.zip"
+    return Response(
+        content=build_memory_export(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

@@ -1,5 +1,6 @@
 // Settings → Memory. Its own section since 2026-10-27 (was half of "Chat & Memory"), laid out
 // like Claude's memory settings. ADR 2026-10-25-memory-keeps-only-what-has-no-other-home.
+import { useState } from 'react'
 import { authFetch } from '../../../../api/client'
 import { useCachedFetchState } from '../../../../state/queryCache'
 import {
@@ -7,8 +8,10 @@ import {
   getMemorySettings,
   type MemorySettings,
 } from '../../../../hooks/useMemoryFacts'
+import { downloadMemoryExport } from '../../../../hooks/memoryImport'
 import { Btn, Panel, Toggle, row, useSectionBusy } from '../ds'
 import { MemoryBrowser } from '../MemoryBrowser'
+import { MemoryImport } from '../MemoryImport'
 import type { SectionProps } from '../ds'
 
 type Key = keyof MemorySettings
@@ -16,6 +19,8 @@ type Key = keyof MemorySettings
 export function MemorySection({ toast }: SectionProps) {
   const memory = useCachedFetchState(MEMORY_SETTINGS_KEY, getMemorySettings, { staleTime: 0 })
   const settings = memory.data
+  const [importing, setImporting] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   useSectionBusy(memory.initialLoading && !settings)
 
@@ -37,6 +42,18 @@ export function MemorySection({ toast }: SectionProps) {
     }
   }
 
+  async function exportMemory() {
+    setExporting(true)
+    try {
+      await downloadMemoryExport()
+      toast('Memory exported')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not export. Try again.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const toggle = (key: Key, label: string, done: (on: boolean) => string) => (
     <Toggle
       on={settings?.[key] ?? false}
@@ -47,48 +64,51 @@ export function MemorySection({ toast }: SectionProps) {
   )
 
   return (
-    <MemoryBrowser
-      toast={toast}
-      disabled={settings?.enabled === false}
-      header={
-        <Panel sub="What Lucius remembers about you between conversations">
-          {row(
-            'Search and reference chats',
-            'Let Lucius search your past conversations for relevant details.',
-            toggle('search_chats', 'Search and reference chats', (on) =>
-              on ? 'Lucius can search your past chats' : 'Lucius won’t search your past chats',
-            ),
-          )}
-          {row(
-            'Generate memory from chats',
-            'Let Lucius remember useful details from your conversations and automations, and use them in replies.',
-            toggle('enabled', 'Generate memory from chats', (on) =>
-              on ? 'Memory on' : 'Memory off — nothing is extracted or recalled',
-            ),
-          )}
-          {row(
-            'Include sensitive topics in memory',
-            'Let Lucius save details about sensitive topics like health conditions or religious beliefs.',
-            toggle('sensitive_topics', 'Include sensitive topics in memory', (on) =>
-              on ? 'Sensitive topics can be remembered' : 'Sensitive topics won’t be remembered',
-            ),
-          )}
-          {row(
-            'Import memory from other AI assistants',
-            'Bring what ChatGPT, Claude or Gemini know about you. We’ll give you a prompt to run there, then you review everything before it’s saved.',
-            <Btn size="xs" onClick={() => toast('Import is coming soon')}>
-              Start import
-            </Btn>,
-          )}
-          {row(
-            'Export memory',
-            'Download your memory as a .zip of Markdown files.',
-            <Btn size="xs" onClick={() => toast('Export is coming soon')}>
-              Export
-            </Btn>,
-          )}
-        </Panel>
-      }
-    />
+    <>
+      {importing && <MemoryImport toast={toast} onClose={() => setImporting(false)} />}
+      <MemoryBrowser
+        toast={toast}
+        disabled={settings?.enabled === false}
+        header={
+          <Panel sub="What Lucius remembers about you between conversations">
+            {row(
+              'Search and reference chats',
+              'Let Lucius search your past conversations for relevant details.',
+              toggle('search_chats', 'Search and reference chats', (on) =>
+                on ? 'Lucius can search your past chats' : 'Lucius won’t search your past chats',
+              ),
+            )}
+            {row(
+              'Generate memory from chats',
+              'Let Lucius remember useful details from your conversations and automations, and use them in replies.',
+              toggle('enabled', 'Generate memory from chats', (on) =>
+                on ? 'Memory on' : 'Memory off — nothing is extracted or recalled',
+              ),
+            )}
+            {row(
+              'Include sensitive topics in memory',
+              'Let Lucius save details about sensitive topics like health conditions or religious beliefs.',
+              toggle('sensitive_topics', 'Include sensitive topics in memory', (on) =>
+                on ? 'Sensitive topics can be remembered' : 'Sensitive topics won’t be remembered',
+              ),
+            )}
+            {row(
+              'Import memory from other AI assistants',
+              'Bring what ChatGPT, Claude or Gemini know about you. We’ll give you a prompt to run there, then you review everything before it’s saved.',
+              <Btn size="xs" onClick={() => setImporting(true)}>
+                Start import
+              </Btn>,
+            )}
+            {row(
+              'Export memory',
+              'Download your memory as a .zip of Markdown files.',
+              <Btn size="xs" disabled={exporting} onClick={() => void exportMemory()}>
+                {exporting ? 'Exporting…' : 'Export'}
+              </Btn>,
+            )}
+          </Panel>
+        }
+      />
+    </>
   )
 }
