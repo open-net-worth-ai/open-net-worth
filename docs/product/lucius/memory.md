@@ -32,7 +32,7 @@ Each fact is filed in a section — **You**, **Money**, **Plans**, **Open items*
 to, which expire after 14 days) or **Other** — and, except in Open items, under a short topic such
 as *Housing*. If you ask him to remember something your profile has a field for, or a standing rule
 for how he should behave, he says where it belongs instead of filing it as a memory. A health,
-religion, political, sexuality, ethnicity or legal fact is remembered only if you've allowed
+religion, political, sexuality, ethnicity or legal fact is saved only if you've allowed
 sensitive topics in **Settings → Memory**; otherwise he tells you it wasn't saved. When a fact
 shapes a reply he marks it as used, which keeps it from fading; you never see the marker.
 
@@ -82,14 +82,14 @@ that narrows it to the facts (or topics) containing your words.
 4. **Older memories — being sorted.** Facts saved before sections existed wait here as a plain
    list until Lucius files them under a section and topic. They are not lost; you can edit or
    forget them as usual. Filing never changes a fact's words, except that one over 280
-   characters is shortened to fit. A fact holding a full card, account or ID number, or a
-   sensitive fact while sensitive topics are off, is moved out instead.
+   characters is shortened to fit. A fact holding a full card, account or ID number is moved
+   out instead; a sensitive fact is filed like any other.
 5. **Moved out of memory.** Folded closed at the bottom. When a fact turns out to live somewhere
    better — or has gone stale — Lucius moves it out of memory and keeps it here for 30 days. Each
    row shows the fact, why it moved (**Moved to your profile**, **Moved to Instructions for
    Lucius**, **Now a payee rule**, **Now an automation**, **Already in your ledger**, **Done**,
-   **Out of date**, **Not used in 90 days** or **Not kept — sensitive**) and **Forgotten in N
-   days**. **Forget** is the only
+   **Out of date**, **Not used in 90 days** or **Not kept — had a card, account or ID number**)
+   and **Forgotten in N days**. **Forget** is the only
    action; leave a row alone and it goes by itself.
 
 You don't organise anything yourself: there is no renaming, moving or merging. Lucius files, merges
@@ -116,8 +116,8 @@ At the top of **Settings → Memory**:
   that chat removes it.
 - **Generate memory from chats** — the main switch (see below).
 - **Include sensitive topics in memory** — lets him keep health, religion, politics and similar
-  facts. Off by default; when off, he tells you a sensitive fact wasn't saved, and a sensitive
-  fact saved earlier stays in the list but is left out of his replies until you turn it back on.
+  facts. Off by default. When it's off, Lucius doesn't save new details about these topics;
+  anything already saved stays and is used like any other memory.
 - **Import memory from other AI assistants** — **Start import** brings over what ChatGPT, Claude
   or Gemini know about you (see below).
 - **Export memory** — downloads your memory as files you can keep (see below).

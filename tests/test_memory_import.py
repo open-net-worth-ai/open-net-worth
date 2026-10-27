@@ -402,7 +402,7 @@ async def test_preview_skips_a_sensitive_line_while_the_setting_is_off(isolated,
     assert MemoryStore().all_facts() == []
 
 
-async def test_preview_and_apply_keep_a_sensitive_line_while_the_setting_is_on(
+async def test_preview_and_apply_store_a_sensitive_line_without_a_flag_while_the_setting_is_on(
     isolated, monkeypatch
 ):
     MemorySettingsStore().set_sensitive_topics(True)
@@ -425,7 +425,9 @@ async def test_preview_and_apply_keep_a_sensitive_line_while_the_setting_is_on(
 
     assert items[0]["destination"] == "memory" and items[0]["sensitive"] is True
     assert out["applied"]["memory"] == 1
-    assert MemoryStore().all_facts()[0]["sensitive"] is True
+    (fact,) = MemoryStore().all_facts()
+    assert fact["content"] == "Takes medication for asthma"
+    assert "sensitive" not in fact
 
 
 def test_apply_still_refuses_a_sensitive_item_while_the_setting_is_off(client):

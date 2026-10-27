@@ -142,7 +142,7 @@ class TestRememberFact:
         )
         assert memory_store_mod.MemoryStore().all_facts()[0]["expires_at"] == due
 
-    def test_a_sensitive_fact_needs_the_setting(self, isolated):
+    def test_a_new_sensitive_fact_needs_the_setting_and_is_stored_without_a_flag(self, isolated):
         store = settings_store_mod.MemorySettingsStore()
         store.set_enabled(True)
         result, _ = _call_tool(
@@ -156,7 +156,8 @@ class TestRememberFact:
             "remember_fact", content="Has asthma", section="you", topic="About you", sensitive=True
         )
         assert result["ok"] is True
-        assert memory_store_mod.MemoryStore().all_facts()[0]["sensitive"] is True
+        (fact,) = memory_store_mod.MemoryStore().all_facts()
+        assert fact["content"] == "Has asthma" and "sensitive" not in fact
 
     @pytest.mark.parametrize(
         "content, needle",

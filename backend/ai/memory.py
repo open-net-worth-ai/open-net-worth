@@ -128,14 +128,6 @@ def _truncate(text: str, limit: int) -> str:
 # ── Deterministic purge ────────────────────────────────────────────────────────
 
 
-def model_visible(facts: list[dict]) -> list[dict]:
-    """Facts a model may read: a fact flagged sensitive stays out while "Include sensitive
-    topics" is off — in recall, in the extraction listing and in the daily merge alike."""
-    if MemorySettingsStore().sensitive_topics():
-        return facts
-    return [f for f in facts if f.get("sensitive") is not True]
-
-
 def purge_expired(store: MemoryStore | None = None) -> int:
     """Hard-delete facts whose expires_at has passed. Returns count deleted.
 
@@ -310,9 +302,8 @@ def _recall_row(fact: dict) -> dict:
 
 def recall_facts(query: str | None, limit: int = 10, topic: str | None = None) -> dict:
     """Best-matching remembered facts for ``query`` — relevance first, newest first on a tie.
-    A fact flagged sensitive is left out while "Include sensitive topics" is off. With a
-    ``topic`` only that topic's facts are searched, and a query is optional: no query returns the
-    topic's facts, newest first.
+    With a ``topic`` only that topic's facts are searched, and a query is optional: no query
+    returns the topic's facts, newest first.
 
     Raises MemoryDisabledError when the memory toggle is OFF: a switched-off memory
     surfaces nothing. Reading is not a write, so a demo's seeded facts stay readable —
@@ -333,7 +324,7 @@ def recall_facts(query: str | None, limit: int = 10, topic: str | None = None) -
         query = ""
     limit = max(1, min(int(limit or 10), RECALL_MAX_LIMIT))
 
-    facts = model_visible(MemoryStore().remembered_facts())
+    facts = MemoryStore().remembered_facts()
     pool = [f for f in facts if topic_key(f.get("topic")) == wanted] if wanted else facts
     if q_tokens:
         scored = [(_recall_score(query, q_tokens, f.get("content", "")), f) for f in pool]
@@ -540,7 +531,7 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
     prompt = extract_prompt(
         today,
         _profile_instructions(),
-        existing_listing(model_visible(store.remembered_facts())),
+        existing_listing(store.remembered_facts()),
         convo,
     )
 

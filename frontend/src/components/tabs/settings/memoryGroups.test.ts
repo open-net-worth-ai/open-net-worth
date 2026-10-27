@@ -93,7 +93,7 @@ describe('groupFacts — expiry agrees with the backend', () => {
 
 describe('retiredReason', () => {
   it('labels every backend retire reason', () => {
-    expect(retiredReason('sensitive')).toBe('Not kept — sensitive')
+    expect(retiredReason('identifier')).toBe('Not kept — had a card, account or ID number')
     expect(retiredReason('unused')).toBe('Not used in 90 days')
     expect(retiredReason('something-new')).toBe('Out of date')
   })

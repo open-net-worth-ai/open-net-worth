@@ -247,8 +247,6 @@ class _Plan:
             "mentioned_at": self.now,
             "last_used_at": None,
         }
-        if sensitive:
-            row["sensitive"] = True
         self.inserts.append(row)
         self.counts["added"] += 1
 
@@ -272,16 +270,17 @@ class _Plan:
 
     def _unfit_to_file(self, raw: dict, current: dict) -> str | None:
         """Filing a fact that is not yet live runs the guards a new fact meets, on the text it
-        will be filed with. Returns the reason to retire it instead (``sensitive`` for an
-        identifier, or for a sensitive fact while sensitive topics are off; ``ledger`` for a
-        figure the ledger reads live), ``_REFUSED`` when it must stay unsorted (too long, with
-        no shorter wording given), or None when it may be filed."""
+        will be filed with. Returns the reason to retire it instead (``identifier`` for a full
+        card, account or ID number; ``ledger`` for a figure the ledger reads live), ``_REFUSED``
+        when it must stay unsorted (too long, with no shorter wording given), or None when it
+        may be filed. A sensitive topic does not stop it: the fact was already saved, and the
+        sensitive-topics setting only governs saving new ones."""
         given = raw.get("content")
         text, reason, message = self.vet_text(
             given if given is not None else current.get("content")
         )
         if reason == "identifier":
-            return "sensitive"
+            return "identifier"
         if reason == "ledger_figure":
             # The user's own words, and a goal filed under Plans ("a net worth of $1M by 40"),
             # are not balances — only an extracted figure goes back to the ledger unasked.
@@ -295,8 +294,7 @@ class _Plan:
         if reason:
             self.reject(reason, text, raw.get("section"), current.get("topic"), message)
             return _REFUSED
-        flagged = _truthy(raw.get("sensitive")) or current.get("sensitive") is True
-        return "sensitive" if flagged and not self.sensitive_ok else None
+        return None
 
     def _changes(self, raw: dict, current: dict) -> dict | None:
         changes: dict = {"updated_at": self.now}
@@ -308,20 +306,20 @@ class _Plan:
                 return None
             changes["content"] = text
             changes["mentioned_at"] = self.now
+        filing = current.get("state") not in ("live", "retired")
         if raw.get("section") is not None:
             section = ms.normalise_section(raw["section"])
             if section is None:
                 self.reject("bad_section", "", str(raw["section"]), current.get("topic"))
                 return None
             changes["section"] = section
-            if current.get("state") not in ("live", "retired"):
+            if filing:
                 changes["state"] = "live"
                 changes["sorted_at"] = self.now
-        if _truthy(raw.get("sensitive")):
-            if not self.sensitive_ok:
-                self.reject("sensitive_off", "", section, current.get("topic"))
-                return None
-            changes["sensitive"] = True
+        # New sensitive wording is a new save; filing an already-saved fact is not.
+        if _truthy(raw.get("sensitive")) and not filing and not self.sensitive_ok:
+            self.reject("sensitive_off", "", section, current.get("topic"))
+            return None
         if not self._shape_update(raw, current, section, changes):
             return None
         if len(changes) > 1 and self.source == "explicit":

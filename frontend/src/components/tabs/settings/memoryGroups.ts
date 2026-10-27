@@ -25,7 +25,7 @@ const REASONS: Record<string, string> = {
   resolved: 'Done',
   stale: 'Out of date',
   unused: 'Not used in 90 days',
-  sensitive: 'Not kept — sensitive',
+  identifier: 'Not kept — had a card, account or ID number',
 }
 
 export function retiredReason(reason?: string | null): string {

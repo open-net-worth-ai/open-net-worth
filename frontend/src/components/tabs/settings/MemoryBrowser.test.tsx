@@ -216,7 +216,7 @@ describe('MemoryBrowser', () => {
     )
   })
 
-  it('names a memory moved out as sensitive', async () => {
+  it('names a memory moved out for holding a card, account or ID number', async () => {
     authFetch.mockImplementation(() =>
       json({
         facts: [
@@ -224,7 +224,7 @@ describe('MemoryBrowser', () => {
             id: 's1',
             content: 'A health detail',
             state: 'retired',
-            retired_reason: 'sensitive',
+            retired_reason: 'identifier',
             retired_at: new Date().toISOString(),
           },
         ],
@@ -233,7 +233,7 @@ describe('MemoryBrowser', () => {
     )
     render(<MemoryBrowser toast={vi.fn()} />)
     fireEvent.click(await screen.findByRole('button', { name: /Moved out of memory \(1\)/ }))
-    expect(screen.getByText('Not kept — sensitive')).toBeTruthy()
+    expect(screen.getByText('Not kept — had a card, account or ID number')).toBeTruthy()
   })
 
   it('files older memories under their own heading', async () => {

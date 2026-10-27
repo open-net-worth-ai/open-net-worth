@@ -140,7 +140,7 @@ def test_fmt_memory_renders_the_block_and_logs_stats_only(db_isolated, caplog):
     assert len(logged) == 1 and "'unsorted': 1" in logged[0] and "Zorblax" not in logged[0]
 
 
-# ── final review: the briefing's block, and sensitive facts while the setting is off ──
+# ── final review: the briefing's block ──
 
 
 def test_handles_false_drops_every_citation_handle():
@@ -149,21 +149,3 @@ def test_handles_false_drops_every_citation_handle():
     without, _ = render_memory_block(facts, handles=False)
     assert "[m7a88f8]" in with_handles
     assert "[m" not in without and "Rents a flat (Mar 2026)" in without
-
-
-def test_sensitive_facts_are_left_out_while_the_setting_is_off():
-    facts = [
-        _f("mem_000000000001", "Rents a flat", topic="Housing"),
-        _f("mem_000000000002", "Has a chronic condition", section="you", sensitive=True),
-        {
-            "id": "mem_000000000003",
-            "content": "Legacy sensitive note",
-            "state": "unsorted",
-            "sensitive": True,
-        },
-    ]
-    off, stats = render_memory_block(facts, sensitive_ok=False)
-    on, _ = render_memory_block(facts, sensitive_ok=True)
-    assert "chronic" not in off and "Rents a flat" in off
-    assert stats["facts"] == 1 and stats["unsorted"] == 0
-    assert "chronic" in on

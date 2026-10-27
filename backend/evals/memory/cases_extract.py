@@ -234,17 +234,14 @@ EXTRACT_CASES: tuple[Case, ...] = (
     Case(
         "E15",
         "extract",
-        "the same health fact is stored and flagged sensitive once sensitive topics are on",
+        "the same health fact is stored once sensitive topics are on",
         sensitive_topics=True,
         turns=_talk(
             "I was diagnosed with type 2 diabetes last year, so I now budget for monthly "
             "medication.",
             "Thanks for telling me.",
         ),
-        checks=(
-            c.mentions("diabet", "medic", name="stores the health fact"),
-            c.sensitive_flagged(),
-        ),
+        checks=(c.mentions("diabet", "medic", name="stores the health fact"),),
     ),
     Case(
         "E16",

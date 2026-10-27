@@ -75,13 +75,14 @@ def test_the_briefing_block_carries_no_citation_handles(db_isolated):
     assert "Prefers short answers" in block and "[m7a88f8]" not in block
 
 
-def test_a_sensitive_fact_stays_out_of_the_prompt_until_the_setting_is_on(db_isolated):
+def test_a_saved_sensitive_fact_is_in_the_prompt_whatever_the_setting(db_isolated):
     from backend.db.memory_settings_store import MemorySettingsStore
 
     MemorySettingsStore().set_enabled(True)
     _store_live("mem_000000000001", "Prefers short answers")
-    _store_live("mem_000000000002", "Has a chronic condition", sensitive=True)
+    _store_live("mem_000000000002", "Has a chronic condition")
 
-    assert "chronic" not in build_system_prompt()
+    MemorySettingsStore().set_sensitive_topics(False)
+    assert "chronic" in build_system_prompt()
     MemorySettingsStore().set_sensitive_topics(True)
     assert "chronic" in build_system_prompt()

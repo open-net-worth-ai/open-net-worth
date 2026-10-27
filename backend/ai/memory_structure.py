@@ -62,7 +62,7 @@ RETIRE_REASONS = (
     "resolved",
     "stale",
     "unused",
-    "sensitive",
+    "identifier",
 )
 
 

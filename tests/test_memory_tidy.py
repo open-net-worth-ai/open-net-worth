@@ -153,12 +153,15 @@ def test_tidy_merges_duplicates_and_topic_names_through_the_choke(isolated, monk
     assert "Tampines" in model.prompts[0]
 
 
-def test_the_merge_never_shows_a_sensitive_fact_while_the_setting_is_off(isolated, monkeypatch):
+def test_the_merge_sees_a_saved_sensitive_fact_while_the_setting_is_off(isolated, monkeypatch):
+    from backend.db.memory_settings_store import MemorySettingsStore
+
+    assert MemorySettingsStore().sensitive_topics() is False
     MemoryStore().bulk_insert(
         [
             _fact("a", "Rents a flat in Tampines", section="money", topic="Housing"),
             _fact("b", "Pays rent on the 1st", section="money", topic="Housing"),
-            _fact("h", "Has a chronic condition", section="you", topic="About you", sensitive=True),
+            _fact("h", "Has a chronic condition", section="you", topic="About you"),
         ]
     )
     model = _use(monkeypatch, _Model())
@@ -166,7 +169,7 @@ def test_the_merge_never_shows_a_sensitive_fact_while_the_setting_is_off(isolate
     asyncio.run(memory_tidy.tidy())
 
     assert "Tampines" in model.prompts[0]
-    assert "chronic condition" not in model.prompts[0]
+    assert "chronic condition" in model.prompts[0]
 
 
 def test_tidy_refuses_a_destructive_reply(isolated, monkeypatch):

@@ -454,3 +454,19 @@ unsafe on a real book.
   extractions in a row until it has new messages.
 - **The first sort of a live book** is reviewed with the app stopped, because the background sort
   starts at boot — `docs/ai/MEMORY_MIGRATION.md`.
+
+## Amendment 6 (2026-10-27) — the sensitive-topics setting governs saving only
+
+Supersedes amendment 5's "Sensitive facts stay out while the setting is off" (R24). Decided by the
+owner in session.
+
+- **The setting governs SAVING only.** With it off, a new save the model marks sensitive is refused
+  (`sensitive_off`) — the extractor's `new`, an update that writes new sensitive wording to a live
+  fact, `remember_fact` and import. The marker is the model's per-write yes/no and nothing more.
+- **No `sensitive` field is stored on a fact.** A saved fact is used like any other — in the reply
+  prompt, recall, the extraction listing, the daily merge and export — whatever the setting.
+- **Filing a legacy fact is not a new save.** The sort files it whatever its topic and setting, and
+  its prompt no longer asks for a sensitive flag.
+- **The retire reason `sensitive` is renamed `identifier`** ("Not kept — had a card, account or ID
+  number") and is kept only for a legacy fact that carries a full card, account or ID number or a
+  password; those are never stored, whatever the setting.

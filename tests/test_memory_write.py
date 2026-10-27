@@ -233,17 +233,19 @@ def test_an_identifier_in_an_update_is_refused_too():
     assert MemoryStore().find_by_id(fact["id"])["content"] == "Card ends 4321"
 
 
-def test_sensitive_fact_needs_the_setting():
+def test_a_new_sensitive_fact_needs_the_setting_and_is_stored_without_a_flag():
     out = _write({"new": [_new("Has a chronic condition", section="you", sensitive=True)]})
     assert out["added"] == 0 and out["rejected"][0]["reason"] == "sensitive_off"
+    assert MemoryStore().all_facts() == []
 
     MemorySettingsStore().set_sensitive_topics(True)
     out = _write({"new": [_new("Has a chronic condition", section="you", sensitive=True)]})
     assert out["added"] == 1 and not out["rejected"]
-    assert MemoryStore().all_facts()[0]["sensitive"] is True
+    (fact,) = MemoryStore().all_facts()
+    assert fact["content"] == "Has a chronic condition" and "sensitive" not in fact
 
 
-def test_a_sensitive_update_needs_the_setting_too():
+def test_a_sensitive_update_to_a_live_fact_needs_the_setting_too():
     MemoryStore().insert(
         {
             "id": "m_1",
@@ -266,7 +268,7 @@ def test_a_sensitive_update_needs_the_setting_too():
     out = _write(ops, source="implicit")
     row = MemoryStore().find_by_id("m_1")
     assert out["updated"] == 1 and not out["rejected"]
-    assert row["content"] == "Has a chronic condition" and row["sensitive"] is True
+    assert row["content"] == "Has a chronic condition" and "sensitive" not in row
 
 
 def test_filing_an_unsorted_fact_stamps_sorted_at():
@@ -726,11 +728,11 @@ def test_filing_a_long_legacy_fact_needs_a_shorter_wording():
     assert (filed["state"], filed["content"]) == ("live", "Keeps a careful record of every bill.")
 
 
-def test_filing_a_legacy_fact_with_an_identifier_retires_it_as_sensitive():
+def test_filing_a_legacy_fact_with_an_identifier_retires_it_as_identifier():
     _legacy("mem_acct", "Salary lands in account 123456789012")
     out = _file("mem_acct", topic="Income & work")
     row = MemoryStore().find_by_id("mem_acct")
-    assert (row["state"], row["retired_reason"]) == ("retired", "sensitive")
+    assert (row["state"], row["retired_reason"]) == ("retired", "identifier")
     assert out["retired"] == 1 and out["updated"] == 0
 
 
@@ -755,23 +757,28 @@ def test_an_explicit_legacy_fact_with_a_figure_is_filed_not_retired():
     assert (row["state"], row["section"]) == ("live", "money")
 
 
-def test_a_sensitive_legacy_fact_is_retired_while_the_setting_is_off_and_filed_when_on():
+def test_a_sensitive_legacy_fact_is_filed_live_whatever_the_setting():
+    assert MemorySettingsStore().sensitive_topics() is False
     _legacy("mem_h1", "Has a chronic condition")
-    _file("mem_h1", "you", topic="About you", sensitive=True)
+    out = _file("mem_h1", "you", topic="About you", sensitive=True)
     row = MemoryStore().find_by_id("mem_h1")
-    assert (row["state"], row["retired_reason"]) == ("retired", "sensitive")
+    assert (row["state"], row["section"]) == ("live", "you")
+    assert row.get("retired_reason") is None and "sensitive" not in row
+    assert out["updated"] == 1 and out["retired"] == 0 and not out["rejected"]
 
     MemorySettingsStore().set_sensitive_topics(True)
     _legacy("mem_h2", "Has a chronic condition")
     _file("mem_h2", "you", topic="About you", sensitive=True)
     row = MemoryStore().find_by_id("mem_h2")
-    assert (row["state"], row.get("sensitive")) == ("live", True)
+    assert row["state"] == "live" and "sensitive" not in row
 
 
-def test_a_fact_already_flagged_sensitive_is_retired_when_filed_with_the_setting_off():
-    _legacy("mem_flag", "Attends a weekly support group", sensitive=True)
+def test_filing_an_unsorted_support_group_fact_is_not_a_new_save():
+    assert MemorySettingsStore().sensitive_topics() is False
+    _legacy("mem_flag", "Attends a weekly support group")
     _file("mem_flag", "you", topic="About you")
-    assert MemoryStore().find_by_id("mem_flag")["retired_reason"] == "sensitive"
+    row = MemoryStore().find_by_id("mem_flag")
+    assert row["state"] == "live" and row.get("retired_reason") is None
 
 
 def test_an_explicit_update_stamps_the_edit_and_a_background_one_does_not():
@@ -796,5 +803,6 @@ def test_a_background_write_tells_open_screens_and_a_touch_alone_does_not(monkey
     assert published == [("memory",)]
 
 
-def test_sensitive_is_a_retire_reason():
-    assert "sensitive" in structure.RETIRE_REASONS
+def test_identifier_is_the_last_retire_reason_and_sensitive_is_not_one():
+    assert structure.RETIRE_REASONS[-1] == "identifier"
+    assert "sensitive" not in structure.RETIRE_REASONS

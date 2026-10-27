@@ -169,16 +169,6 @@ def open_item_with_expiry(max_days: int = 30, name: str = "an open item that exp
     return Check(name, QUALITY, test)
 
 
-def sensitive_flagged(name: str = "flagged sensitive") -> Check:
-    def test(o: Outcome):
-        new = o.new_facts()
-        if not new:
-            return "stored nothing"
-        return None if any(f.get("sensitive") is True for f in new) else "not flagged sensitive"
-
-    return Check(name, QUALITY, test)
-
-
 def topics_in_section(section: str, expected: set[str], name: str) -> Check:
     def test(o: Outcome):
         seen = {

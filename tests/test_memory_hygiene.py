@@ -189,7 +189,7 @@ def test_extractor_prompt_renders_routing_guide_and_instructions(isolated, monke
     assert '"mentioned"' in prompt
 
 
-def test_extractor_never_lists_a_sensitive_fact_while_the_setting_is_off(isolated, monkeypatch):
+def test_extractor_lists_a_saved_fact_whatever_the_setting(isolated, monkeypatch):
     from backend.db.memory_settings_store import MemorySettingsStore
 
     memory_store.MemoryStore().bulk_insert(
@@ -203,15 +203,15 @@ def test_extractor_never_lists_a_sensitive_fact_while_the_setting_is_off(isolate
                 state="live",
                 section="you",
                 topic="About you",
-                sensitive=True,
             ),
         ]
     )
     cap = _Capture()
     monkeypatch.setattr(memory, "_provider", lambda: cap)
 
+    MemorySettingsStore().update({"sensitive_topics": False})
     asyncio.run(memory.extract_and_merge(_CHAT))
-    assert "Tampines" in cap.prompts[0] and "chronic condition" not in cap.prompts[0]
+    assert "Tampines" in cap.prompts[0] and "chronic condition" in cap.prompts[0]
 
     MemorySettingsStore().update({"sensitive_topics": True})
     asyncio.run(memory.extract_and_merge(_CHAT))
@@ -297,7 +297,8 @@ def test_a_sensitive_fact_is_stored_only_when_the_setting_allows_it(isolated, mo
     MemorySettingsStore().set_sensitive_topics(True)
     asyncio.run(memory.extract_and_merge(_CHAT))
     (fact,) = memory_store.MemoryStore().all_facts()
-    assert fact["content"] == "Has type 2 diabetes" and fact["sensitive"] is True
+    assert fact["content"] == "Has type 2 diabetes"
+    assert "sensitive" not in fact
 
 
 def test_no_consolidation_machinery_remains():

@@ -62,16 +62,12 @@ def _fmt_goals(ccy: str = "USD") -> str:
 def _fmt_memory(handles: bool = True) -> str:
     """The cross-session memory block ("WHAT YOU REMEMBER"): every live fact, whole, by section
     and topic — see ``memory_render``. "" when there is nothing to remember or the global memory
-    toggle is OFF; facts flagged sensitive are left out while sensitive topics are off. Logs
-    sizes only, never fact text."""
-    sensitive_ok = False
+    toggle is OFF. Logs sizes only, never fact text."""
     try:
         from backend.db.memory_settings_store import MemorySettingsStore
 
-        settings = MemorySettingsStore()
-        if not settings.enabled():
+        if not MemorySettingsStore().enabled():
             return ""
-        sensitive_ok = settings.sensitive_topics()
     except Exception:
         pass
 
@@ -79,9 +75,7 @@ def _fmt_memory(handles: bool = True) -> str:
         from backend.ai.memory_render import render_memory_block
         from backend.db import MemoryStore
 
-        text, stats = render_memory_block(
-            MemoryStore().remembered_facts(), handles=handles, sensitive_ok=sensitive_ok
-        )
+        text, stats = render_memory_block(MemoryStore().remembered_facts(), handles=handles)
     except Exception:
         return ""
     if text:

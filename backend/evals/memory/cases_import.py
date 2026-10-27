@@ -136,13 +136,13 @@ IMPORT_CASES: tuple[Case, ...] = (
     Case(
         "I02",
         "import",
-        "with sensitive topics on, a health line is kept for review and stored flagged",
+        "with sensitive topics on, a health line is kept for review and stored",
         sensitive_topics=True,
         paste=PASTE_SENSITIVE,
         checks=(
             c.routed("type 2 diabetes", "memory", name="the health line is routed to memory"),
             c.item_has("type 2 diabetes", "sensitive", True, "the item is flagged sensitive"),
-            base.sensitive_flagged("the stored fact is flagged sensitive"),
+            base.mentions("diabet", name="the health fact is stored"),
             c.lines_are_whole(),
         ),
     ),

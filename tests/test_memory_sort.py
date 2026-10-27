@@ -390,7 +390,7 @@ def test_apply_sorts_everything(isolated, monkeypatch, capsys):
 # ── final review: filing runs the guards a new fact meets (R24, R25) ─────────
 
 
-def test_the_prompt_asks_for_the_sensitive_flag_in_the_settings_own_words(isolated, monkeypatch):
+def test_the_prompt_does_not_ask_for_a_sensitive_flag(isolated, monkeypatch):
     from backend.ai import memory_structure as ms
 
     MemoryStore().bulk_insert([_legacy("a", "Rents a flat")])
@@ -399,7 +399,8 @@ def test_the_prompt_asks_for_the_sensitive_flag_in_the_settings_own_words(isolat
     asyncio.run(memory_sort.sort_unsorted())
 
     prompt = model.calls[0]["prompt"]
-    assert ms.SENSITIVE_TOPICS in prompt and '"sensitive": true' in prompt
+    assert "sensitive" not in prompt.lower()
+    assert ms.SENSITIVE_TOPICS not in prompt
 
 
 def test_a_long_fact_is_marked_and_filed_only_with_a_shorter_wording(isolated, monkeypatch):
@@ -452,7 +453,10 @@ def test_a_long_fact_without_a_short_enough_wording_stays_unsorted(isolated, mon
     assert out["sorted"] == 0
 
 
-def test_a_sensitive_fact_is_retired_while_the_setting_is_off(isolated, monkeypatch):
+def test_a_legacy_sensitive_fact_is_filed_live_while_the_setting_is_off(isolated, monkeypatch):
+    from backend.db.memory_settings_store import MemorySettingsStore
+
+    assert MemorySettingsStore().sensitive_topics() is False
     MemoryStore().bulk_insert([_legacy("h", "Has a chronic condition")])
     _use(
         monkeypatch,
@@ -462,11 +466,12 @@ def test_a_sensitive_fact_is_retired_while_the_setting_is_off(isolated, monkeypa
     out = asyncio.run(memory_sort.sort_unsorted())
 
     row = _by_id()["h"]
-    assert (row["state"], row["retired_reason"]) == ("retired", "sensitive")
-    assert out["retired"] == 1
+    assert (row["state"], row["section"]) == ("live", "you")
+    assert row.get("retired_reason") is None and "sensitive" not in row
+    assert out["retired"] == 0 and out["sorted"] == 1
 
 
-def test_a_legacy_fact_with_an_account_number_is_retired_as_sensitive(isolated, monkeypatch):
+def test_a_legacy_fact_with_an_account_number_is_retired_as_identifier(isolated, monkeypatch):
     MemoryStore().bulk_insert([_legacy("acct", "Salary lands in account 123456789012")])
     _use(
         monkeypatch,
@@ -475,7 +480,7 @@ def test_a_legacy_fact_with_an_account_number_is_retired_as_sensitive(isolated, 
 
     asyncio.run(memory_sort.sort_unsorted())
 
-    assert _by_id()["acct"]["retired_reason"] == "sensitive"
+    assert _by_id()["acct"]["retired_reason"] == "identifier"
 
 
 def test_the_sweep_side_db_work_runs_off_the_event_loop(isolated, monkeypatch):

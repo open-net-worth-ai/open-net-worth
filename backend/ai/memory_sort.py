@@ -6,8 +6,8 @@ guide extraction follows, and says where each belongs or why it no longer does. 
 through ``apply_memory_change`` as ``implicit`` (so an explicit fact stays explicit); a retired
 fact keeps its row for ``RETIRED_PURGE_DAYS``. The sort never rewords a fact, with one exception:
 a fact over ``FACT_MAX_CHARS`` may come back shortened (filing one runs the guards a new fact
-meets, so it cannot be filed long; one carrying an identifier, or a sensitive fact while sensitive
-topics are off, is retired ``sensitive``). A reply that is not the expected shape, or an item
+meets, so it cannot be filed long; one carrying a full card, account or ID number is retired
+``identifier``). A reply that is not the expected shape, or an item
 that names a section or id it was not given, changes nothing for that item. The idle sweep calls
 ``sort_remaining`` while any unsorted fact is left; ``backend/scripts/migrate_memory_topics.py``
 is the same pass, by hand. ADR ``2026-10-25-memory-keeps-only-what-has-no-other-home``
@@ -41,7 +41,7 @@ _SORT_SYSTEM = (
     "memory. You are conservative: you never invent a fact and never change what a note says."
 )
 
-_ITEM_KEYS = ("id", "section", "topic", "content", "retire", "sensitive")
+_ITEM_KEYS = ("id", "section", "topic", "content", "retire")
 
 
 def _unsorted(store: MemoryStore) -> list[dict]:
@@ -102,13 +102,12 @@ For each note, reply with ONE of:
   that says the same thing in at most {ms.FACT_MAX_CHARS} characters, adding nothing.
 - retire it, when the guide says it belongs outside memory or it is out of date:
   {{"id": "...", "retire": "<reason>"}} with the reason one of: {", ".join(ms.RETIRE_REASONS)}.
-A note you are unsure about: file it under "other" rather than retiring it. A note about
-{ms.SENSITIVE_TOPICS} also carries "sensitive": true.
+A note you are unsure about: file it under "other" rather than retiring it.
 
 Notes:
 {listing}
 
-Return ONLY JSON: {{"facts": [{{"id": "...", "section": "...", "topic": "...", "sensitive": false}}]}}"""
+Return ONLY JSON: {{"facts": [{{"id": "...", "section": "...", "topic": "..."}}]}}"""
 
 
 def _shortened(raw, original: dict) -> str | None:
@@ -147,8 +146,6 @@ def _clean_item(raw, shown: dict[str, dict]) -> dict | None:
     content = _shortened(item.get("content"), shown[fid])
     if content is not None:
         out["content"] = content
-    if item.get("sensitive") is True or str(item.get("sensitive")).lower() == "true":
-        out["sensitive"] = True
     return out
 
 
@@ -192,7 +189,7 @@ async def propose(limit: int = SORT_BATCH, exclude: frozenset[str] | set[str] = 
 def to_ops(items: list[dict]) -> dict:
     retire = [{"id": i["id"], "reason": i["retire"]} for i in items if "retire" in i]
     updates = [
-        {k: i[k] for k in ("id", "section", "topic", "content", "sensitive") if k in i}
+        {k: i[k] for k in ("id", "section", "topic", "content") if k in i}
         for i in items
         if "retire" not in i
     ]
