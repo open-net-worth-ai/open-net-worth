@@ -186,12 +186,44 @@ describe('MemoryBrowser', () => {
 
   it('filters by fact text or topic name, case-insensitively', async () => {
     const { rerender } = render(<MemoryBrowser toast={vi.fn()} filter="LEASE" />)
-    await screen.findByText('Lease ends in March')
+    await screen.findByText('Rent is paid on the 1st')
     expect(screen.queryByText('Lives with two cats')).toBeNull()
     expect(sectionLabels()).toEqual(['Money'])
     rerender(<MemoryBrowser toast={vi.fn()} filter="reading" />)
     expect(sectionLabels()).toEqual(['Other'])
     rerender(<MemoryBrowser toast={vi.fn()} filter="zzz" />)
     expect(screen.getByText('No memories match “zzz”.')).toBeTruthy()
+  })
+
+  it('counts the whole topic when deleting under a filter', async () => {
+    render(<MemoryBrowser toast={vi.fn()} filter="lease" />)
+    await screen.findByText('Rent is paid on the 1st')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Housing' }))
+    expect(screen.getByRole('alertdialog', { name: 'Forget Housing?' }).textContent).toContain(
+      'its 4 facts',
+    )
+  })
+
+  it('keeps a filtered row’s preview and date from the whole topic', async () => {
+    render(<MemoryBrowser toast={vi.fn()} filter="lease" />)
+    await screen.findByText('Rent is paid on the 1st')
+    expect(screen.queryByText('Lease ends in March')).toBeNull()
+  })
+
+  it('files topics spelled in different cases under one row', async () => {
+    authFetch.mockImplementation(() =>
+      json({
+        facts: [
+          { id: 'a', content: 'One', state: 'live', section: 'money', topic: 'Housing' },
+          { id: 'b', content: 'Two', state: 'live', section: 'money', topic: ' housing ' },
+        ],
+        total: 2,
+      }),
+    )
+    render(<MemoryBrowser toast={vi.fn()} />)
+    await screen.findByText('One')
+    expect(screen.getAllByText(/^housing$/i)).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: /^Delete / }))
+    expect(screen.getByRole('alertdialog').textContent).toContain('its 2 facts')
   })
 })

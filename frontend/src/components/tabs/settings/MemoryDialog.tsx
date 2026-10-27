@@ -50,21 +50,30 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
           </div>
         }
       >
-        <span className="rd-help">
-          {off
-            ? 'Memory is off — Lucius is not learning new facts or using these. Turn it on in ' +
-              'Settings → Memory.'
-            : 'Durable facts Lucius carries between conversations. Editing or forgetting one takes ' +
-              'effect on the next turn.'}
-        </span>
-        <input
-          className="rd-input"
-          value={q}
-          placeholder="Search memories…"
-          aria-label="Search memories"
-          onChange={(e) => setQ(e.target.value)}
+        <MemoryBrowser
+          toast={toast}
+          disabled={off}
+          filter={q}
+          escapeRef={browserEscape}
+          header={
+            <div className="rd-mem-head">
+              <span className="rd-help">
+                {off
+                  ? 'Memory is off — Lucius is not learning new facts or using these. Turn it on in ' +
+                    'Settings → Memory.'
+                  : 'Durable facts Lucius carries between conversations. Editing or forgetting one takes ' +
+                    'effect on the next turn.'}
+              </span>
+              <input
+                className="rd-input"
+                value={q}
+                placeholder="Search memories…"
+                aria-label="Search memories"
+                onChange={(e) => setQ(e.target.value)}
+              />
+            </div>
+          }
         />
-        <MemoryBrowser toast={toast} disabled={off} filter={q} escapeRef={browserEscape} />
       </Modal>
       {forgetEverything && (
         <ForgetConfirm

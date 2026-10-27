@@ -19,7 +19,7 @@ import type { Toast } from './ds'
 import { ForgetConfirm, MemoryAskBox, MemoryBullets } from './MemoryParts'
 import type { PendingForget } from './MemoryParts'
 import { MemoryMovedOut } from './MemoryMovedOut'
-import { SECTIONS, UNSORTED, groupFacts, matchesFilter, topicsOf } from './memoryGroups'
+import { SECTIONS, UNSORTED, groupFacts, matchesFilter, topicsOf, topicKey } from './memoryGroups'
 import type { Topic } from './memoryGroups'
 
 function TopicRow({
@@ -121,7 +121,13 @@ export function MemoryBrowser({
     }
   }
 
-  function askDelete(section: string, t: Topic) {
+  // The filter decides which rows show; a row's preview, date and delete count are the whole topic.
+  function whole(section: string, t: Topic): Topic {
+    return topicsOf(all.bySection.get(section) ?? []).find((w) => w.key === t.key) ?? t
+  }
+
+  function askDelete(section: string, topic: Topic) {
+    const t = whole(section, topic)
     setPending({
       kind: 'topic',
       name: t.name,
@@ -150,7 +156,7 @@ export function MemoryBrowser({
 
   // A topic whose last fact was just forgotten no longer exists: fall back to the list.
   const topic = open
-    ? topicsOf(all.bySection.get(open.section) ?? []).find((t) => t.name === open.topic)
+    ? topicsOf(all.bySection.get(open.section) ?? []).find((t) => t.key === topicKey(open.topic))
     : undefined
   if (open && topic) {
     return (
@@ -217,8 +223,8 @@ export function MemoryBrowser({
                   ? bullets(list)
                   : topicsOf(list).map((t) => (
                       <TopicRow
-                        key={t.name}
-                        topic={t}
+                        key={t.key}
+                        topic={whole(s.key, t)}
                         onOpen={() => setOpen({ section: s.key, topic: t.name })}
                         onDelete={() => askDelete(s.key, t)}
                       />

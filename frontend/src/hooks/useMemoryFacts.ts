@@ -93,9 +93,8 @@ export function useMemoryFacts(notify: (message: string) => void) {
         notify(typeof body.detail === 'string' ? body.detail : `Could not save (HTTP ${r.status})`)
         return false
       }
-      const saved = (await r.json().catch(() => ({}))) as { rejected?: { reason?: string }[] }
       void refresh()
-      notify(rejectedNote(saved) || 'Saved')
+      notify('Saved')
       return true
     } catch {
       notify('Could not reach the server. Try again.')
@@ -163,8 +162,4 @@ export function instructSummary(r: Partial<InstructResult>): string {
   const note = rejectedNote(r)
   if (note) parts.push(note)
   return parts.length ? parts.join(' · ') : 'Nothing needed changing'
-}
-
-export function memorySourceLabel(source?: string): string {
-  return source === 'explicit' ? 'You told Lucius' : 'Learned in chat'
 }

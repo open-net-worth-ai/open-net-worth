@@ -1337,6 +1337,11 @@
   flex-direction: column;
   gap: 22px;
 }
+.onw-settings .rd-mem-head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 .onw-settings .rd-mem-sec {
   display: flex;
   flex-direction: column;

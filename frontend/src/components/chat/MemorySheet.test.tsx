@@ -202,4 +202,18 @@ describe('MemorySheet', () => {
     release(new Response(JSON.stringify({ facts: [RENT], total: 1 })))
     expect(await screen.findByText('Rent goes up every March')).toBeTruthy()
   })
+
+  it('hides the description and search on a topic page and keeps the query for the way back', async () => {
+    serve(true, [RENT, DEPOSIT])
+    render(<MemorySheet onClose={vi.fn()} />)
+    await screen.findByText('Rent goes up every March')
+    fireEvent.change(screen.getByLabelText('Search memories'), { target: { value: 'rent' } })
+    await openRent()
+    expect(screen.queryByLabelText('Search memories')).toBeNull()
+    expect(screen.queryByText(/Durable facts Lucius carries/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Memory/ }))
+    const search = screen.getByLabelText('Search memories') as HTMLInputElement
+    expect(search.value).toBe('rent')
+    expect(screen.queryByRole('region', { name: 'Plans' })).toBeNull()
+  })
 })

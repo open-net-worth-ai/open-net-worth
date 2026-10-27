@@ -1,7 +1,10 @@
 // Synthetic memory facts shared by the memory UI tests — never a real row.
 import type { MemoryFact } from '../../../hooks/useMemoryFacts'
 
-const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString()
+const daysAgo = (n: number) => {
+  const d = new Date(Date.now() - n * 86_400_000)
+  return `${d.toLocaleDateString('en-CA')}T12:00:00Z`
+}
 
 let n = 0
 function fact(over: Partial<MemoryFact> & { content: string }): MemoryFact {

@@ -31,14 +31,29 @@ export function retiredReason(reason?: string | null): string {
   return REASONS[reason ?? ''] ?? 'Out of date'
 }
 
-/** Days until a moved-out fact is forgotten for good: 30 less the days since it moved. */
-export function daysUntilForgotten(retiredAt?: string | null, now = Date.now()): number {
-  const at = retiredAt ? Date.parse(retiredAt) : NaN
-  if (Number.isNaN(at)) return RETIRED_KEEP_DAYS
-  return Math.max(0, RETIRED_KEEP_DAYS - Math.floor((now - at) / DAY_MS))
+const localDay = (d = new Date()) => d.toLocaleDateString('en-CA')
+
+/** Whole calendar days until a moved-out fact is forgotten for good (30 less the days since it
+ *  moved, as the nightly purge counts them), or null when it carries no date. */
+export function daysUntilForgotten(retiredAt?: string | null, today = localDay()): number | null {
+  const at = Date.parse((retiredAt ?? '').slice(0, 10))
+  const now = Date.parse(today)
+  if (Number.isNaN(at) || Number.isNaN(now)) return null
+  return Math.max(0, RETIRED_KEEP_DAYS - Math.round((now - at) / DAY_MS))
 }
 
-export type Topic = { name: string; facts: MemoryFact[]; updated: string; named: boolean }
+/** What two spellings of one topic have in common, as the backend's `topic_key`. */
+export function topicKey(name?: string | null): string {
+  return (name ?? '').split(/\s+/).filter(Boolean).join(' ').toLowerCase()
+}
+
+export type Topic = {
+  key: string
+  name: string
+  facts: MemoryFact[]
+  updated: string
+  named: boolean
+}
 
 export type Grouped = {
   bySection: Map<string, MemoryFact[]>
@@ -54,7 +69,7 @@ function isExpired(f: MemoryFact, today: string): boolean {
   return !!f.expires_at && f.expires_at.slice(0, 10) < today
 }
 
-export function groupFacts(facts: MemoryFact[], today = new Date().toLocaleDateString('en-CA')) {
+export function groupFacts(facts: MemoryFact[], today = localDay()) {
   const known = new Set(SECTIONS.map((s) => s.key))
   const out: Grouped = { bySection: new Map(), unsorted: [], retired: [] }
   for (const f of facts) {
@@ -69,17 +84,20 @@ export function groupFacts(facts: MemoryFact[], today = new Date().toLocaleDateS
 }
 
 export function topicsOf(facts: MemoryFact[]): Topic[] {
-  const byName = new Map<string, MemoryFact[]>()
+  const byKey = new Map<string, { name: string; facts: MemoryFact[] }>()
   for (const f of facts) {
-    const name = (f.topic ?? '').trim() || 'General'
-    byName.set(name, [...(byName.get(name) ?? []), f])
+    const key = topicKey(f.topic) || 'general'
+    const group = byKey.get(key) ?? { name: (f.topic ?? '').trim() || 'General', facts: [] }
+    group.facts.push(f)
+    byKey.set(key, group)
   }
-  return [...byName.entries()]
-    .map(([name, fs]) => ({
-      name,
-      facts: fs,
-      updated: latest(fs),
-      named: fs.some((f) => (f.topic ?? '').trim() === name),
+  return [...byKey.entries()]
+    .map(([key, g]) => ({
+      key,
+      name: g.name,
+      facts: g.facts,
+      updated: latest(g.facts),
+      named: g.facts.some((f) => topicKey(f.topic) !== ''),
     }))
     .sort((a, b) => (a.updated < b.updated ? 1 : -1))
 }

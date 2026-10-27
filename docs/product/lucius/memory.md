@@ -121,8 +121,7 @@ no context:
 
 One sentence can do all three. The list refreshes and a note says what changed — for example
 **Added 1 · Updated 1** — and what he refused to remember, with the reason (a full card number, a
-balance that is read live, a sensitive topic while that switch is off). Anything changed this way — or with **Edit** — shows as **You told
-Lucius**.
+balance that is read live, a sensitive topic while that switch is off).
 
 It's one small AI call on the **Memory** task model, billed like the rest of memory, and it
 needs memory switched on. **Edit** and **Forget** make no AI call and work either way.

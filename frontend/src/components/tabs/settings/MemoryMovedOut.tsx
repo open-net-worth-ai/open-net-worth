@@ -34,7 +34,7 @@ export function MemoryMovedOut({
                 <span className="rd-mem-topic-name">{retiredReason(f.retired_reason)}</span>
                 <span className="rd-mem-topic-preview">{f.content}</span>
                 <span className="rd-mem-topic-date">
-                  Forgotten in {days} {days === 1 ? 'day' : 'days'}
+                  {days === null ? '' : `Forgotten in ${days} ${days === 1 ? 'day' : 'days'}`}
                 </span>
               </div>
               <span className="rd-mem-topic-acts">

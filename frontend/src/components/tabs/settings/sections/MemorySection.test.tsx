@@ -84,8 +84,10 @@ describe('MemorySection', () => {
     render(<MemorySection toast={toast} />)
     const sw = await screen.findByRole('switch', { name: 'Include sensitive topics in memory' })
     await waitFor(() => expect((sw as HTMLButtonElement).disabled).toBe(false))
+    expect(sw.getAttribute('aria-checked')).toBe('false')
     fireEvent.click(sw)
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Could not save (HTTP 500)'))
+    expect(sw.getAttribute('aria-checked')).toBe('false')
   })
 
   it('leaves import and export as coming soon', async () => {
