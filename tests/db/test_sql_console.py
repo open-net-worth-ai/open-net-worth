@@ -121,9 +121,14 @@ def test_every_route_to_a_credential_table_is_refused(seeded, statement):
         sql_console.execute_readonly(statement)
 
 
-def test_chat_transcripts_are_refused(seeded):
-    with pytest.raises(ValidationError):
-        sql_console.execute_readonly("SELECT * FROM sessions")
+def test_the_operators_own_conversations_are_readable(seeded):
+    """Every conversation on a normal instance is the operator's own — titles and messages are
+    readable, so Lucius can find an earlier chat. Only a demo denies them."""
+    got = sql_console.execute_readonly(
+        "SELECT s.title, COUNT(m.id) FROM sessions s "
+        "LEFT JOIN session_messages m ON m.session_id = s.id GROUP BY s.id"
+    )
+    assert got["rows"] == []
 
 
 def test_denied_tables_reuses_the_canonical_secret_set():
