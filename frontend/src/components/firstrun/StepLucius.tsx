@@ -517,12 +517,9 @@ export function StepLucius({
                     </div>
                     {detected[d.key] && (
                       <Button
-                        // One default, not a row of equals: only the first found option leads.
-                        variant={
-                          d.key === offered.find((o) => detected[o.key])?.key
-                            ? 'primary'
-                            : 'secondary'
-                        }
+                        // Every detected CLI is a subscription the user already pays for —
+                        // equal choices, so none is styled as the recommended one.
+                        variant="primary"
                         loading={busyKey === d.key}
                         disabled={busy && busyKey !== d.key}
                         onClick={() => {
