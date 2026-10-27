@@ -89,7 +89,11 @@ describe('MemoryBrowser', () => {
         '/api/memory/instruct',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ instruction: 'the lease now ends in May', topic: 'Housing' }),
+          body: JSON.stringify({
+            instruction: 'the lease now ends in May',
+            section: 'money',
+            topic: 'Housing',
+          }),
         }),
       ),
     )
@@ -176,6 +180,60 @@ describe('MemoryBrowser', () => {
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith('/api/memory/facts/f10', { method: 'DELETE' }),
     )
+  })
+
+  it('a nameless group sends its section and no topic, apart from a real "General"', async () => {
+    authFetch.mockImplementation((url: string) => {
+      if (url === '/api/memory/instruct')
+        return json({ added: 1, updated: 0, removed: 0, rejected: [] })
+      return json({
+        facts: [
+          { id: 'g1', content: 'Has a library card', state: 'live', section: 'other', topic: null },
+          { id: 'g2', content: 'Plays chess', state: 'live', section: 'other', topic: 'General' },
+        ],
+        total: 2,
+      })
+    })
+    render(<MemoryBrowser toast={vi.fn()} />)
+    await screen.findByText('Has a library card')
+    const other = screen.getByRole('region', { name: 'Other' })
+    const rows = within(other).getAllByText('General')
+    expect(rows).toHaveLength(2)
+
+    fireEvent.click(within(other).getByText('Has a library card').closest('button') as HTMLElement)
+    expect(screen.queryByText('Plays chess')).toBeNull()
+    fireEvent.change(screen.getByLabelText('Tell Lucius what to remember or change'), {
+      target: { value: 'it expires in May' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
+    await waitFor(() =>
+      expect(authFetch).toHaveBeenCalledWith(
+        '/api/memory/instruct',
+        expect.objectContaining({
+          body: JSON.stringify({ instruction: 'it expires in May', section: 'other' }),
+        }),
+      ),
+    )
+  })
+
+  it('names a memory moved out as sensitive', async () => {
+    authFetch.mockImplementation(() =>
+      json({
+        facts: [
+          {
+            id: 's1',
+            content: 'A health detail',
+            state: 'retired',
+            retired_reason: 'sensitive',
+            retired_at: new Date().toISOString(),
+          },
+        ],
+        total: 1,
+      }),
+    )
+    render(<MemoryBrowser toast={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: /Moved out of memory \(1\)/ }))
+    expect(screen.getByText('Not kept — sensitive')).toBeTruthy()
   })
 
   it('files older memories under their own heading', async () => {

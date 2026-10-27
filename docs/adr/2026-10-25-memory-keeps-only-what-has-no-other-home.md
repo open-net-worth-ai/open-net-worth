@@ -429,3 +429,28 @@ permission table.
   with review; the topic detail view.
 - **Not now:** the in-chat "memory updated" line; a per-conversation "don't remember this chat";
   special handling for other installs' migration.
+
+## Amendment 2026-10-27 (5) — final-review rulings on decay, sensitivity and the first sort
+
+Amendment 4 still wins on everything it says; this only sharpens the rules the final review found
+unsafe on a real book.
+
+- **The unused clock** is the newest of the last citation, the last time the user said the fact
+  again, the last user edit (`edited_at`), the day the sort filed it and its creation. Being shown
+  in the prompt never counts. While no live fact has been cited for 90 days, nothing is retired
+  as unused: the missing signal means citations are not arriving, not that the facts are unused.
+  A plan's clock also counts its filing day and a user edit.
+- **Expiry follows the section, not the legacy tier.** A filed fact expires on its `expires_at`,
+  and an Open item always has one. A `durable` legacy fact filed outside Open items drops its
+  stray date.
+- **Sensitive facts stay out while the setting is off.** The prompt block and recall leave out a
+  fact flagged sensitive (it stays in the list and returns when the setting is turned on). The
+  sort flags sensitive facts, and with the setting off it retires them with the new reason
+  `sensitive` ("Not kept — sensitive").
+- **Filing runs the guards a new fact meets.** A legacy fact over 280 characters is filed only with
+  a shortened wording the sort proposes — the one exception to "the sort never edits"; one with a
+  full card, account or ID number is retired `sensitive`.
+- **Idle extraction** skips Captures, and stops retrying a conversation after three failed
+  extractions in a row until it has new messages.
+- **The first sort of a live book** is reviewed with the app stopped, because the background sort
+  starts at boot — `docs/ai/MEMORY_MIGRATION.md`.

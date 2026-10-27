@@ -8,7 +8,7 @@ PATCH  /api/memory/facts/{id} body {"content": str} → the edited fact
 DELETE /api/memory/facts/{id} → {"ok": bool}
 DELETE /api/memory/facts      → {"ok": true, "deleted": n}
 DELETE /api/memory/topics     ?section=&topic= → {"ok": true, "deleted": n}
-POST   /api/memory/instruct   body {"instruction": str, "topic"?: str}
+POST   /api/memory/instruct   body {"instruction": str, "topic"?: str, "section"?: str}
                               → {"added", "updated", "removed", "rejected"}
 GET    /api/memory/import/prompt  → {"prompt"}: what to run in the other assistant
 POST   /api/memory/import/preview body {"text": str} → {"items"}; writes nothing
@@ -54,6 +54,7 @@ class MemorySettingsPatch(BaseModel):
 class MemoryInstruction(BaseModel):
     instruction: str
     topic: str | None = None
+    section: str | None = None
 
 
 class MemoryImportPreview(BaseModel):
@@ -131,7 +132,7 @@ async def instruct_memory(body: MemoryInstruction):
     """The memory dialog's "Tell Lucius what to change": add, rewrite or forget facts from one
     typed sentence. Unlike forgetting, it needs memory ON — it writes."""
     try:
-        return await apply_instruction(body.instruction, body.topic)
+        return await apply_instruction(body.instruction, body.topic, body.section)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.message) from exc
     except MemoryDisabledError as exc:

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { daysUntilForgotten, topicsOf } from './memoryGroups'
+import {
+  NO_TOPIC_KEY,
+  daysUntilForgotten,
+  groupFacts,
+  retiredReason,
+  topicsOf,
+} from './memoryGroups'
 
 describe('daysUntilForgotten', () => {
   const today = '2026-10-27'
@@ -34,5 +40,61 @@ describe('topicsOf', () => {
     expect(topics).toHaveLength(1)
     expect(topics[0]!.name).toBe('Housing')
     expect(topics[0]!.facts).toHaveLength(2)
+  })
+})
+
+describe('topicsOf — facts with no topic', () => {
+  it('keeps them apart from a real topic named "General"', () => {
+    const topics = topicsOf([
+      { id: 'a', content: 'x', topic: null },
+      { id: 'b', content: 'y', topic: 'General' },
+    ])
+    expect(topics.map((t) => [t.key, t.named]).sort()).toEqual(
+      [
+        [NO_TOPIC_KEY, false],
+        ['general', true],
+      ].sort(),
+    )
+  })
+})
+
+describe('groupFacts — expiry agrees with the backend', () => {
+  const today = '2026-10-27'
+  const past = '2026-10-01'
+
+  it('hides a filed open item past its date whatever its legacy tier', () => {
+    const g = groupFacts(
+      [
+        {
+          id: 'o',
+          content: 'Call the bank',
+          state: 'live',
+          section: 'open_items',
+          tier: 'durable',
+          expires_at: past,
+        },
+      ],
+      today,
+    )
+    expect(g.bySection.get('open_items')).toBeUndefined()
+  })
+
+  it('keeps an unsorted durable fact with a stray past date, hides a time-bound one', () => {
+    const g = groupFacts(
+      [
+        { id: 'd', content: 'Durable', state: 'unsorted', tier: 'durable', expires_at: past },
+        { id: 't', content: 'Dated', state: 'unsorted', tier: 'time_bound', expires_at: past },
+      ],
+      today,
+    )
+    expect(g.unsorted.map((f) => f.id)).toEqual(['d'])
+  })
+})
+
+describe('retiredReason', () => {
+  it('labels every backend retire reason', () => {
+    expect(retiredReason('sensitive')).toBe('Not kept — sensitive')
+    expect(retiredReason('unused')).toBe('Not used in 90 days')
+    expect(retiredReason('something-new')).toBe('Out of date')
   })
 })

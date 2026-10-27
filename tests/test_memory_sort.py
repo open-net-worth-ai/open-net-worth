@@ -105,7 +105,7 @@ def test_sort_files_into_a_section_and_topic(isolated, monkeypatch):
     )
     assert facts["a"]["source"] == "explicit" and facts["a"].get("sorted_at")
     assert (facts["b"]["state"], facts["b"]["section"]) == ("live", "you")
-    assert facts["b"]["content"] == "Prefers short answers."
+    assert facts["b"]["content"] == "Prefers short answers"
     assert facts["b"]["source"] == "implicit"
     assert out["sorted"] == 2 and out["retired"] == 0 and out["remaining"] == 0
     (call,) = model.calls
@@ -295,7 +295,7 @@ def test_the_sort_files_but_never_edits_the_words(isolated, monkeypatch):
 
     facts = _by_id()
     assert (facts["a"]["state"], facts["a"]["content"]) == ("unsorted", "Rents a flat")
-    assert (facts["b"]["state"], facts["b"]["content"]) == ("live", "Likes tea.")
+    assert (facts["b"]["state"], facts["b"]["content"]) == ("live", "Likes tea")
 
 
 def test_the_script_says_why_when_memory_is_off(isolated, monkeypatch, capsys):
@@ -368,7 +368,7 @@ def test_dry_run_writes_nothing(isolated, monkeypatch, capsys):
     plan = asyncio.run(migrate_memory_topics.run(apply=False))
 
     printed = capsys.readouterr().out
-    assert "a | money · Housing | Rents a flat." in printed
+    assert "a | money · Housing | (text unchanged)" in printed
     assert "b | retire: ledger" in printed
     assert len(plan) == 2
     assert sorted(MemoryStore().all_facts(), key=lambda f: f["id"]) == sorted(
@@ -385,3 +385,124 @@ def test_apply_sorts_everything(isolated, monkeypatch, capsys):
     asyncio.run(migrate_memory_topics.run(apply=True))
 
     assert _by_id()["a"]["state"] == "live" and "0 left" in capsys.readouterr().out
+
+
+# ── final review: filing runs the guards a new fact meets (R24, R25) ─────────
+
+
+def test_the_prompt_asks_for_the_sensitive_flag_in_the_settings_own_words(isolated, monkeypatch):
+    from backend.ai import memory_structure as ms
+
+    MemoryStore().bulk_insert([_legacy("a", "Rents a flat")])
+    model = _use(monkeypatch, _Model())
+
+    asyncio.run(memory_sort.sort_unsorted())
+
+    prompt = model.calls[0]["prompt"]
+    assert ms.SENSITIVE_TOPICS in prompt and '"sensitive": true' in prompt
+
+
+def test_a_long_fact_is_marked_and_filed_only_with_a_shorter_wording(isolated, monkeypatch):
+    long_text = "Keeps every household receipt in a shoebox and reconciles them monthly. " * 5
+    short = "Keeps every household receipt and reconciles them monthly."
+    MemoryStore().bulk_insert([_legacy("long", long_text.strip()), _legacy("tiny", "Likes tea")])
+    model = _use(
+        monkeypatch,
+        _Model(
+            {
+                "facts": [
+                    {"id": "long", "section": "money", "topic": "Bookkeeping", "content": short},
+                    {"id": "tiny", "section": "you", "topic": "Preferences", "content": "Tea!"},
+                ]
+            }
+        ),
+    )
+
+    asyncio.run(memory_sort.sort_unsorted())
+
+    facts = _by_id()
+    assert (facts["long"]["state"], facts["long"]["content"]) == ("live", short)
+    assert (facts["tiny"]["state"], facts["tiny"]["content"]) == ("live", "Likes tea")
+    assert "long [over 280 characters]:" in model.calls[0]["prompt"]
+
+
+def test_a_long_fact_without_a_short_enough_wording_stays_unsorted(isolated, monkeypatch):
+    long_text = ("Keeps every household receipt in a shoebox. " * 8).strip()
+    MemoryStore().bulk_insert([_legacy("long", long_text)])
+    _use(
+        monkeypatch,
+        _Model(
+            {
+                "facts": [
+                    {
+                        "id": "long",
+                        "section": "money",
+                        "topic": "Bookkeeping",
+                        "content": long_text + " Also more.",
+                    }
+                ]
+            }
+        ),
+    )
+
+    out = asyncio.run(memory_sort.sort_unsorted())
+
+    row = _by_id()["long"]
+    assert (row["state"], row["content"]) == ("unsorted", long_text)
+    assert out["sorted"] == 0
+
+
+def test_a_sensitive_fact_is_retired_while_the_setting_is_off(isolated, monkeypatch):
+    MemoryStore().bulk_insert([_legacy("h", "Has a chronic condition")])
+    _use(
+        monkeypatch,
+        _Model({"facts": [{"id": "h", "section": "you", "topic": "About you", "sensitive": True}]}),
+    )
+
+    out = asyncio.run(memory_sort.sort_unsorted())
+
+    row = _by_id()["h"]
+    assert (row["state"], row["retired_reason"]) == ("retired", "sensitive")
+    assert out["retired"] == 1
+
+
+def test_a_legacy_fact_with_an_account_number_is_retired_as_sensitive(isolated, monkeypatch):
+    MemoryStore().bulk_insert([_legacy("acct", "Salary lands in account 123456789012")])
+    _use(
+        monkeypatch,
+        _Model({"facts": [{"id": "acct", "section": "money", "topic": "Income & work"}]}),
+    )
+
+    asyncio.run(memory_sort.sort_unsorted())
+
+    assert _by_id()["acct"]["retired_reason"] == "sensitive"
+
+
+def test_the_sweep_side_db_work_runs_off_the_event_loop(isolated, monkeypatch):
+    import threading
+
+    from backend.ai import memory_write
+
+    threads: dict[str, list[bool]] = {"has_unsorted": [], "choke": []}
+    real_has, real_choke = memory_sort.has_unsorted, memory_write.apply_memory_change
+
+    def spy_has():
+        threads["has_unsorted"].append(threading.current_thread() is threading.main_thread())
+        return real_has()
+
+    def spy_choke(*a, **k):
+        threads["choke"].append(threading.current_thread() is threading.main_thread())
+        return real_choke(*a, **k)
+
+    monkeypatch.setattr(memory_sort, "has_unsorted", spy_has)
+    monkeypatch.setattr(memory_sort, "apply_memory_change", spy_choke)
+    monkeypatch.setattr(memory_tidy, "apply_memory_change", spy_choke)
+    monkeypatch.setattr(memory_sort, "_retry_after", 0.0)
+    MemoryStore().bulk_insert([_legacy("a", "Rents a flat"), _legacy("b", "Likes tea")])
+    _use(monkeypatch, _Model({"facts": [{"id": "a", "section": "money", "topic": "Housing"}]}))
+
+    asyncio.run(memory_sort.sort_tick())
+    asyncio.run(memory_tidy.tidy(force=True))
+
+    assert threads["has_unsorted"] == [False]
+    assert threads["choke"] and not any(threads["choke"])

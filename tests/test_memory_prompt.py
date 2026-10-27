@@ -42,3 +42,46 @@ def test_the_citation_rule_is_in_the_stable_half(prompt):
     assert "<memory-used>m7a88f8 m3c01d2</memory-used>" in stable
     assert "memory-used" not in volatile
     assert "never mention" in stable.lower() or "never show" in stable.lower()
+
+
+def _store_live(fid: str, content: str, **extra) -> None:
+    from backend.db import MemoryStore
+
+    MemoryStore().insert(
+        {
+            "id": fid,
+            "content": content,
+            "state": "live",
+            "section": "you",
+            "topic": "About you",
+            "source": "implicit",
+            "expires_at": None,
+            "created_at": "2026-03-04T10:00:00",
+            "updated_at": "2026-03-04T10:00:00",
+            **extra,
+        }
+    )
+
+
+def test_the_briefing_block_carries_no_citation_handles(db_isolated):
+    from backend.ai.prompts import _fmt_memory, memory_block
+    from backend.db.memory_settings_store import MemorySettingsStore
+
+    MemorySettingsStore().set_enabled(True)
+    _store_live("mem_7a88f842d02f", "Prefers short answers")
+
+    assert "[m7a88f8]" in _fmt_memory()
+    block = memory_block()
+    assert "Prefers short answers" in block and "[m7a88f8]" not in block
+
+
+def test_a_sensitive_fact_stays_out_of_the_prompt_until_the_setting_is_on(db_isolated):
+    from backend.db.memory_settings_store import MemorySettingsStore
+
+    MemorySettingsStore().set_enabled(True)
+    _store_live("mem_000000000001", "Prefers short answers")
+    _store_live("mem_000000000002", "Has a chronic condition", sensitive=True)
+
+    assert "chronic" not in build_system_prompt()
+    MemorySettingsStore().set_sensitive_topics(True)
+    assert "chronic" in build_system_prompt()

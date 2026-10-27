@@ -38,7 +38,7 @@ def _month(created_at) -> str:
         return ""
 
 
-def _bullet(fact: dict) -> str:
+def _bullet(fact: dict, handles: bool = True) -> str:
     content = " ".join(str(fact.get("content") or "").split())
     parts = [f"• {content}"]
     month = _month(fact.get("created_at"))
@@ -46,7 +46,8 @@ def _bullet(fact: dict) -> str:
         parts.append(f"({month})")
     if fact.get("section") == "open_items" and fact.get("expires_at"):
         parts.append(f"(until {str(fact['expires_at'])[:10]})")
-    parts.append(f"[{fact_handle(str(fact.get('id') or ''))}]")
+    if handles:
+        parts.append(f"[{fact_handle(str(fact.get('id') or ''))}]")
     return " ".join(parts)
 
 
@@ -75,9 +76,17 @@ def _is_unsorted(fact: dict) -> bool:
     return fact.get("state") == "unsorted" or (not fact.get("state") and not fact.get("section"))
 
 
-def render_memory_block(facts: list[dict]) -> tuple[str, dict]:
+def render_memory_block(
+    facts: list[dict], *, handles: bool = True, sensitive_ok: bool = True
+) -> tuple[str, dict]:
     """``(text, stats)`` for ``facts`` (live and unsorted; retired are ignored). The text is
-    "" when there is nothing live and nothing waiting to be sorted."""
+    "" when there is nothing live and nothing waiting to be sorted.
+
+    ``handles=False`` drops the citation handles, for a reader with no citation rule (the
+    daily briefing). ``sensitive_ok=False`` (the "Include sensitive topics" setting is off)
+    leaves out every fact flagged sensitive; they come back when it is turned on."""
+    if not sensitive_ok:
+        facts = [f for f in facts if f.get("sensitive") is not True]
     live = [f for f in facts if f.get("state") == "live"]
     unsorted = [f for f in facts if f.get("state") != "live" and _is_unsorted(f)]
     stats = {"facts": len(live), "chars": 0, "by_section": {}, "unsorted": len(unsorted)}
@@ -94,7 +103,7 @@ def render_memory_block(facts: list[dict]) -> tuple[str, dict]:
         for name, group in _topic_groups(members):
             if name:
                 lines.append(f"  {name}:")
-            lines += [_bullet(f) for f in group]
+            lines += [_bullet(f, handles) for f in group]
     if unsorted:
         noun = "fact isn't" if len(unsorted) == 1 else "facts aren't"
         lines.append(f"({len(unsorted)} older {noun} sorted yet — recall_memory searches them.)")

@@ -20,6 +20,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Literal
 
 from backend.ai import memory_structure as ms
+from backend.core import data_events
 from backend.core.errors import ValidationError
 from backend.core.ids import new_id
 from backend.core.user_time import user_today
@@ -50,6 +51,10 @@ _MESSAGES = {
 }
 
 
+# ``_Plan._unfit_to_file``'s answer when a fact must stay unsorted (its reason is in ``rejected``).
+_REFUSED = "refused"
+
+
 def _too_long(length: int) -> str:
     return f"Keep a memory under {ms.FACT_MAX_CHARS} characters (this one is {length})."
 
@@ -60,13 +65,13 @@ _ISO_DATE = re.compile(r"(?<!\d-)(?<!\d)\d{4}-\d{2}-\d{2}(?!-?\d)")
 _DIGIT_RUN = re.compile(r"(?<!\d)\d(?:[ -]?\d){11,}(?!\d)")
 _ID_KEYWORDS = (
     r"(?:passport|nric|ssn|social security|national id|id card|identity card|tax id"
-    r"|driver'?s? licen[cs]e)"
+    r"|driver'?s? licen[cs]e|id(?=\s*(?:no\b|no\.|number|num\b|#)))"
 )
 _ID_SHAPES = (
     re.compile(r"\b[STFGM]\d{7}[A-Z]\b", re.I),
     re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
     re.compile(
-        rf"\b{_ID_KEYWORDS}\b(?:\s*(?:no\.?|number|num|#))?[\s:#=-]{{0,4}}"
+        rf"\b{_ID_KEYWORDS}\b(?:\s*(?:no\.?|number|num|#))?(?:\s*(?:is|was)\b)?[\s:#=-]{{0,4}}"
         r"(?:(?=[A-Z0-9-]{6,}\b)(?=[A-Z-]*\d)[A-Z0-9-]{6,}|\d{3}[ -]\d{2}[ -]\d{4}\b)",
         re.I,
     ),
@@ -254,10 +259,36 @@ class _Plan:
         current = self.view(fid)
         if current is None:
             return self.reject("unknown_id", "", None, None)
+        if raw.get("section") is not None and current.get("state") not in ("live", "retired"):
+            unfit = self._unfit_to_file(raw, current)
+            if unfit == _REFUSED:
+                return None
+            if unfit:
+                return self.retire({"id": fid, "reason": unfit})
         changes = self._changes(raw, current)
         if changes is not None and len(changes) > 1:
             self.patches.setdefault(fid, {}).update(changes)
             self.counts["updated"] += 1
+
+    def _unfit_to_file(self, raw: dict, current: dict) -> str | None:
+        """Filing a fact that is not yet live runs the guards a new fact meets, on the text it
+        will be filed with. Returns the reason to retire it instead (``sensitive`` for an
+        identifier, or for a sensitive fact while sensitive topics are off; ``ledger`` for a
+        figure the ledger reads live), ``_REFUSED`` when it must stay unsorted (too long, with
+        no shorter wording given), or None when it may be filed."""
+        given = raw.get("content")
+        text, reason, message = self.vet_text(
+            given if given is not None else current.get("content")
+        )
+        if reason == "identifier":
+            return "sensitive"
+        if reason == "ledger_figure":
+            return "ledger"
+        if reason:
+            self.reject(reason, text, raw.get("section"), current.get("topic"), message)
+            return _REFUSED
+        flagged = _truthy(raw.get("sensitive")) or current.get("sensitive") is True
+        return "sensitive" if flagged and not self.sensitive_ok else None
 
     def _changes(self, raw: dict, current: dict) -> dict | None:
         changes: dict = {"updated_at": self.now}
@@ -287,6 +318,7 @@ class _Plan:
             return None
         if len(changes) > 1 and self.source == "explicit":
             changes["source"] = "explicit"
+            changes["edited_at"] = self.now
         return changes
 
     def _shape_update(self, raw: dict, current: dict, section, changes: dict) -> bool:
@@ -313,18 +345,25 @@ class _Plan:
                 self.reject("bad_expiry", "", section, current.get("topic"))
                 return False
             changes["expires_at"] = expires
+        elif section == ms.OPEN_ITEMS and not current.get("expires_at"):
+            changes["expires_at"], _ = _expiry(section, None, self.today)
         return True
 
     @staticmethod
     def _carried_expiry(current: dict, section: str):
         """The expiry an update keeps when it names none. The 14-day clock belongs to Open
         items: a fact filed out of them stops expiring, one filed into them from another
-        section starts the clock. A legacy fact with no section keeps whatever it carried."""
+        section starts the clock. A legacy fact with no section keeps its date into Open items,
+        and into any other section only if it was ``time_bound`` — a ``durable`` legacy fact's
+        stray date never meant an expiry."""
         was = current.get("section")
         if was == ms.OPEN_ITEMS and section != ms.OPEN_ITEMS:
             return None
         if section == ms.OPEN_ITEMS and was not in (None, ms.OPEN_ITEMS):
             return None
+        if was is None and section != ms.OPEN_ITEMS:
+            if current.get("tier", "time_bound") != "time_bound":
+                return None
         return current.get("expires_at")
 
     def remove(self, fid) -> None:
@@ -440,4 +479,17 @@ def apply_memory_change(
         if strict and plan.rejected:
             raise ValidationError(plan.messages[0], reason=plan.rejected[0]["reason"])
         plan.commit(store)
+    if source == "implicit" and any(plan.counts.values()):
+        _announce()
     return plan.result()
+
+
+def _announce() -> None:
+    """Tell every open screen that memory changed. A background pass (extraction, the sort,
+    the tidy) has no tool call to broadcast for it, so an open memory list would otherwise keep
+    showing what was there before; a touch alone changes nothing the list shows. ADR
+    ``2026-09-29-every-write-refreshes-every-open-screen``."""
+    try:
+        data_events.publish(("memory",))
+    except Exception:  # noqa: BLE001 — a broadcast fault never fails the write
+        logger.debug("memory change broadcast failed", exc_info=True)

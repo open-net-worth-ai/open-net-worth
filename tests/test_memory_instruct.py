@@ -169,6 +169,55 @@ def test_a_topic_scope_shows_that_topic_first_and_files_new_facts_under_it(prov)
     assert (landlord["section"], landlord["topic"]) == ("money", "Housing")
 
 
+def test_the_section_the_page_sent_wins_over_a_guess(prov):
+    store = MemoryStore()
+    store.insert(
+        {
+            **_fact("m_kids", "Has two children"),
+            "state": "live",
+            "section": "you",
+            "topic": "Family",
+        }
+    )
+    store.insert(
+        {
+            **_fact("m_fund", "Pays into a college fund"),
+            "state": "live",
+            "section": "money",
+            "topic": "Family",
+        }
+    )
+    p = prov(json.dumps({"new": [{"content": "The college fund gets 200 a month"}]}))
+
+    out = asyncio.run(
+        instruct_mod.apply_instruction("the fund gets 200 a month", "Family", "money")
+    )
+
+    assert out["added"] == 1
+    assert 'the topic "Family" in section money' in p.prompts[0]
+    assert p.prompts[0].index("m_fund:") < p.prompts[0].index("m_kids:")
+    added = next(f for f in store.all_facts() if f["content"].startswith("The college fund"))
+    assert (added["section"], added["topic"]) == ("money", "Family")
+
+
+def test_a_group_with_no_topic_scopes_to_its_section_without_inventing_one(prov):
+    p = prov(json.dumps({"new": [{"content": "Has a library card"}]}))
+
+    asyncio.run(instruct_mod.apply_instruction("I have a library card", None, "other"))
+
+    (fact,) = MemoryStore().all_facts()
+    assert (fact["section"], fact["topic"]) == ("other", None)
+    assert "facts with no topic in section other" in p.prompts[0]
+    assert "General" not in p.prompts[0]
+
+
+def test_an_unknown_section_is_refused_before_the_model(prov):
+    p = prov("{}")
+    with pytest.raises(ValidationError):
+        asyncio.run(instruct_mod.apply_instruction("x", "Family", "nowhere"))
+    assert p.prompts == []
+
+
 def test_refused_while_memory_is_off_without_calling_the_model(prov):
     p = prov(json.dumps({"new": [{"content": "x"}]}))
     MemorySettingsStore().set_enabled(False)
@@ -217,6 +266,19 @@ def test_route_returns_the_counts(client, prov):
 
     assert r.status_code == 200
     assert r.json() == {"added": 1, "updated": 0, "removed": 0, "rejected": []}
+
+
+def test_route_passes_the_section_through(client, prov):
+    prov(json.dumps({"new": [{"content": "Has a library card"}]}))
+
+    r = client.post(
+        "/api/memory/instruct", json={"instruction": "I have a library card", "section": "other"}
+    )
+
+    assert r.status_code == 200 and r.json()["added"] == 1
+    assert MemoryStore().all_facts()[0]["section"] == "other"
+    bad = client.post("/api/memory/instruct", json={"instruction": "x", "section": "nowhere"})
+    assert bad.status_code == 422
 
 
 def test_route_maps_each_refusal_to_its_status(client, prov):

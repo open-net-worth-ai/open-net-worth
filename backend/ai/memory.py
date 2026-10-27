@@ -10,6 +10,7 @@ swallow exceptions so memory never breaks chat. Every write goes through
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -300,7 +301,8 @@ def _recall_row(fact: dict) -> dict:
 
 
 def recall_facts(query: str | None, limit: int = 10, topic: str | None = None) -> dict:
-    """Best-matching ACTIVE facts for ``query`` — relevance first, newest first on a tie. With a
+    """Best-matching remembered facts for ``query`` — relevance first, newest first on a tie.
+    A fact flagged sensitive is left out while "Include sensitive topics" is off. With a
     ``topic`` only that topic's facts are searched, and a query is optional: no query returns the
     topic's facts, newest first.
 
@@ -309,7 +311,8 @@ def recall_facts(query: str | None, limit: int = 10, topic: str | None = None) -
     the same rule the prompt block follows (``enabled()``, not ``memory_writes_enabled()``).
     Raises ValueError when there is neither a topic nor a query with a searchable word.
     """
-    if not MemorySettingsStore().enabled():
+    settings = MemorySettingsStore()
+    if not settings.enabled():
         raise MemoryDisabledError()
     query = (query or "").strip()
     q_tokens = _recall_tokens(query)
@@ -322,12 +325,9 @@ def recall_facts(query: str | None, limit: int = 10, topic: str | None = None) -
         query = ""
     limit = max(1, min(int(limit or 10), RECALL_MAX_LIMIT))
 
-    today = user_today().isoformat()
-    facts = [
-        f
-        for f in MemoryStore().remembered_facts(today=today)
-        if not (f.get("expires_at") and f["expires_at"] < today)
-    ]
+    facts = MemoryStore().remembered_facts()
+    if not settings.sensitive_topics():
+        facts = [f for f in facts if f.get("sensitive") is not True]
     pool = [f for f in facts if topic_key(f.get("topic")) == wanted] if wanted else facts
     if q_tokens:
         scored = [(_recall_score(query, q_tokens, f.get("content", "")), f) for f in pool]
@@ -528,7 +528,7 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
         return
 
     store = MemoryStore()
-    purge_expired(store)
+    await asyncio.to_thread(purge_expired, store)
 
     today = user_today().isoformat()
     prompt = extract_prompt(
@@ -554,7 +554,9 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
         logger.warning("memory extraction returned unparseable reply")
         return
 
-    apply_memory_change(_extraction_ops(parsed), source="implicit", strict=False, today=today)
+    await asyncio.to_thread(
+        apply_memory_change, _extraction_ops(parsed), source="implicit", strict=False, today=today
+    )
 
     if session_id:
         _save_cursor(session_id, len(history))

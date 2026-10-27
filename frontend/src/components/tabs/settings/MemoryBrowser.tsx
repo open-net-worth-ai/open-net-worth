@@ -19,7 +19,7 @@ import type { Toast } from './ds'
 import { ForgetConfirm, MemoryAskBox, MemoryBullets } from './MemoryParts'
 import type { PendingForget } from './MemoryParts'
 import { MemoryMovedOut } from './MemoryMovedOut'
-import { SECTIONS, UNSORTED, groupFacts, matchesFilter, topicsOf, topicKey } from './memoryGroups'
+import { SECTIONS, UNSORTED, groupFacts, matchesFilter, topicsOf } from './memoryGroups'
 import type { Topic } from './memoryGroups'
 
 function TopicRow({
@@ -85,7 +85,7 @@ export function MemoryBrowser({
   onTopicOpen?: (open: boolean) => void
 }) {
   const { facts, loading, forget, edit, instruct, deleteTopic } = useMemoryFacts(toast)
-  const [open, setOpen] = useState<{ section: string; topic: string } | null>(null)
+  const [open, setOpen] = useState<{ section: string; key: string } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingForget | null>(null)
   const needle = filter.trim().toLowerCase()
@@ -159,7 +159,7 @@ export function MemoryBrowser({
 
   // A topic whose last fact was just forgotten no longer exists: fall back to the list.
   const topic = open
-    ? topicsOf(all.bySection.get(open.section) ?? []).find((t) => t.key === topicKey(open.topic))
+    ? topicsOf(all.bySection.get(open.section) ?? []).find((t) => t.key === open.key)
     : undefined
   const topicShown = Boolean(open && topic)
   useEffect(() => {
@@ -189,7 +189,9 @@ export function MemoryBrowser({
         <MemoryAskBox
           disabled={disabled}
           placeholder={`Tell Lucius what to change about ${topic.name}`}
-          onSubmit={(text) => instruct(text, topic.name)}
+          onSubmit={(text) =>
+            instruct(text, { section: open.section, topic: topic.named ? topic.name : undefined })
+          }
         />
         {confirmNode}
       </div>
@@ -232,7 +234,7 @@ export function MemoryBrowser({
                       <TopicRow
                         key={t.key}
                         topic={whole(s.key, t)}
-                        onOpen={() => setOpen({ section: s.key, topic: t.name })}
+                        onOpen={() => setOpen({ section: s.key, key: t.key })}
                         onDelete={() => askDelete(s.key, t)}
                       />
                     ))}

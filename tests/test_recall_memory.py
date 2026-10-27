@@ -287,3 +287,48 @@ def test_classified_as_a_reviewed_read():
 
     assert mutated_domains("recall_memory") == ()
     assert "recall_memory" in READ_ONLY_TOOLS
+
+
+def test_a_sensitive_fact_is_not_recalled_while_the_setting_is_off(memory_on):
+    _seed(
+        "Trip insurance covers the knee surgery",
+        fid="s",
+        created_at="2026-01-01",
+        state="live",
+        section="you",
+        topic="About you",
+        sensitive=True,
+    )
+    _seed(
+        "Trip to Japan in spring",
+        fid="p",
+        created_at="2026-01-02",
+        state="live",
+        section="plans",
+        topic="Japan",
+    )
+
+    off, _ = _call(query="trip")
+    settings_store_mod.MemorySettingsStore().set_sensitive_topics(True)
+    on, _ = _call(query="trip")
+
+    assert _contents(off) == ["Trip to Japan in spring"]
+    assert sorted(_contents(on)) == [
+        "Trip insurance covers the knee surgery",
+        "Trip to Japan in spring",
+    ]
+
+
+def test_recall_and_the_prompt_agree_on_a_durable_legacy_fact_with_a_stray_date(memory_on):
+    _seed(
+        "Trip savings live at the credit union",
+        fid="d",
+        created_at="2026-01-01",
+        state="unsorted",
+        tier="durable",
+        expires_at=PAST,
+    )
+
+    result, _ = _call(query="trip")
+
+    assert _contents(result) == ["Trip savings live at the credit union"]

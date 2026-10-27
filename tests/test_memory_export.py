@@ -60,7 +60,7 @@ def test_export_zip_has_one_file_per_topic_and_no_retired_facts(db_isolated):
     assert sorted(files) == [
         "money-housing.md",
         "money-investing.md",
-        "not-sorted-yet.md",
+        "older-memories.md",
         "open-items.md",
         "you-preferences.md",
     ]
@@ -73,7 +73,8 @@ def test_export_zip_has_one_file_per_topic_and_no_retired_facts(db_isolated):
     assert "- Holds ETFs (Feb 2026)" in files["money-investing.md"]
     assert "- Send the tax letter (Sep 2026)" in files["open-items.md"]
     assert files["open-items.md"].startswith("# Open items")
-    assert "- Legacy fact (Sep 2026)" in files["not-sorted-yet.md"]
+    assert "- Legacy fact (Sep 2026)" in files["older-memories.md"]
+    assert files["older-memories.md"].startswith("# Older memories — being sorted")
     assert not any("Old landlord" in text or "Gone long ago" in text for text in files.values())
 
 
@@ -131,7 +132,7 @@ def test_a_hostile_topic_name_cannot_make_an_unsafe_zip_entry(db_isolated):
     MemoryStore().bulk_insert(
         [
             _fact("1", "a", topic="../../evil\x00name"),
-            _fact("2", "b", topic="not-sorted-yet"),
+            _fact("2", "b", topic="older-memories"),
             _fact("3", "c", topic="C:\\windows\\x"),
         ]
     )

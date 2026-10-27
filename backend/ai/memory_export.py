@@ -1,7 +1,8 @@
 """Memory as Markdown: a zip with one file per section and topic, for taking it elsewhere.
 
-Facts still waiting to be filed go in ``not-sorted-yet.md`` and open items in ``open-items.md``
-(both names are reserved, so no topic can take them); retired and expired facts are left out.
+Facts still waiting to be filed go in ``older-memories.md`` (titled as the memory list labels
+them) and open items in ``open-items.md`` (both names are reserved, so no topic can take them);
+retired and expired facts are left out.
 File names are built from slugs only, so no topic can name a path.
 """
 
@@ -17,7 +18,8 @@ from backend.core.user_time import user_today
 from backend.db import MemoryStore
 
 OPEN_ITEMS_FILE = "open-items.md"
-UNSORTED_FILE = "not-sorted-yet.md"
+UNSORTED_FILE = "older-memories.md"
+UNSORTED_TITLE = "Older memories — being sorted"
 _SLUG_MAX = 60
 
 
@@ -49,7 +51,7 @@ def _group_key(fact: dict) -> tuple[str, str] | None:
 
 def _title(key: tuple[str, str] | None, fact: dict) -> str:
     if key is None:
-        return "Not sorted yet"
+        return UNSORTED_TITLE
     topic = "" if key[0] == ms.OPEN_ITEMS else ms.normalise_topic(fact.get("topic"))
     label = ms.SECTIONS[key[0]]
     return f"{label} · {topic}" if topic else label

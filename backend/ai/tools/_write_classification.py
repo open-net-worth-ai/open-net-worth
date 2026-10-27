@@ -39,7 +39,7 @@ READ_ONLY_TOOLS = frozenset(
         # no store, no network, and nothing under DATA_DIR — headless-safe by construction.
         "read_doc",
         "search_docs",
-        # Memory search (ai/tools/memory.py) — reads MemoryStore.active_facts(), scores in
+        # Memory search (ai/tools/memory.py) — reads MemoryStore.remembered_facts(), scores in
         # memory.recall_facts, writes nothing (unlike remember_fact/forget_fact).
         "recall_memory",
         # Keyword search over session_messages text (ai/tools/conversations.py): one SELECT,

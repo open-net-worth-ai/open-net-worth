@@ -59,15 +59,19 @@ def _fmt_goals(ccy: str = "USD") -> str:
     return "\n".join(lines)
 
 
-def _fmt_memory() -> str:
+def _fmt_memory(handles: bool = True) -> str:
     """The cross-session memory block ("WHAT YOU REMEMBER"): every live fact, whole, by section
     and topic — see ``memory_render``. "" when there is nothing to remember or the global memory
-    toggle is OFF. Logs sizes only, never fact text."""
+    toggle is OFF; facts flagged sensitive are left out while sensitive topics are off. Logs
+    sizes only, never fact text."""
+    sensitive_ok = False
     try:
         from backend.db.memory_settings_store import MemorySettingsStore
 
-        if not MemorySettingsStore().enabled():
+        settings = MemorySettingsStore()
+        if not settings.enabled():
             return ""
+        sensitive_ok = settings.sensitive_topics()
     except Exception:
         pass
 
@@ -75,7 +79,9 @@ def _fmt_memory() -> str:
         from backend.ai.memory_render import render_memory_block
         from backend.db import MemoryStore
 
-        text, stats = render_memory_block(MemoryStore().remembered_facts())
+        text, stats = render_memory_block(
+            MemoryStore().remembered_facts(), handles=handles, sensitive_ok=sensitive_ok
+        )
     except Exception:
         return ""
     if text:
@@ -100,8 +106,10 @@ def _fmt_chat_search_line() -> str:
 
 def memory_block() -> str:
     """The "WHAT YOU REMEMBER" block for a model call outside a chat turn (the daily briefing)
-    — the same facts and framing a turn gets, "" when there are none or memory is off."""
-    return _fmt_memory()
+    — the same facts and framing a turn gets, "" when there are none or memory is off. No
+    citation handles: nothing outside a chat turn strips them, so a model that copied one
+    would show it on screen."""
+    return _fmt_memory(handles=False)
 
 
 def _fmt_skills_catalog(
@@ -147,14 +155,13 @@ def _fmt_skills_catalog(
 
 def _fmt_lessons(agent_id: str) -> str:
     """Render an agent's "WHAT YOU'VE LEARNED" block (P3-AG5 §5.2) — the per-agent lessons the
-    reflection loop distilled from past runs + user feedback, formatted exactly like
-    ``_fmt_memory``'s "WHAT YOU REMEMBER" block (durable first, then time_bound). Returns ""
-    when the agent has no active lessons.
+    reflection loop distilled from past runs + user feedback. Its own layout, unrelated to the
+    memory block's sections and topics. Returns "" when the agent has no active lessons, or when
+    the formatter cannot be loaded.
 
     The canonical formatter lives in ``services.agent_reflection`` (so ``services.agents``'s
-    run-prompt build can use it without an ``ai`` up-import — Contract 3); this is the ai-side
-    mirror, delegating to it so the two render identically. Same trust level as the memory
-    block — injected text, no tool power."""
+    run-prompt build can use it without an ``ai`` up-import — Contract 3); this delegates to it.
+    Same trust level as the memory block — injected text, no tool power."""
     try:
         from backend.services import agent_reflection
 

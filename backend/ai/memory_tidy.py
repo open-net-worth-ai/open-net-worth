@@ -1,7 +1,8 @@
 """The daily tidy pass: let unused facts and stale plans fade, then merge what overlaps.
 
-Two deterministic rules need no model — a live fact Lucius has not cited for ``UNUSED_DAYS`` is
-retired as ``unused``, and a plan not mentioned for ``PLAN_STALE_DAYS`` is retired as ``stale``
+Two deterministic rules need no model — a live fact with no citation, mention, user edit or
+filing for ``UNUSED_DAYS`` is retired as ``unused`` (only while citations are reaching the book at
+all), and a plan not mentioned, edited or filed for ``PLAN_STALE_DAYS`` is retired as ``stale``
 (a retired fact stays under "Moved out of memory" for ``RETIRED_PURGE_DAYS``, then goes). One
 memory-model call then merges duplicate facts and near-duplicate topic names. Every write goes
 through ``apply_memory_change``; a merge reply that would remove more than half of any topic is
@@ -11,6 +12,7 @@ ADR ``2026-10-25-memory-keeps-only-what-has-no-other-home`` (amendment 4).
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import date, timedelta
@@ -43,27 +45,45 @@ def _latest(fact: dict, *fields: str) -> date | None:
     return max(days) if days else None
 
 
+# A user's own signals keep a fact: a citation, the user saying it again, the user editing it,
+# and — for a fact that predates the redesign — the day the sort filed it. Being shown in the
+# prompt never counts.
+_UNUSED_CLOCK = ("last_used_at", "mentioned_at", "edited_at", "sorted_at", "created_at")
+_PLAN_CLOCK = ("mentioned_at", "edited_at", "sorted_at", "created_at")
+
+
+def citations_arriving(facts: list[dict], today: date) -> bool:
+    """True when some live fact was cited within ``UNUSED_DAYS``. While none was, usage
+    tracking is evidently not reaching the book (a model that never cites), and retiring facts
+    as unused would retire them for the missing signal, not for being unused."""
+    cutoff = today - timedelta(days=ms.UNUSED_DAYS)
+    return any((_day(f.get("last_used_at")) or cutoff) > cutoff for f in facts)
+
+
 def _unused_ids(facts: list[dict], today: date) -> list[str]:
-    """Live facts (not plans — their own rule governs) whose last use, sorting or creation is
-    older than ``UNUSED_DAYS``. Being shown in the prompt never counts; only a citation does."""
+    """Live facts (not plans or open items — their own rules govern) whose newest signal is
+    older than ``UNUSED_DAYS``; nothing at all while no fact has been cited lately."""
+    if not citations_arriving(facts, today):
+        return []
     cutoff = today - timedelta(days=ms.UNUSED_DAYS)
     out = []
     for f in facts:
         if f.get("section") in (ms.OPEN_ITEMS, "plans"):
             continue
-        clock = _latest(f, "last_used_at", "sorted_at", "created_at")
+        clock = _latest(f, *_UNUSED_CLOCK)
         if clock is not None and clock < cutoff:
             out.append(f["id"])
     return out
 
 
 def _stale_plan_ids(facts: list[dict], today: date) -> list[str]:
+    """Plans not mentioned, edited or (for a legacy one) filed for ``PLAN_STALE_DAYS``."""
     cutoff = today - timedelta(days=ms.PLAN_STALE_DAYS)
     out = []
     for f in facts:
         if f.get("section") != "plans":
             continue
-        clock = _latest(f, "mentioned_at", "created_at")
+        clock = _latest(f, *_PLAN_CLOCK)
         if clock is not None and clock < cutoff:
             out.append(f["id"])
     return out
@@ -130,7 +150,7 @@ Nothing to change → {{"updates": [], "remove": []}}."""
 
 
 async def _merge_duplicates(store: MemoryStore, today: str) -> dict:
-    live = store.active_facts(today)
+    live = await asyncio.to_thread(store.active_facts, today)
     if len(live) < 2:
         return {"merged": False}
     try:
@@ -167,8 +187,12 @@ async def _merge_duplicates(store: MemoryStore, today: str) -> dict:
     if would_gut_a_topic(live, set(remove)):
         logger.warning("memory tidy: refused a merge that removes over half of a topic")
         return {"merged": False, "refused": True}
-    result = apply_memory_change(
-        {"updates": updates, "remove": remove}, source="implicit", strict=False, today=today
+    result = await asyncio.to_thread(
+        apply_memory_change,
+        {"updates": updates, "remove": remove},
+        source="implicit",
+        strict=False,
+        today=today,
     )
     return {"merged": True, "updated": result["updated"], "removed": result["removed"]}
 
@@ -188,17 +212,16 @@ def _record_run(today: str) -> None:
         logger.warning("could not persist the tidy date", exc_info=True)
 
 
-async def tidy(force: bool = False) -> dict:
-    """Run the tidy pass once per day. Returns what it did (``ran`` False when memory is off or
-    it already ran today). ``force`` skips only the once-a-day check."""
-    today_date = user_today()
+def _retire_and_purge(store: MemoryStore, today_date: date) -> tuple[int, dict]:
+    """The deterministic half — no model: drop expired facts, retire unused facts and stale
+    plans, purge what has been retired long enough. Synchronous DB work, run off the loop."""
     today = today_date.isoformat()
-    if not memory_writes_enabled() or (not force and _already_ran(today)):
-        return {"ran": False}
-
-    store = MemoryStore()
     removed_expired = memory.purge_expired(store)
     live = store.active_facts(today)
+    if live and not citations_arriving(live, today_date):
+        logger.info(
+            "memory tidy: no fact cited in %d days; not retiring any as unused", ms.UNUSED_DAYS
+        )
     retire = [{"id": fid, "reason": "unused"} for fid in _unused_ids(live, today_date)] + [
         {"id": fid, "reason": "stale"} for fid in _stale_plan_ids(live, today_date)
     ]
@@ -206,8 +229,21 @@ async def tidy(force: bool = False) -> dict:
     counts = apply_memory_change(
         {"retire": retire, "remove": purge}, source="implicit", strict=False, today=today
     )
+    return removed_expired, counts
+
+
+async def tidy(force: bool = False) -> dict:
+    """Run the tidy pass once per day. Returns what it did (``ran`` False when memory is off or
+    it already ran today). ``force`` skips only the once-a-day check."""
+    today_date = user_today()
+    today = today_date.isoformat()
+    if not memory_writes_enabled() or (not force and await asyncio.to_thread(_already_ran, today)):
+        return {"ran": False}
+
+    store = MemoryStore()
+    removed_expired, counts = await asyncio.to_thread(_retire_and_purge, store, today_date)
     merge = await _merge_duplicates(store, today)
-    _record_run(today)
+    await asyncio.to_thread(_record_run, today)
     logger.info(
         "memory tidy: %d expired, %d retired, %d purged, merge=%s",
         removed_expired,

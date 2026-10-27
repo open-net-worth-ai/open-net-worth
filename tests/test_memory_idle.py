@@ -166,6 +166,44 @@ def test_the_sweep_leaves_background_and_ancient_sessions_alone(isolated, monkey
     assert model.prompts == []
 
 
+def test_the_sweep_never_extracts_a_capture(isolated, monkeypatch):
+    _session("capture-abc", _chat(), quiet_minutes=45, origin="capture")
+    _session("chat", _chat(), quiet_minutes=45, origin="chat")
+    model = _use(monkeypatch, _Model())
+
+    assert asyncio.run(memory_idle.sweep_idle_conversations(NOW)) == 1
+    assert len(model.prompts) == 1 and _cursor("capture-abc") == 0 and _cursor("chat") == 2
+
+
+def test_three_failures_in_a_row_wait_for_new_messages(isolated, monkeypatch):
+    _session("stuck", _chat(), quiet_minutes=45)
+    model = _use(monkeypatch, _Model([RuntimeError("cut off")]))
+
+    for minutes in (0, 5, 10, 15, 20):
+        memory_idle._in_flight.clear()
+        asyncio.run(memory_idle.sweep_idle_conversations(NOW + timedelta(minutes=minutes)))
+
+    assert len(model.prompts) == memory_idle.MAX_FAILED_EXTRACTIONS == 3
+    doc = SessionStore().get_extraction_cursor("stuck")
+    assert doc == {"last_extracted_len": 0, "failures": 3, "failed_len": 2}
+
+    SessionStore().append_messages(
+        "stuck",
+        [
+            {
+                "role": "user",
+                "content": "One more thing about the fund",
+                "ts": int(NOW.timestamp() * 1000),
+            }
+        ],
+    )
+    model.replies = [_REPLY]
+    later = NOW + timedelta(hours=1)
+    assert asyncio.run(memory_idle.sweep_idle_conversations(later)) == 1
+    assert len(model.prompts) == 4
+    assert SessionStore().get_extraction_cursor("stuck") == {"last_extracted_len": 3}
+
+
 def test_the_loop_sweeps_then_tidies_then_waits(isolated, monkeypatch):
     calls: list[str] = []
 

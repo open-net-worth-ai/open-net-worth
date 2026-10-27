@@ -34,11 +34,20 @@ logger = logging.getLogger(__name__)
 INSTRUCTION_MAX_CHARS = 1000
 
 
-def _candidates(facts: list[dict], instruction: str, topic: str | None = None) -> list[dict]:
-    """Every fact, the ones the edit is most likely about first: those in the named topic, then
-    those sharing a word with the instruction, then the rest."""
+def _candidates(
+    facts: list[dict], instruction: str, topic: str | None = None, section: str | None = None
+) -> list[dict]:
+    """Every fact, the ones the edit is most likely about first: those in the named topic (of
+    the named section, when there is one), then those sharing a word with the instruction, then
+    the rest."""
     key = ms.topic_key(topic)
-    in_topic = [f for f in facts if key and ms.topic_key(f.get("topic")) == key]
+    in_topic = [
+        f
+        for f in facts
+        if key
+        and ms.topic_key(f.get("topic")) == key
+        and (section is None or f.get("section") == section)
+    ]
     seen = {f["id"] for f in in_topic}
     words = set(_tokenize(instruction))
     matched = [
@@ -49,22 +58,29 @@ def _candidates(facts: list[dict], instruction: str, topic: str | None = None) -
     return in_topic + matched + rest
 
 
-def _topic_section(facts: list[dict], topic: str | None) -> str | None:
-    """The section the named topic lives in, from the first fact filed under it."""
+def _scope_section(facts: list[dict], topic: str | None, section: str | None) -> str | None:
+    """The section the user opened: the one the page named, else — for a caller that named only
+    a topic — the section of the first fact filed under it."""
+    named = ms.normalise_section(section)
+    if named or section:
+        return named
     key = ms.topic_key(topic)
+    if not key:
+        return None
     return next(
         (f["section"] for f in facts if ms.topic_key(f.get("topic")) == key and f.get("section")),
         None,
     )
 
 
-def _scope_note(topic: str | None, facts: list[dict]) -> str:
-    if not ms.topic_key(topic):
+def _scope_note(topic: str | None, section: str | None) -> str:
+    name = ms.normalise_topic(topic)
+    if name:
+        where = f'the topic "{name}"' + (f" in section {section}" if section else "")
+    elif section:
+        where = f"the facts with no topic in section {section}"
+    else:
         return ""
-    section = _topic_section(facts, topic)
-    where = f'the topic "{ms.normalise_topic(topic)}"' + (
-        f" in section {section}" if section else ""
-    )
     return (
         f"The user opened {where}: unless the instruction says otherwise, change facts there "
         "and file new ones under it.\n\n"
@@ -96,26 +112,31 @@ Return ONLY JSON in this exact shape:
 }}"""
 
 
-def _scoped_ops(parsed: dict, facts: list[dict], topic: str | None) -> dict:
-    """The model's reply as choke ops, new facts defaulting to the topic the user opened."""
+def _scoped_ops(parsed: dict, topic: str | None, section: str | None) -> dict:
+    """The model's reply as choke ops, new facts defaulting to the topic and section the user
+    opened."""
     ops = {key: parsed.get(key) for key in ("new", "updates", "remove")}
-    if not ms.topic_key(topic):
+    name = ms.normalise_topic(topic)
+    if not name and not section:
         return ops
-    section = _topic_section(facts, topic)
     scoped = []
     for item in ops["new"] or []:
         if isinstance(item, dict):
             item = {
                 **item,
-                "topic": item.get("topic") or topic,
+                "topic": item.get("topic") or name or None,
                 "section": item.get("section") or section,
             }
         scoped.append(item)
     return {**ops, "new": scoped}
 
 
-async def apply_instruction(instruction: str, topic: str | None = None) -> dict:
-    """Apply one typed instruction to memory, optionally scoped to the topic the user opened.
+async def apply_instruction(
+    instruction: str, topic: str | None = None, section: str | None = None
+) -> dict:
+    """Apply one typed instruction to memory, optionally scoped to the topic (and section) the
+    user opened. A named ``section`` is used as given — the same topic name can live in two
+    sections — and a section that does not exist is refused.
 
     Returns ``{"added", "updated", "removed", "rejected"}``. Raises MemoryDisabledError while
     memory is off (the same refusal ``remember_fact`` gives), ValidationError for an empty or
@@ -127,23 +148,26 @@ async def apply_instruction(instruction: str, topic: str | None = None) -> dict:
         raise ValidationError("Say what to remember or change.")
     if len(text) > INSTRUCTION_MAX_CHARS:
         raise ValidationError(f"Keep it under {INSTRUCTION_MAX_CHARS} characters.")
+    if section and ms.normalise_section(section) is None:
+        raise ValidationError("Pick a section: " + ", ".join(ms.SECTIONS.values()) + ".")
     if not memory_writes_enabled():
         raise MemoryDisabledError()
 
     store = MemoryStore()
     purge_expired(store)
     facts = store.remembered_facts()
+    scope = _scope_section(facts, topic, section)
     listing = (
         "\n".join(
             f"{f['id']}: [{ms.fact_label(f)}] {f.get('content', '')}"
-            for f in _candidates(facts, text, topic)
+            for f in _candidates(facts, text, topic, scope)
         )
         or "(none yet)"
     )
     today = user_today().isoformat()
     try:
         reply = await _provider().complete(
-            _prompt(text, listing, today, _scope_note(topic, facts)),
+            _prompt(text, listing, today, _scope_note(topic, scope)),
             system=_EXTRACT_SYSTEM,
             model=_memory_model(),
             max_tokens=1024,
@@ -160,7 +184,7 @@ async def apply_instruction(instruction: str, topic: str | None = None) -> dict:
         logger.warning("memory instruction returned an unparseable reply")
         raise ExternalServiceError("Lucius couldn't make sense of that. Try rewording it.")
     result = apply_memory_change(
-        _scoped_ops(parsed, facts, topic), source="explicit", strict=False, today=today
+        _scoped_ops(parsed, topic, scope), source="explicit", strict=False, today=today
     )
     return {key: result[key] for key in ("added", "updated", "removed", "rejected")}
 

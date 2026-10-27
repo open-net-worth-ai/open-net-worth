@@ -7,6 +7,10 @@ who wants to see the plan first. It works on the app's normal data root (`ONW_RO
 respected) and needs "Generate memory from chats" on. A scratch run sets `ONW_ROOT` and
 `ONW_QA_MODE=1`.
 
+On a live book the background sort starts at boot, so run this with the app stopped: stop it,
+`make db-upgrade`, dry run, review, `--apply`, then start it. The full order and the reason are in
+`docs/ai/MEMORY_MIGRATION.md`.
+
     --dry-run (default)  asks the memory model and prints one line per fact
                          (`id | section · topic | new text`, or `id | retire: reason`);
                          nothing is written

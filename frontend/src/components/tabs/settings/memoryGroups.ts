@@ -25,6 +25,7 @@ const REASONS: Record<string, string> = {
   resolved: 'Done',
   stale: 'Out of date',
   unused: 'Not used in 90 days',
+  sensitive: 'Not kept — sensitive',
 }
 
 export function retiredReason(reason?: string | null): string {
@@ -47,6 +48,10 @@ export function topicKey(name?: string | null): string {
   return (name ?? '').split(/\s+/).filter(Boolean).join(' ').toLowerCase()
 }
 
+/** The group key for facts filed with no topic. It has a leading space, which `topicKey` always
+ *  trims, so no real topic name — not even "General" — can share it. */
+export const NO_TOPIC_KEY = ' none'
+
 export type Topic = {
   key: string
   name: string
@@ -65,8 +70,12 @@ function latest(facts: MemoryFact[]): string {
   return facts.reduce((m, f) => ((f.updated_at ?? '') > m ? (f.updated_at ?? '') : m), '')
 }
 
+/** As the backend's `is_expired`: a filed fact expires on its date; a legacy fact not yet filed
+ *  only when it was `time_bound` (a `durable` one's stray date never meant an expiry). */
 function isExpired(f: MemoryFact, today: string): boolean {
-  return !!f.expires_at && f.expires_at.slice(0, 10) < today
+  if (!f.expires_at || f.expires_at.slice(0, 10) >= today) return false
+  if (f.state === 'live' || f.section) return true
+  return (f.tier ?? 'time_bound') === 'time_bound'
 }
 
 export function groupFacts(facts: MemoryFact[], today = localDay()) {
@@ -86,7 +95,7 @@ export function groupFacts(facts: MemoryFact[], today = localDay()) {
 export function topicsOf(facts: MemoryFact[]): Topic[] {
   const byKey = new Map<string, { name: string; facts: MemoryFact[] }>()
   for (const f of facts) {
-    const key = topicKey(f.topic) || 'general'
+    const key = topicKey(f.topic) || NO_TOPIC_KEY
     const group = byKey.get(key) ?? { name: (f.topic ?? '').trim() || 'General', facts: [] }
     group.facts.push(f)
     byKey.set(key, group)

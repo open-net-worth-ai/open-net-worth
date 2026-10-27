@@ -184,6 +184,14 @@ def test_whitespace_in_a_fact_collapses_to_one_line():
         "Passport number K1234567",
         "SSN 123-45-6789",
         "My password is hunter2",
+        "Passport number is X1234567.",
+        "My passport no. is X1234567",
+        "Passport: X1234567",
+        "Passport is X1234567",
+        "ID number is AB123456",
+        "Her ID no. is AB123456",
+        "National ID is 123456789",
+        "NRIC was S1234567D",
     ],
 )
 def test_full_card_and_id_numbers_are_refused_last4_is_kept(text):
@@ -207,6 +215,9 @@ def test_full_card_and_id_numbers_are_refused_last4_is_kept(text):
         "Salary 4500 4500 4500 monthly",
         "Pin is optional",
         "The password manager is 1Password",
+        "Passport is renewed every 10 years",
+        "ID card is ready to collect",
+        "Has an idea number 5 for the budget",
     ],
 )
 def test_last4_and_ordinary_numbers_are_kept(text):
@@ -569,12 +580,16 @@ def test_settings_have_the_new_keys_with_their_defaults():
 
 
 def test_expiry_follows_the_fact_not_a_tier():
+    """A filed fact expires on its date whatever legacy tier it carries; only a legacy fact
+    not yet filed keeps the old rule (a durable one's stray date never meant an expiry)."""
     store = MemoryStore()
     rows = [
         ("mem_new", {}, "2020-01-01"),
         ("mem_tb", {"tier": "time_bound"}, "2020-01-01"),
-        ("mem_dur", {"tier": "durable"}, "2020-01-01"),
+        ("mem_dur", {"tier": "durable", "section": "open_items"}, "2020-01-01"),
         ("mem_live", {}, "2999-01-01"),
+        ("mem_old_dur", {"tier": "durable", "state": "unsorted"}, "2020-01-01"),
+        ("mem_old_tb", {"tier": "time_bound", "state": "unsorted"}, "2020-01-01"),
     ]
     for fid, extra, expires in rows:
         store.insert(
@@ -590,9 +605,9 @@ def test_expiry_follows_the_fact_not_a_tier():
             }
         )
 
-    assert {f["id"] for f in store.active_facts()} == {"mem_dur", "mem_live"}
-    assert memory.purge_expired(store) == 2
-    assert {f["id"] for f in store.all_facts()} == {"mem_dur", "mem_live"}
+    assert {f["id"] for f in store.remembered_facts()} == {"mem_live", "mem_old_dur"}
+    assert memory.purge_expired(store) == 4
+    assert {f["id"] for f in store.all_facts()} == {"mem_live", "mem_old_dur"}
 
 
 # ── a null on an update means "unchanged" ────────────────────────────────────
@@ -641,3 +656,131 @@ def test_an_empty_string_still_clears_a_topic():
     (fact,) = MemoryStore().all_facts()
     _write({"updates": [{"id": fact["id"], "topic": ""}]})
     assert MemoryStore().find_by_id(fact["id"])["topic"] is None
+
+
+# ── filing a legacy fact (final review C1/I1/I3/I4) ─────────────────────────
+
+
+def _legacy(fid: str, content: str, **extra) -> dict:
+    row = {
+        "id": fid,
+        "content": content,
+        "tier": "durable",
+        "source": "implicit",
+        "expires_at": None,
+        "created_at": "2026-01-01T00:00:00",
+        "updated_at": "2026-01-01T00:00:00",
+        "state": "unsorted",
+        "section": None,
+        "topic": None,
+    }
+    MemoryStore().insert({**row, **extra})
+    return row
+
+
+def _file(fid: str, section: str = "money", **extra) -> dict:
+    return _write({"updates": [{"id": fid, "section": section, **extra}]}, source="implicit")
+
+
+def test_a_durable_legacy_fact_filed_into_open_items_expires_like_any_open_item():
+    from backend.db.memory_store import is_expired
+
+    _legacy("mem_follow", "Waiting to hear back from the bank", expires_at="2026-11-01")
+    _file("mem_follow", "open_items")
+    filed = MemoryStore().find_by_id("mem_follow")
+    assert filed["tier"] == "durable" and filed["expires_at"] == "2026-11-01"
+    assert not is_expired(filed, "2026-11-01")
+    assert is_expired(filed, "2026-11-02")
+    assert "mem_follow" not in {f["id"] for f in MemoryStore().remembered_facts("2026-11-02")}
+
+
+def test_filing_into_open_items_without_a_date_gets_the_default_and_a_dateless_item_gets_one():
+    _legacy("mem_a", "Call the insurer")
+    _file("mem_a", "open_items")
+    assert MemoryStore().find_by_id("mem_a")["expires_at"] == "2026-11-10"
+
+    _legacy("mem_b", "Chase the refund", state="live", section="open_items", tier=None)
+    _write({"updates": [{"id": "mem_b", "content": "Chase the refund from the airline"}]})
+    assert MemoryStore().find_by_id("mem_b")["expires_at"] == "2026-11-10"
+
+
+def test_a_durable_legacy_fact_filed_outside_open_items_drops_its_stray_date():
+    _legacy("mem_dur", "Banks with the credit union", expires_at="2026-12-01")
+    _legacy("mem_tb", "Lease runs to spring", tier="time_bound", expires_at="2026-12-01")
+    _file("mem_dur", topic="Banking")
+    _file("mem_tb", topic="Housing")
+    assert MemoryStore().find_by_id("mem_dur")["expires_at"] is None
+    assert MemoryStore().find_by_id("mem_tb")["expires_at"] == "2026-12-01"
+
+
+def test_filing_a_long_legacy_fact_needs_a_shorter_wording():
+    long_text = "Keeps a careful record of every household bill. " * 8
+    _legacy("mem_long", long_text.strip())
+
+    out = _file("mem_long", topic="Bookkeeping")
+    assert out["rejected"][0]["reason"] == "too_long"
+    assert MemoryStore().find_by_id("mem_long")["state"] == "unsorted"
+
+    _file("mem_long", topic="Bookkeeping", content="Keeps a careful record of every bill.")
+    filed = MemoryStore().find_by_id("mem_long")
+    assert (filed["state"], filed["content"]) == ("live", "Keeps a careful record of every bill.")
+
+
+def test_filing_a_legacy_fact_with_an_identifier_retires_it_as_sensitive():
+    _legacy("mem_acct", "Salary lands in account 123456789012")
+    out = _file("mem_acct", topic="Income & work")
+    row = MemoryStore().find_by_id("mem_acct")
+    assert (row["state"], row["retired_reason"]) == ("retired", "sensitive")
+    assert out["retired"] == 1 and out["updated"] == 0
+
+
+def test_filing_a_legacy_ledger_figure_retires_it_to_the_ledger():
+    _legacy("mem_fig", "Holds 120 shares of the index fund")
+    _file("mem_fig", topic="Investing")
+    row = MemoryStore().find_by_id("mem_fig")
+    assert (row["state"], row["retired_reason"]) == ("retired", "ledger")
+
+
+def test_a_sensitive_legacy_fact_is_retired_while_the_setting_is_off_and_filed_when_on():
+    _legacy("mem_h1", "Has a chronic condition")
+    _file("mem_h1", "you", topic="About you", sensitive=True)
+    row = MemoryStore().find_by_id("mem_h1")
+    assert (row["state"], row["retired_reason"]) == ("retired", "sensitive")
+
+    MemorySettingsStore().set_sensitive_topics(True)
+    _legacy("mem_h2", "Has a chronic condition")
+    _file("mem_h2", "you", topic="About you", sensitive=True)
+    row = MemoryStore().find_by_id("mem_h2")
+    assert (row["state"], row.get("sensitive")) == ("live", True)
+
+
+def test_a_fact_already_flagged_sensitive_is_retired_when_filed_with_the_setting_off():
+    _legacy("mem_flag", "Attends a weekly support group", sensitive=True)
+    _file("mem_flag", "you", topic="About you")
+    assert MemoryStore().find_by_id("mem_flag")["retired_reason"] == "sensitive"
+
+
+def test_an_explicit_update_stamps_the_edit_and_a_background_one_does_not():
+    _write({"new": [_new("Rent is due on the 1st", topic="Housing")]})
+    (fact,) = MemoryStore().all_facts()
+    _write({"updates": [{"id": fact["id"], "topic": "Home"}]}, source="implicit")
+    assert not MemoryStore().find_by_id(fact["id"]).get("edited_at")
+    _write({"updates": [{"id": fact["id"], "content": "Rent is due on the 3rd"}]})
+    assert MemoryStore().find_by_id(fact["id"]).get("edited_at")
+
+
+def test_a_background_write_tells_open_screens_and_a_touch_alone_does_not(monkeypatch):
+    from backend.core import data_events
+
+    published: list[tuple] = []
+    monkeypatch.setattr(data_events, "publish", lambda domains: published.append(tuple(domains)))
+    _write({"new": [_new("Rent is due on the 1st", topic="Housing")]}, source="implicit")
+    (fact,) = MemoryStore().all_facts()
+    _write({"touch": {"used": [fact["id"]]}}, source="implicit")
+    _write({"updates": [{"id": fact["id"], "content": "Rent is due on the 2nd"}]})
+
+    assert published == [("memory",)]
+
+
+def test_sensitive_is_a_retire_reason():
+    assert "sensitive" in structure.RETIRE_REASONS

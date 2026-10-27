@@ -109,25 +109,27 @@ export function useMemoryFacts(notify: (message: string) => void) {
   }
 
   /** "Tell Lucius what to change" — one sentence that adds, rewrites or forgets facts, scoped to
-   *  `topic` when given. True when the server applied it (even if nothing needed changing). */
-  async function instruct(instruction: string, topic?: string): Promise<boolean> {
+   *  the section (and topic, when it has a name) the user opened. True when the server applied it
+   *  (even if nothing needed changing). */
+  async function instruct(instruction: string, scope?: InstructScope): Promise<boolean> {
+    const body = scope
+      ? { instruction, section: scope.section, ...(scope.topic ? { topic: scope.topic } : {}) }
+      : { instruction }
     try {
       const r = await authFetch('/api/memory/instruct', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(topic ? { instruction, topic } : { instruction }),
+        body: JSON.stringify(body),
       })
-      const body = (await r.json().catch(() => ({}))) as Partial<InstructResult> & {
+      const out = (await r.json().catch(() => ({}))) as Partial<InstructResult> & {
         detail?: string
       }
       if (!r.ok) {
-        notify(
-          typeof body.detail === 'string' ? body.detail : `Could not update (HTTP ${r.status})`,
-        )
+        notify(typeof out.detail === 'string' ? out.detail : `Could not update (HTTP ${r.status})`)
         return false
       }
       void refresh()
-      notify(instructSummary(body))
+      notify(instructSummary(out))
       return true
     } catch {
       notify('Could not reach the server. Try again.')
@@ -144,6 +146,12 @@ export function useMemoryFacts(notify: (message: string) => void) {
     forget: (id: string) => remove(`${MEMORY_FACTS_KEY}/${encodeURIComponent(id)}`, 'Forgotten'),
     forgetAll: () => remove(MEMORY_FACTS_KEY, 'All memories forgotten'),
   }
+}
+
+/** Where the "Tell Lucius" box was opened: a section, and the topic's name when it has one. */
+export interface InstructScope {
+  section: string
+  topic?: string
 }
 
 interface InstructResult {

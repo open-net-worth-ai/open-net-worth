@@ -24,12 +24,17 @@ SOURCES = ("implicit", "explicit")
 def is_expired(fact: dict, today: str) -> bool:
     """True when the fact's ``expires_at`` is before ``today``.
 
-    A fact written under the section model carries no ``tier`` and always means its expiry; a
-    legacy one expires only when it was ``time_bound`` (a ``durable`` fact with a stray date
-    never did).
+    A filed fact (live, or carrying a section) always means its expiry, whatever ``tier`` a
+    legacy row still carries — an Open item expires on its date. Only a legacy fact not yet
+    filed keeps the old rule: it expires when it was ``time_bound`` (a ``durable`` fact with a
+    stray date never did).
     """
     exp = fact.get("expires_at")
-    return bool(exp) and exp < today and fact.get("tier", "time_bound") == "time_bound"
+    if not exp or str(exp)[:10] >= today[:10]:
+        return False
+    if fact.get("state") == "live" or fact.get("section"):
+        return True
+    return fact.get("tier", "time_bound") == "time_bound"
 
 
 class MemoryStore(PayloadTableStore):

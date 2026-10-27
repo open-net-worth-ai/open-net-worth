@@ -179,9 +179,19 @@ def test_tidy_runs_at_most_once_a_day(isolated, monkeypatch):
     assert MemoryConsolidateStateStore().get()["last_tidy"] == user_today().isoformat()
 
 
+def _cited(fid: str = "m_cited") -> dict:
+    """A fact cited lately — proof that usage tracking reaches the book, without which nothing
+    is retired as unused."""
+    return _fact(fid, "Cited the other day", created_at=_ago(300), last_used_at=_ago(3))
+
+
 def test_a_failed_model_call_still_applies_the_deterministic_rules(isolated, monkeypatch):
     MemoryStore().bulk_insert(
-        [_fact("m_idle", "Likes window seats", created_at=_ago(120)), _fact("b", "Fresh fact")]
+        [
+            _fact("m_idle", "Likes window seats", created_at=_ago(120)),
+            _fact("b", "Fresh fact"),
+            _cited(),
+        ]
     )
     _use(monkeypatch, _Model(fail=True))
 
@@ -247,6 +257,7 @@ def test_the_unused_boundary_is_90_days(isolated, monkeypatch):
         [
             _fact("d89", "Eighty-nine days old", created_at=_ago(89)),
             _fact("d91", "Ninety-one days old", created_at=_ago(91)),
+            _cited(),
         ]
     )
     _use(monkeypatch, _Model())
@@ -256,23 +267,102 @@ def test_the_unused_boundary_is_90_days(isolated, monkeypatch):
     assert (_by_id()["d89"]["state"], _by_id()["d91"]["state"]) == ("live", "retired")
 
 
-def test_a_mention_or_edit_never_resets_the_unused_clock(isolated, monkeypatch):
+def test_a_mention_or_a_user_edit_resets_the_unused_clock_but_being_shown_does_not(
+    isolated, monkeypatch
+):
     MemoryStore().bulk_insert(
         [
             _fact(
                 "m_mentioned",
-                "Mentioned lately, never cited",
+                "Said again lately, never cited",
                 created_at=_ago(200),
                 mentioned_at=_ago(1),
+            ),
+            _fact("m_edited", "Corrected by the user", created_at=_ago(200), edited_at=_ago(2)),
+            _fact(
+                "m_shown",
+                "Only ever shown in the prompt",
+                created_at=_ago(200),
                 updated_at=_ago(1),
-            )
+            ),
+            _cited(),
         ]
     )
     _use(monkeypatch, _Model())
 
     asyncio.run(memory_tidy.tidy())
 
-    assert _by_id()["m_mentioned"]["retired_reason"] == "unused"
+    facts = _by_id()
+    assert facts["m_mentioned"]["state"] == "live"
+    assert facts["m_edited"]["state"] == "live"
+    assert facts["m_shown"]["retired_reason"] == "unused"
+
+
+def test_nothing_retires_as_unused_while_no_fact_has_been_cited_lately(
+    isolated, monkeypatch, caplog
+):
+    MemoryStore().bulk_insert(
+        [
+            _fact("m_old", "Never cited", created_at=_ago(200)),
+            _fact(
+                "m_long_ago", "Cited once, long ago", created_at=_ago(300), last_used_at=_ago(95)
+            ),
+        ]
+    )
+    _use(monkeypatch, _Model())
+
+    with caplog.at_level("INFO", logger="backend.ai.memory_tidy"):
+        result = asyncio.run(memory_tidy.tidy())
+
+    assert [f["state"] for f in _by_id().values()] == ["live", "live"]
+    assert result["retired"] == 0
+    assert any("not retiring any as unused" in r.getMessage() for r in caplog.records)
+
+
+def test_a_user_edit_through_the_dialog_counts_as_a_signal(isolated, monkeypatch):
+    from backend.ai.memory_instruct import edit_fact
+
+    MemoryStore().bulk_insert([_fact("m_fix", "Lives in a flat", created_at=_ago(200)), _cited()])
+    edit_fact("m_fix", "Lives in a rented flat")
+    _use(monkeypatch, _Model())
+
+    asyncio.run(memory_tidy.tidy())
+
+    assert _by_id()["m_fix"]["state"] == "live"
+
+
+def test_a_legacy_plan_filed_by_the_sort_survives_the_next_tidy(isolated, monkeypatch):
+    from backend.ai import memory_sort
+
+    MemoryStore().bulk_insert(
+        [
+            {
+                "id": "m_condo",
+                "content": "Considering buying a condo in 2028",
+                "state": "unsorted",
+                "section": None,
+                "topic": None,
+                "tier": "durable",
+                "source": "implicit",
+                "expires_at": None,
+                "created_at": _ago(200),
+                "updated_at": _ago(200),
+            },
+            _cited(),
+        ]
+    )
+    monkeypatch.setattr(
+        memory,
+        "_provider",
+        lambda: _Model({"facts": [{"id": "m_condo", "section": "plans", "topic": "Condo"}]}),
+    )
+    asyncio.run(memory_sort.sort_unsorted())
+    assert _by_id()["m_condo"]["state"] == "live"
+    _use(monkeypatch, _Model())
+
+    asyncio.run(memory_tidy.tidy(force=True))
+
+    assert _by_id()["m_condo"]["state"] == "live"
 
 
 def test_a_fact_with_no_created_at_is_left_alone(isolated, monkeypatch):

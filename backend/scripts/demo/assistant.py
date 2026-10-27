@@ -39,25 +39,62 @@ ALERTS: list[tuple[str, str, float, str]] = [
     ("GLDM", ">=", 1.14, "The hedge has done its job."),
 ]
 
-# What the assistant has been told about this household.
-MEMORY: list[str] = [
-    "Alex is married to Sam; the Joint Household account covers shared bills and neither of "
-    "us treats it as personal spending.",
-    "Target retirement is 52, on roughly $74k a year in today's money.",
-    "The emergency fund is six months of core spending and is not to be suggested as a source "
-    "for anything except a genuine emergency or the kitchen renovation.",
-    "Do not suggest selling RSU shares in the first 30 days after a vest — we hold for the "
-    "long-term treatment.",
-    "Concentration matters here: Alex both works at Cloudflare and holds its stock, so flag "
-    "NET exposure above 15% of the investment book.",
-    "Freelance income from the Berlin client is quarterly and irregular — do not treat a quiet "
-    "month as a drop in income.",
-    "The Lakeside apartment instalments are the priority call on cash until handover.",
-    "Prefer plain figures over percentages when reporting spending; percentages hide the size "
-    "of a change.",
-    "Sam handles the utilities and does not want reminders about them.",
-    "We review the budget on the last Sunday of the month, so anything non-urgent can wait "
-    "for that rather than interrupting.",
+# What the assistant has been told about this household: (text, section, topic), filed the way
+# the routing guide files a real fact. Nothing a profile field holds — the retirement age is on
+# the demo profile.
+MEMORY: list[tuple[str, str, str | None]] = [
+    (
+        "Alex is married to Sam; the Joint Household account covers shared bills and neither of "
+        "them treats it as personal spending.",
+        "money",
+        "Family",
+    ),
+    (
+        "Sam handles the utilities and does not want reminders about them.",
+        "money",
+        "Family",
+    ),
+    (
+        "The emergency fund is six months of core spending and is not to be suggested as a "
+        "source for anything except a genuine emergency or the kitchen renovation.",
+        "money",
+        "Emergency fund",
+    ),
+    (
+        "Holds RSU shares for at least 30 days after a vest for the long-term treatment, so "
+        "selling them sooner is not to be suggested.",
+        "money",
+        "Investing",
+    ),
+    (
+        "Alex both works at Cloudflare and holds its stock, so NET exposure above 15% of the "
+        "investment book should be flagged.",
+        "money",
+        "Investing",
+    ),
+    (
+        "Freelance income from the Berlin client is quarterly and irregular — a quiet month is "
+        "not a drop in income.",
+        "money",
+        "Income & work",
+    ),
+    (
+        "Reviews the budget on the last Sunday of the month, so anything non-urgent can wait "
+        "for that rather than interrupting.",
+        "money",
+        "Bookkeeping",
+    ),
+    (
+        "The Lakeside apartment instalments are the priority call on cash until handover.",
+        "plans",
+        "Lakeside apartment",
+    ),
+    (
+        "Prefers plain figures over percentages when reporting spending; percentages hide the "
+        "size of a change.",
+        "you",
+        "Preferences",
+    ),
 ]
 
 
@@ -99,9 +136,9 @@ def seed_memory() -> int:
     from backend.ai import memory as memory_module
 
     made = 0
-    for fact in MEMORY:
+    for content, section, topic in MEMORY:
         try:
-            memory_module.add_explicit(fact, section="other")
+            memory_module.add_explicit(content, section=section, topic=topic)
             made += 1
         except Exception as exc:  # noqa: BLE001
             log.warning("demo memory entry skipped: %s", exc)

@@ -4,7 +4,10 @@ A one-time migration stamped every fact written before the redesign ``unsorted``
 memory-model call reads the oldest of them, with the topics already in use and the same routing
 guide extraction follows, and says where each belongs or why it no longer does. Every write goes
 through ``apply_memory_change`` as ``implicit`` (so an explicit fact stays explicit); a retired
-fact keeps its row for ``RETIRED_PURGE_DAYS``. A reply that is not the expected shape, or an item
+fact keeps its row for ``RETIRED_PURGE_DAYS``. The sort never rewords a fact, with one exception:
+a fact over ``FACT_MAX_CHARS`` may come back shortened (filing one runs the guards a new fact
+meets, so it cannot be filed long; one carrying an identifier, or a sensitive fact while sensitive
+topics are off, is retired ``sensitive``). A reply that is not the expected shape, or an item
 that names a section or id it was not given, changes nothing for that item. The idle sweep calls
 ``sort_remaining`` while any unsorted fact is left; ``backend/scripts/migrate_memory_topics.py``
 is the same pass, by hand. ADR ``2026-10-25-memory-keeps-only-what-has-no-other-home``
@@ -13,6 +16,7 @@ is the same pass, by hand. ADR ``2026-10-25-memory-keeps-only-what-has-no-other-
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 
@@ -37,7 +41,7 @@ _SORT_SYSTEM = (
     "memory. You are conservative: you never invent a fact and never change what a note says."
 )
 
-_ITEM_KEYS = ("id", "section", "topic", "content", "retire")
+_ITEM_KEYS = ("id", "section", "topic", "content", "retire", "sensitive")
 
 
 def _unsorted(store: MemoryStore) -> list[dict]:
@@ -64,8 +68,17 @@ def _topics_in_use(store: MemoryStore) -> str:
     )
 
 
+def _too_long(fact: dict) -> bool:
+    return len(" ".join(str(fact.get("content") or "").split())) > ms.FACT_MAX_CHARS
+
+
+def _listed(fact: dict) -> str:
+    mark = f" [over {ms.FACT_MAX_CHARS} characters]" if _too_long(fact) else ""
+    return f"{fact['id']}{mark}: {fact.get('content', '')}"
+
+
 def _sort_prompt(batch: list[dict], topics: str, today: str) -> str:
-    listing = "\n".join(f"{f['id']}: {f.get('content', '')}" for f in batch)
+    listing = "\n".join(_listed(f) for f in batch)
     suggested = "; ".join(
         f"{ms.SECTIONS[k]}: {', '.join(v)}" for k, v in ms.SUGGESTED_TOPICS.items() if v
     )
@@ -84,21 +97,32 @@ use rather than coining a near-duplicate.
 Topics in use: {topics}
 
 For each note, reply with ONE of:
-- file it: {{"id": "...", "section": "<key>", "topic": "<name>"}}. Add "content" only to
-  rewrite it in the third person, or to cut it under {ms.FACT_MAX_CHARS} characters, keeping its
-  meaning. Never add detail it does not already contain.
+- file it: {{"id": "...", "section": "<key>", "topic": "<name>"}}. Never change its words —
+  except a note marked [over {ms.FACT_MAX_CHARS} characters], which MUST carry a "content"
+  that says the same thing in at most {ms.FACT_MAX_CHARS} characters, adding nothing.
 - retire it, when the guide says it belongs outside memory or it is out of date:
   {{"id": "...", "retire": "<reason>"}} with the reason one of: {", ".join(ms.RETIRE_REASONS)}.
-A note you are unsure about: file it under "other" rather than retiring it.
+A note you are unsure about: file it under "other" rather than retiring it. A note about
+{ms.SENSITIVE_TOPICS} also carries "sensitive": true.
 
 Notes:
 {listing}
 
-Return ONLY JSON: {{"facts": [{{"id": "...", "section": "...", "topic": "...", "content": "..."}}]}}"""
+Return ONLY JSON: {{"facts": [{{"id": "...", "section": "...", "topic": "...", "sensitive": false}}]}}"""
 
 
-def _clean_item(raw, shown: set[str]) -> dict | None:
-    """One reply item reduced to the keys it may carry, or None when it is unusable."""
+def _shortened(raw, original: dict) -> str | None:
+    """The sort's one licence to edit: new wording for a note over the length limit, itself
+    within it. Anything else it proposes for the text is dropped."""
+    if not isinstance(raw, str) or not _too_long(original):
+        return None
+    text = " ".join(raw.split())
+    return text if 0 < len(text) <= ms.FACT_MAX_CHARS else None
+
+
+def _clean_item(raw, shown: dict[str, dict]) -> dict | None:
+    """One reply item reduced to the keys it may carry, or None when it is unusable. ``shown``
+    maps each offered id to its fact."""
     if not isinstance(raw, dict):
         logger.debug("memory sort: ignored a reply item that is not an object")
         return None
@@ -110,26 +134,25 @@ def _clean_item(raw, shown: set[str]) -> dict | None:
     if item.get("retire"):
         reason = item["retire"] if item["retire"] in ms.RETIRE_REASONS else "stale"
         return {"id": fid, "retire": reason}
-    out: dict = {"id": fid}
-    if "section" in item:
-        section = ms.normalise_section(item["section"])
-        if section is None:
-            logger.debug("memory sort: ignored %s, unknown section %r", fid, item["section"])
-            return None
-        out["section"] = section
-        if isinstance(item.get("topic"), str):
-            out["topic"] = item["topic"]
-    if isinstance(item.get("content"), str):
-        out["content"] = item["content"]
-    if "section" not in out:
-        out.pop("content", None)
-    if len(out) == 1:
+    if "section" not in item:
         logger.debug("memory sort: %s came back with nothing to change", fid)
         return None
+    section = ms.normalise_section(item["section"])
+    if section is None:
+        logger.debug("memory sort: ignored %s, unknown section %r", fid, item["section"])
+        return None
+    out: dict = {"id": fid, "section": section}
+    if isinstance(item.get("topic"), str):
+        out["topic"] = item["topic"]
+    content = _shortened(item.get("content"), shown[fid])
+    if content is not None:
+        out["content"] = content
+    if item.get("sensitive") is True or str(item.get("sensitive")).lower() == "true":
+        out["sensitive"] = True
     return out
 
 
-def _parse_items(reply, shown: set[str]) -> list[dict] | None:
+def _parse_items(reply, shown: dict[str, dict]) -> list[dict] | None:
     parsed = memory._parse_json(reply)
     facts = parsed.get("facts") if isinstance(parsed, dict) else None
     if not isinstance(facts, list):
@@ -163,13 +186,13 @@ async def propose(limit: int = SORT_BATCH, exclude: frozenset[str] | set[str] = 
     except Exception as exc:
         logger.warning("memory sort LLM call failed: %s", exc)
         return batch, None
-    return batch, _parse_items(reply, {f["id"] for f in batch})
+    return batch, _parse_items(reply, {f["id"]: f for f in batch})
 
 
 def to_ops(items: list[dict]) -> dict:
     retire = [{"id": i["id"], "reason": i["retire"]} for i in items if "retire" in i]
     updates = [
-        {k: i[k] for k in ("id", "section", "topic", "content") if k in i}
+        {k: i[k] for k in ("id", "section", "topic", "content", "sensitive") if k in i}
         for i in items
         if "retire" not in i
     ]
@@ -182,7 +205,7 @@ async def sort_unsorted(limit: int = SORT_BATCH, exclude=frozenset()) -> dict:
     unsorted, the ``offered`` ids, and ``failed`` when the model call or reply was unusable."""
     batch, items = await propose(limit, exclude)
     if items:
-        apply_memory_change(to_ops(items), source="implicit", strict=False)
+        await asyncio.to_thread(apply_memory_change, to_ops(items), source="implicit", strict=False)
     after = {f["id"]: f for f in MemoryStore().all_facts()}
     ids = [f["id"] for f in batch]
     sorted_n = sum(1 for i in ids if after.get(i, {}).get("state") == "live")
@@ -224,7 +247,7 @@ async def sort_tick() -> dict | None:
     """The sweep's sorting step: run ``sort_remaining`` while any fact is unsorted, unless the
     last run filed nothing less than ``SORT_COOLDOWN_SECONDS`` ago. Returns None when skipped."""
     global _retry_after
-    if time.monotonic() < _retry_after or not has_unsorted():
+    if time.monotonic() < _retry_after or not await asyncio.to_thread(has_unsorted):
         return None
     out = await sort_remaining()
     progressed = out["sorted"] + out["retired"] > 0

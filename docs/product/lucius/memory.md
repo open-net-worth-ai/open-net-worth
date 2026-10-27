@@ -43,8 +43,9 @@ already holds, so your profile, your Instructions for Lucius, payee rules, autom
 ledger figures are never copied into memory. He doesn't keep the state of a conversation or a run,
 finished tasks, or full card, account or ID numbers or passwords, and health, religion, politics and
 similar topics only if you've allowed them in the settings. Preferences are written about you in
-the third person. A fact he never cites for 90 days fades out of memory, and so does a plan that
-hasn't come up for 90 days; a faded fact is kept aside for 30 days before it is deleted. Once a
+the third person. A fact that for 90 days he never cites, you never mention again and you never
+edit fades out of memory, and so does a plan that hasn't come up for 90 days; a faded fact is kept
+aside for 30 days before it is deleted. Once a
 day he also merges facts that say the same thing. Saving or forgetting a fact counts as a change, so it follows the
 conversation's [approval mode](permissions.md) like any other.
 
@@ -80,12 +81,15 @@ that narrows it to the facts (or topics) containing your words.
    facts.* It can't be undone.
 4. **Older memories — being sorted.** Facts saved before sections existed wait here as a plain
    list until Lucius files them under a section and topic. They are not lost; you can edit or
-   forget them as usual.
+   forget them as usual. Filing never changes a fact's words, except that one over 280
+   characters is shortened to fit. A fact holding a full card, account or ID number, or a
+   sensitive fact while sensitive topics are off, is moved out instead.
 5. **Moved out of memory.** Folded closed at the bottom. When a fact turns out to live somewhere
    better — or has gone stale — Lucius moves it out of memory and keeps it here for 30 days. Each
    row shows the fact, why it moved (**Moved to your profile**, **Moved to Instructions for
    Lucius**, **Now a payee rule**, **Now an automation**, **Already in your ledger**, **Done**,
-   **Out of date** or **Not used in 90 days**) and **Forgotten in N days**. **Forget** is the only
+   **Out of date**, **Not used in 90 days** or **Not kept — sensitive**) and **Forgotten in N
+   days**. **Forget** is the only
    action; leave a row alone and it goes by itself.
 
 You don't organise anything yourself: there is no renaming, moving or merging. Lucius files, merges
@@ -107,10 +111,13 @@ At the top of **Settings → Memory**:
   from the newest few that match, ignoring upper and lower case. It never reads
   attachments, the results of his tools, or the context the app adds to a message (the screen you
   were on, items you mentioned), and never conversations that don't appear in your Chats list. The conversation
-  you're in is left out. With the switch off he can't look back at all. On by default.
+  you're in is left out. With the switch off he can't look back at all. On by default. If Lucius
+  quoted a file in a reply before you marked it Private, that reply can still be found; deleting
+  that chat removes it.
 - **Generate memory from chats** — the main switch (see below).
 - **Include sensitive topics in memory** — lets him keep health, religion, politics and similar
-  facts. Off by default; when off, he tells you a sensitive fact wasn't saved.
+  facts. Off by default; when off, he tells you a sensitive fact wasn't saved, and a sensitive
+  fact saved earlier stays in the list but is left out of his replies until you turn it back on.
 - **Import memory from other AI assistants** — **Start import** brings over what ChatGPT, Claude
   or Gemini know about you (see below).
 - **Export memory** — downloads your memory as files you can keep (see below).
@@ -173,7 +180,7 @@ call on the **Memory** task model. Import isn't available in the public demo.
 **Settings → Memory → Export** downloads `memory-YYYY-MM-DD.zip`: one Markdown file per section and
 topic (for example `money-housing.md`), each with a title and one line per fact with the month it
 was learned — `- Rent is due on the 1st (Sep 2026)`. Open items are in `open-items.md`, and older
-facts that haven't been sorted yet are in `not-sorted-yet.md`. Facts that were moved out of memory
+facts that haven't been sorted yet are in `older-memories.md`. Facts that were moved out of memory
 are left out.
 
 ## Switch it off
@@ -192,7 +199,7 @@ works whether memory is on or off.
 ## How it works
 
 - After a conversation, Lucius may save a few new facts from it.
-- When the list grows long, he tidies it — merging duplicates and dropping stale ones.
+- Once a day he tidies it — merging duplicates and moving stale facts out.
 - Both steps are small AI calls, billed like any other use. To use a cheaper model for them, set
   **Memory** under **Settings → AI → Task models** — see [Models and cost](models-and-cost.md).
 - Every reply carries everything in your memory sections (You, Money, Plans, Open items, Other),
