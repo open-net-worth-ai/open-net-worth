@@ -601,8 +601,10 @@ export function StepLucius({
                     </span>
                     {keyedChosen && keyedChosen.key !== 'openrouter' && (
                       <Text as="span" size="xs" tone="faint" className="firstrun-row__note">
-                        Running Lucius can get pricey. Consider a cheaper capable model like GLM or
-                        DeepSeek via OpenRouter.
+                        Running Lucius can get pricey.{' '}
+                        {keyedChosen.key === 'anthropic' &&
+                          'Claude Max and Team plans include monthly API credits. '}
+                        Consider a cheaper capable model like GLM or DeepSeek via OpenRouter.
                       </Text>
                     )}
                     {keyedChosen?.key === 'openrouter' && (
