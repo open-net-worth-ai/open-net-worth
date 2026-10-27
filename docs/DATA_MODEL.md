@@ -733,7 +733,7 @@ deliberately carry NEITHER `book_id` NOR (yet) `user_id` — spec:276's partitio
 ("chat history and Lucius's memory are `user_id`-scoped, private") means a family-mode
 `user_id` column is the eventual right shape, but this single-user-only schema has no `user_id`
 anywhere yet, and retrofitting `book_id` now would be actively wrong to walk back, not merely
-premature. **Portability is a per-store split, not one wave-wide answer** — SEVEN join
+premature. **`memory` today (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home`, revision `202610271200`)** — a fact is `{id, text (≤280 chars), state (live|unsorted|retired), section (you|money|plans|open_items|other), topic, source (explicit|implicit), sensitive, created_at, updated_at, mentioned_at, sorted_at, last_used_at, expires_at (open items), retired_reason, retired_at}`; there is NO `tier`. `last_used_at` moves only when a reply cites the fact (`<memory-used>`), never on being shown in the prompt. The revision stamps every legacy fact `unsorted`; `ai/memory_sort` files them. A retired fact is purged 30 days after `retired_at` (`ai/memory_tidy`). Every write goes through `ai.memory_write.apply_memory_change`; the only bypass is the whole-book restore in `db/config_io.py`. `memory_settings` keys are `enabled`, `search_chats` and `sensitive_topics`. **Portability is a per-store split, not one wave-wide answer** — SEVEN join
 `portable_bridge.BRIDGED` (undoable, no cross-file FK, the generic `_apply_bridged_import`
 loop): `payees`, `automations`, `alerts`, `dashboard_layout`, `memory`, `news_sources`,
 `intel_signals` — all seven were ALREADY live in `core.portable.PORTABLE_FILES` pre-wave, no

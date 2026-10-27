@@ -69,6 +69,7 @@ current base; otherwise recompute via `txn_base_amount()`.
 | Owned assets | `owned_assets_service.apply_owned_asset_change` |
 | Intel stories / timeline | `intel_stories_service.apply_story_change` |
 | Intel claims (cross-subject push dedup) | `claims_service.apply_claim_push` |
+| Memory | `memory_write.apply_memory_change` |
 
 - `ledger.resolve_transaction_row(...)` is the resolution half, NO store write — previews render
   exactly what a write would store.
@@ -256,6 +257,7 @@ One line each — full reasoning and the scar behind each is in
 
 **AI harness**
 - Tool results are bounded AT THE TOOL — filter before you cap.
+- Memory keeps only what has no other home — five fixed sections, a topic name per fact, every fact shown in full with its date, ≤280 chars; memory is context, never truth; one routing guide `ai.memory_structure.ROUTING_GUIDE`; one writer `ai.memory_write.apply_memory_change` (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home`).
 - Codex gets our tools as real (dynamic) tool calls that the HOST captures and runs — Codex never
   executes one; text `<tool_call>` is the fallback (ADR `2026-10-03-codex-tools-are-native-calls-the-host-runs`).
   The Codex turn stays OPEN across tool rounds — the call parks and the next round answers it
