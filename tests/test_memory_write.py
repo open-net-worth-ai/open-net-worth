@@ -172,7 +172,13 @@ def test_whitespace_in_a_fact_collapses_to_one_line():
     "text",
     [
         "Main card is 4111 1111 1111 1111",
-        "Account 1234-5678-9012-3456 is the savings",
+        "Account 4111-1111-1111-1111 is the savings",
+        "Account 1234567890123456 is the savings",
+        "Spare card 5500 0000 0000 0004",
+        "Passport number K1234567",
+        "ssn: 123 45 6789",
+        "My password is hunter22",
+        "PIN: 4321",
         "Account number 123456789012",
         "NRIC S1234567D",
         "Passport number K1234567",
@@ -196,6 +202,11 @@ def test_full_card_and_id_numbers_are_refused_last4_is_kept(text):
         "Born in 1984 and retiring at 52",
         "Passport expires in 2031",
         "Phone is +65 6123 4567",
+        "Phone +44 20 7946 0958",
+        "Trip 2026-12-01 2026-12-15",
+        "Salary 4500 4500 4500 monthly",
+        "Pin is optional",
+        "The password manager is 1Password",
     ],
 )
 def test_last4_and_ordinary_numbers_are_kept(text):
@@ -508,3 +519,51 @@ def test_expiry_follows_the_fact_not_a_tier():
     assert {f["id"] for f in store.active_facts()} == {"mem_dur", "mem_live"}
     assert memory.purge_expired(store) == 2
     assert {f["id"] for f in store.all_facts()} == {"mem_dur", "mem_live"}
+
+
+# ── a null on an update means "unchanged" ────────────────────────────────────
+
+
+def test_a_null_topic_or_expiry_on_an_update_changes_nothing():
+    _write(
+        {
+            "new": [
+                _new("Rent is due on the 1st", topic="Housing"),
+                _new("Call the bank", section="open_items"),
+            ]
+        }
+    )
+    rent, call = sorted(MemoryStore().all_facts(), key=lambda f: f["section"])
+    before = MemoryStore().find_by_id(call["id"])["expires_at"]
+
+    out = _write(
+        {
+            "updates": [
+                {
+                    "id": rent["id"],
+                    "content": "Rent is due on the 5th",
+                    "topic": None,
+                    "expires_at": None,
+                },
+                {
+                    "id": call["id"],
+                    "content": "Call the bank today",
+                    "topic": None,
+                    "expires_at": None,
+                },
+            ]
+        },
+        source="implicit",
+    )
+
+    assert out["updated"] == 2 and not out["rejected"]
+    new_rent, new_call = (MemoryStore().find_by_id(f["id"]) for f in (rent, call))
+    assert (new_rent["content"], new_rent["topic"]) == ("Rent is due on the 5th", "Housing")
+    assert new_call["expires_at"] == before == "2026-11-10"
+
+
+def test_an_empty_string_still_clears_a_topic():
+    _write({"new": [_new("Rent is due", topic="Housing")]})
+    (fact,) = MemoryStore().all_facts()
+    _write({"updates": [{"id": fact["id"], "topic": ""}]})
+    assert MemoryStore().find_by_id(fact["id"])["topic"] is None

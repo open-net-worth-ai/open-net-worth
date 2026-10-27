@@ -257,7 +257,7 @@ def test_edit_refuses_text_over_the_limit_and_full_numbers(db_isolated):
         instruct_mod.edit_fact("m_1", "x" * 281)
     assert "280" in long_text.value.message
     with pytest.raises(ValidationError):
-        instruct_mod.edit_fact("m_1", "Account 1234 5678 9012 3456")
+        instruct_mod.edit_fact("m_1", "Card 4111 1111 1111 1111")
     with pytest.raises(NotFoundError):
         instruct_mod.edit_fact("nope", "x")
     assert [f["content"] for f in MemoryStore().all_facts()] == ["Gets paid on the 25th"]

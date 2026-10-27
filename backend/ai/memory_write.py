@@ -56,18 +56,55 @@ def _too_long(length: int) -> str:
 
 # ── content guards ──────────────────────────────────────────────────────────────
 
-_LONG_NUMBER = re.compile(r"(?<!\d)(?:\d[ -]?){11,}\d(?!\d)")
+_ISO_DATE = re.compile(r"(?<!\d-)(?<!\d)\d{4}-\d{2}-\d{2}(?!-?\d)")
+_DIGIT_RUN = re.compile(r"(?<!\d)\d(?:[ -]?\d){11,}(?!\d)")
+_ID_KEYWORDS = (
+    r"(?:passport|nric|ssn|social security|national id|id card|identity card|tax id"
+    r"|driver'?s? licen[cs]e)"
+)
 _ID_SHAPES = (
     re.compile(r"\b[STFGM]\d{7}[A-Z]\b", re.I),
     re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
     re.compile(
-        r"\b(?:passport|nric|ssn|social security|national id|id card|identity card|tax id"
-        r"|driver'?s? licen[cs]e)\b(?:\s*(?:no\.?|number|num|#))?[\s:#=-]{0,4}"
-        r"(?=[A-Z0-9-]{6,}\b)(?=[A-Z-]*\d)[A-Z0-9-]{6,}",
+        rf"\b{_ID_KEYWORDS}\b(?:\s*(?:no\.?|number|num|#))?[\s:#=-]{{0,4}}"
+        r"(?:(?=[A-Z0-9-]{6,}\b)(?=[A-Z-]*\d)[A-Z0-9-]{6,}|\d{3}[ -]\d{2}[ -]\d{4}\b)",
         re.I,
     ),
-    re.compile(r"\b(?:password|passcode|pin)\b\s*(?:is|=|:)\s*\S+", re.I),
 )
+_SECRET = re.compile(r"\b(?:password|passcode|pin)\b\s*(?:is|=|:)\s*(\S+)", re.I)
+
+
+def _luhn(digits: str) -> bool:
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        n = int(ch)
+        if i % 2:
+            n = n * 2 - 9 if n > 4 else n * 2
+        total += n
+    return total % 10 == 0
+
+
+def _long_number(text: str) -> bool:
+    """A full account number (12+ unbroken digits) or a card number (13-19 digits, Luhn-valid).
+
+    Spaced or dashed runs are what phone numbers, repeated amounts and date ranges look like,
+    so they are refused only when they pass the Luhn check (or run past 19 digits)."""
+    for run in _DIGIT_RUN.finditer(_ISO_DATE.sub(" ", text)):
+        digits = re.sub(r"\D", "", run.group())
+        if len(digits) > 19:
+            return True
+        if len(digits) == len(run.group()):
+            return True
+        if len(digits) >= 13 and _luhn(digits):
+            return True
+    return False
+
+
+def _secret_given(text: str) -> bool:
+    """ "password is hunter22" — the word must be followed by a value that looks like one
+    (a digit or a symbol), not by ordinary prose ("Pin is optional")."""
+    return any(re.search(r"[\d\W_]", m.group(1).strip(".,;")) for m in _SECRET.finditer(text))
+
 
 _MONEY_FIGURE = r"(?:[$€£¥]\s*\d[\d,]*(?:\.\d+)?|\d[\d,]*\.\d+|\d{1,3}(?:,\d{3})+)"
 _PERISHABLE = (
@@ -79,7 +116,7 @@ _PERISHABLE = (
 
 def has_identifier(text: str) -> bool:
     """A full card / account number (12+ digits) or an ID, passport or password shape."""
-    return bool(_LONG_NUMBER.search(text)) or any(p.search(text) for p in _ID_SHAPES)
+    return _long_number(text) or _secret_given(text) or any(p.search(text) for p in _ID_SHAPES)
 
 
 def is_perishable_figure(text: str) -> bool:
@@ -247,20 +284,24 @@ class _Plan:
         return changes
 
     def _shape_update(self, raw: dict, current: dict, section, changes: dict) -> bool:
-        """Topic and expiry follow the section: open items carry no topic and always expire."""
+        """Topic and expiry follow the section: open items carry no topic and always expire. A
+        null topic or expiry means "unchanged" (the reply shapes show `...|null`); an empty
+        string clears one."""
         if section is None:
             return True
-        if "topic" in raw or "section" in changes:
+        given_topic = raw.get("topic") is not None
+        given_expiry = raw.get("expires_at") is not None
+        if given_topic or "section" in changes:
             changes["topic"] = self.canonical_topic(
-                section, raw["topic"] if "topic" in raw else current.get("topic")
+                section, raw["topic"] if given_topic else current.get("topic")
             )
-        if "expires_at" in raw or "section" in changes:
+        if given_expiry or "section" in changes:
             expires, valid = _expiry(
                 section,
-                raw["expires_at"] if "expires_at" in raw else current.get("expires_at"),
+                raw["expires_at"] if given_expiry else current.get("expires_at"),
                 self.today,
             )
-            if not valid and "expires_at" not in raw:
+            if not valid and not given_expiry:
                 expires, valid = _expiry(section, None, self.today)
             if not valid:
                 self.reject("bad_expiry", "", section, current.get("topic"))
