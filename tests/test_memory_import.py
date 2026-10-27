@@ -9,8 +9,8 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.ai import memory, memory_import
-from backend.core.errors import ValidationError
+from backend.ai import memory, memory_import, memory_import_apply
+from backend.core.errors import ExternalServiceError, ValidationError
 from backend.db import MemoryStore
 from backend.db.memory_settings_store import MemorySettingsStore
 from backend.services import profile as profile_service
@@ -373,3 +373,195 @@ def test_apply_ignores_a_second_apply_of_the_same_reviewed_items(client):
 
     assert again["applied"]["memory"] == 0
     assert len(MemoryStore().all_facts()) == 1
+
+
+# ── fix round 1 ──────────────────────────────────────────────────────────────────
+
+
+async def test_preview_skips_a_sensitive_line_while_the_setting_is_off(isolated, monkeypatch):
+    model = _use(
+        monkeypatch,
+        [
+            _item(
+                "Takes medication for asthma",
+                "memory",
+                section="you",
+                topic="About you",
+                content="Takes medication for asthma",
+                sensitive=True,
+            )
+        ],
+    )
+
+    items = await memory_import.plan_import("[2026-03-01] - Takes medication for asthma")
+
+    assert [i["destination"] for i in items] == ["skip"]
+    assert "Include sensitive topics" in items[0]["reason"]
+    assert "sensitive" in model.calls[0]["prompt"]
+    assert "religion" in model.calls[0]["prompt"]
+    assert MemoryStore().all_facts() == []
+
+
+async def test_preview_and_apply_keep_a_sensitive_line_while_the_setting_is_on(
+    isolated, monkeypatch
+):
+    MemorySettingsStore().set_sensitive_topics(True)
+    _use(
+        monkeypatch,
+        [
+            _item(
+                "Takes medication for asthma",
+                "memory",
+                section="you",
+                topic="About you",
+                content="Takes medication for asthma",
+                sensitive=True,
+            )
+        ],
+    )
+
+    items = await memory_import.plan_import("Takes medication for asthma")
+    out = memory_import_apply.apply_import(items)
+
+    assert items[0]["destination"] == "memory" and items[0]["sensitive"] is True
+    assert out["applied"]["memory"] == 1
+    assert MemoryStore().all_facts()[0]["sensitive"] is True
+
+
+def test_apply_still_refuses_a_sensitive_item_while_the_setting_is_off(client):
+    out = _apply(
+        client,
+        [_item("l", "memory", section="you", content="Takes medication", sensitive=True)],
+    )
+
+    assert out["applied"]["memory"] == 0
+    assert out["rejected"][0]["reason"] == "sensitive_off"
+
+
+class _Echo:
+    """Answers each prompt with one memory item per entry line it was shown."""
+
+    def __init__(self):
+        self.prompts: list[str] = []
+
+    async def complete(self, prompt, **kwargs):
+        self.prompts.append(prompt)
+        body = prompt.split("START\n", 1)[1].rsplit("\n<<<", 1)[0]
+        items = [
+            _item(ln, "memory", section="other", topic="T", content=ln)
+            for ln in body.splitlines()
+            if ln.startswith("[")
+        ]
+        return json.dumps({"items": items})
+
+
+async def test_a_long_paste_is_sorted_in_pieces_and_every_piece_comes_back(isolated, monkeypatch):
+    echo = _Echo()
+    monkeypatch.setattr(memory, "_provider", lambda: echo)
+    entries = [f"[2026-01-01] - Entry number {n:03d} " + "x" * 400 for n in range(30)]
+    paste = "Projects\n" + "\n".join(entries[:15]) + "\nPreferences\n" + "\n".join(entries[15:])
+    assert 12_000 < len(paste) < memory_import.MAX_PASTE_CHARS
+
+    items = await memory_import.plan_import(paste)
+
+    assert len(echo.prompts) >= 3
+    assert len(items) == 30
+    assert [i["content"] for i in items] == entries
+    for prompt in echo.prompts:
+        body = prompt.split("START\n", 1)[1]
+        assert body.startswith(("Projects\n[", "Preferences\n["))
+    assert "part 2 of" in echo.prompts[1]
+
+
+async def test_one_failing_piece_fails_the_whole_preview(isolated, monkeypatch):
+    calls = []
+
+    class _Flaky:
+        async def complete(self, prompt, **kwargs):
+            calls.append(prompt)
+            if len(calls) == 2:
+                raise RuntimeError("model down")
+            return json.dumps({"items": []})
+
+    monkeypatch.setattr(memory, "_provider", lambda: _Flaky())
+    paste = "\n".join(f"[2026-01-01] - Entry {n} " + "x" * 400 for n in range(30))
+
+    with pytest.raises(ExternalServiceError):
+        await memory_import.plan_import(paste)
+
+
+async def test_preview_drops_a_line_that_is_only_part_of_a_pasted_line(isolated, monkeypatch):
+    _use(
+        monkeypatch,
+        [
+            _item("Likes tea", "memory", section="you", content="Likes tea"),
+            _item("Likes tea and hates coffee", "memory", section="you", content="x"),
+        ],
+    )
+
+    items = await memory_import.plan_import("[2026-03-01] - Likes tea and hates coffee more")
+
+    assert items == []
+
+
+async def test_preview_shows_the_stored_value_of_a_profile_field(isolated, monkeypatch):
+    profile = profile_service.read_profile()
+    profile["nickname"] = "Dee"
+    profile_service.write_profile(profile)
+    _use(monkeypatch, [_item("Call me Danny", "profile", field="nickname", value="Danny")])
+
+    items = await memory_import.plan_import("Call me Danny")
+
+    assert items[0]["value"] == "Danny" and items[0]["current"] == "Dee"
+
+
+def test_apply_caps_appended_instruction_lines(client):
+    sent = [_item(f"l{n}", "instructions", value=f"Rule number {n}") for n in range(53)]
+
+    out = _apply(client, sent)
+
+    assert out["applied"]["instructions"] == 50
+    assert [r["reason"] for r in out["rejected"]] == ["too_many"] * 3
+    assert len(profile_service.read_profile()["notes"].splitlines()) == 50
+
+
+def test_apply_unions_employment_types_with_the_stored_list(client):
+    profile = profile_service.read_profile()
+    profile["employment_types"] = ["salaried"]
+    profile_service.write_profile(profile)
+
+    out = _apply(
+        client,
+        [
+            _item("a", "profile", field="employment_types", value=["self_employed"]),
+            _item("b", "profile", field="employment_types", value="salaried, student"),
+        ],
+    )
+
+    assert out["applied"]["profile"] == 1
+    assert profile_service.read_profile()["employment_types"] == [
+        "salaried",
+        "self_employed",
+        "student",
+    ]
+
+
+def test_apply_keeps_each_line_when_the_profile_write_fails(client, monkeypatch):
+    def boom(profile):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr(profile_service, "write_profile", boom)
+
+    out = _apply(
+        client,
+        [
+            _item("Name is Dana", "profile", field="name", value="Dana"),
+            _item("Be brief", "instructions", value="Be brief"),
+        ],
+    )
+
+    assert out["applied"] == {"profile": 0, "instructions": 0, "memory": 0}
+    assert [(r["line"], r["reason"]) for r in out["rejected"]] == [
+        ("Name is Dana", "write_failed"),
+        ("Be brief", "write_failed"),
+    ]

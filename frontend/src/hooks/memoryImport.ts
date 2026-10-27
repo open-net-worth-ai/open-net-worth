@@ -2,6 +2,7 @@
 // a preview that writes nothing, then an apply of the lines the user kept — and the export is a
 // zip fetched with the session's auth, then handed to the browser as a download.
 import { authFetch } from '../api/client'
+import { saveBlob } from '../utils/useArtifactContent'
 
 export const IMPORT_MAX_CHARS = 20_000
 
@@ -10,7 +11,10 @@ export interface ImportItem {
   destination: 'profile' | 'instructions' | 'memory' | 'skip'
   reason: string
   field?: string
-  value?: string
+  /** A string, or a list for a multi-valued profile field (employment). */
+  value?: string | string[]
+  /** The profile field's stored value now, when it has one. */
+  current?: string | string[] | null
   section?: string
   topic?: string | null
   content?: string
@@ -61,12 +65,5 @@ export async function downloadMemoryExport(): Promise<void> {
   const r = await authFetch('/api/memory/export')
   if (!r.ok) throw await failure(r, 'Could not export')
   const name = /filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') ?? '')?.[1]
-  const url = URL.createObjectURL(await r.blob())
-  const a = document.createElement('a')
-  a.href = url
-  a.download = name ?? 'memory.zip'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  URL.revokeObjectURL(url)
+  saveBlob(await r.blob(), name ?? 'memory.zip')
 }

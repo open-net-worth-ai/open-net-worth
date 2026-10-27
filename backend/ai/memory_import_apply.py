@@ -21,6 +21,7 @@ from backend.services import profile as profile_service
 logger = logging.getLogger(__name__)
 
 MAX_ITEMS = 300
+MAX_INSTRUCTIONS = 50
 TEXT_FIELD_MAX_CHARS = 80
 
 TEXT_FIELDS = ("name", "nickname")
@@ -75,19 +76,30 @@ def _instruction_lines(notes: str) -> set[str]:
     return {_squash(line).lstrip("-• ").casefold() for line in notes.splitlines() if line.strip()}
 
 
+def _union(*lists) -> list:
+    out: list = []
+    for values in lists:
+        out += [v for v in (values or []) if v not in out]
+    return out
+
+
 def _stage_profile(item: dict, changes: dict, rejected: list[dict]) -> bool:
     field = item.get("field")
     value = clean_profile_value(field, item.get("value"))
     if value is None:
         _reject(rejected, item, "profile", "bad_field")
         return False
+    if field in LIST_FIELDS:
+        value = _union(changes.get(field), value)
     changes[field] = value
     return True
 
 
-def _stage_instruction(item: dict, notes: str, seen: set[str], additions: list[str], rej) -> bool:
+def _stage_instruction(item: dict, seen: set[str], additions: list[str], rej) -> bool:
     text = _squash(item.get("value"))
-    if not text:
+    if len(additions) >= MAX_INSTRUCTIONS:
+        _reject(rej, item, "instructions", "too_many")
+    elif not text:
         _reject(rej, item, "instructions", "empty")
     elif len(text) > ms.FACT_MAX_CHARS:
         _reject(rej, item, "instructions", "too_long")
@@ -104,6 +116,9 @@ def _stage_instruction(item: dict, notes: str, seen: set[str], additions: list[s
 
 def _write_profile(changes: dict, additions: list[str]) -> None:
     profile = profile_service.read_profile()
+    for field in LIST_FIELDS:
+        if field in changes:
+            changes[field] = _union(profile.get(field), changes[field])
     profile.update(changes)
     if additions:
         existing = str(profile.get("notes") or "").rstrip()
@@ -130,14 +145,14 @@ def _memory_op(item: dict, live: set[tuple[str, str]], rejected: list[dict]) -> 
 
 def apply_import(items) -> dict:
     """Write the reviewed ``items`` and return ``{"applied": {profile, instructions, memory},
-    "rejected": [{line, destination, reason}]}``."""
+    "rejected": [{line, destination, reason}]}``. ``applied.profile`` counts distinct fields."""
     applied = {"profile": 0, "instructions": 0, "memory": 0}
     rejected: list[dict] = []
     changes: dict = {}
     additions: list[str] = []
+    staged: list[tuple[str, dict]] = []
     memory_items: list[dict] = []
-    notes = str(profile_service.read_profile().get("notes") or "")
-    seen = _instruction_lines(notes)
+    seen = _instruction_lines(str(profile_service.read_profile().get("notes") or ""))
     live = {
         (f["section"], _squash(f.get("content")).casefold())
         for f in MemoryStore().active_facts()
@@ -150,9 +165,11 @@ def apply_import(items) -> dict:
         elif dest == "skip":
             _reject(rejected, item, "skip", "skipped")
         elif dest == "profile":
-            applied["profile"] += _stage_profile(item, changes, rejected)
+            if _stage_profile(item, changes, rejected):
+                staged.append(("profile", item))
         elif dest == "instructions":
-            applied["instructions"] += _stage_instruction(item, notes, seen, additions, rejected)
+            if _stage_instruction(item, seen, additions, rejected):
+                staged.append(("instructions", item))
         else:
             op = _memory_op(item, live, rejected)
             if op:
@@ -160,12 +177,12 @@ def apply_import(items) -> dict:
     if changes or additions:
         try:
             _write_profile(changes, additions)
+            applied["profile"] = len(changes)
+            applied["instructions"] = len(additions)
         except Exception:
             logger.warning("memory import: the profile write failed", exc_info=True)
-            for dest in ("profile", "instructions"):
-                for _ in range(applied[dest]):
-                    rejected.append({"line": "", "destination": dest, "reason": "write_failed"})
-                applied[dest] = 0
+            for dest, item in staged:
+                _reject(rejected, item, dest, "write_failed")
     if memory_items:
         result = apply_memory_change(
             {"new": [m["op"] for m in memory_items]}, source="explicit", strict=False

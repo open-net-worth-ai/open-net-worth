@@ -7,9 +7,13 @@ vi.mock('../api/client', () => ({ authFetch: (...a: unknown[]) => authFetch(...a
 import { downloadMemoryExport } from './memoryImport'
 
 describe('downloadMemoryExport', () => {
-  afterEach(() => vi.restoreAllMocks())
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.useRealTimers()
+  })
 
   it('fetches the zip with the session and saves it under the name the server gave', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
     authFetch.mockResolvedValue(
       new Response('zip-bytes', {
         headers: { 'Content-Disposition': 'attachment; filename="memory-2026-10-27.zip"' },
@@ -28,6 +32,8 @@ describe('downloadMemoryExport', () => {
 
     expect(authFetch).toHaveBeenCalledWith('/api/memory/export')
     expect(saved).toBe('memory-2026-10-27.zip blob:memory')
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(60_000)
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:memory')
   })
 

@@ -37,6 +37,9 @@ SUGGESTED_TOPICS: dict[str, tuple[str, ...]] = {
 OPEN_ITEMS = "open_items"
 
 FACT_MAX_CHARS = 280
+SENSITIVE_TOPICS = (
+    "health, religion, political views, sexuality, ethnicity, criminal or legal matters"
+)
 TOPIC_MAX_CHARS = 60
 
 OPEN_ITEM_DEFAULT_DAYS = 14

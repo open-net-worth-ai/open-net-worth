@@ -32,6 +32,7 @@ from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel, Field
 
 from backend.ai.memory import MemoryDisabledError
+from backend.ai.memory_export import build_memory_export
 from backend.ai.memory_import import EXPORT_PROMPT, plan_import
 from backend.ai.memory_import_apply import MAX_ITEMS, apply_import
 from backend.ai.memory_instruct import apply_instruction, delete_topic, edit_fact
@@ -40,7 +41,6 @@ from backend.core.errors import ExternalServiceError, NotFoundError, ValidationE
 from backend.core.user_time import user_today
 from backend.db.memory_settings_store import MemorySettingsStore
 from backend.db.memory_store import MemoryStore
-from backend.services.memory_export import build_memory_export
 
 router = APIRouter()
 

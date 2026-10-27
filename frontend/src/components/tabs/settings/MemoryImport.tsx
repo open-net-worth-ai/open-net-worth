@@ -33,10 +33,17 @@ const GROUP_TITLES: Record<string, string> = {
 
 const sectionLabel = (key?: string) => SECTIONS.find((s) => s.key === key)?.label ?? 'Other'
 
-/** The words the user reads for an item: what would be saved, not the raw line. */
+const joined = (v?: string | string[] | null) => (Array.isArray(v) ? v.join(', ') : (v ?? ''))
+
+/** The words the user reads for an item: what would be saved, not the raw line. A profile field
+ *  that already has a value shows it too. */
 function itemText(i: ImportItem): string {
-  if (i.destination === 'profile') return `${FIELD_LABELS[i.field ?? ''] ?? i.field}: ${i.value}`
-  if (i.destination === 'instructions') return i.value || i.line
+  if (i.destination === 'profile') {
+    const now = joined(i.current)
+    const base = `${FIELD_LABELS[i.field ?? ''] ?? i.field}: ${joined(i.value)}`
+    return now ? `${base} (now: ${now})` : base
+  }
+  if (i.destination === 'instructions') return joined(i.value) || i.line
   if (i.destination === 'memory') return i.content || i.line
   return i.line
 }
@@ -61,6 +68,13 @@ function groupItems(items: ImportItem[]): { title: string; entries: [ImportItem,
   return [...groups]
     .map(([title, entries]) => ({ title, entries }))
     .sort((x, y) => order(x.title) - order(y.title))
+}
+
+/** What the pasted line said, when the saved text is not simply that. */
+function pastedLine(i: ImportItem): string {
+  if (i.destination === 'skip') return ''
+  const saved = i.destination === 'memory' ? i.content : joined(i.value)
+  return (saved ?? '').trim() === i.line.trim() ? '' : i.line
 }
 
 function summary(applied: number, rejected: number): string {
@@ -136,7 +150,12 @@ export function MemoryImport({ onClose, toast }: { onClose: () => void; toast: T
       return next
     })
 
-  const tooLong = text.length > IMPORT_MAX_CHARS
+  const length = text.trim().length
+  // Escape, the scrim and X wait out a request, like Cancel and Back do.
+  const close = () => {
+    if (!busy) onClose()
+  }
+  const tooLong = length > IMPORT_MAX_CHARS
   const footer = (
     <div className="rd-mi-foot">
       {step !== 'prompt' && (
@@ -171,7 +190,7 @@ export function MemoryImport({ onClose, toast }: { onClose: () => void; toast: T
   )
 
   return (
-    <Modal title="Import memory from another assistant" size="lg" onClose={onClose} footer={footer}>
+    <Modal title="Import memory from another assistant" size="lg" onClose={close} footer={footer}>
       <div className="rd-mi">
         <div className="rd-help">Step {['prompt', 'paste', 'review'].indexOf(step) + 1} of 3</div>
         {error && (
@@ -206,7 +225,7 @@ export function MemoryImport({ onClose, toast }: { onClose: () => void; toast: T
               placeholder="[2026-03-01] - …"
             />
             <div className={'rd-mi-count' + (tooLong ? ' over' : '')}>
-              {text.length.toLocaleString('en-US')} / {IMPORT_MAX_CHARS.toLocaleString('en-US')}
+              {length.toLocaleString('en-US')} / {IMPORT_MAX_CHARS.toLocaleString('en-US')}
             </div>
           </>
         )}
@@ -247,6 +266,7 @@ function ReviewList({
                 />
                 <div className="rd-mi-item-body">
                   <label htmlFor={`mi-${n}`}>{itemText(item)}</label>
+                  {pastedLine(item) && <div className="rd-mi-said">Pasted: {pastedLine(item)}</div>}
                   <div className="rd-help">{item.reason}</div>
                 </div>
               </div>

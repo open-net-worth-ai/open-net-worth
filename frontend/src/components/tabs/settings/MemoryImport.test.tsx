@@ -24,6 +24,7 @@ const ITEMS = [
     destination: 'profile',
     field: 'name',
     value: 'Dana Example',
+    current: 'Dana',
     reason: 'Your name has a profile field.',
   },
   {
@@ -98,6 +99,62 @@ describe('MemoryImport', () => {
 
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(PROMPT))
     expect(toast).toHaveBeenCalledWith('Prompt copied')
+  })
+
+  it('says so when the prompt cannot be copied', async () => {
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn().mockRejectedValue(new Error('no')) },
+    })
+    const toast = vi.fn()
+    render(<MemoryImport onClose={vi.fn()} toast={toast} />)
+
+    await screen.findByText(PROMPT)
+    fireEvent.click(screen.getByRole('button', { name: 'Copy prompt' }))
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith('Could not copy. Select the text and copy it yourself.'),
+    )
+  })
+
+  it('counts the trimmed paste, as the server does', async () => {
+    render(<MemoryImport onClose={vi.fn()} toast={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Next' }))
+
+    fireEvent.change(screen.getByLabelText('Pasted memory'), { target: { value: '   hi   ' } })
+
+    expect(screen.getByText('2 / 20,000')).toBeTruthy()
+  })
+
+  it('shows the stored value and what the paste said', async () => {
+    render(<MemoryImport onClose={vi.fn()} toast={vi.fn()} />)
+    await toReview()
+
+    expect(screen.getByText('Name: Dana Example (now: Dana)')).toBeTruthy()
+    expect(screen.getByText('Pasted: Planning a move to Lisbon')).toBeTruthy()
+    expect(screen.queryByText('Pasted: Rents a flat with a roommate')).toBeNull()
+  })
+
+  it('does not close on Escape, X or the scrim while a request is running', async () => {
+    let finish: (r: Response) => void = () => {}
+    authFetch.mockImplementation((url: string) => {
+      if (url === '/api/memory/import/prompt') return json({ prompt: PROMPT })
+      return new Promise<Response>((resolve) => (finish = resolve))
+    })
+    const onClose = vi.fn()
+    render(<MemoryImport onClose={onClose} toast={vi.fn()} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Next' }))
+    fireEvent.change(screen.getByLabelText('Pasted memory'), { target: { value: 'hi' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }))
+    await screen.findByRole('button', { name: 'Reading…' })
+
+    fireEvent.keyDown(window, { key: 'Escape' })
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).not.toHaveBeenCalled()
+
+    finish(new Response(JSON.stringify({ items: [] }), { status: 200 }))
+    await screen.findByText('Nothing in that text could be sorted.')
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('counts the paste against the limit and blocks one that is too long', async () => {

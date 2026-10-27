@@ -3672,3 +3672,9 @@
 .onw-settings .rd-mi-foot-gap {
   flex: 1;
 }
+.onw-settings .rd-mi-said {
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}

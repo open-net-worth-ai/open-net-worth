@@ -89,8 +89,7 @@ Each fact is at most {ms.FACT_MAX_CHARS} characters. For each fact choose:
     unless you give an expires_at; they take no topic)
   - topic: a short name for the subject. Reuse a name from "Topics in use" below when one fits;
     invent a new one only when none does (suggested: {suggested})
-  - sensitive: true for health, religion, political views, sexuality, ethnicity, criminal or
-    legal matters — on an update too, when its new text is about one. Never store a full card, account, ID or passport number or a password.
+  - sensitive: true for {ms.SENSITIVE_TOPICS} — on an update too, when its new text is about one. Never store a full card, account, ID or passport number or a password.
 
 Decide whether each fact UPDATES an existing memory (reuse its id) or is NEW. If the
 conversation contradicts an existing memory, prefer an update (latest wins). If a fact is

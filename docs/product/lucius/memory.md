@@ -142,7 +142,8 @@ If you've used ChatGPT, Claude or Gemini for a while, they may already know thin
 
 1. **Copy the prompt** and run it in the other assistant. It asks for everything it knows about
    you, grouped as Instructions, Identity, Career, Projects and Preferences, one dated line each.
-2. **Paste the answer** into the box. It takes up to 20,000 characters; for more, import it in parts.
+2. **Paste the answer** into the box. It takes up to 20,000 characters (a long list is read in
+   several pieces); for more, import it in parts.
 3. **Review.** Lucius sorts every line into where it belongs and says why:
    - **Profile** — a name, preferred name, marital status, employment or risk tolerance, set on
      your profile.
@@ -150,8 +151,13 @@ If you've used ChatGPT, Claude or Gemini for a while, they may already know thin
      the end of your instructions. Your own text is never replaced, and a line already there is
      skipped.
    - **Memory** — anything else lasting about you, filed by section and topic.
-   - **Skipped** — what your books, payee rules or automations already hold, and anything that
-     isn't a fact about you. These can't be ticked.
+   - **Skipped** — what your books, payee rules or automations already hold, anything that
+     isn't a fact about you, and sensitive details (health, religion and the like) while
+     **Include sensitive topics in memory** is off. These can't be ticked.
+
+   A profile item shows what's there now — *Employment: self-employed (now: salaried)* — and
+   employment is added to, never replaced. When the saved wording differs from the line you
+   pasted, the pasted line is shown under it.
 
 Nothing is saved until you click **Import** and then only the lines left ticked. Untick any you
 don't want. Afterwards a note says how many were imported and how many weren't — for example a

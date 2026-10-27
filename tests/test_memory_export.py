@@ -10,8 +10,8 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.ai import memory_export
 from backend.db import MemoryStore
-from backend.services import memory_export
 
 
 def _fact(fid, content, section="money", topic="Housing", **extra):
@@ -125,3 +125,21 @@ def test_export_route_streams_a_dated_zip(client, monkeypatch):
     assert r.headers["content-type"] == "application/zip"
     assert 'filename="memory-2026-10-27.zip"' in r.headers["content-disposition"]
     assert "money-housing.md" in _files(r.content)
+
+
+def test_a_hostile_topic_name_cannot_make_an_unsafe_zip_entry(db_isolated):
+    MemoryStore().bulk_insert(
+        [
+            _fact("1", "a", topic="../../evil\x00name"),
+            _fact("2", "b", topic="not-sorted-yet"),
+            _fact("3", "c", topic="C:\\windows\\x"),
+        ]
+    )
+
+    names = list(_files(memory_export.build_memory_export()))
+
+    assert len(names) == len(set(names))
+    for name in names:
+        assert name.endswith(".md") and "\x00" not in name
+        assert not any(bad in name for bad in ("/", "\\", ".."))
+        assert name == "open-items.md" or name.startswith("money-")
