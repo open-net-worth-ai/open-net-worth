@@ -174,8 +174,8 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         "conversation state → nowhere",
     ),
     (
-        "about the user but no Settings profile field fits (an employer, languages, who shares the "
-        "household, personal context)",
+        "about the user but no Settings profile field fits (an employer, languages, who they live "
+        "with — partner, children, flatmates — personal context)",
         "Memory · You · Profile",
         "about the user, no Settings field → You · Profile (a memory topic)",
     ),
@@ -197,7 +197,8 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         f"something to come back to → Open items (expires in {OPEN_ITEM_DEFAULT_DAYS} days)",
     ),
     (
-        "a fact about their money life that nothing above holds (housing, family, investing, "
+        "a fact about their money life that nothing above holds (housing, money they send or "
+        "receive within the family, investing, "
         "tax, cards and payments, income and work, a bookkeeping convention no payee rule can "
         "express)",
         "Memory · Money · a topic name",
