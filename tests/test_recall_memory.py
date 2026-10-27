@@ -26,16 +26,16 @@ def _call(**inp):
     return json.loads(text), proposed
 
 
-def _seed(content, *, fid, created_at, tier="durable", source="implicit", expires_at=None):
+def _seed(content, *, fid, created_at, source="implicit", expires_at=None, **extra):
     memory_store_mod.MemoryStore().insert(
         {
             "id": fid,
             "content": content,
-            "tier": tier,
             "source": source,
             "expires_at": expires_at,
             "created_at": created_at,
             "updated_at": created_at,
+            **extra,
         }
     )
 
@@ -82,20 +82,98 @@ def test_returns_every_field_the_model_needs(memory_on):
         "Plans to sell the car before moving",
         fid="m1",
         created_at="2026-05-01",
-        tier="time_bound",
         source="explicit",
         expires_at=FUTURE,
+        state="live",
+        section="plans",
+        topic="Move",
+        last_used_at="2026-06-01",
     )
 
     match = _call(query="car")[0]["matches"][0]
 
     assert match == {
         "content": "Plans to sell the car before moving",
-        "tier": "time_bound",
+        "section": "plans",
+        "topic": "Move",
         "source": "explicit",
         "created_at": "2026-05-01",
         "expires_at": FUTURE,
+        "last_used_at": "2026-06-01",
     }
+
+
+def test_an_unsorted_fact_is_found_and_says_it_is_unsorted(memory_on):
+    _seed("Keeps a spare key with a neighbour", fid="m1", created_at="2026-05-01")
+
+    match = _call(query="spare key")[0]["matches"][0]
+
+    assert (match["section"], match["topic"]) == (None, None)
+
+
+def test_recall_by_topic(memory_on):
+    _seed(
+        "Rents a flat in Tampines",
+        fid="m1",
+        created_at="2026-05-01",
+        state="live",
+        section="money",
+        topic="Housing",
+    )
+    _seed(
+        "Rent is due on the 1st",
+        fid="m2",
+        created_at="2026-05-02",
+        state="live",
+        section="money",
+        topic="Housing",
+    )
+    _seed(
+        "Wants to buy a flat by 2030",
+        fid="m3",
+        created_at="2026-05-03",
+        state="live",
+        section="plans",
+        topic="Home purchase",
+    )
+    _seed(
+        "Rents a storage unit",
+        fid="m4",
+        created_at="2026-05-04",
+        state="live",
+        section="money",
+        topic="Storage",
+    )
+    _seed(
+        "Old landlord was Lee",
+        fid="m5",
+        created_at="2026-05-05",
+        state="retired",
+        section="money",
+        topic="Housing",
+    )
+
+    result = _call(topic=" housing")[0]
+
+    assert _contents(result) == ["Rent is due on the 1st", "Rents a flat in Tampines"]
+    assert result["total_matches"] == 2
+    narrowed = _call(topic="Housing", query="due")[0]
+    assert _contents(narrowed) == ["Rent is due on the 1st"]
+
+
+def test_recall_by_a_topic_nobody_has_says_so(memory_on):
+    _seed(
+        "Rents a flat",
+        fid="m1",
+        created_at="2026-05-01",
+        state="live",
+        section="money",
+        topic="Housing",
+    )
+
+    result = _call(topic="Cars")[0]
+
+    assert result["matches"] == [] and "Nothing remembered" in result["note"]
 
 
 def test_conversational_query_matches_on_its_subject_word(memory_on):

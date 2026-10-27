@@ -18,6 +18,7 @@ from backend.core.run_steps import append_run_step as _append_step
 logger = logging.getLogger(__name__)
 
 from backend.ai import pending_injection, run_plan, skill_runtime
+from backend.ai.memory_citations import CitationStripper, note_cited_facts, split_citations
 from backend.ai.models.base import AIProvider
 from backend.ai.tool_text import (
     UNPARSED_CALL_NOTICE,
@@ -4388,6 +4389,7 @@ async def _run_turn(
 
             _offered_tools = _active_tools()
             live_text = LiveLineFilter()
+            citations = CitationStripper()
             async for event in _stream_round(_render_turn_messages({}), _offered_tools):
                 if event["type"] == "thinking_delta":
                     assistant_thinking += event["text"]
@@ -4395,12 +4397,12 @@ async def _run_turn(
 
                 elif event["type"] == "text_delta":
                     assistant_text += event["text"]
-                    shown = live_text.feed(event["text"])
+                    shown = live_text.feed(citations.feed(event["text"]))
                     if shown:
                         yield {**event, "text": shown}
 
                 elif event["type"] == "tool_use_start":
-                    held = live_text.flush(has_calls=True)
+                    held = live_text.feed(citations.flush()) + live_text.flush(has_calls=True)
                     if held:
                         yield {"type": "text_delta", "text": held}
                     if str(event.get("name") or "") != "activate_skill":
@@ -4448,10 +4450,16 @@ async def _run_turn(
                     }
 
                 elif event["type"] == "done":
-                    held = live_text.flush(has_calls=bool(pending_tool_uses))
+                    held = live_text.feed(citations.flush()) + live_text.flush(
+                        has_calls=bool(pending_tool_uses)
+                    )
                     if held:
                         yield {"type": "text_delta", "text": held}
                     stop_reason = event.get("stop_reason")
+                    # The citation tag never reaches the transcript, a channel or a run's
+                    # output: every consumer reads this stream or the saved text.
+                    assistant_text, _cited = split_citations(assistant_text)
+                    note_cited_facts(_cited)
 
                     # Append assistant turn to history
                     assistant_content: list[dict] = []

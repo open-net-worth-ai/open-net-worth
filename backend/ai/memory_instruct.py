@@ -178,3 +178,19 @@ def edit_fact(fact_id: str, content: str) -> dict:
     ops = {"updates": [{"id": fact_id, "content": content}]}
     apply_memory_change(ops, source="explicit", strict=True)
     return store.find_by_id(fact_id)
+
+
+def delete_topic(section: str, topic: str) -> int:
+    """Forget every fact filed under ``topic`` in ``section``; returns how many went.
+
+    Allowed while memory is off, like forgetting one fact. Raises ValidationError for a blank
+    topic or a section that has none, and NotFoundError when nothing is filed there.
+    """
+    if not ms.topic_key(topic):
+        raise ValidationError("Name the topic to delete.")
+    result = apply_memory_change(
+        {"delete_topic": [{"section": section, "topic": topic}]}, source="explicit", strict=True
+    )
+    if not result["removed"]:
+        raise NotFoundError("unknown topic")
+    return result["removed"]

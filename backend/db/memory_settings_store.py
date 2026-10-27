@@ -14,6 +14,8 @@ from __future__ import annotations
 from backend.core.config import get_settings
 from backend.db.payload_store import NamespacedSettingsStore
 
+_KEYS = ("enabled", "search_chats", "sensitive_topics")
+
 
 class MemorySettingsStore(NamespacedSettingsStore):
     def __init__(self, engine=None):
@@ -49,6 +51,16 @@ class MemorySettingsStore(NamespacedSettingsStore):
 
     def set_sensitive_topics(self, on: bool) -> None:
         self._set("sensitive_topics", bool(on))
+
+    def update(self, patch: dict) -> dict:
+        """Set every known key in ``patch`` in ONE write and return the settings."""
+        known = {k: bool(v) for k, v in patch.items() if k in _KEYS and v is not None}
+        if known:
+            with self._use_serialized_namespace_conn(None) as conn:
+                doc = dict(self.get(conn=conn))
+                doc.update(known)
+                self.save(doc, conn=conn)
+        return self.settings()
 
     def _set(self, key: str, value: bool) -> None:
         with self._use_serialized_namespace_conn(None) as conn:

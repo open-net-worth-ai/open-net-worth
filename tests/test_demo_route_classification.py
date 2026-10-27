@@ -359,6 +359,7 @@ def test_every_locked_mutating_route_answers_403_demo_locked(open_demo):
         ("POST", "/api/channels/telegram/test"),
         ("PUT", "/api/plaid/config"),
         ("PUT", "/api/memory/settings"),
+        ("DELETE", "/api/memory/topics"),
         ("GET", "/api/logs"),
         ("GET", "/api/desktop/folders"),
         ("POST", "/api/desktop/folders"),

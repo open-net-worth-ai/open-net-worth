@@ -240,7 +240,7 @@ def test_get_memory_settings_default(api_env):
 def test_put_memory_settings_false(api_env):
     resp = _client().put("/api/memory/settings", json={"enabled": False})
     assert resp.status_code == 200
-    assert resp.json() == {"enabled": False}
+    assert resp.json()["enabled"] is False
 
 
 def test_put_memory_settings_true(api_env):
@@ -248,7 +248,7 @@ def test_put_memory_settings_true(api_env):
     c.put("/api/memory/settings", json={"enabled": False})
     resp = c.put("/api/memory/settings", json={"enabled": True})
     assert resp.status_code == 200
-    assert resp.json() == {"enabled": True}
+    assert resp.json()["enabled"] is True
 
 
 def test_get_reflects_put(api_env):
@@ -419,7 +419,9 @@ def _call_tool(tool_name: str, **inp):
 def test_remember_fact_blocked_when_global_off(isolated):
     """remember_fact tool handler must return ok=False with a message when memory is OFF."""
     settings_store_mod.MemorySettingsStore().set_enabled(False)
-    result, proposed = _call_tool("remember_fact", content="User wants to retire at 45")
+    result, proposed = _call_tool(
+        "remember_fact", content="User wants to retire at 45", section="plans", topic="Retirement"
+    )
     assert result["ok"] is False
     assert "message" in result
     assert proposed is None
@@ -428,7 +430,9 @@ def test_remember_fact_blocked_when_global_off(isolated):
 def test_remember_fact_succeeds_when_global_on(isolated):
     """remember_fact tool handler must return ok=True and save the fact when memory is ON."""
     settings_store_mod.MemorySettingsStore().set_enabled(True)
-    result, proposed = _call_tool("remember_fact", content="User wants to retire at 45")
+    result, proposed = _call_tool(
+        "remember_fact", content="User wants to retire at 45", section="plans", topic="Retirement"
+    )
     assert result["ok"] is True
     assert "saved" in result
     assert "retire at 45" in result["saved"]

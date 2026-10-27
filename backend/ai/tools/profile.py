@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import Field
 
+from backend.ai.memory_structure import routing_guide_for_tool
 from backend.ai.tools._shared import no_op_write_result
 from backend.ai.tools.plan_scenarios import PlanEvent, PlanStream
 from backend.ai.tools.registry import tool
@@ -381,10 +382,9 @@ class UpdateProfileChanges(NestedInput):
     notes: Optional[str] = Field(
         default=None,
         description=(
-            "Free-text catch-all for anything genuinely personal that no structured field "
-            "covers — pronouns, preferred tone/communication style, or any other standing "
-            "instruction the user states about themselves. Not for one-off facts about their "
-            "finances or holdings; those belong in the relevant tool or memory instead."
+            "The user's Instructions for Lucius — standing rules for how you should behave. "
+            "Change them when asked, or when the user states a rule they'd expect to find here; "
+            "edit or add a line, never rewrite their text wholesale. " + routing_guide_for_tool()
         ),
     )
     fire_expected_return_pct: Optional[float] = Field(default=None)

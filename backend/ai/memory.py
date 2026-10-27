@@ -16,6 +16,7 @@ import os
 import re
 
 from backend.ai.memory_extract_prompt import EXTRACT_SYSTEM, existing_listing, extract_prompt
+from backend.ai.memory_structure import topic_key
 from backend.ai.memory_write import apply_memory_change
 from backend.core.user_time import user_today
 from backend.db import MemoryStore
@@ -153,7 +154,11 @@ class MemoryDisabledError(Exception):
 
 
 def add_explicit(
-    content: str, section: str, topic: str | None = None, expires_at: str | None = None
+    content: str,
+    section: str,
+    topic: str | None = None,
+    expires_at: str | None = None,
+    sensitive: bool = False,
 ) -> dict:
     """Insert a user-requested fact immediately, saved as written. No dedup.
 
@@ -161,13 +166,15 @@ def add_explicit(
     calling tool handler can surface a clear refusal instead of silently writing
     a fact that stays dormant (prompt-injection write channel when memory is OFF),
     and ValidationError (a sentence for the user) when the write choke refuses it —
-    too long, no such section, a full card or ID number, a bad expiry.
+    too long, no such section, a full card or ID number, a bad expiry, or a sensitive fact
+    while the sensitive-topics setting is off.
     """
     if not memory_writes_enabled():
         raise MemoryDisabledError()
-    ops = {
-        "new": [{"content": content, "section": section, "topic": topic, "expires_at": expires_at}]
-    }
+    item = {"content": content, "section": section, "topic": topic, "expires_at": expires_at}
+    if sensitive:
+        item["sensitive"] = True
+    ops = {"new": [item]}
     return apply_memory_change(ops, source="explicit", strict=True)["created"][0]
 
 
@@ -280,20 +287,39 @@ def _recall_score(query: str, q_tokens: set[str], content: str) -> float:
     return sum(1 for q in q_tokens if _token_hit(q, fact_tokens)) / len(q_tokens)
 
 
-def recall_facts(query: str, limit: int = 10) -> dict:
-    """Best-matching ACTIVE facts for ``query`` — relevance first, newest first on a tie.
+def _recall_row(fact: dict) -> dict:
+    return {
+        "content": _truncate(fact.get("content", ""), RECALL_CONTENT_TRUNCATE),
+        "section": fact.get("section"),
+        "topic": fact.get("topic"),
+        "source": fact.get("source"),
+        "created_at": fact.get("created_at"),
+        "expires_at": fact.get("expires_at"),
+        "last_used_at": fact.get("last_used_at"),
+    }
+
+
+def recall_facts(query: str | None, limit: int = 10, topic: str | None = None) -> dict:
+    """Best-matching ACTIVE facts for ``query`` — relevance first, newest first on a tie. With a
+    ``topic`` only that topic's facts are searched, and a query is optional: no query returns the
+    topic's facts, newest first.
 
     Raises MemoryDisabledError when the memory toggle is OFF: a switched-off memory
     surfaces nothing. Reading is not a write, so a demo's seeded facts stay readable —
     the same rule the prompt block follows (``enabled()``, not ``memory_writes_enabled()``).
-    Raises ValueError when the query has no searchable word.
+    Raises ValueError when there is neither a topic nor a query with a searchable word.
     """
     if not MemorySettingsStore().enabled():
         raise MemoryDisabledError()
     query = (query or "").strip()
     q_tokens = _recall_tokens(query)
-    if not q_tokens:
-        raise ValueError("query needs at least one specific word, e.g. 'apartment' or 'retire'")
+    wanted = topic_key(topic)
+    if not q_tokens and not wanted:
+        raise ValueError(
+            "give a topic, or a query with at least one specific word, e.g. 'apartment' or 'retire'"
+        )
+    if query and not q_tokens and wanted:
+        query = ""
     limit = max(1, min(int(limit or 10), RECALL_MAX_LIMIT))
 
     today = user_today().isoformat()
@@ -302,21 +328,16 @@ def recall_facts(query: str, limit: int = 10) -> dict:
         for f in MemoryStore().remembered_facts(today=today)
         if not (f.get("expires_at") and f["expires_at"] < today)
     ]
-    scored = [(_recall_score(query, q_tokens, f.get("content", "")), f) for f in facts]
+    pool = [f for f in facts if topic_key(f.get("topic")) == wanted] if wanted else facts
+    if q_tokens:
+        scored = [(_recall_score(query, q_tokens, f.get("content", "")), f) for f in pool]
+    else:
+        scored = [(1.0, f) for f in pool]
     hits = [(s, f) for s, f in scored if s > 0]
     hits.sort(key=lambda sf: (sf[1].get("created_at", ""), sf[1].get("id", "")), reverse=True)
     hits.sort(key=lambda sf: sf[0], reverse=True)
     return {
-        "matches": [
-            {
-                "content": _truncate(f.get("content", ""), RECALL_CONTENT_TRUNCATE),
-                "tier": f.get("tier"),
-                "source": f.get("source"),
-                "created_at": f.get("created_at"),
-                "expires_at": f.get("expires_at"),
-            }
-            for _, f in hits[:limit]
-        ],
+        "matches": [_recall_row(f) for _, f in hits[:limit]],
         "total_matches": len(hits),
         "total_facts": len(facts),
     }

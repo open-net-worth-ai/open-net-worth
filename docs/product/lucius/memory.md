@@ -28,6 +28,14 @@ Just say it:
 - *"Remember I'm saving for a house deposit by 2028."*
 - *"Forget what I said about the car loan."*
 
+Each fact is filed in a section — **You**, **Money**, **Plans**, **Open items** (things to come back
+to, which expire after 14 days) or **Other** — and, except in Open items, under a short topic such
+as *Housing*. If you ask him to remember something your profile has a field for, or a standing rule
+for how he should behave, he says where it belongs instead of filing it as a memory. A health,
+religion, political, sexuality, ethnicity or legal fact is remembered only if you've allowed
+sensitive topics in **Settings → Memory**; otherwise he tells you it wasn't saved. When a fact
+shapes a reply he marks it as used, which keeps it from fading; you never see the marker.
+
 He also picks up facts on his own. Memory is written when a conversation has been quiet for 30
 minutes (and when an automation run finishes) — never in the middle of a chat — and only from what
 was said since the last time. He is strict about it: he keeps only what nothing else in the app
@@ -39,6 +47,18 @@ the third person. A fact he never cites for 90 days fades out of memory, and so 
 hasn't come up for 90 days; a faded fact is kept aside for 30 days before it is deleted. Once a
 day he also merges facts that say the same thing. Saving or forgetting a fact counts as a change, so it follows the
 conversation's [approval mode](permissions.md) like any other.
+
+## Memory, instructions or profile?
+
+Three places hold what Lucius knows about you, and a fact lives in only one of them:
+
+- **Your profile** holds the facts the app has a field for — name, date of birth, where you live,
+  income, retirement age. *"I'm moving to Lisbon"* updates your country of residence.
+- **Instructions for Lucius** hold standing rules for how he behaves, and he follows them on every
+  reply. *"Always answer in plain English"* goes here. You can edit them in your profile; he can
+  add or change a line when you ask, and memory never writes to them on its own.
+- **Memory** holds everything else he should know. *"My landlord is Sam and rent is due on the
+  1st"* goes here, under Money, in the topic Housing.
 
 ## Review what he knows
 
