@@ -122,9 +122,9 @@ export interface RegisterProps {
   /** True while the initial/filtered txn fetch is in flight — distinguishes "still loading" from
    *  a genuinely empty result so the register shows a spinner, not the empty-state illustration. */
   loadingTxns: boolean
-  /** True while a fetch for a DIFFERENT query (a filter change) will replace the rows on
-   *  screen — the header progress bar. A same-query revalidation stays silent. */
-  refiltering?: boolean
+  /** True while a fetch will visibly replace the rows on screen (a filter change, or the data
+   *  changed) — the header progress bar. A remount's silent revalidation is not one. */
+  reloadingRows?: boolean
   /** True while an infinite-scroll `loadMore` append is in flight — rows are already on screen,
    *  so this renders a small trailing indicator instead of the full-list spinner. */
   isLoadingMore: boolean
@@ -169,7 +169,7 @@ export function Register({
   onCreateCategory,
   allEmpty,
   loadingTxns,
-  refiltering = false,
+  reloadingRows = false,
   isLoadingMore,
   onAddTxn,
   onImport,
@@ -414,9 +414,9 @@ export function Register({
     } catch (_) {}
   }
 
-  // A filter change keeps the old rows on screen until the new page lands, so without this the
-  // table looks finished while the query is still running.
-  const refetching = refiltering && sorted.length > 0
+  // A filter change or a data-changed reload keeps the old rows on screen until the new page
+  // lands, so without this the table looks finished while the query is still running.
+  const refetching = reloadingRows && sorted.length > 0
   const loadBar = refetching && <span className="acct-reg-loadbar" aria-hidden="true" />
 
   return (

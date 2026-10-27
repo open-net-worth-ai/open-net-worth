@@ -2,7 +2,7 @@
 //
 // Owner report 2026-10-27: on mobile, returning to Accounts from Lucius remounts the tab, which
 // paints the cached rows and revalidates the SAME query — and the filter-refetch bar fired for
-// it, so every return looked like a reload. `refiltering` is true only while a DIFFERENT query
+// it, so every return looked like a reload. `reloadingRows` is true only while a DIFFERENT query
 // is about to replace the rows on screen.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -74,8 +74,8 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('useAccountsLedger — refiltering', () => {
-  it('a remount over cached rows revalidates silently; a filter change shows refiltering', async () => {
+describe('useAccountsLedger — reloadingRows', () => {
+  it('a remount over cached rows revalidates silently; a filter change shows reloadingRows', async () => {
     // What a previous visit to the tab left behind.
     setCachedQueryData('/api/accounts', [])
     setCachedQueryData(`/api/transactions?${buildTxnQueryString(DEFAULTS, 0)}`, {
@@ -86,14 +86,29 @@ describe('useAccountsLedger — refiltering', () => {
     const { result } = renderHook(() => useAccountsLedger())
     expect(result.current.transactions.map((t) => t.id)).toEqual(['t1'])
     await waitFor(() => expect(result.current.loadingTxns).toBe(true))
-    expect(result.current.refiltering).toBe(false)
+    expect(result.current.reloadingRows).toBe(false)
     act(() => releaseTxns.shift()!())
     await waitFor(() => expect(result.current.loadingTxns).toBe(false))
 
     act(() => result.current.setFilters({ search: 'grab' }))
-    await waitFor(() => expect(result.current.refiltering).toBe(true))
+    await waitFor(() => expect(result.current.reloadingRows).toBe(true))
     act(() => releaseTxns.shift()!())
-    await waitFor(() => expect(result.current.refiltering).toBe(false))
+    await waitFor(() => expect(result.current.reloadingRows).toBe(false))
     expect(result.current.loadingTxns).toBe(false)
+  })
+  it('a reload because the data changed (Lucius wrote) shows reloadingRows for the same query', async () => {
+    const { result } = renderHook(() => useAccountsLedger())
+    await waitFor(() => expect(releaseTxns.length).toBe(1))
+    act(() => releaseTxns.shift()!())
+    await waitFor(() => expect(result.current.loadingTxns).toBe(false))
+
+    let done!: Promise<void>
+    act(() => {
+      done = result.current.refresh()
+    })
+    await waitFor(() => expect(result.current.reloadingRows).toBe(true))
+    act(() => releaseTxns.shift()!())
+    await act(() => done)
+    expect(result.current.reloadingRows).toBe(false)
   })
 })

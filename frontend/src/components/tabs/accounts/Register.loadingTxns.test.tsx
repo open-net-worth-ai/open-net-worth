@@ -83,7 +83,7 @@ function renderReg(
   over: {
     txns?: Txn[]
     loadingTxns?: boolean
-    refiltering?: boolean
+    reloadingRows?: boolean
     allEmpty?: boolean
     isLoadingMore?: boolean
   } = {},
@@ -107,7 +107,7 @@ function renderReg(
       categories={[]}
       allEmpty={over.allEmpty ?? false}
       loadingTxns={over.loadingTxns ?? false}
-      refiltering={over.refiltering ?? false}
+      reloadingRows={over.reloadingRows ?? false}
       isLoadingMore={over.isLoadingMore ?? false}
       payeeOptions={[]}
       payeeNames={{}}
@@ -131,13 +131,13 @@ describe('Register — loadingTxns never overrides rows already on screen', () =
   })
 
   it('a refetch over existing rows (a filter change) shows the header progress bar and marks the register busy', () => {
-    const { container } = renderReg({ txns: [makeTxn()], loadingTxns: true, refiltering: true })
+    const { container } = renderReg({ txns: [makeTxn()], loadingTxns: true, reloadingRows: true })
     expect(container.querySelector('.acct-reg-loadbar')).not.toBeNull()
     expect(container.querySelector('.acct-reg.refetching[aria-busy="true"]')).not.toBeNull()
   })
 
   it('no progress bar for a same-query revalidation (a tab return), nor once settled', () => {
-    const revalidating = renderReg({ txns: [makeTxn()], loadingTxns: true, refiltering: false })
+    const revalidating = renderReg({ txns: [makeTxn()], loadingTxns: true, reloadingRows: false })
     expect(revalidating.container.querySelector('.acct-reg-loadbar')).toBeNull()
     expect(revalidating.container.querySelector('[aria-busy]')).toBeNull()
     revalidating.unmount()
