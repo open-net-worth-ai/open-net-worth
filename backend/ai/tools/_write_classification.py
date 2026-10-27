@@ -42,6 +42,9 @@ READ_ONLY_TOOLS = frozenset(
         # Memory search (ai/tools/memory.py) — reads MemoryStore.active_facts(), scores in
         # memory.recall_facts, writes nothing (unlike remember_fact/forget_fact).
         "recall_memory",
+        # Keyword search over session_messages text (ai/tools/conversations.py): one SELECT,
+        # visible conversations only, writes nothing.
+        "search_past_conversations",
         # Was a read-SHAPED WRITER until 2026-08-23: `fetch_live` recorded every fetched
         # point into price_history, so asking what a price is appended to the portfolio's
         # own series. It now passes `record_history=False` — the series is accumulated by

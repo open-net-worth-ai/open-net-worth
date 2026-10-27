@@ -10395,5 +10395,23 @@
     "required": [
       "guide"
     ]
+  },
+  "search_past_conversations": {
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "description": "Words to look for in earlier conversations, e.g. 'house deposit' or a name.",
+        "type": "string"
+      },
+      "limit": {
+        "type": "integer",
+        "default": 5,
+        "description": "Max conversations to return (default 5, max 10)."
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "type": "object"
   }
 }

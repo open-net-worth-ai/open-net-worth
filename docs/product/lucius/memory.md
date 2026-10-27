@@ -6,7 +6,7 @@ order: 50
 audience: [user]
 status: stable
 related: [lucius/overview, lucius/models-and-cost, operations/security-and-privacy]
-keywords: [memory, remember, forget, edit memory, add memory, facts, privacy, stored memories]
+keywords: [memory, remember, forget, edit memory, add memory, facts, privacy, stored memories, search chats, past conversations]
 ---
 
 # Memory
@@ -101,6 +101,11 @@ profile.
 At the top of **Settings → Memory**:
 
 - **Search and reference chats** — lets Lucius search your past conversations for relevant details.
+  When you refer to something you talked about before, he looks through the words you and he typed
+  in your own conversations and quotes a short snippet from the best few matches. It only finds
+  conversations you can see in your Chats list — never background runs of automations, and never
+  the contents of attachments or the results of his tools. The conversation you're in is left out.
+  With the switch off he can't look back at all. On by default.
 - **Generate memory from chats** — the main switch (see below).
 - **Include sensitive topics in memory** — lets him keep health, religion, politics and similar
   facts. Off by default; when off, he tells you a sensitive fact wasn't saved.

@@ -37,7 +37,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Any, Iterator, Optional
 
-from sqlalchemy import Connection, Engine, select
+from sqlalchemy import Connection, Engine, bindparam, select, text
 from sqlalchemy import delete as sa_delete
 from sqlalchemy import func as sa_func
 from sqlalchemy import insert as sa_insert
@@ -326,6 +326,75 @@ class SessionStore:
                 m.update(r.extra)
             out.append(m)
         return out
+
+    def search_message_text(
+        self,
+        needle: str,
+        *,
+        limit: int,
+        exclude_session_id: Optional[str] = None,
+        hidden_ids: tuple[str, ...] = (),
+        hidden_prefixes: tuple[str, ...] = (),
+        context: int = 200,
+    ) -> list[dict]:
+        """The newest user/assistant TEXT that contains ``needle``, one hit per conversation.
+
+        Matches plain-string content and ``text`` blocks only — a tool call, a tool result or an
+        attachment block is never a candidate, and neither is a text block that is a resolved
+        attachment's body (``[Attached …``). Case-insensitive for ASCII (SQLite ``lower``).
+        The scan, the exclusions and the LIMIT all run in SQL; a hit carries only ``context``
+        characters either side of the first match, never the whole message.
+
+        Returns ``[{session_id, title, when, excerpt, cut_before, cut_after}]``, newest message
+        first; ``cut_*`` say whether the excerpt stops short of the message on that side.
+        """
+        prefix_sql = "".join(
+            f" AND substr(u.sid, 1, :pl{i}) != :pv{i}" for i in range(len(hidden_prefixes))
+        )
+        sql = text(
+            "WITH units AS ("
+            " SELECT m.id AS mid, m.session_id AS sid, m.created_at AS at,"
+            "  json_extract(m.content, '$') AS txt FROM session_messages m"
+            "  WHERE m.role IN ('user', 'assistant') AND json_type(m.content) = 'text'"
+            " UNION ALL"
+            " SELECT m.id, m.session_id, m.created_at, json_extract(b.value, '$.text')"
+            "  FROM session_messages m,"
+            "   json_each(CASE WHEN json_type(m.content) = 'array' THEN m.content ELSE '[]' END) b"
+            "  WHERE m.role IN ('user', 'assistant') AND"
+            "   CASE WHEN b.type = 'object' THEN json_extract(b.value, '$.type') END = 'text'"
+            ") SELECT u.sid, s.title, MAX(u.mid) AS mid, u.at,"
+            " instr(lower(u.txt), :needle) AS pos,"
+            " substr(u.txt, max(1, instr(lower(u.txt), :needle) - :ctx), :span) AS excerpt"
+            " FROM units u JOIN sessions s ON s.id = u.sid"
+            " WHERE typeof(u.txt) = 'text' AND substr(u.txt, 1, 7) != '[Attach'"
+            " AND instr(lower(u.txt), :needle) > 0 AND u.sid IS NOT :current"
+            f" AND u.sid NOT IN :hidden{prefix_sql}"
+            " GROUP BY u.sid ORDER BY mid DESC LIMIT :lim"
+        ).bindparams(bindparam("hidden", expanding=True))
+        params: dict[str, Any] = {
+            "needle": needle.lower(),
+            "ctx": context,
+            "span": len(needle) + 2 * context,
+            "current": exclude_session_id,
+            "hidden": list(hidden_ids) or [""],
+            "lim": limit,
+        }
+        for i, prefix in enumerate(hidden_prefixes):
+            params[f"pl{i}"], params[f"pv{i}"] = len(prefix), prefix
+        with self._eng().connect() as conn:
+            rows = conn.execute(sql, params).fetchall()
+        span = params["span"]
+        return [
+            {
+                "session_id": r.sid,
+                "title": r.title,
+                "when": r.at,
+                "excerpt": r.excerpt,
+                "cut_before": r.pos - context > 1,
+                "cut_after": len(r.excerpt) >= span,
+            }
+            for r in rows
+        ]
 
     def truncate_messages_from(self, session_id: str, position: int) -> None:
         """Drop every message from ``position`` onward.

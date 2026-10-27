@@ -83,6 +83,21 @@ def _fmt_memory() -> str:
     return text
 
 
+def _fmt_chat_search_line() -> str:
+    """The one line that tells the model it can look up an earlier conversation — only while the
+    "Search and reference chats" setting is on (and never on the public demo, which refuses the
+    tool). Lives with the memory block, in the half that already changes with settings."""
+    try:
+        from backend.core.config import get_settings
+        from backend.db.memory_settings_store import MemorySettingsStore
+
+        if get_settings().demo_mode or not MemorySettingsStore().search_chats():
+            return ""
+    except Exception:
+        return ""
+    return "\nIf the user refers to an earlier conversation, search_past_conversations can find it."
+
+
 def memory_block() -> str:
     """The "WHAT YOU REMEMBER" block for a model call outside a chat turn (the daily briefing)
     — the same facts and framing a turn gets, "" when there are none or memory is off."""
@@ -524,7 +539,7 @@ def build_system_prompt(
         fire_str = "unknown"
 
     today = user_today().strftime("%Y-%m-%d")
-    memory_block = _fmt_memory()
+    memory_block = _fmt_memory() + _fmt_chat_search_line()
     skills_block = _fmt_skills_catalog(model=model, base_url=base_url)
     tool_catalog_block = _fmt_tool_catalog(include_external=True)
     fresh = is_empty_book()
