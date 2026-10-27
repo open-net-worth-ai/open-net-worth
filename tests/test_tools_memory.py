@@ -199,7 +199,8 @@ def test_update_profile_notes_description_says_edit_not_rewrite():
     notes = schema["input_schema"]["properties"]["changes"]["properties"]["notes"]["description"]
     assert "Instructions for Lucius" in notes
     assert "edit or add a line, never rewrite their text wholesale" in notes
-    assert routing_guide_for_tool() in notes
+    assert "anything else worth keeping goes to remember_fact" in notes
+    assert routing_guide_for_tool() not in notes
 
 
 def test_schema_golden_matches():

@@ -8338,7 +8338,7 @@
           },
           "notes": {
             "type": "string",
-            "description": "The user's Instructions for Lucius — standing rules for how you should behave. Change them when asked, or when the user states a rule they'd expect to find here; edit or add a line, never rewrite their text wholesale. Where a fact goes (first match wins): 1) a profile field → update_profile; 2) a standing rule → Instructions for Lucius (update_profile notes); 3) a payee or bank-text rule → a Payee rule; 4) something scheduled → an Automation; 5) balances, holdings, prices, trades, finished tasks → nowhere (the ledger has them); 6) a goal or commitment → Plan / goals / commitments; 7) conversation state → nowhere; 8) about the user, no profile field → You · About you; 9) how they like to work → You · Preferences (third person); 10) an intention or upcoming event → Plans; 11) something to come back to → Open items (expires in 14 days); 12) money life nothing above holds → Money · a topic name; 13) anything else worth keeping → Other. Only You, Money, Plans, Open items and Other are memory."
+            "description": "The user's Instructions for Lucius — standing rules for how you should behave. Change them when asked, or when the user states a rule they'd expect to find here; edit or add a line, never rewrite their text wholesale. Only standing rules for how you should behave — a fact with a profile field goes there; anything else worth keeping goes to remember_fact."
           },
           "fire_expected_return_pct": {
             "type": "number"

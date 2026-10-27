@@ -102,9 +102,7 @@ def test_delete_topic_route(client):
         ]
     )
 
-    r = client.request(
-        "DELETE", "/api/memory/topics", json={"section": "money", "topic": "HOUSING"}
-    )
+    r = client.delete("/api/memory/topics", params={"section": "money", "topic": "HOUSING"})
 
     assert r.status_code == 200
     assert r.json() == {"ok": True, "deleted": 2}
@@ -115,9 +113,7 @@ def test_delete_topic_works_while_memory_is_off(client):
     MemoryStore().insert(_fact("m1", "Rents a flat"))
     MemorySettingsStore().set_enabled(False)
 
-    r = client.request(
-        "DELETE", "/api/memory/topics", json={"section": "money", "topic": "Housing"}
-    )
+    r = client.delete("/api/memory/topics", params={"section": "money", "topic": "Housing"})
 
     assert r.status_code == 200 and MemoryStore().all_facts() == []
 
@@ -134,7 +130,7 @@ def test_delete_topic_works_while_memory_is_off(client):
 def test_delete_topic_refusals(client, body, status):
     MemoryStore().insert(_fact("m1", "Rents a flat"))
 
-    assert client.request("DELETE", "/api/memory/topics", json=body).status_code == status
+    assert client.delete("/api/memory/topics", params=body).status_code == status
     assert len(MemoryStore().all_facts()) == 1
 
 
@@ -172,3 +168,74 @@ def test_instruct_scoped_to_a_topic(client, monkeypatch):
     assert 'the topic "Housing" in section money' in prov.prompts[0]
     landlord = next(f for f in MemoryStore().all_facts() if f["content"] == "Landlord is Sam")
     assert (landlord["section"], landlord["topic"]) == ("money", "Housing")
+
+
+def _spy_choke(monkeypatch):
+    import backend.api.memory as api
+    from backend.ai.memory_write import apply_memory_change
+
+    calls: list[tuple[dict, str]] = []
+
+    def spy(ops, *, source, strict, today=None):
+        calls.append((ops, source))
+        return apply_memory_change(ops, source=source, strict=strict, today=today)
+
+    monkeypatch.setattr(api, "apply_memory_change", spy)
+    return calls
+
+
+def test_forgetting_one_fact_goes_through_the_write_choke(client, monkeypatch):
+    MemoryStore().bulk_insert([_fact("m1", "Rents a flat"), _fact("m2", "Rent is due on the 1st")])
+    calls = _spy_choke(monkeypatch)
+
+    r = client.delete("/api/memory/facts/m1")
+
+    assert r.status_code == 200 and r.json() == {"ok": True, "id": "m1"}
+    assert calls == [({"remove": ["m1"]}, "explicit")]
+    assert [f["id"] for f in MemoryStore().all_facts()] == ["m2"]
+
+
+def test_forgetting_an_unknown_fact_is_404(client, monkeypatch):
+    MemoryStore().insert(_fact("m1", "Rents a flat"))
+    _spy_choke(monkeypatch)
+
+    assert client.delete("/api/memory/facts/nope").status_code == 404
+    assert len(MemoryStore().all_facts()) == 1
+
+
+def test_forgetting_everything_is_one_choke_call_with_every_id(client, monkeypatch):
+    MemoryStore().bulk_insert(
+        [
+            _fact("m1", "Rents a flat"),
+            _fact("m2", "Rent is due on the 1st"),
+            _fact("m3", "Old landlord", state="retired"),
+        ]
+    )
+    calls = _spy_choke(monkeypatch)
+
+    r = client.delete("/api/memory/facts")
+
+    assert r.status_code == 200 and r.json() == {"ok": True, "deleted": 3}
+    assert len(calls) == 1 and sorted(calls[0][0]["remove"]) == ["m1", "m2", "m3"]
+    assert MemoryStore().all_facts() == []
+
+
+def test_forgetting_waits_for_the_write_lock(client):
+    import threading
+
+    from backend.ai import memory_write
+
+    MemoryStore().insert(_fact("m1", "Rents a flat"))
+    done = threading.Event()
+
+    def forget():
+        client.delete("/api/memory/facts/m1")
+        done.set()
+
+    with memory_write._WRITE_LOCK:
+        t = threading.Thread(target=forget)
+        t.start()
+        assert not done.wait(0.3)
+        assert len(MemoryStore().all_facts()) == 1
+    t.join(5)
+    assert done.is_set() and MemoryStore().all_facts() == []

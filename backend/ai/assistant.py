@@ -4251,6 +4251,8 @@ async def _run_turn(
         # ai/turn_completion.py. Per TURN, not per round: a model that keeps writing its
         # calls as prose gets a bounded number of chances across the whole turn.
         _completion_nudges = 0
+        # Whether any round of this turn has shown the reader text yet.
+        _turn_had_text = False
 
         # Cross-channel-attachments RFC section 4 (same-turn first-refusal recovery):
         # bounds the ONE capability-learning retry a turn may spend. Set True the instant
@@ -4458,8 +4460,13 @@ async def _run_turn(
                     stop_reason = event.get("stop_reason")
                     # The citation tag never reaches the transcript, a channel or a run's
                     # output: every consumer reads this stream or the saved text.
+                    _with_tag = assistant_text
                     assistant_text, _cited = split_citations(assistant_text)
-                    note_cited_facts(_cited)
+                    await note_cited_facts(_cited)
+                    # A round that was only the tag, after an earlier round already answered,
+                    # is a finished turn, not an empty reply.
+                    _tag_only_round = bool(_with_tag.strip()) and not assistant_text.strip()
+                    _answered_earlier = _turn_had_text
 
                     # Append assistant turn to history
                     assistant_content: list[dict] = []
@@ -4482,6 +4489,7 @@ async def _run_turn(
                         )
                     if assistant_text:
                         assistant_content.append({"type": "text", "text": assistant_text})
+                        _turn_had_text = True
                     for tu in pending_tool_uses:
                         assistant_content.append(
                             {
@@ -5134,6 +5142,7 @@ async def _run_turn(
                             _raw_assistant_text,
                             run_plan.get_tasks(),
                             nudges_used=_completion_nudges,
+                            reply_given=_tag_only_round and _answered_earlier,
                         )
                         if _nudge is not None:
                             _completion_nudges += 1

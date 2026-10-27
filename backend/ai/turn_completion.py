@@ -71,11 +71,15 @@ def completion_nudge(
     tasks: list[dict],
     *,
     nudges_used: int,
+    reply_given: bool = False,
 ) -> str | None:
     """The correction to feed back, or None if the turn may end.
 
     ``tasks`` is this run's declared task list (``run_plan.get_tasks()``), which is empty on
     an ordinary chat turn — so the outstanding-work rule is structurally unreachable there.
+    ``reply_given`` says an earlier round of the turn already showed the reader an answer and
+    this one is empty only because a hidden marker was stripped: that is a finished turn, so
+    the empty-reply rule is skipped.
     The unexecuted-call rule applies to both: a reply describing a call that never ran is
     the same lie to a human as it is to a run card, and the human only gets to notice it.
     So does the empty-reply rule: ``assistant_text`` is the round's visible text, so a
@@ -108,7 +112,7 @@ def completion_nudge(
             "with another summary."
         )
 
-    if not strip_tool_syntax(assistant_text).strip():
+    if not reply_given and not strip_tool_syntax(assistant_text).strip():
         return _EMPTY_REPLY_NUDGE
 
     return None

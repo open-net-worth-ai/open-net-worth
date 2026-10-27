@@ -140,50 +140,86 @@ def test_split_citations_strips_the_saved_text_and_returns_the_handles():
     assert split_citations("<memory-used>m7a88f8</memory-used>") == ("", ["m7a88f8"])
 
 
+@pytest.mark.parametrize(
+    "tag",
+    [
+        "<Memory-Used>m7a88f8 m3c01d2</MEMORY-USED>",
+        "< memory-used >m7a88f8 m3c01d2</ memory-used >",
+        "<memory-used>m7a88f8 m3c01d2< / memory-used >",
+        "`<memory-used>m7a88f8 m3c01d2</memory-used>`",
+        "`< Memory-Used >m7a88f8 m3c01d2</Memory-Used>`",
+    ],
+)
+@pytest.mark.parametrize("chunk", [1, 2, 3, 5, 1000])
+def test_the_tag_is_hidden_whatever_its_case_spacing_or_backticks(tag, chunk):
+    shown, handles = _stream(f"{ANSWER}\n\n{tag}", chunk)
+    assert shown.rstrip() == ANSWER
+    assert handles == ["m7a88f8", "m3c01d2"]
+    assert split_citations(f"{ANSWER}\n\n{tag}") == (ANSWER, ["m7a88f8", "m3c01d2"])
+
+
+def test_a_mixed_case_tag_split_across_deltas_is_stripped():
+    s = CitationStripper()
+    parts = [
+        s.feed("Done.\n`<Memory-"),
+        s.feed("Used>m3a"),
+        s.feed("bcde</MEMORY-"),
+        s.feed("used>"),
+        s.feed("`"),
+    ]
+    assert "".join(parts) + s.flush() == "Done.\n"
+    assert s.handles == ["m3abcde"]
+
+
+def test_backticks_that_do_not_touch_the_tag_are_kept():
+    shown, _ = _stream("Use `calc` here. <memory-used>m7a88f8</memory-used> `end`", 3)
+    assert shown == "Use `calc` here.  `end`"
+
+
 # ── resolving a handle: prefix against LIVE facts, one match or nothing ───────────────
 
 
-def test_cited_facts_get_last_used_and_tag_is_hidden_from_the_store_side(facts):
+async def test_cited_facts_get_last_used_and_tag_is_hidden_from_the_store_side(facts):
     assert fact_handle("mem_7a88f842d02f") == "m7a88f8"
 
-    note_cited_facts(["m7a88f8", "m3c01d2"])
+    await note_cited_facts(["m7a88f8", "m3c01d2"])
 
     used = _used(facts)
     assert used["mem_7a88f842d02f"] and used["mem_3c01d2aa90b1"]
     assert used["mem_9ff0aa11bb22"] is None
 
 
-def test_a_handle_that_matches_nothing_or_two_facts_marks_nothing(facts):
+async def test_a_handle_that_matches_nothing_or_two_facts_marks_nothing(facts):
     facts.insert(_fact("mem_7a88f8ffffff", "Twin of the first handle"))
 
-    note_cited_facts(["m7a88f8", "mdeadbe", "m", "m7", "x7a88f8", ""])
+    await note_cited_facts(["m7a88f8", "mdeadbe", "m", "m7", "x7a88f8", ""])
 
     assert set(_used(facts).values()) == {None}
 
 
-def test_a_short_prefix_that_is_unambiguous_resolves(facts):
-    note_cited_facts(["m9ff"])
+async def test_a_short_prefix_that_is_unambiguous_resolves(facts):
+    await note_cited_facts(["m9ff"])
     assert _used(facts)["mem_9ff0aa11bb22"]
 
 
-def test_a_retired_or_unsorted_fact_is_never_marked(facts):
+async def test_a_retired_or_unsorted_fact_is_never_marked(facts):
     facts.insert(_fact("mem_aa00bb00cc00", "Old landlord", state="retired"))
     facts.insert({**_fact("mem_bb11cc11dd11", "Legacy"), "state": "unsorted", "section": None})
 
-    note_cited_facts(["maa00bb", "mbb11cc"])
+    await note_cited_facts(["maa00bb", "mbb11cc"])
 
     assert set(_used(facts).values()) == {None}
 
 
-def test_citing_does_nothing_on_a_demo(facts, monkeypatch):
+async def test_citing_does_nothing_on_a_demo(facts, monkeypatch):
     monkeypatch.setattr("backend.ai.memory_citations.memory_writes_enabled", lambda: False)
-    note_cited_facts(["m7a88f8"])
+    await note_cited_facts(["m7a88f8"])
     assert set(_used(facts).values()) == {None}
 
 
-def test_citing_when_memory_is_off_is_harmless(facts):
+async def test_citing_when_memory_is_off_is_harmless(facts):
     MemorySettingsStore().set_enabled(False)
-    note_cited_facts(["m7a88f8"])
+    await note_cited_facts(["m7a88f8"])
     assert set(_used(facts).values()) == {None}
 
 
@@ -232,7 +268,7 @@ def _turn(monkeypatch, facts):
     turns._by_session.clear()
 
 
-async def _run(sid: str, provider) -> tuple[list[dict], list[dict]]:
+async def _run(sid: str, provider=None) -> tuple[list[dict], list[dict]]:
     monkeypatched = assistant
     try:
         events = [
@@ -318,3 +354,59 @@ async def test_uncited_injected_facts_are_not_marked_used(monkeypatch, _turn, fa
 
     assert _shown(events) == ANSWER
     assert set(_used(facts).values()) == {None}
+
+
+# ── a final round that is only the tag ───────────────────────────────────────────────
+
+
+class _RoundsProvider:
+    """One scripted round per ``stream_chat`` call; counts the calls."""
+
+    def __init__(self, rounds: list[list[dict]]):
+        self.rounds = rounds
+        self.calls = 0
+
+    async def stream_chat(self, *_a, **_k):
+        script = self.rounds[min(self.calls, len(self.rounds) - 1)]
+        self.calls += 1
+        for ev in script:
+            yield ev
+
+
+def _calc_round(text: str = "") -> list[dict]:
+    call = {"id": "tu_1", "name": "calculate", "input": {"expressions": ["500 + 288"]}}
+    head = [{"type": "text_delta", "text": text}] if text else []
+    return [
+        *head,
+        {"type": "tool_use_start", "id": "tu_1", "name": "calculate", "input": {}},
+        {"type": "tool_use", **call},
+        {"type": "done", "stop_reason": "tool_use"},
+    ]
+
+
+def _text_round(text: str) -> list[dict]:
+    return [{"type": "text_delta", "text": text}, {"type": "done", "stop_reason": "end_turn"}]
+
+
+TAG_ONLY = "<memory-used>m7a88f8</memory-used>"
+
+
+async def test_a_tag_only_final_round_after_an_earlier_answer_is_not_nudged(monkeypatch, _turn):
+    provider = _RoundsProvider([_calc_round("You have S$788 left."), _text_round(TAG_ONLY)])
+    monkeypatch.setattr(assistant, "get_provider", lambda *a, **k: provider)
+
+    events, saved = await _run("test-citation-tag-only-answered")
+
+    assert provider.calls == 2
+    assert _shown(events).strip() == "You have S$788 left."
+    assert "memory-used" not in json.dumps(saved)
+
+
+async def test_a_tag_only_reply_with_no_text_anywhere_is_still_nudged(monkeypatch, _turn):
+    provider = _RoundsProvider([_calc_round(), _text_round(TAG_ONLY), _text_round(ANSWER)])
+    monkeypatch.setattr(assistant, "get_provider", lambda *a, **k: provider)
+
+    events, _ = await _run("test-citation-tag-only-silent")
+
+    assert provider.calls == 3
+    assert _shown(events).strip() == ANSWER

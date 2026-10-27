@@ -7,7 +7,7 @@ GET    /api/memory/facts      → {"facts": [...], "total": n}; a row carries st
 PATCH  /api/memory/facts/{id} body {"content": str} → the edited fact
 DELETE /api/memory/facts/{id} → {"ok": bool}
 DELETE /api/memory/facts      → {"ok": true, "deleted": n}
-DELETE /api/memory/topics     body {"section": str, "topic": str} → {"ok": true, "deleted": n}
+DELETE /api/memory/topics     ?section=&topic= → {"ok": true, "deleted": n}
 POST   /api/memory/instruct   body {"instruction": str, "topic"?: str}
                               → {"added", "updated", "removed", "rejected"}
 
@@ -25,6 +25,7 @@ from pydantic import BaseModel
 
 from backend.ai.memory import MemoryDisabledError
 from backend.ai.memory_instruct import apply_instruction, delete_topic, edit_fact
+from backend.ai.memory_write import apply_memory_change
 from backend.core.errors import ExternalServiceError, NotFoundError, ValidationError
 from backend.db.memory_settings_store import MemorySettingsStore
 from backend.db.memory_store import MemoryStore
@@ -41,11 +42,6 @@ class MemorySettingsPatch(BaseModel):
 class MemoryInstruction(BaseModel):
     instruction: str
     topic: str | None = None
-
-
-class MemoryTopic(BaseModel):
-    section: str
-    topic: str
 
 
 class MemoryFactEdit(BaseModel):
@@ -85,24 +81,24 @@ def edit_memory_fact(fact_id: str, body: MemoryFactEdit):
 
 @router.delete("/api/memory/facts/{fact_id}")
 def forget_memory_fact(fact_id: str):
-    if not MemoryStore().remove_by_id(fact_id):
+    removed = apply_memory_change({"remove": [fact_id]}, source="explicit", strict=False)["removed"]
+    if not removed:
         raise HTTPException(status_code=404, detail="unknown memory")
     return {"ok": True, "id": fact_id}
 
 
 @router.delete("/api/memory/facts")
 def forget_all_memory_facts():
-    store = MemoryStore()
-    facts = store.all_facts()
-    deleted = sum(1 for f in facts if store.remove_by_id(f.get("id", "")))
-    return {"ok": True, "deleted": deleted}
+    ids = [f["id"] for f in MemoryStore().all_facts() if f.get("id")]
+    removed = apply_memory_change({"remove": ids}, source="explicit", strict=False)["removed"]
+    return {"ok": True, "deleted": removed}
 
 
 @router.delete("/api/memory/topics")
-def forget_memory_topic(body: MemoryTopic):
+def forget_memory_topic(section: str, topic: str):
     """Forget a whole topic. Like forgetting one fact, it works while memory is off."""
     try:
-        deleted = delete_topic(body.section, body.topic)
+        deleted = delete_topic(section, topic)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=exc.message) from exc
     except NotFoundError as exc:
