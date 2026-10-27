@@ -148,9 +148,9 @@ _FIELDS: dict[str, dict[str, Any]] = {
         "type": "string",
         "description": (
             "Your own note — what you'd jot down yourself: what was bought, who it was with, "
-            "what it was for. Not a copy of the source: no alert or receipt text, times, card "
-            "or account numbers, fee or fare breakdowns, or anything another field already "
-            "shows. Leave it empty when there's nothing worth noting."
+            "what it was for. Not a copy of the alert: no alert text, times, card or account "
+            "numbers, or anything another field already shows. Leave it empty when there's "
+            "nothing worth noting."
         ),
     },
     "amount": {"type": "number", "description": "Always a positive number (absolute value)."},
