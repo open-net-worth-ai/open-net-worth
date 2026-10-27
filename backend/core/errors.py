@@ -195,6 +195,15 @@ class UnsupportedModalityError(ExternalServiceError):
         self.modality = modality
 
 
+class UnknownFeatureFlagError(NotFoundError):
+    """A feature-flag name that is not declared in ``core.feature_flags.FLAGS``. Raised, never
+    read as ``False`` — a typo would otherwise silently run the old path forever."""
+
+
+class FeatureFlagLockedError(ConflictError):
+    """A feature flag cannot be changed here (the public demo always runs the defaults)."""
+
+
 class ConfigurationError(OpenNetWorthError):
     """A required setting/credential is missing or invalid."""
 

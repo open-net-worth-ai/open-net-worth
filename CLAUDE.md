@@ -315,6 +315,8 @@ Screen data: read through `useQueryCache` — it revalidates on every tool write
 (`dispatch` → `GET /api/events`, ADR `2026-09-29-every-write-refreshes-every-open-screen`); a
 screen holding fetched data in local state must add `useDataVersion('*')` to its fetch deps.
 
+**Feature flags:** declared ONLY in `core/feature_flags.py`, read via `services.feature_flags.enabled(name)` at ONE seam; off = the old code untouched, data additive-only, both paths tested, CI fails past `remove_by` — [`docs/FEATURE_FLAGS.md`](docs/FEATURE_FLAGS.md).
+
 **Clock:** "today" and time of day for the user come from `core.user_time` (`user_today()` / `user_now()`, the profile's IANA `timezone`) — never `date.today()` / `datetime.now()`: a hosted container runs UTC. Market sessions use their exchange zone; stored timestamps stay UTC/server clock.
 
 ## Proportionate workflow
@@ -372,6 +374,7 @@ recordings) goes in gitignored scratch folders, never the tree.
 | Backend layers | [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) |
 | Decisions | [`docs/adr/`](docs/adr/) |
 | Windows | [`docs/WINDOWS.md`](docs/WINDOWS.md) |
+| Feature flags | [`docs/FEATURE_FLAGS.md`](docs/FEATURE_FLAGS.md) |
 
 ## Project structure
 

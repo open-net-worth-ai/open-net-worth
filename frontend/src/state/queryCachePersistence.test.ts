@@ -85,6 +85,23 @@ describe('queryCache — survives a cold start', () => {
     expect(second.getCachedQueryData('/api/accounts')).toBeUndefined()
   })
 
+  it('never persists or hydrates the feature-flag list — a flag must not paint from last session', async () => {
+    const first = await reopenApp()
+    await first.fetchCachedQuery('/api/feature-flags', async () => ({ flags: [], locked: false }))
+    await first.fetchCachedQuery('/api/accounts', async () => [{ id: 'a1' }])
+    first.flushQueryCachePersistence()
+    expect(localStorage.getItem(storageKey())).not.toContain('/api/feature-flags')
+
+    // Even a mirror written by some other build is not trusted for it.
+    const blob = JSON.parse(localStorage.getItem(storageKey()) ?? '{}')
+    blob['/api/feature-flags'] = { data: { flags: [], locked: false }, updatedAt: Date.now() }
+    localStorage.setItem(storageKey(), JSON.stringify(blob))
+
+    const second = await reopenApp()
+    expect(second.getCachedQueryData('/api/feature-flags')).toBeUndefined()
+    expect(second.getCachedQueryData('/api/accounts')).toEqual([{ id: 'a1' }])
+  })
+
   it('refuses to persist an oversized entry, and keeps the rest', async () => {
     // localStorage is a ~5MB budget shared with the dashboard layout, auth status and chat
     // drafts, and setItem throws rather than evicting. One huge read must not cost the user

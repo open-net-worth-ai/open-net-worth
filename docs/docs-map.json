@@ -17,6 +17,8 @@
     { "glob": "frontend/src/components/tabs/plan/**", "docs": ["docs/product/features"] },
     { "glob": "frontend/src/components/tabs/connectors/**", "docs": ["docs/product/connectors"] },
     { "glob": "backend/connectors/**", "docs": ["docs/product/connectors"] },
+    { "glob": "backend/*/feature_flags.py", "docs": ["docs/product/features/settings.md"] },
+    { "glob": "frontend/src/components/tabs/settings/ExperimentalPanel*", "docs": ["docs/product/features/settings.md"] },
     { "glob": "frontend/src/components/tabs/settings/sections/[Mm]cp*", "docs": ["docs/product/operations/connect-ai-apps.md", "docs/product/features/settings.md"] },
     { "glob": "frontend/src/components/tabs/settings/sections/Shortcuts*", "docs": ["docs/product/features/phone-shortcuts.md", "docs/product/features/settings.md"] },
     { "glob": "backend/services/shortcuts/**", "docs": ["docs/product/features/phone-shortcuts.md"] },

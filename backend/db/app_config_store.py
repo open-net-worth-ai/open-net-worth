@@ -131,6 +131,12 @@ TURN_TIME_LIMIT_KEY = "turn_time_limit_s"
 KEEP_AWAKE_FLAG = "keep_awake_enabled"
 
 
+# Feature flags (core/feature_flags.py): the owner's stored choices, ``{name: bool}`` under ONE
+# key so a Reset removes the entry (back to the declared default) and a list is one read. A
+# name no longer declared is ignored by every reader. Human-only: no Lucius tool writes it.
+FEATURE_FLAGS_KEY = "feature_flags"
+
+
 def _seed_from_env() -> dict:
     """Seed branding from APP_* env vars — used once, when the row doesn't exist yet."""
     seed: dict = {}
@@ -195,6 +201,26 @@ class AppConfigStore(NamespacedSettingsStore):
             raw[key] = bool(value)
             self.save(raw, conn=conn)
         return bool(value)
+
+    def get_feature_flags(self) -> dict[str, bool]:
+        """The stored feature-flag choices; a malformed entry is dropped, never coerced."""
+        raw = self._read_raw().get(FEATURE_FLAGS_KEY)
+        if not isinstance(raw, dict):
+            return {}
+        return {str(k): v for k, v in raw.items() if isinstance(v, bool)}
+
+    def set_feature_flag(self, name: str, value: Optional[bool]) -> None:
+        """Store one feature-flag choice; ``None`` removes it (back to the default)."""
+        with self._use_conn(None) as conn:
+            raw = self._read_raw(conn=conn)
+            current = raw.get(FEATURE_FLAGS_KEY)
+            flags = dict(current) if isinstance(current, dict) else {}
+            if value is None:
+                flags.pop(name, None)
+            else:
+                flags[name] = bool(value)
+            raw[FEATURE_FLAGS_KEY] = flags
+            self.save(raw, conn=conn)
 
     def get_backup_retention_days(self) -> int:
         """How many days of daily backups to keep (services/backup.py). Default 30;

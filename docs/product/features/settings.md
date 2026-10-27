@@ -70,8 +70,19 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
 | **Data** | **Backup & restore** (export a full .zip), **Automatic backups** (daily, and how many days to keep), **Restore from a backup**, **Uploaded files** from chat, and resetting the instance. See [Backup & restore](../operations/backup-and-restore.md). |
 | **Terminal** | A shell on the machine the app runs on. Shown only where it is allowed; off by default when you host the app yourself. See [Terminal](../operations/terminal.md). |
 | **Help** | The **Help center** (these pages, available offline), **Ask Lucius**, and **Send feedback**. |
-| **Developer** | **Application logs**, **Code execution** (let Lucius run short Python on this server), **Extensions**, **Bundled script skills**, and **SQL access** (Lucius's read-only queries and their log). See [Logs](../operations/logs.md). |
+| **Developer** | **Application logs**, **Code execution** (let Lucius run short Python on this server), **Extensions**, **Bundled script skills**, **SQL access** (Lucius's read-only queries and their log), and **Experimental** (see below). See [Logs](../operations/logs.md). |
 | **Cost & Performance** | **AI spend** over a period you choose, search and page-fetch costs, and model speed and reliability. |
+
+## Experimental features
+
+Settings → Developer → **Experimental** lists features that are still being tried out. Each has
+a switch, a short description, and whether it is at its **default** or **changed** by you; **Reset**
+puts a changed one back to its default. Turning a feature off always brings back exactly how the
+app worked before. Each one is temporary: once it is finished it becomes part of the app (or is
+removed) and disappears from this list. When the list is empty there is nothing to try right now.
+
+A switch is read-only when the server sets it from its environment (the row names the variable),
+and on the public demo, which always runs the defaults. Lucius cannot change these switches.
 
 ## Things to know
 
