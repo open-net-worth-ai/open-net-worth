@@ -9,7 +9,7 @@ import {
   type MemorySettings,
 } from '../../../../hooks/useMemoryFacts'
 import { downloadMemoryExport } from '../../../../hooks/memoryImport'
-import { Btn, Panel, Toggle, row, useSectionBusy } from '../ds'
+import { Btn, Panel, Toggle, row, useSectionBack, useSectionBusy } from '../ds'
 import { MemoryBrowser } from '../MemoryBrowser'
 import { MemoryImport } from '../MemoryImport'
 import type { SectionProps } from '../ds'
@@ -23,6 +23,7 @@ export function MemorySection({ toast }: SectionProps) {
   const [exporting, setExporting] = useState(false)
 
   useSectionBusy(memory.initialLoading && !settings)
+  const placeBack = useSectionBack()
 
   async function putSetting(key: Key, value: boolean, done: string) {
     try {
@@ -68,6 +69,7 @@ export function MemorySection({ toast }: SectionProps) {
       {importing && <MemoryImport toast={toast} onClose={() => setImporting(false)} />}
       <MemoryBrowser
         toast={toast}
+        placeBack={placeBack}
         disabled={settings?.enabled === false}
         header={
           <Panel sub="What Lucius remembers about you between conversations">

@@ -89,7 +89,7 @@ that narrows it to the facts (or topics) containing your words.
 3. **Delete a topic.** On the topic's page click **Delete**, or click the bin on its row. Lucius
    asks first and says how many facts go, for example *Forget Housing? Lucius will forget its 4
    facts.* It can't be undone.
-4. **Older memories — being sorted.** Facts saved before sections existed wait here as a plain
+4. **Older memories.** Facts saved before sections existed wait here as a plain
    list until Lucius files them under a section and topic. They are not lost; you can edit or
    forget them as usual. Filing never changes a fact's words, except that one over 280
    characters is shortened to fit. A fact holding a full card, account or ID number is moved

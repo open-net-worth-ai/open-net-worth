@@ -50,7 +50,7 @@ describe('MemoryBrowser', () => {
       'Plans',
       'Open items',
       'Other',
-      'Older memories — being sorted',
+      'Older memories',
     ])
     expect(screen.queryByText('Works as a nurse')).toBeNull()
     expect(screen.queryByText(/Moved out of memory/)).toBeNull()
@@ -208,7 +208,8 @@ describe('MemoryBrowser', () => {
 
   it('files older memories under their own heading', async () => {
     await renderBrowser()
-    const old = screen.getByRole('region', { name: 'Older memories — being sorted' })
+    const old = screen.getByRole('region', { name: 'Older memories' })
+    expect(within(old).getByText(/moving them into the new format in the background/)).toBeTruthy()
     expect(within(old).getByText('Prefers metric units')).toBeTruthy()
   })
 

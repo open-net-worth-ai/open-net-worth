@@ -15,11 +15,20 @@ import { fDate } from '../../../utils/format'
 import { useMemoryFacts } from '../../../hooks/useMemoryFacts'
 import type { MemoryFact } from '../../../hooks/useMemoryFacts'
 import { Btn } from './ds'
-import type { Toast } from './ds'
+import type { SectionBack, Toast } from './ds'
 import { ForgetConfirm, MemoryAskBox, MemoryBullets } from './MemoryParts'
 import type { PendingForget } from './MemoryParts'
 import { SECTIONS, UNSORTED, groupFacts, matchesFilter, summaryOf, topicsOf } from './memoryGroups'
 import type { Topic } from './memoryGroups'
+
+function BackLink({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" className="rd-mem-back" onClick={onClick}>
+      <ChevronLeft size={16} strokeWidth={1.8} aria-hidden="true" />
+      Memory
+    </button>
+  )
+}
 
 /** A topic's row: its name, its summary (its first fact until Lucius has written one) and when it
  *  last changed. */
@@ -79,6 +88,7 @@ export function MemoryBrowser({
   filter = '',
   escapeRef,
   onTopicOpen,
+  placeBack,
 }: {
   toast: Toast
   disabled?: boolean
@@ -86,6 +96,7 @@ export function MemoryBrowser({
   filter?: string
   escapeRef?: MutableRefObject<(() => boolean) | null>
   onTopicOpen?: (open: boolean) => void
+  placeBack?: ((back: SectionBack | null) => void) | null
 }) {
   const { facts, summaries, loading, forget, edit, instruct, deleteTopic } = useMemoryFacts(toast)
   const [open, setOpen] = useState<{ section: string; key: string } | null>(null)
@@ -168,14 +179,18 @@ export function MemoryBrowser({
   useEffect(() => {
     onTopicOpen?.(topicShown)
   }, [onTopicOpen, topicShown])
+  // Settings draws the way back itself (its title bar, or a phone's sheet arrow), so "Memory" isn't
+  // said twice; elsewhere the page carries its own link.
+  useEffect(() => {
+    if (!placeBack) return
+    placeBack(topicShown ? { label: 'Memory', onBack: () => setOpen(null) } : null)
+    return () => placeBack(null)
+  }, [placeBack, topicShown])
   if (open && topic) {
     const summary = summaryOf(summaries, open.section, topic.key)
     return (
       <div className="rd-mem-detail" ref={top}>
-        <button type="button" className="rd-mem-back" onClick={() => setOpen(null)}>
-          <ChevronLeft size={16} strokeWidth={1.8} aria-hidden="true" />
-          Memory
-        </button>
+        {placeBack ? null : <BackLink onClick={() => setOpen(null)} />}
         <div className="rd-mem-detail-head">
           <div className="rd-mem-detail-title">{topic.name}</div>
           <Btn size="xs" variant="danger" onClick={() => askDelete(open.section, topic)}>
@@ -238,6 +253,7 @@ export function MemoryBrowser({
             return (
               <section className="rd-mem-sec" key={s.key} aria-label={s.label}>
                 <div className="rd-mem-sec-h">{s.label}</div>
+                {'note' in s && s.note ? <div className="rd-mem-sec-note">{s.note}</div> : null}
                 {s.flat
                   ? bullets(list)
                   : topicsOf(list).map((t) => (

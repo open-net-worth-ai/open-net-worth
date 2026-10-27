@@ -74,7 +74,7 @@ def test_export_zip_has_one_file_per_topic_and_no_retired_facts(db_isolated):
     assert "- Send the tax letter (Sep 2026)" in files["open-items.md"]
     assert files["open-items.md"].startswith("# Open items")
     assert "- Legacy fact (Sep 2026)" in files["older-memories.md"]
-    assert files["older-memories.md"].startswith("# Older memories — being sorted")
+    assert files["older-memories.md"].startswith("# Older memories")
     assert not any("Old landlord" in text or "Gone long ago" in text for text in files.values())
 
 

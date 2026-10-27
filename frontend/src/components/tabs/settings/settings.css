@@ -246,6 +246,14 @@
   gap: 12px;
   padding: 20px 24px 10px;
 }
+/* a section's own title-bar node (a topic page's "← Memory") takes the title's place */
+.onw-settings .rd-set-hslot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
 .onw-settings .rd-set-x {
   flex: none;
   width: 30px;
@@ -1366,6 +1374,13 @@
   color: var(--ink);
   padding: 0 12px 10px;
 }
+.onw-settings .rd-mem-sec-note {
+  margin-top: -4px;
+  padding: 0 12px 12px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--muted);
+}
 .onw-settings .rd-mem-sec > .ui-list {
   margin-left: 12px;
 }
@@ -1472,7 +1487,8 @@
   height: 32px;
 }
 /* a topic's own page */
-.onw-settings .rd-mem-back {
+.onw-settings .rd-mem-back,
+.onw-settings .rd-set-back {
   align-self: flex-start;
   display: inline-flex;
   align-items: center;
@@ -1487,7 +1503,8 @@
   cursor: pointer;
 }
 @media (hover: hover) {
-  .onw-settings .rd-mem-back:hover {
+  .onw-settings .rd-mem-back:hover,
+  .onw-settings .rd-set-back:hover {
     color: var(--ink);
   }
 }

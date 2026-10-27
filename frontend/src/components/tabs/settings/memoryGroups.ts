@@ -3,7 +3,7 @@
 import type { MemoryFact, MemoryTopicSummary } from '../../../hooks/useMemoryFacts'
 
 // The fixed sections, in display order. `flat` sections list their facts directly (no topics).
-export const SECTIONS: readonly { key: string; label: string; flat?: boolean }[] = [
+export const SECTIONS: readonly { key: string; label: string; flat?: boolean; note?: string }[] = [
   { key: 'you', label: 'You' },
   { key: 'money', label: 'Money' },
   { key: 'plans', label: 'Plans' },
@@ -11,7 +11,12 @@ export const SECTIONS: readonly { key: string; label: string; flat?: boolean }[]
   { key: 'other', label: 'Other' },
 ]
 // Facts saved before sections and topics existed, until the sort files them.
-export const UNSORTED = { key: 'unsorted', label: 'Older memories — being sorted', flat: true }
+export const UNSORTED = {
+  key: 'unsorted',
+  label: 'Older memories',
+  flat: true,
+  note: 'Saved before memory had sections. Lucius is moving them into the new format in the background — filing each under a section and topic, or out of memory if it belongs elsewhere. You can still edit or forget them.',
+}
 
 // A topic name is stored at most this long (the backend's `TOPIC_MAX_CHARS`).
 const TOPIC_MAX_CHARS = 60

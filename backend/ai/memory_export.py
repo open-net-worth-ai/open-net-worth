@@ -21,7 +21,7 @@ from backend.db import MemoryStore
 
 OPEN_ITEMS_FILE = "open-items.md"
 UNSORTED_FILE = "older-memories.md"
-UNSORTED_TITLE = "Older memories — being sorted"
+UNSORTED_TITLE = "Older memories"
 _SLUG_MAX = 60
 
 

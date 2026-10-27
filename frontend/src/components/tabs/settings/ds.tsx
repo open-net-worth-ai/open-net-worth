@@ -339,6 +339,17 @@ export function SectionBusyProvider({
   return <SectionBusyContext.Provider value={bump}>{children}</SectionBusyContext.Provider>
 }
 
+// A section with a page of its own (a memory topic) hands the shell a way back, and the shell draws
+// it: "‹ Memory" in place of the title on a computer, the sheet's own back arrow on a phone — so
+// the name is never shown twice. Null outside Settings, where the section draws its own link.
+export type SectionBack = { label: string; onBack: () => void }
+const SectionBackContext = createContext<((back: SectionBack | null) => void) | null>(null)
+export const SectionBackProvider = SectionBackContext.Provider
+
+export function useSectionBack(): ((back: SectionBack | null) => void) | null {
+  return useContext(SectionBackContext)
+}
+
 /** Declare that this component is doing a FIRST load — pass `initialLoading && !data`. */
 export function useSectionBusy(busy: boolean): void {
   const bump = useContext(SectionBusyContext)

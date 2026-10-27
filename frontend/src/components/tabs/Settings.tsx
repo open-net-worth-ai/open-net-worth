@@ -42,7 +42,8 @@ import {
   X,
 } from '../../ui/icons'
 import type { IconProps } from '../../ui/icons'
-import { SectionBusyProvider, useToast } from './settings/ds'
+import { SectionBackProvider, SectionBusyProvider, useToast } from './settings/ds'
+import type { SectionBack } from './settings/ds'
 import { Spark } from '../../lucius/identity'
 import { PROFILE_KEY, fetchJson } from '../../hooks/serverState'
 import { useTerminalAvailable } from '../../hooks/useTerminalAvailable'
@@ -379,6 +380,9 @@ export function Settings({
   const bumpBusy = useRef((delta: number) => setBusyCount((n) => Math.max(0, n + delta))).current
 
   const active = SECTIONS.find((s) => s.key === section) || SECTIONS[0]!
+  // A section's own way back (a memory topic page → the memory list). The section clears it when it
+  // unmounts, so leaving the section needs no reset here.
+  const [back, setBack] = useState<SectionBack | null>(null)
 
   const needle = q.trim().toLowerCase()
   const availableSections = SECTIONS.filter((s) => sectionAvailable(s.key))
@@ -421,8 +425,8 @@ export function Settings({
               <button
                 type="button"
                 className="rd-set-x"
-                onClick={() => setDrilled(false)}
-                aria-label="Back to all settings"
+                onClick={() => (back ? back.onBack() : setDrilled(false))}
+                aria-label={back ? `Back to ${back.label}` : 'Back to all settings'}
               >
                 <ChevronLeft size={22} strokeWidth={1.8} aria-hidden="true" />
               </button>
@@ -501,7 +505,16 @@ export function Settings({
             fight with the rows. */}
         {isMobile ? null : (
           <div className="rd-set-topbar">
-            <h2 className="rd-set-h">{active.label}</h2>
+            {back ? (
+              <div className="rd-set-hslot">
+                <button type="button" className="rd-set-back" onClick={back.onBack}>
+                  <ChevronLeft size={16} strokeWidth={1.8} aria-hidden="true" />
+                  {back.label}
+                </button>
+              </div>
+            ) : (
+              <h2 className="rd-set-h">{active.label}</h2>
+            )}
             {closeBtn}
           </div>
         )}
@@ -569,22 +582,24 @@ export function Settings({
               </div>
             ) : (
               <SectionBusyProvider onChange={bumpBusy}>
-                {Body ? (
-                  <Suspense fallback={<SectionFallback />}>
-                    <Body
+                <SectionBackProvider value={setBack}>
+                  {Body ? (
+                    <Suspense fallback={<SectionFallback />}>
+                      <Body
+                        toast={toast}
+                        actionBarSlot={actionBarSlot}
+                        gatewayMode={gatewayMode}
+                        openSection={(key) => setSec(key as Section)}
+                      />
+                    </Suspense>
+                  ) : (
+                    <ProfileSection
                       toast={toast}
+                      onReviewDefaultChange={onReviewDefaultChange}
                       actionBarSlot={actionBarSlot}
-                      gatewayMode={gatewayMode}
-                      openSection={(key) => setSec(key as Section)}
                     />
-                  </Suspense>
-                ) : (
-                  <ProfileSection
-                    toast={toast}
-                    onReviewDefaultChange={onReviewDefaultChange}
-                    actionBarSlot={actionBarSlot}
-                  />
-                )}
+                  )}
+                </SectionBackProvider>
               </SectionBusyProvider>
             )}
           </div>
