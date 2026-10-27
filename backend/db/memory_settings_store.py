@@ -1,15 +1,12 @@
 """
-MemorySettingsStore — global memory toggle for the Lucius memory subsystem.
+MemorySettingsStore — the memory settings of the Lucius memory subsystem.
 
-Single-item dict store: {"enabled": true}. Default when the namespace row is absent: enabled.
-
-PLAN 4D TASK 2: DB-backed — a row in the shared ``settings`` table, namespace
-"memory_settings", via ``NamespacedSettingsStore``. ``set_enabled`` is a read-modify-write
-(``get()`` then ``save()``); the table lock covers each ``save()`` but NOT the whole
-read-modify-write, so concurrent toggles are last-writer-wins — correct for this single-key
-flag (the persisted value is always one writer's, never a torn merge). If this doc ever grows
-a second independent key, thread one ``conn`` through ``get(conn=)``/``save(conn=)`` to make
-the read-modify-write atomic.
+One dict in the shared ``settings`` table, namespace "memory_settings", via
+``NamespacedSettingsStore``: ``enabled`` ("Generate memory from chats", default on),
+``search_chats`` (Lucius may search past conversations, default on) and ``sensitive_topics``
+(health, religion, politics… may be remembered, default off). A missing row or key reads as
+its default. Every setter is one database-serialized read-modify-write, so two toggles
+changed together never drop each other's key.
 """
 
 from __future__ import annotations
@@ -28,12 +25,36 @@ class MemorySettingsStore(NamespacedSettingsStore):
         """Return True (the safe default) when the namespace row is absent or key missing."""
         return bool(self.get().get("enabled", True))
 
+    def search_chats(self) -> bool:
+        return bool(self.get().get("search_chats", True))
+
+    def sensitive_topics(self) -> bool:
+        return bool(self.get().get("sensitive_topics", False))
+
+    def settings(self) -> dict:
+        doc = self.get()
+        return {
+            "enabled": bool(doc.get("enabled", True)),
+            "search_chats": bool(doc.get("search_chats", True)),
+            "sensitive_topics": bool(doc.get("sensitive_topics", False)),
+        }
+
     def set_enabled(self, on: bool) -> dict:
         """Persist the flag and return the updated settings dict."""
-        doc = self.get()
-        doc["enabled"] = bool(on)
-        self.save(doc)
+        self._set("enabled", bool(on))
         return {"enabled": bool(on)}
+
+    def set_search_chats(self, on: bool) -> None:
+        self._set("search_chats", bool(on))
+
+    def set_sensitive_topics(self, on: bool) -> None:
+        self._set("sensitive_topics", bool(on))
+
+    def _set(self, key: str, value: bool) -> None:
+        with self._use_serialized_namespace_conn(None) as conn:
+            doc = dict(self.get(conn=conn))
+            doc[key] = value
+            self.save(doc, conn=conn)
 
 
 def memory_enabled_for(agent: dict | None) -> bool:

@@ -20,12 +20,14 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from datetime import timedelta
 
 import pytest
 
 import backend.ai.memory as memory_mod
 import backend.db.memory_settings_store as settings_store_mod
 import backend.db.memory_store as memory_store_mod
+from backend.core.user_time import user_today
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -106,25 +108,29 @@ class TestRememberFact:
         facts = memory_store_mod.MemoryStore().all_facts()
         assert any("Johor Bahru" in f.get("content", "") for f in facts)
 
-    def test_durable_tier_default(self, isolated):
-        """No tier argument → fact is stored with tier=durable."""
+    def test_fact_is_filed_live_under_other_with_no_tier(self, isolated):
+        """Until the tool grows a section, a saved fact lands in Other as a live fact."""
         settings_store_mod.MemorySettingsStore().set_enabled(True)
-        _call_tool("remember_fact", content="Risk tolerance is moderate")
-        facts = memory_store_mod.MemoryStore().all_facts()
-        assert facts[0]["tier"] == "durable"
+        _call_tool("remember_fact", content="Risk tolerance is moderate", tier="durable")
+        (fact,) = memory_store_mod.MemoryStore().all_facts()
+        assert (fact["section"], fact["state"], fact["source"]) == ("other", "live", "explicit")
+        assert "tier" not in fact and fact["expires_at"] is None
 
-    def test_time_bound_tier_stored(self, isolated):
-        """tier=time_bound is persisted correctly."""
+    def test_expires_at_is_stored(self, isolated):
         settings_store_mod.MemorySettingsStore().set_enabled(True)
-        _call_tool(
-            "remember_fact",
-            content="Expects to sell ONWAI after Q3 vest",
-            tier="time_bound",
-            expires_at="2026-09-30",
-        )
-        facts = memory_store_mod.MemoryStore().all_facts()
-        assert facts[0]["tier"] == "time_bound"
-        assert facts[0]["expires_at"] == "2026-09-30"
+        due = (user_today() + timedelta(days=20)).isoformat()
+        _call_tool("remember_fact", content="Expects to sell ONWAI after Q3 vest", expires_at=due)
+        assert memory_store_mod.MemoryStore().all_facts()[0]["expires_at"] == due
+
+    @pytest.mark.parametrize(
+        "content, needle",
+        [("x" * 281, "280"), ("Card 4111 1111 1111 1111", "last 4")],
+    )
+    def test_a_refusal_comes_back_as_a_message_and_stores_nothing(self, isolated, content, needle):
+        settings_store_mod.MemorySettingsStore().set_enabled(True)
+        result, _ = _call_tool("remember_fact", content=content)
+        assert result["ok"] is False and needle in result["message"]
+        assert memory_store_mod.MemoryStore().all_facts() == []
 
     def test_multiple_facts_accumulate(self, isolated):
         """Calling remember_fact twice must result in two stored facts."""

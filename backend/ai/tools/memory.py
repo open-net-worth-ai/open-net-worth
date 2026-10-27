@@ -67,14 +67,18 @@ class RecallMemoryInput(ToolInput):
 )
 async def remember_fact(input_data: dict):
     from backend.ai.memory import MemoryDisabledError, add_explicit
+    from backend.core.errors import ValidationError
 
     try:
         item = add_explicit(
             content=input_data["content"],
-            tier=input_data.get("tier", "durable"),
+            section="other",
+            topic=None,
             expires_at=input_data.get("expires_at"),
         )
     except MemoryDisabledError as exc:
+        return json.dumps({"ok": False, "message": exc.message}, ensure_ascii=False), None
+    except ValidationError as exc:
         return json.dumps({"ok": False, "message": exc.message}, ensure_ascii=False), None
     return json.dumps({"ok": True, "saved": item["content"]}, ensure_ascii=False), None
 

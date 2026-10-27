@@ -14,12 +14,14 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from backend.core.ids import new_id
+from backend.ai import memory_structure as ms
+from backend.ai.memory_write import apply_memory_change
 from backend.core.user_time import user_today
 from backend.db import MemoryStore
 from backend.db.memory_settings_store import MemorySettingsStore, memory_writes_enabled
+from backend.db.memory_store import is_expired
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +184,7 @@ def _truncate(text: str, limit: int) -> str:
 
 
 def purge_expired(store: MemoryStore | None = None) -> int:
-    """Hard-delete time_bound facts whose expires_at has passed. Returns count deleted.
+    """Hard-delete facts whose expires_at has passed. Returns count deleted.
 
     Called before extraction and consolidation so the LLM never sees stale facts
     and the store shrinks deterministically without any LLM spend.
@@ -190,11 +192,7 @@ def purge_expired(store: MemoryStore | None = None) -> int:
     """
     s = store or MemoryStore()
     today = user_today().isoformat()
-    to_delete = [
-        f["id"]
-        for f in s.all_facts()
-        if f.get("tier") == "time_bound" and f.get("expires_at") and f["expires_at"] < today
-    ]
+    to_delete = [f["id"] for f in s.all_facts() if is_expired(f, today)]
     for fid in to_delete:
         s.remove_by_id(fid)
     if to_delete:
@@ -211,26 +209,23 @@ class MemoryDisabledError(Exception):
     message = "Memory is disabled. Enable it in Settings → Memory before adding or removing facts."
 
 
-def add_explicit(content: str, tier: str = "durable", expires_at: str | None = None) -> dict:
-    """Insert a user-requested fact immediately. No dedup — save it verbatim.
+def add_explicit(
+    content: str, section: str, topic: str | None = None, expires_at: str | None = None
+) -> dict:
+    """Insert a user-requested fact immediately, saved as written. No dedup.
 
     Raises MemoryDisabledError when the global memory toggle is OFF so the
     calling tool handler can surface a clear refusal instead of silently writing
-    a fact that stays dormant (prompt-injection write channel when memory is OFF).
+    a fact that stays dormant (prompt-injection write channel when memory is OFF),
+    and ValidationError (a sentence for the user) when the write choke refuses it —
+    too long, no such section, a full card or ID number, a bad expiry.
     """
     if not memory_writes_enabled():
         raise MemoryDisabledError()
-    item = {
-        "id": new_id("mem"),
-        "content": content.strip(),
-        "tier": _coerce_tier(tier),
-        "source": "explicit",
-        "expires_at": expires_at,
-        "created_at": _now(),
-        "updated_at": _now(),
+    ops = {
+        "new": [{"content": content, "section": section, "topic": topic, "expires_at": expires_at}]
     }
-    MemoryStore().insert(item)
-    return item
+    return apply_memory_change(ops, source="explicit", strict=True)["created"][0]
 
 
 async def remove_fact(description: str) -> bool:
@@ -299,7 +294,7 @@ async def remove_fact(description: str) -> bool:
     target = parsed.get("id") if isinstance(parsed, dict) else None
     if not target or target == "none":
         return False
-    return store.remove_by_id(target)
+    return apply_memory_change({"remove": [target]}, source="explicit", strict=False)["removed"] > 0
 
 
 def _tokenize(text: str) -> list[str]:
@@ -560,6 +555,58 @@ _EXTRACT_SYSTEM = (
 )
 
 
+def _extract_prompt(today: str, existing_listing: str, convo: str) -> str:
+    return f"""Today is {today}.
+
+Given this conversation between a user and their financial advisor, extract facts worth
+remembering across future conversations: decisions, intentions, plans, constraints, and
+important personal/financial context. Ignore one-off data lookups and small talk.
+
+NEVER record a transaction, sale, disposal, purchase, transfer, or rule-creation as a
+completed or dated fact — those belong to the system of record (the ledger, lots/realized
+events, positions, rules), NOT to memory. If the user merely discussed or proposed an action,
+capture it (if at all) as an INTENTION ("user is considering selling X"), never as history
+("user sold X on <date>").
+
+Strongly prefer durable, low-churn facts: preferences, goals, risk posture, account
+structure, and standing intentions. Prefer durable preferences/context over perishable figures
+(share counts, live prices, balances) that the tools read live — those go stale immediately.
+AVOID memorizing quantities, share counts, live prices, or account balances — a memorized
+figure goes stale the moment the price moves or a trade lands (an "underwater META at $598"
+note is wrong tomorrow). Record the durable kernel instead ("holds META as a long-term equity
+position"), not the live figure; a fact that carries one is dropped.
+
+{ms.ROUTING_GUIDE}
+You only store the lines whose home starts with "Memory". Skip a fact whose home is anything
+else: it is written elsewhere, in a conversation.
+
+Each fact is at most {ms.FACT_MAX_CHARS} characters. For each fact choose:
+  - section: one of {", ".join(ms.SECTIONS)} (open_items expire after {ms.OPEN_ITEM_DEFAULT_DAYS} days
+    unless you give an expires_at; they take no topic)
+  - topic: a short name for the subject, reusing a listed name when one fits (suggested:
+    {"; ".join(f"{ms.SECTIONS[k]}: {', '.join(v)}" for k, v in ms.SUGGESTED_TOPICS.items() if v)})
+  - sensitive: true for health, religion, political views, sexuality, ethnicity, criminal or
+    legal matters. Never store a full card, account, ID or passport number or a password.
+
+Decide whether each fact UPDATES an existing memory (reuse its id) or is NEW. If the
+conversation contradicts an existing memory, prefer an update (latest wins). If a fact is
+no longer true, list its id under "remove".
+
+Existing memory:
+{existing_listing}
+
+Conversation:
+{convo}
+
+Return ONLY JSON in this exact shape:
+{{
+  "new":     [{{"content": "...", "section": "you|money|plans|open_items|other", "topic": "...|null", "expires_at": "YYYY-MM-DD|null", "sensitive": false}}],
+  "updates": [{{"id": "...", "content": "...", "section": "...", "topic": "...|null", "expires_at": "YYYY-MM-DD|null"}}],
+  "remove":  ["id", ...]
+}}
+If there is nothing worth remembering, return {{"new": [], "updates": [], "remove": []}}."""
+
+
 async def extract_and_merge(history: list[dict], session_id: str | None = None) -> None:
     """Extract facts from the new portion of a conversation and merge into the store.
 
@@ -605,59 +652,14 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
     capped = existing[:EXTRACT_EXISTING_CAP]
     existing_listing = (
         "\n".join(
-            f"{f['id']}: [{f.get('tier')}] {_truncate(f.get('content', ''), FACT_LISTING_TRUNCATE)}"
+            f"{f['id']}: [{ms.fact_label(f)}] {_truncate(f.get('content', ''), FACT_LISTING_TRUNCATE)}"
             for f in capped
         )
         or "(none yet)"
     )
     today = user_today().isoformat()
 
-    prompt = f"""Today is {today}.
-
-Given this conversation between a user and their financial advisor, extract facts worth
-remembering across future conversations: decisions, intentions, plans, constraints, and
-important personal/financial context. Ignore one-off data lookups and small talk.
-
-NEVER record a transaction, sale, disposal, purchase, transfer, or rule-creation as a
-completed or dated fact — those belong to the system of record (the ledger, lots/realized
-events, positions, rules), NOT to memory. If the user merely discussed or proposed an action,
-capture it (if at all) as an INTENTION ("user is considering selling X"), never as history
-("user sold X on <date>").
-
-Strongly prefer durable, low-churn facts: preferences, goals, risk posture, account
-structure, and standing intentions. Prefer durable preferences/context over perishable figures
-(share counts, live prices, balances) that the tools read live — those go stale immediately.
-AVOID memorizing quantities, share counts, live prices, or account balances — a memorized
-figure goes stale the moment the price moves or a trade lands (an "underwater META at $598"
-note is wrong tomorrow). Record the durable kernel instead ("holds META as a long-term equity
-position"), not the live figure. Where a specific figure is genuinely essential to a fact, mark
-that fact time_bound with an as-of date in the content and a near-term expires_at, NEVER durable
-— so it expires instead of misleading later.
-
-For each fact, classify:
-  - tier: "durable" (a standing preference or truth, e.g. risk tolerance, a hard constraint —
-          must NOT carry a perishable quantity/price/balance)
-          or "time_bound" (tied to a date/event, e.g. "selling ONWAI after the Q3 vest", or a
-          figure that needs an as-of)
-  - expires_at: an ISO date (YYYY-MM-DD) if time_bound and a date is implied, else null
-
-Decide whether each fact UPDATES an existing memory (reuse its id) or is NEW. If the
-conversation contradicts an existing memory, prefer an update (latest wins). If a fact is
-no longer true, list its id under "remove".
-
-Existing memory:
-{existing_listing}
-
-Conversation:
-{convo}
-
-Return ONLY JSON in this exact shape:
-{{
-  "new":     [{{"content": "...", "tier": "durable|time_bound", "expires_at": "YYYY-MM-DD|null"}}],
-  "updates": [{{"id": "...", "content": "...", "tier": "durable|time_bound", "expires_at": "YYYY-MM-DD|null"}}],
-  "remove":  ["id", ...]
-}}
-If there is nothing worth remembering, return {{"new": [], "updates": [], "remove": []}}."""
+    prompt = _extract_prompt(today, existing_listing, convo)
 
     try:
         reply = await _provider().complete(
@@ -678,7 +680,8 @@ If there is nothing worth remembering, return {{"new": [], "updates": [], "remov
         logger.warning("memory extraction returned unparseable reply")
         return
 
-    apply_memory_ops(store, parsed, today, source="implicit")
+    ops = {key: parsed.get(key) for key in ("new", "updates", "remove")}
+    apply_memory_change(ops, source="implicit", strict=False, today=today)
 
     if session_id:
         _save_cursor(session_id, len(history))
@@ -687,118 +690,10 @@ If there is nothing worth remembering, return {{"new": [], "updates": [], "remov
         await consolidate()
 
 
-def apply_memory_ops(
-    store: MemoryStore, parsed: dict, today: str, *, source: str, guard: bool = True
-) -> dict:
-    """Apply one {"new", "updates", "remove"} reply to the store; return what changed.
-
-    Shared by extraction (source "implicit") and a typed instruction from the memory dialog
-    (source "explicit" — the user's own words, so an edited fact becomes theirs and, like
-    ``add_explicit``, is saved without the perishable-figure demotion). An update naming an
-    unknown id is treated as new rather than dropped.
-    """
-    known_ids = {f["id"] for f in store.all_facts()}
-    counts = {"added": 0, "updated": 0, "removed": 0}
-
-    def _shape(raw: dict) -> dict:
-        fact = {
-            "content": (raw.get("content") or "").strip(),
-            "tier": _coerce_tier(raw.get("tier")),
-            "expires_at": _norm_expiry(raw.get("expires_at")),
-        }
-        return _guard_perishable_durable(fact, today) if guard else fact
-
-    new_items = list(parsed.get("new", []) or [])
-    for upd in parsed.get("updates", []) or []:
-        if not isinstance(upd, dict):
-            continue
-        if upd.get("id") not in known_ids:
-            new_items.append(upd)
-            continue
-        patch = _shape(upd)
-        if not patch["content"]:
-            continue
-        extra = {"source": "explicit"} if source == "explicit" else {}
-        store.update_by_id(upd["id"], {**patch, **extra, "updated_at": _now()})
-        counts["updated"] += 1
-
-    for fid in parsed.get("remove", []) or []:
-        if fid in known_ids and store.remove_by_id(fid):
-            counts["removed"] += 1
-
-    for new in new_items:
-        if not isinstance(new, dict):
-            continue
-        fact = _shape(new)
-        if not fact["content"]:
-            continue
-        store.insert(
-            {
-                "id": new_id("mem"),
-                **fact,
-                "source": source,
-                "created_at": _now(),
-                "updated_at": _now(),
-            }
-        )
-        counts["added"] += 1
-    return counts
-
-
 def _norm_expiry(value) -> str | None:
     if not value or value in ("null", "none", "None"):
         return None
     return str(value)
-
-
-# ── MEM-2 perishable-fact guard ─────────────────────────────────────────────────
-# A light, deterministic backstop to the extractor prompt: a *durable* fact that
-# carries a live-readable figure (share count / live price / account balance) goes
-# stale the moment the price moves or a trade lands. We demote such facts to
-# time_bound with a short as-of window so they expire instead of misleading later.
-# Conservative on purpose — a plain preference ("risk tolerance is moderate") never
-# trips it; only quantity/price/balance phrasing does.
-
-# How long a demoted figure-bearing fact stays active before expiry filters it out.
-PERISHABLE_FACT_TTL_DAYS = 30
-
-# A "money figure" is a number carrying a currency symbol, OR a decimal, OR a
-# thousands separator — i.e. price/balance shaped, not a bare small integer like an
-# age ("retiring at 45") or a percent.
-_MONEY_FIGURE = r"(?:[$€£¥]\s*\d[\d,]*(?:\.\d+)?|\d[\d,]*\.\d+|\d{1,3}(?:,\d{3})+)"
-
-_PERISHABLE_PATTERNS = (
-    # "12.5 shares", "38 shares", "1,068.7 shares/units/coins/contracts"
-    re.compile(r"\b\d[\d,]*(?:\.\d+)?\s*(?:shares?|units?|coins?|contracts?)\b", re.I),
-    # "trading at ~$598", "at $522", "@ €30.00", "price of 1,234.56" — money-shaped only
-    re.compile(rf"(?:trading at|priced? at|price of|@|at)\s*[~≈]?\s*{_MONEY_FIGURE}", re.I),
-    # "balance of $12,000", "balance ~ 12000.50", "worth $1.2m"
-    re.compile(rf"\b(?:balance|worth)\b[^.\n]{{0,20}}{_MONEY_FIGURE}", re.I),
-)
-
-
-def _is_perishable_figure(content: str) -> bool:
-    """True if the text pins a live-readable figure (share count / price / balance)."""
-    return any(p.search(content or "") for p in _PERISHABLE_PATTERNS)
-
-
-def _guard_perishable_durable(fact: dict, today: str | None = None) -> dict:
-    """
-    Demote a *durable* fact that carries a perishable figure to time_bound with a
-    near-term expires_at, so a stale share count / live price / balance ages out of
-    the always-injected prompt instead of misleading indefinitely. Pure; idempotent;
-    leaves genuinely-durable preference facts and already-time_bound facts untouched.
-    """
-    if fact.get("tier") != "durable" or not _is_perishable_figure(fact.get("content", "")):
-        return fact
-    today = today or datetime.now(timezone.utc).date().isoformat()
-    expires = fact.get("expires_at") or _expiry_after(today, PERISHABLE_FACT_TTL_DAYS)
-    return {**fact, "tier": "time_bound", "expires_at": expires}
-
-
-def _expiry_after(today: str, days: int) -> str:
-    base = datetime.fromisoformat(today).date()
-    return (base + timedelta(days=days)).isoformat()
 
 
 # ── Consolidation (Phase 4) ─────────────────────────────────────────────────────

@@ -101,7 +101,7 @@ def seed_memory() -> int:
     made = 0
     for fact in MEMORY:
         try:
-            memory_module.add_explicit(fact, tier="durable")
+            memory_module.add_explicit(fact, section="other")
             made += 1
         except Exception as exc:  # noqa: BLE001
             log.warning("demo memory entry skipped: %s", exc)

@@ -21,6 +21,17 @@ TIERS = ("durable", "time_bound")
 SOURCES = ("implicit", "explicit")
 
 
+def is_expired(fact: dict, today: str) -> bool:
+    """True when the fact's ``expires_at`` is before ``today``.
+
+    A fact written under the section model carries no ``tier`` and always means its expiry; a
+    legacy one expires only when it was ``time_bound`` (a ``durable`` fact with a stray date
+    never did).
+    """
+    exp = fact.get("expires_at")
+    return bool(exp) and exp < today and fact.get("tier", "time_bound") == "time_bound"
+
+
 class MemoryStore(PayloadTableStore):
     def __init__(self, engine=None):
         super().__init__(memory, id_field="id", engine=engine)
@@ -35,14 +46,13 @@ class MemoryStore(PayloadTableStore):
 
     def active_facts(self, today: str | None = None) -> list[dict]:
         """
-        All items except time_bound ones whose expires_at is in the past.
+        All items except those whose expiry has passed (see ``is_expired``).
         This is what the system prompt injects.
         """
         today = today or user_today().isoformat()
         out = []
         for f in self.all_facts():
-            exp = f.get("expires_at")
-            if f.get("tier") == "time_bound" and exp and exp < today:
+            if is_expired(f, today):
                 continue
             out.append(f)
         return out
