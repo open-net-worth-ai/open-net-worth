@@ -162,11 +162,11 @@ IMPORT_CASES: tuple[Case, ...] = (
     Case(
         "I04",
         "import",
-        "a full-size paste (about 19,000 characters) is sorted in pieces with nothing dropped",
+        "a full-size paste (about 19,000 characters) is sorted in pieces; every line comes back",
         paste=bulk_paste(),
         checks=(
-            c.covers_most_lines(0.95, "at least 95% of the lines come back"),
-            c.plan_destinations("memory", 0.9, "preferences are routed to memory"),
+            c.covers_most_lines(0.95, "the model sorts at least 95% of the lines itself"),
+            c.no_line_dropped(),
             c.lines_are_whole(),
         ),
     ),

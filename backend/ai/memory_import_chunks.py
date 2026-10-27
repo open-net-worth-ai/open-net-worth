@@ -25,7 +25,7 @@ def entry_text(line: str) -> str:
     return " ".join(text.split())
 
 
-def _is_heading(line: str) -> bool:
+def is_heading(line: str) -> bool:
     stripped = line.strip()
     return (
         bool(stripped)
@@ -33,6 +33,24 @@ def _is_heading(line: str) -> bool:
         and not _DATE_PREFIX.match(line)
         and not stripped.endswith((".", "!", "?"))
     )
+
+
+def missed_lines(chunk: str, answered: set[str]) -> str:
+    """The entries of ``chunk`` whose ``entry_text`` (casefolded) is not in ``answered``, each
+    led by the heading it falls under — "" when the reply covered every entry."""
+    out: list[str] = []
+    heading = ""
+    for line in chunk.splitlines():
+        if not line.strip():
+            continue
+        if is_heading(line):
+            heading = line
+            continue
+        if entry_text(line).casefold() not in answered:
+            if heading and heading not in out:
+                out.append(heading)
+            out.append(line)
+    return "\n".join(out)
 
 
 def split_paste(text: str, size: int = CHUNK_CHARS) -> list[str]:
@@ -46,7 +64,7 @@ def split_paste(text: str, size: int = CHUNK_CHARS) -> list[str]:
     used = 0
     heading = ""
     for line in lines:
-        if _is_heading(line):
+        if is_heading(line):
             heading = line
         if current and used + len(line) + 1 > size:
             chunks.append("\n".join(current))

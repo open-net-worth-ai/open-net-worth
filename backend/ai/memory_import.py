@@ -21,7 +21,7 @@ from backend.ai.memory_import_apply import (
     MAX_ITEMS,
     clean_profile_value,
 )
-from backend.ai.memory_import_chunks import entry_text, split_paste
+from backend.ai.memory_import_chunks import entry_text, is_heading, missed_lines, split_paste
 from backend.ai.memory_write import has_identifier
 from backend.core.errors import ExternalServiceError, ValidationError
 from backend.core.user_time import user_today
@@ -207,11 +207,33 @@ async def plan_import(text: str) -> list[dict]:
     chunks = split_paste(pasted)
     items: list[dict] = []
     seen: set[tuple[str, str]] = set()
-    for n, chunk in enumerate(chunks, start=1):
-        for raw in await _sort_chunk(chunk, (n, len(chunks)), today):
+
+    def take(raws: list) -> None:
+        for raw in raws:
             item = _clean_item(raw, whole_lines, sensitive_ok, profile)
             key = (item["line"].casefold(), item["destination"]) if item else None
             if item and key not in seen:
                 seen.add(key)
                 items.append(item)
+
+    for n, chunk in enumerate(chunks, start=1):
+        take(await _sort_chunk(chunk, (n, len(chunks)), today))
+        # A long reply can quietly leave entries out; ask once more for exactly those.
+        missed = missed_lines(chunk, {line for line, _ in seen})
+        if missed:
+            take(await _sort_chunk(missed, (n, len(chunks)), today))
+            missed = missed_lines(chunk, {line for line, _ in seen})
+        items.extend(_unsorted_item(line) for line in missed.splitlines() if not is_heading(line))
     return items[:MAX_ITEMS]
+
+
+UNSORTED_REASON = "Lucius couldn't sort this line. Add it by hand if you want to keep it."
+
+
+def _unsorted_item(line: str) -> dict:
+    """A pasted entry the model would not sort, shown rather than silently dropped."""
+    return {
+        "line": entry_text(line),
+        "destination": "skip",
+        "reason": UNSORTED_REASON,
+    }

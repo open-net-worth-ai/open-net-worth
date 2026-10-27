@@ -100,8 +100,9 @@ def fact_label(fact: dict) -> str:
 _ROUTES: tuple[tuple[str, str, str], ...] = (
     (
         "something the profile has a field for (name, date of birth, residence, nationality, "
-        "tax residency, employment, marital status, income, expenses, saving, risk, retirement "
-        "age, target allocation, briefing time, benchmark)",
+        "tax residency, employment TYPE such as salaried or self-employed, marital status, "
+        "income, expenses, saving, risk, retirement age, target allocation, briefing time, "
+        "benchmark) — an employer's name, a job title or an industry has no profile field",
         "Profile field (update_profile) — not memory",
         "a profile field → update_profile",
     ),
@@ -127,7 +128,8 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         "balances, holdings, prices, trades, finished tasks → nowhere (the ledger has them)",
     ),
     (
-        "a goal, commitment or plan figure the Plan screen holds",
+        "a goal or commitment already recorded on the Plan screen (a named goal with its "
+        "target, a scheduled commitment)",
         "Plan / goals / commitments — not memory",
         "a goal or commitment → Plan / goals / commitments",
     ),
@@ -149,7 +151,8 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         "how they like to work → You · Preferences (third person)",
     ),
     (
-        "an intention, a big decision or an upcoming life event",
+        "an intention, a saving aim, a big decision or an upcoming life event — even with a "
+        'date or an amount ("putting money aside to study abroad in 2028")',
         "Memory · Plans (one topic per plan)",
         "an intention or upcoming event → Plans",
     ),

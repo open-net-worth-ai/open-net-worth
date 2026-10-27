@@ -244,7 +244,8 @@ def test_sort_remaining_files_what_is_behind_a_batch_it_cannot_file(isolated, mo
     out = asyncio.run(memory_sort.sort_remaining())
 
     assert out["sorted"] == 5 and out["remaining"] == 25
-    assert len(model.calls) == 2
+    # two calls to offer all 30, then one second chance for the 25 it skipped
+    assert len(model.calls) == 3
     assert {f["id"] for f in MemoryStore().all_facts() if f["state"] == "live"} == {
         f"g{i}" for i in range(5)
     }

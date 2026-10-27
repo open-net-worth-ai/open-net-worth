@@ -16,7 +16,9 @@ def _pasted_lines(prompt: str) -> list[str]:
 
 
 def _find(lines: list[str], needle: str) -> str:
-    return next(ln for ln in lines if needle.casefold() in ln.casefold())
+    """The pasted line holding ``needle``, or "" when this prompt does not carry it (a re-ask
+    sends only the lines a reply left out)."""
+    return next((ln for ln in lines if needle.casefold() in ln.casefold()), "")
 
 
 def _mem(line: str, section: str, topic: str, **extra) -> dict:
@@ -124,4 +126,4 @@ def import_reply(case_id: str, persona: str, prompt: str) -> dict:
     build = {"I01": _import_i01, "I02": _import_i02, "I03": _import_i03, "I04": _import_i04}[
         case_id
     ]
-    return {"items": build(lines, persona)}
+    return {"items": [item for item in build(lines, persona) if item.get("line")]}

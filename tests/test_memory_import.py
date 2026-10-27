@@ -149,7 +149,8 @@ async def test_preview_refuses_over_20000_chars(isolated, monkeypatch):
 
     assert model.calls == []
     await memory_import.plan_import("x" * 20_000)
-    assert len(model.calls) == 1
+    # the one line the model left out is asked for once more
+    assert len(model.calls) == 2
 
 
 async def test_preview_refuses_an_empty_paste(isolated, monkeypatch):
@@ -206,7 +207,8 @@ async def test_preview_works_while_generate_memory_is_off(isolated, monkeypatch)
 
     items = await memory_import.plan_import(PASTE)
 
-    assert len(items) == 1
+    assert items[0]["destination"] == ROUTED[0]["destination"]
+    assert [i["destination"] for i in items[1:]] == ["skip"] * (len(items) - 1)
 
 
 def test_preview_route_returns_items_and_a_bad_paste_is_422(client, monkeypatch):
@@ -215,7 +217,8 @@ def test_preview_route_returns_items_and_a_bad_paste_is_422(client, monkeypatch)
     ok = client.post("/api/memory/import/preview", json={"text": PASTE})
     big = client.post("/api/memory/import/preview", json={"text": "y" * 20_001})
 
-    assert ok.status_code == 200 and len(ok.json()["items"]) == 1
+    assert ok.status_code == 200
+    assert [i["destination"] != "skip" for i in ok.json()["items"]].count(True) == 1
     assert big.status_code == 422
 
 
@@ -503,7 +506,9 @@ async def test_preview_drops_a_line_that_is_only_part_of_a_pasted_line(isolated,
 
     items = await memory_import.plan_import("[2026-03-01] - Likes tea and hates coffee more")
 
-    assert items == []
+    assert [(i["line"], i["destination"]) for i in items] == [
+        ("Likes tea and hates coffee more", "skip")
+    ]
 
 
 async def test_preview_shows_the_stored_value_of_a_profile_field(isolated, monkeypatch):
@@ -566,4 +571,52 @@ def test_apply_keeps_each_line_when_the_profile_write_fails(client, monkeypatch)
     assert [(r["line"], r["reason"]) for r in out["rejected"]] == [
         ("Name is Dana", "write_failed"),
         ("Be brief", "write_failed"),
+    ]
+
+
+class _ForgetsOnce:
+    """Leaves out the last entry on the first reply; answers what it is asked the second time."""
+
+    def __init__(self):
+        self.prompts: list[str] = []
+
+    async def complete(self, prompt, **kwargs):
+        self.prompts.append(prompt)
+        body = prompt.split("START\n", 1)[1].rsplit("\n<<<", 1)[0]
+        lines = [ln for ln in body.splitlines() if ln.startswith("[")]
+        if len(self.prompts) == 1:
+            lines = lines[:-1]
+        return json.dumps(
+            {"items": [_item(ln, "memory", section="other", topic="T", content=ln) for ln in lines]}
+        )
+
+
+async def test_a_line_the_model_leaves_out_is_asked_for_again(isolated, monkeypatch):
+    model = _ForgetsOnce()
+    monkeypatch.setattr(memory, "_provider", lambda: model)
+    paste = "Preferences\n[2026-03-01] - Likes tea.\n[2026-03-02] - Walks to work."
+
+    items = await memory_import.plan_import(paste)
+
+    assert len(model.prompts) == 2
+    assert "Walks to work." in model.prompts[1] and "Likes tea." not in model.prompts[1]
+    assert "Preferences" in model.prompts[1]
+    assert [(i["line"], i["destination"]) for i in items] == [
+        ("Likes tea.", "memory"),
+        ("Walks to work.", "memory"),
+    ]
+
+
+async def test_a_line_the_model_never_sorts_is_shown_not_dropped(isolated, monkeypatch):
+    model = _use(monkeypatch, [])
+
+    items = await memory_import.plan_import("[2026-03-01] - Likes tea.")
+
+    assert len(model.calls) == 2
+    assert items == [
+        {
+            "line": "Likes tea.",
+            "destination": "skip",
+            "reason": "Lucius couldn't sort this line. Add it by hand if you want to keep it.",
+        }
     ]

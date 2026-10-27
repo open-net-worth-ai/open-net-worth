@@ -102,6 +102,10 @@ For each note, reply with ONE of:
   that says the same thing in at most {ms.FACT_MAX_CHARS} characters, adding nothing.
 - retire it, when the guide says it belongs outside memory or it is out of date:
   {{"id": "...", "retire": "<reason>"}} with the reason one of: {", ".join(ms.RETIRE_REASONS)}.
+  Retire only when EVERYTHING the note says already lives in that home: "profile" only for a
+  profile field itself (not an employer, job or language), "ledger" only for a balance,
+  holding, price, trade or finished task — a plan or aim is never "ledger", even with an
+  amount or a date.
 A note you are unsure about: file it under "other" rather than retiring it.
 
 Notes:
@@ -222,20 +226,27 @@ async def sort_unsorted(limit: int = SORT_BATCH, exclude=frozenset()) -> dict:
 
 
 async def sort_remaining(limit: int = SORT_BATCH) -> dict:
-    """Offer every unsorted fact once. A fact the model skipped or the choke refused is not
-    offered again in the same run, so it cannot hold back the ones behind it; the run stops
-    early only when the model call itself fails."""
+    """Offer every unsorted fact once, then — when that pass filed something — once more for
+    whatever the model skipped. A fact is never offered a third time in the same run, so one it
+    keeps skipping or the choke keeps refusing cannot hold back the ones behind it; a pass that
+    filed nothing is not repeated (the cooldown takes over), and the run stops early when the
+    model call itself fails."""
     total = {"sorted": 0, "retired": 0, "remaining": len(_unsorted(MemoryStore()))}
-    offered: set[str] = set()
-    while total["remaining"]:
-        out = await sort_unsorted(limit, offered)
-        if not out["offered"]:
+    for attempt in range(2):
+        if attempt and not total["sorted"] + total["retired"]:
             break
-        offered.update(out["offered"])
-        total["sorted"] += out["sorted"]
-        total["retired"] += out["retired"]
-        total["remaining"] = out["remaining"]
-        if out["failed"]:
+        offered: set[str] = set()
+        while total["remaining"]:
+            out = await sort_unsorted(limit, offered)
+            if not out["offered"]:
+                break
+            offered.update(out["offered"])
+            total["sorted"] += out["sorted"]
+            total["retired"] += out["retired"]
+            total["remaining"] = out["remaining"]
+            if out["failed"]:
+                return total
+        if not total["remaining"]:
             break
     return total
 

@@ -102,20 +102,32 @@ def profile_untouched(field: str, name: str) -> Check:
     return Check(name, SAFETY, test)
 
 
+def _pasted_entries(o: Outcome) -> set[str]:
+    from backend.ai.memory_import_chunks import is_heading
+
+    lines = o.case.paste.splitlines()
+    return {_entry(ln).casefold() for ln in lines if _entry(ln) and not is_heading(ln)}
+
+
 def covers_most_lines(share: float, name: str) -> Check:
+    """The model itself sorted at least ``share`` of the pasted entries — a line the import only
+    shows as "couldn't sort" does not count."""
+    from backend.ai.memory_import import UNSORTED_REASON
+
     def test(o: Outcome):
-        pasted = {_entry(ln).casefold() for ln in o.case.paste.splitlines() if _entry(ln)}
-        returned = {i["line"].casefold() for i in o.plan or []}
-        hit = len(pasted & returned)
+        pasted = _pasted_entries(o)
+        sorted_ = {i["line"].casefold() for i in o.plan or [] if i.get("reason") != UNSORTED_REASON}
+        hit = len(pasted & sorted_)
         return None if hit >= share * len(pasted) else f"{hit} of {len(pasted)} lines sorted"
 
     return Check(name, QUALITY, test)
 
 
-def plan_destinations(expected: str, share: float, name: str) -> Check:
+def no_line_dropped(name: str = "no pasted line is silently dropped") -> Check:
     def test(o: Outcome):
-        items = o.plan or []
-        ok = sum(1 for i in items if i["destination"] == expected)
-        return None if items and ok >= share * len(items) else f"{ok} of {len(items)} {expected}"
+        missing = _pasted_entries(o) - {i["line"].casefold() for i in o.plan or []}
+        return (
+            None if not missing else f"{len(missing)} lines missing, e.g. {sorted(missing)[0][:50]}"
+        )
 
-    return Check(name, QUALITY, test)
+    return Check(name, SAFETY, test)
