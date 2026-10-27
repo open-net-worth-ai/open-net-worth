@@ -19,6 +19,7 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
   const off = settings.data?.enabled === false
   const [q, setQ] = useState('')
   const [forgetEverything, setForgetEverything] = useState(false)
+  const [inTopic, setInTopic] = useState(false)
   const browserEscape = useRef<(() => boolean) | null>(null)
 
   // The dialog owns Escape (and the X and scrim): an open confirm or edit is cancelled first.
@@ -38,14 +39,16 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
         onClose={close}
         footer={
           <div className="rd-mem-actions">
-            <Btn
-              variant="danger"
-              style={{ marginRight: 'auto' }}
-              disabled={!facts.length}
-              onClick={() => setForgetEverything(true)}
-            >
-              Forget everything
-            </Btn>
+            {!inTopic && (
+              <Btn
+                variant="danger"
+                style={{ marginRight: 'auto' }}
+                disabled={!facts.length}
+                onClick={() => setForgetEverything(true)}
+              >
+                Forget everything
+              </Btn>
+            )}
             <Btn onClick={onClose}>Done</Btn>
           </div>
         }
@@ -55,6 +58,7 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
           disabled={off}
           filter={q}
           escapeRef={browserEscape}
+          onTopicOpen={setInTopic}
           header={
             <div className="rd-mem-head">
               <span className="rd-help">

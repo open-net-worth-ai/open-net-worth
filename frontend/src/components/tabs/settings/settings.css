@@ -1313,6 +1313,18 @@
 .onw-settings .rd-modal.rd-mem-modal {
   height: min(80vh, 720px);
 }
+/* In the dialog the change box sits at the bottom: pushed down when the list is short, held in
+   view while a long one scrolls. The ring is the dialog's own colour so rows don't show around it. */
+.onw-settings .rd-mem-modal .rd-mem-browser,
+.onw-settings .rd-mem-modal .rd-mem-detail {
+  flex: 1 0 auto;
+}
+.onw-settings .rd-mem-modal .rd-mem-ask {
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  box-shadow: 0 0 0 20px var(--modal-bg);
+}
 .onw-settings .rd-mem-empty {
   flex: 1;
   display: flex;
@@ -1336,6 +1348,8 @@
   display: flex;
   flex-direction: column;
   gap: 22px;
+  /* scrolled to on opening a topic: keep the container's top padding visible */
+  scroll-margin-top: 24px;
 }
 .onw-settings .rd-mem-head {
   display: flex;
@@ -1375,15 +1389,14 @@
   color: var(--muted);
   white-space: nowrap;
 }
-/* a topic row: hairline between rows, a rounded wash and Edit/Delete on hover */
+/* a topic row: a faint hairline only BETWEEN rows, a rounded wash and Edit/Delete on hover */
 .onw-settings .rd-mem-topic {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  border-bottom: 1px solid var(--line);
 }
-.onw-settings .rd-mem-sec-h + .rd-mem-topic {
-  border-top: 1px solid var(--line);
+.onw-settings .rd-mem-topic + .rd-mem-topic {
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
 }
 @media (hover: hover) {
   .onw-settings .rd-mem-topic:hover {

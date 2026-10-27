@@ -67,19 +67,22 @@ function TopicRow({
 /** `header` (the memory settings rows) shows above the list and is hidden while a topic is open —
  *  a topic's detail is its own page, as in Claude's memory. `filter` narrows the list to facts
  *  whose text or topic name contains it; `escapeRef` lets a host dialog ask the browser to back
- *  out of an open confirm or edit first (it returns true when it did). */
+ *  out of an open confirm or edit first (it returns true when it did). `onTopicOpen` tells a host
+ *  when a topic page opens or closes, so it can hide list-wide actions. */
 export function MemoryBrowser({
   toast,
   disabled,
   header,
   filter = '',
   escapeRef,
+  onTopicOpen,
 }: {
   toast: Toast
   disabled?: boolean
   header?: ReactNode
   filter?: string
   escapeRef?: MutableRefObject<(() => boolean) | null>
+  onTopicOpen?: (open: boolean) => void
 }) {
   const { facts, loading, forget, edit, instruct, deleteTopic } = useMemoryFacts(toast)
   const [open, setOpen] = useState<{ section: string; topic: string } | null>(null)
@@ -91,10 +94,10 @@ export function MemoryBrowser({
   const top = useRef<HTMLDivElement>(null)
 
   // Opening or leaving a topic starts at its top, not wherever the list was scrolled to.
-  const opened = useRef(false)
+  const lastOpen = useRef(open)
   useLayoutEffect(() => {
-    if (opened.current) top.current?.scrollIntoView({ block: 'start' })
-    opened.current = true
+    if (lastOpen.current !== open) top.current?.scrollIntoView({ block: 'start' })
+    lastOpen.current = open
   }, [open])
 
   useEffect(() => {
@@ -158,6 +161,10 @@ export function MemoryBrowser({
   const topic = open
     ? topicsOf(all.bySection.get(open.section) ?? []).find((t) => t.key === topicKey(open.topic))
     : undefined
+  const topicShown = Boolean(open && topic)
+  useEffect(() => {
+    onTopicOpen?.(topicShown)
+  }, [onTopicOpen, topicShown])
   if (open && topic) {
     return (
       <div className="rd-mem-detail" ref={top}>

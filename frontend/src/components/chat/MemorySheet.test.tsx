@@ -216,4 +216,15 @@ describe('MemorySheet', () => {
     expect(search.value).toBe('rent')
     expect(screen.queryByRole('region', { name: 'Plans' })).toBeNull()
   })
+
+  it('offers "Forget everything" on the list only, not on a topic page', async () => {
+    serve(true, [RENT, DEPOSIT])
+    render(<MemorySheet onClose={vi.fn()} />)
+    await screen.findByText('Rent goes up every March')
+    expect(screen.getByRole('button', { name: 'Forget everything' })).toBeTruthy()
+    await openRent()
+    expect(screen.queryByRole('button', { name: 'Forget everything' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Memory/ }))
+    expect(screen.getByRole('button', { name: 'Forget everything' })).toBeTruthy()
+  })
 })
