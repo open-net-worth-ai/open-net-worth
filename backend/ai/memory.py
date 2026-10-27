@@ -128,6 +128,14 @@ def _truncate(text: str, limit: int) -> str:
 # ── Deterministic purge ────────────────────────────────────────────────────────
 
 
+def model_visible(facts: list[dict]) -> list[dict]:
+    """Facts a model may read: a fact flagged sensitive stays out while "Include sensitive
+    topics" is off — in recall, in the extraction listing and in the daily merge alike."""
+    if MemorySettingsStore().sensitive_topics():
+        return facts
+    return [f for f in facts if f.get("sensitive") is not True]
+
+
 def purge_expired(store: MemoryStore | None = None) -> int:
     """Hard-delete facts whose expires_at has passed. Returns count deleted.
 
@@ -325,9 +333,7 @@ def recall_facts(query: str | None, limit: int = 10, topic: str | None = None) -
         query = ""
     limit = max(1, min(int(limit or 10), RECALL_MAX_LIMIT))
 
-    facts = MemoryStore().remembered_facts()
-    if not settings.sensitive_topics():
-        facts = [f for f in facts if f.get("sensitive") is not True]
+    facts = model_visible(MemoryStore().remembered_facts())
     pool = [f for f in facts if topic_key(f.get("topic")) == wanted] if wanted else facts
     if q_tokens:
         scored = [(_recall_score(query, q_tokens, f.get("content", "")), f) for f in pool]
@@ -532,7 +538,10 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
 
     today = user_today().isoformat()
     prompt = extract_prompt(
-        today, _profile_instructions(), existing_listing(store.remembered_facts()), convo
+        today,
+        _profile_instructions(),
+        existing_listing(model_visible(store.remembered_facts())),
+        convo,
     )
 
     try:

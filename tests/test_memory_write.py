@@ -741,6 +741,20 @@ def test_filing_a_legacy_ledger_figure_retires_it_to_the_ledger():
     assert (row["state"], row["retired_reason"]) == ("retired", "ledger")
 
 
+def test_a_money_goal_filed_under_plans_is_kept_not_sent_to_the_ledger():
+    _legacy("mem_goal", "Wants a net worth of $1M by 40")
+    _file("mem_goal", "plans", topic="Net worth goal")
+    row = MemoryStore().find_by_id("mem_goal")
+    assert (row["state"], row["section"]) == ("live", "plans")
+
+
+def test_an_explicit_legacy_fact_with_a_figure_is_filed_not_retired():
+    _legacy("mem_condo", "Bought the condo at $450k", source="explicit")
+    _file("mem_condo", topic="Housing")
+    row = MemoryStore().find_by_id("mem_condo")
+    assert (row["state"], row["section"]) == ("live", "money")
+
+
 def test_a_sensitive_legacy_fact_is_retired_while_the_setting_is_off_and_filed_when_on():
     _legacy("mem_h1", "Has a chronic condition")
     _file("mem_h1", "you", topic="About you", sensitive=True)

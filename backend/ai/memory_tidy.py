@@ -150,7 +150,7 @@ Nothing to change → {{"updates": [], "remove": []}}."""
 
 
 async def _merge_duplicates(store: MemoryStore, today: str) -> dict:
-    live = await asyncio.to_thread(store.active_facts, today)
+    live = memory.model_visible(await asyncio.to_thread(store.active_facts, today))
     if len(live) < 2:
         return {"merged": False}
     try:

@@ -283,7 +283,15 @@ class _Plan:
         if reason == "identifier":
             return "sensitive"
         if reason == "ledger_figure":
-            return "ledger"
+            # The user's own words, and a goal filed under Plans ("a net worth of $1M by 40"),
+            # are not balances — only an extracted figure goes back to the ledger unasked.
+            if (
+                current.get("source") == "explicit"
+                or ms.normalise_section(raw["section"]) == "plans"
+            ):
+                reason = None
+            else:
+                return "ledger"
         if reason:
             self.reject(reason, text, raw.get("section"), current.get("topic"), message)
             return _REFUSED

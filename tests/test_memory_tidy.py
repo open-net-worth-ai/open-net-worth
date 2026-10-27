@@ -153,6 +153,22 @@ def test_tidy_merges_duplicates_and_topic_names_through_the_choke(isolated, monk
     assert "Tampines" in model.prompts[0]
 
 
+def test_the_merge_never_shows_a_sensitive_fact_while_the_setting_is_off(isolated, monkeypatch):
+    MemoryStore().bulk_insert(
+        [
+            _fact("a", "Rents a flat in Tampines", section="money", topic="Housing"),
+            _fact("b", "Pays rent on the 1st", section="money", topic="Housing"),
+            _fact("h", "Has a chronic condition", section="you", topic="About you", sensitive=True),
+        ]
+    )
+    model = _use(monkeypatch, _Model())
+
+    asyncio.run(memory_tidy.tidy())
+
+    assert "Tampines" in model.prompts[0]
+    assert "chronic condition" not in model.prompts[0]
+
+
 def test_tidy_refuses_a_destructive_reply(isolated, monkeypatch):
     MemoryStore().bulk_insert(
         [_fact(f"f{i}", f"Distinct fact number {i}", topic="Misc") for i in range(4)]
