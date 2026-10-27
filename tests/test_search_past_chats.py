@@ -211,3 +211,119 @@ def test_the_tool_is_a_read_and_outside_the_default_offer():
     assert "search_past_conversations" not in CORE_TOOL_NAMES
     assert mutated_domains("search_past_conversations") == ()
     assert "search_past_conversations" in _DEMO_REFUSED_TOOLS
+
+
+def _skill_row(sid: str, body: str) -> None:
+    SessionStore().append_messages(
+        sid,
+        [
+            {
+                "role": "user",
+                "content": f"[SKILL INVOCATION: Budget helper (budget-helper)]\n{body}",
+                "_onw_skill": {"skill_id": "budget-helper"},
+            }
+        ],
+    )
+
+
+def test_search_matches_only_what_was_said_not_model_context():
+    _session(
+        "chat-ctx",
+        "Context",
+        [
+            _msg(
+                "user",
+                [
+                    {"type": "text", "text": "tell me about my wizardry plan"},
+                    {
+                        "type": "text",
+                        "text": "<turn_context>\nPositions: zebrafin\n</turn_context>",
+                    },
+                    {"type": "text", "text": "[Currently on screen — Plan\nzebrafin rows]"},
+                    {"type": "text", "text": "[No app screen is shared: zebrafin catalog]"},
+                    {"type": "text", "text": "«mention:ab12»\nzebrafin account\n«/mention:ab12»"},
+                    {"type": "text", "text": "«harness_note»zebrafin nudge«/harness_note»"},
+                    {"type": "text", "text": "[SKILL INVOCATION: x (x)]\nzebrafin body"},
+                ],
+            ),
+            _msg("user", "__ONBOARDING_INIT__"),
+        ],
+    )
+    _skill_row("chat-ctx", "zebrafin steps")
+
+    assert _search(query="zebrafin")["results"] == []
+    assert _search(query="onboarding_init")["results"] == []
+    assert _search(query="wizardry")["results"][0]["session_id"] == "chat-ctx"
+
+
+def test_search_unwraps_a_mid_turn_message_fence():
+    _session(
+        "chat-fence",
+        "Fence",
+        [
+            _msg(
+                "user",
+                [
+                    {
+                        "type": "text",
+                        "text": "«user_msg:ab12cd»\nremind me about quokkas\n«/user_msg:ab12cd»",
+                    }
+                ],
+            )
+        ],
+    )
+
+    assert _search(query="user_msg")["results"] == []
+    snippet = _search(query="quokkas")["results"][0]["snippet"]
+    assert snippet == "remind me about quokkas"
+
+
+@pytest.mark.parametrize(
+    ("stored", "query"),
+    [
+        ("Chuyến đi đà lạt tháng sau", "Đà Lạt"),
+        ("Chuyến đi Đà Lạt tháng sau", "đà lạt"),
+        ("Chuyến đi đà lạt tháng sau", "Đà Lạt"),
+        ("Chuyến đi Đà Lạt tháng sau", "đà lạt"),
+        ("STRASSE café", "CAFÉ"),
+    ],
+)
+def test_search_folds_case_and_normalisation_for_any_script(stored, query):
+    _session("chat-vi", "Trip", [_msg("user", stored)])
+
+    out = _search(query=query)
+
+    assert [r["session_id"] for r in out["results"]] == ["chat-vi"]
+
+
+def test_search_never_matches_a_secret_far_behind_an_attachment_header():
+    far_text = "obsidian ledger entry"
+    body = "note: [Attached file: notes.txt | ref_id: att_unknown]\n\n" + ("x " * 250) + far_text
+    _session("chat-far", "Far", [_msg("user", [{"type": "text", "text": body}])])
+
+    assert _search(query=far_text)["results"] == []
+
+
+def test_search_snippet_never_exceeds_the_cap_and_marks_only_real_cuts():
+    _session("chat-short", "Short", [_msg("user", "a short note about marmots")])
+    _session("chat-end", "End", [_msg("user", ("lead " * 200) + "the marmot ends here")])
+    _session("chat-start", "Start", [_msg("user", "marmot begins here" + (" tail" * 200))])
+    _session("chat-mid", "Mid", [_msg("user", ("lead " * 200) + "marmot" + (" tail" * 200))])
+
+    by_id = {r["session_id"]: r["snippet"] for r in _search(query="marmot", limit=10)["results"]}
+
+    assert by_id["chat-short"] == "a short note about marmots"
+    assert by_id["chat-end"].startswith("…") and not by_id["chat-end"].endswith("…")
+    assert by_id["chat-start"].endswith("…") and not by_id["chat-start"].startswith("…")
+    assert by_id["chat-mid"].startswith("…") and by_id["chat-mid"].endswith("…")
+    assert all(len(s) <= 300 for s in by_id.values())
+
+
+def test_search_limit_zero_is_one_and_an_untitled_chat_is_labelled_like_the_list():
+    for i in range(3):
+        _session(f"chat-n{i}", "", [_msg("user", "pangolin facts")])
+
+    out = _search(query="pangolin", limit=0)
+
+    assert len(out["results"]) == 1
+    assert out["results"][0]["title"] == "New conversation"

@@ -47,9 +47,9 @@ def _parse(stamp) -> datetime | None:
 
 
 def _is_internal(session_id: str) -> bool:
-    from backend.ai.assistant import _is_internal_session
+    from backend.core.chat_session import is_internal_session
 
-    return _is_internal_session(session_id)
+    return is_internal_session(session_id)
 
 
 def _due(candidate: dict, now: datetime) -> bool:

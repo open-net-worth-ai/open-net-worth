@@ -33,12 +33,14 @@ from backend.ai.tools.display import describe_tool_call
 from backend.ai.tools.registry import external_args_error, mutated_domains, validation_error
 from backend.ai.turn_completion import MAX_COMPLETION_NUDGES, completion_nudge
 from backend.core import mcp_external
+from backend.core.chat_context_markers import is_model_context_block
+from backend.core.chat_session import INTERNAL_SESSION_IDS as _INTERNAL_SESSION_IDS  # noqa: F401
+from backend.core.chat_session import is_internal_session as _is_internal_session
 from backend.core.errors import DataIntegrityError
 from backend.core.redact import redact_secrets, redact_summary
 from backend.core.tool_use_context import set_tool_use_id
 from backend.core.untrusted import (
     fence_untrusted_block,
-    is_screen_context_block,
     make_fence_nonce,
     sanitize_untrusted,
 )
@@ -556,14 +558,6 @@ def _proposed_change_signature(change: dict) -> tuple:
         ).hexdigest()
     return (ctype, identity)
 
-
-# Session IDs (or prefixes) used by background/headless paths that must never
-# appear in the user-facing conversation list.  The on-disk files are kept
-# intact (the agents still read/write them); only the LISTING is filtered.
-# Exact IDs: "scheduled" (legacy; may still exist on disk from old instances).
-# Prefix: "scheduled-" (per-run sessions from the prompt_lucius runner).
-_INTERNAL_SESSION_IDS: frozenset[str] = frozenset({"scheduled"})
-_INTERNAL_SESSION_PREFIXES: tuple[str, ...] = ("scheduled-",)
 
 # In-memory sessions: {session_id: [messages]}
 SESSIONS: Dict[str, List[dict]] = {}
@@ -1098,13 +1092,6 @@ def session_screen_commands(session_id: str) -> list:
     ``run_screen_command`` can only ever invoke what THIS turn's screen advertised."""
     entry = _session_meta_entry(session_id)
     return (entry.get("screen_commands") or []) if entry is not None else []
-
-
-def _is_internal_session(sid: str) -> bool:
-    """True when ``sid`` identifies a background/headless session (never shown to the user)."""
-    if sid in _INTERNAL_SESSION_IDS:
-        return True
-    return any(sid.startswith(p) for p in _INTERNAL_SESSION_PREFIXES)
 
 
 def list_sessions(*, with_run_status: bool = False) -> list[dict]:
@@ -2270,28 +2257,14 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                                 )
                 elif btype == "text":
                     t = b.get("text", "")
-                    if t.startswith("<turn_context>"):
-                        continue  # persisted snapshot — never render in chat UI
-                    if t.lstrip().startswith("«mention:"):
-                        # The resolved-mention block (services/mentions/dispatch —
-                        # "[Referenced items the user is asking about … UNTRUSTED]" inside a
-                        # nonce fence). api/chat._merge_mention_context appends it as its own
-                        # text part on the user turn so the model can see the current data
-                        # behind an @-chip. It is MODEL context, not something the reader
-                        # typed — and because these parts are ""-joined below, leaving it in
-                        # rendered as "change the payee name to sally«mention:97beb…»" followed
-                        # by the whole untrusted-data dump, in the reader's own message bubble.
+                    if is_model_context_block(t):
+                        # A persisted <turn_context> snapshot, the resolved-mention block and
+                        # the screen snapshot are appended onto the user turn by
+                        # api/chat._merge_mention_context so the MODEL can see them; they are
+                        # not something the reader typed, and because these parts are
+                        # ""-joined below, leaving one in rendered it inside the reader's own
+                        # bubble (owner: "…alongside the home[Currently on screen — Plan …]").
                         # Skipped for DISPLAY only; the transcript keeps the block.
-                        continue
-                    if is_screen_context_block(t):
-                        # Same reason as turn_context: api/chat._merge_mention_context appends
-                        # the screen snapshot as its own content part on the user turn so the
-                        # model can see what's on screen. It is MODEL context, not something
-                        # the user typed — and because these parts are ""-joined below, leaving
-                        # it in rendered the owner's one-line message as
-                        # "Yes, add the car alongside the home[Currently on screen — Plan …]"
-                        # followed by every row on the screen. Skipped for DISPLAY only; the
-                        # transcript keeps the block, so the model still sees it.
                         continue
                     _injected_body = _strip_user_msg_fence(t)
                     if _injected_body is not None:
@@ -3335,11 +3308,7 @@ def _extract_user_text(content: object) -> str:
         if not isinstance(b, dict) or b.get("type") != "text":
             continue
         t = b.get("text", "")
-        if t.startswith("<turn_context>"):
-            continue
-        if t.lstrip().startswith("«mention:"):
-            continue
-        if is_screen_context_block(t):
+        if is_model_context_block(t):
             continue
         injected = _strip_user_msg_fence(t)
         text_parts.append(injected if injected is not None else t)
