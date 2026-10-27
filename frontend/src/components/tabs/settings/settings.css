@@ -1308,27 +1308,10 @@
   flex: 1;
   min-width: 0;
 }
-.onw-settings .rd-fact-t {
-  font-size: 12.5px;
-  color: var(--ink);
-  line-height: 1.45;
-}
-.onw-settings .rd-fact-meta {
-  display: flex;
-  gap: 12px;
-  font-size: var(--text-xs);
-  color: var(--faint);
-  margin-top: 3px;
-}
 /* the memory dialog keeps one height — the list scrolls inside it — so searching never
    shrinks it; on a phone it is a tall bottom sheet (see the max-width block) */
 .onw-settings .rd-modal.rd-mem-modal {
   height: min(80vh, 720px);
-}
-.onw-settings .rd-mem-count {
-  margin-top: -6px;
-  font-size: var(--text-xs);
-  color: var(--faint);
 }
 .onw-settings .rd-mem-empty {
   flex: 1;
@@ -1367,6 +1350,26 @@
 .onw-settings .rd-mem-sec > .ui-list {
   margin-left: 12px;
 }
+/* "Moved out of memory": the header is a disclosure button, its rows read like topic rows */
+.onw-settings .rd-mem-sec-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.onw-settings .rd-mem-sec-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.onw-settings .rd-mem-bullet-until {
+  color: var(--muted);
+  white-space: nowrap;
+}
 /* a topic row: hairline between rows, a rounded wash and Edit/Delete on hover */
 .onw-settings .rd-mem-topic {
   display: grid;
@@ -1382,6 +1385,14 @@
     background: color-mix(in srgb, var(--ink) 5%, transparent);
     border-radius: var(--radius-lg);
   }
+}
+.onw-settings .rd-mem-moved {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.6fr) 8.5em;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+  padding: 14px 12px;
 }
 .onw-settings .rd-mem-topic-open {
   display: grid;
@@ -1563,32 +1574,6 @@
 .onw-settings .rd-fact {
   transition: background 0.12s ease;
 }
-/* `> .rd-fact-acts` outranks `.rd-fact > div { flex: 1 }`, which would stretch the group */
-.onw-settings .rd-fact > .rd-fact-acts {
-  flex: none;
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.onw-settings .rd-fact:focus-within > .rd-fact-acts {
-  opacity: 1;
-}
-@media (hover: hover) {
-  .onw-settings .rd-fact:not(.rd-fact-edit):hover {
-    background: color-mix(in srgb, var(--ink) 5%, var(--surface));
-  }
-  .onw-settings .rd-fact:hover > .rd-fact-acts {
-    opacity: 1;
-  }
-}
-/* same selector as the hiding rule above — a plain `.rd-fact-acts` lost on specificity and the
-   icons stayed invisible on a phone */
-@media (hover: none) {
-  .onw-settings .rd-fact > .rd-fact-acts {
-    opacity: 1;
-  }
-}
 .onw-settings .rd-fact-ibtn {
   display: grid;
   place-items: center;
@@ -1632,14 +1617,6 @@
   display: flex;
   justify-content: flex-end;
   gap: 6px;
-}
-/* memory dialog footer: "Tell Lucius what to change" above the dialog's own buttons */
-.onw-settings .rd-mem-foot {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 /* Claude-style composer: one pill, the send is a round button inside it */
 .onw-settings .rd-mem-ask {
@@ -2881,7 +2858,8 @@
     height: 85dvh;
   }
   /* a topic row stacks: name and date on top, the preview under them */
-  .onw-settings .rd-mem-topic-open {
+  .onw-settings .rd-mem-topic-open,
+  .onw-settings .rd-mem-moved {
     grid-template-columns: minmax(0, 1fr) auto;
     row-gap: 4px;
   }

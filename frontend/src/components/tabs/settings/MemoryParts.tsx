@@ -1,8 +1,7 @@
-// Pieces of the stored-memories UI shared by the memory dialog and Settings → Memory's inline
-// browser: one fact row (with its in-place editor), the forget confirm, and the "Tell Lucius" box.
+// Pieces of the one memory UI (MemoryBrowser, shown in Settings → Memory and in the chat's memory
+// dialog): the fact bullets with their in-place editor, the forget confirm, and the "Tell Lucius" box.
 import { useLayoutEffect, useRef, useState } from 'react'
 import { ArrowUp, Pencil, Trash2 } from '../../../ui/icons'
-import { memorySourceLabel } from '../../../hooks/useMemoryFacts'
 import { fDate } from '../../../utils/format'
 import { List } from '../../ui/List'
 import { Btn } from './ds'
@@ -82,56 +81,6 @@ function MemoryFactEditor({
   )
 }
 
-export function MemoryFactRow({
-  fact,
-  editing,
-  onEdit,
-  onCancel,
-  onSave,
-  onForget,
-}: {
-  fact: MemoryFact
-  editing: boolean
-  onEdit: () => void
-  onCancel: () => void
-  onSave: (content: string) => Promise<boolean>
-  onForget: () => void
-}) {
-  if (editing) return <MemoryFactEditor fact={fact} onCancel={onCancel} onSave={onSave} />
-
-  return (
-    <div className="rd-fact">
-      <div>
-        <div className="rd-fact-t">{fact.content}</div>
-        <div className="rd-fact-meta">
-          <span>{memorySourceLabel(fact.source)}</span>
-          <span>{fact.updated_at ? fDate(fact.updated_at) : ''}</span>
-        </div>
-      </div>
-      <div className="rd-fact-acts">
-        <button
-          type="button"
-          className="rd-fact-ibtn"
-          title="Edit"
-          aria-label={'Edit: ' + fact.content}
-          onClick={onEdit}
-        >
-          <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="rd-fact-ibtn rd-fact-ibtn--forget"
-          title="Forget"
-          aria-label={'Forget: ' + fact.content}
-          onClick={onForget}
-        >
-          <Trash2 size={15} strokeWidth={1.8} aria-hidden="true" />
-        </button>
-      </div>
-    </div>
-  )
-}
-
 /** A topic's facts as one memory, Claude-style: the design system's bullet `List`. The pencil and bin surface on
  *  hover (always on touch); a bullet being edited becomes the editor in place. */
 export function MemoryBullets({
@@ -162,7 +111,12 @@ export function MemoryBullets({
           </li>
         ) : (
           <li key={f.id} className="rd-mem-bullet">
-            <span className="rd-mem-bullet-t">{f.content}</span>
+            <span className="rd-mem-bullet-t">
+              {f.content}
+              {f.expires_at && (
+                <span className="rd-mem-bullet-until"> · until {fDate(f.expires_at)}</span>
+              )}
+            </span>
             <span className="rd-mem-bullet-acts">
               <button
                 type="button"
@@ -193,7 +147,7 @@ export function MemoryBullets({
 export type PendingForget =
   | { kind: 'one'; fact: MemoryFact }
   | { kind: 'all'; count: number }
-  | { kind: 'topic'; name: string; ids: string[] }
+  | { kind: 'topic'; name: string; section: string; ids: string[]; named: boolean }
 
 /** "Forget this memory?" — Forget is a REST delete outside an AI turn, so no checkpoint backs it
  *  and the only recovery is a backup: it asks first, like Claude's memory. Esc and the scrim
@@ -207,18 +161,17 @@ export function ForgetConfirm({
   onCancel: () => void
   onConfirm: () => void
 }) {
-  const one = pending.kind === 'one'
   const title =
     pending.kind === 'one'
       ? 'Forget this memory?'
       : pending.kind === 'topic'
-        ? 'Delete this topic?'
+        ? `Forget ${pending.name}?`
         : `Forget all ${pending.count} memories?`
   const body =
     pending.kind === 'one'
       ? 'Lucius will no longer remember this. This can’t be undone.'
       : pending.kind === 'topic'
-        ? `Lucius will forget the ${pending.ids.length} things he remembers under ${pending.name}. This can’t be undone.`
+        ? `Lucius will forget its ${pending.ids.length} ${pending.ids.length === 1 ? 'fact' : 'facts'}. This can’t be undone.`
         : 'Lucius will start again with an empty memory. This can’t be undone.'
   return (
     <div
@@ -245,7 +198,7 @@ export function ForgetConfirm({
             Cancel
           </Btn>
           <Btn variant="danger" onClick={onConfirm}>
-            {one ? 'Forget' : pending.kind === 'topic' ? 'Delete' : 'Forget all'}
+            {pending.kind === 'all' ? 'Forget all' : 'Forget'}
           </Btn>
         </div>
       </div>

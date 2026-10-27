@@ -1,73 +1,77 @@
 // Settings → Memory. Its own section since 2026-10-27 (was half of "Chat & Memory"), laid out
 // like Claude's memory settings. ADR 2026-10-25-memory-keeps-only-what-has-no-other-home.
-import { useState } from 'react'
 import { authFetch } from '../../../../api/client'
 import { useCachedFetchState } from '../../../../state/queryCache'
-import { MEMORY_SETTINGS_KEY, getMemorySettings } from '../../../../hooks/useMemoryFacts'
+import {
+  MEMORY_SETTINGS_KEY,
+  getMemorySettings,
+  type MemorySettings,
+} from '../../../../hooks/useMemoryFacts'
 import { Btn, Panel, Toggle, row, useSectionBusy } from '../ds'
 import { MemoryBrowser } from '../MemoryBrowser'
 import type { SectionProps } from '../ds'
 
+type Key = keyof MemorySettings
+
 export function MemorySection({ toast }: SectionProps) {
   const memory = useCachedFetchState(MEMORY_SETTINGS_KEY, getMemorySettings, { staleTime: 0 })
-  // DESIGN PREVIEW — not persisted yet: these two switches get their stored settings with the
-  // memory redesign (ADR 2026-10-25-memory-keeps-only-what-has-no-other-home).
-  const [searchChats, setSearchChats] = useState(true)
-  const [sensitiveTopics, setSensitiveTopics] = useState(false)
+  const settings = memory.data
 
-  useSectionBusy(memory.initialLoading && !memory.data)
+  useSectionBusy(memory.initialLoading && !settings)
 
-  async function putMemoryEnabled(enabled: boolean) {
+  async function putSetting(key: Key, value: boolean, done: string) {
     try {
-      const r = await authFetch('/api/memory/settings', {
+      const r = await authFetch(MEMORY_SETTINGS_KEY, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled }),
+        body: JSON.stringify({ [key]: value }),
       })
       if (!r.ok) {
         toast(`Could not save (HTTP ${r.status})`)
         return
       }
       void memory.refresh()
-      toast(enabled ? 'Memory on' : 'Memory off — nothing is extracted or recalled')
+      toast(done)
     } catch {
       toast('Could not reach the server. Try again.')
     }
   }
 
+  const toggle = (key: Key, label: string, done: (on: boolean) => string) => (
+    <Toggle
+      on={settings?.[key] ?? false}
+      disabled={!settings}
+      onChange={(v) => void putSetting(key, v, done(v))}
+      label={label}
+    />
+  )
+
   return (
     <MemoryBrowser
       toast={toast}
-      disabled={memory.data?.enabled === false}
+      disabled={settings?.enabled === false}
       header={
         <Panel sub="What Lucius remembers about you between conversations">
           {row(
             'Search and reference chats',
             'Let Lucius search your past conversations for relevant details.',
-            <Toggle
-              on={searchChats}
-              onChange={setSearchChats}
-              label="Search and reference chats"
-            />,
+            toggle('search_chats', 'Search and reference chats', (on) =>
+              on ? 'Lucius can search your past chats' : 'Lucius won’t search your past chats',
+            ),
           )}
           {row(
             'Generate memory from chats',
             'Let Lucius remember useful details from your conversations and automations, and use them in replies.',
-            <Toggle
-              on={memory.data?.enabled ?? false}
-              disabled={!memory.data}
-              onChange={(v) => void putMemoryEnabled(v)}
-              label="Generate memory from chats"
-            />,
+            toggle('enabled', 'Generate memory from chats', (on) =>
+              on ? 'Memory on' : 'Memory off — nothing is extracted or recalled',
+            ),
           )}
           {row(
             'Include sensitive topics in memory',
             'Let Lucius save details about sensitive topics like health conditions or religious beliefs.',
-            <Toggle
-              on={sensitiveTopics}
-              onChange={setSensitiveTopics}
-              label="Include sensitive topics in memory"
-            />,
+            toggle('sensitive_topics', 'Include sensitive topics in memory', (on) =>
+              on ? 'Sensitive topics can be remembered' : 'Sensitive topics won’t be remembered',
+            ),
           )}
           {row(
             'Import memory from other AI assistants',

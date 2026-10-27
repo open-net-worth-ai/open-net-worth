@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { clearQueryCache } from '../../state/queryCache'
+import type { MemoryFact } from '../../hooks/useMemoryFacts'
 
 const authFetch = vi.fn()
 vi.mock('../../api/client', () => ({ authFetch: (...a: unknown[]) => authFetch(...a) }))
@@ -11,15 +12,40 @@ import { MemorySheet } from './MemorySheet'
 const json = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status }))
 
-function serve(enabled: boolean, facts: { id: string; content: string; source?: string }[]) {
+const settings = (enabled: boolean) => ({ enabled, search_chats: true, sensitive_topics: false })
+
+const RENT: MemoryFact = {
+  id: 'f 1',
+  content: 'Rent goes up every March',
+  state: 'live',
+  section: 'money',
+  topic: 'Housing',
+  updated_at: '2026-10-01T00:00:00Z',
+}
+const DEPOSIT: MemoryFact = {
+  id: 'f2',
+  content: 'Saving for a house deposit',
+  state: 'live',
+  section: 'plans',
+  topic: 'Home',
+  updated_at: '2026-10-02T00:00:00Z',
+}
+
+function serve(enabled: boolean, facts: MemoryFact[]) {
   authFetch.mockImplementation((url: string, init?: RequestInit) => {
-    if (url === '/api/memory/settings') return json({ enabled })
+    if (url === '/api/memory/settings') return json(settings(enabled))
     if (init?.method === 'DELETE') return json({ ok: true })
     if (init?.method === 'PATCH') return json({ id: 'f1', content: 'edited' })
     if (url === '/api/memory/instruct') return json({ added: 1, updated: 1, removed: 0 })
     return json({ facts, total: facts.length })
   })
 }
+
+async function openRent() {
+  fireEvent.click((await screen.findByText('Housing')).closest('button') as HTMLElement)
+}
+
+Element.prototype.scrollIntoView = vi.fn()
 
 describe('MemorySheet', () => {
   beforeEach(() => {
@@ -28,23 +54,36 @@ describe('MemorySheet', () => {
   })
   afterEach(cleanup)
 
-  it('lists stored facts with where each came from', async () => {
-    serve(true, [
-      { id: 'f1', content: 'Gets paid on the 25th', source: 'explicit' },
-      { id: 'f2', content: 'Saving for a house deposit', source: 'extracted' },
-    ])
+  it('shows the same sections-and-topics browser as Settings', async () => {
+    serve(true, [RENT, DEPOSIT])
     render(<MemorySheet onClose={vi.fn()} />)
-    expect(await screen.findByText('Gets paid on the 25th')).toBeTruthy()
-    expect(screen.getByText('You told Lucius')).toBeTruthy()
-    expect(screen.getByText('Learned in chat')).toBeTruthy()
-    expect(screen.getByText('Stored memories (2)')).toBeTruthy()
+    const money = await screen.findByRole('region', { name: 'Money' })
+    expect(within(money).getByText('Housing')).toBeTruthy()
+    expect(within(money).getByText('Rent goes up every March')).toBeTruthy()
+    expect(screen.getByRole('region', { name: 'Plans' })).toBeTruthy()
     expect(screen.queryByText(/Memory is off/)).toBeNull()
   })
 
-  it('forgets one fact through the same DELETE Settings uses', async () => {
-    serve(true, [{ id: 'f 1', content: 'Rent goes up every March' }])
+  it('filters the browser from its search box by fact text or topic', async () => {
+    serve(true, [RENT, DEPOSIT])
     render(<MemorySheet onClose={vi.fn()} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Forget: Rent goes up every March' }))
+    await screen.findByText('Rent goes up every March')
+    const search = screen.getByLabelText('Search memories')
+    fireEvent.change(search, { target: { value: 'RENT' } })
+    expect(screen.queryByRole('region', { name: 'Plans' })).toBeNull()
+    expect(screen.getByRole('region', { name: 'Money' })).toBeTruthy()
+    fireEvent.change(search, { target: { value: 'home' } })
+    expect(screen.queryByRole('region', { name: 'Money' })).toBeNull()
+    expect(screen.getByRole('region', { name: 'Plans' })).toBeTruthy()
+    fireEvent.change(search, { target: { value: 'zzz' } })
+    expect(screen.getByText('No memories match “zzz”.')).toBeTruthy()
+  })
+
+  it('forgets one fact through the same DELETE Settings uses', async () => {
+    serve(true, [RENT])
+    render(<MemorySheet onClose={vi.fn()} />)
+    await openRent()
+    fireEvent.click(screen.getByRole('button', { name: 'Forget: Rent goes up every March' }))
     expect(screen.getByRole('alertdialog', { name: 'Forget this memory?' })).toBeTruthy()
     expect(authFetch).not.toHaveBeenCalledWith(expect.anything(), { method: 'DELETE' })
     fireEvent.click(screen.getByRole('button', { name: 'Forget' }))
@@ -54,9 +93,9 @@ describe('MemorySheet', () => {
   })
 
   it('asks before "Forget everything" deletes anything', async () => {
-    serve(true, [{ id: 'f1', content: 'A fact' }])
+    serve(true, [RENT])
     render(<MemorySheet onClose={vi.fn()} />)
-    await screen.findByText('A fact')
+    await screen.findByText('Rent goes up every March')
     fireEvent.click(screen.getByRole('button', { name: 'Forget everything' }))
     expect(authFetch).not.toHaveBeenCalledWith('/api/memory/facts', { method: 'DELETE' })
     fireEvent.click(screen.getByRole('button', { name: 'Forget all' }))
@@ -65,14 +104,18 @@ describe('MemorySheet', () => {
     )
   })
 
-  it('says so when memory is switched off', async () => {
+  it('says so when memory is switched off, and keeps the change box closed', async () => {
     serve(false, [])
     render(<MemorySheet onClose={vi.fn()} />)
     expect(await screen.findByText(/Memory is off/)).toBeTruthy()
+    expect(
+      (screen.getByLabelText('Tell Lucius what to remember or change') as HTMLInputElement)
+        .disabled,
+    ).toBe(true)
   })
 
   it('sends a typed change to the instruct route and says what changed', async () => {
-    serve(true, [{ id: 'f1', content: 'Rent goes up every March' }])
+    serve(true, [RENT])
     render(<MemorySheet onClose={vi.fn()} />)
     await screen.findByText('Rent goes up every March')
     const box = screen.getByLabelText('Tell Lucius what to remember or change')
@@ -91,20 +134,11 @@ describe('MemorySheet', () => {
     expect((box as HTMLInputElement).value).toBe('')
   })
 
-  it('keeps the change box closed while memory is off', async () => {
-    serve(false, [])
-    render(<MemorySheet onClose={vi.fn()} />)
-    await screen.findByText(/Memory is off/)
-    expect(
-      (screen.getByLabelText('Tell Lucius what to remember or change') as HTMLInputElement)
-        .disabled,
-    ).toBe(true)
-  })
-
   it('edits a fact in place and saves exactly what was typed', async () => {
-    serve(true, [{ id: 'f 1', content: 'Rent goes up every March' }])
+    serve(true, [RENT])
     render(<MemorySheet onClose={vi.fn()} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit: Rent goes up every March' }))
+    await openRent()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit: Rent goes up every March' }))
     const field = screen.getByRole('textbox', { name: 'Edit: Rent goes up every March' })
     fireEvent.change(field, { target: { value: 'Rent goes up every April' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -121,12 +155,15 @@ describe('MemorySheet', () => {
   })
 
   it('Escape cancels an edit without closing the dialog or saving', async () => {
-    serve(true, [{ id: 'f1', content: 'A fact' }])
+    serve(true, [RENT])
     const onClose = vi.fn()
     render(<MemorySheet onClose={onClose} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit: A fact' }))
+    await openRent()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit: Rent goes up every March' }))
     fireEvent.keyDown(window, { key: 'Escape' })
-    await waitFor(() => expect(screen.queryByRole('textbox', { name: 'Edit: A fact' })).toBeNull())
+    await waitFor(() =>
+      expect(screen.queryByRole('textbox', { name: 'Edit: Rent goes up every March' })).toBeNull(),
+    )
     expect(onClose).not.toHaveBeenCalled()
     expect(authFetch).not.toHaveBeenCalledWith(
       expect.anything(),
@@ -136,66 +173,33 @@ describe('MemorySheet', () => {
     expect(onClose).toHaveBeenCalledOnce()
   })
 
-  it('Enter saves an edit and Shift+Enter does not', async () => {
-    serve(true, [{ id: 'f1', content: 'A fact' }])
-    render(<MemorySheet onClose={vi.fn()} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit: A fact' }))
-    const box = screen.getByRole('textbox', { name: 'Edit: A fact' })
-    fireEvent.change(box, { target: { value: 'A better fact' } })
-    fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })
-    expect(authFetch).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ method: 'PATCH' }),
-    )
-    fireEvent.keyDown(box, { key: 'Enter' })
-    await waitFor(() =>
-      expect(authFetch).toHaveBeenCalledWith(
-        '/api/memory/facts/f1',
-        expect.objectContaining({ method: 'PATCH' }),
-      ),
-    )
-  })
-
   it('Cancel and Escape back out of a forget without deleting or closing', async () => {
-    serve(true, [{ id: 'f1', content: 'A fact' }])
+    serve(true, [RENT])
     const onClose = vi.fn()
     render(<MemorySheet onClose={onClose} />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Forget: A fact' }))
+    await openRent()
+    fireEvent.click(screen.getByRole('button', { name: 'Forget: Rent goes up every March' }))
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('alertdialog')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Forget: A fact' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Forget: Rent goes up every March' }))
     fireEvent.keyDown(window, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(onClose).not.toHaveBeenCalled()
     expect(authFetch).not.toHaveBeenCalledWith(expect.anything(), { method: 'DELETE' })
   })
 
-  it('shows a loading state, not "No memories stored", before the facts arrive', async () => {
+  it('shows a loading state, not "Nothing remembered", before the facts arrive', async () => {
     let release: (r: Response) => void = () => {}
     authFetch.mockImplementation((url: string) => {
-      if (url === '/api/memory/settings') return json({ enabled: true })
+      if (url === '/api/memory/settings') return json(settings(true))
       return new Promise<Response>((r) => {
         release = r
       })
     })
     render(<MemorySheet onClose={vi.fn()} />)
     expect(screen.getByLabelText('Loading memories')).toBeTruthy()
-    expect(screen.queryByText(/No memories stored/)).toBeNull()
-    expect(screen.getByText('Stored memories')).toBeTruthy()
-    release(new Response(JSON.stringify({ facts: [{ id: 'f1', content: 'A fact' }], total: 1 })))
-    expect(await screen.findByText('A fact')).toBeTruthy()
-  })
-
-  it('says how many memories match a search', async () => {
-    serve(true, [
-      { id: 'f1', content: 'Rent goes up every March' },
-      { id: 'f2', content: 'Saving for a house deposit' },
-    ])
-    render(<MemorySheet onClose={vi.fn()} />)
-    await screen.findByText('Rent goes up every March')
-    fireEvent.change(screen.getByLabelText('Search memories'), { target: { value: 'rent' } })
-    expect(screen.getByRole('status').textContent).toBe('1 of 2 memories match')
-    fireEvent.change(screen.getByLabelText('Search memories'), { target: { value: 'zzz' } })
-    expect(screen.getByText('No memories match “zzz”.')).toBeTruthy()
+    expect(screen.queryByText(/Nothing remembered/)).toBeNull()
+    release(new Response(JSON.stringify({ facts: [RENT], total: 1 })))
+    expect(await screen.findByText('Rent goes up every March')).toBeTruthy()
   })
 })

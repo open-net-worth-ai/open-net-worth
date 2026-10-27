@@ -62,32 +62,66 @@ Three places hold what Lucius knows about you, and a fact lives in only one of t
 
 ## Review what he knows
 
-Click **Memory** (the brain) next to **Documents** — at the top of the chat side panel, or on
-the **Lucius** tab on a computer. On a phone, and from anywhere, it's also in **Settings → Memory**, below the memory settings.
+Open **Settings → Memory**. The brain button next to **Documents** — at the top of the chat side
+panel, or on the **Lucius** tab on a computer — opens the same list in a window, with a search box
+that narrows it to the facts (or topics) containing your words.
 
-1. The list shows each fact, when it changed, and where it came from — **You told Lucius** or
-   **Learned in chat**. Use the search box to find one.
-2. Click **Edit** (the pencil — on a computer it shows when you point at a fact) to fix its wording. The whole fact opens in a box; change it, then
-   **Save** or press Enter (Shift+Enter starts a new line). **Cancel** or Esc leaves it as it was.
-3. Click **Forget** (the bin) next to anything wrong or out of date, then **Forget** again to
-   confirm. It can't be undone.
+1. **Sections.** Memory is laid out in the order **You**, **Money**, **Plans**, **Open items** and
+   **Other**. In each, a row per topic shows its name, its first fact and when it was last
+   updated. **Open items** are listed directly, each with the date it runs until.
+2. **A topic's page.** Click a topic (or its pencil) to open it: **← Memory** goes back, then you
+   see when it was **Last updated** and its **Details** as bullets. Point at a bullet (on a phone
+   the icons are always there) and click **Edit** (the pencil) to fix its wording — the whole fact
+   opens in a box; change it, then **Save** or press Enter (Shift+Enter starts a new line);
+   **Cancel** or Esc leaves it as it was — or **Forget** (the bin) to remove just that fact, then
+   **Forget** again to confirm.
+3. **Delete a topic.** On the topic's page click **Delete**, or click the bin on its row. Lucius
+   asks first and says how many facts go, for example *Forget Housing? Lucius will forget its 4
+   facts.* It can't be undone.
+4. **Older memories — being sorted.** Facts saved before sections existed wait here as a plain
+   list until Lucius files them under a section and topic. They are not lost; you can edit or
+   forget them as usual.
+5. **Moved out of memory.** Folded closed at the bottom. When a fact turns out to live somewhere
+   better — or has gone stale — Lucius moves it out of memory and keeps it here for 30 days. Each
+   row shows the fact, why it moved (**Moved to your profile**, **Moved to Instructions for
+   Lucius**, **Now a payee rule**, **Now an automation**, **Already in your ledger**, **Done**,
+   **Out of date** or **Not used in 90 days**) and **Forgotten in N days**. **Forget** is the only
+   action; leave a row alone and it goes by itself.
 
-If memory is switched off, the list says so at the top.
+You don't organise anything yourself: there is no renaming, moving or merging. Lucius files, merges
+and retires facts; you edit, forget, or tell him what to change.
+
+If memory is switched off, the page says so at the top.
 
 Editing or forgetting a fact takes effect from Lucius's next reply. It doesn't change your ledger or
 profile.
 
+## The memory settings
+
+At the top of **Settings → Memory**:
+
+- **Search and reference chats** — lets Lucius search your past conversations for relevant details.
+- **Generate memory from chats** — the main switch (see below).
+- **Include sensitive topics in memory** — lets him keep health, religion, politics and similar
+  facts. Off by default; when off, he tells you a sensitive fact wasn't saved.
+- **Import memory from other AI assistants** and **Export memory** — coming soon.
+
+Each switch saves as soon as you flip it, and a short note confirms it.
+
 ## Change or add facts
 
 At the bottom of the memory list, type what to change in **Tell Lucius what to remember or
-change** and press Enter, or click the arrow:
+change** and press Enter, or click the arrow. On a topic's page the same box is scoped to that
+topic (**Tell Lucius what to change about Housing**), so a short *"it's now due on the 3rd"* needs
+no context:
 
 - *"My dog's name is Beans"* — adds a fact.
 - *"Rent goes up in April now, not March"* — rewrites the fact it corrects.
 - *"I paid off the car loan"* — forgets what's no longer true.
 
 One sentence can do all three. The list refreshes and a note says what changed — for example
-**Added 1 · Updated 1**. Anything changed this way — or with **Edit** — shows as **You told
+**Added 1 · Updated 1** — and what he refused to remember, with the reason (a full card number, a
+balance that is read live, a sensitive topic while that switch is off). Anything changed this way — or with **Edit** — shows as **You told
 Lucius**.
 
 It's one small AI call on the **Memory** task model, billed like the rest of memory, and it
@@ -103,7 +137,7 @@ remove them, see below.
 
 ## Clear everything
 
-In the memory list, click **Forget everything**, then **Forget all** to confirm. This
+In the memory window (the brain button), click **Forget everything**, then **Forget all** to confirm. This
 works whether memory is on or off.
 
 ## How it works
@@ -125,7 +159,7 @@ configured, as part of a normal request — the same as anything you type in cha
 
 ## Troubleshooting
 
-**Lucius doesn't remember something I told him.** Check **Memory extraction & injection** is on,
+**Lucius doesn't remember something I told him.** Check **Generate memory from chats** is on,
 and look for the fact in the memory list. If it isn't there, type it into the box at the bottom
 of the list, or tell him in chat: *"remember that …"*.
 
