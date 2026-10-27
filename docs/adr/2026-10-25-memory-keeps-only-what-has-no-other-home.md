@@ -36,7 +36,8 @@ copy of facts the profile, payee rules, automations and the ledger own.
 
 ## Decision
 
-> **Amended 2026-10-27, twice** — (1) the profile's notes become Instructions for Lucius, and
+> **Amended 2026-10-27, three times** — (3) for now, five fixed sections (You, Money, Plans,
+> Open items, Other) with flexible topics; Lucius owns the structure, the user owns the content; (1) the profile's notes become Instructions for Lucius, and
 > one routing guide decides profile vs instructions vs memory; (2) **sections and topics are
 > dynamic** — seeded with defaults for a wealth assistant (You, Money, Plans, Open items), with
 > behaviour carried by a section's switches ("always shown", "items expire") — replacing the
@@ -303,3 +304,49 @@ route, never instructions to Lucius, and the review step is the only path to a w
 
 **Each topic has a detail view** — last updated, summary, its facts as bullets, Delete, and a
 "Tell Lucius what to change" box scoped to that topic (the instruct route with a `topic`).
+
+## Amendment 2026-10-27 (3) — fixed sections for now, flexible topics; Lucius owns the structure
+
+Narrows amendment 2. The owner's call: the system decides how memory is organised, the user never
+has to; and for now the **sections are fixed** while **topics stay flexible**, with a catch-all.
+
+**The schema stays generic; the sections are locked for now.** Sections remain rows of
+`memory_sections` (amendment 2's shape: id, `seed_key`, name, position, the two switches) plus a
+`locked` flag. The five below are seeded locked, and while a section is locked nobody — user,
+Lucius or any pass — adds, renames, reorders, re-switches or deletes it. Customisation later is
+unlocking rows and exposing the section ops that already exist in the write choke, not a
+migration:
+
+| Section | Switches | Topics |
+|---|---|---|
+| **You** | always shown | flexible; suggested: *How you want Lucius to work*, *About you (beyond your profile)* |
+| **Money** | — | flexible; suggested: *Housing*, *Family*, *Investing*, *Tax*, *Cards & payments*, *Income & work*, *Bookkeeping* |
+| **Plans** | — | flexible; one per plan or big decision |
+| **Open items** | always shown, items expire | none — one flat list |
+| **Other** | — | flexible, at most 4 topics — the catch-all |
+
+Behaviour still follows the two switches, never a name, and facts and topics point at a section
+`id`, so nothing in the code assumes these five are the only sections. **Other** takes what fits no other section instead of it being
+dropped; the tidy pass keeps trying to move its topics to a better section, so it stays a small
+holding area rather than a second, unsorted memory.
+
+**Who may do what:**
+
+| Who | Facts | Topics |
+|---|---|---|
+| **User** (dialog) | edit text, forget, add via "Tell Lucius" | delete one (with its facts) |
+| **Lucius** (a conversation, or the dialog's "Tell Lucius" box) | anything | create, rename, move between sections, merge, delete |
+| **Tidy pass** (background, periodic) | merge/replace inside a full topic | create, rename, move, merge, refresh summaries |
+| **Background pass** (after a turn), **sort pass** | add, update, remove, retire | create (reuse-first) |
+
+- The dialog has **no organising controls** — no rename, move or merge. A user who wants memory
+  organised differently tells Lucius ("keep rent and the landlord under Housing") in the box or
+  in chat. **Delete a topic** stays, as in Claude's memory.
+- In a conversation, Lucius's memory writes follow the approval mode; from the "Tell Lucius" box
+  the user's own request is the approval.
+- **Unchanged from amendment 2:** the switches' meaning, the suggested topic names, reuse-first
+  naming, the bounds (≤ 30 topics, ≤ 12 facts per topic, ≤ 30 always-shown facts, ≤ 10 expiring),
+  the routing guide (its memory rows name these five sections by `seed_key`; anything memory keeps
+  that fits nowhere else → **Other**), import, the topic detail view, the `memory_sections` and
+  `memory_topics` tables. Amendment 2's section ops stay in the write choke but are refused for
+  locked sections, and no route or tool exposes them yet.
