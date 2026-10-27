@@ -129,8 +129,8 @@ At the top of **Settings → Memory**:
 - **Include sensitive topics in memory** — lets him keep health, religion, politics and similar
   facts. Off by default. When it's off, Lucius doesn't save new details about these topics;
   anything already saved stays and is used like any other memory.
-- **Import memory from other AI assistants** — **Start import** brings over what ChatGPT, Claude
-  or Gemini know about you (see below).
+- **Import memory from other AI providers** — **Start import** brings relevant context and data
+  from another AI provider to Lucius (see below).
 - **Export memory** — downloads your memory as files you can keep (see below).
 
 Each switch saves as soon as you flip it, and a short note confirms it.
@@ -155,7 +155,7 @@ needs memory switched on. **Edit** and **Forget** make no AI call and work eithe
 
 ## Bring memory from another assistant
 
-If you've used ChatGPT, Claude or Gemini for a while, they may already know things about you.
+If you've used another AI assistant for a while, it may already know things about you.
 **Settings → Memory → Start import** carries that over in three steps:
 
 1. **Copy the prompt** and run it in the other assistant. It asks for everything it knows about

@@ -39,7 +39,7 @@ describe('MemorySection', () => {
       'Search and reference chats',
       'Generate memory from chats',
       'Include sensitive topics in memory',
-      'Import memory from other AI assistants',
+      'Import memory from other AI providers',
       'Export memory',
     ]
     const nodes = titles.map((t) => screen.getByText(t, { selector: 'div' }))

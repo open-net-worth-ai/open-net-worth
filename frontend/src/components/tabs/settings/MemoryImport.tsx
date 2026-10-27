@@ -201,8 +201,8 @@ export function MemoryImport({ onClose, toast }: { onClose: () => void; toast: T
         {step === 'prompt' && (
           <>
             <p className="rd-mi-lead">
-              Run this in ChatGPT, Claude or Gemini. It asks the assistant to list what it knows
-              about you.
+              Run this in your other AI account. It asks that assistant to list what it knows about
+              you.
             </p>
             <pre className="rd-mi-prompt">{prompt ?? 'Loading…'}</pre>
             <Btn size="xs" onClick={() => void copyPrompt()} disabled={!prompt}>

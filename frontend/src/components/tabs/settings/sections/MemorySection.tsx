@@ -93,8 +93,8 @@ export function MemorySection({ toast }: SectionProps) {
               ),
             )}
             {row(
-              'Import memory from other AI assistants',
-              'Bring what ChatGPT, Claude or Gemini know about you. We’ll give you a prompt to run there, then you review everything before it’s saved.',
+              'Import memory from other AI providers',
+              'Bring relevant context and data from another AI provider to Lucius. We’ll provide a prompt you can use to fetch the memory from your other account.',
               <Btn size="xs" onClick={() => setImporting(true)}>
                 Start import
               </Btn>,
