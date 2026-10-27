@@ -28,6 +28,7 @@ import {
   Info,
   LockKeyhole,
   MessageSquare,
+  Brain,
   Monitor,
   Palette,
   Plug,
@@ -54,9 +55,11 @@ const loadAiUsageSection = () => import('./settings/sections/AiUsageSection')
 const AiUsageSection = lazyChunk(() =>
   loadAiUsageSection().then((m) => ({ default: m.AiUsageSection })),
 )
-const loadChatMemorySection = () => import('./settings/sections/ChatMemorySection')
-const ChatMemorySection = lazyChunk(() =>
-  loadChatMemorySection().then((m) => ({ default: m.ChatMemorySection })),
+const loadChatSection = () => import('./settings/sections/ChatSection')
+const ChatSection = lazyChunk(() => loadChatSection().then((m) => ({ default: m.ChatSection })))
+const loadMemorySection = () => import('./settings/sections/MemorySection')
+const MemorySection = lazyChunk(() =>
+  loadMemorySection().then((m) => ({ default: m.MemorySection })),
 )
 const loadPermissionsSection = () => import('./settings/sections/PermissionsSection')
 const PermissionsSection = lazyChunk(() =>
@@ -105,7 +108,8 @@ import './settings/settings.css'
 export const SECTIONS = [
   { key: 'profile', label: 'Profile' },
   { key: 'model', label: 'AI' },
-  { key: 'chatMemory', label: 'Chat & Memory' },
+  { key: 'chat', label: 'Chat' },
+  { key: 'memory', label: 'Memory' },
   { key: 'permissions', label: 'Permissions' },
   { key: 'dedup', label: 'Duplicate Detection' },
   { key: 'intel', label: 'Intelligence' },
@@ -130,7 +134,7 @@ export type Section = (typeof SECTIONS)[number]['key']
 // expects settings to be. Desktop keeps the rail — it has the width for it.
 const SECTION_GROUPS: { title: string; keys: Section[] }[] = [
   { title: 'Account', keys: ['profile', 'security'] },
-  { title: 'Assistant', keys: ['model', 'chatMemory', 'permissions'] },
+  { title: 'Assistant', keys: ['model', 'chat', 'memory', 'permissions'] },
   { title: 'App', keys: ['appearance', 'desktop', 'currency', 'dedup', 'intel'] },
   { title: 'Phone & other apps', keys: ['shortcuts', 'mcp'] },
   { title: 'Advanced', keys: ['data', 'terminal', 'developer', 'aiUsage'] },
@@ -141,7 +145,8 @@ const SECTION_GROUPS: { title: string; keys: Section[] }[] = [
 const SECTION_LOADERS: Partial<Record<Section, () => Promise<unknown>>> = {
   model: loadModelSection,
   aiUsage: loadAiUsageSection,
-  chatMemory: loadChatMemorySection,
+  chat: loadChatSection,
+  memory: loadMemorySection,
   permissions: loadPermissionsSection,
   dedup: loadDedupSection,
   intel: loadIntelSection,
@@ -182,7 +187,8 @@ const SECTION_KEYS: readonly string[] = SECTIONS.map((s) => s.key)
 const SECTION_ICONS: Record<Exclude<Section, 'model'>, ComponentType<IconProps>> = {
   profile: User,
   aiUsage: ChartBar,
-  chatMemory: MessageSquare,
+  chat: MessageSquare,
+  memory: Brain,
   permissions: ShieldCheck,
   dedup: Copy,
   intel: Radar,
@@ -204,8 +210,9 @@ const SECTION_TERMS: Record<Section, string> = {
     'name age income expenses fire retirement notes lucius country nationality residence employment tax',
   model: 'ai anthropic openai claude provider api key routing auto local ollama custom endpoint',
   aiUsage: 'ai usage cost spend tokens telemetry performance latency speed retry models providers',
-  chatMemory:
-    'chat memory suggestions follow-up cost thinking multi-turn facts forget remember conversation extraction',
+  chat: 'chat suggestions follow-up cost thinking reasoning multi-turn conversation',
+  memory:
+    'memory remember forget facts recall sensitive import export past chats search lucius knows',
   permissions: 'tool grants revoke confirm approval write send email unattended tasks',
   dedup: 'duplicate merge import matching',
   intel:
@@ -228,7 +235,8 @@ const SECTION_TERMS: Record<Section, string> = {
 const BODY: Record<Exclude<Section, 'profile'>, ComponentType<SectionProps>> = {
   model: ModelSection,
   aiUsage: AiUsageSection,
-  chatMemory: ChatMemorySection,
+  chat: ChatSection,
+  memory: MemorySection,
   permissions: PermissionsSection,
   dedup: DedupSection,
   intel: IntelSection,

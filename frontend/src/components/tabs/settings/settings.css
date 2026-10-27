@@ -1337,7 +1337,7 @@
   justify-content: center;
   text-align: center;
   padding: 24px 12px;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--faint);
 }
 .onw-settings .rd-fact.rd-fact-skel {
@@ -1345,6 +1345,179 @@
   align-items: stretch;
   gap: 8px;
   padding: 14px 13px;
+}
+/* Settings → Memory's inline browser (MemoryBrowser), laid out like Claude's memory. Type sizes are
+   the app's tokens; colours are the theme's ink/muted/faint. */
+.onw-settings .rd-mem-browser,
+.onw-settings .rd-mem-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.onw-settings .rd-mem-sec {
+  display: flex;
+  flex-direction: column;
+}
+.onw-settings .rd-mem-sec-h {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--ink);
+  padding: 0 12px 10px;
+}
+.onw-settings .rd-mem-sec > .ui-list {
+  margin-left: 12px;
+}
+/* a topic row: hairline between rows, a rounded wash and Edit/Delete on hover */
+.onw-settings .rd-mem-topic {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+}
+.onw-settings .rd-mem-sec-h + .rd-mem-topic {
+  border-top: 1px solid var(--line);
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-topic:hover {
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+    border-radius: var(--radius-lg);
+  }
+}
+.onw-settings .rd-mem-topic-open {
+  display: grid;
+  /* a fixed date column, so names, descriptions and dates line up row to row */
+  grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.6fr) 8.5em;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+  padding: 14px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.onw-settings .rd-mem-topic-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* one size for name, description and date — the app's body size — only the colour steps down */
+.onw-settings .rd-mem-topic-name {
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+.onw-settings .rd-mem-topic-preview {
+  font-size: var(--text-base);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.onw-settings .rd-mem-topic-date {
+  font-size: var(--text-base);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.onw-settings .rd-mem-topic-acts {
+  display: flex;
+  gap: 4px;
+  padding-right: 8px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.onw-settings .rd-mem-topic:focus-within .rd-mem-topic-acts {
+  opacity: 1;
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-topic:hover .rd-mem-topic-acts {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .onw-settings .rd-mem-topic-acts {
+    opacity: 1;
+  }
+}
+.onw-settings .rd-mem-topic-acts .rd-fact-ibtn {
+  width: 32px;
+  height: 32px;
+}
+/* a topic's own page */
+.onw-settings .rd-mem-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-back:hover {
+    color: var(--ink);
+  }
+}
+.onw-settings .rd-mem-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.onw-settings .rd-mem-detail-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--ink);
+}
+.onw-settings .rd-mem-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+.onw-settings .rd-mem-field-label {
+  font-size: var(--text-sm);
+  color: var(--faint);
+}
+/* a bullet's Edit/Forget surface on hover (always on touch) */
+.onw-settings .rd-mem-bullet-t {
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-bullet-acts {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 6px;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.onw-settings .rd-mem-bullet:focus-within .rd-mem-bullet-acts {
+  opacity: 1;
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-bullet:hover .rd-mem-bullet-acts {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .onw-settings .rd-mem-bullet-acts {
+    opacity: 1;
+  }
+}
+.onw-settings .rd-mem-bullet-acts .rd-fact-ibtn {
+  width: 24px;
+  height: 24px;
+}
+.onw-settings .rd-mem-bullet-edit {
+  list-style: none;
+  margin-left: calc(-1 * var(--space-8));
 }
 /* "Forget this memory?" — a small confirm above the memory dialog */
 .onw-settings .rd-confirm-scrim {
@@ -1490,7 +1663,7 @@
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--text-base);
   padding: 7px 0;
 }
 .onw-settings .rd-mem-ask-input::placeholder {
@@ -2706,6 +2879,15 @@
   .onw-settings .rd-modal.rd-mem-modal {
     height: 85vh;
     height: 85dvh;
+  }
+  /* a topic row stacks: name and date on top, the preview under them */
+  .onw-settings .rd-mem-topic-open {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 4px;
+  }
+  .onw-settings .rd-mem-topic-preview {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
   /* the forget confirm docks to the bottom edge like the dialog it sits over */
   .onw-settings .rd-confirm-scrim {

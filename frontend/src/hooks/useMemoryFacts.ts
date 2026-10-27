@@ -6,6 +6,11 @@ export interface MemoryFact {
   content: string
   source?: string
   tier?: string
+  /** Section key (you, money, plans, open_items, other) and topic name — the memory redesign,
+   *  ADR 2026-10-25-memory-keeps-only-what-has-no-other-home amendment 4. Absent on legacy facts. */
+  section?: string
+  topic?: string
+  expires_at?: string | null
   updated_at?: string
   created_at?: string
 }

@@ -34,8 +34,7 @@ it follows the conversation's [approval mode](permissions.md) like any other.
 ## Review what he knows
 
 Click **Memory** (the brain) next to **Documents** — at the top of the chat side panel, or on
-the **Lucius** tab on a computer. On a phone, and from anywhere, it's also in **Settings → Chat &
-Memory → Stored memories → Review…**.
+the **Lucius** tab on a computer. On a phone, and from anywhere, it's also in **Settings → Memory**, below the memory settings.
 
 1. The list shows each fact, when it changed, and where it came from — **You told Lucius** or
    **Learned in chat**. Use the search box to find one.
@@ -67,7 +66,7 @@ needs memory switched on. **Edit** and **Forget** make no AI call and work eithe
 
 ## Switch it off
 
-In **Settings → Chat & Memory**, turn off **Memory extraction & injection**. Lucius then stops
+In **Settings → Memory**, turn off **Generate memory from chats**. Lucius then stops
 learning new facts and stops using stored ones in his replies.
 
 Switching it off does **not** delete anything — the facts stay until you forget them. To

@@ -114,7 +114,7 @@ something, the retry adds your message again so Lucius still knows what was done
 
 ## Chat settings
 
-**Settings → Chat & Memory** has a few switches for how chat behaves:
+**Settings → Chat** has a few switches for how chat behaves:
 
 - **Follow-up suggestions** — suggested next questions under a reply. Off also saves the model
   call that writes them.

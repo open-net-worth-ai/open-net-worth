@@ -1,193 +1,18 @@
-// The stored-memories dialog — the ONE implementation. Settings → Chat & Memory → Review opens it
-// inside the Settings shell; the chat header's Memory button opens it through
-// components/chat/MemorySheet, which supplies the `.onw-settings` scope these classes need.
-import { useLayoutEffect, useRef, useState } from 'react'
-import { ArrowUp, Pencil, Trash2 } from '../../../ui/icons'
+// The stored-memories dialog, opened from the chat header's Memory button through
+// components/chat/MemorySheet (which supplies the `.onw-settings` scope these classes need).
+// Settings → Memory shows the same memory inline (MemoryBrowser); both use MemoryParts.
+import { useState } from 'react'
+import { ArrowUp } from '../../../ui/icons'
+import { ForgetConfirm, MemoryFactRow } from './MemoryParts'
+import type { PendingForget } from './MemoryParts'
 import {
   MEMORY_SETTINGS_KEY,
   getMemorySettings,
-  memorySourceLabel,
   useMemoryFacts,
 } from '../../../hooks/useMemoryFacts'
 import { useCachedFetchState } from '../../../state/queryCache'
-import { fDate } from '../../../utils/format'
 import { Btn, Modal } from './ds'
 import type { Toast } from './ds'
-import type { MemoryFact } from '../../../hooks/useMemoryFacts'
-
-/** A fact being edited: a box that grows to show the whole fact (facts run to several lines),
- *  Save and Cancel under it. Enter saves, Shift+Enter breaks a line; Esc is the dialog's. */
-function MemoryFactEditor({
-  fact,
-  onCancel,
-  onSave,
-}: {
-  fact: MemoryFact
-  onCancel: () => void
-  onSave: (content: string) => Promise<boolean>
-}) {
-  const [draft, setDraft] = useState(fact.content)
-  const [saving, setSaving] = useState(false)
-  const box = useRef<HTMLTextAreaElement>(null)
-
-  useLayoutEffect(() => {
-    const el = box.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${el.scrollHeight + 2}px`
-  }, [draft])
-
-  useLayoutEffect(() => {
-    const el = box.current
-    if (!el) return
-    el.focus()
-    el.setSelectionRange(el.value.length, el.value.length)
-  }, [])
-
-  async function save() {
-    const text = draft.trim()
-    if (!text || saving) return
-    if (text === fact.content.trim()) return onCancel()
-    setSaving(true)
-    if (await onSave(text)) onCancel()
-    setSaving(false)
-  }
-
-  return (
-    <form
-      className="rd-fact rd-fact-edit"
-      onSubmit={(e) => {
-        e.preventDefault()
-        void save()
-      }}
-    >
-      <textarea
-        ref={box}
-        className="rd-textarea rd-fact-edit-text"
-        rows={1}
-        value={draft}
-        maxLength={1000}
-        disabled={saving}
-        aria-label={'Edit: ' + fact.content}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault()
-            void save()
-          }
-        }}
-      />
-      <div className="rd-fact-edit-acts">
-        <Btn size="xs" variant="ghost" onClick={onCancel} disabled={saving}>
-          Cancel
-        </Btn>
-        <Btn size="xs" type="submit" variant="primary" disabled={saving || !draft.trim()}>
-          {saving ? 'Saving…' : 'Save'}
-        </Btn>
-      </div>
-    </form>
-  )
-}
-
-function MemoryFactRow({
-  fact,
-  editing,
-  onEdit,
-  onCancel,
-  onSave,
-  onForget,
-}: {
-  fact: MemoryFact
-  editing: boolean
-  onEdit: () => void
-  onCancel: () => void
-  onSave: (content: string) => Promise<boolean>
-  onForget: () => void
-}) {
-  if (editing) return <MemoryFactEditor fact={fact} onCancel={onCancel} onSave={onSave} />
-
-  return (
-    <div className="rd-fact">
-      <div>
-        <div className="rd-fact-t">{fact.content}</div>
-        <div className="rd-fact-meta">
-          <span>{memorySourceLabel(fact.source)}</span>
-          <span>{fact.updated_at ? fDate(fact.updated_at) : ''}</span>
-        </div>
-      </div>
-      <div className="rd-fact-acts">
-        <button
-          type="button"
-          className="rd-fact-ibtn"
-          title="Edit"
-          aria-label={'Edit: ' + fact.content}
-          onClick={onEdit}
-        >
-          <Pencil size={15} strokeWidth={1.8} aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          className="rd-fact-ibtn rd-fact-ibtn--forget"
-          title="Forget"
-          aria-label={'Forget: ' + fact.content}
-          onClick={onForget}
-        >
-          <Trash2 size={15} strokeWidth={1.8} aria-hidden="true" />
-        </button>
-      </div>
-    </div>
-  )
-}
-
-type PendingForget = { kind: 'one'; fact: MemoryFact } | { kind: 'all'; count: number }
-
-/** "Forget this memory?" — Forget is a REST delete outside an AI turn, so no checkpoint backs it
- *  and the only recovery is a backup: it asks first, like Claude's memory. Esc and the scrim
- *  cancel (Esc via the dialog's own onClose, which owns the key). */
-function ForgetConfirm({
-  pending,
-  onCancel,
-  onConfirm,
-}: {
-  pending: PendingForget
-  onCancel: () => void
-  onConfirm: () => void
-}) {
-  const one = pending.kind === 'one'
-  return (
-    <div
-      className="rd-confirm-scrim"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onCancel()
-      }}
-    >
-      <div
-        className="rd-confirm"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="rd-forget-title"
-        aria-describedby="rd-forget-body"
-      >
-        <div className="rd-confirm-title" id="rd-forget-title">
-          {one ? 'Forget this memory?' : `Forget all ${pending.count} memories?`}
-        </div>
-        <p className="rd-confirm-body" id="rd-forget-body">
-          {one
-            ? 'Lucius will no longer remember this. This can’t be undone.'
-            : 'Lucius will start again with an empty memory. This can’t be undone.'}
-        </p>
-        <div className="rd-confirm-acts">
-          <Btn autoFocus onClick={onCancel}>
-            Cancel
-          </Btn>
-          <Btn variant="danger" onClick={onConfirm}>
-            {one ? 'Forget' : 'Forget all'}
-          </Btn>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: Toast }) {
   const { facts, loading, forget, forgetAll, instruct, edit } = useMemoryFacts(toast)
@@ -284,7 +109,7 @@ export function MemoryDialog({ onClose, toast }: { onClose: () => void; toast: T
         <span className="rd-help">
           {off
             ? 'Memory is off — Lucius is not learning new facts or using these. Turn it on in ' +
-              'Settings → Chat & Memory.'
+              'Settings → Memory.'
             : 'Durable facts Lucius carries between conversations. Editing or forgetting one takes ' +
               'effect on the next turn.'}
         </span>

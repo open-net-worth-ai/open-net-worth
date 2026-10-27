@@ -159,7 +159,7 @@ To see and control it:
   projected monthly cost.
 - **Settings → AI → Task models** runs background chores (like automations) on a cheaper model;
   chat keeps your default.
-- **Settings → Chat & Memory** has switches for extras that use tokens, such as follow-up
+- **Settings → Chat** has switches for extras that use tokens, such as follow-up
   suggestions and memory, and **Show cost per turn** to see each reply's cost in the chat.
 
 More in [Models and cost](../lucius/models-and-cost.md).
