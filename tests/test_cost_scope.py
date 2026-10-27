@@ -24,6 +24,7 @@ from backend.db.category_store import CategoryStore
 from backend.models.category_defs import BUILTIN_CATEGORIES
 from backend.services import ledger as ledger_service
 from backend.services.statements import decisions as svc
+from tests.conftest import drop_stored_review
 
 
 @pytest.fixture(autouse=True)
@@ -113,10 +114,17 @@ def test_preview_stamps_parse_cost_and_reuse_stays_free(monkeypatch):
     assert res["llm_cost_usd"] == pytest.approx(0.01 * record["llm_calls"])
     assert record["llm_cost_usd"] == res["llm_cost_usd"]
 
-    # Same file again (account switch / re-open): the PARSE itself is zero new calls always.
-    # The row never resolves a category hint in this stub, so the bounded hint-retry budget
-    # (2026-07-27 — was once-ever, now `_MAX_HINT_ATTEMPTS`) adds a small cost on the next
-    # couple of re-opens too, before it goes quiet — that is the intended fix, not a leak.
+    # Re-open: the stored review comes back as it was left — no parse, no hint retry, no new
+    # cost (ADR 2026-10-25-ready-means-the-review-is-persisted).
+    reopened = svc.decision_preview(pdf, "pdf", "acc", filename="june.pdf")
+    assert reopened["llm_cost_usd"] == res["llm_cost_usd"]
+    assert stmt_mod.StatementStore().find_by_id(res["statement_id"])["hints_attempts"] == 1
+
+    # A recompute: the PARSE itself is zero new calls always. The row never resolves a
+    # category hint in this stub, so the bounded hint-retry budget (2026-07-27 — was
+    # once-ever, now `_MAX_HINT_ATTEMPTS`) adds a small cost on the next couple of recomputes
+    # too, before it goes quiet — that is the intended fix, not a leak.
+    drop_stored_review(res["statement_id"])
     res2 = svc.decision_preview(pdf, "pdf", "acc", filename="june.pdf")
     assert res2["llm_calls"] == 0  # zero NEW row/metadata parse calls — cached
     assert res2["llm_cost_usd"] > res["llm_cost_usd"]  # a hint retry still fired
@@ -125,8 +133,10 @@ def test_preview_stamps_parse_cost_and_reuse_stays_free(monkeypatch):
     assert record2["hints_attempts"] == 2
 
     # Spend the remaining hint budget (attempt 3), then confirm it truly goes quiet.
+    drop_stored_review(res["statement_id"])
     res3 = svc.decision_preview(pdf, "pdf", "acc", filename="june.pdf")
     assert res3["llm_cost_usd"] > res2["llm_cost_usd"]
+    drop_stored_review(res["statement_id"])
     res4 = svc.decision_preview(pdf, "pdf", "acc", filename="june.pdf")
     assert res4["llm_cost_usd"] == res3["llm_cost_usd"]  # budget spent — truly free now
     record4 = stmt_mod.StatementStore().find_by_id(res4["statement_id"])
