@@ -36,7 +36,9 @@ copy of facts the profile, payee rules, automations and the ledger own.
 
 ## Decision
 
-> **Amended 2026-10-27, three times** — (3) for now, five fixed sections (You, Money, Plans,
+> **Amended 2026-10-27, four times** — (4) **simpler, and it wins over 2 and 3**: five fixed
+> sections in code, a free-text topic name per fact, everything shown in full with dates, one
+> 280-character limit, settings like Claude's; (3) for now, five fixed sections (You, Money, Plans,
 > Open items, Other) with flexible topics; Lucius owns the structure, the user owns the content; (1) the profile's notes become Instructions for Lucius, and
 > one routing guide decides profile vs instructions vs memory; (2) **sections and topics are
 > dynamic** — seeded with defaults for a wealth assistant (You, Money, Plans, Open items), with
@@ -350,3 +352,80 @@ holding area rather than a second, unsorted memory.
   that fits nowhere else → **Other**), import, the topic detail view, the `memory_sections` and
   `memory_topics` tables. Amendment 2's section ops stay in the write choke but are refused for
   locked sections, and no route or tool exposes them yet.
+
+## Amendment 2026-10-27 (4) — simpler: fixed sections, a topic name per fact; settings like Claude's
+
+The owner's call: amendments 2 and 3 over-built the structure. **Where this amendment differs from
+amendments 2 and 3, it wins.** It drops the `memory_sections` and `memory_topics` tables, the
+section switches, locked rows, caps, the prompt size budget, topic summaries and the per-actor
+permission table.
+
+### Structure
+
+- **Five sections, a fixed list in code:** You, Money, Plans, Open items, Other. Each fact stores
+  its section as a plain string key (`you`, `money`, `plans`, `open_items`, `other`) — a column a
+  later customisation can widen — and a **free-text topic name**. Facts with the same name in the
+  same section group together; there is nothing else to keep in sync.
+- **You** has two suggested topics: **About you** — only what has no profile field (an employer,
+  languages, who shares the household) — and **Preferences** — observations Lucius makes, written in
+  the third person ("Prefers short answers on reconciliation"). The memory UI is **not** merged with
+  Settings → Profile, and no memory topic is named "Profile".
+- **Storage is one row per fact; the model and the user see it differently.** Lucius gets every
+  live fact in full, grouped section → topic, each with its month (`(Oct 2026)`). The user sees
+  sections with topic rows (name, fact count, last updated); a topic opens to its facts, a Delete,
+  and a "Tell Lucius what to change" box scoped to it. Open items are listed directly.
+- **Lucius owns organising** (topic names, moving facts); the user edits or forgets a fact, deletes
+  a topic, or asks Lucius to reorganise.
+
+### What Lucius sees, and when to trust it
+
+- **Everything, in full.** `recall_memory` stays as a keyword backup and gains lookup by topic.
+  The scale-up path, when memory outgrows a prompt, is the Claude Code / Codex shape: always show
+  You and Open items, list the other topics as an index, and let Lucius recall a topic on demand.
+- **Memory is context, never truth.** Before acting on a memory that names something changeable (an
+  account, a payee, a plan, an amount), Lucius checks the owning record. When they disagree the
+  record wins, and Lucius corrects the memory in the same turn.
+
+### Limits and decay
+
+- **One limit: 280 characters per fact.**
+- **Open items** expire after 14 days by default.
+- **Plans fade:** a plan not mentioned for 90 days expires; mentioning it again resets the clock.
+- **Usage tracking:** Lucius cites the facts he used in a reply (as Codex does). A fact unused for
+  ~90 days is retired by the tidy pass and stays visible under "Moved out of memory" for 30 days.
+
+### Instructions or memory
+
+- An explicit, lasting "do this / don't do that" → **Instructions for Lucius** (profile notes):
+  written by the user, or by Lucius when asked or when the user states a standing rule, under the
+  approval mode; never by the background pass.
+- A preference Lucius infers, or is told in passing → **You · Preferences**.
+
+### Who writes, and when
+
+- The noise was the **extraction rules** — no "other home" rule, a time-bound category that invited
+  dated follow-ups, runs on fragments, facts that grew with each rewrite — not automations.
+  **Automations and external MCP clients may write memory.**
+- The background pass runs when a conversation **goes idle**: no new message for 30 minutes. The
+  server checks every few minutes and on startup, using each conversation's last-message time and
+  its existing extraction cursor, and reads only what is past the cursor. An automation run is
+  processed as soon as it finishes.
+
+### Settings (Settings → Chat & Memory → Memory), like Claude's
+
+| Row | Behaviour |
+|---|---|
+| **Search and reference chats** | Lucius may search the user's past conversations for relevant details — a new capability |
+| **Generate memory from chats** | today's master memory switch, renamed |
+| **Include sensitive topics in memory** | off by default; covers health, religion, political views, sexuality, ethnicity, criminal or legal matters. Full card, account, ID or passport numbers and passwords are never stored whatever the setting; last-4 digits are fine |
+| **Stored memories** — Review… | opens the memory dialog |
+| **Import memory from other AI providers** — Start import | the reviewed import flow of amendment 2 |
+| **Export memory** — Export | a `.zip` of Markdown files, one per topic |
+
+### Kept, and not now
+
+- **Kept:** one home per fact and the routing guide; Instructions for Lucius; the single write
+  choke; the one-time sort of legacy facts with a reviewed dry run; "Moved out of memory"; import
+  with review; the topic detail view.
+- **Not now:** the in-chat "memory updated" line; a per-conversation "don't remember this chat";
+  special handling for other installs' migration.
