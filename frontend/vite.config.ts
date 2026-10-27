@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
-import { defineConfig, type Plugin } from 'vite'
+import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import { inlineAppleTouchIcon } from './inlineAppleTouchIcon'
 
 // Dev-server proxy target. Defaults to the local backend on :8080.
 // WARNING: :5174 (npm run dev) proxies /api here — that is the owner's LIVE
@@ -31,26 +32,6 @@ function extraAllowedHosts(): string[] {
     }
   }
   return raw.split(',').map((h) => h.trim()).filter(Boolean)
-}
-
-// iOS 27 Safari stopped using a URL-referenced apple-touch-icon (and the manifest icons) for
-// "Add to Home Screen" — the shortcut became a letter tile ("N"), while the same PNG embedded
-// as a data: URI still works. Inline it at build time from the one file in public/, so the PNG
-// stays the single source of truth (generate-brand-assets.mjs writes it). The placeholder must
-// be present: a silent miss would ship the letter tile again.
-const APPLE_TOUCH_ICON_PLACEHOLDER = '%APPLE_TOUCH_ICON%'
-
-export function inlineAppleTouchIcon(): Plugin {
-  return {
-    name: 'onw-inline-apple-touch-icon',
-    transformIndexHtml(html) {
-      if (!html.includes(APPLE_TOUCH_ICON_PLACEHOLDER)) {
-        throw new Error(`index.html is missing the ${APPLE_TOUCH_ICON_PLACEHOLDER} placeholder`)
-      }
-      const png = readFileSync(new URL('public/icons/apple-touch-icon.png', import.meta.url))
-      return html.replace(APPLE_TOUCH_ICON_PLACEHOLDER, `data:image/png;base64,${png.toString('base64')}`)
-    },
-  }
 }
 
 export default defineConfig({

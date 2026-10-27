@@ -127,7 +127,6 @@ function mapScorecard(d: ForecastScorecard | null): ScoreView | null {
 export interface OutlookTabProps {
   onAskLucius: (text: string) => void
   toast: (msg: string) => void
-  onOpenSettings: () => void
   /** Real net worth (GET /api/net-worth, the authoritative computation) — seeds FIRE.netWorth. */
   total: number
   /** True while /api/net-worth's FIRST fetch is still in flight — `total` is a 0 placeholder
@@ -470,7 +469,7 @@ const INIT_STREAMS: IncomeStream[] = []
 
 // ── Main component ─────────────────────────────────────────────────────────────
 export function OutlookTab(props: OutlookTabProps) {
-  const { onAskLucius: onAsk, toast, onOpenSettings } = props
+  const { onAskLucius: onAsk, toast } = props
   // "What if?" is a full sidebar on desktop but too tall/cramped to scroll to on a phone —
   // it opens as a bottom sheet there instead (same PlanningModal primitive as every other
   // mobile sheet in this tab), never inline in the page flow.

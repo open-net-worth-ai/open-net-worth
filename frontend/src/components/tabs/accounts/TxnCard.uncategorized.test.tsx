@@ -39,7 +39,7 @@ const account: Account = {
   balanceBase: 100,
   clearedBalance: 100,
   clearedBalanceBase: 100,
-  role: 'investment',
+  role: 'cash',
   holdingsBase: 0,
 }
 

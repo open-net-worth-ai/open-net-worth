@@ -279,8 +279,8 @@ describe('fetchCachedQuery (one-shot callers)', () => {
     const after = fetchCachedQuery('accts', fetcher, { force: true })
     expect(fetcher).toHaveBeenCalledTimes(2)
 
-    pending[1]('post-write')
-    pending[0]('pre-write')
+    pending[1]!('post-write')
+    pending[0]!('pre-write')
     expect(await after).toBe('post-write')
     expect(await before).toBe('post-write')
     expect(getCachedQueryData('accts')).toBe('post-write')
@@ -293,9 +293,9 @@ describe('fetchCachedQuery (one-shot callers)', () => {
     const before = fetchCachedQuery('accts2', fetcher, { force: true })
     const after = fetchCachedQuery('accts2', fetcher, { force: true })
 
-    pending[1]('post-write')
+    pending[1]!('post-write')
     expect(await after).toBe('post-write')
-    pending[0]('pre-write')
+    pending[0]!('pre-write')
     // Its awaiter applies whatever it resolves with to its own state, AFTER `after`'s
     // awaiter did — so handing back its own stale body would win the race.
     expect(await before).toBe('post-write')
@@ -309,8 +309,8 @@ describe('fetchCachedQuery (one-shot callers)', () => {
     const before = fetchCachedQuery('accts3', fetcher, { force: true })
     const after = fetchCachedQuery('accts3', fetcher, { force: true })
 
-    pending[0]('pre-write')
-    pending[1]('post-write')
+    pending[0]!('pre-write')
+    pending[1]!('post-write')
     expect(await before).toBe('post-write')
     expect(await after).toBe('post-write')
   })
