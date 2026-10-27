@@ -15,7 +15,15 @@ import json
 import logging
 from typing import Any, AsyncGenerator, AsyncIterable, Callable, Optional, Sequence
 
-from backend.ai import assistant, pending_injection, run_context, run_plan, skill_runtime, turns
+from backend.ai import (
+    assistant,
+    memory_idle,
+    pending_injection,
+    run_context,
+    run_plan,
+    skill_runtime,
+    turns,
+)
 from backend.ai.prompts import build_system_prompt
 from backend.ai.tool_text import RoundText
 from backend.ai.tools import _skill_scope
@@ -306,6 +314,7 @@ async def automation_runner(
                 "This run exceeded the turn time limit and was stopped before it finished."
             )
         _persist_automation_history(request.session_id)
+        await memory_idle.extract_session(request.session_id)
     except asyncio.CancelledError:
         # The run row is settled by `runs._task_done` — the only place that can also release
         # the runtime claim — so this just releases the email stage and lets the
@@ -747,6 +756,7 @@ async def _stream_continuation(
                     )
                 yield event
             _persist_automation_history(session_id)
+            await memory_idle.extract_session(session_id)
         finally:
             close = getattr(stream, "aclose", None)
             if close is not None:

@@ -1413,11 +1413,10 @@ def clear_session(session_id: str) -> None:
 
 
 def release_session(session_id: str) -> None:
-    """Drop a session's in-process state (cached history, extract debounce, idle turn lock)
+    """Drop a session's in-process state (cached history, idle turn lock)
     and KEEP its stored row — for a one-shot turn whose conversation stays readable, like a
     capture. ``clear_session`` is this plus cancelling its turns and deleting the row."""
     SESSIONS.pop(session_id, None)
-    _last_memory_extract_len.pop(session_id, None)
     # Drop this session's turn lock too (finding 3) — a scheduled/dispatched run mints a
     # fresh ``scheduled-<uuid>`` session id per invocation and always calls clear_session()
     # AFTER its own run() generator is fully exhausted, so popping there is always safe.
@@ -3183,19 +3182,6 @@ def _drain_injected_messages(
         raise
 
 
-# Skip memory extraction for trivial exchanges (need at least ~2 turns of substance).
-MIN_HISTORY_FOR_MEMORY = 4
-
-# Debounce extraction: it re-reads the whole conversation each time, so firing it on
-# every turn re-processes already-distilled history. Only fire once the transcript has
-# grown by this many messages (~3 turns) since the last extraction.
-MEMORY_EXTRACT_EVERY = 8
-
-# session_id -> history length at last memory extraction (in-memory; resets on restart,
-# which at worst triggers one extra extraction — harmless).
-_last_memory_extract_len: Dict[str, int] = {}
-
-
 def _record_cost(
     session_id: str,
     model: str,
@@ -3249,21 +3235,6 @@ def _round_prompt_tokens(event: dict) -> int:
         + (event.get("cache_creation_tokens") or 0)
         + (event.get("cache_read_tokens") or 0)
     )
-
-
-async def _run_memory_extraction(history: list[dict], session_id: str = "") -> None:
-    """
-    Fire-and-forget: distil the finished conversation into long-term memory.
-    Best-effort — any failure is logged and swallowed so chat is never affected.
-    session_id activates the per-conversation extraction cursor (only turns added
-    since the last run are sent to the LLM).
-    """
-    try:
-        from backend.ai.memory import extract_and_merge
-
-        await extract_and_merge(history, session_id=session_id or None)
-    except Exception:
-        logger.exception("memory extraction failed (non-fatal)")
 
 
 # Cheap, local, no-API-call token estimate — same technique as Codex's own
@@ -5196,13 +5167,6 @@ async def _run_turn(
                                     effort,
                                     len(assistant_text.split()),
                                 )
-                        _last = _last_memory_extract_len.get(session_id, 0)
-                        if (
-                            len(history) >= MIN_HISTORY_FOR_MEMORY
-                            and len(history) - _last >= MEMORY_EXTRACT_EVERY
-                        ):
-                            _last_memory_extract_len[session_id] = len(history)
-                            asyncio.create_task(_run_memory_extraction(list(history), session_id))
                         # Fold update already happened BEFORE this turn rendered (see
                         # _stream_turn_fold_update, 2026-08-27) — no post-turn call left
                         # to make here.

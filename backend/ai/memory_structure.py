@@ -151,8 +151,8 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "something unresolved the user will expect you to come back to",
-        "Memory · Open items (no topic; expires after 14 days)",
-        "something to come back to → Open items (expires in 14 days)",
+        f"Memory · Open items (no topic; expires after {OPEN_ITEM_DEFAULT_DAYS} days)",
+        f"something to come back to → Open items (expires in {OPEN_ITEM_DEFAULT_DAYS} days)",
     ),
     (
         "a fact about their money life that nothing above holds (housing, family, investing, "

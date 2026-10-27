@@ -16,14 +16,11 @@ from backend.ai import memory_structure as ms
 from backend.ai.memory import (
     _EXTRACT_SYSTEM,
     _MEMORY_JSON,
-    EXTRACT_EXISTING_CAP,
-    FACT_LISTING_TRUNCATE,
     MemoryDisabledError,
     _memory_model,
     _parse_json,
     _provider,
     _tokenize,
-    _truncate,
     purge_expired,
 )
 from backend.ai.memory_write import apply_memory_change
@@ -38,8 +35,8 @@ INSTRUCTION_MAX_CHARS = 1000
 
 
 def _candidates(facts: list[dict], instruction: str, topic: str | None = None) -> list[dict]:
-    """Facts in the named topic first, then those sharing a word with the instruction, then the
-    newest, up to the cap — an edit must SEE the fact it rewrites, however old it is."""
+    """Every fact, the ones the edit is most likely about first: those in the named topic, then
+    those sharing a word with the instruction, then the rest."""
     key = ms.topic_key(topic)
     in_topic = [f for f in facts if key and ms.topic_key(f.get("topic")) == key]
     seen = {f["id"] for f in in_topic}
@@ -49,7 +46,7 @@ def _candidates(facts: list[dict], instruction: str, topic: str | None = None) -
     ]
     seen |= {f["id"] for f in matched}
     rest = [f for f in facts if f["id"] not in seen]
-    return (in_topic + matched + rest)[:EXTRACT_EXISTING_CAP]
+    return in_topic + matched + rest
 
 
 def _topic_section(facts: list[dict], topic: str | None) -> str | None:
@@ -138,7 +135,7 @@ async def apply_instruction(instruction: str, topic: str | None = None) -> dict:
     facts = store.remembered_facts()
     listing = (
         "\n".join(
-            f"{f['id']}: [{ms.fact_label(f)}] {_truncate(f.get('content', ''), FACT_LISTING_TRUNCATE)}"
+            f"{f['id']}: [{ms.fact_label(f)}] {f.get('content', '')}"
             for f in _candidates(facts, text, topic)
         )
         or "(none yet)"

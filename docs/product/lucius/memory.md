@@ -28,8 +28,17 @@ Just say it:
 - *"Remember I'm saving for a house deposit by 2028."*
 - *"Forget what I said about the car loan."*
 
-He also picks up facts on his own as you talk. Saving or forgetting a fact counts as a change, so
-it follows the conversation's [approval mode](permissions.md) like any other.
+He also picks up facts on his own. Memory is written when a conversation has been quiet for 30
+minutes (and when an automation run finishes) — never in the middle of a chat — and only from what
+was said since the last time. He is strict about it: he keeps only what nothing else in the app
+already holds, so your profile, your Instructions for Lucius, payee rules, automations and your
+ledger figures are never copied into memory. He doesn't keep the state of a conversation or a run,
+finished tasks, or full card, account or ID numbers or passwords, and health, religion, politics and
+similar topics only if you've allowed them in the settings. Preferences are written about you in
+the third person. A fact he never cites for 90 days fades out of memory, and so does a plan that
+hasn't come up for 90 days; a faded fact is kept aside for 30 days before it is deleted. Once a
+day he also merges facts that say the same thing. Saving or forgetting a fact counts as a change, so it follows the
+conversation's [approval mode](permissions.md) like any other.
 
 ## Review what he knows
 

@@ -92,7 +92,7 @@ def test_adds_updates_and_removes_as_the_users_own_facts(prov):
 def test_an_old_fact_the_instruction_names_is_shown_to_the_model(prov):
     store = MemoryStore()
     store.insert(_fact("m_old", "Keeps an emergency fund at the credit union"))
-    for i in range(instruct_mod.EXTRACT_EXISTING_CAP + 5):
+    for i in range(150):
         store.insert(_fact(f"m_{i}", f"Unrelated note number {i}"))
     p = prov(json.dumps({"new": [], "updates": [], "remove": []}))
 

@@ -3,7 +3,7 @@
 Coverage:
 1. MemorySettingsStore — CRUD, default-True when absent
 2. extract_and_merge — no-op when toggle OFF (assert LLM not called)
-3. consolidate — no-op when toggle OFF
+3. (the idle sweep and tidy pass are no-ops when OFF — tests/test_memory_idle.py, test_memory_tidy.py)
 4. remove_fact — no-op when toggle OFF
 5. _fmt_memory — returns "" when toggle OFF even with facts present
 6. memory_enabled_for — effective-AND truth table (global × per-agent)
@@ -117,27 +117,6 @@ def test_extract_runs_when_toggle_on(isolated, monkeypatch):
     monkeypatch.setattr(memory_mod, "_provider", lambda: _FakeProv())
     asyncio.run(memory_mod.extract_and_merge(_history()))
     assert called["n"] == 1
-
-
-# ── 3. consolidate gated by toggle ───────────────────────────────────────────
-
-
-def test_consolidate_noop_when_toggle_off(isolated, monkeypatch):
-    settings_store_mod.MemorySettingsStore().set_enabled(False)
-
-    store = memory_store_mod.MemoryStore()
-    store.replace_all([_fact(f"fact {i}", fid=f"f{i}") for i in range(5)])
-
-    called = {"n": 0}
-
-    class _FakeProv:
-        async def complete(self, *a, **kw):
-            called["n"] += 1
-            return "[]"
-
-    monkeypatch.setattr(memory_mod, "_provider", lambda: _FakeProv())
-    asyncio.run(memory_mod.consolidate())
-    assert called["n"] == 0, "provider.complete must NOT be called when toggle is OFF"
 
 
 # ── 4. remove_fact gated by toggle ───────────────────────────────────────────

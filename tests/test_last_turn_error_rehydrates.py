@@ -143,10 +143,6 @@ async def test_a_crashed_turn_keeps_the_messages_it_already_produced(monkeypatch
     monkeypatch.setattr(assistant, "_active_tools", lambda: list(assistant.TOOL_SCHEMAS))
     monkeypatch.setattr(assistant, "upsert_session_meta", lambda *a, **k: None)
 
-    async def _noop(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop, raising=False)
     live_sessions._reset_for_tests()
     pending_injection._reset_for_tests()
     turns.set_inline_for_tests(False)

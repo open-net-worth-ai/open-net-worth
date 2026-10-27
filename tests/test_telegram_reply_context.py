@@ -69,10 +69,6 @@ def tg(db_isolated, monkeypatch):
     monkeypatch.setattr(handlers, "is_allowed", lambda cid: True)
     monkeypatch.setattr(handlers, "_policy_allows_turn", lambda cid: True)
 
-    async def _noop_memory(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory, raising=False)
     yield
 
 

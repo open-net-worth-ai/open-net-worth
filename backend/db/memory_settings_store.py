@@ -71,7 +71,7 @@ def memory_enabled_for(agent: dict | None) -> bool:
 
 
 def memory_writes_enabled() -> bool:
-    """True when Lucius may ADD, forget or consolidate facts — the toggle, and never on a public demo.
+    """True when Lucius may ADD, forget or tidy facts — the toggle, and never on a public demo.
 
     A demo's memory is shared by every visitor, so a fact distilled from one visitor's chat would
     surface in the next visitor's, and extraction is a model call nobody is charged for. Facts

@@ -432,6 +432,40 @@ class SessionStore:
             row = self._row(conn, session_id)
         return row["extraction_cursor"] if row is not None else None
 
+    def extraction_candidates(self) -> list[dict]:
+        """Every session that has messages, with what the memory sweep needs to decide whether
+        to read it: ``{"id", "meta", "cursor", "count", "last_message_at"}``.
+
+        One aggregate query instead of a read per session. ``cursor`` is the number of messages
+        already extracted (0 if none yet) and ``last_message_at`` the newest message's ISO
+        stamp. Parsed from raw TEXT like ``all_meta``, so one corrupt row is skipped rather
+        than hiding the rest."""
+        with self._eng().connect() as conn:
+            rows = conn.exec_driver_sql(
+                "SELECT s.id, s.meta, s.extraction_cursor, COUNT(m.id), MAX(m.created_at) "
+                "FROM sessions s JOIN session_messages m ON m.session_id = s.id "
+                "GROUP BY s.id ORDER BY s.id"
+            ).fetchall()
+        out: list[dict] = []
+        for session_id, meta_raw, cursor_raw, count, last_at in rows:
+            try:
+                meta = json.loads(meta_raw) if meta_raw else {}
+                cursor_doc = json.loads(cursor_raw) if cursor_raw else {}
+                cursor = int((cursor_doc or {}).get("last_extracted_len") or 0)
+            except Exception:
+                logger.warning("extraction candidates: skipping %r — unreadable row", session_id)
+                continue
+            out.append(
+                {
+                    "id": session_id,
+                    "meta": meta if isinstance(meta, dict) else {},
+                    "cursor": cursor,
+                    "count": int(count or 0),
+                    "last_message_at": last_at,
+                }
+            )
+        return out
+
     def set_extraction_cursor(self, session_id: str, data: dict) -> bool:
         """Persist the extraction cursor onto an EXISTING row; returns whether one was there.
 

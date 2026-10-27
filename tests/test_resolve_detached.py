@@ -39,7 +39,6 @@ def _isolate(tmp_path, monkeypatch, db_isolated):
     monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
     monkeypatch.setattr(assistant, "_active_tools", lambda: list(assistant.TOOL_SCHEMAS))
     monkeypatch.setattr(assistant, "get_provider", lambda *a, **k: _TextOnlyProvider())
-    monkeypatch.setattr(assistant, "_run_memory_extraction", lambda *a, **k: _noop(), raising=False)
     live_sessions._reset_for_tests()
     turns._turns.clear()
     turns._by_session.clear()
@@ -48,10 +47,6 @@ def _isolate(tmp_path, monkeypatch, db_isolated):
     live_sessions._reset_for_tests()
     turns._turns.clear()
     turns._by_session.clear()
-
-
-async def _noop():
-    return None
 
 
 def _stage(session_id: str, tool_use_id: str, tool: str, args: dict) -> None:

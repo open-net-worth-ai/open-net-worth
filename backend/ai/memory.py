@@ -1,22 +1,21 @@
 """
-Lucius cross-session memory — extraction, consolidation, and explicit edits.
+Lucius cross-session memory — extraction and explicit edits.
 
-All functions operate on MemoryStore (backend/memory.json). Background functions
-(extract_and_merge, consolidate, remove_fact) make a single non-streaming Claude
-call via the configured provider and are best-effort: callers swallow exceptions
-so memory never breaks chat. See docs/rfc/lucius-memory.md.
+All functions operate on MemoryStore. Background functions (extract_and_merge, remove_fact)
+make a single non-streaming call via the configured provider and are best-effort: callers
+swallow exceptions so memory never breaks chat. Every write goes through
+``memory_write.apply_memory_change``; ``memory_idle`` decides when extraction runs and
+``memory_tidy`` is the daily clean-up. See docs/rfc/lucius-memory.md.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
 
-from backend.ai import memory_structure as ms
+from backend.ai.memory_extract_prompt import EXTRACT_SYSTEM, existing_listing, extract_prompt
 from backend.ai.memory_write import apply_memory_change
 from backend.core.user_time import user_today
 from backend.db import MemoryStore
@@ -49,60 +48,8 @@ def _memory_model() -> str:
 _MEMORY_JSON = {"type": "json_object"}
 
 
-# Run a consolidation pass once active facts exceed this, after an extraction.
-CONSOLIDATE_THRESHOLD = 60
-
-# Cadence guard (cost fix 2026-07-11): after a consolidation run, the NEXT run only
-# fires once the store has GROWN by this many facts since that run — ">60 after every
-# extraction" ran the consolidator near-every-turn on any book that permanently sits
-# above the threshold (69 runs / 114 extractions observed; ~70% of memory spend).
-CONSOLIDATE_MIN_GROWTH = 15
-
-# Cap on how many facts about a single entity/event the consolidator should keep
-# (prompt-level guidance; bounds the "4 near-duplicate ONWAI-sale variants" failure).
-MAX_FACTS_PER_ENTITY = 2
-
-# Batch size for chunked map-reduce consolidation. ~50 facts per call keeps the
-# input well within context while allowing max_tokens=16000 for a clean output.
-CONSOLIDATE_BATCH_SIZE = 50
-
-# How many most-recent existing facts to send to the extractor for dedup context.
-# 80 is enough to catch near-duplicate newly-extracted facts; sending all 185+
-# facts was the source of 91K-char extraction prompts.
-EXTRACT_EXISTING_CAP = 80
-
-# Max chars for a single fact's content when building LLM listing inputs.
-# Keeps per-call token budgets bounded without losing dedup signal.
-FACT_LISTING_TRUNCATE = 150
-
 # Max facts to pass to the LLM in forget_fact after prefiltering.
 FORGET_CANDIDATE_CAP = 20
-
-_VALID_TIERS = {"durable", "time_bound"}
-
-# Guards against concurrent consolidation runs (e.g. two interleaved extract_and_merge
-# calls both crossing the threshold in the same async loop). asyncio.Lock is
-# per-event-loop; using a simple flag is sufficient because consolidate() is
-# always awaited on the same event loop as extract_and_merge().
-#
-# Built on FIRST USE, not at import. On Python 3.9 asyncio.Lock() binds the running loop
-# at construction, so importing this module with no current loop raises outright — and
-# that is decided by whoever imports first. In tests a module that had called
-# ``asyncio.run`` (which CLOSES the loop it made) left the next importer to fail with
-# "no current event loop", turning a passing test red purely by file order. Nothing about
-# this lock needs to exist before someone awaits it.
-_consolidation_lock: "asyncio.Lock | None" = None
-
-
-def _lock() -> asyncio.Lock:
-    global _consolidation_lock
-    if _consolidation_lock is None:
-        _consolidation_lock = asyncio.Lock()
-    return _consolidation_lock
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _provider():
@@ -111,10 +58,6 @@ def _provider():
 
     override = ModelConfigStore().task_model_override("memory")
     return get_provider(override)
-
-
-def _coerce_tier(tier: str | None) -> str:
-    return tier if tier in _VALID_TIERS else "durable"
 
 
 def _extract_balanced_json(text: str) -> str | None:
@@ -186,18 +129,18 @@ def _truncate(text: str, limit: int) -> str:
 def purge_expired(store: MemoryStore | None = None) -> int:
     """Hard-delete facts whose expires_at has passed. Returns count deleted.
 
-    Called before extraction and consolidation so the LLM never sees stale facts
-    and the store shrinks deterministically without any LLM spend.
-    Uses user_today() (local clock) for consistency with MemoryStore.remembered_facts().
+    Called before extraction and by the tidy pass so the LLM never sees stale facts and the
+    store shrinks deterministically without any LLM spend. Goes through the write choke, so it
+    cannot race an extraction or an edit. Uses user_today() (local clock) for consistency with
+    MemoryStore.remembered_facts().
     """
     s = store or MemoryStore()
     today = user_today().isoformat()
-    to_delete = [f["id"] for f in s.all_facts() if is_expired(f, today)]
-    for fid in to_delete:
-        s.remove_by_id(fid)
-    if to_delete:
-        logger.info("purge_expired: removed %d expired facts", len(to_delete))
-    return len(to_delete)
+    expired = [f["id"] for f in s.all_facts() if is_expired(f, today)]
+    if expired:
+        apply_memory_change({"remove": expired}, source="implicit", strict=False)
+        logger.info("purge_expired: removed %d expired facts", len(expired))
+    return len(expired)
 
 
 # ── Explicit edits (Phase 2) ───────────────────────────────────────────────────
@@ -267,9 +210,7 @@ async def remove_fact(description: str) -> bool:
     if not candidates:
         candidates = facts[:FORGET_CANDIDATE_CAP]
 
-    listing = "\n".join(
-        f"{f['id']}: {_truncate(f.get('content', ''), FACT_LISTING_TRUNCATE)}" for f in candidates
-    )
+    listing = "\n".join(f"{f['id']}: {f.get('content', '')}" for f in candidates)
     prompt = (
         "The user wants to forget a remembered fact. From the list below, return the id of "
         'the single best match, or "none" if nothing matches.\n\n'
@@ -423,46 +364,6 @@ def _save_cursor(session_id: str, last_extracted_len: int) -> None:
         logger.debug("could not persist extraction cursor", exc_info=True)
 
 
-def _load_last_consolidated_count() -> int | None:
-    """Fact count right after the last consolidation run (None = never ran)."""
-    from backend.db.memory_consolidate_state_store import MemoryConsolidateStateStore
-
-    try:
-        doc = MemoryConsolidateStateStore().get()
-    except Exception:
-        return None
-    if not doc:
-        return None
-    try:
-        return int(doc["last_count"])
-    except Exception:
-        return None
-
-
-def _save_last_consolidated_count(count: int) -> None:
-    from backend.db.memory_consolidate_state_store import MemoryConsolidateStateStore
-
-    try:
-        MemoryConsolidateStateStore().save({"last_count": int(count), "ts": _now()})
-    except Exception:
-        logger.debug("could not persist consolidate state", exc_info=True)
-
-
-def _should_consolidate(active_count: int) -> bool:
-    """Growth-based cadence: over the threshold AND grown enough since the last run.
-
-    A store that a consolidation run cannot shrink below CONSOLIDATE_THRESHOLD must
-    not re-consolidate every turn — it re-runs only after CONSOLIDATE_MIN_GROWTH new
-    facts accumulate. First-ever run (no state) keeps the plain threshold rule.
-    """
-    if active_count <= CONSOLIDATE_THRESHOLD:
-        return False
-    last = _load_last_consolidated_count()
-    if last is None:
-        return True
-    return active_count - last >= CONSOLIDATE_MIN_GROWTH
-
-
 def _incremental_slice(history: list[dict], last_extracted_len: int) -> list[dict]:
     """Return the slice of history to send for incremental extraction.
 
@@ -548,73 +449,34 @@ def _only_trivial_new_messages(history: list[dict], last_extracted_len: int) -> 
     return True
 
 
-_EXTRACT_SYSTEM = (
-    "You maintain the long-term memory of a personal financial advisor about their client. "
-    "You extract durable facts and dated intentions from a conversation and reconcile them "
-    "with what is already remembered. You are precise and conservative — only record things "
-    "that are genuinely worth carrying into future conversations."
-)
+_EXTRACT_SYSTEM = EXTRACT_SYSTEM
 
 
-def _extract_prompt(today: str, existing_listing: str, convo: str) -> str:
-    return f"""Today is {today}.
+def _profile_instructions() -> str:
+    """The user's Instructions for Lucius (profile notes), shown to the extractor so it does
+    not store what they already say."""
+    from backend.services.profile import read_profile_raw
 
-Given this conversation between a user and their financial advisor, extract facts worth
-remembering across future conversations: decisions, intentions, plans, constraints, and
-important personal/financial context. Ignore one-off data lookups and small talk.
+    notes = read_profile_raw().get("notes")
+    return notes if isinstance(notes, str) else ""
 
-NEVER record a transaction, sale, disposal, purchase, transfer, or rule-creation as a
-completed or dated fact — those belong to the system of record (the ledger, lots/realized
-events, positions, rules), NOT to memory. If the user merely discussed or proposed an action,
-capture it (if at all) as an INTENTION ("user is considering selling X"), never as history
-("user sold X on <date>").
 
-Strongly prefer durable, low-churn facts: preferences, goals, risk posture, account
-structure, and standing intentions. Prefer durable preferences/context over perishable figures
-(share counts, live prices, balances) that the tools read live — those go stale immediately.
-AVOID memorizing quantities, share counts, live prices, or account balances — a memorized
-figure goes stale the moment the price moves or a trade lands (an "underwater META at $598"
-note is wrong tomorrow). Record the durable kernel instead ("holds META as a long-term equity
-position"), not the live figure; a fact that carries one is dropped.
-
-{ms.ROUTING_GUIDE}
-You only store the lines whose home starts with "Memory". Skip a fact whose home is anything
-else: it is written elsewhere, in a conversation.
-
-Each fact is at most {ms.FACT_MAX_CHARS} characters. For each fact choose:
-  - section: one of {", ".join(ms.SECTIONS)} (open_items expire after {ms.OPEN_ITEM_DEFAULT_DAYS} days
-    unless you give an expires_at; they take no topic)
-  - topic: a short name for the subject, reusing a listed name when one fits (suggested:
-    {"; ".join(f"{ms.SECTIONS[k]}: {', '.join(v)}" for k, v in ms.SUGGESTED_TOPICS.items() if v)})
-  - sensitive: true for health, religion, political views, sexuality, ethnicity, criminal or
-    legal matters. Never store a full card, account, ID or passport number or a password.
-
-Decide whether each fact UPDATES an existing memory (reuse its id) or is NEW. If the
-conversation contradicts an existing memory, prefer an update (latest wins). If a fact is
-no longer true, list its id under "remove".
-
-Existing memory:
-{existing_listing}
-
-Conversation:
-{convo}
-
-Return ONLY JSON in this exact shape:
-{{
-  "new":     [{{"content": "...", "section": "you|money|plans|open_items|other", "topic": "...|null", "expires_at": "YYYY-MM-DD|null", "sensitive": false}}],
-  "updates": [{{"id": "...", "content": "...", "section": "...", "topic": "...|null", "expires_at": "YYYY-MM-DD|null"}}],
-  "remove":  ["id", ...]
-}}
-If there is nothing worth remembering, return {{"new": [], "updates": [], "remove": []}}."""
+def _extraction_ops(parsed: dict) -> dict:
+    ops = {key: parsed.get(key) for key in ("new", "updates", "remove")}
+    mentioned = parsed.get("mentioned")
+    if isinstance(mentioned, list):
+        ops["touch"] = {"mentioned": mentioned}
+    return ops
 
 
 async def extract_and_merge(history: list[dict], session_id: str | None = None) -> None:
     """Extract facts from the new portion of a conversation and merge into the store.
 
-    When session_id is provided, an extraction cursor sidecar tracks the last
-    extracted history length so only newly-added messages are sent to the LLM on
-    each call (plus a small overlap for dedup context).  First run on a legacy long
-    session: the backfill is capped at EXTRACT_BACKFILL_CAP messages.
+    When session_id is provided, the extraction cursor tracks the last extracted history
+    length so only newly-added messages are sent to the LLM (plus a small overlap for dedup
+    context); it advances only after a pass that succeeded, so a failed one is retried by the
+    next idle sweep. First run on a legacy long session: the backfill is capped at
+    EXTRACT_BACKFILL_CAP messages.
 
     If the global memory toggle is OFF, this is a no-op.
     """
@@ -640,27 +502,17 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
 
     convo = _conversation_text(slice_history)
     if not convo.strip():
+        if session_id:
+            _save_cursor(session_id, len(history))
         return
 
     store = MemoryStore()
-    # Purge expired facts before building the existing listing so the extractor
-    # never sees already-stale time_bound facts (saves tokens + avoids confusing it).
     purge_expired(store)
 
-    existing = store.remembered_facts()
-    # Cap the listing sent to the extractor: truncate each fact and send only the
-    # most-recent EXTRACT_EXISTING_CAP facts. Enough for dedup, not the full 91K.
-    capped = existing[:EXTRACT_EXISTING_CAP]
-    existing_listing = (
-        "\n".join(
-            f"{f['id']}: [{ms.fact_label(f)}] {_truncate(f.get('content', ''), FACT_LISTING_TRUNCATE)}"
-            for f in capped
-        )
-        or "(none yet)"
-    )
     today = user_today().isoformat()
-
-    prompt = _extract_prompt(today, existing_listing, convo)
+    prompt = extract_prompt(
+        today, _profile_instructions(), existing_listing(store.remembered_facts()), convo
+    )
 
     try:
         reply = await _provider().complete(
@@ -681,241 +533,7 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
         logger.warning("memory extraction returned unparseable reply")
         return
 
-    ops = {key: parsed.get(key) for key in ("new", "updates", "remove")}
-    apply_memory_change(ops, source="implicit", strict=False, today=today)
+    apply_memory_change(_extraction_ops(parsed), source="implicit", strict=False, today=today)
 
     if session_id:
         _save_cursor(session_id, len(history))
-
-    if _should_consolidate(len(store.remembered_facts())):
-        await consolidate()
-
-
-def _norm_expiry(value) -> str | None:
-    if not value or value in ("null", "none", "None"):
-        return None
-    return str(value)
-
-
-# ── Consolidation (Phase 4) ─────────────────────────────────────────────────────
-
-
-def _dedup_exact(facts: list[dict]) -> list[dict]:
-    """
-    Deterministic backstop to the LLM consolidation: collapse facts whose content is
-    identical once lowercased + whitespace-collapsed, keeping the most recently updated
-    one. Stops byte-identical re-extractions of the same fact from surviving as separate
-    rows even if the model misses them; never merges genuinely-distinct wording.
-    """
-    by_key: dict[str, dict] = {}
-    for f in facts:
-        key = " ".join((f.get("content") or "").lower().split())
-        if not key:
-            continue
-        kept = by_key.get(key)
-        if kept is None or (f.get("updated_at", "") > kept.get("updated_at", "")):
-            by_key[key] = f
-    # Preserve first-seen order of the surviving keys for stable output.
-    seen: set[str] = set()
-    out: list[dict] = []
-    for f in facts:
-        key = " ".join((f.get("content") or "").lower().split())
-        if not key or key in seen:
-            continue
-        seen.add(key)
-        out.append(by_key[key])
-    return out
-
-
-_CONSOLIDATE_SYSTEM = (
-    "You are the hygiene pass over a financial advisor's long-term memory about their client. "
-    "You drop stale items, merge duplicates, and resolve contradictions, returning a clean set."
-)
-
-
-def _consolidate_batch_prompt(batch: list[dict], today: str) -> str:
-    listing = json.dumps(
-        [
-            {
-                "id": f["id"],
-                "content": f.get("content", ""),
-                "tier": f.get("tier"),
-                "source": f.get("source"),
-                "expires_at": f.get("expires_at"),
-                "updated_at": f.get("updated_at"),
-            }
-            for f in batch
-        ],
-        ensure_ascii=False,
-    )
-    return f"""Today is {today}. Clean up this financial advisor's memory about their client.
-
-Rules:
-- Drop any time_bound fact whose expires_at is before today.
-- Group facts by the SAME entity or event (e.g. all facts about "the ONWAI sale", or all
-  facts about one account) and collapse each group into ONE fact. Several extractions of the
-  same event MUST NOT survive as separate facts, even if their numbers differ slightly.
-- On a genuine contradiction within a group (conflicting numbers, dates, or destinations),
-  keep ONLY the version with the latest updated_at and discard the older variants — do not
-  hedge by keeping both.
-- After grouping, keep at MOST {MAX_FACTS_PER_ENTITY} facts about any single entity/event;
-  drop the rest (oldest updated_at first).
-- Preserve each surviving fact's original id when possible (reuse the id of the kept item).
-- Do not invent new facts. Keep wording faithful to the originals.
-
-Current memory (JSON):
-{listing}
-
-Return ONLY JSON with the OPERATIONS to apply — never restate unchanged facts
-(cost fix: output size must scale with the number of CHANGES, not the store size):
-{{
-  "merge":  [{{"keep_id": "...", "absorb_ids": ["...", "..."],
-              "content": "optional rewritten content",
-              "tier": "durable|time_bound (optional)",
-              "expires_at": "YYYY-MM-DD|null (optional)"}}],
-  "remove": ["id", ...]
-}}
-- merge: collapse a group into keep_id; every absorb_ids fact is deleted. Omitted
-  content/tier/expires_at keep keep_id's current values.
-- remove: delete these facts outright (expired, superseded, over the per-entity cap).
-- A fact needing no change MUST NOT appear anywhere in the reply.
-- Nothing to change → {{"merge": [], "remove": []}}."""
-
-
-def _apply_batch_ops(batch: list[dict], parsed, today: str) -> "tuple[dict, set] | None":
-    """Validate one batch's operations → ({id: updated_fact}, {removed_ids}) or None.
-
-    None = reply unusable OR the wipe guard tripped — the caller keeps the batch
-    untouched. Ops may only reference ids INSIDE this batch; a single batch may not
-    delete more than half its facts (a degenerate "remove everything" reply must
-    never wipe real memory — the diff shape makes this guard precise).
-    """
-    if not isinstance(parsed, dict):
-        return None
-    batch_by_id = {f["id"]: f for f in batch}
-    updates: dict = {}
-    removed: set = set()
-    for op in parsed.get("merge") or []:
-        if not isinstance(op, dict):
-            continue
-        keep = op.get("keep_id")
-        original = batch_by_id.get(keep)
-        if original is None:
-            continue
-        absorbs = {a for a in (op.get("absorb_ids") or []) if a in batch_by_id and a != keep}
-        fact = dict(updates.get(keep) or original)
-        content = (op.get("content") or "").strip()
-        if content:
-            fact["content"] = content
-        if op.get("tier"):
-            fact["tier"] = _coerce_tier(op.get("tier"))
-        if "expires_at" in op:
-            fact["expires_at"] = _norm_expiry(op.get("expires_at"))
-        fact["updated_at"] = today
-        updates[keep] = fact
-        removed |= absorbs
-    bare_removes = 0
-    for rid in parsed.get("remove") or []:
-        if rid in batch_by_id and rid not in updates and rid not in removed:
-            removed.add(rid)
-            bare_removes += 1
-    # Wipe guards: merging N dupes into one keep_id is legitimate however many it
-    # absorbs (the entity's info survives on keep_id) — but a degenerate reply must
-    # never gut the store. Refuse when bare deletions (no surviving merge target)
-    # exceed half the batch, or when fewer than a quarter of the batch would survive.
-    survivors = len(batch) - len(removed)
-    if bare_removes > len(batch) // 2 or survivors < max(1, len(batch) // 4):
-        logger.warning(
-            "memory consolidation batch too destructive (%d bare removes, %d/%d survive) — refusing",
-            bare_removes,
-            survivors,
-            len(batch),
-        )
-        return None
-    return updates, removed
-
-
-async def consolidate() -> None:
-    """Chunked, DIFF-based consolidation: shrinks the store toward ≤60 active facts.
-
-    Each batch call returns only merge/remove OPERATIONS (cost fix 2026-07-11: the
-    old shape re-emitted every fact — 431k output tokens across 69 runs, output ≈
-    input at 5× the input price). Output now scales with the number of changes, so
-    max_tokens drops 16000 → 2048. A lock prevents concurrent runs; expired facts
-    are purged deterministically first; the last-run fact count is persisted for the
-    growth-based cadence gate.
-
-    Batch-seam note: deliberately NOT routed through core.llm_seam batching — the
-    result must apply before the next extraction reads the store, and post-fix this
-    runs rarely with tiny outputs; async collection plumbing isn't worth it.
-
-    No-op when the global memory toggle is OFF.
-    """
-    if not memory_writes_enabled():
-        return
-
-    if _lock().locked():
-        logger.debug("consolidate: run already in flight, skipping")
-        return
-
-    async with _lock():
-        store = MemoryStore()
-        purge_expired(store)
-
-        facts = store.all_facts()
-        if len(facts) < 2:
-            return
-
-        today = user_today().isoformat()
-        batches = [
-            facts[i : i + CONSOLIDATE_BATCH_SIZE]
-            for i in range(0, len(facts), CONSOLIDATE_BATCH_SIZE)
-        ]
-        all_updates: dict = {}
-        all_removed: set = set()
-
-        for batch in batches:
-            prompt = _consolidate_batch_prompt(batch, today)
-            try:
-                reply = await _provider().complete(
-                    prompt,
-                    system=_CONSOLIDATE_SYSTEM,
-                    model=_memory_model(),
-                    max_tokens=2048,
-                    source="memory_consolidate",
-                    response_format=_MEMORY_JSON,
-                    effort="none",  # dedup/merge of facts — mechanical, skip reasoning
-                )
-            except Exception as exc:
-                logger.warning("memory consolidation batch LLM call failed: %s", exc)
-                continue
-
-            applied = _apply_batch_ops(batch, _parse_json(reply), today)
-            if applied is None:
-                logger.warning(
-                    "memory consolidation batch returned unusable ops; batch untouched. "
-                    "reply_preview=%r",
-                    (reply or "")[:200],
-                )
-                continue
-            updates, removed = applied
-            all_updates.update(updates)
-            all_removed |= removed
-
-        cleaned = _dedup_exact(
-            [all_updates.get(f["id"], f) for f in facts if f["id"] not in all_removed]
-        )
-        if not cleaned:
-            logger.warning("memory consolidation produced an empty set; leaving memory untouched")
-            return
-
-        if all_updates or all_removed or len(cleaned) != len(facts):
-            store.replace_all(cleaned)
-        _save_last_consolidated_count(len(cleaned))
-        logger.info(
-            "memory consolidated: %d → %d facts (%d merged/rewritten, %d removed)",
-            len(facts),
-            len(cleaned),
-            len(all_updates),
-            len(all_removed),
-        )
