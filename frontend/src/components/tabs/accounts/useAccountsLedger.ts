@@ -181,6 +181,9 @@ export interface AccountsLedgerState {
   // loading states
   loading: boolean
   loadingTxns: boolean
+  /** The in-flight fetch will REPLACE the rows on screen with a different query's (a filter
+   *  change) — not a background revalidation of the same one, nor a load-more append. */
+  refiltering: boolean
   /** A further page of transactions is being appended to the register. */
   isLoadingMore: boolean
   error: string | null
@@ -400,6 +403,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
     () => getCachedQueryData<ApiAccount[]>(ACCOUNTS_KEY) === undefined,
   )
   const [loadingTxns, setLoadingTxns] = useState(false)
+  const [refiltering, setRefiltering] = useState(false)
   // Distinct from `loadingTxns` (which also covers the initial/filtered load, where rows are
   // absent and a full-list spinner is correct): this is ONLY true for an in-flight `loadMore`
   // append, so the list can show a small trailing "loading more" row instead of nothing.
@@ -436,6 +440,12 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
   // (e.g. the initial unfiltered mount fetch) resolving AFTER a newer one (e.g. a just-applied
   // date filter) would silently clobber the correct state with stale data.
   const loadTxnsAbortRef = useRef<AbortController | null>(null)
+  // Which query the rows on screen answer. A remount paints the cached default rows and
+  // revalidates that same query — no visible "reloading" for it (owner report 2026-10-27:
+  // every return to the tab from Lucius flashed the refetch bar).
+  const shownQueryRef = useRef<string | null>(
+    initialTxnData ? buildTxnQueryString(DEFAULT_FILTERS, 0) : null,
+  )
 
   // ── Core data fetch (accounts, categories, payees, FX) ─────────────────
 
@@ -499,6 +509,8 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
       const ac = new AbortController()
       loadTxnsAbortRef.current = ac
       setLoadingTxns(true)
+      const queryKey = buildTxnQueryString(currentFilters, 0)
+      if (!append) setRefiltering(queryKey !== shownQueryRef.current)
       try {
         const qs = buildTxnQueryString(currentFilters, currentOffset)
         const url = `/api/transactions?${qs}`
@@ -532,6 +544,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
         const items: ApiTxn[] = Array.isArray(data) ? data : (data.items ?? data.transactions ?? [])
         const mapped = items.map(fromApiTxn)
         setTransactions((prev) => (append ? [...prev, ...mapped] : mapped))
+        if (!append) shownQueryRef.current = queryKey
         setHasMore(
           !Array.isArray(data) && typeof data.has_more === 'boolean'
             ? data.has_more
@@ -548,7 +561,10 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
         if (ac.signal.aborted) return
         setError(e instanceof Error ? e.message : 'Failed to load transactions')
       } finally {
-        if (!ac.signal.aborted) setLoadingTxns(false)
+        if (!ac.signal.aborted) {
+          setLoadingTxns(false)
+          setRefiltering(false)
+        }
       }
     },
     [],
@@ -1060,6 +1076,7 @@ export function useAccountsLedger(onMutate?: () => void): AccountsLedgerState {
     baseCurrency: getBaseCurrency(),
     loading,
     loadingTxns,
+    refiltering,
     isLoadingMore,
     error,
     hasLoaded,

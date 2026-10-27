@@ -2174,6 +2174,7 @@ export function AccountsTab({
                 onAskLucius={onAskLucius}
                 allEmpty={allEmpty}
                 loadingTxns={L.loadingTxns}
+                refiltering={L.refiltering}
                 isLoadingMore={L.isLoadingMore}
                 onAddTxn={handleAddTxn}
                 onClearFilters={clearAll}
