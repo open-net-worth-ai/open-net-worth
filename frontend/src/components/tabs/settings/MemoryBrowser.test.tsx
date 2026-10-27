@@ -260,6 +260,11 @@ describe('MemoryBrowser', () => {
     function serveSummaries(topics: unknown[]) {
       authFetch.mockImplementation(() => json({ facts: sampleFacts(), total: 11, topics }))
     }
+    // The row shows the summary in place of the first fact, so wait for the summary instead.
+    async function renderWithSummary() {
+      render(<MemoryBrowser toast={vi.fn()} />)
+      await screen.findByText(summary)
+    }
     const labels = () =>
       Array.from(document.querySelectorAll('.rd-mem-field-label')).map((n) => n.textContent)
 
@@ -267,7 +272,7 @@ describe('MemoryBrowser', () => {
       serveSummaries([
         { section: 'money', topic: 'Housing', summary, updated_at: '2026-10-27T00:00:00+00:00' },
       ])
-      await renderBrowser()
+      await renderWithSummary()
       fireEvent.click(topicRow('Housing'))
       expect(labels()).toEqual(['Last updated', 'Summary', 'Details'])
       expect(screen.getByText(summary)).toBeTruthy()
@@ -283,11 +288,20 @@ describe('MemoryBrowser', () => {
       expect(screen.queryByText(summary)).toBeNull()
     })
 
+    it('shows the summary on the topic row, and the first fact until there is one', async () => {
+      serveSummaries([
+        { section: 'money', topic: 'Housing', summary, updated_at: '2026-10-27T00:00:00+00:00' },
+      ])
+      await renderWithSummary()
+      expect(within(topicRow('Housing')).getByText(summary)).toBeTruthy()
+      expect(within(topicRow('Housing')).queryByText('Rent is paid on the 1st')).toBeNull()
+    })
+
     it('matches the topic case-insensitively', async () => {
       serveSummaries([
         { section: 'money', topic: ' HOUSING ', summary, updated_at: '2026-10-27T00:00:00+00:00' },
       ])
-      await renderBrowser()
+      await renderWithSummary()
       fireEvent.click(topicRow('Housing'))
       expect(screen.getByText(summary)).toBeTruthy()
     })

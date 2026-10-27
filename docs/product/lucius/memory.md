@@ -73,13 +73,14 @@ panel, or on the **Lucius** tab on a computer — opens the same list in a windo
 that narrows it to the facts (or topics) containing your words.
 
 1. **Sections.** Memory is laid out in the order **You**, **Money**, **Plans**, **Open items** and
-   **Other**. In each, a row per topic shows its name, its first fact and when it was last
-   updated. **Open items** are listed directly, each with the date it runs until.
+   **Other**. In each, a row per topic shows its name, its one-line summary (its first fact until
+   Lucius has written one) and when it was last updated. **Open items** are listed directly, each with the date it runs until.
 2. **A topic's page.** Click a topic (or its pencil) to open it: **← Memory** goes back, then you
    see when it was **Last updated**, a one-line **Summary** of what the topic covers, and its
    **Details** as bullets. Lucius writes the summary himself and refreshes it within a few minutes
-   of the topic's facts changing (a brand-new topic shows it once he has); it describes the topic
-   and never repeats its numbers. It is for you to read: it is never in Lucius's prompt. When a
+   of the topic's facts changing (a brand-new topic shows it once he has); it describes the topic,
+   calls you by the name you gave in **Settings → Profile** (*What should Lucius call you?*), and
+   never repeats its numbers. It is for you to read: it is never in Lucius's prompt. When a
    topic's last fact goes, its summary goes with it straight away. Point at a bullet (on a phone
    the icons are always there) and click **Edit** (the pencil) to fix its wording — the whole fact
    opens in a box; change it, then **Save** or press Enter (Shift+Enter starts a new line);

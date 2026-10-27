@@ -463,3 +463,50 @@ def test_the_sweep_step_never_raises(monkeypatch):
 
     monkeypatch.setattr(memory_summaries, "refresh_summaries", boom)
     asyncio.run(memory_idle.refresh_topic_summaries())
+
+
+def _set_profile(**fields) -> None:
+    from backend.services import profile as profile_service
+
+    profile_service.write_profile({**profile_service.read_profile(), **fields})
+
+
+def test_a_summary_calls_the_user_by_the_name_they_chose(monkeypatch):
+    _set_profile(name="Alex Example", nickname="Lex")
+    MemoryStore().bulk_insert([_fact("f1", "Works at Marlowe Analytics")])
+    model = _Model()
+    monkeypatch.setattr(memory, "_provider", lambda: model)
+
+    asyncio.run(memory_summaries.refresh_summaries())
+
+    assert '"Lex"' in model.prompts[0] and "Who Lex is" in model.prompts[0]
+    assert '"they"' not in model.prompts[0]
+
+
+def test_without_a_nickname_the_first_name_is_used_and_without_either_they(monkeypatch):
+    _set_profile(name="Alex Example", nickname=None)
+    assert memory_summaries.person_name() == "Alex"
+    _set_profile(name=None, nickname=None)
+    assert memory_summaries.person_name() == ""
+    MemoryStore().bulk_insert([_fact("f1", "Works at Marlowe Analytics")])
+    model = _Model()
+    monkeypatch.setattr(memory, "_provider", lambda: model)
+
+    asyncio.run(memory_summaries.refresh_summaries())
+
+    assert '"they"' in model.prompts[0]
+
+
+def test_changing_the_name_rewrites_the_summaries(monkeypatch):
+    _set_profile(nickname="Lex")
+    MemoryStore().bulk_insert([_fact("f1", "Works at Marlowe Analytics")])
+    model = _Model()
+    monkeypatch.setattr(memory, "_provider", lambda: model)
+    asyncio.run(memory_summaries.refresh_summaries())
+    asyncio.run(memory_summaries.refresh_summaries())
+    assert len(model.prompts) == 1
+
+    _set_profile(nickname="Sam")
+    asyncio.run(memory_summaries.refresh_summaries())
+
+    assert len(model.prompts) == 2 and "Who Sam is" in model.prompts[1]

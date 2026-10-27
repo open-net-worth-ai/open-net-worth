@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 
 MAX_TOPICS_PER_CALL = 20
 SUMMARY_MAX_CHARS = 120
+NAME_MAX_CHARS = 40
 # A topic sent once with no usable line back (left out, or every answer refused — "FY2026 plan"
 # echoed as "2026") is not sent again with the same facts until this has passed.
 RETRY_COOLDOWN_SECONDS = 24 * 60 * 60
@@ -54,10 +55,25 @@ Key = tuple[str, str]
 _attempted: dict[Key, tuple[str, float]] = {}
 
 
-def digest(facts: list[dict]) -> str:
-    """SHA-256 over a topic's live fact ids and text, order-independent."""
+def digest(facts: list[dict], name: str = "") -> str:
+    """SHA-256 over a topic's live fact ids and text, order-independent, and the name the summary
+    calls the user by — so renaming yourself rewrites the summaries."""
     pairs = sorted((str(f.get("id") or ""), str(f.get("content") or "")) for f in facts)
-    return hashlib.sha256(json.dumps(pairs, ensure_ascii=False).encode("utf-8")).hexdigest()
+    payload = json.dumps([name, pairs] if name else pairs, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def person_name() -> str:
+    """What the summaries call the user: the profile's "What should Lucius call you?", else the
+    first word of their name, else "" (the summaries then say "they")."""
+    from backend.services.profile import read_profile_raw
+
+    profile = read_profile_raw()
+    for raw in (profile.get("nickname"), (str(profile.get("name") or "").split() or [""])[0]):
+        text = " ".join(str(raw or "").split())[:NAME_MAX_CHARS]
+        if text:
+            return text
+    return ""
 
 
 def live_topics(facts: list[dict]) -> dict[Key, dict]:
@@ -79,7 +95,7 @@ def live_topics(facts: list[dict]) -> dict[Key, dict]:
     return out
 
 
-def _prompt(batch: list[dict]) -> str:
+def _prompt(batch: list[dict], name: str = "") -> str:
     listing = json.dumps(
         [
             {
@@ -92,12 +108,19 @@ def _prompt(batch: list[dict]) -> str:
         ensure_ascii=False,
         indent=1,
     )
+    who = (
+        f"The user is called {json.dumps(name, ensure_ascii=False)}: refer to them by that name, "
+        f'in the style of "Who {name} is — location, employer, background, languages" or '
+        f'"How {name} likes answers".'
+        if name
+        else 'Refer to the user as "they", in the style of "Who they are — location, employer, '
+        'background, languages".'
+    )
     return f"""Write a one-line summary for each topic below.
 
-Each summary says what the topic covers, in at most 90 characters, in the style of
-"Who they are — location, employer, background, languages". Describe the kinds of things the
-topic holds; do not restate the facts. Never include numbers, amounts, dates, account or card
-numbers, or any other identifier.
+Each summary says what the topic covers, in at most 90 characters. {who} Describe the kinds of
+things the topic holds; do not restate the facts. Never include numbers, amounts, dates, account
+or card numbers, or any other identifier.
 
 TOPICS (JSON):
 {listing}
@@ -131,13 +154,13 @@ def _accepted(parsed, sent: dict[Key, dict]) -> dict[Key, str]:
     return out
 
 
-async def _ask(batch: list[dict]) -> dict[Key, str] | None:
+async def _ask(batch: list[dict], name: str = "") -> dict[Key, str] | None:
     """The usable lines from one call, or None when the call failed or its reply could not be
     read at all (a transient fault: nothing backs off for it)."""
     sent = {(t["section"], ms.topic_key(t["topic"])): t for t in batch}
     try:
         reply = await memory._provider().complete(
-            _prompt(batch),
+            _prompt(batch, name),
             system=_SUMMARY_SYSTEM,
             model=memory._memory_model(),
             max_tokens=2048,
@@ -175,9 +198,11 @@ def _plan(store: MemoryTopicSummaryStore) -> tuple[list[dict], list[Key], int]:
     topics = _live()
     rows = {(r["section"], r["topic_key"]): r for r in store.all()}
     now = time.monotonic()
+    name = person_name()
     dirty = []
     for key, topic in topics.items():
-        topic["digest"] = digest(topic["facts"])
+        topic["digest"] = digest(topic["facts"], name)
+        topic["name"] = name
         if rows.get(key, {}).get("facts_digest") == topic["digest"]:
             continue
         if _backing_off(key, topic, now):
@@ -229,7 +254,7 @@ async def refresh_summaries() -> dict:
         return {"ran": False}
     store = MemoryTopicSummaryStore()
     batch, gone, dirty = await asyncio.to_thread(_plan, store)
-    lines = await _ask(batch) if batch else None
+    lines = await _ask(batch, batch[0].get("name", "")) if batch else None
     if lines is not None:
         _remember_attempts(batch, lines)
     lines = lines or {}

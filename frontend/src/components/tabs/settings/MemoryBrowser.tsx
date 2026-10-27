@@ -21,12 +21,16 @@ import type { PendingForget } from './MemoryParts'
 import { SECTIONS, UNSORTED, groupFacts, matchesFilter, summaryOf, topicsOf } from './memoryGroups'
 import type { Topic } from './memoryGroups'
 
+/** A topic's row: its name, its summary (its first fact until Lucius has written one) and when it
+ *  last changed. */
 function TopicRow({
   topic,
+  summary,
   onOpen,
   onDelete,
 }: {
   topic: Topic
+  summary: string
   onOpen: () => void
   onDelete: () => void
 }) {
@@ -34,7 +38,7 @@ function TopicRow({
     <div className="rd-mem-topic">
       <button type="button" className="rd-mem-topic-open" onClick={onOpen}>
         <span className="rd-mem-topic-name">{topic.name}</span>
-        <span className="rd-mem-topic-preview">{topic.facts[0]?.content}</span>
+        <span className="rd-mem-topic-preview">{summary || topic.facts[0]?.content}</span>
         <span className="rd-mem-topic-date">
           {topic.updated ? `Updated ${fDate(topic.updated)}` : ''}
         </span>
@@ -240,6 +244,7 @@ export function MemoryBrowser({
                       <TopicRow
                         key={t.key}
                         topic={whole(s.key, t)}
+                        summary={summaryOf(summaries, s.key, t.key)}
                         onOpen={() => setOpen({ section: s.key, key: t.key })}
                         onDelete={() => askDelete(s.key, t)}
                       />

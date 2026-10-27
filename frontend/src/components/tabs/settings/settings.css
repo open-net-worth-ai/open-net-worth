@@ -1369,6 +1369,27 @@
 .onw-settings .rd-mem-sec > .ui-list {
   margin-left: 12px;
 }
+/* a topic page's Details, laid out like Claude's: the text starts where the "Details" label ends
+   (about 3.2 of its characters) and each dot sits under the label's middle — drawn here, since
+   the browser's own marker can't be placed that precisely */
+.onw-settings .rd-mem-field > .ui-list {
+  --rd-mem-indent: calc(var(--text-sm) * 3.2);
+  list-style: none;
+  padding-inline-start: var(--rd-mem-indent);
+}
+.onw-settings .rd-mem-field > .ui-list > li {
+  position: relative;
+}
+.onw-settings .rd-mem-field > .ui-list > li::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--rd-mem-indent) / -2 - 2px);
+  top: calc(0.75em - 2px);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+}
 /* "Moved out of memory": the header is a disclosure button, its rows read like topic rows */
 .onw-settings .rd-mem-bullet-until {
   color: var(--muted);
