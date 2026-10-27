@@ -42,6 +42,9 @@ _SORT_SYSTEM = (
 )
 
 _ITEM_KEYS = ("id", "section", "topic", "content", "retire")
+# `unused` and `merged` are the tidy's own verdicts: the sort has no usage data and no merge.
+_TIDY_ONLY_REASONS = ("unused", "merged")
+SORT_RETIRE_REASONS = tuple(r for r in ms.RETIRE_REASONS if r not in _TIDY_ONLY_REASONS)
 
 
 def _unsorted(store: MemoryStore) -> list[dict]:
@@ -101,7 +104,7 @@ For each note, reply with ONE of:
   except a note marked [over {ms.FACT_MAX_CHARS} characters], which MUST carry a "content"
   that says the same thing in at most {ms.FACT_MAX_CHARS} characters, adding nothing.
 - retire it, when the guide says it belongs outside memory or it is out of date:
-  {{"id": "...", "retire": "<reason>"}} with the reason one of: {", ".join(ms.RETIRE_REASONS)}.
+  {{"id": "...", "retire": "<reason>"}} with the reason one of: {", ".join(SORT_RETIRE_REASONS)}.
   Retire only when EVERYTHING the note says already lives in that home: "profile" only for a
   Settings profile field itself (an employer, job or language is filed under You · Profile), "ledger" only for a balance,
   holding, price, trade or finished task — a plan or aim is never "ledger", even with an
@@ -135,6 +138,9 @@ def _clean_item(raw, shown: dict[str, dict]) -> dict | None:
         logger.debug("memory sort: ignored an id it was not shown: %r", fid)
         return None
     if item.get("retire"):
+        if item["retire"] in _TIDY_ONLY_REASONS:
+            logger.debug("memory sort: ignored %s, a tidy-only reason %r", fid, item["retire"])
+            return None
         reason = item["retire"] if item["retire"] in ms.RETIRE_REASONS else "stale"
         return {"id": fid, "retire": reason}
     if "section" not in item:

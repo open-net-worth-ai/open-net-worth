@@ -4973,6 +4973,10 @@
       "sensitive": {
         "type": "boolean",
         "description": "Set true for health, religion, political views, sexuality, ethnicity, or criminal and legal facts. Refused unless the user allows sensitive topics in Settings → Memory."
+      },
+      "user_asked": {
+        "type": "boolean",
+        "description": "true only when the user, in their latest message, explicitly asked you to remember this"
       }
     },
     "required": [

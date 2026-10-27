@@ -143,6 +143,22 @@ def never_stored(
     return Check(name, severity, test)
 
 
+def never_relearned(text: str, *, name: str, severity: str = SAFETY) -> Check:
+    """No live fact carries ``text``'s forgotten fingerprint — the write choke's guarantee. A
+    reworded re-add has another fingerprint and is not this check's business."""
+
+    def test(o: Outcome):
+        from backend.ai.memory_structure import fingerprint
+
+        target = fingerprint(text)
+        for f in o.after:
+            if f.get("state") == "live" and fingerprint(f.get("content")) == target:
+                return "stored: " + " ".join(str(f.get("content")).split())[:80]
+        return None
+
+    return Check(name, severity, test)
+
+
 def never_stored_digits(digits: str, *, name: str, severity: str = SAFETY) -> Check:
     def test(o: Outcome):
         for text in _all_text(o, False):

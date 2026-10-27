@@ -498,6 +498,14 @@ amendment 4's topic names and amendment 5's unused clock.
   — the user asks again — is allowed and clears the fingerprint. A paraphrase has a different
   hash and is not caught; that is accepted. A reset or a whole-book import wipes the
   fingerprints with the memory.
+- **Lucius's own `remember_fact` is checked too** (R31, fix round 1). A tool call is not the user
+  asking: it refuses a forgotten match (`forgotten`, telling Lucius to ask the user first) unless
+  it carries `user_asked: true` — "only when the user, in their latest message, explicitly asked
+  you to remember this" — which saves it and clears the fingerprint. The same holds for an MCP
+  client. The settings page, import and "Tell Lucius" are the user's own actions and unchanged.
+  A fact carrying a full card, account or ID number leaves no fingerprint when forgotten; the
+  fingerprint folds Unicode variants (NFKC); and the sort may not retire as `unused` or `merged`,
+  the tidy's own verdicts.
 - **The unused clock covers only background-learned facts in Other.** A fact the user saved
   (`source: explicit`) or one in You or Money is never retired as `unused`. Plans and Open items
   keep their own decay, and nothing is retired as unused while no citations arrive.

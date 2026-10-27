@@ -512,3 +512,19 @@ def test_the_sweep_side_db_work_runs_off_the_event_loop(isolated, monkeypatch):
 
     assert threads["has_unsorted"] == [False]
     assert threads["choke"] and not any(threads["choke"])
+
+
+def test_the_sort_may_not_retire_as_unused_or_merged(isolated, monkeypatch):
+    from backend.ai import memory_sort
+    from backend.ai import memory_structure as ms
+
+    assert "unused" not in memory_sort.SORT_RETIRE_REASONS
+    assert "merged" not in memory_sort.SORT_RETIRE_REASONS
+    assert set(memory_sort.SORT_RETIRE_REASONS) < set(ms.RETIRE_REASONS)
+    shown = {"m1": {"id": "m1", "content": "Old fact"}}
+    for reason in ("unused", "merged"):
+        assert memory_sort._clean_item({"id": "m1", "retire": reason}, shown) is None
+    assert memory_sort._clean_item({"id": "m1", "retire": "profile"}, shown) == {
+        "id": "m1",
+        "retire": "profile",
+    }

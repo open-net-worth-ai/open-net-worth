@@ -160,8 +160,13 @@ def add_explicit(
     topic: str | None = None,
     expires_at: str | None = None,
     sensitive: bool = False,
+    guard_forgotten: bool = False,
 ) -> dict:
     """Insert a user-requested fact immediately, saved as written. No dedup.
+
+    ``guard_forgotten`` (the ``remember_fact`` tool, unless the user asked in so many words)
+    refuses text the user told Lucius to forget instead of saving it and clearing its
+    fingerprint.
 
     Raises MemoryDisabledError when the global memory toggle is OFF so the
     calling tool handler can surface a clear refusal instead of silently writing
@@ -176,7 +181,9 @@ def add_explicit(
     if sensitive:
         item["sensitive"] = True
     ops = {"new": [item]}
-    return apply_memory_change(ops, source="explicit", strict=True)["created"][0]
+    return apply_memory_change(
+        ops, source="explicit", strict=True, guard_forgotten=guard_forgotten
+    )["created"][0]
 
 
 async def remove_fact(description: str) -> bool:

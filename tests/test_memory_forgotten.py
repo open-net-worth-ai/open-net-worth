@@ -251,3 +251,81 @@ def test_a_reset_wipes_the_fingerprints_with_the_memory():
     reset_bridged_stores()
 
     assert MemoryForgottenStore().all_hashes() == set()
+
+
+# ── the remember_fact tool must not bring a forgotten fact back on its own (R31) ──
+
+
+def _tool(**inp) -> dict:
+    from backend.ai.tools import execute_tool
+
+    text, _ = asyncio.run(
+        execute_tool("remember_fact", {"section": "you", "topic": "Profile", **inp})
+    )
+    return json.loads(text)
+
+
+def _forget_the_dog() -> str:
+    fact = _add(DOG)
+    _write({"remove": [fact["id"]]}, source="explicit")
+    return ms.fingerprint(DOG)
+
+
+def test_an_unprompted_remember_fact_refuses_a_forgotten_fact_and_keeps_the_fingerprint():
+    fp = _forget_the_dog()
+
+    out = _tool(content="has a dog named Biscuit!")
+
+    assert out["ok"] is False and "forget" in out["message"] and "user_asked" in out["message"]
+    assert MemoryStore().all_facts() == []
+    assert MemoryForgottenStore().known({fp}) == {fp}
+
+
+def test_remember_fact_with_user_asked_saves_it_and_clears_the_fingerprint():
+    fp = _forget_the_dog()
+
+    out = _tool(content=DOG, user_asked=True)
+
+    assert out["ok"] is True
+    assert [f["content"] for f in MemoryStore().all_facts()] == [DOG]
+    assert MemoryForgottenStore().known({fp}) == set()
+
+
+def test_an_mcp_remember_fact_without_the_flag_is_refused():
+    from backend.mcp.adapter import call_tool
+
+    fp = _forget_the_dog()
+
+    text, _ = asyncio.run(
+        call_tool("remember_fact", {"content": DOG, "section": "you", "topic": "Profile"})
+    )
+
+    assert json.loads(text)["ok"] is False
+    assert MemoryStore().all_facts() == []
+    assert MemoryForgottenStore().known({fp}) == {fp}
+
+
+def test_remember_fact_of_an_unforgotten_fact_needs_no_flag():
+    assert _tool(content="Plays badminton on Saturdays")["ok"] is True
+
+
+# ── minors ───────────────────────────────────────────────────────────────────
+
+
+def test_a_fact_with_a_full_identifier_is_forgotten_without_a_fingerprint():
+    legacy = "Passport number is X1234567 for travel"
+    MemoryStore().bulk_insert(
+        [{"id": "mem_id1", "content": legacy, "state": "unsorted", "source": "implicit"}]
+    )
+
+    _write({"remove": ["mem_id1"]}, source="explicit")
+
+    assert MemoryStore().all_facts() == []
+    assert MemoryForgottenStore().all_hashes() == set()
+
+
+def test_the_fingerprint_folds_unicode_variants():
+    composed, decomposed = "Lives near the Café Lumière", "Lives near the Café Lumière"
+    assert composed != decomposed
+    assert ms.fingerprint(composed) == ms.fingerprint(decomposed)
+    assert ms.fingerprint("Ｈａｓ a dog named Biscuit") == ms.fingerprint(DOG)

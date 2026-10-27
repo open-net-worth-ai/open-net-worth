@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 
 SECTIONS: dict[str, str] = {
     "you": "You",
@@ -102,9 +103,10 @@ def current_topic(section: str | None, name: str) -> str:
 
 def fingerprint(text) -> str:
     """SHA-256 of a fact's text with case, punctuation and spacing folded away, so "Has a dog
-    named Biscuit" and "has a dog, named biscuit!" match. What a user forgot is remembered only
-    as this hash; a paraphrase has a different one."""
-    folded = re.sub(r"[\W_]+", " ", str(text or "").casefold()).strip()
+    named Biscuit" and "has a dog, named biscuit!" match, and so do Unicode variants (NFKC). What
+    a user forgot is remembered only as this hash; a paraphrase has a different one."""
+    text = unicodedata.normalize("NFKC", str(text or ""))
+    folded = re.sub(r"[\W_]+", " ", text.casefold()).strip()
     return hashlib.sha256(folded.encode("utf-8")).hexdigest()
 
 

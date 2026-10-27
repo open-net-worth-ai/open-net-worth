@@ -56,6 +56,14 @@ class RememberFactInput(ToolInput):
         ),
     )
 
+    user_asked: Optional[bool] = Field(
+        default=None,
+        description=(
+            "true only when the user, in their latest message, explicitly asked you to remember "
+            "this"
+        ),
+    )
+
 
 class ForgetFactInput(ToolInput):
     """Schema-of-record for ``forget_fact`` (see ``schema_from_model``)."""
@@ -106,6 +114,7 @@ async def remember_fact(input_data: dict):
             topic=input_data.get("topic"),
             expires_at=input_data.get("expires_at"),
             sensitive=bool(input_data.get("sensitive")),
+            guard_forgotten=input_data.get("user_asked") is not True,
         )
     except MemoryDisabledError as exc:
         return json.dumps({"ok": False, "message": exc.message}, ensure_ascii=False), None

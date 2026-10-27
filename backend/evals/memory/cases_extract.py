@@ -4,7 +4,7 @@ stored. Every name, amount and number is invented."""
 from __future__ import annotations
 
 from backend.evals.memory import checks as c
-from backend.evals.memory.spec import Case, live
+from backend.evals.memory.spec import QUALITY, Case, live
 
 E10_HOUSING = "mem_e10h01"
 E11_PREFERENCE = "mem_e11p01"
@@ -273,7 +273,14 @@ EXTRACT_CASES: tuple[Case, ...] = (
             "look at this month's grocery spending?",
             "No problem. Let's look at groceries.",
         ),
-        checks=(c.never_stored(r"biscuit", name="the forgotten dog is not learned again"),),
+        checks=(
+            c.never_relearned(E18_FORGOTTEN, name="the forgotten fact is not learned again"),
+            c.never_stored(
+                r"biscuit",
+                name="nor is a reworded version of it (the accepted paraphrase gap)",
+                severity=QUALITY,
+            ),
+        ),
     ),
 )
 

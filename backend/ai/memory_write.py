@@ -50,7 +50,10 @@ _MESSAGES = {
         "in Settings to allow it."
     ),
     "unknown_id": "That memory no longer exists.",
-    "forgotten": "You asked Lucius to forget this, so it isn't learned again on its own.",
+    "forgotten": (
+        "The user previously asked you to forget this, so it was not saved. Ask them whether "
+        "to remember it again; only if they say so, call remember_fact with user_asked=true."
+    ),
 }
 
 
@@ -170,9 +173,13 @@ class _Plan:
         today: str,
         sensitive_ok: bool,
         forgotten: set[str] = frozenset(),
+        guard_forgotten: bool = False,
     ):
         self.source = source
         self.forgotten = forgotten
+        # An explicit save the user did not ask for in so many words (Lucius's own
+        # remember_fact) is checked against the fingerprints like a background one (R31).
+        self.guard_forgotten = guard_forgotten
         # Fingerprints a user forget records, and those an explicit save of the text clears.
         self.forget: set[str] = set()
         self.unforget: set[str] = set()
@@ -230,12 +237,19 @@ class _Plan:
         return text, None, None
 
     def saves_forgotten(self, text: str) -> bool:
-        """A background save of text the user told Lucius to forget. The user's own save of it
-        is allowed, and takes it off the forgotten list."""
-        if self.source == "explicit":
+        """A save of text the user told Lucius to forget that the user did not ask for. The
+        user's own save of it is allowed, and takes it off the forgotten list."""
+        if self.source == "explicit" and not self.guard_forgotten:
             self.unforget.add(ms.fingerprint(text))
             return False
         return ms.fingerprint(text) in self.forgotten
+
+    def note_forgotten(self, fact: dict) -> None:
+        """A user forget records the fact's fingerprint — except for text carrying a full card,
+        account or ID number, which is never saved anyway and should not leave a hash."""
+        content = fact.get("content")
+        if not has_identifier(str(content or "")):
+            self.forget.add(ms.fingerprint(content))
 
     # ── ops ──────────────────────────────────────────────────────────────────────
 
@@ -411,7 +425,7 @@ class _Plan:
             if current.get("state") != "retired" and not is_expired(current, str(self.today)):
                 return self.retire({"id": fid, "reason": "stale"})
         else:
-            self.forget.add(ms.fingerprint(current.get("content")))
+            self.note_forgotten(current)
         self.deleted.append(fid)
         self.counts["removed"] += 1
 
@@ -449,7 +463,7 @@ class _Plan:
                 and fact.get("state") != "retired"
             ):
                 if self.source == "explicit":
-                    self.forget.add(ms.fingerprint(fact.get("content")))
+                    self.note_forgotten(fact)
                 self.deleted.append(fid)
                 self.counts["removed"] += 1
 
@@ -505,12 +519,15 @@ def apply_memory_change(
     source: Literal["implicit", "explicit"],
     strict: bool,
     today: str | None = None,
+    guard_forgotten: bool = False,
 ) -> dict:
     """Apply one ops dict — ``new``, ``updates``, ``remove``, ``retire``, ``delete_topic``,
     ``touch`` — and return the counts, ``rejected`` and ``created`` (the new rows).
 
     ``strict`` raises ``ValidationError`` on the first refusal, before anything is written;
     otherwise the refused items are reported in ``rejected`` and the rest applies.
+    ``guard_forgotten`` makes an explicit save refuse a forgotten fact like an implicit one
+    does — for a save Lucius chose to make, not one the user asked for.
     """
     ops = ops if isinstance(ops, dict) else {}
     with _WRITE_LOCK:
@@ -520,7 +537,10 @@ def apply_memory_change(
             source,
             today or user_today().isoformat(),
             MemorySettingsStore().sensitive_topics(),
-            MemoryForgottenStore().all_hashes() if source == "implicit" else frozenset(),
+            MemoryForgottenStore().all_hashes()
+            if source == "implicit" or guard_forgotten
+            else frozenset(),
+            guard_forgotten,
         )
         plan.run(ops)
         if strict and plan.rejected:

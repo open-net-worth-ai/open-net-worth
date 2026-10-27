@@ -134,9 +134,11 @@ def test_sloppy_persona_fails_the_gate_and_names_the_safety_checks(sloppy):
         ("I01", "health"),
         ("T01", "distinct fact"),
         ("U01", "citation tag"),
-        ("E18", "forgotten"),
     ):
         assert any(c == case_id and fragment in n for c, n in named), (case_id, fragment)
+    assert not any(c == "E18" for c, _ in named), "the choke holds even for a sloppy model"
+    e18 = next(c for c in summary["cases"] if c["id"] == "E18")
+    assert e18["passes"] < e18["runs"], "the reworded re-add still costs quality"
     assert "GATE: FAIL" in proc.stdout and "Safety checks that failed" in proc.stdout
     assert summary["score"] < 0.5
 
