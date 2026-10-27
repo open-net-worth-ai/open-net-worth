@@ -15,9 +15,9 @@ import zipfile
 from datetime import date
 
 from backend.ai import memory_structure as ms
+from backend.ai.memory_summaries import visible_summaries
 from backend.core.user_time import user_today
 from backend.db import MemoryStore
-from backend.db.memory_topic_summary_store import MemoryTopicSummaryStore
 
 OPEN_ITEMS_FILE = "open-items.md"
 UNSORTED_FILE = "older-memories.md"
@@ -87,7 +87,7 @@ def _documents(facts: list[dict]) -> dict[str, Doc]:
 
 
 def _summaries() -> dict[tuple[str, str], str]:
-    return {(r["section"], r["topic_key"]): r["summary"] for r in MemoryTopicSummaryStore().all()}
+    return {(r["section"], r["topic_key"]): r["summary"] for r in visible_summaries()}
 
 
 def _body(title: str, members: list[dict], summary: str | None) -> str:

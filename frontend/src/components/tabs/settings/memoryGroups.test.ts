@@ -5,6 +5,7 @@ import {
   groupFacts,
   retiredReason,
   summaryOf,
+  topicKey,
   topicsOf,
 } from './memoryGroups'
 
@@ -113,5 +114,15 @@ describe('summaryOf', () => {
   it('is empty for another section or an unknown topic', () => {
     expect(summaryOf(rows, 'other', 'profile')).toBe('')
     expect(summaryOf(rows, 'you', 'preferences')).toBe('')
+  })
+})
+
+describe('topicKey', () => {
+  it('cuts a long name to 60 characters, as the backend stores it', () => {
+    const long = 'Household  budgeting and long-term savings ' + 'x'.repeat(40)
+    const key = topicKey(long)
+    expect(key).toHaveLength(60)
+    expect(key).toBe(('household budgeting and long-term savings ' + 'x'.repeat(40)).slice(0, 60))
+    expect(topicKey('A'.repeat(59) + ' B')).toBe('a'.repeat(59))
   })
 })

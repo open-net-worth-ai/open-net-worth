@@ -28,7 +28,9 @@ from backend.db.memory_topic_summary_store import MemoryTopicSummaryStore
 @pytest.fixture(autouse=True)
 def _isolated(db_isolated):
     MemorySettingsStore().set_enabled(True)
-    return db_isolated
+    memory_summaries._attempted.clear()
+    yield db_isolated
+    memory_summaries._attempted.clear()
 
 
 def _ago(days: int = 1) -> str:
@@ -179,7 +181,7 @@ def test_one_call_for_many_topics_and_at_most_twenty(monkeypatch):
 # ── what is kept from the reply ──────────────────────────────────────────────
 
 
-def test_a_bad_reply_item_is_skipped_and_retried_next_sweep(monkeypatch):
+def test_a_bad_reply_item_is_skipped_and_backs_off_until_its_facts_change(monkeypatch):
     _seed(
         _fact("m1", "Works at Marlowe Analytics"),
         _fact("m2", "Rents a flat in Tampines", section="money", topic="Housing"),
@@ -209,13 +211,46 @@ def test_a_bad_reply_item_is_skipped_and_retried_next_sweep(monkeypatch):
     assert out["written"] == 1 and out["skipped"] >= 4
 
     model.override = None
+    again = _refresh()
+    assert len(model.prompts) == 1, "a refused topic is not re-sent with the same facts"
+    assert again["sent"] == 0
+
+    MemoryStore().update_by_id("m2", {"content": "Rents a flat in Bedok"})
     _refresh()
-    assert sorted(model.sent[1]) == [
-        ("money", "Banking"),
-        ("money", "Housing"),
-        ("other", "Reading"),
-        ("plans", "Hokkaido trip"),
-    ]
+    assert model.sent[1] == [("money", "Housing")], "a changed topic is tried again"
+    assert ("money", "housing") in _rows()
+
+
+def test_a_topic_the_model_leaves_out_backs_off_and_returns_after_the_cooldown(monkeypatch):
+    _seed(_fact("m1", "Has a FY2026 plan", section="plans", topic="FY2026 plan"))
+    model = _use(monkeypatch, _Model([]))
+    _refresh()
+    _refresh()
+    assert len(model.prompts) == 1
+
+    key = ("plans", "fy2026 plan")
+    digest, at = memory_summaries._attempted[key]
+    memory_summaries._attempted[key] = (digest, at - memory_summaries.RETRY_COOLDOWN_SECONDS - 1)
+    _refresh()
+    assert len(model.prompts) == 2
+
+
+def test_a_never_tried_topic_goes_ahead_of_one_that_already_failed(monkeypatch):
+    _seed(
+        *(
+            _fact(f"m{i}", f"Fact number {i}", section="other", topic=f"Topic {i}")
+            for i in range(20)
+        )
+    )
+    model = _use(monkeypatch, _Model([]))
+    _refresh()
+    for key, (digest, at) in list(memory_summaries._attempted.items()):
+        memory_summaries._attempted[key] = (digest, at - memory_summaries.RETRY_COOLDOWN_SECONDS)
+    _seed(_fact("m_new", "A newer fact", section="other", topic="Fresh", updated_at=_ago(30)))
+
+    _refresh()
+
+    assert model.sent[1][0] == ("other", "Fresh") and len(model.sent[1]) == 20
 
 
 def test_a_failed_or_unparseable_call_writes_nothing_and_never_raises(monkeypatch):
@@ -229,6 +264,10 @@ def test_a_failed_or_unparseable_call_writes_nothing_and_never_raises(monkeypatc
 
     monkeypatch.setattr(memory, "_provider", lambda: _Garbage())
     assert _refresh()["written"] == 0 and _rows() == {}
+
+    model = _use(monkeypatch, _Model())
+    _refresh()
+    assert len(model.prompts) == 1, "a failed call is no reason to back off"
 
 
 def test_a_no_op_while_memory_is_off(monkeypatch):
@@ -292,7 +331,7 @@ def test_the_facts_route_returns_the_topics_and_delete_topic_removes_its_summary
     _seed(
         _fact("m1", "Works at Marlowe Analytics"),
         _fact("m2", "Rents a flat in Tampines", section="money", topic="Housing"),
-        _fact("m3", "Pays rent on the 3rd", section="money", topic="housing"),
+        _fact("m3", "Pays rent on the 3rd", section="money", topic="housing", updated_at=_ago(5)),
     )
     _use(monkeypatch, _Model())
     _refresh()
@@ -300,10 +339,7 @@ def test_the_facts_route_returns_the_topics_and_delete_topic_removes_its_summary
 
     body = client.get("/api/memory/facts").json()
     topics = {(t["section"], t["topic"]): t for t in body["topics"]}
-    assert set(topics) == {("you", "Profile"), ("money", "Housing")} or set(topics) == {
-        ("you", "Profile"),
-        ("money", "housing"),
-    }
+    assert set(topics) == {("you", "Profile"), ("money", "Housing")}, "named as its newest fact"
     assert all(t["summary"] and t["updated_at"] for t in body["topics"])
     assert set(body["topics"][0]) == {"section", "topic", "summary", "updated_at"}
 
@@ -325,6 +361,79 @@ def test_forget_all_clears_every_summary(monkeypatch):
 
 
 # ── the export ───────────────────────────────────────────────────────────────
+
+
+def test_forgetting_a_topics_last_fact_with_memory_off_drops_its_summary_at_once(monkeypatch):
+    _seed(
+        _fact("m1", "Works at Marlowe Analytics"),
+        _fact("m2", "Rents a flat in Tampines", section="money", topic="Housing"),
+    )
+    _use(monkeypatch, _Model())
+    _refresh()
+    MemorySettingsStore().set_enabled(False)
+    client = _client()
+
+    assert client.delete("/api/memory/facts/m2").status_code == 200
+
+    assert set(_rows()) == {("you", "profile")}
+    topics = client.get("/api/memory/facts").json()["topics"]
+    assert [(t["section"], t["topic"]) for t in topics] == [("you", "Profile")]
+
+
+def test_the_forget_fact_tool_and_a_retire_drop_an_emptied_topics_summary(monkeypatch):
+    from backend.ai.memory_write import apply_memory_change
+
+    _seed(
+        _fact("m1", "Works at Marlowe Analytics"),
+        _fact("m2", "Rents a flat in Tampines", section="money", topic="Housing"),
+    )
+    _use(monkeypatch, _Model())
+    _refresh()
+
+    apply_memory_change(
+        {"retire": [{"id": "m1", "reason": "stale"}]}, source="implicit", strict=False
+    )
+    assert set(_rows()) == {("money", "housing")}
+
+
+def test_get_and_export_hide_a_summary_whose_topic_has_no_live_facts(monkeypatch):
+    _seed(_fact("m1", "Works at Marlowe Analytics"))
+    _use(monkeypatch, _Model([{"section": "you", "topic": "Profile", "summary": "Who they are"}]))
+    _refresh()
+    MemoryStore().remove_by_id("m1")  # bypasses the choke: the row is still stored
+
+    assert set(_rows()) == {("you", "profile")}
+    assert _client().get("/api/memory/facts").json()["topics"] == []
+    assert "Who they are" not in "".join(_files(memory_export.build_memory_export()).values())
+
+
+def test_the_sweep_prune_runs_with_memory_off(monkeypatch):
+    from backend.ai import memory_idle
+
+    _seed(_fact("m1", "Works at Marlowe Analytics"))
+    _use(monkeypatch, _Model())
+    _refresh()
+    MemoryStore().remove_by_id("m1")
+    MemorySettingsStore().set_enabled(False)
+
+    asyncio.run(memory_idle.prune_topic_summaries())
+
+    assert _rows() == {}
+
+
+def test_a_reset_or_whole_book_import_wipes_the_summaries(monkeypatch):
+    from backend.db import portable_bridge
+    from backend.db.engine import get_engine
+
+    _seed(_fact("m1", "Works at Marlowe Analytics"))
+    _use(monkeypatch, _Model())
+    _refresh()
+    assert _rows()
+
+    with get_engine().begin() as conn:
+        portable_bridge._wipe_memory(conn)
+
+    assert _rows() == {} and MemoryStore().all_facts() == []
 
 
 def _files(blob: bytes) -> dict[str, str]:

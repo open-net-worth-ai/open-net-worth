@@ -13,7 +13,6 @@ from __future__ import annotations
 import logging
 
 from backend.ai import memory_structure as ms
-from backend.ai import memory_summaries
 from backend.ai.memory import (
     _EXTRACT_SYSTEM,
     _MEMORY_JSON,
@@ -218,14 +217,11 @@ def delete_topic(section: str, topic: str) -> int:
     )
     if not result["removed"]:
         raise NotFoundError("unknown topic")
-    memory_summaries.forget_topic(ms.normalise_section(section) or section, topic)
     return result["removed"]
 
 
 def forget_everything() -> int:
-    """Forget every stored fact and every topic summary; returns how many facts went. Allowed
-    while memory is off."""
+    """Forget every stored fact (their topics' summaries go with them); returns how many facts
+    went. Allowed while memory is off."""
     ids = [f["id"] for f in MemoryStore().all_facts() if f.get("id")]
-    removed = apply_memory_change({"remove": ids}, source="explicit", strict=False)["removed"]
-    memory_summaries.forget_all()
-    return removed
+    return apply_memory_change({"remove": ids}, source="explicit", strict=False)["removed"]

@@ -546,9 +546,22 @@ def apply_memory_change(
         if strict and plan.rejected:
             raise ValidationError(plan.messages[0], reason=plan.rejected[0]["reason"])
         plan.commit(store)
+    if plan.counts["removed"] or plan.counts["retired"] or plan.counts["updated"]:
+        _prune_summaries()
     if source == "implicit" and any(plan.counts.values()):
         _announce()
     return plan.result()
+
+
+def _prune_summaries() -> None:
+    """A topic this write emptied loses its generated summary now, not at the next sweep (which
+    never runs while memory is off). Never fails the write."""
+    try:
+        from backend.ai.memory_summaries import prune_summaries
+
+        prune_summaries()
+    except Exception:  # noqa: BLE001 — a display-only summary never fails a memory write
+        logger.warning("could not prune topic summaries", exc_info=True)
 
 
 def _announce() -> None:

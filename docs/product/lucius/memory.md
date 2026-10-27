@@ -79,7 +79,8 @@ that narrows it to the facts (or topics) containing your words.
    see when it was **Last updated**, a one-line **Summary** of what the topic covers, and its
    **Details** as bullets. Lucius writes the summary himself and refreshes it within a few minutes
    of the topic's facts changing (a brand-new topic shows it once he has); it describes the topic
-   and never repeats its numbers, and it is only shown to you — it isn't part of what he reads. Point at a bullet (on a phone
+   and never repeats its numbers. It is for you to read: it is never in Lucius's prompt. When a
+   topic's last fact goes, its summary goes with it straight away. Point at a bullet (on a phone
    the icons are always there) and click **Edit** (the pencil) to fix its wording — the whole fact
    opens in a box; change it, then **Save** or press Enter (Shift+Enter starts a new line);
    **Cancel** or Esc leaves it as it was — or **Forget** (the bin) to remove just that fact, then

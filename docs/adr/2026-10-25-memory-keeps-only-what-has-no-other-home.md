@@ -520,8 +520,11 @@ It is generated in the idle sweep, after extraction, the sort and the tidy, by
 `ai.memory_summaries.refresh_summaries`: one memory-model call (`source=memory_summary`) for up to
 20 topics whose stored row is missing or whose digest of live fact ids and text has changed. A
 returned line is kept only for a topic that was sent, at most 120 characters, with no identifier
-and no run of more than three digits; anything else is asked for again next sweep. Rows live in
-`memory_topic_summaries` (revision `202610272100`), checkpoint-excluded because they are derived;
-a topic with no live facts loses its row, and deleting a topic or forgetting everything removes
-them. The export writes the summary as an italic line under each topic's title. Benchmark case
+and no run of more than three digits. A topic sent with no usable line back backs off until its
+facts change or 24 hours pass, behind topics never tried, so a few stubborn topics cannot starve
+the rest. Rows live in `memory_topic_summaries` (revision `202610272100`), checkpoint-excluded
+because they are derived. A topic with no live facts loses its row at once, whatever the memory
+setting: the write choke prunes after any write that removes, retires or moves a fact (no model
+call), the sweep prunes at the start of every tick, and the API and export show only rows whose
+topic still has live facts. The export writes the summary as an italic line under each topic's title. Benchmark case
 T03 holds the line to its length and to restating no number from the facts.

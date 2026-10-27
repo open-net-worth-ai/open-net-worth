@@ -6,8 +6,11 @@ the tidy. A topic needs a summary when it has no row or its facts changed since 
 written (a digest over its live fact ids and text); up to ``MAX_TOPICS_PER_CALL`` such topics go
 in ONE memory-model call and the rest wait for the next sweep. A returned line is kept only for a
 topic that was sent, within ``SUMMARY_MAX_CHARS``, and with no identifier and no run of more than
-three digits; anything else is skipped and asked for again next sweep. A topic with no live facts
-left loses its row. ADR ``2026-10-25-memory-keeps-only-what-has-no-other-home`` (amendment 8).
+three digits. A topic the model leaves out or answers badly backs off: it is not sent again until
+its facts change or ``RETRY_COOLDOWN_SECONDS`` pass, and topics never tried go first, so a few
+stubborn ones cannot starve the rest. A topic with no live facts left loses its row at once —
+``prune_summaries`` runs after every write that removes, retires or moves a fact, whatever the
+memory setting. ADR ``2026-10-25-memory-keeps-only-what-has-no-other-home`` (amendment 8).
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ import hashlib
 import json
 import logging
 import re
+import time
 from datetime import datetime, timezone
 
 from backend.ai import memory
@@ -32,6 +36,9 @@ logger = logging.getLogger(__name__)
 
 MAX_TOPICS_PER_CALL = 20
 SUMMARY_MAX_CHARS = 120
+# A topic sent once with no usable line back (left out, or every answer refused — "FY2026 plan"
+# echoed as "2026") is not sent again with the same facts until this has passed.
+RETRY_COOLDOWN_SECONDS = 24 * 60 * 60
 _LONG_DIGITS = re.compile(r"\d{4,}")
 
 _SUMMARY_SYSTEM = (
@@ -41,6 +48,10 @@ _SUMMARY_SYSTEM = (
 )
 
 Key = tuple[str, str]
+
+# (section, topic key) → (facts digest, monotonic time) of a send that came back unusable.
+# In-process only: a restart gives every stubborn topic one more try.
+_attempted: dict[Key, tuple[str, float]] = {}
 
 
 def digest(facts: list[dict]) -> str:
@@ -120,7 +131,9 @@ def _accepted(parsed, sent: dict[Key, dict]) -> dict[Key, str]:
     return out
 
 
-async def _ask(batch: list[dict]) -> dict[Key, str]:
+async def _ask(batch: list[dict]) -> dict[Key, str] | None:
+    """The usable lines from one call, or None when the call failed or its reply could not be
+    read at all (a transient fault: nothing backs off for it)."""
     sent = {(t["section"], ms.topic_key(t["topic"])): t for t in batch}
     try:
         reply = await memory._provider().complete(
@@ -134,29 +147,60 @@ async def _ask(batch: list[dict]) -> dict[Key, str]:
         )
     except Exception as exc:
         logger.warning("memory summary LLM call failed: %s", type(exc).__name__)
-        return {}
+        return None
     parsed = memory._parse_json(reply)
     if not isinstance(parsed, dict):
         logger.warning("memory summary returned an unparseable reply")
-        return {}
+        return None
     return _accepted(parsed, sent)
+
+
+def _live() -> dict[Key, dict]:
+    return live_topics(MemoryStore().active_facts(user_today().isoformat()))
+
+
+def _backing_off(key: Key, topic: dict, now: float) -> bool:
+    """True while ``topic`` was already sent with these exact facts and came back without a usable
+    line, less than ``RETRY_COOLDOWN_SECONDS`` ago."""
+    tried = _attempted.get(key)
+    return (
+        tried is not None
+        and tried[0] == topic["digest"]
+        and now - tried[1] < RETRY_COOLDOWN_SECONDS
+    )
 
 
 def _plan(store: MemoryTopicSummaryStore) -> tuple[list[dict], list[Key], int]:
     """(the topics to send now, the rows to delete, how many topics are dirty). Sync DB reads."""
-    topics = live_topics(MemoryStore().active_facts(user_today().isoformat()))
+    topics = _live()
     rows = {(r["section"], r["topic_key"]): r for r in store.all()}
+    now = time.monotonic()
     dirty = []
     for key, topic in topics.items():
         topic["digest"] = digest(topic["facts"])
-        if rows.get(key, {}).get("facts_digest") != topic["digest"]:
-            newest = max(str(f.get("updated_at") or "") for f in topic["facts"])
-            dirty.append((key in rows, newest, topic))
-    # Topics with no summary yet first, then the most recently changed.
-    dirty.sort(key=lambda d: d[1], reverse=True)
-    dirty.sort(key=lambda d: d[0])
-    batch = [d[2] for d in dirty[:MAX_TOPICS_PER_CALL]]
+        if rows.get(key, {}).get("facts_digest") == topic["digest"]:
+            continue
+        if _backing_off(key, topic, now):
+            continue
+        newest = max(str(f.get("updated_at") or "") for f in topic["facts"])
+        dirty.append((key in _attempted, key in rows, newest, topic))
+    # Never tried before first, then topics with no summary yet, then the most recently changed.
+    dirty.sort(key=lambda d: d[2], reverse=True)
+    dirty.sort(key=lambda d: (d[0], d[1]))
+    batch = [d[3] for d in dirty[:MAX_TOPICS_PER_CALL]]
     return batch, [k for k in rows if k not in topics], len(dirty)
+
+
+def _remember_attempts(batch: list[dict], lines: dict[Key, str]) -> None:
+    """A topic the model answered for is done; one it left out or answered badly backs off until
+    its facts change or the cooldown passes."""
+    now = time.monotonic()
+    for topic in batch:
+        key = (topic["section"], ms.topic_key(topic["topic"]))
+        if key in lines:
+            _attempted.pop(key, None)
+        else:
+            _attempted[key] = (topic["digest"], now)
 
 
 def _write(store: MemoryTopicSummaryStore, batch: list[dict], lines: dict[Key, str]) -> int:
@@ -185,7 +229,10 @@ async def refresh_summaries() -> dict:
         return {"ran": False}
     store = MemoryTopicSummaryStore()
     batch, gone, dirty = await asyncio.to_thread(_plan, store)
-    lines = await _ask(batch) if batch else {}
+    lines = await _ask(batch) if batch else None
+    if lines is not None:
+        _remember_attempts(batch, lines)
+    lines = lines or {}
     written = await asyncio.to_thread(_write, store, batch, lines) if lines else 0
     deleted = await asyncio.to_thread(store.delete, gone) if gone else 0
     if written or deleted:
@@ -210,11 +257,18 @@ async def refresh_summaries() -> dict:
     return out
 
 
-def forget_topic(section: str, topic: str) -> int:
-    """Drop one topic's summary (the user deleted the topic)."""
-    return MemoryTopicSummaryStore().delete([(section, ms.topic_key(topic))])
+def prune_summaries() -> int:
+    """Delete the summary of every topic with no live facts left. Cheap and model-free, and
+    run whatever the memory setting: a summary must not outlive the facts it describes — the
+    write choke calls it after a write that removes, retires or moves a fact, and the sweep at
+    the start of every tick."""
+    live = _live()
+    store = MemoryTopicSummaryStore()
+    gone = [(r["section"], r["topic_key"]) for r in store.all()]
+    return store.delete([k for k in gone if k not in live])
 
 
-def forget_all() -> int:
-    """Drop every summary (the user forgot everything)."""
-    return MemoryTopicSummaryStore().clear()
+def visible_summaries() -> list[dict]:
+    """The stored summaries of topics that have live facts right now."""
+    live = _live()
+    return [r for r in MemoryTopicSummaryStore().all() if (r["section"], r["topic_key"]) in live]

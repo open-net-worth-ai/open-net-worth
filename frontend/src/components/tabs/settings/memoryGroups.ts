@@ -44,9 +44,19 @@ export function daysUntilForgotten(retiredAt?: string | null, today = localDay()
   return Math.max(0, RETIRED_KEEP_DAYS - Math.round((now - at) / DAY_MS))
 }
 
-/** What two spellings of one topic have in common, as the backend's `topic_key`. */
+// A topic name is stored at most this long (the backend's `TOPIC_MAX_CHARS`).
+const TOPIC_MAX_CHARS = 60
+
+/** What two spellings of one topic have in common, as the backend's `topic_key`: whitespace
+ *  collapsed, cut to 60 characters, trimmed, case folded. */
 export function topicKey(name?: string | null): string {
-  return (name ?? '').split(/\s+/).filter(Boolean).join(' ').toLowerCase()
+  return (name ?? '')
+    .split(/\s+/)
+    .filter(Boolean)
+    .join(' ')
+    .slice(0, TOPIC_MAX_CHARS)
+    .trim()
+    .toLowerCase()
 }
 
 /** A topic's generated summary line, matched by section and topic key (as the facts group), or

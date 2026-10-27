@@ -178,7 +178,7 @@ class Harness:
     # ── the scratch book ─────────────────────────────────────────────────────
 
     def _reset_book(self) -> None:
-        from backend.ai import assistant, memory_sort
+        from backend.ai import assistant, memory_sort, memory_summaries
         from backend.core import paths
         from backend.db.engine import dispose_engine
 
@@ -189,6 +189,7 @@ class Harness:
         assistant.SESSIONS.clear()
         assistant._SESSION_LOCKS.clear()
         memory_sort._retry_after = 0.0
+        memory_summaries._attempted.clear()
 
     def _configure_model(self) -> None:
         if self.cfg.mock:

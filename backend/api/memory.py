@@ -42,12 +42,12 @@ from backend.ai.memory_instruct import (
     edit_fact,
     forget_everything,
 )
+from backend.ai.memory_summaries import visible_summaries
 from backend.ai.memory_write import apply_memory_change
 from backend.core.errors import ExternalServiceError, NotFoundError, ValidationError
 from backend.core.user_time import user_today
 from backend.db.memory_settings_store import MemorySettingsStore
 from backend.db.memory_store import MemoryStore
-from backend.db.memory_topic_summary_store import MemoryTopicSummaryStore
 
 router = APIRouter()
 
@@ -97,7 +97,7 @@ def list_memory_facts():
     facts = MemoryStore().all_facts()
     topics = [
         {k: row[k] for k in ("section", "topic", "summary", "updated_at")}
-        for row in MemoryTopicSummaryStore().all()
+        for row in visible_summaries()
     ]
     return {"facts": facts, "total": len(facts), "topics": topics}
 
