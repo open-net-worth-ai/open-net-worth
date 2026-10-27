@@ -141,13 +141,6 @@
   gap: var(--space-4);
   min-width: 0;
 }
-/* The bubble defaults to `left: 0` (opens rightward). This control sits at the RIGHT edge of the
-   row, so rightward runs straight off-screen / under the chat dock and the text is clipped.
-   Anchor it to the right edge instead so it opens back into the page. */
-.pl-mast-row .info-pop-bubble {
-  left: auto;
-  right: 0;
-}
 /* Denser than the default control: this annotates a tab row, it is not a primary action. */
 .pl-mast-row .ui-segmented {
   padding: 2px;

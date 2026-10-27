@@ -429,6 +429,11 @@ class FakeSvc:
 
         return _real_ledger._signed_opening(row)
 
+    def cleared_account_balance(self, account, txns, opening_date):
+        from backend.services import ledger as _real_ledger
+
+        return _real_ledger.cleared_account_balance(account, txns, opening_date)
+
 
 def test_list_accounts_default_hides_archived(monkeypatch):
     """Default call hides archived accounts and appends a note."""

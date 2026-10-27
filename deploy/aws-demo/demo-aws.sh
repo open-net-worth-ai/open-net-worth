@@ -6,6 +6,7 @@
 #   demo-aws.sh book --seed        generate a fresh fabricated demo book on the VM
 #   demo-aws.sh book --reset       replace the live book with a fresh one, keeping Lucius's AI settings
 #   demo-aws.sh book [DIR]         or copy an existing hosted demo book (default ~/.open-net-worth-demo)
+#   demo-aws.sh backup             save the live book to this machine (~/.open-net-worth-demo-backups)
 #   demo-aws.sh lucius             point Lucius at OpenRouter (key read silently, never echoed)
 #   demo-aws.sh verify             open the VM's demo at http://127.0.0.1:15175 over SSH
 #   demo-aws.sh tunnel             start the connector for a tunnel DEDICATED to the demo
@@ -23,6 +24,12 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${HERE}/../.." && pwd)"
 STACK=/srv/onw-demo-stack
 BOOK=/srv/onw-demo
+BACKUP_DIR="${ONW_DEMO_BACKUP_DIR:-${HOME}/.open-net-worth-demo-backups}"
+BACKUP_KEEP="${ONW_DEMO_BACKUP_KEEP:-14}"
+
+# Read / write Lucius's AI settings inside the app container (they live in the book).
+AI_READ_PY='import json; from backend.db.model_config_store import ModelConfigStore as S; print(json.dumps(S().get() or {}))'
+AI_WRITE_PY='import json, sys; from backend.db.model_config_store import ModelConfigStore as S; raw = json.loads(sys.stdin.read()); raw and S().save(raw)'
 
 ls_() { aws lightsail --region "${REGION}" "$@"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -153,6 +160,37 @@ ensure_unpublished_password() {
     || remote "head -c 48 /dev/urandom | base64 | tr -d '\n/+='" | remote_env_set DEMO_UNPUBLISHED_PASSWORD
 }
 
+# The live book, saved to THIS machine before anything replaces it. `book --reset` deletes the
+# VM's own nightly backups (they hold visitors' conversations) and there are no Lightsail
+# snapshots, so without this a book replaced by mistake is gone (2026-10-26). The archive holds
+# data/ exactly as `book DIR` expects: extract it and run `demo-aws.sh book <that dir>`.
+# It contains the AI key and the auth hash, so the folder is owner-only.
+cmd_backup() {
+  remote "test -s ${BOOK}/data/onw.db" || { echo "==> no book on the VM yet; nothing to back up"; return 0; }
+  local out
+  ( umask 077; mkdir -p "${BACKUP_DIR}" )
+  out="${BACKUP_DIR}/onw-demo-$(date +%Y%m%d-%H%M%S).tar.gz"
+  echo "==> saving the live book to ${out}..."
+  # SQLite's online backup is consistent while the app keeps writing; copying onw.db + -wal is not.
+  remote "BOOK=${BOOK} bash -s" > "${out}.part" <<'SH'
+set -euo pipefail
+s="$(mktemp -d)"; trap 'rm -rf "$s"' EXIT
+python3 -c 'import sqlite3, sys
+src, dst = sys.argv[1:]
+d = sqlite3.connect(dst)
+sqlite3.connect(src).backup(d)
+assert d.execute("pragma integrity_check").fetchone()[0] == "ok", "snapshot failed integrity_check"
+d.close()' "${BOOK}/data/onw.db" "$s/onw.db" </dev/null
+tar czf - --exclude='data/onw.db' --exclude='data/onw.db-wal' --exclude='data/onw.db-shm' \
+  --exclude='*.lock' -C "${BOOK}" data -C "$s" --transform 's,^onw\.db$,data/onw.db,' onw.db </dev/null
+SH
+  tar tzf "${out}.part" data/onw.db >/dev/null 2>&1 || { rm -f "${out}.part"; die "backup is incomplete — nothing was replaced"; }
+  chmod 600 "${out}.part" && mv "${out}.part" "${out}"
+  # Oldest first out; ls -t sorts newest first.
+  ls -1t "${BACKUP_DIR}"/onw-demo-*.tar.gz 2>/dev/null | tail -n +"$((BACKUP_KEEP + 1))" | while read -r old; do rm -f "${old}"; done
+  echo "==> saved ($(du -h "${out}" | cut -f1)); the newest ${BACKUP_KEEP} are kept in ${BACKUP_DIR}"
+}
+
 cmd_book_seed() {
   remote_env_has ONW_DEMO_TAG || die "no image on the VM yet — run ship first"
   remote "test -s ${BOOK}/data/onw.db" && die "the VM already has a book — remove ${BOOK}/data/onw.db first to reseed"
@@ -169,6 +207,7 @@ cmd_book_seed() {
 # out of the running container and written into the new book; it never leaves the VM.
 cmd_book_reset() {
   remote_env_has ONW_DEMO_TAG || die "no image on the VM yet — run ship first"
+  cmd_backup
   echo "==> replacing the book with a fresh one dated to today (AI settings kept)..."
   remote "STACK=${STACK} BOOK=${BOOK} bash -s" <<'SH'
 set -euo pipefail
@@ -201,6 +240,11 @@ cmd_book_copy() {
   sqlite3 "${root}/data/onw.db" ".backup '${stage}/onw.db'"
   [[ "$(sqlite3 "${stage}/onw.db" 'PRAGMA integrity_check;')" == "ok" ]] || die "snapshot failed integrity_check"
 
+  cmd_backup
+  # Lucius's AI settings live IN the book, so copying another book over it would drop the key
+  # (2026-10-26). Read them out of the running app first; they stay on the VM, owner-only.
+  remote "umask 077; docker exec -e DEMO_MODE=0 onw-demo python3 -c '${AI_READ_PY}' > ${STACK}/.ai-carry.json 2>/dev/null \
+    || echo '{}' > ${STACK}/.ai-carry.json"
   compose stop app 2>/dev/null || true
   local excl=(--exclude 'onw.db' --exclude 'onw.db-wal' --exclude 'onw.db-shm' --exclude '*.lock'
               --exclude 'backups/')
@@ -214,8 +258,13 @@ cmd_book_copy() {
   ensure_session_key "${root}.session-key"
 
   if remote_env_has ONW_DEMO_TAG; then
+    if remote "grep -q '[^{} ]' ${STACK}/.ai-carry.json"; then
+      remote "cd ${STACK} && docker compose run --rm --no-deps -T -e DEMO_MODE=0 app python3 -c '${AI_WRITE_PY}' < .ai-carry.json"
+      echo "==> Lucius's AI settings carried over"
+    fi
+    remote "rm -f ${STACK}/.ai-carry.json"
     compose up -d app
-    echo "==> book in place and the demo is starting — next: $0 lucius, then $0 verify"
+    echo "==> book in place and the demo is starting — next: $0 verify"
   else
     echo "==> book in place — next: $0 ship"
   fi
@@ -293,7 +342,7 @@ cmd_status() {
 }
 
 case "${1:-}" in
-  ship|book|lucius|verify|tunnel|status|logs|ssh) need_vm ;;
+  ship|book|backup|lucius|verify|tunnel|status|logs|ssh) need_vm ;;
 esac
 case "${1:-}" in
   provision) cmd_provision ;;
@@ -304,11 +353,12 @@ case "${1:-}" in
                --reset) cmd_book_reset ;;
                *)       cmd_book_copy "${1:-}" ;;
              esac ;;
+  backup)    cmd_backup ;;
   lucius)    cmd_lucius ;;
   verify)    cmd_verify ;;
   tunnel)    cmd_tunnel ;;
   status)    cmd_status ;;
   logs)      remote "docker logs --tail 200 -f onw-demo" ;;
   ssh)       shift; remote "$@" ;;
-  *) sed -n '2,15p' "$0"; exit 2 ;;
+  *) sed -n '2,16p' "$0"; exit 2 ;;
 esac

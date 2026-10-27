@@ -2106,11 +2106,24 @@ body.hide-amounts .mask.l::after {
   min-width: 260px;
 }
 .acct-bal-k {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: 10px;
   letter-spacing: 0.09em;
   text-transform: uppercase;
   color: var(--faint);
   font-weight: 700;
+}
+/* The title's one "i": a line per figure. */
+.acct-bal-terms {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.acct-bal-terms b {
+  color: var(--ink);
+  font-weight: 600;
 }
 .acct-bal-v {
   font-size: 22px;
@@ -2337,7 +2350,9 @@ body.hide-amounts .mask.l::after {
 .acct-recon-group--review {
   gap: 6px;
 }
-.acct-recon-group--review > .acct-recon-stat.muted {
+/* A little extra room after the review pills only — alone on a phone row it lines up with the
+   status icon above. */
+.acct-recon-review + .acct-recon-txns {
   margin-left: 6px;
 }
 .acct-recon-review {
@@ -8461,11 +8476,6 @@ select.acct-addin {
 /* The checkbox's label is screen-reader only (the row already says "Cleared"), so no gap. */
 .acct-detail-cleared .ui-check {
   gap: 0;
-}
-.acct-detail-cleared .info-pop-bubble {
-  left: 50%;
-  transform: translateX(-50%);
-  min-width: 0;
 }
 .acct-edit-sign.tog {
   cursor: pointer;

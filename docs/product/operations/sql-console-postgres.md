@@ -30,10 +30,10 @@ has no equivalent, and checking the query text isn't reliable, so on PostgreSQL 
    GRANT CONNECT ON DATABASE onw TO onw_sql_console;
    GRANT USAGE ON SCHEMA public TO onw_sql_console;
    GRANT SELECT ON ALL TABLES IN SCHEMA public TO onw_sql_console;
-   -- credential tables, connector settings and sign-in sessions: never readable through this role
-   REVOKE ALL ON secret_config, connector_secrets, connectors, sessions FROM onw_sql_console;
-   -- optional: also keep chat transcripts out of reach
-   REVOKE ALL ON session_messages FROM onw_sql_console;
+   -- credential tables and connector settings: never readable through this role
+   REVOKE ALL ON secret_config, connector_secrets, connectors FROM onw_sql_console;
+   -- optional: also keep your conversations (titles and messages) out of Lucius's queries
+   REVOKE ALL ON sessions, session_messages FROM onw_sql_console;
    ```
 
 2. **Point the app at it** with a second connection address, then restart:

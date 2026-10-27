@@ -90,7 +90,7 @@ def test_the_schema_tool_hides_both_connector_tables(store, table):
 def test_the_postgres_revoke_list_names_both_connector_tables():
     assert {"connectors", "connector_secrets"} <= sql_console.DENIED_TABLES
     doc = Path(__file__).resolve().parents[1] / "docs/product/operations/sql-console-postgres.md"
-    assert "connectors, sessions" in doc.read_text()
+    assert "connector_secrets, connectors FROM onw_sql_console" in doc.read_text()
 
 
 @pytest.mark.parametrize(

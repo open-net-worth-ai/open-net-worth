@@ -83,6 +83,35 @@ link. So a commit subject is release-note copy: write it for a user. The release
 `release.yml` fetches the script at the source commit; a failure there leaves the list out and
 never blocks the release. Keep the trailing `Source: <sha>` line — the next run reads it.
 
+With `--highlights` (what the nightly passes, with the releases repo's `ANTHROPIC_API_KEY`),
+Claude (`claude-sonnet-5-5`, low effort, server-side refusal fallback) reads that list and a
+`## Highlights` section of 1–6 plain bullets goes on top: what users can now do first, then the
+fixes they would notice. The full list stays below it. It is best effort: no key, no SDK, an
+error, a refusal or an answer that isn't a bullet list leaves the notes exactly as before.
+
+### Discord announcement
+
+`scripts/release_announce.py` posts each published release to a Discord channel. It posts whenever
+the notes have anything under New, Fixes or Polish, so fixes-only nightlies are announced too. Its
+bullets are the release's Highlights, so the post and the release page say the same thing; notes
+without Highlights use their first New, then Fixes, lines as written. A line counts every fix
+and polish change and names the areas most of them touched ("Plus 35 fixes and 8 smaller
+improvements, especially in Import, Accounts and Chat."), then **How to get it** tells each kind
+of user what to do (desktop: automatic, or Check for Updates; server: `onw upgrade` or a new
+Docker image; new users: the download page) and the post ends with a link to the release. Try it locally with `--dry-run`: it prints the Discord payload and sends nothing.
+
+It runs as the `announce` job of the releases repo's `release.yml`, after `publish`, fetching the
+script at the source commit; it is `continue-on-error`, so it never fails a release. It needs the
+secret `DISCORD_RELEASE_WEBHOOK` (Discord channel → Edit Channel → Integrations → Webhooks) and the
+repository VARIABLE `DISCORD_ANNOUNCE=true` — a secret of that name does nothing.
+
+To see what a release's notes and post would look like without publishing anything, run the
+releases repo's **Preview release notes** workflow (`notes-preview.yml`):
+`gh workflow run notes-preview.yml -R open-net-worth-ai/open-net-worth-releases` (optional
+`-f version=0.1.26`, `-f ref=<source ref of the scripts>`). It rebuilds that release's notes with
+Highlights from the same commit range and writes them, and the Discord payload, to the run's
+summary. Only `-f post=true` sends the post to Discord.
+
 ### `manifest.json`
 
 Written by `scripts/release_manifest.py` (unit-tested), signed with the same minisign key as

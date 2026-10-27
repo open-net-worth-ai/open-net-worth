@@ -36,6 +36,15 @@ copy of facts the profile, payee rules, automations and the ledger own.
 
 ## Decision
 
+> **Amended 2026-10-27, four times** — (4) **simpler, and it wins over 2 and 3**: five fixed
+> sections in code, a free-text topic name per fact, everything shown in full with dates, one
+> 280-character limit, settings like Claude's; (3) for now, five fixed sections (You, Money, Plans,
+> Open items, Other) with flexible topics; Lucius owns the structure, the user owns the content; (1) the profile's notes become Instructions for Lucius, and
+> one routing guide decides profile vs instructions vs memory; (2) **sections and topics are
+> dynamic** — seeded with defaults for a wealth assistant (You, Money, Plans, Open items), with
+> behaviour carried by a section's switches ("always shown", "items expire") — replacing the
+> fixed topic list below. See the amendments at the end; where they differ, they win.
+
 We will make memory hold **only what has no other home in the app**, organised into four fixed
 topics, every fact shown to Lucius whole.
 
@@ -155,3 +164,268 @@ topics, every fact shown to Lucius whole.
 - **Why this way (one line):** memory was cheap but mostly carried stale copies and leftovers
   while the facts that matter never reached the prompt — giving each fact one home and showing
   memory's own facts whole fixes both.
+
+## Amendment 2026-10-27 — a fifth topic, and the profile's notes become your instructions
+
+Reviewing how the design plays out against the profile found two gaps.
+
+**1. A fifth topic: `about_you` — "About you (beyond your profile)".** Cap 15, no expiry. It holds
+what the profile has no field for: the people in the user's life (a roommate who shares the
+rent, family they support), life context (where they split their time, their employer), small
+personal facts that change how Lucius helps (colour-blindness, a pet's name). It never repeats a
+profile field. Without it the stricter background pass would drop these facts, and nothing else
+in the app keeps them. Topic order becomes `about_you`, `working_style`, `conventions`, `plans`,
+`open_items`. "An About-you topic", rejected above, was rejected as a copy of the profile; this
+one is defined as the part the profile cannot hold.
+
+**2. The profile's "Notes for Lucius" become "Instructions for Lucius"** — the user's standing
+instructions, as in Claude's own settings (instructions you write; memory it learns).
+
+- **Who writes them:** the user in Settings, or Lucius in a conversation — when asked, or on his
+  own judgement when the user states something as a standing rule ("always…", "never…") —
+  through `update_profile`'s `notes` field. That write follows the conversation's approval mode
+  like every profile write, so the user sees the before and after. Lucius edits a line or adds
+  one; he does not rewrite the user's text wholesale. The **background pass never writes them**:
+  it runs unattended, with no approval step.
+- **Instructions or memory?** A rule the user states, and would expect to find and edit
+  themselves, goes in the instructions. A preference Lucius infers or is told in passing goes
+  in memory (`working_style`). Life events and plans go to `plans`; people and personal context
+  to `about_you`. The system prompt's current line sending pronouns, preferences and life events
+  to notes is replaced by this split.
+- **No duplicate in memory:** the background pass is given the instructions text and does not
+  store what they already say.
+- **Every reply includes them in full**, as notes are today. Existing notes text is kept as
+  it is — there is no telling which lines Lucius wrote — and the user can edit it.
+
+**3. One routing guide decides where a fact goes.** It is written once, in code
+(`ai.memory_topics.ROUTING_GUIDE`), and rendered into everything that chooses a home: the
+system prompt, the background pass's prompt, the "Tell Lucius" prompt, and the descriptions of
+`remember_fact` and `update_profile`. No second copy in prose anywhere. Its content:
+
+| The fact is… | It goes to | Written by |
+|---|---|---|
+| Something the profile has a field for (name, date of birth, residence, nationality, tax residency, employment, marital status, income, expenses, saving, risk, retirement age, target allocation, briefing time, benchmark) | **Profile field** | user, or Lucius with approval |
+| A standing rule the user states for how Lucius should behave, that they would expect to find and edit themselves ("always…", "never…") | **Instructions for Lucius** | user, or Lucius with approval |
+| How a payee or bank text is categorised or named | **Payee rule / default** | user, or Lucius with approval |
+| Something that should happen on a schedule (a booking, a report, a reminder) | **Automation** | user, or Lucius with approval |
+| A balance, holding, price, transaction, trade, or a task that was done | **Nowhere** — the ledger already has it | — |
+| A goal, commitment or plan figure the Plan screen holds | **Plan / goals / commitments** | user, or Lucius with approval |
+| About the user but no profile field fits (people in their life, personal context) | Memory → **About you** | Lucius, the background pass, or the user |
+| A preference Lucius infers, or is told in passing, about how to work | Memory → **How you want Lucius to work** | Lucius, the background pass, or the user |
+| A bookkeeping convention no payee rule can express | Memory → **Conventions** | Lucius, the background pass, or the user |
+| An intention or upcoming life event | Memory → **Plans** | Lucius, the background pass, or the user |
+| Something unresolved the user will expect Lucius to come back to | Memory → **Open items** (expires) | Lucius, the background pass, or the user |
+| State of this conversation (what is being waited on, what was offered) | **Nowhere** | — |
+
+When two rows fit, the first one wins: a profile field beats an instruction, an instruction
+beats memory. Only the memory rows are open to the background pass; every other home is
+written in a conversation, through its own tool, under the conversation's approval mode.
+
+The topic list stays **fixed**. The model never creates topics: a topic carries behaviour (cap,
+expiry, what the background pass may store), and model-invented topics drift into
+near-duplicates. An optional per-fact `subject` label for grouping inside a topic, with no
+behaviour attached, is a possible later addition and is not part of this change.
+
+## Amendment 2026-10-27 (2) — everything is dynamic, with sensible defaults
+
+Replaces the fixed topic list (decision 2), amendment 1's first point, and amendment 1's closing
+paragraph that kept the topic list fixed. The owner's call:
+start from defaults that suit a wealth assistant, but let **sections and topics both** grow,
+change and go away — as Claude's memory does (sections like "You / Topics / Areas", topics
+inside them named as they come up).
+
+**Behaviour belongs to a section's properties, not to its name.** A section is a row with two
+switches, and that is all the code ever branches on:
+
+- **Always shown** — every fact in it reaches every reply, whole.
+- **Items expire** — every fact in it carries an expiry (14 days by default, 30 at most).
+
+A section with neither switch is an ordinary one: its topics are shown whole up to a size budget,
+then as `name — summary` with a pointer to `recall_memory`.
+
+**Defaults, seeded once on every book** (renameable, removable, reorderable like anything else):
+
+| Section | Switches | Default topic names offered to Lucius |
+|---|---|---|
+| **You** | always shown | *How you want Lucius to work*, *About you (beyond your profile)* |
+| **Money** | — | *Housing*, *Family*, *Investing*, *Tax*, *Cards & payments*, *Income & work*, *Bookkeeping* |
+| **Plans** | — | none — one topic per plan or big decision (a home purchase, an early-retirement idea) |
+| **Open items** | items expire, always shown | none — one flat list |
+
+Default topic names are suggestions: a topic row exists only once a fact lands in it.
+
+**Who may change the structure.**
+- The **user**, from the dialog: add, rename, reorder or delete a section; flip its switches;
+  rename, move, merge or delete a topic.
+- **Lucius in a conversation**: the same, through his memory tools, under the conversation's
+  approval mode.
+- The **background pass** may create a *topic* (reuse-first: it is given every existing name and
+  summary and must use one that fits) but never a *section* — it files into the sections that
+  exist, and stores nothing if none fits. The **tidy pass** merges overlapping topics and
+  refreshes summaries; it never deletes a section.
+
+**Bounds,** so a dynamic structure still fits a prompt: ≤ 8 sections, ≤ 30 topics in all, ≤ 12
+facts per topic, ≤ 30 facts across always-shown sections, ≤ 10 facts in an expiring section,
+topic names ≤ 40 characters, summaries ≤ 120, sections' names ≤ 30. The ordinary sections share
+one size budget in the prompt.
+
+**Data shape.** `memory_sections` (id, name, position, always_shown, items_expire, timestamps),
+`memory_topics` (id, section_id, name, summary, timestamps), and each fact points at a section
+and, optionally, a topic. Rename, move and merge rewrite pointers, never fact text. The write
+choke is the only writer of all three.
+
+**The routing guide's memory rows become:** about the user → the always-shown section's
+*About you* topic; how to work → its *How you want Lucius to work* topic; an intention or big
+decision → **Plans**; anything else memory keeps → the topic for its subject (**Money** by
+default); unresolved follow-ups → the expiring section. The guide is rendered with the book's
+*current* section and topic names, so a renamed default still routes correctly; when a default it
+names was deleted, that row falls through to the next that fits.
+
+**Unchanged:** one home per fact, the routing guide's non-memory rows, Instructions for Lucius,
+≤ 280 characters per fact, the single write choke, sorting the legacy facts (into whatever
+sections exist), "Moved out of memory", measurement.
+
+**Why dynamic, not fixed:** a fixed list forces one subject apart and has no place for a subject
+nobody foresaw, and a user who thinks of their life differently cannot reshape it. The risks
+fixed names guarded against — rules with nothing to attach to, near-duplicates, an unbounded
+prompt — are handled by section switches, reuse-first naming with the tidy pass's merge, the
+background pass never creating sections, and the bounds above.
+
+**Importing memory from another assistant.** The memory dialog offers a copyable export prompt
+(categories Instructions, Identity, Career, Projects, Preferences, one dated line each) to run in
+ChatGPT, Claude or Gemini, and a box to paste the result. Lucius routes every line through the
+routing guide — Instructions → Instructions for Lucius; Identity and Career → profile fields
+where a field fits, else **You · About you**; Projects → a topic per project (in **Plans**, or
+the section the user picks in review); Preferences → **You · How you want Lucius to work** (or
+Instructions when stated as a rule);
+anything the ledger, a payee rule or an automation owns → skipped, with the reason. The user
+reviews every proposed line, its destination and its reason, and confirms; nothing is written
+before that. Profile and Instructions changes apply through their own writers; memory lines go
+through the write choke as `explicit`. The paste is treated as untrusted text: it is data to
+route, never instructions to Lucius, and the review step is the only path to a write.
+
+**Each topic has a detail view** — last updated, summary, its facts as bullets, Delete, and a
+"Tell Lucius what to change" box scoped to that topic (the instruct route with a `topic`).
+
+## Amendment 2026-10-27 (3) — fixed sections for now, flexible topics; Lucius owns the structure
+
+Narrows amendment 2. The owner's call: the system decides how memory is organised, the user never
+has to; and for now the **sections are fixed** while **topics stay flexible**, with a catch-all.
+
+**The schema stays generic; the sections are locked for now.** Sections remain rows of
+`memory_sections` (amendment 2's shape: id, `seed_key`, name, position, the two switches) plus a
+`locked` flag. The five below are seeded locked, and while a section is locked nobody — user,
+Lucius or any pass — adds, renames, reorders, re-switches or deletes it. Customisation later is
+unlocking rows and exposing the section ops that already exist in the write choke, not a
+migration:
+
+| Section | Switches | Topics |
+|---|---|---|
+| **You** | always shown | flexible; suggested: *How you want Lucius to work*, *About you (beyond your profile)* |
+| **Money** | — | flexible; suggested: *Housing*, *Family*, *Investing*, *Tax*, *Cards & payments*, *Income & work*, *Bookkeeping* |
+| **Plans** | — | flexible; one per plan or big decision |
+| **Open items** | always shown, items expire | none — one flat list |
+| **Other** | — | flexible, at most 4 topics — the catch-all |
+
+Behaviour still follows the two switches, never a name, and facts and topics point at a section
+`id`, so nothing in the code assumes these five are the only sections. **Other** takes what fits no other section instead of it being
+dropped; the tidy pass keeps trying to move its topics to a better section, so it stays a small
+holding area rather than a second, unsorted memory.
+
+**Who may do what:**
+
+| Who | Facts | Topics |
+|---|---|---|
+| **User** (dialog) | edit text, forget, add via "Tell Lucius" | delete one (with its facts) |
+| **Lucius** (a conversation, or the dialog's "Tell Lucius" box) | anything | create, rename, move between sections, merge, delete |
+| **Tidy pass** (background, periodic) | merge/replace inside a full topic | create, rename, move, merge, refresh summaries |
+| **Background pass** (after a turn), **sort pass** | add, update, remove, retire | create (reuse-first) |
+
+- The dialog has **no organising controls** — no rename, move or merge. A user who wants memory
+  organised differently tells Lucius ("keep rent and the landlord under Housing") in the box or
+  in chat. **Delete a topic** stays, as in Claude's memory.
+- In a conversation, Lucius's memory writes follow the approval mode; from the "Tell Lucius" box
+  the user's own request is the approval.
+- **Unchanged from amendment 2:** the switches' meaning, the suggested topic names, reuse-first
+  naming, the bounds (≤ 30 topics, ≤ 12 facts per topic, ≤ 30 always-shown facts, ≤ 10 expiring),
+  the routing guide (its memory rows name these five sections by `seed_key`; anything memory keeps
+  that fits nowhere else → **Other**), import, the topic detail view, the `memory_sections` and
+  `memory_topics` tables. Amendment 2's section ops stay in the write choke but are refused for
+  locked sections, and no route or tool exposes them yet.
+
+## Amendment 2026-10-27 (4) — simpler: fixed sections, a topic name per fact; settings like Claude's
+
+The owner's call: amendments 2 and 3 over-built the structure. **Where this amendment differs from
+amendments 2 and 3, it wins.** It drops the `memory_sections` and `memory_topics` tables, the
+section switches, locked rows, caps, the prompt size budget, topic summaries and the per-actor
+permission table.
+
+### Structure
+
+- **Five sections, a fixed list in code:** You, Money, Plans, Open items, Other. Each fact stores
+  its section as a plain string key (`you`, `money`, `plans`, `open_items`, `other`) — a column a
+  later customisation can widen — and a **free-text topic name**. Facts with the same name in the
+  same section group together; there is nothing else to keep in sync.
+- **You** has two suggested topics: **About you** — only what has no profile field (an employer,
+  languages, who shares the household) — and **Preferences** — observations Lucius makes, written in
+  the third person ("Prefers short answers on reconciliation"). The memory UI is **not** merged with
+  Settings → Profile, and no memory topic is named "Profile".
+- **Storage is one row per fact; the model and the user see it differently.** Lucius gets every
+  live fact in full, grouped section → topic, each with its month (`(Oct 2026)`). The user sees
+  sections with topic rows (name, fact count, last updated); a topic opens to its facts, a Delete,
+  and a "Tell Lucius what to change" box scoped to it. Open items are listed directly.
+- **Lucius owns organising** (topic names, moving facts); the user edits or forgets a fact, deletes
+  a topic, or asks Lucius to reorganise.
+
+### What Lucius sees, and when to trust it
+
+- **Everything, in full.** `recall_memory` stays as a keyword backup and gains lookup by topic.
+  The scale-up path, when memory outgrows a prompt, is the Claude Code / Codex shape: always show
+  You and Open items, list the other topics as an index, and let Lucius recall a topic on demand.
+- **Memory is context, never truth.** Before acting on a memory that names something changeable (an
+  account, a payee, a plan, an amount), Lucius checks the owning record. When they disagree the
+  record wins, and Lucius corrects the memory in the same turn.
+
+### Limits and decay
+
+- **One limit: 280 characters per fact.**
+- **Open items** expire after 14 days by default.
+- **Plans fade:** a plan not mentioned for 90 days expires; mentioning it again resets the clock.
+- **Usage tracking:** Lucius cites the facts he used in a reply (as Codex does). A fact unused for
+  ~90 days is retired by the tidy pass and stays visible under "Moved out of memory" for 30 days.
+
+### Instructions or memory
+
+- An explicit, lasting "do this / don't do that" → **Instructions for Lucius** (profile notes):
+  written by the user, or by Lucius when asked or when the user states a standing rule, under the
+  approval mode; never by the background pass.
+- A preference Lucius infers, or is told in passing → **You · Preferences**.
+
+### Who writes, and when
+
+- The noise was the **extraction rules** — no "other home" rule, a time-bound category that invited
+  dated follow-ups, runs on fragments, facts that grew with each rewrite — not automations.
+  **Automations and external MCP clients may write memory.**
+- The background pass runs when a conversation **goes idle**: no new message for 30 minutes. The
+  server checks every few minutes and on startup, using each conversation's last-message time and
+  its existing extraction cursor, and reads only what is past the cursor. An automation run is
+  processed as soon as it finishes.
+
+### Settings (Settings → Chat & Memory → Memory), like Claude's
+
+| Row | Behaviour |
+|---|---|
+| **Search and reference chats** | Lucius may search the user's past conversations for relevant details — a new capability |
+| **Generate memory from chats** | today's master memory switch, renamed |
+| **Include sensitive topics in memory** | off by default; covers health, religion, political views, sexuality, ethnicity, criminal or legal matters. Full card, account, ID or passport numbers and passwords are never stored whatever the setting; last-4 digits are fine |
+| **Stored memories** — Review… | opens the memory dialog |
+| **Import memory from other AI providers** — Start import | the reviewed import flow of amendment 2 |
+| **Export memory** — Export | a `.zip` of Markdown files, one per topic |
+
+### Kept, and not now
+
+- **Kept:** one home per fact and the routing guide; Instructions for Lucius; the single write
+  choke; the one-time sort of legacy facts with a reviewed dry run; "Moved out of memory"; import
+  with review; the topic detail view.
+- **Not now:** the in-chat "memory updated" line; a per-conversation "don't remember this chat";
+  special handling for other installs' migration.

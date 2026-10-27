@@ -1,6 +1,6 @@
-// A reconcile is worth doing about once a month: the toast after one names the next check, and
-// the header turns to a warning once the last one is older than that (owner, 2026-10-26 —
-// "Reconciled — in sync" said nothing useful and nothing nudged a stale account).
+// A reconcile is worth doing at least once a month. The toast after one only confirms what
+// happened — a "next check" date read as "don't come back before then" (owner, 2026-10-26); the
+// header's overdue warning is what nudges the cadence.
 
 import { describe, expect, it } from 'vitest'
 import { isReconcileOverdue, reconcileToastMessage, daysSinceReconcile } from './reconcileCadence'
@@ -8,18 +8,24 @@ import { isReconcileOverdue, reconcileToastMessage, daysSinceReconcile } from '.
 const NOW = new Date(2026, 9, 26, 17, 0)
 
 describe('reconcileToastMessage', () => {
-  it('names the next check a month out when the balance already matched', () => {
-    expect(reconcileToastMessage(null, 'VND', NOW)).toBe('Reconciled. Next check around Nov 25')
+  it('confirms the balance it was reconciled at when nothing needed adjusting', () => {
+    expect(reconcileToastMessage(null, 420204223, 'VND')).toMatch(/^Reconciled at .*420,204,223/)
   })
 
   it('states a booked increase with its sign', () => {
-    const msg = reconcileToastMessage({ to_amount: 40000 }, 'VND', NOW)
-    expect(msg).toMatch(/^Reconciled with a \+.*40,000.* adjustment\. Next check around Nov 25$/)
+    expect(reconcileToastMessage({ to_amount: 40000 }, 420244223, 'VND')).toMatch(
+      /^Reconciled with a \+.*40,000.* adjustment$/,
+    )
   })
 
   it('states a booked decrease with its sign', () => {
-    const msg = reconcileToastMessage({ from_amount: 12.5 }, 'SGD', NOW)
-    expect(msg).toMatch(/^Reconciled with a -.*12\.50.* adjustment\./)
+    expect(reconcileToastMessage({ from_amount: 12.5 }, 987.5, 'SGD')).toMatch(
+      /^Reconciled with a -.*12\.50.* adjustment$/,
+    )
+  })
+
+  it('never names a date to come back on', () => {
+    expect(reconcileToastMessage(null, 1000, 'SGD')).not.toMatch(/next|check|Nov/i)
   })
 })
 

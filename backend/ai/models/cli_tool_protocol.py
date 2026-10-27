@@ -485,7 +485,7 @@ def parse_tool_calls(text: str) -> list[dict]:
         raw = next((g for g in match.groups() if g), "")
         try:
             obj = json.loads(raw.strip())
-        except (TypeError, ValueError):
+        except (TypeError, ValueError) as exc:
             # The XML dialect: a bare `<invoke>` block, or `<function_calls>` wrapping one.
             invoked = _invoke_calls(match.group(0))
             if invoked:
@@ -498,7 +498,7 @@ def parse_tool_calls(text: str) -> list[dict]:
                 for body in inner:
                     calls.extend(parse_tool_calls(OPEN_TAG + body + CLOSE_TAG))
                 continue
-            log.warning("cli_tools: malformed tool-call block ignored: %.120s", raw)
+            _log_malformed_block(match.group(0), raw.strip(), exc)
             continue
         for item in obj if isinstance(obj, list) else [obj]:
             if not isinstance(item, dict):
@@ -539,6 +539,28 @@ def parse_tool_calls(text: str) -> list[dict]:
                 log.warning("cli_tools: implausible tool name %r in block: %.500s", name, raw)
             calls.append({"name": name, "input": payload})
     return _drop_placeholders(calls, text)
+
+
+_MALFORMED_LOG_CHARS = 4_000
+_MALFORMED_CONTEXT_CHARS = 200
+
+
+def _log_malformed_block(block: str, body: str, exc: Exception) -> None:
+    """Log the block as written, tags included, with where its JSON broke. A 120-char
+    preview hid every live failure (2026-10-26: each capture's ``add_transactions`` preview
+    was well-formed). ``%r`` keeps it on one log line — a newline in the block used to cut
+    the warning short — and the excerpt around the break survives the length cap."""
+    pos = getattr(exc, "pos", None)
+    if isinstance(pos, int):
+        near = body[max(0, pos - _MALFORMED_CONTEXT_CHARS) : pos + _MALFORMED_CONTEXT_CHARS]
+        where = f"{getattr(exc, 'msg', exc)} at char {pos} of {len(body)}; near {near!r}"
+    else:
+        where = str(exc)
+    log.warning(
+        "cli_tools: malformed tool-call block ignored (%s): %r",
+        where,
+        block[:_MALFORMED_LOG_CHARS],
+    )
 
 
 def _drop_placeholders(calls: list[dict], raw: str) -> list[dict]:

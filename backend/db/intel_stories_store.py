@@ -185,10 +185,11 @@ class IntelStoriesStore:
         """Case-insensitive ticker scan — every row in this store IS a story now (the old
         multi-shape ``intel_signals`` table's ``is_story_row`` filter has no successor here,
         RFC intel-signals-data-model). The only caller is ``intel_agent._persist_story``'s
-        existing-story lookup."""
+        existing-story lookup. Macro/sector/geography stories store ``ticker`` as None — the
+        key exists, so ``.get``'s default never applies."""
         ticker_up = ticker.upper()
         for story in self.all():
-            if story.get("ticker", "").upper() == ticker_up:
+            if (story.get("ticker") or "").upper() == ticker_up:
                 return story
         return None
 
@@ -196,7 +197,7 @@ class IntelStoriesStore:
         """Label counterpart to ``find_story_by_ticker`` — same story-row scan."""
         label_lo = label.lower()
         for story in self.all():
-            if story.get("label", "").lower() == label_lo:
+            if (story.get("label") or "").lower() == label_lo:
                 return story
         return None
 

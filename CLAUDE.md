@@ -265,7 +265,8 @@ One line each — full reasoning and the scar behind each is in
   `run_sql_query` is the one deliberately-scoped exception.
 - First run configures the machine; Lucius onboards the book (two separate predicates).
 - Lucius reads the DB directly, read-only, via `run_sql_query` — the boundary is the connection
-  (an allowlist authorizer), never a SQL parser. Denied = `SECRET_TABLES ∪ {sessions}`.
+  (an allowlist authorizer), never a SQL parser. Denied = `SECRET_TABLES ∪ {connectors}`;
+  the operator's own conversations (`sessions`, `session_messages`) are readable — only a demo denies them.
 - One confirm mechanism for every tool: a gated tool stages its OWN call arguments under the
   `tool_use_id`; approval resolves server-side and re-runs the same handler.
 - Every turn goes through `ai/turns.py`, never a bare `asyncio.create_task` (confirm gate fails

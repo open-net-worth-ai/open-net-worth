@@ -2256,6 +2256,42 @@ def test_an_invoke_whose_body_cannot_be_read_is_logged_with_its_raw_block(caplog
     assert len(warnings) == 1 and "lot L1" in warnings[0]  # a genuinely empty invoke is quiet
 
 
+def test_a_malformed_block_is_logged_whole_with_where_the_json_broke(caplog):
+    """2026-10-26: 28 of 76 captures lost their first add_transactions to an unparsable block,
+    and the log kept 120 chars of it — all well-formed — so the fault was never visible."""
+    from backend.ai.models.cli_tool_protocol import parse_tool_calls
+
+    body = (
+        '{"name": "add_transactions", "input": {"transactions": [{"date": "2026-10-26", '
+        '"description": "Green SM", "amount": 79000, "currency": "VND", '
+        '"memo": "line one\nline two"}]}}'
+    )
+    with caplog.at_level("WARNING", logger="backend.ai.models.cli_tool_protocol"):
+        calls = parse_tool_calls(f"<tool_call>{body}</tool_call>")
+
+    assert calls == []
+    (warning,) = [
+        r.getMessage() for r in caplog.records if "malformed tool-call block" in r.getMessage()
+    ]
+    assert "\n" not in warning
+    assert "<tool_call>" in warning and "line one\\nline two" in warning
+    assert "Invalid control character" in warning
+    assert f"char {body.index(chr(10))}" in warning
+
+
+def test_a_huge_malformed_block_is_logged_bounded(caplog):
+    from backend.ai.models.cli_tool_protocol import parse_tool_calls
+
+    body = '{"name": "add_transactions", "input": {"note": "' + "x" * 20_000 + '"}}}'
+    with caplog.at_level("WARNING", logger="backend.ai.models.cli_tool_protocol"):
+        parse_tool_calls(f"<tool_call>{body}</tool_call>")
+
+    (warning,) = [
+        r.getMessage() for r in caplog.records if "malformed tool-call block" in r.getMessage()
+    ]
+    assert len(warning) < 6_000 and "Extra data" in warning and '"}}}' in warning
+
+
 def test_an_empty_placeholder_before_the_real_call_is_dropped(caplog):
     """Live 2026-10-13: one reply dispatched ``update_lots {}`` then the real call — the empty
     one failed ("lot not found") and showed the user an error for a write nobody asked for."""

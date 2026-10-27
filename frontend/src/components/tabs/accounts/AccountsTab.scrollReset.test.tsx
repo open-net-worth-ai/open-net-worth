@@ -173,3 +173,25 @@ describe('AccountsTab — .acct-main scroll reset on fresh vs. append fetches (R
     expect(main.scrollTop).toBe(500)
   })
 })
+
+describe('AccountsTab — refreshSignal on remount', () => {
+  // Owner report 2026-10-27: on mobile, Accounts remounts on every return from Lucius while the
+  // shell's refreshSignal is already nonzero; reacting to that stale value ran a second full
+  // reload (and, with the data-changed bar, would flash it) on every return.
+  const registerFetches = () =>
+    mockAuthFetch.mock.calls.filter(([u]) => String(u).startsWith('/api/transactions?')).length
+
+  it('mounting with an old nonzero refreshSignal loads once; only a later bump reloads', async () => {
+    const { rerender } = render(<AccountsTab refreshSignal={5} />)
+    await waitFor(() => expect(registerFetches()).toBe(1))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    expect(registerFetches()).toBe(1)
+
+    await act(async () => {
+      rerender(<AccountsTab refreshSignal={6} />)
+    })
+    await waitFor(() => expect(registerFetches()).toBe(2))
+  })
+})

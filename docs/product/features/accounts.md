@@ -123,8 +123,8 @@ When the balance in the app doesn't match your bank:
 4. If not, click **No**, type the **Real balance**, check the **Adjustment** it shows, and
    click **Add adjustment**. The app books one adjustment transaction for the difference.
 
-The confirmation tells you whether an adjustment was booked and when to check again. Reconcile
-each account about **once a month**: once the last reconcile is more than 30 days old, the
+The confirmation shows the balance it was reconciled at, or the adjustment it booked. Reconcile
+each account at least **once a month**: once the last reconcile is more than 30 days old, the
 **Reconciled** line under the balance turns to a warning and shows how many days ago it was,
 right beside the **Reconcile** button.
 

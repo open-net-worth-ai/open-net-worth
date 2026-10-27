@@ -246,9 +246,12 @@ export function AccountsTab({
   const { accounts, transactions, categories, payees, fx, baseCurrency } = L
 
   // Reload when the AI mutates the ledger (RouterShell bumps refreshSignal on every portfolio/ledger
-  // change). Skip the initial 0 — the hook already loads on mount.
+  // change). Only a bump AFTER mount: the shell's counter is already nonzero when this tab
+  // remounts (e.g. back from Lucius on mobile), and the hook's own mount load covers that —
+  // reacting to the stale value ran a second full reload on every tab return.
+  const mountSignalRef = useRef(refreshSignal)
   useEffect(() => {
-    if (refreshSignal) L.refresh()
+    if (refreshSignal && refreshSignal !== mountSignalRef.current) L.refresh()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshSignal])
 
@@ -1244,7 +1247,7 @@ export function AccountsTab({
       expected_balance: account.clearedBalance,
     })
       .then((r) => {
-        showToast(reconcileToastMessage(r.adjustment, account.currency))
+        showToast(reconcileToastMessage(r.adjustment, r.cleared_balance, account.currency))
         setReconcileBurst((n) => n + 1)
       })
       .catch((e) => showToast(e instanceof Error ? e.message : 'Reconcile failed'))
@@ -2174,6 +2177,7 @@ export function AccountsTab({
                 onAskLucius={onAskLucius}
                 allEmpty={allEmpty}
                 loadingTxns={L.loadingTxns}
+                reloadingRows={L.reloadingRows}
                 isLoadingMore={L.isLoadingMore}
                 onAddTxn={handleAddTxn}
                 onClearFilters={clearAll}

@@ -82,6 +82,8 @@ at `http://localhost:5175`, then pipe or paste its token into `demo-aws.sh tunne
 | Shell on the VM | `demo-aws.sh ssh` |
 | Roll back | `demo-aws.sh ssh docker images onw-demo`, then set `ONW_DEMO_TAG=<old tag>` in `/srv/onw-demo-stack/.env` and run `docker compose up -d app` there |
 | Fresh book | `demo-aws.sh book --reset` (keeps Lucius's AI settings) |
+| Back up the live book | `demo-aws.sh backup` — saves it to `~/.open-net-worth-demo-backups/` on this machine (newest 14 kept; `ONW_DEMO_BACKUP_DIR` / `ONW_DEMO_BACKUP_KEEP`). `book --reset` and `book DIR` take one first and refuse to replace the book if it fails |
+| Restore a backup | `tar xzf <backup>.tar.gz -C <dir>`, then `demo-aws.sh book <dir>` (Lucius's AI settings on the VM are kept) |
 | Change quotas | edit `DEMO_TOKENS_*` / `DEMO_TURNS_*` / `DEMO_TRUSTED_PROXY_HOPS` in `/srv/onw-demo-stack/.env`, then `docker compose up -d app` |
 
 Running more than one VM? `ONW_DEMO_VM=<name>` picks which one; the default is `onw-demo`.
@@ -98,7 +100,9 @@ The agent runs at that local time. Install looks up the VM's static IP once and 
 agent, so a run needs only SSH, never an AWS sign-in (an `aws login` session expires within a
 day). Each run ships `origin/main` if it differs from the live tag, then runs `book --reset`: a fresh
 fabricated book dated to today, with Lucius's AI settings carried over inside the VM. Visitors'
-edits, conversations and the app's nightly backups of them are discarded. If the new image never
+edits, conversations and the app's nightly backups of them are discarded on the VM — but the
+book is first saved to `~/.open-net-worth-demo-backups/` on this Mac, and the reset is skipped if
+that save fails. To keep something for good, put it in the seed (`backend/scripts/demo/`). If the new image never
 reports healthy, the job rolls back to the tag that was running and raises a macOS
 notification. It starts Docker Desktop only when it needs to build, deletes the local
 `onw-demo` images and build cache afterwards, and quits Docker again if it started it. A Mac that

@@ -8,7 +8,8 @@ because the one after it cannot run first:
 * prices before the trade plan — a buy is priced off that day's close;
 * trades before the ledger — the cash legs that settle them are ordinary transactions;
 * the ledger before envelopes — the envelope seed mints one per category with activity;
-* the card payments last among the transactions — they are computed FROM the charges.
+* the card payments last among the transactions — they are computed FROM the charges;
+* the Singapore chapter after the plan — it budgets cash that is already in the book.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from backend.scripts.demo import (
     owned_assets,
     planning,
     rows,
+    singapore,
 )
 from backend.scripts.demo import ledger_spending as spend
 from backend.scripts.demo._timeline import Timeline, on_business_day
@@ -264,7 +266,7 @@ def build(today: date | None = None, *, offline: bool = False) -> dict:
     A = _seed_accounts(tl)
     report["accounts"] = len(A)
     report["categories"] = len(C)
-    report["owned_assets"] = len(owned_assets.seed(tl, A))
+    report["owned_assets"] = len(owned_assets.seed(tl, A, offline=offline))
 
     # Instruments FIRST: the live-price lookup routes a CoinGecko coin by reading its
     # instrument row, so anchoring the history depends on those rows already existing.
@@ -296,6 +298,12 @@ def build(today: date | None = None, *, offline: bool = False) -> dict:
     report["commitments"] = planning.seed_commitments(tl, A, positions)
     report["watchlist"] = planning.seed_watchlist()
     report["dashboard_views"] = dashboard.seed_views()
+
+    # The Singapore chapter goes in LAST among the money: its budget step re-balances Ready to
+    # Assign over the finished book, and the counts above must keep naming what the DB holds.
+    report["singapore"] = singapore.seed(tl, offline=offline)
+    for key in ("accounts", "categories", "transactions", "instruments"):
+        report[key] += report["singapore"][key]
 
     # The assistant side: standing work, watch levels, and what it already knows. An
     # empty Automations tab shows a feature that exists; these show one in use.

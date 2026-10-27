@@ -1,7 +1,9 @@
 # Demo asset photos
 
-The demo book's asset photos (`owned_assets.py`). Each is a Wikimedia Commons file, resized to at
-most 1280px and stripped of metadata; nothing else is changed. Credit and licence per file:
+The demo book's asset photos (`owned_assets.py`, `asset_collections.py`). Each is a Wikimedia
+Commons file, resized to at most 1280px and stripped of metadata; nothing else is changed. Pokémon
+card scans are NOT here — they are fetched at build time (`asset_collections.py`);
+`pokemon-collection.jpg` is only their offline fallback. Credit and licence per file:
 
 | File | Source | Author | Licence |
 |---|---|---|---|
@@ -9,3 +11,22 @@ most 1280px and stripped of metadata; nothing else is changed. Credit and licenc
 | `rav4.jpg` | [2022 Toyota RAV4 Hybrid LE in Midnight Black Metallic, front left](https://commons.wikimedia.org/wiki/File:2022_Toyota_RAV4_Hybrid_LE_in_Midnight_Black_Metallic,_front_left.jpg) | Mr.choppers | [CC BY-SA 3.0](https://creativecommons.org/licenses/by-sa/3.0) |
 | `watch.jpg` | [Tudor Black Bay 54 ref. m79000n-0001](https://commons.wikimedia.org/wiki/File:Tudor_Black_Bay_54_ref._m79000n-0001.jpg) | EMore98 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
 | `ebike.jpg` | [Cube Mountain ebike (50198895002)](https://commons.wikimedia.org/wiki/File:Cube_Mountain_ebike_(50198895002).jpg) | Tony Hisgett from Birmingham, UK | [CC BY 2.0](https://creativecommons.org/licenses/by/2.0) |
+| `seiko-snk809.jpg` | [Seiko SNK809](https://commons.wikimedia.org/wiki/File:Seiko_SNK809.jpg) | Soulreaper | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| `seiko-turtle.jpg` | [Modern Monday seiko turtle divewatch srp](https://commons.wikimedia.org/wiki/File:Modern_Monday_seiko_turtle_divewatch_srp.jpg) | gabihil | Public domain |
+| `tissot-prx.jpg` | [Tissot PRX 35mm](https://commons.wikimedia.org/wiki/File:Tissot_PRX_35mm.jpg) | Soulreaper | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| `omega-speedmaster.jpg` | [OMEGA-Speedmaster-Professional-Front](https://commons.wikimedia.org/wiki/File:OMEGA-Speedmaster-Professional-Front.jpg) | Torsten Bolten | Public domain |
+| `rolex-submariner.jpg` | [The Rolex Submariner Professional](https://commons.wikimedia.org/wiki/File:The_Rolex_Submariner_Professional.JPG) | Dr.K. | [CC BY-SA 3.0](http://creativecommons.org/licenses/by-sa/3.0/) |
+| `rolex-daytona.jpg` | [Rolex Cosmograph Daytona Panda](https://commons.wikimedia.org/wiki/File:Rolex_Cosmograph_Daytona_Panda.jpg) | Shuntfield | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| `ap-royal-oak.jpg` | [Audemars Piguet Royal Oak ref. 15202](https://commons.wikimedia.org/wiki/File:Audemars_Piguet_Royal_Oak_ref._15202.jpg) | OpaleHorse | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| `patek-nautilus.jpg` | [Patek-Philippe-Nautilus-5711-1A-010-1](https://commons.wikimedia.org/wiki/File:Patek-Philippe-Nautilus-5711-1A-010-1.jpg) | Patek Philippe SA | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| `vc-overseas.jpg` | [Decorazione del fondello del Vacheron Constantin Overseas prima generazione, fine anni Novanta](https://commons.wikimedia.org/wiki/File:Decorazione_del_fondello_del_Vacheron_Constantin_Overseas_prima_generazione,_fine_anni_Novanta.jpg) | EMore98 | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| `patek-calatrava.jpg` | [Calatrava1](https://commons.wikimedia.org/wiki/File:Calatrava1.jpg) | User:Jeff Muscato | Public domain |
+| `pokemon-collection.jpg` | [Pokemon collection](https://commons.wikimedia.org/wiki/File:Pokemon_collection.jpg) | Jarek Tuszyński | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| `vn-thao-dien-house.jpg` | [Villa Diem- distric 07, Tanphong, Hcmcity-construction Designer TrungDany 2015 - panoramio](https://commons.wikimedia.org/wiki/File:Villa_Diem-_distric_07,_Tanphong,_Hcmcity-construction_Designer_TrungDany_2015_-_panoramio.jpg) | trungydang | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0) |
+| `vn-da-lat-land.jpg` | [Pine hill on the road into Đà Lạt, 2018 (8)](https://commons.wikimedia.org/wiki/File:%C4%90%C3%A0_L%E1%BA%A1t_n%C4%83m_2018,_%C4%91%C6%B0%E1%BB%9Dng_%C4%91i_v%C3%A0o_l%C3%A0ng_hoa_%C4%90%C3%A0_L%E1%BA%A1t_(%C4%91%E1%BB%93i_th%C3%B4ng) | Phương Huy | [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0) |
+| `art-boudin-trouville.jpg` | [Eugène Boudin, Beach Scene at Trouville, 1863, NGA 61364](https://commons.wikimedia.org/wiki/File:Eug%C3%A8ne_Boudin,_Beach_Scene_at_Trouville,_1863,_NGA_61364.jpg) | Eugène Boudin | [CC0](http://creativecommons.org/publicdomain/zero/1.0/deed.en) |
+| `art-jongkind-honfleur.jpg` | [Norwegian Ship Leaving the Port of Honfleur by Johan Barthold Jongkind, 1865, Portland Museum of Art](https://commons.wikimedia.org/wiki/File:Norwegian_Ship_Leaving_the_Port_of_Honfleur_by_Johan_Barthold_Jongkind,_1865,_Portland_Museum_of_Art.jpg) | Johan Barthold Jongkind | [CC0](http://creativecommons.org/publicdomain/zero/1.0/deed.en) |
+| `art-thaulow-simoa.jpg` | [Frits Thaulow - Winter at the River Simoa - Google Art Project](https://commons.wikimedia.org/wiki/File:Frits_Thaulow_-_Winter_at_the_River_Simoa_-_Google_Art_Project.jpg) | Frits Thaulow | Public domain |
+| `art-cross-venice.jpg` | [Henri Edmond Cross, Venice, c. 1903, NGA 52288](https://commons.wikimedia.org/wiki/File:Henri_Edmond_Cross,_Venice,_c._1903,_NGA_52288.jpg) | Henri-Edmond Cross | [CC0](http://creativecommons.org/publicdomain/zero/1.0/deed.en) |
+| `art-hokusai-red-fuji.jpg` | [Katsushika Hokusai, published by Nishimuraya Yohachi (Eijudō) - Fine Wind, Clear Weather (Gaifū kaisei), also known as Red Fuji, from the series Thirty-six Views o... - Google Art Project - Cropped](https://commons.wikimedia.org/wiki/File:Katsushika_Hokusai,_published_by_Nishimuraya_Yohachi_(Eijud%C5%8D)_-_Fine_Wind,_Clear_Weather_(Gaif%C5%AB_kaisei),_also_known_as_Red_Fuji,_from_the_series_Thirty-six_Views_o..._-_Google_Art_Project_-_Cropped.jpg) | Katsushika Hokusai | Public domain |
+| `art-hiroshige-shower.jpg` | [Ando Hiroshige - Sudden Shower over Shin-Ōhashi Bridge and Atake, from the series One Hundre - 1921.318 - Cleveland Museum of Art](https://commons.wikimedia.org/wiki/File:Ando_Hiroshige_-_Sudden_Shower_over_Shin-%C5%8Chashi_Bridge_and_Atake,_from_the_series_One_Hundre_-_1921.318_-_Cleveland_Museum_of_Art.tif) | Utagawa Hiroshige | [CC0](http://creativecommons.org/publicdomain/zero/1.0/deed.en) |

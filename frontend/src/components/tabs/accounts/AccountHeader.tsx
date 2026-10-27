@@ -10,7 +10,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useChatComposerOptional } from '../../../state/chatComposer'
 import { StatementViewer, StatementsModal } from './StatementsSection'
-import { Button, FormField, InfoPopover, TextField } from '../../ui'
+import { Button, FormField, TextField } from '../../ui'
+import { BalanceTermsInfo } from './BalanceTermsInfo'
 import { Spark } from '../../../lucius/identity'
 import {
   Archive,
@@ -28,7 +29,7 @@ import {
 } from '../../../ui/icons'
 import type { Account } from './types'
 import { fCur } from './data'
-import { ReviewStrip } from './ReviewStrip'
+import { ReviewStrip, TxnCount } from './ReviewStrip'
 import { typeLabel } from './categories'
 import { fDate } from '../../../utils/format'
 import { daysSinceReconcile, isReconcileOverdue } from './reconcileCadence'
@@ -713,15 +714,14 @@ export function AccountHeader({
         <div className="acct-bal-card">
           <div className="acct-bal-k">
             {account.kind === 'liability' ? 'Balance owed' : 'Balance'}
+            <BalanceTermsInfo total="Working balance" meaning="the two together." />
           </div>
           <div className="acct-bal-breakdown">
             <div className="acct-bal-part">
               <div className={'acct-bal-fig mask' + (account.clearedBalance > 0 ? ' pos' : '')}>
                 {fCur(account.clearedBalance, account.currency, { cents: true })}
               </div>
-              <div className="acct-bal-lbl">
-                Cleared <InfoPopover text="Posted — finalized; the amount won't change." />
-              </div>
+              <div className="acct-bal-lbl">Cleared</div>
             </div>
             <div className="acct-bal-grp">
               <span className="acct-bal-op">+</span>
@@ -729,10 +729,7 @@ export function AccountHeader({
                 <div className={'acct-bal-fig mask' + (pending > 0 ? ' pos' : '')}>
                   {fCur(pending, account.currency, { cents: true })}
                 </div>
-                <div className="acct-bal-lbl">
-                  Uncleared{' '}
-                  <InfoPopover text="Pending — a temporary hold; the amount can still change." />
-                </div>
+                <div className="acct-bal-lbl">Uncleared</div>
               </div>
             </div>
             <div className="acct-bal-grp">
@@ -741,9 +738,7 @@ export function AccountHeader({
                 <div className={'acct-bal-fig work mask' + (account.balance > 0 ? ' pos' : '')}>
                   {fCur(account.balance, account.currency, { cents: true })}
                 </div>
-                <div className="acct-bal-lbl">
-                  Working balance <InfoPopover text="Cleared + uncleared, for this account." />
-                </div>
+                <div className="acct-bal-lbl">Working balance</div>
               </div>
             </div>
           </div>
@@ -787,7 +782,7 @@ export function AccountHeader({
                     onReview={onReview}
                     onStartReview={onStartReview}
                   />
-                  <span className="acct-recon-stat muted">{stats.count} txns</span>
+                  <TxnCount count={stats.count} />
                 </span>
               </>
             )}

@@ -593,10 +593,23 @@ def stage_generic(tool_name: str, args: dict) -> tuple[Optional[str], Optional[d
             "NOTHING was written. Try the call again."
         )
 
+    from backend.ai.tools.registry import tool_precheck, tool_preview_adapter
+
+    # A call the handler would refuse is never staged: approving it could only ever run the
+    # refusal (demo incident 2026-10-26 — a schedule trigger with no 'type' drew a card, was
+    # approved, then failed). The error goes back to the model now, in the handler's own
+    # shape, so it corrects the call with no card. Catch-all on purpose: an exception escaping
+    # here reaches `_permission_gate`'s fail-OPEN handler and would run the call UNGATED.
+    precheck = tool_precheck(tool_name)
+    if precheck is not None:
+        try:
+            precheck(args or {})
+        except Exception as exc:  # noqa: BLE001 — see above
+            logger.info("confirm gate: %s refused before staging: %s", tool_name, exc)
+            return preview_failed_result(str(exc))
+
     display_args = args or {}
     outcome: dict = {"tool": tool_name, "arguments": display_args}
-    from backend.ai.tools.registry import tool_preview_adapter
-
     adapter = tool_preview_adapter(tool_name)
     if adapter is not None:
         try:

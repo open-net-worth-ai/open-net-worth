@@ -1214,6 +1214,11 @@
     font-weight: 500;
     margin-top: 6px;
   }
+  /* The approved call ran and came back with an error — never a green tick over a failure. */
+  .change-confirmed--failed {
+    color: var(--bad);
+    overflow-wrap: anywhere;
+  }
 
   /* ── Approval-card design system (docs/APPROVAL_CARDS.md) ──
      Two sizes, no others: --ac-text for every line, --ac-caps for table column headings.

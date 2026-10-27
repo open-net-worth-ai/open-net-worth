@@ -93,23 +93,22 @@ _UNBOUNDED_CELL = 10**9  # see _cell(max_chars=…) — sampling, never shown to
 # rows leaving the instance, into a model context that may be logged, shared, or steered by
 # untrusted text.
 #
-# `sessions` is added for a different reason and is NOT a secret: it holds every chat
-# transcript as multi-MB JSON columns. Reading it through SQL is a bad idea for size alone, and
-# there are purpose-built tools for session history.
-#
 # `connectors` is not a secret table either (it is kept in a sanitised backup), but it holds raw
 # SERVER-CHOSEN text — an MCP server's discovered tool descriptions, instructions and publisher
 # URLs, which are the prompt-injection surface `get_connector_status` deliberately never relays —
 # and personal configuration (the email address, Telegram chat ids, usernames). The purpose-built
 # tools (`get_connector_status`, `get_connector_tools`) are the model's way in.
-_EXTRA_DENIED_TABLES = frozenset({"sessions", "connectors"})
+_EXTRA_DENIED_TABLES = frozenset({"connectors"})
 DENIED_TABLES: frozenset[str] = SECRET_TABLES | _EXTRA_DENIED_TABLES
 
 # A public demo's visitors share one database, and a visitor's own Lucius would otherwise read
-# every other visitor's conversation here. These hold transcripts, staged tool arguments and the
-# queries and tool calls other visitors made; they are unreadable on a demo (and only there).
+# every other visitor's conversation here. These hold transcripts (`sessions` too: its titles
+# and fold summaries are conversation content), staged tool arguments and the queries and tool
+# calls other visitors made; they are unreadable on a demo (and only there). On a normal
+# instance every conversation is the operator's own, so both transcript tables are readable.
 _DEMO_EXTRA_DENIED_TABLES = frozenset(
     {
+        "sessions",
         "session_messages",
         "pending_plans",
         "tool_call_log",

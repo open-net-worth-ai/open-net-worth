@@ -1,9 +1,9 @@
 /**
- * reconcileCadence.ts — how often an account should be reconciled, and the copy around it.
- * A month: long enough to be a habit, short enough that a gap is still easy to trace.
+ * reconcileCadence.ts — how often an account should be reconciled (at least monthly: long enough
+ * to be a habit, short enough that a gap is still easy to trace), and the copy around it.
  */
 
-import { fDate, parseDate } from '../../../utils/format'
+import { parseDate } from '../../../utils/format'
 import { fCur } from './data'
 
 export const RECONCILE_EVERY_DAYS = 30
@@ -30,15 +30,16 @@ function adjustmentDelta(adj: { to_amount?: number | null; from_amount?: number 
   return -Number(adj.from_amount ?? 0)
 }
 
+/** What the reconcile settled — the confirmed figure, or the adjustment it took. No "next
+ *  check" date: it read as "don't come back before then"; the header's overdue warning carries
+ *  the cadence. */
 export function reconcileToastMessage(
   adjustment: { to_amount?: number | null; from_amount?: number | null } | null,
+  clearedBalance: number,
   currency: string,
-  now: Date = new Date(),
 ): string {
-  const next = fDate(new Date(startOfDay(now) + RECONCILE_EVERY_DAYS * DAY_MS), 'short')
-  const tail = `Next check around ${next}`
-  if (!adjustment) return `Reconciled. ${tail}`
+  if (!adjustment) return `Reconciled at ${fCur(clearedBalance, currency, { cents: true })}`
   const delta = adjustmentDelta(adjustment)
   const signed = (delta > 0 ? '+' : '-') + fCur(Math.abs(delta), currency, { cents: true })
-  return `Reconciled with a ${signed} adjustment. ${tail}`
+  return `Reconciled with a ${signed} adjustment`
 }
