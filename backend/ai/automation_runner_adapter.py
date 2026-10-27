@@ -301,6 +301,7 @@ async def automation_runner(
     # NOT a tool ceiling. The predecessor flag was both, and as a ceiling it refused every
     # tool on every run; see core.unattended.
     _unattended_token = set_unattended(True)
+    transcript_saved = False
     try:
         turn_status = await turns.run_inline(
             request.session_id,
@@ -314,7 +315,7 @@ async def automation_runner(
                 "This run exceeded the turn time limit and was stopped before it finished."
             )
         _persist_automation_history(request.session_id)
-        await memory_idle.extract_session(request.session_id)
+        transcript_saved = True
     except asyncio.CancelledError:
         # The run row is settled by `runs._task_done` — the only place that can also release
         # the runtime claim — so this just releases the email stage and lets the
@@ -339,6 +340,9 @@ async def automation_runner(
         _skill_scope.restore_scope(skill_scope_snapshot)
         set_email_consumer(prior_email_consumer)
         clear_audit_scope(audit_token)
+
+    if transcript_saved:
+        memory_idle.schedule_extraction(request.session_id)
 
     files = _artifact_filenames(request.session_id)
     context = {
@@ -717,9 +721,10 @@ async def _stream_continuation(
     prior_email_consumer: str | None = None
     failure: str | None = None
     stream = None
+    transcript_saved = False
     try:
-        persisted = assistant.load_session_durable(session_id)
-        if not persisted:
+        transcript = assistant.load_session_durable(session_id)
+        if not transcript:
             raise RuntimeError("Automation conversation transcript is missing or empty")
         request = request_for_run(automation, baseline)
         projection = _EventProjection(request)
@@ -756,7 +761,7 @@ async def _stream_continuation(
                     )
                 yield event
             _persist_automation_history(session_id)
-            await memory_idle.extract_session(session_id)
+            transcript_saved = True
         finally:
             close = getattr(stream, "aclose", None)
             if close is not None:
@@ -796,6 +801,8 @@ async def _stream_continuation(
                 set_email_consumer(prior_email_consumer)
             if audit_token is not None:
                 clear_audit_scope(audit_token)
+            if transcript_saved:
+                memory_idle.schedule_extraction(session_id)
 
 
 def _persist_automation_history(session_id: str) -> None:

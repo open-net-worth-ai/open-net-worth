@@ -150,15 +150,25 @@ async def _merge_duplicates(store: MemoryStore, today: str) -> dict:
     if not isinstance(parsed, dict):
         logger.warning("memory tidy returned an unparseable reply")
         return {"merged": False}
+    shown = {f["id"] for f in live}
     remove = [i for i in parsed.get("remove") or [] if isinstance(i, str)]
+    updates = [u for u in parsed.get("updates") or [] if isinstance(u, dict)]
+    dropped = [i for i in remove if i not in shown] + [
+        u.get("id") for u in updates if u.get("id") not in shown
+    ]
+    if dropped:
+        logger.debug("memory tidy: ignored ids it was not shown: %s", dropped)
+    remove = [i for i in remove if i in shown]
+    updates = [
+        {k: u[k] for k in ("id", "content", "topic") if k in u}
+        for u in updates
+        if u.get("id") in shown
+    ]
     if would_gut_a_topic(live, set(remove)):
         logger.warning("memory tidy: refused a merge that removes over half of a topic")
         return {"merged": False, "refused": True}
     result = apply_memory_change(
-        {"updates": parsed.get("updates"), "remove": remove},
-        source="implicit",
-        strict=False,
-        today=today,
+        {"updates": updates, "remove": remove}, source="implicit", strict=False, today=today
     )
     return {"merged": True, "updated": result["updated"], "removed": result["removed"]}
 
@@ -167,6 +177,7 @@ def _already_ran(today: str) -> bool:
     try:
         return (MemoryConsolidateStateStore().get() or {}).get("last_tidy") == today
     except Exception:
+        logger.warning("could not read the tidy date; tidying anyway", exc_info=True)
         return False
 
 
@@ -174,7 +185,7 @@ def _record_run(today: str) -> None:
     try:
         MemoryConsolidateStateStore().save({"last_tidy": today})
     except Exception:
-        logger.debug("could not persist the tidy date", exc_info=True)
+        logger.warning("could not persist the tidy date", exc_info=True)
 
 
 async def tidy(force: bool = False) -> dict:

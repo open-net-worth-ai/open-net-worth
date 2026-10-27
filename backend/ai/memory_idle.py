@@ -31,6 +31,10 @@ SWEEP_LOOKBACK_DAYS = 14
 # completion must not both read the same messages.
 _in_flight: set[str] = set()
 
+# Extractions handed off by a finished automation run. A task only the loop references can be
+# garbage-collected mid-flight, so each is held here until it is done.
+_background: set[asyncio.Task] = set()
+
 
 def _parse(stamp) -> datetime | None:
     if not isinstance(stamp, str) or not stamp:
@@ -83,6 +87,31 @@ async def extract_session(session_id: str) -> bool:
         return False
     finally:
         _in_flight.discard(session_id)
+
+
+def schedule_extraction(session_id: str) -> None:
+    """Extract a session in the background, after the caller has gone on. A run that has
+    settled must not wait on a model call, and a Stop or shutdown during that call must not
+    touch the run — the sweep picks the session up if this task is lost."""
+    task = asyncio.get_running_loop().create_task(
+        extract_session(session_id), name=f"memory-extract-{session_id[:8]}"
+    )
+    _background.add(task)
+    task.add_done_callback(_background_done)
+
+
+def _background_done(task: asyncio.Task) -> None:
+    _background.discard(task)
+    if not task.cancelled() and task.exception() is not None:
+        logger.error("background memory extraction failed", exc_info=task.exception())
+
+
+async def cancel_background() -> None:
+    """Cancel every handed-off extraction and wait for them to stop (shutdown)."""
+    tasks = list(_background)
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def sweep_idle_conversations(now: datetime | None = None) -> int:

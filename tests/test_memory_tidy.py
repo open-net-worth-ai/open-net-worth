@@ -213,3 +213,133 @@ def test_tidy_is_a_no_op_while_memory_is_off(isolated, monkeypatch):
 
     assert asyncio.run(memory_tidy.tidy()) == {"ran": False}
     assert _by_id()["m_idle"]["state"] == "live" and model.prompts == []
+
+
+def test_a_filed_legacy_fact_is_not_retired_as_unused(isolated, monkeypatch):
+    from backend.ai.memory_write import apply_memory_change
+
+    MemoryStore().bulk_insert(
+        [
+            {
+                "id": "m_legacy",
+                "content": "Prefers index funds",
+                "state": "unsorted",
+                "source": "implicit",
+                "created_at": _ago(400),
+                "updated_at": _ago(400),
+            }
+        ]
+    )
+    apply_memory_change(
+        {"updates": [{"id": "m_legacy", "section": "money", "topic": "Investing"}]},
+        source="implicit",
+        strict=False,
+    )
+    _use(monkeypatch, _Model())
+
+    asyncio.run(memory_tidy.tidy(force=True))
+
+    assert _by_id()["m_legacy"]["state"] == "live"
+
+
+def test_the_unused_boundary_is_90_days(isolated, monkeypatch):
+    MemoryStore().bulk_insert(
+        [
+            _fact("d89", "Eighty-nine days old", created_at=_ago(89)),
+            _fact("d91", "Ninety-one days old", created_at=_ago(91)),
+        ]
+    )
+    _use(monkeypatch, _Model())
+
+    asyncio.run(memory_tidy.tidy())
+
+    assert (_by_id()["d89"]["state"], _by_id()["d91"]["state"]) == ("live", "retired")
+
+
+def test_a_mention_or_edit_never_resets_the_unused_clock(isolated, monkeypatch):
+    MemoryStore().bulk_insert(
+        [
+            _fact(
+                "m_mentioned",
+                "Mentioned lately, never cited",
+                created_at=_ago(200),
+                mentioned_at=_ago(1),
+                updated_at=_ago(1),
+            )
+        ]
+    )
+    _use(monkeypatch, _Model())
+
+    asyncio.run(memory_tidy.tidy())
+
+    assert _by_id()["m_mentioned"]["retired_reason"] == "unused"
+
+
+def test_a_fact_with_no_created_at_is_left_alone(isolated, monkeypatch):
+    MemoryStore().bulk_insert([_fact("m_undated", "No dates at all", created_at=None)])
+    _use(monkeypatch, _Model())
+
+    asyncio.run(memory_tidy.tidy())
+
+    assert _by_id()["m_undated"]["state"] == "live"
+
+
+def test_removing_exactly_half_a_topic_is_allowed(isolated, monkeypatch):
+    MemoryStore().bulk_insert([_fact(f"f{i}", f"Distinct fact number {i}") for i in range(4)])
+    _use(monkeypatch, _Model({"updates": [], "remove": ["f0", "f1"]}))
+
+    result = asyncio.run(memory_tidy.tidy())
+
+    assert set(_by_id()) == {"f2", "f3"} and result["merged"] is True
+
+
+def test_a_reply_naming_ids_it_was_not_shown_changes_nothing_for_them(isolated, monkeypatch):
+    MemoryStore().bulk_insert(
+        [
+            _fact("a", "Fact a"),
+            _fact("b", "Fact b"),
+            _fact("legacy", "Old legacy fact", state="unsorted"),
+        ]
+    )
+    _use(
+        monkeypatch,
+        _Model(
+            {
+                "updates": [
+                    {"id": "legacy", "content": "Rewritten", "topic": "Elsewhere"},
+                    {"id": "ghost", "content": "Invented"},
+                    {
+                        "id": "a",
+                        "content": "Fact a, reworded",
+                        "section": "you",
+                        "state": "retired",
+                    },
+                ],
+                "remove": ["legacy", "ghost"],
+            }
+        ),
+    )
+
+    asyncio.run(memory_tidy.tidy())
+
+    facts = _by_id()
+    assert set(facts) == {"a", "b", "legacy"}
+    assert (
+        facts["legacy"]["content"] == "Old legacy fact" and facts["legacy"]["state"] == "unsorted"
+    )
+    assert facts["a"]["content"] == "Fact a, reworded"
+    assert facts["a"]["section"] == "other" and facts["a"]["state"] == "live"
+
+
+def test_a_state_store_failure_is_logged_not_swallowed(isolated, monkeypatch, caplog):
+    def boom(self):
+        raise RuntimeError("state store down")
+
+    monkeypatch.setattr(MemoryConsolidateStateStore, "get", boom)
+    monkeypatch.setattr(MemoryConsolidateStateStore, "save", lambda self, doc: boom(self))
+    _use(monkeypatch, _Model())
+
+    with caplog.at_level("WARNING", logger="backend.ai.memory_tidy"):
+        assert asyncio.run(memory_tidy.tidy())["ran"] is True
+
+    assert sum("tidy date" in r.getMessage() for r in caplog.records) == 2

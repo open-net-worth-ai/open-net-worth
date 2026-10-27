@@ -210,13 +210,7 @@ def test_the_loop_does_nothing_while_memory_is_off(isolated, monkeypatch):
     assert calls == []
 
 
-async def test_automation_run_extracted_on_completion(isolated, monkeypatch):
-    spied: list[str] = []
-
-    async def spy(session_id: str) -> bool:
-        spied.append(session_id)
-        return True
-
+def _stub_run(monkeypatch):
     context = assistant.ModelTurnContext(
         model="m",
         provider_key="p",
@@ -228,25 +222,83 @@ async def test_automation_run_extracted_on_completion(isolated, monkeypatch):
     async def fake_run(*args, **kwargs):
         yield {"type": "turn_done", "usage": {"model": "m"}}
 
-    monkeypatch.setattr(memory_idle, "extract_session", spy)
     monkeypatch.setattr(assistant, "resolve_model_context", lambda _o: context)
     monkeypatch.setattr(adapter, "build_system_prompt", lambda **_k: "prompt")
     monkeypatch.setattr(assistant, "run", fake_run)
     monkeypatch.setattr(assistant, "upsert_session_meta", lambda *a, **k: None)
     monkeypatch.setattr(adapter, "_persist_automation_history", lambda *_a: None)
 
-    await adapter.automation_runner(
-        AutomationRunnerRequest(
-            automation_id="automation-a",
-            run_id="run-a",
-            session_id="automation-run-mem",
-            title="Memory",
-            instructions="Run it",
-            model="m",
-        )
+
+def _request(session_id: str) -> AutomationRunnerRequest:
+    return AutomationRunnerRequest(
+        automation_id="automation-a",
+        run_id="run-a",
+        session_id=session_id,
+        title="Memory",
+        instructions="Run it",
+        model="m",
     )
 
+
+async def test_automation_run_extracted_on_completion(isolated, monkeypatch):
+    spied: list[str] = []
+
+    async def spy(session_id: str) -> bool:
+        spied.append(session_id)
+        return True
+
+    _stub_run(monkeypatch)
+    monkeypatch.setattr(memory_idle, "extract_session", spy)
+
+    await adapter.automation_runner(_request("automation-run-mem"))
+    await asyncio.gather(*memory_idle._background)
+
     assert spied == ["automation-run-mem"]
+
+
+async def test_the_run_settles_before_its_extraction_and_a_cancelled_extraction_changes_nothing(
+    isolated, monkeypatch
+):
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def slow(session_id: str) -> bool:
+        started.set()
+        await release.wait()
+        return True
+
+    _stub_run(monkeypatch)
+    monkeypatch.setattr(memory_idle, "extract_session", slow)
+
+    result = await adapter.automation_runner(_request("automation-run-slow"))
+
+    assert result.status == "completed"
+    assert len(memory_idle._background) == 1
+    await asyncio.wait_for(started.wait(), 1)
+    task = next(iter(memory_idle._background))
+    assert not task.done()
+
+    await memory_idle.cancel_background()
+
+    assert task.cancelled() and not memory_idle._background
+    assert result.status == "completed"
+
+
+async def test_a_failing_background_extraction_is_logged_and_released(
+    isolated, monkeypatch, caplog
+):
+    async def boom(session_id: str) -> bool:
+        raise RuntimeError("model down")
+
+    monkeypatch.setattr(memory_idle, "extract_session", boom)
+
+    with caplog.at_level("ERROR", logger="backend.ai.memory_idle"):
+        memory_idle.schedule_extraction("s-1")
+        await asyncio.gather(*memory_idle._background, return_exceptions=True)
+        await asyncio.sleep(0)
+
+    assert not memory_idle._background
+    assert any("background memory extraction failed" in r.getMessage() for r in caplog.records)
 
 
 def test_no_per_turn_extraction_remains():

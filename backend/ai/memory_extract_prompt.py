@@ -90,7 +90,7 @@ Each fact is at most {ms.FACT_MAX_CHARS} characters. For each fact choose:
   - topic: a short name for the subject. Reuse a name from "Topics in use" below when one fits;
     invent a new one only when none does (suggested: {suggested})
   - sensitive: true for health, religion, political views, sexuality, ethnicity, criminal or
-    legal matters. Never store a full card, account, ID or passport number or a password.
+    legal matters — on an update too, when its new text is about one. Never store a full card, account, ID or passport number or a password.
 
 Decide whether each fact UPDATES an existing memory (reuse its id) or is NEW. If the
 conversation contradicts an existing memory, prefer an update (latest wins). If a fact is
@@ -106,7 +106,7 @@ Conversation:
 Return ONLY JSON in this exact shape:
 {{
   "new":     [{{"content": "...", "section": "you|money|plans|open_items|other", "topic": "...|null", "expires_at": "YYYY-MM-DD|null", "sensitive": false}}],
-  "updates": [{{"id": "...", "content": "...", "section": "...", "topic": "...|null", "expires_at": "YYYY-MM-DD|null"}}],
+  "updates": [{{"id": "...", "content": "...", "section": "...", "topic": "...|null", "expires_at": "YYYY-MM-DD|null", "sensitive": false}}],
   "remove":  ["id", ...],
   "mentioned": ["id", ...]
 }}

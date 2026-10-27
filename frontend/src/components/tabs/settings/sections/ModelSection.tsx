@@ -110,7 +110,7 @@ const TASK_GROUPS: [string, [string, string, string, boolean?][]][] = [
   [
     'Assistant',
     [
-      ['memory', 'Memory', 'Extracts and consolidates facts after chat turns'],
+      ['memory', 'Memory', 'Writes memory when a conversation goes quiet, and tidies it daily'],
       ['suggestions', 'Chat suggestions', 'Generates follow-up suggestions in the chat panel'],
       [
         'title',

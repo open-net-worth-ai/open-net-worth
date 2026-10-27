@@ -28,9 +28,9 @@ from backend.db.memory_settings_store import MemorySettingsStore
 
 logger = logging.getLogger(__name__)
 
-# The choke is synchronous (it serves sync routes and async tools alike), so it cannot hold the
-# asyncio lock ``memory._lock()`` that ``consolidate`` holds across its model calls; this
-# serialises the read-modify-write between writers instead.
+# The choke is synchronous (it serves sync routes and async tools alike), so it cannot hold an
+# asyncio lock across a writer's model call; this serialises the read-modify-write between
+# writers instead.
 _WRITE_LOCK = threading.RLock()
 
 _MESSAGES = {
@@ -277,6 +277,12 @@ class _Plan:
             changes["section"] = section
             if current.get("state") not in ("live", "retired"):
                 changes["state"] = "live"
+                changes["sorted_at"] = self.now
+        if _truthy(raw.get("sensitive")):
+            if not self.sensitive_ok:
+                self.reject("sensitive_off", "", section, current.get("topic"))
+                return None
+            changes["sensitive"] = True
         if not self._shape_update(raw, current, section, changes):
             return None
         if len(changes) > 1 and self.source == "explicit":

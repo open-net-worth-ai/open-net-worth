@@ -232,6 +232,49 @@ def test_sensitive_fact_needs_the_setting():
     assert MemoryStore().all_facts()[0]["sensitive"] is True
 
 
+def test_a_sensitive_update_needs_the_setting_too():
+    MemoryStore().insert(
+        {
+            "id": "m_1",
+            "content": "Sees a doctor",
+            "section": "you",
+            "topic": "About you",
+            "state": "live",
+            "source": "implicit",
+            "created_at": "2026-09-01T00:00:00+00:00",
+            "updated_at": "2026-09-01T00:00:00+00:00",
+        }
+    )
+    ops = {"updates": [{"id": "m_1", "content": "Has a chronic condition", "sensitive": True}]}
+
+    out = _write(ops, source="implicit")
+    assert out["updated"] == 0 and out["rejected"][0]["reason"] == "sensitive_off"
+    assert MemoryStore().find_by_id("m_1")["content"] == "Sees a doctor"
+
+    MemorySettingsStore().set_sensitive_topics(True)
+    out = _write(ops, source="implicit")
+    row = MemoryStore().find_by_id("m_1")
+    assert out["updated"] == 1 and not out["rejected"]
+    assert row["content"] == "Has a chronic condition" and row["sensitive"] is True
+
+
+def test_filing_an_unsorted_fact_stamps_sorted_at():
+    MemoryStore().insert(
+        {
+            "id": "m_old",
+            "content": "Prefers index funds",
+            "state": "unsorted",
+            "source": "implicit",
+            "created_at": "2025-01-01T00:00:00+00:00",
+            "updated_at": "2025-01-01T00:00:00+00:00",
+        }
+    )
+    _write({"updates": [{"id": "m_old", "section": "money", "topic": "Investing"}]})
+
+    row = MemoryStore().find_by_id("m_old")
+    assert row["state"] == "live" and row["sorted_at"] > "2026"
+
+
 def test_an_unflagged_fact_never_needs_the_setting():
     assert _write({"new": [_new("Likes tables")]})["added"] == 1
     assert "sensitive" not in MemoryStore().all_facts()[0]
