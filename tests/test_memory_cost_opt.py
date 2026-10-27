@@ -3,7 +3,7 @@ Tests for Lane C memory cost-optimisation changes:
 
 1. purge_expired — hard-deletes expired time_bound facts, keeps durable + non-expired
 2. Chunked consolidation — batches of ~50, mock provider.complete(), in-flight lock
-3. _fmt_memory — 30-fact cap, stable sort (created_at/id), 300-char truncation, ≤8K chars
+3. _fmt_memory — stable sort (created_at/id); the full render is tested in test_memory_render.py
 4. Extraction listing cap — only EXTRACT_EXISTING_CAP most-recent facts sent to LLM
 5. forget_fact prefilter — deterministic token-overlap narrows to ≤20 candidates
 
@@ -38,6 +38,7 @@ def _fact(
     return {
         "id": fid or str(uuid.uuid4()),
         "content": content,
+        "state": "live",
         "tier": tier,
         "source": source,
         "expires_at": expires_at,
@@ -265,17 +266,6 @@ def _make_fmt_facts(n: int, tier: str = "durable", source: str = "implicit") -> 
     ]
 
 
-def test_fmt_memory_caps_at_30_facts(isolated):
-    from backend.ai.prompts import _fmt_memory
-
-    store = memory_store.MemoryStore()
-    store.replace_all(_make_fmt_facts(60))
-
-    output = _fmt_memory()
-    bullet_count = output.count("\n• ")
-    assert bullet_count <= 30, f"expected ≤30 bullets, got {bullet_count}"
-
-
 def test_fmt_memory_output_is_byte_stable_across_calls(isolated):
     """Same facts → identical bytes on repeated calls (cache stability)."""
     from backend.ai.prompts import _fmt_memory
@@ -320,131 +310,6 @@ def test_fmt_memory_sort_by_created_at_not_updated_at(isolated):
         "Updating updated_at must not change _fmt_memory output — "
         "sort must be by created_at/id, not updated_at"
     )
-
-
-def test_fmt_memory_truncates_long_content(isolated):
-    """Content longer than 240 chars is truncated with ellipsis."""
-    from backend.ai.prompts import _fmt_memory
-
-    long_content = "X" * 500
-    store = memory_store.MemoryStore()
-    store.replace_all([_fact(long_content, fid="long")])
-
-    output = _fmt_memory()
-    # The raw 500-char string must not appear.
-    assert long_content not in output
-    # The rendered bullet must contain an ellipsis.
-    assert "…" in output
-
-
-def test_fmt_memory_total_size_under_8k(isolated):
-    """Even with 30 long-ish facts the rendered block should be ≤8K chars."""
-    from backend.ai.prompts import _fmt_memory
-
-    store = memory_store.MemoryStore()
-    facts = [
-        _fact(
-            "This is a moderately long fact about the user's financial situation. " * 5,
-            fid=f"f{i:03d}",
-            created_at=f"2026-01-{i + 1:02d}T00:00:00",
-        )
-        for i in range(30)
-    ]
-    store.replace_all(facts)
-
-    output = _fmt_memory()
-    assert len(output) <= 8192, f"_fmt_memory too large: {len(output)} chars"
-
-
-def test_fmt_memory_explicit_source_prioritised_over_implicit(isolated):
-    """Explicit-source facts appear in output even when they are older."""
-    from backend.ai.prompts import _fmt_memory
-
-    store = memory_store.MemoryStore()
-    # 35 implicit facts (newer) + 2 explicit facts (older)
-    implicit_facts = _make_fmt_facts(35, source="implicit")
-    explicit_facts = [
-        _fact(
-            "User's explicit preference A",
-            source="explicit",
-            fid="ex_a",
-            created_at="2025-01-01T00:00:00",
-            updated_at="2025-01-01T00:00:00",
-        ),
-        _fact(
-            "User's explicit preference B",
-            source="explicit",
-            fid="ex_b",
-            created_at="2025-01-02T00:00:00",
-            updated_at="2025-01-02T00:00:00",
-        ),
-    ]
-    store.replace_all(implicit_facts + explicit_facts)
-
-    output = _fmt_memory()
-    assert "explicit preference A" in output, "explicit-source fact must be included"
-    assert "explicit preference B" in output, "explicit-source fact must be included"
-
-
-def test_fmt_memory_keeps_the_newest_facts_not_the_oldest(isolated):
-    """Owner report 2026-10-13: past the cap the block kept the OLDEST implicit facts and
-    dropped everything learned since — a 117-fact book never showed its newest 87."""
-    from backend.ai.prompts import _fmt_memory
-
-    store = memory_store.MemoryStore()
-    store.replace_all(_make_fmt_facts(35))
-
-    output = _fmt_memory()
-    assert "Fact content number 34 " in output
-    assert "Fact content number 5 " in output
-    assert "Fact content number 4 " not in output
-    assert "Fact content number 0 " not in output
-
-
-def test_fmt_memory_protects_at_most_ten_explicit_facts(isolated):
-    """Explicit facts outrank implicit ones, but only the newest ten are protected — a long
-    list of "remember that…" must not crowd out everything learned since."""
-    from backend.ai.prompts import _fmt_memory
-
-    store = memory_store.MemoryStore()
-    explicit = [
-        _fact(
-            f"Told me explicitly #{i}.",
-            source="explicit",
-            fid=f"ex{i:02d}",
-            created_at=f"2025-01-{i + 1:02d}T00:00:00",
-        )
-        for i in range(15)
-    ]
-    store.replace_all(explicit + _make_fmt_facts(30))
-
-    output = _fmt_memory()
-    assert output.count("\n• ") == 30
-    assert "Told me explicitly #14." in output and "Told me explicitly #5." in output
-    assert "Told me explicitly #4." not in output
-    assert "Fact content number 29 " in output and "Fact content number 10 " in output
-    assert "Fact content number 9 " not in output
-
-
-def test_fmt_memory_says_when_more_facts_exist(isolated):
-    """Nothing told the model the block was partial, so it had no reason to search."""
-    from backend.ai.prompts import _fmt_memory
-
-    store = memory_store.MemoryStore()
-    store.replace_all(_make_fmt_facts(60))
-
-    output = _fmt_memory()
-    assert "Showing 30 of 60 remembered facts" in output
-    assert "recall_memory" in output
-
-
-def test_fmt_memory_says_nothing_extra_when_everything_fits(isolated):
-    from backend.ai.prompts import _fmt_memory
-
-    store = memory_store.MemoryStore()
-    store.replace_all(_make_fmt_facts(5))
-
-    assert "recall_memory" not in _fmt_memory()
 
 
 def test_fmt_memory_returns_empty_for_no_facts(isolated):

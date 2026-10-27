@@ -59,29 +59,9 @@ def _fmt_goals(ccy: str = "USD") -> str:
 
 
 def _fmt_memory() -> str:
-    """
-    Render the cross-session memory block ("WHAT YOU REMEMBER"), grouped by tier.
-    Returns "" when there's nothing to remember so new users get no noise.
-    Also returns "" when the global memory toggle is OFF.
-
-    Rendering rules (cost-opt):
-    - Hard cap of 30 facts: the newest ten explicit-source facts (what the user asked to be
-      remembered), then the NEWEST of everything else. It used to fill by ascending
-      created_at, keeping the oldest facts and dropping everything learned since (owner
-      report 2026-10-13: a 117-fact book). Past the cap the header says how many exist and
-      points at ``recall_memory``, which searches them all.
-    - Sort within each group by (created_at, id) — a stable key that does NOT
-      churn bytes when updated_at is touched on every extraction pass.  Byte-stable
-      output is required so the semi-stable cache block another lane is adding does
-      not get busted by no-op memory touches.
-    - Each fact's content is truncated to 240 chars with an ellipsis so a single
-      verbose fact can't balloon the block.
-    - Target ≤8K chars total (30 facts × ~242 chars each + ~200-char header ≈ 7.5K).
-    """
-    _FACT_RENDER_CAP = 30
-    _EXPLICIT_PROTECTED = 10
-    _CONTENT_TRUNCATE = 240
-
+    """The cross-session memory block ("WHAT YOU REMEMBER"): every live fact, whole, by section
+    and topic — see ``memory_render``. "" when there is nothing to remember or the global memory
+    toggle is OFF. Logs sizes only, never fact text."""
     try:
         from backend.db.memory_settings_store import MemorySettingsStore
 
@@ -91,62 +71,15 @@ def _fmt_memory() -> str:
         pass
 
     try:
+        from backend.ai.memory_render import render_memory_block
         from backend.db import MemoryStore
 
-        facts = MemoryStore().active_facts()
+        text, stats = render_memory_block(MemoryStore().remembered_facts())
     except Exception:
         return ""
-    if not facts:
-        return ""
-
-    # created_at then id: both stable across the updated_at touches every extraction makes.
-    def _newest_first(fs: list[dict]) -> list[dict]:
-        return sorted(fs, key=lambda f: (f.get("created_at", ""), f.get("id", "")), reverse=True)
-
-    protected = _newest_first([f for f in facts if f.get("source") == "explicit"])[
-        :_EXPLICIT_PROTECTED
-    ]
-    kept = {f.get("id") for f in protected}
-    rest = _newest_first([f for f in facts if f.get("id") not in kept])
-    selected = protected + rest[: _FACT_RENDER_CAP - len(protected)]
-
-    # Within each tier group, render in stable (created_at, id) order.
-    def _stable_key(f: dict) -> tuple:
-        return (f.get("created_at", ""), f.get("id", ""))
-
-    standing = sorted([f for f in selected if f.get("tier") != "time_bound"], key=_stable_key)
-    current = sorted([f for f in selected if f.get("tier") == "time_bound"], key=_stable_key)
-
-    def _render(content: str) -> str:
-        c = (content or "").strip()
-        if len(c) <= _CONTENT_TRUNCATE:
-            return c
-        return c[: _CONTENT_TRUNCATE - 1] + "…"
-
-    # Header carries the anti-recitation rule inline (cheaper than a divider block) —
-    # this is the one instruction in this render with direct behavioral teeth: it's
-    # the same "never recite unprompted" rule as RESPONSE CALIBRATION, restated here
-    # because this block is the thing most likely to get narrated back verbatim.
-    # Regression-pinned wording: tests/test_response_calibration_prompt.py::
-    # test_memory_block_has_reference_only_framing.
-    lines = [
-        "",
-        "WHAT YOU REMEMBER (reference — apply when relevant; never recite these facts back unprompted):",
-    ]
-    if len(facts) > len(selected):
-        lines.append(
-            f"(Showing {len(selected)} of {len(facts)} remembered facts — the newest. When the "
-            "user mentions something you may have been told that isn't here, call recall_memory.)"
-        )
-    if standing:
-        lines.append("Standing facts:")
-        lines += [f"• {_render(f.get('content', ''))}" for f in standing]
-    if current:
-        if standing:
-            lines.append("")
-        lines.append("Current plans & context:")
-        lines += [f"• {_render(f.get('content', ''))}" for f in current]
-    return "\n".join(lines)
+    if text:
+        logger.info("memory_injected %s", stats)
+    return text
 
 
 def memory_block() -> str:

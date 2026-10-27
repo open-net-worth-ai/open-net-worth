@@ -188,7 +188,7 @@ def purge_expired(store: MemoryStore | None = None) -> int:
 
     Called before extraction and consolidation so the LLM never sees stale facts
     and the store shrinks deterministically without any LLM spend.
-    Uses user_today() (local clock) for consistency with MemoryStore.active_facts().
+    Uses user_today() (local clock) for consistency with MemoryStore.remembered_facts().
     """
     s = store or MemoryStore()
     today = user_today().isoformat()
@@ -303,7 +303,8 @@ def _tokenize(text: str) -> list[str]:
 
 
 # ── Recall (read-only search) ───────────────────────────────────────────────────
-# The prompt block (`prompts._fmt_memory`) carries at most 30 facts; recall reaches the rest.
+# The prompt block (`prompts._fmt_memory`) carries every live fact; recall also reaches the
+# older ones not yet sorted into a section.
 
 RECALL_MAX_LIMIT = 25
 RECALL_CONTENT_TRUNCATE = 500
@@ -357,7 +358,7 @@ def recall_facts(query: str, limit: int = 10) -> dict:
     today = user_today().isoformat()
     facts = [
         f
-        for f in MemoryStore().active_facts(today=today)
+        for f in MemoryStore().remembered_facts(today=today)
         if not (f.get("expires_at") and f["expires_at"] < today)
     ]
     scored = [(_recall_score(query, q_tokens, f.get("content", "")), f) for f in facts]
@@ -646,7 +647,7 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
     # never sees already-stale time_bound facts (saves tokens + avoids confusing it).
     purge_expired(store)
 
-    existing = store.active_facts()
+    existing = store.remembered_facts()
     # Cap the listing sent to the extractor: truncate each fact and send only the
     # most-recent EXTRACT_EXISTING_CAP facts. Enough for dedup, not the full 91K.
     capped = existing[:EXTRACT_EXISTING_CAP]
@@ -686,7 +687,7 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
     if session_id:
         _save_cursor(session_id, len(history))
 
-    if _should_consolidate(len(store.active_facts())):
+    if _should_consolidate(len(store.remembered_facts())):
         await consolidate()
 
 

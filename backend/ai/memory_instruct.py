@@ -135,7 +135,7 @@ async def apply_instruction(instruction: str, topic: str | None = None) -> dict:
 
     store = MemoryStore()
     purge_expired(store)
-    facts = store.active_facts()
+    facts = store.remembered_facts()
     listing = (
         "\n".join(
             f"{f['id']}: [{ms.fact_label(f)}] {_truncate(f.get('content', ''), FACT_LISTING_TRUNCATE)}"

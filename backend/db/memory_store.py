@@ -44,18 +44,19 @@ class MemoryStore(PayloadTableStore):
             reverse=True,
         )
 
-    def active_facts(self, today: str | None = None) -> list[dict]:
-        """
-        All items except those whose expiry has passed (see ``is_expired``).
-        This is what the system prompt injects.
-        """
+    def remembered_facts(self, today: str | None = None) -> list[dict]:
+        """Every fact that still counts — live and not yet sorted, not retired, not expired. A
+        fact with no ``state`` predates the migration and is waiting to be sorted. This is what
+        recall searches and what the prompt counts."""
         today = today or user_today().isoformat()
-        out = []
-        for f in self.all_facts():
-            if is_expired(f, today):
-                continue
-            out.append(f)
-        return out
+        return [
+            f for f in self.all_facts() if f.get("state") != "retired" and not is_expired(f, today)
+        ]
+
+    def active_facts(self, today: str | None = None) -> list[dict]:
+        """The live facts — the ones Lucius is shown in full. A fact with no ``state`` is not
+        live: the migration stamps it ``unsorted`` until it is filed."""
+        return [f for f in self.remembered_facts(today) if f.get("state") == "live"]
 
     def remove_by_id(self, id_val: str) -> bool:
         return self.delete(id_val)

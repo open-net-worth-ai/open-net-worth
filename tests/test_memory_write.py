@@ -508,6 +508,7 @@ def test_expiry_follows_the_fact_not_a_tier():
             {
                 "id": fid,
                 "content": fid,
+                "state": "live",
                 "source": "implicit",
                 "expires_at": expires,
                 "created_at": "2026-01-01T00:00:00",

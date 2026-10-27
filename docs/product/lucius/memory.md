@@ -83,10 +83,13 @@ works whether memory is on or off.
 - When the list grows long, he tidies it — merging duplicates and dropping stale ones.
 - Both steps are small AI calls, billed like any other use. To use a cheaper model for them, set
   **Memory** under **Settings → AI → Task models** — see [Models and cost](models-and-cost.md).
-- Each reply carries up to 30 facts: the ten most recent things you asked him to remember, then
-  the newest of everything else. When you mention something he may have been told before that
-  isn't among them — *"my apartment"*, a nickname — he searches everything he remembers for it.
-  The search is a plain keyword lookup and never changes a fact.
+- Every reply carries everything in your memory sections (You, Money, Plans, Open items, Other),
+  in full and with the month each fact was learned. Older facts that haven't been sorted into a
+  section yet aren't in the reply; when you mention something he may have been told — *"my
+  apartment"*, a nickname — he searches everything he remembers for it. The search is a plain
+  keyword lookup and never changes a fact.
+- Memory is context, not proof. Before acting on anything that can change — a balance, a rate, a
+  date — Lucius checks the records, and if they disagree the record wins and he fixes the memory.
 
 Facts are stored in your own database on this machine. They're sent only to the AI provider you
 configured, as part of a normal request — the same as anything you type in chat.

@@ -35,6 +35,7 @@ def _fact(content: str = "a fact", tier: str = "durable", fid: str | None = None
     return {
         "id": fid or str(uuid.uuid4()),
         "content": content,
+        "state": "live",
         "tier": tier,
         "source": "implicit",
         "expires_at": None,
