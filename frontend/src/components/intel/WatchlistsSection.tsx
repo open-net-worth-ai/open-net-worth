@@ -165,7 +165,7 @@ function AssetRow({
           {meta?.price != null ? (
             <>
               {sym}
-              {fPrice(meta.price, priceDigits(meta.asset_class))}
+              {fPrice(meta.price, priceDigits(item.asset_class))}
             </>
           ) : (
             '—'
