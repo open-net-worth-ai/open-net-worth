@@ -1,27 +1,31 @@
-# Sorting an existing book's memory — the owner's order
+# Sorting an existing book's memory
 
 The memory redesign (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home`) stamps every
 fact written before it `unsorted`. The memory model then files each one into a section and topic,
-or retires it. On a book with real memories, review that sort before it is written:
+or moves it out of memory.
 
-1. **Stop the app** (the `:8080` instance, the desktop app or the boot service).
-2. **`make db-upgrade`** — applies revisions `202610271200` (with a backup), which stamps the
-   legacy facts `unsorted`, and `202610271800`, which adds the forgotten-fact fingerprints and
-   renames a stored You topic "About you" to "Profile".
-3. **`.venv/bin/python -m backend.scripts.migrate_memory_topics`** — the dry run. It asks the
-   memory model and prints one line per fact (`id | section · topic | new text`, or
-   `id | retire: reason`). Nothing is written.
-4. **Review** every line. If a decision is wrong, fix the fact after the sort (edit, forget, or
-   tell Lucius) or run the dry run again.
-5. **`.venv/bin/python -m backend.scripts.migrate_memory_topics --apply`** — files and retires the
-   facts through the memory write choke.
-6. **Start the app.**
+## The normal path: nothing to do
 
-**Why in this order:** the background sort starts at boot. The memory sweep runs in the worker
-that holds the scheduler lock, and its first pass sorts every unsorted fact. If you start the app
-before step 5, the model has already filed and retired the facts before you can review a dry run.
-Turning memory off first does not help, because the script needs "Generate memory from chats" on.
+Upgrade and start the app as usual — this is what every user, the owner included, goes through.
 
-Both steps need "Generate memory from chats" on and a memory model that answers. A retired fact
-stays under **Moved out of memory** for 30 days. For a scratch run, set `ONW_ROOT` and
-`ONW_QA_MODE=1`.
+1. On boot, the database migrations run: `202610271200` (with a backup) stamps the legacy facts
+   `unsorted`; `202610271800` adds the forgotten-fact fingerprints and renames a stored You topic
+   "About you" to "Profile"; `202610272100` adds the topic summaries.
+2. The memory sweep's first pass (in the worker that holds the scheduler lock) sorts every
+   unsorted fact in one go — about 25 facts per model call, back to back, so a book of ~130
+   facts takes about a minute — then writes the topic summaries.
+3. Every later pass finds nothing unsorted and does nothing. A fact the model skipped is offered
+   once more in the same pass, then again an hour later.
+
+Until a fact is filed it shows under **Older memories — being sorted** in Settings → Memory; it
+can be edited or forgotten there, and `recall_memory` finds it. A fact moved out is kept 30 days
+(not shown), then deleted. It needs "Generate memory from chats" on and a memory model that
+answers; with memory off, the facts wait unsorted until it is turned on.
+
+## Optional: preview the sort by hand (operators)
+
+`.venv/bin/python -m backend.scripts.migrate_memory_topics` prints the plan — one line per fact,
+`id | section · topic | new text` or `id | retire: reason` — and writes nothing; `--apply` runs
+it. Because the sweep sorts at boot, a preview is only meaningful with the app stopped: stop it,
+`make db-upgrade`, run the preview, then `--apply` or just start the app. For a scratch run, set
+`ONW_ROOT` and `ONW_QA_MODE=1`.

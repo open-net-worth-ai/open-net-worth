@@ -1,14 +1,11 @@
 """
 Sort the memory facts written before sections and topics existed.
 
-Every legacy fact is `unsorted` until it is filed. The app sorts them itself in the background
-(the idle sweep runs `memory_sort.sort_remaining`); this is the same pass by hand, for an owner
-who wants to see the plan first. It works on the app's normal data root (`ONW_ROOT` is
+Every legacy fact is `unsorted` until it is filed. The app sorts them itself at boot (the memory
+sweep runs `memory_sort.sort_remaining`), so nobody needs this; it is the same pass by hand, for an
+operator who wants to preview the plan. It works on the app's normal data root (`ONW_ROOT` is
 respected) and needs "Generate memory from chats" on. A scratch run sets `ONW_ROOT` and
-`ONW_QA_MODE=1`.
-
-On a live book the background sort starts at boot, so run this with the app stopped: stop it,
-`make db-upgrade`, dry run, review, `--apply`, then start it. The full order and the reason are in
+`ONW_QA_MODE=1`. A preview only means something with the app stopped (it sorts at boot) — see
 `docs/ai/MEMORY_MIGRATION.md`.
 
     --dry-run (default)  asks the memory model and prints one line per fact
