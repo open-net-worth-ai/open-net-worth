@@ -22,6 +22,15 @@ export function privateCloudItems(
   ];
 }
 
+// File > New conversation / New transaction. Cmd+N belongs to Lucius: the page opens the
+// conversation in the side panel when it is showing, else on the Lucius screen.
+export function newItems(send: (command: DesktopCommand) => void): MenuItemConstructorOptions[] {
+  return [
+    { label: 'New conversation', accelerator: 'CmdOrCtrl+N', click: () => send({ type: 'new-conversation' }) },
+    { label: 'New transaction', accelerator: 'CmdOrCtrl+Shift+N', click: () => send({ type: 'new-transaction' }) },
+  ];
+}
+
 // View > Reload / Force Reload. Routed through the main window (never the built-in `reload` role,
 // which would also reload a welcome/recovery page or a child window). F5 is the Windows/Linux
 // alias; a menu item holds one accelerator, so it is a hidden twin.

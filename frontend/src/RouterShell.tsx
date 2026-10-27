@@ -73,6 +73,7 @@ import { openReportProblem } from './state/reportProblem'
 import { ScreenSnapshotProvider } from './state/screenSnapshot'
 import { AssetNavProvider } from './state/assetNav'
 import { LuciusChatProvider, useLuciusChat } from './state/luciusChat'
+import { startFreshConversation } from './utils/freshConversation'
 import { useDataVersion } from './hooks/useDataVersion'
 import { connectDataEvents } from './lucius/dataEventsStream'
 import {
@@ -96,7 +97,7 @@ import { useIsMobile } from './hooks/useIsMobile'
 import { useTimezoneCapture } from './hooks/useTimezoneCapture'
 import { useVisualViewportVars } from './hooks/useVisualViewportVars'
 import { NewVersionBanner } from './NewVersionBanner'
-import { isLuciusDockVisible, useLuciusTab } from './hooks/useLuciusTab'
+import { isLuciusDockVisible, routeNewConversation, useLuciusTab } from './hooks/useLuciusTab'
 // Static, not a lazy chunk (2026-09-05): a first open used to wait on a ~17 KB (gzipped)
 // download with a `null` fallback — a blank beat after the tap, and one more chunk that can
 // 404 in a tab that predates a rebuild. Served from the owner's own machine, that split saved
@@ -207,16 +208,19 @@ const TAB_SKELETON_VARIANTS: Record<TabId, TabSkeletonVariant> = {
 function PaletteBridge({
   requestOpenRef,
   switchConversationRef,
+  startFreshRef,
 }: {
   requestOpenRef: MutableRefObject<((fresh?: boolean) => void) | null>
   switchConversationRef: MutableRefObject<
     ((sessionId: string, selection?: { model: string; effort: string }) => void) | null
   >
+  startFreshRef: MutableRefObject<(() => void) | null>
 }) {
   const { requestOpen } = useChatComposer()
-  const { switchConversation } = useLuciusChat()
+  const chat = useLuciusChat()
   requestOpenRef.current = requestOpen
-  switchConversationRef.current = switchConversation
+  switchConversationRef.current = chat.switchConversation
+  startFreshRef.current = () => startFreshConversation(chat)
   return null
 }
 
@@ -659,6 +663,8 @@ function RouterShellInner() {
   // route. In particular, `/lucius` renders the in-flow main tab and must never reserve the
   // hidden dock's width during the first frame of a restored session.
   const luciusDockVisible = isLuciusDockVisible(chatOpen, isMobile, tabToRender)
+  const luciusDockVisibleRef = useRef(luciusDockVisible)
+  luciusDockVisibleRef.current = luciusDockVisible
   // The docked chat's OWN artifact side panel (owner, 2026-08-13: "when user use lucius side
   // panel! the artifact must open as the modal on the side, not fullscreen") — mirrors
   // LuciusHome's ArtifactPanelProvider, scoped to this one docked instance. Closes whenever
@@ -744,6 +750,7 @@ function RouterShellInner() {
   const chatSwitchConversationRef = useRef<
     ((sessionId: string, selection?: { model: string; effort: string }) => void) | null
   >(null)
+  const chatStartFreshRef = useRef<(() => void) | null>(null)
   // Tracks the previous "room for the expanded nav" state so the auto-collapse
   // is edge-triggered (fires once when the content area gets too narrow).
   const prevRoomRef = useRef(true)
@@ -1067,6 +1074,12 @@ function RouterShellInner() {
         })
       } else if (command.type === 'open-lucius') {
         void navigate({ to: '/lucius' })
+      } else if (command.type === 'new-conversation') {
+        routeNewConversation(luciusDockVisibleRef.current, {
+          startFresh: () => chatStartFreshRef.current?.(),
+          focusPanel: () => chatRequestOpenRef.current?.(),
+          openLuciusTab: () => void navigate({ to: '/lucius' }),
+        })
       } else if (command.type === 'resume') {
         invalidateQueryCache(() => true)
       } else if (command.type === 'go') {
@@ -1355,6 +1368,7 @@ function RouterShellInner() {
               <PaletteBridge
                 requestOpenRef={chatRequestOpenRef}
                 switchConversationRef={chatSwitchConversationRef}
+                startFreshRef={chatStartFreshRef}
               />
               <div
                 className={`app-shell${luciusDockVisible ? ' chat-open' : ''}${drawerOpen ? ' drawer-open' : ''}${isMobile ? ' mb-shell' : ''}`}

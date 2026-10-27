@@ -66,7 +66,8 @@ The desktop app's menus add these:
 | Shortcut | What it does |
 |---|---|
 | <kbd>Ctrl</kbd> <kbd>L</kbd> | Open Lucius. |
-| <kbd>Ctrl</kbd> <kbd>N</kbd> | New transaction. |
+| <kbd>Ctrl</kbd> <kbd>N</kbd> | New Lucius conversation — in the Lucius side panel when it's open, otherwise on the Lucius screen. |
+| <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>N</kbd> | New transaction. |
 | <kbd>Ctrl</kbd> <kbd>O</kbd> | Import a statement or receipt. |
 | <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>E</kbd> | Export your book. |
 | <kbd>Ctrl</kbd> <kbd>,</kbd> | Settings. |

@@ -30,7 +30,7 @@ export type GoTab = (typeof GO_TABS)[number];
 export type DesktopCommand =
   | { type: 'import-files'; files: NativeFile[] }
   | { type: 'go'; tab: GoTab }
-  | { type: 'open-inbox' | 'open-activity' | 'open-intel' | 'new-transaction' | 'search' | 'open-lucius' | 'open-settings' | 'resume' | 'history-back' | 'history-forward' | 'toggle-sidebar' | 'open-help' | 'show-shortcuts' };
+  | { type: 'open-inbox' | 'open-activity' | 'open-intel' | 'new-transaction' | 'new-conversation' | 'search' | 'open-lucius' | 'open-settings' | 'resume' | 'history-back' | 'history-forward' | 'toggle-sidebar' | 'open-help' | 'show-shortcuts' };
 export interface DesktopBridge {
   version: 1;
   chooseImportFiles(): Promise<ImportSelection>;

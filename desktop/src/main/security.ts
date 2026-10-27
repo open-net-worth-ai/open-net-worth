@@ -11,7 +11,7 @@ export function serverHeaders(input: Record<string, string>): Record<string, str
 }
 
 export function safeServerCommand(type: string): boolean {
-  return ['open-activity', 'open-intel', 'new-transaction', 'search', 'open-lucius', 'open-settings', 'resume', 'history-back', 'history-forward', 'go', 'toggle-sidebar', 'open-help', 'show-shortcuts'].includes(type);
+  return ['open-activity', 'open-intel', 'new-transaction', 'new-conversation', 'search', 'open-lucius', 'open-settings', 'resume', 'history-back', 'history-forward', 'go', 'toggle-sidebar', 'open-help', 'show-shortcuts'].includes(type);
 }
 
 // A `go` command carries a destination, so the type alone is not enough: only the listed screens may be named.
