@@ -1,9 +1,13 @@
 // Pieces of the one memory UI (MemoryBrowser, shown in Settings → Memory and in the chat's memory
-// dialog): the fact bullets with their in-place editor, the forget confirm, and the "Tell Lucius" box.
+// dialog): the fact bullets and rows with their in-place editor and actions, the forget confirm,
+// and the "Tell Lucius" box.
 import { useLayoutEffect, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
 import { ArrowUp, Pencil, Trash2 } from '../../../ui/icons'
 import { fDate } from '../../../utils/format'
 import { List } from '../../ui/List'
+import { SwipeActions } from '../../ui/SwipeActions'
+import { useSwipeRows } from '../../ui/useSwipeRows'
 import { Btn } from './ds'
 import type { MemoryFact } from '../../../hooks/useMemoryFacts'
 
@@ -81,8 +85,90 @@ function MemoryFactEditor({
   )
 }
 
-/** A topic's facts as one memory, Claude-style: the design system's bullet `List`. The pencil and bin surface on
- *  hover (always on touch); a bullet being edited becomes the editor in place. */
+/** What a row's Edit and Delete/Forget do, and what they're called to a screen reader. */
+export type RowActs = {
+  editLabel: string
+  forgetLabel: string
+  word: 'Delete' | 'Forget'
+  onEdit: () => void
+  onForget: () => void
+}
+
+/** A row that, where rows swipe, slides left onto Edit and Delete/Forget. */
+export function MemorySwipeRow({ acts, children }: { acts: RowActs; children: ReactNode }) {
+  return (
+    <SwipeActions
+      actions={[
+        { label: 'Edit', ariaLabel: acts.editLabel, onClick: acts.onEdit },
+        { label: acts.word, ariaLabel: acts.forgetLabel, onClick: acts.onForget, tone: 'danger' },
+      ]}
+    >
+      {children}
+    </SwipeActions>
+  )
+}
+
+/** The pencil and bin that surface on hover. Where rows swipe, the row's swipe actions take
+ *  their place. */
+export function MemoryHoverActs({
+  acts,
+  className,
+  size,
+}: {
+  acts: RowActs
+  className: string
+  size: number
+}) {
+  if (useSwipeRows()) return null
+  return (
+    <span className={className}>
+      <button
+        type="button"
+        className="rd-fact-ibtn"
+        title="Edit"
+        aria-label={acts.editLabel}
+        onClick={acts.onEdit}
+      >
+        <Pencil size={size} strokeWidth={1.8} aria-hidden="true" />
+      </button>
+      <button
+        type="button"
+        className="rd-fact-ibtn rd-fact-ibtn--forget"
+        title={acts.word}
+        aria-label={acts.forgetLabel}
+        onClick={acts.onForget}
+      >
+        <Trash2 size={size} strokeWidth={1.8} aria-hidden="true" />
+      </button>
+    </span>
+  )
+}
+
+type FactListProps = {
+  facts: MemoryFact[]
+  editingId: string | null
+  onEdit: (id: string) => void
+  onCancel: () => void
+  onSave: (id: string, content: string) => Promise<boolean>
+  onForget: (fact: MemoryFact) => void
+}
+
+function factActs(
+  f: MemoryFact,
+  onEdit: (id: string) => void,
+  onForget: (f: MemoryFact) => void,
+): RowActs {
+  return {
+    editLabel: 'Edit: ' + f.content,
+    forgetLabel: 'Forget: ' + f.content,
+    word: 'Forget',
+    onEdit: () => onEdit(f.id),
+    onForget: () => onForget(f),
+  }
+}
+
+/** A topic's facts as one memory, Claude-style: the design system's bullet `List`. A bullet
+ *  being edited becomes the editor in place. */
 export function MemoryBullets({
   facts,
   editingId,
@@ -90,58 +176,74 @@ export function MemoryBullets({
   onCancel,
   onSave,
   onForget,
-}: {
-  facts: MemoryFact[]
-  editingId: string | null
-  onEdit: (id: string) => void
-  onCancel: () => void
-  onSave: (id: string, content: string) => Promise<boolean>
-  onForget: (fact: MemoryFact) => void
-}) {
+}: FactListProps) {
+  const swipe = useSwipeRows()
   return (
     <List>
-      {facts.map((f) =>
-        editingId === f.id ? (
-          <li key={f.id} className="rd-mem-bullet-edit">
-            <MemoryFactEditor
-              fact={f}
-              onCancel={onCancel}
-              onSave={(content) => onSave(f.id, content)}
-            />
+      {facts.map((f) => {
+        if (editingId === f.id)
+          return (
+            <li key={f.id} className="rd-mem-bullet-edit">
+              <MemoryFactEditor
+                fact={f}
+                onCancel={onCancel}
+                onSave={(content) => onSave(f.id, content)}
+              />
+            </li>
+          )
+        const acts = factActs(f, onEdit, onForget)
+        return (
+          <li key={f.id} className={swipe ? 'rd-mem-bullet rd-mem-bullet--swipe' : 'rd-mem-bullet'}>
+            <MemorySwipeRow acts={acts}>
+              <span className="rd-mem-bullet-t">
+                {f.content}
+                {f.expires_at && (
+                  <span className="rd-mem-bullet-until"> · until {fDate(f.expires_at)}</span>
+                )}
+              </span>
+              <MemoryHoverActs acts={acts} className="rd-mem-bullet-acts" size={14} />
+            </MemorySwipeRow>
           </li>
-        ) : (
-          <li key={f.id} className="rd-mem-bullet">
-            <span className="rd-mem-bullet-t">
-              {f.content}
-              {f.expires_at && (
-                <span className="rd-mem-bullet-until"> · until {fDate(f.expires_at)}</span>
-              )}
-            </span>
-            <span className="rd-mem-bullet-acts">
-              <button
-                type="button"
-                className="rd-fact-ibtn"
-                title="Edit"
-                aria-label={'Edit: ' + f.content}
-                onClick={() => onEdit(f.id)}
-              >
-                <Pencil size={14} strokeWidth={1.8} aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="rd-fact-ibtn rd-fact-ibtn--forget"
-                title="Forget"
-                aria-label={'Forget: ' + f.content}
-                onClick={() => onForget(f)}
-              >
-                <Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />
-              </button>
-            </span>
-          </li>
-        ),
-      )}
+        )
+      })}
     </List>
   )
+}
+
+/** Facts listed straight under a section (open items, older memories) as rows shaped like the
+ *  topic rows: the text where a topic's name and summary go, an open item's end date in the
+ *  date column. A row being edited becomes the editor in place. */
+export function MemoryFactRows({
+  facts,
+  editingId,
+  onEdit,
+  onCancel,
+  onSave,
+  onForget,
+}: FactListProps) {
+  return facts.map((f) => {
+    if (editingId === f.id)
+      return (
+        <MemoryFactEditor
+          key={f.id}
+          fact={f}
+          onCancel={onCancel}
+          onSave={(content) => onSave(f.id, content)}
+        />
+      )
+    const acts = factActs(f, onEdit, onForget)
+    return (
+      <MemorySwipeRow key={f.id} acts={acts}>
+        <div className="rd-mem-topic">
+          <div className="rd-mem-topic-open rd-mem-fact-body">
+            <span className="rd-mem-fact-t">{f.content}</span>
+            {f.expires_at && <span className="rd-mem-topic-date">until {fDate(f.expires_at)}</span>}
+          </div>
+          <MemoryHoverActs acts={acts} className="rd-mem-topic-acts" size={16} />
+        </div>
+      </MemorySwipeRow>
+    )
+  })
 }
 
 export type PendingForget =

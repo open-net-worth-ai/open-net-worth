@@ -1381,9 +1381,6 @@
   line-height: 1.5;
   color: var(--muted);
 }
-.onw-settings .rd-mem-sec > .ui-list {
-  margin-left: 12px;
-}
 /* a topic page's Details, laid out like Claude's: the text starts where the "Details" label ends
    (about 3.2 of its characters) and each dot sits under the label's middle — drawn here, since
    the browser's own marker can't be placed that precisely */
@@ -1485,6 +1482,28 @@
 .onw-settings .rd-mem-topic-acts .rd-fact-ibtn {
   width: 32px;
   height: 32px;
+}
+/* an open item or older memory: a topic row whose text runs where the name and summary go */
+.onw-settings .rd-mem-fact-body {
+  cursor: default;
+}
+.onw-settings .rd-mem-fact-t {
+  grid-column: 1 / 3;
+  font-size: var(--text-base);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+/* rows that swipe (touch): the hairline sits between the swipe wrappers */
+.onw-settings .rd-mem-sec > .ui-swipe + .ui-swipe {
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+/* a swiping bullet gets a taller face, so its actions are big enough to tap; the dot drops to stay
+   level with the text */
+.onw-settings .rd-mem-bullet--swipe .ui-swipe-face {
+  padding-block: var(--space-2);
+}
+.onw-settings .rd-mem-field > .ui-list > li.rd-mem-bullet--swipe::before {
+  top: calc(0.75em - 2px + var(--space-2));
 }
 /* a topic's own page */
 .onw-settings .rd-mem-back,

@@ -74,6 +74,40 @@ describe('MemoryBrowser', () => {
     expect(within(open).queryByRole('button', { name: /^Delete / })).toBeNull()
   })
 
+  it('lays open items and older memories out as rows, an end date in the date column', async () => {
+    await renderBrowser()
+    const open = screen.getByRole('region', { name: 'Open items' })
+    const old = screen.getByRole('region', { name: 'Older memories' })
+    expect(open.querySelector('.ui-list')).toBeNull()
+    expect(old.querySelector('.ui-list')).toBeNull()
+    const item = within(open)
+      .getByText('Call the insurer about the renewal')
+      .closest('.rd-mem-topic')
+    expect(item?.querySelector('.rd-mem-topic-date')?.textContent).toMatch(/^until /)
+    expect(
+      within(item as HTMLElement)
+        .getAllByRole('button')
+        .map((b) => b.title),
+    ).toEqual(['Edit', 'Forget'])
+    expect(within(old).getByText('Prefers metric units').closest('.rd-mem-topic')).toBeTruthy()
+  })
+
+  it('edits an open item in place from its row', async () => {
+    await renderBrowser()
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Edit: Call the insurer about the renewal' }),
+    )
+    const box = screen.getByRole('textbox', { name: 'Edit: Call the insurer about the renewal' })
+    fireEvent.change(box, { target: { value: 'Call the insurer on Monday' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(authFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/memory/'),
+        expect.objectContaining({ method: 'PATCH' }),
+      ),
+    )
+  })
+
   it('opens a topic to its facts, and the change box sends the topic', async () => {
     const toast = await renderBrowser()
     fireEvent.click(topicRow('Housing'))
@@ -305,6 +339,48 @@ describe('MemoryBrowser', () => {
       await renderWithSummary()
       fireEvent.click(topicRow('Housing'))
       expect(screen.getByText(summary)).toBeTruthy()
+    })
+  })
+
+  describe('on a touch screen', () => {
+    const original = Object.getOwnPropertyDescriptor(window, 'matchMedia')
+    beforeEach(() => {
+      Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        writable: true,
+        value: (query: string) => ({
+          matches: query === '(hover: none) and (pointer: coarse)',
+          media: query,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }),
+      })
+    })
+    afterEach(() => {
+      if (original) Object.defineProperty(window, 'matchMedia', original)
+    })
+
+    it('rows swipe to Edit and Delete or Forget instead of showing icons', async () => {
+      await renderBrowser()
+      expect(document.querySelector('.rd-mem-topic-acts, .rd-mem-bullet-acts')).toBeNull()
+      const del = screen.getByRole('button', { name: 'Delete Housing' })
+      expect(del.textContent).toBe('Delete')
+      expect(del.closest('.ui-swipe-acts')).toBeTruthy()
+      const forget = screen.getByRole('button', {
+        name: 'Forget: Call the insurer about the renewal',
+      })
+      expect(forget.textContent).toBe('Forget')
+      fireEvent.click(del)
+      expect(screen.getByRole('alertdialog', { name: 'Forget Housing?' })).toBeTruthy()
+    })
+
+    it('a topic’s Details bullets swipe to Edit and Forget', async () => {
+      await renderBrowser()
+      fireEvent.click(topicRow('Housing'))
+      const forget = screen.getByRole('button', { name: 'Forget: Lease ends in March' })
+      expect(forget.closest('li.rd-mem-bullet--swipe')).toBeTruthy()
+      fireEvent.click(forget)
+      expect(screen.getByRole('alertdialog', { name: 'Forget this memory?' })).toBeTruthy()
     })
   })
 })

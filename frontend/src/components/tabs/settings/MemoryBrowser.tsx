@@ -10,14 +10,21 @@ import {
   type MutableRefObject,
   type ReactNode,
 } from 'react'
-import { ChevronLeft, Pencil, Trash2 } from '../../../ui/icons'
+import { ChevronLeft } from '../../../ui/icons'
 import { fDate } from '../../../utils/format'
 import { useMemoryFacts } from '../../../hooks/useMemoryFacts'
 import type { MemoryFact } from '../../../hooks/useMemoryFacts'
 import { Btn } from './ds'
 import type { SectionBack, Toast } from './ds'
-import { ForgetConfirm, MemoryAskBox, MemoryBullets } from './MemoryParts'
-import type { PendingForget } from './MemoryParts'
+import {
+  ForgetConfirm,
+  MemoryAskBox,
+  MemoryBullets,
+  MemoryFactRows,
+  MemoryHoverActs,
+  MemorySwipeRow,
+} from './MemoryParts'
+import type { PendingForget, RowActs } from './MemoryParts'
 import { SECTIONS, UNSORTED, groupFacts, matchesFilter, summaryOf, topicsOf } from './memoryGroups'
 import type { Topic } from './memoryGroups'
 
@@ -43,36 +50,26 @@ function TopicRow({
   onOpen: () => void
   onDelete: () => void
 }) {
+  const acts: RowActs = {
+    editLabel: 'Edit ' + topic.name,
+    forgetLabel: 'Delete ' + topic.name,
+    word: 'Delete',
+    onEdit: onOpen,
+    onForget: onDelete,
+  }
   return (
-    <div className="rd-mem-topic">
-      <button type="button" className="rd-mem-topic-open" onClick={onOpen}>
-        <span className="rd-mem-topic-name">{topic.name}</span>
-        <span className="rd-mem-topic-preview">{summary || topic.facts[0]?.content}</span>
-        <span className="rd-mem-topic-date">
-          {topic.updated ? `Updated ${fDate(topic.updated)}` : ''}
-        </span>
-      </button>
-      <span className="rd-mem-topic-acts">
-        <button
-          type="button"
-          className="rd-fact-ibtn"
-          title="Edit"
-          aria-label={'Edit ' + topic.name}
-          onClick={onOpen}
-        >
-          <Pencil size={16} strokeWidth={1.8} aria-hidden="true" />
+    <MemorySwipeRow acts={acts}>
+      <div className="rd-mem-topic">
+        <button type="button" className="rd-mem-topic-open" onClick={onOpen}>
+          <span className="rd-mem-topic-name">{topic.name}</span>
+          <span className="rd-mem-topic-preview">{summary || topic.facts[0]?.content}</span>
+          <span className="rd-mem-topic-date">
+            {topic.updated ? `Updated ${fDate(topic.updated)}` : ''}
+          </span>
         </button>
-        <button
-          type="button"
-          className="rd-fact-ibtn rd-fact-ibtn--forget"
-          title="Delete"
-          aria-label={'Delete ' + topic.name}
-          onClick={onDelete}
-        >
-          <Trash2 size={16} strokeWidth={1.8} aria-hidden="true" />
-        </button>
-      </span>
-    </div>
+        <MemoryHoverActs acts={acts} className="rd-mem-topic-acts" size={16} />
+      </div>
+    </MemorySwipeRow>
   )
 }
 
@@ -154,18 +151,14 @@ export function MemoryBrowser({
     })
   }
 
-  function bullets(list: MemoryFact[]) {
-    return (
-      <MemoryBullets
-        facts={list}
-        editingId={editingId}
-        onEdit={setEditingId}
-        onCancel={() => setEditingId(null)}
-        onSave={edit}
-        onForget={(fact) => setPending({ kind: 'one', fact })}
-      />
-    )
-  }
+  const factList = (list: MemoryFact[]) => ({
+    facts: list,
+    editingId,
+    onEdit: setEditingId,
+    onCancel: () => setEditingId(null),
+    onSave: edit,
+    onForget: (fact: MemoryFact) => setPending({ kind: 'one', fact }),
+  })
 
   const confirmNode = pending && (
     <ForgetConfirm pending={pending} onCancel={() => setPending(null)} onConfirm={confirm} />
@@ -209,7 +202,7 @@ export function MemoryBrowser({
         )}
         <div className="rd-mem-field">
           <div className="rd-mem-field-label">Details</div>
-          {bullets(topic.facts)}
+          <MemoryBullets {...factList(topic.facts)} />
         </div>
         <MemoryAskBox
           disabled={disabled}
@@ -254,17 +247,19 @@ export function MemoryBrowser({
               <section className="rd-mem-sec" key={s.key} aria-label={s.label}>
                 <div className="rd-mem-sec-h">{s.label}</div>
                 {'note' in s && s.note ? <div className="rd-mem-sec-note">{s.note}</div> : null}
-                {s.flat
-                  ? bullets(list)
-                  : topicsOf(list).map((t) => (
-                      <TopicRow
-                        key={t.key}
-                        topic={whole(s.key, t)}
-                        summary={summaryOf(summaries, s.key, t.key)}
-                        onOpen={() => setOpen({ section: s.key, key: t.key })}
-                        onDelete={() => askDelete(s.key, t)}
-                      />
-                    ))}
+                {s.flat ? (
+                  <MemoryFactRows {...factList(list)} />
+                ) : (
+                  topicsOf(list).map((t) => (
+                    <TopicRow
+                      key={t.key}
+                      topic={whole(s.key, t)}
+                      summary={summaryOf(summaries, s.key, t.key)}
+                      onOpen={() => setOpen({ section: s.key, key: t.key })}
+                      onDelete={() => askDelete(s.key, t)}
+                    />
+                  ))
+                )}
               </section>
             )
           })}

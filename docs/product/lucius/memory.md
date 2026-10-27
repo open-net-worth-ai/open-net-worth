@@ -74,26 +74,29 @@ that narrows it to the facts (or topics) containing your words.
 
 1. **Sections.** Memory is laid out in the order **You**, **Money**, **Plans**, **Open items** and
    **Other**. In each, a row per topic shows its name, its one-line summary (its first fact until
-   Lucius has written one) and when it was last updated. **Open items** are listed directly, each with the date it runs until.
+   Lucius has written one) and when it was last updated. **Open items** are listed directly, a row
+   per item with the date it runs until where a topic's date goes.
 2. **A topic's page.** Click a topic (or its pencil) to open it: **← Memory** goes back, then you
    see when it was **Last updated**, a one-line **Summary** of what the topic covers, and its
    **Details** as bullets. Lucius writes the summary himself and refreshes it within a few minutes
    of the topic's facts changing (a brand-new topic shows it once he has); it describes the topic,
    calls you by the name you gave in **Settings → Profile** (*What should Lucius call you?*), and
    never repeats its numbers. It is for you to read: it is never in Lucius's prompt. When a
-   topic's last fact goes, its summary goes with it straight away. Point at a bullet (on a phone
-   the icons are always there) and click **Edit** (the pencil) to fix its wording — the whole fact
+   topic's last fact goes, its summary goes with it straight away. Point at a bullet and click **Edit** (the pencil) to fix its wording — the whole fact
    opens in a box; change it, then **Save** or press Enter (Shift+Enter starts a new line);
    **Cancel** or Esc leaves it as it was — or **Forget** (the bin) to remove just that fact, then
    **Forget** again to confirm.
 3. **Delete a topic.** On the topic's page click **Delete**, or click the bin on its row. Lucius
    asks first and says how many facts go, for example *Forget Housing? Lucius will forget its 4
    facts.* It can't be undone.
-4. **Older memories.** Facts saved before sections existed wait here as a plain
-   list until Lucius files them under a section and topic. They are not lost; you can edit or
+4. **Older memories.** Facts saved before sections existed wait here, a row each, until Lucius files them under a section and topic. They are not lost; you can edit or
    forget them as usual. Filing never changes a fact's words, except that one over 280
    characters is shortened to fit. A fact holding a full card, account or ID number is moved
    out instead; a sensitive fact is filed like any other.
+
+On a phone or tablet there are no pencils or bins: swipe a row — a topic, an open item, an older
+memory or a bullet on a topic's page — to the left to show **Edit** and **Delete** (**Forget** for
+a single fact), then tap one. Tap the row again, or anywhere else, to slide it back.
 
 When a fact turns out to live somewhere better — your profile, your Instructions, a payee rule,
 an automation, the ledger — or has gone stale, Lucius moves it out of memory. It no longer shows
