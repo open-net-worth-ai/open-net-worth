@@ -1,6 +1,7 @@
 """Stage ``tidy``: the daily clean-up merges duplicate facts and near-duplicate topic names. The
 safety bar is the other half of the job — a fact that says something no other fact says must
-survive, and no topic may lose more than half of its facts."""
+survive, and no topic may lose more than half of its facts. T03 runs the topic-summary pass that
+rides the same sweep: one short line per topic that describes it and restates no number."""
 
 from __future__ import annotations
 
@@ -31,6 +32,12 @@ _T02 = (
     live("mem_t02a01", "Rents a two-bedroom flat in Tampines", "money", "Housing"),
     live("mem_t02a02", "Pays the rent on the 3rd of each month", "money", "Housing"),
     live("mem_t02d01", "Plans a trip to Hokkaido in December", "plans", "Hokkaido trip"),
+)
+
+_T03 = (
+    live("mem_t03a01", "Works at Marlowe Analytics as a data engineer", "you", "Profile"),
+    live("mem_t03a02", "Speaks English and Mandarin at home", "you", "Profile"),
+    live("mem_t03a03", "Has lived in Singapore for 12 years, moved from Penang", "you", "Profile"),
 )
 
 TIDY_CASES: tuple[Case, ...] = (
@@ -79,6 +86,21 @@ TIDY_CASES: tuple[Case, ...] = (
             ),
             c.no_topic_gutted(),
             c.unchanged("no fact is merged, retopiced or reworded"),
+        ),
+    ),
+    Case(
+        "T03",
+        "tidy",
+        "the You · Profile topic gets a one-line summary that describes it without its numbers",
+        facts=_T03,
+        summaries=True,
+        checks=(
+            c.summary_written(
+                "you", "Profile", 120, "the topic has a summary of 120 chars or less"
+            ),
+            c.summary_restates_no_number(
+                "you", "Profile", "the summary restates no number from the facts"
+            ),
         ),
     ),
 )

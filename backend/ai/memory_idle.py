@@ -180,8 +180,8 @@ async def sweep_idle_conversations(now: datetime | None = None) -> int:
 
 async def memory_sweep_loop() -> None:
     """Sweep at startup, then every ``MEMORY_SWEEP_SECONDS``; the daily tidy rides the same
-    loop, and so does sorting any legacy facts still unsorted. A no-op pass while "Generate
-    memory from chats" is off."""
+    loop, and so does sorting any legacy facts still unsorted, then refreshing the topic
+    summaries. A no-op pass while "Generate memory from chats" is off."""
     from backend.ai import memory_sort
     from backend.ai.memory_tidy import tidy
 
@@ -191,8 +191,22 @@ async def memory_sweep_loop() -> None:
                 await sweep_idle_conversations()
                 await tidy()
                 await memory_sort.sort_tick()
+                await refresh_topic_summaries()
         except asyncio.CancelledError:
             raise
         except Exception:
             logger.exception("memory sweep failed (non-fatal)")
         await asyncio.sleep(MEMORY_SWEEP_SECONDS)
+
+
+async def refresh_topic_summaries() -> None:
+    """Bring each topic's one-line summary up to date. A failure is logged and swallowed: a
+    summary is display-only and is retried next sweep."""
+    from backend.ai.memory_summaries import refresh_summaries
+
+    try:
+        await refresh_summaries()
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception("memory topic summaries failed (non-fatal)")

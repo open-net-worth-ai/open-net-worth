@@ -305,6 +305,12 @@ class Harness:
         elif case.stage == "import":
             out.plan = await memory_import.plan_import(case.paste)
             out.applied = apply_import(out.plan)
+        elif case.stage == "tidy" and case.summaries:
+            from backend.ai import memory_summaries
+            from backend.db.memory_topic_summary_store import MemoryTopicSummaryStore
+
+            out.run = await memory_summaries.refresh_summaries()
+            out.summaries = MemoryTopicSummaryStore().all()
         elif case.stage == "tidy":
             out.run = await memory_tidy.tidy(force=True)
         else:

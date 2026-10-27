@@ -76,7 +76,10 @@ that narrows it to the facts (or topics) containing your words.
    **Other**. In each, a row per topic shows its name, its first fact and when it was last
    updated. **Open items** are listed directly, each with the date it runs until.
 2. **A topic's page.** Click a topic (or its pencil) to open it: **← Memory** goes back, then you
-   see when it was **Last updated** and its **Details** as bullets. Point at a bullet (on a phone
+   see when it was **Last updated**, a one-line **Summary** of what the topic covers, and its
+   **Details** as bullets. Lucius writes the summary himself and refreshes it within a few minutes
+   of the topic's facts changing (a brand-new topic shows it once he has); it describes the topic
+   and never repeats its numbers, and it is only shown to you — it isn't part of what he reads. Point at a bullet (on a phone
    the icons are always there) and click **Edit** (the pencil) to fix its wording — the whole fact
    opens in a box; change it, then **Save** or press Enter (Shift+Enter starts a new line);
    **Cancel** or Esc leaves it as it was — or **Forget** (the bin) to remove just that fact, then

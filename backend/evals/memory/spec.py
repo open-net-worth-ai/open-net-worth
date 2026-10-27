@@ -35,6 +35,7 @@ class Case:
     question: str = ""
     accounts: tuple[str, ...] = ()
     forgotten: tuple[str, ...] = ()  # texts the user told Lucius to forget, seeded as fingerprints
+    summaries: bool = False  # a tidy-stage case that runs the topic-summary pass, not the tidy
 
 
 @dataclass
@@ -52,6 +53,7 @@ class Outcome:
     plan: list[dict] | None = None
     applied: dict | None = None
     run: dict = field(default_factory=dict)
+    summaries: list[dict] = field(default_factory=list)
 
     def new_facts(self) -> list[dict]:
         return [f for f in self.after if f["id"] not in self.before]

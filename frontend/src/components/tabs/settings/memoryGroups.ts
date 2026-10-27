@@ -1,6 +1,6 @@
 // How the stored facts are laid out: sections in a fixed order, topics inside them, the facts the
 // sort hasn't filed yet, and the ones moved out of memory (kept 30 days, then forgotten).
-import type { MemoryFact } from '../../../hooks/useMemoryFacts'
+import type { MemoryFact, MemoryTopicSummary } from '../../../hooks/useMemoryFacts'
 
 // The fixed sections, in display order. `flat` sections list their facts directly (no topics).
 export const SECTIONS: readonly { key: string; label: string; flat?: boolean }[] = [
@@ -47,6 +47,13 @@ export function daysUntilForgotten(retiredAt?: string | null, today = localDay()
 /** What two spellings of one topic have in common, as the backend's `topic_key`. */
 export function topicKey(name?: string | null): string {
   return (name ?? '').split(/\s+/).filter(Boolean).join(' ').toLowerCase()
+}
+
+/** A topic's generated summary line, matched by section and topic key (as the facts group), or
+ *  '' when it has none yet. */
+export function summaryOf(summaries: MemoryTopicSummary[], section: string, key: string): string {
+  const hit = summaries.find((s) => s.section === section && topicKey(s.topic) === key)
+  return hit?.summary.trim() ?? ''
 }
 
 /** The group key for facts filed with no topic. It has a leading space, which `topicKey` always

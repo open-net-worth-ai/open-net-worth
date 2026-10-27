@@ -19,7 +19,7 @@ import type { Toast } from './ds'
 import { ForgetConfirm, MemoryAskBox, MemoryBullets } from './MemoryParts'
 import type { PendingForget } from './MemoryParts'
 import { MemoryMovedOut } from './MemoryMovedOut'
-import { SECTIONS, UNSORTED, groupFacts, matchesFilter, topicsOf } from './memoryGroups'
+import { SECTIONS, UNSORTED, groupFacts, matchesFilter, summaryOf, topicsOf } from './memoryGroups'
 import type { Topic } from './memoryGroups'
 
 function TopicRow({
@@ -84,7 +84,7 @@ export function MemoryBrowser({
   escapeRef?: MutableRefObject<(() => boolean) | null>
   onTopicOpen?: (open: boolean) => void
 }) {
-  const { facts, loading, forget, edit, instruct, deleteTopic } = useMemoryFacts(toast)
+  const { facts, summaries, loading, forget, edit, instruct, deleteTopic } = useMemoryFacts(toast)
   const [open, setOpen] = useState<{ section: string; key: string } | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingForget | null>(null)
@@ -166,6 +166,7 @@ export function MemoryBrowser({
     onTopicOpen?.(topicShown)
   }, [onTopicOpen, topicShown])
   if (open && topic) {
+    const summary = summaryOf(summaries, open.section, topic.key)
     return (
       <div className="rd-mem-detail" ref={top}>
         <button type="button" className="rd-mem-back" onClick={() => setOpen(null)}>
@@ -182,6 +183,12 @@ export function MemoryBrowser({
           <div className="rd-mem-field-label">Last updated</div>
           <div>{topic.updated ? fDate(topic.updated) : '—'}</div>
         </div>
+        {summary && (
+          <div className="rd-mem-field">
+            <div className="rd-mem-field-label">Summary</div>
+            <div>{summary}</div>
+          </div>
+        )}
         <div className="rd-mem-field">
           <div className="rd-mem-field-label">Details</div>
           {bullets(topic.facts)}

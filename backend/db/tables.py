@@ -856,6 +856,21 @@ memory_forgotten = Table(
     Column("forgotten_at", Text, nullable=False),
 )
 
+# One generated Summary line per memory topic, for the topic page (ADR
+# `2026-10-25-memory-keeps-only-what-has-no-other-home` amendment 8). Display-only, never in a
+# model prompt. `facts_digest` (sha256 over the topic's live fact ids + text) tells the idle sweep
+# which topics changed. Derived and regenerated, so checkpoint-EXCLUDED; wiped with `memory`.
+memory_topic_summaries = Table(
+    "memory_topic_summaries",
+    metadata,
+    Column("section", Text, primary_key=True),
+    Column("topic_key", Text, primary_key=True),
+    Column("topic", Text, nullable=False),
+    Column("summary", Text, nullable=False),
+    Column("facts_digest", Text, nullable=False),
+    Column("updated_at", Text, nullable=False),
+)
+
 # ── Tier-3 config stores (plan 4d, task 1) — plain flat-list shape, NO book_id:
 # installation-wide config/reference rows, not book-scoped user data.
 news_sources = payload_table("news_sources")

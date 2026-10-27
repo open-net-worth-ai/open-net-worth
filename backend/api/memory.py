@@ -2,8 +2,9 @@
 
 GET    /api/memory/settings   → {"enabled", "search_chats", "sensitive_topics"}
 PUT    /api/memory/settings   body: any of those keys → updated settings
-GET    /api/memory/facts      → {"facts": [...], "total": n}; a row carries state, section, topic,
-                                retired_reason, retired_at, expires_at, last_used_at
+GET    /api/memory/facts      → {"facts": [...], "total": n, "topics": [...]}; a fact carries state,
+                                section, topic, retired_reason, retired_at, expires_at,
+                                last_used_at; a topic is {section, topic, summary, updated_at}
 PATCH  /api/memory/facts/{id} body {"content": str} → the edited fact
 DELETE /api/memory/facts/{id} → {"ok": bool}
 DELETE /api/memory/facts      → {"ok": true, "deleted": n}
@@ -35,12 +36,18 @@ from backend.ai.memory import MemoryDisabledError
 from backend.ai.memory_export import build_memory_export
 from backend.ai.memory_import import EXPORT_PROMPT, plan_import
 from backend.ai.memory_import_apply import MAX_ITEMS, apply_import
-from backend.ai.memory_instruct import apply_instruction, delete_topic, edit_fact
+from backend.ai.memory_instruct import (
+    apply_instruction,
+    delete_topic,
+    edit_fact,
+    forget_everything,
+)
 from backend.ai.memory_write import apply_memory_change
 from backend.core.errors import ExternalServiceError, NotFoundError, ValidationError
 from backend.core.user_time import user_today
 from backend.db.memory_settings_store import MemorySettingsStore
 from backend.db.memory_store import MemoryStore
+from backend.db.memory_topic_summary_store import MemoryTopicSummaryStore
 
 router = APIRouter()
 
@@ -85,9 +92,14 @@ def put_memory_settings(body: MemorySettingsPatch):
 @router.get("/api/memory/facts")
 def list_memory_facts():
     """Every stored fact, newest-updated first. Bounded by the store's own size — memory is
-    a distilled fact list, not a log, so there is no window to page through."""
+    a distilled fact list, not a log, so there is no window to page through. ``topics`` is each
+    topic's generated one-line summary, for the topic page (display-only)."""
     facts = MemoryStore().all_facts()
-    return {"facts": facts, "total": len(facts)}
+    topics = [
+        {k: row[k] for k in ("section", "topic", "summary", "updated_at")}
+        for row in MemoryTopicSummaryStore().all()
+    ]
+    return {"facts": facts, "total": len(facts), "topics": topics}
 
 
 @router.patch("/api/memory/facts/{fact_id}")
@@ -110,9 +122,7 @@ def forget_memory_fact(fact_id: str):
 
 @router.delete("/api/memory/facts")
 def forget_all_memory_facts():
-    ids = [f["id"] for f in MemoryStore().all_facts() if f.get("id")]
-    removed = apply_memory_change({"remove": ids}, source="explicit", strict=False)["removed"]
-    return {"ok": True, "deleted": removed}
+    return {"ok": True, "deleted": forget_everything()}
 
 
 @router.delete("/api/memory/topics")

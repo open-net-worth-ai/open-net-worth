@@ -75,8 +75,8 @@ def test_every_case_has_a_canned_reply_for_both_personas():
         if case.stage == "extract":
             assert case.id in mock_replies.EXTRACT
         if case.stage == "tidy":
-            assert case.id in mock_replies.TIDY
-    assert [c.id for c in select(("tidy",))] == ["T01", "T02"]
+            assert case.id in (mock_replies.SUMMARY if case.summaries else mock_replies.TIDY)
+    assert [c.id for c in select(("tidy",))] == ["T01", "T02", "T03"]
     with pytest.raises(ValueError):
         select(ids=("nope",))
 
@@ -134,6 +134,7 @@ def test_sloppy_persona_fails_the_gate_and_names_the_safety_checks(sloppy):
         ("I01", "health"),
         ("T01", "distinct fact"),
         ("U01", "citation tag"),
+        ("T03", "restates no number"),
     ):
         assert any(c == case_id and fragment in n for c, n in named), (case_id, fragment)
     assert not any(c == "E18" for c, _ in named), "the choke holds even for a sloppy model"

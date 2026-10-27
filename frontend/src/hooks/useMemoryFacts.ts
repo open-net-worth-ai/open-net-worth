@@ -20,6 +20,15 @@ export interface MemoryFact {
   created_at?: string
 }
 
+/** A topic's generated one-line summary — display-only, written by the idle sweep (ADR
+ *  2026-10-25-memory-keeps-only-what-has-no-other-home amendment 8). */
+export interface MemoryTopicSummary {
+  section: string
+  topic: string
+  summary: string
+  updated_at: string
+}
+
 export interface MemorySettings {
   enabled: boolean
   search_chats: boolean
@@ -53,10 +62,16 @@ export function rejectedNote(body: { rejected?: { reason?: string }[] }): string
   return REJECTED_REASONS[first.reason ?? ''] ?? 'Part of that couldn’t be remembered.'
 }
 
-async function getFacts(): Promise<{ facts: MemoryFact[]; total: number }> {
+interface FactsResponse {
+  facts: MemoryFact[]
+  total: number
+  topics?: MemoryTopicSummary[]
+}
+
+async function getFacts(): Promise<FactsResponse> {
   const r = await authFetch(MEMORY_FACTS_KEY)
   if (!r.ok) throw new Error(String(r.status))
-  return r.json() as Promise<{ facts: MemoryFact[]; total: number }>
+  return r.json() as Promise<FactsResponse>
 }
 
 /** The stored-memory list and its edits and deletes, used by the one memory browser
@@ -142,6 +157,7 @@ export function useMemoryFacts(notify: (message: string) => void) {
     instruct,
     deleteTopic,
     facts: data?.facts ?? [],
+    summaries: data?.topics ?? [],
     loading: initialLoading,
     forget: (id: string) => remove(`${MEMORY_FACTS_KEY}/${encodeURIComponent(id)}`, 'Forgotten'),
     forgetAll: () => remove(MEMORY_FACTS_KEY, 'All memories forgotten'),

@@ -284,4 +284,42 @@ describe('MemoryBrowser', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Delete / }))
     expect(screen.getByRole('alertdialog').textContent).toContain('its 2 facts')
   })
+
+  describe('topic summary', () => {
+    const summary = 'Where they live — rent, lease, landlord'
+    function serveSummaries(topics: unknown[]) {
+      authFetch.mockImplementation(() => json({ facts: sampleFacts(), total: 11, topics }))
+    }
+    const labels = () =>
+      Array.from(document.querySelectorAll('.rd-mem-field-label')).map((n) => n.textContent)
+
+    it('shows the summary between Last updated and Details', async () => {
+      serveSummaries([
+        { section: 'money', topic: 'Housing', summary, updated_at: '2026-10-27T00:00:00+00:00' },
+      ])
+      await renderBrowser()
+      fireEvent.click(topicRow('Housing'))
+      expect(labels()).toEqual(['Last updated', 'Summary', 'Details'])
+      expect(screen.getByText(summary)).toBeTruthy()
+    })
+
+    it('hides the field when the topic has no summary yet', async () => {
+      serveSummaries([
+        { section: 'plans', topic: 'Housing', summary, updated_at: '2026-10-27T00:00:00+00:00' },
+      ])
+      await renderBrowser()
+      fireEvent.click(topicRow('Housing'))
+      expect(labels()).toEqual(['Last updated', 'Details'])
+      expect(screen.queryByText(summary)).toBeNull()
+    })
+
+    it('matches the topic case-insensitively', async () => {
+      serveSummaries([
+        { section: 'money', topic: ' HOUSING ', summary, updated_at: '2026-10-27T00:00:00+00:00' },
+      ])
+      await renderBrowser()
+      fireEvent.click(topicRow('Housing'))
+      expect(screen.getByText(summary)).toBeTruthy()
+    })
+  })
 })

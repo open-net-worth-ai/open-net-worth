@@ -4,6 +4,7 @@ import {
   daysUntilForgotten,
   groupFacts,
   retiredReason,
+  summaryOf,
   topicsOf,
 } from './memoryGroups'
 
@@ -97,5 +98,20 @@ describe('retiredReason', () => {
     expect(retiredReason('unused')).toBe('Not used in 90 days')
     expect(retiredReason('merged')).toBe('Merged into another memory')
     expect(retiredReason('something-new')).toBe('Out of date')
+  })
+})
+
+describe('summaryOf', () => {
+  const rows = [
+    { section: 'money', topic: 'Cards  &  Payments', summary: ' How they pay ', updated_at: '' },
+    { section: 'you', topic: 'Profile', summary: 'Who they are', updated_at: '' },
+  ]
+  it('matches by section and case-folded topic key', () => {
+    expect(summaryOf(rows, 'money', 'cards & payments')).toBe('How they pay')
+    expect(summaryOf(rows, 'you', 'profile')).toBe('Who they are')
+  })
+  it('is empty for another section or an unknown topic', () => {
+    expect(summaryOf(rows, 'other', 'profile')).toBe('')
+    expect(summaryOf(rows, 'you', 'preferences')).toBe('')
   })
 })

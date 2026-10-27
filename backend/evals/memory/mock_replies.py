@@ -264,6 +264,32 @@ TIDY: dict[str, tuple[dict, dict]] = {
 }
 
 
+# ── topic summaries (a tidy-stage case) ──────────────────────────────────────
+
+SUMMARY: dict[str, tuple[dict, dict]] = {
+    "T03": (
+        {
+            "summaries": [
+                {
+                    "section": "you",
+                    "topic": "Profile",
+                    "summary": "Who they are — work, where they live and come from, languages",
+                }
+            ]
+        },
+        {
+            "summaries": [
+                {
+                    "section": "you",
+                    "topic": "Profile",
+                    "summary": "Data engineer at Marlowe, 12 years in Singapore, bilingual",
+                }
+            ]
+        },
+    ),
+}
+
+
 def reply(persona: str, case_id: str, source: str, prompt: str) -> str:
     """The raw text a memory-model call returns for this case."""
     pick = 0 if persona == GOOD else 1
@@ -276,6 +302,8 @@ def reply(persona: str, case_id: str, source: str, prompt: str) -> str:
             body = _sort_s02(prompt, persona)
     elif source == "memory_tidy":
         body = TIDY[case_id][pick]
+    elif source == "memory_summary":
+        body = SUMMARY[case_id][pick]
     elif source == "memory_import":
         body = import_reply(case_id, persona, prompt)
     else:

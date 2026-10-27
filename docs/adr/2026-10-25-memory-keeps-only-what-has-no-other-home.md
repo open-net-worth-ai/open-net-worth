@@ -509,3 +509,19 @@ amendment 4's topic names and amendment 5's unused clock.
 - **The unused clock covers only background-learned facts in Other.** A fact the user saved
   (`source: explicit`) or one in You or Money is never retired as `unused`. Plans and Open items
   keep their own decay, and nothing is retired as unused while no citations arrive.
+
+## Amendment 8 (2026-10-27) — a one-line Summary per topic
+
+Decided by the owner in session. Each topic page shows, between **Last updated** and **Details**,
+a one-line **Summary** of what the topic covers ("Who they are — location, employer, background,
+languages"), as Claude's memory pages do. It is display-only: not a fact, never written through
+`apply_memory_change`, and never added to Lucius's prompt (the prompt keeps rendering the facts).
+It is generated in the idle sweep, after extraction, the sort and the tidy, by
+`ai.memory_summaries.refresh_summaries`: one memory-model call (`source=memory_summary`) for up to
+20 topics whose stored row is missing or whose digest of live fact ids and text has changed. A
+returned line is kept only for a topic that was sent, at most 120 characters, with no identifier
+and no run of more than three digits; anything else is asked for again next sweep. Rows live in
+`memory_topic_summaries` (revision `202610272100`), checkpoint-excluded because they are derived;
+a topic with no live facts loses its row, and deleting a topic or forgetting everything removes
+them. The export writes the summary as an italic line under each topic's title. Benchmark case
+T03 holds the line to its length and to restating no number from the facts.

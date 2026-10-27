@@ -181,6 +181,7 @@ def _spy_choke(monkeypatch):
         return apply_memory_change(ops, source=source, strict=strict, today=today)
 
     monkeypatch.setattr(api, "apply_memory_change", spy)
+    monkeypatch.setattr(instruct_mod, "apply_memory_change", spy)  # forget-all lives there
     return calls
 
 
