@@ -36,6 +36,10 @@ copy of facts the profile, payee rules, automations and the ledger own.
 
 ## Decision
 
+> **Amended 2026-10-27** — five topics (adds "About you (beyond your profile)"), the profile's
+> notes become Instructions for Lucius, and one routing guide decides profile vs instructions vs
+> memory. See the amendment at the end; where it differs, it wins.
+
 We will make memory hold **only what has no other home in the app**, organised into four fixed
 topics, every fact shown to Lucius whole.
 
@@ -155,3 +159,64 @@ topics, every fact shown to Lucius whole.
 - **Why this way (one line):** memory was cheap but mostly carried stale copies and leftovers
   while the facts that matter never reached the prompt — giving each fact one home and showing
   memory's own facts whole fixes both.
+
+## Amendment 2026-10-27 — a fifth topic, and the profile's notes become your instructions
+
+Reviewing how the design plays out against the profile found two gaps.
+
+**1. A fifth topic: `about_you` — "About you (beyond your profile)".** Cap 15, no expiry. It holds
+what the profile has no field for: the people in the user's life (a roommate who shares the
+rent, family they support), life context (where they split their time, their employer), small
+personal facts that change how Lucius helps (colour-blindness, a pet's name). It never repeats a
+profile field. Without it the stricter background pass would drop these facts, and nothing else
+in the app keeps them. Topic order becomes `about_you`, `working_style`, `conventions`, `plans`,
+`open_items`. "An About-you topic", rejected above, was rejected as a copy of the profile; this
+one is defined as the part the profile cannot hold.
+
+**2. The profile's "Notes for Lucius" become "Instructions for Lucius"** — the user's standing
+instructions, as in Claude's own settings (instructions you write; memory it learns).
+
+- **Who writes them:** the user in Settings, or Lucius in a conversation — when asked, or on his
+  own judgement when the user states something as a standing rule ("always…", "never…") —
+  through `update_profile`'s `notes` field. That write follows the conversation's approval mode
+  like every profile write, so the user sees the before and after. Lucius edits a line or adds
+  one; he does not rewrite the user's text wholesale. The **background pass never writes them**:
+  it runs unattended, with no approval step.
+- **Instructions or memory?** A rule the user states, and would expect to find and edit
+  themselves, goes in the instructions. A preference Lucius infers or is told in passing goes
+  in memory (`working_style`). Life events and plans go to `plans`; people and personal context
+  to `about_you`. The system prompt's current line sending pronouns, preferences and life events
+  to notes is replaced by this split.
+- **No duplicate in memory:** the background pass is given the instructions text and does not
+  store what they already say.
+- **Every reply includes them in full**, as notes are today. Existing notes text is kept as
+  it is — there is no telling which lines Lucius wrote — and the user can edit it.
+
+**3. One routing guide decides where a fact goes.** It is written once, in code
+(`ai.memory_topics.ROUTING_GUIDE`), and rendered into everything that chooses a home: the
+system prompt, the background pass's prompt, the "Tell Lucius" prompt, and the descriptions of
+`remember_fact` and `update_profile`. No second copy in prose anywhere. Its content:
+
+| The fact is… | It goes to | Written by |
+|---|---|---|
+| Something the profile has a field for (name, date of birth, residence, nationality, tax residency, employment, marital status, income, expenses, saving, risk, retirement age, target allocation, briefing time, benchmark) | **Profile field** | user, or Lucius with approval |
+| A standing rule the user states for how Lucius should behave, that they would expect to find and edit themselves ("always…", "never…") | **Instructions for Lucius** | user, or Lucius with approval |
+| How a payee or bank text is categorised or named | **Payee rule / default** | user, or Lucius with approval |
+| Something that should happen on a schedule (a booking, a report, a reminder) | **Automation** | user, or Lucius with approval |
+| A balance, holding, price, transaction, trade, or a task that was done | **Nowhere** — the ledger already has it | — |
+| A goal, commitment or plan figure the Plan screen holds | **Plan / goals / commitments** | user, or Lucius with approval |
+| About the user but no profile field fits (people in their life, personal context) | Memory → **About you** | Lucius, the background pass, or the user |
+| A preference Lucius infers, or is told in passing, about how to work | Memory → **How you want Lucius to work** | Lucius, the background pass, or the user |
+| A bookkeeping convention no payee rule can express | Memory → **Conventions** | Lucius, the background pass, or the user |
+| An intention or upcoming life event | Memory → **Plans** | Lucius, the background pass, or the user |
+| Something unresolved the user will expect Lucius to come back to | Memory → **Open items** (expires) | Lucius, the background pass, or the user |
+| State of this conversation (what is being waited on, what was offered) | **Nowhere** | — |
+
+When two rows fit, the first one wins: a profile field beats an instruction, an instruction
+beats memory. Only the memory rows are open to the background pass; every other home is
+written in a conversation, through its own tool, under the conversation's approval mode.
+
+The topic list stays **fixed**. The model never creates topics: a topic carries behaviour (cap,
+expiry, what the background pass may store), and model-invented topics drift into
+near-duplicates. An optional per-fact `subject` label for grouping inside a topic, with no
+behaviour attached, is a possible later addition and is not part of this change.
