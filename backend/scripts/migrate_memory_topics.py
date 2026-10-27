@@ -4,7 +4,8 @@ Sort the memory facts written before sections and topics existed.
 Every legacy fact is `unsorted` until it is filed. The app sorts them itself in the background
 (the idle sweep runs `memory_sort.sort_remaining`); this is the same pass by hand, for an owner
 who wants to see the plan first. It works on the app's normal data root (`ONW_ROOT` is
-respected) and needs "Generate memory from chats" on.
+respected) and needs "Generate memory from chats" on. A scratch run sets `ONW_ROOT` and
+`ONW_QA_MODE=1`.
 
     --dry-run (default)  asks the memory model and prints one line per fact
                          (`id | section · topic | new text`, or `id | retire: reason`);
@@ -23,6 +24,7 @@ import argparse
 import asyncio
 
 from backend.ai import memory_sort
+from backend.db.memory_settings_store import memory_writes_enabled
 
 
 async def _dry_run() -> list[dict]:
@@ -33,6 +35,9 @@ async def _dry_run() -> list[dict]:
         if not batch:
             break
         offered.update(f["id"] for f in batch)
+        if items is None:
+            print("The memory model gave no usable reply; stopping.")
+            break
         for item in items:
             print(memory_sort.describe(item))
         plan.extend(items)
@@ -52,6 +57,9 @@ async def _apply() -> list[dict]:
 
 async def run(apply: bool = False) -> list[dict]:
     """The proposed plan (dry run), or ``[]`` after applying."""
+    if not memory_writes_enabled():
+        print('"Generate memory from chats" is off, so nothing is sorted.')
+        return []
     return await (_apply() if apply else _dry_run())
 
 

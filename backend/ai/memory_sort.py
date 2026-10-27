@@ -14,6 +14,7 @@ is the same pass, by hand. ADR ``2026-10-25-memory-keeps-only-what-has-no-other-
 from __future__ import annotations
 
 import logging
+import time
 
 from backend.ai import memory
 from backend.ai import memory_structure as ms
@@ -25,6 +26,11 @@ from backend.db.memory_settings_store import memory_writes_enabled
 logger = logging.getLogger(__name__)
 
 SORT_BATCH = 25
+SORT_COOLDOWN_SECONDS = 3600
+
+# Monotonic time before which the sweep does not try sorting again: a run that filed nothing
+# (model down, or every fact skipped) would otherwise be repeated every tick.
+_retry_after = 0.0
 
 _SORT_SYSTEM = (
     "You file a financial advisor's older notes about their client into a tidy long-term "
@@ -115,24 +121,28 @@ def _clean_item(raw, shown: set[str]) -> dict | None:
             out["topic"] = item["topic"]
     if isinstance(item.get("content"), str):
         out["content"] = item["content"]
+    if "section" not in out:
+        out.pop("content", None)
     if len(out) == 1:
         logger.debug("memory sort: %s came back with nothing to change", fid)
         return None
     return out
 
 
-def _parse_items(reply, shown: set[str]) -> list[dict]:
+def _parse_items(reply, shown: set[str]) -> list[dict] | None:
     parsed = memory._parse_json(reply)
     facts = parsed.get("facts") if isinstance(parsed, dict) else None
     if not isinstance(facts, list):
         logger.warning("memory sort returned a reply that is not the expected shape")
-        return []
+        return None
     return [item for item in (_clean_item(raw, shown) for raw in facts) if item]
 
 
 async def propose(limit: int = SORT_BATCH, exclude: frozenset[str] | set[str] = frozenset()):
     """Ask the model where the oldest ``limit`` unsorted facts (not in ``exclude``) belong.
-    Returns ``(batch, items)``; nothing is written. ``([], [])`` while memory writing is off."""
+    Returns ``(batch, items)``; nothing is written. ``items`` is ``None`` when the call failed
+    or the reply was not the expected shape, ``[]`` when the model had nothing to say, and the
+    whole result is ``([], [])`` while memory writing is off."""
     if not memory_writes_enabled():
         return [], []
     store = MemoryStore()
@@ -152,7 +162,7 @@ async def propose(limit: int = SORT_BATCH, exclude: frozenset[str] | set[str] = 
         )
     except Exception as exc:
         logger.warning("memory sort LLM call failed: %s", exc)
-        return batch, []
+        return batch, None
     return batch, _parse_items(reply, {f["id"] for f in batch})
 
 
@@ -166,10 +176,11 @@ def to_ops(items: list[dict]) -> dict:
     return {"updates": updates, "retire": retire}
 
 
-async def sort_unsorted(limit: int = SORT_BATCH) -> dict:
-    """File the oldest ``limit`` unsorted facts in one model call. Returns how many were
-    ``sorted`` (now live), ``retired`` and how many are ``remaining`` unsorted."""
-    batch, items = await propose(limit)
+async def sort_unsorted(limit: int = SORT_BATCH, exclude=frozenset()) -> dict:
+    """File the oldest ``limit`` unsorted facts (not in ``exclude``) in one model call.
+    Returns how many were ``sorted`` (now live), ``retired``, how many are ``remaining``
+    unsorted, the ``offered`` ids, and ``failed`` when the model call or reply was unusable."""
+    batch, items = await propose(limit, exclude)
     if items:
         apply_memory_change(to_ops(items), source="implicit", strict=False)
     after = {f["id"]: f for f in MemoryStore().all_facts()}
@@ -181,21 +192,44 @@ async def sort_unsorted(limit: int = SORT_BATCH) -> dict:
         logger.info(
             "memory sort: %d filed, %d retired, %d left unsorted", sorted_n, retired_n, remaining
         )
-    return {"sorted": sorted_n, "retired": retired_n, "remaining": remaining}
+    return {
+        "sorted": sorted_n,
+        "retired": retired_n,
+        "remaining": remaining,
+        "offered": ids,
+        "failed": bool(batch) and items is None,
+    }
 
 
 async def sort_remaining(limit: int = SORT_BATCH) -> dict:
-    """Run ``sort_unsorted`` until nothing is left or a run makes no progress (a model that
-    ignores a whole batch would otherwise be asked about the same facts forever)."""
+    """Offer every unsorted fact once. A fact the model skipped or the choke refused is not
+    offered again in the same run, so it cannot hold back the ones behind it; the run stops
+    early only when the model call itself fails."""
     total = {"sorted": 0, "retired": 0, "remaining": len(_unsorted(MemoryStore()))}
+    offered: set[str] = set()
     while total["remaining"]:
-        out = await sort_unsorted(limit)
+        out = await sort_unsorted(limit, offered)
+        if not out["offered"]:
+            break
+        offered.update(out["offered"])
         total["sorted"] += out["sorted"]
         total["retired"] += out["retired"]
         total["remaining"] = out["remaining"]
-        if out["sorted"] + out["retired"] == 0:
+        if out["failed"]:
             break
     return total
+
+
+async def sort_tick() -> dict | None:
+    """The sweep's sorting step: run ``sort_remaining`` while any fact is unsorted, unless the
+    last run filed nothing less than ``SORT_COOLDOWN_SECONDS`` ago. Returns None when skipped."""
+    global _retry_after
+    if time.monotonic() < _retry_after or not has_unsorted():
+        return None
+    out = await sort_remaining()
+    progressed = out["sorted"] + out["retired"] > 0
+    _retry_after = 0.0 if progressed else time.monotonic() + SORT_COOLDOWN_SECONDS
+    return out
 
 
 def describe(item: dict) -> str:

@@ -215,27 +215,105 @@ def test_retired_purged_after_30_days(isolated, monkeypatch):
     assert set(_by_id()) == {"new"}
 
 
-def test_sort_remaining_loops_until_done_and_stops_without_progress(isolated, monkeypatch):
+class _FilesAllButSkipped(_Model):
+    """Files every shown fact except the ones whose text says "skip me"."""
+
+    async def complete(self, prompt, **kwargs):
+        await super().complete(prompt, **kwargs)
+        rows = [
+            line.split(": ", 1) for line in prompt.splitlines() if line[:1] in "fg" and ": " in line
+        ]
+        return json.dumps(
+            {
+                "facts": [
+                    {"id": fid, "section": "other"}
+                    for fid, text in rows
+                    if not text.startswith("skip me")
+                ]
+            }
+        )
+
+
+def test_sort_remaining_files_what_is_behind_a_batch_it_cannot_file(isolated, monkeypatch):
+    MemoryStore().bulk_insert(
+        [_legacy(f"f{i:02d}", f"skip me {i}", age=100 - i) for i in range(25)]
+        + [_legacy(f"g{i}", f"fileable {i}", age=50 - i) for i in range(5)]
+    )
+    model = _use(monkeypatch, _FilesAllButSkipped())
+
+    out = asyncio.run(memory_sort.sort_remaining())
+
+    assert out["sorted"] == 5 and out["remaining"] == 25
+    assert len(model.calls) == 2
+    assert {f["id"] for f in MemoryStore().all_facts() if f["state"] == "live"} == {
+        f"g{i}" for i in range(5)
+    }
+
+
+def test_sort_remaining_stops_when_the_model_fails(isolated, monkeypatch):
     MemoryStore().bulk_insert([_legacy(f"f{i}", f"fact {i}", age=50 - i) for i in range(4)])
+    model = _use(monkeypatch, _Model(raw="garbage"))
 
-    class _Half(_Model):
-        async def complete(self, prompt, **kwargs):
-            await super().complete(prompt, **kwargs)
-            ids = [line.split(":")[0] for line in prompt.splitlines() if line[:1] == "f"]
-            return json.dumps({"facts": [{"id": ids[0], "section": "other"}]})
-
-    model = _use(monkeypatch, _Half())
     out = asyncio.run(memory_sort.sort_remaining(limit=2))
-    assert out["sorted"] == 4 and out["remaining"] == 0
 
-    MemoryStore().bulk_insert([_legacy("z", "ignored")])
+    assert len(model.calls) == 1 and out["remaining"] == 4
+
+
+def test_the_sweep_waits_an_hour_after_a_run_that_filed_nothing(isolated, monkeypatch):
+    MemoryStore().bulk_insert([_legacy("a", "one")])
     model = _use(monkeypatch, _Model())
-    out = asyncio.run(memory_sort.sort_remaining(limit=2))
-    assert len(model.calls) == 1 and out["remaining"] == 1
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(memory_sort, "time", SimpleNamespace(monotonic=lambda: clock["now"]))
+    monkeypatch.setattr(memory_sort, "_retry_after", 0.0)
+
+    assert asyncio.run(memory_sort.sort_tick()) is not None
+    clock["now"] += 3599
+    assert asyncio.run(memory_sort.sort_tick()) is None
+    assert len(model.calls) == 1
+
+    clock["now"] += 2
+    model = _use(monkeypatch, _Model({"facts": [{"id": "a", "section": "other"}]}))
+    assert asyncio.run(memory_sort.sort_tick())["sorted"] == 1
+    assert memory_sort._retry_after == 0.0
+
+
+def test_the_sort_files_but_never_edits_the_words(isolated, monkeypatch):
+    MemoryStore().bulk_insert([_legacy("a", "Rents a flat"), _legacy("b", "Likes tea")])
+    _use(
+        monkeypatch,
+        _Model(
+            {
+                "facts": [
+                    {"id": "a", "content": "Rents a flat in Tampines"},
+                    {"id": "b", "section": "you", "content": "Likes tea."},
+                ]
+            }
+        ),
+    )
+
+    asyncio.run(memory_sort.sort_unsorted())
+
+    facts = _by_id()
+    assert (facts["a"]["state"], facts["a"]["content"]) == ("unsorted", "Rents a flat")
+    assert (facts["b"]["state"], facts["b"]["content"]) == ("live", "Likes tea.")
+
+
+def test_the_script_says_why_when_memory_is_off(isolated, monkeypatch, capsys):
+    from backend.scripts import migrate_memory_topics
+
+    MemoryStore().bulk_insert([_legacy("a", "one")])
+    model = _use(monkeypatch, _Model())
+    MemorySettingsStore().set_enabled(False)
+
+    assert asyncio.run(migrate_memory_topics.run(apply=True)) == []
+
+    assert "Generate memory from chats" in capsys.readouterr().out
+    assert model.calls == [] and _by_id()["a"]["state"] == "unsorted"
 
 
 def test_the_loop_sorts_while_unsorted_facts_remain(isolated, monkeypatch):
     calls: list[str] = []
+    monkeypatch.setattr(memory_sort, "_retry_after", 0.0)
 
     async def fake_sweep(now=None):
         return 0
