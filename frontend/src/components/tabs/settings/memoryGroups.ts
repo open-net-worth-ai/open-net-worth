@@ -1,5 +1,5 @@
-// How the stored facts are laid out: sections in a fixed order, topics inside them, the facts the
-// sort hasn't filed yet, and the ones moved out of memory (kept 30 days, then forgotten).
+// How the stored facts are laid out: sections in a fixed order, topics inside them, and the facts
+// the sort hasn't filed yet. Facts moved out of memory are kept 30 days but not shown.
 import type { MemoryFact, MemoryTopicSummary } from '../../../hooks/useMemoryFacts'
 
 // The fixed sections, in display order. `flat` sections list their facts directly (no topics).
@@ -12,37 +12,6 @@ export const SECTIONS: readonly { key: string; label: string; flat?: boolean }[]
 ]
 // Facts saved before sections and topics existed, until the sort files them.
 export const UNSORTED = { key: 'unsorted', label: 'Older memories — being sorted', flat: true }
-
-const RETIRED_KEEP_DAYS = 30
-const DAY_MS = 86_400_000
-
-const REASONS: Record<string, string> = {
-  profile: 'Moved to your profile',
-  instructions: 'Moved to Instructions for Lucius',
-  payee_rule: 'Now a payee rule',
-  automation: 'Now an automation',
-  ledger: 'Already in your ledger',
-  resolved: 'Done',
-  stale: 'Out of date',
-  unused: 'Not used in 90 days',
-  merged: 'Merged into another memory',
-  identifier: 'Not kept — had a card, account or ID number',
-}
-
-export function retiredReason(reason?: string | null): string {
-  return REASONS[reason ?? ''] ?? 'Out of date'
-}
-
-const localDay = (d = new Date()) => d.toLocaleDateString('en-CA')
-
-/** Whole calendar days until a moved-out fact is forgotten for good (30 less the days since it
- *  moved, as the nightly purge counts them), or null when it carries no date. */
-export function daysUntilForgotten(retiredAt?: string | null, today = localDay()): number | null {
-  const at = Date.parse((retiredAt ?? '').slice(0, 10))
-  const now = Date.parse(today)
-  if (Number.isNaN(at) || Number.isNaN(now)) return null
-  return Math.max(0, RETIRED_KEEP_DAYS - Math.round((now - at) / DAY_MS))
-}
 
 // A topic name is stored at most this long (the backend's `TOPIC_MAX_CHARS`).
 const TOPIC_MAX_CHARS = 60
@@ -81,7 +50,6 @@ export type Topic = {
 export type Grouped = {
   bySection: Map<string, MemoryFact[]>
   unsorted: MemoryFact[]
-  retired: MemoryFact[]
 }
 
 function latest(facts: MemoryFact[]): string {
@@ -96,17 +64,17 @@ function isExpired(f: MemoryFact, today: string): boolean {
   return (f.tier ?? 'time_bound') === 'time_bound'
 }
 
+const localDay = (d = new Date()) => d.toLocaleDateString('en-CA')
+
 export function groupFacts(facts: MemoryFact[], today = localDay()) {
   const known = new Set(SECTIONS.map((s) => s.key))
-  const out: Grouped = { bySection: new Map(), unsorted: [], retired: [] }
+  const out: Grouped = { bySection: new Map(), unsorted: [] }
   for (const f of facts) {
-    if (f.state === 'retired') out.retired.push(f)
-    else if (isExpired(f, today)) continue
+    if (f.state === 'retired' || isExpired(f, today)) continue
     else if (f.section && known.has(f.section))
       out.bySection.set(f.section, [...(out.bySection.get(f.section) ?? []), f])
     else out.unsorted.push(f)
   }
-  out.retired.sort((a, b) => ((a.retired_at ?? '') < (b.retired_at ?? '') ? 1 : -1))
   return out
 }
 

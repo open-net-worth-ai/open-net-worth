@@ -93,14 +93,10 @@ that narrows it to the facts (or topics) containing your words.
    forget them as usual. Filing never changes a fact's words, except that one over 280
    characters is shortened to fit. A fact holding a full card, account or ID number is moved
    out instead; a sensitive fact is filed like any other.
-5. **Moved out of memory.** Folded closed at the bottom. When a fact turns out to live somewhere
-   better — or has gone stale — Lucius moves it out of memory and keeps it here for 30 days. Each
-   row shows the fact, why it moved (**Moved to your profile**, **Moved to Instructions for
-   Lucius**, **Now a payee rule**, **Now an automation**, **Already in your ledger**, **Done**,
-   **Out of date**, **Not used in 90 days**, **Merged into another memory** or **Not kept — had a
-   card, account or ID number**)
-   and **Forgotten in N days**. **Forget** is the only
-   action; leave a row alone and it goes by itself.
+
+When a fact turns out to live somewhere better — your profile, your Instructions, a payee rule,
+an automation, the ledger — or has gone stale, Lucius moves it out of memory. It no longer shows
+in the list and he no longer uses it; it is kept for 30 days, then deleted.
 
 You don't organise anything yourself: there is no renaming, moving or merging. Lucius files, merges
 and retires facts; you edit, forget, or tell him what to change.

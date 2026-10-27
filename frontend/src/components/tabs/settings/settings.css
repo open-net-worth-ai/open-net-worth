@@ -1370,21 +1370,6 @@
   margin-left: 12px;
 }
 /* "Moved out of memory": the header is a disclosure button, its rows read like topic rows */
-.onw-settings .rd-mem-sec-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.onw-settings .rd-mem-sec-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
 .onw-settings .rd-mem-bullet-until {
   color: var(--muted);
   white-space: nowrap;
@@ -1403,14 +1388,6 @@
     background: color-mix(in srgb, var(--ink) 5%, transparent);
     border-radius: var(--radius-lg);
   }
-}
-.onw-settings .rd-mem-moved {
-  display: grid;
-  grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.6fr) 8.5em;
-  align-items: center;
-  gap: 20px;
-  min-width: 0;
-  padding: 14px 12px;
 }
 .onw-settings .rd-mem-topic-open {
   display: grid;
@@ -2876,8 +2853,7 @@
     height: 85dvh;
   }
   /* a topic row stacks: name and date on top, the preview under them */
-  .onw-settings .rd-mem-topic-open,
-  .onw-settings .rd-mem-moved {
+  .onw-settings .rd-mem-topic-open {
     grid-template-columns: minmax(0, 1fr) auto;
     row-gap: 4px;
   }

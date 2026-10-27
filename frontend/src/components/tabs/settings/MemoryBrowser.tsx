@@ -18,7 +18,6 @@ import { Btn } from './ds'
 import type { Toast } from './ds'
 import { ForgetConfirm, MemoryAskBox, MemoryBullets } from './MemoryParts'
 import type { PendingForget } from './MemoryParts'
-import { MemoryMovedOut } from './MemoryMovedOut'
 import { SECTIONS, UNSORTED, groupFacts, matchesFilter, summaryOf, topicsOf } from './memoryGroups'
 import type { Topic } from './memoryGroups'
 
@@ -208,7 +207,7 @@ export function MemoryBrowser({
   const sections = [...SECTIONS, UNSORTED].filter((s) =>
     s.key === UNSORTED.key ? shown.unsorted.length : shown.bySection.get(s.key)?.length,
   )
-  const nothingShown = sections.length === 0 && shown.retired.length === 0
+  const nothingShown = sections.length === 0
   return (
     <div className="rd-mem-browser" ref={top}>
       {header}
@@ -248,12 +247,6 @@ export function MemoryBrowser({
               </section>
             )
           })}
-          {shown.retired.length > 0 && (
-            <MemoryMovedOut
-              facts={shown.retired}
-              onForget={(fact) => setPending({ kind: 'one', fact })}
-            />
-          )}
         </>
       )}
       <MemoryAskBox disabled={disabled} onSubmit={(text) => instruct(text)} />

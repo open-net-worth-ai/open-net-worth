@@ -42,7 +42,7 @@ describe('MemoryBrowser', () => {
   })
   afterEach(cleanup)
 
-  it('lists the sections in order, then older memories, then moved-out memories', async () => {
+  it('lists the sections in order, then older memories, and never memories moved out', async () => {
     await renderBrowser()
     expect(sectionLabels()).toEqual([
       'You',
@@ -51,8 +51,9 @@ describe('MemoryBrowser', () => {
       'Open items',
       'Other',
       'Older memories — being sorted',
-      'Moved out of memory',
     ])
+    expect(screen.queryByText('Works as a nurse')).toBeNull()
+    expect(screen.queryByText(/Moved out of memory/)).toBeNull()
   })
 
   it('shows a topic as name, first fact and updated date, with no fact count', async () => {
@@ -159,29 +160,6 @@ describe('MemoryBrowser', () => {
     expect(authFetch).not.toHaveBeenCalledWith(expect.anything(), { method: 'DELETE' })
   })
 
-  it('keeps moved-out memories collapsed, then shows reason and days left', async () => {
-    await renderBrowser()
-    expect(screen.queryByText('Works as a nurse')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /Moved out of memory \(2\)/ }))
-    expect(screen.getByText('Works as a nurse')).toBeTruthy()
-    expect(screen.getByText('Moved to your profile')).toBeTruthy()
-    expect(screen.getByText('Forgotten in 20 days')).toBeTruthy()
-    expect(screen.getByText('Not used in 90 days')).toBeTruthy()
-    expect(screen.getByText('Forgotten in 0 days')).toBeTruthy()
-  })
-
-  it('a moved-out memory has Forget only, and it asks first', async () => {
-    await renderBrowser()
-    fireEvent.click(screen.getByRole('button', { name: /Moved out of memory/ }))
-    const group = screen.getByRole('region', { name: 'Moved out of memory' })
-    expect(within(group).queryByRole('button', { name: /^Edit/ })).toBeNull()
-    fireEvent.click(within(group).getByRole('button', { name: 'Forget: Works as a nurse' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Forget' }))
-    await waitFor(() =>
-      expect(authFetch).toHaveBeenCalledWith('/api/memory/facts/f10', { method: 'DELETE' }),
-    )
-  })
-
   it('a nameless group sends its section and no topic, apart from a real "General"', async () => {
     authFetch.mockImplementation((url: string) => {
       if (url === '/api/memory/instruct')
@@ -216,24 +194,16 @@ describe('MemoryBrowser', () => {
     )
   })
 
-  it('names a memory moved out for holding a card, account or ID number', async () => {
+  it('shows the empty state when every memory has been moved out', async () => {
     authFetch.mockImplementation(() =>
       json({
-        facts: [
-          {
-            id: 's1',
-            content: 'A health detail',
-            state: 'retired',
-            retired_reason: 'identifier',
-            retired_at: new Date().toISOString(),
-          },
-        ],
+        facts: [{ id: 's1', content: 'Old note', state: 'retired', retired_reason: 'stale' }],
         total: 1,
       }),
     )
     render(<MemoryBrowser toast={vi.fn()} />)
-    fireEvent.click(await screen.findByRole('button', { name: /Moved out of memory \(1\)/ }))
-    expect(screen.getByText('Not kept — had a card, account or ID number')).toBeTruthy()
+    expect(await screen.findByText(/Nothing remembered yet/)).toBeTruthy()
+    expect(screen.queryByText('Old note')).toBeNull()
   })
 
   it('files older memories under their own heading', async () => {

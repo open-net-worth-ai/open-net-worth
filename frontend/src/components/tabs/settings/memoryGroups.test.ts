@@ -1,37 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  NO_TOPIC_KEY,
-  daysUntilForgotten,
-  groupFacts,
-  retiredReason,
-  summaryOf,
-  topicKey,
-  topicsOf,
-} from './memoryGroups'
-
-describe('daysUntilForgotten', () => {
-  const today = '2026-10-27'
-
-  it.each([
-    ['2026-10-27T23:59:00Z', 30],
-    ['2026-09-28T00:00:00Z', 1],
-    ['2026-09-27T08:00:00Z', 0],
-    ['2026-08-01T00:00:00Z', 0],
-  ])('%s leaves %i days (whole calendar days, like the purge)', (at, left) => {
-    expect(daysUntilForgotten(at, today)).toBe(left)
-  })
-
-  it('counts 0, 29 and 30 days since it moved', () => {
-    expect(daysUntilForgotten('2026-10-27', today)).toBe(30)
-    expect(daysUntilForgotten('2026-09-28', today)).toBe(1)
-    expect(daysUntilForgotten('2026-09-27', today)).toBe(0)
-  })
-
-  it('shows nothing without a date', () => {
-    expect(daysUntilForgotten(null, today)).toBeNull()
-    expect(daysUntilForgotten('', today)).toBeNull()
-  })
-})
+import { NO_TOPIC_KEY, groupFacts, summaryOf, topicKey, topicsOf } from './memoryGroups'
 
 describe('topicsOf', () => {
   it('merges spellings that differ in case or spacing, showing the first name seen', () => {
@@ -90,15 +58,6 @@ describe('groupFacts — expiry agrees with the backend', () => {
       today,
     )
     expect(g.unsorted.map((f) => f.id)).toEqual(['d'])
-  })
-})
-
-describe('retiredReason', () => {
-  it('labels every backend retire reason', () => {
-    expect(retiredReason('identifier')).toBe('Not kept — had a card, account or ID number')
-    expect(retiredReason('unused')).toBe('Not used in 90 days')
-    expect(retiredReason('merged')).toBe('Merged into another memory')
-    expect(retiredReason('something-new')).toBe('Out of date')
   })
 })
 
