@@ -51,6 +51,7 @@ REVIEWED_SAFE = frozenset(
     PUT /api/statements/{statement_id}/instructions
     DELETE /api/statements/{statement_id}/lucius-ops
     POST /api/statements/{statement_id}/preview
+    POST /api/statements/{statement_id}/row-type
     POST /api/transactions/{txn_id}/receipts
     POST /api/transactions/{txn_id}/receipts/upload
     POST /api/upload
