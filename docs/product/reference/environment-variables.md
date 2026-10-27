@@ -45,6 +45,7 @@ described below.
 | `LOGS_DIR` | `<ONW_ROOT>/logs` | The app log. |
 | `BACKUPS_DIR` | `<ONW_ROOT>/backups` | Daily backups. |
 | `ONW_DATABASE_URL` | `sqlite:///<DATA_DIR>/onw.db` | Use Postgres instead of the built-in SQLite file, e.g. `postgresql+psycopg://user:pass@host/db`. See [SQL console and Postgres](../operations/sql-console-postgres.md). |
+| `ONW_SQL_CONSOLE_DATABASE_URL` | unset | Postgres only, rarely needed: a database login you made for Lucius's read-only SQL, instead of the one the app creates. The app still keeps its table permissions up to date. See [SQL console and Postgres](../operations/sql-console-postgres.md). |
 
 Two instances can't share one working folder — the second refuses to start (see
 [The backend won't start](../troubleshooting/backend-wont-start.md#another-copy-is-already-using-the-folder)).

@@ -35,15 +35,17 @@ so on a cold instance it fails with a bare "unable to open database file" that l
 corruption to the operator. Two independent controls that always work beat three where the
 third turns a working feature into a confusing outage.
 
-### Postgres — a dedicated REVOKE-d role, or no console
+### Postgres — a dedicated login the app keeps REVOKE-d
 
 Postgres has no authorizer, and a textual scan for table names is NOT a boundary there:
 ``query_to_xml('select * from secret_config', ...)`` names the table inside a string,
 ``U&"\\0073ecret_config"`` spells it with escapes, and ``E'..'`` / ``$$..$$`` quoting hides
-text from a naive scrubber. So the console is DISABLED on Postgres unless
-``ONW_SQL_CONSOLE_DATABASE_URL`` names a connection whose ROLE has been REVOKE-d on every
-``DENIED_TABLES`` entry (setup: ``docs/product/operations/sql-console-postgres.md``). The
-database then enforces the table boundary exactly as the SQLite authorizer does. Around it
+text from a naive scrubber. So queries run as a separate database LOGIN with no access to any
+``DENIED_TABLES`` entry. The app creates that login and re-syncs its permissions itself
+(``db/sql_console_role.py``), then verifies them from the login before any query runs; an
+operator may supply their own login with ``ONW_SQL_CONSOLE_DATABASE_URL`` and the app syncs
+that one too. The database then enforces the table boundary exactly as the SQLite authorizer
+does. Around it
 sit the genuine read-only transaction, ``statement_timeout``, an unconditional rollback, the
 (over-refusing) identifier scan as a clearer-error layer, and the EXTENDED protocol only
 (a prepared statement), which makes a second statement in the same call a server error rather
@@ -65,6 +67,7 @@ from backend.core.config import get_settings
 from backend.core.errors import ValidationError
 from backend.core.sensitive import SECRET_TABLES
 from backend.db import engine as eng
+from backend.db import sql_console_role
 
 logger = logging.getLogger(__name__)
 
@@ -286,9 +289,10 @@ def assert_tables_allowed(sql: str) -> None:
     """Fail-closed identifier scan for denied table names.
 
     On SQLite this is redundant (the authorizer is authoritative) and kept as a second,
-    independent control. On Postgres, where no authorizer exists, it IS the table boundary —
-    so it deliberately over-refuses: a denied name appearing anywhere as a bare token, even in
-    a context where it could not be a table reference, rejects the whole query.
+    independent control. On Postgres the console login's permissions are the boundary
+    (``db/sql_console_role.py``); this scan only turns the common case into a clear error, so
+    it deliberately over-refuses: a denied name appearing anywhere as a bare token, even in a
+    context where it could not be a table reference, rejects the whole query.
     """
     if _UNICODE_ESCAPE_RE.search(sql):
         raise ValidationError(
@@ -299,7 +303,7 @@ def assert_tables_allowed(sql: str) -> None:
     if hit:
         raise ValidationError(
             f"Refused: {', '.join(hit)} is not readable through this tool. "
-            "Credential tables are never exposed, and chat transcripts have their own tools."
+            "Rewrite the query against the data tables."
         )
 
 
@@ -500,8 +504,8 @@ def _translate_sqlite_error(exc: sqlite3.DatabaseError) -> ValidationError:
     if "not authorized" in message.lower():
         logger.info("sql_console: authorizer refused a statement")
         return ValidationError(
-            "Refused by the database: this tool may only READ, and may not read credential "
-            "tables or chat transcripts. Rewrite the query against the data tables."
+            "Refused by the database: this tool may only READ, and only the data tables. "
+            "Rewrite the query against them."
         )
     if "interrupted" in message.lower():
         return ValidationError(
@@ -512,37 +516,30 @@ def _translate_sqlite_error(exc: sqlite3.DatabaseError) -> ValidationError:
 
 
 CONSOLE_URL_ENV = "ONW_SQL_CONSOLE_DATABASE_URL"
-_console_engine = None
 
 
 def console_database_url() -> str:
-    """The dedicated read-only role's URL, or ``""`` when none is configured."""
+    """An operator-made console login's URL, or ``""`` for the app-managed one."""
     return (os.environ.get(CONSOLE_URL_ENV) or "").strip()
 
 
-def _get_console_engine():
-    global _console_engine
-    url = console_database_url()
-    if not url:
-        raise ValidationError(
-            "SQL access is disabled on Postgres: it needs a dedicated read-only database role. "
-            f"Set {CONSOLE_URL_ENV} to a connection whose role is REVOKE-d on the credential "
-            "tables (see the SQL console Postgres setup guide)."
-        )
-    if _console_engine is None:
-        _console_engine = eng._make_engine(url)
-    return _console_engine
+def console_status() -> sql_console_role.ConsoleStatus:
+    """Whether Lucius's SQL can run on this database, and if not, why and what fixes it.
+    SQLite always can (the authorizer needs no setup); Postgres prepares its login here."""
+    if dialect() == "sqlite":
+        return sql_console_role.ConsoleStatus(True)
+    return sql_console_role.prepare(denied_tables(), console_database_url())
 
 
 def _run_postgres(
     statement: str, cap: int, max_cell: int
 ) -> tuple[list[str], list[list], bool, int]:
-    """Runs on the console role's own engine, as ONE prepared statement (extended protocol —
-    the simple protocol would run ``select 1; delete ...`` as two). The role, not the text
-    gate, is the table boundary."""
+    """Runs as the console login, on a fresh session that has just passed its own safety check,
+    as ONE prepared statement (extended protocol — the simple protocol would run
+    ``select 1; delete ...`` as two). The login, not the text gate, is the table boundary."""
     import psycopg
 
-    connection = _get_console_engine().connect()
+    connection = sql_console_role.connect(denied_tables(), console_database_url())
     raw = connection.connection.dbapi_connection
     try:
         raw.read_only = True
