@@ -102,7 +102,8 @@ At the top of **Settings → Memory**:
 
 - **Search and reference chats** — lets Lucius search your past conversations for relevant details.
   When you refer to something you talked about before, he looks through what you and he said in your
-  own conversations — the ones in your Chats list, Captures included — and quotes a short snippet
+  own conversations — the ones in your Chats list, Captures included (for a Capture, only
+  his reply is searched, not the app's own prompt) — and quotes a short snippet
   from the newest few that match, ignoring upper and lower case. It never reads
   attachments, the results of his tools, or the context the app adds to a message (the screen you
   were on, items you mentioned), and never conversations that don't appear in your Chats list. The conversation

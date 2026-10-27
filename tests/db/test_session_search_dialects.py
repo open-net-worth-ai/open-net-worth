@@ -82,3 +82,15 @@ def test_one_hit_per_conversation_newest_first_and_the_current_one_excluded(book
 
     assert _find("plan", exclude_session_id="chat-b") == []
     assert len(_find("lemur", limit=1)) == 1
+
+
+def test_a_capture_sessions_user_turn_is_skipped_but_its_reply_is_found(db_isolated):
+    _chat(
+        "capture-1a2b3c4d",
+        {"role": "user", "content": "template mentions the pelican clause"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Booked the flat white"}]},
+    )
+    SessionStore().upsert_meta("capture-1a2b3c4d", {"origin": "capture"})
+
+    assert _find("pelican") == []
+    assert [h["session_id"] for h in _find("flat white")] == ["capture-1a2b3c4d"]

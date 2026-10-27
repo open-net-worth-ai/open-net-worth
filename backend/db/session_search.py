@@ -5,7 +5,8 @@ around the first match of each of the (at most ``limit``) hits is ever read into
 
 A candidate is a plain-string message or a ``text`` block of a user/assistant message — never a
 tool call, a tool result or an attachment block, a skill invocation row, or a text block that
-``core.chat_context_markers.is_not_said`` names as model context (turn snapshot, screen or mention
+``core.chat_context_markers`` names as model context, nor a USER turn of a capture session
+(``meta.origin == 'capture'``: that turn is the app's own prompt template) (turn snapshot, screen or mention
 dump, harness note, attachment contents). Matching is Unicode case-insensitive over NFC-normalised
 text on both sides: SQLite's own ``lower()`` is ASCII-only, so it gets two small registered
 functions; Postgres uses ``normalize(…, NFC)`` and ``lower()`` (which needs a UTF-8 database).
@@ -28,13 +29,13 @@ from backend.core.chat_context_markers import (
 )
 
 _SQLITE_UNITS = """
-    SELECT m.id AS mid, m.session_id AS sid, m.created_at AS at,
+    SELECT m.id AS mid, m.session_id AS sid, m.created_at AS at, m.role AS role,
            onw_nfc(json_extract(m.content, '$')) AS txt
       FROM session_messages m
      WHERE m.role IN ('user', 'assistant') AND json_type(m.content) = 'text'
        AND json_extract(m.extra, '$._onw_skill') IS NULL
     UNION ALL
-    SELECT m.id, m.session_id, m.created_at, onw_nfc(json_extract(b.value, '$.text'))
+    SELECT m.id, m.session_id, m.created_at, m.role, onw_nfc(json_extract(b.value, '$.text'))
       FROM session_messages m,
            json_each(CASE WHEN json_type(m.content) = 'array' THEN m.content ELSE '[]' END) b
      WHERE m.role IN ('user', 'assistant') AND json_extract(m.extra, '$._onw_skill') IS NULL
@@ -42,13 +43,13 @@ _SQLITE_UNITS = """
 """
 
 _POSTGRES_UNITS = """
-    SELECT m.id AS mid, m.session_id AS sid, m.created_at AS at,
+    SELECT m.id AS mid, m.session_id AS sid, m.created_at AS at, m.role AS role,
            normalize(m.content #>> '{}', NFC) AS txt
       FROM session_messages m
      WHERE m.role IN ('user', 'assistant') AND json_typeof(m.content) = 'string'
        AND m.extra -> '_onw_skill' IS NULL
     UNION ALL
-    SELECT m.id, m.session_id, m.created_at, normalize(b.value ->> 'text', NFC)
+    SELECT m.id, m.session_id, m.created_at, m.role, normalize(b.value ->> 'text', NFC)
       FROM session_messages m
      CROSS JOIN LATERAL json_array_elements(
             CASE WHEN json_typeof(m.content) = 'array' THEN m.content ELSE '[]'::json END
@@ -81,8 +82,14 @@ def _statement(
 ) -> tuple[str, dict[str, Any]]:
     lower, pos = ("onw_lower", "instr") if dialect == "sqlite" else ("lower", "strpos")
     units = _SQLITE_UNITS if dialect == "sqlite" else _POSTGRES_UNITS
+    origin = "json_extract(s.meta, '$.origin')" if dialect == "sqlite" else "s.meta ->> 'origin'"
     params: dict[str, Any] = {"init": ONBOARDING_INIT}
-    conds = ["u.txt IS NOT NULL", "trim(u.txt) <> :init", f"{pos}({lower}(u.txt), :needle) > 0"]
+    conds = [
+        f"NOT (u.role = 'user' AND COALESCE({origin}, '') = 'capture')",
+        "u.txt IS NOT NULL",
+        "trim(u.txt) <> :init",
+        f"{pos}({lower}(u.txt), :needle) > 0",
+    ]
     for i, opening in enumerate(CONTEXT_OPENINGS):
         conds.append(f"substr(ltrim(u.txt), 1, {len(opening)}) <> :open{i}")
         params[f"open{i}"] = opening
@@ -98,14 +105,14 @@ def _statement(
     sql = f"""
         WITH units AS ({units}),
         hits AS (
-            SELECT u.sid, u.mid, u.at, u.txt, {pos}({lower}(u.txt), :needle) AS pos,
+            SELECT u.sid, s.title, u.mid, u.at, u.txt, {pos}({lower}(u.txt), :needle) AS pos,
                    ROW_NUMBER() OVER (PARTITION BY u.sid ORDER BY u.mid DESC) AS rn
-              FROM units u
+              FROM units u JOIN sessions s ON s.id = u.sid
              WHERE {" AND ".join(conds)}
         )
-        SELECT h.sid, s.title, h.at, h.pos, length(h.txt) AS total, substr(h.txt, 1, 300) AS head,
+        SELECT h.sid, h.title, h.at, h.pos, length(h.txt) AS total, substr(h.txt, 1, 300) AS head,
                substr(h.txt, CASE WHEN h.pos > :ctx THEN h.pos - :ctx ELSE 1 END, :span) AS excerpt
-          FROM hits h JOIN sessions s ON s.id = h.sid
+          FROM hits h
          WHERE h.rn = 1
          ORDER BY h.mid DESC
          LIMIT :lim

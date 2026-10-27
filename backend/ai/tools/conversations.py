@@ -73,7 +73,7 @@ def _refusal(message: str) -> tuple[str, None]:
         "from before' — and the current conversation and your memory don't cover it. Returns the "
         "newest matching conversations first, one per chat, each with its title, date and a "
         "short snippet around the match. Searches only what was typed and what you replied "
-        "in the conversations listed under Chats (Captures included) — never attachments, "
+        "in the conversations listed under Chats (Captures too, though for a Capture only his reply, not the app's own prompt) — never attachments, "
         "tool output, or the context the app adds to a message. Reference only: use what you find to answer, never recite "
         "old conversations back unprompted."
     ),

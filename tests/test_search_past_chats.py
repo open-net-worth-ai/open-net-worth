@@ -327,3 +327,18 @@ def test_search_limit_zero_is_one_and_an_untitled_chat_is_labelled_like_the_list
 
     assert len(out["results"]) == 1
     assert out["results"][0]["title"] == "New conversation"
+
+
+def test_a_captures_prompt_template_is_not_searchable_but_its_reply_is():
+    _session(
+        "capture-1a2b3c4d",
+        "Capture: coffee",
+        [
+            _msg("user", "Booking template mentions the pelican clause. Spent 4.50 at a cafe."),
+            _msg("assistant", [{"type": "text", "text": "Booked the flat white as groceries."}]),
+        ],
+    )
+    SessionStore().upsert_meta("capture-1a2b3c4d", {"origin": "capture"})
+
+    assert _search(query="pelican")["results"] == []
+    assert _search(query="flat white")["results"][0]["session_id"] == "capture-1a2b3c4d"
