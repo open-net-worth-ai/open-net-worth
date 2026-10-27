@@ -843,6 +843,19 @@ dashboard_layouts = Table(
 # ledger fact.
 memory = payload_table("memory")
 
+# What the user told Lucius to forget, as a SHA-256 of the fact's normalised text — the hash
+# only, never the text (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home` amendment 7).
+# The memory write choke refuses an implicit write that matches one; an explicit save of the
+# same text clears it. Checkpoint-INCLUDED like `memory` (a rewound forget brings the fact AND
+# drops its fingerprint), wiped with `memory` by `/api/reset` and a whole-book import, not
+# portable on its own.
+memory_forgotten = Table(
+    "memory_forgotten",
+    metadata,
+    Column("hash", Text, primary_key=True),
+    Column("forgotten_at", Text, nullable=False),
+)
+
 # ── Tier-3 config stores (plan 4d, task 1) — plain flat-list shape, NO book_id:
 # installation-wide config/reference rows, not book-scoped user data.
 news_sources = payload_table("news_sources")

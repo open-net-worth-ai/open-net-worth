@@ -95,6 +95,7 @@ describe('retiredReason', () => {
   it('labels every backend retire reason', () => {
     expect(retiredReason('identifier')).toBe('Not kept — had a card, account or ID number')
     expect(retiredReason('unused')).toBe('Not used in 90 days')
+    expect(retiredReason('merged')).toBe('Merged into another memory')
     expect(retiredReason('something-new')).toBe('Out of date')
   })
 })

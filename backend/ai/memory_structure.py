@@ -8,6 +8,7 @@ extractor and the tools all read the same constants. ADR
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 SECTIONS: dict[str, str] = {
@@ -19,7 +20,7 @@ SECTIONS: dict[str, str] = {
 }
 
 SUGGESTED_TOPICS: dict[str, tuple[str, ...]] = {
-    "you": ("About you", "Preferences"),
+    "you": ("Profile", "Preferences"),
     "money": (
         "Housing",
         "Family",
@@ -35,6 +36,11 @@ SUGGESTED_TOPICS: dict[str, tuple[str, ...]] = {
 }
 
 OPEN_ITEMS = "open_items"
+
+# The You topic was called "About you" until 2026-10-27 (ADR amendment 7, R30); a write that still
+# names it lands under "Profile", and revision 202610271800 renamed the stored ones.
+PROFILE_TOPIC = "Profile"
+_RENAMED_YOU_TOPICS = frozenset({"about you"})
 
 FACT_MAX_CHARS = 280
 SENSITIVE_TOPICS = (
@@ -62,6 +68,7 @@ RETIRE_REASONS = (
     "resolved",
     "stale",
     "unused",
+    "merged",
     "identifier",
 )
 
@@ -86,6 +93,32 @@ def topic_key(name) -> str:
     return normalise_topic(name).casefold()
 
 
+def current_topic(section: str | None, name: str) -> str:
+    """``name`` as it is filed today: the You topic once called "About you" is "Profile"."""
+    if section == "you" and topic_key(name) in _RENAMED_YOU_TOPICS:
+        return PROFILE_TOPIC
+    return name
+
+
+def fingerprint(text) -> str:
+    """SHA-256 of a fact's text with case, punctuation and spacing folded away, so "Has a dog
+    named Biscuit" and "has a dog, named biscuit!" match. What a user forgot is remembered only
+    as this hash; a paraphrase has a different one."""
+    folded = re.sub(r"[\W_]+", " ", str(text or "").casefold()).strip()
+    return hashlib.sha256(folded.encode("utf-8")).hexdigest()
+
+
+def kept_apart(remove, updates) -> list[str]:
+    """The ids a model reply moves out of memory, minus any it also updates: one reply never
+    both keeps and retires a fact, and keeping it is the safe reading."""
+    kept = {u.get("id") for u in updates or [] if isinstance(u, dict)}
+    out: list[str] = []
+    for fid in remove or []:
+        if isinstance(fid, str) and fid not in kept and fid not in out:
+            out.append(fid)
+    return out
+
+
 def fact_label(fact: dict) -> str:
     """Where a fact sits, for a model-facing listing: ``money · Housing``, ``open_items``,
     or ``unsorted`` for a legacy fact not yet filed."""
@@ -99,12 +132,12 @@ def fact_label(fact: dict) -> str:
 # field beats an instruction, an instruction beats memory.
 _ROUTES: tuple[tuple[str, str, str], ...] = (
     (
-        "something the profile has a field for (name, date of birth, residence, nationality, "
+        "something the Settings profile has a field for (name, date of birth, residence, nationality, "
         "tax residency, employment TYPE such as salaried or self-employed, marital status, "
         "income, expenses, saving, risk, retirement age, target allocation, briefing time, "
-        "benchmark) — an employer's name, a job title or an industry has no profile field",
-        "Profile field (update_profile) — not memory",
-        "a profile field → update_profile",
+        "benchmark) — an employer's name, a job title or an industry has no Settings field",
+        "a Settings profile field (update_profile) — not memory",
+        "a Settings profile field → update_profile",
     ),
     (
         "a standing rule the user states for how you should behave, which they would expect to "
@@ -139,10 +172,10 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         "conversation state → nowhere",
     ),
     (
-        "about the user but no profile field fits (an employer, languages, who shares the "
+        "about the user but no Settings profile field fits (an employer, languages, who shares the "
         "household, personal context)",
-        "Memory · You · About you",
-        "about the user, no profile field → You · About you",
+        "Memory · You · Profile",
+        "about the user, no Settings field → You · Profile (a memory topic)",
     ),
     (
         "an observation about how the user likes to work, inferred or said in passing — written "
@@ -175,7 +208,10 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
     ),
 )
 
-_GUIDE_HEADER = "Where a fact goes — the first line that matches wins:"
+_GUIDE_HEADER = (
+    "Where a fact goes — the first line that matches wins (a Settings profile field and the "
+    "memory topic You · Profile are two different homes):"
+)
 
 ROUTING_GUIDE: str = "\n".join(
     [_GUIDE_HEADER]

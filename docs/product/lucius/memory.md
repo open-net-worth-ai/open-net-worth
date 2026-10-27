@@ -30,7 +30,10 @@ Just say it:
 
 Each fact is filed in a section — **You**, **Money**, **Plans**, **Open items** (things to come back
 to, which expire after 14 days) or **Other** — and, except in Open items, under a short topic such
-as *Housing*. If you ask him to remember something your profile has a field for, or a standing rule
+as *Housing*. In **You** there are two: **Profile**, for what he knows about you that no profile
+field holds (your employer, the languages you speak, who you live with), and **Preferences**, for
+how you like to work. This **Profile** is a memory topic, not your Settings profile — that one
+holds the facts the app has a field for. If you ask him to remember something your profile has a field for, or a standing rule
 for how he should behave, he says where it belongs instead of filing it as a memory. A health,
 religion, political, sexuality, ethnicity or legal fact is saved only if you've allowed
 sensitive topics in **Settings → Memory**; otherwise he tells you it wasn't saved. When a fact
@@ -43,10 +46,12 @@ already holds, so your profile, your Instructions for Lucius, payee rules, autom
 ledger figures are never copied into memory. He doesn't keep the state of a conversation or a run,
 finished tasks, or full card, account or ID numbers or passwords, and health, religion, politics and
 similar topics only if you've allowed them in the settings. Preferences are written about you in
-the third person. A fact that for 90 days he never cites, you never mention again and you never
-edit fades out of memory, and so does a plan that hasn't come up for 90 days; a faded fact is kept
-aside for 30 days before it is deleted. Once a
-day he also merges facts that say the same thing. Saving or forgetting a fact counts as a change, so it follows the
+the third person. A fact he picked up on his own under **Other** that for 90 days he never cites,
+you never mention again and you never edit fades out of memory — what you told him yourself, and
+anything in You or Money, never fades this way — and so does a plan that hasn't come up for 90
+days; a faded fact is kept aside for 30 days before it is deleted. Once a day he also merges facts
+that say the same thing; the one merged away is moved out the same way. When a chat shows a fact
+is no longer true, he moves it out as out of date — he never deletes a fact on his own. Saving or forgetting a fact counts as a change, so it follows the
 conversation's [approval mode](permissions.md) like any other.
 
 ## Memory, instructions or profile?
@@ -88,7 +93,8 @@ that narrows it to the facts (or topics) containing your words.
    better — or has gone stale — Lucius moves it out of memory and keeps it here for 30 days. Each
    row shows the fact, why it moved (**Moved to your profile**, **Moved to Instructions for
    Lucius**, **Now a payee rule**, **Now an automation**, **Already in your ledger**, **Done**,
-   **Out of date**, **Not used in 90 days** or **Not kept — had a card, account or ID number**)
+   **Out of date**, **Not used in 90 days**, **Merged into another memory** or **Not kept — had a
+   card, account or ID number**)
    and **Forgotten in N days**. **Forget** is the only
    action; leave a row alone and it goes by itself.
 
@@ -96,6 +102,11 @@ You don't organise anything yourself: there is no renaming, moving or merging. L
 and retires facts; you edit, forget, or tell him what to change.
 
 If memory is switched off, the page says so at the top.
+
+A fact you forget isn't learned again from later chats, unless you tell Lucius to remember it.
+He keeps only a fingerprint of its wording — never the words — so the same sentence, whatever its
+capitals or punctuation, is turned away; a differently worded version of it can still be picked
+up, and you can forget that too.
 
 Editing or forgetting a fact takes effect from Lucius's next reply. It doesn't change your ledger or
 profile.
@@ -153,7 +164,7 @@ If you've used ChatGPT, Claude or Gemini for a while, they may already know thin
    several pieces); for more, import it in parts.
 3. **Review.** Lucius sorts every line into where it belongs and says why:
    - **Profile** — a name, preferred name, marital status, employment or risk tolerance, set on
-     your profile.
+     your Settings profile.
    - **Instructions for Lucius** — standing rules ("always…", "never…"), added as new lines at
      the end of your instructions. Your own text is never replaced, and a line already there is
      skipped.

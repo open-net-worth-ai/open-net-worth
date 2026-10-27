@@ -1,13 +1,15 @@
 """The daily tidy pass: let unused facts and stale plans fade, then merge what overlaps.
 
-Two deterministic rules need no model — a live fact with no citation, mention, user edit or
-filing for ``UNUSED_DAYS`` is retired as ``unused`` (only while citations are reaching the book at
-all), and a plan not mentioned, edited or filed for ``PLAN_STALE_DAYS`` is retired as ``stale``
-(a retired fact stays under "Moved out of memory" for ``RETIRED_PURGE_DAYS``, then goes). One
-memory-model call then merges duplicate facts and near-duplicate topic names. Every write goes
-through ``apply_memory_change``; a merge reply that would remove more than half of any topic is
-refused whole. Facts still ``unsorted`` are never touched — the one-time sort owns them.
-ADR ``2026-10-25-memory-keeps-only-what-has-no-other-home`` (amendment 4).
+Two deterministic rules need no model — a background-learned fact in Other with no citation,
+mention, user edit or filing for ``UNUSED_DAYS`` is retired as ``unused`` (only while citations
+are reaching the book at all; the user's own facts and You / Money never fade this way), and a
+plan not mentioned, edited or filed for ``PLAN_STALE_DAYS`` is retired as ``stale`` (a retired
+fact stays under "Moved out of memory" for ``RETIRED_PURGE_DAYS``, then goes). One memory-model
+call then merges duplicate facts and near-duplicate topic names; a merged-away fact is retired
+``merged``, never deleted. Every write goes through ``apply_memory_change``; a merge reply that
+would retire more than half of any topic is refused whole. Facts still ``unsorted`` are never
+touched — the one-time sort owns them. ADR ``2026-10-25-memory-keeps-only-what-has-no-other-home``
+(amendments 4 and 7).
 """
 
 from __future__ import annotations
@@ -60,15 +62,21 @@ def citations_arriving(facts: list[dict], today: date) -> bool:
     return any((_day(f.get("last_used_at")) or cutoff) > cutoff for f in facts)
 
 
+# Only a background-learned fact in Other can fade for want of use: the user's own words, and
+# what Lucius knows about them and their money, stay until edited, forgotten or moved out.
+# Plans and open items have their own clocks.
+_UNUSED_SECTIONS = ("other",)
+
+
 def _unused_ids(facts: list[dict], today: date) -> list[str]:
-    """Live facts (not plans or open items — their own rules govern) whose newest signal is
-    older than ``UNUSED_DAYS``; nothing at all while no fact has been cited lately."""
+    """Implicit Other facts whose newest signal is older than ``UNUSED_DAYS``; nothing at all
+    while no fact has been cited lately."""
     if not citations_arriving(facts, today):
         return []
     cutoff = today - timedelta(days=ms.UNUSED_DAYS)
     out = []
     for f in facts:
-        if f.get("section") in (ms.OPEN_ITEMS, "plans"):
+        if f.get("section") not in _UNUSED_SECTIONS or f.get("source") == "explicit":
             continue
         clock = _latest(f, *_UNUSED_CLOCK)
         if clock is not None and clock < cutoff:
@@ -171,8 +179,8 @@ async def _merge_duplicates(store: MemoryStore, today: str) -> dict:
         logger.warning("memory tidy returned an unparseable reply")
         return {"merged": False}
     shown = {f["id"] for f in live}
-    remove = [i for i in parsed.get("remove") or [] if isinstance(i, str)]
     updates = [u for u in parsed.get("updates") or [] if isinstance(u, dict)]
+    remove = ms.kept_apart(parsed.get("remove"), updates)
     dropped = [i for i in remove if i not in shown] + [
         u.get("id") for u in updates if u.get("id") not in shown
     ]
@@ -185,16 +193,16 @@ async def _merge_duplicates(store: MemoryStore, today: str) -> dict:
         if u.get("id") in shown
     ]
     if would_gut_a_topic(live, set(remove)):
-        logger.warning("memory tidy: refused a merge that removes over half of a topic")
+        logger.warning("memory tidy: refused a merge that retires over half of a topic")
         return {"merged": False, "refused": True}
     result = await asyncio.to_thread(
         apply_memory_change,
-        {"updates": updates, "remove": remove},
+        {"updates": updates, "retire": [{"id": i, "reason": "merged"} for i in remove]},
         source="implicit",
         strict=False,
         today=today,
     )
-    return {"merged": True, "updated": result["updated"], "removed": result["removed"]}
+    return {"merged": True, "updated": result["updated"], "merged_out": result["retired"]}
 
 
 def _already_ran(today: str) -> bool:

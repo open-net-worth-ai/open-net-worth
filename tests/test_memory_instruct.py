@@ -64,9 +64,7 @@ def test_adds_updates_and_removes_as_the_users_own_facts(prov):
     p = prov(
         json.dumps(
             {
-                "new": [
-                    {"content": "Has a dog named Beans", "section": "you", "topic": "About you"}
-                ],
+                "new": [{"content": "Has a dog named Beans", "section": "you", "topic": "Profile"}],
                 "updates": [{"id": "m_rent", "content": "Rent goes up every April"}],
                 "remove": ["m_car"],
             }
@@ -84,7 +82,7 @@ def test_adds_updates_and_removes_as_the_users_own_facts(prov):
         by_content["Has a dog named Beans"]["topic"],
     ) == (
         "you",
-        "About you",
+        "Profile",
     )
     assert "m_rent: [unsorted] Rent goes up every March" in p.prompts[0]
 

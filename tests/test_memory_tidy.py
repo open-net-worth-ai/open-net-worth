@@ -128,9 +128,9 @@ def test_tidy_merges_duplicates_and_topic_names_through_the_choke(isolated, monk
             _fact("a", "Rents a flat in Tampines", section="money", topic="Housing"),
             _fact("b", "Lives in a rented flat in Tampines", section="money", topic="Housing"),
             _fact("c", "Pays rent on the 1st", section="money", topic="Home"),
-            _fact("d", "Has two cats", section="you", topic="About you"),
-            _fact("e", "Prefers email over calls", section="you", topic="About you"),
-            _fact("f", "Is a vegetarian", section="you", topic="About you"),
+            _fact("d", "Has two cats", section="you", topic="Profile"),
+            _fact("e", "Prefers email over calls", section="you", topic="Profile"),
+            _fact("f", "Is a vegetarian", section="you", topic="Profile"),
         ]
     )
     model = _use(
@@ -146,11 +146,40 @@ def test_tidy_merges_duplicates_and_topic_names_through_the_choke(isolated, monk
     result = asyncio.run(memory_tidy.tidy())
 
     facts = _by_id()
-    assert "b" not in facts
+    assert (facts["b"]["state"], facts["b"]["retired_reason"]) == ("retired", "merged")
+    assert facts["b"]["retired_at"], "a merged fact waits under Moved out of memory"
     assert facts["c"]["topic"] == "Housing"
-    assert set(facts) == {"a", "c", "d", "e", "f"}
-    assert result["merged"] is True and result["removed"] == 1
+    live = {fid for fid, f in facts.items() if f["state"] == "live"}
+    assert live == {"a", "c", "d", "e", "f"}
+    assert result["merged"] is True and result["merged_out"] == 1
     assert "Tampines" in model.prompts[0]
+
+
+def test_a_merge_reply_that_keeps_and_removes_one_id_keeps_it(isolated, monkeypatch):
+    MemoryStore().bulk_insert(
+        [
+            _fact("a", "Rents a flat in Tampines", section="money", topic="Housing"),
+            _fact("b", "Lives in a rented flat in Tampines", section="money", topic="Housing"),
+            _fact("c", "Pays rent on the 1st", section="money", topic="Housing"),
+        ]
+    )
+    _use(
+        monkeypatch,
+        _Model(
+            {
+                "updates": [{"id": "a", "content": "Rents a flat in Tampines, paying on the 1st"}],
+                "remove": ["a", "b"],
+            }
+        ),
+    )
+
+    result = asyncio.run(memory_tidy.tidy())
+
+    facts = _by_id()
+    assert facts["a"]["state"] == "live"
+    assert facts["a"]["content"] == "Rents a flat in Tampines, paying on the 1st"
+    assert (facts["b"]["state"], facts["b"]["retired_reason"]) == ("retired", "merged")
+    assert result["merged_out"] == 1
 
 
 def test_the_merge_sees_a_saved_sensitive_fact_while_the_setting_is_off(isolated, monkeypatch):
@@ -161,7 +190,7 @@ def test_the_merge_sees_a_saved_sensitive_fact_while_the_setting_is_off(isolated
         [
             _fact("a", "Rents a flat in Tampines", section="money", topic="Housing"),
             _fact("b", "Pays rent on the 1st", section="money", topic="Housing"),
-            _fact("h", "Has a chronic condition", section="you", topic="About you"),
+            _fact("h", "Has a chronic condition", section="you", topic="Profile"),
         ]
     )
     model = _use(monkeypatch, _Model())
@@ -175,13 +204,14 @@ def test_the_merge_sees_a_saved_sensitive_fact_while_the_setting_is_off(isolated
 def test_tidy_refuses_a_destructive_reply(isolated, monkeypatch):
     MemoryStore().bulk_insert(
         [_fact(f"f{i}", f"Distinct fact number {i}", topic="Misc") for i in range(4)]
-        + [_fact("g", "Another subject", section="you", topic="About you")]
+        + [_fact("g", "Another subject", section="you", topic="Profile")]
     )
     _use(monkeypatch, _Model({"updates": [], "remove": ["f0", "f1", "f2"]}))
 
     result = asyncio.run(memory_tidy.tidy())
 
     assert set(_by_id()) == {"f0", "f1", "f2", "f3", "g"}
+    assert all(f["state"] == "live" for f in _by_id().values()), "merged retires count too"
     assert result["merged"] is False and result["refused"] is True
 
 
@@ -399,7 +429,10 @@ def test_removing_exactly_half_a_topic_is_allowed(isolated, monkeypatch):
 
     result = asyncio.run(memory_tidy.tidy())
 
-    assert set(_by_id()) == {"f2", "f3"} and result["merged"] is True
+    facts = _by_id()
+    assert {fid for fid, f in facts.items() if f["state"] == "live"} == {"f2", "f3"}
+    assert {facts[i]["retired_reason"] for i in ("f0", "f1")} == {"merged"}
+    assert result["merged"] is True
 
 
 def test_a_reply_naming_ids_it_was_not_shown_changes_nothing_for_them(isolated, monkeypatch):
@@ -452,3 +485,43 @@ def test_a_state_store_failure_is_logged_not_swallowed(isolated, monkeypatch, ca
         assert asyncio.run(memory_tidy.tidy())["ran"] is True
 
     assert sum("tidy date" in r.getMessage() for r in caplog.records) == 2
+
+
+def test_the_unused_clock_never_retires_the_users_own_or_you_and_money_facts(isolated, monkeypatch):
+    MemoryStore().bulk_insert(
+        [
+            _fact("own", "Said by the user", created_at=_ago(200), source="explicit"),
+            _fact("you", "Plays badminton", section="you", topic="Profile", created_at=_ago(200)),
+            _fact("money", "Banks at DBS", section="money", topic="Banking", created_at=_ago(200)),
+            _fact("other", "Likes window seats", created_at=_ago(200)),
+            _cited(),
+        ]
+    )
+    _use(monkeypatch, _Model())
+
+    asyncio.run(memory_tidy.tidy())
+
+    facts = _by_id()
+    assert [facts[i]["state"] for i in ("own", "you", "money")] == ["live"] * 3
+    assert (facts["other"]["state"], facts["other"]["retired_reason"]) == ("retired", "unused")
+
+
+def test_plans_and_open_items_keep_their_own_decay_whoever_wrote_them(isolated, monkeypatch):
+    MemoryStore().bulk_insert(
+        [
+            _fact(
+                "p_own",
+                "Plans to move to Lisbon",
+                section="plans",
+                topic="Move abroad",
+                source="explicit",
+                created_at=_ago(200),
+            ),
+            _cited(),
+        ]
+    )
+    _use(monkeypatch, _Model())
+
+    asyncio.run(memory_tidy.tidy())
+
+    assert (_by_id()["p_own"]["state"], _by_id()["p_own"]["retired_reason"]) == ("retired", "stale")

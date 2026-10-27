@@ -25,6 +25,7 @@ const REASONS: Record<string, string> = {
   resolved: 'Done',
   stale: 'Out of date',
   unused: 'Not used in 90 days',
+  merged: 'Merged into another memory',
   identifier: 'Not kept — had a card, account or ID number',
 }
 

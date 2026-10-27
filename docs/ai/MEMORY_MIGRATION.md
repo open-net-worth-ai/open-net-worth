@@ -5,8 +5,9 @@ fact written before it `unsorted`. The memory model then files each one into a s
 or retires it. On a book with real memories, review that sort before it is written:
 
 1. **Stop the app** (the `:8080` instance, the desktop app or the boot service).
-2. **`make db-upgrade`** — applies revision `202610271200` (with a backup), which stamps the
-   legacy facts `unsorted`.
+2. **`make db-upgrade`** — applies revisions `202610271200` (with a backup), which stamps the
+   legacy facts `unsorted`, and `202610271800`, which adds the forgotten-fact fingerprints and
+   renames a stored You topic "About you" to "Profile".
 3. **`.venv/bin/python -m backend.scripts.migrate_memory_topics`** — the dry run. It asks the
    memory model and prints one line per fact (`id | section · topic | new text`, or
    `id | retire: reason`). Nothing is written.

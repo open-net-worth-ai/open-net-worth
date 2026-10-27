@@ -146,14 +146,14 @@ class TestRememberFact:
         store = settings_store_mod.MemorySettingsStore()
         store.set_enabled(True)
         result, _ = _call_tool(
-            "remember_fact", content="Has asthma", section="you", topic="About you", sensitive=True
+            "remember_fact", content="Has asthma", section="you", topic="Profile", sensitive=True
         )
         assert result["ok"] is False and "Sensitive" in result["message"]
         assert memory_store_mod.MemoryStore().all_facts() == []
 
         store.set_sensitive_topics(True)
         result, _ = _call_tool(
-            "remember_fact", content="Has asthma", section="you", topic="About you", sensitive=True
+            "remember_fact", content="Has asthma", section="you", topic="Profile", sensitive=True
         )
         assert result["ok"] is True
         (fact,) = memory_store_mod.MemoryStore().all_facts()

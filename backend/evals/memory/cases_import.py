@@ -119,8 +119,8 @@ IMPORT_CASES: tuple[Case, ...] = (
                 "Works at Marlowe",
                 "memory",
                 section="you",
-                topic_any=("about",),
-                name="the employer goes to You / About you",
+                topic_any=("profile",),
+                name="the employer goes to You / Profile",
             ),
             c.routed(
                 "kitchen renovation", "memory", section="plans", name="a project goes to Plans"

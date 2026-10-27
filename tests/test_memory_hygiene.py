@@ -202,7 +202,7 @@ def test_extractor_lists_a_saved_fact_whatever_the_setting(isolated, monkeypatch
                 "Has a chronic condition",
                 state="live",
                 section="you",
-                topic="About you",
+                topic="Profile",
             ),
         ]
     )
@@ -283,7 +283,7 @@ def test_a_sensitive_fact_is_stored_only_when_the_setting_allows_it(isolated, mo
                 {
                     "content": "Has type 2 diabetes",
                     "section": "you",
-                    "topic": "About you",
+                    "topic": "Profile",
                     "sensitive": True,
                 }
             ]

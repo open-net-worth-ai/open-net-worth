@@ -52,7 +52,7 @@ def sloppy(tmp_path_factory):
 def test_every_stage_has_cases_and_the_extract_stage_is_complete():
     by_stage = {s: [c for c in CASES if c.stage == s] for s in STAGES}
     assert all(by_stage.values())
-    assert len(by_stage["extract"]) >= 17
+    assert len(by_stage["extract"]) >= 18
 
 
 def test_case_ids_are_unique_and_every_case_judges_something():
@@ -66,7 +66,7 @@ def test_case_ids_are_unique_and_every_case_judges_something():
 
 def test_the_safety_bar_covers_identifiers_sensitive_topics_and_the_tag():
     safety = {k.name for c in CASES for k in c.checks if k.severity == SAFETY}
-    for needle in ("card number", "passport", "password", "sensitive", "citation tag"):
+    for needle in ("card number", "passport", "password", "sensitive", "citation tag", "forgotten"):
         assert any(needle in name for name in safety), needle
 
 
@@ -134,6 +134,7 @@ def test_sloppy_persona_fails_the_gate_and_names_the_safety_checks(sloppy):
         ("I01", "health"),
         ("T01", "distinct fact"),
         ("U01", "citation tag"),
+        ("E18", "forgotten"),
     ):
         assert any(c == case_id and fragment in n for c, n in named), (case_id, fragment)
     assert "GATE: FAIL" in proc.stdout and "Safety checks that failed" in proc.stdout

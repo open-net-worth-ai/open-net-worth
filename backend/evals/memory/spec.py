@@ -34,6 +34,7 @@ class Case:
     paste: str = ""
     question: str = ""
     accounts: tuple[str, ...] = ()
+    forgotten: tuple[str, ...] = ()  # texts the user told Lucius to forget, seeded as fingerprints
 
 
 @dataclass

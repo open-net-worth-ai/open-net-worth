@@ -18,7 +18,7 @@ _T01 = (
     live("mem_t01a05", "Pays the rent on the 3rd of each month", "money", "housing"),
     live("mem_t01b01", "Prefers short answers on reconciliation", "you", "Preferences"),
     live("mem_t01b02", "Likes tables over bullet lists", "you", "Preferences"),
-    live("mem_t01c01", "Works at Marlowe Analytics as a data engineer", "you", "About you"),
+    live("mem_t01c01", "Works at Marlowe Analytics as a data engineer", "you", "Profile"),
     live("mem_t01d01", "Is saving for a kitchen renovation starting mid-2027", "plans", "Kitchen"),
 )
 
@@ -26,8 +26,8 @@ _T02 = (
     live("mem_t02b01", "Prefers short answers on reconciliation", "you", "Preferences"),
     live("mem_t02b02", "Likes tables over bullet lists", "you", "Preferences"),
     live("mem_t02b03", "Wants the key number before the reasoning", "you", "Preferences"),
-    live("mem_t02c01", "Works at Marlowe Analytics as a data engineer", "you", "About you"),
-    live("mem_t02c02", "Speaks English and Mandarin at home", "you", "About you"),
+    live("mem_t02c01", "Works at Marlowe Analytics as a data engineer", "you", "Profile"),
+    live("mem_t02c02", "Speaks English and Mandarin at home", "you", "Profile"),
     live("mem_t02a01", "Rents a two-bedroom flat in Tampines", "money", "Housing"),
     live("mem_t02a02", "Pays the rent on the 3rd of each month", "money", "Housing"),
     live("mem_t02d01", "Plans a trip to Hokkaido in December", "plans", "Hokkaido trip"),

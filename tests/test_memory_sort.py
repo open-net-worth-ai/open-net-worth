@@ -461,7 +461,7 @@ def test_a_legacy_sensitive_fact_is_filed_live_while_the_setting_is_off(isolated
     MemoryStore().bulk_insert([_legacy("h", "Has a chronic condition")])
     _use(
         monkeypatch,
-        _Model({"facts": [{"id": "h", "section": "you", "topic": "About you", "sensitive": True}]}),
+        _Model({"facts": [{"id": "h", "section": "you", "topic": "Profile", "sensitive": True}]}),
     )
 
     out = asyncio.run(memory_sort.sort_unsorted())

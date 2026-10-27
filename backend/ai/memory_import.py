@@ -90,7 +90,8 @@ Choose a destination for each useful line:
   "value" (employment_types: salaried, self_employed, business_owner, retired, student;
   marital_status: single, married, divorced, widowed; risk_tolerance: conservative, moderate,
   aggressive).
-- "memory": a lasting fact about the person that no profile field holds. Give "section", "topic"
+- "memory": a lasting fact about the person that no profile field holds (the You topic
+  "Profile" is part of memory — it is not the "profile" destination). Give "section", "topic"
   (a short name) and "content" (one third-person sentence under {ms.FACT_MAX_CHARS} characters).
   Sections: {sections}. Suggested topics — {suggested}. Add "sensitive": true for
   {ms.SENSITIVE_TOPICS}.
@@ -142,7 +143,7 @@ def _route(item: dict, raw: dict, profile: dict) -> dict:
         if value is not None:
             field = raw["field"]
             return {**item, "field": field, "value": value, "current": profile.get(field) or None}
-        return _as_memory(item, {"section": "you", "topic": "About you"}, _FALLBACK_NOTE)
+        return _as_memory(item, {"section": "you", "topic": ms.PROFILE_TOPIC}, _FALLBACK_NOTE)
     if item["destination"] == "memory":
         return _as_memory(item, raw, None)
     return item

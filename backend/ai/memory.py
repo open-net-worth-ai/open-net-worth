@@ -17,7 +17,7 @@ import os
 import re
 
 from backend.ai.memory_extract_prompt import EXTRACT_SYSTEM, existing_listing, extract_prompt
-from backend.ai.memory_structure import topic_key
+from backend.ai.memory_structure import kept_apart, topic_key
 from backend.ai.memory_write import apply_memory_change
 from backend.core.user_time import user_today
 from backend.db import MemoryStore
@@ -480,7 +480,12 @@ def _profile_instructions() -> str:
 
 
 def _extraction_ops(parsed: dict) -> dict:
-    ops = {key: parsed.get(key) for key in ("new", "updates", "remove")}
+    """The extractor's reply as choke ops. Its ``remove`` never deletes: the fact is retired
+    ``stale`` and waits under "Moved out of memory" (R29) — and an id it also updates is kept."""
+    ops = {key: parsed.get(key) for key in ("new", "updates")}
+    ops["retire"] = [
+        {"id": fid, "reason": "stale"} for fid in kept_apart(parsed.get("remove"), ops["updates"])
+    ]
     mentioned = parsed.get("mentioned")
     if isinstance(mentioned, list):
         ops["touch"] = {"mentioned": mentioned}

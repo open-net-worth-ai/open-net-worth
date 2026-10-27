@@ -44,7 +44,7 @@ def _import_i01(lines: list[str], persona: str) -> list[dict]:
             _mem(f("My name"), "other", "Misc"),
             _mem(f("Always show"), "other", "Misc"),
             _mem(f("Never round"), "other", "Misc"),
-            _mem(f("diabetes"), "you", "About you", sensitive=False),
+            _mem(f("diabetes"), "you", "Profile", sensitive=False),
             _mem(f("Marlowe"), "other", "Misc"),
             _mem(f("kitchen"), "other", "Misc"),
             _skip(f("Prefers short"), "Not important."),
@@ -83,9 +83,9 @@ def _import_i01(lines: list[str], persona: str) -> list[dict]:
             "value": "Wei Ling Tan",
             "reason": "The profile name.",
         },
-        _mem(f("Speaks English"), "you", "About you"),
-        _mem(f("diabetes"), "you", "About you", sensitive=True),
-        _mem(f("Marlowe"), "you", "About you"),
+        _mem(f("Speaks English"), "you", "Profile"),
+        _mem(f("diabetes"), "you", "Profile", sensitive=True),
+        _mem(f("Marlowe"), "you", "Profile"),
         _mem(f("kitchen"), "plans", "Kitchen renovation"),
         _mem(f("Prefers short"), "you", "Preferences"),
         _mem(f("Likes tables"), "you", "Preferences"),
@@ -99,14 +99,14 @@ def _import_i02(lines: list[str], persona: str) -> list[dict]:
     prefs = _mem(_find(lines, "Prefers short"), "you", "Preferences")
     if persona == SLOPPY:
         return [_skip(health, "Health is private."), prefs]
-    return [_mem(health, "you", "About you", sensitive=True), prefs]
+    return [_mem(health, "you", "Profile", sensitive=True), prefs]
 
 
 def _import_i03(lines: list[str], persona: str) -> list[dict]:
     passport, card = _find(lines, "Passport"), _find(lines, "Main card")
     prefs = _mem(_find(lines, "Prefers short"), "you", "Preferences")
     if persona == SLOPPY:
-        return [_mem(passport, "you", "About you"), _mem(card, "money", "Cards & payments"), prefs]
+        return [_mem(passport, "you", "Profile"), _mem(card, "money", "Cards & payments"), prefs]
     return [
         _skip(passport, "A passport number is never kept."),
         _skip(card, "A card number is never kept."),

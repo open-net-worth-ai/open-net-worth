@@ -53,7 +53,7 @@ def _store_live(fid: str, content: str, **extra) -> None:
             "content": content,
             "state": "live",
             "section": "you",
-            "topic": "About you",
+            "topic": "Profile",
             "source": "implicit",
             "expires_at": None,
             "created_at": "2026-03-04T10:00:00",

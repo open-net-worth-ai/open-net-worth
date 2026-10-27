@@ -9,6 +9,7 @@ from backend.evals.memory.spec import Case, live
 E10_HOUSING = "mem_e10h01"
 E11_PREFERENCE = "mem_e11p01"
 E12_RENT = "mem_e12r01"
+E18_FORGOTTEN = "Has a dog named Biscuit"
 
 
 def _talk(user: str, assistant: str = "Understood.") -> tuple[tuple[str, str], ...]:
@@ -80,7 +81,7 @@ EXTRACT_CASES: tuple[Case, ...] = (
     Case(
         "E06",
         "extract",
-        "employer, languages and household go to You / About you",
+        "employer, languages and household go to You / Profile",
         turns=_talk(
             "Quick background so you know me better: I'm a data engineer at Marlowe Analytics, "
             "we speak English and Mandarin at home, and it's just me, my partner Jun and our "
@@ -88,7 +89,7 @@ EXTRACT_CASES: tuple[Case, ...] = (
             "Thanks for the background.",
         ),
         checks=(
-            c.every_new_fact_in("you", "about", name="every fact is filed under You / About you"),
+            c.every_new_fact_in("you", "profile", name="every fact is filed under You / Profile"),
             c.mentions("marlowe", name="records the employer"),
             c.mentions("mandarin", name="records the languages"),
             c.mentions("partner", "daughter", "jun", name="records the household"),
@@ -261,6 +262,18 @@ EXTRACT_CASES: tuple[Case, ...] = (
         notes="Always answer in SGD.",
         turns=_talk("Remember, I want everything in SGD.", "Will do."),
         checks=(c.no_new_facts("does not repeat the Instructions"),),
+    ),
+    Case(
+        "E18",
+        "extract",
+        "a fact the user told Lucius to forget is not learned again when it comes up",
+        forgotten=(E18_FORGOTTEN,),
+        turns=_talk(
+            "Sorry for the slow reply, I have a dog named Biscuit and he needed a walk. Can we "
+            "look at this month's grocery spending?",
+            "No problem. Let's look at groceries.",
+        ),
+        checks=(c.never_stored(r"biscuit", name="the forgotten dog is not learned again"),),
     ),
 )
 

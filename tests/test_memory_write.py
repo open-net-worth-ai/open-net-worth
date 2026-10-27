@@ -51,10 +51,7 @@ def test_routing_guide_names_every_home_and_section():
         assert home in guide, home
     for label in structure.SECTIONS.values():
         assert label in guide, label
-    assert "About you" in guide and "Preferences" in guide
-    assert "Profile" not in " ".join(
-        t for topics in structure.SUGGESTED_TOPICS.values() for t in topics
-    )
+    assert "You · Profile" in guide and "Preferences" in guide
     header, *lines = guide.splitlines()
     assert "first line that matches wins" in header
     assert [ln.split(".")[0] for ln in lines] == [str(i) for i in range(1, len(lines) + 1)]
@@ -63,7 +60,7 @@ def test_routing_guide_names_every_home_and_section():
 def test_sections_are_fixed_and_ordered():
     assert list(structure.SECTIONS) == ["you", "money", "plans", "open_items", "other"]
     assert structure.SECTIONS["open_items"] == "Open items"
-    assert structure.SUGGESTED_TOPICS["you"] == ("About you", "Preferences")
+    assert structure.SUGGESTED_TOPICS["you"] == ("Profile", "Preferences")
     assert set(structure.SUGGESTED_TOPICS) == set(structure.SECTIONS)
     assert structure.FACT_MAX_CHARS == 280
     assert "unused" in structure.RETIRE_REASONS and "instructions" in structure.RETIRE_REASONS
@@ -251,7 +248,7 @@ def test_a_sensitive_update_to_a_live_fact_needs_the_setting_too():
             "id": "m_1",
             "content": "Sees a doctor",
             "section": "you",
-            "topic": "About you",
+            "topic": "Profile",
             "state": "live",
             "source": "implicit",
             "created_at": "2026-09-01T00:00:00+00:00",
@@ -760,7 +757,7 @@ def test_an_explicit_legacy_fact_with_a_figure_is_filed_not_retired():
 def test_a_sensitive_legacy_fact_is_filed_live_whatever_the_setting():
     assert MemorySettingsStore().sensitive_topics() is False
     _legacy("mem_h1", "Has a chronic condition")
-    out = _file("mem_h1", "you", topic="About you", sensitive=True)
+    out = _file("mem_h1", "you", topic="Profile", sensitive=True)
     row = MemoryStore().find_by_id("mem_h1")
     assert (row["state"], row["section"]) == ("live", "you")
     assert row.get("retired_reason") is None and "sensitive" not in row
@@ -768,7 +765,7 @@ def test_a_sensitive_legacy_fact_is_filed_live_whatever_the_setting():
 
     MemorySettingsStore().set_sensitive_topics(True)
     _legacy("mem_h2", "Has a chronic condition")
-    _file("mem_h2", "you", topic="About you", sensitive=True)
+    _file("mem_h2", "you", topic="Profile", sensitive=True)
     row = MemoryStore().find_by_id("mem_h2")
     assert row["state"] == "live" and "sensitive" not in row
 
@@ -776,7 +773,7 @@ def test_a_sensitive_legacy_fact_is_filed_live_whatever_the_setting():
 def test_filing_an_unsorted_support_group_fact_is_not_a_new_save():
     assert MemorySettingsStore().sensitive_topics() is False
     _legacy("mem_flag", "Attends a weekly support group")
-    _file("mem_flag", "you", topic="About you")
+    _file("mem_flag", "you", topic="Profile")
     row = MemoryStore().find_by_id("mem_flag")
     assert row["state"] == "live" and row.get("retired_reason") is None
 

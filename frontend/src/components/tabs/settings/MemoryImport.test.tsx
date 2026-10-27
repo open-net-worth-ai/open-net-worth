@@ -37,7 +37,7 @@ const ITEMS = [
     line: 'Rents a flat with a roommate',
     destination: 'memory',
     section: 'you',
-    topic: 'About you',
+    topic: 'Profile',
     content: 'Rents a flat with a roommate',
     reason: 'Personal context.',
   },
@@ -181,7 +181,7 @@ describe('MemoryImport', () => {
     for (const heading of ['Profile', 'Instructions for Lucius', 'Skipped']) {
       expect(screen.getByRole('heading', { name: heading })).toBeTruthy()
     }
-    expect(screen.getByRole('heading', { name: 'You · About you' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'You · Profile' })).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Plans · Move to Lisbon' })).toBeTruthy()
     expect(screen.getByText('The ledger already has it.')).toBeTruthy()
     const skipped = screen.getByLabelText('Tracks coffee spending') as HTMLInputElement

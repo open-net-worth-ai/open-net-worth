@@ -216,6 +216,11 @@ class Harness:
         profile_service.write_profile(stored)
         if case.facts:
             MemoryStore().bulk_insert(copy.deepcopy(list(case.facts)))
+        if case.forgotten:
+            from backend.ai.memory_structure import fingerprint
+            from backend.db.memory_forgotten_store import MemoryForgottenStore
+
+            MemoryForgottenStore().record({fingerprint(t) for t in case.forgotten})
         for name in case.accounts:
             accounts.create_account(
                 {"name": name, "type": "cash", "currency": "SGD", "initial_balance": 100}

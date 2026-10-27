@@ -69,7 +69,7 @@ ROUTED = [
         "Rents a flat with a roommate",
         "memory",
         section="you",
-        topic="About you",
+        topic="Profile",
         content="Rents a flat with a roommate",
     ),
     _item(
@@ -187,7 +187,7 @@ async def test_preview_demotes_a_profile_line_it_cannot_write(isolated, monkeypa
     items = await memory_import.plan_import("Net worth is huge\nIs married")
 
     assert [i["destination"] for i in items] == ["memory", "memory"]
-    assert all(i["section"] == "you" and i["topic"] == "About you" for i in items)
+    assert all(i["section"] == "you" and i["topic"] == "Profile" for i in items)
 
 
 async def test_preview_skips_a_line_carrying_an_id_number(isolated, monkeypatch):
@@ -244,7 +244,7 @@ def test_apply_writes_only_checked_items_through_their_owners(client):
             "Rents a flat",
             "memory",
             section="you",
-            topic="About you",
+            topic="Profile",
             content="Rents a flat with a roommate",
         ),
         _item("Likes tea", "skip"),
@@ -257,7 +257,7 @@ def test_apply_writes_only_checked_items_through_their_owners(client):
     assert profile_service.read_profile()["name"] == "Dana Example"
     facts = MemoryStore().all_facts()
     assert [(f["content"], f["section"], f["topic"], f["source"]) for f in facts] == [
-        ("Rents a flat with a roommate", "you", "About you", "explicit")
+        ("Rents a flat with a roommate", "you", "Profile", "explicit")
     ]
 
 
@@ -342,8 +342,8 @@ def test_apply_reports_what_the_memory_choke_refuses_and_skips_duplicates(client
     out = _apply(
         client,
         [
-            _item("1", "memory", section="you", topic="About you", content="Speaks French"),
-            _item("2", "memory", section="you", topic="About you", content="speaks french"),
+            _item("1", "memory", section="you", topic="Profile", content="Speaks French"),
+            _item("2", "memory", section="you", topic="Profile", content="speaks french"),
             _item("3", "memory", section="you", content="Passport number K1234567"),
             _item("4", "memory", section="nowhere", content="Fine"),
             _item("5", "memory", section="other", content="y" * 300),
@@ -389,7 +389,7 @@ async def test_preview_skips_a_sensitive_line_while_the_setting_is_off(isolated,
                 "Takes medication for asthma",
                 "memory",
                 section="you",
-                topic="About you",
+                topic="Profile",
                 content="Takes medication for asthma",
                 sensitive=True,
             )
@@ -416,7 +416,7 @@ async def test_preview_and_apply_store_a_sensitive_line_without_a_flag_while_the
                 "Takes medication for asthma",
                 "memory",
                 section="you",
-                topic="About you",
+                topic="Profile",
                 content="Takes medication for asthma",
                 sensitive=True,
             )

@@ -470,3 +470,34 @@ owner in session.
 - **The retire reason `sensitive` is renamed `identifier`** ("Not kept — had a card, account or ID
   number") and is kept only for a legacy fact that carries a full card, account or ID number or a
   password; those are never stored, whatever the setting.
+
+## Amendment 7 (2026-10-27) — Profile; a model never deletes; a forgotten fact stays forgotten
+
+Decided by the owner in session (rulings R29 and R30, and the unused-clock scope); amends
+amendment 4's topic names and amendment 5's unused clock.
+
+- **The You topic is "Profile"** (R30), with **Preferences** beside it. The routing guide's first
+  row now reads "a Settings profile field (update_profile) — not memory" and its eighth
+  "Memory · You · Profile", and the guide's header, the sort prompt and the import prompt say the
+  two are different homes. The write choke files a topic "About you" (any case) in You as
+  "Profile"; revision `202610271800_memory_forgotten` renamed the ones already stored. A data step
+  in the revision, not a fix-up in the sort or tidy, because it is one-time, runs before anything
+  reads the book, and leaves no code behind that every later pass would run for nothing.
+- **A model never deletes a fact** (R29). An extraction `remove` retires the fact `stale`; a
+  tidy merge retires the merged-away fact with the new reason `merged` ("Merged into another
+  memory"). Both wait under "Moved out of memory" and are purged after 30 days like any retire.
+  The tidy's "more than half of a topic" refusal counts merged retires, and an id a reply both
+  updates and removes is kept. The choke backs this up: an implicit `remove` of a fact that is
+  neither retired nor expired is a `stale` retire.
+- **A forgotten fact stays forgotten** (R29). A user-initiated forget — the forget button,
+  Forget everything, deleting a topic, `forget_fact`, a "Tell Lucius" removal — still
+  hard-deletes and records a SHA-256 of the fact's text, casefolded with punctuation and
+  whitespace collapsed, in `memory_forgotten` (the hash only, never the text). The choke refuses
+  an implicit `new`, or an implicit update rewriting a live fact, that matches one (`forgotten`);
+  filing a legacy fact is not a new save and is not checked. An explicit save of the same text
+  — the user asks again — is allowed and clears the fingerprint. A paraphrase has a different
+  hash and is not caught; that is accepted. A reset or a whole-book import wipes the
+  fingerprints with the memory.
+- **The unused clock covers only background-learned facts in Other.** A fact the user saved
+  (`source: explicit`) or one in You or Money is never retired as `unused`. Plans and Open items
+  keep their own decay, and nothing is retired as unused while no citations arrive.

@@ -103,7 +103,7 @@ For each note, reply with ONE of:
 - retire it, when the guide says it belongs outside memory or it is out of date:
   {{"id": "...", "retire": "<reason>"}} with the reason one of: {", ".join(ms.RETIRE_REASONS)}.
   Retire only when EVERYTHING the note says already lives in that home: "profile" only for a
-  profile field itself (not an employer, job or language), "ledger" only for a balance,
+  Settings profile field itself (an employer, job or language is filed under You · Profile), "ledger" only for a balance,
   holding, price, trade or finished task — a plan or aim is never "ledger", even with an
   amount or a date.
 A note you are unsure about: file it under "other" rather than retiring it.

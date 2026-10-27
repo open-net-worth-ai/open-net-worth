@@ -46,7 +46,7 @@ def test_sections_then_topics_order():
         _f("mem_000000000002", "tax fact", topic="Tax"),
         _f("mem_000000000003", "housing fact", topic="housing"),
         _f("mem_000000000004", "Housing again", topic="Housing", created="2026-04-01T00:00:00"),
-        _f("mem_000000000005", "about", section="you", topic="About you"),
+        _f("mem_000000000005", "about", section="you", topic="Profile"),
         _f("mem_000000000006", "plan", section="plans", topic="Move abroad"),
     ]
     text, _ = render_memory_block(facts)

@@ -296,7 +296,7 @@ def test_a_saved_sensitive_fact_is_recalled_whatever_the_setting(memory_on):
         created_at="2026-01-01",
         state="live",
         section="you",
-        topic="About you",
+        topic="Profile",
     )
     _seed(
         "Trip to Japan in spring",

@@ -25,7 +25,9 @@ from backend.core.errors import ValidationError
 from backend.core.ids import new_id
 from backend.core.user_time import user_today
 from backend.db import MemoryStore
+from backend.db.memory_forgotten_store import MemoryForgottenStore
 from backend.db.memory_settings_store import MemorySettingsStore
+from backend.db.memory_store import is_expired
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +50,7 @@ _MESSAGES = {
         "in Settings to allow it."
     ),
     "unknown_id": "That memory no longer exists.",
+    "forgotten": "You asked Lucius to forget this, so it isn't learned again on its own.",
 }
 
 
@@ -160,8 +163,19 @@ class _Plan:
     """One call's working copy: validates every op against the facts as they stand, then
     ``commit`` writes what survived."""
 
-    def __init__(self, facts: list[dict], source: str, today: str, sensitive_ok: bool):
+    def __init__(
+        self,
+        facts: list[dict],
+        source: str,
+        today: str,
+        sensitive_ok: bool,
+        forgotten: set[str] = frozenset(),
+    ):
         self.source = source
+        self.forgotten = forgotten
+        # Fingerprints a user forget records, and those an explicit save of the text clears.
+        self.forget: set[str] = set()
+        self.unforget: set[str] = set()
         self.today = date.fromisoformat(today)
         self.sensitive_ok = sensitive_ok
         self.now = _now()
@@ -197,7 +211,7 @@ class _Plan:
     def canonical_topic(self, section: str, raw) -> str | None:
         if section == ms.OPEN_ITEMS:
             return None
-        name = ms.normalise_topic(raw)
+        name = ms.current_topic(section, ms.normalise_topic(raw))
         if not name:
             return None
         return self._topics.setdefault((section, ms.topic_key(name)), name)
@@ -214,6 +228,14 @@ class _Plan:
         if self.source == "implicit" and is_perishable_figure(text):
             return text, "ledger_figure", None
         return text, None, None
+
+    def saves_forgotten(self, text: str) -> bool:
+        """A background save of text the user told Lucius to forget. The user's own save of it
+        is allowed, and takes it off the forgotten list."""
+        if self.source == "explicit":
+            self.unforget.add(ms.fingerprint(text))
+            return False
+        return ms.fingerprint(text) in self.forgotten
 
     # ── ops ──────────────────────────────────────────────────────────────────────
 
@@ -232,6 +254,8 @@ class _Plan:
         expires, valid = _expiry(section or "", raw.get("expires_at"), self.today)
         if reason is None and not valid:
             reason = "bad_expiry"
+        if reason is None and self.saves_forgotten(text):
+            reason = "forgotten"
         if reason:
             return self.reject(reason, text, label, topic, message)
         row = {
@@ -322,6 +346,9 @@ class _Plan:
             return None
         if not self._shape_update(raw, current, section, changes):
             return None
+        if "content" in changes and not filing and self.saves_forgotten(changes["content"]):
+            self.reject("forgotten", changes["content"], section, current.get("topic"))
+            return None
         if len(changes) > 1 and self.source == "explicit":
             changes["source"] = "explicit"
             changes["edited_at"] = self.now
@@ -373,10 +400,18 @@ class _Plan:
         return current.get("expires_at")
 
     def remove(self, fid) -> None:
+        """A user's forget deletes and leaves the fact's fingerprint. A background pass only
+        deletes what is already retired or expired; any other fact it removes is retired."""
         if not isinstance(fid, str):
             return
-        if self.view(fid) is None:
+        current = self.view(fid)
+        if current is None:
             return self.reject("unknown_id", "", None, None)
+        if self.source == "implicit":
+            if current.get("state") != "retired" and not is_expired(current, str(self.today)):
+                return self.retire({"id": fid, "reason": "stale"})
+        else:
+            self.forget.add(ms.fingerprint(current.get("content")))
         self.deleted.append(fid)
         self.counts["removed"] += 1
 
@@ -413,6 +448,8 @@ class _Plan:
                 and ms.topic_key(fact.get("topic")) == key
                 and fact.get("state") != "retired"
             ):
+                if self.source == "explicit":
+                    self.forget.add(ms.fingerprint(fact.get("content")))
                 self.deleted.append(fid)
                 self.counts["removed"] += 1
 
@@ -449,6 +486,9 @@ class _Plan:
         for fid in self.deleted:
             store.remove_by_id(fid)
         store.bulk_insert(self.inserts)
+        forgotten = MemoryForgottenStore()
+        forgotten.clear(self.unforget)
+        forgotten.record(self.forget - self.unforget)
 
     def result(self) -> dict:
         return {
@@ -480,6 +520,7 @@ def apply_memory_change(
             source,
             today or user_today().isoformat(),
             MemorySettingsStore().sensitive_topics(),
+            MemoryForgottenStore().all_hashes() if source == "implicit" else frozenset(),
         )
         plan.run(ops)
         if strict and plan.rejected:

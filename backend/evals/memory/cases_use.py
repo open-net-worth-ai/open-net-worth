@@ -22,8 +22,8 @@ USE_CASES: tuple[Case, ...] = (
         "reader and only that fact is marked used",
         facts=(
             live(U01_RENT, "Splits the rent 60/40 with flatmate Priya", "money", "Housing"),
-            live(U01_EMPLOYER, "Works at Marlowe Analytics as a data engineer", "you", "About you"),
-            live(U01_BADMINTON, "Plays badminton on Saturday mornings", "you", "About you"),
+            live(U01_EMPLOYER, "Works at Marlowe Analytics as a data engineer", "you", "Profile"),
+            live(U01_BADMINTON, "Plays badminton on Saturday mornings", "you", "Profile"),
             live(U01_STYLE, "Prefers short answers on reconciliation", "you", "Preferences"),
         ),
         question="How should I split this month's rent with my flatmate?",
@@ -40,7 +40,7 @@ USE_CASES: tuple[Case, ...] = (
         "use",
         "memory is context, not proof: asked for a count the book holds, the model reads the book "
         "and answers with the book's number, not the remembered one",
-        facts=(live(U02_BANKS, "Has two accounts at DBS", "you", "About you"),),
+        facts=(live(U02_BANKS, "Has two accounts at DBS", "you", "Profile"),),
         accounts=("DBS Multiplier", "DBS Savings", "DBS Vickers Cash"),
         question="How many DBS accounts do I have?",
         checks=(
