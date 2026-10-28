@@ -7,7 +7,7 @@ must carry a ``quote``: words from one of the person's own messages in this conv
 they say they will do it or ask to be reminded. The quote is matched against what the person
 typed — never Lucius's turns, nor an attachment, a harness note or other context the app adds
 (``core.chat_context_markers.is_not_said``) — ignoring case and spacing, and must share a content
-word with the item, so a stray "hmm, maybe" grounds nothing. At most one new Open item is kept
+word with the item (in the message it comes from), so a stray "hmm, maybe" grounds nothing. At most one new Open item is kept
 per extraction pass (one quiet conversation). ADR
 ``2026-10-25-memory-keeps-only-what-has-no-other-home`` (amendment 9).
 """
@@ -65,10 +65,14 @@ def _content_words(text: str) -> set[str]:
 
 
 def _grounded(item: dict, said: str) -> bool:
+    """The quote is in what the person typed, and the message it comes from shares a content
+    word with the item — the message, not the quote alone, since "can we come back to that?"
+    points at what the same message just said."""
     quote = _norm(item.get("quote") or "")
-    if len(quote) < QUOTE_MIN_CHARS or quote not in said:
+    if len(quote) < QUOTE_MIN_CHARS:
         return False
-    return bool(_content_words(quote) & _content_words(str(item.get("content") or "")))
+    item_words = _content_words(str(item.get("content") or ""))
+    return any(quote in line and _content_words(line) & item_words for line in said.split("\n"))
 
 
 def guard(ops: dict, said: str, current: dict[str, dict]) -> dict:

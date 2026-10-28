@@ -74,9 +74,9 @@ KEEP_EXTRACT_CASES: tuple[Case, ...] = (
         "extract",
         "a lasting preference is stored as its kernel, in the house voice, with no history",
         turns=_talk(
-            "From now on itemise the requests I send my flatmate — each item and each of our "
-            "shares, like the FairPrice one on 12 Sep. Lump sums confuse him.",
-            "Got it, I'll itemise them.",
+            "My flatmate and I split shared bills item by item — each item and each of our "
+            "shares, like the FairPrice one on 12 Sep — because lump sums confuse him.",
+            "That makes sense.",
         ),
         checks=(
             c.stores_some("stores the preference"),

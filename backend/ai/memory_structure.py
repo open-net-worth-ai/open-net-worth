@@ -179,7 +179,8 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "about the user but no Settings profile field fits (an employer, languages, who they live "
-        "with — partner, children, flatmates — personal context)",
+        "with — partner, children, flatmates — personal context; NOT rent or bills split with "
+        "them, nor money sent between them: those are Money)",
         "Memory · You · Profile",
         "about the user, no Settings field → You · Profile (a memory topic)",
     ),
@@ -202,8 +203,8 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         f"something to come back to → Open items (expires in {OPEN_ITEM_DEFAULT_DAYS} days)",
     ),
     (
-        "a fact about their money life that nothing above holds (housing, money they send or "
-        "receive within the family, investing, "
+        "a fact about their money life that nothing above holds (housing, rent or bills split "
+        "with a flatmate or partner, money they send or receive within the family, investing, "
         "tax, cards and payments, income and work, a bookkeeping convention no payee rule can "
         "express)",
         "Memory · Money · a topic name",
@@ -223,7 +224,7 @@ KEEP_TEST = (
     "incident, or a thread left mid-way); and nothing else in the app already holds it. Never "
     "keep: a lesson about how Lucius should do a task, learned from one mistake or incident (that "
     "is a fix to the app, or an Instructions rule if the person states it as one); a problem with "
-    "the app or a connector; what Lucius suggested and the person did not take up; research "
+    "the app or a connector, or how they got around one (a login that kept failing); what Lucius suggested and the person did not take up; research "
     "results (card comparisons, product mechanics); a what-if they were only exploring. Store only "
     'the lasting part: no history tail ("decided on…", "stated…", "awaiting…", "as of…") — keep a '
     "date only when it is the fact itself (a due date, a start date)."

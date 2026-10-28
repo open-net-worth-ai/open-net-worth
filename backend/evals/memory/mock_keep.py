@@ -46,9 +46,9 @@ EXTRACT_KEEP: dict[str, tuple[dict, dict]] = {
     ),
     "E23": (
         _new(
-            "Wants requests to the flatmate itemised — each item and each share — not lump sums",
-            "you",
-            "Preferences",
+            "Splits shared bills with the flatmate item by item, each share shown, not lump sums",
+            "money",
+            "Housing",
         ),
         _new(
             "User wants flatmate requests itemised, like the FairPrice one on 12 Sep",

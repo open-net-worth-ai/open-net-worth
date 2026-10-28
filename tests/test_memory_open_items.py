@@ -143,3 +143,17 @@ def test_an_attachment_or_harness_note_is_not_the_persons_words():
 def test_an_update_without_an_id_does_not_break_the_pass():
     ops = guard({"updates": [{"section": "open_items", "content": "Chase the refund"}]}, SAID, {})
     assert ops["updates"] == []
+
+
+def test_a_quote_that_points_back_is_grounded_by_its_own_message():
+    history = [
+        {
+            "role": "user",
+            "content": "I haven't decided whether to dispute the deposit deduction. "
+            "Can we come back to that next week?",
+        }
+    ]
+    item = _open(
+        "Decide whether to dispute the deposit deduction", "Can we come back to that next week?"
+    )
+    assert guard({"new": [item]}, user_words(history), {})["new"][0]["content"].startswith("Decide")
