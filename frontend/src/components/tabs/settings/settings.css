@@ -956,6 +956,8 @@
 .onw-settings .rd-select,
 .onw-settings .rd-textarea {
   width: 100%;
+  /* taller only: the browser default (both) let it be dragged wider than its panel */
+  resize: vertical;
   background: var(--surface2);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
