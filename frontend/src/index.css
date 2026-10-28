@@ -6399,10 +6399,15 @@ body.hide-amounts .money * {
   .ui-swipe[data-dragging] .ui-swipe-acts {
     transition: none;
   }
+  /* Square and flush, one block behind the row (the global `button` radius made each a chip). */
   .ui-swipe-act {
-    min-width: calc(var(--space-9) * 2.25);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: calc(var(--space-9) * 2);
     padding: 0 var(--space-5);
     border: 0;
+    border-radius: 0;
     background: var(--muted);
     color: var(--bg);
     font: inherit;

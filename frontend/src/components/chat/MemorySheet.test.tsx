@@ -170,6 +170,22 @@ describe('MemorySheet', () => {
       expect.objectContaining({ method: 'PATCH' }),
     )
     fireEvent.keyDown(window, { key: 'Escape' })
+    expect(await screen.findByRole('region', { name: 'Money' })).toBeTruthy()
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('Escape on a topic page goes back to the list, and only then closes', async () => {
+    serve(true, [RENT])
+    const onClose = vi.fn()
+    render(<MemorySheet onClose={onClose} />)
+    await openRent()
+    expect(screen.queryByRole('region', { name: 'Money' })).toBeNull()
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(await screen.findByRole('region', { name: 'Money' })).toBeTruthy()
+    expect(onClose).not.toHaveBeenCalled()
+    fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalledOnce()
   })
 

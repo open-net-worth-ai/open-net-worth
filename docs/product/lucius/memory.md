@@ -76,7 +76,8 @@ that narrows it to the facts (or topics) containing your words.
    **Other**. In each, a row per topic shows its name, its one-line summary (its first fact until
    Lucius has written one) and when it was last updated. **Open items** are listed directly, a row
    per item with the date it runs until where a topic's date goes.
-2. **A topic's page.** Click a topic (or its pencil) to open it: **← Memory** goes back, then you
+2. **A topic's page.** Click a topic (or its pencil) to open it: **← Memory** goes back (in the
+   memory window, so does Esc; a second Esc closes the window), then you
    see when it was **Last updated**, a one-line **Summary** of what the topic covers, and its
    **Details** as bullets. Lucius writes the summary himself and refreshes it within a few minutes
    of the topic's facts changing (a brand-new topic shows it once he has); it describes the topic,
@@ -94,9 +95,11 @@ that narrows it to the facts (or topics) containing your words.
    characters is shortened to fit. A fact holding a full card, account or ID number is moved
    out instead; a sensitive fact is filed like any other.
 
-On a phone or tablet there are no pencils or bins: swipe a row — a topic, an open item, an older
-memory or a bullet on a topic's page — to the left to show **Edit** and **Delete** (**Forget** for
-a single fact), then tap one. Tap the row again, or anywhere else, to slide it back.
+On a phone or tablet the pencils and bins sit behind the row: swipe a row — a topic, an open
+item, an older memory or a bullet on a topic's page — to the left to show the pencil (**Edit**)
+and the bin (**Delete**, or **Forget** for a single fact), then tap one. Tap the row again, or
+anywhere else, to slide it back. Going back from a topic's page returns the list to where you
+had scrolled it.
 
 When a fact turns out to live somewhere better — your profile, your Instructions, a payee rule,
 an automation, the ledger — or has gone stale, Lucius moves it out of memory. It no longer shows
@@ -141,8 +144,8 @@ Each switch saves as soon as you flip it, and a short note confirms it.
 
 ## Change or add facts
 
-At the bottom of the memory list, type what to change in **Tell Lucius what to remember or
-change** and press Enter, or click the arrow. On a topic's page the same box is scoped to that
+Type what to change in **Tell Lucius what to remember or change** — the box stays pinned at the
+bottom of the memory list while you scroll — and press Enter, or click the arrow. On a topic's page the same box is scoped to that
 topic (**Tell Lucius what to change about Housing**), so a short *"it's now due on the 3rd"* needs
 no context:
 

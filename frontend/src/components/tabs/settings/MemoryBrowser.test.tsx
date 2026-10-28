@@ -70,7 +70,7 @@ describe('MemoryBrowser', () => {
     await renderBrowser()
     const open = screen.getByRole('region', { name: 'Open items' })
     expect(within(open).getByText(/Call the insurer about the renewal/)).toBeTruthy()
-    expect(within(open).getByText(/until /)).toBeTruthy()
+    expect(within(open).getByText(/Until /)).toBeTruthy()
     expect(within(open).queryByRole('button', { name: /^Delete / })).toBeNull()
   })
 
@@ -83,7 +83,7 @@ describe('MemoryBrowser', () => {
     const item = within(open)
       .getByText('Call the insurer about the renewal')
       .closest('.rd-mem-topic')
-    expect(item?.querySelector('.rd-mem-topic-date')?.textContent).toMatch(/^until /)
+    expect(item?.querySelector('.rd-mem-topic-date')?.textContent).toMatch(/^Until /)
     expect(
       within(item as HTMLElement)
         .getAllByRole('button')
@@ -106,6 +106,26 @@ describe('MemoryBrowser', () => {
         expect.objectContaining({ method: 'PATCH' }),
       ),
     )
+  })
+
+  it('going back from a topic puts the list where it was scrolled to', async () => {
+    serve()
+    const toast = vi.fn()
+    const { container } = render(
+      <div style={{ overflowY: 'auto' }}>
+        <MemoryBrowser toast={toast} />
+      </div>,
+    )
+    await screen.findByText('Rent is paid on the 1st')
+    const pane = container.firstElementChild as HTMLElement
+    Object.defineProperty(pane, 'scrollHeight', { configurable: true, value: 2000 })
+    Object.defineProperty(pane, 'clientHeight', { configurable: true, value: 500 })
+    pane.scrollTop = 640
+    fireEvent.click(topicRow('Housing'))
+    pane.scrollTop = 0
+    fireEvent.click(screen.getByRole('button', { name: /Memory/ }))
+    await screen.findByText('Lives with two cats')
+    expect(pane.scrollTop).toBe(640)
   })
 
   it('opens a topic to its facts, and the change box sends the topic', async () => {
@@ -364,12 +384,12 @@ describe('MemoryBrowser', () => {
       await renderBrowser()
       expect(document.querySelector('.rd-mem-topic-acts, .rd-mem-bullet-acts')).toBeNull()
       const del = screen.getByRole('button', { name: 'Delete Housing' })
-      expect(del.textContent).toBe('Delete')
+      expect(del.querySelector('svg')).toBeTruthy()
       expect(del.closest('.ui-swipe-acts')).toBeTruthy()
       const forget = screen.getByRole('button', {
         name: 'Forget: Call the insurer about the renewal',
       })
-      expect(forget.textContent).toBe('Forget')
+      expect(forget.querySelector('svg')).toBeTruthy()
       fireEvent.click(del)
       expect(screen.getByRole('alertdialog', { name: 'Forget Housing?' })).toBeTruthy()
     })
