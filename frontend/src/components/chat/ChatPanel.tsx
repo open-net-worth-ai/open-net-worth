@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useMemoryWindow } from '../../hooks/useMemoryWindow'
 import { useLuciusChat } from '../../state/luciusChat'
 import { useChatSuggestionsEnabled } from '../../hooks/useChatSuggestionsEnabled'
 import { useIsCoarsePointer } from '../../hooks/useIsCoarsePointer'
@@ -446,7 +447,7 @@ export function ChatPanel({
   // with, so "View all runs" lands on runs rather than making you pick again.
   const [menuOpen, setMenuOpen] = useState(false)
   const [documentsOpen, setDocumentsOpen] = useState(false)
-  const [memoryOpen, setMemoryOpen] = useState(false)
+  const memory = useMemoryWindow('panel')
   const [browsingConvs, setBrowsingConvs] = useState<ConversationKind | null>(null)
   // One ordering for the header, the sidebar and the browser — they disagreed for a build,
   // and a switcher that orders its rows differently from the list behind it is worse than
@@ -1207,9 +1208,9 @@ export function ChatPanel({
           <DocumentsSheet onClose={() => setDocumentsOpen(false)} />
         </Suspense>
       )}
-      {!homeMode && memoryOpen && (
+      {!homeMode && memory.open && (
         <Suspense fallback={null}>
-          <MemorySheet onClose={() => setMemoryOpen(false)} />
+          <MemorySheet onClose={memory.close} />
         </Suspense>
       )}
       {!homeMode && menuOpen && (
@@ -1286,12 +1287,7 @@ export function ChatPanel({
               <FolderLock size={15} />
             </button>
 
-            <button
-              className="lx-side-x"
-              onClick={() => setMemoryOpen(true)}
-              title="Memory"
-              aria-label="Memory"
-            >
+            <button className="lx-side-x" onClick={memory.show} title="Memory" aria-label="Memory">
               <Brain size={15} />
             </button>
 

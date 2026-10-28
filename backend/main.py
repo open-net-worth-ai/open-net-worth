@@ -22,6 +22,7 @@ import logging
 import logging.config
 import math
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -359,6 +360,20 @@ async def lifespan(app: FastAPI):
 
     ensure_migrated(allow_live_instance=True)
 
+    # ── Postgres: create / re-sync Lucius's SQL login against THIS schema, right after the
+    # migration that may have added tables, so an upgrade never leaves a table unreadable or a
+    # credential table readable. Off the event loop (a remote server can be slow) and
+    # non-fatal: an unavailable login only switches SQL access off, with the reason in Settings.
+    from backend.db import sql_console
+
+    def _prepare_sql_console() -> None:
+        try:
+            sql_console.console_status()
+        except Exception:
+            _log.exception("SQL console login preparation failed (non-fatal)")
+
+    threading.Thread(target=_prepare_sql_console, name="sql-console-login", daemon=True).start()
+
     # ── A shell in the browser runs as this user: make this process unreadable to it, and drop
     # the secrets Settings has already absorbed from the live environment. AFTER Settings is
     # built (they are read once, at construction) and BEFORE the app serves a request, so before
@@ -672,6 +687,17 @@ async def lifespan(app: FastAPI):
         lock_exclusive(_SCHEDULER_LOCK_HANDLE)
         start()
         _log.info("scheduler: started (this worker owns the scheduler lock)")
+        # Memory is written when a conversation goes idle and tidied once a day. Like the
+        # scheduler this must run in ONE worker, or every worker would extract the same chat.
+        # Skipped under ONW_QA_MODE — an isolated QA run must not spend model calls.
+        from backend.core.config import get_settings as _memory_settings
+
+        if not _memory_settings().onw_qa_mode:
+            from backend.ai.memory_idle import memory_sweep_loop
+
+            app.state.memory_sweep_task = asyncio.create_task(
+                memory_sweep_loop(), name="memory-sweep"
+            )
     except (OSError, BlockingIOError):
         if _SCHEDULER_LOCK_HANDLE is not None:
             _SCHEDULER_LOCK_HANDLE.close()
@@ -840,6 +866,13 @@ async def lifespan(app: FastAPI):
     from backend.ai.turns import shutdown as shutdown_turns
 
     await shutdown_turns()
+    memory_sweep_task = getattr(app.state, "memory_sweep_task", None)
+    if memory_sweep_task is not None:
+        memory_sweep_task.cancel()
+        await asyncio.gather(memory_sweep_task, return_exceptions=True)
+    from backend.ai.memory_idle import cancel_background as cancel_memory_extractions
+
+    await cancel_memory_extractions()
     unregister_automation_adapters()
     await telegram_bot.stop()
     _keep_awake.release()

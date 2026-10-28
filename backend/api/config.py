@@ -34,6 +34,7 @@ from backend.db.app_config_store import (
     set_sql_query_enabled,
     sql_query_enabled,
 )
+from backend.db.sql_console import console_status
 from backend.services import keep_awake
 
 router = APIRouter()
@@ -199,9 +200,17 @@ class SqlQueryConfigPatch(BaseModel):
 
 @router.get("/api/config/sql-query")
 def get_sql_query_config():
-    """The read-only-SQL kill switch. Defaults ``true``. Auth-gated; never on the public
-    branding GET /api/config."""
-    return {"enabled": sql_query_enabled()}
+    """The read-only-SQL kill switch (defaults ``true``) and whether SQL can actually run on
+    this database — on Postgres the app's console login can be unavailable, with ``reason``
+    and, when only an operator can fix it, ``fix``. Auth-gated; never on the public branding
+    GET /api/config."""
+    status = console_status()
+    return {
+        "enabled": sql_query_enabled(),
+        "available": status.available,
+        "reason": status.reason,
+        "fix": status.fix,
+    }
 
 
 @router.put("/api/config/sql-query")

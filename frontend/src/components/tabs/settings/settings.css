@@ -246,6 +246,14 @@
   gap: 12px;
   padding: 20px 24px 10px;
 }
+/* a section's own title-bar node (a topic page's "← Memory") takes the title's place */
+.onw-settings .rd-set-hslot {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
 .onw-settings .rd-set-x {
   flex: none;
   width: 30px;
@@ -1308,27 +1316,52 @@
   flex: 1;
   min-width: 0;
 }
-.onw-settings .rd-fact-t {
-  font-size: 12.5px;
-  color: var(--ink);
-  line-height: 1.45;
-}
-.onw-settings .rd-fact-meta {
-  display: flex;
-  gap: 12px;
-  font-size: var(--text-xs);
-  color: var(--faint);
-  margin-top: 3px;
-}
 /* the memory dialog keeps one height — the list scrolls inside it — so searching never
    shrinks it; on a phone it is a tall bottom sheet (see the max-width block) */
 .onw-settings .rd-modal.rd-mem-modal {
   height: min(80vh, 720px);
 }
-.onw-settings .rd-mem-count {
-  margin-top: -6px;
-  font-size: var(--text-xs);
-  color: var(--faint);
+/* The change box stays in view at the bottom while a long list scrolls, in Settings and in the
+   dialog alike; the ring is the shell's own colour so rows don't show around it, and on a phone
+   it clears the home indicator. When the list or a topic is short it is pushed to the bottom. */
+.onw-settings .rd-set-body > .rd-mem-browser,
+.onw-settings .rd-set-body > .rd-mem-detail {
+  flex: 1 0 auto;
+}
+.onw-settings .rd-mem-dock {
+  margin-top: auto;
+  position: sticky;
+  /* 0, not the safe-area inset: the scroll pane's bottom padding already holds it */
+  bottom: 0;
+  z-index: 1;
+  /* Solid from the box's top down to the pane's bottom edge (a home-indicator inset included),
+     so no row shows beside or beneath it: copies stepped down, each starting at the box's top.
+     Shadows, not a block below the box — a block is content, and let the pane scroll past its
+     end, the box riding up over empty space. */
+  box-shadow:
+    0 var(--space-4) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9)) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9) * 2) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9) * 3) 0 var(--space-4) var(--modal-bg);
+}
+/* Above it, rows fade out instead of meeting a hard edge — the fade under Documents' filter
+   chips (vault.css), drawn as a gradient because masking the pane would fade the box too. */
+.onw-settings .rd-mem-dock::before {
+  content: '';
+  position: absolute;
+  inset-inline: calc(var(--space-4) * -1);
+  bottom: 100%;
+  height: var(--space-7);
+  background: linear-gradient(to bottom, transparent, var(--modal-bg));
+  pointer-events: none;
+}
+.onw-settings .rd-mem-modal .rd-mem-browser,
+.onw-settings .rd-mem-modal .rd-mem-detail {
+  flex: 1 0 auto;
+}
+.onw-settings .rd-mem-modal .rd-mem-dock {
+  bottom: 0;
+  box-shadow: 0 20px 0 20px var(--modal-bg);
 }
 .onw-settings .rd-mem-empty {
   flex: 1;
@@ -1337,7 +1370,7 @@
   justify-content: center;
   text-align: center;
   padding: 24px 12px;
-  font-size: 13px;
+  font-size: var(--text-base);
   color: var(--faint);
 }
 .onw-settings .rd-fact.rd-fact-skel {
@@ -1345,6 +1378,241 @@
   align-items: stretch;
   gap: 8px;
   padding: 14px 13px;
+}
+/* Settings → Memory's inline browser (MemoryBrowser), laid out like Claude's memory. Type sizes are
+   the app's tokens; colours are the theme's ink/muted/faint. */
+.onw-settings .rd-mem-browser,
+.onw-settings .rd-mem-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  /* scrolled to on opening a topic: keep the container's top padding visible */
+  scroll-margin-top: 24px;
+}
+.onw-settings .rd-mem-head {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.onw-settings .rd-mem-sec {
+  display: flex;
+  flex-direction: column;
+}
+.onw-settings .rd-mem-sec-h {
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--ink);
+  padding: 0 12px 10px;
+}
+.onw-settings .rd-mem-sec-note {
+  margin-top: -4px;
+  padding: 0 12px 12px;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--muted);
+}
+/* a topic page's Details, laid out like Claude's: the text starts where the "Details" label ends
+   (about 3.2 of its characters) and each dot sits under the label's middle — drawn here, since
+   the browser's own marker can't be placed that precisely */
+.onw-settings .rd-mem-field > .ui-list {
+  --rd-mem-indent: calc(var(--text-sm) * 3.2);
+  list-style: none;
+  padding-inline-start: var(--rd-mem-indent);
+}
+.onw-settings .rd-mem-field > .ui-list > li {
+  /* the body size, as Summary and Last updated (.ui-list alone is a size up) */
+  font-size: var(--text-base);
+  position: relative;
+}
+.onw-settings .rd-mem-field > .ui-list > li::before {
+  content: '';
+  position: absolute;
+  left: calc(var(--rd-mem-indent) / -2 - 2px);
+  top: calc(0.75em - 2px);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+/* "Moved out of memory": the header is a disclosure button, its rows read like topic rows */
+.onw-settings .rd-mem-bullet-until {
+  color: var(--muted);
+  white-space: nowrap;
+}
+/* a topic row: a faint hairline only BETWEEN rows, a rounded wash and Edit/Delete on hover */
+.onw-settings .rd-mem-topic {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.onw-settings .rd-mem-topic + .rd-mem-topic {
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-topic:hover {
+    background: color-mix(in srgb, var(--ink) 5%, transparent);
+    border-radius: var(--radius-lg);
+  }
+}
+.onw-settings .rd-mem-topic-open {
+  display: grid;
+  /* a fixed date column, so names, descriptions and dates line up row to row */
+  grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.6fr) 8.5em;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
+  padding: 14px 12px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.onw-settings .rd-mem-topic-open:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+/* one size for name, description and date — the app's body size — only the colour steps down */
+.onw-settings .rd-mem-topic-name {
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+.onw-settings .rd-mem-topic-preview {
+  font-size: var(--text-base);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.onw-settings .rd-mem-topic-date {
+  font-size: var(--text-base);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.onw-settings .rd-mem-topic-acts {
+  display: flex;
+  gap: 4px;
+  padding-right: 8px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.onw-settings .rd-mem-topic:focus-within .rd-mem-topic-acts {
+  opacity: 1;
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-topic:hover .rd-mem-topic-acts {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .onw-settings .rd-mem-topic-acts {
+    opacity: 1;
+  }
+}
+.onw-settings .rd-mem-topic-acts .rd-fact-ibtn {
+  width: 32px;
+  height: 32px;
+}
+/* an open item or older memory: a topic row whose text runs where the name and summary go */
+.onw-settings .rd-mem-fact-body {
+  cursor: default;
+}
+.onw-settings .rd-mem-fact-t {
+  grid-column: 1 / 3;
+  font-size: var(--text-base);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+/* rows that swipe (touch): the hairline sits between the swipe wrappers */
+.onw-settings .rd-mem-sec > .ui-swipe + .ui-swipe {
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+/* a swiping bullet gets a taller face, so its actions are big enough to tap; the dot drops to stay
+   level with the text */
+.onw-settings .rd-mem-bullet--swipe .ui-swipe-face {
+  padding-block: var(--space-2);
+}
+.onw-settings .rd-mem-field > .ui-list > li.rd-mem-bullet--swipe::before {
+  top: calc(0.75em - 2px + var(--space-2));
+}
+/* a topic's own page */
+.onw-settings .rd-mem-back,
+.onw-settings .rd-set-back {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px 4px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-base);
+  font-weight: 600;
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-back:hover,
+  .onw-settings .rd-set-back:hover {
+    color: var(--ink);
+  }
+}
+.onw-settings .rd-mem-detail-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.onw-settings .rd-mem-detail-title {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--ink);
+}
+.onw-settings .rd-mem-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: var(--text-base);
+  color: var(--ink);
+}
+.onw-settings .rd-mem-field-label {
+  font-size: var(--text-sm);
+  color: var(--faint);
+}
+/* a bullet's Edit/Forget surface on hover (always on touch) */
+.onw-settings .rd-mem-bullet-t {
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-bullet-acts {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: 6px;
+  vertical-align: middle;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.onw-settings .rd-mem-bullet:focus-within .rd-mem-bullet-acts {
+  opacity: 1;
+}
+@media (hover: hover) {
+  .onw-settings .rd-mem-bullet:hover .rd-mem-bullet-acts {
+    opacity: 1;
+  }
+}
+@media (hover: none) {
+  .onw-settings .rd-mem-bullet-acts {
+    opacity: 1;
+  }
+}
+.onw-settings .rd-mem-bullet-acts .rd-fact-ibtn {
+  width: 24px;
+  height: 24px;
+}
+.onw-settings .rd-mem-bullet-edit {
+  list-style: none;
+  margin-left: calc(-1 * var(--space-8));
 }
 /* "Forget this memory?" — a small confirm above the memory dialog */
 .onw-settings .rd-confirm-scrim {
@@ -1390,32 +1658,6 @@
 .onw-settings .rd-fact {
   transition: background 0.12s ease;
 }
-/* `> .rd-fact-acts` outranks `.rd-fact > div { flex: 1 }`, which would stretch the group */
-.onw-settings .rd-fact > .rd-fact-acts {
-  flex: none;
-  display: flex;
-  gap: 2px;
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-.onw-settings .rd-fact:focus-within > .rd-fact-acts {
-  opacity: 1;
-}
-@media (hover: hover) {
-  .onw-settings .rd-fact:not(.rd-fact-edit):hover {
-    background: color-mix(in srgb, var(--ink) 5%, var(--surface));
-  }
-  .onw-settings .rd-fact:hover > .rd-fact-acts {
-    opacity: 1;
-  }
-}
-/* same selector as the hiding rule above — a plain `.rd-fact-acts` lost on specificity and the
-   icons stayed invisible on a phone */
-@media (hover: none) {
-  .onw-settings .rd-fact > .rd-fact-acts {
-    opacity: 1;
-  }
-}
 .onw-settings .rd-fact-ibtn {
   display: grid;
   place-items: center;
@@ -1460,15 +1702,76 @@
   justify-content: flex-end;
   gap: 6px;
 }
-/* memory dialog footer: "Tell Lucius what to change" above the dialog's own buttons */
-.onw-settings .rd-mem-foot {
-  flex: 1;
-  min-width: 0;
+/* Claude-style composer: one pill, the send is a round button inside it */
+/* What the last "Tell Lucius" sentence changed, above the box until dismissed or replaced */
+.onw-settings .rd-mem-changes {
+  margin-bottom: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  font-size: var(--text-base);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.onw-settings .rd-mem-changes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.onw-settings .rd-mem-changes-x {
+  display: inline-grid;
+  place-items: center;
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.onw-settings .rd-mem-changes-x:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.onw-settings .rd-mem-changes-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
 }
-/* Claude-style composer: one pill, the send is a round button inside it */
+.onw-settings .rd-mem-change-meta {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.onw-settings .rd-mem-change-kind {
+  font-weight: 600;
+  color: var(--ink);
+}
+.onw-settings .rd-mem-change-where {
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-change-kind.is-removed {
+  color: var(--bad);
+}
+.onw-settings .rd-mem-change-t {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-change-t.is-gone {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.onw-settings .rd-mem-change-was {
+  color: var(--faint);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
 .onw-settings .rd-mem-ask {
   display: flex;
   align-items: center;
@@ -1490,7 +1793,7 @@
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 13.5px;
+  font-size: var(--text-base);
   padding: 7px 0;
 }
 .onw-settings .rd-mem-ask-input::placeholder {
@@ -2707,6 +3010,15 @@
     height: 85vh;
     height: 85dvh;
   }
+  /* a topic row stacks: name and date on top, the preview under them */
+  .onw-settings .rd-mem-topic-open {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 4px;
+  }
+  .onw-settings .rd-mem-topic-preview {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
   /* the forget confirm docks to the bottom edge like the dialog it sits over */
   .onw-settings .rd-confirm-scrim {
     padding: 0;
@@ -3391,4 +3703,112 @@
   .onw-settings .rd-row--option > .rd-steps {
     gap: var(--space-3);
   }
+}
+
+/* Settings → Memory → Start import: the three-step dialog (MemoryImport) */
+.onw-settings .rd-mi {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+}
+.onw-settings .rd-mi > * {
+  max-width: 100%;
+}
+.onw-settings .rd-mi-lead {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.onw-settings .rd-mi-prompt {
+  align-self: stretch;
+  margin: 0;
+  padding: 12px 14px;
+  max-height: 280px;
+  overflow: auto;
+  white-space: pre-wrap;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--ink);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+.onw-settings .rd-mi-paste {
+  align-self: stretch;
+  resize: vertical;
+  min-height: 180px;
+}
+.onw-settings .rd-mi-count {
+  align-self: flex-end;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.onw-settings .rd-mi-count.over {
+  color: var(--bad);
+}
+.onw-settings .rd-mi-error {
+  align-self: stretch;
+  padding: 9px 12px;
+  border: 1px solid var(--bad);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-base);
+  color: var(--bad);
+}
+.onw-settings .rd-mi-group {
+  align-self: stretch;
+}
+.onw-settings .rd-mi-group-h {
+  margin: 0 0 6px;
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--ink);
+}
+.onw-settings .rd-mi-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 0;
+}
+.onw-settings .rd-mi-item + .rd-mi-item {
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
+}
+.onw-settings .rd-mi-item input[type='checkbox'] {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 2px;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+.onw-settings .rd-mi-item input[type='checkbox']:disabled {
+  cursor: default;
+}
+.onw-settings .rd-mi-item-body {
+  flex: 1;
+  min-width: 0;
+}
+.onw-settings .rd-mi-item-body label {
+  display: block;
+  font-size: var(--text-base);
+  color: var(--ink);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mi-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.onw-settings .rd-mi-foot-gap {
+  flex: 1;
+}
+.onw-settings .rd-mi-said {
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  overflow-wrap: anywhere;
 }

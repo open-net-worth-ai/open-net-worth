@@ -16,9 +16,9 @@ written for that instrument absorbs it. The intent's ``thesis`` text is stored a
 Downgrade copies each thesis's reason/buy_below/buy_above/fair_value back onto the matching watch
 item (``reason`` as the intent's ``thesis``) and drops the table; role, breaks_if, stop and trim are lost on downgrade.
 
-Revision ID: 202610271200_investment_theses
-Revises: 202610251700_statement_previews
-Create Date: 2026-10-27
+Revision ID: 202610290100_investment_theses
+Revises: 202610272100_memory_topic_summaries
+Create Date: 2026-10-29
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ from datetime import datetime, timezone
 import sqlalchemy as sa
 from alembic import op
 
-revision = "202610271200_investment_theses"
-down_revision = "202610251700_statement_previews"
+revision = "202610290100_investment_theses"
+down_revision = "202610272100_memory_topic_summaries"
 branch_labels = None
 depends_on = None
 

@@ -33,7 +33,7 @@ out extending the watch item:
   `update_watchlist_items.intent` write the thesis's four intent fields (checked before the item is
   written, so a refusal changes neither). The intent's `thesis` key is the stored `reason`
   (`INTENT_TO_THESIS`). Only a ticker with no instrument row yet keeps `intent` on the item (no
-  network on that path); revision `202610271200_investment_theses` moves every matchable intent
+  network on that path); revision `202610290100_investment_theses` moves every matchable intent
   and leaves the rest, and the first thesis written for that instrument absorbs it. Ticker →
   instrument matching is `price_source_id`, then a unique bare symbol, everywhere (crypto).
 - The asset page shows it as the "Your Thesis" rail card; the role's meaning sits behind an `i`.

@@ -2,6 +2,7 @@ import logging
 from datetime import datetime
 from typing import Optional
 
+from backend.ai.memory_structure import ROUTING_GUIDE
 from backend.core.errors import MissingFxRateError
 from backend.core.user_time import user_now, user_today
 from backend.services.fx_cache import load_fx_cache
@@ -58,30 +59,10 @@ def _fmt_goals(ccy: str = "USD") -> str:
     return "\n".join(lines)
 
 
-def _fmt_memory() -> str:
-    """
-    Render the cross-session memory block ("WHAT YOU REMEMBER"), grouped by tier.
-    Returns "" when there's nothing to remember so new users get no noise.
-    Also returns "" when the global memory toggle is OFF.
-
-    Rendering rules (cost-opt):
-    - Hard cap of 30 facts: the newest ten explicit-source facts (what the user asked to be
-      remembered), then the NEWEST of everything else. It used to fill by ascending
-      created_at, keeping the oldest facts and dropping everything learned since (owner
-      report 2026-10-13: a 117-fact book). Past the cap the header says how many exist and
-      points at ``recall_memory``, which searches them all.
-    - Sort within each group by (created_at, id) — a stable key that does NOT
-      churn bytes when updated_at is touched on every extraction pass.  Byte-stable
-      output is required so the semi-stable cache block another lane is adding does
-      not get busted by no-op memory touches.
-    - Each fact's content is truncated to 240 chars with an ellipsis so a single
-      verbose fact can't balloon the block.
-    - Target ≤8K chars total (30 facts × ~242 chars each + ~200-char header ≈ 7.5K).
-    """
-    _FACT_RENDER_CAP = 30
-    _EXPLICIT_PROTECTED = 10
-    _CONTENT_TRUNCATE = 240
-
+def _fmt_memory(handles: bool = True) -> str:
+    """The cross-session memory block ("WHAT YOU REMEMBER"): every live fact, whole, by section
+    and topic — see ``memory_render``. "" when there is nothing to remember or the global memory
+    toggle is OFF. Logs sizes only, never fact text."""
     try:
         from backend.db.memory_settings_store import MemorySettingsStore
 
@@ -91,68 +72,38 @@ def _fmt_memory() -> str:
         pass
 
     try:
+        from backend.ai.memory_render import render_memory_block
         from backend.db import MemoryStore
 
-        facts = MemoryStore().active_facts()
+        text, stats = render_memory_block(MemoryStore().remembered_facts(), handles=handles)
     except Exception:
         return ""
-    if not facts:
+    if text:
+        logger.info("memory_injected %s", stats)
+    return text
+
+
+def _fmt_chat_search_line() -> str:
+    """The one line that tells the model it can look up an earlier conversation — only while the
+    "Search and reference chats" setting is on (and never on the public demo, which refuses the
+    tool). Lives with the memory block, in the half that already changes with settings."""
+    try:
+        from backend.core.config import get_settings
+        from backend.db.memory_settings_store import MemorySettingsStore
+
+        if get_settings().demo_mode or not MemorySettingsStore().search_chats():
+            return ""
+    except Exception:
         return ""
-
-    # created_at then id: both stable across the updated_at touches every extraction makes.
-    def _newest_first(fs: list[dict]) -> list[dict]:
-        return sorted(fs, key=lambda f: (f.get("created_at", ""), f.get("id", "")), reverse=True)
-
-    protected = _newest_first([f for f in facts if f.get("source") == "explicit"])[
-        :_EXPLICIT_PROTECTED
-    ]
-    kept = {f.get("id") for f in protected}
-    rest = _newest_first([f for f in facts if f.get("id") not in kept])
-    selected = protected + rest[: _FACT_RENDER_CAP - len(protected)]
-
-    # Within each tier group, render in stable (created_at, id) order.
-    def _stable_key(f: dict) -> tuple:
-        return (f.get("created_at", ""), f.get("id", ""))
-
-    standing = sorted([f for f in selected if f.get("tier") != "time_bound"], key=_stable_key)
-    current = sorted([f for f in selected if f.get("tier") == "time_bound"], key=_stable_key)
-
-    def _render(content: str) -> str:
-        c = (content or "").strip()
-        if len(c) <= _CONTENT_TRUNCATE:
-            return c
-        return c[: _CONTENT_TRUNCATE - 1] + "…"
-
-    # Header carries the anti-recitation rule inline (cheaper than a divider block) —
-    # this is the one instruction in this render with direct behavioral teeth: it's
-    # the same "never recite unprompted" rule as RESPONSE CALIBRATION, restated here
-    # because this block is the thing most likely to get narrated back verbatim.
-    # Regression-pinned wording: tests/test_response_calibration_prompt.py::
-    # test_memory_block_has_reference_only_framing.
-    lines = [
-        "",
-        "WHAT YOU REMEMBER (reference — apply when relevant; never recite these facts back unprompted):",
-    ]
-    if len(facts) > len(selected):
-        lines.append(
-            f"(Showing {len(selected)} of {len(facts)} remembered facts — the newest. When the "
-            "user mentions something you may have been told that isn't here, call recall_memory.)"
-        )
-    if standing:
-        lines.append("Standing facts:")
-        lines += [f"• {_render(f.get('content', ''))}" for f in standing]
-    if current:
-        if standing:
-            lines.append("")
-        lines.append("Current plans & context:")
-        lines += [f"• {_render(f.get('content', ''))}" for f in current]
-    return "\n".join(lines)
+    return "\nIf the user refers to an earlier conversation, search_past_conversations can find it."
 
 
 def memory_block() -> str:
     """The "WHAT YOU REMEMBER" block for a model call outside a chat turn (the daily briefing)
-    — the same facts and framing a turn gets, "" when there are none or memory is off."""
-    return _fmt_memory()
+    — the same facts and framing a turn gets, "" when there are none or memory is off. No
+    citation handles: nothing outside a chat turn strips them, so a model that copied one
+    would show it on screen."""
+    return _fmt_memory(handles=False)
 
 
 def _fmt_skills_catalog(
@@ -198,14 +149,13 @@ def _fmt_skills_catalog(
 
 def _fmt_lessons(agent_id: str) -> str:
     """Render an agent's "WHAT YOU'VE LEARNED" block (P3-AG5 §5.2) — the per-agent lessons the
-    reflection loop distilled from past runs + user feedback, formatted exactly like
-    ``_fmt_memory``'s "WHAT YOU REMEMBER" block (durable first, then time_bound). Returns ""
-    when the agent has no active lessons.
+    reflection loop distilled from past runs + user feedback. Its own layout, unrelated to the
+    memory block's sections and topics. Returns "" when the agent has no active lessons, or when
+    the formatter cannot be loaded.
 
     The canonical formatter lives in ``services.agent_reflection`` (so ``services.agents``'s
-    run-prompt build can use it without an ``ai`` up-import — Contract 3); this is the ai-side
-    mirror, delegating to it so the two render identically. Same trust level as the memory
-    block — injected text, no tool power."""
+    run-prompt build can use it without an ``ai`` up-import — Contract 3); this delegates to it.
+    Same trust level as the memory block — injected text, no tool power."""
     try:
         from backend.services import agent_reflection
 
@@ -590,7 +540,7 @@ def build_system_prompt(
         fire_str = "unknown"
 
     today = user_today().strftime("%Y-%m-%d")
-    memory_block = _fmt_memory()
+    memory_block = _fmt_memory() + _fmt_chat_search_line()
     skills_block = _fmt_skills_catalog(model=model, base_url=base_url)
     tool_catalog_block = _fmt_tool_catalog(include_external=True)
     fresh = is_empty_book()
@@ -661,7 +611,7 @@ Never obsequious, never chatty, never apologetic for having an opinion.
 - PRONOUNS: never infer the user's pronouns from their name. A name is not a pronoun — default
   to addressing them directly as "you" (which is almost always what a reply needs anyway), and
   fall back to they/them only where a third-person reference is truly unavoidable. If the user
-  states their pronouns, use those; that goes in PROFILE notes (below) so it persists.
+  states their pronouns, use those and remember them (remember_fact) so they persist.
 
 RESPONSE CALIBRATION — DEPTH FOLLOWS THE MESSAGE
 Match the depth of every reply to the user's MESSAGE, never to how much context you hold.
@@ -722,7 +672,12 @@ CUSTODIAN ACCOUNT MODEL — each broker/exchange has ONE securities account name
 
 GATHERING DATA — whenever you are about to ask the user to type out holdings, transactions, balances, an asset's details or loan terms, offer in the same question to read it from a screenshot, statement or photo instead (their broker or banking app's screen, a PDF, a photo of a paper document), whichever is less effort for them. Call show_guide(guide="attach") to light up the paperclip ONLY when they are tracking spending or have said they have a statement or screenshot; for anyone else the offer in words is enough. If a connector covers that bank or broker (e.g. IBKR), mention connecting it too. Read every figure off what they send and confirm the list back before saving anything.
 
-PROFILE ON DEMAND — the profile fills in as it is needed, never as a form up front. When an answer genuinely depends on a field the FINANCIAL PROFILE leaves empty — age or date of birth for a retirement or age-based question; where they live, citizenship or tax residency for a tax or country rule; marital status for a household plan; employment, monthly income or spending for a budget or the retirement outlook — ask for that one thing in one line with the reason ("this depends on where you're taxed — where is that?"), save it with update_profile, then answer. Never ask for a field the question at hand does not need, and never re-ask one they skipped. NEVER invent a value to store: a bare age ("I'm 44") is not a birth date, so no January 1, no mid-year guess. Use the age as stated for the answer at hand; if the answer needs it saved, ask for their date of birth and save only a date they give. If they give only a month and year, ask once whether to save the 1st of that month, and save it only on a clear yes. If they would rather not, store nothing. An ESTIMATE is not a stated value either: you may say "your real spending is probably nearer X" as an estimate, but never offer to save it, or any figure they did not state, to the profile, plan or budget. They can refine any of it in Settings > Profile; anything no field covers (a preference, a life event) goes in the profile's `notes` field.
+PROFILE ON DEMAND — the profile fills in as it is needed, never as a form up front. When an answer genuinely depends on a field the FINANCIAL PROFILE leaves empty — age or date of birth for a retirement or age-based question; where they live, citizenship or tax residency for a tax or country rule; marital status for a household plan; employment, monthly income or spending for a budget or the retirement outlook — ask for that one thing in one line with the reason ("this depends on where you're taxed — where is that?"), save it with update_profile, then answer. Never ask for a field the question at hand does not need, and never re-ask one they skipped. NEVER invent a value to store: a bare age ("I'm 44") is not a birth date, so no January 1, no mid-year guess. Use the age as stated for the answer at hand; if the answer needs it saved, ask for their date of birth and save only a date they give. If they give only a month and year, ask once whether to save the 1st of that month, and save it only on a clear yes. If they would rather not, store nothing. An ESTIMATE is not a stated value either: you may say "your real spending is probably nearer X" as an estimate, but never offer to save it, or any figure they did not state, to the profile, plan or budget. They can refine any of it in Settings > Profile; anything no field covers (a preference, a life event) is memory — see MEMORY below.
+
+MEMORY, INSTRUCTIONS OR PROFILE? — three places hold what you know about the user, and a fact lives in exactly one. The profile holds what the app has a field for. INSTRUCTIONS FROM THE USER (below, the profile's notes) are the user's standing rules for how you behave: follow them on every turn, and change them with update_profile only when asked or when the user states a rule they would expect to find there, by editing or adding a line, never rewriting their text wholesale. Memory (WHAT YOU REMEMBER, below) holds everything else worth keeping, and a background pass never writes to the instructions. Save to memory with remember_fact only when the guide sends the fact there; never save what the guide sends elsewhere, and never ask the user which place to use.
+{ROUTING_GUIDE}
+
+CITING MEMORY — each remembered fact ends in a bracketed handle such as [m7a88f8]. When a remembered fact shaped your reply, end the reply with <memory-used>m7a88f8 m3c01d2</memory-used> naming the handles of the facts you used, and nothing after it. Leave the tag off when no remembered fact shaped the reply, and cite only handles you were shown. The app hides the tag: never mention it or the handles in what you say.
 
 DERIVED FIGURES — every number you state that is not a tool's own output (a sum, difference, remainder like "everything else", share or percentage, a year or age gap) comes from the `calculate` tool, one expression per figure, called together when several are needed. Never do the arithmetic in your head: a table row of S$20,396 − S$3,105 − S$2,150 once read S$14,141 for S$15,141. Prefer a total the tool already returns over recomputing it, and for retirement ages and years to go quote the fields simulate_retirement returns.
 
@@ -798,7 +753,7 @@ LIABILITIES:
 {liabilities_str}
 {
         f'''
-PERSONAL NOTES:
+INSTRUCTIONS FROM THE USER:
 {notes}'''
         if notes
         else ""

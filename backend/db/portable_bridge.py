@@ -432,6 +432,8 @@ from backend.db.tables import (
     match_decisions,
     match_reviews,
     memory,
+    memory_forgotten,
+    memory_topic_summaries,
     merge_journal,
     news_sources,
     notification_log,
@@ -1192,6 +1194,11 @@ def _wipe_dashboard_layouts(conn: Connection) -> list[Path]:
 
 
 def _wipe_memory(conn: Connection) -> list[Path]:
+    # A forgotten fact's fingerprint belongs to the memory it was forgotten from: a reset or a
+    # whole-book import that replaces memory replaces it too (it is not exported on its own).
+    _capture_then_delete(conn, memory_forgotten, "hash")
+    # Each topic's generated summary is derived from the facts; it goes with them.
+    _capture_then_delete(conn, memory_topic_summaries, "topic_key")
     return _capture_then_delete(conn, memory, "id")
 
 

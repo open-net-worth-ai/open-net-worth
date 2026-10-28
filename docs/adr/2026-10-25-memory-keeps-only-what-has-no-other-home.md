@@ -429,3 +429,147 @@ permission table.
   with review; the topic detail view.
 - **Not now:** the in-chat "memory updated" line; a per-conversation "don't remember this chat";
   special handling for other installs' migration.
+
+## Amendment 2026-10-27 (5) — final-review rulings on decay, sensitivity and the first sort
+
+Amendment 4 still wins on everything it says; this only sharpens the rules the final review found
+unsafe on a real book.
+
+- **The unused clock** is the newest of the last citation, the last time the user said the fact
+  again, the last user edit (`edited_at`), the day the sort filed it and its creation. Being shown
+  in the prompt never counts. While no live fact has been cited for 90 days, nothing is retired
+  as unused: the missing signal means citations are not arriving, not that the facts are unused.
+  A plan's clock also counts its filing day and a user edit.
+- **Expiry follows the section, not the legacy tier.** A filed fact expires on its `expires_at`,
+  and an Open item always has one. A `durable` legacy fact filed outside Open items drops its
+  stray date.
+- **Sensitive facts stay out while the setting is off.** The prompt block and recall leave out a
+  fact flagged sensitive (it stays in the list and returns when the setting is turned on). The
+  sort flags sensitive facts, and with the setting off it retires them with the new reason
+  `sensitive` ("Not kept — sensitive").
+- **Filing runs the guards a new fact meets.** A legacy fact over 280 characters is filed only with
+  a shortened wording the sort proposes — the one exception to "the sort never edits"; one with a
+  full card, account or ID number is retired `sensitive`.
+- **Idle extraction** skips Captures, and stops retrying a conversation after three failed
+  extractions in a row until it has new messages.
+- **The first sort of a live book** is reviewed with the app stopped, because the background sort
+  starts at boot — `docs/ai/MEMORY_MIGRATION.md`.
+
+## Amendment 6 (2026-10-27) — the sensitive-topics setting governs saving only
+
+Supersedes amendment 5's "Sensitive facts stay out while the setting is off" (R24). Decided by the
+owner in session.
+
+- **The setting governs SAVING only.** With it off, a new save the model marks sensitive is refused
+  (`sensitive_off`) — the extractor's `new`, an update that writes new sensitive wording to a live
+  fact, `remember_fact` and import. The marker is the model's per-write yes/no and nothing more.
+- **No `sensitive` field is stored on a fact.** A saved fact is used like any other — in the reply
+  prompt, recall, the extraction listing, the daily merge and export — whatever the setting.
+- **Filing a legacy fact is not a new save.** The sort files it whatever its topic and setting, and
+  its prompt no longer asks for a sensitive flag.
+- **The retire reason `sensitive` is renamed `identifier`** ("Not kept — had a card, account or ID
+  number") and is kept only for a legacy fact that carries a full card, account or ID number or a
+  password; those are never stored, whatever the setting.
+
+## Amendment 7 (2026-10-27) — Profile; a model never deletes; a forgotten fact stays forgotten
+
+Decided by the owner in session (rulings R29 and R30, and the unused-clock scope); amends
+amendment 4's topic names and amendment 5's unused clock.
+
+- **The You topic is "Profile"** (R30), with **Preferences** beside it. The routing guide's first
+  row now reads "a Settings profile field (update_profile) — not memory" and its eighth
+  "Memory · You · Profile", and the guide's header, the sort prompt and the import prompt say the
+  two are different homes. The write choke files a topic "About you" (any case) in You as
+  "Profile"; revision `202610271800_memory_forgotten` renamed the ones already stored. A data step
+  in the revision, not a fix-up in the sort or tidy, because it is one-time, runs before anything
+  reads the book, and leaves no code behind that every later pass would run for nothing.
+- **A model never deletes a fact** (R29). An extraction `remove` retires the fact `stale`; a
+  tidy merge retires the merged-away fact with the new reason `merged` ("Merged into another
+  memory"). Both wait under "Moved out of memory" and are purged after 30 days like any retire.
+  The tidy's "more than half of a topic" refusal counts merged retires, and an id a reply both
+  updates and removes is kept. The choke backs this up: an implicit `remove` of a fact that is
+  neither retired nor expired is a `stale` retire.
+- **A forgotten fact stays forgotten** (R29). A user-initiated forget — the forget button,
+  Forget everything, deleting a topic, `forget_fact`, a "Tell Lucius" removal — still
+  hard-deletes and records a SHA-256 of the fact's text, casefolded with punctuation and
+  whitespace collapsed, in `memory_forgotten` (the hash only, never the text). The choke refuses
+  an implicit `new`, or an implicit update rewriting a live fact, that matches one (`forgotten`);
+  filing a legacy fact is not a new save and is not checked. An explicit save of the same text
+  — the user asks again — is allowed and clears the fingerprint. A paraphrase has a different
+  hash and is not caught; that is accepted. A reset or a whole-book import wipes the
+  fingerprints with the memory.
+- **Lucius's own `remember_fact` is checked too** (R31, fix round 1). A tool call is not the user
+  asking: it refuses a forgotten match (`forgotten`, telling Lucius to ask the user first) unless
+  it carries `user_asked: true` — "only when the user, in their latest message, explicitly asked
+  you to remember this" — which saves it and clears the fingerprint. The same holds for an MCP
+  client. The settings page, import and "Tell Lucius" are the user's own actions and unchanged.
+  A fact carrying a full card, account or ID number leaves no fingerprint when forgotten; the
+  fingerprint folds Unicode variants (NFKC); and the sort may not retire as `unused` or `merged`,
+  the tidy's own verdicts.
+- **The unused clock covers only background-learned facts in Other.** A fact the user saved
+  (`source: explicit`) or one in You or Money is never retired as `unused`. Plans and Open items
+  keep their own decay, and nothing is retired as unused while no citations arrive.
+
+## Amendment 8 (2026-10-27) — a one-line Summary per topic
+
+Decided by the owner in session. Each topic page shows, between **Last updated** and **Details**,
+a one-line **Summary** of what the topic covers ("Who they are — location, employer, background,
+languages"), as Claude's memory pages do. It is display-only: not a fact, never written through
+`apply_memory_change`, and never added to Lucius's prompt (the prompt keeps rendering the facts).
+It is generated in the idle sweep, after extraction, the sort and the tidy, by
+`ai.memory_summaries.refresh_summaries`: one memory-model call (`source=memory_summary`) for up to
+20 topics whose stored row is missing or whose digest of live fact ids and text has changed. A
+returned line is kept only for a topic that was sent, at most 120 characters, with no identifier
+and no run of more than three digits. A topic sent with no usable line back backs off until its
+facts change or 24 hours pass, behind topics never tried, so a few stubborn topics cannot starve
+the rest. Rows live in `memory_topic_summaries` (revision `202610272100`), checkpoint-excluded
+because they are derived. A topic with no live facts loses its row at once, whatever the memory
+setting: the write choke prunes after any write that removes, retires or moves a fact (no model
+call), the sweep prunes at the start of every tick, and the API and export show only rows whose
+topic still has live facts. The export writes the summary as an italic line under each topic's title. Benchmark case
+T03 holds the line to its length and to restating no number from the facts.
+
+## Amendment 9 (2026-10-28) — one keep test, the house voice, Open items need your words
+
+Decided by the owner in session, after reviewing their own memory once the upgrade sort had run:
+of 99 filed facts, 62 failed the test below — snapshots the ledger holds, bookkeeping threads,
+incidents and the lessons Lucius drew from them, payee-rule copies, stale what-ifs — and nearly
+every Open item was a thread Lucius had left mid-way.
+
+- **One keep test, in every writer** (`memory_structure.KEEP_TEST`, in the extract, sort and
+  import prompts): a fact stays only if it is about the person or their money life, will still be
+  true in three months, and nothing else in the app holds it. Never kept: a lesson about how
+  Lucius should do a task, an incident, an app or connector problem, a suggestion the person did
+  not take up, research results, a what-if. Only the lasting part is stored — no "decided on…",
+  "stated…", "awaiting…" tail; a date stays only when it is the fact.
+- **The house voice** (`memory_voice.VOICE_RULE`): a fact is written about the person, never
+  "User…", "the advisor", "the client" or a leading "As of <date>:". The prompts no longer cast
+  Lucius as an advisor keeping notes on a client — the framing the old memory copied into its
+  facts. The upgrade sort marks a legacy note in the old framing `[reword]` and keeps its new
+  wording only when `memory_voice.keeps_facts` finds every number and date (character for
+  character — a leading "As of <date>:" is the one date it may drop), every quoted text, every
+  name and as many negations intact, and no name the old wording lacked; otherwise the note keeps
+  its old words. This is the sort's second licence to edit, beside shortening one over 280
+  characters. Known limit: a rewording that flips a meaning without touching a number, name or
+  negation ("up" → "down") passes; the sort prompt forbids it, the guard cannot see it.
+- **An Open item needs the person's own words** (`memory_open_items.guard`, on every extraction):
+  a new Open item, or an update moving a fact into Open items, must carry a `quote` found in what
+  the person typed in that conversation — never Lucius's turns, an attachment, a harness note or
+  other context the app adds (`chat_context_markers.is_not_said`) — that shares a content word
+  with the item, so filler like "hmm, maybe" grounds nothing; at most one new Open item is kept
+  per extraction pass. What Lucius offered, proposed or is waiting on never grounds one. The
+  upgrade sort never files an Open item (nothing records that the person asked for an older
+  note); a reply placing one there is a `stale` retire. "Tell Lucius" and `remember_fact` with
+  `user_asked` are the person asking, and are unchanged.
+- **Only Open items expire.** `memory_store.is_expired` (and its frontend mirror in
+  `memoryGroups.ts`) lets a filed fact expire only in Open items, and the write choke stores no
+  date on any other section, so a stray legacy date can no longer retire or hide a Preference. No
+  data migration: the only book already through the upgrade sort is the owner's, cleaned by hand.
+- **The owner's own book** was cleaned by hand from a reviewed list (kept facts rewritten to their
+  lasting part, eight standing rules moved to Instructions for Lucius with the owner's approval,
+  the rest moved out — kept 30 days), not by a migration: no other book has been through the
+  upgrade sort yet, and the sort above now applies the same test.
+- Benchmark cases E19–E23 and S03 hold these rules: an incident, a bookkeeping thread and an
+  untaken offer store nothing; "remind me" makes exactly one Open item; a preference is stored as
+  its kernel; older notes in the old framing are filed in the house voice or moved out, and none
+  becomes an Open item.

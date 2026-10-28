@@ -253,6 +253,14 @@ are pushed for watch signals; the rest stay in the app.
 feed's symbol (`BTC-USD`, `D05.SI`). A just-added ticker's trend and sector comparison appear after
 a minute or two.
 
+**A ticker shows a price but no % change or Prev Close** — the price feed's previous close was
+more than 50 times away from the price (or under a fiftieth of it). No stock really moves that
+much in a day, so the app treats that close as broken data and leaves the change blank rather
+than show a nonsense figure. This happens with thinly traded or near-delisted listings.
+
+**"As of" shows a date but no time** — the live price wasn't available, so the page shows the
+last close the app recorded, dated by its trading day.
+
 **"Last scanned" looks old** — check **Monitoring active** is on in Settings → Intelligence, then
 click **Scan**. If scans keep failing, see [Logs](../operations/logs.md).
 

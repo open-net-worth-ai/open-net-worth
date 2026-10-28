@@ -381,10 +381,11 @@ class UpdateProfileChanges(NestedInput):
     notes: Optional[str] = Field(
         default=None,
         description=(
-            "Free-text catch-all for anything genuinely personal that no structured field "
-            "covers — pronouns, preferred tone/communication style, or any other standing "
-            "instruction the user states about themselves. Not for one-off facts about their "
-            "finances or holdings; those belong in the relevant tool or memory instead."
+            "The user's Instructions for Lucius — standing rules for how you should behave. "
+            "Change them when asked, or when the user states a rule they'd expect to find here; "
+            "edit or add a line, never rewrite their text wholesale. Only standing rules for how "
+            "you should behave — a fact with a profile field goes there; anything else worth "
+            "keeping goes to remember_fact."
         ),
     )
     fire_expected_return_pct: Optional[float] = Field(default=None)

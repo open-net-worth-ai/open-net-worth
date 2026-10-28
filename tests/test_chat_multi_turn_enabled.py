@@ -42,10 +42,6 @@ def _isolate(tmp_path, monkeypatch, db_isolated):
     monkeypatch.setattr(assistant, "_active_tools", lambda: list(assistant.TOOL_SCHEMAS))
     monkeypatch.setattr(assistant, "upsert_session_meta", lambda *a, **k: None)
 
-    async def _noop_memory(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory, raising=False)
     live_sessions._reset_for_tests()
     pending_injection._reset_for_tests()
     turns.set_inline_for_tests(False)

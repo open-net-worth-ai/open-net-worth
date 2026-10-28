@@ -69,6 +69,7 @@ current base; otherwise recompute via `txn_base_amount()`.
 | Owned assets | `owned_assets_service.apply_owned_asset_change` |
 | Intel stories / timeline | `intel_stories_service.apply_story_change` |
 | Intel claims (cross-subject push dedup) | `claims_service.apply_claim_push` |
+| Memory | `memory_write.apply_memory_change` |
 
 - `ledger.resolve_transaction_row(...)` is the resolution half, NO store write — previews render
   exactly what a write would store.
@@ -256,6 +257,7 @@ One line each — full reasoning and the scar behind each is in
 
 **AI harness**
 - Tool results are bounded AT THE TOOL — filter before you cap.
+- Memory keeps only what has no other home — five fixed sections, a topic name per fact, every fact shown in full with its date, ≤280 chars; memory is context, never truth; one routing guide `ai.memory_structure.ROUTING_GUIDE`; one writer `ai.memory_write.apply_memory_change`; a background pass never deletes a fact (it retires), and a user's forget leaves only a hash in `memory_forgotten` that refuses an implicit re-add (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home`, amendment 7).
 - Codex gets our tools as real (dynamic) tool calls that the HOST captures and runs — Codex never
   executes one; text `<tool_call>` is the fallback (ADR `2026-10-03-codex-tools-are-native-calls-the-host-runs`).
   The Codex turn stays OPEN across tool rounds — the call parks and the next round answers it
@@ -267,6 +269,8 @@ One line each — full reasoning and the scar behind each is in
 - Lucius reads the DB directly, read-only, via `run_sql_query` — the boundary is the connection
   (an allowlist authorizer), never a SQL parser. Denied = `SECRET_TABLES ∪ {connectors}`;
   the operator's own conversations (`sessions`, `session_messages`) are readable — only a demo denies them.
+  On Postgres the boundary is a separate login the APP creates and re-syncs at boot
+  (`db/sql_console_role.py`) — never an operator GRANT step, never `SET ROLE` on the app's connection.
 - One confirm mechanism for every tool: a gated tool stages its OWN call arguments under the
   `tool_use_id`; approval resolves server-side and re-runs the same handler.
 - Every turn goes through `ai/turns.py`, never a bare `asyncio.create_task` (confirm gate fails

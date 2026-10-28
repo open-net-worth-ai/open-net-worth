@@ -1,4 +1,4 @@
-"""Revision 202610271200_investment_theses: watch-item ``intent`` moves onto per-instrument theses (its ``thesis`` text as ``reason``)."""
+"""Revision 202610290100_investment_theses: watch-item ``intent`` moves onto per-instrument theses (its ``thesis`` text as ``reason``)."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from sqlalchemy import create_engine, inspect, text
 from backend.db.alembic_config import make_config
 from backend.db.tables import DEFAULT_BOOK_ID
 
-_PARENT = "202610251700_statement_previews"
-_REVISION = "202610271200_investment_theses"
+_PARENT = "202610272100_memory_topic_summaries"
+_REVISION = "202610290100_investment_theses"
 
 
 def _instrument(conn, iid: str, source_id: str, seq: int) -> None:

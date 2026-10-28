@@ -785,7 +785,6 @@ def tmp_session(monkeypatch):
     import backend.ai.assistant as asst
 
     monkeypatch.setattr(asst, "SESSIONS", {})
-    monkeypatch.setattr(asst, "_last_memory_extract_len", {})
     yield
 
 
@@ -800,7 +799,6 @@ def test_clear_session_deletes_fold_sidecar(db_isolated, monkeypatch):
     import backend.ai.assistant as asst
 
     monkeypatch.setattr(asst, "SESSIONS", {})
-    monkeypatch.setattr(asst, "_last_memory_extract_len", {})
 
     sid = "clear-test"
     asst.SESSIONS[sid] = [{"role": "user", "content": "hi"}]

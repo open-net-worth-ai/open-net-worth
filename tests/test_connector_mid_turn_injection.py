@@ -271,11 +271,6 @@ async def test_end_to_end_a_follow_up_joins_the_running_turn(tg, monkeypatch):
 
     monkeypatch.setattr(assistant, "get_provider", lambda **_k: _Provider())
 
-    async def _noop(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop, raising=False)
-
     bot = _Bot()
     first = asyncio.create_task(
         handlers.handle_message(_update(chat_id, "summarise my spending"), SimpleNamespace(bot=bot))

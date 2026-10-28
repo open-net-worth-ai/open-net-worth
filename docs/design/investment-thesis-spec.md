@@ -76,7 +76,7 @@ watch-rule view of a thesis: `{thesis, buy_below, buy_above, fair_value}`, where
 
 ## Migration from watch intent
 
-Alembic revision `202610271200_investment_theses`:
+Alembic revision `202610290100_investment_theses`:
 
 1. Create `investment_theses`.
 2. For each book's `watchlists` payload, for every ticker item with a non-empty `intent`: find the

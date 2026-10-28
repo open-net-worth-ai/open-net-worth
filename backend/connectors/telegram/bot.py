@@ -6,7 +6,7 @@ import asyncio
 import logging
 import os
 
-log = logging.getLogger("connectors.telegram")
+log = logging.getLogger("backend.connectors.telegram.bot")  # under "backend" → app.log
 
 _app = None  # telegram.ext.Application instance
 _task: asyncio.Task | None = None  # the connect-with-retry supervisor task
@@ -122,6 +122,30 @@ async def _connect(token: str) -> None:
     can time out), then start polling. Sets the module-global _app."""
     global _app
 
+    from backend.connectors.telegram.handlers import BOT_COMMANDS
+
+    _app = _build_app(token)
+    await _app.initialize()
+    await _app.start()
+
+    # Register the command list so Telegram shows the "/" autocomplete panel + menu button.
+    # Best-effort — a failure here must never block the connector from starting.
+    try:
+        from telegram import BotCommand
+
+        await _app.bot.set_my_commands([BotCommand(c, d) for c, d in BOT_COMMANDS])
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Telegram set_my_commands failed: %s", type(exc).__name__)
+
+    # Steal the long-poll session from any previous run by issuing a
+    # zero-timeout getUpdates, which forces Telegram to close it.
+    await _app.bot.get_updates(timeout=0, offset=-1)
+    await _app.updater.start_polling(drop_pending_updates=True)
+    log.info("Telegram connector started (polling mode)")
+
+
+def _build_app(token: str):
+    """The Application with every handler registered — no network I/O."""
     from telegram.ext import (
         Application,
         CallbackQueryHandler,
@@ -131,11 +155,11 @@ async def _connect(token: str) -> None:
     )
 
     from backend.connectors.telegram.handlers import (
-        BOT_COMMANDS,
         handle_callback,
         handle_cost,
         handle_document,
         handle_effort,
+        handle_error,
         handle_help,
         handle_id,
         handle_message,
@@ -156,41 +180,25 @@ async def _connect(token: str) -> None:
     # OpenClaw #20600 / Hermes #26813). The turn-batching critical section in handle_message
     # has no await between its _text_batches read and write, so it stays race-free under
     # cooperative scheduling; same-session turns are still serialized by assistant.run's lock.
-    _app = Application.builder().token(token).concurrent_updates(True).build()
-    _app.add_handler(CommandHandler("start", handle_start))
-    _app.add_handler(CommandHandler("help", handle_help))
-    _app.add_handler(CommandHandler("id", handle_id))
-    _app.add_handler(CommandHandler("model", handle_model))
-    _app.add_handler(CommandHandler("status", handle_status))
-    _app.add_handler(CommandHandler("cost", handle_cost))
-    _app.add_handler(CommandHandler("effort", handle_effort))
-    _app.add_handler(CommandHandler("streaming", handle_streaming))
-    _app.add_handler(CommandHandler("suggestions", handle_suggestions))
-    _app.add_handler(CommandHandler("toolstream", handle_toolstream))
-    _app.add_handler(CommandHandler("new", handle_new))
-    _app.add_handler(CommandHandler("stop", handle_stop))
-    _app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    _app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
-    _app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
-    _app.add_handler(CallbackQueryHandler(handle_callback))
-
-    await _app.initialize()
-    await _app.start()
-
-    # Register the command list so Telegram shows the "/" autocomplete panel + menu button.
-    # Best-effort — a failure here must never block the connector from starting.
-    try:
-        from telegram import BotCommand
-
-        await _app.bot.set_my_commands([BotCommand(c, d) for c, d in BOT_COMMANDS])
-    except Exception as exc:  # noqa: BLE001
-        log.warning("Telegram set_my_commands failed: %s", type(exc).__name__)
-
-    # Steal the long-poll session from any previous run by issuing a
-    # zero-timeout getUpdates, which forces Telegram to close it.
-    await _app.bot.get_updates(timeout=0, offset=-1)
-    await _app.updater.start_polling(drop_pending_updates=True)
-    log.info("Telegram connector started (polling mode)")
+    app = Application.builder().token(token).concurrent_updates(True).build()
+    app.add_handler(CommandHandler("start", handle_start))
+    app.add_handler(CommandHandler("help", handle_help))
+    app.add_handler(CommandHandler("id", handle_id))
+    app.add_handler(CommandHandler("model", handle_model))
+    app.add_handler(CommandHandler("status", handle_status))
+    app.add_handler(CommandHandler("cost", handle_cost))
+    app.add_handler(CommandHandler("effort", handle_effort))
+    app.add_handler(CommandHandler("streaming", handle_streaming))
+    app.add_handler(CommandHandler("suggestions", handle_suggestions))
+    app.add_handler(CommandHandler("toolstream", handle_toolstream))
+    app.add_handler(CommandHandler("new", handle_new))
+    app.add_handler(CommandHandler("stop", handle_stop))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    app.add_handler(CallbackQueryHandler(handle_callback))
+    app.add_error_handler(handle_error)
+    return app
 
 
 async def _teardown_partial() -> None:

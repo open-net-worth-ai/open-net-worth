@@ -733,6 +733,10 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                       })}
                     </span>
                   </>
+                ) : /^\d{4}-\d{2}-\d{2}$/.test(effAsOf!) ? (
+                  // A recorded close from local history is a calendar day with no time; read
+                  // as a UTC instant it showed "Oct 26, 8:00 PM EDT" for Oct 27's close.
+                  fDate(effAsOf!)
                 ) : (
                   // The year is noise almost always — only worth showing once the price is
                   // stale enough to be from a DIFFERENT calendar year (owner ask 2026-09-01).

@@ -20,6 +20,13 @@ from __future__ import annotations
 import json
 import re
 
+from backend.core.chat_context_markers import (  # noqa: F401 — re-exported: the markers' home is core
+    HARNESS_NOTE_CLOSE,
+    HARNESS_NOTE_OPEN,
+    LEGACY_HARNESS_OPENINGS,
+    ONBOARDING_INIT,
+)
+
 # Every shape a model reaches for: our own <tool_call> fence, and the XML-ish form
 # (<function=name><parameter=x><arg_key>…</arg_key><arg_value>…</arg_value>) common to
 # several open-weight models. None of them can occur in prose, which is what makes their
@@ -34,6 +41,7 @@ _RESIDUE_TAG_RE = re.compile(
     r"|invoke|call)(?:_[a-z]+)?(?:[ =][^<>]*)?>",
     re.IGNORECASE,
 )
+
 
 # A message the HARNESS wrote, not the owner. It rides `role: "user"` because that is the
 # only role every transport has — Anthropic grew a real `system` message role (Opus 5 / 4.8 /
@@ -50,10 +58,6 @@ _RESIDUE_TAG_RE = re.compile(
 # this module already strips. Unlike that fence this one carries NO nonce: it makes no
 # security claim, so there is nothing to forge — a reader that trusts it is only deciding
 # whether to draw a bubble, never whether to obey an instruction.
-HARNESS_NOTE_OPEN = "«harness_note»"
-HARNESS_NOTE_CLOSE = "«/harness_note»"
-
-
 def harness_note(text: str) -> str:
     """Wrap harness-authored text so every reader can tell it apart from the owner's."""
     return f"{HARNESS_NOTE_OPEN}{text}{HARNESS_NOTE_CLOSE}"
@@ -67,16 +71,7 @@ def harness_note(text: str) -> str:
 # "[Automated monitor — the following message was delivered to" this way). Matched on a
 # distinctive full opening clause, not a loose keyword, so ordinary prose about
 # monitoring cannot trip it.
-_LEGACY_HARNESS_OPENINGS = (
-    "[Automated monitor — the following message was delivered",
-    # `connectors.chat.confirm.inject_session_note` wrote these BARE too, so every
-    # confirm/discard/deny on a chat channel left a "[System: …]" entry that rendered as
-    # the owner's own message. Matched on each note's full opening clause rather than a
-    # bare "[System: " prefix, so a person who happens to type that is not silenced.
-    "[System: User confirmed and applied via chat:",
-    "[System: User discarded the proposed change via chat:",
-    "[System: Denied — the user declined to run",
-)
+_LEGACY_HARNESS_OPENINGS = LEGACY_HARNESS_OPENINGS
 
 
 # The onboarding kickoff sentinel. `ChatPanel` sends it to make Lucius speak first on a brand-new
@@ -84,7 +79,6 @@ _LEGACY_HARNESS_OPENINGS = (
 # fence above because `ai/prompts.py` and `ai/assistant.py` both match it by EXACT equality —
 # wrapping it would silently break the greeting it exists to trigger. Matched exactly here for the
 # same reason, and so a person who merely BEGINS a message with the token is not silenced.
-ONBOARDING_INIT = "__ONBOARDING_INIT__"
 
 
 def is_harness_note(text: str) -> bool:

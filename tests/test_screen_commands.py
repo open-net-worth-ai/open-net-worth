@@ -221,11 +221,6 @@ def _run_loop(monkeypatch, turns, *, sid, stub_execute=None):
         monkeypatch.setattr(assistant, "execute_tool", stub_execute)
     monkeypatch.setattr(assistant, "get_provider", lambda *a, **k: _ScriptedProvider(turns))
 
-    async def _noop_memory(history, session_id=""):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory)
-
     events: list[dict] = []
 
     async def _go():

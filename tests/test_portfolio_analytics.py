@@ -1117,10 +1117,14 @@ def test_the_dashboard_buffer_and_cash_flow_runway_are_one_figure(db_isolated):
         {"name": "Current", "type": "cash", "currency": "SGD", "initial_balance": 9_000.0}
     )
     today = user_today()
-    for months_back in (1, 2, 3):
+    # This month's payment too once it is due: without it, late in the month the last one is
+    # >52 days old and `recurring._is_stale` ends both streams, collapsing the two divisors.
+    for months_back in (0, 1, 2, 3):
         month_start = today.replace(day=1)
         for _ in range(months_back):
             month_start = (month_start - timedelta(days=1)).replace(day=1)
+        if month_start.replace(day=3) > today:
+            continue
         for label, amount in (("Rent", 1_500.0), ("Groceries", 400.0)):
             ledger_service.create_transaction(
                 {

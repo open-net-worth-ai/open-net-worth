@@ -1,13 +1,11 @@
-"""MemoryConsolidateStateStore — the memory-consolidation cadence watermark.
+"""MemoryConsolidateStateStore — the memory tidy pass's watermark.
 
-A single tiny state row: ``{last_count: int, ts: ISO}`` — the active-fact count right
-after the last consolidation run. ``ai/memory.py::_should_consolidate`` reads it to gate
-re-consolidation on GROWTH since that run (``CONSOLIDATE_MIN_GROWTH``), not merely "still
-over threshold" — otherwise a book permanently above the threshold would re-consolidate
-near every turn (cost fix 2026-07-11).
+A single tiny state row: ``{last_tidy: "YYYY-MM-DD"}`` — the user's local day the daily tidy
+pass (``ai/memory_tidy.py``) last ran, so it runs at most once per ``user_today()``. The store
+keeps its historical name; it once held the consolidator's fact count.
 
 Runtime state, NOT user-authored data → checkpoint-EXCLUDED (a Lucius restore must not
-roll the cadence watermark back), NOT portable.
+roll the watermark back), NOT portable.
 
 WAVE 5F (JSON->DB): replaces the hand-rolled ``memory_consolidate_state.json`` (CACHE_DIR)
 file I/O with a row in the ``runtime_state`` table, namespace ``"memory_consolidate_state"``

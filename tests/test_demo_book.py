@@ -718,3 +718,21 @@ def test_owned_assets_store_valuations_and_derive_the_purchase(demo_book):
     assert kinds == {"valuation", "purchase"}
     costed = [a for a in projected if a.get("cost") and a.get("cost_date")]
     assert costed and all(a["marks"][-1]["kind"] == "purchase" for a in costed)
+
+
+def test_demo_automations_run_at_a_sensible_cadence(demo_book):
+    """Every demo run is a Lucius turn charged to the public demo's token ceiling. An hourly
+    watch that reads the last 24 hours re-read the same day 24 times, and the grant's own
+    "Vest calendar reminder" ran beside the seeded "Vest reminder" (2026-10-28)."""
+    from backend.db.automation_store import AutomationStore
+
+    active = [a for a in AutomationStore().all() if a.get("status") == "active"]
+    too_often = [
+        a["name"]
+        for a in active
+        if (a.get("trigger") or {}).get("type") == "interval"
+        and (a["trigger"].get("seconds") or 0) < 86400
+    ]
+    assert not too_often, f"active demo automations running more than daily: {too_often}"
+    vests = [a["name"] for a in active if "vest" in a["name"].lower()]
+    assert len(vests) == 1, f"one active vest automation expected, got {vests}"

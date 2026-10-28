@@ -104,10 +104,6 @@ async def test_a_live_nudge_never_reaches_the_client_as_an_event(monkeypatch, db
     monkeypatch.setattr(assistant, "upsert_session_meta", lambda *a, **k: None)
     monkeypatch.setattr(profile_service, "read_profile", lambda: {})
 
-    async def _noop(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop, raising=False)
     live_sessions._reset_for_tests()
     pending_injection._reset_for_tests()
     turns.set_inline_for_tests(False)

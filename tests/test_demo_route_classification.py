@@ -51,6 +51,7 @@ REVIEWED_SAFE = frozenset(
     PUT /api/statements/{statement_id}/instructions
     DELETE /api/statements/{statement_id}/lucius-ops
     POST /api/statements/{statement_id}/preview
+    POST /api/statements/{statement_id}/row-type
     POST /api/transactions/{txn_id}/receipts
     POST /api/transactions/{txn_id}/receipts/upload
     POST /api/upload
@@ -361,6 +362,9 @@ def test_every_locked_mutating_route_answers_403_demo_locked(open_demo):
         ("POST", "/api/channels/telegram/test"),
         ("PUT", "/api/plaid/config"),
         ("PUT", "/api/memory/settings"),
+        ("DELETE", "/api/memory/topics"),
+        ("POST", "/api/memory/import/preview"),
+        ("POST", "/api/memory/import/apply"),
         ("GET", "/api/logs"),
         ("GET", "/api/desktop/folders"),
         ("POST", "/api/desktop/folders"),

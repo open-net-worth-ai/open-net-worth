@@ -221,7 +221,7 @@ def test_the_prompt_asks_for_a_profile_field_only_when_an_answer_needs_it(db_iso
     """PROFILE ON DEMAND (main prompt, every conversation): ask one missing field with its
     reason when an answer depends on it; never chase a skipped one; a bare age is NEVER
     turned into an invented birth date (persona QA 2026-10-14: "I'm 44" was stored as
-    1 January 1982); free-form context goes to `notes`."""
+    1 January 1982); free-form context is memory, not the profile."""
     prompt = build_system_prompt()
     assert "PROFILE ON DEMAND" in prompt
     assert "Never ask for a field the question at hand does not need" in prompt
@@ -229,7 +229,8 @@ def test_the_prompt_asks_for_a_profile_field_only_when_an_answer_needs_it(db_iso
     assert "NEVER invent a value to store" in prompt
     assert "a bare age" in prompt and "is not a birth date" in prompt
     assert "January 1 of that birth year" not in prompt
-    assert "profile's `notes` field" in prompt
+    assert "is memory — see MEMORY below" in prompt
+    assert "profile's `notes` field" not in prompt
     assert "Settings > Profile" in prompt
 
 

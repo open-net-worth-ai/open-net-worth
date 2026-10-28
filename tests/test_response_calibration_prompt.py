@@ -132,6 +132,9 @@ def test_memory_block_has_reference_only_framing(isolated, monkeypatch):
         [
             {
                 "id": "mem_1",
+                "state": "live",
+                "section": "you",
+                "topic": "Preferences",
                 "content": "User prefers metric units",
                 "tier": "durable",
                 "source": "explicit",

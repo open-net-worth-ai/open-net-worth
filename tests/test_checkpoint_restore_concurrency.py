@@ -121,12 +121,8 @@ def test_active_turns_decrements_after_a_turn_raises(monkeypatch, isolated):
 
     other_cp_id = _make_checkpoint(isolated, "other-session-exc")
 
-    async def _noop_memory(*args, **kwargs):
-        return None
-
     monkeypatch.setattr(assistant, "upsert_session_meta", lambda *a, **k: None)
     monkeypatch.setattr(assistant, "_save_session", lambda *a, **k: None)
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory, raising=False)
 
     class _RaisingProvider:
         async def stream_chat(self, *a, **kw):
@@ -163,12 +159,8 @@ def test_active_turns_decrements_after_a_turn_is_cancelled(monkeypatch, isolated
 
     other_cp_id = _make_checkpoint(isolated, "other-session-cancel")
 
-    async def _noop_memory(*args, **kwargs):
-        return None
-
     monkeypatch.setattr(assistant, "upsert_session_meta", lambda *a, **k: None)
     monkeypatch.setattr(assistant, "_save_session", lambda *a, **k: None)
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory, raising=False)
 
     async def _go():
         # Constructed here, not in the outer sync test body: Python 3.9 requires a

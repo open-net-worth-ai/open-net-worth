@@ -18,6 +18,7 @@ from backend.core.run_steps import append_run_step as _append_step
 logger = logging.getLogger(__name__)
 
 from backend.ai import pending_injection, run_plan, skill_runtime
+from backend.ai.memory_citations import CitationStripper, note_cited_facts, split_citations
 from backend.ai.models.base import AIProvider
 from backend.ai.tool_text import (
     UNPARSED_CALL_NOTICE,
@@ -32,12 +33,14 @@ from backend.ai.tools.display import describe_tool_call
 from backend.ai.tools.registry import external_args_error, mutated_domains, validation_error
 from backend.ai.turn_completion import MAX_COMPLETION_NUDGES, completion_nudge
 from backend.core import mcp_external
+from backend.core.chat_context_markers import is_model_context_block
+from backend.core.chat_session import INTERNAL_SESSION_IDS as _INTERNAL_SESSION_IDS  # noqa: F401
+from backend.core.chat_session import is_internal_session as _is_internal_session
 from backend.core.errors import DataIntegrityError
 from backend.core.redact import redact_secrets, redact_summary
 from backend.core.tool_use_context import set_tool_use_id
 from backend.core.untrusted import (
     fence_untrusted_block,
-    is_screen_context_block,
     make_fence_nonce,
     sanitize_untrusted,
 )
@@ -555,14 +558,6 @@ def _proposed_change_signature(change: dict) -> tuple:
         ).hexdigest()
     return (ctype, identity)
 
-
-# Session IDs (or prefixes) used by background/headless paths that must never
-# appear in the user-facing conversation list.  The on-disk files are kept
-# intact (the agents still read/write them); only the LISTING is filtered.
-# Exact IDs: "scheduled" (legacy; may still exist on disk from old instances).
-# Prefix: "scheduled-" (per-run sessions from the prompt_lucius runner).
-_INTERNAL_SESSION_IDS: frozenset[str] = frozenset({"scheduled"})
-_INTERNAL_SESSION_PREFIXES: tuple[str, ...] = ("scheduled-",)
 
 # In-memory sessions: {session_id: [messages]}
 SESSIONS: Dict[str, List[dict]] = {}
@@ -1099,13 +1094,6 @@ def session_screen_commands(session_id: str) -> list:
     return (entry.get("screen_commands") or []) if entry is not None else []
 
 
-def _is_internal_session(sid: str) -> bool:
-    """True when ``sid`` identifies a background/headless session (never shown to the user)."""
-    if sid in _INTERNAL_SESSION_IDS:
-        return True
-    return any(sid.startswith(p) for p in _INTERNAL_SESSION_PREFIXES)
-
-
 def list_sessions(*, with_run_status: bool = False) -> list[dict]:
     """Every session's listing metadata, sorted newest-updated-first, excluding
     internal/background sessions. ``with_run_status`` adds an Automation run's own outcome
@@ -1413,11 +1401,10 @@ def clear_session(session_id: str) -> None:
 
 
 def release_session(session_id: str) -> None:
-    """Drop a session's in-process state (cached history, extract debounce, idle turn lock)
+    """Drop a session's in-process state (cached history, idle turn lock)
     and KEEP its stored row — for a one-shot turn whose conversation stays readable, like a
     capture. ``clear_session`` is this plus cancelling its turns and deleting the row."""
     SESSIONS.pop(session_id, None)
-    _last_memory_extract_len.pop(session_id, None)
     # Drop this session's turn lock too (finding 3) — a scheduled/dispatched run mints a
     # fresh ``scheduled-<uuid>`` session id per invocation and always calls clear_session()
     # AFTER its own run() generator is fully exhausted, so popping there is always safe.
@@ -2270,28 +2257,14 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                                 )
                 elif btype == "text":
                     t = b.get("text", "")
-                    if t.startswith("<turn_context>"):
-                        continue  # persisted snapshot — never render in chat UI
-                    if t.lstrip().startswith("«mention:"):
-                        # The resolved-mention block (services/mentions/dispatch —
-                        # "[Referenced items the user is asking about … UNTRUSTED]" inside a
-                        # nonce fence). api/chat._merge_mention_context appends it as its own
-                        # text part on the user turn so the model can see the current data
-                        # behind an @-chip. It is MODEL context, not something the reader
-                        # typed — and because these parts are ""-joined below, leaving it in
-                        # rendered as "change the payee name to sally«mention:97beb…»" followed
-                        # by the whole untrusted-data dump, in the reader's own message bubble.
+                    if is_model_context_block(t):
+                        # A persisted <turn_context> snapshot, the resolved-mention block and
+                        # the screen snapshot are appended onto the user turn by
+                        # api/chat._merge_mention_context so the MODEL can see them; they are
+                        # not something the reader typed, and because these parts are
+                        # ""-joined below, leaving one in rendered it inside the reader's own
+                        # bubble (owner: "…alongside the home[Currently on screen — Plan …]").
                         # Skipped for DISPLAY only; the transcript keeps the block.
-                        continue
-                    if is_screen_context_block(t):
-                        # Same reason as turn_context: api/chat._merge_mention_context appends
-                        # the screen snapshot as its own content part on the user turn so the
-                        # model can see what's on screen. It is MODEL context, not something
-                        # the user typed — and because these parts are ""-joined below, leaving
-                        # it in rendered the owner's one-line message as
-                        # "Yes, add the car alongside the home[Currently on screen — Plan …]"
-                        # followed by every row on the screen. Skipped for DISPLAY only; the
-                        # transcript keeps the block, so the model still sees it.
                         continue
                     _injected_body = _strip_user_msg_fence(t)
                     if _injected_body is not None:
@@ -3183,19 +3156,6 @@ def _drain_injected_messages(
         raise
 
 
-# Skip memory extraction for trivial exchanges (need at least ~2 turns of substance).
-MIN_HISTORY_FOR_MEMORY = 4
-
-# Debounce extraction: it re-reads the whole conversation each time, so firing it on
-# every turn re-processes already-distilled history. Only fire once the transcript has
-# grown by this many messages (~3 turns) since the last extraction.
-MEMORY_EXTRACT_EVERY = 8
-
-# session_id -> history length at last memory extraction (in-memory; resets on restart,
-# which at worst triggers one extra extraction — harmless).
-_last_memory_extract_len: Dict[str, int] = {}
-
-
 def _record_cost(
     session_id: str,
     model: str,
@@ -3249,21 +3209,6 @@ def _round_prompt_tokens(event: dict) -> int:
         + (event.get("cache_creation_tokens") or 0)
         + (event.get("cache_read_tokens") or 0)
     )
-
-
-async def _run_memory_extraction(history: list[dict], session_id: str = "") -> None:
-    """
-    Fire-and-forget: distil the finished conversation into long-term memory.
-    Best-effort — any failure is logged and swallowed so chat is never affected.
-    session_id activates the per-conversation extraction cursor (only turns added
-    since the last run are sent to the LLM).
-    """
-    try:
-        from backend.ai.memory import extract_and_merge
-
-        await extract_and_merge(history, session_id=session_id or None)
-    except Exception:
-        logger.exception("memory extraction failed (non-fatal)")
 
 
 # Cheap, local, no-API-call token estimate — same technique as Codex's own
@@ -3363,11 +3308,7 @@ def _extract_user_text(content: object) -> str:
         if not isinstance(b, dict) or b.get("type") != "text":
             continue
         t = b.get("text", "")
-        if t.startswith("<turn_context>"):
-            continue
-        if t.lstrip().startswith("«mention:"):
-            continue
-        if is_screen_context_block(t):
+        if is_model_context_block(t):
             continue
         injected = _strip_user_msg_fence(t)
         text_parts.append(injected if injected is not None else t)
@@ -4279,6 +4220,8 @@ async def _run_turn(
         # ai/turn_completion.py. Per TURN, not per round: a model that keeps writing its
         # calls as prose gets a bounded number of chances across the whole turn.
         _completion_nudges = 0
+        # Whether any round of this turn has shown the reader text yet.
+        _turn_had_text = False
 
         # Cross-channel-attachments RFC section 4 (same-turn first-refusal recovery):
         # bounds the ONE capability-learning retry a turn may spend. Set True the instant
@@ -4417,6 +4360,7 @@ async def _run_turn(
 
             _offered_tools = _active_tools()
             live_text = LiveLineFilter()
+            citations = CitationStripper()
             async for event in _stream_round(_render_turn_messages({}), _offered_tools):
                 if event["type"] == "thinking_delta":
                     assistant_thinking += event["text"]
@@ -4424,12 +4368,12 @@ async def _run_turn(
 
                 elif event["type"] == "text_delta":
                     assistant_text += event["text"]
-                    shown = live_text.feed(event["text"])
+                    shown = live_text.feed(citations.feed(event["text"]))
                     if shown:
                         yield {**event, "text": shown}
 
                 elif event["type"] == "tool_use_start":
-                    held = live_text.flush(has_calls=True)
+                    held = live_text.feed(citations.flush()) + live_text.flush(has_calls=True)
                     if held:
                         yield {"type": "text_delta", "text": held}
                     if str(event.get("name") or "") != "activate_skill":
@@ -4477,10 +4421,21 @@ async def _run_turn(
                     }
 
                 elif event["type"] == "done":
-                    held = live_text.flush(has_calls=bool(pending_tool_uses))
+                    held = live_text.feed(citations.flush()) + live_text.flush(
+                        has_calls=bool(pending_tool_uses)
+                    )
                     if held:
                         yield {"type": "text_delta", "text": held}
                     stop_reason = event.get("stop_reason")
+                    # The citation tag never reaches the transcript, a channel or a run's
+                    # output: every consumer reads this stream or the saved text.
+                    _with_tag = assistant_text
+                    assistant_text, _cited = split_citations(assistant_text)
+                    await note_cited_facts(_cited)
+                    # A round that was only the tag, after an earlier round already answered,
+                    # is a finished turn, not an empty reply.
+                    _tag_only_round = bool(_with_tag.strip()) and not assistant_text.strip()
+                    _answered_earlier = _turn_had_text
 
                     # Append assistant turn to history
                     assistant_content: list[dict] = []
@@ -4503,6 +4458,7 @@ async def _run_turn(
                         )
                     if assistant_text:
                         assistant_content.append({"type": "text", "text": assistant_text})
+                        _turn_had_text = True
                     for tu in pending_tool_uses:
                         assistant_content.append(
                             {
@@ -5155,6 +5111,7 @@ async def _run_turn(
                             _raw_assistant_text,
                             run_plan.get_tasks(),
                             nudges_used=_completion_nudges,
+                            reply_given=_tag_only_round and _answered_earlier,
                         )
                         if _nudge is not None:
                             _completion_nudges += 1
@@ -5196,13 +5153,6 @@ async def _run_turn(
                                     effort,
                                     len(assistant_text.split()),
                                 )
-                        _last = _last_memory_extract_len.get(session_id, 0)
-                        if (
-                            len(history) >= MIN_HISTORY_FOR_MEMORY
-                            and len(history) - _last >= MEMORY_EXTRACT_EVERY
-                        ):
-                            _last_memory_extract_len[session_id] = len(history)
-                            asyncio.create_task(_run_memory_extraction(list(history), session_id))
                         # Fold update already happened BEFORE this turn rendered (see
                         # _stream_turn_fold_update, 2026-08-27) — no post-turn call left
                         # to make here.
