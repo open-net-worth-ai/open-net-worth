@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { _electron as electron } from "playwright";
+import { SEEN_GUIDES } from "./guides.mjs";
 
 const repo = path.resolve("..");
 const root = await mkdtemp(path.join(tmpdir(), "onw-desktop-e2e-"));
@@ -196,6 +197,8 @@ try {
     },
     "PUT",
   );
+  // Before the reload below, so the app loads a profile that already has them.
+  await api("/api/profile", { seen_intros: SEEN_GUIDES }, "PUT");
   await page.goto(`${firstOrigin}/setup/password`);
   await page.getByRole("button", { name: "Skip", exact: true }).click();
   await page.waitForURL(/\/lucius/);
