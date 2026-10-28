@@ -7,6 +7,8 @@ import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import { MAC_BUNDLE_ID, REOPEN_SCRIPT, UPDATE_HANDOFF_FLAG, bundleVersion, installTarget, macBundlePath, notificationsOn, pendingMacInstall, runningPid, shipItStatePath } from '../src/main/update-handoff';
 
+// macOS paths, /bin/sh and /usr/bin/open: macOS-only behaviour, checked where it can run.
+const MAC_ONLY = { skip: process.platform === 'win32' && 'POSIX paths and /bin/sh; macOS-only behaviour' };
 const BUNDLE = '/Applications/Open Net Worth.app';
 const LISTED = `{
 \t"LimitLoadToSessionType" = "Aqua";
@@ -26,7 +28,7 @@ test('the bundle id matches the one the app is built with', async () => {
   assert.match(await readFile(join(__dirname, '..', 'forge.config.cjs'), 'utf8'), new RegExp(`appBundleId: '${MAC_BUNDLE_ID.replace(/\./g, '\\.')}'`));
 });
 
-test('the bundle is three levels above the executable', () => {
+test('the bundle is three levels above the executable', MAC_ONLY, () => {
   assert.equal(macBundlePath(`${BUNDLE}/Contents/MacOS/Open Net Worth`), BUNDLE);
 });
 
@@ -36,7 +38,7 @@ test('only a running installer job has a pid', () => {
   assert.equal(runningPid(''), null);
 });
 
-test('only an install that replaces this bundle counts', () => {
+test('only an install that replaces this bundle counts', MAC_ONLY, () => {
   assert.deepEqual(installTarget(state(BUNDLE, '/tmp/update.x/Open Net Worth.app'), BUNDLE), { updateBundle: '/tmp/update.x/Open Net Worth.app/' });
   assert.equal(installTarget(state('/Users/someone/Downloads/Open Net Worth.app', '/tmp/u/Open Net Worth.app'), BUNDLE), null);
   assert.equal(installTarget('not json', BUNDLE), null);
@@ -72,7 +74,7 @@ test('a pending install is found only while the installer runs for this bundle',
   assert.equal(await pendingMacInstall(BUNDLE, join(home, 'nobody'), async () => LISTED), null);
 });
 
-test('the reopen waits for the installer to exit, then opens the bundle with the handoff flag', async () => {
+test('the reopen waits for the installer to exit, then opens the bundle with the handoff flag', MAC_ONLY, async () => {
   const installer = spawn('/bin/sleep', ['1']);
   const started = Date.now();
   const output = await new Promise<string>((done, fail) => execFile('/bin/sh', ['-c', REOPEN_SCRIPT.replace('/usr/bin/open', 'echo'), 'onw-update-handoff', String(installer.pid), BUNDLE], (error, stdout) => error ? fail(error) : done(stdout)));

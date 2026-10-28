@@ -75,7 +75,7 @@ export function MemorySection({ toast }: SectionProps) {
           <Panel sub="What Lucius remembers about you between conversations">
             {row(
               'Search and reference chats',
-              'Let Lucius search your past conversations for relevant details.',
+              'Let Lucius search your past conversations for relevant details. Even when this is off, he can still read them with a SQL query.',
               toggle('search_chats', 'Search and reference chats', (on) =>
                 on ? 'Lucius can search your past chats' : 'Lucius won’t search your past chats',
               ),

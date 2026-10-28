@@ -397,9 +397,11 @@ try {
   );
   await f.stop(serverA);
   await launch();
+  // Startup keeps the splash up for a server still starting (SERVER_STARTUP_PATIENCE_MS, 60s)
+  // before it says the server can't be reached.
   await page
     .getByText(/Can.t reach your server|Couldn.t reach your server/)
-    .waitFor({ timeout: 45000 });
+    .waitFor({ timeout: 90000 });
   await page.getByRole("button", { name: /Change connection/ }).waitFor();
   assert.equal(await exists(path.join(f.home, ".open-net-worth")), false);
   await page.screenshot({ path: "qa/artifacts/server-client-offline.png" });

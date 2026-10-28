@@ -168,7 +168,8 @@ for.
 - **On a screen that already has data** (for example, accounts Lucius added during setup):
   **Got it**, or **Walk me through it**, where Lucius explains what you're looking at.
 
-Each introduction shows once per person, on any device. On Skills the buttons are **Write one
+Each introduction shows once per person, on any device, and never over a window you already
+have open, such as a statement import: it waits until you close it. On Skills the buttons are **Write one
 myself** and **Make one with Lucius**. Plan's Outlook asks for your birth date, monthly saving and retirement spending first if it
 doesn't have them yet; answering them is its introduction.
 

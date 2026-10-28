@@ -235,7 +235,11 @@ jobs:
           Start-Sleep -Seconds 10
           Get-Process open-net-worth -ErrorAction SilentlyContinue | Stop-Process -Force
           Start-Sleep -Seconds 5
-          $exe = (Get-ChildItem "$env:LOCALAPPDATA\OpenNetWorth" -Recurse -Filter open-net-worth.exe | Select-Object -First 1).FullName
+          # The open-net-worth.exe at the install root is Squirrel's stub: it starts the app in
+          # app-<version>\ and exits 0 at once, which the smoke reads as the app quitting.
+          $apps = @(Get-ChildItem "$env:LOCALAPPDATA\OpenNetWorth" -Directory -Filter 'app-*')
+          if ($apps.Count -ne 1) { throw "Expected one installed app-* folder, found $($apps.Count)" }
+          $exe = Join-Path $apps[0].FullName 'open-net-worth.exe'
           Write-Host "installed: $exe"
           Push-Location desktop
           node qa/packaged-smoke.mjs $exe
