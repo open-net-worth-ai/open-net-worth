@@ -5,6 +5,7 @@ import type { InvestmentThesis, InvestmentThesisFields } from '../../types/asset
 import {
   BREAKS_IF_EXAMPLE,
   BREAKS_IF_LABEL,
+  groupPrice,
   PRICE_LABELS,
   pricesNote,
   priceText,
@@ -47,7 +48,7 @@ const num = (s: string): number | null => {
 
 /** A holding with no role yet opens on Core, so the control never shows an empty choice. */
 function draftOf(thesis: InvestmentThesis | null, held: boolean): Draft {
-  const str = (v: number | null | undefined) => (v == null ? '' : String(v))
+  const str = (v: number | null | undefined) => (v == null ? '' : groupPrice(String(v)))
   return {
     role: thesis?.role ?? (held ? 'core' : null),
     reason: thesis?.reason ?? '',
@@ -177,6 +178,9 @@ export function ThesisEditor({ instrumentId, thesis, held, currency, onSaved, on
               invalid={localError?.field === k}
               onChange={(e) =>
                 setDraft({ ...draft, prices: { ...draft.prices, [k]: priceText(e.target.value) } })
+              }
+              onBlur={() =>
+                setDraft((d) => ({ ...d, prices: { ...d.prices, [k]: groupPrice(d.prices[k]) } }))
               }
             />
           </FormField>

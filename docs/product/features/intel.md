@@ -67,9 +67,10 @@ at the bottom adds up to 5 RSS feeds of your own for that ticker.
 
 ### 4. Say why you're watching (optional, recommended)
 
-Open the ticker's page and click **Add** (or **Edit**) on the **Your Thesis** card, or fill in
-**Why you're watching** in its alerts screen — it's the same form with the same fields, so either
-place edits the whole thesis. Click **Save thesis** when you're done:
+Open the ticker's page and click **Add** (or **Edit**) on the **Your Thesis** card, or do the same
+on **Why you're watching** in its alerts screen. Both show your thesis the same way and open the
+same form, so either place edits the whole thesis. Prices get thousands separators once you leave
+the box. Click **Save thesis** when you're done:
 
 - **Why you'd buy it** (**Why you own it** for a stock you hold) — one line on why you care, e.g.
   *"Leader in AI chips, but too expensive today"*. If you plan to hold for a set time, say so here

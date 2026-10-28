@@ -376,6 +376,7 @@ function AlertsModalBody({
             key={item.id}
             sym={ticker}
             instrumentId={item.instrument_id}
+            price={price}
             onSaved={onSaved}
           />
         ) : undefined

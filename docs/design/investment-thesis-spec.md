@@ -115,7 +115,8 @@ screens refresh. Demo lockdown: thesis writes are book edits like any other (cla
 four intent fields. Watch item reads (`get_watchlist`, the pulse, the alerts dialog) project
 `intent` from the thesis. The alerts dialog's "Why you're watching" section edits the thesis itself:
 it loads it with `GET /api/investment-theses/for` (by instrument id, else ticker — plus currency and
-held) and shows the same `ThesisEditor` component as the card, so both places offer every field.
+held) and shows the same `ThesisView` read view and `ThesisEditor` form as the card (read first, Edit
+swaps in the form), so both places offer every field.
 
 ## Watch readers
 

@@ -36,46 +36,66 @@ const held = (ticker: string): ThesisContext => ({
 })
 
 describe('WatchIntentSection', () => {
-  it('edits the whole thesis in place — the same fields as the asset page card', async () => {
+  it('reads the thesis first, like the card — no form until Edit', async () => {
     contexts.HELD1 = held('HELD1')
-    const { findByLabelText, getByLabelText, getByText } = render(
-      <WatchIntentSection sym="HELD1" onSaved={vi.fn()} />,
+    const { findByText, getByText, queryByLabelText } = render(
+      <WatchIntentSection sym="HELD1" price={160} onSaved={vi.fn()} />,
     )
-    expect(await findByLabelText('Why you own it')).toBeTruthy()
+    expect(await findByText('Share gains keep compounding.')).toBeTruthy()
+    expect(getByText('Margins stay under 45%.')).toBeTruthy()
+    expect(getByText('Satellite')).toBeTruthy()
+    expect(getByText('€120.00')).toBeTruthy()
+    expect(getByText('−25.0%')).toBeTruthy()
+    expect(queryByLabelText('Why you own it')).toBeNull()
+    expect(getByText(/alerts about your thesis/)).toBeTruthy()
+  })
+
+  it('Edit opens the same fields as the asset page card, prices grouped', async () => {
+    contexts.HELD3 = held('HELD3')
+    contexts.HELD3!.thesis!.trim_above = 2200
+    const { findByText, getByLabelText, getByText } = render(
+      <WatchIntentSection sym="HELD3" onSaved={vi.fn()} />,
+    )
+    fireEvent.click(await findByText('Edit'))
+    expect((getByLabelText('Why you own it') as HTMLTextAreaElement).value).toBe(
+      'Share gains keep compounding.',
+    )
     expect((getByLabelText('Thesis breaks if') as HTMLTextAreaElement).value).toBe(
       'Margins stay under 45%.',
     )
     expect((getByLabelText('Stop below') as HTMLInputElement).value).toBe('120')
-    expect((getByLabelText('Trim above') as HTMLInputElement).value).toBe('220')
+    expect((getByLabelText('Trim above') as HTMLInputElement).value).toBe('2,200')
     expect(getByText('Prices in EUR')).toBeTruthy()
-    expect(getByText(/alerts about your thesis/)).toBeTruthy()
+    fireEvent.click(getByText('Cancel'))
+    expect(getByText('Share gains keep compounding.')).toBeTruthy()
   })
 
-  it('a watched stock shows the watch fields only', async () => {
+  it('a watched stock with no thesis offers Add, then the watch fields only', async () => {
     contexts.WATCH1 = { instrument_id: 'inst_w', currency: 'USD', held: false, thesis: null }
-    const { findByLabelText, queryByLabelText } = render(
+    const { findByText, getByLabelText, queryByLabelText } = render(
       <WatchIntentSection sym="WATCH1" onSaved={vi.fn()} />,
     )
-    expect(await findByLabelText('Why you’d buy it')).toBeTruthy()
+    expect(await findByText('Write down why you’d buy WATCH1.')).toBeTruthy()
+    fireEvent.click(await findByText('Add'))
+    expect(getByLabelText('Why you’d buy it')).toBeTruthy()
     expect(queryByLabelText('Stop below')).toBeNull()
     expect(queryByLabelText('Thesis breaks if')).toBeNull()
   })
 
-  it('saves through the same editor and says so', async () => {
+  it('saves through the same editor and goes back to the read view with the new thesis', async () => {
     contexts.HELD2 = held('HELD2')
     saveInvestmentThesis.mockResolvedValue({ ...held('HELD2').thesis, reason: 'Cheaper now.' })
     const onSaved = vi.fn()
-    const { findByLabelText, getByText, findByText } = render(
+    const { findByText, getByLabelText, getByText } = render(
       <WatchIntentSection sym="HELD2" onSaved={onSaved} />,
     )
-    fireEvent.change(await findByLabelText('Why you own it'), {
-      target: { value: 'Cheaper now.' },
-    })
+    fireEvent.click(await findByText('Edit'))
+    fireEvent.change(getByLabelText('Why you own it'), { target: { value: 'Cheaper now.' } })
     fireEvent.click(getByText('Save thesis'))
     await waitFor(() => expect(onSaved).toHaveBeenCalled())
     expect(saveInvestmentThesis.mock.calls[0]?.[0]).toBe('inst_HELD2')
     expect(saveInvestmentThesis.mock.calls[0]?.[1]?.reason).toBe('Cheaper now.')
-    expect(await findByText('Saved')).toBeTruthy()
+    expect(await findByText('Cheaper now.')).toBeTruthy()
   })
 
   it('says when the ticker has no instrument to hold a thesis yet', async () => {

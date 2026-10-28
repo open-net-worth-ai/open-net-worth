@@ -14,6 +14,7 @@ vi.mock('../../api/investmentTheses', () => ({
 }))
 
 import { YourThesisCard } from './YourThesisCard'
+import { groupPrice } from './thesisFields'
 
 afterEach(cleanup)
 beforeEach(() => {
@@ -143,11 +144,37 @@ describe('YourThesisCard', () => {
     expect(saveInvestmentThesis).not.toHaveBeenCalled()
   })
 
+  it('groups a price once you leave the box, and saves the plain number', async () => {
+    saveInvestmentThesis.mockResolvedValue(THESIS)
+    const { getByText, getByLabelText } = mount()
+    fireEvent.click(getByText('Edit'))
+    const fair = getByLabelText('Fair value') as HTMLInputElement
+    fireEvent.change(fair, { target: { value: '232323223' } })
+    expect(fair.value).toBe('232323223')
+    fireEvent.blur(fair)
+    expect(fair.value).toBe('232,323,223')
+    fireEvent.click(getByText('Save thesis'))
+    await waitFor(() => expect(saveInvestmentThesis).toHaveBeenCalled())
+    expect(saveInvestmentThesis.mock.calls[0]?.[1]?.fair_value).toBe(232323223)
+  })
+
   it('shows the server’s reason when a save fails', async () => {
     failWith = 'Your stop must be below your trim level.'
     const { getByText, findByText } = mount()
     fireEvent.click(getByText('Edit'))
     fireEvent.click(getByText('Save thesis'))
     expect(await findByText('Your stop must be below your trim level.')).toBeTruthy()
+  })
+})
+
+describe('groupPrice', () => {
+  it('groups the whole part and keeps the decimals as typed', () => {
+    expect(groupPrice('232323223')).toBe('232,323,223')
+    expect(groupPrice('1234.5')).toBe('1,234.5')
+    expect(groupPrice('1,2345')).toBe('12,345')
+    expect(groupPrice('999')).toBe('999')
+    expect(groupPrice('0.00012')).toBe('0.00012')
+    expect(groupPrice('')).toBe('')
+    expect(groupPrice('1.2.3')).toBe('1.2.3')
   })
 })
