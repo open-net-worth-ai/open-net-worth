@@ -1,5 +1,19 @@
-// One wording for an investment thesis's fields, shared by the asset page's Your Thesis card and
-// the alerts screen's "Why you're watching" form — both edit the same record.
+// One wording for an investment thesis's fields, used by ThesisEditor (the one form, shown on the
+// asset page's Your Thesis card and in the alerts screen's Why you're watching) and the card's
+// read view.
+import type { InvestmentThesis } from '../../types/assetDetail'
+
+export type Role = NonNullable<InvestmentThesis['role']>
+
+export const ROLES: { value: Role; label: string; help: string }[] = [
+  { value: 'core', label: 'Core', help: 'The long-term base of your portfolio.' },
+  { value: 'satellite', label: 'Satellite', help: 'An active bet around your core holdings.' },
+  {
+    value: 'speculative',
+    label: 'Speculative',
+    help: 'A small, high-risk bet you can afford to lose.',
+  },
+]
 
 export type PriceKey = 'stop_below' | 'buy_below' | 'buy_above' | 'fair_value' | 'trim_above'
 

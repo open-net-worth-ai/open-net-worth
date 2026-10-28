@@ -142,6 +142,25 @@ def test_list_theses_joins_ticker_and_held(inst):
 # ── REST ────────────────────────────────────────────────────────────────────────────
 
 
+def test_for_route_gives_an_editor_the_full_thesis_by_id_or_ticker(client):
+    from backend.db.position_store import PositionStore
+
+    empty = client.get("/api/investment-theses/for", params={"ticker": "acme"}).json()
+    assert empty == {"instrument_id": "inst_acme", "currency": "USD", "held": False, "thesis": None}
+    _set({"reason": "Moat", "role": "core", "stop_below": 90})
+    PositionStore().insert(
+        {"id": "pos_1", "instrument_id": "inst_acme", "account_id": "acc_1", "quantity": 3}
+    )
+    got = client.get("/api/investment-theses/for", params={"instrument_id": "inst_acme"}).json()
+    assert got["held"] is True
+    assert (got["thesis"]["reason"], got["thesis"]["role"], got["thesis"]["stop_below"]) == (
+        "Moat",
+        "core",
+        90.0,
+    )
+    assert client.get("/api/investment-theses/for", params={"ticker": "NOPE"}).status_code == 404
+
+
 def test_put_replaces_the_whole_thesis(client):
     res = client.put("/api/investment-theses/inst_acme", json={"reason": "A", "stop_below": 100})
     assert res.status_code == 200 and res.json()["thesis"]["stop_below"] == 100.0

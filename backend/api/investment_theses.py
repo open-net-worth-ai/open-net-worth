@@ -1,5 +1,7 @@
 """
 GET    /api/investment-theses                   — every thesis, with ticker / name / held joined in
+GET    /api/investment-theses/for               — ?instrument_id= or ?ticker=: one stock's thesis plus
+                                                  its currency and held, for an editor off the asset page
 PUT    /api/investment-theses/{instrument_id}   — replace one instrument's thesis (omitted = blank)
 DELETE /api/investment-theses/{instrument_id}   — delete it
 
@@ -41,6 +43,14 @@ def _apply(change: dict) -> dict:
 @router.get("/api/investment-theses")
 def list_investment_theses():
     return {"theses": investment_theses.list_theses()}
+
+
+@router.get("/api/investment-theses/for")
+def investment_thesis_for(instrument_id: Optional[str] = None, ticker: Optional[str] = None):
+    found = investment_theses.editor_context(instrument_id, ticker)
+    if found is None:
+        raise HTTPException(404, "No instrument for that ticker yet.")
+    return found
 
 
 @router.put("/api/investment-theses/{instrument_id}")

@@ -1,52 +1,15 @@
 import { useState } from 'react'
 import { Pencil } from 'lucide-react'
-import {
-  Button,
-  FormField,
-  InfoPopover,
-  Panel,
-  SegmentedControl,
-  Text,
-  TextArea,
-  TextField,
-} from '../ui'
-import { saveInvestmentThesis } from '../../api/investmentTheses'
-import type { InvestmentThesis, InvestmentThesisFields } from '../../types/assetDetail'
+import { InfoPopover, Panel, Text } from '../ui'
+import type { InvestmentThesis } from '../../types/assetDetail'
 import { fPrice, getCurrencySymbol } from '../../utils/format'
-import {
-  BREAKS_IF_EXAMPLE,
-  BREAKS_IF_LABEL,
-  PRICE_LABELS,
-  pricesNote,
-  priceText,
-  reasonExample,
-  reasonLabel,
-  type PriceKey,
-} from './thesisFields'
+import { ThesisEditor } from './ThesisEditor'
+import { BREAKS_IF_LABEL, ROLES } from './thesisFields'
 
 // "Your Thesis" — why you own (or would buy) this instrument and the prices that matter to you.
 // One thesis per instrument (services/investment_theses); held vs watched only changes what is shown:
-// a holding adds its role, breaks-if, stop and trim.
-
-type Role = NonNullable<InvestmentThesis['role']>
-
-const ROLES: { value: Role; label: string; help: string }[] = [
-  {
-    value: 'core',
-    label: 'Core',
-    help: 'The long-term base of your portfolio.',
-  },
-  {
-    value: 'satellite',
-    label: 'Satellite',
-    help: 'An active bet around your core holdings.',
-  },
-  {
-    value: 'speculative',
-    label: 'Speculative',
-    help: 'A small, high-risk bet you can afford to lose.',
-  },
-]
+// a holding adds its role, breaks-if, stop and trim. Editing is ThesisEditor, the same form the
+// alerts screen shows.
 
 interface Props {
   instrumentId: string
@@ -59,78 +22,6 @@ interface Props {
   /** The instrument's quote currency — what the page price and every level are in. */
   currency?: string
   onSaved: () => void
-}
-
-interface Draft {
-  role: Role | null
-  reason: string
-  breaks_if: string
-  prices: Record<PriceKey, string>
-}
-
-/** A typed price as a number, or null when blank or not a positive number ("12abc" too). */
-const num = (s: string): number | null => {
-  const text = s.replace(/,/g, '').trim()
-  if (!text) return null
-  const v = Number(text)
-  return Number.isFinite(v) && v > 0 ? v : null
-}
-
-/** A holding with no role yet opens on Core, so the control never shows an empty choice. */
-function draftOf(thesis: InvestmentThesis | null, held: boolean): Draft {
-  const str = (v: number | null | undefined) => (v == null ? '' : String(v))
-  return {
-    role: thesis?.role ?? (held ? 'core' : null),
-    reason: thesis?.reason ?? '',
-    breaks_if: thesis?.breaks_if ?? '',
-    prices: {
-      stop_below: str(thesis?.stop_below),
-      buy_below: str(thesis?.buy_below),
-      buy_above: str(thesis?.buy_above),
-      fair_value: str(thesis?.fair_value),
-      trim_above: str(thesis?.trim_above),
-    },
-  }
-}
-
-/** The first rule the draft breaks, and the field to outline for it. */
-function draftError(d: Draft): { message: string; field: PriceKey } | null {
-  // A typo must not save as "no level" — that would silently delete it.
-  for (const k of Object.keys(PRICE_LABELS) as PriceKey[]) {
-    if (d.prices[k].trim() && num(d.prices[k]) == null)
-      return { message: `${PRICE_LABELS[k]} must be a positive number.`, field: k }
-  }
-  const below = num(d.prices.buy_below)
-  const above = num(d.prices.buy_above)
-  const stop = num(d.prices.stop_below)
-  const trim = num(d.prices.trim_above)
-  if (above != null && below == null)
-    return { message: 'Set “Buy at or under” first.', field: 'buy_below' }
-  if (above != null && below != null && above >= below)
-    return { message: 'The floor must be below the top of the buy zone.', field: 'buy_above' }
-  if (stop != null && trim != null && stop >= trim)
-    return { message: 'Your stop must be below your trim level.', field: 'stop_below' }
-  return null
-}
-
-/** The fields a save sends. PUT replaces the thesis, so held-only fields a watched card doesn't
- *  show are carried over unchanged rather than wiped. */
-function fieldsOf(
-  d: Draft,
-  thesis: InvestmentThesis | null,
-  held: boolean,
-): InvestmentThesisFields {
-  const pick = (k: PriceKey) => num(d.prices[k])
-  return {
-    role: held ? d.role : (thesis?.role ?? null),
-    reason: d.reason.trim() || null,
-    breaks_if: held ? d.breaks_if.trim() || null : (thesis?.breaks_if ?? null),
-    stop_below: held ? pick('stop_below') : (thesis?.stop_below ?? null),
-    trim_above: held ? pick('trim_above') : (thesis?.trim_above ?? null),
-    buy_below: pick('buy_below'),
-    buy_above: pick('buy_above'),
-    fair_value: pick('fair_value'),
-  }
 }
 
 interface Level {
@@ -246,35 +137,10 @@ export function YourThesisCard({
   } | null>(null)
   const current = justSaved && justSaved.over === thesis ? justSaved.thesis : thesis
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState<Draft>(() => draftOf(thesis, held))
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const sym = currency ? getCurrencySymbol(currency) : ''
   const fmt = (v: number) => `${sym}${fPrice(v, priceMaxFrac)}`
-  const localError = editing ? draftError(draft) : null
-
-  function startEdit() {
-    setDraft(draftOf(current, held))
-    setError(null)
-    setEditing(true)
-  }
-
-  async function save() {
-    if (localError) return
-    setSaving(true)
-    setError(null)
-    try {
-      const saved = await saveInvestmentThesis(instrumentId, fieldsOf(draft, current, held))
-      setJustSaved({ over: thesis, thesis: saved })
-      setEditing(false)
-      onSaved()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't save your thesis. Try again.")
-    } finally {
-      setSaving(false)
-    }
-  }
+  const startEdit = () => setEditing(true)
 
   const role = held && current?.role ? ROLES.find((r) => r.value === current.role) : undefined
   const levels = current ? levelsOf(current, held, fmt) : []
@@ -304,85 +170,18 @@ export function YourThesisCard({
       className="asd-rail-panel asd-thesis-card"
     >
       {editing ? (
-        <div className="asd-thesis-form">
-          {held && (
-            <FormField label="Role" info={role?.help}>
-              <SegmentedControl<Role>
-                ariaLabel="Role"
-                options={ROLES.map((r) => ({ value: r.value, label: r.label }))}
-                value={draft.role ?? ('' as Role)}
-                onChange={(v) => setDraft({ ...draft, role: v })}
-              />
-            </FormField>
-          )}
-          <FormField label={reasonLabel(held)} htmlFor="thesis-reason">
-            <TextArea
-              id="thesis-reason"
-              rows={3}
-              maxLength={280}
-              value={draft.reason}
-              placeholder={reasonExample(held)}
-              onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
-            />
-          </FormField>
-          {held && (
-            <FormField label={BREAKS_IF_LABEL} htmlFor="thesis-breaks">
-              <TextArea
-                id="thesis-breaks"
-                rows={3}
-                maxLength={280}
-                value={draft.breaks_if}
-                placeholder={BREAKS_IF_EXAMPLE}
-                onChange={(e) => setDraft({ ...draft, breaks_if: e.target.value })}
-              />
-            </FormField>
-          )}
-          {currency && <p className="thesis-prices-note">{pricesNote(currency)}</p>}
-          <div className="asd-thesis-grid">
-            {(held
-              ? (['stop_below', 'trim_above', 'buy_below', 'buy_above', 'fair_value'] as PriceKey[])
-              : (['buy_below', 'buy_above', 'fair_value'] as PriceKey[])
-            ).map((k) => (
-              <FormField
-                key={k}
-                label={PRICE_LABELS[k]}
-                htmlFor={`thesis-${k}`}
-                span={held && k === 'fair_value' ? 'full' : 1}
-              >
-                <TextField
-                  id={`thesis-${k}`}
-                  inputMode="decimal"
-                  value={draft.prices[k]}
-                  invalid={localError?.field === k}
-                  onChange={(e) =>
-                    setDraft({
-                      ...draft,
-                      prices: { ...draft.prices, [k]: priceText(e.target.value) },
-                    })
-                  }
-                />
-              </FormField>
-            ))}
-          </div>
-          {(localError || error) && (
-            <p className="ui-field__error" role="alert">
-              {localError?.message ?? error}
-            </p>
-          )}
-          <div className="asd-thesis-actions">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setEditing(false)}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            <Button variant="primary" size="sm" onClick={() => void save()} loading={saving}>
-              Save thesis
-            </Button>
-          </div>
-        </div>
+        <ThesisEditor
+          instrumentId={instrumentId}
+          thesis={current}
+          held={held}
+          currency={currency}
+          onSaved={(saved) => {
+            setJustSaved({ over: thesis, thesis: saved })
+            setEditing(false)
+            onSaved()
+          }}
+          onCancel={() => setEditing(false)}
+        />
       ) : !hasContent ? (
         <Text size="sm" tone="muted">
           {held ? `Write down why you own ${ticker}.` : `Write down why you’d buy ${ticker}.`}

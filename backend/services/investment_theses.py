@@ -197,6 +197,23 @@ def instrument_for_ticker(ticker: str, *, resolve: bool = False) -> dict | None:
     return inst
 
 
+def editor_context(instrument_id: str | None = None, ticker: str | None = None) -> dict | None:
+    """What a thesis editor opened away from the asset page needs — the instrument the id (else
+    the ticker) names, its quote currency, whether it is held, and its thesis — or None when
+    neither names an instrument. Never hits the network."""
+    inst = InstrumentStore().find_by_id(instrument_id) if instrument_id else None
+    if inst is None and ticker:
+        inst = instrument_for_ticker(ticker)
+    if inst is None:
+        return None
+    return {
+        "instrument_id": inst["id"],
+        "currency": (inst.get("quote_currency") or "USD").upper(),
+        "held": inst["id"] in held_instrument_ids(),
+        "thesis": thesis_for(inst["id"]),
+    }
+
+
 def _item_instrument_id(item: dict) -> str | None:
     iid = item.get("instrument_id")
     if iid:

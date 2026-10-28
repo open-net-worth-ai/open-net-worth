@@ -375,13 +375,8 @@ function AlertsModalBody({
           <WatchIntentSection
             key={item.id}
             sym={ticker}
-            ccy={ccy}
-            held={!!ctx.holdingsBySymbol[ticker.toUpperCase()]}
-            intent={item.intent ?? null}
-            onSave={async (next) => {
-              await patchItem({ intent: next })
-              onSaved()
-            }}
+            instrumentId={item.instrument_id}
+            onSaved={onSaved}
           />
         ) : undefined
       }

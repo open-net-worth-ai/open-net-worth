@@ -102,6 +102,7 @@ After the migration nothing writes `item["intent"]` for a ticker that has an ins
 | Route | Does |
 |---|---|
 | `GET /api/investment-theses` | `{"theses": [...]}`, each with `ticker` and `held` joined in |
+| `GET /api/investment-theses/for` | `?instrument_id=` or `?ticker=` → `{instrument_id, currency, held, thesis}` for an editor off the asset page; 404 when no instrument |
 | `PUT /api/investment-theses/{instrument_id}` | replaces the thesis with the body (all fields optional; omitted = blank) — the asset-page form's save |
 | `DELETE /api/investment-theses/{instrument_id}` | deletes it |
 | `GET /api/intel/assets/{instrument_id}` | gains `thesis: InvestmentThesis \| null` |
@@ -112,7 +113,9 @@ screens refresh. Demo lockdown: thesis writes are book edits like any other (cla
 **Compatibility:** `PATCH /api/watchlist/items/{id}` with `intent`, and `update_watchlist_items`'s
 `intent`, keep working — they resolve the item's instrument and call `apply_thesis_change` with the
 four intent fields. Watch item reads (`get_watchlist`, the pulse, the alerts dialog) project
-`intent` from the thesis, so the "Why you're watching" section edits the same record.
+`intent` from the thesis. The alerts dialog's "Why you're watching" section edits the thesis itself:
+it loads it with `GET /api/investment-theses/for` (by instrument id, else ticker — plus currency and
+held) and shows the same `ThesisEditor` component as the card, so both places offer every field.
 
 ## Watch readers
 

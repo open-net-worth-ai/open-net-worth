@@ -64,7 +64,8 @@ For a story rather than one stock — an IPO, a war, interest rates:
 ### 4. Say why you're watching (optional, recommended)
 
 Open the ticker's page and click **Add** (or **Edit**) on the **Your Thesis** card, or fill in
-**Why you're watching** in its alerts screen — both edit the same thesis:
+**Why you're watching** in its alerts screen — it's the same form with the same fields, so either
+place edits the whole thesis. Click **Save thesis** when you're done:
 
 - **Why you'd buy it** (**Why you own it** for a stock you hold) — one line on why you care, e.g.
   *"Leader in AI chips, but too expensive today"*.

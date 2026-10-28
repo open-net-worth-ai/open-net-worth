@@ -14873,17 +14873,7 @@ body.hide-amounts .money * {
     font-size: 11px;
     color: var(--faint);
   }
-  .watch-intent-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px 12px;
-  }
-  .watch-intent-grid > :first-child,
-  .watch-intent-grid > .thesis-prices-note {
-    grid-column: 1 / -1;
-  }
-  /* "Prices in EUR" — said once above a thesis form's price fields (the card and Why you're
-     watching), never repeated on every label. */
+  /* "Prices in EUR" — said once above ThesisEditor's price fields, never on every label. */
   .thesis-prices-note {
     font-size: var(--text-xs);
     color: var(--muted);
@@ -14892,17 +14882,9 @@ body.hide-amounts .money * {
   .asd-thesis-form .thesis-prices-note {
     margin-bottom: calc(-1 * var(--space-3));
   }
-  .watch-intent-err {
-    margin-top: 8px;
-  }
   .watch-intent-saved {
     font-size: 12px;
     color: var(--good);
-  }
-  @media (max-width: 560px) {
-    .watch-intent-grid {
-      grid-template-columns: minmax(0, 1fr);
-    }
   }
 
   /* ── Intel tabs: per-tab lead cards ─────────────────────────────────────────── */
