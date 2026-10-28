@@ -175,6 +175,11 @@ export function ApprovalDiffLine({ kind, children }: { kind: DiffKind; children:
   )
 }
 
+/** The words that changed inside an ApprovalDiffLine paired with its opposite line. */
+export function ApprovalDiffWord({ children }: { children: ReactNode }) {
+  return <mark className="ac-diff-word">{children}</mark>
+}
+
 /** ONE short line that must be seen before approving (a warning, a consequence). Not for
  * explanations — those go in a fact's `title` and the docs. */
 export function ApprovalNote({ children, tone = 'muted' }: { children: ReactNode; tone?: Tone }) {

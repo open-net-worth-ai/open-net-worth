@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactElement } from 'react'
-import { diffLines } from 'diff'
+import { diffLines, diffWordsWithSpace } from 'diff'
 import type {
   AutomationFieldChange,
   AutomationUpdateDisplay,
@@ -12,6 +12,7 @@ import {
   ApprovalDetails,
   ApprovalDiff,
   ApprovalDiffLine,
+  ApprovalDiffWord,
   ApprovalFact,
   ApprovalFacts,
   ApprovalMeta,
@@ -193,16 +194,62 @@ export function GenericChangePreview({ change }: { change: ProposedChange }) {
   return <ArgumentRows entries={entries} />
 }
 
-type DiffRow = { kind: DiffKind; text: string }
+type WordPart = { text: string; changed: boolean }
+type DiffRow = { kind: DiffKind; text: string; parts?: WordPart[] }
 type DiffItem = { type: 'line'; row: DiffRow } | { type: 'collapsed'; rows: DiffRow[] }
 
-function diffRows(before: string, after: string): DiffRow[] {
-  return diffLines(before, after).flatMap((hunk) => {
-    const lines = hunk.value.split('\n')
-    if (lines[lines.length - 1] === '') lines.pop()
-    const kind: DiffKind = hunk.added ? 'added' : hunk.removed ? 'removed' : 'context'
-    return lines.map((text) => ({ kind, text }))
+// Below this share of unchanged characters a line was rewritten, not edited — marking
+// nearly every word would be noise, so the pair stays a plain line diff.
+const MIN_SHARED = 0.4
+
+function splitLines(value: string): string[] {
+  const lines = value.split('\n')
+  if (lines[lines.length - 1] === '') lines.pop()
+  return lines
+}
+
+// A one-line instruction edited by a phrase is one removed and one added line; mark the
+// words that differ so the edit is visible without comparing the two paragraphs by eye.
+function pairWords(removed: DiffRow, added: DiffRow) {
+  const changes = diffWordsWithSpace(removed.text, added.text)
+  const shared = changes
+    .filter((c) => !c.added && !c.removed)
+    .reduce((n, c) => n + c.value.length, 0)
+  if (shared < MIN_SHARED * Math.max(removed.text.length, added.text.length)) return
+  removed.parts = joinMarks(
+    changes.filter((c) => !c.added).map((c) => ({ text: c.value, changed: c.removed })),
+  )
+  added.parts = joinMarks(
+    changes.filter((c) => !c.removed).map((c) => ({ text: c.value, changed: c.added })),
+  )
+}
+
+// The word diff keeps whichever space it can align, so "Rent, set x, and" → "Rent and" marks
+// "," and "set x, " apart with a kept space between; one edit should read as one mark.
+function joinMarks(parts: WordPart[]): WordPart[] {
+  const out: WordPart[] = []
+  parts.forEach((part, i) => {
+    const bridge =
+      !part.changed && !part.text.trim() && parts[i - 1]?.changed && parts[i + 1]?.changed
+    const changed = part.changed || Boolean(bridge)
+    const last = out[out.length - 1]
+    if (last && last.changed === changed) last.text += part.text
+    else out.push({ text: part.text, changed })
   })
+  return out
+}
+
+function diffRows(before: string, after: string): DiffRow[][] {
+  const blocks = diffLines(before, after).map((hunk) => {
+    const kind: DiffKind = hunk.added ? 'added' : hunk.removed ? 'removed' : 'context'
+    return splitLines(hunk.value).map((text): DiffRow => ({ kind, text }))
+  })
+  blocks.forEach((removed, i) => {
+    const added = blocks[i + 1]
+    if (removed[0]?.kind !== 'removed' || added?.[0]?.kind !== 'added') return
+    if (added.length === removed.length) removed.forEach((row, j) => pairWords(row, added[j]!))
+  })
+  return blocks
 }
 
 // Keep `size` lines of context around every change; fold the rest into runs.
@@ -221,14 +268,22 @@ function collapseContext(rows: DiffRow[], size = 3): DiffItem[] {
 /** A line diff with its unchanged stretches folded; each expands on a tap. */
 function TextDiff({ before, after }: { before: string; after: string }) {
   const [expanded, setExpanded] = useState<Record<number, boolean>>({})
-  const items = useMemo(() => collapseContext(diffRows(before, after)), [before, after])
+  const items = useMemo(() => collapseContext(diffRows(before, after).flat()), [before, after])
   return (
     <ApprovalDiff>
       {items.map((item, i) => {
         if (item.type === 'line') {
           return (
             <ApprovalDiffLine key={i} kind={item.row.kind}>
-              {item.row.text}
+              {item.row.parts
+                ? item.row.parts.map((part, j) =>
+                    part.changed ? (
+                      <ApprovalDiffWord key={j}>{part.text}</ApprovalDiffWord>
+                    ) : (
+                      part.text
+                    ),
+                  )
+                : item.row.text}
             </ApprovalDiffLine>
           )
         }

@@ -1436,6 +1436,14 @@
   .ac-diff-context {
     color: var(--muted);
   }
+  .ac-diff-word {
+    color: inherit;
+    background: color-mix(in srgb, currentColor 22%, transparent);
+    border-radius: 2px;
+  }
+  .ac-diff-removed .ac-diff-word {
+    text-decoration: line-through;
+  }
   .ac-details {
     margin-top: 8px;
     font-size: var(--ac-text);

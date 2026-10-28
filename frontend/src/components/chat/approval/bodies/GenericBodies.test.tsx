@@ -173,6 +173,48 @@ describe('update_automations field diff', () => {
     expect(raw.textContent).toContain('auto_123')
   })
 
+  function withPrompt(old: string, next: string): ProposedChange {
+    const change = structuredClone(fixture('tool_permission · update_automations field diff'))
+    const preview = change.display!.preview as {
+      data: { items: { changes: Record<string, unknown> }[] }
+    }
+    const item = preview.data.items[0]!
+    item.changes = { prompt: { old, new: next } }
+    return change
+  }
+
+  const marked = (container: HTMLElement, kind: 'added' | 'removed') =>
+    [...container.querySelectorAll(`.ac-diff-${kind} .ac-diff-word`)].map((m) => m.textContent)
+
+  it('marks only the words that changed inside a one-line edit', () => {
+    const { container } = mount(
+      withPrompt(
+        'When a deposit arrives, set its category to Rent, set taxable=false, and append a memo.',
+        'When a deposit arrives, set its category to Rent and append a memo.',
+      ),
+    )
+    expect(marked(container, 'removed')).toEqual([', set taxable=false, '])
+    expect(marked(container, 'added')).toEqual([])
+    expect(container.querySelector('.ac-diff-removed')?.textContent).toContain('append a memo.')
+  })
+
+  it('marks an appended phrase on the added line of a multi-line prompt', () => {
+    const { container } = mount(fixture('tool_permission · update_automations field diff'))
+    expect(marked(container, 'added').join('')).toBe(' and unmatched transfers')
+    expect(marked(container, 'removed')).toEqual([])
+  })
+
+  it('leaves a rewritten line unmarked rather than marking almost every word', () => {
+    const { container } = mount(
+      withPrompt(
+        'Sweep idle cash above the buffer into savings every week.\nKeep a log.',
+        'Every Friday, email me the uncleared card charges from that week.\nKeep a log.',
+      ),
+    )
+    expect(container.querySelector('.ac-diff-word')).toBeNull()
+    expect(container.querySelector('.ac-diff-added')?.textContent).toContain('Every Friday')
+  })
+
   it('says the values match, and still offers the raw arguments', () => {
     const { container } = mount(fixture('tool_permission · update_automations no changes'))
     expect(screen.getByText('The proposed values match the current automation')).toBeTruthy()
