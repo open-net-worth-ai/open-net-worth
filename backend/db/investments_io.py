@@ -74,6 +74,7 @@ _MONEY_FIELDS = {
         "collateral_amount",
         "contracts",
     ),
+    "holding_plans": ("stop_below", "buy_below", "buy_above", "fair_value", "trim_above"),
     "realized_events": (
         "proceeds_per_unit",
         "disposal_fees",

@@ -63,9 +63,10 @@ For a story rather than one stock — an IPO, a war, interest rates:
 
 ### 4. Say why you're watching (optional, recommended)
 
-In the same alerts screen, fill in **Why you're watching**:
+Open the ticker's page and click **Add** (or **Edit**) on the **Your Plan** card, or fill in
+**Why you're watching** in its alerts screen — both edit the same plan:
 
-- **Thesis** — one line on why you care, e.g. *"AI accelerator share gains keep compounding"*.
+- **Why you'd buy it** — one line on why you care, e.g. *"AI accelerator share gains keep compounding"*.
 - **Buy at or under** (and optionally **…but not under**) — your buy zone.
 - **Fair value**.
 
@@ -181,6 +182,21 @@ looked at before shows **Generating** until they arrive, even if you click **Ref
 meantime. Refresh updates the news, facts and peers. If nothing is being written, you see
 *"No key issues yet"*; click **Refresh now** to try again.
 
+### Your Plan
+
+Every asset page has a **Your Plan** card under **Your Position**: why you own the stock (or would
+buy it) and the prices that matter to you. Click **Edit**, change what you like, and **Save plan**.
+
+- For a stock you **own**, the plan also has a **role** — **Core** (the long-term base of your
+  portfolio), **Satellite** (an active bet around it) or **Speculative** (a small, high-risk bet);
+  hover the **i** next to it for a reminder — plus **You'd sell if** (what would prove you wrong),
+  **Stop below** and **Trim above**.
+- For a stock you only **watch**, it's your reason, buy zone and fair value.
+
+A bar shows today's price against your levels, and each level lists how far away it is. The plan
+belongs to the stock, not to an account or a watchlist: it's shared by every account that holds
+it, and it stays when you sell or stop watching.
+
 ## Run a scan now
 
 Intel scans on a schedule. To scan now, click **Scan** at the top of the page, then **Scan now**.
@@ -189,6 +205,7 @@ A scan uses your web-search quota.
 ## What Lucius can do here
 
 - Create, change or delete watchlists, topics and price alerts.
+- Read or write your plan for a stock — *"my plan for ACME: sell if margins fall below 45%, stop at 120"* — after you confirm the values.
 - Run a scan and summarise what it found.
 - Explain your portfolio's risk signals and the news behind your biggest movers.
 - Add, remove, turn on or off news sources.

@@ -10381,5 +10381,104 @@
     "required": [
       "guide"
     ]
+  },
+  "get_holding_plans": {
+    "additionalProperties": false,
+    "properties": {
+      "tickers": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array",
+        "description": "Only these tickers, e.g. ['AAPL']. Omit for every plan."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "set_holding_plans": {
+    "additionalProperties": false,
+    "properties": {
+      "updates": {
+        "description": "One entry per ticker. Fields you omit keep their current value; `clear` blanks fields. Prices are in the instrument's quote currency.",
+        "items": {
+          "properties": {
+            "ticker": {
+              "description": "The ticker whose plan to write, e.g. 'AAPL'.",
+              "type": "string"
+            },
+            "role": {
+              "enum": [
+                "core",
+                "satellite",
+                "speculative"
+              ],
+              "type": "string",
+              "description": "core = long-term base of the portfolio; satellite = an active bet around it; speculative = a small, high-risk bet."
+            },
+            "thesis": {
+              "type": "string",
+              "description": "Why they own it, or would buy it. At most 280 characters."
+            },
+            "exit_if": {
+              "type": "string",
+              "description": "The business condition that would make them sell. At most 280 characters."
+            },
+            "stop_below": {
+              "type": "number",
+              "description": "Sell-review price floor."
+            },
+            "buy_below": {
+              "type": "number",
+              "description": "Top of the buy zone."
+            },
+            "buy_above": {
+              "type": "number",
+              "description": "Optional floor of the buy zone (needs buy_below)."
+            },
+            "fair_value": {
+              "type": "number",
+              "description": "What they think it's worth."
+            },
+            "trim_above": {
+              "type": "number",
+              "description": "Price to trim or sell at."
+            },
+            "clear": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "description": "Field names to blank, e.g. ['stop_below']."
+            }
+          },
+          "required": [
+            "ticker"
+          ],
+          "type": "object"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "updates"
+    ],
+    "type": "object"
+  },
+  "delete_holding_plans": {
+    "additionalProperties": false,
+    "properties": {
+      "tickers": {
+        "description": "Tickers whose plans to delete.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "tickers"
+    ],
+    "type": "object"
   }
 }

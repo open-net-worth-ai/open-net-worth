@@ -108,6 +108,9 @@ GRANTS_JSON = (
 OPTION_CONTRACTS_JSON = (
     DATA_DIR / "option_contracts.json"
 )  # derivative overlay contracts — checkpoint-INCLUDED (portfolio truth, like lots/grants)
+HOLDING_PLANS_JSON = (
+    DATA_DIR / "holding_plans.json"
+)  # why you own / would buy an instrument — checkpoint-INCLUDED (user intent)
 VEST_EVENTS_JSON = (
     DATA_DIR / "vest_events.json"
 )  # append-only vest-event ledger (income txn + lot + locked-flip per vest) — checkpoint-INCLUDED

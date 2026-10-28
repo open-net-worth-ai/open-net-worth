@@ -87,6 +87,7 @@ from backend.ai.tools.schema_from_model import (
 )
 from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.core.ids import new_id
+from backend.services import holding_plans as _plans
 from backend.services import watchlist as _wl
 
 # ── Batch shape helpers (self-contained per-file, mirroring payees.py) ────────────────
@@ -657,6 +658,8 @@ async def get_watchlist(input_data: dict):
     if len(values) > 1:
         wanted = {v.upper() for v in values}
         items = [i for i in items if (i.get("value") or "").upper() in wanted]
+    plans = _plans.plans_by_instrument()
+    items = [_plans.with_intent(i, plans) if not _wl.is_topic(i) else i for i in items]
     watchlists = store.list_watchlists()
     return json.dumps(
         {
@@ -1116,7 +1119,7 @@ async def _update_one_watchlist_item(store, item_id: str, changes: dict) -> dict
         return no_op_write_result({"item": dict(existing)})
     try:
         # SEC-A (code review): same blocking-getaddrinfo concern as add_watchlist_items.
-        item = await asyncio.to_thread(store.update_by_id, item_id, changes)
+        item = await asyncio.to_thread(_wl.update_item, item_id, changes)
     except ValidationError as exc:
         return {"ok": False, "error": str(exc)}
     if item:
