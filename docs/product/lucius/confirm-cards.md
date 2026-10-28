@@ -90,6 +90,10 @@ Every change can still be undone with the **Restore** button on the reply — se
 **"Not run — can't be reused."** A later message replaced this card, or it was already answered
 (for example in another window). Ask Lucius again.
 
+**"Couldn't reach the server — nothing was approved or denied."** Your tap never arrived — the app
+may have been restarting or your connection dropped. The card keeps its buttons: tap again once the
+app is back. Don't send a new message instead, or the card is set aside.
+
 **I approved, but nothing was saved.** Something in your book changed after the card was shown,
 so the approval was refused rather than saving different numbers. Lucius shows a fresh card —
 approve that one.

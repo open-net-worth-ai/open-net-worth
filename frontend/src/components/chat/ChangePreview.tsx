@@ -79,9 +79,11 @@ export function ChangePreview({ change, onRespond, onResolvePendingToolUse, fail
   // screenshot behind ADR `approvals-never-expire`). Keyed on the flag rather than on
   // `status === undefined` because the tap's own two updates batch into one render, so a
   // status-transition watcher would never see the change.
+  // `change.undelivered` (the decision never reached the server) clears it the same way, but
+  // leaves the buttons up — the staged call is still pending and can be answered again.
   useEffect(() => {
-    if (change.refused) setLocalResponse(null)
-  }, [change.refused])
+    if (change.refused || change.undelivered) setLocalResponse(null)
+  }, [change.refused, change.undelivered])
 
   const isPermissionCard = Boolean(change.grant_tool)
   // external_mcp_call renders its OWN three-way card (see the early return below) rather

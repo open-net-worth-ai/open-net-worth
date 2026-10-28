@@ -218,6 +218,10 @@ export interface ProposedChange {
   // has to be cleared too, and only an explicitly-changing prop survives React's batching of
   // the tap's own updates. Cleared again on the next tap.
   refused?: boolean
+  // The decision never REACHED the server (network drop, server restarting, non-2xx), so the
+  // staged call is still pending there and the card must offer its buttons again — the
+  // opposite of `refused`. A flag of its own for the same batching reason. Cleared on the next tap.
+  undelivered?: boolean
   position_id?: string // update / remove target
   instrument_id?: string // add
   account_id?: string

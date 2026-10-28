@@ -617,7 +617,7 @@ export function useChat(
         // server refused once paints its tick again (and can be un-painted again if it
         // refuses again).
         const answer = (c: ProposedChange): ProposedChange =>
-          c.id === toolUseId ? { ...c, status, refused: undefined } : c
+          c.id === toolUseId ? { ...c, status, refused: undefined, undelivered: undefined } : c
         const proposedChanges = m.proposedChanges?.map(answer)
         const blocks = m.blocks?.map((block) =>
           block.type === 'change' && block.change.id === toolUseId
@@ -654,11 +654,11 @@ export function useChat(
         }))
       } catch (err) {
         // The decision never reached the server (network drop, server restarting, non-2xx),
-        // so nothing ran and the call is still pending there. Un-paint the optimistic tick
-        // exactly like a refused approval (chatReducer's `error` branch) so the card offers
-        // Approve/Deny again instead of asserting "✓ Approved" above the error.
+        // so nothing ran and the call is still pending there. Un-paint the optimistic tick and
+        // mark it `undelivered`, NOT `refused`: refused renders the terminal "can't be reused"
+        // row, which is false here — the card must offer Approve/Deny again (2026-10-29).
         const unpaint = (c: ProposedChange): ProposedChange =>
-          c.id === toolUseId ? { ...c, status: undefined, refused: true } : c
+          c.id === toolUseId ? { ...c, status: undefined, undelivered: true } : c
         const message =
           err instanceof TypeError
             ? "Couldn't reach the server — nothing was approved or denied. Try again."
