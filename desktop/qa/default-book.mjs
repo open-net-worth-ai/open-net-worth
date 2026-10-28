@@ -280,7 +280,7 @@ try {
   await page.getByRole("heading", { name: "Choose your app currency." }).waitFor();
   assert.equal(await page.getByRole("button", { name: "Get started", exact: true }).count(), 0);
   assert.equal(await page.getByRole('button', {name:'Change book folder'}).count(), 0);
-  await page.getByRole('button', {name:'← Back',exact:true}).waitFor();
+  await page.getByRole('button', {name:'Back',exact:true}).waitFor();
   assert.equal((await page.evaluate(() => window.onwDesktop.getSettings())).bookFolder, await realpath(path.join(freshHome,'.open-net-worth')));
   await page.waitForFunction(()=>[...document.querySelectorAll('.firstrun-topbar img')].every(img=>img.complete && img.naturalWidth>0));
   await page.screenshot({path:'qa/artifacts/first-launch-currency.png'});

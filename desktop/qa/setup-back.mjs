@@ -60,7 +60,7 @@ async function currency(root) {
     await page.getByRole("button", { name: "Change book folder" }).count(),
     0,
   );
-  await page.getByRole("button", { name: "← Back", exact: true }).waitFor();
+  await page.getByRole("button", { name: "Back", exact: true }).waitFor();
 }
 async function denied() {
   return page.evaluate(async () => {
@@ -84,7 +84,7 @@ try {
   );
   const settings = await page.evaluate(() => window.onwDesktop.getSettings());
   const backStarted = performance.now();
-  await page.getByRole("button", { name: "← Back", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await page
     .getByRole("heading", { name: "Where should we keep your book?" })
     .waitFor();
@@ -116,12 +116,12 @@ try {
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.waitForURL(/\/setup\/model$/);
   assert.equal(await denied(), true);
-  await page.getByRole("button", { name: "← Back", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await currency(first);
   check(
     "model Back still returns to currency; the native folder-choice capability is refused on the model page",
   );
-  await page.getByRole("button", { name: "← Back", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await page
     .getByRole("heading", { name: "Where should we keep your book?" })
     .waitFor();
