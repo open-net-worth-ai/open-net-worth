@@ -8,6 +8,7 @@ from typing import Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReactionTypeEmoji, Update
 from telegram.constants import ParseMode
+from telegram.error import BadRequest, NetworkError, TelegramError
 from telegram.ext import ContextTypes
 
 from backend.connectors import session_map, session_reset, turn_registry
@@ -859,6 +860,35 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None
     turn_registry.register_debounce(CONNECTOR, str(chat_id), batch["task"])
 
 
+_DOWNLOAD_RETRY_DELAY = 1.0
+
+
+async def _download_file(bot, file_id: str) -> bytes:
+    """Fetch an inbound file, retrying ONCE on a network error — a lone ``get_file`` timeout
+    once dropped a receipt photo with nothing but the 👀 reaction to show for it."""
+    try:
+        tg_file = await bot.get_file(file_id)
+        return bytes(await tg_file.download_as_bytearray())
+    except NetworkError as exc:
+        if isinstance(exc, BadRequest):  # permanent (e.g. file too big) — a retry can't help
+            raise
+        log.info("telegram file download failed, retrying once: %r", exc)
+    await asyncio.sleep(_DOWNLOAD_RETRY_DELAY)
+    tg_file = await bot.get_file(file_id)
+    return bytes(await tg_file.download_as_bytearray())
+
+
+async def handle_error(update: object, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    """The Application's error handler: without one, PTB prints a handler's exception to
+    stderr only, so a dropped message left no trace in app.log."""
+    chat = getattr(update, "effective_chat", None)
+    log.error(
+        "unhandled error in Telegram handler (chat_id=%s)",
+        getattr(chat, "id", None),
+        exc_info=ctx.error,
+    )
+
+
 async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = update.effective_chat.id
     username = update.effective_user.username or update.effective_user.first_name or "unknown"
@@ -894,8 +924,15 @@ async def handle_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     # (cross-channel-attachments RFC items 3/11/12) — a Telegram photo is now a durable
     # attachment ref exactly like a web upload, never raw bytes riding straight into
     # build_user_content as ``images=`` (removed).
-    tg_file = await ctx.bot.get_file(photo.file_id)
-    raw_bytes = bytes(await tg_file.download_as_bytearray())
+    try:
+        raw_bytes = await _download_file(ctx.bot, photo.file_id)
+    except TelegramError as exc:
+        log.warning("photo download from %s failed after retry: %r", chat_id, exc)
+        await ctx.bot.send_message(
+            chat_id=chat_id,
+            text="I couldn't download your photo from Telegram. Please send it again.",
+        )
+        return
     from backend.services.attachment_ingress import persist_inbound_file
 
     try:
@@ -1028,8 +1065,7 @@ async def handle_document(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> Non
     session_id = session_map.get_or_create_session(CONNECTOR, str(chat_id))
     password = caption.strip() or None
     try:
-        tg_file = await ctx.bot.get_file(doc.file_id)
-        raw_bytes = bytes(await tg_file.download_as_bytearray())
+        raw_bytes = await _download_file(ctx.bot, doc.file_id)
         result = persist_inbound_file(
             doc.file_name or "",
             doc.mime_type or "",

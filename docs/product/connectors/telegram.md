@@ -86,7 +86,9 @@ Talk to it like the in-app chat. Useful commands:
 | `/streaming`, `/suggestions`, `/toolstream` | Turn live-updating replies, follow-up suggestions, or "what I'm doing" progress on or off |
 | `/help` | Show the full list |
 
-You can also send photos (a receipt, a screenshot of a statement) and documents.
+You can also send photos (a receipt, a screenshot of a statement) and documents. If Telegram
+can't hand the file over, even after one retry, the bot tells you to send it again instead of
+going quiet.
 
 **Approving changes.** When Lucius wants to change something that needs your OK, the message
 comes with buttons — **✓ Once**, **✓ Always**, **✗ Deny** (or **✓ Apply** / **✗ Discard**). They
