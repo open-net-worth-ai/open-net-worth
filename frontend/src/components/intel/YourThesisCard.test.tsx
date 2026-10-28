@@ -14,7 +14,6 @@ vi.mock('../../api/investmentTheses', () => ({
 }))
 
 import { YourThesisCard } from './YourThesisCard'
-import { groupPrice } from './thesisFields'
 
 afterEach(cleanup)
 beforeEach(() => {
@@ -76,24 +75,28 @@ describe('YourThesisCard', () => {
     expect(getByText('Buy zone')).toBeTruthy()
   })
 
-  it('invites a first thesis when there is none', () => {
-    const { getByText } = mount({ thesis: null })
-    expect(getByText('Write down why you own ACME.')).toBeTruthy()
-    expect(getByText('Add')).toBeTruthy()
+  it('invites a first thesis with one button, and no separate Add or Edit', () => {
+    const { getByRole, queryByText } = mount({ thesis: null })
+    expect(getByRole('button', { name: 'Write down why you own ACME' })).toBeTruthy()
+    expect(queryByText('Add')).toBeNull()
+    expect(queryByText('Edit')).toBeNull()
   })
 
-  it('says which currency the levels are in', () => {
+  it('draws the ticker’s currency symbol inside every price box', () => {
     const { getByText, getByLabelText } = mount({ currency: 'EUR' })
     expect(getByText('€120.00')).toBeTruthy()
     fireEvent.click(getByText('Edit'))
-    expect(getByText('Prices in EUR')).toBeTruthy()
-    expect(getByLabelText('Stop below')).toBeTruthy()
+    const stop = getByLabelText('Stop below')
+    expect(
+      stop.closest('.ui-money-field')?.querySelector('.ui-money-field__prefix')?.textContent,
+    ).toBe('€')
+    expect(document.querySelectorAll('.asd-thesis-form .ui-money-field__prefix')).toHaveLength(5)
   })
 
   it('opens a new holding’s thesis on Core instead of an empty role', async () => {
     saveInvestmentThesis.mockResolvedValue({ ...THESIS, role: 'core', reason: 'Why not.' })
     const { getByText, getByLabelText, getByRole, onSaved } = mount({ thesis: null })
-    fireEvent.click(getByText('Add'))
+    fireEvent.click(getByRole('button', { name: 'Write down why you own ACME' }))
     expect(getByRole('tab', { name: 'Core' }).getAttribute('aria-selected')).toBe('true')
     fireEvent.change(getByLabelText('Why you own it'), { target: { value: 'Why not.' } })
     fireEvent.click(getByText('Save thesis'))
@@ -164,17 +167,5 @@ describe('YourThesisCard', () => {
     fireEvent.click(getByText('Edit'))
     fireEvent.click(getByText('Save thesis'))
     expect(await findByText('Your stop must be below your trim level.')).toBeTruthy()
-  })
-})
-
-describe('groupPrice', () => {
-  it('groups the whole part and keeps the decimals as typed', () => {
-    expect(groupPrice('232323223')).toBe('232,323,223')
-    expect(groupPrice('1234.5')).toBe('1,234.5')
-    expect(groupPrice('1,2345')).toBe('12,345')
-    expect(groupPrice('999')).toBe('999')
-    expect(groupPrice('0.00012')).toBe('0.00012')
-    expect(groupPrice('')).toBe('')
-    expect(groupPrice('1.2.3')).toBe('1.2.3')
   })
 })

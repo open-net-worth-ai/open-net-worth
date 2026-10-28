@@ -14930,15 +14930,6 @@ body.hide-amounts .money * {
     font-size: 11px;
     color: var(--faint);
   }
-  /* "Prices in EUR" — said once above ThesisEditor's price fields, never on every label. */
-  .thesis-prices-note {
-    font-size: var(--text-xs);
-    color: var(--muted);
-    margin: 0;
-  }
-  .asd-thesis-form .thesis-prices-note {
-    margin-bottom: calc(-1 * var(--space-3));
-  }
   /* ── Intel tabs: per-tab lead cards ─────────────────────────────────────────── */
   .intel-tab-lead {
     display: flex;

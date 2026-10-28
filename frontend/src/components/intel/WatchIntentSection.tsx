@@ -6,7 +6,7 @@ import type { InvestmentThesis } from '../../types/assetDetail'
 import { useQueryCache } from '../../state/queryCache'
 import { fPrice, getCurrencySymbol } from '../../utils/format'
 import { ThesisEditor } from './ThesisEditor'
-import { ThesisRoleBadge, ThesisView } from './ThesisView'
+import { ThesisRoleBadge, ThesisStart, ThesisView } from './ThesisView'
 import { thesisHasContent, thesisRole } from './thesisFields'
 
 // "Why you're watching" — the stock's investment thesis, shown and edited with the same ThesisView
@@ -47,10 +47,10 @@ export function WatchIntentSection({ sym, instrumentId, price = null, onSaved }:
   const fmt = (v: number) => `${ccy}${fPrice(v)}`
 
   const actions =
-    ctx && !editing ? (
+    hasContent && !editing ? (
       <button type="button" className="asd-rail-manage" onClick={() => setEditing(true)}>
         <Pencil size={12} aria-hidden="true" />
-        {hasContent ? 'Edit' : 'Add'}
+        Edit
       </button>
     ) : undefined
 
@@ -86,9 +86,7 @@ export function WatchIntentSection({ sym, instrumentId, price = null, onSaved }:
       ) : hasContent && thesis ? (
         <ThesisView thesis={thesis} held={ctx.held} price={price} fmt={fmt} />
       ) : (
-        <Text size="sm" tone="muted">
-          {ctx.held ? `Write down why you own ${sym}.` : `Write down why you’d buy ${sym}.`}
-        </Text>
+        <ThesisStart sym={sym} held={ctx.held} onClick={() => setEditing(true)} />
       )}
     </Panel>
   )

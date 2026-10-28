@@ -1,13 +1,22 @@
-import { useId, useState } from 'react'
-import { Button, FormField, SegmentedControl, TextArea, TextField } from '../ui'
+import { useId, useState, type CSSProperties } from 'react'
+import {
+  Button,
+  FormField,
+  SegmentedControl,
+  TextArea,
+  TextField,
+  type TextFieldProps,
+} from '../ui'
+import { getCurrencySymbol } from '../../utils/format'
 import { saveInvestmentThesis } from '../../api/investmentTheses'
 import type { InvestmentThesis, InvestmentThesisFields } from '../../types/assetDetail'
 import {
   BREAKS_IF_EXAMPLE,
   BREAKS_IF_LABEL,
+  formatPrice,
   groupPrice,
+  parsePrice,
   PRICE_LABELS,
-  pricesNote,
   priceText,
   reasonExample,
   reasonLabel,
@@ -38,17 +47,9 @@ interface Draft {
   prices: Record<PriceKey, string>
 }
 
-/** A typed price as a number, or null when blank or not a positive number. */
-const num = (s: string): number | null => {
-  const text = s.replace(/,/g, '').trim()
-  if (!text) return null
-  const v = Number(text)
-  return Number.isFinite(v) && v > 0 ? v : null
-}
-
 /** A holding with no role yet opens on Core, so the control never shows an empty choice. */
 function draftOf(thesis: InvestmentThesis | null, held: boolean): Draft {
-  const str = (v: number | null | undefined) => (v == null ? '' : groupPrice(String(v)))
+  const str = (v: number | null | undefined) => (v == null ? '' : formatPrice(v))
   return {
     role: thesis?.role ?? (held ? 'core' : null),
     reason: thesis?.reason ?? '',
@@ -67,13 +68,13 @@ function draftOf(thesis: InvestmentThesis | null, held: boolean): Draft {
 function draftError(d: Draft): { message: string; field: PriceKey } | null {
   // A typo must not save as "no level" — that would silently delete it.
   for (const k of Object.keys(PRICE_LABELS) as PriceKey[]) {
-    if (d.prices[k].trim() && num(d.prices[k]) == null)
+    if (d.prices[k].trim() && parsePrice(d.prices[k]) == null)
       return { message: `${PRICE_LABELS[k]} must be a positive number.`, field: k }
   }
-  const below = num(d.prices.buy_below)
-  const above = num(d.prices.buy_above)
-  const stop = num(d.prices.stop_below)
-  const trim = num(d.prices.trim_above)
+  const below = parsePrice(d.prices.buy_below)
+  const above = parsePrice(d.prices.buy_above)
+  const stop = parsePrice(d.prices.stop_below)
+  const trim = parsePrice(d.prices.trim_above)
   if (above != null && below == null)
     return { message: 'Set “Buy at or under” first.', field: 'buy_below' }
   if (above != null && below != null && above >= below)
@@ -90,7 +91,7 @@ function fieldsOf(
   thesis: InvestmentThesis | null,
   held: boolean,
 ): InvestmentThesisFields {
-  const pick = (k: PriceKey) => num(d.prices[k])
+  const pick = (k: PriceKey) => parsePrice(d.prices[k])
   return {
     role: held ? d.role : (thesis?.role ?? null),
     reason: d.reason.trim() || null,
@@ -103,6 +104,24 @@ function fieldsOf(
   }
 }
 
+/** A price box with the ticker's currency symbol drawn inside it, like MoneyField's — FormField's
+ *  aria wiring lands on the input itself. */
+function PriceInput({ symbol, ...rest }: TextFieldProps & { symbol: string }) {
+  const style = symbol ? ({ '--ui-money-prefix-chars': symbol.length } as CSSProperties) : undefined
+  return (
+    <div className="ui-money-field" style={style}>
+      <div className="ui-money-field__box">
+        {symbol && (
+          <span className="ui-money-field__prefix" aria-hidden="true">
+            {symbol}
+          </span>
+        )}
+        <TextField inputMode="decimal" {...rest} />
+      </div>
+    </div>
+  )
+}
+
 export function ThesisEditor({ instrumentId, thesis, held, currency, onSaved, onCancel }: Props) {
   // useId, not fixed ids: the card and the alerts dialog can both hold an editor on one page.
   const id = useId()
@@ -111,6 +130,7 @@ export function ThesisEditor({ instrumentId, thesis, held, currency, onSaved, on
   const [error, setError] = useState<string | null>(null)
   const localError = draftError(draft)
   const roleHelp = ROLES.find((r) => r.value === draft.role)?.help
+  const symbol = currency ? getCurrencySymbol(currency) : ''
 
   async function save() {
     if (localError) return
@@ -159,7 +179,6 @@ export function ThesisEditor({ instrumentId, thesis, held, currency, onSaved, on
           />
         </FormField>
       )}
-      {currency && <p className="thesis-prices-note">{pricesNote(currency)}</p>}
       <div className="asd-thesis-grid">
         {(held
           ? (['stop_below', 'trim_above', 'buy_below', 'buy_above', 'fair_value'] as PriceKey[])
@@ -171,9 +190,9 @@ export function ThesisEditor({ instrumentId, thesis, held, currency, onSaved, on
             htmlFor={`${id}-${k}`}
             span={held && k === 'fair_value' ? 'full' : 1}
           >
-            <TextField
+            <PriceInput
+              symbol={symbol}
               id={`${id}-${k}`}
-              inputMode="decimal"
               value={draft.prices[k]}
               invalid={localError?.field === k}
               onChange={(e) =>

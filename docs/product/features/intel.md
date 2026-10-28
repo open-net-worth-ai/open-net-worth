@@ -67,10 +67,10 @@ at the bottom adds up to 5 RSS feeds of your own for that ticker.
 
 ### 4. Say why you're watching (optional, recommended)
 
-Open the ticker's page and click **Add** (or **Edit**) on the **Your Thesis** card, or do the same
-on **Why you're watching** in its alerts screen. Both show your thesis the same way and open the
-same form, so either place edits the whole thesis. Prices get thousands separators once you leave
-the box. Click **Save thesis** when you're done:
+Open the ticker's page and click **Write down why you own it** (or **Edit**) on the **Your
+Thesis** card, or do the same on **Why you're watching** in its alerts screen. Both show your
+thesis the same way and open the same form, so either place edits the whole thesis. Click **Save
+thesis** when you're done:
 
 - **Why you'd buy it** (**Why you own it** for a stock you hold) — one line on why you care, e.g.
   *"Leader in AI chips, but too expensive today"*. If you plan to hold for a set time, say so here
@@ -202,8 +202,10 @@ thesis**.
   would prove you wrong), **Stop below** and **Trim above**.
 - For a stock you only **watch**, it's your reason, buy zone and fair value.
 
-Prices are in the stock's own quote currency — the one its page shows, named once above the
-price fields, e.g. *Prices in EUR* (crypto is quoted in USD). A new thesis for a stock you own starts as **Core**; change it
+Prices are in the stock's own quote currency — the one its page shows, with its symbol inside
+each price box, e.g. **€** (crypto is quoted in **$**). Type them in your own number format
+(Settings → Currency & format: *1,234.56*, *1.234,56* or *1 234,56*); they're grouped that way once you
+leave the box, and never rounded, so a coin's *0.00001234* is kept exactly. A new thesis for a stock you own starts as **Core**; change it
 if it's a smaller bet.
 
 A bar shows today's price against your levels, and each level lists how far away it is. The thesis

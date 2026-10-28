@@ -65,18 +65,23 @@ describe('WatchIntentSection', () => {
     )
     expect((getByLabelText('Stop below') as HTMLInputElement).value).toBe('120')
     expect((getByLabelText('Trim above') as HTMLInputElement).value).toBe('2,200')
-    expect(getByText('Prices in EUR')).toBeTruthy()
+    expect(
+      getByLabelText('Stop below')
+        .closest('.ui-money-field')
+        ?.querySelector('.ui-money-field__prefix')?.textContent,
+    ).toBe('€')
     fireEvent.click(getByText('Cancel'))
     expect(getByText('Share gains keep compounding.')).toBeTruthy()
   })
 
-  it('a watched stock with no thesis offers Add, then the watch fields only', async () => {
+  it('a watched stock with no thesis offers one start button, then the watch fields only', async () => {
     contexts.WATCH1 = { instrument_id: 'inst_w', currency: 'USD', held: false, thesis: null }
-    const { findByText, getByLabelText, queryByLabelText } = render(
+    const { findByRole, getByLabelText, queryByLabelText, queryByText } = render(
       <WatchIntentSection sym="WATCH1" onSaved={vi.fn()} />,
     )
-    expect(await findByText('Write down why you’d buy WATCH1.')).toBeTruthy()
-    fireEvent.click(await findByText('Add'))
+    const start = await findByRole('button', { name: 'Write down why you’d buy WATCH1' })
+    expect(queryByText('Add')).toBeNull()
+    fireEvent.click(start)
     expect(getByLabelText('Why you’d buy it')).toBeTruthy()
     expect(queryByLabelText('Stop below')).toBeNull()
     expect(queryByLabelText('Thesis breaks if')).toBeNull()

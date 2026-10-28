@@ -1,4 +1,5 @@
-import { InfoPopover } from '../ui'
+import { Plus } from 'lucide-react'
+import { Button, InfoPopover } from '../ui'
 import type { InvestmentThesis } from '../../types/assetDetail'
 import { BREAKS_IF_LABEL, thesisLevels, type ROLES, type ThesisLevel } from './thesisFields'
 
@@ -56,6 +57,28 @@ function PriceBar({
         {fmt(price)}
       </div>
     </div>
+  )
+}
+
+/** No thesis yet: the prompt is the button that starts one. */
+export function ThesisStart({
+  sym,
+  held,
+  onClick,
+}: {
+  sym: string
+  held: boolean
+  onClick: () => void
+}) {
+  return (
+    <Button
+      variant="secondary"
+      size="sm"
+      iconLeft={<Plus size={13} aria-hidden="true" />}
+      onClick={onClick}
+    >
+      {held ? `Write down why you own ${sym}` : `Write down why you’d buy ${sym}`}
+    </Button>
   )
 }
 

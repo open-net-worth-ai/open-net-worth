@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Pencil } from 'lucide-react'
-import { Panel, Text } from '../ui'
+import { Panel } from '../ui'
 import type { InvestmentThesis } from '../../types/assetDetail'
 import { fPrice, getCurrencySymbol } from '../../utils/format'
 import { ThesisEditor } from './ThesisEditor'
-import { ThesisRoleBadge, ThesisView } from './ThesisView'
+import { ThesisRoleBadge, ThesisStart, ThesisView } from './ThesisView'
 import { thesisHasContent, thesisRole } from './thesisFields'
 
 // "Your Thesis" — why you own (or would buy) this instrument and the prices that matter to you.
@@ -48,12 +48,13 @@ export function YourThesisCard({
   const hasContent = thesisHasContent(current, held)
   const role = thesisRole(current, held)
 
-  const actions = editing ? undefined : (
-    <button type="button" className="asd-rail-manage" onClick={() => setEditing(true)}>
-      <Pencil size={12} aria-hidden="true" />
-      {hasContent ? 'Edit' : 'Add'}
-    </button>
-  )
+  const actions =
+    editing || !hasContent ? undefined : (
+      <button type="button" className="asd-rail-manage" onClick={() => setEditing(true)}>
+        <Pencil size={12} aria-hidden="true" />
+        Edit
+      </button>
+    )
 
   return (
     <Panel
@@ -78,9 +79,7 @@ export function YourThesisCard({
       ) : hasContent && current ? (
         <ThesisView thesis={current} held={held} price={price} fmt={fmt} />
       ) : (
-        <Text size="sm" tone="muted">
-          {held ? `Write down why you own ${ticker}.` : `Write down why you’d buy ${ticker}.`}
-        </Text>
+        <ThesisStart sym={ticker} held={held} onClick={() => setEditing(true)} />
       )}
     </Panel>
   )

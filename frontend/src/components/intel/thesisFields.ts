@@ -2,6 +2,8 @@
 // (the one read view) — both shown on the asset page's Your Thesis card and in the alerts screen's
 // Why you're watching.
 import type { InvestmentThesis } from '../../types/assetDetail'
+import { numberSeparators, parseExact } from '../ui/amountText'
+import { getNumberLocale } from '../../utils/format'
 
 export type Role = NonNullable<InvestmentThesis['role']>
 
@@ -25,10 +27,6 @@ export const PRICE_LABELS: Record<PriceKey, string> = {
   fair_value: 'Fair value',
 }
 
-/** The one line above a form's price fields saying what currency they're in — once, not on
- *  every label. */
-export const pricesNote = (currency: string): string => `Prices in ${currency.toUpperCase()}`
-
 export const reasonLabel = (held: boolean): string => (held ? 'Why you own it' : 'Why you’d buy it')
 
 export const reasonExample = (held: boolean): string =>
@@ -39,21 +37,36 @@ export const reasonExample = (held: boolean): string =>
 export const BREAKS_IF_LABEL = 'Thesis breaks if'
 export const BREAKS_IF_EXAMPLE = 'e.g. Cloud growth slows two quarters in a row, or the CEO leaves.'
 
-/** What a price box keeps of a keystroke or paste: digits, commas (thousands, dropped when read)
- *  and one decimal point — letters never reach the field. */
+// Thesis prices are per share or per coin, so they're read and written in the user's own number
+// format (the same marks MoneyField uses) but never rounded to cents: a coin's 0.00001234 is the
+// price itself.
+
+/** What a price box keeps of a keystroke or paste: digits, the format's group mark (and spaces)
+ *  and one decimal mark — letters never reach the field. */
 export const priceText = (s: string): string => {
-  const [whole = '', ...rest] = s.replace(/[^\d.,]/g, '').split('.')
-  return rest.length ? `${whole}.${rest.join('')}` : whole
+  const { group, decimal } = numberSeparators()
+  const kept = [...s].filter((c) => /[\d\s]/.test(c) || c === group || c === decimal).join('')
+  const [whole = '', ...rest] = kept.split(decimal)
+  return rest.length ? `${whole}${decimal}${rest.join('')}` : whole
 }
 
-/** A typed price with thousands separators, for a box the user has left. Anything that isn't a
- *  plain positive number is returned as typed, so the error the editor shows still points at it. */
+/** A typed price as a number, or null when blank, unreadable or not positive. */
+export const parsePrice = (s: string): number | null => {
+  const text = s.trim()
+  if (!text) return null
+  const v = parseExact(text, [])
+  return v != null && v > 0 ? v : null
+}
+
+/** A stored price written in the user's number format, grouped, with every decimal it has. */
+export const formatPrice = (v: number): string =>
+  new Intl.NumberFormat(getNumberLocale(), { maximumFractionDigits: 20 }).format(v)
+
+/** A typed price regrouped for a box the user has left. Text that can't be read is returned as
+ *  typed, so the error the editor shows still points at it. */
 export const groupPrice = (s: string): string => {
-  const text = s.replace(/,/g, '').trim()
-  if (!/^\d+(\.\d*)?$/.test(text)) return s
-  const [whole = '', frac] = text.split('.')
-  const grouped = whole.replace(/^0+(?=\d)/, '').replace(/\B(?=(\d{3})+(?!\d))/g, ',')
-  return frac === undefined ? grouped : `${grouped}.${frac}`
+  const v = parsePrice(s)
+  return v == null ? s : formatPrice(v)
 }
 
 export interface ThesisLevel {

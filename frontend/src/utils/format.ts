@@ -441,8 +441,15 @@ export function fPrice(p: number | null | undefined, maxFractionDigits?: number)
       minimumFractionDigits: 2,
       maximumFractionDigits: maxFractionDigits,
     })
-  if (p >= 0.001) return p.toFixed(4)
-  if (p >= 0.000001) return p.toFixed(8)
+  // The same fixed precision as before, written with the user's decimal mark ("0,00001234" under
+  // the dot format) — toFixed only ever writes a point.
+  const fixed = (digits: number) =>
+    p.toLocaleString(_numberLocale, {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    })
+  if (p >= 0.001) return fixed(4)
+  if (p >= 0.000001) return fixed(8)
   return p.toExponential(2)
 }
 
