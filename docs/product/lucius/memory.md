@@ -98,8 +98,8 @@ that narrows it to the facts (or topics) containing your words.
 On a phone or tablet the pencils and bins sit behind the row: swipe a row — a topic, an open
 item, an older memory or a bullet on a topic's page — to the left to show the pencil (**Edit**)
 and the bin (**Delete**, or **Forget** for a single fact), then tap one. Tap the row again, or
-anywhere else, to slide it back. Going back from a topic's page returns the list to where you
-had scrolled it.
+anywhere else, to slide it back. Going back from a topic's page — the ‹ arrow or a swipe to the
+right — returns to the memory list where you had scrolled it.
 
 When a fact turns out to live somewhere better — your profile, your Instructions, a payee rule,
 an automation, the ledger — or has gone stale, Lucius moves it out of memory. It no longer shows
