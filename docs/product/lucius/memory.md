@@ -61,7 +61,11 @@ reminded of — he writes it down ready to act on, for example *When Priya's Pay
 arrives (S$540): book Rent S$500, Utilities S$20, Phone & Internet S$20*. Every run sees Recent
 first — your chats, a Capture of a bank notification, an automation, the daily briefing — and when
 what it handles matches an entry, it does what the entry says rather than guessing from past
-patterns, then marks the entry done. An entry is saved only from your own words in a chat (he
+patterns, then marks the entry done. If the money is a little off what was agreed (rounded up, a
+small overpayment) he still books the agreed split and puts the difference on a line of its own;
+if it is far off, such as a part payment, he books only what came and leaves the entry open.
+Where a part pays you back for an earlier charge and you named no category, it goes to the
+category that charge was booked under. An entry is saved only from your own words in a chat (he
 checks them, never his), never from an automation or a Capture; at most three come from one
 conversation, the list is trimmed to the ten most recently edited or used before each memory
 pass (the rest lapse), and each lapses after 14 days unless it names a date. A Capture or an

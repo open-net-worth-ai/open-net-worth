@@ -18,7 +18,7 @@ from backend.evals.memory.cases_sort import S01_FACTS
 from backend.evals.memory.cases_tidy import T01_DUP_B
 from backend.evals.memory.mock_import import import_reply
 from backend.evals.memory.mock_keep import EXTRACT_KEEP, sort_s03
-from backend.evals.memory.mock_recent import EXTRACT_RECENT, recent_script
+from backend.evals.memory.mock_recent import EXTRACT_RECENT, RECENT_USE_IDS, recent_script
 
 GOOD, SLOPPY = "good", "sloppy"
 PERSONAS = (GOOD, SLOPPY)
@@ -355,8 +355,9 @@ def chat_script(persona: str, case_id: str, context: str) -> list[list[dict]]:
                 f"Split it 60/40 as before (memory-used: {rent}).\n\n<memory-used>{job}</memory-used>"
             )
         ]
-    if case_id == "U03":
-        return recent_script(persona == GOOD, _handle_near(context, "When Priya's PayNow"), _round)
+    if case_id in RECENT_USE_IDS:
+        handle = _handle_near(context, "When Priya's PayNow")
+        return recent_script(case_id, persona == GOOD, handle, _round)
     if persona == GOOD:
         return [
             _round(tool="list_accounts"),

@@ -18,6 +18,14 @@ def recent_closed(fact_id: str, name: str) -> Check:
     return Check(name, QUALITY, test)
 
 
+def recent_open(fact_id: str, name: str) -> Check:
+    def test(o: Outcome):
+        f = o.fact(fact_id) or {}
+        return None if f.get("state") == "live" else f"state {f.get('state')}"
+
+    return Check(name, QUALITY, test)
+
+
 def run_mentions(pattern: str, name: str) -> Check:
     """The run's reply or any tool call it made carries ``pattern``."""
     rx = re.compile(pattern, re.IGNORECASE)
@@ -47,4 +55,4 @@ def usual_fact_kept(fact_id: str, name: str) -> Check:
     return Check(name, QUALITY, test)
 
 
-__all__ = ["recent_closed", "run_mentions", "usual_fact_kept"]
+__all__ = ["recent_closed", "recent_open", "run_mentions", "usual_fact_kept"]
