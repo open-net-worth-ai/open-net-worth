@@ -10,7 +10,11 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, cleanup, screen, fireEvent } from '@testing-library/react'
 
-const authFetch = vi.hoisted(() => vi.fn(() => Promise.reject(new Error('offline'))))
+const authFetch = vi.hoisted(() =>
+  vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(() =>
+    Promise.reject(new Error('offline')),
+  ),
+)
 vi.mock('../../../api/client', () => ({ authFetch }))
 
 import { PayeesModal } from './PayeesModal'

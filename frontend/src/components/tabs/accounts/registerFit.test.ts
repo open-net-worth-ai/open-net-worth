@@ -3,7 +3,6 @@ import { REG_COLS } from './Register'
 import { fitRegisterColumns } from './registerFit'
 
 const widthsOf = () => Object.fromEntries(REG_COLS.map((c) => [c.key, c.w]))
-const keys = (list: { key: string }[]) => list.map((c) => c.key)
 
 describe('fitRegisterColumns', () => {
   it('leaves the widths alone before the container is measured', () => {

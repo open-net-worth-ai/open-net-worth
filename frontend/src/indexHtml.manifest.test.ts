@@ -13,7 +13,7 @@ it('the manifest link sends credentials', () => {
 // iOS 27 ignores a URL-referenced apple-touch-icon (and the manifest icons) and shows a letter
 // tile on the Home Screen; the same PNG inlined as a data: URI still works.
 it('the apple-touch-icon is inlined as a data: URI at build time', async () => {
-  const { inlineAppleTouchIcon } = await import('../vite.config')
+  const { inlineAppleTouchIcon } = await import('../inlineAppleTouchIcon')
   const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8')
   const transform = inlineAppleTouchIcon().transformIndexHtml as (html: string) => string
   const out = transform(html)
