@@ -98,9 +98,8 @@ async def _instrument_id(ticker: str) -> str:
 @tool(
     "get_investment_theses",
     description=(
-        "The user's investment theses: per ticker, why they own (or would buy) it, what would "
-        "break the thesis, its role (core / satellite / speculative), and their price levels — "
-        "stop, buy zone, fair value, trim — with whether they hold it now."
+        "The user's investment theses per ticker — reason, breaks_if, role and price levels — "
+        "and whether they hold it now."
     ),
     input_schema=schema_of(GetInvestmentThesesInput, tool_name="get_investment_theses"),
 )
