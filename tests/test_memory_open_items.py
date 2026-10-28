@@ -43,24 +43,25 @@ def test_an_open_item_without_the_persons_words_is_dropped(quote):
     assert guard({"new": [_open("Set a stop-loss on RIVN", quote)]}, SAID, {})["new"] == []
 
 
-def test_one_new_open_item_per_conversation_and_other_sections_pass():
+def test_three_new_recent_entries_per_pass_and_other_sections_pass():
     q = "Remind me next week to check the PayPal login alert"
-    ops = guard(
-        {
-            "new": [
-                _open("Check the PayPal login alert", q),
-                _open("Check it again", q),
-                {"content": "Prefers short answers", "section": "you", "quote": None},
-            ]
-        },
-        SAID,
-        {},
-    )
-    assert [i["content"] for i in ops["new"]] == [
-        "Check the PayPal login alert",
+    items = [_open(f"Check the PayPal login alert, step {n}", q) for n in range(1, 5)]
+    items.append({"content": "Prefers short answers", "section": "you", "quote": None})
+    ops = guard({"new": items}, SAID, {})
+    kept = [i["content"] for i in ops["new"]]
+    assert kept == [
+        "Check the PayPal login alert, step 1",
+        "Check the PayPal login alert, step 2",
+        "Check the PayPal login alert, step 3",
         "Prefers short answers",
     ]
     assert all("quote" not in i for i in ops["new"])
+
+
+def test_an_automation_run_may_not_add_a_recent_entry():
+    q = "Remind me next week to check the PayPal login alert"
+    ops = guard({"new": [_open("Check the PayPal login alert", q)]}, SAID, {}, may_add=False)
+    assert ops["new"] == []
 
 
 def test_moving_a_fact_into_open_items_needs_a_quote_but_editing_one_does_not():
@@ -157,3 +158,70 @@ def test_a_quote_that_points_back_is_grounded_by_its_own_message():
         "Decide whether to dispute the deposit deduction", "Can we come back to that next week?"
     )
     assert guard({"new": [item]}, user_words(history), {})["new"][0]["content"].startswith("Decide")
+
+
+# ── Recent context (amendment 10): read by every run, closed by the run that acts on it ──────
+
+
+def _live_fact(fid: str, content: str, section: str, age_minutes: int = 0) -> dict:
+    stamp = f"2026-10-28T{10 + age_minutes // 60:02d}:{age_minutes % 60:02d}:00+00:00"
+    return {
+        "id": fid,
+        "content": content,
+        "section": section,
+        "topic": None if section == "open_items" else "Housing",
+        "state": "live",
+        "source": "implicit",
+        "expires_at": "2026-11-11" if section == "open_items" else None,
+        "created_at": stamp,
+        "updated_at": stamp,
+    }
+
+
+def test_a_run_closes_the_recent_entry_it_acted_on_by_its_handle(db_isolated):
+    from backend.ai.memory_open_items import close_recent
+    from backend.ai.memory_render import fact_handle
+
+    MemoryStore().bulk_insert(
+        [
+            _live_fact(
+                "mem_aa11bb22cc33", "When Priya's PayNow arrives, book Rent S$500", "open_items"
+            ),
+            _live_fact("mem_dd44ee55ff66", "Splits rent with Priya", "money"),
+        ]
+    )
+    closed = close_recent([fact_handle("mem_aa11bb22cc33"), fact_handle("mem_dd44ee55ff66")])
+    assert closed == ["When Priya's PayNow arrives, book Rent S$500"]
+    rows = {f["id"]: f for f in MemoryStore().all_facts()}
+    assert (rows["mem_aa11bb22cc33"]["state"], rows["mem_aa11bb22cc33"]["retired_reason"]) == (
+        "retired",
+        "resolved",
+    )
+    assert rows["mem_dd44ee55ff66"]["state"] == "live"
+    assert close_recent(["mzzzzzz"]) == []
+
+
+def test_past_ten_live_recent_entries_the_oldest_lapse(db_isolated):
+    MemorySettingsStore().set_enabled(True)
+    MemoryStore().bulk_insert(
+        [_live_fact(f"mem_r{n:02d}", f"Entry {n}", "open_items", age_minutes=n) for n in range(12)]
+    )
+    memory.purge_expired(MemoryStore())
+    live = sorted(f["id"] for f in MemoryStore().all_facts() if f["state"] == "live")
+    assert live == [f"mem_r{n:02d}" for n in range(2, 12)]
+
+
+def test_recent_leads_every_runs_memory_block_with_how_to_use_it():
+    from backend.ai.memory_render import RECENT_HEAD, render_memory_block
+
+    facts = [
+        _live_fact("mem_aa11bb22cc33", "Splits rent with Priya", "money"),
+        _live_fact(
+            "mem_dd44ee55ff66", "When Priya's PayNow arrives, book Rent S$500", "open_items"
+        ),
+    ]
+    text, _ = render_memory_block(facts)
+    assert text.index(RECENT_HEAD) < text.index("Money:")
+    assert "close_recent_items" in RECENT_HEAD
+    briefing, _ = render_memory_block(facts, handles=False)
+    assert "Recent:" in briefing and "close_recent_items" not in briefing

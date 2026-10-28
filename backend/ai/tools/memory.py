@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import Field
 
@@ -182,3 +182,35 @@ async def recall_memory(input_data: dict):
     elif not found["matches"]:
         payload["note"] = "Nothing remembered matches. Ask the user rather than guessing."
     return json.dumps(payload, ensure_ascii=False), None
+
+
+class CloseRecentItemsInput(ToolInput):
+    """Schema-of-record for ``close_recent_items`` (see ``schema_from_model``)."""
+
+    handles: List[str] = Field(
+        description=(
+            "The handles of the Recent entries this run has done what they said, as shown beside "
+            "each entry in your memory block (e.g. 'm7a88f8')."
+        ),
+    )
+
+
+@tool(
+    "close_recent_items",
+    description=(
+        "Mark Recent entries done, once you have done what they say — booked the payment one "
+        "expects, as it says, or acted on the decision it records — so no later run waits for "
+        "something that already happened. Pass the handles shown beside the entries. Never close "
+        "an entry you did not act on; to change what one says, use remember_fact instead."
+    ),
+    input_schema=schema_of(CloseRecentItemsInput, tool_name="close_recent_items"),
+    mutates=("memory",),
+)
+async def close_recent_items(input_data: dict):
+    from backend.ai.memory_open_items import close_recent
+
+    closed = close_recent(input_data.get("handles") or [])
+    if not closed:
+        message = "No live Recent entry matches those handles."
+        return json.dumps({"ok": False, "message": message}, ensure_ascii=False), None
+    return json.dumps({"ok": True, "closed": closed}, ensure_ascii=False), None

@@ -36,6 +36,7 @@ class Case:
     accounts: tuple[str, ...] = ()
     forgotten: tuple[str, ...] = ()  # texts the user told Lucius to forget, seeded as fingerprints
     summaries: bool = False  # a tidy-stage case that runs the topic-summary pass, not the tidy
+    unattended: bool = False  # a use-stage turn run as a Capture or automation is: no approvals
 
 
 @dataclass

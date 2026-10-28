@@ -61,7 +61,7 @@ def test_export_zip_has_one_file_per_topic_and_no_retired_facts(db_isolated):
         "money-housing.md",
         "money-investing.md",
         "older-memories.md",
-        "open-items.md",
+        "recent.md",
         "you-preferences.md",
     ]
     assert files["money-housing.md"].splitlines() == [
@@ -71,8 +71,8 @@ def test_export_zip_has_one_file_per_topic_and_no_retired_facts(db_isolated):
         "- Rent is due on the 1st (Sep 2026)",
     ]
     assert "- Holds ETFs (Feb 2026)" in files["money-investing.md"]
-    assert "- Send the tax letter (Sep 2026)" in files["open-items.md"]
-    assert files["open-items.md"].startswith("# Open items")
+    assert "- Send the tax letter (Sep 2026)" in files["recent.md"]
+    assert files["recent.md"].startswith("# Recent")
     assert "- Legacy fact (Sep 2026)" in files["older-memories.md"]
     assert files["older-memories.md"].startswith("# Older memories")
     assert not any("Old landlord" in text or "Gone long ago" in text for text in files.values())
@@ -81,7 +81,7 @@ def test_export_zip_has_one_file_per_topic_and_no_retired_facts(db_isolated):
 def test_export_always_carries_open_items_and_skips_empty_groups(db_isolated):
     files = _files(memory_export.build_memory_export())
 
-    assert list(files) == ["open-items.md"]
+    assert list(files) == ["recent.md"]
 
 
 def test_export_filenames_are_safe_and_distinct(db_isolated):
@@ -143,4 +143,4 @@ def test_a_hostile_topic_name_cannot_make_an_unsafe_zip_entry(db_isolated):
     for name in names:
         assert name.endswith(".md") and "\x00" not in name
         assert not any(bad in name for bad in ("/", "\\", ".."))
-        assert name == "open-items.md" or name.startswith("money-")
+        assert name == "recent.md" or name.startswith("money-")

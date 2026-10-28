@@ -24,7 +24,7 @@ from backend.core.chat_context_markers import is_not_said, strip_user_msg_fence_
 logger = logging.getLogger(__name__)
 
 QUOTE_MIN_CHARS = 8
-MAX_NEW_PER_CONVERSATION = 1
+MAX_NEW_PER_CONVERSATION = ms.RECENT_MAX_NEW_PER_PASS
 
 _QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"'})
 _CONTENT_WORD = re.compile(r"[^\W\d_]{4,}")
@@ -75,10 +75,14 @@ def _grounded(item: dict, said: str) -> bool:
     return any(quote in line and _content_words(line) & item_words for line in said.split("\n"))
 
 
-def guard(ops: dict, said: str, current: dict[str, dict]) -> dict:
-    """``ops`` with every Open item the person did not ask for dropped, and ``quote`` stripped
+def guard(ops: dict, said: str, current: dict[str, dict], *, may_add: bool = True) -> dict:
+    """``ops`` with every Recent entry the person did not ask for dropped, and ``quote`` stripped
     from every item. ``said`` is ``user_words`` of the conversation; ``current`` maps fact ids
-    to the facts as they stand (an update to a fact already in Open items needs no quote)."""
+    to the facts as they stand (an update to an entry already in Recent needs no quote).
+    ``may_add`` is False for an automation run: its "user" turn is the automation's own prompt,
+    not the person speaking, so it may close a Recent entry but never add one."""
+    if not may_add:
+        said = ""
     kept_new, opened = [], 0
     for item in ops.get("new") or []:
         if not isinstance(item, dict):
@@ -104,4 +108,39 @@ def guard(ops: dict, said: str, current: dict[str, dict]) -> dict:
     return {**ops, "new": kept_new, "updates": kept_updates}
 
 
-__all__ = ["guard", "user_words"]
+def overflow(facts: list[dict]) -> list[str]:
+    """Ids of the live Recent entries past ``RECENT_MAX_LIVE``, least recently touched first to
+    go — the cap that keeps what every run carries short."""
+    live = [f for f in facts if f.get("state") == "live" and f.get("section") == ms.OPEN_ITEMS]
+    live.sort(key=lambda f: str(f.get("updated_at") or f.get("created_at") or ""), reverse=True)
+    return [f["id"] for f in live[ms.RECENT_MAX_LIVE :]]
+
+
+def close_recent(handles: list[str]) -> list[str]:
+    """Close the live Recent entries the handles (or full ids) name, as ``resolved``: the run
+    that did what an entry said marks it done, so no later run waits for a payment that came.
+    Returns the closed entries' texts; a handle naming anything else closes nothing."""
+    from backend.ai.memory_citations import resolve_handles
+    from backend.ai.memory_write import apply_memory_change
+    from backend.db import MemoryStore
+
+    recent = [
+        f
+        for f in MemoryStore().active_facts()
+        if f.get("state") == "live" and f.get("section") == ms.OPEN_ITEMS
+    ]
+    wanted = [str(h or "").strip() for h in handles if isinstance(h, str)]
+    by_id = {f["id"]: f for f in recent}
+    ids = [h for h in wanted if h in by_id]
+    ids += [
+        i for i in resolve_handles([h for h in wanted if h not in by_id], recent) if i not in ids
+    ]
+    if not ids:
+        return []
+    apply_memory_change(
+        {"retire": [{"id": i, "reason": "resolved"} for i in ids]}, source="implicit", strict=False
+    )
+    return [by_id[i]["content"] for i in ids]
+
+
+__all__ = ["close_recent", "guard", "overflow", "user_words"]

@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 from datetime import date
 
-from backend.ai.memory_structure import SECTIONS, topic_key
+from backend.ai.memory_structure import OPEN_ITEMS, SECTIONS, topic_key
 
 HEADER = (
     "WHAT YOU REMEMBER (reference — apply when relevant; never recite these facts back unprompted):"
@@ -19,6 +19,14 @@ HEADER = (
 CONTEXT_NOT_PROOF = (
     "Memory is context, not proof — check the owning record before acting on anything "
     "changeable; if they disagree, the record wins and you fix the memory."
+)
+
+# Recent leads the block, in every run that carries it — a chat, a Capture, an automation, the
+# briefing — so the run handling a payment knows what the person agreed about it (amendment 10).
+RECENT_HEAD = (
+    "Recent — decided or in flight over the last two weeks. When what you are handling matches "
+    "one (the payment it expects arrives, its date comes), do what it says, over any past "
+    "pattern; once done, close it with close_recent_items:"
 )
 
 HANDLE_HEX_CHARS = 6
@@ -89,12 +97,13 @@ def render_memory_block(facts: list[dict], *, handles: bool = True) -> tuple[str
         return "", stats
 
     lines = ["", HEADER, CONTEXT_NOT_PROOF]
-    for key, label in SECTIONS.items():
+    order = [OPEN_ITEMS] + [k for k in SECTIONS if k != OPEN_ITEMS]
+    for key in order:
         members = [f for f in live if _section_of(f) == key]
         if not members:
             continue
         stats["by_section"][key] = len(members)
-        lines.append(f"{label}:")
+        lines.append(RECENT_HEAD if key == OPEN_ITEMS and handles else f"{SECTIONS[key]}:")
         for name, group in _topic_groups(members):
             if name:
                 lines.append(f"  {name}:")

@@ -52,14 +52,7 @@ describe('MemoryBrowser', () => {
 
   it('lists the sections in order, then older memories, and never memories moved out', async () => {
     await renderBrowser()
-    expect(sectionLabels()).toEqual([
-      'You',
-      'Money',
-      'Plans',
-      'Open items',
-      'Other',
-      'Older memories',
-    ])
+    expect(sectionLabels()).toEqual(['You', 'Money', 'Plans', 'Recent', 'Other', 'Older memories'])
     expect(screen.queryByText('Works as a nurse')).toBeNull()
     expect(screen.queryByText(/Moved out of memory/)).toBeNull()
   })
@@ -76,7 +69,7 @@ describe('MemoryBrowser', () => {
 
   it('lists open items directly, each with its date', async () => {
     await renderBrowser()
-    const open = screen.getByRole('region', { name: 'Open items' })
+    const open = screen.getByRole('region', { name: 'Recent' })
     expect(within(open).getByText(/Call the insurer about the renewal/)).toBeTruthy()
     expect(within(open).getByText(/Until /)).toBeTruthy()
     expect(within(open).queryByRole('button', { name: /^Delete / })).toBeNull()
@@ -84,7 +77,7 @@ describe('MemoryBrowser', () => {
 
   it('lays open items and older memories out as rows, an end date in the date column', async () => {
     await renderBrowser()
-    const open = screen.getByRole('region', { name: 'Open items' })
+    const open = screen.getByRole('region', { name: 'Recent' })
     const old = screen.getByRole('region', { name: 'Older memories' })
     expect(open.querySelector('.ui-list')).toBeNull()
     expect(old.querySelector('.ui-list')).toBeNull()

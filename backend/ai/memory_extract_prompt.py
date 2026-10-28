@@ -79,8 +79,9 @@ position"), not the live figure; a fact that carries one is dropped.
 You only store the lines whose home starts with "Memory". Skip a fact whose home is anything
 else: it is written elsewhere, in a conversation.
 
-Never store conversation or run state (what is being waited on, what was offered or proposed,
-what awaits the person's confirmation, what an automation did or flagged), ledger figures
+Never store conversation or run state (what is being waited on, what was offered or proposed
+and not agreed, what awaits the person's confirmation, what an automation did or flagged) — what
+the person agreed or decided is different: that is a Recent entry, below — ledger figures
 (balances, holdings, prices, trades), a bookkeeping follow-up the book already shows (an
 unmatched or uncleared entry, a pending charge, a missing memo, a statement line to match), a
 task that is finished, or a full card, account, ID or passport number or a password (the last
@@ -91,15 +92,21 @@ The user's Instructions for Lucius are followed on every turn. Do not store what
 instructions already say:
 {instructions.strip() or "(none)"}
 
-An open item is only something the person said they will do, or asked to be reminded of, that
-no screen in the app already shows. It MUST carry "quote": their own words from one of the
-USER messages above, copied exactly, in which they say they will do it or ask for the reminder.
-Lucius offering, proposing or waiting for an answer is never an open item. At most one new open
-item per conversation. Only open items take an expires_at.
+RECENT (section open_items) carries what this conversation decided or set in motion that matters
+over the next two weeks, so every later run of Lucius — a chat, a Capture of a bank notification,
+an automation — acts as the same person who was there: an agreement about a payment someone owes
+and exactly how to book it when it arrives, a decision whose result is still to come, something
+the person will do or asked to be reminded of. Write each one ready to act on, with the figures
+it needs ("When Priya's PayNow for November arrives (S$540.00): book Rent S$500, Utilities S$20,
+Phone & Internet S$20"); update an entry rather than add a second one about the same thing, and
+remove one this conversation settled. Each MUST carry "quote": the person's own words from one of
+the USER messages above, copied exactly, in which they agree, decide or ask — Lucius offering,
+proposing or waiting for an answer is never a Recent entry. At most {ms.RECENT_MAX_NEW_PER_PASS}
+new Recent entries. Only Recent entries take an expires_at (the day after it no longer matters).
 
 Each fact is at most {ms.FACT_MAX_CHARS} characters. For each fact choose:
-  - section: one of {", ".join(ms.SECTIONS)} (open_items expire after {ms.OPEN_ITEM_DEFAULT_DAYS} days
-    unless you give an expires_at; they take no topic)
+  - section: one of {", ".join(ms.SECTIONS)} (open_items is Recent: it lapses after
+    {ms.OPEN_ITEM_DEFAULT_DAYS} days unless you give an expires_at, and takes no topic)
   - topic: a short name for the subject. Reuse a name from "Topics in use" below when one fits;
     invent a new one only when none does (suggested: {suggested})
   - sensitive: true for {ms.SENSITIVE_TOPICS} — on an update too, when its new text is about one. Never store a full card, account, ID or passport number or a password.

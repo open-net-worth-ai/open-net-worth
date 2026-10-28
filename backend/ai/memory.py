@@ -139,10 +139,16 @@ def purge_expired(store: MemoryStore | None = None) -> int:
     """
     s = store or MemoryStore()
     today = user_today().isoformat()
-    expired = [f["id"] for f in s.all_facts() if is_expired(f, today)]
+    facts = s.all_facts()
+    expired = [f["id"] for f in facts if is_expired(f, today)]
     if expired:
         apply_memory_change({"remove": expired}, source="implicit", strict=False)
         logger.info("purge_expired: removed %d expired facts", len(expired))
+    surplus = [fid for fid in memory_open_items.overflow(facts) if fid not in expired]
+    if surplus:
+        retire = [{"id": fid, "reason": "stale"} for fid in surplus]
+        apply_memory_change({"retire": retire}, source="implicit", strict=False)
+        logger.info("purge_expired: %d Recent entries past the cap lapsed", len(surplus))
     return len(expired)
 
 
@@ -500,7 +506,9 @@ def _extraction_ops(parsed: dict) -> dict:
     return ops
 
 
-async def extract_and_merge(history: list[dict], session_id: str | None = None) -> None:
+async def extract_and_merge(
+    history: list[dict], session_id: str | None = None, *, from_person: bool = True
+) -> None:
     """Extract facts from the new portion of a conversation and merge into the store.
 
     When session_id is provided, the extraction cursor tracks the last extracted history
@@ -509,7 +517,8 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
     next idle sweep. First run on a legacy long session: the backfill is capped at
     EXTRACT_BACKFILL_CAP messages.
 
-    If the global memory toggle is OFF, this is a no-op.
+    If the global memory toggle is OFF, this is a no-op. ``from_person`` is False for an
+    automation run, which may close a Recent entry but never add one (amendment 10).
     """
     if not memory_writes_enabled():
         return
@@ -571,6 +580,7 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
         _extraction_ops(parsed),
         memory_open_items.user_words(slice_history),
         {f["id"]: f for f in store.all_facts()},
+        may_add=from_person,
     )
     await asyncio.to_thread(apply_memory_change, ops, source="implicit", strict=False, today=today)
 

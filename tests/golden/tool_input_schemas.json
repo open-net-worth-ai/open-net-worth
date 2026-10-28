@@ -10417,5 +10417,21 @@
       "query"
     ],
     "type": "object"
+  },
+  "close_recent_items": {
+    "additionalProperties": false,
+    "properties": {
+      "handles": {
+        "description": "The handles of the Recent entries this run has done what they said, as shown beside each entry in your memory block (e.g. 'm7a88f8').",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "handles"
+    ],
+    "type": "object"
   }
 }

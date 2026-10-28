@@ -573,3 +573,31 @@ every Open item was a thread Lucius had left mid-way.
   untaken offer store nothing; "remind me" makes exactly one Open item; a preference is stored as
   its kernel; older notes in the old framing are filed in the house voice or moved out, and none
   becomes an Open item.
+
+## Amendment 10 (2026-10-29) — Recent context: what was decided reaches every run
+
+Decided by the owner in session, after a Capture booked a flatmate's PayNow with the wrong split:
+the agreed amount and split had been settled in a chat a few hours earlier, but long-term memory
+held only to-dos ("send the request", "collect the share") and the Capture — a separate run —
+fell back on past transactions. One long-term layer was doing two jobs.
+
+- **The Open items section becomes Recent** (key `open_items` kept, no data to move; label
+  "Recent", alias accepted by `normalise_section`). It holds what a chat decided or set in motion
+  that matters over the next two weeks — an agreement about a payment someone owes and exactly how
+  to book it, a decision whose result is still to come, something the person will do or asked to
+  be reminded of — written ready to act on. The three-month keep test (amendment 9) is for
+  long-term facts; Recent is its one exception.
+- **Every run reads it first.** `memory_render` puts Recent at the head of the memory block, with
+  the instruction to do what a matching entry says over any past pattern and to close it once
+  done. The block already reaches chats, Captures, automation runs (the lean prompt that strips it
+  is unused) and the daily briefing, which shows it without the close instruction.
+- **Only the person adds; any run may close.** An entry still needs a quote from the person's own
+  typed words (amendment 9's guard), at most three per extraction pass. An automation run's
+  extraction may update or remove but never add one (`extract_and_merge(from_person=False)`: its
+  "user" turn is the automation's prompt), and Captures stay unextracted. A run that does what an
+  entry says closes it with the new tool `close_recent_items(handles)` — retired `resolved`, never
+  deleted, so no later run waits for something that already happened. Unattended runs pass the
+  approval gate unchanged, so a Capture can close what it acted on.
+- **Bounded.** At most ten live entries; past that the least recently touched lapse (`stale`) in
+  `purge_expired`. Each lapses after 14 days unless it names a date.
+- Export writes `recent.md` (was `open-items.md`).
