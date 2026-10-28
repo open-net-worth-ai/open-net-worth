@@ -1,7 +1,7 @@
 import { app, autoUpdater, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, Notification, powerMonitor, protocol, safeStorage, shell, Tray } from 'electron';
 import { existsSync } from 'node:fs';
 import { release } from 'node:os';
-import { mkdir, realpath } from 'node:fs/promises';
+import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { DesktopCommand, DesktopConnection, DesktopSettings } from '../contracts';
 import { BackendSupervisor } from './backend';
@@ -12,6 +12,7 @@ import { NativeNotifications } from './notifications';
 import { Preferences, settingsPatch, type SettingsPatch } from './preferences';
 import { setKeepAwake } from './keep-awake';
 import { handOverToInstaller, showUpdateProgress } from './update-progress';
+import { UPDATE_HANDOFF_FLAG, macBundlePath, notificationsOn, pendingMacInstall, reopenAfterInstall } from './update-handoff';
 import { bundledRuntime, type RuntimeConfig } from './runtime';
 import { externalUrl } from './security';
 import { DesktopWindow } from './window';
@@ -127,7 +128,7 @@ if (squirrelStartup || !app.requestSingleInstanceLock()) {
   });
   process.on('SIGTERM', () => app.quit());
   process.on('SIGINT', () => app.quit());
-  void app.whenReady().then(boot).catch((error: unknown) => {
+  void app.whenReady().then(async () => { if (!await handOffToUpdateInstall()) await boot(); }).catch((error: unknown) => {
     desktopEvent({ event: 'desktop.startup_failed', error: error instanceof Error ? error.name : 'Error', message: error instanceof Error ? error.message : 'Startup failed' });
     // showErrorBox blocks the main process until dismissed, which would also hold off SIGTERM and every quit.
     void dialog.showMessageBox({ type: 'error', title: 'Open Net Worth could not open', message: 'Open Net Worth could not open', detail: 'Your book has been kept. Verify the app installation and open it again.' }).finally(() => app.quit());
@@ -147,6 +148,25 @@ function shutdown(): Promise<void> {
     tray = null;
     if (main && !main.window.isDestroyed()) main.window.destroy();
   });
+}
+
+// Reopened while ShipIt is still installing the update the last quit handed it: staying open would
+// cancel that install, so this launch says what is happening, leaves, and comes back once it is done.
+// A notification, not a window: any window keeps this process running, which is what cancels it.
+async function handOffToUpdateInstall(): Promise<boolean> {
+  if (process.platform !== 'darwin' || process.argv.includes(UPDATE_HANDOFF_FLAG) || !updatesSupported(app.isPackaged, process.platform, qaMode, process.env)) return false;
+  const bundle = macBundlePath(process.execPath);
+  const pending = await pendingMacInstall(bundle, app.getPath('home'));
+  if (!pending) return false;
+  desktopEvent({ event: 'desktop.update_install_handoff', version: pending.version });
+  reopenAfterInstall(pending.pid, bundle);
+  const settings = await readFile(join(app.getPath('userData'), 'desktop-settings.json'), 'utf8').catch(() => '');
+  if (notificationsOn(settings) && Notification.isSupported()) {
+    const notification = new Notification({ title: pending.version ? `Installing Open Net Worth ${pending.version}…` : 'Installing update…', body: 'Open Net Worth opens again when it is done. Your book is not affected.' });
+    await new Promise<void>(done => { notification.once('show', () => done()); setTimeout(done, 1_000).unref(); notification.show(); });
+  }
+  app.exit(0);
+  return true;
 }
 
 // The window's close handler hides rather than closes, so Squirrel's own window teardown would

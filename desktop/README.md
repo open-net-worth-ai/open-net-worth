@@ -349,6 +349,13 @@ BACKGROUND find then calls the updater straight away, quietly — it fetches the
 `update-downloaded` the menu (and tray) reads **Restart to Update**, which
 installs at once when chosen, plus one notification; nothing installs before a restart or the next
 quit, and it never restarts on its own (ADR `2026-10-17-desktop-updates-download-in-the-background`).
+On a plain quit, ShipIt verifies the new bundle for several seconds AFTER the app exits and cancels
+the update ("App Still Running Error") if the app is running again by then. So a macOS launch first
+asks `launchctl list app.opennetworth.desktop.ShipIt` (`src/main/update-handoff.ts`): a running
+installer whose `ShipItState.plist` targets THIS bundle means the launch only notifies **Installing
+Open Net Worth X…** (the staged bundle's version), spawns a detached shell that waits for that pid
+(bounded at 2 min) and reopens the bundle with `--onw-update-handoff`, and exits. A window is never
+shown for it, since a running process is exactly what cancels the install; the flag stops a second handoff.
 A MANUAL **Check for Updates…** still asks (**Download and Install** / **Skip This Version** /
 **Later**), confirms the download started, relabels the menu **Downloading Update…** and ends in
 the Restart Now / Later dialog. Skip is stored as `skippedUpdateVersion` in the app-global desktop
