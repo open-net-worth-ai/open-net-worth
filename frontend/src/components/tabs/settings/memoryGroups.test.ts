@@ -49,7 +49,7 @@ describe('groupFacts — expiry agrees with the backend', () => {
     expect(g.bySection.get('open_items')).toBeUndefined()
   })
 
-  it('keeps a fact filed outside Open items whatever date it still carries', () => {
+  it('keeps a fact filed outside Recent whatever date it still carries', () => {
     const g = groupFacts(
       [
         {

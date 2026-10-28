@@ -321,9 +321,19 @@ class Harness:
         """A real chat turn: the app's system prompt, the real tools, the chosen model."""
         from backend.ai import assistant
         from backend.ai.prompts import build_system_prompt
+        from backend.core.unattended import reset_unattended, set_unattended
 
         model = MOCK_TURN_MODEL if self.cfg.mock else self.cfg.model
         session = f"memory-eval-{case.id}"
+        events: list[dict] = []
+        token = set_unattended(case.unattended)
+        try:
+            events = await self._stream(session, case, model, assistant, build_system_prompt)
+        finally:
+            reset_unattended(token)
+        return events
+
+    async def _stream(self, session, case, model, assistant, build_system_prompt) -> list[dict]:
         events: list[dict] = []
         async for ev in assistant.run(
             session,
@@ -334,6 +344,10 @@ class Harness:
             if ev.get("type") in ("text_delta", "tool_use_start"):
                 events.append(
                     {"type": ev["type"], "text": ev.get("text", ""), "name": ev.get("name")}
+                )
+            elif ev.get("type") == "tool_use":
+                events.append(
+                    {"type": "tool_use", "name": ev.get("name"), "input": ev.get("input")}
                 )
         return events
 
