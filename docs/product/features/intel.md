@@ -61,6 +61,10 @@ For a story rather than one stock — an IPO, a war, interest rates:
 5. Click **Create alert**. The ticker's alerts screen shows every level on a 52-week price scale, each with its own
    on/off switch.
 
+The **🔔 Mute** button next to the price on that screen silences the ticker: no price alerts and no
+news scans for it until you click it again (it then reads **Muted**). **Additional news sources**
+at the bottom adds up to 5 RSS feeds of your own for that ticker.
+
 ### 4. Say why you're watching (optional, recommended)
 
 Open the ticker's page and click **Add** (or **Edit**) on the **Your Thesis** card, or fill in

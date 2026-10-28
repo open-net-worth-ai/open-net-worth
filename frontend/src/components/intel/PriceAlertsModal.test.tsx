@@ -134,20 +134,26 @@ describe('PriceAlertsModal — manage view', () => {
     expect((getByLabelText('Turn off the ≤ $182.00 alert') as HTMLInputElement).checked).toBe(true)
   })
 
-  it('the mute switch PATCHes the watchlist item immediately (no Save button)', async () => {
-    const { getByLabelText, queryByText } = render(
+  it('the header mute toggle PATCHes the watchlist item immediately (no Save button)', async () => {
+    const { getByLabelText, queryByText, findByText } = render(
       <PriceAlertsModal {...props({ price_alerts: TWO })} />,
     )
     expect(queryByText('Save')).toBeNull()
-    fireEvent.click(getByLabelText('Mute ORCL'))
+    const toggle = getByLabelText('Mute ORCL')
+    expect(toggle.closest('.pa-head')).toBeTruthy()
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(toggle)
+    expect(await findByText('Muted')).toBeTruthy()
     await waitFor(() => expect(calls('PATCH')).toHaveLength(1))
     expect(calls('PATCH')[0]![0]).toBe('/api/watchlist/items/wli-1')
     expect(body(calls('PATCH')[0]!)).toEqual({ monitor_news: false })
   })
 
   it('hides the ticker-level settings for a standalone alert with no watchlist item', () => {
-    const { queryByText } = render(<PriceAlertsModal {...props({ id: '', price_alerts: TWO })} />)
-    expect(queryByText('Mute ORCL')).toBeNull()
+    const { queryByText, queryByLabelText } = render(
+      <PriceAlertsModal {...props({ id: '', price_alerts: TWO })} />,
+    )
+    expect(queryByLabelText('Mute ORCL')).toBeNull()
     expect(queryByText('Additional news sources')).toBeNull()
   })
 
