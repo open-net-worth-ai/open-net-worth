@@ -151,7 +151,7 @@ async function commitImport(filename, shot) {
     .waitFor({ timeout: 45000 });
   if (shot) await page.screenshot({ path: `qa/artifacts/${shot}.png` });
   await page.getByRole("button", { name: "Confirm", exact: true }).click();
-  await page.getByText("Booked.", { exact: true }).waitFor();
+  await page.getByText(`Imported ${filename}`, { exact: true }).waitFor();
   await page.getByRole("button", { name: "Done", exact: true }).click();
 }
 async function stop() {
