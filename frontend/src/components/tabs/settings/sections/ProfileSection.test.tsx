@@ -208,3 +208,26 @@ describe('ProfileSection — import_review_default', () => {
     expect(screen.queryByLabelText(/Statement import/i)).toBeNull()
   })
 })
+
+describe('ProfileSection — Instructions for Lucius', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearQueryCache()
+  })
+  afterEach(cleanup)
+
+  it('titles the standing-rules panel Instructions for Lucius', async () => {
+    mockRoutes()
+    render(<ProfileSection toast={vi.fn()} />)
+    expect(await screen.findByText('Instructions for Lucius')).toBeTruthy()
+    expect(screen.queryByText('Notes for Lucius')).toBeNull()
+    expect(
+      screen.getByText(
+        /Standing rules for how Lucius should work with you\. Lucius can add to them too/,
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByPlaceholderText('e.g. Keep answers short. Always show amounts in SGD.'),
+    ).toBeTruthy()
+  })
+})

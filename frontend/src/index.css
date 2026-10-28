@@ -131,6 +131,22 @@
       background: var(--muted);
     }
   }
+  /* The square where two scrollbars meet, and a text box's resize grip, were the browser's own:
+     a light block and a hard diagonal on every dark text box. The corner is clear; the grip is
+     two short lines in the muted ink. */
+  body *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  body textarea::-webkit-resizer {
+    background: linear-gradient(
+      135deg,
+      transparent 0 52%,
+      var(--muted) 52% 58%,
+      transparent 58% 70%,
+      var(--muted) 70% 76%,
+      transparent 76%
+    );
+  }
   /* Phones: no visible scrollbar at all. The document bar is already hidden above, but inner
      areas kept a 10px styled one, which on a touch screen is a permanent line down the right
      edge that nobody can drag. Touch already has momentum scrolling and the OS draws its own
@@ -6372,6 +6388,63 @@ body.hide-amounts .money * {
   .ui-list > li::marker {
     color: var(--muted);
     font-weight: 600;
+  }
+  /* SwipeActions (touch only): the face slides by --ui-swipe-x and the actions follow it in from
+     the right edge. `clip`, not `hidden`, so focusing a hidden action can't scroll the row. */
+  .ui-swipe {
+    position: relative;
+    overflow: hidden;
+    overflow: clip;
+  }
+  .ui-swipe-face {
+    position: relative;
+    touch-action: pan-y;
+    transform: translateX(var(--ui-swipe-x, 0px));
+    transition: transform 0.22s ease;
+  }
+  .ui-swipe-acts {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    transform: translateX(calc(100% + var(--ui-swipe-x, 0px)));
+    transition: transform 0.22s ease;
+  }
+  .ui-swipe[data-dragging] .ui-swipe-face,
+  .ui-swipe[data-dragging] .ui-swipe-acts {
+    transition: none;
+  }
+  /* Square and flush, one block behind the row (the global `button` radius made each a chip). */
+  .ui-swipe-act {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: calc(var(--space-9) * 2);
+    padding: 0 var(--space-5);
+    border: 0;
+    border-radius: 0;
+    background: var(--muted);
+    color: var(--bg);
+    font: inherit;
+    font-size: var(--text-base);
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .ui-swipe-act--danger {
+    background: var(--bad);
+    color: var(--ink-on-accent);
+  }
+  .ui-swipe-act:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .ui-swipe-face,
+    .ui-swipe-acts {
+      transition: none;
+    }
   }
   .ui-input:focus,
   .ui-textarea:focus,

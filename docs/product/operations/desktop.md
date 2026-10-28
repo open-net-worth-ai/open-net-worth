@@ -152,7 +152,9 @@ The app checks for a new version 30 seconds after it starts and every 4 hours af
    **Downloading Update…**.
 2. When it's ready, you get a notification and the menu shows **Restart to Update**. Choose it to restart now, or keep working: the update installs the next time you
    quit. The app never restarts on its own, and it closes your book safely before installing — a
-   small **Installing Open Net Worth X…** window shows while it does.
+   small **Installing Open Net Worth X…** window shows while it does. On a Mac the install finishes
+   a few seconds after the app closes; if you open it again during those seconds, a notification
+   says **Installing Open Net Worth X…** and the app reopens by itself, updated, once it's done.
 3. After restarting, a notification confirms "Open Net Worth was updated to X."
 
 To check right away: **Open Net Worth → Check for Updates…** on macOS, **Help → Check for

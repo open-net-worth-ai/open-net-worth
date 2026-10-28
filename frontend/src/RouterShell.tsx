@@ -12,7 +12,14 @@ import {
   type MutableRefObject,
   type ReactElement,
 } from 'react'
-import { useNavigate, useLocation, useRouteContext, useRouterState } from '@tanstack/react-router'
+import {
+  useNavigate,
+  useLocation,
+  useRouteContext,
+  useRouter,
+  useRouterState,
+} from '@tanstack/react-router'
+import { HistoryStepContext } from './hooks/useHistoryStep'
 import {
   LayoutGrid,
   Box,
@@ -299,10 +306,13 @@ function SurfaceCommands({
 }
 
 export function RouterShell() {
+  const { history } = useRouter()
   return (
-    <PortfolioProvider>
-      <RouterShellInner />
-    </PortfolioProvider>
+    <HistoryStepContext.Provider value={history}>
+      <PortfolioProvider>
+        <RouterShellInner />
+      </PortfolioProvider>
+    </HistoryStepContext.Provider>
   )
 }
 

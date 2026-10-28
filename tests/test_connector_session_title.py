@@ -110,11 +110,6 @@ async def test_a_real_telegram_turn_names_its_conversation(db_isolated, monkeypa
     monkeypatch.setattr(handlers, "_policy_allows_turn", lambda cid: True)
     monkeypatch.setattr(assistant, "get_provider", lambda **_k: _Provider())
 
-    async def _noop(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop, raising=False)
-
     update = SimpleNamespace(
         effective_chat=SimpleNamespace(id=5150),
         effective_user=SimpleNamespace(username="owner", first_name="Owner"),

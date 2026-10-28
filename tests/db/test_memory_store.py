@@ -40,6 +40,7 @@ def test_active_facts_excludes_expired_time_bound_items(db_engine):
             "id": "mem_durable",
             "text": "always shown",
             "tier": "durable",
+            "state": "live",
             "updated_at": "2026-01-01",
         }
     )
@@ -49,6 +50,7 @@ def test_active_facts_excludes_expired_time_bound_items(db_engine):
             "text": "stale",
             "tier": "time_bound",
             "expires_at": "2026-01-01",
+            "state": "live",
             "updated_at": "2026-01-01",
         }
     )
@@ -58,8 +60,27 @@ def test_active_facts_excludes_expired_time_bound_items(db_engine):
             "text": "still relevant",
             "tier": "time_bound",
             "expires_at": "2099-01-01",
+            "state": "live",
             "updated_at": "2026-01-01",
         }
     )
     active_ids = {f["id"] for f in store.active_facts(today="2026-06-01")}
     assert active_ids == {"mem_durable", "mem_future"}
+
+
+def test_active_facts_are_live_ones_and_remembered_adds_the_unsorted(db_engine):
+    store = MemoryStore(engine=db_engine)
+    for fid, extra in (
+        ("mem_live", {"state": "live"}),
+        ("mem_unsorted", {"state": "unsorted"}),
+        ("mem_legacy", {}),
+        ("mem_retired", {"state": "retired"}),
+        ("mem_stale", {"state": "live", "expires_at": "2026-01-01"}),
+    ):
+        store.insert({"id": fid, "content": fid, "updated_at": "2026-01-01", **extra})
+    assert {f["id"] for f in store.active_facts(today="2026-06-01")} == {"mem_live"}
+    assert {f["id"] for f in store.remembered_facts(today="2026-06-01")} == {
+        "mem_live",
+        "mem_unsorted",
+        "mem_legacy",
+    }

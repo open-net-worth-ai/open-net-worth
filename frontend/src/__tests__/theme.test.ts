@@ -16,7 +16,9 @@ import {
   setThemePreference,
   initTheme,
   subscribeTheme,
+  useTheme,
 } from '../theme'
+import { act, renderHook } from '@testing-library/react'
 import { generateCss } from '../../scripts/build-tokens.mjs'
 import { tokenGroups } from '../design/tokens.source.mjs'
 
@@ -105,6 +107,36 @@ describe('theme preference', () => {
     unsub()
     setThemePreference('dark')
     expect(seen).toEqual(['warm'])
+  })
+
+  it('useTheme reports the APPLIED theme, never an OS flip whose change event has not fired', () => {
+    // matchMedia flips before its change event fires. A render in that gap used to see the new
+    // theme while data-theme (and every CSS var a canvas chart reads) was still the old one —
+    // the chart re-coloured itself with the OLD palette (a white light-theme grid on a dark
+    // page), and the event's re-notify then changed nothing, so it never re-rendered.
+    let osLight = false
+    const handlers: Array<() => void> = []
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn(() => ({
+        get matches() {
+          return osLight
+        },
+        addEventListener: (_: string, fn: () => void) => handlers.push(fn),
+      })),
+    )
+    initTheme()
+    const { result, rerender } = renderHook(() => useTheme())
+    expect(result.current.resolved).toBe('dark')
+
+    osLight = true
+    rerender()
+    expect(result.current.resolved).toBe('dark')
+
+    act(() => handlers.forEach((fn) => fn()))
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+    expect(result.current.resolved).toBe('light')
+    vi.unstubAllGlobals()
   })
 })
 

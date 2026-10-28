@@ -1,16 +1,12 @@
 """
-Regression tests for memory hygiene — MEM-2 (volatile snapshots stored as durable)
-and MEM-3 (duplicate/contradictory facts accumulate).
+Regression tests for memory hygiene — MEM-2 (volatile snapshots stored as facts) and the
+stricter extractor (one routing guide, the user's instructions, every existing fact listed in
+full, sensitive facts flagged, re-confirmed facts reported).
 
 MEM-2: extract_and_merge must (a) instruct the extractor to prefer durable, low-churn
-facts and avoid memorizing live-readable figures (share counts / prices / balances), and
-mark essential figures time_bound; and (b) a deterministic post-extraction guard demotes a
-durable fact that still carries a perishable figure to time_bound with a near-term expiry,
-so it ages out of the always-injected prompt instead of misleading forever.
-
-MEM-3: consolidate() must collapse several overlapping/contradictory variants of one event
-into a single most-recent fact. The LLM call is mocked to return a deterministic
-consolidation; the pure _dedup_exact backstop is unit-tested directly.
+facts and avoid memorizing live-readable figures (share counts / prices / balances); and
+(b) the write choke deterministically drops a background-written fact that still carries a
+perishable figure, so a stale share count / price / balance never reaches the prompt.
 
 Prompt-content assertions mirror test_grounding_prompt.py. Fully isolated — no network/LLM.
 """
@@ -19,11 +15,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import date, timedelta
 
 import pytest
 
 from backend.ai import memory
+from backend.ai.memory_structure import ROUTING_GUIDE
+from backend.ai.memory_write import is_perishable_figure
 from backend.db import memory_store
 
 
@@ -61,11 +58,12 @@ def test_extractor_prompt_prefers_durable_and_avoids_live_figures(isolated, monk
     # Prefer durable, low-churn facts.
     assert "prefer durable, low-churn facts" in n
     assert "preferences, goals, risk posture, account structure" in n
-    # Avoid memorizing live-readable figures.
+    # Avoid memorizing live-readable figures; the choke drops one that slips through.
     assert "avoid memorizing quantities, share counts, live prices, or account balances" in n
-    # Essential figures go time_bound with an as-of, never durable.
-    assert "mark that fact time_bound with an as-of date" in n
-    assert "never durable" in n
+    assert "a fact that carries one is dropped" in n
+    # Where a fact goes is decided by the one routing guide, and the reply names a section.
+    assert _norm(ROUTING_GUIDE) in n
+    assert '"section": "you|money|plans|open_items|other"' in captured["prompt"]
 
 
 # ── MEM-2: deterministic perishable-figure guard ────────────────────────────────
@@ -81,19 +79,8 @@ def test_extractor_prompt_prefers_durable_and_avoids_live_figures(isolated, monk
         "Holds 890.4 units of ONWAI.",
     ],
 )
-def test_guard_demotes_perishable_durable_fact(content):
-    today = "2026-06-05"
-    fact = {"content": content, "tier": "durable", "expires_at": None}
-    out = memory._guard_perishable_durable(fact, today)
-
-    assert out["tier"] == "time_bound", f"should demote: {content!r}"
-    assert out["expires_at"], "demoted fact must carry an expiry so it ages out"
-    expected = (
-        date.fromisoformat(today) + timedelta(days=memory.PERISHABLE_FACT_TTL_DAYS)
-    ).isoformat()
-    assert out["expires_at"] == expected
-    # The expiry is in the future relative to today (will be active now, stale later).
-    assert out["expires_at"] > today
+def test_perishable_figures_are_recognised(content):
+    assert is_perishable_figure(content), f"should be a ledger figure: {content!r}"
 
 
 @pytest.mark.parametrize(
@@ -106,34 +93,12 @@ def test_guard_demotes_perishable_durable_fact(content):
         "Banks primarily with Meridian Bank in Singapore.",
     ],
 )
-def test_guard_leaves_genuine_durable_preferences_untouched(content):
-    fact = {"content": content, "tier": "durable", "expires_at": None}
-    out = memory._guard_perishable_durable(fact, "2026-06-05")
-    assert out["tier"] == "durable", f"should NOT demote a preference: {content!r}"
-    assert out is fact  # unchanged object
+def test_genuine_preferences_are_not_ledger_figures(content):
+    assert not is_perishable_figure(content), f"should NOT be a ledger figure: {content!r}"
 
 
-def test_guard_leaves_time_bound_facts_alone():
-    fact = {
-        "content": "Sold 500 ONWAI at €30.00/share",
-        "tier": "time_bound",
-        "expires_at": "2026-07-01",
-    }
-    out = memory._guard_perishable_durable(fact, "2026-06-05")
-    assert out is fact  # already time_bound — guard is a no-op
-
-
-def test_guard_is_idempotent():
-    today = "2026-06-05"
-    fact = {"content": "META 12.5 shares at $598", "tier": "durable", "expires_at": None}
-    once = memory._guard_perishable_durable(fact, today)
-    twice = memory._guard_perishable_durable(once, today)
-    assert twice["tier"] == "time_bound"
-    assert twice["expires_at"] == once["expires_at"]
-
-
-def test_extract_and_merge_demotes_perishable_new_durable_fact(isolated, monkeypatch):
-    """End-to-end: a durable figure-bearing fact the model emits is stored time_bound."""
+def test_extract_and_merge_drops_a_perishable_figure_and_keeps_a_preference(isolated, monkeypatch):
+    """End-to-end: a figure-bearing fact the model emits is dropped; a plain preference is filed."""
 
     class _FakeProvider:
         async def complete(self, prompt, **kwargs):
@@ -142,13 +107,13 @@ def test_extract_and_merge_demotes_perishable_new_durable_fact(isolated, monkeyp
                     "new": [
                         {
                             "content": "User holds META (12.5 shares) trading at ~$598.",
-                            "tier": "durable",
-                            "expires_at": None,
+                            "section": "money",
+                            "topic": "Investing",
                         },
                         {
                             "content": "Risk tolerance is moderate.",
-                            "tier": "durable",
-                            "expires_at": None,
+                            "section": "money",
+                            "topic": "Investing",
                         },
                     ],
                     "updates": [],
@@ -164,178 +129,186 @@ def test_extract_and_merge_demotes_perishable_new_durable_fact(isolated, monkeyp
     ]
     asyncio.run(memory.extract_and_merge(history))
 
-    store = memory_store.MemoryStore()
-    facts = {f["content"]: f for f in store.all_facts()}
-
-    meta = facts["User holds META (12.5 shares) trading at ~$598."]
-    assert meta["tier"] == "time_bound", "perishable figure must be demoted to time_bound"
-    assert meta["expires_at"], "demoted fact must carry an expiry"
-
-    risk = facts["Risk tolerance is moderate."]
-    assert risk["tier"] == "durable", "a plain preference must stay durable"
-    assert risk["expires_at"] is None
+    (risk,) = memory_store.MemoryStore().all_facts()
+    assert risk["content"] == "Risk tolerance is moderate."
+    assert (risk["section"], risk["topic"], risk["state"]) == ("money", "Investing", "live")
+    assert risk["source"] == "implicit" and risk["expires_at"] is None and "tier" not in risk
 
 
-# ── MEM-3: consolidation collapses duplicate/contradictory event variants ─────────
+# ── The stricter extractor ──────────────────────────────────────────────────────
 
 
-def test_dedup_exact_collapses_identical_content_keeping_newest():
-    facts = [
-        {"id": "a", "content": "Sold 500 ONWAI", "updated_at": "2026-06-01T00:00:00"},
-        {"id": "b", "content": "sold 500 onwai", "updated_at": "2026-06-04T00:00:00"},  # dup
-        {
-            "id": "c",
-            "content": "  Sold   500   ONWAI  ",
-            "updated_at": "2026-06-02T00:00:00",
-        },  # dup
-        {"id": "d", "content": "Banks with Meridian Bank", "updated_at": "2026-06-03T00:00:00"},
-    ]
-    out = memory._dedup_exact(facts)
-    contents = [f["content"] for f in out]
-    assert len(out) == 2
-    # The ONWAI trio collapses to the newest (id "b").
-    onwai = next(f for f in out if "onwai" in f["content"].lower())
-    assert onwai["id"] == "b"
-    assert "Banks with Meridian Bank" in contents
+class _Capture:
+    def __init__(self, reply: str = '{"new": [], "updates": [], "remove": []}'):
+        self.reply = reply
+        self.prompts: list[str] = []
+
+    async def complete(self, prompt, **kwargs):
+        self.prompts.append(prompt)
+        return self.reply
 
 
-def test_dedup_exact_keeps_distinct_facts():
-    facts = [
-        {"id": "a", "content": "Risk tolerance moderate", "updated_at": "2026-06-01T00:00:00"},
-        {"id": "b", "content": "Retiring at 45", "updated_at": "2026-06-02T00:00:00"},
-    ]
-    out = memory._dedup_exact(facts)
-    assert len(out) == 2
+def _stored(fid: str, content: str, **extra) -> dict:
+    return {
+        "id": fid,
+        "content": content,
+        "source": "implicit",
+        "expires_at": None,
+        "created_at": "2026-09-01T00:00:00+00:00",
+        "updated_at": "2026-09-01T00:00:00+00:00",
+        **extra,
+    }
 
 
-def test_consolidate_reconciles_overlapping_event_variants(isolated, monkeypatch):
-    """Several overlapping/contradictory ONWAI-sale variants → one most-recent fact.
-
-    The memory model is mocked to return the deterministic consolidation a good
-    consolidator should produce (keep the latest, drop the rest); the _dedup_exact
-    backstop further collapses any exact dup the model leaves behind.
-    """
-    store = memory_store.MemoryStore()
-    variants = [
-        {
-            "id": "v1",
-            "content": "User sold ONWAI; proceeds €21,480.35 into Meridian Bank Multiplier EUR",
-            "tier": "time_bound",
-            "source": "implicit",
-            "expires_at": None,
-            "created_at": "2026-06-01T00:00:00",
-            "updated_at": "2026-06-01T00:00:00",
-        },
-        {
-            "id": "v2",
-            "content": "User sold ONWAI; proceeds ~€21,300; reduced from 1,310 to ~8xx",
-            "tier": "time_bound",
-            "source": "implicit",
-            "expires_at": None,
-            "created_at": "2026-06-02T00:00:00",
-            "updated_at": "2026-06-02T00:00:00",
-        },
-        {
-            "id": "v3",
-            "content": "User sold ONWAI (fourth tranche); reduced to 890.4 shares",
-            "tier": "time_bound",
-            "source": "implicit",
-            "expires_at": None,
-            "created_at": "2026-06-03T00:00:00",
-            "updated_at": "2026-06-03T00:00:00",
-        },
-        {
-            "id": "v4",
-            "content": "User sold ONWAI via lot disposal; realized gain ~€5,120",
-            "tier": "time_bound",
-            "source": "implicit",
-            "expires_at": None,
-            "created_at": "2026-06-04T00:00:00",
-            "updated_at": "2026-06-04T00:00:00",
-        },
-        {
-            "id": "keep",
-            "content": "Risk tolerance is moderate",
-            "tier": "durable",
-            "source": "explicit",
-            "expires_at": None,
-            "created_at": "2026-05-01T00:00:00",
-            "updated_at": "2026-05-01T00:00:00",
-        },
-    ]
-    store.replace_all(variants)
-
-    captured: dict[str, str] = {}
-
-    class _FakeProvider:
-        async def complete(self, prompt, **kwargs):
-            captured["prompt"] = prompt
-            # A correct consolidator collapses the 4 ONWAI variants to the newest (v4)
-            # and keeps the unrelated durable preference.
-            return json.dumps(
-                {
-                    "merge": [
-                        {
-                            "keep_id": "v4",
-                            "absorb_ids": ["v1", "v2", "v3"],
-                            "content": "User sold ONWAI via lot disposal; realized gain ~€5,120",
-                            "tier": "time_bound",
-                            "expires_at": None,
-                        }
-                    ],
-                    "remove": [],
-                }
-            )
-
-    monkeypatch.setattr(memory, "_provider", lambda: _FakeProvider())
-
-    asyncio.run(memory.consolidate())
-
-    facts = memory_store.MemoryStore().all_facts()
-    onwai_facts = [f for f in facts if "onwai" in f["content"].lower()]
-    assert len(onwai_facts) == 1, f"4 ONWAI variants must collapse to 1, got {len(onwai_facts)}"
-    assert onwai_facts[0]["id"] == "v4", "the most-recent variant survives"
-    assert any(f["content"] == "Risk tolerance is moderate" for f in facts)
-    assert len(facts) == 2
+_CHAT = [
+    {"role": "user", "content": "I keep my emergency fund at the credit union, please remember."},
+    {"role": "assistant", "content": "Noted."},
+]
 
 
-def test_consolidate_prompt_instructs_entity_merge_and_cap(isolated, monkeypatch):
-    store = memory_store.MemoryStore()
-    store.replace_all(
+def test_extractor_prompt_renders_routing_guide_and_instructions(isolated, monkeypatch):
+    from backend.services import profile as profile_service
+
+    profile_service.write_profile(
+        {**profile_service.read_profile(), "notes": "Always answer in plain English."}
+    )
+    cap = _Capture()
+    monkeypatch.setattr(memory, "_provider", lambda: cap)
+
+    asyncio.run(memory.extract_and_merge(_CHAT))
+
+    prompt = cap.prompts[0]
+    assert ROUTING_GUIDE in prompt
+    assert "Always answer in plain English." in prompt
+    n = _norm(prompt)
+    assert "do not store what these instructions already say" in n
+    assert "third person" in n and "preferences" in n
+    assert "conversation or run state" in n
+    assert "full card, account, id or passport number" in n
+    assert "sensitive" in n and "true" in n
+    assert '"mentioned"' in prompt
+
+
+def test_extractor_lists_a_saved_fact_whatever_the_setting(isolated, monkeypatch):
+    from backend.db.memory_settings_store import MemorySettingsStore
+
+    memory_store.MemoryStore().bulk_insert(
         [
-            {
-                "id": "a",
-                "content": "Fact one",
-                "tier": "durable",
-                "source": "implicit",
-                "expires_at": None,
-                "created_at": "2026-06-01T00:00:00",
-                "updated_at": "2026-06-01T00:00:00",
-            },
-            {
-                "id": "b",
-                "content": "Fact two",
-                "tier": "durable",
-                "source": "implicit",
-                "expires_at": None,
-                "created_at": "2026-06-02T00:00:00",
-                "updated_at": "2026-06-02T00:00:00",
-            },
+            _stored(
+                "m_rent", "Rents a flat in Tampines", state="live", section="money", topic="Housing"
+            ),
+            _stored(
+                "m_health",
+                "Has a chronic condition",
+                state="live",
+                section="you",
+                topic="Profile",
+            ),
         ]
     )
+    cap = _Capture()
+    monkeypatch.setattr(memory, "_provider", lambda: cap)
 
-    captured: dict[str, str] = {}
+    MemorySettingsStore().update({"sensitive_topics": False})
+    asyncio.run(memory.extract_and_merge(_CHAT))
+    assert "Tampines" in cap.prompts[0] and "chronic condition" in cap.prompts[0]
 
-    class _FakeProvider:
-        async def complete(self, prompt, **kwargs):
-            captured["prompt"] = prompt
-            return "[]"  # empty → leaves memory untouched (guarded)
+    MemorySettingsStore().update({"sensitive_topics": True})
+    asyncio.run(memory.extract_and_merge(_CHAT))
+    assert "chronic condition" in cap.prompts[1]
 
-    monkeypatch.setattr(memory, "_provider", lambda: _FakeProvider())
-    asyncio.run(memory.consolidate())
 
-    n = _norm(captured["prompt"])
-    assert "group facts by the same entity or event" in n
-    assert "collapse each group into one fact" in n
-    assert "keep only the version with the latest updated_at" in n
-    assert f"keep at most {memory.MAX_FACTS_PER_ENTITY} facts" in n
+def test_extractor_lists_every_fact_in_full_with_its_place(isolated, monkeypatch):
+    store = memory_store.MemoryStore()
+    long_text = "Z" * 280
+    store.bulk_insert(
+        [
+            _stored(
+                "m_live", "Rents a flat in Tampines", state="live", section="money", topic="Housing"
+            ),
+            _stored("m_open", "Waiting on the tax letter", state="live", section="open_items"),
+            _stored("m_old", "Prefers index funds", state="unsorted"),
+            _stored("m_legacy", "Banks with Meridian Bank"),
+            _stored("m_long", long_text, state="live", section="other", topic="Misc"),
+            *[_stored(f"m_{i}", f"Filler note number {i}", state="unsorted") for i in range(150)],
+        ]
+    )
+    cap = _Capture()
+    monkeypatch.setattr(memory, "_provider", lambda: cap)
+
+    asyncio.run(memory.extract_and_merge(_CHAT))
+
+    prompt = cap.prompts[0]
+    assert "m_live: [Money · Housing] Rents a flat in Tampines" in prompt
+    assert "m_open: [Open items] Waiting on the tax letter" in prompt
+    assert "m_old: [unsorted] Prefers index funds" in prompt
+    assert "m_legacy: [unsorted] Banks with Meridian Bank" in prompt
+    assert f"m_long: [Other · Misc] {long_text}" in prompt
+    assert "m_149: [unsorted]" in prompt
+    assert "Housing" in prompt.split("Topics in use —")[1]
+
+
+def test_extractor_reports_mentioned_facts(isolated, monkeypatch):
+    store = memory_store.MemoryStore()
+    store.bulk_insert(
+        [
+            _stored(
+                "m_plan",
+                "Plans to move to Lisbon",
+                state="live",
+                section="plans",
+                topic="Move abroad",
+                mentioned_at="2026-06-01T00:00:00+00:00",
+            )
+        ]
+    )
+    cap = _Capture(
+        json.dumps({"new": [], "updates": [], "remove": [], "mentioned": ["m_plan", "ghost"]})
+    )
+    monkeypatch.setattr(memory, "_provider", lambda: cap)
+
+    asyncio.run(memory.extract_and_merge(_CHAT))
+
+    (fact,) = store.all_facts()
+    assert fact["mentioned_at"] > "2026-06-01T00:00:00+00:00"
+    assert fact["content"] == "Plans to move to Lisbon"
+
+
+def test_a_sensitive_fact_is_stored_only_when_the_setting_allows_it(isolated, monkeypatch):
+    from backend.db.memory_settings_store import MemorySettingsStore
+
+    reply = json.dumps(
+        {
+            "new": [
+                {
+                    "content": "Has type 2 diabetes",
+                    "section": "you",
+                    "topic": "Profile",
+                    "sensitive": True,
+                }
+            ]
+        }
+    )
+    monkeypatch.setattr(memory, "_provider", lambda: _Capture(reply))
+
+    asyncio.run(memory.extract_and_merge(_CHAT))
+    assert memory_store.MemoryStore().all_facts() == []
+
+    MemorySettingsStore().set_sensitive_topics(True)
+    asyncio.run(memory.extract_and_merge(_CHAT))
+    (fact,) = memory_store.MemoryStore().all_facts()
+    assert fact["content"] == "Has type 2 diabetes"
+    assert "sensitive" not in fact
+
+
+def test_no_consolidation_machinery_remains():
+    for name in (
+        "consolidate",
+        "_CONSOLIDATE_SYSTEM",
+        "CONSOLIDATE_THRESHOLD",
+        "CONSOLIDATE_MIN_GROWTH",
+        "CONSOLIDATE_BATCH_SIZE",
+        "EXTRACT_EXISTING_CAP",
+        "FACT_LISTING_TRUNCATE",
+    ):
+        assert not hasattr(memory, name), name

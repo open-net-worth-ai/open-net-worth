@@ -4948,24 +4948,40 @@
     "additionalProperties": false,
     "properties": {
       "content": {
-        "description": "The fact to remember, as a concise statement (e.g. 'Wants to retire at 45')",
+        "description": "The fact, one concise self-contained statement of at most 280 characters, in the third person (e.g. 'Rents a flat in Tampines')",
         "type": "string"
       },
-      "tier": {
+      "section": {
+        "description": "Where it is filed: you (about the user, how they like to work), money (their money life: housing, family, investing, tax, cards, income and work), plans (an intention or upcoming event), open_items (something to come back to; expires), other.",
         "enum": [
-          "durable",
-          "time_bound"
+          "you",
+          "money",
+          "plans",
+          "open_items",
+          "other"
         ],
+        "type": "string"
+      },
+      "topic": {
         "type": "string",
-        "description": "'durable' = standing preference/truth; 'time_bound' = tied to a date/event. Default durable."
+        "description": "A short name for the subject (e.g. 'Housing'); reuse one from the remembered facts when it fits. Omit for open_items."
       },
       "expires_at": {
         "type": "string",
-        "description": "ISO date (YYYY-MM-DD) after which a time_bound fact is stale. Omit for durable facts."
+        "description": "ISO date (YYYY-MM-DD) an Open item lapses on; only Open items expire. They default to 14 days and never run past 30; a date on any other section is ignored."
+      },
+      "sensitive": {
+        "type": "boolean",
+        "description": "Set true for health, religion, political views, sexuality, ethnicity, or criminal and legal facts. Refused unless the user allows sensitive topics in Settings → Memory."
+      },
+      "user_asked": {
+        "type": "boolean",
+        "description": "true only when the user, in their latest message, explicitly asked you to remember this"
       }
     },
     "required": [
-      "content"
+      "content",
+      "section"
     ],
     "type": "object"
   },
@@ -4986,8 +5002,12 @@
     "additionalProperties": false,
     "properties": {
       "query": {
-        "description": "Specific words for what to look up, e.g. 'apartment', 'retirement plans', or the nickname the user used",
-        "type": "string"
+        "type": "string",
+        "description": "Specific words for what to look up, e.g. 'apartment', 'retirement plans', or the nickname the user used. Optional when topic is given."
+      },
+      "topic": {
+        "type": "string",
+        "description": "A topic name from the remembered facts (e.g. 'Housing'): returns that topic's facts."
       },
       "limit": {
         "type": "integer",
@@ -4995,10 +5015,8 @@
         "description": "Max facts to return (default 10, max 25)."
       }
     },
-    "required": [
-      "query"
-    ],
-    "type": "object"
+    "type": "object",
+    "required": []
   },
   "calculate": {
     "additionalProperties": false,
@@ -8324,7 +8342,7 @@
           },
           "notes": {
             "type": "string",
-            "description": "Free-text catch-all for anything genuinely personal that no structured field covers — pronouns, preferred tone/communication style, or any other standing instruction the user states about themselves. Not for one-off facts about their finances or holdings; those belong in the relevant tool or memory instead."
+            "description": "The user's Instructions for Lucius — standing rules for how you should behave. Change them when asked, or when the user states a rule they'd expect to find here; edit or add a line, never rewrite their text wholesale. Only standing rules for how you should behave — a fact with a profile field goes there; anything else worth keeping goes to remember_fact."
           },
           "fire_expected_return_pct": {
             "type": "number"
@@ -10381,5 +10399,23 @@
     "required": [
       "guide"
     ]
+  },
+  "search_past_conversations": {
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "description": "Words to look for in earlier conversations, e.g. 'house deposit' or a name.",
+        "type": "string"
+      },
+      "limit": {
+        "type": "integer",
+        "default": 5,
+        "description": "Max conversations to return (default 5, max 10)."
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "type": "object"
   }
 }

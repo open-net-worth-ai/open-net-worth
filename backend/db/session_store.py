@@ -95,6 +95,16 @@ def _promoted_columns(session_id: str, meta: dict) -> dict:
     }
 
 
+def _json_value(raw):
+    """A JSON column's value as the driver hands it back: TEXT to parse (SQLite), or a value
+    psycopg already decoded (Postgres). ``None`` and empty text read as ``{}``."""
+    if raw is None or raw == "":
+        return {}
+    if isinstance(raw, (str, bytes, bytearray)):
+        return json.loads(raw)
+    return raw
+
+
 class SessionStore:
     """Persists one row per chat session — see module docstring for the shape."""
 
@@ -431,6 +441,46 @@ class SessionStore:
         with self._eng().connect() as conn:
             row = self._row(conn, session_id)
         return row["extraction_cursor"] if row is not None else None
+
+    def extraction_candidates(self) -> list[dict]:
+        """Every session that has messages, with what the memory sweep needs to decide whether
+        to read it: ``{"id", "meta", "cursor", "count", "last_message_at"}``.
+
+        One aggregate query instead of a read per session. ``cursor`` is the number of messages
+        already extracted (0 if none yet), ``failures`` how many extractions in a row failed and
+        ``failed_len`` the message count the last one failed at, and ``last_message_at`` the
+        newest message's ISO stamp. The JSON columns are read raw — TEXT on SQLite, already
+        decoded on Postgres — so one corrupt row is skipped rather than hiding the rest."""
+        with self._eng().connect() as conn:
+            rows = conn.exec_driver_sql(
+                "SELECT s.id, s.meta, s.extraction_cursor, COUNT(m.id), MAX(m.created_at) "
+                "FROM sessions s JOIN session_messages m ON m.session_id = s.id "
+                "GROUP BY s.id ORDER BY s.id"
+            ).fetchall()
+        out: list[dict] = []
+        for session_id, meta_raw, cursor_raw, count, last_at in rows:
+            try:
+                meta = _json_value(meta_raw)
+                cursor_doc = _json_value(cursor_raw)
+                cursor_doc = cursor_doc if isinstance(cursor_doc, dict) else {}
+                cursor = int(cursor_doc.get("last_extracted_len") or 0)
+                failures = int(cursor_doc.get("failures") or 0)
+                failed_len = int(cursor_doc.get("failed_len") or 0)
+            except Exception:
+                logger.warning("extraction candidates: skipping %r — unreadable row", session_id)
+                continue
+            out.append(
+                {
+                    "id": session_id,
+                    "meta": meta if isinstance(meta, dict) else {},
+                    "cursor": cursor,
+                    "failures": failures,
+                    "failed_len": failed_len,
+                    "count": int(count or 0),
+                    "last_message_at": last_at,
+                }
+            )
+        return out
 
     def set_extraction_cursor(self, session_id: str, data: dict) -> bool:
         """Persist the extraction cursor onto an EXISTING row; returns whether one was there.

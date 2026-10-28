@@ -56,10 +56,6 @@ def _isolate(tmp_path, monkeypatch, db_isolated):
     # behavior itself is pinned separately in test_chat_multi_turn_enabled.py.
     monkeypatch.setattr(profile_service, "read_profile", lambda: {"chat_multi_turn_enabled": True})
 
-    async def _noop_memory(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory, raising=False)
     live_sessions._reset_for_tests()
     pending_injection._reset_for_tests()
     turns.set_inline_for_tests(False)

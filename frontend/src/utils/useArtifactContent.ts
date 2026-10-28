@@ -55,7 +55,9 @@ export function downloadArtifactContent(raw: string, artifact: ArtifactRef): voi
   setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
 }
 
-function saveBlob(blob: Blob, filename: string): void {
+/** Save a blob under `filename`. The object URL is revoked later, not at once, so the browser has
+ * started the download first. */
+export function saveBlob(blob: Blob, filename: string): void {
   const objectUrl = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = objectUrl

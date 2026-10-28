@@ -108,7 +108,7 @@ message. There's nothing to set. This is separate from [Memory](memory.md), whic
 ## See what it costs
 
 - **Per reply:** under each reply, the tokens, price and model that answered. Turn it off with
-  **Settings → Chat & Memory → Show cost per turn** — hiding it changes nothing about what's
+  **Settings → Chat → Show cost per turn** — hiding it changes nothing about what's
   spent or recorded.
 - **Per conversation:** the running total next to the model name in the message box.
 - **Per Automation:** its **Cost & usage** section; sort the Automations list by **Cost this
@@ -124,7 +124,7 @@ Prices are calculated from each provider's published rates. With the Claude Code
 Claude plan, the figure is what that usage would cost at list price — your plan covers it, and
 its usage limits apply instead of a bill.
 
-To cut costs: turn off **Follow-up suggestions** in **Settings → Chat & Memory** (that stops a
+To cut costs: turn off **Follow-up suggestions** in **Settings → Chat** (that stops a
 model call per reply), route background tasks to a cheaper model, and use **Low** effort for
 simple chats.
 

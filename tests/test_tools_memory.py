@@ -20,12 +20,14 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from datetime import timedelta
 
 import pytest
 
 import backend.ai.memory as memory_mod
 import backend.db.memory_settings_store as settings_store_mod
 import backend.db.memory_store as memory_store_mod
+from backend.core.user_time import user_today
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
@@ -79,7 +81,7 @@ class TestRememberFact:
     def test_blocked_when_global_memory_off(self, isolated):
         """remember_fact must return ok=False with a message when memory is OFF."""
         settings_store_mod.MemorySettingsStore().set_enabled(False)
-        result, proposed = _call_tool("remember_fact", content="Wants to retire at 50")
+        result, proposed = _call_tool("remember_fact", content="Has a dog", section="you")
         assert result["ok"] is False
         assert "message" in result
         assert proposed is None
@@ -87,51 +89,132 @@ class TestRememberFact:
     def test_blocked_does_not_write(self, isolated):
         """When memory is OFF, no fact must be written to the store."""
         settings_store_mod.MemorySettingsStore().set_enabled(False)
-        _call_tool("remember_fact", content="Wants to retire at 50")
+        _call_tool("remember_fact", content="Has a dog", section="you")
         assert memory_store_mod.MemoryStore().all_facts() == []
 
     def test_succeeds_when_global_memory_on(self, isolated):
-        """remember_fact must return ok=True and the saved content when memory is ON."""
         settings_store_mod.MemorySettingsStore().set_enabled(True)
-        result, proposed = _call_tool("remember_fact", content="Prefers SGD as base currency")
+        result, proposed = _call_tool(
+            "remember_fact", content="Prefers short answers", section="you", topic="Preferences"
+        )
         assert result["ok"] is True
-        assert "saved" in result
-        assert "SGD" in result["saved"]
+        assert "short answers" in result["saved"]
         assert proposed is None
 
-    def test_writes_to_store_when_on(self, isolated):
-        """Fact must be retrievable from the MemoryStore after remember_fact."""
-        settings_store_mod.MemorySettingsStore().set_enabled(True)
-        _call_tool("remember_fact", content="Owns rental property in Johor Bahru")
-        facts = memory_store_mod.MemoryStore().all_facts()
-        assert any("Johor Bahru" in f.get("content", "") for f in facts)
-
-    def test_durable_tier_default(self, isolated):
-        """No tier argument → fact is stored with tier=durable."""
-        settings_store_mod.MemorySettingsStore().set_enabled(True)
-        _call_tool("remember_fact", content="Risk tolerance is moderate")
-        facts = memory_store_mod.MemoryStore().all_facts()
-        assert facts[0]["tier"] == "durable"
-
-    def test_time_bound_tier_stored(self, isolated):
-        """tier=time_bound is persisted correctly."""
+    def test_remember_fact_takes_a_section_and_topic(self, isolated):
         settings_store_mod.MemorySettingsStore().set_enabled(True)
         _call_tool(
-            "remember_fact",
-            content="Expects to sell ONWAI after Q3 vest",
-            tier="time_bound",
-            expires_at="2026-09-30",
+            "remember_fact", content="Rents a flat in Tampines", section="money", topic=" housing "
         )
-        facts = memory_store_mod.MemoryStore().all_facts()
-        assert facts[0]["tier"] == "time_bound"
-        assert facts[0]["expires_at"] == "2026-09-30"
+        _call_tool(
+            "remember_fact", content="Rent is due on the 1st", section="money", topic="Housing"
+        )
+        first, second = sorted(
+            memory_store_mod.MemoryStore().all_facts(), key=lambda f: f["content"], reverse=True
+        )
+        assert (first["section"], first["topic"], first["state"], first["source"]) == (
+            "money",
+            "housing",
+            "live",
+            "explicit",
+        )
+        assert second["topic"] == first["topic"]
+        assert "tier" not in first and first["expires_at"] is None
+
+    def test_an_open_item_expires_and_carries_no_topic(self, isolated):
+        settings_store_mod.MemorySettingsStore().set_enabled(True)
+        _call_tool(
+            "remember_fact", content="Waiting on the tax letter", section="open_items", topic="Tax"
+        )
+        (fact,) = memory_store_mod.MemoryStore().all_facts()
+        assert fact["topic"] is None
+        assert fact["expires_at"] == (user_today() + timedelta(days=14)).isoformat()
+
+    def test_expires_at_is_stored(self, isolated):
+        settings_store_mod.MemorySettingsStore().set_enabled(True)
+        due = (user_today() + timedelta(days=20)).isoformat()
+        _call_tool(
+            "remember_fact",
+            content="Check whether the ONWAI vest posted",
+            section="open_items",
+            expires_at=due,
+        )
+        assert memory_store_mod.MemoryStore().all_facts()[0]["expires_at"] == due
+
+    def test_a_new_sensitive_fact_needs_the_setting_and_is_stored_without_a_flag(self, isolated):
+        store = settings_store_mod.MemorySettingsStore()
+        store.set_enabled(True)
+        result, _ = _call_tool(
+            "remember_fact", content="Has asthma", section="you", topic="Profile", sensitive=True
+        )
+        assert result["ok"] is False and "Sensitive" in result["message"]
+        assert memory_store_mod.MemoryStore().all_facts() == []
+
+        store.set_sensitive_topics(True)
+        result, _ = _call_tool(
+            "remember_fact", content="Has asthma", section="you", topic="Profile", sensitive=True
+        )
+        assert result["ok"] is True
+        (fact,) = memory_store_mod.MemoryStore().all_facts()
+        assert fact["content"] == "Has asthma" and "sensitive" not in fact
+
+    @pytest.mark.parametrize(
+        "content, needle",
+        [("x" * 281, "280"), ("Card 4111 1111 1111 1111", "last 4")],
+    )
+    def test_a_refusal_comes_back_as_a_message_and_stores_nothing(self, isolated, content, needle):
+        settings_store_mod.MemorySettingsStore().set_enabled(True)
+        result, _ = _call_tool("remember_fact", content=content, section="other")
+        assert result["ok"] is False and needle in result["message"]
+        assert memory_store_mod.MemoryStore().all_facts() == []
+
+    def test_an_unknown_section_is_refused_with_the_choices(self, isolated):
+        settings_store_mod.MemorySettingsStore().set_enabled(True)
+        result, _ = _call_tool("remember_fact", content="Likes jazz", section="hobbies")
+        assert result["ok"] is False and "Pick a section" in result["message"]
 
     def test_multiple_facts_accumulate(self, isolated):
-        """Calling remember_fact twice must result in two stored facts."""
         settings_store_mod.MemorySettingsStore().set_enabled(True)
-        _call_tool("remember_fact", content="Fact one")
-        _call_tool("remember_fact", content="Fact two")
+        _call_tool("remember_fact", content="Fact one", section="other")
+        _call_tool("remember_fact", content="Fact two", section="other")
         assert len(memory_store_mod.MemoryStore().all_facts()) == 2
+
+    def test_the_description_carries_the_routing_guide_and_no_profile_example(self):
+        from backend.ai.memory_structure import routing_guide_for_tool
+        from backend.ai.tools.registry import build_tool_schemas
+
+        schema = next(s for s in build_tool_schemas() if s["name"] == "remember_fact")
+        assert routing_guide_for_tool() in schema["description"]
+        assert "retire at 45" not in json.dumps(schema)
+        assert "sensitive" in schema["input_schema"]["properties"]
+        assert "health" in schema["input_schema"]["properties"]["sensitive"]["description"]
+        assert schema["input_schema"]["required"] == ["content", "section"]
+
+
+def test_update_profile_notes_description_says_edit_not_rewrite():
+    from backend.ai.memory_structure import routing_guide_for_tool
+    from backend.ai.tools.registry import build_tool_schemas
+
+    schema = next(s for s in build_tool_schemas() if s["name"] == "update_profile")
+    notes = schema["input_schema"]["properties"]["changes"]["properties"]["notes"]["description"]
+    assert "Instructions for Lucius" in notes
+    assert "edit or add a line, never rewrite their text wholesale" in notes
+    assert "anything else worth keeping goes to remember_fact" in notes
+    assert routing_guide_for_tool() not in notes
+
+
+def test_schema_golden_matches():
+    """The three memory tools' live schemas are pinned in the hand-edited golden file."""
+    from backend.ai.tools.registry import build_tool_schemas
+
+    golden = json.loads(
+        (
+            __import__("pathlib").Path(__file__).parent / "golden" / "tool_input_schemas.json"
+        ).read_text()
+    )
+    live = {s["name"]: s["input_schema"] for s in build_tool_schemas()}
+    for name in ("remember_fact", "recall_memory", "forget_fact", "update_profile"):
+        assert live[name] == golden[name], name
 
 
 # ══════════════════════════════════════════════════════════════════════════════

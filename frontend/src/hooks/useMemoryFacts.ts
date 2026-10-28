@@ -6,27 +6,76 @@ export interface MemoryFact {
   content: string
   source?: string
   tier?: string
+  /** `live` (filed), `unsorted` (waiting for the sort) or `retired` (moved out, kept 30 days).
+   *  Section key (you, money, plans, open_items, other) and topic name — the memory redesign,
+   *  ADR 2026-10-25-memory-keeps-only-what-has-no-other-home amendment 4. Absent on legacy facts. */
+  state?: string
+  section?: string | null
+  topic?: string | null
+  retired_reason?: string | null
+  retired_at?: string | null
+  expires_at?: string | null
+  last_used_at?: string | null
   updated_at?: string
   created_at?: string
+}
+
+/** A topic's generated one-line summary — display-only, written by the idle sweep (ADR
+ *  2026-10-25-memory-keeps-only-what-has-no-other-home amendment 8). */
+export interface MemoryTopicSummary {
+  section: string
+  topic: string
+  summary: string
+  updated_at: string
+}
+
+export interface MemorySettings {
+  enabled: boolean
+  search_chats: boolean
+  sensitive_topics: boolean
 }
 
 export const MEMORY_FACTS_KEY = '/api/memory/facts'
 export const MEMORY_SETTINGS_KEY = '/api/memory/settings'
 
-export async function getMemorySettings(): Promise<{ enabled: boolean }> {
+export async function getMemorySettings(): Promise<MemorySettings> {
   const r = await authFetch(MEMORY_SETTINGS_KEY)
   if (!r.ok) throw new Error(String(r.status))
-  return r.json() as Promise<{ enabled: boolean }>
+  return r.json() as Promise<MemorySettings>
 }
 
-async function getFacts(): Promise<{ facts: MemoryFact[]; total: number }> {
+const REJECTED_REASONS: Record<string, string> = {
+  empty: 'A memory can’t be empty.',
+  too_long: 'That memory is too long.',
+  bad_section: 'That section doesn’t exist.',
+  bad_expiry: 'That date has passed.',
+  ledger_figure: 'Balances, prices and share counts are read live, so they aren’t remembered.',
+  identifier: 'Full card, account or ID numbers and passwords are never remembered.',
+  sensitive_off: 'Sensitive topics are off. Turn them on in Settings → Memory to save this.',
+  unknown_id: 'That memory no longer exists.',
+}
+
+/** A sentence for the first thing the server refused in a write, or '' when nothing was. */
+export function rejectedNote(body: { rejected?: { reason?: string }[] }): string {
+  const first = body.rejected?.[0]
+  if (!first) return ''
+  return REJECTED_REASONS[first.reason ?? ''] ?? 'Part of that couldn’t be remembered.'
+}
+
+interface FactsResponse {
+  facts: MemoryFact[]
+  total: number
+  topics?: MemoryTopicSummary[]
+}
+
+async function getFacts(): Promise<FactsResponse> {
   const r = await authFetch(MEMORY_FACTS_KEY)
   if (!r.ok) throw new Error(String(r.status))
-  return r.json() as Promise<{ facts: MemoryFact[]; total: number }>
+  return r.json() as Promise<FactsResponse>
 }
 
-/** The stored-memory list and its edits and deletes, used by the one stored-memories dialog
- *  (components/tabs/settings/MemoryDialog). `notify` gets one short line per outcome. */
+/** The stored-memory list and its edits and deletes, used by the one memory browser
+ *  (components/tabs/settings/MemoryBrowser). `notify` gets one short line per outcome. */
 export function useMemoryFacts(notify: (message: string) => void) {
   const { data, refresh, initialLoading } = useCachedFetchState(MEMORY_FACTS_KEY, getFacts, {
     staleTime: 0,
@@ -68,58 +117,86 @@ export function useMemoryFacts(notify: (message: string) => void) {
     }
   }
 
-  /** "Tell Lucius what to change" — one sentence that adds, rewrites or forgets facts. True
-   *  when the server applied it (even if nothing needed changing). */
-  async function instruct(instruction: string): Promise<boolean> {
+  /** Forget every fact filed under one topic. */
+  function deleteTopic(section: string, topic: string) {
+    const query = new URLSearchParams({ section, topic }).toString()
+    return remove(`/api/memory/topics?${query}`, 'Forgotten')
+  }
+
+  /** "Tell Lucius what to change" — one sentence that adds, rewrites or forgets facts, scoped to
+   *  the section (and topic, when it has a name) the user opened. What changed and Lucius's own
+   *  sentence on it when the server applied it; null when it was refused or failed. */
+  async function instruct(
+    instruction: string,
+    scope?: InstructScope,
+  ): Promise<InstructOutcome | null> {
+    const body = scope
+      ? { instruction, section: scope.section, ...(scope.topic ? { topic: scope.topic } : {}) }
+      : { instruction }
     try {
       const r = await authFetch('/api/memory/instruct', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instruction }),
+        body: JSON.stringify(body),
       })
-      const body = (await r.json().catch(() => ({}))) as Partial<InstructResult> & {
+      const out = (await r.json().catch(() => ({}))) as Partial<InstructResult> & {
         detail?: string
       }
       if (!r.ok) {
-        notify(
-          typeof body.detail === 'string' ? body.detail : `Could not update (HTTP ${r.status})`,
-        )
-        return false
+        notify(typeof out.detail === 'string' ? out.detail : `Could not update (HTTP ${r.status})`)
+        return null
       }
       void refresh()
-      notify(instructSummary(body))
-      return true
+      // Shown by the box itself — what changed, why, and what was refused — not as a toast.
+      return {
+        changes: Array.isArray(out.changes) ? out.changes : [],
+        reply: typeof out.reply === 'string' ? out.reply : '',
+        refused: rejectedNote(out),
+      }
     } catch {
       notify('Could not reach the server. Try again.')
-      return false
+      return null
     }
   }
 
   return {
     edit,
     instruct,
+    deleteTopic,
     facts: data?.facts ?? [],
+    summaries: data?.topics ?? [],
     loading: initialLoading,
     forget: (id: string) => remove(`${MEMORY_FACTS_KEY}/${encodeURIComponent(id)}`, 'Forgotten'),
     forgetAll: () => remove(MEMORY_FACTS_KEY, 'All memories forgotten'),
   }
 }
 
+/** Where the "Tell Lucius" box was opened: a section, and the topic's name when it has one. */
+export interface InstructScope {
+  section: string
+  topic?: string
+}
+
+export interface InstructChange {
+  change: 'added' | 'updated' | 'removed'
+  where: string
+  text: string
+  was?: string | null
+}
+
+export interface InstructOutcome {
+  changes: InstructChange[]
+  /** Lucius's own sentence: what it changed, or why nothing needed changing. */
+  reply: string
+  /** What the write path refused, and why ("" when nothing was). */
+  refused: string
+}
+
 interface InstructResult {
   added: number
   updated: number
   removed: number
-}
-
-export function instructSummary(r: Partial<InstructResult>): string {
-  const parts = [
-    r.added ? `Added ${r.added}` : '',
-    r.updated ? `Updated ${r.updated}` : '',
-    r.removed ? `Forgot ${r.removed}` : '',
-  ].filter(Boolean)
-  return parts.length ? parts.join(' · ') : 'Nothing needed changing'
-}
-
-export function memorySourceLabel(source?: string): string {
-  return source === 'explicit' ? 'You told Lucius' : 'Learned in chat'
+  rejected: { reason?: string }[]
+  changes: InstructChange[]
+  reply: string
 }
