@@ -363,6 +363,7 @@ def test_bridge_registry_has_the_three_reference_stores_plus_the_money_six():
             "grants.json",
             "vest_events.json",
             "option_contracts.json",
+            "investment_theses.json",
             "realized_events.json",
             "watchlist.json",
             "automation_runs.json",

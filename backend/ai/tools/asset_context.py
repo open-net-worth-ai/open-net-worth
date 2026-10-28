@@ -77,6 +77,26 @@ def _clamp(raw: object, default: int, maximum: int) -> int:
     return max(1, min(value, maximum))
 
 
+def _thesis_out(thesis: dict | None) -> dict | None:
+    if not thesis:
+        return None
+    keep = (
+        "role",
+        "reason",
+        "breaks_if",
+        "stop_below",
+        "buy_below",
+        "buy_above",
+        "fair_value",
+        "trim_above",
+    )
+    out = {k: thesis.get(k) for k in keep}
+    for key in ("reason", "breaks_if"):
+        if out[key]:
+            out[key] = _clean(out[key])
+    return out
+
+
 def _clean(value: object) -> str:
     """Sanitize one untrusted free-text value (M5 fix) — the shared helper every field below
     routes through, mirroring ``ai/tools/misc.py``'s ``web_search``/``x_search`` sanitization
@@ -389,6 +409,9 @@ async def get_asset_context(input_data: dict):
         "held": position_out is not None,
         "watched": bool(wl.get("following")),
         "position": position_out,
+        # The user's own investment thesis (services.investment_theses): why they own / would buy
+        # it, what would break it, role and price levels. Text fields sanitized like every other one.
+        "thesis": _thesis_out(detail.get("thesis")),
         # Live position numbers + the cached, position-aware narrative Lucius already wrote —
         # composed at read time by services.asset_detail._compose_portfolio_impact (R3 fix,
         # security-review 2026-08-29: this is the exact field built to answer "what should I do

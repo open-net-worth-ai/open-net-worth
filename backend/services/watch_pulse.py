@@ -18,7 +18,7 @@ import logging
 from datetime import datetime
 
 from backend.core.errors import ValidationError
-from backend.services import watch_context, watch_signals
+from backend.services import investment_theses, watch_context, watch_signals
 from backend.services import watch_rules as rules
 from backend.services.watch_intent import in_buy_zone, thesis_of
 from backend.services.watch_trend import row_trend
@@ -101,7 +101,7 @@ def held_context(now: datetime | None = None) -> dict:
     }
     ctx: dict = {
         "now": now,
-        "items": [g["item"] for g in groups.values()],
+        "items": investment_theses.with_intents([g["item"] for g in groups.values()]),
         "snaps": {},
         "bench": None,
         "alerts": {},

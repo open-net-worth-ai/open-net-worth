@@ -87,6 +87,7 @@ from backend.ai.tools.schema_from_model import (
 )
 from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.core.ids import new_id
+from backend.services import investment_theses as _theses
 from backend.services import watchlist as _wl
 
 # ── Batch shape helpers (self-contained per-file, mirroring payees.py) ────────────────
@@ -657,6 +658,8 @@ async def get_watchlist(input_data: dict):
     if len(values) > 1:
         wanted = {v.upper() for v in values}
         items = [i for i in items if (i.get("value") or "").upper() in wanted]
+    theses = _theses.theses_by_instrument()
+    items = [_theses.with_intent(i, theses) if not _wl.is_topic(i) else i for i in items]
     watchlists = store.list_watchlists()
     return json.dumps(
         {
@@ -681,7 +684,7 @@ _ITEM_ASSET_CLASS_DESC = "equity | crypto | commodity | property | other"
 _ITEM_MONITOR_NEWS_DESC = "Include in scheduled news scans. Always true for topics."
 _ITEM_NOTE_DESC = (
     "The user's angle to focus on when news breaks (e.g. 'watch M&A activity'). "
-    "Feeds the news scan and shows in the UI. Ask before saving; empty if nothing."
+    "Feeds the news scan and shows in the UI. Empty if nothing."
 )
 _ITEM_SEARCH_QUERIES_DESC = (
     "Topics/companies: 3–5 targeted search queries, specific and varied, "
@@ -1026,12 +1029,12 @@ async def remove_watchlist_items(input_data: dict):
 # ── update_watchlist_items ───────────────────────────────────────────────────────────
 
 _UPDATE_ITEM_ID_DESC = "UUID of the watchlist item"
-_UPDATE_ITEM_NOTE_DESC = "The user's angle to focus on when news breaks. Ask before saving."
+_UPDATE_ITEM_NOTE_DESC = "The user's angle to focus on when news breaks."
 _UPDATE_ITEM_INTENT_DESC = (
     "TICKERS: why the user watches it, read by the Watching pulse's rules — {thesis?, "
     "buy_below?, buy_above?, fair_value?}. buy_below = top of the buy zone (start buying at or "
     "under), buy_above = optional floor, fair_value = what the user thinks it's worth. Replaces "
-    "the whole intent; {} clears it. Propose values and ask before saving — they're the user's call."
+    "the whole intent; {} clears it. Record the user's own values, never your estimate."
 )
 _UPDATE_ITEM_SEARCH_QUERIES_DESC = (
     "TOPICS ONLY: replace the news search queries wholesale (3–5 targeted)."
@@ -1116,7 +1119,7 @@ async def _update_one_watchlist_item(store, item_id: str, changes: dict) -> dict
         return no_op_write_result({"item": dict(existing)})
     try:
         # SEC-A (code review): same blocking-getaddrinfo concern as add_watchlist_items.
-        item = await asyncio.to_thread(store.update_by_id, item_id, changes)
+        item = await asyncio.to_thread(_wl.update_item, item_id, changes)
     except ValidationError as exc:
         return {"ok": False, "error": str(exc)}
     if item:

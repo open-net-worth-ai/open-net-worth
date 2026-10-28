@@ -134,31 +134,37 @@ describe('PriceAlertsModal — manage view', () => {
     expect((getByLabelText('Turn off the ≤ $182.00 alert') as HTMLInputElement).checked).toBe(true)
   })
 
-  it('the mute switch PATCHes the watchlist item immediately (no Save button)', async () => {
-    const { getByLabelText, queryByText } = render(
+  it('the header mute toggle PATCHes the watchlist item immediately (no Save button)', async () => {
+    const { getByLabelText, queryByText, findByText } = render(
       <PriceAlertsModal {...props({ price_alerts: TWO })} />,
     )
     expect(queryByText('Save')).toBeNull()
-    fireEvent.click(getByLabelText('Mute ORCL'))
+    const toggle = getByLabelText('Mute ORCL')
+    expect(toggle.closest('.pa-head')).toBeTruthy()
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(toggle)
+    expect(await findByText('Muted')).toBeTruthy()
     await waitFor(() => expect(calls('PATCH')).toHaveLength(1))
     expect(calls('PATCH')[0]![0]).toBe('/api/watchlist/items/wli-1')
     expect(body(calls('PATCH')[0]!)).toEqual({ monitor_news: false })
   })
 
   it('hides the ticker-level settings for a standalone alert with no watchlist item', () => {
-    const { queryByText } = render(<PriceAlertsModal {...props({ id: '', price_alerts: TWO })} />)
-    expect(queryByText('Mute ORCL')).toBeNull()
-    expect(queryByText('News sources')).toBeNull()
+    const { queryByText, queryByLabelText } = render(
+      <PriceAlertsModal {...props({ id: '', price_alerts: TWO })} />,
+    )
+    expect(queryByLabelText('Mute ORCL')).toBeNull()
+    expect(queryByText('Additional news sources')).toBeNull()
   })
 
-  it('the News sources copy states the exact fetch cadence and says when the lane is paused', async () => {
+  it('the Additional news sources copy states the exact fetch cadence and says when the lane is paused', async () => {
     mockAuthFetch.mockImplementation(async (url: string, init?: RequestInit) => {
       if (init?.method) return ok({})
       if (url === '/api/watchlist') return ok({ config: { enabled: true, news_freshness: 'off' } })
       return ok(url.includes('/api/alerts') ? { alerts: [] } : { stats: {} })
     })
     const { getByText } = render(<PriceAlertsModal {...props({ price_alerts: TWO })} />)
-    fireEvent.click(getByText('News sources'))
+    fireEvent.click(getByText('Additional news sources'))
     expect(getByText(/checked every 90 seconds/)).toBeTruthy()
     await waitFor(() => expect(getByText(/Paused right now: RSS freshness is off/)).toBeTruthy())
   })
@@ -167,7 +173,7 @@ describe('PriceAlertsModal — manage view', () => {
     const { getByText, getByPlaceholderText } = render(
       <PriceAlertsModal {...props({ price_alerts: TWO })} />,
     )
-    fireEvent.click(getByText('News sources'))
+    fireEvent.click(getByText('Additional news sources'))
     fireEvent.click(getByText('Add feed'))
     const input = getByPlaceholderText('https://example.com/feed.xml')
     fireEvent.change(input, { target: { value: 'https://example.com/feed.xml' } })
@@ -189,7 +195,7 @@ describe('PriceAlertsModal — manage view', () => {
     const { getByText, getByPlaceholderText } = render(
       <PriceAlertsModal {...props({ price_alerts: TWO })} />,
     )
-    fireEvent.click(getByText('News sources'))
+    fireEvent.click(getByText('Additional news sources'))
     fireEvent.click(getByText('Add feed'))
     const input = getByPlaceholderText('https://example.com/feed.xml')
     fireEvent.change(input, { target: { value: 'x' } })

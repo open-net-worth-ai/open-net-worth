@@ -139,6 +139,7 @@ _WRITABLE: tuple[re.Pattern[str], ...] = tuple(
         r"^/api/commitments(/.*)?$",
         r"^/api/dashboard/layout$",
         r"^/api/equity(/.*)?$",
+        r"^/api/investment-theses(/[^/]+)?$",
         r"^/api/(income|options|lots|positions|disposals|instruments|rebalance|recurring)(/.*)?$",
         r"^/api/intel/(assets|signals)(/.*)?$",
         r"^/api/(accounts|categories|institutions|transactions|payees|matches)(/.*)?$",

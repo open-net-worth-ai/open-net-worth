@@ -40,6 +40,7 @@ import { PriceMovementTimeline } from './PriceMovementTimeline'
 import { KeyIssuesAccordion } from './KeyIssuesAccordion'
 import { YourPositionCard } from './YourPositionCard'
 import { PositionSubtab } from './PositionSubtab'
+import { YourThesisCard } from './YourThesisCard'
 import { ClosedPositionHistory } from './ClosedPositionHistory'
 import { AssetWatchlistMenu } from './AssetWatchlistMenu'
 import { AssetAlertsCard } from './AssetAlertsCard'
@@ -500,6 +501,19 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
         </Panel>
       )
     )
+
+  const thesisBlock = (
+    <YourThesisCard
+      instrumentId={instrumentId}
+      ticker={asset.ticker ?? asset.symbol}
+      thesis={data.thesis ?? null}
+      held={!!position?.held}
+      price={effPrice ?? null}
+      priceMaxFrac={priceMaxFrac}
+      currency={price.currency}
+      onSaved={refetch}
+    />
+  )
 
   const priceAlertsBlock = data.has_ticker && asset.ticker && (
     <AssetAlertsCard
@@ -1023,6 +1037,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
               />
 
               <div className="asd-mobile-only">{yourPositionBlock}</div>
+              <div className="asd-mobile-only">{thesisBlock}</div>
               <div className="asd-mobile-only">{priceAlertsBlock}</div>
               <div className="asd-mobile-only">{analystConsensusBlock}</div>
 
@@ -1239,6 +1254,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
             (below), each next to the content it's actually about. */}
         <div className="asd-rail asd-desktop-only">
           {yourPositionBlock}
+          {thesisBlock}
           {priceAlertsBlock}
           {/* Hidden only on Analysis, which already has the full Estimates/Ratings
               breakdown — shown on every other tab (Overview, Position). */}

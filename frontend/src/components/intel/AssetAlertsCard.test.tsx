@@ -69,7 +69,7 @@ describe('AssetAlertsCard', () => {
   })
 
   // ALERT-AD-MUTE: a muted ticker (monitor_news=false) opens the modal in the muted state and the
-  // mute switch commits itself — guards the prop→toggle→PATCH wiring against silent regressions.
+  // header mute toggle commits itself — guards the prop→toggle→PATCH wiring against silent regressions.
   it('opens muted and un-muting PATCHes monitor_news:true straight away', async () => {
     mockAuthFetch.mockResolvedValue({ ok: true, json: async () => ({}) })
     const { getByText, findByText, getByLabelText } = render(
@@ -77,7 +77,7 @@ describe('AssetAlertsCard', () => {
     )
     fireEvent.click(getByText('Add price alert'))
     expect(await findByText('Muted')).toBeTruthy()
-    expect((getByLabelText('Mute AAPL') as HTMLInputElement).checked).toBe(true)
+    expect(getByLabelText('Mute AAPL').getAttribute('aria-pressed')).toBe('true')
     fireEvent.click(getByLabelText('Mute AAPL'))
     await waitFor(() => {
       const patch = mockAuthFetch.mock.calls.find(([, opts]) => opts?.method === 'PATCH')

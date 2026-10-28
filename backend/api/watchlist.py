@@ -207,7 +207,7 @@ def get_watchlist():
     if wl["config"].get("auto_scan_holdings", True):
         store.sync_from_holdings(read_rows())
         wl = store.as_dict()
-    return wl
+    return wl_service.with_thesis_intents(wl)
 
 
 @router.get("/api/watchlist/quotes")
@@ -249,7 +249,7 @@ def add_watchlist_item(body: WatchlistItemCreate):
         # Append this watchlist to the existing item's watchlist_ids and return it.
         new_ids = list(existing.get("watchlist_ids", [])) + [watchlist_id]
         updated = store.update_by_id(existing["id"], {"watchlist_ids": new_ids})
-        return updated or existing
+        return wl_service.project_item(updated or existing)
 
     item = {
         "id": new_id("wli"),
@@ -291,10 +291,9 @@ def _ticker_watchlist(store, name: Optional[str]) -> str:
 
 @router.patch("/api/watchlist/items/{item_id}")
 def update_watchlist_item(item_id: str, body: WatchlistItemPatch):
-    store = wl_service.watchlist_store()
     changes = body.model_dump(exclude_none=True)
     try:
-        updated = store.update_by_id(item_id, changes)
+        updated = wl_service.update_item(item_id, changes)
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if updated:
@@ -371,8 +370,7 @@ def list_alert_channels():
 def sync_holdings():
     store = wl_service.watchlist_store()
     store.sync_from_holdings(read_rows())
-    wl = store.as_dict()
-    return wl
+    return wl_service.with_thesis_intents(store.as_dict())
 
 
 # ── Watchlists endpoints ────────────────────────────────────────────────────────

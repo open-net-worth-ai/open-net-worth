@@ -141,6 +141,7 @@ from backend.api.intel_digest import router as intel_digest_router
 from backend.api.intel_latency import router as intel_latency_router
 from backend.api.intel_signals import router as intel_signals_router
 from backend.api.intel_watch import router as intel_watch_router
+from backend.api.investment_theses import router as investment_theses_router
 from backend.api.investments import router as investments_router
 from backend.api.investments_xray import router as investments_xray_router
 from backend.api.ledger import router as ledger_router
@@ -1120,6 +1121,7 @@ app.include_router(fixed_income_router)
 app.include_router(options_router)
 app.include_router(notification_log_router)
 app.include_router(intel_assets_router)
+app.include_router(investment_theses_router)
 app.include_router(intel_digest_router)
 app.include_router(intel_watch_router)
 app.include_router(intel_signals_router)

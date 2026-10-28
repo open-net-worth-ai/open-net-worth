@@ -57,6 +57,7 @@ export {
   X,
   Link2,
   Bell,
+  BellOff,
   Plus,
   Minus,
   Sparkles,
