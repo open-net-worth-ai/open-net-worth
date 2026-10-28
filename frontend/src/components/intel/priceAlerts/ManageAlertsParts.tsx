@@ -106,7 +106,7 @@ export function SuggestionSet({
 
 type SavedKey = 'mute' | 'feeds' | null
 
-/** Mute + News sources. Each control commits itself — the per-alert toggles already do, so a
+/** Mute + Additional news sources. Each control commits itself — the per-alert toggles already do, so a
  * Save button covering only mute and feeds would be ambiguous. A feed row commits on blur and
  * an empty one is dropped there, matching the upstream filter. */
 export function TickerSettings({
@@ -161,7 +161,7 @@ export function TickerSettings({
           aria-expanded={feedsOpen}
           onClick={() => setFeedsOpen((o) => !o)}
         >
-          <span className="pa-feeds-t">News sources</span>
+          <span className="pa-feeds-t">Additional news sources</span>
           {feeds.length > 0 && (
             <span className="pa-feeds-n">
               {feeds.length} feed{feeds.length === 1 ? '' : 's'}

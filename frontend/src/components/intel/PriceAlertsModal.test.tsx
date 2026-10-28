@@ -148,17 +148,17 @@ describe('PriceAlertsModal — manage view', () => {
   it('hides the ticker-level settings for a standalone alert with no watchlist item', () => {
     const { queryByText } = render(<PriceAlertsModal {...props({ id: '', price_alerts: TWO })} />)
     expect(queryByText('Mute ORCL')).toBeNull()
-    expect(queryByText('News sources')).toBeNull()
+    expect(queryByText('Additional news sources')).toBeNull()
   })
 
-  it('the News sources copy states the exact fetch cadence and says when the lane is paused', async () => {
+  it('the Additional news sources copy states the exact fetch cadence and says when the lane is paused', async () => {
     mockAuthFetch.mockImplementation(async (url: string, init?: RequestInit) => {
       if (init?.method) return ok({})
       if (url === '/api/watchlist') return ok({ config: { enabled: true, news_freshness: 'off' } })
       return ok(url.includes('/api/alerts') ? { alerts: [] } : { stats: {} })
     })
     const { getByText } = render(<PriceAlertsModal {...props({ price_alerts: TWO })} />)
-    fireEvent.click(getByText('News sources'))
+    fireEvent.click(getByText('Additional news sources'))
     expect(getByText(/checked every 90 seconds/)).toBeTruthy()
     await waitFor(() => expect(getByText(/Paused right now: RSS freshness is off/)).toBeTruthy())
   })
@@ -167,7 +167,7 @@ describe('PriceAlertsModal — manage view', () => {
     const { getByText, getByPlaceholderText } = render(
       <PriceAlertsModal {...props({ price_alerts: TWO })} />,
     )
-    fireEvent.click(getByText('News sources'))
+    fireEvent.click(getByText('Additional news sources'))
     fireEvent.click(getByText('Add feed'))
     const input = getByPlaceholderText('https://example.com/feed.xml')
     fireEvent.change(input, { target: { value: 'https://example.com/feed.xml' } })
@@ -189,7 +189,7 @@ describe('PriceAlertsModal — manage view', () => {
     const { getByText, getByPlaceholderText } = render(
       <PriceAlertsModal {...props({ price_alerts: TWO })} />,
     )
-    fireEvent.click(getByText('News sources'))
+    fireEvent.click(getByText('Additional news sources'))
     fireEvent.click(getByText('Add feed'))
     const input = getByPlaceholderText('https://example.com/feed.xml')
     fireEvent.change(input, { target: { value: 'x' } })
