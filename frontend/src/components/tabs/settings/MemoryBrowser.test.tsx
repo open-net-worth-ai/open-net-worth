@@ -70,7 +70,7 @@ describe('MemoryBrowser', () => {
     await renderBrowser()
     const open = screen.getByRole('region', { name: 'Open items' })
     expect(within(open).getByText(/Call the insurer about the renewal/)).toBeTruthy()
-    expect(within(open).getByText(/until /)).toBeTruthy()
+    expect(within(open).getByText(/Until /)).toBeTruthy()
     expect(within(open).queryByRole('button', { name: /^Delete / })).toBeNull()
   })
 
@@ -83,7 +83,7 @@ describe('MemoryBrowser', () => {
     const item = within(open)
       .getByText('Call the insurer about the renewal')
       .closest('.rd-mem-topic')
-    expect(item?.querySelector('.rd-mem-topic-date')?.textContent).toMatch(/^until /)
+    expect(item?.querySelector('.rd-mem-topic-date')?.textContent).toMatch(/^Until /)
     expect(
       within(item as HTMLElement)
         .getAllByRole('button')

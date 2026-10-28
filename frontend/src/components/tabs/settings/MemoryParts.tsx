@@ -237,7 +237,7 @@ export function MemoryFactRows({
         <div className="rd-mem-topic">
           <div className="rd-mem-topic-open rd-mem-fact-body">
             <span className="rd-mem-fact-t">{f.content}</span>
-            {f.expires_at && <span className="rd-mem-topic-date">until {fDate(f.expires_at)}</span>}
+            {f.expires_at && <span className="rd-mem-topic-date">Until {fDate(f.expires_at)}</span>}
           </div>
           <MemoryHoverActs acts={acts} className="rd-mem-topic-acts" size={16} />
         </div>
