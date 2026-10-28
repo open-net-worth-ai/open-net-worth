@@ -2,7 +2,7 @@
 
 One thesis per instrument (``services.investment_theses``), shown on the asset page's "Your Thesis"
 card. The watch rules read its reason / buy zone / fair value; role, breaks_if, stop and trim are
-the held-side fields. Every value is the user's call: tools propose, the user confirms.
+the held-side fields.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from backend.core.errors import OpenNetWorthError
 from backend.db.investment_thesis_store import THESIS_FIELDS
 from backend.services import investment_theses as _theses
 
-_ASK_FIRST = "These are the user's own views — propose values and ask before saving."
+_USERS_OWN = "Every value is the user's own view — record what they say, never your estimate."
 
 
 class GetInvestmentThesesInput(ToolInput):
@@ -109,7 +109,7 @@ async def get_investment_theses(input_data: dict):
     "set_investment_theses",
     description=(
         "Write the user's investment thesis for one or more tickers: reason, what would break it "
-        "(breaks_if), role and price levels. Creates the thesis if there is none. " + _ASK_FIRST
+        "(breaks_if), role and price levels. Creates the thesis if there is none. " + _USERS_OWN
     ),
     input_schema=schema_of(SetInvestmentThesesInput, tool_name="set_investment_theses"),
     mutates=("portfolio", "watchlist"),
@@ -136,7 +136,7 @@ async def set_investment_theses(input_data: dict):
 
 @tool(
     "delete_investment_theses",
-    description="Delete the user's investment thesis for one or more tickers. " + _ASK_FIRST,
+    description="Delete the user's investment thesis for one or more tickers.",
     input_schema=schema_of(DeleteInvestmentThesesInput, tool_name="delete_investment_theses"),
     mutates=("portfolio", "watchlist"),
 )

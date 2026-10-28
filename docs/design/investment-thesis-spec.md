@@ -131,7 +131,8 @@ drives the existing buy-zone and fair-value findings. `watch_intent` stays pure.
 | `set_investment_theses` | `mutates=("portfolio","watchlist")` | `updates: [{ticker, role?, reason?, breaks_if?, stop_below?, buy_below?, buy_above?, fair_value?, trim_above?, clear?: string[]}]` — merge semantics |
 | `delete_investment_theses` | `mutates=("portfolio","watchlist")` | `tickers: string[]` |
 
-Descriptions tell the model the values are the user's call: propose, then ask before saving.
+Descriptions say the values are the user's own views, never the model's estimates. Whether a write
+needs approval is `tool_permissions`' decision alone, never the description's.
 `get_asset_context` includes the instrument's `thesis`.
 
 ## UI
