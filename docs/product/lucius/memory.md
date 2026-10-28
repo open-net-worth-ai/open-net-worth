@@ -162,7 +162,9 @@ At the top of **Settings → Memory**:
   conversation by its title in his reply; click or tap the link to switch to it. It never reads
   attachments, the results of his tools, or the context the app adds to a message (the screen you
   were on, items you mentioned), and never conversations that don't appear in your Chats list. The conversation
-  you're in is left out. With the switch off he can't look back at all. On by default. If Lucius
+  you're in is left out. With the switch off he can't use this search, but he can still read past
+  conversations by writing a SQL query against your data, so the switch doesn't fully keep them from
+  him yet. On by default. If Lucius
   quoted a file in a reply before you marked it Private, that reply can still be found; deleting
   that chat removes it.
 - **Generate memory from chats** — the main switch (see below).
