@@ -108,23 +108,37 @@ async function nativeChoice(folder, cancelled = false) {
     dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
   }, { folder, cancelled });
 }
-// macOS can stop painting a window parked offscreen, and Chromium then refuses the capture
-// ("Unable to capture screenshot"). Electron's capturePage draws the page for the capture alone;
-// the window's state is logged so a window that is really hidden shows up in the run.
+// The macOS runner's compositor now and then gives no frame for the window (the same capture
+// passed on one run and failed on the next): Chromium refuses it ("Unable to capture screenshot")
+// and so can Electron's capturePage ("UnknownVizError"). A screenshot here is evidence, not a
+// check, so a frame that never comes is logged with every window's state and the run goes on.
 async function shot(file) {
   try {
     await page.screenshot({ path: file });
+    return;
   } catch (error) {
     if (!/Unable to capture screenshot/.test(String(error))) throw error;
-    const state = await app.evaluate(({ BrowserWindow }) => {
-      const window = BrowserWindow.getAllWindows()[0];
-      return { visible: window.isVisible(), minimized: window.isMinimized(), bounds: window.getBounds() };
-    });
-    console.log("NOTE renderer capture refused, capturing through Electron:", path.basename(file), JSON.stringify(state));
-    const png = await app.evaluate(async ({ BrowserWindow }) =>
-      (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString("base64"));
-    await writeFile(file, Buffer.from(png, "base64"));
   }
+  const url = page.url();
+  const result = await app.evaluate(async ({ BrowserWindow }, url) => {
+    const windows = BrowserWindow.getAllWindows();
+    const state = windows.map((window) => ({
+      page: window.webContents.getURL() === url,
+      visible: window.isVisible(),
+      minimized: window.isMinimized(),
+      focused: window.isFocused(),
+      bounds: window.getBounds(),
+    }));
+    const owner = windows.find((window) => window.webContents.getURL() === url);
+    try {
+      return { state, png: owner ? (await owner.webContents.capturePage()).toPNG().toString("base64") : null };
+    } catch (error) {
+      return { state, png: null, error: String(error) };
+    }
+  }, url);
+  console.log("NOTE renderer capture refused:", path.basename(file), JSON.stringify({ windows: result.state, error: result.error }));
+  if (result.png) await writeFile(file, Buffer.from(result.png, "base64"));
+  else console.log("NOTE no frame to capture, screenshot skipped:", path.basename(file));
 }
 async function close() {
   if (app) {
