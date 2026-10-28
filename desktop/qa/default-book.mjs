@@ -108,6 +108,24 @@ async function nativeChoice(folder, cancelled = false) {
     dialog.showMessageBox = async () => ({ response: 0, checkboxChecked: false });
   }, { folder, cancelled });
 }
+// macOS can stop painting a window parked offscreen, and Chromium then refuses the capture
+// ("Unable to capture screenshot"). Electron's capturePage draws the page for the capture alone;
+// the window's state is logged so a window that is really hidden shows up in the run.
+async function shot(file) {
+  try {
+    await page.screenshot({ path: file });
+  } catch (error) {
+    if (!/Unable to capture screenshot/.test(String(error))) throw error;
+    const state = await app.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      return { visible: window.isVisible(), minimized: window.isMinimized(), bounds: window.getBounds() };
+    });
+    console.log("NOTE renderer capture refused, capturing through Electron:", path.basename(file), JSON.stringify(state));
+    const png = await app.evaluate(async ({ BrowserWindow }) =>
+      (await BrowserWindow.getAllWindows()[0].webContents.capturePage()).toPNG().toString("base64"));
+    await writeFile(file, Buffer.from(png, "base64"));
+  }
+}
 async function close() {
   if (app) {
     await app.close();
@@ -139,7 +157,7 @@ try {
     assert.equal(style.background,scheme==='dark'?'rgb(14, 16, 20)':'rgb(255, 255, 255)');
     assert.equal(style.heading,'44px');
     assert.ok(style.font.includes('Plus Jakarta Sans'));
-    await page.screenshot({path:`qa/artifacts/first-launch-welcome-${scheme}.png`});
+    await shot(`qa/artifacts/first-launch-welcome-${scheme}.png`);
   }
   await app.evaluate(({nativeTheme})=>{nativeTheme.themeSource='system';});
   check("Welcome follows native system appearance and switches palettes with matching onboarding typography");
@@ -158,7 +176,7 @@ try {
   if (process.env.ONW_QA_SHOTS) for (const scheme of ["dark", "light"]) {
     await app.evaluate(({nativeTheme},scheme)=>{nativeTheme.themeSource=scheme;},scheme);
     await page.waitForTimeout(300);
-    await page.screenshot({path:path.join(process.env.ONW_QA_SHOTS,`chooser-${scheme}.png`)});
+    await shot(path.join(process.env.ONW_QA_SHOTS,`chooser-${scheme}.png`));
   }
   await app.evaluate(({nativeTheme})=>{nativeTheme.themeSource='system';});
   assert.equal(await readFile(path.join(root, '.instance.lock'), 'utf8').catch(()=>null), initialLock);
@@ -237,7 +255,7 @@ try {
   assert.equal(await page.getByRole("button", { name: "Back", exact: true }).count(), 0);
   assert.equal(await readFile(path.join(root, '.instance.lock'), 'utf8'), lockBefore);
   assert.equal(await hash(), before);
-  await page.screenshot({path:'qa/artifacts/first-launch-welcome.png'});
+  await shot('qa/artifacts/first-launch-welcome.png');
   check("a locked suggested book stays untouched through Welcome and the folder choice (which has no Back); pre-book capabilities are denied");
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page
@@ -246,7 +264,7 @@ try {
   await page.getByText(/port 8097.*stop that server and retry/i).waitFor();
   await page.getByText(await realpath(root), { exact: true }).waitFor();
   assert.equal(await hash(), before);
-  await page.screenshot({ path: "qa/artifacts/default-book-in-use.png" });
+  await shot("qa/artifacts/default-book-in-use.png");
   check(
     "a default book held by another server stays untouched and recovery explains the conflict",
   );
@@ -283,7 +301,7 @@ try {
   await page.getByRole('button', {name:'Back',exact:true}).waitFor();
   assert.equal((await page.evaluate(() => window.onwDesktop.getSettings())).bookFolder, await realpath(path.join(freshHome,'.open-net-worth')));
   await page.waitForFunction(()=>[...document.querySelectorAll('.firstrun-topbar img')].every(img=>img.complete && img.naturalWidth>0));
-  await page.screenshot({path:'qa/artifacts/first-launch-currency.png'});
+  await shot('qa/artifacts/first-launch-currency.png');
   assert.equal((await accounts()).length, 0);
   assert.equal(await exists(path.join(profile, "book")), false);
   check("a missing default stays absent until confirmation, then goes directly to currency");
@@ -307,7 +325,7 @@ try {
   await page.locator('.firstrun-drop__input').setInputFiles(archive);
   await page.getByRole("button",{name:"Restore this backup"}).waitFor();
   assert.deepEqual(await accounts(),[]);
-  await page.screenshot({path:'qa/artifacts/first-launch-restore-preview.png'});
+  await shot('qa/artifacts/first-launch-restore-preview.png');
   await page.getByRole("button",{name:"Restore this backup"}).click();
   await page.waitForURL(/\/setup\/model$/);
   assert.equal((await page.evaluate(async () => (await fetch('/api/setup-status')).json())).restore_pending, true);
