@@ -6,7 +6,7 @@ import type { ReactNode } from 'react'
 import { Check } from 'lucide-react'
 import { Button, Modal } from '../ui'
 import { Spark } from '../../lucius/identity'
-import { guidedThisVisit, inFirstRun, markGuided, useTourShowing } from './tourTarget'
+import { guidedThisVisit, inFirstRun, markGuided, modalOpen, useTourShowing } from './tourTarget'
 import './intro.css'
 
 export interface IntroPoint {
@@ -34,13 +34,29 @@ export interface FeatureIntroProps {
   onClose: () => void
 }
 
+// Polled, as the tours wait for a modal: dialogs open and close outside React's view of this one.
+function useNoModal(watching: boolean): boolean {
+  const [clear, setClear] = useState(() => !modalOpen())
+  useEffect(() => {
+    if (!watching) return
+    const check = () => setClear(!modalOpen())
+    check()
+    const timer = setInterval(check, 700)
+    return () => clearInterval(timer)
+  }, [watching])
+  return clear
+}
+
 export function FeatureIntro({ open, steps, lucius, secondary, onClose }: FeatureIntroProps) {
   const [i, setI] = useState(0)
   // Never on top of a tour or tip, and never a second guide in one visit: it waits, unseen,
   // for a visit where it is the first (see `guidedThisVisit`).
   const touring = useTourShowing()
   const [claimed, setClaimed] = useState(false)
-  const shown = open && !touring && !inFirstRun() && (claimed || !guidedThisVisit())
+  // Nor on top of a dialog the user already has open (a statement import, say): an intro there
+  // left that dialog inert under it. It waits for the dialog to close.
+  const clear = useNoModal(open && !touring && !claimed)
+  const shown = open && !touring && !inFirstRun() && (claimed || (clear && !guidedThisVisit()))
   useEffect(() => {
     if (shown && !claimed) {
       markGuided()

@@ -43,6 +43,27 @@ it('an intro waits for a later visit once another guide has shown in this one', 
   expect(onClose).not.toHaveBeenCalled() // still unseen, so it comes back next visit
 })
 
+it('an intro waits while another dialog is open, then opens once it closes', () => {
+  vi.useFakeTimers()
+  try {
+    // The statement import, open when the Accounts intro became due (desktop e2e, 2026-10-27).
+    const other = document.createElement('div')
+    other.className = 'modal-overlay'
+    document.body.appendChild(other)
+    render(intro())
+    act(() => vi.advanceTimersByTime(1500))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    other.remove()
+    act(() => vi.advanceTimersByTime(700))
+    expect(screen.getByRole('dialog', { name: 'Hello' })).toBeTruthy()
+    // Its own overlay doesn't make it wait on itself.
+    act(() => vi.advanceTimersByTime(1500))
+    expect(screen.getByRole('dialog', { name: 'Hello' })).toBeTruthy()
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
 it('the intro that took the visit stays open', () => {
   const { rerender } = render(intro())
   expect(screen.getByRole('dialog', { name: 'Hello' })).toBeTruthy()
