@@ -95,10 +95,58 @@ def drop_stored_review(statement_id: str) -> None:
     StatementPreviewStore().delete(statement_id)
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--flag",
+        action="append",
+        default=[],
+        metavar="NAME=on|off",
+        help="force a feature flag for the whole run (repeatable) — docs/FEATURE_FLAGS.md",
+    )
+
+
 def pytest_configure(config):
     config.addinivalue_line(
         "markers", "integration: requires ANTHROPIC_API_KEY and makes LLM calls"
     )
+    config.addinivalue_line("markers", "flags(**values): force feature flags for this test")
+    config.addinivalue_line(
+        "markers", "flag_both(name): run this test with the feature flag off and on"
+    )
+    from backend.core import feature_flags as _ff
+    from tests.flags import TEST_FLAGS
+
+    _ff.REGISTRY.update(_ff.build_registry(_ff.FLAGS + TEST_FLAGS))
+
+
+def pytest_generate_tests(metafunc):
+    marker = metafunc.definition.get_closest_marker("flag_both")
+    if marker is None:
+        return
+    (name,) = marker.args
+    metafunc.parametrize(
+        "_feature_flags",
+        [{name: False}, {name: True}],
+        ids=[f"{name}=off", f"{name}=on"],
+        indirect=True,
+    )
+
+
+@pytest.fixture(autouse=True)
+def _feature_flags(request, monkeypatch):
+    """Apply ``--flag``, ``@pytest.mark.flags`` and ``flag_both`` (tests/flags.py), most
+    specific last so it wins; clear any ``ONW_FLAG_*`` inherited from the shell."""
+    from backend.core.feature_flags import ENV_PREFIX, override
+    from tests.flags import parse_cli
+
+    for key in [k for k in os.environ if k.startswith(ENV_PREFIX)]:
+        monkeypatch.delenv(key)
+    values = parse_cli(request.config.getoption("--flag"))
+    for marker in reversed(list(request.node.iter_markers("flags"))):
+        values.update(marker.kwargs)
+    values.update(getattr(request, "param", None) or {})
+    with override(**values):
+        yield
 
 
 def pytest_collection_modifyitems(items):
@@ -220,13 +268,15 @@ def _clear_tier2_tables(engine) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _sql_console_role_for_postgres_ci(monkeypatch):
-    """On a Postgres test run the SQL console needs its dedicated-role URL (it is refused
-    without one). CI's single test role stands in for it; the refusal itself is tested in
-    tests/db/test_sql_console_postgres_gate.py, which clears this."""
-    url = os.environ.get("ONW_TEST_DATABASE_URL") or ""
-    if url.startswith("postgres"):
-        monkeypatch.setenv("ONW_SQL_CONSOLE_DATABASE_URL", url)
+def _sql_console_login_per_test(monkeypatch):
+    """On a Postgres test run the app manages the SQL console's login itself; each test drops
+    the schema, so the prepared login and its grants are forgotten between tests."""
+    from backend.db import sql_console_role
+
+    monkeypatch.delenv("ONW_SQL_CONSOLE_DATABASE_URL", raising=False)
+    sql_console_role.reset()
+    yield
+    sql_console_role.reset()
 
 
 @pytest.fixture(autouse=True)

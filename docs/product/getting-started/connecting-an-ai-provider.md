@@ -105,7 +105,7 @@ filesystem, so it can't see your computer's sign-in. To share it:
 | Provider (as listed in the app) | Where to get a key |
 |---|---|
 | **OpenRouter** | [openrouter.ai](https://openrouter.ai) → sign in → **Keys** → **Create key**. Add credits under **Credits**. One key reaches models from many companies. Pick a model on par with Claude Sonnet, such as GLM or Kimi — weaker models slip on long tasks. |
-| **Anthropic** | [console.anthropic.com](https://console.anthropic.com) → **API keys** → **Create key**. Add credit under **Billing**. Keys start with `sk-ant-`. |
+| **Anthropic** | [console.anthropic.com](https://console.anthropic.com) → **API keys** → **Create key**. Add credit under **Billing**. Keys start with `sk-ant-`. On a Claude Max or Team plan, claim the plan's monthly API credits first: on [claude.ai](https://claude.ai), **Settings → Billing** → **API credits** → **Link organization**, then create the key in that Console organization. Credits expire at the end of each billing cycle. Pro includes none. |
 | **OpenAI** | [platform.openai.com](https://platform.openai.com) → **API keys** → **Create new secret key**. Add credit under **Billing**. |
 | **Google Gemini** | [aistudio.google.com](https://aistudio.google.com) → **Get API key** → **Create API key**. |
 | **xAI (Grok)** | [console.x.ai](https://console.x.ai) → **API keys** → create a key. |

@@ -1,10 +1,12 @@
 // Settings → Developer. Ported from the DeveloperSection in
 // design_handoffs/settings_handoff/prototype/redesign/settings.jsx. Connecting other AI apps
 // (Settings → MCP) and iPhone Shortcuts are everyday features with their own sections.
+// Experimental (feature flags) is generated from the backend registry — ExperimentalPanel.
 import { useState } from 'react'
 import { authFetch } from '../../../../api/client'
 import { useCachedFetchState } from '../../../../state/queryCache'
 import { Zap } from '../../../../ui/icons'
+import { ExperimentalPanel } from '../ExperimentalPanel'
 import { SqlAccessPanel } from '../SqlAccessPanel'
 import { Btn, Panel, Select, Toggle, row, useSectionBusy } from '../ds'
 import type { SectionProps } from '../ds'
@@ -345,6 +347,7 @@ export function DeveloperSection({ toast }: SectionProps) {
       <SqlAccessPanel toast={toast} />
       <Extensions toast={toast} />
       <ScriptSkills toast={toast} />
+      <ExperimentalPanel toast={toast} />
     </>
   )
 }

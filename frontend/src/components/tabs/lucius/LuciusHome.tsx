@@ -14,6 +14,7 @@ import { ArtifactFullscreen } from './ArtifactFullscreen'
 import { ArtifactPanelProvider } from '../../../state/artifactPanel'
 import { VaultPanel } from '../../vault/VaultPanel'
 import { useLuciusChat } from '../../../state/luciusChat'
+import { startFreshConversation } from '../../../utils/freshConversation'
 import { Brain, ChevronRight, FolderLock, SquarePen } from '../../../ui/icons'
 import { usePointerResize } from '../../../hooks/usePointerResize'
 import { useSessionState } from '../../../hooks/useSessionState'
@@ -308,18 +309,10 @@ export function LuciusHome({
   const [browsingConvs, setBrowsingConvs] = useState<ConversationKind | null>(null)
   const groups = conversationGroups(conversations)
 
-  // A `persist: false` conversation is never added to `conversations` (that's the whole
-  // point — it stays out of the sidebar/server until it has real content), so "the active
-  // id isn't in the list" IS "already sitting on an empty/unpersisted conversation." Reusing
-  // that instead of minting another one satisfies two owner reports at once: "New shouldn't
-  // trigger when I'm already on a new conversation tab", and it's also what makes a
-  // not-yet-typed-into conversation never hit the server/sidebar at all (ensurePersisted in
+  // Owner: "New shouldn't trigger when I'm already on a new conversation tab" — and a
+  // not-yet-typed-into conversation never hits the server/sidebar at all (ensurePersisted in
   // luciusChat.tsx promotes it the moment a real message is actually sent).
-  const startFresh = () => {
-    const alreadyOnAnEmptyOne = !conversations.some((c) => c.id === activeId)
-    if (alreadyOnAnEmptyOne) return
-    createConversation()
-  }
+  const startFresh = () => startFreshConversation({ conversations, activeId, createConversation })
 
   // Ref guard against React StrictMode's dev double-invoke (would otherwise start two
   // fresh conversations on first mount) — not a dependency-array concern, this must run

@@ -1185,6 +1185,9 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             # 2026-10-25: memo invited "anything worth seeing", so runs retold each email
             # (alert name, time, card, payee, fare) in memo. Now empty unless it adds something.
             "c5646e9cf177bf8db1c26e09c6e8ea185d31b5f1c9bf62e7363175c4ded8ee43",
+            # 2026-10-27: memo banned the amount and fare breakdown, so a receipt's breakdown
+            # never reached memo even when the user asked for it. Now the model decides.
+            "d877696c3bac8ae098ca3f70043b79046ed02f766cd8168b9c240159b7494a35",
         }
     ),
     # 2026-10-11 (e98c3e2a5): the load step spelled as a find_tools(names=[...]) call.

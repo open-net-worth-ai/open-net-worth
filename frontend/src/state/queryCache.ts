@@ -123,6 +123,7 @@ function hydrateFromStorage(): void {
     if (!parsed || typeof parsed !== 'object') return
     for (const [key, record] of Object.entries(parsed)) {
       if (!record || record.data === undefined || typeof record.updatedAt !== 'number') continue
+      if (!isPersistable(key)) continue
       entries.set(key, {
         snapshot: {
           data: record.data,
@@ -160,6 +161,16 @@ function isSecretKey(key: string): boolean {
   return SECRET_KEY_SEGMENTS.some((seg) => key.startsWith(`/api/${seg}/`))
 }
 
+/** Reads that must never paint from a previous session. Feature flags pick which code path
+ *  renders, and "off means the old code" (docs/FEATURE_FLAGS.md): a hydrated `true` would show
+ *  the new path for a flag the owner has since switched off, until — or, offline, instead of —
+ *  the refetch. `useFlag` reads `undefined` until this session has fetched instead. */
+const LIVE_ONLY_KEYS = new Set(['/api/feature-flags'])
+
+function isPersistable(key: string): boolean {
+  return !isSecretKey(key) && !LIVE_ONLY_KEYS.has(key)
+}
+
 function persistNow(): void {
   if (persistClean) return
   persistClean = true
@@ -168,7 +179,7 @@ function persistNow(): void {
     const ordered = [...entries.entries()]
       .filter(
         ([key, e]) =>
-          e.snapshot.data !== undefined && e.snapshot.updatedAt > 0 && !isSecretKey(key),
+          e.snapshot.data !== undefined && e.snapshot.updatedAt > 0 && isPersistable(key),
       )
       .sort((a, b) => b[1].snapshot.updatedAt - a[1].snapshot.updatedAt)
 

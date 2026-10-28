@@ -267,7 +267,10 @@ One line each — full reasoning and the scar behind each is in
   `run_sql_query` is the one deliberately-scoped exception.
 - First run configures the machine; Lucius onboards the book (two separate predicates).
 - Lucius reads the DB directly, read-only, via `run_sql_query` — the boundary is the connection
-  (an allowlist authorizer), never a SQL parser. Denied = `SECRET_TABLES ∪ {sessions}`.
+  (an allowlist authorizer), never a SQL parser. Denied = `SECRET_TABLES ∪ {connectors}`;
+  the operator's own conversations (`sessions`, `session_messages`) are readable — only a demo denies them.
+  On Postgres the boundary is a separate login the APP creates and re-syncs at boot
+  (`db/sql_console_role.py`) — never an operator GRANT step, never `SET ROLE` on the app's connection.
 - One confirm mechanism for every tool: a gated tool stages its OWN call arguments under the
   `tool_use_id`; approval resolves server-side and re-runs the same handler.
 - Every turn goes through `ai/turns.py`, never a bare `asyncio.create_task` (confirm gate fails
@@ -315,6 +318,8 @@ Functions ≤ ~60 lines, files ≤ ~400 lines. Typed exceptions from `core/error
 Screen data: read through `useQueryCache` — it revalidates on every tool write, from any surface
 (`dispatch` → `GET /api/events`, ADR `2026-09-29-every-write-refreshes-every-open-screen`); a
 screen holding fetched data in local state must add `useDataVersion('*')` to its fetch deps.
+
+**Feature flags:** declared ONLY in `core/feature_flags.py`, read via `services.feature_flags.enabled(name)` at ONE seam; off = the old code untouched, data additive-only, both paths tested, CI fails past `remove_by` — [`docs/FEATURE_FLAGS.md`](docs/FEATURE_FLAGS.md).
 
 **Clock:** "today" and time of day for the user come from `core.user_time` (`user_today()` / `user_now()`, the profile's IANA `timezone`) — never `date.today()` / `datetime.now()`: a hosted container runs UTC. Market sessions use their exchange zone; stored timestamps stay UTC/server clock.
 
@@ -373,6 +378,7 @@ recordings) goes in gitignored scratch folders, never the tree.
 | Backend layers | [`BACKEND_ARCHITECTURE.md`](BACKEND_ARCHITECTURE.md) |
 | Decisions | [`docs/adr/`](docs/adr/) |
 | Windows | [`docs/WINDOWS.md`](docs/WINDOWS.md) |
+| Feature flags | [`docs/FEATURE_FLAGS.md`](docs/FEATURE_FLAGS.md) |
 
 ## Project structure
 

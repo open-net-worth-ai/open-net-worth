@@ -517,12 +517,9 @@ export function StepLucius({
                     </div>
                     {detected[d.key] && (
                       <Button
-                        // One default, not a row of equals: only the first found option leads.
-                        variant={
-                          d.key === offered.find((o) => detected[o.key])?.key
-                            ? 'primary'
-                            : 'secondary'
-                        }
+                        // Every detected CLI is a subscription the user already pays for —
+                        // equal choices, so none is styled as the recommended one.
+                        variant="primary"
                         loading={busyKey === d.key}
                         disabled={busy && busyKey !== d.key}
                         onClick={() => {
@@ -604,8 +601,10 @@ export function StepLucius({
                     </span>
                     {keyedChosen && keyedChosen.key !== 'openrouter' && (
                       <Text as="span" size="xs" tone="faint" className="firstrun-row__note">
-                        Running Lucius can get pricey. Consider a cheaper capable model like GLM or
-                        DeepSeek via OpenRouter.
+                        Running Lucius can get pricey.{' '}
+                        {keyedChosen.key === 'anthropic' &&
+                          'Claude Max and Team plans include monthly API credits. '}
+                        Consider a cheaper capable model like GLM or DeepSeek via OpenRouter.
                       </Text>
                     )}
                     {keyedChosen?.key === 'openrouter' && (

@@ -202,7 +202,8 @@ spot was on a display that is no longer connected, it opens at the same size on 
 | Close Window (hides it, like the red button) | <kbd>⌘</kbd><kbd>W</kbd> | not applicable |
 | Keyboard Shortcuts (Help menu) | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>/</kbd> | <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>/</kbd> |
 | Open Lucius | <kbd>⌘</kbd><kbd>L</kbd> | <kbd>Ctrl</kbd><kbd>L</kbd> |
-| New transaction | <kbd>⌘</kbd><kbd>N</kbd> | <kbd>Ctrl</kbd><kbd>N</kbd> |
+| New Lucius conversation — in the Lucius side panel when it's open, otherwise on the Lucius screen | <kbd>⌘</kbd><kbd>N</kbd> | <kbd>Ctrl</kbd><kbd>N</kbd> |
+| New transaction | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>N</kbd> | <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>N</kbd> |
 | Import statement or receipt | <kbd>⌘</kbd><kbd>O</kbd> | <kbd>Ctrl</kbd><kbd>O</kbd> |
 | Export book | <kbd>⇧</kbd><kbd>⌘</kbd><kbd>E</kbd> | <kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>E</kbd> |
 | Settings | <kbd>⌘</kbd><kbd>,</kbd> | <kbd>Ctrl</kbd><kbd>,</kbd> |
@@ -218,7 +219,7 @@ Where things are in the menus:
 - **Open Net Worth** (macOS only): About, **Settings…**, **Check for Updates…**,
   **Background and startup…**, Quit.
 - **File**: **Connection…**, **Open book folder…**, **Open in browser**, **Import statement or
-  receipt…**, **Export book…**, **New transaction**. On Windows and Linux, File also holds
+  receipt…**, **Export book…**, **New conversation**, **New transaction**. On Windows and Linux, File also holds
   **Settings…**, **Background and startup…** and Quit.
 - **View**: command palette, **Toggle Sidebar**, Lucius, **Review documents**, zoom, reload, full
   screen.

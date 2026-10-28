@@ -193,3 +193,11 @@ def test_suggestions_never_read_another_visitors_conversation(demo, monkeypatch)
 def test_demo_sql_cannot_read_the_cost_log_or_telemetry(demo):
     denied = sql_console.denied_tables()
     assert {"cost_log", "cost_log_daily", "model_telemetry"} <= denied
+
+
+def test_demo_sql_cannot_read_other_visitors_conversations(demo):
+    assert {"sessions", "session_messages"} <= sql_console.denied_tables()
+
+
+def test_an_operator_can_read_their_own_conversations(not_demo):
+    assert not ({"sessions", "session_messages"} & sql_console.denied_tables())

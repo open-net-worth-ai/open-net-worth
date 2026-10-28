@@ -80,7 +80,13 @@ function makeTxn(over: Partial<Txn> = {}): Txn {
 }
 
 function renderReg(
-  over: { txns?: Txn[]; loadingTxns?: boolean; allEmpty?: boolean; isLoadingMore?: boolean } = {},
+  over: {
+    txns?: Txn[]
+    loadingTxns?: boolean
+    reloadingRows?: boolean
+    allEmpty?: boolean
+    isLoadingMore?: boolean
+  } = {},
 ) {
   return render(
     <Register
@@ -101,6 +107,7 @@ function renderReg(
       categories={[]}
       allEmpty={over.allEmpty ?? false}
       loadingTxns={over.loadingTxns ?? false}
+      reloadingRows={over.reloadingRows ?? false}
       isLoadingMore={over.isLoadingMore ?? false}
       payeeOptions={[]}
       payeeNames={{}}
@@ -124,17 +131,18 @@ describe('Register — loadingTxns never overrides rows already on screen', () =
   })
 
   it('a refetch over existing rows (a filter change) shows the header progress bar and marks the register busy', () => {
-    const { container } = renderReg({ txns: [makeTxn()], loadingTxns: true })
+    const { container } = renderReg({ txns: [makeTxn()], loadingTxns: true, reloadingRows: true })
     expect(container.querySelector('.acct-reg-loadbar')).not.toBeNull()
     expect(container.querySelector('.acct-reg.refetching[aria-busy="true"]')).not.toBeNull()
   })
 
-  it('no progress bar once the refetch settles, nor during a load-more append', () => {
+  it('no progress bar for a same-query revalidation (a tab return), nor once settled', () => {
+    const revalidating = renderReg({ txns: [makeTxn()], loadingTxns: true, reloadingRows: false })
+    expect(revalidating.container.querySelector('.acct-reg-loadbar')).toBeNull()
+    expect(revalidating.container.querySelector('[aria-busy]')).toBeNull()
+    revalidating.unmount()
     const settled = renderReg({ txns: [makeTxn()], loadingTxns: false })
     expect(settled.container.querySelector('.acct-reg-loadbar')).toBeNull()
-    settled.unmount()
-    const appending = renderReg({ txns: [makeTxn()], loadingTxns: true, isLoadingMore: true })
-    expect(appending.container.querySelector('.acct-reg-loadbar')).toBeNull()
   })
 
   it('a genuinely empty account (loadingTxns=false, no rows) shows the empty-state CTAs', () => {
