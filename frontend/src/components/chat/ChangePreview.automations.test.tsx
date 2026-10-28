@@ -125,8 +125,9 @@ describe('update_automations approval preview', () => {
     expect(screen.getByText('Prompt')).toBeTruthy()
     expect(screen.getByText('Paused')).toBeTruthy()
 
-    expect(container.querySelector('.ac-diff-removed')?.textContent).toContain('Old trigger logic')
-    expect(container.querySelector('.ac-diff-added')?.textContent).toContain('New trigger logic')
+    expect(container.querySelector('.ac-diff-edited')?.textContent).toContain('trigger logic')
+    expect(container.querySelector('.ac-diff-word-removed')?.textContent).toBe('Old')
+    expect(container.querySelector('.ac-diff-word-added')?.textContent).toBe('New')
 
     // Check collapsible button for unchanged context lines
     const expandButtons = screen.getAllByRole('button', { name: /Show \d+ unchanged line/i })

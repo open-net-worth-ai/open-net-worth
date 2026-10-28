@@ -60,7 +60,7 @@ function grantBody(): Record<string, unknown> | null {
 }
 
 describe('tool-permission card — the three choices', () => {
-  it('renders nested old/new prompt arguments as an expanded red/green diff', () => {
+  it('renders nested old/new prompt arguments as a diff marking the changed words', () => {
     const { container } = mount({
       type: 'tool_permission',
       grant_tool: 'update_agent',
@@ -81,12 +81,11 @@ describe('tool-permission card — the three choices', () => {
       },
     })
 
-    expect(container.querySelector('.ac-diff .ac-diff-removed')?.textContent).toContain(
-      'Use one external reference.',
+    expect(container.querySelector('.ac-diff .ac-diff-edited')?.textContent).toContain(
+      'external reference.',
     )
-    expect(container.querySelector('.ac-diff .ac-diff-added')?.textContent).toContain(
-      'Use every matching external reference.',
-    )
+    expect(container.querySelector('.ac-diff-word-removed')?.textContent).toBe('one')
+    expect(container.querySelector('.ac-diff-word-added')?.textContent).toBe('every matching')
     expect(container.querySelector('.ac-diff .ac-diff-context')?.textContent).toContain(
       'Keep the raw bank note.',
     )

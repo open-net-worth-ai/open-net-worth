@@ -157,27 +157,38 @@ export function ApprovalCode({ children }: { children: ReactNode }) {
   )
 }
 
-export type DiffKind = 'added' | 'removed' | 'context'
+// `edited`: one line shown once, its changed words marked inside it (ApprovalDiffWord).
+export type DiffKind = 'added' | 'removed' | 'context' | 'edited'
 
 /** A line diff container; fill it with ApprovalDiffLine (or a collapsed-context toggle). */
 export function ApprovalDiff({ children }: { children: ReactNode }) {
   return <div className="ac-diff">{children}</div>
 }
 
+const GUTTER: Record<DiffKind, string> = { added: '+', removed: '−', context: ' ', edited: '±' }
+
 export function ApprovalDiffLine({ kind, children }: { kind: DiffKind; children: ReactNode }) {
   return (
     <div className={`ac-diff-line ac-diff-${kind}`}>
-      <span className="ac-diff-gutter">
-        {kind === 'added' ? '+' : kind === 'removed' ? '−' : ' '}
-      </span>
+      <span className="ac-diff-gutter">{GUTTER[kind]}</span>
       <span>{children}</span>
     </div>
   )
 }
 
-/** The words that changed inside an ApprovalDiffLine paired with its opposite line. */
-export function ApprovalDiffWord({ children }: { children: ReactNode }) {
-  return <mark className="ac-diff-word">{children}</mark>
+/** Words deleted or inserted inside an `edited` ApprovalDiffLine. */
+export function ApprovalDiffWord({
+  op,
+  children,
+}: {
+  op: 'added' | 'removed'
+  children: ReactNode
+}) {
+  return op === 'removed' ? (
+    <del className="ac-diff-word ac-diff-word-removed">{children}</del>
+  ) : (
+    <ins className="ac-diff-word ac-diff-word-added">{children}</ins>
+  )
 }
 
 /** ONE short line that must be seen before approving (a warning, a consequence). Not for

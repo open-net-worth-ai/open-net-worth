@@ -74,7 +74,7 @@ Reason: Duplicate of the October 9 buy        ← a card's own reason, last, one
 The other primitives are `ApprovalTable` (compact table: one rule under the headings and none between rows; cells wrap
 at spaces, never mid-word; `numeric` columns align right and never wrap; a table still too
 wide for a phone scrolls sideways with an edge shadow on the side that has more),
-`ApprovalCode` (source / JSON), `ApprovalDiff` + `ApprovalDiffLine` (line diffs; `ApprovalDiffWord` marks the changed words in a paired removed/added line),
+`ApprovalCode` (source / JSON), `ApprovalDiff` + `ApprovalDiffLine` (line diffs; an edited line is shown once as `edited`, `ApprovalDiffWord` marking its deleted and inserted words; a rewrite stays a removed + an added line),
 `ApprovalSection` (a titled group on a card that changes several things), `ApprovalToggle`
 ("Show 3 unchanged lines") and `ApprovalNote` (below).
 

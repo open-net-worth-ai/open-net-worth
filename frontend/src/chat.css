@@ -1436,13 +1436,25 @@
   .ac-diff-context {
     color: var(--muted);
   }
+  .ac-diff-edited {
+    color: var(--ink);
+  }
   .ac-diff-word {
-    color: inherit;
-    background: color-mix(in srgb, currentColor 22%, transparent);
     border-radius: 2px;
   }
-  .ac-diff-removed .ac-diff-word {
+  .ac-diff-word-removed {
+    color: var(--bad);
+    background: color-mix(in srgb, var(--bad) 14%, transparent);
     text-decoration: line-through;
+  }
+  .ac-diff-word-added {
+    color: var(--good);
+    background: color-mix(in srgb, var(--good) 14%, transparent);
+    text-decoration: underline;
+  }
+  /* A swap ("550" → "600") must not read as one figure ("550600"). */
+  .ac-diff-word-removed + .ac-diff-word-added {
+    margin-left: 3px;
   }
   .ac-details {
     margin-top: 8px;
