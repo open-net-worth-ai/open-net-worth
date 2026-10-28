@@ -28,8 +28,9 @@ Just say it:
 - *"Remember I'm saving for a house deposit by 2028."*
 - *"Forget what I said about the car loan."*
 
-Each fact is filed in a section — **You**, **Money**, **Plans**, **Open items** (things to come back
-to, which expire after 14 days) or **Other** — and, except in Open items, under a short topic such
+Each fact is filed in a section — **You**, **Money**, **Plans**, **Open items** (things you said
+you'd do or asked to be reminded of, which expire after 14 days — the only facts that ever expire)
+or **Other** — and, except in Open items, under a short topic such
 as *Housing*. In **You** there are two: **Profile**, for what he knows about you that no profile
 field holds (your employer, the languages you speak, who you live with), and **Preferences**, for
 how you like to work. This **Profile** is a memory topic, not your Settings profile — that one
@@ -41,12 +42,18 @@ shapes a reply he marks it as used, which keeps it from fading; you never see th
 
 He also picks up facts on his own. Memory is written when a conversation has been quiet for 30
 minutes (and when an automation run finishes) — never in the middle of a chat — and only from what
-was said since the last time. He is strict about it: he keeps only what nothing else in the app
-already holds, so your profile, your Instructions for Lucius, payee rules, automations and your
-ledger figures are never copied into memory. He doesn't keep the state of a conversation or a run,
-finished tasks, or full card, account or ID numbers or passwords, and health, religion, politics and
-similar topics only if you've allowed them in the settings. Preferences are written about you in
-the third person. A fact he picked up on his own under **Other** that for 90 days he never cites,
+was said since the last time. He is strict about it — most conversations add nothing. A fact
+stays only if it is about you or your money life, will still be true in three months, and nothing
+else in the app already holds it, so your profile, your Instructions for Lucius, payee rules,
+automations and your ledger figures are never copied into memory. He doesn't keep the state of a
+conversation or a run, a bookkeeping follow-up the ledger already shows (a statement line to
+match, a pending charge, a missing memo), finished tasks, a lesson he drew from one mistake, a
+problem with the app, a suggestion of his you didn't take up, research or a what-if, or full card,
+account or ID numbers or passwords, and health, religion, politics and similar topics only if
+you've allowed them in the settings. He keeps only the lasting part of a fact, with no history
+attached, written about you ("Splits rent with Priya 60/40") — never "User…", "the advisor" or
+"As of …". An **Open item** is saved only when you said you'd do something or asked to be
+reminded — he checks your own words in the chat, never his — and at most one per conversation. A fact he picked up on his own under **Other** that for 90 days he never cites,
 you never mention again and you never edit fades out of memory — what you told him yourself, and
 anything in You or Money, never fades this way — and so does a plan that hasn't come up for 90
 days; a faded fact is kept aside for 30 days before it is deleted. Once a day he also merges facts
@@ -91,9 +98,13 @@ that narrows it to the facts (or topics) containing your words.
    asks first and says how many facts go, for example *Forget Housing? Lucius will forget its 4
    facts.* It can't be undone.
 4. **Older memories.** Facts saved before sections existed wait here, a row each, until Lucius files them under a section and topic. They are not lost; you can edit or
-   forget them as usual. Filing never changes a fact's words, except that one over 280
-   characters is shortened to fit. A fact holding a full card, account or ID number is moved
-   out instead; a sensitive fact is filed like any other.
+   forget them as usual. Filing never changes a fact's words, with two exceptions: one over 280
+   characters is shortened to fit, and one written as "User…", "the advisor…" or "As of …" is
+   reworded about you — kept only if every number, date, quote and name in it survives,
+   otherwise it keeps its old words. Older facts are never filed as Open items, and the same
+   test as new facts applies: a bookkeeping note, an incident or a suggestion is moved out. A
+   fact holding a full card, account or ID number is moved out too; a sensitive fact is filed
+   like any other.
 
 On a phone or tablet the pencils and bins sit behind the row: swipe a row — a topic, an open
 item, an older memory or a bullet on a topic's page — to the left to show the pencil (**Edit**)

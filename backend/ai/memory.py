@@ -16,6 +16,7 @@ import logging
 import os
 import re
 
+from backend.ai import memory_open_items
 from backend.ai.memory_extract_prompt import EXTRACT_SYSTEM, existing_listing, extract_prompt
 from backend.ai.memory_structure import kept_apart, topic_key
 from backend.ai.memory_write import apply_memory_change
@@ -566,9 +567,12 @@ async def extract_and_merge(history: list[dict], session_id: str | None = None) 
         logger.warning("memory extraction returned unparseable reply")
         return
 
-    await asyncio.to_thread(
-        apply_memory_change, _extraction_ops(parsed), source="implicit", strict=False, today=today
+    ops = memory_open_items.guard(
+        _extraction_ops(parsed),
+        memory_open_items.user_words(slice_history),
+        {f["id"]: f for f in store.all_facts()},
     )
+    await asyncio.to_thread(apply_memory_change, ops, source="implicit", strict=False, today=today)
 
     if session_id:
         _save_cursor(session_id, len(history))

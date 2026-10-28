@@ -31,11 +31,13 @@ def _fact(
     created_at: str = "2026-01-01T00:00:00",
     updated_at: str = "2026-01-01T00:00:00",
     fid: str | None = None,
+    section: str | None = "open_items",
 ) -> dict:
     return {
         "id": fid or str(uuid.uuid4()),
         "content": content,
         "state": "live",
+        "section": section,
         "tier": tier,
         "source": source,
         "expires_at": expires_at,
@@ -67,6 +69,12 @@ def test_purge_expired_removes_expired_time_bound(isolated):
                 "drop — time_bound expired", tier="time_bound", expires_at=yesterday, fid="drop1"
             ),
             _fact(
+                "keep — a plan's stray past date",
+                expires_at=yesterday,
+                fid="keep_plan",
+                section="plans",
+            ),
+            _fact(
                 "drop — time_bound more expired",
                 tier="time_bound",
                 expires_at="2020-01-01",
@@ -80,6 +88,7 @@ def test_purge_expired_removes_expired_time_bound(isolated):
     remaining_ids = {f["id"] for f in store.all_facts()}
     assert count == 2
     assert "keep_dur" in remaining_ids
+    assert "keep_plan" in remaining_ids
     assert "keep_tb" in remaining_ids
     assert "drop1" not in remaining_ids
     assert "drop2" not in remaining_ids

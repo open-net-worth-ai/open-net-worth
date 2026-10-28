@@ -4,10 +4,12 @@ A one-time migration stamped every fact written before the redesign ``unsorted``
 memory-model call reads the oldest of them, with the topics already in use and the same routing
 guide extraction follows, and says where each belongs or why it no longer does. Every write goes
 through ``apply_memory_change`` as ``implicit`` (so an explicit fact stays explicit); a retired
-fact keeps its row for ``RETIRED_PURGE_DAYS``. The sort never rewords a fact, with one exception:
-a fact over ``FACT_MAX_CHARS`` may come back shortened (filing one runs the guards a new fact
-meets, so it cannot be filed long; one carrying a full card, account or ID number is retired
-``identifier``). A reply that is not the expected shape, or an item
+fact keeps its row for ``RETIRED_PURGE_DAYS``. The sort never rewords a fact, with two
+exceptions: a fact over ``FACT_MAX_CHARS`` may come back shortened (filing one runs the guards a
+new fact meets, so it cannot be filed long; one carrying a full card, account or ID number is
+retired ``identifier``), and one the old memory wrote in its own framing ("User…", "advisor",
+"As of <date>:") may come back in the house voice, kept only when ``memory_voice.keeps_facts``
+finds every number, date, quote and name intact (amendment 9). A reply that is not the expected shape, or an item
 that names a section or id it was not given, changes nothing for that item. The idle sweep calls
 ``sort_remaining`` while any unsorted fact is left; ``backend/scripts/migrate_memory_topics.py``
 is the same pass, by hand. ADR ``2026-10-25-memory-keeps-only-what-has-no-other-home``
@@ -22,6 +24,7 @@ import time
 
 from backend.ai import memory
 from backend.ai import memory_structure as ms
+from backend.ai import memory_voice as mv
 from backend.ai.memory_write import apply_memory_change
 from backend.core.user_time import user_today
 from backend.db import MemoryStore
@@ -37,8 +40,9 @@ SORT_COOLDOWN_SECONDS = 3600
 _retry_after = 0.0
 
 _SORT_SYSTEM = (
-    "You file a financial advisor's older notes about their client into a tidy long-term "
-    "memory. You are conservative: you never invent a fact and never change what a note says."
+    "You file the older notes Lucius, a personal-finance assistant, kept about the person he "
+    "helps into a tidy long-term memory. You are conservative: you never invent a fact and never "
+    "change what a note says."
 )
 
 _ITEM_KEYS = ("id", "section", "topic", "content", "retire")
@@ -75,8 +79,13 @@ def _too_long(fact: dict) -> bool:
     return len(" ".join(str(fact.get("content") or "").split())) > ms.FACT_MAX_CHARS
 
 
+def _reword_wanted(fact: dict) -> bool:
+    return not _too_long(fact) and mv.off_voice(str(fact.get("content") or ""))
+
+
 def _listed(fact: dict) -> str:
     mark = f" [over {ms.FACT_MAX_CHARS} characters]" if _too_long(fact) else ""
+    mark = " [reword]" if _reword_wanted(fact) else mark
     return f"{fact['id']}{mark}: {fact.get('content', '')}"
 
 
@@ -85,30 +94,46 @@ def _sort_prompt(batch: list[dict], topics: str, today: str) -> str:
     suggested = "; ".join(
         f"{ms.SECTIONS[k]}: {', '.join(v)}" for k, v in ms.SUGGESTED_TOPICS.items() if v
     )
-    sections = ", ".join(f'"{k}" ({v})' for k, v in ms.SECTIONS.items())
+    sections = ", ".join(f'"{k}" ({v})' for k, v in ms.SECTIONS.items() if k != ms.OPEN_ITEMS)
     return f"""Today is {today}.
 
-These notes about the client were written before memory was organised into sections. For
+These notes about the person were written before memory was organised into sections. For
 each one decide where it belongs, following the same rules used for new notes.
 
 {ms.ROUTING_GUIDE}
 
+{ms.KEEP_TEST} A note that fails it is retired: "instructions" for a rule about how Lucius
+should work, "ledger" for what the book holds, "stale" for anything else.
+
 Sections: {sections}. A section's notes are grouped under a short topic name
-(1-3 words); open_items take no topic. Suggested topics — {suggested}. Reuse a topic already in
-use rather than coining a near-duplicate.
+(1-3 words). Suggested topics — {suggested}. Reuse a topic already in use rather than coining a
+near-duplicate. An older note is never filed as an open item: nothing records that the person
+asked for it, so a follow-up note is filed under plans when it is their own intention, and
+retired as "resolved" or "stale" otherwise.
 
 Topics in use: {topics}
 
 For each note, reply with ONE of:
 - file it: {{"id": "...", "section": "<key>", "topic": "<name>"}}. Never change its words —
   except a note marked [over {ms.FACT_MAX_CHARS} characters], which MUST carry a "content"
-  that says the same thing in at most {ms.FACT_MAX_CHARS} characters, adding nothing.
+  that says the same thing in at most {ms.FACT_MAX_CHARS} characters, adding nothing, and a
+  note marked [reword], which MUST carry a "content" that says the same thing in the house
+  voice. {mv.VOICE_RULE} A [reword] content drops a leading "As of <date>:" but otherwise keeps
+  every number and date exactly as written (copy "2026-10-26" as "2026-10-26"), every quoted
+  text, every name and every "not"/"never", and adds nothing — no history tail is cut here; one
+  that drops or changes any of them is ignored and the note keeps its old words.
 - retire it, when the guide says it belongs outside memory or it is out of date:
   {{"id": "...", "retire": "<reason>"}} with the reason one of: {", ".join(SORT_RETIRE_REASONS)}.
   Retire only when EVERYTHING the note says already lives in that home: "profile" only for a
   Settings profile field itself (an employer, job or language is filed under You · Profile), "ledger" only for a balance,
   holding, price, trade or finished task — a plan or aim is never "ledger", even with an
-  amount or a date.
+  amount or a date. A bookkeeping note — what a statement, import, receipt or the ledger
+  showed or still needs (an unmatched or uncleared entry, a pending charge, a missing memo, a
+  match to confirm), often opening "As of <date>:" — is "ledger": the book and its review
+  screens show it, so it is never an open item. A note about what Lucius proposed, offered or
+  is waiting for the person to confirm is "resolved" or "stale", never an open item: an open
+  item is only something the person said they will do, or asked to be reminded of, that no
+  screen in the app already shows.
 A note you are unsure about: file it under "other" rather than retiring it.
 
 Notes:
@@ -117,13 +142,20 @@ Notes:
 Return ONLY JSON: {{"facts": [{{"id": "...", "section": "...", "topic": "..."}}]}}"""
 
 
-def _shortened(raw, original: dict) -> str | None:
-    """The sort's one licence to edit: new wording for a note over the length limit, itself
-    within it. Anything else it proposes for the text is dropped."""
-    if not isinstance(raw, str) or not _too_long(original):
+def _new_wording(raw, original: dict) -> str | None:
+    """The sort's two licences to edit: new wording for a note over the length limit, itself
+    within it, and the house voice for a note in the old framing, kept only when every number,
+    date, quote and name survives. Anything else it proposes for the text is dropped."""
+    if not isinstance(raw, str):
         return None
     text = " ".join(raw.split())
-    return text if 0 < len(text) <= ms.FACT_MAX_CHARS else None
+    if _too_long(original):
+        return text if 0 < len(text) <= ms.FACT_MAX_CHARS else None
+    if _reword_wanted(original):
+        if mv.keeps_facts(str(original.get("content") or ""), text):
+            return text
+        logger.info("memory sort: kept %s's old wording, the rewording changed it", original["id"])
+    return None
 
 
 def _clean_item(raw, shown: dict[str, dict]) -> dict | None:
@@ -150,10 +182,13 @@ def _clean_item(raw, shown: dict[str, dict]) -> dict | None:
     if section is None:
         logger.debug("memory sort: ignored %s, unknown section %r", fid, item["section"])
         return None
+    if section == ms.OPEN_ITEMS:
+        logger.info("memory sort: retired %s instead of filing it as an open item", fid)
+        return {"id": fid, "retire": "stale"}
     out: dict = {"id": fid, "section": section}
     if isinstance(item.get("topic"), str):
         out["topic"] = item["topic"]
-    content = _shortened(item.get("content"), shown[fid])
+    content = _new_wording(item.get("content"), shown[fid])
     if content is not None:
         out["content"] = content
     return out

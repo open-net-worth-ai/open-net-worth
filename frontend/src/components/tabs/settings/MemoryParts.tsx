@@ -208,7 +208,7 @@ export function MemoryBullets({
             <MemorySwipeRow acts={acts}>
               <span className="rd-mem-bullet-t">
                 {f.content}
-                {f.expires_at && (
+                {f.section === 'open_items' && f.expires_at && (
                   <span className="rd-mem-bullet-until"> · until {fDate(f.expires_at)}</span>
                 )}
               </span>
