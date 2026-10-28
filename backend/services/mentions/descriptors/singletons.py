@@ -64,9 +64,9 @@ register(
 # ── holding (order=1) — class (b) service-hydrated; defined in financials.py ─
 # ── instrument (order=2) — class (b) service-hydrated; defined in financials.py ─
 # ── account (order=3) — class (b) service-hydrated; defined in financials.py ─
-# ── transaction (order=4) — class (b) service-hydrated; defined in financials.py ─
+# ── transaction (order=5) — class (b) service-hydrated; defined in financials.py ─
 
-# ── category (order=5) ────────────────────────────────────────────────────────
+# ── category (order=6) ────────────────────────────────────────────────────────
 
 
 def _category_rows(query: SearchQuery) -> list[dict]:
@@ -83,7 +83,7 @@ register(
         type="category",
         label="Category",
         icon="▣",
-        order=5,
+        order=6,
         tone="invest",
         surfaces=frozenset({"entity"}),
         rows=_category_rows,
@@ -108,14 +108,14 @@ register(
     )
 )
 
-# ── budget_month (order=6) ────────────────────────────────────────────────────
+# ── budget_month (order=7) ────────────────────────────────────────────────────
 
 register(
     EntityDescriptor(
         type="budget_month",
         label="Budget Month",
         icon="◱",
-        order=6,
+        order=7,
         tone="credit",
         surfaces=frozenset({"entity"}),
         search_override=search_budget_month,
@@ -143,16 +143,16 @@ register(
     )
 )
 
-# ── target (order=7) — class (a) clean store-backed; defined in store_backed.py ─
+# ── target (order=8) — class (a) clean store-backed; defined in store_backed.py ─
 
-# ── allocation_slice (order=8) ────────────────────────────────────────────────
+# ── allocation_slice (order=9) ────────────────────────────────────────────────
 
 register(
     EntityDescriptor(
         type="allocation_slice",
         label="Allocation",
         icon="◭",
-        order=8,
+        order=9,
         tone="invest",
         surfaces=frozenset({"entity"}),
         search_override=search_allocation_slice,
@@ -166,14 +166,14 @@ register(
     )
 )
 
-# ── returns (order=9) ─────────────────────────────────────────────────────────
+# ── returns (order=10) ─────────────────────────────────────────────────────────
 
 register(
     EntityDescriptor(
         type="returns",
         label="Returns",
         icon="↗",
-        order=9,
+        order=10,
         tone="neutral",
         surfaces=frozenset({"entity"}),
         search_override=search_returns,

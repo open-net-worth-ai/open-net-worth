@@ -268,6 +268,17 @@ def _clear_tier2_tables(engine) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _mention_corpus_per_test():
+    """The mention picker's corpus memo is keyed on the data epoch, which a test that writes a
+    store's file directly or swaps a module's path never moves — start every test empty."""
+    from backend.services.mentions import _corpus
+
+    _corpus.clear()
+    yield
+    _corpus.clear()
+
+
+@pytest.fixture(autouse=True)
 def _sql_console_login_per_test(monkeypatch):
     """On a Postgres test run the app manages the SQL console's login itself; each test drops
     the schema, so the prepared login and its grants are forgotten between tests."""

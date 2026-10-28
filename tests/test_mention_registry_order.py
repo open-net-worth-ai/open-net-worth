@@ -28,13 +28,15 @@ _EXPECTED_ORDER = [
     "holding",
     "instrument",
     "account",
+    # 2026-10-29 — payee moved ahead of transaction (owner: a payee's short name is usually
+    # what "@herbal" means, not the transaction whose description also contains it).
+    "payee",
     "transaction",
     "category",
     "budget_month",
     "target",
     "allocation_slice",
     "returns",
-    "payee",
     "watchlist",
     "automation",
     "skill",

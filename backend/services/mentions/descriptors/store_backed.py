@@ -33,7 +33,7 @@ from backend.services.mentions.resolve import (
 )
 from backend.services.mentions.types import SearchQuery
 
-# ── payee (order=10) ──────────────────────────────────────────────────────────
+# ── payee (order=4) ──────────────────────────────────────────────────────────
 
 
 def _payee_rows(query: SearchQuery) -> list[dict]:
@@ -54,7 +54,7 @@ register(
         type="payee",
         label="Payee",
         icon="◉",
-        order=10,
+        order=4,
         tone="invest",
         surfaces=frozenset({"entity"}),
         rows=_payee_rows,
@@ -160,9 +160,9 @@ register(
     )
 )
 
-# ── target (order=7) ──────────────────────────────────────────────────────────
-# Placed here (store_backed.py) but order=7 so it sorts between budget_month(6)
-# and allocation_slice(8) in the registry — targets.list_hydrated() is the source.
+# ── target (order=8) ──────────────────────────────────────────────────────────
+# Placed here (store_backed.py) but order=8 so it sorts between budget_month(7)
+# and allocation_slice(9) in the registry — targets.list_hydrated() is the source.
 
 
 def _target_rows(query: SearchQuery) -> list[dict]:
@@ -182,7 +182,7 @@ register(
         type="target",
         label="Target",
         icon="◎",
-        order=7,
+        order=8,
         tone="retire",
         surfaces=frozenset({"entity"}),
         rows=_target_rows,

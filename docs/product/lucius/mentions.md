@@ -25,8 +25,9 @@ The list is grouped:
 
 - **On this screen** — things you can see right now, listed first.
 - **Deeper sources** — detailed data behind the current screen (for example the rows of a chart).
-- Then one group per kind — accounts, transactions, payees, categories, envelopes, holdings,
-  documents, Automations, skills and more — with tabs along the top to jump between them.
+- Then one group per kind — accounts, payees, transactions, categories, envelopes, holdings,
+  documents, Automations, skills and more — with tabs along the top to jump between them. A
+  payee whose name matches as well as a transaction's is listed before it.
 
 Type a kind instead of a name to list them: `@accounts`, `@payees`, `@docs` or `@files` for your
 [Documents](documents.md).

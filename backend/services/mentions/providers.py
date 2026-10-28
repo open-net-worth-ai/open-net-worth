@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from backend.core.user_time import user_today
 from backend.services.mentions._common import _ROW_CAP, _matches, _row, _type_synonym_match
+from backend.services.mentions._corpus import corpus
 from backend.services.mentions.types import SearchQuery
 
 # ── transaction ───────────────────────────────────────────────────────────────
@@ -98,24 +99,30 @@ def search_transaction(query: SearchQuery) -> list[dict]:
 # ── account ────────────────────────────────────────────────────────────────────
 
 
-def search_account(query: SearchQuery) -> list[dict]:
-    from backend.core.fx import base_currency
+def _account_balances() -> list[tuple[dict, float]]:
     from backend.db.account_store import AccountStore
     from backend.db.transaction_store import TransactionStore
     from backend.services import ledger
 
-    q = (query.q or "").strip().lower()
-    synonym_hint = _type_synonym_match("account", q) if q else None
-    base = base_currency()
     accounts = AccountStore().query_accounts()
     txns = TransactionStore().all()
     idx = ledger.opening_index(txns, accounts)
+    return [
+        (a, ledger.account_with_balance(a, txns, idx=idx).get("balance_base", 0) or 0)
+        for a in accounts
+    ]
+
+
+def search_account(query: SearchQuery) -> list[dict]:
+    from backend.core.fx import base_currency
+
+    q = (query.q or "").strip().lower()
+    synonym_hint = _type_synonym_match("account", q) if q else None
+    base = base_currency()
     out: list[dict] = []
-    for a in accounts:
+    for a, bal in corpus(_account_balances):
         if q and not synonym_hint and not _matches(q, a.get("name")):
             continue
-        hydrated = ledger.account_with_balance(a, txns, idx=idx)
-        bal = hydrated.get("balance_base", 0) or 0
         sublabel = f"{bal} {base}"
         out.append(
             _row(
@@ -135,8 +142,13 @@ def search_account(query: SearchQuery) -> list[dict]:
 # ── instrument ─────────────────────────────────────────────────────────────────
 
 
-def search_instrument(query: SearchQuery) -> list[dict]:
+def _all_instruments() -> list[dict]:
     from backend.db.instrument_store import InstrumentStore
+
+    return InstrumentStore().all()
+
+
+def search_instrument(query: SearchQuery) -> list[dict]:
     from backend.services import positions as positions_service
 
     q = (query.q or "").strip().lower()
@@ -144,9 +156,11 @@ def search_instrument(query: SearchQuery) -> list[dict]:
     # Exclude instruments the user currently holds — they already surface as Holding rows,
     # so showing them again here as Securities is redundant and confusing.
     held_ids = {
-        row.get("instrument_id") for row in positions_service.hydrated() if row.get("instrument_id")
+        row.get("instrument_id")
+        for row in corpus(positions_service.hydrated)
+        if row.get("instrument_id")
     }
-    instruments = InstrumentStore().all()
+    instruments = corpus(_all_instruments)
     out: list[dict] = []
     for i in instruments:
         if i["id"] in held_ids:
@@ -184,7 +198,7 @@ def search_holding(query: SearchQuery) -> list[dict]:
     synonym_hint = _type_synonym_match("holding", q) if q else None
     base = base_currency()
     out: list[dict] = []
-    for row in positions_service.hydrated():
+    for row in corpus(positions_service.hydrated):
         symbol = row.get("symbol") or ""
         label_field = row.get("label") or ""
         account_name = row.get("account_name") or ""
@@ -226,7 +240,7 @@ def search_category(query: SearchQuery) -> list[dict]:
     synonym_hint = _type_synonym_match("category", q) if q else None
     today = user_today()
     month = f"{today.year:04d}-{today.month:02d}"
-    table = planning.budget_month(month)
+    table = corpus(planning.budget_month, month)
     out: list[dict] = []
     seen: set[str] = set()
     for grp in table.get("groups", []):
@@ -259,7 +273,7 @@ def search_category(query: SearchQuery) -> list[dict]:
     # Categories with NO budget row this month — income/transfer/investment kinds and
     # unlinked expense categories (the Manage-categories universe). The structural "split"
     # sentinel is a marker, not a real category (ADR 2026-07-11).
-    for row in categories.all_category_rows():
+    for row in corpus(categories.all_category_rows):
         cid = row.get("id") or ""
         if not cid or cid in categories.STRUCTURAL_KEYS or cid in seen:
             continue
@@ -296,7 +310,7 @@ def search_envelope(query: SearchQuery) -> list[dict]:
     synonym_hint = _type_synonym_match("envelope", q) if q else None
     today = user_today()
     month = f"{today.year:04d}-{today.month:02d}"
-    table = planning.budget_month(month)
+    table = corpus(planning.budget_month, month)
     out: list[dict] = []
     for grp in table.get("groups", []):
         grp_name = grp.get("name") or ""
@@ -334,7 +348,7 @@ def search_target(query: SearchQuery) -> list[dict]:
     q = (query.q or "").strip().lower()
     synonym_hint = _type_synonym_match("target", q) if q else None
     out: list[dict] = []
-    for t in targets.list_hydrated():
+    for t in corpus(targets.list_hydrated):
         name = t.get("name") or ""
         if q and not synonym_hint and not _matches(q, name):
             continue
@@ -367,7 +381,7 @@ def search_net_worth(query: SearchQuery) -> list[dict]:
     synonym_hint = _type_synonym_match("net_worth", q) if q else None
     if q and not synonym_hint and not _matches(q, "net worth", "net"):
         return []
-    nw = ledger.net_worth()
+    nw = corpus(ledger.net_worth)
     base = base_currency()
     val = nw.get("net_worth", 0) or 0
     return [
@@ -454,9 +468,13 @@ def search_budget_month(query: SearchQuery) -> list[dict]:
 # ── allocation_slice ───────────────────────────────────────────────────────────
 
 
-def search_payee(query: SearchQuery) -> list[dict]:
+def _payees_with_usage() -> list[dict]:
     from backend.services import payee_registry
 
+    return payee_registry.list_registry(with_usage=True)
+
+
+def search_payee(query: SearchQuery) -> list[dict]:
     q = (query.q or "").strip().lower()
     synonym_hint = _type_synonym_match("payee", q) if q else None
     out: list[dict] = []
@@ -464,7 +482,7 @@ def search_payee(query: SearchQuery) -> list[dict]:
     # ledger), matching Manage Payees — NOT the stored monotonic usage stat (txn_count), which is
     # only bumped, never decremented, so an orphaned auto-minted payee wrongly read "1 txns" while
     # Manage Payees correctly showed "0 txns".
-    for p in payee_registry.list_registry(with_usage=True):
+    for p in corpus(_payees_with_usage):
         # `hidden` already means "suppress from autocomplete" — Manage Payees' own
         # editor reads/writes it (PayeesModal.tsx) and its checkbox already worked;
         # this provider was the one surface that never honored it, so hiding a junk
@@ -635,7 +653,7 @@ def search_allocation_slice(query: SearchQuery) -> list[dict]:
     # Collect distinct asset_class and currency values from live positions.
     asset_classes: set[str] = set()
     currencies: set[str] = set()
-    for row in positions_service.hydrated():
+    for row in corpus(positions_service.hydrated):
         ac = (row.get("asset_class") or "").strip()
         if ac:
             asset_classes.add(ac)
