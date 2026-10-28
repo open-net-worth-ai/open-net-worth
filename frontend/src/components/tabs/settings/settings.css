@@ -1334,17 +1334,14 @@
   /* 0, not the safe-area inset: the scroll pane's bottom padding already holds it */
   bottom: 0;
   z-index: 1;
-  box-shadow: 0 0 0 var(--space-4) var(--modal-bg);
-}
-/* one solid backing from the box to the pane's bottom edge, so no row shows beneath it */
-.onw-settings .rd-mem-ask::after {
-  content: '';
-  position: absolute;
-  inset-inline: calc(var(--space-4) * -1);
-  top: 100%;
-  height: calc(var(--space-9) * 3 + env(safe-area-inset-bottom));
-  background: var(--modal-bg);
-  pointer-events: none;
+  /* A ring, then copies stepped down to the pane's bottom edge so no row shows beneath it (a
+     home-indicator inset included). Shadows, not a block below the box: a block is content, and
+     let the pane scroll past its end, the box riding up over empty space. */
+  box-shadow:
+    0 0 0 var(--space-4) var(--modal-bg),
+    0 var(--space-9) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-9) * 2) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-9) * 3) 0 var(--space-4) var(--modal-bg);
 }
 .onw-settings .rd-mem-modal .rd-mem-browser,
 .onw-settings .rd-mem-modal .rd-mem-detail {
@@ -1411,6 +1408,8 @@
   padding-inline-start: var(--rd-mem-indent);
 }
 .onw-settings .rd-mem-field > .ui-list > li {
+  /* the body size, as Summary and Last updated (.ui-list alone is a size up) */
+  font-size: var(--text-base);
   position: relative;
 }
 .onw-settings .rd-mem-field > .ui-list > li::before {
