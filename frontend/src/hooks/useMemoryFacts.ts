@@ -124,9 +124,12 @@ export function useMemoryFacts(notify: (message: string) => void) {
   }
 
   /** "Tell Lucius what to change" — one sentence that adds, rewrites or forgets facts, scoped to
-   *  the section (and topic, when it has a name) the user opened. True when the server applied it
-   *  (even if nothing needed changing). */
-  async function instruct(instruction: string, scope?: InstructScope): Promise<boolean> {
+   *  the section (and topic, when it has a name) the user opened. What changed when the server
+   *  applied it (empty when nothing needed changing), null when it was refused or failed. */
+  async function instruct(
+    instruction: string,
+    scope?: InstructScope,
+  ): Promise<InstructChange[] | null> {
     const body = scope
       ? { instruction, section: scope.section, ...(scope.topic ? { topic: scope.topic } : {}) }
       : { instruction }
@@ -141,14 +144,16 @@ export function useMemoryFacts(notify: (message: string) => void) {
       }
       if (!r.ok) {
         notify(typeof out.detail === 'string' ? out.detail : `Could not update (HTTP ${r.status})`)
-        return false
+        return null
       }
       void refresh()
-      notify(instructSummary(out))
-      return true
+      // The box shows what changed; a toast is left for what was refused.
+      const refused = rejectedNote(out)
+      if (refused) notify(refused)
+      return Array.isArray(out.changes) ? out.changes : []
     } catch {
       notify('Could not reach the server. Try again.')
-      return false
+      return null
     }
   }
 
@@ -170,20 +175,17 @@ export interface InstructScope {
   topic?: string
 }
 
+export interface InstructChange {
+  change: 'added' | 'updated' | 'removed'
+  where: string
+  text: string
+  was?: string | null
+}
+
 interface InstructResult {
   added: number
   updated: number
   removed: number
   rejected: { reason?: string }[]
-}
-
-export function instructSummary(r: Partial<InstructResult>): string {
-  const parts = [
-    r.added ? `Added ${r.added}` : '',
-    r.updated ? `Updated ${r.updated}` : '',
-    r.removed ? `Forgot ${r.removed}` : '',
-  ].filter(Boolean)
-  const note = rejectedNote(r)
-  if (note) parts.push(note)
-  return parts.length ? parts.join(' · ') : 'Nothing needed changing'
+  changes: InstructChange[]
 }
