@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { newsTime, safeHref } from '../../utils/format'
 import type { NewsItem } from '../../types/assetDetail'
 import { Favicon } from './Favicon'
@@ -42,29 +43,31 @@ export function NewsCardGrid({ items, limit = 6 }: Props) {
                 )}
               </div>
             </div>
-            {item.image ? (
-              <div className="asd-news-thumb">
-                <img
-                  src={item.image}
-                  alt=""
-                  loading="lazy"
-                  onError={(e) => {
-                    const wrap = (e.currentTarget as HTMLImageElement).closest('.asd-news-thumb')
-                    if (wrap) (wrap as HTMLElement).style.display = 'none'
-                  }}
-                />
-              </div>
-            ) : (
-              /* Phone carousel only (hidden on desktop, see the CSS): a favicon tile keeps the
-                 card's picture slot while the article has no og:image yet — the brief's
-                 full-text pass harvests one later (owner ask 2026-09-22, Perplexity-style). */
-              <div className="asd-news-thumb asd-news-thumb--placeholder" aria-hidden="true">
-                <Favicon url={item.url} domain={item.domain} className="asd-news-favicon" />
-              </div>
-            )}
+            <NewsThumb key={item.image ?? ''} item={item} />
           </Tag>
         )
       })}
+    </div>
+  )
+}
+
+// A broken og:image falls back to the same favicon tile as no image at all — hiding the slot
+// instead left that phone card text-only, its title jumping above its neighbours'.
+function NewsThumb({ item }: { item: NewsItem }) {
+  const [failed, setFailed] = useState(false)
+  if (item.image && !failed) {
+    return (
+      <div className="asd-news-thumb">
+        <img src={item.image} alt="" loading="lazy" onError={() => setFailed(true)} />
+      </div>
+    )
+  }
+  /* Phone carousel only (hidden on desktop, see the CSS): a favicon tile keeps the card's
+     picture slot while the article has no og:image yet — the brief's full-text pass harvests
+     one later (owner ask 2026-09-22, Perplexity-style). */
+  return (
+    <div className="asd-news-thumb asd-news-thumb--placeholder" aria-hidden="true">
+      <Favicon url={item.url} domain={item.domain} className="asd-news-favicon" />
     </div>
   )
 }
