@@ -19,6 +19,7 @@ import type {
   FxRates,
   SourceEntry,
   StatementLink,
+  TxnSplit,
 } from './types'
 
 // ── Account adapter ───────────────────────────────────────────────────────
@@ -133,7 +134,7 @@ export function fromApiTxn(api: ApiTxn): Txn {
     splits: (api.splits ?? []).map((s) => ({
       category: s.category,
       amount: s.amount,
-      note: s.note ?? '',
+      note: s.memo ?? '',
     })),
     fromAccountId: api.from_account_id ?? null,
     fromAmount: api.from_amount ?? null,
@@ -319,8 +320,7 @@ export function toApiTxnCreate(t: Partial<Txn>): TransactionCreate {
     memo: t.memo ?? null,
     tags: t.tags ?? [],
     splits:
-      t.splits?.map((s) => ({ category: s.category, amount: s.amount, note: s.note || null })) ??
-      [],
+      t.splits?.map((s) => ({ category: s.category, amount: s.amount, memo: s.note || '' })) ?? [],
     from_account_id: t.fromAccountId ?? null,
     from_amount: t.fromAmount ?? null,
     from_currency: t.fromCurrency ?? null,
@@ -361,7 +361,14 @@ export function detailPatchToUpdate(patch: Record<string, unknown>): Transaction
   if (patch.category !== undefined) u.category = patch.category as string | null
   // Split allocation (P3-SP): an array re-validates against the leg (backend derives the
   // `split` sentinel from ≥2 lines); [] clears it back to a plain category. Omitted = unchanged.
-  if (patch.splits !== undefined) u.splits = patch.splits as TransactionCreate['splits']
+  // The wire field is `memo` (renamed from `note` 2026-08-02); sending `note` was silently
+  // ignored, so every save of a split wiped its line memos.
+  if (patch.splits !== undefined)
+    u.splits = (patch.splits as TxnSplit[]).map((s) => ({
+      category: s.category,
+      amount: s.amount,
+      memo: s.note || '',
+    }))
   if (patch.tags !== undefined) u.tags = patch.tags as string[]
   if (patch.cleared !== undefined) u.cleared = patch.cleared as boolean
   if (patch.fromAccountId !== undefined) u.from_account_id = patch.fromAccountId as string | null

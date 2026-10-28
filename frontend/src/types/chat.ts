@@ -353,7 +353,7 @@ export interface TxnSplitLine {
   category_id: string | null
   category_label: string
   amount: number
-  note?: string | null
+  memo?: string | null
 }
 
 // One row of a txn_update's resolved before/after diff (already human-labeled by the

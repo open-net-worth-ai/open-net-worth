@@ -120,7 +120,7 @@ def _splits_block(row: dict, category_rows: list[dict]) -> Optional[list[dict]]:
             "category_id": s.get("category"),
             "category_label": _category_label(s.get("category"), category_rows),
             "amount": s.get("amount"),
-            "note": s.get("note"),
+            "memo": s.get("memo"),
         }
         for s in splits
         if isinstance(s, dict)

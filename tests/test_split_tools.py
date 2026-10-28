@@ -111,6 +111,40 @@ def test_add_transaction_with_valid_split_stores_lines(env):
     ]
 
 
+def test_split_line_memo_survives_add_and_update(env):
+    """The schema advertises a per-line ``memo``; the add path read ``note`` instead (a leftover
+    of the 2026-08-02 rename) and silently dropped every line memo Lucius wrote."""
+    lines = [
+        {"category": "cat_13095ba70000", "amount": 60.0, "memo": "Weekly shop"},
+        {"category": "cat_6c4bc0170000", "amount": 40.0, "memo": "Detergent"},
+    ]
+    add, _ = call(
+        "add_transactions",
+        description="Store run",
+        amount=100.0,
+        currency="SGD",
+        account_id="bank",
+        splits=lines,
+    )
+    assert [s["memo"] for s in add["transaction"]["splits"]] == ["Weekly shop", "Detergent"]
+    upd, _ = call(
+        "update_transactions",
+        transaction_id=add["transaction"]["id"],
+        splits=[{**lines[0], "memo": "Fortnightly shop"}, lines[1]],
+    )
+    assert [s["memo"] for s in upd["transaction"]["splits"]] == ["Fortnightly shop", "Detergent"]
+
+
+def test_split_preview_carries_line_memo():
+    from backend.services.ledger_preview import _splits_block
+
+    block = _splits_block(
+        {"splits": [{"category": "cat_13095ba70000", "amount": 60.0, "memo": "Weekly shop"}]},
+        [{"id": "cat_13095ba70000", "label": "Groceries", "kind": "expense"}],
+    )
+    assert block[0]["memo"] == "Weekly shop"
+
+
 def test_add_transaction_split_sum_mismatch_refused(env):
     res, _ = call(
         "add_transactions",

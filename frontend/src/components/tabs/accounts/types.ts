@@ -57,7 +57,7 @@ export interface ApiAccount {
 export interface ApiTxnSplit {
   category: string
   amount: number
-  note?: string | null
+  memo?: string | null
 }
 
 export interface ApiTxn {

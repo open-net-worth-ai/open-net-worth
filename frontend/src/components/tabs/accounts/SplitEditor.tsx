@@ -107,8 +107,8 @@ export function SplitEditor({
               className="acct-edit-splitnote"
               value={line.note}
               onChange={(e) => patchLine(i, { note: e.target.value })}
-              placeholder="Note (optional)"
-              aria-label="Split note"
+              placeholder="Memo (optional)"
+              aria-label="Split memo"
             />
           </div>
         ))}

@@ -400,7 +400,7 @@ def _txn_data_from_ai(item: dict, default_date: str, *, derived_out: dict | None
                 "amount": _unsigned_amount(s.get("amount"), "splits[].amount")
                 if s.get("amount") is not None
                 else 0.0,
-                "note": (s.get("note") or ""),
+                "memo": (s.get("memo") or ""),
             }
             for s in raw_splits
             if isinstance(s, dict)
