@@ -375,7 +375,7 @@ function AlertsModalBody({
           <WatchIntentSection
             key={item.id}
             sym={ticker}
-            ccy={sym}
+            ccy={ccy}
             held={!!ctx.holdingsBySymbol[ticker.toUpperCase()]}
             intent={item.intent ?? null}
             onSave={async (next) => {

@@ -85,7 +85,8 @@ describe('YourThesisCard', () => {
     const { getByText, getByLabelText } = mount({ currency: 'EUR' })
     expect(getByText('€120.00')).toBeTruthy()
     fireEvent.click(getByText('Edit'))
-    expect(getByLabelText('Stop below (€)')).toBeTruthy()
+    expect(getByText('Prices in EUR')).toBeTruthy()
+    expect(getByLabelText('Stop below')).toBeTruthy()
   })
 
   it('opens a new holding’s thesis on Core instead of an empty role', async () => {

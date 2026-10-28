@@ -9,7 +9,7 @@ afterEach(cleanup)
 function mount(onSave = vi.fn().mockResolvedValue(undefined), intent = null) {
   return {
     onSave,
-    ...render(<WatchIntentSection sym="AMD" ccy="$" intent={intent} onSave={onSave} />),
+    ...render(<WatchIntentSection sym="AMD" ccy="USD" intent={intent} onSave={onSave} />),
   }
 }
 
@@ -39,12 +39,13 @@ describe('WatchIntentSection', () => {
   it('uses the thesis card’s wording, and its price boxes take only numbers', () => {
     const watched = mount()
     expect(watched.getByLabelText('Why you’d buy it')).toBeTruthy()
-    const fair = watched.getByLabelText('Fair value ($)') as HTMLInputElement
+    expect(watched.getByText('Prices in USD')).toBeTruthy()
+    const fair = watched.getByLabelText('Fair value') as HTMLInputElement
     fireEvent.change(fair, { target: { value: 'abc1x5.0.5' } })
     expect(fair.value).toBe('15.05')
     cleanup()
     const held = render(
-      <WatchIntentSection sym="AMD" ccy="$" held intent={null} onSave={vi.fn()} />,
+      <WatchIntentSection sym="AMD" ccy="USD" held intent={null} onSave={vi.fn()} />,
     )
     expect(held.getByLabelText('Why you own it')).toBeTruthy()
     expect(held.getByText(/alerts about your thesis/)).toBeTruthy()

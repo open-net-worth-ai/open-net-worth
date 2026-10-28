@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { FormField, Panel, TextArea, TextField } from '../ui'
-import { priceLabel, priceText, reasonExample, reasonLabel } from './thesisFields'
+import { PRICE_LABELS, pricesNote, priceText, reasonExample, reasonLabel } from './thesisFields'
 
 // "Why you're watching" — the thesis, buy zone and fair value the Watching pulse turns into
 // rules ("Entered your buy zone", "12% below your fair value", "Earnings in 3 days — check your
@@ -17,6 +17,7 @@ export interface WatchIntent {
 
 interface Props {
   sym: string
+  /** The quote currency code the prices are in, e.g. "EUR". */
   ccy: string
   /** You own it: the reason reads "Why you own it", as on the card. */
   held?: boolean
@@ -95,11 +96,8 @@ export function WatchIntentSection({ sym, ccy, held = false, intent, onSave }: P
             onBlur={blur}
           />
         </FormField>
-        <FormField
-          label={priceLabel('buy_below', ccy)}
-          htmlFor="wi-below"
-          error={zoneError ?? undefined}
-        >
+        <p className="thesis-prices-note">{pricesNote(ccy)}</p>
+        <FormField label={PRICE_LABELS.buy_below} htmlFor="wi-below" error={zoneError ?? undefined}>
           <TextField
             id="wi-below"
             inputMode="decimal"
@@ -109,7 +107,7 @@ export function WatchIntentSection({ sym, ccy, held = false, intent, onSave }: P
             invalid={!!zoneError}
           />
         </FormField>
-        <FormField label={priceLabel('buy_above', ccy)} htmlFor="wi-above">
+        <FormField label={PRICE_LABELS.buy_above} htmlFor="wi-above">
           <TextField
             id="wi-above"
             inputMode="decimal"
@@ -118,7 +116,7 @@ export function WatchIntentSection({ sym, ccy, held = false, intent, onSave }: P
             onBlur={blur}
           />
         </FormField>
-        <FormField label={priceLabel('fair_value', ccy)} htmlFor="wi-fair">
+        <FormField label={PRICE_LABELS.fair_value} htmlFor="wi-fair">
           <TextField
             id="wi-fair"
             inputMode="decimal"

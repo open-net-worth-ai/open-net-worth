@@ -195,8 +195,8 @@ thesis**.
   would prove you wrong), **Stop below** and **Trim above**.
 - For a stock you only **watch**, it's your reason, buy zone and fair value.
 
-Prices are in the stock's own quote currency — the one its page shows, marked in each price
-field's label, e.g. **Fair value (€)** (crypto is quoted in USD). A new thesis for a stock you own starts as **Core**; change it
+Prices are in the stock's own quote currency — the one its page shows, named once above the
+price fields, e.g. *Prices in EUR* (crypto is quoted in USD). A new thesis for a stock you own starts as **Core**; change it
 if it's a smaller bet.
 
 A bar shows today's price against your levels, and each level lists how far away it is. The thesis

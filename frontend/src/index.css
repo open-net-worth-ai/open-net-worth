@@ -14878,8 +14878,19 @@ body.hide-amounts .money * {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px 12px;
   }
-  .watch-intent-grid > :first-child {
+  .watch-intent-grid > :first-child,
+  .watch-intent-grid > .thesis-prices-note {
     grid-column: 1 / -1;
+  }
+  /* "Prices in EUR" — said once above a thesis form's price fields (the card and Why you're
+     watching), never repeated on every label. */
+  .thesis-prices-note {
+    font-size: var(--text-xs);
+    color: var(--muted);
+    margin: 0;
+  }
+  .asd-thesis-form .thesis-prices-note {
+    margin-bottom: calc(-1 * var(--space-3));
   }
   .watch-intent-err {
     margin-top: 8px;

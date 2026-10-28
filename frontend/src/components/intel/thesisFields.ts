@@ -11,9 +11,9 @@ export const PRICE_LABELS: Record<PriceKey, string> = {
   fair_value: 'Fair value',
 }
 
-/** A price field's label with the currency its figure is in, e.g. "Fair value (€)". */
-export const priceLabel = (key: PriceKey, symbol?: string): string =>
-  symbol ? `${PRICE_LABELS[key]} (${symbol})` : PRICE_LABELS[key]
+/** The one line above a form's price fields saying what currency they're in — once, not on
+ *  every label. */
+export const pricesNote = (currency: string): string => `Prices in ${currency.toUpperCase()}`
 
 export const reasonLabel = (held: boolean): string => (held ? 'Why you own it' : 'Why you’d buy it')
 

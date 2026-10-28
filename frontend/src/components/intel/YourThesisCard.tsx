@@ -17,7 +17,7 @@ import {
   BREAKS_IF_EXAMPLE,
   BREAKS_IF_LABEL,
   PRICE_LABELS,
-  priceLabel,
+  pricesNote,
   priceText,
   reasonExample,
   reasonLabel,
@@ -337,6 +337,7 @@ export function YourThesisCard({
               />
             </FormField>
           )}
+          {currency && <p className="thesis-prices-note">{pricesNote(currency)}</p>}
           <div className="asd-thesis-grid">
             {(held
               ? (['stop_below', 'trim_above', 'buy_below', 'buy_above', 'fair_value'] as PriceKey[])
@@ -344,7 +345,7 @@ export function YourThesisCard({
             ).map((k) => (
               <FormField
                 key={k}
-                label={priceLabel(k, sym)}
+                label={PRICE_LABELS[k]}
                 htmlFor={`thesis-${k}`}
                 span={held && k === 'fair_value' ? 'full' : 1}
               >
