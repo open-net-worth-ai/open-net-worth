@@ -116,13 +116,14 @@ export function MemoryBrowser({
     escapeRef.current = () => {
       if (pending) setPending(null)
       else if (editingId) setEditingId(null)
+      else if (open) setOpen(null)
       else return false
       return true
     }
     return () => {
       escapeRef.current = null
     }
-  }, [escapeRef, pending, editingId])
+  }, [escapeRef, pending, editingId, open])
 
   function confirm() {
     const p = pending

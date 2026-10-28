@@ -76,7 +76,8 @@ that narrows it to the facts (or topics) containing your words.
    **Other**. In each, a row per topic shows its name, its one-line summary (its first fact until
    Lucius has written one) and when it was last updated. **Open items** are listed directly, a row
    per item with the date it runs until where a topic's date goes.
-2. **A topic's page.** Click a topic (or its pencil) to open it: **← Memory** goes back, then you
+2. **A topic's page.** Click a topic (or its pencil) to open it: **← Memory** goes back (in the
+   memory window, so does Esc; a second Esc closes the window), then you
    see when it was **Last updated**, a one-line **Summary** of what the topic covers, and its
    **Details** as bullets. Lucius writes the summary himself and refreshes it within a few minutes
    of the topic's facts changing (a brand-new topic shows it once he has); it describes the topic,
