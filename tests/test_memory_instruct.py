@@ -74,6 +74,7 @@ def test_adds_updates_and_removes_as_the_users_own_facts(prov):
     counts = _run("my dog is Beans, rent goes up in April now, and the car loan is paid off")
 
     changes = counts.pop("changes")
+    assert counts.pop("reply") == ""
     assert counts == {"added": 1, "updated": 1, "removed": 1, "rejected": []}
     assert changes == [
         {"change": "added", "where": "You · Profile", "text": "Has a dog named Beans"},
@@ -280,7 +281,27 @@ def test_route_returns_the_counts_and_what_changed(client, prov):
         "removed": 0,
         "rejected": [],
         "changes": [{"change": "added", "where": "You", "text": "Has a dog named Beans"}],
+        "reply": "",
     }
+
+
+def test_the_models_reply_says_why_nothing_changed_on_one_capped_line(prov):
+    prov(
+        json.dumps(
+            {
+                "new": [],
+                "updates": [],
+                "remove": [],
+                "reply": "That looks like random characters —\n nothing to act on. " + "x" * 500,
+            }
+        )
+    )
+
+    out = _run("fdaf fdjsklfj")
+
+    assert out["changes"] == [] and out["added"] == 0
+    assert out["reply"].startswith("That looks like random characters — nothing to act on.")
+    assert len(out["reply"]) == instruct_mod.REPLY_MAX_CHARS and out["reply"].endswith("…")
 
 
 def test_route_passes_the_section_through(client, prov):

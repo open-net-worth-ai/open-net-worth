@@ -165,13 +165,16 @@ no context:
 - *"Rent goes up in April now, not March"* — rewrites the fact it corrects.
 - *"I paid off the car loan"* — forgets what's no longer true.
 
-One sentence can do all three. The list refreshes and **What changed** appears just above the
-box: each fact he added, updated (with what it said before) or forgot, and where it lives — for
-example *Updated · Money · Housing — Rent goes up every April (Was: Rent goes up every March)*.
-Close it with ×; your next change replaces it. What he refused to remember shows as a note, with
-the reason (a full card number, a balance that is read live, a sensitive topic while that switch
-is off). While the list scrolls under the box, rows fade out above it rather than meeting a hard
-edge.
+One message can do all three, over several lines: Enter sends, Shift+Enter starts a new line,
+and the box grows as you type. The list refreshes and a line above the box says what happened —
+**Added 1 · Updated 1**, or **No changes were made.** When something changed it opens on its own:
+Lucius's one-line reply and each fact he added, updated (with what it said before) or forgot, and
+where it lives — for example *Updated · Money · Housing — Rent goes up every April (Was: Rent goes
+up every March)*. When nothing changed, **See why** shows his reason (the message was unclear, it
+is already remembered, it belongs in your profile) and anything he refused to remember, with the
+reason (a full card number, a balance that is read live, a sensitive topic while that switch is
+off); **Hide** folds it again. Your next message replaces it. While the list scrolls under the
+box, rows blur and fade out above it rather than meeting a hard edge.
 
 It's one small AI call on the **Memory** task model, billed like the rest of memory, and it
 needs memory switched on. **Edit** and **Forget** make no AI call and work either way.
