@@ -1,7 +1,7 @@
 // A screen's first-visit introduction: a picture of what it holds, why it is worth using, and
 // two ways to start (Lucius, or by yourself). A screen with several parts walks through them
 // one step at a time, with its progress shown; the two ways in come on the last step.
-import { useEffect, useState } from 'react'
+import { useEffect, useReducer, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Check } from 'lucide-react'
 import { Button, Modal } from '../ui'
@@ -34,17 +34,16 @@ export interface FeatureIntroProps {
   onClose: () => void
 }
 
-// Polled, as the tours wait for a modal: dialogs open and close outside React's view of this one.
-function useNoModal(watching: boolean): boolean {
-  const [clear, setClear] = useState(() => !modalOpen())
+// Dialogs open and close outside React's view of this one, so a waiting intro looks again on a
+// timer, as the tours do. The look itself is taken as it would open, never remembered from an
+// earlier render: one taken at mount said "clear" while an import opened above it.
+function useRecheck(waiting: boolean): void {
+  const [, recheck] = useReducer((n: number) => n + 1, 0)
   useEffect(() => {
-    if (!watching) return
-    const check = () => setClear(!modalOpen())
-    check()
-    const timer = setInterval(check, 700)
+    if (!waiting) return
+    const timer = setInterval(recheck, 700)
     return () => clearInterval(timer)
-  }, [watching])
-  return clear
+  }, [waiting])
 }
 
 export function FeatureIntro({ open, steps, lucius, secondary, onClose }: FeatureIntroProps) {
@@ -55,8 +54,9 @@ export function FeatureIntro({ open, steps, lucius, secondary, onClose }: Featur
   const [claimed, setClaimed] = useState(false)
   // Nor on top of a dialog the user already has open (a statement import, say): an intro there
   // left that dialog inert under it. It waits for the dialog to close.
-  const clear = useNoModal(open && !touring && !claimed)
-  const shown = open && !touring && !inFirstRun() && (claimed || (clear && !guidedThisVisit()))
+  const due = open && !touring && !inFirstRun()
+  useRecheck(due && !claimed && !guidedThisVisit())
+  const shown = due && (claimed || (!modalOpen() && !guidedThisVisit()))
   useEffect(() => {
     if (shown && !claimed) {
       markGuided()
