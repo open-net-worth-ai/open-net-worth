@@ -9257,7 +9257,7 @@
             },
             "note": {
               "type": "string",
-              "description": "The user's angle to focus on when news breaks (e.g. 'watch M&A activity'). Feeds the news scan and shows in the UI. Ask before saving; empty if nothing."
+              "description": "The user's angle to focus on when news breaks (e.g. 'watch M&A activity'). Feeds the news scan and shows in the UI. Empty if nothing."
             },
             "search_queries": {
               "items": {
@@ -9378,7 +9378,7 @@
       },
       "note": {
         "type": "string",
-        "description": "The user's angle to focus on when news breaks. Ask before saving."
+        "description": "The user's angle to focus on when news breaks."
       },
       "intent": {
         "properties": {
@@ -9400,7 +9400,7 @@
           }
         },
         "type": "object",
-        "description": "TICKERS: why the user watches it, read by the Watching pulse's rules — {thesis?, buy_below?, buy_above?, fair_value?}. buy_below = top of the buy zone (start buying at or under), buy_above = optional floor, fair_value = what the user thinks it's worth. Replaces the whole intent; {} clears it. Propose values and ask before saving — they're the user's call."
+        "description": "TICKERS: why the user watches it, read by the Watching pulse's rules — {thesis?, buy_below?, buy_above?, fair_value?}. buy_below = top of the buy zone (start buying at or under), buy_above = optional floor, fair_value = what the user thinks it's worth. Replaces the whole intent; {} clears it. Record the user's own values, never your estimate."
       },
       "search_queries": {
         "items": {
@@ -9441,7 +9441,7 @@
             },
             "note": {
               "type": "string",
-              "description": "The user's angle to focus on when news breaks. Ask before saving."
+              "description": "The user's angle to focus on when news breaks."
             },
             "intent": {
               "properties": {
@@ -9463,7 +9463,7 @@
                 }
               },
               "type": "object",
-              "description": "TICKERS: why the user watches it, read by the Watching pulse's rules — {thesis?, buy_below?, buy_above?, fair_value?}. buy_below = top of the buy zone (start buying at or under), buy_above = optional floor, fair_value = what the user thinks it's worth. Replaces the whole intent; {} clears it. Propose values and ask before saving — they're the user's call."
+              "description": "TICKERS: why the user watches it, read by the Watching pulse's rules — {thesis?, buy_below?, buy_above?, fair_value?}. buy_below = top of the buy zone (start buying at or under), buy_above = optional floor, fair_value = what the user thinks it's worth. Replaces the whole intent; {} clears it. Record the user's own values, never your estimate."
             },
             "search_queries": {
               "items": {

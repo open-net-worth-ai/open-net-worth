@@ -684,7 +684,7 @@ _ITEM_ASSET_CLASS_DESC = "equity | crypto | commodity | property | other"
 _ITEM_MONITOR_NEWS_DESC = "Include in scheduled news scans. Always true for topics."
 _ITEM_NOTE_DESC = (
     "The user's angle to focus on when news breaks (e.g. 'watch M&A activity'). "
-    "Feeds the news scan and shows in the UI. Ask before saving; empty if nothing."
+    "Feeds the news scan and shows in the UI. Empty if nothing."
 )
 _ITEM_SEARCH_QUERIES_DESC = (
     "Topics/companies: 3–5 targeted search queries, specific and varied, "
@@ -1029,12 +1029,12 @@ async def remove_watchlist_items(input_data: dict):
 # ── update_watchlist_items ───────────────────────────────────────────────────────────
 
 _UPDATE_ITEM_ID_DESC = "UUID of the watchlist item"
-_UPDATE_ITEM_NOTE_DESC = "The user's angle to focus on when news breaks. Ask before saving."
+_UPDATE_ITEM_NOTE_DESC = "The user's angle to focus on when news breaks."
 _UPDATE_ITEM_INTENT_DESC = (
     "TICKERS: why the user watches it, read by the Watching pulse's rules — {thesis?, "
     "buy_below?, buy_above?, fair_value?}. buy_below = top of the buy zone (start buying at or "
     "under), buy_above = optional floor, fair_value = what the user thinks it's worth. Replaces "
-    "the whole intent; {} clears it. Propose values and ask before saving — they're the user's call."
+    "the whole intent; {} clears it. Record the user's own values, never your estimate."
 )
 _UPDATE_ITEM_SEARCH_QUERIES_DESC = (
     "TOPICS ONLY: replace the news search queries wholesale (3–5 targeted)."
