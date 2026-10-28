@@ -36,7 +36,22 @@ function serve(enabled: boolean, facts: MemoryFact[]) {
     if (url === '/api/memory/settings') return json(settings(enabled))
     if (init?.method === 'DELETE') return json({ ok: true })
     if (init?.method === 'PATCH') return json({ id: 'f1', content: 'edited' })
-    if (url === '/api/memory/instruct') return json({ added: 1, updated: 1, removed: 0 })
+    if (url === '/api/memory/instruct')
+      return json({
+        added: 1,
+        updated: 1,
+        removed: 0,
+        rejected: [],
+        changes: [
+          { change: 'added', where: 'You · Profile', text: 'Has a dog named Beans' },
+          {
+            change: 'updated',
+            where: 'Money · Housing',
+            text: 'Rent goes up every April',
+            was: 'Rent goes up every March',
+          },
+        ],
+      })
     return json({ facts, total: facts.length })
   })
 }
@@ -130,8 +145,17 @@ describe('MemorySheet', () => {
         }),
       ),
     )
-    expect(await screen.findByText('Added 1 · Updated 1')).toBeTruthy()
+    const line = await screen.findByRole('status')
+    expect(within(line).getByText('Added 1 · Updated 1')).toBeTruthy()
+    expect(within(line).getByText('Has a dog named Beans')).toBeTruthy()
+    expect(within(line).getByText('Money · Housing')).toBeTruthy()
+    expect(within(line).getByText('Was: Rent goes up every March')).toBeTruthy()
     expect((box as HTMLInputElement).value).toBe('')
+    // the cursor comes back to the box, so focus never falls to the dialog itself
+    await waitFor(() => expect(document.activeElement).toBe(box))
+    fireEvent.click(within(line).getByRole('button', { name: 'Hide' }))
+    expect(within(line).queryByText('Has a dog named Beans')).toBeNull()
+    expect(within(line).getByText('Added 1 · Updated 1')).toBeTruthy()
   })
 
   it('edits a fact in place and saves exactly what was typed', async () => {

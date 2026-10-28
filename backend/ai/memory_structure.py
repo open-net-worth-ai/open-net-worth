@@ -16,7 +16,7 @@ SECTIONS: dict[str, str] = {
     "you": "You",
     "money": "Money",
     "plans": "Plans",
-    "open_items": "Open items",
+    "open_items": "Recent",
     "other": "Other",
 }
 
@@ -36,7 +36,13 @@ SUGGESTED_TOPICS: dict[str, tuple[str, ...]] = {
     "other": (),
 }
 
+# The key stays ``open_items``: the section was "Open items" until amendment 10 widened it to
+# Recent context — what was decided or is in flight in the last two weeks — with no data to move.
 OPEN_ITEMS = "open_items"
+_SECTION_ALIASES = {"recent": OPEN_ITEMS, "recent_context": OPEN_ITEMS}
+# Recent entries a chat pass may add, and how many may be live at once (the oldest lapse first).
+RECENT_MAX_NEW_PER_PASS = 3
+RECENT_MAX_LIVE = 10
 
 # The You topic was called "About you" until 2026-10-27 (ADR amendment 7, R30); a write that still
 # names it lands under "Profile", and revision 202610271800 renamed the stored ones.
@@ -79,6 +85,7 @@ def normalise_section(value) -> str | None:
     if not isinstance(value, str):
         return None
     key = re.sub(r"[\s\-]+", "_", value.strip().lower())
+    key = _SECTION_ALIASES.get(key, key)
     return key if key in SECTIONS else None
 
 
@@ -197,10 +204,14 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         "an intention or upcoming event → Plans",
     ),
     (
-        "something unresolved the user said they will do, or asked you to remind them of, that "
-        "no screen in the app already shows",
-        f"Memory · Open items (no topic; expires after {OPEN_ITEM_DEFAULT_DAYS} days)",
-        f"something to come back to → Open items (expires in {OPEN_ITEM_DEFAULT_DAYS} days)",
+        "decided, agreed or asked for in this conversation and still in flight over the next two "
+        "weeks, with no screen that shows it — an agreement about a payment someone owes and how "
+        "to book it, a decision whose result is still to come, something the user said they will "
+        "do or asked to be reminded of",
+        f"Memory · Recent (no topic; written ready to act on — who, how much, how to book; lapses "
+        f"after {OPEN_ITEM_DEFAULT_DAYS} days)",
+        f"decided or in flight, the next two weeks → Recent (lapses in {OPEN_ITEM_DEFAULT_DAYS} "
+        "days)",
     ),
     (
         "a fact about their money life that nothing above holds (housing, rent or bills split "
@@ -227,7 +238,9 @@ KEEP_TEST = (
     "the app or a connector, or how they got around one (a login that kept failing); what Lucius suggested and the person did not take up; research "
     "results (card comparisons, product mechanics); a what-if they were only exploring. Store only "
     'the lasting part: no history tail ("decided on…", "stated…", "awaiting…", "as of…") — keep a '
-    "date only when it is the fact itself (a due date, a start date)."
+    "date only when it is the fact itself (a due date, a start date). This test is for long-term "
+    "facts; a Recent entry is the one exception to its three months — something decided or still "
+    "in flight that matters over the next two weeks."
 )
 
 _GUIDE_HEADER = (
@@ -246,5 +259,5 @@ def routing_guide_for_tool() -> str:
     rows = "; ".join(f"{i}) {short}" for i, (_, _, short) in enumerate(_ROUTES, start=1))
     return (
         f"Where a fact goes (first match wins): {rows}. "
-        "Only You, Money, Plans, Open items and Other are memory."
+        "Only You, Money, Plans, Recent and Other are memory."
     )

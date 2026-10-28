@@ -46,8 +46,7 @@ class SearchPastConversationsInput(ToolInput):
 
     query: str = Field(
         description=(
-            "Words to look for in earlier conversations, e.g. 'house deposit' or a name. Each "
-            'word is matched on its own; put a phrase in "double quotes" to match it as written.'
+            "A few words, e.g. 'house deposit' or a name; \"double quotes\" keep a phrase whole."
         ),
     )
     limit: Optional[int] = Field(
@@ -64,7 +63,7 @@ class ReadPastConversationInput(ToolInput):
     )
     offset: Optional[int] = Field(
         default=0,
-        description="Messages to skip from the start, to page through a long conversation.",
+        description="Messages to skip from the start.",
     )
     limit: Optional[int] = Field(
         default=READ_DEFAULT_LIMIT,
@@ -171,19 +170,13 @@ def _result(hit: dict, terms: list[str]) -> Optional[dict]:
 @tool(
     "search_past_conversations",
     description=(
-        "Search the user's earlier conversations with you by keyword. Call it when the user "
-        "refers to something said in a previous chat — 'what we discussed last week', 'the plan "
-        "from before' — and the current conversation and your memory don't cover it. Each word "
-        "is matched on its own, anywhere in a conversation or its title; the conversations "
-        "holding the most of your words come back, newest first, one per chat, with its title, "
-        "date, the words it holds and a short snippet. Search with a few distinctive words "
-        "(a name, an amount, a topic), not a sentence. Searches only what was typed and what "
-        "you replied in the conversations listed under Chats (Captures too, though for a "
-        "Capture only his reply, not the app's own prompt) — never attachments, tool output, "
-        "or the context the app adds to a message. To see more than the snippet, open the "
-        "conversation with read_past_conversation. Each result carries a `link`: put it in your "
-        "reply as a markdown link on the conversation's title, so the user can open that chat. Reference only: use what you find to answer, "
-        "never recite old conversations back unprompted."
+        "Search the user's earlier conversations with you by keyword, when they refer to a "
+        "previous chat and neither this conversation nor your memory covers it. Use a few "
+        "distinctive words (a name, an amount, a topic), not a sentence; each is matched on its "
+        "own in what was said or the title. The chats holding the most of them come back, newest "
+        "first, with a snippet; never attachments, tool output or app-added context. Open one "
+        "with read_past_conversation. Link a chat you mention with its `link`. Reference only: "
+        "never recite old conversations unprompted."
     ),
     input_schema=schema_of(SearchPastConversationsInput, tool_name="search_past_conversations"),
     mutates=(),
@@ -247,15 +240,11 @@ def _said_text(blocks: list[str]) -> tuple[str, bool]:
 @tool(
     "read_past_conversation",
     description=(
-        "Read one of the user's earlier conversations with you, oldest message first, by the "
-        "session_id search_past_conversations returned. Call it when a snippet is not enough — "
-        "the exact figure, wording or decision from that chat. Returns what was typed and what "
-        "you replied (role 'assistant' is you), each message cut at "
-        f"{READ_MESSAGE_MAX_CHARS:,} characters; never tool output, attachments or the context "
-        "the app adds. Pages by offset when the conversation is long: `total` is its message "
-        "count and `next_offset` is where the next page starts. Link the conversation in your "
-        "reply with its `link`, as a markdown link on its title. Reference only: use what you "
-        "find to answer, never recite old conversations back unprompted."
+        "Read one of the user's earlier conversations, oldest first, by the session_id "
+        "search_past_conversations returned, when a snippet is not enough. Returns what was "
+        f"said (role 'assistant' is you), each message cut at {READ_MESSAGE_MAX_CHARS:,} chars; "
+        "page with offset (`total`, `next_offset`). Link it with its `link`. Reference only: "
+        "never recite old conversations unprompted."
     ),
     input_schema=schema_of(ReadPastConversationInput, tool_name="read_past_conversation"),
     mutates=(),

@@ -240,7 +240,7 @@ def test_extractor_lists_every_fact_in_full_with_its_place(isolated, monkeypatch
 
     prompt = cap.prompts[0]
     assert "m_live: [Money · Housing] Rents a flat in Tampines" in prompt
-    assert "m_open: [Open items] Waiting on the tax letter" in prompt
+    assert "m_open: [Recent] Waiting on the tax letter" in prompt
     assert "m_old: [unsorted] Prefers index funds" in prompt
     assert "m_legacy: [unsorted] Banks with Meridian Bank" in prompt
     assert f"m_long: [Other · Misc] {long_text}" in prompt

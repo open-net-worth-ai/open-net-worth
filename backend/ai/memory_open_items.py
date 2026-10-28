@@ -1,15 +1,16 @@
-"""The guard on an Open item the extractor proposes: it needs the person's own words.
+"""The guard on a Recent entry the extractor proposes: it needs the person's own words.
 
 An unfinished chat always looks "open" to a model — what Lucius offered, what he is waiting for,
 a statement line still to match — so the prompt's rule is backed by a check it cannot talk past.
-An Open item the extractor writes (a new one, or an update that moves a fact into Open items)
-must carry a ``quote``: words from one of the person's own messages in this conversation, where
-they say they will do it or ask to be reminded. The quote is matched against what the person
-typed — never Lucius's turns, nor an attachment, a harness note or other context the app adds
-(``core.chat_context_markers.is_not_said``) — ignoring case and spacing, and must share a content
-word with the item (in the message it comes from), so a stray "hmm, maybe" grounds nothing. At most one new Open item is kept
-per extraction pass (one quiet conversation). ADR
-``2026-10-25-memory-keeps-only-what-has-no-other-home`` (amendment 9).
+A Recent entry the extractor writes (a new one, or an update that moves a fact into Recent) must
+carry a ``quote``: words from one of the person's own messages in this conversation, where they
+agree, decide or ask. The quote is matched against what the person typed — never Lucius's turns,
+an Automation run's own prompt, an attachment, a harness note or other context the app adds
+(``core.chat_context_markers.is_not_said``) — ignoring case and spacing, and the message it comes
+from must share a content word with the item, so a stray "hmm, maybe" grounds nothing. At most
+``RECENT_MAX_NEW_PER_PASS`` new entries are kept per extraction pass. A run that does what an entry
+says closes it (``close_recent``); at most ``RECENT_MAX_LIVE`` stay live (``overflow``). ADR
+``2026-10-25-memory-keeps-only-what-has-no-other-home`` (amendments 9 and 10).
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ from backend.core.chat_context_markers import is_not_said, strip_user_msg_fence_
 logger = logging.getLogger(__name__)
 
 QUOTE_MIN_CHARS = 8
-MAX_NEW_PER_CONVERSATION = 1
+MAX_NEW_PER_CONVERSATION = ms.RECENT_MAX_NEW_PER_PASS
 
 _QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"'})
 _CONTENT_WORD = re.compile(r"[^\W\d_]{4,}")
@@ -76,9 +77,10 @@ def _grounded(item: dict, said: str) -> bool:
 
 
 def guard(ops: dict, said: str, current: dict[str, dict]) -> dict:
-    """``ops`` with every Open item the person did not ask for dropped, and ``quote`` stripped
-    from every item. ``said`` is ``user_words`` of the conversation; ``current`` maps fact ids
-    to the facts as they stand (an update to a fact already in Open items needs no quote)."""
+    """``ops`` with every Recent entry the person did not ask for dropped, and ``quote`` stripped
+    from every item. ``said`` is ``user_words`` of what the person typed (never a run's own
+    prompt); ``current`` maps fact ids to the facts as they stand (an update to an entry already
+    in Recent needs no quote)."""
     kept_new, opened = [], 0
     for item in ops.get("new") or []:
         if not isinstance(item, dict):
@@ -104,4 +106,42 @@ def guard(ops: dict, said: str, current: dict[str, dict]) -> dict:
     return {**ops, "new": kept_new, "updates": kept_updates}
 
 
-__all__ = ["guard", "user_words"]
+def _touched(fact: dict) -> str:
+    stamps = (fact.get("updated_at"), fact.get("last_used_at"), fact.get("created_at"))
+    return max((str(s) for s in stamps if s), default="")
+
+
+def overflow(facts: list[dict]) -> list[str]:
+    """Ids of the live Recent entries past ``RECENT_MAX_LIVE``, the least recently edited or
+    used first to go — the cap that keeps what every run carries short. ``facts`` must already
+    leave out what is expiring, or an expired entry would hold a slot."""
+    live = [f for f in facts if f.get("state") == "live" and f.get("section") == ms.OPEN_ITEMS]
+    live.sort(key=_touched, reverse=True)
+    return [f["id"] for f in live[ms.RECENT_MAX_LIVE :]]
+
+
+def close_recent(handles: list[str]) -> list[str]:
+    """Close the live Recent entries the handles (or full ids) name, as ``resolved``: the run
+    that did what an entry said marks it done, so no later run waits for a payment that came.
+    Returns the closed entries' texts; a handle naming anything else closes nothing."""
+    from backend.ai.memory_citations import resolve_handles
+    from backend.ai.memory_write import apply_memory_change
+    from backend.db import MemoryStore
+
+    live = [f for f in MemoryStore().active_facts() if f.get("state") == "live"]
+    by_id = {f["id"]: f for f in live if f.get("section") == ms.OPEN_ITEMS}
+    wanted = [str(h or "").strip() for h in handles if isinstance(h, str)]
+    ids = [h for h in wanted if h in by_id]
+    # A handle is judged against every live fact, so a prefix another fact shares is ambiguous
+    # and closes nothing; only then is the match held to Recent.
+    named = resolve_handles([h for h in wanted if h not in by_id], live)
+    ids += [i for i in named if i in by_id and i not in ids]
+    if not ids:
+        return []
+    apply_memory_change(
+        {"retire": [{"id": i, "reason": "resolved"} for i in ids]}, source="implicit", strict=False
+    )
+    return [by_id[i]["content"] for i in ids]
+
+
+__all__ = ["close_recent", "guard", "overflow", "user_words"]

@@ -4952,7 +4952,7 @@
         "type": "string"
       },
       "section": {
-        "description": "Where it is filed: you (about the user, how they like to work), money (their money life: housing, family, investing, tax, cards, income and work), plans (an intention or upcoming event), open_items (something to come back to; expires), other.",
+        "description": "Where it is filed: you (about the user, how they like to work), money (their money life: housing, family, investing, tax, cards, income and work), plans (an intention or upcoming event), open_items (Recent: what the user decided or set in motion over the next two weeks, ready to act on; lapses), other.",
         "enum": [
           "you",
           "money",
@@ -4968,7 +4968,7 @@
       },
       "expires_at": {
         "type": "string",
-        "description": "ISO date (YYYY-MM-DD) an Open item lapses on; only Open items expire. They default to 14 days and never run past 30; a date on any other section is ignored."
+        "description": "ISO date (YYYY-MM-DD) a Recent entry lapses on; only Recent entries expire. They default to 14 days and never run past 30; a date on any other section is ignored."
       },
       "sensitive": {
         "type": "boolean",
@@ -10404,7 +10404,7 @@
     "additionalProperties": false,
     "properties": {
       "query": {
-        "description": "Words to look for in earlier conversations, e.g. 'house deposit' or a name. Each word is matched on its own; put a phrase in \"double quotes\" to match it as written.",
+        "description": "A few words, e.g. 'house deposit' or a name; \"double quotes\" keep a phrase whole.",
         "type": "string"
       },
       "limit": {
@@ -10428,7 +10428,7 @@
       "offset": {
         "type": "integer",
         "default": 0,
-        "description": "Messages to skip from the start, to page through a long conversation."
+        "description": "Messages to skip from the start."
       },
       "limit": {
         "type": "integer",
@@ -10438,6 +10438,22 @@
     },
     "required": [
       "session_id"
+    ],
+    "type": "object"
+  },
+  "close_recent_items": {
+    "additionalProperties": false,
+    "properties": {
+      "handles": {
+        "description": "The handles of the Recent entries this run has done what they said, as shown beside each entry in your memory block (e.g. 'm7a88f8').",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "handles"
     ],
     "type": "object"
   }

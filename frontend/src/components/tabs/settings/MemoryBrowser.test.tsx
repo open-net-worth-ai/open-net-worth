@@ -12,7 +12,15 @@ import { MemoryBrowser } from './MemoryBrowser'
 const json = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status }))
 
-function serve(instruct: unknown = { added: 1, updated: 0, removed: 0, rejected: [] }) {
+function serve(
+  instruct: unknown = {
+    added: 1,
+    updated: 0,
+    removed: 0,
+    rejected: [],
+    changes: [{ change: 'added', where: 'Money · Housing', text: 'Lease now ends in May' }],
+  },
+) {
   authFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (url === '/api/memory/instruct') return json(instruct)
     if (init?.method === 'DELETE') return json({ ok: true, deleted: 4 })
@@ -44,14 +52,7 @@ describe('MemoryBrowser', () => {
 
   it('lists the sections in order, then older memories, and never memories moved out', async () => {
     await renderBrowser()
-    expect(sectionLabels()).toEqual([
-      'You',
-      'Money',
-      'Plans',
-      'Open items',
-      'Other',
-      'Older memories',
-    ])
+    expect(sectionLabels()).toEqual(['You', 'Money', 'Plans', 'Recent', 'Other', 'Older memories'])
     expect(screen.queryByText('Works as a nurse')).toBeNull()
     expect(screen.queryByText(/Moved out of memory/)).toBeNull()
   })
@@ -68,7 +69,7 @@ describe('MemoryBrowser', () => {
 
   it('lists open items directly, each with its date', async () => {
     await renderBrowser()
-    const open = screen.getByRole('region', { name: 'Open items' })
+    const open = screen.getByRole('region', { name: 'Recent' })
     expect(within(open).getByText(/Call the insurer about the renewal/)).toBeTruthy()
     expect(within(open).getByText(/Until /)).toBeTruthy()
     expect(within(open).queryByRole('button', { name: /^Delete / })).toBeNull()
@@ -76,7 +77,7 @@ describe('MemoryBrowser', () => {
 
   it('lays open items and older memories out as rows, an end date in the date column', async () => {
     await renderBrowser()
-    const open = screen.getByRole('region', { name: 'Open items' })
+    const open = screen.getByRole('region', { name: 'Recent' })
     const old = screen.getByRole('region', { name: 'Older memories' })
     expect(open.querySelector('.ui-list')).toBeNull()
     expect(old.querySelector('.ui-list')).toBeNull()
@@ -152,7 +153,8 @@ describe('MemoryBrowser', () => {
         }),
       ),
     )
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('Added 1'))
+    expect(await screen.findByText('Lease now ends in May')).toBeTruthy()
+    expect(toast).not.toHaveBeenCalled()
   })
 
   it('the list-level change box sends no topic', async () => {
@@ -175,14 +177,41 @@ describe('MemoryBrowser', () => {
       updated: 0,
       removed: 0,
       rejected: [{ reason: 'identifier', content: 'x', section: 'you', topic: null }],
+      changes: [],
+      reply: "Card numbers aren't kept in memory, so nothing was saved.",
     })
     const toast = await renderBrowser()
     fireEvent.change(screen.getByLabelText('Tell Lucius what to remember or change'), {
       target: { value: 'my card number is on file' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
-    await waitFor(() => expect(toast).toHaveBeenCalled())
-    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/never remembered/))
+    const line = await screen.findByRole('status')
+    expect(within(line).getByText('No changes were made.')).toBeTruthy()
+    expect(within(line).queryByText(/Card numbers/)).toBeNull()
+    fireEvent.click(within(line).getByRole('button', { name: 'See why' }))
+    expect(
+      within(line).getByText("Card numbers aren't kept in memory, so nothing was saved."),
+    ).toBeTruthy()
+    expect(within(line).getByText(/never remembered/)).toBeTruthy()
+    expect(toast).not.toHaveBeenCalled()
+  })
+
+  it('sends on Enter, and Shift+Enter starts a new line', async () => {
+    await renderBrowser()
+    const box = screen.getByLabelText('Tell Lucius what to remember or change')
+    fireEvent.change(box, { target: { value: 'first line' } })
+    fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })
+    expect(authFetch).not.toHaveBeenCalledWith('/api/memory/instruct', expect.anything())
+    fireEvent.change(box, { target: { value: 'first line\nsecond line' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() =>
+      expect(authFetch).toHaveBeenCalledWith(
+        '/api/memory/instruct',
+        expect.objectContaining({
+          body: JSON.stringify({ instruction: 'first line\nsecond line' }),
+        }),
+      ),
+    )
   })
 
   it('offers no organising controls on a topic page', async () => {

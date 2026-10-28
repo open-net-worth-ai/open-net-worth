@@ -1,7 +1,7 @@
 """Memory as Markdown: a zip with one file per section and topic, for taking it elsewhere.
 
 Facts still waiting to be filed go in ``older-memories.md`` (titled as the memory list labels
-them) and open items in ``open-items.md`` (both names are reserved, so no topic can take them);
+them) and Recent entries in ``recent.md`` (both names are reserved, so no topic can take them);
 retired and expired facts are left out. A topic's generated one-line summary, when it has one,
 is an italic line under its title. File names are built from slugs only, so no topic can name a
 path.
@@ -19,7 +19,7 @@ from backend.ai.memory_summaries import visible_summaries
 from backend.core.user_time import user_today
 from backend.db import MemoryStore
 
-OPEN_ITEMS_FILE = "open-items.md"
+OPEN_ITEMS_FILE = "recent.md"
 UNSORTED_FILE = "older-memories.md"
 UNSORTED_TITLE = "Older memories"
 _SLUG_MAX = 60
@@ -69,7 +69,7 @@ def _documents(facts: list[dict]) -> dict[str, Doc]:
     for fact in ordered:
         key = _group_key(fact)
         groups.setdefault(key, (_title(key, fact), []))[1].append(fact)
-    docs: dict[str, Doc] = {OPEN_ITEMS_FILE: ("Open items", [], None)}
+    docs: dict[str, Doc] = {OPEN_ITEMS_FILE: ("Recent", [], None)}
     taken = {OPEN_ITEMS_FILE, UNSORTED_FILE}
     for key, (title, members) in groups.items():
         if key is None:

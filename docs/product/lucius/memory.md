@@ -28,9 +28,9 @@ Just say it:
 - *"Remember I'm saving for a house deposit by 2028."*
 - *"Forget what I said about the car loan."*
 
-Each fact is filed in a section — **You**, **Money**, **Plans**, **Open items** (things you said
-you'd do or asked to be reminded of, which expire after 14 days — the only facts that ever expire)
-or **Other** — and, except in Open items, under a short topic such
+Each fact is filed in a section — **Recent** (what you decided or set in motion over the last two
+weeks; the only facts that ever lapse — see below), **You**, **Money**, **Plans** or **Other** —
+and, except in Recent, under a short topic such
 as *Housing*. In **You** there are two: **Profile**, for what he knows about you that no profile
 field holds (your employer, the languages you speak, who you live with), and **Preferences**, for
 how you like to work. This **Profile** is a memory topic, not your Settings profile — that one
@@ -52,8 +52,21 @@ problem with the app, a suggestion of his you didn't take up, research or a what
 account or ID numbers or passwords, and health, religion, politics and similar topics only if
 you've allowed them in the settings. He keeps only the lasting part of a fact, with no history
 attached, written about you ("Splits rent with Priya 60/40") — never "User…", "the advisor" or
-"As of …". An **Open item** is saved only when you said you'd do something or asked to be
-reminded — he checks your own words in the chat, never his — and at most one per conversation. A fact he picked up on his own under **Other** that for 90 days he never cites,
+"As of …".
+
+**Recent** is what makes every Lucius run act like the one you talked to. When a chat settles
+something that will matter over the next two weeks — an agreement about money someone owes you and
+how to book it, a decision whose result is still to come, something you'll do or asked to be
+reminded of — he writes it down ready to act on, for example *When Priya's PayNow for November
+arrives (S$540): book Rent S$500, Utilities S$20, Phone & Internet S$20*. Every run sees Recent
+first — your chats, a Capture of a bank notification, an automation, the daily briefing — and when
+what it handles matches an entry, it does what the entry says rather than guessing from past
+patterns, then marks the entry done. An entry is saved only from your own words in a chat (he
+checks them, never his), never from an automation or a Capture; at most three come from one
+conversation, the list is trimmed to the ten most recently edited or used before each memory
+pass (the rest lapse), and each lapses after 14 days unless it names a date. A Capture or an
+automation can close an entry it acted on, but can never add one, even if a notification asks. Something you settled outside the app needs one line in **Tell
+Lucius** for him to know. A fact he picked up on his own under **Other** that for 90 days he never cites,
 you never mention again and you never edit fades out of memory — what you told him yourself, and
 anything in You or Money, never fades this way — and so does a plan that hasn't come up for 90
 days; a faded fact is kept aside for 30 days before it is deleted. Once a day he also merges facts
@@ -79,10 +92,10 @@ Open **Settings → Memory**. The brain button next to **Documents** — at the 
 panel, or on the **Lucius** tab on a computer — opens the same list in a window, with a search box
 that narrows it to the facts (or topics) containing your words.
 
-1. **Sections.** Memory is laid out in the order **You**, **Money**, **Plans**, **Open items** and
+1. **Sections.** Memory is laid out in the order **You**, **Money**, **Plans**, **Recent** and
    **Other**. In each, a row per topic shows its name, its one-line summary (its first fact until
-   Lucius has written one) and when it was last updated. **Open items** are listed directly, a row
-   per item with the date it runs until where a topic's date goes.
+   Lucius has written one) and when it was last updated. **Recent** entries are listed directly, a
+   row per entry with the date it runs until where a topic's date goes.
 2. **A topic's page.** Click a topic (or its pencil) to open it: **← Memory** goes back (in the
    memory window, so does Esc; a second Esc closes the window), then you
    see when it was **Last updated**, a one-line **Summary** of what the topic covers, and its
@@ -101,7 +114,7 @@ that narrows it to the facts (or topics) containing your words.
    forget them as usual. Filing never changes a fact's words, with two exceptions: one over 280
    characters is shortened to fit, and one written as "User…", "the advisor…" or "As of …" is
    reworded about you — kept only if every number, date, quote and name in it survives,
-   otherwise it keeps its old words. Older facts are never filed as Open items, and the same
+   otherwise it keeps its old words. Older facts are never filed under Recent, and the same
    test as new facts applies: a bookkeeping note, an incident or a suggestion is moved out. A
    fact holding a full card, account or ID number is moved out too; a sensitive fact is filed
    like any other.
@@ -169,9 +182,16 @@ no context:
 - *"Rent goes up in April now, not March"* — rewrites the fact it corrects.
 - *"I paid off the car loan"* — forgets what's no longer true.
 
-One sentence can do all three. The list refreshes and a note says what changed — for example
-**Added 1 · Updated 1** — and what he refused to remember, with the reason (a full card number, a
-balance that is read live, a sensitive topic while that switch is off).
+One message can do all three, over several lines: Enter sends, Shift+Enter starts a new line,
+and the box grows as you type. The list refreshes and a line above the box says what happened —
+**Added 1 · Updated 1**, or **No changes were made.** When something changed it opens on its own:
+Lucius's one-line reply and each fact he added, updated (with what it said before) or forgot, and
+where it lives — for example *Updated · Money · Housing — Rent goes up every April (Was: Rent goes
+up every March)*. When nothing changed, **See why** shows his reason (the message was unclear, it
+is already remembered, it belongs in your profile) and anything he refused to remember, with the
+reason (a full card number, a balance that is read live, a sensitive topic while that switch is
+off); **Hide** folds it again. Your next message replaces it. While the list scrolls under the
+box, rows blur and fade out above it rather than meeting a hard edge.
 
 It's one small AI call on the **Memory** task model, billed like the rest of memory, and it
 needs memory switched on. **Edit** and **Forget** make no AI call and work either way.
@@ -213,7 +233,7 @@ call on the **Memory** task model. Import isn't available in the public demo.
 
 **Settings → Memory → Export** downloads `memory-YYYY-MM-DD.zip`: one Markdown file per section and
 topic (for example `money-housing.md`), each with a title and one line per fact with the month it
-was learned — `- Rent is due on the 1st (Sep 2026)`. Open items are in `open-items.md`, and older
+was learned — `- Rent is due on the 1st (Sep 2026)`. Recent entries are in `recent.md`, and older
 facts that haven't been sorted yet are in `older-memories.md`. Facts that were moved out of memory
 are left out.
 
@@ -236,8 +256,9 @@ works whether memory is on or off.
 - Once a day he tidies it — merging duplicates and moving stale facts out.
 - Both steps are small AI calls, billed like any other use. To use a cheaper model for them, set
   **Memory** under **Settings → AI → Task models** — see [Models and cost](models-and-cost.md).
-- Every reply carries everything in your memory sections (You, Money, Plans, Open items, Other),
-  in full and with the month each fact was learned. Older facts that haven't been sorted into a
+- Every reply carries everything in your memory sections — Recent first, then You, Money, Plans
+  and Other — in full and with the month each fact was learned; so does every Capture, automation
+  run and daily briefing. Older facts that haven't been sorted into a
   section yet aren't in the reply; when you mention something he may have been told — *"my
   apartment"*, a nickname — he searches everything he remembers for it. The search is a plain
   keyword lookup and never changes a fact.

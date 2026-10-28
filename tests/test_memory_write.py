@@ -59,7 +59,8 @@ def test_routing_guide_names_every_home_and_section():
 
 def test_sections_are_fixed_and_ordered():
     assert list(structure.SECTIONS) == ["you", "money", "plans", "open_items", "other"]
-    assert structure.SECTIONS["open_items"] == "Open items"
+    assert structure.SECTIONS["open_items"] == "Recent"
+    assert structure.normalise_section("Open items") == "open_items"
     assert structure.SUGGESTED_TOPICS["you"] == ("Profile", "Preferences")
     assert set(structure.SUGGESTED_TOPICS) == set(structure.SECTIONS)
     assert structure.FACT_MAX_CHARS == 280

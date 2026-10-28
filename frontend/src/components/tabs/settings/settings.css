@@ -956,6 +956,8 @@
 .onw-settings .rd-select,
 .onw-settings .rd-textarea {
   width: 100%;
+  /* taller only: the browser default (both) let it be dragged wider than its panel */
+  resize: vertical;
   background: var(--surface2);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -1328,28 +1330,48 @@
 .onw-settings .rd-set-body > .rd-mem-detail {
   flex: 1 0 auto;
 }
-.onw-settings .rd-mem-ask {
+.onw-settings .rd-mem-dock {
   margin-top: auto;
   position: sticky;
   /* 0, not the safe-area inset: the scroll pane's bottom padding already holds it */
   bottom: 0;
   z-index: 1;
-  /* A ring, then copies stepped down to the pane's bottom edge so no row shows beneath it (a
-     home-indicator inset included). Shadows, not a block below the box: a block is content, and
-     let the pane scroll past its end, the box riding up over empty space. */
+  /* a shadow paints only outside the box, so the dock (the outcome line) needs its own fill */
+  background: var(--modal-bg);
+  /* Solid from the box's top down to the pane's bottom edge (a home-indicator inset included),
+     so no row shows beside or beneath it: copies stepped down, each starting at the box's top.
+     Shadows, not a block below the box — a block is content, and let the pane scroll past its
+     end, the box riding up over empty space. */
   box-shadow:
-    0 0 0 var(--space-4) var(--modal-bg),
-    0 var(--space-9) 0 var(--space-4) var(--modal-bg),
-    0 calc(var(--space-9) * 2) 0 var(--space-4) var(--modal-bg),
-    0 calc(var(--space-9) * 3) 0 var(--space-4) var(--modal-bg);
+    0 var(--space-4) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9)) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9) * 2) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9) * 3) 0 var(--space-4) var(--modal-bg);
+}
+/* Above it, rows blur and fade out instead of meeting a hard edge — like the fade under
+   Documents' filter chips (vault.css), drawn on the dock because masking the pane would fade the
+   box too. Tall enough to take a whole two-line row: a 20px fade cut a row in half. The blur
+   strengthens toward the box (the mask), under the colour fade. */
+.onw-settings .rd-mem-dock::before {
+  content: '';
+  position: absolute;
+  inset-inline: calc(var(--space-4) * -1);
+  bottom: 100%;
+  height: calc(var(--space-9) * 1.5);
+  background: linear-gradient(to bottom, transparent, var(--modal-bg) 90%);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 70%);
+  mask-image: linear-gradient(to bottom, transparent, black 70%);
+  pointer-events: none;
 }
 .onw-settings .rd-mem-modal .rd-mem-browser,
 .onw-settings .rd-mem-modal .rd-mem-detail {
   flex: 1 0 auto;
 }
-.onw-settings .rd-mem-modal .rd-mem-ask {
+.onw-settings .rd-mem-modal .rd-mem-dock {
   bottom: 0;
-  box-shadow: 0 0 0 20px var(--modal-bg);
+  box-shadow: 0 20px 0 20px var(--modal-bg);
 }
 .onw-settings .rd-mem-empty {
   flex: 1;
@@ -1569,15 +1591,23 @@
   font-size: var(--text-sm);
   color: var(--faint);
 }
-/* a bullet's Edit/Forget surface on hover (always on touch) */
+/* a bullet's Edit/Forget surface on hover (always on touch), in a column of its own on the right:
+   inline after the text, a fact that filled its last line wrapped the (hidden) icons onto a line
+   of their own, and that bullet stood taller than the rest */
+.onw-settings .rd-mem-bullet:not(.rd-mem-bullet--swipe) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-3);
+  align-items: start;
+}
 .onw-settings .rd-mem-bullet-t {
   overflow-wrap: anywhere;
 }
 .onw-settings .rd-mem-bullet-acts {
   display: inline-flex;
   gap: 2px;
-  margin-left: 6px;
-  vertical-align: middle;
+  /* level with the first line, adding no height to it (24px buttons on a 16px line) */
+  margin-block: -4px;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
@@ -1598,9 +1628,15 @@
   width: 24px;
   height: 24px;
 }
+/* the bullet being edited: the box sits in the text column, with no dot over it */
 .onw-settings .rd-mem-bullet-edit {
   list-style: none;
-  margin-left: calc(-1 * var(--space-8));
+}
+.onw-settings .rd-mem-field > .ui-list > li.rd-mem-bullet-edit::before {
+  content: none;
+}
+.onw-settings .rd-mem-bullet-edit > .rd-fact-edit {
+  padding-inline: 0;
 }
 /* "Forget this memory?" — a small confirm above the memory dialog */
 .onw-settings .rd-confirm-scrim {
@@ -1690,13 +1726,90 @@
   justify-content: flex-end;
   gap: 6px;
 }
-/* Claude-style composer: one pill, the send is a round button inside it */
+/* The outcome of the last "Tell Lucius" message, a line above the box: what happened on the
+   left, See why / Hide on the right, Lucius's reason and the changes under it when open */
+.onw-settings .rd-mem-outcome {
+  margin-bottom: var(--space-3);
+  padding-inline: var(--space-2);
+  font-size: var(--text-base);
+}
+.onw-settings .rd-mem-outcome-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  color: var(--muted);
+}
+.onw-settings .rd-mem-outcome-toggle {
+  flex: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.onw-settings .rd-mem-outcome-toggle:hover {
+  color: var(--ink);
+}
+.onw-settings .rd-mem-outcome-body {
+  margin-top: var(--space-2);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.onw-settings .rd-mem-outcome-reply,
+.onw-settings .rd-mem-outcome-refused {
+  margin: 0 0 var(--space-2);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-outcome-refused {
+  color: var(--muted);
+}
+.onw-settings .rd-mem-changes-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.onw-settings .rd-mem-change-meta {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.onw-settings .rd-mem-change-kind {
+  font-weight: 600;
+  color: var(--ink);
+}
+.onw-settings .rd-mem-change-where {
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-change-kind.is-removed {
+  color: var(--bad);
+}
+.onw-settings .rd-mem-change-t {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-change-t.is-gone {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.onw-settings .rd-mem-change-was {
+  color: var(--faint);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+/* Claude-style composer: a box that grows with the text, the round send pinned bottom-right */
 .onw-settings .rd-mem-ask {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   padding: 5px 5px 5px 18px;
-  border-radius: 999px;
+  border-radius: 23px;
   background: color-mix(in srgb, var(--ink) 6%, var(--modal-bg));
   border: 1px solid var(--line);
   transition: border-color 0.12s ease;
@@ -1713,7 +1826,10 @@
   color: var(--ink);
   font: inherit;
   font-size: var(--text-base);
+  line-height: 1.45;
   padding: 7px 0;
+  resize: none;
+  overflow-y: auto;
 }
 .onw-settings .rd-mem-ask-input::placeholder {
   color: var(--faint);

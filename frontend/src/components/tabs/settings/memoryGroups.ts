@@ -7,7 +7,12 @@ export const SECTIONS: readonly { key: string; label: string; flat?: boolean; no
   { key: 'you', label: 'You' },
   { key: 'money', label: 'Money' },
   { key: 'plans', label: 'Plans' },
-  { key: 'open_items', label: 'Open items', flat: true },
+  {
+    key: 'open_items',
+    label: 'Recent',
+    flat: true,
+    note: 'Decided or in flight over the last two weeks, from your chats — every Lucius run, a Capture or an automation included, sees these and acts on them. Each lapses on its date or once it is done.',
+  },
   { key: 'other', label: 'Other' },
 ]
 // Facts saved before sections and topics existed, until the sort files them.

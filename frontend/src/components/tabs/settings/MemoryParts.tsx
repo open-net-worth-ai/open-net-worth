@@ -3,7 +3,7 @@
 // and the "Tell Lucius" box.
 import { useLayoutEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { ArrowUp, Pencil, Trash2 } from '../../../ui/icons'
+import { Pencil, Trash2 } from '../../../ui/icons'
 import { fDate } from '../../../utils/format'
 import { List } from '../../ui/List'
 import { SwipeActions } from '../../ui/SwipeActions'
@@ -316,57 +316,5 @@ export function ForgetConfirm({
         </div>
       </div>
     </div>
-  )
-}
-
-/** "Tell Lucius what to remember or change" — one sentence, one memory-model call that adds,
- *  rewrites or forgets (POST /api/memory/instruct). The pill with the round send arrow. */
-export function MemoryAskBox({
-  disabled,
-  placeholder = 'Tell Lucius what to remember or change',
-  onSubmit,
-}: {
-  disabled?: boolean
-  placeholder?: string
-  onSubmit: (text: string) => Promise<boolean>
-}) {
-  const [text, setText] = useState('')
-  const [busy, setBusy] = useState(false)
-  return (
-    <form
-      className="rd-mem-ask"
-      onSubmit={async (e) => {
-        e.preventDefault()
-        const t = text.trim()
-        if (!t || busy) return
-        setBusy(true)
-        if (await onSubmit(t)) setText('')
-        setBusy(false)
-      }}
-    >
-      <input
-        className="rd-mem-ask-input"
-        value={text}
-        disabled={disabled || busy}
-        maxLength={1000}
-        placeholder={disabled ? 'Turn memory on to make changes' : placeholder}
-        aria-label="Tell Lucius what to remember or change"
-        onChange={(e) => setText(e.target.value)}
-      />
-      <button
-        type="submit"
-        className="rd-mem-send"
-        title="Update memory"
-        aria-label="Update memory"
-        aria-busy={busy || undefined}
-        disabled={disabled || busy || !text.trim()}
-      >
-        {busy ? (
-          <span className="rd-mem-spin" aria-hidden="true" />
-        ) : (
-          <ArrowUp size={16} strokeWidth={2.2} aria-hidden="true" />
-        )}
-      </button>
-    </form>
   )
 }

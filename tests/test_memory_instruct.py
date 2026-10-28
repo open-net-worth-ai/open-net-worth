@@ -73,7 +73,19 @@ def test_adds_updates_and_removes_as_the_users_own_facts(prov):
 
     counts = _run("my dog is Beans, rent goes up in April now, and the car loan is paid off")
 
+    changes = counts.pop("changes")
+    assert counts.pop("reply") == ""
     assert counts == {"added": 1, "updated": 1, "removed": 1, "rejected": []}
+    assert changes == [
+        {"change": "added", "where": "You · Profile", "text": "Has a dog named Beans"},
+        {
+            "change": "updated",
+            "where": "Older memories",
+            "text": "Rent goes up every April",
+            "was": "Rent goes up every March",
+        },
+        {"change": "removed", "where": "Older memories", "text": "Is paying off a car loan"},
+    ]
     by_content = {f["content"]: f for f in store.all_facts()}
     assert set(by_content) == {"Has a dog named Beans", "Rent goes up every April"}
     assert {f["source"] for f in by_content.values()} == {"explicit"}
@@ -257,13 +269,39 @@ def client(monkeypatch, db_isolated):
     cfg._settings = None
 
 
-def test_route_returns_the_counts(client, prov):
+def test_route_returns_the_counts_and_what_changed(client, prov):
     prov(json.dumps({"new": [{"content": "Has a dog named Beans", "section": "you"}]}))
 
     r = client.post("/api/memory/instruct", json={"instruction": "my dog's name is Beans"})
 
     assert r.status_code == 200
-    assert r.json() == {"added": 1, "updated": 0, "removed": 0, "rejected": []}
+    assert r.json() == {
+        "added": 1,
+        "updated": 0,
+        "removed": 0,
+        "rejected": [],
+        "changes": [{"change": "added", "where": "You", "text": "Has a dog named Beans"}],
+        "reply": "",
+    }
+
+
+def test_the_models_reply_says_why_nothing_changed_on_one_capped_line(prov):
+    prov(
+        json.dumps(
+            {
+                "new": [],
+                "updates": [],
+                "remove": [],
+                "reply": "That looks like random characters —\n nothing to act on. " + "x" * 500,
+            }
+        )
+    )
+
+    out = _run("fdaf fdjsklfj")
+
+    assert out["changes"] == [] and out["added"] == 0
+    assert out["reply"].startswith("That looks like random characters — nothing to act on.")
+    assert len(out["reply"]) == instruct_mod.REPLY_MAX_CHARS and out["reply"].endswith("…")
 
 
 def test_route_passes_the_section_through(client, prov):
