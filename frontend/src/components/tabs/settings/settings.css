@@ -1321,15 +1321,23 @@
 .onw-settings .rd-modal.rd-mem-modal {
   height: min(80vh, 720px);
 }
-/* In the dialog the change box sits at the bottom: pushed down when the list is short, held in
-   view while a long one scrolls. The ring is the dialog's own colour so rows don't show around it. */
+/* The change box stays in view at the bottom while a long list scrolls, in Settings and in the
+   dialog alike; the ring is the shell's own colour so rows don't show around it, and on a phone
+   it clears the home indicator. In the dialog it is also pushed down when the list is short. */
+.onw-settings .rd-mem-ask {
+  position: sticky;
+  bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  z-index: 1;
+  box-shadow:
+    0 0 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-9) * 2 + env(safe-area-inset-bottom)) 0 var(--space-4) var(--modal-bg);
+}
 .onw-settings .rd-mem-modal .rd-mem-browser,
 .onw-settings .rd-mem-modal .rd-mem-detail {
   flex: 1 0 auto;
 }
 .onw-settings .rd-mem-modal .rd-mem-ask {
   margin-top: auto;
-  position: sticky;
   bottom: 0;
   box-shadow: 0 0 0 20px var(--modal-bg);
 }

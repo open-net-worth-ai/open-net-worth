@@ -144,8 +144,8 @@ Each switch saves as soon as you flip it, and a short note confirms it.
 
 ## Change or add facts
 
-At the bottom of the memory list, type what to change in **Tell Lucius what to remember or
-change** and press Enter, or click the arrow. On a topic's page the same box is scoped to that
+Type what to change in **Tell Lucius what to remember or change** — the box stays pinned at the
+bottom of the memory list while you scroll — and press Enter, or click the arrow. On a topic's page the same box is scoped to that
 topic (**Tell Lucius what to change about Housing**), so a short *"it's now due on the 3rd"* needs
 no context:
 
