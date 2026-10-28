@@ -44,8 +44,9 @@ class RememberFactInput(ToolInput):
     expires_at: Optional[str] = Field(
         default=None,
         description=(
-            "ISO date (YYYY-MM-DD) after which the fact is stale. Open items default to "
-            f"{OPEN_ITEM_DEFAULT_DAYS} days and never run past {OPEN_ITEM_MAX_DAYS}."
+            "ISO date (YYYY-MM-DD) an Open item lapses on; only Open items expire. They default "
+            f"to {OPEN_ITEM_DEFAULT_DAYS} days and never run past {OPEN_ITEM_MAX_DAYS}; a date on "
+            "any other section is ignored."
         ),
     )
     sensitive: Optional[bool] = Field(

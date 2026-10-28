@@ -317,9 +317,15 @@ export function Settings({
   // switcher (PageTabs) rather than the prototype's bespoke chip row, so Settings switches
   // sections the same way every other tab in this app does.
   const isMobile = useIsMobile()
-  // A right swipe over the drilled-in section pane goes back to the section list — the touch
-  // equivalent of the ‹ Back chevron in the sheethead.
-  const swipeBackHandlers = useSwipeBack(() => setDrilled(false), isMobile && drilled)
+  // A section with a page of its own (Memory's topic page) says how to go back from it; the
+  // sheethead's ‹ and a right swipe both take that step first, then back to the section list. The
+  // section clears it when it unmounts, so leaving the section needs no reset here.
+  const [back, setBack] = useState<SectionBack | null>(null)
+  // A right swipe over the drilled-in section pane is the touch equivalent of the ‹ chevron.
+  const swipeBackHandlers = useSwipeBack(
+    () => (back ? back.onBack() : setDrilled(false)),
+    isMobile && drilled,
+  )
 
   // ── ?sub= has exactly ONE writer per direction ──────────────────────────────
   // Mirroring `section` into the URL from an effect on [section] looked simpler, but it
@@ -380,9 +386,6 @@ export function Settings({
   const bumpBusy = useRef((delta: number) => setBusyCount((n) => Math.max(0, n + delta))).current
 
   const active = SECTIONS.find((s) => s.key === section) || SECTIONS[0]!
-  // A section's own way back (a memory topic page → the memory list). The section clears it when it
-  // unmounts, so leaving the section needs no reset here.
-  const [back, setBack] = useState<SectionBack | null>(null)
 
   const needle = q.trim().toLowerCase()
   const availableSections = SECTIONS.filter((s) => sectionAvailable(s.key))

@@ -43,9 +43,9 @@ RETRY_COOLDOWN_SECONDS = 24 * 60 * 60
 _LONG_DIGITS = re.compile(r"\d{4,}")
 
 _SUMMARY_SYSTEM = (
-    "You write the one-line description shown at the top of each topic in a financial "
-    "advisor's memory about their client. You describe what a topic covers; you never restate "
-    "its facts."
+    "You write the one-line description shown at the top of each topic in the memory Lucius, "
+    "a personal-finance assistant, keeps about the person he helps. You describe what a topic "
+    "covers; you never restate its facts."
 )
 
 Key = tuple[str, str]

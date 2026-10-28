@@ -158,9 +158,12 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         "something scheduled → an Automation",
     ),
     (
-        "a balance, holding, price, transaction, trade, or a task that was done",
-        "Nowhere — the ledger already has it",
-        "balances, holdings, prices, trades, finished tasks → nowhere (the ledger has them)",
+        "a balance, holding, price, transaction, trade, a task that was done, or a bookkeeping "
+        "follow-up the book already shows (an unmatched or uncleared entry, a pending charge, a "
+        "missing memo, a statement or import line to match)",
+        "Nowhere — the ledger and its review screens already have it",
+        "balances, holdings, prices, trades, finished tasks, bookkeeping follow-ups → nowhere "
+        "(the ledger has them)",
     ),
     (
         "a goal or commitment already recorded on the Plan screen (a named goal with its "
@@ -169,13 +172,15 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         "a goal or commitment → Plan / goals / commitments",
     ),
     (
-        "the state of this conversation (what is being waited on, what was offered)",
+        "the state of this conversation or a run (what is being waited on, what was offered or "
+        "proposed, what awaits the user's confirmation, what an automation flagged)",
         "Nowhere",
         "conversation state → nowhere",
     ),
     (
         "about the user but no Settings profile field fits (an employer, languages, who they live "
-        "with — partner, children, flatmates — personal context)",
+        "with — partner, children, flatmates — personal context; NOT rent or bills split with "
+        "them, nor money sent between them: those are Money)",
         "Memory · You · Profile",
         "about the user, no Settings field → You · Profile (a memory topic)",
     ),
@@ -192,13 +197,14 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         "an intention or upcoming event → Plans",
     ),
     (
-        "something unresolved the user will expect you to come back to",
+        "something unresolved the user said they will do, or asked you to remind them of, that "
+        "no screen in the app already shows",
         f"Memory · Open items (no topic; expires after {OPEN_ITEM_DEFAULT_DAYS} days)",
         f"something to come back to → Open items (expires in {OPEN_ITEM_DEFAULT_DAYS} days)",
     ),
     (
-        "a fact about their money life that nothing above holds (housing, money they send or "
-        "receive within the family, investing, "
+        "a fact about their money life that nothing above holds (housing, rent or bills split "
+        "with a flatmate or partner, money they send or receive within the family, investing, "
         "tax, cards and payments, income and work, a bookkeeping convention no payee rule can "
         "express)",
         "Memory · Money · a topic name",
@@ -209,6 +215,19 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         "Memory · Other",
         "anything else worth keeping → Other",
     ),
+)
+
+# The one test every writer applies (extraction, the upgrade sort, import), amendment 9.
+KEEP_TEST = (
+    "Keep a fact only when it passes all three: it is about the person or their money life (not "
+    "about how Lucius did a task); it will still be true in three months (not a snapshot, an "
+    "incident, or a thread left mid-way); and nothing else in the app already holds it. Never "
+    "keep: a lesson about how Lucius should do a task, learned from one mistake or incident (that "
+    "is a fix to the app, or an Instructions rule if the person states it as one); a problem with "
+    "the app or a connector, or how they got around one (a login that kept failing); what Lucius suggested and the person did not take up; research "
+    "results (card comparisons, product mechanics); a what-if they were only exploring. Store only "
+    'the lasting part: no history tail ("decided on…", "stated…", "awaiting…", "as of…") — keep a '
+    "date only when it is the fact itself (a due date, a start date)."
 )
 
 _GUIDE_HEADER = (

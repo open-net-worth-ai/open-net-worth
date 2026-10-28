@@ -61,11 +61,11 @@ function latest(facts: MemoryFact[]): string {
   return facts.reduce((m, f) => ((f.updated_at ?? '') > m ? (f.updated_at ?? '') : m), '')
 }
 
-/** As the backend's `is_expired`: a filed fact expires on its date; a legacy fact not yet filed
- *  only when it was `time_bound` (a `durable` one's stray date never meant an expiry). */
+/** As the backend's `is_expired`: once filed, only an Open item expires on its date; a legacy
+ *  fact not yet filed only when it was `time_bound` (a `durable` one's stray date never meant one). */
 function isExpired(f: MemoryFact, today: string): boolean {
   if (!f.expires_at || f.expires_at.slice(0, 10) >= today) return false
-  if (f.state === 'live' || f.section) return true
+  if (f.state === 'live' || f.section) return f.section === 'open_items'
   return (f.tier ?? 'time_bound') === 'time_bound'
 }
 

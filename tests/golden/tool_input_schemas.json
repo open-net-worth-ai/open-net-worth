@@ -4968,7 +4968,7 @@
       },
       "expires_at": {
         "type": "string",
-        "description": "ISO date (YYYY-MM-DD) after which the fact is stale. Open items default to 14 days and never run past 30."
+        "description": "ISO date (YYYY-MM-DD) an Open item lapses on; only Open items expire. They default to 14 days and never run past 30; a date on any other section is ignored."
       },
       "sensitive": {
         "type": "boolean",

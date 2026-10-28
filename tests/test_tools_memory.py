@@ -135,9 +135,8 @@ class TestRememberFact:
         due = (user_today() + timedelta(days=20)).isoformat()
         _call_tool(
             "remember_fact",
-            content="Expects to sell ONWAI after Q3 vest",
-            section="plans",
-            topic="Equity",
+            content="Check whether the ONWAI vest posted",
+            section="open_items",
             expires_at=due,
         )
         assert memory_store_mod.MemoryStore().all_facts()[0]["expires_at"] == due

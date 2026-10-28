@@ -15,6 +15,7 @@ import secrets
 
 from backend.ai import memory
 from backend.ai import memory_structure as ms
+from backend.ai import memory_voice as mv
 from backend.ai.memory_import_apply import (
     DESTINATIONS,
     IMPORTABLE_PROFILE_FIELDS,
@@ -100,6 +101,8 @@ Choose a destination for each useful line:
 Every item needs a short "reason" (one plain sentence) saying why it goes there.
 
 {ms.ROUTING_GUIDE}
+
+{ms.KEEP_TEST} A line that fails it is "skip". {mv.VOICE_RULE}
 
 Copy "line" exactly as it appears in the text, without its leading date. Return ONLY JSON:
 {{"items": [{{"line": "...", "destination": "...", "field": "...", "value": "...",

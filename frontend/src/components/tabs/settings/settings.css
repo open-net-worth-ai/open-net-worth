@@ -1323,21 +1323,34 @@
 }
 /* The change box stays in view at the bottom while a long list scrolls, in Settings and in the
    dialog alike; the ring is the shell's own colour so rows don't show around it, and on a phone
-   it clears the home indicator. In the dialog it is also pushed down when the list is short. */
+   it clears the home indicator. When the list or a topic is short it is pushed to the bottom. */
+.onw-settings .rd-set-body > .rd-mem-browser,
+.onw-settings .rd-set-body > .rd-mem-detail {
+  flex: 1 0 auto;
+}
 .onw-settings .rd-mem-ask {
+  margin-top: auto;
   position: sticky;
-  bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+  /* 0, not the safe-area inset: the scroll pane's bottom padding already holds it */
+  bottom: 0;
   z-index: 1;
-  box-shadow:
-    0 0 0 var(--space-4) var(--modal-bg),
-    0 calc(var(--space-9) * 2 + env(safe-area-inset-bottom)) 0 var(--space-4) var(--modal-bg);
+  box-shadow: 0 0 0 var(--space-4) var(--modal-bg);
+}
+/* one solid backing from the box to the pane's bottom edge, so no row shows beneath it */
+.onw-settings .rd-mem-ask::after {
+  content: '';
+  position: absolute;
+  inset-inline: calc(var(--space-4) * -1);
+  top: 100%;
+  height: calc(var(--space-9) * 3 + env(safe-area-inset-bottom));
+  background: var(--modal-bg);
+  pointer-events: none;
 }
 .onw-settings .rd-mem-modal .rd-mem-browser,
 .onw-settings .rd-mem-modal .rd-mem-detail {
   flex: 1 0 auto;
 }
 .onw-settings .rd-mem-modal .rd-mem-ask {
-  margin-top: auto;
   bottom: 0;
   box-shadow: 0 0 0 20px var(--modal-bg);
 }

@@ -21,6 +21,7 @@ from datetime import date, timedelta
 
 from backend.ai import memory
 from backend.ai import memory_structure as ms
+from backend.ai.memory_voice import VOICE_RULE
 from backend.ai.memory_write import apply_memory_change
 from backend.core.user_time import user_today
 from backend.db import MemoryStore
@@ -30,7 +31,8 @@ from backend.db.memory_settings_store import memory_writes_enabled
 logger = logging.getLogger(__name__)
 
 _TIDY_SYSTEM = (
-    "You are the hygiene pass over a financial advisor's long-term memory about their client. "
+    "You are the hygiene pass over Lucius's long-term memory of the person he helps with their "
+    "money. "
     "You merge duplicates and near-duplicate topic names and never invent facts."
 )
 
@@ -135,12 +137,13 @@ def _merge_prompt(live: list[dict]) -> str:
         ],
         ensure_ascii=False,
     )
-    return f"""Clean up this financial advisor's memory about their client.
+    return f"""Clean up this memory Lucius keeps about the person he helps.
 
 Each fact has a section, a topic and a text. Do two things, and only these:
 - Merge duplicates: when several facts say the same thing, keep the best-worded one (reuse
   its id, rewriting its content only if the others add something), and list the rest under
-  "remove". On a contradiction keep the newer wording.
+  "remove". On a contradiction keep the newer wording. A rewritten content follows the house
+  voice: {VOICE_RULE}
 - Merge near-duplicate topic names ("Home" and "Housing"): update the facts of the lesser
   name to the other with {{"id", "topic"}}.
 Never delete a fact that says something no other fact says. Never invent a fact. A fact that

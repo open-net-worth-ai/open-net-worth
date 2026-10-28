@@ -528,3 +528,48 @@ setting: the write choke prunes after any write that removes, retires or moves a
 call), the sweep prunes at the start of every tick, and the API and export show only rows whose
 topic still has live facts. The export writes the summary as an italic line under each topic's title. Benchmark case
 T03 holds the line to its length and to restating no number from the facts.
+
+## Amendment 9 (2026-10-28) — one keep test, the house voice, Open items need your words
+
+Decided by the owner in session, after reviewing their own memory once the upgrade sort had run:
+of 99 filed facts, 62 failed the test below — snapshots the ledger holds, bookkeeping threads,
+incidents and the lessons Lucius drew from them, payee-rule copies, stale what-ifs — and nearly
+every Open item was a thread Lucius had left mid-way.
+
+- **One keep test, in every writer** (`memory_structure.KEEP_TEST`, in the extract, sort and
+  import prompts): a fact stays only if it is about the person or their money life, will still be
+  true in three months, and nothing else in the app holds it. Never kept: a lesson about how
+  Lucius should do a task, an incident, an app or connector problem, a suggestion the person did
+  not take up, research results, a what-if. Only the lasting part is stored — no "decided on…",
+  "stated…", "awaiting…" tail; a date stays only when it is the fact.
+- **The house voice** (`memory_voice.VOICE_RULE`): a fact is written about the person, never
+  "User…", "the advisor", "the client" or a leading "As of <date>:". The prompts no longer cast
+  Lucius as an advisor keeping notes on a client — the framing the old memory copied into its
+  facts. The upgrade sort marks a legacy note in the old framing `[reword]` and keeps its new
+  wording only when `memory_voice.keeps_facts` finds every number and date (character for
+  character — a leading "As of <date>:" is the one date it may drop), every quoted text, every
+  name and as many negations intact, and no name the old wording lacked; otherwise the note keeps
+  its old words. This is the sort's second licence to edit, beside shortening one over 280
+  characters. Known limit: a rewording that flips a meaning without touching a number, name or
+  negation ("up" → "down") passes; the sort prompt forbids it, the guard cannot see it.
+- **An Open item needs the person's own words** (`memory_open_items.guard`, on every extraction):
+  a new Open item, or an update moving a fact into Open items, must carry a `quote` found in what
+  the person typed in that conversation — never Lucius's turns, an attachment, a harness note or
+  other context the app adds (`chat_context_markers.is_not_said`) — that shares a content word
+  with the item, so filler like "hmm, maybe" grounds nothing; at most one new Open item is kept
+  per extraction pass. What Lucius offered, proposed or is waiting on never grounds one. The
+  upgrade sort never files an Open item (nothing records that the person asked for an older
+  note); a reply placing one there is a `stale` retire. "Tell Lucius" and `remember_fact` with
+  `user_asked` are the person asking, and are unchanged.
+- **Only Open items expire.** `memory_store.is_expired` (and its frontend mirror in
+  `memoryGroups.ts`) lets a filed fact expire only in Open items, and the write choke stores no
+  date on any other section, so a stray legacy date can no longer retire or hide a Preference. No
+  data migration: the only book already through the upgrade sort is the owner's, cleaned by hand.
+- **The owner's own book** was cleaned by hand from a reviewed list (kept facts rewritten to their
+  lasting part, eight standing rules moved to Instructions for Lucius with the owner's approval,
+  the rest moved out — kept 30 days), not by a migration: no other book has been through the
+  upgrade sort yet, and the sort above now applies the same test.
+- Benchmark cases E19–E23 and S03 hold these rules: an incident, a bookkeeping thread and an
+  untaken offer store nothing; "remind me" makes exactly one Open item; a preference is stored as
+  its kernel; older notes in the old framing are filed in the house voice or moved out, and none
+  becomes an Open item.

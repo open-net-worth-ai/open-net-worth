@@ -146,20 +146,19 @@ def _now() -> str:
 
 
 def _expiry(section: str, raw, today: date) -> tuple[str | None, bool]:
-    """(expires_at, valid). Open items default to 14 days and are capped at 30."""
-    if raw is None or str(raw).strip().lower() in ("", "null", "none"):
-        if section == ms.OPEN_ITEMS:
-            return (today + timedelta(days=ms.OPEN_ITEM_DEFAULT_DAYS)).isoformat(), True
+    """(expires_at, valid). Only Open items expire: they default to 14 days and are capped at
+    30; any other section stores no date, whatever was given (amendment 9)."""
+    if section != ms.OPEN_ITEMS:
         return None, True
+    if raw is None or str(raw).strip().lower() in ("", "null", "none"):
+        return (today + timedelta(days=ms.OPEN_ITEM_DEFAULT_DAYS)).isoformat(), True
     try:
         due = date.fromisoformat(str(raw).strip())
     except ValueError:
         return None, False
     if due < today:
         return None, False
-    if section == ms.OPEN_ITEMS:
-        due = min(due, today + timedelta(days=ms.OPEN_ITEM_MAX_DAYS))
-    return due.isoformat(), True
+    return min(due, today + timedelta(days=ms.OPEN_ITEM_MAX_DAYS)).isoformat(), True
 
 
 class _Plan:

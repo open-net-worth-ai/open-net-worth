@@ -131,10 +131,31 @@ def test_open_items_expiry_is_capped_at_30_days_and_never_in_the_past():
     assert [r["reason"] for r in out["rejected"]] == ["bad_expiry"]
 
 
-def test_a_malformed_expiry_is_rejected_for_any_section():
-    out = _write({"new": [_new("x", expires_at="next week"), _new("y", expires_at="null")]})
+def test_a_malformed_expiry_is_rejected_on_an_open_item():
+    out = _write(
+        {
+            "new": [
+                _new("x", section="open_items", expires_at="next week"),
+                _new("y", section="open_items", expires_at="null"),
+            ]
+        }
+    )
     assert [r["reason"] for r in out["rejected"]] == ["bad_expiry"]
     assert [f["content"] for f in MemoryStore().all_facts()] == ["y"]
+
+
+def test_only_open_items_store_an_expiry():
+    """Amendment 9: a fact filed anywhere but Open items never expires, whatever date it is given."""
+    out = _write(
+        {
+            "new": [
+                _new("Pays rent on the 1st", expires_at="2026-12-01"),
+                _new("Plans a trip to Hokkaido", section="plans", topic="Trip", expires_at="soon"),
+            ]
+        }
+    )
+    assert out["rejected"] == []
+    assert {f["expires_at"] for f in MemoryStore().all_facts()} == {None}
 
 
 def test_280_and_281_with_diacritics():
@@ -376,13 +397,13 @@ def test_moving_a_fact_out_of_open_items_clears_its_expiry():
             ]
         }
     )
-    assert MemoryStore().find_by_id(other["id"])["expires_at"] == "2026-12-01"
+    assert MemoryStore().find_by_id(other["id"])["expires_at"] is None
 
 
 def test_moving_a_fact_into_open_items_without_an_expiry_gets_the_default():
     _write({"new": [_new("Buy a desk", section="plans", topic="Move", expires_at="2026-11-29")]})
     (fact,) = MemoryStore().all_facts()
-    assert fact["expires_at"] == "2026-11-29"
+    assert fact["expires_at"] is None
 
     _write({"updates": [{"id": fact["id"], "section": "open_items"}]})
     assert MemoryStore().find_by_id(fact["id"])["expires_at"] == "2026-11-10"
@@ -494,7 +515,7 @@ def test_strict_raises_a_sentence_and_applies_nothing():
     [
         ({"new": [_new("   ")]}, "empty"),
         ({"new": [_new("a", section="nope")]}, "You, Money"),
-        ({"new": [_new("a", expires_at="soon")]}, "date"),
+        ({"new": [_new("a", section="open_items", expires_at="soon")]}, "date"),
         ({"new": [_new("card 4111 1111 1111 1111")]}, "last 4"),
         ({"new": [_new("a", sensitive=True)]}, "Sensitive"),
         ({"updates": [{"id": "mem_missing", "content": "a"}]}, "no longer"),
@@ -579,12 +600,14 @@ def test_settings_have_the_new_keys_with_their_defaults():
 
 
 def test_expiry_follows_the_fact_not_a_tier():
-    """A filed fact expires on its date whatever legacy tier it carries; only a legacy fact
-    not yet filed keeps the old rule (a durable one's stray date never meant an expiry)."""
+    """A filed Open item expires on its date whatever legacy tier it carries, and a fact filed
+    anywhere else never does; only a legacy fact not yet filed keeps the old rule (a durable
+    one's stray date never meant an expiry)."""
     store = MemoryStore()
     rows = [
-        ("mem_new", {}, "2020-01-01"),
-        ("mem_tb", {"tier": "time_bound"}, "2020-01-01"),
+        ("mem_new", {"section": "open_items"}, "2020-01-01"),
+        ("mem_tb", {"tier": "time_bound", "section": "open_items"}, "2020-01-01"),
+        ("mem_plan", {"section": "plans"}, "2020-01-01"),
         ("mem_dur", {"tier": "durable", "section": "open_items"}, "2020-01-01"),
         ("mem_live", {}, "2999-01-01"),
         ("mem_old_dur", {"tier": "durable", "state": "unsorted"}, "2020-01-01"),
@@ -604,9 +627,9 @@ def test_expiry_follows_the_fact_not_a_tier():
             }
         )
 
-    assert {f["id"] for f in store.remembered_facts()} == {"mem_live", "mem_old_dur"}
+    assert {f["id"] for f in store.remembered_facts()} == {"mem_live", "mem_old_dur", "mem_plan"}
     assert memory.purge_expired(store) == 4
-    assert {f["id"] for f in store.all_facts()} == {"mem_live", "mem_old_dur"}
+    assert {f["id"] for f in store.all_facts()} == {"mem_live", "mem_old_dur", "mem_plan"}
 
 
 # ── a null on an update means "unchanged" ────────────────────────────────────
@@ -703,13 +726,13 @@ def test_filing_into_open_items_without_a_date_gets_the_default_and_a_dateless_i
     assert MemoryStore().find_by_id("mem_b")["expires_at"] == "2026-11-10"
 
 
-def test_a_durable_legacy_fact_filed_outside_open_items_drops_its_stray_date():
+def test_a_legacy_fact_filed_outside_open_items_drops_its_date():
     _legacy("mem_dur", "Banks with the credit union", expires_at="2026-12-01")
     _legacy("mem_tb", "Lease runs to spring", tier="time_bound", expires_at="2026-12-01")
     _file("mem_dur", topic="Banking")
     _file("mem_tb", topic="Housing")
     assert MemoryStore().find_by_id("mem_dur")["expires_at"] is None
-    assert MemoryStore().find_by_id("mem_tb")["expires_at"] == "2026-12-01"
+    assert MemoryStore().find_by_id("mem_tb")["expires_at"] is None
 
 
 def test_filing_a_long_legacy_fact_needs_a_shorter_wording():

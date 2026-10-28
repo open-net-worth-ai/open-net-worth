@@ -17,6 +17,7 @@ from backend.evals.memory.cases_extract import E11_PREFERENCE, E12_RENT, E18_FOR
 from backend.evals.memory.cases_sort import S01_FACTS
 from backend.evals.memory.cases_tidy import T01_DUP_B
 from backend.evals.memory.mock_import import import_reply
+from backend.evals.memory.mock_keep import EXTRACT_KEEP, sort_s03
 
 GOOD, SLOPPY = "good", "sloppy"
 PERSONAS = (GOOD, SLOPPY)
@@ -106,6 +107,7 @@ EXTRACT: dict[str, tuple[dict, dict]] = {
                 _n(
                     "Undecided about disputing the landlord's deposit deduction; revisit next week",
                     "open_items",
+                    quote="I haven't decided whether to dispute my landlord's deposit deduction.",
                 )
             ]
         ),
@@ -184,6 +186,8 @@ EXTRACT: dict[str, tuple[dict, dict]] = {
         _extract([_n("Owns a dog called Biscuit", "you", "Profile")]),
     ),
 }
+
+EXTRACT.update(EXTRACT_KEEP)
 
 # ── sort ─────────────────────────────────────────────────────────────────────
 
@@ -298,6 +302,8 @@ def reply(persona: str, case_id: str, source: str, prompt: str) -> str:
     elif source == "memory_sort":
         if case_id == "S01":
             body = _sort_good_s01() if persona == GOOD else _sort_sloppy_s01()
+        elif case_id == "S03":
+            body = sort_s03(persona == GOOD)
         else:
             body = _sort_s02(prompt, persona)
     elif source == "memory_tidy":

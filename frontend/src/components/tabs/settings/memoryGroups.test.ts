@@ -49,6 +49,23 @@ describe('groupFacts — expiry agrees with the backend', () => {
     expect(g.bySection.get('open_items')).toBeUndefined()
   })
 
+  it('keeps a fact filed outside Open items whatever date it still carries', () => {
+    const g = groupFacts(
+      [
+        {
+          id: 'p',
+          content: 'Prefers short answers',
+          state: 'live',
+          section: 'you',
+          topic: 'Preferences',
+          expires_at: past,
+        },
+      ],
+      today,
+    )
+    expect(g.bySection.get('you')).toBeDefined()
+  })
+
   it('keeps an unsorted durable fact with a stray past date, hides a time-bound one', () => {
     const g = groupFacts(
       [
