@@ -514,3 +514,15 @@ def test_read_is_a_read_outside_the_default_offer_and_off_in_the_demo():
     assert "read_past_conversation" not in CORE_TOOL_NAMES
     assert mutated_domains("read_past_conversation") == ()
     assert "read_past_conversation" in _DEMO_REFUSED_TOOLS
+
+
+def test_search_and_read_give_a_link_that_opens_the_conversation():
+    _session("chat/odd id", "Car insurance renewal", [_msg("user", "renewal quote")])
+
+    found = _search(query="renewal")
+    read = _read(session_id="chat/odd id")
+
+    assert found["results"][0]["link"] == "/lucius?conversation=chat%2Fodd%20id"
+    assert read["link"] == "/lucius?conversation=chat%2Fodd%20id"
+    assert "link" in found["link_hint"] and "link" in read["link_hint"]
+    assert "link_hint" not in _search(query="nothing-like-this")

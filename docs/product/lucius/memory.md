@@ -141,7 +141,8 @@ At the top of **Settings → Memory**:
   was said and in the conversation's title, ignoring upper and lower case, so "Japan trip" finds a
   chat titled *Japan trip budget* that only says "ten days in Japan". The conversations that
   hold the most of the words come back, newest first, each with a short snippet; when a snippet
-  isn't enough he opens that conversation and reads what you both said in it. It never reads
+  isn't enough he opens that conversation and reads what you both said in it. He links the
+  conversation by its title in his reply; click or tap the link to switch to it. It never reads
   attachments, the results of his tools, or the context the app adds to a message (the screen you
   were on, items you mentioned), and never conversations that don't appear in your Chats list. The conversation
   you're in is left out. With the switch off he can't look back at all. On by default. If Lucius

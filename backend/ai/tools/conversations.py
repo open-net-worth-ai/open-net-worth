@@ -6,6 +6,7 @@ from __future__ import annotations
 import json
 import re
 from typing import Optional
+from urllib.parse import quote
 
 from pydantic import Field
 
@@ -20,6 +21,10 @@ _MAX_TERMS = 8
 _CONTEXT_CHARS = 200
 _ELLIPSIS = "…"
 _UNTITLED = "New conversation"
+_LINK_HINT = (
+    "When you mention a conversation you found, link it with its `link` so the user can open it, "
+    "e.g. [Car insurance renewal](/lucius?conversation=…)."
+)
 _ATTACHMENT_REF = re.compile(r"ref_id:\s*([\w.-]+)")
 _TERM = re.compile(r'"([^"]+)"|(\S+)')
 _EDGE_PUNCT = "\"'`.,;:!?()[]{}<>“”‘’«»…"
@@ -113,6 +118,11 @@ def _shows_private_attachment(*blocks: str) -> bool:
     return any(private_refusal(ref) for b in blocks for ref in _ATTACHMENT_REF.findall(b or ""))
 
 
+def conversation_link(session_id: str) -> str:
+    """The in-app path that opens ``session_id`` — a plain click on it in a reply switches the chat."""
+    return f"/lucius?conversation={quote(session_id, safe='')}"
+
+
 def _refusal(message: str) -> tuple[str, None]:
     return json.dumps({"ok": False, "message": message}, ensure_ascii=False), None
 
@@ -147,6 +157,7 @@ def _result(hit: dict, terms: list[str]) -> Optional[dict]:
     result = {
         "session_id": hit["session_id"],
         "title": title,
+        "link": conversation_link(hit["session_id"]),
         "when": hit["when"],
         "matched": [t for t in terms if fold(t) in hit["matched"]],
     }
@@ -170,7 +181,8 @@ def _result(hit: dict, terms: list[str]) -> Optional[dict]:
         "you replied in the conversations listed under Chats (Captures too, though for a "
         "Capture only his reply, not the app's own prompt) — never attachments, tool output, "
         "or the context the app adds to a message. To see more than the snippet, open the "
-        "conversation with read_past_conversation. Reference only: use what you find to answer, "
+        "conversation with read_past_conversation. Each result carries a `link`: put it in your "
+        "reply as a markdown link on the conversation's title, so the user can open that chat. Reference only: use what you find to answer, "
         "never recite old conversations back unprompted."
     ),
     input_schema=schema_of(SearchPastConversationsInput, tool_name="search_past_conversations"),
@@ -207,6 +219,8 @@ async def search_past_conversations(input_data: dict):
     )
     results = [r for r in (_result(hit, terms) for hit in hits) if r is not None]
     payload: dict = {"ok": True, "searched_for": terms, "results": results}
+    if results:
+        payload["link_hint"] = _LINK_HINT
     if not results:
         payload["note"] = (
             "No earlier conversation holds any of these words. Try other words once; then ask "
@@ -239,7 +253,8 @@ def _said_text(blocks: list[str]) -> tuple[str, bool]:
         "you replied (role 'assistant' is you), each message cut at "
         f"{READ_MESSAGE_MAX_CHARS:,} characters; never tool output, attachments or the context "
         "the app adds. Pages by offset when the conversation is long: `total` is its message "
-        "count and `next_offset` is where the next page starts. Reference only: use what you "
+        "count and `next_offset` is where the next page starts. Link the conversation in your "
+        "reply with its `link`, as a markdown link on its title. Reference only: use what you "
         "find to answer, never recite old conversations back unprompted."
     ),
     input_schema=schema_of(ReadPastConversationInput, tool_name="read_past_conversation"),
@@ -283,6 +298,8 @@ async def read_past_conversation(input_data: dict):
         "ok": True,
         "session_id": session_id,
         "title": meta.get("title") or _UNTITLED,
+        "link": conversation_link(session_id),
+        "link_hint": _LINK_HINT,
         "total": page["total"],
         "offset": offset,
         "messages": messages,
