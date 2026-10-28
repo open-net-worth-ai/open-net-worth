@@ -51,6 +51,7 @@ def test_active_facts_excludes_expired_time_bound_items(db_engine):
             "tier": "time_bound",
             "expires_at": "2026-01-01",
             "state": "live",
+            "section": "open_items",  # only a Recent entry expires once filed
             "updated_at": "2026-01-01",
         }
     )
@@ -75,7 +76,7 @@ def test_active_facts_are_live_ones_and_remembered_adds_the_unsorted(db_engine):
         ("mem_unsorted", {"state": "unsorted"}),
         ("mem_legacy", {}),
         ("mem_retired", {"state": "retired"}),
-        ("mem_stale", {"state": "live", "expires_at": "2026-01-01"}),
+        ("mem_stale", {"state": "live", "section": "open_items", "expires_at": "2026-01-01"}),
     ):
         store.insert({"id": fid, "content": fid, "updated_at": "2026-01-01", **extra})
     assert {f["id"] for f in store.active_facts(today="2026-06-01")} == {"mem_live"}
