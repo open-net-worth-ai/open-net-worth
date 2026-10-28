@@ -592,12 +592,18 @@ fell back on past transactions. One long-term layer was doing two jobs.
   done. The block already reaches chats, Captures, automation runs (the lean prompt that strips it
   is unused) and the daily briefing, which shows it without the close instruction.
 - **Only the person adds; any run may close.** An entry still needs a quote from the person's own
-  typed words (amendment 9's guard), at most three per extraction pass. An automation run's
-  extraction may update or remove but never add one (`extract_and_merge(from_person=False)`: its
-  "user" turn is the automation's prompt), and Captures stay unextracted. A run that does what an
+  typed words (amendment 9's guard), at most three per extraction pass. In an Automation's
+  conversation the run's own prompt (its first message) never grounds one, while a follow-up the
+  person types there still does (`extract_and_merge(run_prompt=True)`, set for a session stamped
+  `source=automation` or named `automation-…`); Captures stay unextracted. `remember_fact` refuses
+  to add a Recent entry in a Capture, Automation, headless or scheduled session
+  (`core.chat_session.is_run_session`): a notification's text could otherwise plant an instruction
+  every later run follows. A run that does what an
   entry says closes it with the new tool `close_recent_items(handles)` — retired `resolved`, never
   deleted, so no later run waits for something that already happened. Unattended runs pass the
   approval gate unchanged, so a Capture can close what it acted on.
-- **Bounded.** At most ten live entries; past that the least recently touched lapse (`stale`) in
-  `purge_expired`. Each lapses after 14 days unless it names a date.
+- **Bounded.** `purge_expired` (before each extraction, Tell Lucius and the daily tidy) keeps the
+  ten most recently edited or used live entries, counting only unexpired ones, and lapses the rest
+  (`stale`); between passes a pass may add up to three. Each lapses after 14 days unless it names
+  a date.
 - Export writes `recent.md` (was `open-items.md`).

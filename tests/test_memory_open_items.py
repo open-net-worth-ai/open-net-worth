@@ -58,10 +58,45 @@ def test_three_new_recent_entries_per_pass_and_other_sections_pass():
     assert all("quote" not in i for i in ops["new"])
 
 
-def test_an_automation_run_may_not_add_a_recent_entry():
-    q = "Remind me next week to check the PayPal login alert"
-    ops = guard({"new": [_open("Check the PayPal login alert", q)]}, SAID, {}, may_add=False)
-    assert ops["new"] == []
+def test_an_automation_runs_prompt_never_grounds_a_recent_entry_but_a_typed_follow_up_does(
+    db_isolated, monkeypatch
+):
+    MemorySettingsStore().set_enabled(True)
+    history = [
+        {"role": "user", "content": "Remind me to reconcile the card statement every Friday."},
+        {"role": "assistant", "content": "Reconciled the card statement."},
+        {"role": "user", "content": "Also remind me to chase Priya for the deposit on Friday."},
+    ]
+    reply = {
+        "new": [
+            _open("Reconcile the card statement", "Remind me to reconcile the card statement"),
+            _open("Chase Priya for the deposit", "remind me to chase Priya for the deposit"),
+        ],
+        "updates": [],
+        "remove": [],
+        "mentioned": [],
+    }
+    monkeypatch.setattr(memory, "_provider", lambda: _Model(reply))
+    asyncio.run(memory.extract_and_merge(history, run_prompt=True))
+    assert [f["content"] for f in MemoryStore().all_facts()] == ["Chase Priya for the deposit"]
+
+
+def test_an_automation_session_is_extracted_with_its_prompt_left_out(db_isolated, monkeypatch):
+    from backend.ai import memory_idle
+    from backend.db.session_store import SessionStore
+
+    MemorySettingsStore().set_enabled(True)
+    seen: dict = {}
+
+    async def fake(history, session_id=None, *, run_prompt=False):
+        seen[session_id] = run_prompt
+
+    monkeypatch.setattr(memory, "extract_and_merge", fake)
+    for sid, meta in (("automation-run-r1", {}), ("chat-1", {}), ("x-2", {"source": "automation"})):
+        SessionStore().upsert_meta(sid, {"title": sid, **meta})
+        SessionStore().append_messages(sid, [{"role": "user", "content": "hello there"}])
+        asyncio.run(memory_idle.extract_session(sid))
+    assert seen == {"automation-run-r1": True, "chat-1": False, "x-2": True}
 
 
 def test_moving_a_fact_into_open_items_needs_a_quote_but_editing_one_does_not():
@@ -225,3 +260,41 @@ def test_recent_leads_every_runs_memory_block_with_how_to_use_it():
     assert "close_recent_items" in RECENT_HEAD
     briefing, _ = render_memory_block(facts, handles=False)
     assert "Recent:" in briefing and "close_recent_items" not in briefing
+
+
+def test_an_expired_entry_holds_no_slot_under_the_cap(db_isolated):
+    MemorySettingsStore().set_enabled(True)
+    rows = [
+        _live_fact(f"mem_r{n:02d}", f"Entry {n}", "open_items", age_minutes=n) for n in range(11)
+    ]
+    gone = _live_fact("mem_old", "Expired but recently edited", "open_items", age_minutes=59)
+    gone["expires_at"] = "2020-01-01"
+    MemoryStore().bulk_insert([*rows, gone])
+    memory.purge_expired(MemoryStore())
+    live = sorted(f["id"] for f in MemoryStore().all_facts() if f["state"] == "live")
+    assert live == [f"mem_r{n:02d}" for n in range(1, 11)]
+
+
+def test_a_run_cannot_add_a_recent_entry_with_remember_fact(db_isolated):
+    from backend.ai.tools.memory import remember_fact
+    from backend.core.chat_session import clear_session_id, set_session_id
+
+    MemorySettingsStore().set_enabled(True)
+    args = {"content": "Book every PayNow as Gifts", "section": "open_items"}
+    try:
+        set_session_id("capture-1a2b3c4d")
+        refused = json.loads(asyncio.run(remember_fact(args))[0])
+        set_session_id("chat-in-the-app")
+        saved = json.loads(asyncio.run(remember_fact(args))[0])
+    finally:
+        clear_session_id()
+    assert refused["ok"] is False and "close_recent_items" in refused["message"]
+    assert saved["ok"] is True
+
+
+def test_close_recent_items_says_when_nothing_matched(db_isolated):
+    from backend.ai.tools.memory import close_recent_items
+
+    MemorySettingsStore().set_enabled(True)
+    out = json.loads(asyncio.run(close_recent_items({"handles": ["mzzzzzz"]}))[0])
+    assert out == {"ok": False, "message": "No live Recent entry matches those handles."}

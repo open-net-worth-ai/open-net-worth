@@ -44,6 +44,17 @@ INTERNAL_SESSION_IDS: frozenset[str] = frozenset({"scheduled"})
 INTERNAL_SESSION_PREFIXES: tuple[str, ...] = ("scheduled-",)
 
 
+# Sessions a run of Lucius owns rather than the person typing: a Capture of a notification, an
+# Automation run (and the follow-ups typed into it), a headless or scheduled turn. Their text is
+# not the person's own words, so they may close a Recent memory entry but never add one.
+RUN_SESSION_PREFIXES: tuple[str, ...] = ("capture-", "automation-", "headless-", "scheduled-")
+
+
+def is_run_session(session_id: Optional[str]) -> bool:
+    """True for a session a Capture, Automation, headless or scheduled run owns."""
+    return bool(session_id) and str(session_id).startswith(RUN_SESSION_PREFIXES)
+
+
 def is_internal_session(session_id: str) -> bool:
     """True when ``session_id`` identifies a background/headless session (never shown to the user)."""
     if session_id in INTERNAL_SESSION_IDS:

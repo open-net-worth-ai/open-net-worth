@@ -4952,7 +4952,7 @@
         "type": "string"
       },
       "section": {
-        "description": "Where it is filed: you (about the user, how they like to work), money (their money life: housing, family, investing, tax, cards, income and work), plans (an intention or upcoming event), open_items (something to come back to; expires), other.",
+        "description": "Where it is filed: you (about the user, how they like to work), money (their money life: housing, family, investing, tax, cards, income and work), plans (an intention or upcoming event), open_items (Recent: what the user decided or set in motion over the next two weeks, ready to act on; lapses), other.",
         "enum": [
           "you",
           "money",
@@ -4968,7 +4968,7 @@
       },
       "expires_at": {
         "type": "string",
-        "description": "ISO date (YYYY-MM-DD) an Open item lapses on; only Open items expire. They default to 14 days and never run past 30; a date on any other section is ignored."
+        "description": "ISO date (YYYY-MM-DD) a Recent entry lapses on; only Recent entries expire. They default to 14 days and never run past 30; a date on any other section is ignored."
       },
       "sensitive": {
         "type": "boolean",

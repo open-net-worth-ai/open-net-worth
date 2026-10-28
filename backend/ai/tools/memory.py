@@ -30,8 +30,8 @@ class RememberFactInput(ToolInput):
         description=(
             "Where it is filed: you (about the user, how they like to work), money (their money "
             "life: housing, family, investing, tax, cards, income and work), plans (an "
-            "intention or upcoming event), open_items (something to come back to; expires), "
-            "other."
+            "intention or upcoming event), open_items (Recent: what the user decided or set in "
+            "motion over the next two weeks, ready to act on; lapses), other."
         ),
     )
     topic: Optional[str] = Field(
@@ -44,7 +44,7 @@ class RememberFactInput(ToolInput):
     expires_at: Optional[str] = Field(
         default=None,
         description=(
-            "ISO date (YYYY-MM-DD) an Open item lapses on; only Open items expire. They default "
+            "ISO date (YYYY-MM-DD) a Recent entry lapses on; only Recent entries expire. They default "
             f"to {OPEN_ITEM_DEFAULT_DAYS} days and never run past {OPEN_ITEM_MAX_DAYS}; a date on "
             "any other section is ignored."
         ),
@@ -108,8 +108,21 @@ class RecallMemoryInput(ToolInput):
 )
 async def remember_fact(input_data: dict):
     from backend.ai.memory import MemoryDisabledError, add_explicit
+    from backend.ai.memory_structure import OPEN_ITEMS, normalise_section
+    from backend.core.chat_session import get_session_id, is_run_session
     from backend.core.errors import ValidationError
 
+    # A Capture's or an Automation's text is not the person speaking (a notification can carry
+    # anything), and a Recent entry is an instruction every later run follows: a run may close
+    # one, never add one (amendment 10).
+    if normalise_section(input_data.get("section")) == OPEN_ITEMS and is_run_session(
+        get_session_id()
+    ):
+        message = (
+            "A Recent entry is saved only from the person's own words in a chat. This run can "
+            "close one it acted on (close_recent_items) but not add one."
+        )
+        return json.dumps({"ok": False, "message": message}, ensure_ascii=False), None
     try:
         item = add_explicit(
             content=input_data["content"],
@@ -208,6 +221,11 @@ class CloseRecentItemsInput(ToolInput):
 )
 async def close_recent_items(input_data: dict):
     from backend.ai.memory_open_items import close_recent
+    from backend.db.memory_settings_store import memory_writes_enabled
+
+    if not memory_writes_enabled():
+        message = "Memory is off (Settings → Memory), so there is nothing to close."
+        return json.dumps({"ok": False, "message": message}, ensure_ascii=False), None
 
     closed = close_recent(input_data.get("handles") or [])
     if not closed:

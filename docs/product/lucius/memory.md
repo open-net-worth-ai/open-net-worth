@@ -63,8 +63,9 @@ first — your chats, a Capture of a bank notification, an automation, the daily
 what it handles matches an entry, it does what the entry says rather than guessing from past
 patterns, then marks the entry done. An entry is saved only from your own words in a chat (he
 checks them, never his), never from an automation or a Capture; at most three come from one
-conversation, at most ten are kept at once (the oldest lapse first), and each lapses after 14
-days unless it names a date. Something you settled outside the app needs one line in **Tell
+conversation, the list is trimmed to the ten most recently edited or used before each memory
+pass (the rest lapse), and each lapses after 14 days unless it names a date. A Capture or an
+automation can close an entry it acted on, but can never add one, even if a notification asks. Something you settled outside the app needs one line in **Tell
 Lucius** for him to know. A fact he picked up on his own under **Other** that for 90 days he never cites,
 you never mention again and you never edit fades out of memory — what you told him yourself, and
 anything in You or Money, never fades this way — and so does a plan that hasn't come up for 90
