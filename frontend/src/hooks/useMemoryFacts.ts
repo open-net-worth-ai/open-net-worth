@@ -124,12 +124,12 @@ export function useMemoryFacts(notify: (message: string) => void) {
   }
 
   /** "Tell Lucius what to change" — one sentence that adds, rewrites or forgets facts, scoped to
-   *  the section (and topic, when it has a name) the user opened. What changed when the server
-   *  applied it (empty when nothing needed changing), null when it was refused or failed. */
+   *  the section (and topic, when it has a name) the user opened. What changed and Lucius's own
+   *  sentence on it when the server applied it; null when it was refused or failed. */
   async function instruct(
     instruction: string,
     scope?: InstructScope,
-  ): Promise<InstructChange[] | null> {
+  ): Promise<InstructOutcome | null> {
     const body = scope
       ? { instruction, section: scope.section, ...(scope.topic ? { topic: scope.topic } : {}) }
       : { instruction }
@@ -147,10 +147,12 @@ export function useMemoryFacts(notify: (message: string) => void) {
         return null
       }
       void refresh()
-      // The box shows what changed; a toast is left for what was refused.
-      const refused = rejectedNote(out)
-      if (refused) notify(refused)
-      return Array.isArray(out.changes) ? out.changes : []
+      // Shown by the box itself — what changed, why, and what was refused — not as a toast.
+      return {
+        changes: Array.isArray(out.changes) ? out.changes : [],
+        reply: typeof out.reply === 'string' ? out.reply : '',
+        refused: rejectedNote(out),
+      }
     } catch {
       notify('Could not reach the server. Try again.')
       return null
@@ -182,10 +184,19 @@ export interface InstructChange {
   was?: string | null
 }
 
+export interface InstructOutcome {
+  changes: InstructChange[]
+  /** Lucius's own sentence: what it changed, or why nothing needed changing. */
+  reply: string
+  /** What the write path refused, and why ("" when nothing was). */
+  refused: string
+}
+
 interface InstructResult {
   added: number
   updated: number
   removed: number
   rejected: { reason?: string }[]
   changes: InstructChange[]
+  reply: string
 }

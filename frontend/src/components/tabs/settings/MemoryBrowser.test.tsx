@@ -184,14 +184,41 @@ describe('MemoryBrowser', () => {
       updated: 0,
       removed: 0,
       rejected: [{ reason: 'identifier', content: 'x', section: 'you', topic: null }],
+      changes: [],
+      reply: "Card numbers aren't kept in memory, so nothing was saved.",
     })
     const toast = await renderBrowser()
     fireEvent.change(screen.getByLabelText('Tell Lucius what to remember or change'), {
       target: { value: 'my card number is on file' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
-    await waitFor(() => expect(toast).toHaveBeenCalled())
-    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/never remembered/))
+    const line = await screen.findByRole('status')
+    expect(within(line).getByText('No changes were made.')).toBeTruthy()
+    expect(within(line).queryByText(/Card numbers/)).toBeNull()
+    fireEvent.click(within(line).getByRole('button', { name: 'See why' }))
+    expect(
+      within(line).getByText("Card numbers aren't kept in memory, so nothing was saved."),
+    ).toBeTruthy()
+    expect(within(line).getByText(/never remembered/)).toBeTruthy()
+    expect(toast).not.toHaveBeenCalled()
+  })
+
+  it('sends on Enter, and Shift+Enter starts a new line', async () => {
+    await renderBrowser()
+    const box = screen.getByLabelText('Tell Lucius what to remember or change')
+    fireEvent.change(box, { target: { value: 'first line' } })
+    fireEvent.keyDown(box, { key: 'Enter', shiftKey: true })
+    expect(authFetch).not.toHaveBeenCalledWith('/api/memory/instruct', expect.anything())
+    fireEvent.change(box, { target: { value: 'first line\nsecond line' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() =>
+      expect(authFetch).toHaveBeenCalledWith(
+        '/api/memory/instruct',
+        expect.objectContaining({
+          body: JSON.stringify({ instruction: 'first line\nsecond line' }),
+        }),
+      ),
+    )
   })
 
   it('offers no organising controls on a topic page', async () => {

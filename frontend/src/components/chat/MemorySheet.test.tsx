@@ -145,14 +145,17 @@ describe('MemorySheet', () => {
         }),
       ),
     )
-    const card = await screen.findByRole('status')
-    expect(within(card).getByText('What changed')).toBeTruthy()
-    expect(within(card).getByText('Has a dog named Beans')).toBeTruthy()
-    expect(within(card).getByText('Money · Housing')).toBeTruthy()
-    expect(within(card).getByText('Was: Rent goes up every March')).toBeTruthy()
+    const line = await screen.findByRole('status')
+    expect(within(line).getByText('Added 1 · Updated 1')).toBeTruthy()
+    expect(within(line).getByText('Has a dog named Beans')).toBeTruthy()
+    expect(within(line).getByText('Money · Housing')).toBeTruthy()
+    expect(within(line).getByText('Was: Rent goes up every March')).toBeTruthy()
     expect((box as HTMLInputElement).value).toBe('')
-    fireEvent.click(within(card).getByRole('button', { name: 'Dismiss what changed' }))
-    expect(screen.queryByText('What changed')).toBeNull()
+    // the cursor comes back to the box, so focus never falls to the dialog itself
+    await waitFor(() => expect(document.activeElement).toBe(box))
+    fireEvent.click(within(line).getByRole('button', { name: 'Hide' }))
+    expect(within(line).queryByText('Has a dog named Beans')).toBeNull()
+    expect(within(line).getByText('Added 1 · Updated 1')).toBeTruthy()
   })
 
   it('edits a fact in place and saves exactly what was typed', async () => {
