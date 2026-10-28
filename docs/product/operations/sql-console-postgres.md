@@ -1,71 +1,88 @@
 ---
 title: Lucius SQL access on Postgres
-description: Lucius reads your data with a read-only SQL tool; on a PostgreSQL database it needs a dedicated, restricted database role. How to create it, step by step.
+description: On PostgreSQL, Lucius's read-only SQL runs as a restricted login the app creates and keeps up to date itself. What it does, and the rare fixes.
 category: operations
 order: 57
 audience: [operator]
 status: stable
 related: [operations/security-and-privacy, operations/exposing-beyond-localhost]
-keywords: [Postgres, PostgreSQL, run_sql_query, SQL console, read-only role, REVOKE, ONW_SQL_CONSOLE_DATABASE_URL, ONW_DATABASE_URL]
+keywords: [Postgres, PostgreSQL, run_sql_query, SQL console, read-only role, CREATEROLE, ONW_SQL_CONSOLE_DATABASE_URL, ONW_DATABASE_URL]
 ---
 
 # Lucius SQL access on Postgres
 
 **Only for installs that keep the database in PostgreSQL** (`ONW_DATABASE_URL` set to a
-`postgresql+psycopg://…` address). On the standard SQLite setup there's nothing to do — this
-works out of the box.
+`postgresql+psycopg://…` address). On the standard SQLite setup none of this applies.
 
 Lucius can answer unusual questions by reading your data directly with a read-only SQL query.
-On SQLite the database itself stops him from reading the tables that hold credentials. PostgreSQL
-has no equivalent, and checking the query text isn't reliable, so on PostgreSQL this tool stays
-**off** until you give it its own database login that physically can't read those tables.
+It must never read the tables that hold your credentials. SQLite lets the app enforce that
+itself; PostgreSQL doesn't, so on PostgreSQL Lucius's queries run as a **separate database
+login that can't read those tables** — the database itself refuses.
 
-## Set it up
+## There's nothing to set up
 
-1. **Create a restricted role.** Connect to PostgreSQL as an admin and run (replace the database
-   name `onw` and the password):
+The app handles that login for you:
 
-   ```sql
-   CREATE ROLE onw_sql_console LOGIN PASSWORD 'choose-a-long-random-password';
-   GRANT CONNECT ON DATABASE onw TO onw_sql_console;
-   GRANT USAGE ON SCHEMA public TO onw_sql_console;
-   GRANT SELECT ON ALL TABLES IN SCHEMA public TO onw_sql_console;
-   -- credential tables and connector settings: never readable through this role
-   REVOKE ALL ON secret_config, connector_secrets, connectors FROM onw_sql_console;
-   -- optional: also keep your conversations (titles and messages) out of Lucius's queries
-   REVOKE ALL ON sessions, session_messages FROM onw_sql_console;
-   ```
+- **It creates it** the first time it starts on PostgreSQL, named `onw_sql_<your database>`,
+  with a random password it keeps with its other secrets.
+- **It updates it at every start**, right after any database update, so tables added by a new
+  version are readable and credential tables never are. You never run a `GRANT`.
+- **It checks it on every query**: the login must not be able to read a credential table,
+  switch to another database user, or hold powers like superuser. If anything is off, SQL
+  access switches off and **Settings › Developer › SQL access** says why.
 
-2. **Point the app at it** with a second connection address, then restart:
+To check it works, ask Lucius *"Use SQL to count my transactions by year."* He should answer
+with a table.
 
-   ```bash
-   ONW_SQL_CONSOLE_DATABASE_URL=postgresql+psycopg://onw_sql_console:<password>@<host>/onw
-   ```
+## When the app can't do it alone
 
-3. **Check it works:** ask Lucius *"Use SQL to count my transactions by year."* He should answer
-   with a table instead of saying SQL access is disabled.
+Settings › Developer › SQL access shows **Not working on this database** with the reason, and
+a command to copy when an admin can fix it. Once the fix is in, SQL access starts working within
+a minute — no restart needed.
+
+**"…isn't allowed to create the restricted login"** — the database login the app uses lacks the
+`CREATEROLE` permission (some managed databases). A database admin runs the command shown, for
+example:
+
+```sql
+ALTER ROLE "onw" CREATEROLE;
+```
+
+On PostgreSQL 15 and older, Settings suggests a different command instead: there, that
+permission lets a login grant itself almost anything, so an admin creates the restricted login
+directly and you point the app at it (below).
+
+**"…the database refused a sign-in as onw_sql_…"** — the server doesn't accept password
+sign-ins for new logins (`pg_hba.conf`). Allow it, or use your own login (below).
+
+## Using a login you made yourself
+
+If your database rules require it, create a login and point the app at it, then restart:
+
+```bash
+ONW_SQL_CONSOLE_DATABASE_URL=postgresql+psycopg://<login>:<password>@<host>/<database>
+```
+
+The app keeps that login's table permissions up to date at every start, exactly as it does
+for its own — so a table you revoke from it by hand is readable again after the next start.
+It refuses the app's own login (it must be a different one), a login that starts as another
+role, one with powers like superuser or creating databases, and one that's a member of
+another role.
 
 ## Limits
 
 Every query runs as a single read-only statement, inside a read-only transaction, with a
 10-second time limit. Results are capped at 200 rows by default (Lucius can ask for up to 1,000).
-
-## After an upgrade
-
-`GRANT SELECT ON ALL TABLES` only covers tables that exist when you run it. If a new version adds
-tables, re-run the `GRANT SELECT …` line so Lucius can read them — and if release notes mention a
-new credential table, add it to the `REVOKE` line. The authoritative list of tables the role must
-not read is `DENIED_TABLES` in `backend/db/sql_console.py`.
+Your conversations (`sessions`, `session_messages`) are readable, so Lucius can find an earlier
+chat; a public demo blocks them.
 
 ## Troubleshooting
-
-**Lucius says "SQL access is disabled on Postgres: it needs a dedicated read-only database
-role."** — `ONW_SQL_CONSOLE_DATABASE_URL` isn't set, or the app wasn't restarted after setting it.
 
 **"Query exceeded the 10s limit"** — the query was too broad; ask Lucius to narrow it (a date
 range, one account).
 
-**Permission denied on a table** — a table was added after you ran the `GRANT`; re-run it.
+**Lucius says SQL access is unavailable** — open Settings › Developer › SQL access for the
+reason, and see [When the app can't do it alone](#when-the-app-cant-do-it-alone).
 
 ## Related pages
 

@@ -8,6 +8,7 @@
 //  - a REFUSED query shows its reason (the owner needs to see attempts, not just successes)
 //  - loading / empty / error states — the empty state's copy changes with the switch
 //  - relativeTime's boundaries
+//  - on Postgres, an unavailable SQL login shows its reason and the one command that fixes it
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react'
@@ -48,7 +49,7 @@ function jsonOnce(body: unknown, ok = true, status = 200) {
 }
 
 /** Route each path to its fixture, so ordering between the two hooks never matters. */
-function routeFetch(config: { enabled: boolean }, queries: unknown[]) {
+function routeFetch(config: Record<string, unknown>, queries: unknown[]) {
   mockAuthFetch.mockImplementation((path: string, init?: RequestInit) => {
     if (path.startsWith('/api/config/sql-query')) {
       if (init?.method === 'PUT') {
@@ -83,6 +84,30 @@ describe('SqlAccessPanel', () => {
     render(<SqlAccessPanel toast={toast} />)
     const toggle = await screen.findByRole('switch', { name: 'Direct SQL reads' })
     expect(toggle.getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('says why SQL is not working and offers the one command that fixes it', async () => {
+    routeFetch(
+      {
+        enabled: true,
+        available: false,
+        reason: "the app's database login (onw_app) isn't allowed to create the restricted login.",
+        fix: 'ALTER ROLE "onw_app" CREATEROLE;',
+      },
+      [],
+    )
+    render(<SqlAccessPanel toast={toast} />)
+    expect(await screen.findByText('Not working on this database')).toBeTruthy()
+    expect(screen.getByText(/isn't allowed to create the restricted login/)).toBeTruthy()
+    expect(screen.getByText('ALTER ROLE "onw_app" CREATEROLE;')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy' })).toBeTruthy()
+  })
+
+  it('shows no warning when SQL is available', async () => {
+    routeFetch({ enabled: true, available: true, reason: '', fix: '' }, [])
+    render(<SqlAccessPanel toast={toast} />)
+    await screen.findByRole('switch', { name: 'Direct SQL reads' })
+    expect(screen.queryByText('Not working on this database')).toBeNull()
   })
 
   it('PUTs the new value when flipped off', async () => {

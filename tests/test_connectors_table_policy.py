@@ -87,10 +87,9 @@ def test_the_schema_tool_hides_both_connector_tables(store, table):
         sql_introspect.describe_table(table)
 
 
-def test_the_postgres_revoke_list_names_both_connector_tables():
+def test_both_connector_tables_are_denied_and_so_revoked_on_postgres():
+    # The Postgres console login's REVOKEs are synced from this set (db/sql_console_role.py).
     assert {"connectors", "connector_secrets"} <= sql_console.DENIED_TABLES
-    doc = Path(__file__).resolve().parents[1] / "docs/product/operations/sql-console-postgres.md"
-    assert "connector_secrets, connectors FROM onw_sql_console" in doc.read_text()
 
 
 @pytest.mark.parametrize(
