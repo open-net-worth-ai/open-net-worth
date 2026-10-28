@@ -99,8 +99,11 @@ function assistantMessage(result: { current: { messages: { role: string }[] } })
         streaming?: boolean
         usage?: { cost_usd?: number; output_tokens?: number }
         error?: string
-        blocks?: { type: string; change?: { status?: string; refused?: boolean } }[]
-        proposedChanges?: { status?: string; refused?: boolean }[]
+        blocks?: {
+          type: string
+          change?: { status?: string; refused?: boolean; undelivered?: boolean }
+        }[]
+        proposedChanges?: { status?: string; refused?: boolean; undelivered?: boolean }[]
         text?: string
       })
     | undefined
@@ -236,6 +239,56 @@ describe('useChat: a turn paused on a permission card', () => {
     expect(card?.change?.refused).toBe(true)
     expect(assistant.proposedChanges?.[0]?.status).toBeUndefined()
     expect(assistant.proposedChanges?.[0]?.refused).toBe(true)
+  })
+
+  it.each([
+    [
+      'the server is unreachable',
+      () => Promise.reject(new TypeError('Failed to fetch')),
+      "Couldn't reach the server",
+    ],
+    [
+      'the server answers non-2xx',
+      () => Promise.resolve(new Response('', { status: 502 })),
+      'HTTP 502',
+    ],
+  ])('keeps the card answerable when %s', async (_label, failResolve, expected) => {
+    // REGRESSION (2026-10-29): the approve tap landed while the backend was restarting. The
+    // decision never reached the server, so the staged call was still pending there — yet the
+    // card was marked `refused`, which renders the terminal "Not run — can't be reused." row,
+    // right under an error saying "Try again". Nothing was left to tap.
+    mockRoutes(PAUSED_TURN)
+    const { result } = renderHook(() => useChat('conv-undelivered', vi.fn()))
+    await act(async () => {})
+    await act(async () => {
+      await result.current.sendMessage('delete the duplicate')
+    })
+    await waitFor(() => expect(assistantMessage(result)?.awaitingApproval).toBe(true))
+
+    mockAuthFetch.mockImplementation(failResolve)
+    await act(async () => {
+      await result.current.resolvePendingToolUse('toolu_1', 'approve')
+    })
+
+    const assistant = assistantMessage(result)!
+    expect(assistant.error).toContain(expected)
+    expect(assistant.awaitingApproval).toBe(true)
+    const card = assistant.blocks?.find((b) => b.type === 'change')
+    expect(card?.change?.status).toBeUndefined()
+    expect(card?.change?.refused).toBeFalsy()
+    expect(card?.change?.undelivered).toBe(true)
+    expect(assistant.proposedChanges?.[0]?.refused).toBeFalsy()
+    expect(assistant.proposedChanges?.[0]?.undelivered).toBe(true)
+
+    // The retry tap goes out and clears the flag.
+    mockRoutes(['{"type":"turn_done","usage":{}}'])
+    await act(async () => {
+      await result.current.resolvePendingToolUse('toolu_1', 'approve')
+    })
+    await waitFor(() =>
+      expect(assistantMessage(result)?.proposedChanges?.[0]?.status).toBe('confirmed'),
+    )
+    expect(assistantMessage(result)?.proposedChanges?.[0]?.undelivered).toBeUndefined()
   })
 
   it('leaves card state alone for an error that names no tool_use_id', async () => {
