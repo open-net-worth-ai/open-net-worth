@@ -26,7 +26,11 @@ CONTEXT_NOT_PROOF = (
 RECENT_HEAD = (
     "Recent — decided or in flight over the last two weeks. When what you are handling matches "
     "one (the payment it expects arrives, its date comes), do what it says, over any past "
-    "pattern; once done, close it with close_recent_items:"
+    "pattern or a payee's default; if the amount is a little off what it expects (rounded up, a "
+    "small over- or under-payment), still book its split and put the difference on a line of "
+    "its own, saying so; if it is far off (a part payment), book only what came the usual way and "
+    "leave the entry open. Once done, close it, and any other entry the same action finished, with "
+    "close_recent_items:"
 )
 
 HANDLE_HEX_CHARS = 6

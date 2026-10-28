@@ -607,3 +607,30 @@ fell back on past transactions. One long-term layer was doing two jobs.
   (`stale`); between passes a pass may add up to three. Each lapses after 14 days unless it names
   a date.
 - Export writes `recent.md` (was `open-items.md`).
+
+## Amendment 11 (2026-10-29) — Recent entries hold up against a real payment
+
+Replaying the Capture that motivated amendment 10 against the owner's book, with the new design,
+still booked the wrong split. Each fix is a general rule, not a case for that book, and each is
+checked by synthetic benchmark cases that pull both ways (E25–E27, U04–U06):
+
+- **A typo does not drop an entry.** The guard matched the quote exactly; the model tidies a
+  person's typos when it copies them, so the one correct entry of the chat was dropped. A quote
+  now grounds when ~85% of it matches what the person typed, and the item shares a word with that
+  message allowing a typo in words of five letters or more (`memory_open_items._quoted_in`,
+  `_alike`). A different sentence of the same shape still grounds nothing.
+- **A vague entry is upgraded, never removed.** An existing to-do ("collect his share") made the
+  extractor mark it mentioned and add nothing, or remove it as "settled". The prompt now says an
+  entry without what it takes to act on is updated in place with what the chat decided, and one
+  is removed only when the chat shows it done or no longer wanted.
+- **Every part names its category**, as the person put it; where they named none for a share paid
+  back for an earlier charge, the category that charge was booked under (a book's own habit wins
+  whenever it was said).
+- **Close enough is close enough; far off is not.** A small difference (rounded up, a small
+  over- or under-payment) still books the agreed split with the difference on its own line; a
+  part payment far short books what came and leaves the entry open. A run closes the entry and
+  any other entry the same action finished. The Capture prompt says the same in its own words.
+- **A tool call one closing brace short is closed and read** (`cli_tool_protocol._loads_call`).
+  On the Claude CLI transport every `add_transactions` in the replay ended one `}` short, so
+  nothing was booked; only a body whose strings are all closed and whose brackets nest is
+  completed, anything broken earlier stays malformed.

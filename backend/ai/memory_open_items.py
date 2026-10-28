@@ -6,11 +6,12 @@ A Recent entry the extractor writes (a new one, or an update that moves a fact i
 carry a ``quote``: words from one of the person's own messages in this conversation, where they
 agree, decide or ask. The quote is matched against what the person typed — never Lucius's turns,
 an Automation run's own prompt, an attachment, a harness note or other context the app adds
-(``core.chat_context_markers.is_not_said``) — ignoring case and spacing, and the message it comes
-from must share a content word with the item, so a stray "hmm, maybe" grounds nothing. At most
+(``core.chat_context_markers.is_not_said``) — ignoring case, spacing and the typos a model tidies
+when it copies them, and the message it comes from must share a content word with the item, so a
+stray "hmm, maybe" grounds nothing. At most
 ``RECENT_MAX_NEW_PER_PASS`` new entries are kept per extraction pass. A run that does what an entry
 says closes it (``close_recent``); at most ``RECENT_MAX_LIVE`` stay live (``overflow``). ADR
-``2026-10-25-memory-keeps-only-what-has-no-other-home`` (amendments 9 and 10).
+``2026-10-25-memory-keeps-only-what-has-no-other-home`` (amendments 9, 10 and 11).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+from difflib import SequenceMatcher
 
 from backend.ai import memory_structure as ms
 from backend.core.chat_context_markers import is_not_said, strip_user_msg_fence_tokens
@@ -25,6 +27,9 @@ from backend.core.chat_context_markers import is_not_said, strip_user_msg_fence_
 logger = logging.getLogger(__name__)
 
 QUOTE_MIN_CHARS = 8
+# How closely a model's copy of the person's words must match what they typed — typos allowed.
+QUOTE_ALIKE = 0.85
+WORD_ALIKE = 0.8
 MAX_NEW_PER_CONVERSATION = ms.RECENT_MAX_NEW_PER_PASS
 
 _QUOTES = str.maketrans({"‘": "'", "’": "'", "“": '"', "”": '"'})
@@ -65,15 +70,37 @@ def _content_words(text: str) -> set[str]:
     return {w for w in _CONTENT_WORD.findall(_norm(text)) if w not in _STOPWORDS}
 
 
+def _alike(a: str, b: str) -> bool:
+    """The same word, allowing a typo in a longer one ("utliilities" for "utilities")."""
+    if a == b:
+        return True
+    return min(len(a), len(b)) >= 5 and SequenceMatcher(None, a, b).ratio() >= WORD_ALIKE
+
+
+def _quoted_in(quote: str, line: str) -> bool:
+    """The quote appears in the line, allowing the typos a model tidies when it copies one
+    (live: it quoted "utlilities" for the person's "utliilities" and the exact check dropped a
+    correct entry)."""
+    if quote in line:
+        return True
+    matched = SequenceMatcher(None, quote, line, autojunk=False).get_matching_blocks()
+    return sum(block.size for block in matched) >= QUOTE_ALIKE * len(quote)
+
+
 def _grounded(item: dict, said: str) -> bool:
     """The quote is in what the person typed, and the message it comes from shares a content
     word with the item — the message, not the quote alone, since "can we come back to that?"
-    points at what the same message just said."""
+    points at what the same message just said. Both allow a typo."""
     quote = _norm(item.get("quote") or "")
     if len(quote) < QUOTE_MIN_CHARS:
         return False
     item_words = _content_words(str(item.get("content") or ""))
-    return any(quote in line and _content_words(line) & item_words for line in said.split("\n"))
+    for line in said.split("\n"):
+        if not _quoted_in(quote, line):
+            continue
+        if any(_alike(a, b) for a in _content_words(line) for b in item_words):
+            return True
+    return False
 
 
 def guard(ops: dict, said: str, current: dict[str, dict]) -> dict:

@@ -95,14 +95,21 @@ instructions already say:
 RECENT (section open_items) carries what this conversation decided or set in motion that matters
 over the next two weeks, so every later run of Lucius — a chat, a Capture of a bank notification,
 an automation — acts as the same person who was there: an agreement about a payment someone owes
-and exactly how to book it when it arrives, a decision whose result is still to come, something
-the person will do or asked to be reminded of. Write each one ready to act on, with the figures
-it needs ("When Priya's PayNow for November arrives (S$540.00): book Rent S$500, Utilities S$20,
-Phone & Internet S$20"); update an entry rather than add a second one about the same thing, and
-remove one this conversation settled. Each MUST carry "quote": the person's own words from one of
-the USER messages above, copied exactly, in which they agree, decide or ask — Lucius offering,
-proposing or waiting for an answer is never a Recent entry. At most {ms.RECENT_MAX_NEW_PER_PASS}
-new Recent entries. Only Recent entries take an expires_at (the day after it no longer matters).
+and exactly how to book it when it arrives, a decision whose result is still to come, something the
+person will do or asked to be reminded of. Write each one ready to act on, with the figures it
+needs — the category and amount of every part, as the person put it (where they named no category
+for a share paid back for an earlier charge, the category that charge was booked under), never
+"against the charges" ("When Priya's PayNow for November arrives (S$540.00): book Rent S$500,
+Utilities S$20, Phone & Internet S$20"); update an entry rather than add a second one about the
+same thing, and remove one only when this conversation shows it is done or no longer wanted — one
+whose figures were decided or changed here is updated, never removed. An existing Recent entry that
+is about the same thing but is not ready to act on — a to-do with no amount, no split, no way to
+book it, or figures this conversation changed — is not "already remembered": UPDATE it (reuse its
+id) with everything the conversation decided. Each MUST carry "quote": the person's own words from
+one of the USER messages above, copied exactly, in which they agree, decide or ask — Lucius
+offering, proposing or waiting for an answer is never a Recent entry. At most
+{ms.RECENT_MAX_NEW_PER_PASS} new Recent entries. Only Recent entries take an expires_at (the day
+after it no longer matters).
 
 Each fact is at most {ms.FACT_MAX_CHARS} characters. For each fact choose:
   - section: one of {", ".join(ms.SECTIONS)} (open_items is Recent: it lapses after
