@@ -7288,7 +7288,9 @@ body.hide-amounts .money * {
      with many segments (e.g. the 5-tab Investments sub-nav) is narrower than its
      content. A 2–3 segment control still fits one row, so this is a no-op there. */
     flex-wrap: wrap;
-    background: var(--bg);
+    /* A sunken track the selected segment sits raised on: --bg/--surface/--surface2 are the
+       same white in the light theme, so a --bg track left the selection as a 1px outline. */
+    background: var(--bg-2);
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
     padding: 3px;
@@ -7301,8 +7303,9 @@ body.hide-amounts .money * {
   }
   .ui-segmented__seg {
     background: none;
-    border: none;
-    color: var(--faint);
+    /* Transparent, not none: the active segment's border then never shifts its neighbours. */
+    border: 1px solid transparent;
+    color: var(--muted);
     font-size: var(--text-sm);
     font-weight: 500;
     padding: var(--space-2) var(--space-6);
@@ -7314,17 +7317,21 @@ body.hide-amounts .money * {
   }
   @media (hover: hover) {
     .ui-segmented__seg:hover:not(.ui-segmented__seg--active) {
-      color: var(--muted);
+      color: var(--ink);
     }
   }
   .ui-segmented__seg--active {
     background: var(--surface2);
     color: var(--ink);
-    /* Selection must not rely on background contrast alone — --surface2 equals --bg in at
-     least one theme, making the "active" pill invisible (white-on-white). A border + shadow
-     make the selected segment legible regardless of how close those two tokens are. */
-    border: 1px solid var(--line);
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+    border-color: var(--line-strong);
+    box-shadow:
+      0 1px 2px rgb(0 0 0 / 0.08),
+      0 1px 1px rgb(0 0 0 / 0.04);
+  }
+  /* Dark: --surface2 is darker than the --bg-2 track, which would read as pressed in, not
+     selected — lift the active segment above the track instead. */
+  :root:not([data-theme='light']):not([data-theme='warm']) .ui-segmented__seg--active {
+    background: color-mix(in srgb, var(--ink) 9%, var(--bg-2));
   }
   .ui-segmented--primary .ui-segmented__seg--active {
     border-color: var(--line-strong);
