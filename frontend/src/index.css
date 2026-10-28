@@ -12840,13 +12840,19 @@ body.hide-amounts .money * {
     font-weight: 500;
     color: var(--faint);
   }
+  /* Columns sized by label, then stretched: equal thirds clip "Speculative" in the narrow rail. */
   .asd-thesis-form .ui-segmented {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, auto);
     align-self: stretch;
   }
   .asd-thesis-form .ui-segmented__seg {
     padding-inline: var(--space-2);
+  }
+  .asd-thesis-ccy {
+    font-size: var(--text-xs);
+    color: var(--muted);
+    margin-bottom: calc(-1 * var(--space-3));
   }
   .asd-thesis-grid {
     display: grid;

@@ -12,7 +12,7 @@ import {
 } from '../ui'
 import { saveInvestmentThesis } from '../../api/investmentTheses'
 import type { InvestmentThesis, InvestmentThesisFields } from '../../types/assetDetail'
-import { fPrice } from '../../utils/format'
+import { fPrice, getCurrencySymbol } from '../../utils/format'
 
 // "Your Thesis" — why you own (or would buy) this instrument and the prices that matter to you.
 // One thesis per instrument (services/investment_theses); held vs watched only changes what is shown:
@@ -55,6 +55,8 @@ interface Props {
   price: number | null
   /** Max fraction digits for prices (undefined = the formatter's own, for crypto). */
   priceMaxFrac?: number
+  /** The instrument's quote currency — what the page price and every level are in. */
+  currency?: string
   onSaved: () => void
 }
 
@@ -73,10 +75,11 @@ const num = (s: string): number | null => {
   return Number.isFinite(v) && v > 0 ? v : null
 }
 
-function draftOf(thesis: InvestmentThesis | null): Draft {
+/** A holding with no role yet opens on Core, so the control never shows an empty choice. */
+function draftOf(thesis: InvestmentThesis | null, held: boolean): Draft {
   const str = (v: number | null | undefined) => (v == null ? '' : String(v))
   return {
-    role: thesis?.role ?? null,
+    role: thesis?.role ?? (held ? 'core' : null),
     reason: thesis?.reason ?? '',
     breaks_if: thesis?.breaks_if ?? '',
     prices: {
@@ -232,6 +235,7 @@ export function YourThesisCard({
   held,
   price,
   priceMaxFrac,
+  currency,
   onSaved,
 }: Props) {
   // The saved thesis shows at once; the refetch's copy replaces it as soon as `thesis` changes.
@@ -241,15 +245,16 @@ export function YourThesisCard({
   } | null>(null)
   const current = justSaved && justSaved.over === thesis ? justSaved.thesis : thesis
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState<Draft>(() => draftOf(thesis))
+  const [draft, setDraft] = useState<Draft>(() => draftOf(thesis, held))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fmt = (v: number) => fPrice(v, priceMaxFrac)
+  const sym = currency ? getCurrencySymbol(currency) : ''
+  const fmt = (v: number) => `${sym}${fPrice(v, priceMaxFrac)}`
   const localError = editing ? draftError(draft) : null
 
   function startEdit() {
-    setDraft(draftOf(current))
+    setDraft(draftOf(current, held))
     setError(null)
     setEditing(true)
   }
@@ -316,7 +321,9 @@ export function YourThesisCard({
               maxLength={280}
               value={draft.reason}
               placeholder={
-                held ? 'What has to keep being true?' : 'What would make it worth owning?'
+                held
+                  ? 'e.g. Cloud revenue keeps growing 30%+ a year while margins hold.'
+                  : 'e.g. Leader in AI chips, but too expensive today.'
               }
               onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
             />
@@ -328,11 +335,12 @@ export function YourThesisCard({
                 rows={3}
                 maxLength={280}
                 value={draft.breaks_if}
-                placeholder="What would prove you wrong?"
+                placeholder="e.g. Cloud growth slows two quarters in a row, or the CEO leaves."
                 onChange={(e) => setDraft({ ...draft, breaks_if: e.target.value })}
               />
             </FormField>
           )}
+          {currency && <p className="asd-thesis-ccy">Prices in {currency.toUpperCase()}</p>}
           <div className="asd-thesis-grid">
             {(held
               ? (['stop_below', 'trim_above', 'buy_below', 'buy_above', 'fair_value'] as PriceKey[])

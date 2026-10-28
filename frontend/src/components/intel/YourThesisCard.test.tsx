@@ -81,6 +81,24 @@ describe('YourThesisCard', () => {
     expect(getByText('Add')).toBeTruthy()
   })
 
+  it('says which currency the levels are in', () => {
+    const { getByText } = mount({ currency: 'EUR' })
+    expect(getByText('€120.00')).toBeTruthy()
+    fireEvent.click(getByText('Edit'))
+    expect(getByText('Prices in EUR')).toBeTruthy()
+  })
+
+  it('opens a new holding’s thesis on Core instead of an empty role', async () => {
+    saveInvestmentThesis.mockResolvedValue({ ...THESIS, role: 'core', reason: 'Why not.' })
+    const { getByText, getByLabelText, getByRole, onSaved } = mount({ thesis: null })
+    fireEvent.click(getByText('Add'))
+    expect(getByRole('tab', { name: 'Core' }).getAttribute('aria-selected')).toBe('true')
+    fireEvent.change(getByLabelText('Why you own it'), { target: { value: 'Why not.' } })
+    fireEvent.click(getByText('Save thesis'))
+    await waitFor(() => expect(onSaved).toHaveBeenCalled())
+    expect(saveInvestmentThesis.mock.calls[0][1].role).toBe('core')
+  })
+
   it('saves the edited thesis and keeps a watched card’s hidden fields', async () => {
     saveInvestmentThesis.mockResolvedValue({ ...THESIS, reason: 'Cheaper now.' })
     const { getByText, getByLabelText, onSaved } = mount({ held: false })

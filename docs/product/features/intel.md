@@ -194,6 +194,10 @@ thesis**.
   would prove you wrong), **Stop below** and **Trim above**.
 - For a stock you only **watch**, it's your reason, buy zone and fair value.
 
+Prices are in the stock's own quote currency — the one its page shows, named above the price
+fields (crypto is quoted in USD). A new thesis for a stock you own starts as **Core**; change it
+if it's a smaller bet.
+
 A bar shows today's price against your levels, and each level lists how far away it is. The thesis
 belongs to the stock, not to an account or a watchlist: it's shared by every account that holds
 it, and it stays when you sell or stop watching.

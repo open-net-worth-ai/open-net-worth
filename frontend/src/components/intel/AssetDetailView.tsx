@@ -510,6 +510,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
       held={!!position?.held}
       price={effPrice ?? null}
       priceMaxFrac={priceMaxFrac}
+      currency={price.currency}
       onSaved={refetch}
     />
   )
