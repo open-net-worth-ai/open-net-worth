@@ -94,3 +94,26 @@ def test_a_capture_sessions_user_turn_is_skipped_but_its_reply_is_found(db_isola
 
     assert _find("pelican") == []
     assert [h["session_id"] for h in _find("flat white")] == ["capture-1a2b3c4d"]
+
+
+def test_terms_match_on_their_own_and_titles_count_on_both_dialects(db_isolated):
+    _chat("chat-deposit", {"role": "user", "content": "Target 85,000 for the deposit"})
+    SessionStore().upsert_meta("chat-deposit", {"title": "Bonus plan"})
+    _chat("chat-other", {"role": "user", "content": "deposit only"})
+
+    hits = _find(["deposit", "TARGET", "bonus"])
+
+    assert [h["session_id"] for h in hits] == ["chat-deposit"]
+    assert hits[0]["matched"] == ["deposit", "target", "bonus"]
+    assert "Target 85,000" in hits[0]["excerpt"]
+
+
+def test_reading_a_conversation_pages_its_said_messages_on_both_dialects(book):
+    from backend.db.session_search import read_said_messages
+
+    page = read_said_messages(get_engine(), "chat-b", offset=1, limit=1, max_chars=5)
+
+    assert page["total"] == 3
+    assert [(m["role"], m["blocks"]) for m in page["messages"]] == [("user", ["Plan a"])]
+    only_said = read_said_messages(get_engine(), "chat-c", offset=0, limit=10, max_chars=100)
+    assert [m["blocks"] for m in only_said["messages"]] == [["the lemur question"]]

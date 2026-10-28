@@ -342,3 +342,175 @@ def test_a_captures_prompt_template_is_not_searchable_but_its_reply_is():
 
     assert _search(query="pelican")["results"] == []
     assert _search(query="flat white")["results"][0]["session_id"] == "capture-1a2b3c4d"
+
+
+def test_each_word_is_matched_on_its_own_across_the_conversation():
+    _session(
+        "chat-deposit",
+        "Saving for a flat",
+        [
+            _msg("user", "Target is 85,000 SGD for the deposit by March 2028."),
+            _msg("assistant", [{"type": "text", "text": "Front-load the December bonus."}]),
+        ],
+    )
+    _session("chat-other", "Groceries", [_msg("user", "the deposit on my bottles")])
+
+    out = _search(query="deposit target bonus")
+
+    assert [r["session_id"] for r in out["results"]] == ["chat-deposit"]
+    assert out["results"][0]["matched"] == ["deposit", "target", "bonus"]
+    assert out["searched_for"] == ["deposit", "target", "bonus"]
+    assert "note" not in out
+
+
+def test_a_word_only_in_the_title_still_counts():
+    _session("chat-japan", "Japan trip budget", [_msg("user", "Ten days in Japan in April")])
+
+    out = _search(query="Japan trip")
+
+    assert [r["session_id"] for r in out["results"]] == ["chat-japan"]
+    assert "Japan" in out["results"][0]["snippet"]
+
+
+def test_a_title_only_match_comes_back_without_a_snippet():
+    _session("chat-car", "Car insurance renewal", [_msg("user", "It went up again this year")])
+
+    hit = _search(query="insurance")["results"][0]
+
+    assert hit["session_id"] == "chat-car"
+    assert "snippet" not in hit
+
+
+def test_filler_words_are_dropped_and_a_quoted_phrase_is_kept_whole():
+    _session("chat-a", "A", [_msg("user", "the harbour view flat")])
+    _session("chat-b", "B", [_msg("user", "view of the harbour")])
+
+    assert _search(query="what did we say about the harbour?")["searched_for"] == ["harbour"]
+    phrase = _search(query='"harbour view"')
+    assert [r["session_id"] for r in phrase["results"]] == ["chat-a"]
+
+
+def test_when_no_conversation_holds_every_word_the_closest_ones_are_marked_partial():
+    _session("chat-two", "Two", [_msg("user", "kestrel and osprey sightings")])
+    _session("chat-one", "One", [_msg("user", "a kestrel only")])
+
+    out = _search(query="kestrel osprey heron")
+
+    assert [r["session_id"] for r in out["results"]] == ["chat-two"]
+    assert out["results"][0]["matched"] == ["kestrel", "osprey"]
+    assert "every word" in out["note"]
+
+
+def _read(**inp) -> dict:
+    from backend.ai.tools import execute_tool
+
+    text, proposed = asyncio.run(execute_tool("read_past_conversation", inp))
+    assert proposed is None
+    return json.loads(text)
+
+
+def test_read_returns_what_was_said_in_order_and_nothing_else():
+    _session(
+        "chat-read",
+        "Car insurance renewal",
+        [
+            _msg("user", "My renewal came in at 1,480, up from 1,210."),
+            _msg(
+                "assistant",
+                [{"type": "tool_use", "id": "t1", "name": "x", "input": {"q": "renewal"}}],
+            ),
+            _msg("user", [{"type": "tool_result", "tool_use_id": "t1", "content": "rows"}]),
+            _msg(
+                "assistant",
+                [
+                    {"type": "text", "text": "Get two quotes before 14 November."},
+                    {"type": "text", "text": "Staying keeps the no-claims discount simple."},
+                ],
+            ),
+            _msg(
+                "user",
+                [
+                    {"type": "text", "text": "«user_msg:ab12cd»\nthanks\n«/user_msg:ab12cd»"},
+                    {
+                        "type": "text",
+                        "text": "<turn_context>\nPositions: zebrafin\n</turn_context>",
+                    },
+                ],
+            ),
+        ],
+    )
+
+    out = _read(session_id="chat-read")
+
+    assert out["ok"] is True
+    assert out["title"] == "Car insurance renewal"
+    assert out["total"] == 3
+    assert [(m["role"], m["text"]) for m in out["messages"]] == [
+        ("user", "My renewal came in at 1,480, up from 1,210."),
+        (
+            "assistant",
+            "Get two quotes before 14 November.\n\nStaying keeps the no-claims discount simple.",
+        ),
+        ("user", "thanks"),
+    ]
+    assert all(m["when"] for m in out["messages"])
+    assert "next_offset" not in out
+
+
+def test_read_pages_a_long_conversation_and_cuts_a_huge_message():
+    from backend.ai.tools.conversations import READ_MESSAGE_MAX_CHARS
+
+    msgs = [_msg("user", f"note number {i}") for i in range(25)]
+    msgs.append(_msg("assistant", "x" * (READ_MESSAGE_MAX_CHARS + 500)))
+    _session("chat-long", "Long", msgs)
+
+    first = _read(session_id="chat-long")
+    last = _read(session_id="chat-long", offset=first["next_offset"], limit=50)
+
+    assert first["total"] == 26 and len(first["messages"]) == 20
+    assert first["next_offset"] == 20
+    assert [m["text"] for m in last["messages"][:2]] == ["note number 20", "note number 21"]
+    huge = last["messages"][-1]
+    assert huge["truncated"] is True
+    assert len(huge["text"]) == READ_MESSAGE_MAX_CHARS + 1
+    assert "next_offset" not in last
+
+
+def test_read_refuses_unknown_background_and_setting_off():
+    _session("scheduled-abc12345", "Background", [_msg("assistant", "quokka digest")])
+    _session("chat-ok", "Fine", [_msg("user", "hello")])
+
+    assert _read(session_id="nope")["ok"] is False
+    assert _read(session_id="scheduled-abc12345")["ok"] is False
+    assert _read(session_id="")["ok"] is False
+    MemorySettingsStore().set_search_chats(False)
+    off = _read(session_id="chat-ok")
+    assert off["ok"] is False and "Search and reference chats" in off["message"]
+
+
+def test_read_never_returns_private_attachment_text():
+    from backend.services import vault_changes
+
+    item = vault_changes.add_file("n.txt", "text/plain", b"secret", private=True)
+    att_id = item["source_id"]
+    _session(
+        "chat-att",
+        "Upload",
+        [
+            _msg("user", f"see ref_id: {att_id} please"),
+            _msg("assistant", "Read it."),
+        ],
+    )
+
+    out = _read(session_id="chat-att")
+
+    assert [m["text"] for m in out["messages"]] == ["Read it."]
+
+
+def test_read_is_a_read_outside_the_default_offer_and_off_in_the_demo():
+    from backend.ai.tools._groups import CORE_TOOL_NAMES
+    from backend.ai.tools.registry import _DEMO_REFUSED_TOOLS, mutated_domains
+
+    assert "read_past_conversation" not in CORE_TOOL_NAMES
+    assert mutated_domains("read_past_conversation") == ()
+    assert "read_past_conversation" in _DEMO_REFUSED_TOOLS

@@ -8786,7 +8786,7 @@
     "additionalProperties": false,
     "properties": {
       "sql": {
-        "description": "ONE read-only SELECT (or WITH … SELECT) statement. Writes are refused by the database itself, not just by validation.",
+        "description": "ONE read-only SELECT (or WITH … SELECT) statement.",
         "type": "string"
       },
       "limit": {
@@ -10404,7 +10404,7 @@
     "additionalProperties": false,
     "properties": {
       "query": {
-        "description": "Words to look for in earlier conversations, e.g. 'house deposit' or a name.",
+        "description": "Words to look for in earlier conversations, e.g. 'house deposit' or a name. Each word is matched on its own; put a phrase in \"double quotes\" to match it as written.",
         "type": "string"
       },
       "limit": {
@@ -10415,6 +10415,29 @@
     },
     "required": [
       "query"
+    ],
+    "type": "object"
+  },
+  "read_past_conversation": {
+    "additionalProperties": false,
+    "properties": {
+      "session_id": {
+        "description": "The conversation's id, as search_past_conversations returns it.",
+        "type": "string"
+      },
+      "offset": {
+        "type": "integer",
+        "default": 0,
+        "description": "Messages to skip from the start, to page through a long conversation."
+      },
+      "limit": {
+        "type": "integer",
+        "default": 20,
+        "description": "Max messages to return (default 20, max 50)."
+      }
+    },
+    "required": [
+      "session_id"
     ],
     "type": "object"
   }
