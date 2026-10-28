@@ -13,39 +13,40 @@ import {
 import { saveInvestmentThesis } from '../../api/investmentTheses'
 import type { InvestmentThesis, InvestmentThesisFields } from '../../types/assetDetail'
 import { fPrice, getCurrencySymbol } from '../../utils/format'
+import {
+  BREAKS_IF_EXAMPLE,
+  BREAKS_IF_LABEL,
+  PRICE_LABELS,
+  priceLabel,
+  priceText,
+  reasonExample,
+  reasonLabel,
+  type PriceKey,
+} from './thesisFields'
 
 // "Your Thesis" — why you own (or would buy) this instrument and the prices that matter to you.
 // One thesis per instrument (services/investment_theses); held vs watched only changes what is shown:
 // a holding adds its role, breaks-if, stop and trim.
 
 type Role = NonNullable<InvestmentThesis['role']>
-type PriceKey = 'stop_below' | 'buy_below' | 'buy_above' | 'fair_value' | 'trim_above'
 
 const ROLES: { value: Role; label: string; help: string }[] = [
   {
     value: 'core',
     label: 'Core',
-    help: 'Long-term base of your portfolio. Normal swings stay quiet.',
+    help: 'The long-term base of your portfolio.',
   },
   {
     value: 'satellite',
     label: 'Satellite',
-    help: 'An active bet around your core. Size and drawdown are watched closely.',
+    help: 'An active bet around your core holdings.',
   },
   {
     value: 'speculative',
     label: 'Speculative',
-    help: 'A small, high-risk bet. Flagged early if it grows.',
+    help: 'A small, high-risk bet you can afford to lose.',
   },
 ]
-
-const PRICE_LABELS: Record<PriceKey, string> = {
-  stop_below: 'Stop below',
-  trim_above: 'Trim above',
-  buy_below: 'Buy at or under',
-  buy_above: '…but not under',
-  fair_value: 'Fair value',
-}
 
 interface Props {
   instrumentId: string
@@ -65,13 +66,6 @@ interface Draft {
   reason: string
   breaks_if: string
   prices: Record<PriceKey, string>
-}
-
-/** What a price box keeps of a keystroke or paste: digits, commas (thousands, dropped by `num`)
- *  and one decimal point — letters never reach the field. */
-const priceText = (s: string): string => {
-  const [whole, ...rest] = s.replace(/[^\d.,]/g, '').split('.')
-  return rest.length ? `${whole}.${rest.join('')}` : whole
 }
 
 /** A typed price as a number, or null when blank or not a positive number ("12abc" too). */
@@ -321,33 +315,28 @@ export function YourThesisCard({
               />
             </FormField>
           )}
-          <FormField label={held ? 'Why you own it' : 'Why you’d buy it'} htmlFor="thesis-reason">
+          <FormField label={reasonLabel(held)} htmlFor="thesis-reason">
             <TextArea
               id="thesis-reason"
               rows={3}
               maxLength={280}
               value={draft.reason}
-              placeholder={
-                held
-                  ? 'e.g. Cloud revenue keeps growing 30%+ a year while margins hold.'
-                  : 'e.g. Leader in AI chips, but too expensive today.'
-              }
+              placeholder={reasonExample(held)}
               onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
             />
           </FormField>
           {held && (
-            <FormField label="Thesis breaks if" htmlFor="thesis-breaks">
+            <FormField label={BREAKS_IF_LABEL} htmlFor="thesis-breaks">
               <TextArea
                 id="thesis-breaks"
                 rows={3}
                 maxLength={280}
                 value={draft.breaks_if}
-                placeholder="e.g. Cloud growth slows two quarters in a row, or the CEO leaves."
+                placeholder={BREAKS_IF_EXAMPLE}
                 onChange={(e) => setDraft({ ...draft, breaks_if: e.target.value })}
               />
             </FormField>
           )}
-          {currency && <p className="asd-thesis-ccy">Prices in {currency.toUpperCase()}</p>}
           <div className="asd-thesis-grid">
             {(held
               ? (['stop_below', 'trim_above', 'buy_below', 'buy_above', 'fair_value'] as PriceKey[])
@@ -355,7 +344,7 @@ export function YourThesisCard({
             ).map((k) => (
               <FormField
                 key={k}
-                label={PRICE_LABELS[k]}
+                label={priceLabel(k, sym)}
                 htmlFor={`thesis-${k}`}
                 span={held && k === 'fair_value' ? 'full' : 1}
               >
@@ -402,7 +391,7 @@ export function YourThesisCard({
           {current?.reason && <p className="asd-thesis-reason">{current.reason}</p>}
           {held && current?.breaks_if && (
             <div className="asd-thesis-breaks">
-              <p className="asd-thesis-breaks-label">Thesis breaks if</p>
+              <p className="asd-thesis-breaks-label">{BREAKS_IF_LABEL}</p>
               <p className="asd-thesis-reason">{current.breaks_if}</p>
             </div>
           )}

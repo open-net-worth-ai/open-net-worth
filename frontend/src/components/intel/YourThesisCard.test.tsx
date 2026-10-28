@@ -82,10 +82,10 @@ describe('YourThesisCard', () => {
   })
 
   it('says which currency the levels are in', () => {
-    const { getByText } = mount({ currency: 'EUR' })
+    const { getByText, getByLabelText } = mount({ currency: 'EUR' })
     expect(getByText('€120.00')).toBeTruthy()
     fireEvent.click(getByText('Edit'))
-    expect(getByText('Prices in EUR')).toBeTruthy()
+    expect(getByLabelText('Stop below (€)')).toBeTruthy()
   })
 
   it('opens a new holding’s thesis on Core instead of an empty role', async () => {
@@ -96,7 +96,7 @@ describe('YourThesisCard', () => {
     fireEvent.change(getByLabelText('Why you own it'), { target: { value: 'Why not.' } })
     fireEvent.click(getByText('Save thesis'))
     await waitFor(() => expect(onSaved).toHaveBeenCalled())
-    expect(saveInvestmentThesis.mock.calls[0][1].role).toBe('core')
+    expect(saveInvestmentThesis.mock.calls[0]?.[1]?.role).toBe('core')
   })
 
   it('saves the edited thesis and keeps a watched card’s hidden fields', async () => {

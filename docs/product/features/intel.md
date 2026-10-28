@@ -66,7 +66,8 @@ For a story rather than one stock — an IPO, a war, interest rates:
 Open the ticker's page and click **Add** (or **Edit**) on the **Your Thesis** card, or fill in
 **Why you're watching** in its alerts screen — both edit the same thesis:
 
-- **Why you'd buy it** — one line on why you care, e.g. *"AI accelerator share gains keep compounding"*.
+- **Why you'd buy it** (**Why you own it** for a stock you hold) — one line on why you care, e.g.
+  *"Leader in AI chips, but too expensive today"*.
 - **Buy at or under** (and optionally **…but not under**) — your buy zone.
 - **Fair value**.
 
@@ -194,8 +195,8 @@ thesis**.
   would prove you wrong), **Stop below** and **Trim above**.
 - For a stock you only **watch**, it's your reason, buy zone and fair value.
 
-Prices are in the stock's own quote currency — the one its page shows, named above the price
-fields (crypto is quoted in USD). A new thesis for a stock you own starts as **Core**; change it
+Prices are in the stock's own quote currency — the one its page shows, marked in each price
+field's label, e.g. **Fair value (€)** (crypto is quoted in USD). A new thesis for a stock you own starts as **Core**; change it
 if it's a smaller bet.
 
 A bar shows today's price against your levels, and each level lists how far away it is. The thesis

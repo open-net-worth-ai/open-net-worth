@@ -1,9 +1,12 @@
 import { useState } from 'react'
-import { FormField, NumberField, Panel, TextArea } from '../ui'
+import { FormField, Panel, TextArea, TextField } from '../ui'
+import { priceLabel, priceText, reasonExample, reasonLabel } from './thesisFields'
 
 // "Why you're watching" — the thesis, buy zone and fair value the Watching pulse turns into
 // rules ("Entered your buy zone", "12% below your fair value", "Earnings in 3 days — check your
-// thesis") and the explained alert ties its "what it means for you" to. Saved on the watch item.
+// thesis") and the explained alert ties its "what it means for you" to. Saved to the
+// instrument's investment thesis — the same record as the asset page's Your Thesis card, so
+// both share one wording (thesisFields).
 
 export interface WatchIntent {
   thesis?: string
@@ -15,6 +18,8 @@ export interface WatchIntent {
 interface Props {
   sym: string
   ccy: string
+  /** You own it: the reason reads "Why you own it", as on the card. */
+  held?: boolean
   intent: WatchIntent | null
   /** Saves the whole intent ({} clears it); rejects with the server's message. */
   onSave: (next: WatchIntent) => Promise<void>
@@ -26,7 +31,7 @@ const num = (s: string): number | undefined => {
 }
 const str = (v: number | undefined) => (v == null ? '' : String(v))
 
-export function WatchIntentSection({ sym, ccy, intent, onSave }: Props) {
+export function WatchIntentSection({ sym, ccy, held = false, intent, onSave }: Props) {
   const [thesis, setThesis] = useState(intent?.thesis ?? '')
   const [below, setBelow] = useState(str(intent?.buy_below))
   const [above, setAbove] = useState(str(intent?.buy_above))
@@ -69,7 +74,7 @@ export function WatchIntentSection({ sym, ccy, intent, onSave }: Props) {
   return (
     <Panel
       title="Why you're watching"
-      subtitle={`Turns ${sym}'s price moves into alerts about your plan, not just the price.`}
+      subtitle={`Turns ${sym}'s price moves into alerts about your thesis, not just the price.`}
       badge={
         state === 'saved' ? (
           <span className="watch-intent-saved">Saved</span>
@@ -79,55 +84,46 @@ export function WatchIntentSection({ sym, ccy, intent, onSave }: Props) {
       }
     >
       <div className="watch-intent-grid">
-        <FormField
-          label="Thesis"
-          help="One line: why you'd own it."
-          span="full"
-          htmlFor="wi-thesis"
-        >
+        <FormField label={reasonLabel(held)} span="full" htmlFor="wi-thesis">
           <TextArea
             id="wi-thesis"
             rows={2}
             maxLength={280}
             value={thesis}
-            placeholder="e.g. AI accelerator share gains keep compounding"
+            placeholder={reasonExample(held)}
             onChange={(e) => setThesis(e.target.value)}
             onBlur={blur}
           />
         </FormField>
         <FormField
-          label={`Buy at or under (${ccy})`}
+          label={priceLabel('buy_below', ccy)}
           htmlFor="wi-below"
           error={zoneError ?? undefined}
         >
-          <NumberField
+          <TextField
             id="wi-below"
             inputMode="decimal"
             value={below}
-            onChange={(e) => setBelow(e.target.value)}
+            onChange={(e) => setBelow(priceText(e.target.value))}
             onBlur={blur}
             invalid={!!zoneError}
           />
         </FormField>
-        <FormField label={`…but not under (${ccy})`} help="Optional floor." htmlFor="wi-above">
-          <NumberField
+        <FormField label={priceLabel('buy_above', ccy)} htmlFor="wi-above">
+          <TextField
             id="wi-above"
             inputMode="decimal"
             value={above}
-            onChange={(e) => setAbove(e.target.value)}
+            onChange={(e) => setAbove(priceText(e.target.value))}
             onBlur={blur}
           />
         </FormField>
-        <FormField
-          label={`Fair value (${ccy})`}
-          help="What you think it's worth."
-          htmlFor="wi-fair"
-        >
-          <NumberField
+        <FormField label={priceLabel('fair_value', ccy)} htmlFor="wi-fair">
+          <TextField
             id="wi-fair"
             inputMode="decimal"
             value={fair}
-            onChange={(e) => setFair(e.target.value)}
+            onChange={(e) => setFair(priceText(e.target.value))}
             onBlur={blur}
           />
         </FormField>

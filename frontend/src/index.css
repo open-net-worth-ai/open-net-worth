@@ -12856,11 +12856,6 @@ body.hide-amounts .money * {
   .asd-thesis-form .ui-segmented__seg {
     padding-inline: var(--space-2);
   }
-  .asd-thesis-ccy {
-    font-size: var(--text-xs);
-    color: var(--muted);
-    margin-bottom: calc(-1 * var(--space-3));
-  }
   .asd-thesis-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -36,6 +36,20 @@ describe('WatchIntentSection', () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
+  it('uses the thesis card’s wording, and its price boxes take only numbers', () => {
+    const watched = mount()
+    expect(watched.getByLabelText('Why you’d buy it')).toBeTruthy()
+    const fair = watched.getByLabelText('Fair value ($)') as HTMLInputElement
+    fireEvent.change(fair, { target: { value: 'abc1x5.0.5' } })
+    expect(fair.value).toBe('15.05')
+    cleanup()
+    const held = render(
+      <WatchIntentSection sym="AMD" ccy="$" held intent={null} onSave={vi.fn()} />,
+    )
+    expect(held.getByLabelText('Why you own it')).toBeTruthy()
+    expect(held.getByText(/alerts about your thesis/)).toBeTruthy()
+  })
+
   it('shows the server’s message when a save fails', async () => {
     const onSave = vi
       .fn()
