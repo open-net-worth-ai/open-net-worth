@@ -198,10 +198,11 @@ def test_default_offer_tool_count_in_target_range():
 
 
 def test_default_offer_json_size_in_target_range():
-    """Default slim offer JSON must be under 50K chars (per-turn token cost)."""
+    """Default slim offer JSON must be under 55K chars (per-turn token cost). Owner call
+    2026-10-27: raised from 50K, which the offer had passed since the initial commit (51,170)."""
     size = len(json.dumps(assistant._active_tools()))
-    assert size < 50_000, (
-        f"Default offer JSON is {size:,} chars — over the 50K target. "
+    assert size < 55_000, (
+        f"Default offer JSON is {size:,} chars — over the 55K target. "
         "Demote a verbose tool out of CORE_TOOL_NAMES."
     )
 
