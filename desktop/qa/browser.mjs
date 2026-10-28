@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { _electron as electron, chromium } from 'playwright';
+import { SEEN_GUIDES } from './guides.mjs';
 
 const repo = path.resolve('..');
 const root = await mkdtemp(path.join(tmpdir(), 'onw-browser-'));
@@ -55,6 +56,8 @@ try {
   await api(page, '/api/model-config', {
     provider: 'openai_compatible', model: 'browser-qa', base_url: 'http://127.0.0.1:9/v1',
   }, 'PUT');
+  // Before the reload below, so the app loads a profile that already has them.
+  await api(page, '/api/profile', { seen_intros: SEEN_GUIDES }, 'PUT');
   await page.goto(`${origin}/setup/password`);
   await page.getByRole('button', { name: 'Skip', exact: true }).click();
   await page.waitForURL(/\/lucius/);
