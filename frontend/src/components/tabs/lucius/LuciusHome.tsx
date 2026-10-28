@@ -3,6 +3,7 @@
 // see the render-gate note in RouterShell.tsx (mobileNav === 'lucius' still owns the phone's
 // full-screen chat, unchanged).
 
+import { useMemoryWindow } from '../../../hooks/useMemoryWindow'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { ChatPanel, conversationGroups, conversationWhen } from '../../chat/ChatPanel'
 import { ConversationBrowser } from '../../chat/ConversationBrowser'
@@ -264,7 +265,7 @@ export function LuciusHome({
   // artifact it is not tied to a conversation, so switching chats leaves it open.
   // Remembered for the browser session, so a refresh brings it back (owner report).
   const [documentsFlag, setDocumentsFlag] = useSessionState(DOCUMENTS_OPEN_KEY)
-  const [memoryOpen, setMemoryOpen] = useState(false)
+  const memory = useMemoryWindow('home')
   const vaultOpen = documentsFlag === '1'
   const setVaultOpen = (open: boolean) => setDocumentsFlag(open ? '1' : null)
   const toggleVault = () => {
@@ -470,7 +471,7 @@ export function LuciusHome({
           <button
             type="button"
             className="lucius-home-vault-btn"
-            onClick={() => setMemoryOpen(true)}
+            onClick={memory.show}
             title="What Lucius remembers about you"
           >
             <Brain size={15} strokeWidth={1.6} />
@@ -488,9 +489,9 @@ export function LuciusHome({
             Documents
           </button>
         </div>
-        {memoryOpen && (
+        {memory.open && (
           <Suspense fallback={null}>
-            <MemorySheet onClose={() => setMemoryOpen(false)} />
+            <MemorySheet onClose={memory.close} />
           </Suspense>
         )}
         <ArtifactPanelProvider onOpen={setOpenArtifact}>
