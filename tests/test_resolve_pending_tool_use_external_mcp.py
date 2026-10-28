@@ -115,7 +115,6 @@ def env(tmp_path, monkeypatch, db_isolated):
     exactly as they do in production."""
     monkeypatch.setattr("backend.core.cost_context.get_cost_surface", lambda: "web")
     monkeypatch.setattr(gate, "GATE_ALL_WRITES", True)
-    monkeypatch.setattr(assistant, "_run_memory_extraction", lambda *a, **k: _noop(), raising=False)
 
     store = McpClientStore()
     store.create(_cfg())
@@ -139,10 +138,6 @@ def env(tmp_path, monkeypatch, db_isolated):
     yield tmp_path, captured
     mcp_external.register_external_dispatcher(None)
     set_tool_use_id(None)
-
-
-async def _noop():
-    return None
 
 
 def _install(monkeypatch, provider) -> None:

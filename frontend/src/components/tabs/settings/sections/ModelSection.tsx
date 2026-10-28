@@ -2,7 +2,7 @@
 // design_handoffs/settings_handoff/prototype/redesign/settings-model.jsx.
 //
 // Provider credentials and model routing. Usage telemetry lives in Settings → AI usage;
-// chat and memory preferences live in Settings → Chat & Memory.
+// chat preferences live in Settings → Chat, memory in Settings → Memory.
 //
 // The one deliberate departure from the prototype source: vision capability. The handoff's
 // `TEXT_ONLY` array is explicitly a stand-in ("capability must come from the provider; an
@@ -110,7 +110,7 @@ const TASK_GROUPS: [string, [string, string, string, boolean?][]][] = [
   [
     'Assistant',
     [
-      ['memory', 'Memory', 'Extracts and consolidates facts after chat turns'],
+      ['memory', 'Memory', 'Writes memory when a conversation goes quiet, and tidies it daily'],
       ['suggestions', 'Chat suggestions', 'Generates follow-up suggestions in the chat panel'],
       [
         'title',

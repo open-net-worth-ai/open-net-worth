@@ -665,10 +665,6 @@ def _turn_isolation(monkeypatch):
     monkeypatch.setattr(assistant, "_record_cost", lambda *a, **k: None)
     monkeypatch.setattr("backend.ai.conversation.build_system_prompt", lambda *a, **k: "SYS")
 
-    async def _noop_memory(*a, **k):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory)
     monkeypatch.setattr(profile_service, "read_profile", lambda: {"chat_multi_turn_enabled": True})
     assistant.SESSIONS.clear()
     assistant._SESSION_LOCKS.clear()

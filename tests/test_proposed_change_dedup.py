@@ -57,11 +57,6 @@ def _drive(monkeypatch, tool_calls, change_for):
     # first blind call before it can produce a proposed_change).
     monkeypatch.setattr(assistant, "_active_tools", lambda: list(assistant.TOOL_SCHEMAS))
 
-    async def _noop_memory(history, session_id=""):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory, raising=False)
-
     proposed: list[dict] = []
     results: list[str] = []
 

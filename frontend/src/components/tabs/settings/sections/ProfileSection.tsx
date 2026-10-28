@@ -1,7 +1,7 @@
 // Settings → Profile. Ported from
 // design_handoffs/settings_handoff/prototype/redesign/profile-section.jsx.
 //
-// Four panels: About you · Income & expenses · FIRE settings · Notes for Lucius. Everything
+// Four panels: About you · Income & expenses · FIRE settings · Instructions for Lucius. Everything
 // here is fed to the model, which is why the panel subtitles say so — a user who doesn't know
 // that leaves the fields empty.
 //
@@ -776,12 +776,13 @@ export function ProfileSection({
       </Panel>
 
       <Panel
-        title="Notes for Lucius"
-        sub="Anything else the AI assistant should know — tax situation, upcoming life events, preferences"
+        title="Instructions for Lucius"
+        sub="Standing rules for how Lucius should work with you. Lucius can add to them too — you’ll see each change before it’s saved."
       >
         <textarea
           className="rd-textarea"
           rows={4}
+          placeholder="e.g. Keep answers short. Always show amounts in SGD."
           value={draft?.notes ?? ''}
           disabled={loading}
           onChange={(e) => set('notes', e.target.value)}

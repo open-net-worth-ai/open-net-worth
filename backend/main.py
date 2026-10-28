@@ -686,6 +686,17 @@ async def lifespan(app: FastAPI):
         lock_exclusive(_SCHEDULER_LOCK_HANDLE)
         start()
         _log.info("scheduler: started (this worker owns the scheduler lock)")
+        # Memory is written when a conversation goes idle and tidied once a day. Like the
+        # scheduler this must run in ONE worker, or every worker would extract the same chat.
+        # Skipped under ONW_QA_MODE — an isolated QA run must not spend model calls.
+        from backend.core.config import get_settings as _memory_settings
+
+        if not _memory_settings().onw_qa_mode:
+            from backend.ai.memory_idle import memory_sweep_loop
+
+            app.state.memory_sweep_task = asyncio.create_task(
+                memory_sweep_loop(), name="memory-sweep"
+            )
     except (OSError, BlockingIOError):
         if _SCHEDULER_LOCK_HANDLE is not None:
             _SCHEDULER_LOCK_HANDLE.close()
@@ -854,6 +865,13 @@ async def lifespan(app: FastAPI):
     from backend.ai.turns import shutdown as shutdown_turns
 
     await shutdown_turns()
+    memory_sweep_task = getattr(app.state, "memory_sweep_task", None)
+    if memory_sweep_task is not None:
+        memory_sweep_task.cancel()
+        await asyncio.gather(memory_sweep_task, return_exceptions=True)
+    from backend.ai.memory_idle import cancel_background as cancel_memory_extractions
+
+    await cancel_memory_extractions()
     unregister_automation_adapters()
     await telegram_bot.stop()
     _keep_awake.release()

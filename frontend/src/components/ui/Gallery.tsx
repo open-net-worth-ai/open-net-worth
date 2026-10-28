@@ -30,6 +30,7 @@ import {
   Text,
   TextArea,
   List,
+  SwipeActions,
   TextField,
 } from './index'
 import type { ButtonVariant, ButtonSize, CheckboxGroupOption, TextSize, TextTone } from './index'
@@ -208,6 +209,17 @@ export function Gallery() {
           <li>A bulleted item</li>
           <li>Another one</li>
         </List>
+      </Section>
+
+      <Section title="SwipeActions" derives="new — swipe a row left for its actions (touch only)">
+        <SwipeActions
+          actions={[
+            { label: 'Edit', ariaLabel: 'Edit sample row', onClick: () => {} },
+            { label: 'Delete', ariaLabel: 'Delete sample row', onClick: () => {}, tone: 'danger' },
+          ]}
+        >
+          <Text>On a touch screen, swipe this row left.</Text>
+        </SwipeActions>
       </Section>
 
       <Section title="Typography — <Text>" derives="new — phase-3 §3">

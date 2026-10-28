@@ -41,7 +41,7 @@ _PROJECTION_MONTH = 30.4
 _TARGET_MONTHLY_USD = 10.0
 
 # Source-bucket mapping: source field value → surface bucket label.
-# "memory" covers memory_extract, memory_consolidate, memory_remove, etc.
+# "memory" covers memory_extract, memory_tidy, memory_remove, etc.
 # "intel"  covers intel_scan, intel_brief, etc.
 # "agents" covers agent:<any-id>.
 _CHAT_SOURCE = "chat"

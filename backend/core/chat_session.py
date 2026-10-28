@@ -33,3 +33,19 @@ def get_session_id() -> Optional[str]:
 def clear_session_id() -> None:
     """Clear the binding at turn end so it never leaks into the next turn."""
     _session_id.set(None)
+
+
+# Session IDs (or prefixes) used by background/headless paths that must never appear in the
+# user-facing conversation list. The rows are kept intact (the agents still read and write
+# them); only the LISTING — and anything that searches "the user's conversations" — hides them.
+# Exact IDs: "scheduled" (legacy; may still exist on old instances).
+# Prefix: "scheduled-" (per-run sessions from the prompt_lucius runner).
+INTERNAL_SESSION_IDS: frozenset[str] = frozenset({"scheduled"})
+INTERNAL_SESSION_PREFIXES: tuple[str, ...] = ("scheduled-",)
+
+
+def is_internal_session(session_id: str) -> bool:
+    """True when ``session_id`` identifies a background/headless session (never shown to the user)."""
+    if session_id in INTERNAL_SESSION_IDS:
+        return True
+    return any(session_id.startswith(p) for p in INTERNAL_SESSION_PREFIXES)

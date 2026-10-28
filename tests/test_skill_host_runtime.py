@@ -76,10 +76,6 @@ def _isolate(tmp_path, monkeypatch):
     monkeypatch.setattr(assistant, "_record_cost", lambda *args, **kwargs: None)
     monkeypatch.setattr("backend.ai.conversation.build_system_prompt", lambda **kwargs: "system")
 
-    async def _noop_memory(*args, **kwargs):
-        return None
-
-    monkeypatch.setattr(assistant, "_run_memory_extraction", _noop_memory)
     monkeypatch.setattr(profile_service, "read_profile", lambda: {"chat_multi_turn_enabled": True})
     assistant.SESSIONS.clear()
     assistant._SESSION_LOCKS.clear()
