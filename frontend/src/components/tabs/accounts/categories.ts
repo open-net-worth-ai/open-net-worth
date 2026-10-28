@@ -99,7 +99,14 @@ export function isRefundTxn(
   categoryId: string | null | undefined,
   catMap: Record<string, { kind?: string }>,
 ): boolean {
-  return kind === 'income' && !!categoryId && catMap[categoryId]?.kind === 'expense'
+  // The `split` sentinel is stored as an expense-kind row, but a split inflow lands on its
+  // lines' envelopes, never on a "Split" one (it once read "Returned to Split envelope").
+  return (
+    kind === 'income' &&
+    !!categoryId &&
+    categoryId !== 'split' &&
+    catMap[categoryId]?.kind === 'expense'
+  )
 }
 
 // ── Account types ─────────────────────────────────────────────────────────

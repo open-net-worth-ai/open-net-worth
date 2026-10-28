@@ -8,7 +8,7 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { TxnCard } from './TxnCard'
-import type { Account, Txn } from './types'
+import type { Account, Category, Txn } from './types'
 
 afterEach(cleanup)
 
@@ -131,5 +131,77 @@ describe('TxnCard amount sub-line', () => {
     const sub = container.querySelector('.acct-amt-orig')?.textContent ?? ''
     expect(sub).toMatch(/5,000\.00 → .*5,610\.00/)
     expect(sub).not.toContain('•')
+  })
+})
+
+describe('TxnCard split chip', () => {
+  // A bare "Split • 6" said nothing about where the money went (owner, 2026-10-29).
+  const cats: Record<string, Category> = {
+    cat_rent: { id: 'cat_rent', label: 'Rent', color: '#e05050', kind: 'expense' },
+    cat_net: { id: 'cat_net', label: 'Phone & Internet', color: '#c050c0', kind: 'expense' },
+  }
+  const split: Txn = {
+    ...base,
+    kind: 'income',
+    category: 'split',
+    fromAccountId: null,
+    fromAmount: null,
+    fromCurrency: null,
+    toAccountId: 'a1',
+    toAmount: 607,
+    toCurrency: 'USD',
+    splits: [
+      { category: 'cat_net', amount: 7, note: '' },
+      { category: 'cat_rent', amount: 600, note: 'October' },
+    ],
+  }
+  const renderSplit = (open: boolean, onSplit: (id: string) => void = () => {}) =>
+    render(
+      <TxnCard
+        t={split}
+        accounts={[account]}
+        showAccount={false}
+        selectedId="a1"
+        selected={false}
+        onToggle={() => {}}
+        onUpdate={() => {}}
+        payeeName={null}
+        rates={{}}
+        catMap={cats}
+        splitOpen={open}
+        onSplit={onSplit}
+      />,
+    )
+
+  it('leads with the largest line and counts the rest', () => {
+    const { container } = renderSplit(false)
+    expect(container.querySelector('.acct-split-chip')?.textContent).toBe('Rent+1')
+    expect(container.querySelector('.acct-card-splits')).toBeNull()
+  })
+
+  it("blends every line's colour into the chip background", () => {
+    const { container } = renderSplit(false)
+    const bg = (container.querySelector('.acct-split-chip') as HTMLElement).style.background
+    expect(bg).toContain('linear-gradient')
+    // Line order (Phone & Internet, then Rent), not amount order — jsdom serializes hex as rgb().
+    expect(bg.indexOf('rgb(192, 80, 192)')).toBeGreaterThan(-1)
+    expect(bg.indexOf('rgb(192, 80, 192)')).toBeLessThan(bg.indexOf('rgb(224, 80, 80)'))
+  })
+
+  it('toggles without opening the detail', () => {
+    let toggled = ''
+    const { container } = renderSplit(false, (id) => (toggled = id))
+    ;(container.querySelector('.acct-split-chip') as HTMLButtonElement).click()
+    expect(toggled).toBe('t1')
+  })
+
+  it('expands the lines inside the card, signed like the parent, notes kept', () => {
+    const { container } = renderSplit(true)
+    const lines = [...container.querySelectorAll('.acct-card-splits .acct-splitline')]
+    expect(lines.map((l) => l.textContent)).toEqual([
+      'Phone & Internet+$7.00',
+      'RentOctober+$600.00',
+    ])
+    expect(container.querySelector('.acct-card-body .acct-card-splits')).not.toBeNull()
   })
 })

@@ -1,7 +1,7 @@
 // ReceiptsSection — the transaction detail drawer's Receipts block (attach/view/unlink).
 // Self-fetching (like StatementViewer), NOT prop-threaded from AccountsTab — see the
-// receipts-in-drawer UI spec. Renders inside TxnDetail.tsx's ViewBody, between the split
-// block and Provenance.
+// receipts-in-drawer UI spec. Renders inside TxnDetail.tsx's ViewBody, between the detail
+// rows and Provenance.
 import { Fragment, useRef, useState } from 'react'
 import { Button } from '../../ui/Button'
 import { fmtDay } from './TxnDetail'

@@ -32,6 +32,7 @@ import type {
 } from './types'
 import { AddAccountSelect, AddDateField, AddPayeeField, AddCategoryField } from './pickers'
 import { SplitEditor, type EditSplit } from './SplitEditor'
+import { SplitLines } from './SplitView'
 import { ConfirmModal } from './ConfirmModal'
 import { Checkbox } from '../../ui/Checkbox'
 import { InfoPopover } from '../../ui/InfoPopover'
@@ -57,6 +58,7 @@ const CHANGE_FIELD_LABEL: Record<string, string> = {
   to_currency: 'Currency',
   original_amount: 'Original amount',
   original_currency: 'Original currency',
+  splits: 'Split',
 }
 // Internal bookkeeping fields that are never meaningful in a user-facing diff.
 // needs_review renders as its own verb (Approved / Flagged for review), never as a field edit.
@@ -74,9 +76,26 @@ function fmtChangeVal(field: string, v: unknown, ctx: ChangeCtx): string {
   if (field.endsWith('account_id')) return ctx.acctMap[String(v)]?.name ?? String(v)
   if (field === 'payee_id') return ctx.payeeMap[String(v)] ?? String(v)
   if (field === 'category') return ctx.catMap[String(v)]?.label ?? 'Uncategorized'
-  if (Array.isArray(v)) return v.length ? v.join(', ') : '—'
+  if (Array.isArray(v)) return v.length ? v.map((x) => fmtChangeItem(x, ctx)).join(', ') : '—'
   if (typeof v === 'number') return v.toLocaleString(undefined, { maximumFractionDigits: 2 })
+  if (typeof v === 'object') return JSON.stringify(v)
   return String(v)
+}
+// One element of a list-valued change. A split line is `{category, amount, memo}`; a bare
+// String() of it painted "[object Object]" for every line (owner, 2026-10-29).
+function fmtChangeItem(x: unknown, ctx: ChangeCtx): string {
+  if (x == null || typeof x !== 'object') return String(x)
+  const o = x as { category?: unknown; amount?: unknown; memo?: unknown }
+  if (!('category' in o) && !('amount' in o)) return JSON.stringify(x)
+  const label = o.category
+    ? (ctx.catMap[String(o.category)]?.label ?? 'Uncategorized')
+    : 'Uncategorized'
+  const amt =
+    typeof o.amount === 'number'
+      ? ' ' +
+        o.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : ''
+  return `${label}${amt}${o.memo ? ` (${String(o.memo)})` : ''}`
 }
 
 export interface TxnDetailProps {
@@ -1192,17 +1211,17 @@ function ViewBody({
         {txn.kind !== 'adjustment' && (
           <DRow label="Category">
             {isSplit ? (
-              <span className="acct-detail-chip acct-detail-splitcat">
-                {splitGlyph}Split
-                <span className="acct-detail-splitdots">
-                  {txn.splits.map((s, i) => (
-                    <i
-                      key={i}
-                      style={{ background: catMap[s.category]?.color }}
-                      title={catMap[s.category]?.label ?? 'Uncategorized'}
-                    />
-                  ))}
+              <span className="acct-detail-splitcat">
+                <span className="acct-detail-splithead">
+                  {splitGlyph}Split across {txn.splits.length} categories
                 </span>
+                <SplitLines
+                  splits={txn.splits}
+                  catMap={catMap}
+                  currency={currency}
+                  sign={heroSign === '+' ? '+' : '−'}
+                  className="acct-detail-splitlines"
+                />
               </span>
             ) : cat ? (
               <span className="acct-detail-chip">
@@ -1264,28 +1283,6 @@ function ViewBody({
           <DRow label="Refund">Returned to {cat?.label ?? 'budget'} envelope</DRow>
         )}
       </div>
-      {isSplit && (
-        <>
-          <div className="acct-detail-sec">Split into {txn.splits.length}</div>
-          <div className="acct-detail-splits">
-            {txn.splits.map((s, i) => {
-              const sc = catMap[s.category]
-              return (
-                <div className="acct-detail-split" key={i}>
-                  <span className="acct-detail-chip">
-                    <i style={{ background: sc?.color }} />
-                    {sc?.label ?? 'Uncategorized'}
-                  </span>
-                  {s.note && <span className="acct-detail-split-note">{s.note}</span>}
-                  <span className="acct-detail-split-amt">
-                    {fCur(s.amount, currency, { cents: true })}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        </>
-      )}
       {/* key={txn.id}: the drawer never unmounts on a row switch (this component's own
           docstring above), so without a key ReceiptsSection's local UI state — armed row,
           open viewer, in-flight attach — would leak from the previous transaction onto the

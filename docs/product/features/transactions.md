@@ -42,6 +42,8 @@ or just by telling Lucius: *"I paid $42.80 for dinner at Nando's on my Visa yest
    household), click **Split into multiple categories** under Category and add a line per
    category. The lines must add up exactly — the editor shows **Balanced** when they do, or the
    amount **Remaining**.
+   A saved split shows its biggest category and a count (**Rent +5**) in the register — tap it
+   to list the lines — and every line, with its amount, in the drawer's **Category** row.
 4. To remove it, click **Delete**.
 
 The drawer always lists **Memo** and **Tags**, showing a dash when they are empty; add either with

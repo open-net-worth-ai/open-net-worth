@@ -8,7 +8,7 @@
 // the drawer renders/edits the lines, save maps them correctly, and Unsplit clears them.
 
 import { describe, it, expect, afterEach } from 'vitest'
-import { render, cleanup, screen, fireEvent } from '@testing-library/react'
+import { render, cleanup, screen, fireEvent, waitFor } from '@testing-library/react'
 import TxnDetail from './TxnDetail'
 import type { Account, Category, Txn } from './types'
 
@@ -213,5 +213,121 @@ describe('TxnDetail — splitting a plain expense', () => {
     // Transfer can't carry splits — the editor must disappear.
     fireEvent.click(screen.getByText('Transfer'))
     expect(screen.queryByText('Unsplit')).toBeNull()
+  })
+})
+
+describe('TxnDetail — viewing a split transaction', () => {
+  // Owner, 2026-10-29: a split inflow read "Refund — Returned to Split envelope" (the `split`
+  // sentinel is stored as an expense-kind row) and its lines sat below the fold, unsigned.
+  const SPLIT_ROW: Category = { id: 'split', label: 'Split', color: '#888888', kind: 'expense' }
+  function renderView(t: Txn) {
+    render(
+      <TxnDetail
+        txn={t}
+        accounts={[ACCT]}
+        categories={[...CATS, SPLIT_ROW]}
+        payeeOptions={[]}
+        baseCurrency="SGD"
+        rates={{}}
+        onClose={() => {}}
+        onSave={() => {}}
+        onDelete={() => {}}
+        onMarkReviewed={() => {}}
+        onManagePayees={() => {}}
+        onCreateCategory={() => {}}
+        onLoadActivity={() => new Promise(() => {})}
+        onLoadSourceEntries={() => Promise.resolve(null)}
+        onDetachSourceRef={() => Promise.resolve()}
+      />,
+    )
+  }
+  const inflow = () =>
+    makeSplit({
+      kind: 'income',
+      fromAccountId: null,
+      fromAmount: null,
+      fromCurrency: null,
+      toAccountId: 'a1',
+      toAmount: 50,
+      toCurrency: 'SGD',
+    })
+
+  it('never claims a split inflow was returned to a "Split" envelope', () => {
+    renderView(inflow())
+    expect(screen.queryByText('Refund')).toBeNull()
+    expect(screen.queryByText(/Split envelope/)).toBeNull()
+  })
+
+  it('lists every line, signed like its parent, in the Category row', () => {
+    renderView(inflow())
+    expect(screen.getByText('Split across 2 categories')).toBeTruthy()
+    const lines = [...document.querySelectorAll('.acct-detail-splitlines .acct-splitline')]
+    expect(lines.map((l) => l.querySelector('.acct-splitline-cat')?.textContent)).toEqual([
+      'Groceries',
+      'Household',
+    ])
+    expect(lines.map((l) => l.querySelector('.acct-splitline-amt')?.textContent)).toEqual([
+      '+S$30.00',
+      '+S$20.00',
+    ])
+  })
+
+  it('signs an outflow split negative', () => {
+    renderView(makeSplit())
+    const amts = [...document.querySelectorAll('.acct-detail-splitlines .acct-splitline-amt')]
+    expect(amts.map((a) => a.textContent)).toEqual(['−S$30.00', '−S$20.00'])
+  })
+})
+
+describe('TxnDetail — a split edit in the activity log', () => {
+  // Owner, 2026-10-29: the timeline painted every split line as "[object Object]".
+  it('names each line by category and amount, never [object Object]', async () => {
+    render(
+      <TxnDetail
+        txn={makeSplit()}
+        accounts={[ACCT]}
+        categories={CATS}
+        payeeOptions={[]}
+        baseCurrency="SGD"
+        rates={{}}
+        onClose={() => {}}
+        onSave={() => {}}
+        onDelete={() => {}}
+        onMarkReviewed={() => {}}
+        onManagePayees={() => {}}
+        onCreateCategory={() => {}}
+        onLoadActivity={() =>
+          Promise.resolve({
+            source: 'ai',
+            addedBy: 'Lucius',
+            createdAt: '2026-07-10T01:00:00Z',
+            updatedAt: '2026-07-10T02:00:00Z',
+            activity: [
+              {
+                action: 'updated',
+                actor: 'lucius',
+                actorName: 'Lucius',
+                at: '2026-07-10T02:00:00Z',
+                changes: [
+                  {
+                    field: 'splits',
+                    from: [{ category: 'cat_food', amount: 50, memo: '' }],
+                    to: [
+                      { category: 'cat_food', amount: 30, memo: 'Weekly shop' },
+                      { category: 'cat_home', amount: 20, memo: '' },
+                    ],
+                  },
+                ],
+              },
+            ],
+          })
+        }
+        onLoadSourceEntries={() => Promise.resolve(null)}
+        onDetachSourceRef={() => Promise.resolve()}
+      />,
+    )
+    await waitFor(() => expect(screen.getByText('Groceries 50.00')).toBeTruthy())
+    expect(screen.getByText('Groceries 30.00 (Weekly shop), Household 20.00')).toBeTruthy()
+    expect(document.body.textContent).not.toContain('[object Object]')
   })
 })

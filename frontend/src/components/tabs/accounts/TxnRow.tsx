@@ -22,7 +22,8 @@ import {
   type PayeeOption,
 } from './pickers'
 import { SourceIcon, IconCheck } from './pickers'
-import { ChevronUp, ChevronDown, Check, Circle } from '../../../ui/icons'
+import { SplitChip } from './SplitView'
+import { Check, Circle } from '../../../ui/icons'
 
 export interface RowPatch {
   date?: string
@@ -357,20 +358,12 @@ export function TxnRow({
                 />
               </InlineField>
             ) : isSplit ? (
-              <button
-                className="acct-split-chip"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onSplit(t.id)
-                }}
-              >
-                Split • {t.splits.length}{' '}
-                {splitOpen ? (
-                  <ChevronUp size={12} aria-hidden="true" />
-                ) : (
-                  <ChevronDown size={12} aria-hidden="true" />
-                )}
-              </button>
+              <SplitChip
+                splits={t.splits}
+                catMap={catMap}
+                open={splitOpen}
+                onToggle={() => onSplit(t.id)}
+              />
             ) : t.category && t.kind !== 'adjustment' ? (
               categoryPill(t.category, catMap)
             ) : !isTransfer && (t.kind === 'expense' || t.kind === 'income') ? (
@@ -562,7 +555,8 @@ export function TxnRow({
                 </span>
               )}
               <span className="acct-split-amt" style={{ gridColumn: gcol('amount') }}>
-                {fCur(s.amount, t.fromCurrency ?? ccy, { cents: true })}
+                {pos ? '+' : '−'}
+                {fCur(s.amount, t.fromCurrency ?? ccy, { cents: true }).replace('-', '')}
               </span>
             </div>
           ))}

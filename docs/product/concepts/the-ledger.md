@@ -70,6 +70,12 @@ because small silent corrections are exactly how a budget drifts.
 
 Only expenses and income can be split.
 
+In the register a split shows its largest line's category and how many more there are (for
+example **Rent +5**), on a blend of every line's colour; tap it to list the lines under the
+transaction. The detail drawer lists every line, with its amount, in the **Category** row. An
+incoming split shows its lines with a **+**: money that lands on a spending category goes back
+into that category's envelope, the same as a refund.
+
 ## Cleared
 
 Tick **Cleared** on a transaction once you've confirmed it against your bank or card statement.

@@ -3744,8 +3744,69 @@ body.hide-amounts .mask.l::after {
   background: var(--surface2);
   border: 1px solid var(--line);
   border-radius: var(--radius-pill);
-  padding: 2px 9px;
+  padding: 2px 8px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  max-width: 100%;
+}
+.acct-split-chip-lead {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+.acct-split-chip-more {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.acct-split-chip svg {
+  flex: none;
+}
+/* SplitView's line list — one row per split line under its parent (register card, detail
+   drawer). Desktop rows keep their own grid-aligned overlay (.acct-split-detail). */
+.acct-splitlines {
+  display: flex;
+  flex-direction: column;
+}
+.acct-splitline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 0;
+}
+.acct-splitline-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex: none;
+  align-self: center;
+}
+.acct-splitline-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.acct-splitline-cat {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acct-splitline-note {
+  color: var(--faint);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+.acct-splitline-amt {
+  flex: none;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
 }
 @media (hover: hover) {
   .acct-split-chip:hover {
@@ -4871,25 +4932,11 @@ select.acct-addin {
   color: var(--faint);
   overflow-wrap: anywhere;
 }
-.acct-card-split-detail {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0 14px 12px 42px;
-  border-bottom: 1px solid var(--line);
-}
-.acct-card-split-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11.5px;
-}
-.acct-card-split-line .acct-split-note {
-  flex: 1 1 auto;
-}
-.acct-card-split-line .acct-split-amt {
-  margin-left: auto;
-  padding-right: 0;
+.acct-card-splits {
+  margin: 2px 0 2px 3px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line-strong);
+  font-size: 12px;
 }
 .acct-loadmore {
   text-align: center;
@@ -8007,51 +8054,30 @@ select.acct-addin {
   }
 }
 .acct-detail-splitcat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.acct-detail-splithead {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
+  color: var(--muted);
 }
 .acct-detail-splitglyph {
   color: var(--muted);
   flex: none;
   transform: rotate(90deg);
 }
-.acct-detail-splitdots {
-  display: inline-flex;
-  align-items: center;
-  margin-left: 2px;
-}
-.acct-detail-splitdots i {
-  width: 9px;
-  height: 9px;
-  border-radius: 2px;
-  flex: none;
-  box-shadow: 0 0 0 1.5px var(--surface);
-}
-.acct-detail-splitdots i + i {
-  margin-left: -3px;
-}
-.acct-detail-splits {
-  padding: 0 18px;
-}
-.acct-detail-split {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 7px 0;
+.acct-detail-splitlines .acct-splitline {
+  padding: 4px 0;
   border-bottom: 1px solid var(--line);
-  font-size: 12px;
 }
-.acct-detail-split:last-child {
+.acct-detail-splitlines .acct-splitline:last-child {
   border-bottom: none;
 }
-.acct-detail-split-note {
-  color: var(--faint);
-  flex: 1;
-}
-.acct-detail-split-amt {
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
-}
-/* Receipts section (TxnDetail's ViewBody, between the split block and Provenance) — same
+/* Receipts section (TxnDetail's ViewBody, between the detail rows and Provenance) — same
    local px scale as every sibling section in this file (deliberate carve-out, see
    CLAUDE.md). */
 .acct-detail-receipts {
@@ -8697,6 +8723,19 @@ select.acct-addin {
   outline: none;
   border-bottom-color: var(--accent);
   color: var(--ink);
+}
+/* A dashed underline ~18px tall was too small to tap on a phone (owner, 2026-10-29). On touch
+   the note keeps its underline look (boxing it like the picker read as too many boxes) but
+   grows to the picker's 34px: the extra height is padding ABOVE the text, so the text still
+   sits on the underline while the whole band is tappable. */
+@media (pointer: coarse) {
+  .acct-edit-splitrows {
+    gap: 12px;
+  }
+  .acct-edit-splitnote {
+    height: 34px;
+    padding: 14px 2px 3px;
+  }
 }
 .acct-edit-splitfoot {
   display: flex;
