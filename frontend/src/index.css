@@ -12705,6 +12705,11 @@ body.hide-amounts .money * {
     background: none;
     padding: 0;
   }
+  /* `.panel h2` gives the title a 16px bottom margin that outranks `.ui-panel__title`,
+     so a centred row drops the role chip below the title text; sit it on the baseline. */
+  .asd-plan-card .ui-panel__titlerow {
+    align-items: baseline;
+  }
   .asd-plan-role-wrap {
     display: inline-flex;
     align-items: center;
