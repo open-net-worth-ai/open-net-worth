@@ -1,4 +1,4 @@
-"""Revision 202610271200_holding_plans: watch-item ``intent`` moves onto per-instrument plans."""
+"""Revision 202610271200_investment_theses: watch-item ``intent`` moves onto per-instrument theses (its ``thesis`` text as ``reason``)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from backend.db.alembic_config import make_config
 from backend.db.tables import DEFAULT_BOOK_ID
 
 _PARENT = "202610251700_statement_previews"
-_REVISION = "202610271200_holding_plans"
+_REVISION = "202610271200_investment_theses"
 
 
 def _instrument(conn, iid: str, source_id: str, seq: int) -> None:
@@ -46,7 +46,7 @@ def seeded(tmp_path):
         {"id": "w5", "type": "topic", "value": "AI chips"},
         # matched by a unique bare symbol (held crypto: "BTC" vs "bitcoin")
         {"id": "w6", "type": "ticker", "value": "BTC", "intent": {"buy_below": 50000}},
-        # second item for an instrument that already got a plan → keeps its intent
+        # second item for an instrument that already got a thesis → keeps its intent
         {"id": "w7", "type": "ticker", "value": "aaa", "intent": {"thesis": "other"}},
         # a stored price that is not a number → keeps its intent, boot does not fail
         {"id": "w8", "type": "ticker", "value": "CCC", "intent": {"fair_value": "lots"}},
@@ -76,9 +76,9 @@ def _items(engine) -> dict:
     return {i["id"]: i for i in payload["items"]}
 
 
-def _plans(engine) -> dict:
+def _theses(engine) -> dict:
     with engine.connect() as conn:
-        rows = conn.execute(text("SELECT book_id, payload FROM holding_plans")).fetchall()
+        rows = conn.execute(text("SELECT book_id, payload FROM investment_theses")).fetchall()
     out = {}
     for book_id, payload in rows:
         payload = json.loads(payload) if isinstance(payload, str) else payload
@@ -91,18 +91,18 @@ def test_upgrade_moves_matched_intent_and_keeps_the_rest(seeded):
     engine, url = seeded
     command.upgrade(make_config(url), _REVISION)
 
-    plans = _plans(engine)
-    assert set(plans) == {"inst_a", "inst_b", "inst_btc"}
-    assert plans["inst_btc"]["buy_below"] == 50000.0
-    a = plans["inst_a"]
-    assert (a["thesis"], a["buy_below"], a["fair_value"], a["role"], a["exit_if"]) == (
+    theses = _theses(engine)
+    assert set(theses) == {"inst_a", "inst_b", "inst_btc"}
+    assert theses["inst_btc"]["buy_below"] == 50000.0
+    a = theses["inst_a"]
+    assert (a["reason"], a["buy_below"], a["fair_value"], a["role"], a["breaks_if"]) == (
         "Moat",
         90.0,
         150.0,
         None,
         None,
     )
-    assert a["id"].startswith("hp_") and plans["inst_b"]["buy_below"] == 10.0
+    assert a["id"].startswith("th_") and theses["inst_b"]["buy_below"] == 10.0
 
     items = _items(engine)
     assert "intent" not in items["w1"] and "intent" not in items["w2"]
@@ -117,7 +117,7 @@ def test_downgrade_restores_the_intent_and_drops_the_table(seeded):
     command.upgrade(make_config(url), _REVISION)
     command.downgrade(make_config(url), _PARENT)
 
-    assert "holding_plans" not in inspect(engine).get_table_names()
+    assert "investment_theses" not in inspect(engine).get_table_names()
     items = _items(engine)
     assert items["w1"]["intent"] == {"thesis": "Moat", "buy_below": 90.0, "fair_value": 150.0}
     assert items["w2"]["intent"] == {"buy_below": 10.0}

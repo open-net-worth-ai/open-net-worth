@@ -242,33 +242,34 @@ def delete_watchlist(watchlist_id: str) -> dict:
     return watchlist_store().delete_watchlist(watchlist_id)
 
 
-def with_plan_intents(wl: dict) -> dict:
+def with_thesis_intents(wl: dict) -> dict:
     """A watchlist read as every caller expects it: each ticker item's ``intent`` is its
-    instrument's holding plan (``holding_plans.intent_for_item``), never the raw stored key."""
-    from backend.services import holding_plans
+    instrument's investment thesis (``investment_theses.intent_for_item``), never the raw stored key."""
+    from backend.services import investment_theses
 
-    plans = holding_plans.plans_by_instrument()
+    theses = investment_theses.theses_by_instrument()
     items = [
-        i if is_topic(i) else holding_plans.with_intent(i, plans) for i in wl.get("items") or []
+        i if is_topic(i) else investment_theses.with_intent(i, theses)
+        for i in wl.get("items") or []
     ]
     return {**wl, "items": items}
 
 
 def project_item(item: dict | None) -> dict | None:
-    """One watch item with its plan-backed ``intent`` (see ``with_plan_intents``)."""
+    """One watch item with its thesis-backed ``intent`` (see ``with_thesis_intents``)."""
     if item is None or is_topic(item):
         return item
-    from backend.services import holding_plans
+    from backend.services import investment_theses
 
-    return holding_plans.with_intent(item)
+    return investment_theses.with_intent(item)
 
 
 def update_item(item_id: str, changes: dict) -> dict | None:
-    """Patch one watch item. Its ``intent`` belongs to the instrument's holding plan, so an
+    """Patch one watch item. Its ``intent`` belongs to the instrument's investment thesis, so an
     ``intent`` change is written there whenever the ticker has an instrument and dropped from the
     item; only a ticker with no instrument yet keeps it on the item. Returns the item with
-    ``intent`` projected from the plan, or None when the id is unknown."""
-    from backend.services import holding_plans
+    ``intent`` projected from the thesis, or None when the id is unknown."""
+    from backend.services import investment_theses
 
     store = watchlist_store()
     iid = None
@@ -277,17 +278,17 @@ def update_item(item_id: str, changes: dict) -> dict | None:
         item = store.find_by_id(item_id)
         if item is None:
             return None
-        iid = holding_plans.plan_instrument_for_item(item)
+        iid = investment_theses.thesis_instrument_for_item(item)
         if iid:
             # Check the intent first, then write the item (its own validators run there), then
-            # the plan — so a refusal on either side leaves both untouched.
+            # the thesis — so a refusal on either side leaves both untouched.
             intent = changes.get("intent")
-            holding_plans.check_watch_intent(iid, intent)
+            investment_theses.check_watch_intent(iid, intent)
             changes = {**changes, "intent": None}
     updated = store.update_by_id(item_id, changes)
     if updated and iid:
-        holding_plans.set_from_watch_intent(iid, intent)
-    return holding_plans.with_intent(updated) if updated else None
+        investment_theses.set_from_watch_intent(iid, intent)
+    return investment_theses.with_intent(updated) if updated else None
 
 
 def resolve_watchlist_id(watchlist_name: str | None) -> str:

@@ -88,7 +88,7 @@ READ_ONLY_TOOLS = frozenset(
         "get_actions",
         "get_alert_channels",
         "get_alerts",
-        "get_holding_plans",
+        "get_investment_theses",
         # Composes services.asset_detail.read_asset_detail (called with
         # record_price_history=False, persist_exchange=False — see that function's own
         # docstring for the two write side effects those flags exist to opt out of) +

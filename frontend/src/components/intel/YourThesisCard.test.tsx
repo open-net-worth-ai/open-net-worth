@@ -2,31 +2,31 @@
 
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, cleanup, fireEvent, waitFor } from '@testing-library/react'
-import type { HoldingPlan } from '../../types/assetDetail'
+import type { InvestmentThesis } from '../../types/assetDetail'
 
-const saveHoldingPlan = vi.fn()
+const saveInvestmentThesis = vi.fn()
 let failWith: string | null = null
-vi.mock('../../api/holdingPlans', () => ({
-  saveHoldingPlan: async (...args: unknown[]) => {
+vi.mock('../../api/investmentTheses', () => ({
+  saveInvestmentThesis: async (...args: unknown[]) => {
     if (failWith) throw new Error(failWith)
-    return saveHoldingPlan(...args)
+    return saveInvestmentThesis(...args)
   },
 }))
 
-import { YourPlanCard } from './YourPlanCard'
+import { YourThesisCard } from './YourThesisCard'
 
 afterEach(cleanup)
 beforeEach(() => {
-  saveHoldingPlan.mockReset()
+  saveInvestmentThesis.mockReset()
   failWith = null
 })
 
-const PLAN: HoldingPlan = {
+const THESIS: InvestmentThesis = {
   id: 'hp_1',
   instrument_id: 'inst_acme',
   role: 'satellite',
-  thesis: 'Share gains keep compounding.',
-  exit_if: 'Margins stay under 45%.',
+  reason: 'Share gains keep compounding.',
+  breaks_if: 'Margins stay under 45%.',
   stop_below: 120,
   buy_below: 150,
   buy_above: 130,
@@ -36,13 +36,13 @@ const PLAN: HoldingPlan = {
   updated_at: '2026-10-27T00:00:00Z',
 }
 
-function mount(props: Partial<Parameters<typeof YourPlanCard>[0]> = {}) {
+function mount(props: Partial<Parameters<typeof YourThesisCard>[0]> = {}) {
   const onSaved = vi.fn()
   const utils = render(
-    <YourPlanCard
+    <YourThesisCard
       instrumentId="inst_acme"
       ticker="ACME"
-      plan={PLAN}
+      thesis={THESIS}
       held
       price={162.4}
       priceMaxFrac={2}
@@ -53,8 +53,8 @@ function mount(props: Partial<Parameters<typeof YourPlanCard>[0]> = {}) {
   return { onSaved, ...utils }
 }
 
-describe('YourPlanCard', () => {
-  it('shows a holding’s role, thesis, sell condition and every level with its distance', () => {
+describe('YourThesisCard', () => {
+  it('shows a holding’s role, thesis, breaks-if and every level with its distance', () => {
     const { getByText } = mount()
     expect(getByText('Satellite')).toBeTruthy()
     expect(getByText('Share gains keep compounding.')).toBeTruthy()
@@ -75,23 +75,23 @@ describe('YourPlanCard', () => {
     expect(getByText('Buy zone')).toBeTruthy()
   })
 
-  it('invites a first plan when there is none', () => {
-    const { getByText } = mount({ plan: null })
+  it('invites a first thesis when there is none', () => {
+    const { getByText } = mount({ thesis: null })
     expect(getByText('Write down why you own ACME.')).toBeTruthy()
     expect(getByText('Add')).toBeTruthy()
   })
 
-  it('saves the edited plan and keeps a watched card’s hidden fields', async () => {
-    saveHoldingPlan.mockResolvedValue({ ...PLAN, thesis: 'Cheaper now.' })
+  it('saves the edited thesis and keeps a watched card’s hidden fields', async () => {
+    saveInvestmentThesis.mockResolvedValue({ ...THESIS, reason: 'Cheaper now.' })
     const { getByText, getByLabelText, onSaved } = mount({ held: false })
     fireEvent.click(getByText('Edit'))
     fireEvent.change(getByLabelText('Why you’d buy it'), { target: { value: 'Cheaper now.' } })
-    fireEvent.click(getByText('Save plan'))
+    fireEvent.click(getByText('Save thesis'))
     await waitFor(() => expect(onSaved).toHaveBeenCalled())
-    expect(saveHoldingPlan).toHaveBeenCalledWith('inst_acme', {
+    expect(saveInvestmentThesis).toHaveBeenCalledWith('inst_acme', {
       role: 'satellite',
-      thesis: 'Cheaper now.',
-      exit_if: 'Margins stay under 45%.',
+      reason: 'Cheaper now.',
+      breaks_if: 'Margins stay under 45%.',
       stop_below: 120,
       trim_above: 220,
       buy_below: 150,
@@ -106,8 +106,8 @@ describe('YourPlanCard', () => {
     fireEvent.click(getByText('Edit'))
     fireEvent.change(getByLabelText('…but not under'), { target: { value: '160' } })
     expect(getByText('The floor must be below the top of the buy zone.')).toBeTruthy()
-    fireEvent.click(getByText('Save plan'))
-    expect(saveHoldingPlan).not.toHaveBeenCalled()
+    fireEvent.click(getByText('Save thesis'))
+    expect(saveInvestmentThesis).not.toHaveBeenCalled()
   })
 
   it('refuses a price it cannot read instead of clearing that level', () => {
@@ -115,15 +115,15 @@ describe('YourPlanCard', () => {
     fireEvent.click(getByText('Edit'))
     fireEvent.change(getByLabelText('Stop below'), { target: { value: '12abc' } })
     expect(getByText('Stop below must be a positive number.')).toBeTruthy()
-    fireEvent.click(getByText('Save plan'))
-    expect(saveHoldingPlan).not.toHaveBeenCalled()
+    fireEvent.click(getByText('Save thesis'))
+    expect(saveInvestmentThesis).not.toHaveBeenCalled()
   })
 
   it('shows the server’s reason when a save fails', async () => {
     failWith = 'Your stop must be below your trim level.'
     const { getByText, findByText } = mount()
     fireEvent.click(getByText('Edit'))
-    fireEvent.click(getByText('Save plan'))
+    fireEvent.click(getByText('Save thesis'))
     expect(await findByText('Your stop must be below your trim level.')).toBeTruthy()
   })
 })

@@ -12700,22 +12700,22 @@ body.hide-amounts .money * {
     color: var(--muted);
   }
 
-  /* ── Your Plan (rail card, YourPlanCard.tsx) — thesis, sell condition, price levels ── */
-  .asd-plan-card .ui-panel__badge {
+  /* ── Your Thesis (rail card, YourThesisCard.tsx) — reason, breaks-if, price levels ── */
+  .asd-thesis-card .ui-panel__badge {
     background: none;
     padding: 0;
   }
   /* `.panel h2` gives the title a 16px bottom margin that outranks `.ui-panel__title`,
      so a centred row drops the role chip below the title text; sit it on the baseline. */
-  .asd-plan-card .ui-panel__titlerow {
+  .asd-thesis-card .ui-panel__titlerow {
     align-items: baseline;
   }
-  .asd-plan-role-wrap {
+  .asd-thesis-role-wrap {
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
   }
-  .asd-plan-role {
+  .asd-thesis-role {
     font-size: var(--text-xs);
     font-weight: 600;
     color: var(--ink);
@@ -12724,38 +12724,38 @@ body.hide-amounts .money * {
     border-radius: var(--radius-md);
     padding: 1px var(--space-3);
   }
-  .asd-plan-body,
-  .asd-plan-form {
+  .asd-thesis-body,
+  .asd-thesis-form {
     display: flex;
     flex-direction: column;
     gap: var(--space-5);
   }
-  .asd-plan-form {
+  .asd-thesis-form {
     gap: var(--space-6);
   }
-  .asd-plan-thesis {
+  .asd-thesis-reason {
     margin: 0;
     font-size: var(--text-base);
     line-height: 1.55;
     color: var(--ink);
     text-wrap: pretty;
   }
-  .asd-plan-exit {
+  .asd-thesis-breaks {
     background: var(--bg-2);
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
     padding: var(--space-4) var(--space-5);
   }
-  .asd-plan-exit-label {
+  .asd-thesis-breaks-label {
     margin: 0 0 var(--space-1);
     font-size: var(--text-sm);
     color: var(--muted);
   }
-  .asd-plan-bar {
+  .asd-thesis-bar {
     position: relative;
     height: 40px;
   }
-  .asd-plan-track {
+  .asd-thesis-track {
     position: absolute;
     left: 0;
     right: 0;
@@ -12764,7 +12764,7 @@ body.hide-amounts .money * {
     border-radius: 2px;
     background: var(--line);
   }
-  .asd-plan-zone {
+  .asd-thesis-zone {
     position: absolute;
     top: 21px;
     height: 10px;
@@ -12773,7 +12773,7 @@ body.hide-amounts .money * {
     background: color-mix(in srgb, var(--good) 22%, transparent);
     border: 1px solid color-mix(in srgb, var(--good) 60%, transparent);
   }
-  .asd-plan-tick {
+  .asd-thesis-tick {
     position: absolute;
     top: 19px;
     width: 2px;
@@ -12781,16 +12781,16 @@ body.hide-amounts .money * {
     margin-left: -1px;
     border-radius: 1px;
   }
-  .asd-plan-tick--stop {
+  .asd-thesis-tick--stop {
     background: var(--bad);
   }
-  .asd-plan-tick--fair {
+  .asd-thesis-tick--fair {
     background: var(--muted);
   }
-  .asd-plan-tick--trim {
+  .asd-thesis-tick--trim {
     background: var(--primary);
   }
-  .asd-plan-now {
+  .asd-thesis-now {
     position: absolute;
     top: 19px;
     width: 14px;
@@ -12800,7 +12800,7 @@ body.hide-amounts .money * {
     background: var(--ink);
     box-shadow: 0 0 0 3px var(--surface);
   }
-  .asd-plan-now-label {
+  .asd-thesis-now-label {
     position: absolute;
     top: 0;
     transform: translateX(-50%);
@@ -12809,51 +12809,51 @@ body.hide-amounts .money * {
     color: var(--ink);
     white-space: nowrap;
   }
-  .asd-plan-levels {
+  .asd-thesis-levels {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
     margin-top: var(--space-3);
   }
-  .asd-plan-key {
+  .asd-thesis-key {
     display: inline-block;
     width: 8px;
     height: 8px;
     border-radius: 2px;
     margin-right: var(--space-2);
   }
-  .asd-plan-key--stop {
+  .asd-thesis-key--stop {
     background: var(--bad);
   }
-  .asd-plan-key--zone {
+  .asd-thesis-key--zone {
     background: color-mix(in srgb, var(--good) 60%, transparent);
   }
-  .asd-plan-key--fair {
+  .asd-thesis-key--fair {
     background: var(--muted);
   }
-  .asd-plan-key--trim {
+  .asd-thesis-key--trim {
     background: var(--primary);
   }
-  .asd-plan-dist {
+  .asd-thesis-dist {
     margin-left: var(--space-2);
     font-size: var(--text-xs);
     font-weight: 500;
     color: var(--faint);
   }
-  .asd-plan-form .ui-segmented {
+  .asd-thesis-form .ui-segmented {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-self: stretch;
   }
-  .asd-plan-form .ui-segmented__seg {
+  .asd-thesis-form .ui-segmented__seg {
     padding-inline: var(--space-2);
   }
-  .asd-plan-grid {
+  .asd-thesis-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-5) var(--space-4);
   }
-  .asd-plan-actions {
+  .asd-thesis-actions {
     display: flex;
     justify-content: flex-end;
     gap: var(--space-3);

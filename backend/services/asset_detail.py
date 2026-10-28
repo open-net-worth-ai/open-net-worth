@@ -35,7 +35,7 @@ from backend.db.asset_brief_store import AssetBriefStore
 from backend.db.grant_store import GrantStore
 from backend.db.instrument_store import InstrumentStore
 from backend.db.price_history_store import PriceHistoryStore
-from backend.services import holding_plans
+from backend.services import investment_theses
 from backend.services.evidence import read_evidence
 from backend.services.fx_cache import load_fx_cache
 from backend.services.income import income_summary
@@ -1302,7 +1302,7 @@ def read_asset_detail(
             "crypto_facts": crypto_facts,
             "peers": peers,
             "watchlist": wl_block,
-            "plan": holding_plans.plan_for(instrument_id),
+            "thesis": investment_theses.thesis_for(instrument_id),
             "last_refreshed_at": synthesized_at,
             "has_ticker": has_ticker,
             "portfolio_impact": _compose_portfolio_impact(

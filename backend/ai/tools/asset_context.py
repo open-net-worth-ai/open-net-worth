@@ -77,21 +77,21 @@ def _clamp(raw: object, default: int, maximum: int) -> int:
     return max(1, min(value, maximum))
 
 
-def _plan_out(plan: dict | None) -> dict | None:
-    if not plan:
+def _thesis_out(thesis: dict | None) -> dict | None:
+    if not thesis:
         return None
     keep = (
         "role",
-        "thesis",
-        "exit_if",
+        "reason",
+        "breaks_if",
         "stop_below",
         "buy_below",
         "buy_above",
         "fair_value",
         "trim_above",
     )
-    out = {k: plan.get(k) for k in keep}
-    for key in ("thesis", "exit_if"):
+    out = {k: thesis.get(k) for k in keep}
+    for key in ("reason", "breaks_if"):
         if out[key]:
             out[key] = _clean(out[key])
     return out
@@ -409,9 +409,9 @@ async def get_asset_context(input_data: dict):
         "held": position_out is not None,
         "watched": bool(wl.get("following")),
         "position": position_out,
-        # The user's own plan (services.holding_plans): why they own / would buy it, what would
-        # make them sell, role and price levels. Text fields sanitized like every other one.
-        "plan": _plan_out(detail.get("plan")),
+        # The user's own investment thesis (services.investment_theses): why they own / would buy
+        # it, what would break it, role and price levels. Text fields sanitized like every other one.
+        "thesis": _thesis_out(detail.get("thesis")),
         # Live position numbers + the cached, position-aware narrative Lucius already wrote —
         # composed at read time by services.asset_detail._compose_portfolio_impact (R3 fix,
         # security-review 2026-08-29: this is the exact field built to answer "what should I do

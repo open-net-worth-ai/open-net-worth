@@ -272,14 +272,14 @@ export interface WatchlistStatus {
 }
 
 /** Why you own (or would buy) this instrument, and the prices that matter to you — one per
- *  instrument, edited on the asset page's Your Plan card (services/holding_plans). Prices are in
+ *  instrument, edited on the asset page's Your Thesis card (services/investment_theses). Prices are in
  *  the instrument's quote currency. */
-export interface HoldingPlan {
+export interface InvestmentThesis {
   id: string
   instrument_id: string
   role: 'core' | 'satellite' | 'speculative' | null
-  thesis: string | null
-  exit_if: string | null
+  reason: string | null
+  breaks_if: string | null
   stop_below: number | null
   buy_below: number | null
   buy_above: number | null
@@ -289,12 +289,12 @@ export interface HoldingPlan {
   updated_at: string
 }
 
-export type HoldingPlanFields = Partial<
+export type InvestmentThesisFields = Partial<
   Pick<
-    HoldingPlan,
+    InvestmentThesis,
     | 'role'
-    | 'thesis'
-    | 'exit_if'
+    | 'reason'
+    | 'breaks_if'
     | 'stop_below'
     | 'buy_below'
     | 'buy_above'
@@ -314,8 +314,8 @@ export interface AssetDetail {
   crypto_facts: CryptoFacts | null
   peers: PeerItem[]
   watchlist: WatchlistStatus
-  /** The user's plan for this instrument, or null when they haven't written one. */
-  plan?: HoldingPlan | null
+  /** The user's investment thesis for this instrument, or null when they haven't written one. */
+  thesis?: InvestmentThesis | null
   last_refreshed_at: string | null
   has_ticker: boolean
   portfolio_impact: string | null

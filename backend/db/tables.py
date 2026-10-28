@@ -655,8 +655,8 @@ categories = book_payload_table("categories")
 commitments = book_payload_table("commitments")
 envelopes = book_payload_table("envelopes")
 income_events = book_payload_table("income_events")
-# Why you own / would buy an instrument (services.holding_plans) — one row per instrument.
-holding_plans = book_payload_table("holding_plans")
+# Why you own / would buy an instrument (services.investment_theses) — one row per instrument.
+investment_theses = book_payload_table("investment_theses")
 recurring_streams = book_payload_table("recurring_streams")
 targets = book_payload_table("targets")
 corrections = book_payload_table("corrections")

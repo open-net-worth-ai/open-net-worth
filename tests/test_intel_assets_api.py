@@ -1159,10 +1159,10 @@ def test_get_asset_detail_does_not_schedule_refresh_for_instrument_with_no_ticke
     assert complete_calls == []
 
 
-def test_get_asset_detail_carries_the_holding_plan(client, seeded):
+def test_get_asset_detail_carries_the_investment_thesis(client, seeded):
     iid = seeded["instrument_id"]
-    assert client.get(f"/api/intel/assets/{iid}").json()["plan"] is None
-    put = client.put(f"/api/holding-plans/{iid}", json={"thesis": "Moat", "fair_value": 150})
+    assert client.get(f"/api/intel/assets/{iid}").json()["thesis"] is None
+    put = client.put(f"/api/investment-theses/{iid}", json={"reason": "Moat", "fair_value": 150})
     assert put.status_code == 200
-    plan = client.get(f"/api/intel/assets/{iid}").json()["plan"]
-    assert (plan["thesis"], plan["fair_value"], plan["instrument_id"]) == ("Moat", 150.0, iid)
+    thesis = client.get(f"/api/intel/assets/{iid}").json()["thesis"]
+    assert (thesis["reason"], thesis["fair_value"], thesis["instrument_id"]) == ("Moat", 150.0, iid)

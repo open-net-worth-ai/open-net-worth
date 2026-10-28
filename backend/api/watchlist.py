@@ -207,7 +207,7 @@ def get_watchlist():
     if wl["config"].get("auto_scan_holdings", True):
         store.sync_from_holdings(read_rows())
         wl = store.as_dict()
-    return wl_service.with_plan_intents(wl)
+    return wl_service.with_thesis_intents(wl)
 
 
 @router.get("/api/watchlist/quotes")
@@ -370,7 +370,7 @@ def list_alert_channels():
 def sync_holdings():
     store = wl_service.watchlist_store()
     store.sync_from_holdings(read_rows())
-    return wl_service.with_plan_intents(store.as_dict())
+    return wl_service.with_thesis_intents(store.as_dict())
 
 
 # ── Watchlists endpoints ────────────────────────────────────────────────────────

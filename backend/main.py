@@ -129,7 +129,6 @@ from backend.api.feature_flags import router as feature_flags_router
 from backend.api.fire import router as fire_router
 from backend.api.fixed_income import router as fixed_income_router
 from backend.api.forecast_scorecard import router as forecast_scorecard_router
-from backend.api.holding_plans import router as holding_plans_router
 from backend.api.ibkr_api import router as ibkr_router
 from backend.api.import_api import router as import_router
 from backend.api.inbox import router as inbox_router
@@ -141,6 +140,7 @@ from backend.api.intel_digest import router as intel_digest_router
 from backend.api.intel_latency import router as intel_latency_router
 from backend.api.intel_signals import router as intel_signals_router
 from backend.api.intel_watch import router as intel_watch_router
+from backend.api.investment_theses import router as investment_theses_router
 from backend.api.investments import router as investments_router
 from backend.api.investments_xray import router as investments_xray_router
 from backend.api.ledger import router as ledger_router
@@ -1088,7 +1088,7 @@ app.include_router(fixed_income_router)
 app.include_router(options_router)
 app.include_router(notification_log_router)
 app.include_router(intel_assets_router)
-app.include_router(holding_plans_router)
+app.include_router(investment_theses_router)
 app.include_router(intel_digest_router)
 app.include_router(intel_watch_router)
 app.include_router(intel_signals_router)

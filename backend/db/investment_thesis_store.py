@@ -1,18 +1,18 @@
 """
-HoldingPlanStore — why you own (or would buy) an instrument, and the prices that matter to you.
+InvestmentThesisStore — why you own (or would buy) an instrument, and the prices that matter to you.
 
-One plan per (book, instrument), independent of positions and watchlist membership: buying,
+One thesis per (book, instrument), independent of positions and watchlist membership: buying,
 selling or leaving every watchlist never touches it (a held ticker's auto "My holdings" watch
-item is deleted on a full sell, which is why the plan cannot live there — ADR
-``2026-10-27-a-holding-plan-lives-on-the-instrument``). Held vs watched is derived at read time,
+item is deleted on a full sell, which is why the thesis cannot live there — ADR
+``2026-10-27-an-investment-thesis-lives-on-the-instrument``). Held vs watched is derived at read time,
 never stored. User intent: checkpoint-included and portable.
 
-Plan schema:
-    id            : "hp_<12hex>"
+Thesis schema:
+    id            : "th_<12hex>"
     instrument_id : str
     role          : "core" | "satellite" | "speculative" | None
-    thesis        : str (<= 280)     why you own it / would buy it
-    exit_if       : str (<= 280)     what would make you sell
+    reason        : str (<= 280)     why you own it / would buy it
+    breaks_if     : str (<= 280)     the business fact that would break the thesis
     stop_below    : float | None     prices in the instrument's quote currency
     buy_below     : float | None     top of the buy zone
     buy_above     : float | None     optional floor of the buy zone (needs buy_below)
@@ -21,7 +21,7 @@ Plan schema:
     created_at    : ISO
     updated_at    : ISO
 
-``validate_plan`` is the one place these rules live; ``services.holding_plans.apply_plan_change``
+``validate_thesis`` is the one place these rules live; ``services.investment_theses.apply_thesis_change``
 is the one writer and calls it before every write.
 """
 
@@ -31,17 +31,17 @@ import math
 
 from backend.core.errors import ValidationError
 from backend.db.payload_store import BookPayloadTableStore
-from backend.db.tables import holding_plans
+from backend.db.tables import investment_theses
 
 ROLES = ("core", "satellite", "speculative")
-TEXT_FIELDS = ("thesis", "exit_if")
+TEXT_FIELDS = ("reason", "breaks_if")
 PRICE_FIELDS = ("stop_below", "buy_below", "buy_above", "fair_value", "trim_above")
-PLAN_FIELDS = ("role", *TEXT_FIELDS, *PRICE_FIELDS)
+THESIS_FIELDS = ("role", *TEXT_FIELDS, *PRICE_FIELDS)
 MAX_TEXT_CHARS = 280
 
 _LABELS = {
-    "thesis": "Why you own it",
-    "exit_if": "You'd sell if",
+    "reason": "Why you own it",
+    "breaks_if": "Breaks if",
     "stop_below": "Stop below",
     "buy_below": "Buy at or under",
     "buy_above": "…but not under",
@@ -62,12 +62,12 @@ def _price(key: str, raw) -> float | None:
     return value
 
 
-def validate_plan(fields: dict) -> dict:
-    """Normalize and check one plan's fields as a whole. Returns only the fields that are set;
-    an empty dict means the plan is blank (the caller deletes it)."""
-    unknown = set(fields) - set(PLAN_FIELDS)
+def validate_thesis(fields: dict) -> dict:
+    """Normalize and check one thesis's fields as a whole. Returns only the fields that are set;
+    an empty dict means the thesis is blank (the caller deletes it)."""
+    unknown = set(fields) - set(THESIS_FIELDS)
     if unknown:
-        raise ValidationError(f"Unknown plan field(s): {', '.join(sorted(unknown))}.")
+        raise ValidationError(f"Unknown thesis field(s): {', '.join(sorted(unknown))}.")
     out: dict = {}
     role = fields.get("role")
     if role not in (None, ""):
@@ -93,14 +93,14 @@ def validate_plan(fields: dict) -> dict:
     return out
 
 
-class HoldingPlanStore(BookPayloadTableStore):
+class InvestmentThesisStore(BookPayloadTableStore):
     def __init__(self, engine=None):
-        super().__init__(holding_plans, id_field="id", engine=engine)
+        super().__init__(investment_theses, id_field="id", engine=engine)
 
     def find_by_instrument(self, instrument_id: str, *, conn=None) -> dict | None:
         if not instrument_id:
             return None
-        for plan in self.all(conn=conn):
-            if plan.get("instrument_id") == instrument_id:
-                return plan
+        for thesis in self.all(conn=conn):
+            if thesis.get("instrument_id") == instrument_id:
+                return thesis
         return None

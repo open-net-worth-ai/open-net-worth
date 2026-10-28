@@ -1,22 +1,22 @@
-"""holding_plans — why you own (or would buy) an instrument, moved off the watch item.
+"""investment_theses — why you own (or would buy) an instrument, moved off the watch item.
 
 A watched ticker's ``intent`` (thesis, buy zone, fair value) lived inside the watchlist item, and
-a held ticker's auto "My holdings" item is deleted on a full sell — so a plan stored there died
-with the position. Plans now live in their own book-scoped table, one row per instrument (ADR
-``2026-10-27-a-holding-plan-lives-on-the-instrument``).
+a held ticker's auto "My holdings" item is deleted on a full sell — so a thesis stored there died
+with the position. Theses now live in their own book-scoped table, one row per instrument (ADR
+``2026-10-27-an-investment-thesis-lives-on-the-instrument``).
 
-Upgrade creates the table and moves every ticker item's ``intent`` into a plan when the item's
+Upgrade creates the table and moves every ticker item's ``intent`` into a thesis when the item's
 instrument is known: its ``instrument_id``, else exactly one instrument whose ``price_source_id``
 matches the ticker, else exactly one carrying it as a bare symbol (held crypto: "BTC" vs
 "bitcoin"). An item is left untouched — ``intent`` kept, logged — when no instrument matches,
-when a second item maps to an instrument that already got a plan, or when a stored price is not
-a number. ``services.holding_plans`` reads a kept intent as a fallback, and the first plan
-written for that instrument absorbs it.
+when a second item maps to an instrument that already got a thesis, or when a stored price is not
+a number. ``services.investment_theses`` reads a kept intent as a fallback, and the first thesis
+written for that instrument absorbs it. The intent's ``thesis`` text is stored as ``reason``.
 
-Downgrade copies each plan's thesis/buy_below/buy_above/fair_value back onto the matching watch
-item and drops the table; role, sell condition, stop and trim are lost on downgrade.
+Downgrade copies each thesis's reason/buy_below/buy_above/fair_value back onto the matching watch
+item (``reason`` as the intent's ``thesis``) and drops the table; role, breaks_if, stop and trim are lost on downgrade.
 
-Revision ID: 202610271200_holding_plans
+Revision ID: 202610271200_investment_theses
 Revises: 202610251700_statement_previews
 Create Date: 2026-10-27
 """
@@ -30,18 +30,24 @@ from datetime import datetime, timezone
 import sqlalchemy as sa
 from alembic import op
 
-revision = "202610271200_holding_plans"
+revision = "202610271200_investment_theses"
 down_revision = "202610251700_statement_previews"
 branch_labels = None
 depends_on = None
 
 log = logging.getLogger("alembic.runtime.migration")
 
-_INTENT_FIELDS = ("thesis", "buy_below", "buy_above", "fair_value")
-_PLAN_FIELDS = (
+# The watch intent's own key → the thesis field it is stored as.
+_INTENT_TO_THESIS = {
+    "thesis": "reason",
+    "buy_below": "buy_below",
+    "buy_above": "buy_above",
+    "fair_value": "fair_value",
+}
+_THESIS_FIELDS = (
     "role",
-    "thesis",
-    "exit_if",
+    "reason",
+    "breaks_if",
     "stop_below",
     "buy_below",
     "buy_above",
@@ -56,8 +62,8 @@ _watchlists = sa.Table(
 _instruments = sa.Table(
     "instruments", _meta, sa.Column("id", sa.Text), sa.Column("payload", sa.JSON)
 )
-_plans = sa.Table(
-    "holding_plans",
+_theses = sa.Table(
+    "investment_theses",
     _meta,
     sa.Column("book_id", sa.Text),
     sa.Column("seq", sa.Integer),
@@ -76,17 +82,17 @@ def _instrument_for(item: dict, by_source_id: dict, by_symbol: dict, known: set[
 
 
 def _intent_fields(intent: dict) -> dict | None:
-    """The intent as plan fields, or None when a stored price is not a usable number."""
+    """The intent as thesis fields, or None when a stored price is not a usable number."""
     out = {}
-    for key in _INTENT_FIELDS:
+    for key, field in _INTENT_TO_THESIS.items():
         value = intent.get(key)
         if value in (None, ""):
             continue
         if key == "thesis":
-            out[key] = str(value).strip()
+            out[field] = str(value).strip()
             continue
         try:
-            out[key] = float(value)
+            out[field] = float(value)
         except (TypeError, ValueError):
             return None
     return {k: v for k, v in out.items() if v != ""}
@@ -94,13 +100,15 @@ def _intent_fields(intent: dict) -> dict | None:
 
 def upgrade() -> None:
     op.create_table(
-        "holding_plans",
+        "investment_theses",
         sa.Column("book_id", sa.Text, sa.ForeignKey("books.id"), nullable=False),
         sa.Column("seq", sa.Integer, nullable=False),
         sa.Column("id", sa.Text, primary_key=True),
         sa.Column("payload", sa.JSON, nullable=False),
     )
-    op.create_index("ix_holding_plans_book_seq", "holding_plans", ["book_id", "seq"], unique=True)
+    op.create_index(
+        "ix_investment_theses_book_seq", "investment_theses", ["book_id", "seq"], unique=True
+    )
 
     conn = op.get_bind()
     known: set[str] = set()
@@ -120,7 +128,7 @@ def upgrade() -> None:
     for book_id, payload in conn.execute(sa.select(_watchlists.c.book_id, _watchlists.c.payload)):
         payload = dict(payload or {})
         items = [dict(i) for i in payload.get("items") or []]
-        planned: set[str] = set()
+        written: set[str] = set()
         changed = False
         for item in items:
             intent = item.get("intent")
@@ -128,31 +136,33 @@ def upgrade() -> None:
                 continue
             fields = _intent_fields(intent)
             iid = _instrument_for(item, by_source_id, by_symbol, known)
-            if iid is None or fields is None or iid in planned:
+            if iid is None or fields is None or iid in written:
                 log.warning(
-                    "holding_plans: kept the intent on watch item %s (%s)",
+                    "investment_theses: kept the intent on watch item %s (%s)",
                     item.get("id"),
                     "no single matching instrument"
                     if iid is None
                     else "a stored price is not a number"
                     if fields is None
-                    else "its instrument already has a plan from another item",
+                    else "its instrument already has a thesis from another item",
                 )
                 continue
             if fields:
-                plan = {
-                    "id": f"hp_{secrets.token_hex(6)}",
+                thesis = {
+                    "id": f"th_{secrets.token_hex(6)}",
                     "instrument_id": iid,
-                    **{k: None for k in _PLAN_FIELDS},
+                    **{k: None for k in _THESIS_FIELDS},
                     **fields,
                     "created_at": now,
                     "updated_at": now,
                 }
                 conn.execute(
-                    _plans.insert().values(book_id=book_id, seq=seq, id=plan["id"], payload=plan)
+                    _theses.insert().values(
+                        book_id=book_id, seq=seq, id=thesis["id"], payload=thesis
+                    )
                 )
                 seq += 1
-                planned.add(iid)
+                written.add(iid)
             item.pop("intent", None)
             changed = True
         if changed:
@@ -164,16 +174,16 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     conn = op.get_bind()
-    plans_by_book: dict[str, dict[str, dict]] = {}
-    for book_id, payload in conn.execute(sa.select(_plans.c.book_id, _plans.c.payload)):
-        plans_by_book.setdefault(book_id, {})[payload.get("instrument_id")] = payload
+    theses_by_book: dict[str, dict[str, dict]] = {}
+    for book_id, payload in conn.execute(sa.select(_theses.c.book_id, _theses.c.payload)):
+        theses_by_book.setdefault(book_id, {})[payload.get("instrument_id")] = payload
     source_ids = {
         iid: ((p or {}).get("price_source_id") or "").strip().lower()
         for iid, p in conn.execute(sa.select(_instruments.c.id, _instruments.c.payload))
     }
     for book_id, payload in conn.execute(sa.select(_watchlists.c.book_id, _watchlists.c.payload)):
-        plans = plans_by_book.get(book_id) or {}
-        if not plans:
+        theses = theses_by_book.get(book_id) or {}
+        if not theses:
             continue
         payload = dict(payload or {})
         items = [dict(i) for i in payload.get("items") or []]
@@ -184,14 +194,18 @@ def downgrade() -> None:
             if not iid:
                 ticker = (item.get("value") or "").strip().lower()
                 iid = next((k for k, v in source_ids.items() if v and v == ticker), None)
-            plan = plans.get(iid) if iid else None
-            if plan:
-                intent = {k: plan[k] for k in _INTENT_FIELDS if plan.get(k) not in (None, "")}
+            thesis = theses.get(iid) if iid else None
+            if thesis:
+                intent = {
+                    key: thesis[field]
+                    for key, field in _INTENT_TO_THESIS.items()
+                    if thesis.get(field) not in (None, "")
+                }
                 if intent:
                     item["intent"] = intent
         payload["items"] = items
         conn.execute(
             _watchlists.update().where(_watchlists.c.book_id == book_id).values(payload=payload)
         )
-    op.drop_index("ix_holding_plans_book_seq", table_name="holding_plans")
-    op.drop_table("holding_plans")
+    op.drop_index("ix_investment_theses_book_seq", table_name="investment_theses")
+    op.drop_table("investment_theses")

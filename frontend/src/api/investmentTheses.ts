@@ -1,15 +1,15 @@
 import { authFetch } from './client'
-import type { HoldingPlan, HoldingPlanFields } from '../types/assetDetail'
+import type { InvestmentThesis, InvestmentThesisFields } from '../types/assetDetail'
 
-const SAVE_FAILED = "Couldn't save your plan. Try again."
+const SAVE_FAILED = "Couldn't save your thesis. Try again."
 
-/** PUT /api/holding-plans/{id} — replaces the plan with `fields` (anything omitted is blanked).
+/** PUT /api/investment-theses/{id} — replaces the thesis with `fields` (anything omitted is blanked).
  *  Rejects with the server's reason on a 422 (e.g. a buy-zone floor above its top). */
-export async function saveHoldingPlan(
+export async function saveInvestmentThesis(
   instrumentId: string,
-  fields: HoldingPlanFields,
-): Promise<HoldingPlan | null> {
-  const res = await authFetch(`/api/holding-plans/${encodeURIComponent(instrumentId)}`, {
+  fields: InvestmentThesisFields,
+): Promise<InvestmentThesis | null> {
+  const res = await authFetch(`/api/investment-theses/${encodeURIComponent(instrumentId)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(fields),
@@ -26,6 +26,6 @@ export async function saveHoldingPlan(
     }
     throw new Error(detail)
   }
-  const body = (await res.json()) as { plan: HoldingPlan | null }
-  return body.plan
+  const body = (await res.json()) as { thesis: InvestmentThesis | null }
+  return body.thesis
 }

@@ -10382,7 +10382,7 @@
       "guide"
     ]
   },
-  "get_holding_plans": {
+  "get_investment_theses": {
     "additionalProperties": false,
     "properties": {
       "tickers": {
@@ -10390,13 +10390,13 @@
           "type": "string"
         },
         "type": "array",
-        "description": "Only these tickers, e.g. ['AAPL']. Omit for every plan."
+        "description": "Only these tickers, e.g. ['AAPL']. Omit for every thesis."
       }
     },
     "type": "object",
     "required": []
   },
-  "set_holding_plans": {
+  "set_investment_theses": {
     "additionalProperties": false,
     "properties": {
       "updates": {
@@ -10404,7 +10404,7 @@
         "items": {
           "properties": {
             "ticker": {
-              "description": "The ticker whose plan to write, e.g. 'AAPL'.",
+              "description": "The ticker whose thesis to write, e.g. 'AAPL'.",
               "type": "string"
             },
             "role": {
@@ -10416,13 +10416,13 @@
               "type": "string",
               "description": "core = long-term base of the portfolio; satellite = an active bet around it; speculative = a small, high-risk bet."
             },
-            "thesis": {
+            "reason": {
               "type": "string",
               "description": "Why they own it, or would buy it. At most 280 characters."
             },
-            "exit_if": {
+            "breaks_if": {
               "type": "string",
-              "description": "The business condition that would make them sell. At most 280 characters."
+              "description": "The business fact that would break the thesis and make them sell. At most 280 characters."
             },
             "stop_below": {
               "type": "number",
@@ -10465,11 +10465,11 @@
     ],
     "type": "object"
   },
-  "delete_holding_plans": {
+  "delete_investment_theses": {
     "additionalProperties": false,
     "properties": {
       "tickers": {
-        "description": "Tickers whose plans to delete.",
+        "description": "Tickers whose theses to delete.",
         "items": {
           "type": "string"
         },

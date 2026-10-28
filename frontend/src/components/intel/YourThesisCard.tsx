@@ -10,15 +10,15 @@ import {
   TextArea,
   TextField,
 } from '../ui'
-import { saveHoldingPlan } from '../../api/holdingPlans'
-import type { HoldingPlan, HoldingPlanFields } from '../../types/assetDetail'
+import { saveInvestmentThesis } from '../../api/investmentTheses'
+import type { InvestmentThesis, InvestmentThesisFields } from '../../types/assetDetail'
 import { fPrice } from '../../utils/format'
 
-// "Your Plan" — why you own (or would buy) this instrument and the prices that matter to you.
-// One plan per instrument (services/holding_plans); held vs watched only changes what is shown:
-// a holding adds its role, sell condition, stop and trim.
+// "Your Thesis" — why you own (or would buy) this instrument and the prices that matter to you.
+// One thesis per instrument (services/investment_theses); held vs watched only changes what is shown:
+// a holding adds its role, breaks-if, stop and trim.
 
-type Role = NonNullable<HoldingPlan['role']>
+type Role = NonNullable<InvestmentThesis['role']>
 type PriceKey = 'stop_below' | 'buy_below' | 'buy_above' | 'fair_value' | 'trim_above'
 
 const ROLES: { value: Role; label: string; help: string }[] = [
@@ -50,7 +50,7 @@ const PRICE_LABELS: Record<PriceKey, string> = {
 interface Props {
   instrumentId: string
   ticker: string
-  plan: HoldingPlan | null
+  thesis: InvestmentThesis | null
   held: boolean
   price: number | null
   /** Max fraction digits for prices (undefined = the formatter's own, for crypto). */
@@ -60,8 +60,8 @@ interface Props {
 
 interface Draft {
   role: Role | null
-  thesis: string
-  exit_if: string
+  reason: string
+  breaks_if: string
   prices: Record<PriceKey, string>
 }
 
@@ -73,18 +73,18 @@ const num = (s: string): number | null => {
   return Number.isFinite(v) && v > 0 ? v : null
 }
 
-function draftOf(plan: HoldingPlan | null): Draft {
+function draftOf(thesis: InvestmentThesis | null): Draft {
   const str = (v: number | null | undefined) => (v == null ? '' : String(v))
   return {
-    role: plan?.role ?? null,
-    thesis: plan?.thesis ?? '',
-    exit_if: plan?.exit_if ?? '',
+    role: thesis?.role ?? null,
+    reason: thesis?.reason ?? '',
+    breaks_if: thesis?.breaks_if ?? '',
     prices: {
-      stop_below: str(plan?.stop_below),
-      buy_below: str(plan?.buy_below),
-      buy_above: str(plan?.buy_above),
-      fair_value: str(plan?.fair_value),
-      trim_above: str(plan?.trim_above),
+      stop_below: str(thesis?.stop_below),
+      buy_below: str(thesis?.buy_below),
+      buy_above: str(thesis?.buy_above),
+      fair_value: str(thesis?.fair_value),
+      trim_above: str(thesis?.trim_above),
     },
   }
 }
@@ -109,16 +109,20 @@ function draftError(d: Draft): { message: string; field: PriceKey } | null {
   return null
 }
 
-/** The fields a save sends. PUT replaces the plan, so held-only fields a watched card doesn't
+/** The fields a save sends. PUT replaces the thesis, so held-only fields a watched card doesn't
  *  show are carried over unchanged rather than wiped. */
-function fieldsOf(d: Draft, plan: HoldingPlan | null, held: boolean): HoldingPlanFields {
+function fieldsOf(
+  d: Draft,
+  thesis: InvestmentThesis | null,
+  held: boolean,
+): InvestmentThesisFields {
   const pick = (k: PriceKey) => num(d.prices[k])
   return {
-    role: held ? d.role : (plan?.role ?? null),
-    thesis: d.thesis.trim() || null,
-    exit_if: held ? d.exit_if.trim() || null : (plan?.exit_if ?? null),
-    stop_below: held ? pick('stop_below') : (plan?.stop_below ?? null),
-    trim_above: held ? pick('trim_above') : (plan?.trim_above ?? null),
+    role: held ? d.role : (thesis?.role ?? null),
+    reason: d.reason.trim() || null,
+    breaks_if: held ? d.breaks_if.trim() || null : (thesis?.breaks_if ?? null),
+    stop_below: held ? pick('stop_below') : (thesis?.stop_below ?? null),
+    trim_above: held ? pick('trim_above') : (thesis?.trim_above ?? null),
     buy_below: pick('buy_below'),
     buy_above: pick('buy_above'),
     fair_value: pick('fair_value'),
@@ -132,24 +136,39 @@ interface Level {
   at: number
 }
 
-function levelsOf(plan: HoldingPlan, held: boolean, fmt: (v: number) => string): Level[] {
+function levelsOf(thesis: InvestmentThesis, held: boolean, fmt: (v: number) => string): Level[] {
   const out: Level[] = []
-  if (held && plan.stop_below != null)
-    out.push({ key: 'stop', label: 'Stop below', value: fmt(plan.stop_below), at: plan.stop_below })
-  if (plan.buy_below != null)
+  if (held && thesis.stop_below != null)
+    out.push({
+      key: 'stop',
+      label: 'Stop below',
+      value: fmt(thesis.stop_below),
+      at: thesis.stop_below,
+    })
+  if (thesis.buy_below != null)
     out.push({
       key: 'zone',
       label: 'Buy zone',
       value:
-        plan.buy_above != null
-          ? `${fmt(plan.buy_above)}–${fmt(plan.buy_below)}`
-          : `≤ ${fmt(plan.buy_below)}`,
-      at: plan.buy_below,
+        thesis.buy_above != null
+          ? `${fmt(thesis.buy_above)}–${fmt(thesis.buy_below)}`
+          : `≤ ${fmt(thesis.buy_below)}`,
+      at: thesis.buy_below,
     })
-  if (plan.fair_value != null)
-    out.push({ key: 'fair', label: 'Fair value', value: fmt(plan.fair_value), at: plan.fair_value })
-  if (held && plan.trim_above != null)
-    out.push({ key: 'trim', label: 'Trim above', value: fmt(plan.trim_above), at: plan.trim_above })
+  if (thesis.fair_value != null)
+    out.push({
+      key: 'fair',
+      label: 'Fair value',
+      value: fmt(thesis.fair_value),
+      at: thesis.fair_value,
+    })
+  if (held && thesis.trim_above != null)
+    out.push({
+      key: 'trim',
+      label: 'Trim above',
+      value: fmt(thesis.trim_above),
+      at: thesis.trim_above,
+    })
   return out
 }
 
@@ -159,32 +178,33 @@ function distance(level: number, price: number): string {
 }
 
 function PriceBar({
-  plan,
+  thesis,
   levels,
   price,
   fmt,
 }: {
-  plan: HoldingPlan
+  thesis: InvestmentThesis
   levels: Level[]
   price: number
   fmt: (v: number) => string
 }) {
-  const zoneLow = plan.buy_below != null ? (plan.buy_above ?? null) : null
+  const zoneLow = thesis.buy_below != null ? (thesis.buy_above ?? null) : null
   const points = [price, ...levels.map((l) => l.at), ...(zoneLow != null ? [zoneLow] : [])]
   const lo = Math.min(...points) * 0.9
   const hi = Math.max(...points) * 1.05
   const pct = (v: number) => `${(((v - lo) / (hi - lo)) * 100).toFixed(2)}%`
-  const zoneFrom = plan.buy_below != null ? (zoneLow ?? Math.max(lo, plan.buy_below * 0.88)) : null
-  const label = `Price ${fmt(price)} against your plan: ${levels.map((l) => `${l.label} ${l.value}`).join(', ')}`
+  const zoneFrom =
+    thesis.buy_below != null ? (zoneLow ?? Math.max(lo, thesis.buy_below * 0.88)) : null
+  const label = `Price ${fmt(price)} against your thesis: ${levels.map((l) => `${l.label} ${l.value}`).join(', ')}`
   return (
-    <div className="asd-plan-bar" role="img" aria-label={label}>
-      <div className="asd-plan-track" />
-      {plan.buy_below != null && zoneFrom != null && (
+    <div className="asd-thesis-bar" role="img" aria-label={label}>
+      <div className="asd-thesis-track" />
+      {thesis.buy_below != null && zoneFrom != null && (
         <div
-          className="asd-plan-zone"
+          className="asd-thesis-zone"
           style={{
             left: pct(zoneFrom),
-            width: `${(((plan.buy_below - zoneFrom) / (hi - lo)) * 100).toFixed(2)}%`,
+            width: `${(((thesis.buy_below - zoneFrom) / (hi - lo)) * 100).toFixed(2)}%`,
           }}
         />
       )}
@@ -193,35 +213,35 @@ function PriceBar({
         .map((l) => (
           <div
             key={l.key}
-            className={`asd-plan-tick asd-plan-tick--${l.key}`}
+            className={`asd-thesis-tick asd-thesis-tick--${l.key}`}
             style={{ left: pct(l.at) }}
           />
         ))}
-      <div className="asd-plan-now" style={{ left: pct(price) }} />
-      <div className="asd-plan-now-label" style={{ left: pct(price) }}>
+      <div className="asd-thesis-now" style={{ left: pct(price) }} />
+      <div className="asd-thesis-now-label" style={{ left: pct(price) }}>
         {fmt(price)}
       </div>
     </div>
   )
 }
 
-export function YourPlanCard({
+export function YourThesisCard({
   instrumentId,
   ticker,
-  plan,
+  thesis,
   held,
   price,
   priceMaxFrac,
   onSaved,
 }: Props) {
-  // The saved plan shows at once; the refetch's copy replaces it as soon as `plan` changes.
+  // The saved thesis shows at once; the refetch's copy replaces it as soon as `thesis` changes.
   const [justSaved, setJustSaved] = useState<{
-    over: HoldingPlan | null
-    plan: HoldingPlan | null
+    over: InvestmentThesis | null
+    thesis: InvestmentThesis | null
   } | null>(null)
-  const current = justSaved && justSaved.over === plan ? justSaved.plan : plan
+  const current = justSaved && justSaved.over === thesis ? justSaved.thesis : thesis
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState<Draft>(() => draftOf(plan))
+  const [draft, setDraft] = useState<Draft>(() => draftOf(thesis))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -239,12 +259,12 @@ export function YourPlanCard({
     setSaving(true)
     setError(null)
     try {
-      const saved = await saveHoldingPlan(instrumentId, fieldsOf(draft, current, held))
-      setJustSaved({ over: plan, plan: saved })
+      const saved = await saveInvestmentThesis(instrumentId, fieldsOf(draft, current, held))
+      setJustSaved({ over: thesis, thesis: saved })
       setEditing(false)
       onSaved()
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't save your plan. Try again.")
+      setError(e instanceof Error ? e.message : "Couldn't save your thesis. Try again.")
     } finally {
       setSaving(false)
     }
@@ -253,7 +273,7 @@ export function YourPlanCard({
   const role = held && current?.role ? ROLES.find((r) => r.value === current.role) : undefined
   const levels = current ? levelsOf(current, held, fmt) : []
   const hasContent =
-    !!current && (!!current.thesis || (held && !!current.exit_if) || levels.length > 0)
+    !!current && (!!current.reason || (held && !!current.breaks_if) || levels.length > 0)
 
   const actions = editing ? undefined : (
     <button type="button" className="asd-rail-manage" onClick={startEdit}>
@@ -264,21 +284,21 @@ export function YourPlanCard({
 
   const badge =
     role && !editing ? (
-      <span className="asd-plan-role-wrap">
-        <span className="asd-plan-role">{role.label}</span>
+      <span className="asd-thesis-role-wrap">
+        <span className="asd-thesis-role">{role.label}</span>
         <InfoPopover text={role.help} label={`What ${role.label} means`} />
       </span>
     ) : undefined
 
   return (
     <Panel
-      title="Your Plan"
+      title="Your Thesis"
       badge={badge}
       actions={actions}
-      className="asd-rail-panel asd-plan-card"
+      className="asd-rail-panel asd-thesis-card"
     >
       {editing ? (
-        <div className="asd-plan-form">
+        <div className="asd-thesis-form">
           {held && (
             <FormField label="Role" info={role?.help}>
               <SegmentedControl<Role>
@@ -289,31 +309,31 @@ export function YourPlanCard({
               />
             </FormField>
           )}
-          <FormField label={held ? 'Why you own it' : 'Why you’d buy it'} htmlFor="plan-thesis">
+          <FormField label={held ? 'Why you own it' : 'Why you’d buy it'} htmlFor="thesis-reason">
             <TextArea
-              id="plan-thesis"
+              id="thesis-reason"
               rows={3}
               maxLength={280}
-              value={draft.thesis}
+              value={draft.reason}
               placeholder={
                 held ? 'What has to keep being true?' : 'What would make it worth owning?'
               }
-              onChange={(e) => setDraft({ ...draft, thesis: e.target.value })}
+              onChange={(e) => setDraft({ ...draft, reason: e.target.value })}
             />
           </FormField>
           {held && (
-            <FormField label="You’d sell if" htmlFor="plan-exit">
+            <FormField label="Thesis breaks if" htmlFor="thesis-breaks">
               <TextArea
-                id="plan-exit"
+                id="thesis-breaks"
                 rows={3}
                 maxLength={280}
-                value={draft.exit_if}
+                value={draft.breaks_if}
                 placeholder="What would prove you wrong?"
-                onChange={(e) => setDraft({ ...draft, exit_if: e.target.value })}
+                onChange={(e) => setDraft({ ...draft, breaks_if: e.target.value })}
               />
             </FormField>
           )}
-          <div className="asd-plan-grid">
+          <div className="asd-thesis-grid">
             {(held
               ? (['stop_below', 'trim_above', 'buy_below', 'buy_above', 'fair_value'] as PriceKey[])
               : (['buy_below', 'buy_above', 'fair_value'] as PriceKey[])
@@ -321,11 +341,11 @@ export function YourPlanCard({
               <FormField
                 key={k}
                 label={PRICE_LABELS[k]}
-                htmlFor={`plan-${k}`}
+                htmlFor={`thesis-${k}`}
                 span={held && k === 'fair_value' ? 'full' : 1}
               >
                 <TextField
-                  id={`plan-${k}`}
+                  id={`thesis-${k}`}
                   inputMode="decimal"
                   placeholder="—"
                   value={draft.prices[k]}
@@ -342,7 +362,7 @@ export function YourPlanCard({
               {localError?.message ?? error}
             </p>
           )}
-          <div className="asd-plan-actions">
+          <div className="asd-thesis-actions">
             <Button
               variant="secondary"
               size="sm"
@@ -352,7 +372,7 @@ export function YourPlanCard({
               Cancel
             </Button>
             <Button variant="primary" size="sm" onClick={() => void save()} loading={saving}>
-              Save plan
+              Save thesis
             </Button>
           </div>
         </div>
@@ -361,30 +381,33 @@ export function YourPlanCard({
           {held ? `Write down why you own ${ticker}.` : `Write down why you’d buy ${ticker}.`}
         </Text>
       ) : (
-        <div className="asd-plan-body">
-          {current?.thesis && <p className="asd-plan-thesis">{current.thesis}</p>}
-          {held && current?.exit_if && (
-            <div className="asd-plan-exit">
-              <p className="asd-plan-exit-label">You’d sell if</p>
-              <p className="asd-plan-thesis">{current.exit_if}</p>
+        <div className="asd-thesis-body">
+          {current?.reason && <p className="asd-thesis-reason">{current.reason}</p>}
+          {held && current?.breaks_if && (
+            <div className="asd-thesis-breaks">
+              <p className="asd-thesis-breaks-label">Thesis breaks if</p>
+              <p className="asd-thesis-reason">{current.breaks_if}</p>
             </div>
           )}
           {levels.length > 0 && (
             <div>
               {price != null && current && (
-                <PriceBar plan={current} levels={levels} price={price} fmt={fmt} />
+                <PriceBar thesis={current} levels={levels} price={price} fmt={fmt} />
               )}
-              <div className="asd-plan-levels">
+              <div className="asd-thesis-levels">
                 {levels.map((l) => (
                   <div key={l.key} className="asd-pos-row">
                     <span className="asd-pos-label">
-                      <span className={`asd-plan-key asd-plan-key--${l.key}`} aria-hidden="true" />
+                      <span
+                        className={`asd-thesis-key asd-thesis-key--${l.key}`}
+                        aria-hidden="true"
+                      />
                       {l.label}
                     </span>
                     <span className="asd-pos-value">
                       {l.value}
                       {price != null && (
-                        <span className="asd-plan-dist">{distance(l.at, price)}</span>
+                        <span className="asd-thesis-dist">{distance(l.at, price)}</span>
                       )}
                     </span>
                   </div>
