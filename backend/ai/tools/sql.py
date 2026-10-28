@@ -69,12 +69,7 @@ def _origin_and_session() -> tuple[str, Optional[str]]:
 
 
 class RunSqlQueryInput(ToolInput):
-    sql: str = Field(
-        description=(
-            "ONE read-only SELECT (or WITH … SELECT) statement. Writes are refused by the "
-            "database itself, not just by validation."
-        )
-    )
+    sql: str = Field(description="ONE read-only SELECT (or WITH … SELECT) statement.")
     limit: Optional[int] = Field(
         default=None,
         description="Max rows to return (default 200, hard max 1000). Aggregate instead of raising this.",
@@ -86,8 +81,8 @@ class RunSqlQueryInput(ToolInput):
     description=(
         "Run ONE read-only SQL SELECT against this app's own database, for questions the other "
         "tools cannot express (joins, distributions, 'which X appears in both A and B'). "
-        "Writes, ATTACH, PRAGMA, multiple statements, credential tables and chat transcripts "
-        "are all refused by the database itself.\n"
+        "Tables holding credentials are not readable. For earlier conversations use "
+        "search_past_conversations and read_past_conversation instead.\n"
         "CALL describe_db_schema FIRST — most tables keep their real fields inside a `payload` "
         "JSON column, so `SELECT quantity FROM positions` fails and "
         "`json_extract(payload,'$.quantity')` is what you want.\n"

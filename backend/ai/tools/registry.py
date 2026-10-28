@@ -956,6 +956,7 @@ _DEMO_REFUSED_TOOLS = frozenset(
         "set_news_sources_enabled",
         "scan_intel",
         "search_past_conversations",
+        "read_past_conversation",
     }
 )
 
