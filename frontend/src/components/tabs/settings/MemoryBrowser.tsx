@@ -28,6 +28,16 @@ import type { PendingForget, RowActs } from './MemoryParts'
 import { SECTIONS, UNSORTED, groupFacts, matchesFilter, summaryOf, topicsOf } from './memoryGroups'
 import type { Topic } from './memoryGroups'
 
+/** The element the browser scrolls in: the Settings pane, the dialog's body, or the page. */
+function scrollParent(el: HTMLElement | null): HTMLElement | null {
+  for (let p = el?.parentElement; p; p = p.parentElement) {
+    const { overflowY } = getComputedStyle(p)
+    if ((overflowY === 'auto' || overflowY === 'scroll') && p.scrollHeight > p.clientHeight)
+      return p
+  }
+  return document.scrollingElement as HTMLElement | null
+}
+
 function BackLink({ onClick }: { onClick: () => void }) {
   return (
     <button type="button" className="rd-mem-back" onClick={onClick}>
@@ -104,12 +114,23 @@ export function MemoryBrowser({
   const shown = needle ? groupFacts(facts.filter((f) => matchesFilter(f, needle))) : all
   const top = useRef<HTMLDivElement>(null)
 
-  // Opening or leaving a topic starts at its top, not wherever the list was scrolled to.
+  // Opening a topic starts at its top; leaving it puts the list back where it was scrolled to.
   const lastOpen = useRef(open)
+  const listScroll = useRef<{ el: HTMLElement; y: number } | null>(null)
   useLayoutEffect(() => {
-    if (lastOpen.current !== open) top.current?.scrollIntoView({ block: 'start' })
+    if (lastOpen.current !== open) {
+      const back = open ? null : listScroll.current
+      if (back) back.el.scrollTop = back.y
+      else top.current?.scrollIntoView({ block: 'start' })
+    }
     lastOpen.current = open
   }, [open])
+
+  function openTopic(next: { section: string; key: string }) {
+    const el = scrollParent(top.current)
+    listScroll.current = el ? { el, y: el.scrollTop } : null
+    setOpen(next)
+  }
 
   useEffect(() => {
     if (!escapeRef) return
@@ -256,7 +277,7 @@ export function MemoryBrowser({
                       key={t.key}
                       topic={whole(s.key, t)}
                       summary={summaryOf(summaries, s.key, t.key)}
-                      onOpen={() => setOpen({ section: s.key, key: t.key })}
+                      onOpen={() => openTopic({ section: s.key, key: t.key })}
                       onDelete={() => askDelete(s.key, t)}
                     />
                   ))

@@ -99,8 +99,19 @@ export function MemorySwipeRow({ acts, children }: { acts: RowActs; children: Re
   return (
     <SwipeActions
       actions={[
-        { label: 'Edit', ariaLabel: acts.editLabel, onClick: acts.onEdit },
-        { label: acts.word, ariaLabel: acts.forgetLabel, onClick: acts.onForget, tone: 'danger' },
+        {
+          label: 'Edit',
+          ariaLabel: acts.editLabel,
+          onClick: acts.onEdit,
+          icon: <Pencil size={20} strokeWidth={1.8} aria-hidden="true" />,
+        },
+        {
+          label: acts.word,
+          ariaLabel: acts.forgetLabel,
+          onClick: acts.onForget,
+          tone: 'danger',
+          icon: <Trash2 size={20} strokeWidth={1.8} aria-hidden="true" />,
+        },
       ]}
     >
       {children}

@@ -28,6 +28,8 @@ export interface SwipeAction {
   ariaLabel: string
   onClick: () => void
   tone?: 'danger'
+  /** Drawn instead of the label, matching the row's own hover icons elsewhere. */
+  icon?: ReactNode
 }
 
 // One open row in the whole app: opening another closes it.
@@ -129,7 +131,7 @@ function SwipeRow({
               a.onClick()
             }}
           >
-            {a.label}
+            {a.icon ?? a.label}
           </button>
         ))}
       </div>
