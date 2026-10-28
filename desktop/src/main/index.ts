@@ -15,7 +15,7 @@ import { handOverToInstaller, showUpdateProgress } from './update-progress';
 import { bundledRuntime, type RuntimeConfig } from './runtime';
 import { externalUrl } from './security';
 import { DesktopWindow } from './window';
-import { goMenu, helpMenu, privateCloudItems, viewMenu, windowMenu } from './app-menu';
+import { goMenu, helpMenu, newItems, privateCloudItems, viewMenu, windowMenu } from './app-menu';
 import { qaInactiveMode } from './window-chrome';
 import { desktopEvent } from './desktop-events';
 import { initialBookRoot, inspectBookFolder, verifyConfirmedBookRoot, verifyRememberedBookRoot, type BookFolder } from './book-folder';
@@ -689,7 +689,7 @@ function installMenu(): void {
     { label: 'Open in browser', click: () => nativeAction(() => books!.exclusive(openBrowser)) },
     { label: 'Import statement or receipt…', enabled: !main?.serverOrigin, accelerator: 'CmdOrCtrl+O', click: importAction },
     { label: 'Export book…', enabled: !main?.serverOrigin, accelerator: 'CmdOrCtrl+Shift+E', click: () => { if (main && !main.serverOrigin && backend?.origin && !starting) nativeAction(() => books!.exclusive(() => saveExport(main!.window, backend!))); } },
-    { type: 'separator' }, { label: 'New transaction', accelerator: 'CmdOrCtrl+N', click: () => command({ type: 'new-transaction' }) },
+    { type: 'separator' }, ...newItems(command),
     // Closing hides the window exactly like the red button; on Windows and Linux that would quit, which Quit already offers.
     ...(mac ? [{ type: 'separator' as const }, { role: 'close' as const }] : [{ type: 'separator' as const }, { label: 'Settings…', accelerator: 'CmdOrCtrl+,', click: openSettings }, { label: 'Background and startup…', click: showBackground }, { type: 'separator' as const }, { role: 'quit' as const }]),
   ] };

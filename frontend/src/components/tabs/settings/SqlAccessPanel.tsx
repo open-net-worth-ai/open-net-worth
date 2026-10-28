@@ -25,7 +25,7 @@ import { useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { useCachedFetchState } from '../../../state/queryCache'
 import { fDate } from '../../../utils/format'
-import { Btn, Empty, Panel, Toggle, row, useSectionBusy } from './ds'
+import { Badge, Btn, Empty, Panel, Toggle, row, useSectionBusy } from './ds'
 import type { SectionProps } from './ds'
 
 export interface SqlQueryRow {
@@ -104,11 +104,22 @@ function QueryRow({ q }: { q: SqlQueryRow }) {
   )
 }
 
+/** `available` is false only on Postgres, when the app could not prepare the separate
+ * database login Lucius's SQL runs as; `fix` is set when only an operator can resolve it. */
+interface SqlConfig {
+  enabled: boolean
+  available?: boolean
+  reason?: string
+  fix?: string
+}
+
 export function SqlAccessPanel({ toast }: SectionProps) {
-  const config = useCachedFetchState<{ enabled: boolean }>(
+  const config = useCachedFetchState<SqlConfig>(
     CONFIG_PATH,
-    () => getJson<{ enabled: boolean }>(CONFIG_PATH),
-    { staleTime: 0 },
+    () => getJson<SqlConfig>(CONFIG_PATH),
+    {
+      staleTime: 0,
+    },
   )
   const log = useCachedFetchState<{ queries: SqlQueryRow[] }>(
     LOG_PATH,
@@ -118,6 +129,8 @@ export function SqlAccessPanel({ toast }: SectionProps) {
   useSectionBusy(config.initialLoading && !config.data)
 
   const enabled = config.data?.enabled ?? true
+  const unavailable = config.data?.available === false
+  const fix = config.data?.fix ?? ''
   const queries = log.data?.queries ?? []
 
   async function setEnabled(next: boolean) {
@@ -168,6 +181,37 @@ export function SqlAccessPanel({ toast }: SectionProps) {
           label="Direct SQL reads"
         />,
       )}
+
+      {enabled && unavailable
+        ? row(
+            'Not working on this database',
+            <>
+              {`Lucius can't run SQL right now: ${config.data?.reason ?? ''}`}
+              {fix
+                ? ' Run this once as a database admin; it starts working within a minute, no restart needed.'
+                : null}
+            </>,
+            <Badge tone="warn">Unavailable</Badge>,
+          )
+        : null}
+      {enabled && unavailable && fix ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <code className="rd-code" style={{ flex: 1, minWidth: 0 }}>
+            {fix}
+          </code>
+          <Btn
+            size="xs"
+            onClick={() => {
+              void navigator.clipboard
+                .writeText(fix)
+                .then(() => toast('Copied'))
+                .catch(() => toast('Could not copy — select the command manually'))
+            }}
+          >
+            Copy
+          </Btn>
+        </div>
+      ) : null}
 
       {log.error && !log.data ? (
         <Empty

@@ -268,13 +268,15 @@ def _clear_tier2_tables(engine) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _sql_console_role_for_postgres_ci(monkeypatch):
-    """On a Postgres test run the SQL console needs its dedicated-role URL (it is refused
-    without one). CI's single test role stands in for it; the refusal itself is tested in
-    tests/db/test_sql_console_postgres_gate.py, which clears this."""
-    url = os.environ.get("ONW_TEST_DATABASE_URL") or ""
-    if url.startswith("postgres"):
-        monkeypatch.setenv("ONW_SQL_CONSOLE_DATABASE_URL", url)
+def _sql_console_login_per_test(monkeypatch):
+    """On a Postgres test run the app manages the SQL console's login itself; each test drops
+    the schema, so the prepared login and its grants are forgotten between tests."""
+    from backend.db import sql_console_role
+
+    monkeypatch.delenv("ONW_SQL_CONSOLE_DATABASE_URL", raising=False)
+    sql_console_role.reset()
+    yield
+    sql_console_role.reset()
 
 
 @pytest.fixture(autouse=True)

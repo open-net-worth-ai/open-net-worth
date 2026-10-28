@@ -22,6 +22,7 @@ import logging
 import logging.config
 import math
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -357,6 +358,20 @@ async def lifespan(app: FastAPI):
     from backend.db.migrate import ensure_migrated
 
     ensure_migrated(allow_live_instance=True)
+
+    # ── Postgres: create / re-sync Lucius's SQL login against THIS schema, right after the
+    # migration that may have added tables, so an upgrade never leaves a table unreadable or a
+    # credential table readable. Off the event loop (a remote server can be slow) and
+    # non-fatal: an unavailable login only switches SQL access off, with the reason in Settings.
+    from backend.db import sql_console
+
+    def _prepare_sql_console() -> None:
+        try:
+            sql_console.console_status()
+        except Exception:
+            _log.exception("SQL console login preparation failed (non-fatal)")
+
+    threading.Thread(target=_prepare_sql_console, name="sql-console-login", daemon=True).start()
 
     # ── A shell in the browser runs as this user: make this process unreadable to it, and drop
     # the secrets Settings has already absorbed from the live environment. AFTER Settings is
