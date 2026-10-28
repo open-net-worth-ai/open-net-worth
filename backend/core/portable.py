@@ -90,6 +90,7 @@ from backend.paths import (
     INSTITUTIONS_JSON,
     INSTRUMENTS_JSON,
     INTEL_STORIES_JSON,
+    INVESTMENT_THESES_JSON,
     LOTS_JSON,
     MEMORY_JSON,
     MERGE_JOURNAL_JSON,
@@ -162,6 +163,7 @@ PORTABLE_FILES: list[Path] = [
     PRICE_HISTORY_JSON,
     # Option contracts — portfolio truth, like lots/grants — checkpoint-INCLUDED and portable.
     OPTION_CONTRACTS_JSON,
+    INVESTMENT_THESES_JSON,
     ACTIONS_JSON,
     COMMITMENTS_JSON,
     # Owned-assets domain (ADR 2026-09-06-assets-tab-faithful-port) — a sibling of

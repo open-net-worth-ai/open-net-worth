@@ -1,5 +1,5 @@
 // The manage view's three sub-blocks — the Lucius suggestion set, one alert row, and the
-// ticker-level settings (mute + news feeds). Split out of ManageAlerts.tsx for file size only;
+// ticker's additional news feeds. Split out of ManageAlerts.tsx for file size only;
 // the DOM and class names are the prototype's, unchanged.
 import { useRef, useState } from 'react'
 import { Button, Money, Switch, TextField } from '../../ui'
@@ -104,56 +104,32 @@ export function SuggestionSet({
   )
 }
 
-type SavedKey = 'mute' | 'feeds' | null
-
-/** Mute + News sources. Each control commits itself — the per-alert toggles already do, so a
- * Save button covering only mute and feeds would be ambiguous. A feed row commits on blur and
- * an empty one is dropped there, matching the upstream filter. */
+/** Additional news sources. Each feed commits itself, like the per-alert toggles; a row commits
+ * on blur and an empty one is dropped there, matching the upstream filter. */
 export function TickerSettings({
   sym,
-  muted,
   feeds,
   feedLaneActive,
-  onMute,
   onFeeds,
   onCommitFeeds,
 }: {
   sym: string
-  muted: boolean
   feeds: string[]
   /** Whether the hot RSS lane that fetches these feeds is running (null = not known yet). */
   feedLaneActive: boolean | null
-  onMute: (on: boolean) => void
   onFeeds: (next: string[]) => void
   onCommitFeeds: (next: string[]) => void
 }) {
   const [feedsOpen, setFeedsOpen] = useState(false)
-  const [saved, setSaved] = useState<SavedKey>(null)
+  const [saved, setSaved] = useState(false)
   const savedT = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const flash = (key: SavedKey) => {
-    setSaved(key)
+  const flash = () => {
+    setSaved(true)
     if (savedT.current) clearTimeout(savedT.current)
-    savedT.current = setTimeout(() => setSaved(null), 2200)
-  }
-  const commitMute = (on: boolean) => {
-    onMute(on)
-    flash('mute')
+    savedT.current = setTimeout(() => setSaved(false), 2200)
   }
   return (
     <div className="pa-set">
-      <div className="pa-setrow">
-        <span className="pa-set-b">
-          <span className="pa-set-t">Mute {sym}</span>
-          <span className={'pa-saved' + (saved === 'mute' ? ' pa-saved--on' : '')}>
-            <Check size={11} strokeWidth={2.4} /> Saved
-          </span>
-        </span>
-        <Switch
-          checked={muted}
-          onChange={(e) => commitMute(e.target.checked)}
-          aria-label={`Mute ${sym}`}
-        />
-      </div>
       <div className="pa-feeds">
         <button
           type="button"
@@ -161,7 +137,7 @@ export function TickerSettings({
           aria-expanded={feedsOpen}
           onClick={() => setFeedsOpen((o) => !o)}
         >
-          <span className="pa-feeds-t">News sources</span>
+          <span className="pa-feeds-t">Additional news sources</span>
           {feeds.length > 0 && (
             <span className="pa-feeds-n">
               {feeds.length} feed{feeds.length === 1 ? '' : 's'}
@@ -194,7 +170,7 @@ export function TickerSettings({
                         if (cleaned.length !== feeds.length) onFeeds(cleaned)
                         if (u.trim()) {
                           onCommitFeeds(cleaned)
-                          flash('feeds')
+                          flash()
                         }
                       }}
                     />
@@ -206,7 +182,7 @@ export function TickerSettings({
                         const next = feeds.filter((_, j) => j !== i)
                         onFeeds(next)
                         onCommitFeeds(next)
-                        flash('feeds')
+                        flash()
                       }}
                     >
                       <X size={13} strokeWidth={2} />
@@ -229,7 +205,7 @@ export function TickerSettings({
                 {feeds.length >= 5 ? 'Maximum of 5' : `${5 - feeds.length} of 5 left`}
               </span>
               <span
-                className={'pa-saved' + (saved === 'feeds' ? ' pa-saved--on' : '')}
+                className={'pa-saved' + (saved ? ' pa-saved--on' : '')}
                 style={{ marginLeft: 'auto' }}
               >
                 <Check size={11} strokeWidth={2.4} /> Saved

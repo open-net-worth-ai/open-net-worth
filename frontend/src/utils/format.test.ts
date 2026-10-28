@@ -66,6 +66,15 @@ describe('fPrice — always ≥2 decimals for normal prices, more for sub-dollar
     expect(fPrice(0.5)).toBe('0.5000')
     expect(fPrice(0.00001234)).toBe('0.00001234')
   })
+  it('sub-dollar prices use the user’s decimal mark, not always a point', () => {
+    setDisplayFormats({ number_format: 'dot' })
+    expect(fPrice(0.5)).toBe('0,5000')
+    expect(fPrice(0.00001234)).toBe('0,00001234')
+    setDisplayFormats({ number_format: 'space' })
+    expect(fPrice(0.00001234)).toBe('0,00001234')
+    setDisplayFormats({ number_format: 'comma' })
+    expect(fPrice(0.00001234)).toBe('0.00001234')
+  })
   it('null / zero render as an em dash', () => {
     expect(fPrice(0)).toBe('—')
     expect(fPrice(null)).toBe('—')

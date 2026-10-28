@@ -256,7 +256,11 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # 1,500 chars (the per-tool cap), plus the CORE offer's get_net_worth / get_transactions /
     # get_payees / get_portfolio prose, which took the default offer from 50,265 to 49,873 so its
     # own 50_000 cap stays unraised. The cost-sensitive default-offer number is unchanged.
-    budget = 462_000
+    # 2026-10-29: 462_000 -> 465_000. Investment theses (ADR
+    # 2026-10-27-an-investment-thesis-lives-on-the-instrument) add three non-CORE tools —
+    # get/set/delete_investment_theses — a new domain, ~2.5K chars after trimming
+    # get_investment_theses' description; the watchlist intent fields it absorbs shed a little.
+    budget = 465_000
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

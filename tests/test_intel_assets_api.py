@@ -1157,3 +1157,12 @@ def test_get_asset_detail_does_not_schedule_refresh_for_instrument_with_no_ticke
 
     time.sleep(0.1)  # give any (wrongly) scheduled task a chance to run
     assert complete_calls == []
+
+
+def test_get_asset_detail_carries_the_investment_thesis(client, seeded):
+    iid = seeded["instrument_id"]
+    assert client.get(f"/api/intel/assets/{iid}").json()["thesis"] is None
+    put = client.put(f"/api/investment-theses/{iid}", json={"reason": "Moat", "fair_value": 150})
+    assert put.status_code == 200
+    thesis = client.get(f"/api/intel/assets/{iid}").json()["thesis"]
+    assert (thesis["reason"], thesis["fair_value"], thesis["instrument_id"]) == ("Moat", 150.0, iid)

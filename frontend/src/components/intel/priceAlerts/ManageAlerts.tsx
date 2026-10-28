@@ -1,10 +1,11 @@
 // Manage view — every alert on one ticker (verbatim port of the prototype's ManageAlerts).
 // Each control in this view commits itself — the per-alert toggles already do, so a Save
-// button covering only mute and feeds would be ambiguous. A feed row commits on blur and an
+// button covering only mute and feeds would be ambiguous. Mute sits in the header: it silences
+// every alert on the ticker and its news scans, so it governs the whole dialog. A feed row commits on blur and an
 // empty one is dropped there, matching the upstream filter.
 import { Fragment, type ReactNode, useLayoutEffect, useRef, useState } from 'react'
 import { Button, EmptyState, Modal, Money, Panel } from '../../ui'
-import { ChevronLeft } from '../../../ui/icons'
+import { Bell, BellOff, ChevronLeft } from '../../../ui/icons'
 import { NEAR, fmt, foldOp, layoutTickRows, toFire } from './alertModel'
 import type { AlertRecord } from './alertModel'
 import { AlertRow, SuggestionSet, TickerSettings } from './ManageAlertsParts'
@@ -126,7 +127,27 @@ export function ManageAlerts(p: ManageAlertsProps) {
             {p.chg.toFixed(2)}% today
           </span>
         )}
-        {p.muted && <span className="pa-head-sub pa-head-sub--muted">Muted</span>}
+        {p.hasItem && (
+          <button
+            type="button"
+            className={'pa-mute' + (p.muted ? ' pa-mute--on' : '')}
+            aria-pressed={p.muted}
+            aria-label={`Mute ${sym}`}
+            title={
+              p.muted
+                ? `Muted: no price alerts or news scans for ${sym}`
+                : `Stop price alerts and news scans for ${sym}`
+            }
+            onClick={() => p.onMute(!p.muted)}
+          >
+            {p.muted ? (
+              <BellOff size={13} strokeWidth={2.2} />
+            ) : (
+              <Bell size={13} strokeWidth={2.2} />
+            )}
+            {p.muted ? 'Muted' : 'Mute'}
+          </button>
+        )}
       </div>
 
       {levels.length > 0 && price != null && (
@@ -231,10 +252,8 @@ export function ManageAlerts(p: ManageAlertsProps) {
       {p.hasItem && (
         <TickerSettings
           sym={sym}
-          muted={p.muted}
           feeds={feeds}
           feedLaneActive={p.feedLaneActive}
-          onMute={p.onMute}
           onFeeds={p.onFeeds}
           onCommitFeeds={p.onCommitFeeds}
         />

@@ -271,6 +271,38 @@ export interface WatchlistStatus {
   custom_feed_urls?: string[]
 }
 
+/** Why you own (or would buy) this instrument, and the prices that matter to you — one per
+ *  instrument, edited on the asset page's Your Thesis card (services/investment_theses). Prices are in
+ *  the instrument's quote currency. */
+export interface InvestmentThesis {
+  id: string
+  instrument_id: string
+  role: 'core' | 'satellite' | 'speculative' | null
+  reason: string | null
+  breaks_if: string | null
+  stop_below: number | null
+  buy_below: number | null
+  buy_above: number | null
+  fair_value: number | null
+  trim_above: number | null
+  created_at: string
+  updated_at: string
+}
+
+export type InvestmentThesisFields = Partial<
+  Pick<
+    InvestmentThesis,
+    | 'role'
+    | 'reason'
+    | 'breaks_if'
+    | 'stop_below'
+    | 'buy_below'
+    | 'buy_above'
+    | 'fair_value'
+    | 'trim_above'
+  >
+>
+
 export interface AssetDetail {
   instrument_id: string
   asset: AssetInfo
@@ -282,6 +314,8 @@ export interface AssetDetail {
   crypto_facts: CryptoFacts | null
   peers: PeerItem[]
   watchlist: WatchlistStatus
+  /** The user's investment thesis for this instrument, or null when they haven't written one. */
+  thesis?: InvestmentThesis | null
   last_refreshed_at: string | null
   has_ticker: boolean
   portfolio_impact: string | null

@@ -82,9 +82,13 @@ const dashboardRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/dashboard',
 })
+// ?conversation=<id> opens that conversation — the link Lucius gives to a past chat he found.
 const luciusRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/lucius',
+  validateSearch: (search: Record<string, unknown>) => ({
+    conversation: typeof search.conversation === 'string' ? search.conversation : undefined,
+  }),
 })
 const inboxRoute = createRoute({
   getParentRoute: () => rootRoute,

@@ -103,6 +103,8 @@ REVIEWED_SAFE = frozenset(
     PUT /api/commitments/{commitment_id}/installments
     PATCH /api/commitments/{commitment_id}/installments/{installment_id}
     PUT /api/dashboard/layout
+    PUT /api/investment-theses/{instrument_id}
+    DELETE /api/investment-theses/{instrument_id}
     PATCH /api/disposals/{event_id}
     POST /api/equity/grants
     PATCH /api/equity/grants/{grant_id}
