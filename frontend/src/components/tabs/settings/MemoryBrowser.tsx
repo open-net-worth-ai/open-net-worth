@@ -13,6 +13,9 @@ import {
 import { ChevronLeft } from '../../../ui/icons'
 import { fDate } from '../../../utils/format'
 import { useMemoryFacts } from '../../../hooks/useMemoryFacts'
+import { useHistoryStep } from '../../../hooks/useHistoryStep'
+import { MEMORY_TOPIC_STEP } from '../../../hooks/useMemoryWindow'
+import type { MemoryTopicStep } from '../../../hooks/useMemoryWindow'
 import type { MemoryFact } from '../../../hooks/useMemoryFacts'
 import { Btn } from './ds'
 import type { SectionBack, Toast } from './ds'
@@ -106,7 +109,11 @@ export function MemoryBrowser({
   placeBack?: ((back: SectionBack | null) => void) | null
 }) {
   const { facts, summaries, loading, forget, edit, instruct, deleteTopic } = useMemoryFacts(toast)
-  const [open, setOpen] = useState<{ section: string; key: string } | null>(null)
+  // A topic's page is a history step, so Back (the gesture, the browser's, the app's) leaves it
+  // for the list before it leaves the window or the page.
+  const topicStep = useHistoryStep<MemoryTopicStep>(MEMORY_TOPIC_STEP)
+  const open = topicStep.value
+  const closeTopic = topicStep.close
   const [editingId, setEditingId] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingForget | null>(null)
   const needle = filter.trim().toLowerCase()
@@ -115,21 +122,23 @@ export function MemoryBrowser({
   const top = useRef<HTMLDivElement>(null)
 
   // Opening a topic starts at its top; leaving it puts the list back where it was scrolled to.
-  const lastOpen = useRef(open)
+  // Compared by value: a step read back from history is a fresh object each time.
+  const openKey = open ? `${open.section}:${open.key}` : null
+  const lastOpen = useRef(openKey)
   const listScroll = useRef<{ el: HTMLElement; y: number } | null>(null)
   useLayoutEffect(() => {
-    if (lastOpen.current !== open) {
-      const back = open ? null : listScroll.current
+    if (lastOpen.current !== openKey) {
+      const back = openKey ? null : listScroll.current
       if (back) back.el.scrollTop = back.y
       else top.current?.scrollIntoView({ block: 'start' })
     }
-    lastOpen.current = open
-  }, [open])
+    lastOpen.current = openKey
+  }, [openKey])
 
   function openTopic(next: { section: string; key: string }) {
     const el = scrollParent(top.current)
     listScroll.current = el ? { el, y: el.scrollTop } : null
-    setOpen(next)
+    topicStep.open(next)
   }
 
   useEffect(() => {
@@ -137,14 +146,14 @@ export function MemoryBrowser({
     escapeRef.current = () => {
       if (pending) setPending(null)
       else if (editingId) setEditingId(null)
-      else if (open) setOpen(null)
+      else if (open) closeTopic()
       else return false
       return true
     }
     return () => {
       escapeRef.current = null
     }
-  }, [escapeRef, pending, editingId, open])
+  }, [escapeRef, pending, editingId, open, closeTopic])
 
   function confirm() {
     const p = pending
@@ -153,7 +162,7 @@ export function MemoryBrowser({
     if (p?.kind === 'topic') {
       if (p.named) void deleteTopic(p.section, p.name)
       else p.ids.forEach((id) => void forget(id))
-      setOpen(null)
+      closeTopic()
     }
   }
 
@@ -198,14 +207,14 @@ export function MemoryBrowser({
   // said twice; elsewhere the page carries its own link.
   useEffect(() => {
     if (!placeBack) return
-    placeBack(topicShown ? { label: 'Memory', onBack: () => setOpen(null) } : null)
+    placeBack(topicShown ? { label: 'Memory', onBack: closeTopic } : null)
     return () => placeBack(null)
-  }, [placeBack, topicShown])
+  }, [placeBack, topicShown, closeTopic])
   if (open && topic) {
     const summary = summaryOf(summaries, open.section, topic.key)
     return (
       <div className="rd-mem-detail" ref={top}>
-        {placeBack ? null : <BackLink onClick={() => setOpen(null)} />}
+        {placeBack ? null : <BackLink onClick={closeTopic} />}
         <div className="rd-mem-detail-head">
           <div className="rd-mem-detail-title">{topic.name}</div>
           <Btn size="xs" variant="danger" onClick={() => askDelete(open.section, topic)}>
