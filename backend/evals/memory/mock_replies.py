@@ -18,6 +18,7 @@ from backend.evals.memory.cases_sort import S01_FACTS
 from backend.evals.memory.cases_tidy import T01_DUP_B
 from backend.evals.memory.mock_import import import_reply
 from backend.evals.memory.mock_keep import EXTRACT_KEEP, sort_s03
+from backend.evals.memory.mock_recent import EXTRACT_RECENT, recent_script
 
 GOOD, SLOPPY = "good", "sloppy"
 PERSONAS = (GOOD, SLOPPY)
@@ -188,6 +189,7 @@ EXTRACT: dict[str, tuple[dict, dict]] = {
 }
 
 EXTRACT.update(EXTRACT_KEEP)
+EXTRACT.update(EXTRACT_RECENT)
 
 # ── sort ─────────────────────────────────────────────────────────────────────
 
@@ -327,10 +329,10 @@ def _handle_near(context: str, phrase: str) -> str:
     return found.group(1)
 
 
-def _round(text: str = "", tool: str | None = None) -> list[dict]:
+def _round(text: str = "", tool: str | None = None, args: dict | None = None) -> list[dict]:
     events = [{"type": "text_delta", "text": text[i : i + 7]} for i in range(0, len(text), 7)]
     if tool:
-        call = {"id": "tu_eval_1", "name": tool, "input": {}}
+        call = {"id": "tu_eval_1", "name": tool, "input": args or {}}
         events += [{"type": "tool_use_start", **call}, {"type": "tool_use", **call}]
         return [*events, {"type": "done", "stop_reason": "tool_use"}]
     return [*events, {"type": "done", "stop_reason": "end_turn"}]
@@ -353,6 +355,8 @@ def chat_script(persona: str, case_id: str, context: str) -> list[list[dict]]:
                 f"Split it 60/40 as before (memory-used: {rent}).\n\n<memory-used>{job}</memory-used>"
             )
         ]
+    if case_id == "U03":
+        return recent_script(persona == GOOD, _handle_near(context, "When Priya's PayNow"), _round)
     if persona == GOOD:
         return [
             _round(tool="list_accounts"),

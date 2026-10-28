@@ -941,6 +941,7 @@ _DEMO_REFUSED_TOOLS = frozenset(
         "run_script",
         "remember_fact",
         "forget_fact",
+        "close_recent_items",
         "telegram_send_message",
         "webhook_send_message",
         "email_send_message",

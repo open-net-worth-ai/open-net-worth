@@ -1591,15 +1591,23 @@
   font-size: var(--text-sm);
   color: var(--faint);
 }
-/* a bullet's Edit/Forget surface on hover (always on touch) */
+/* a bullet's Edit/Forget surface on hover (always on touch), in a column of its own on the right:
+   inline after the text, a fact that filled its last line wrapped the (hidden) icons onto a line
+   of their own, and that bullet stood taller than the rest */
+.onw-settings .rd-mem-bullet:not(.rd-mem-bullet--swipe) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-3);
+  align-items: start;
+}
 .onw-settings .rd-mem-bullet-t {
   overflow-wrap: anywhere;
 }
 .onw-settings .rd-mem-bullet-acts {
   display: inline-flex;
   gap: 2px;
-  margin-left: 6px;
-  vertical-align: middle;
+  /* level with the first line, adding no height to it (24px buttons on a 16px line) */
+  margin-block: -4px;
   opacity: 0;
   transition: opacity 0.12s ease;
 }
@@ -1620,9 +1628,15 @@
   width: 24px;
   height: 24px;
 }
+/* the bullet being edited: the box sits in the text column, with no dot over it */
 .onw-settings .rd-mem-bullet-edit {
   list-style: none;
-  margin-left: calc(-1 * var(--space-8));
+}
+.onw-settings .rd-mem-field > .ui-list > li.rd-mem-bullet-edit::before {
+  content: none;
+}
+.onw-settings .rd-mem-bullet-edit > .rd-fact-edit {
+  padding-inline: 0;
 }
 /* "Forget this memory?" — a small confirm above the memory dialog */
 .onw-settings .rd-confirm-scrim {

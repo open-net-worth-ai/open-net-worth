@@ -97,8 +97,9 @@ says is no longer true or should be forgotten. Change nothing the instruction do
 Keep each fact a concise, self-contained statement of at most {ms.FACT_MAX_CHARS} characters in the
 third person ("Has a dog named Beans"). Every fact goes in a section ({", ".join(ms.SECTIONS)})
 and, except in open_items, under a short topic name (reuse a listed one when it fits). Something
-to come back to is an open item and expires after {ms.OPEN_ITEM_DEFAULT_DAYS} days unless an
-expires_at is implied.
+decided or in flight over the next two weeks — an agreement about a payment someone owes and how
+to book it, something to come back to — is Recent (section open_items), written ready to act on,
+and lapses after {ms.OPEN_ITEM_DEFAULT_DAYS} days unless an expires_at is implied.
 
 {scope}Existing memory:
 {listing}

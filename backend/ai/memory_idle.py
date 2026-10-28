@@ -97,7 +97,9 @@ async def extract_session(session_id: str) -> bool:
         history = await asyncio.to_thread(store.get_messages, session_id)
         if not history:
             return False
-        await memory.extract_and_merge(history, session_id=session_id)
+        meta = await asyncio.to_thread(store.get_meta, session_id) or {}
+        run_prompt = meta.get("source") == "automation" or session_id.startswith("automation-")
+        await memory.extract_and_merge(history, session_id=session_id, run_prompt=run_prompt)
         concluded = await asyncio.to_thread(memory._load_cursor, session_id) >= len(history)
     except Exception:
         logger.exception("memory extraction failed for session %s (non-fatal)", session_id[:8])
