@@ -128,10 +128,15 @@ describe('YourThesisCard', () => {
     expect(saveInvestmentThesis).not.toHaveBeenCalled()
   })
 
-  it('refuses a price it cannot read instead of clearing that level', () => {
+  it('keeps only numbers in a price box and still refuses zero', () => {
     const { getByText, getByLabelText } = mount()
     fireEvent.click(getByText('Edit'))
-    fireEvent.change(getByLabelText('Stop below'), { target: { value: '12abc' } })
+    const stop = getByLabelText('Stop below') as HTMLInputElement
+    fireEvent.change(stop, { target: { value: 'fdsfds' } })
+    expect(stop.value).toBe('')
+    fireEvent.change(stop, { target: { value: '1,2a0.5.5' } })
+    expect(stop.value).toBe('1,20.55')
+    fireEvent.change(stop, { target: { value: '0' } })
     expect(getByText('Stop below must be a positive number.')).toBeTruthy()
     fireEvent.click(getByText('Save thesis'))
     expect(saveInvestmentThesis).not.toHaveBeenCalled()

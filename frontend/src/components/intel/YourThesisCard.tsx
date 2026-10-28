@@ -67,6 +67,13 @@ interface Draft {
   prices: Record<PriceKey, string>
 }
 
+/** What a price box keeps of a keystroke or paste: digits, commas (thousands, dropped by `num`)
+ *  and one decimal point — letters never reach the field. */
+const priceText = (s: string): string => {
+  const [whole, ...rest] = s.replace(/[^\d.,]/g, '').split('.')
+  return rest.length ? `${whole}.${rest.join('')}` : whole
+}
+
 /** A typed price as a number, or null when blank or not a positive number ("12abc" too). */
 const num = (s: string): number | null => {
   const text = s.replace(/,/g, '').trim()
@@ -355,11 +362,13 @@ export function YourThesisCard({
                 <TextField
                   id={`thesis-${k}`}
                   inputMode="decimal"
-                  placeholder="—"
                   value={draft.prices[k]}
                   invalid={localError?.field === k}
                   onChange={(e) =>
-                    setDraft({ ...draft, prices: { ...draft.prices, [k]: e.target.value } })
+                    setDraft({
+                      ...draft,
+                      prices: { ...draft.prices, [k]: priceText(e.target.value) },
+                    })
                   }
                 />
               </FormField>
