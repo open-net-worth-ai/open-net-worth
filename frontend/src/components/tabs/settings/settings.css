@@ -1484,7 +1484,9 @@
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
-/* one size for name, description and date — the app's body size — only the colour steps down */
+/* name and description at the app's body size, only the colour stepping down; the date one step
+   smaller — at the same size, "Updated Oct 28" beside a short name on a phone read as the bigger
+   text. Not a heavier name: that reads as a section heading (owner, 2026-10-29). */
 .onw-settings .rd-mem-topic-name {
   font-size: var(--text-base);
   color: var(--ink);
@@ -1497,7 +1499,7 @@
   white-space: nowrap;
 }
 .onw-settings .rd-mem-topic-date {
-  font-size: var(--text-base);
+  font-size: var(--text-sm);
   color: var(--muted);
   white-space: nowrap;
 }
