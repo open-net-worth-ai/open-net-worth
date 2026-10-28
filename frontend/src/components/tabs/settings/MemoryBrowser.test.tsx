@@ -12,7 +12,15 @@ import { MemoryBrowser } from './MemoryBrowser'
 const json = (body: unknown, status = 200) =>
   Promise.resolve(new Response(JSON.stringify(body), { status }))
 
-function serve(instruct: unknown = { added: 1, updated: 0, removed: 0, rejected: [] }) {
+function serve(
+  instruct: unknown = {
+    added: 1,
+    updated: 0,
+    removed: 0,
+    rejected: [],
+    changes: [{ change: 'added', where: 'Money · Housing', text: 'Lease now ends in May' }],
+  },
+) {
   authFetch.mockImplementation((url: string, init?: RequestInit) => {
     if (url === '/api/memory/instruct') return json(instruct)
     if (init?.method === 'DELETE') return json({ ok: true, deleted: 4 })
@@ -152,7 +160,8 @@ describe('MemoryBrowser', () => {
         }),
       ),
     )
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('Added 1'))
+    expect(await screen.findByText('Lease now ends in May')).toBeTruthy()
+    expect(toast).not.toHaveBeenCalled()
   })
 
   it('the list-level change box sends no topic', async () => {

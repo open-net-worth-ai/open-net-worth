@@ -165,9 +165,13 @@ no context:
 - *"Rent goes up in April now, not March"* — rewrites the fact it corrects.
 - *"I paid off the car loan"* — forgets what's no longer true.
 
-One sentence can do all three. The list refreshes and a note says what changed — for example
-**Added 1 · Updated 1** — and what he refused to remember, with the reason (a full card number, a
-balance that is read live, a sensitive topic while that switch is off).
+One sentence can do all three. The list refreshes and **What changed** appears just above the
+box: each fact he added, updated (with what it said before) or forgot, and where it lives — for
+example *Updated · Money · Housing — Rent goes up every April (Was: Rent goes up every March)*.
+Close it with ×; your next change replaces it. What he refused to remember shows as a note, with
+the reason (a full card number, a balance that is read live, a sensitive topic while that switch
+is off). While the list scrolls under the box, rows fade out above it rather than meeting a hard
+edge.
 
 It's one small AI call on the **Memory** task model, billed like the rest of memory, and it
 needs memory switched on. **Edit** and **Forget** make no AI call and work either way.

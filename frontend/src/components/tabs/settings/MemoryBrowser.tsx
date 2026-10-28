@@ -14,6 +14,7 @@ import { ChevronLeft } from '../../../ui/icons'
 import { fDate } from '../../../utils/format'
 import { useMemoryFacts } from '../../../hooks/useMemoryFacts'
 import { useHistoryStep } from '../../../hooks/useHistoryStep'
+import { MemoryAskBox } from './MemoryAsk'
 import { MEMORY_TOPIC_STEP } from '../../../hooks/useMemoryWindow'
 import type { MemoryTopicStep } from '../../../hooks/useMemoryWindow'
 import type { MemoryFact } from '../../../hooks/useMemoryFacts'
@@ -21,7 +22,6 @@ import { Btn } from './ds'
 import type { SectionBack, Toast } from './ds'
 import {
   ForgetConfirm,
-  MemoryAskBox,
   MemoryBullets,
   MemoryFactRows,
   MemoryHoverActs,

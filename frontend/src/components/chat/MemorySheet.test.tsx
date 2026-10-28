@@ -36,7 +36,22 @@ function serve(enabled: boolean, facts: MemoryFact[]) {
     if (url === '/api/memory/settings') return json(settings(enabled))
     if (init?.method === 'DELETE') return json({ ok: true })
     if (init?.method === 'PATCH') return json({ id: 'f1', content: 'edited' })
-    if (url === '/api/memory/instruct') return json({ added: 1, updated: 1, removed: 0 })
+    if (url === '/api/memory/instruct')
+      return json({
+        added: 1,
+        updated: 1,
+        removed: 0,
+        rejected: [],
+        changes: [
+          { change: 'added', where: 'You · Profile', text: 'Has a dog named Beans' },
+          {
+            change: 'updated',
+            where: 'Money · Housing',
+            text: 'Rent goes up every April',
+            was: 'Rent goes up every March',
+          },
+        ],
+      })
     return json({ facts, total: facts.length })
   })
 }
@@ -130,8 +145,14 @@ describe('MemorySheet', () => {
         }),
       ),
     )
-    expect(await screen.findByText('Added 1 · Updated 1')).toBeTruthy()
+    const card = await screen.findByRole('status')
+    expect(within(card).getByText('What changed')).toBeTruthy()
+    expect(within(card).getByText('Has a dog named Beans')).toBeTruthy()
+    expect(within(card).getByText('Money · Housing')).toBeTruthy()
+    expect(within(card).getByText('Was: Rent goes up every March')).toBeTruthy()
     expect((box as HTMLInputElement).value).toBe('')
+    fireEvent.click(within(card).getByRole('button', { name: 'Dismiss what changed' }))
+    expect(screen.queryByText('What changed')).toBeNull()
   })
 
   it('edits a fact in place and saves exactly what was typed', async () => {

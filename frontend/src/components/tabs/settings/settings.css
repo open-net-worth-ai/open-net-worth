@@ -1328,28 +1328,40 @@
 .onw-settings .rd-set-body > .rd-mem-detail {
   flex: 1 0 auto;
 }
-.onw-settings .rd-mem-ask {
+.onw-settings .rd-mem-dock {
   margin-top: auto;
   position: sticky;
   /* 0, not the safe-area inset: the scroll pane's bottom padding already holds it */
   bottom: 0;
   z-index: 1;
-  /* A ring, then copies stepped down to the pane's bottom edge so no row shows beneath it (a
-     home-indicator inset included). Shadows, not a block below the box: a block is content, and
-     let the pane scroll past its end, the box riding up over empty space. */
+  /* Solid from the box's top down to the pane's bottom edge (a home-indicator inset included),
+     so no row shows beside or beneath it: copies stepped down, each starting at the box's top.
+     Shadows, not a block below the box — a block is content, and let the pane scroll past its
+     end, the box riding up over empty space. */
   box-shadow:
-    0 0 0 var(--space-4) var(--modal-bg),
-    0 var(--space-9) 0 var(--space-4) var(--modal-bg),
-    0 calc(var(--space-9) * 2) 0 var(--space-4) var(--modal-bg),
-    0 calc(var(--space-9) * 3) 0 var(--space-4) var(--modal-bg);
+    0 var(--space-4) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9)) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9) * 2) 0 var(--space-4) var(--modal-bg),
+    0 calc(var(--space-4) + var(--space-9) * 3) 0 var(--space-4) var(--modal-bg);
+}
+/* Above it, rows fade out instead of meeting a hard edge — the fade under Documents' filter
+   chips (vault.css), drawn as a gradient because masking the pane would fade the box too. */
+.onw-settings .rd-mem-dock::before {
+  content: '';
+  position: absolute;
+  inset-inline: calc(var(--space-4) * -1);
+  bottom: 100%;
+  height: var(--space-7);
+  background: linear-gradient(to bottom, transparent, var(--modal-bg));
+  pointer-events: none;
 }
 .onw-settings .rd-mem-modal .rd-mem-browser,
 .onw-settings .rd-mem-modal .rd-mem-detail {
   flex: 1 0 auto;
 }
-.onw-settings .rd-mem-modal .rd-mem-ask {
+.onw-settings .rd-mem-modal .rd-mem-dock {
   bottom: 0;
-  box-shadow: 0 0 0 20px var(--modal-bg);
+  box-shadow: 0 20px 0 20px var(--modal-bg);
 }
 .onw-settings .rd-mem-empty {
   flex: 1;
@@ -1691,6 +1703,75 @@
   gap: 6px;
 }
 /* Claude-style composer: one pill, the send is a round button inside it */
+/* What the last "Tell Lucius" sentence changed, above the box until dismissed or replaced */
+.onw-settings .rd-mem-changes {
+  margin-bottom: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  font-size: var(--text-base);
+  max-height: 40vh;
+  overflow-y: auto;
+}
+.onw-settings .rd-mem-changes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+.onw-settings .rd-mem-changes-x {
+  display: inline-grid;
+  place-items: center;
+  padding: var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.onw-settings .rd-mem-changes-x:hover {
+  color: var(--ink);
+  background: var(--hover);
+}
+.onw-settings .rd-mem-changes-list {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.onw-settings .rd-mem-change-meta {
+  display: flex;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+.onw-settings .rd-mem-change-kind {
+  font-weight: 600;
+  color: var(--ink);
+}
+.onw-settings .rd-mem-change-where {
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-change-kind.is-removed {
+  color: var(--bad);
+}
+.onw-settings .rd-mem-change-t {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.onw-settings .rd-mem-change-t.is-gone {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.onw-settings .rd-mem-change-was {
+  color: var(--faint);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
 .onw-settings .rd-mem-ask {
   display: flex;
   align-items: center;

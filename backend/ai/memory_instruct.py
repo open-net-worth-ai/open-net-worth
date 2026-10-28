@@ -138,7 +138,9 @@ async def apply_instruction(
     user opened. A named ``section`` is used as given — the same topic name can live in two
     sections — and a section that does not exist is refused.
 
-    Returns ``{"added", "updated", "removed", "rejected"}``. Raises MemoryDisabledError while
+    Returns ``{"added", "updated", "removed", "rejected", "changes"}`` — ``changes`` says what
+    changed, one ``{"change", "where", "text", "was"}`` per fact, so the person can see it (a
+    count alone told them nothing). Raises MemoryDisabledError while
     memory is off (the same refusal ``remember_fact`` gives), ValidationError for an empty or
     oversized instruction, and ExternalServiceError when the model gives nothing usable — in
     every refusal, nothing was changed.
@@ -183,10 +185,38 @@ async def apply_instruction(
     if not isinstance(parsed, dict):
         logger.warning("memory instruction returned an unparseable reply")
         raise ExternalServiceError("Lucius couldn't make sense of that. Try rewording it.")
+    before = {f["id"]: f for f in facts}
     result = apply_memory_change(
         _scoped_ops(parsed, topic, scope), source="explicit", strict=False, today=today
     )
-    return {key: result[key] for key in ("added", "updated", "removed", "rejected")}
+    out = {key: result[key] for key in ("added", "updated", "removed", "rejected")}
+    return {**out, "changes": _changes(before, MemoryStore().remembered_facts())}
+
+
+def _where(fact: dict) -> str:
+    section = ms.SECTIONS.get(fact.get("section") or "", "Older memories")
+    return f"{section} · {fact['topic']}" if fact.get("topic") else section
+
+
+def _changes(before: dict[str, dict], after: list[dict]) -> list[dict]:
+    """What one instruction changed, fact by fact: added, updated (with its old wording when the
+    words changed) and removed, in that order."""
+    now = {f["id"]: f for f in after}
+    changes: list[dict] = []
+    for fid, fact in now.items():
+        old = before.get(fid)
+        if old is None:
+            changes.append({"change": "added", "where": _where(fact), "text": fact["content"]})
+        elif (old.get("content"), _where(old)) != (fact.get("content"), _where(fact)):
+            was = old.get("content") if old.get("content") != fact.get("content") else None
+            changes.append(
+                {"change": "updated", "where": _where(fact), "text": fact["content"], "was": was}
+            )
+    for fid, fact in before.items():
+        if fid not in now:
+            changes.append({"change": "removed", "where": _where(fact), "text": fact["content"]})
+    order = {"added": 0, "updated": 1, "removed": 2}
+    return sorted(changes, key=lambda c: order[c["change"]])
 
 
 def edit_fact(fact_id: str, content: str) -> dict:
