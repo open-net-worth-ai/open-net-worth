@@ -62,6 +62,10 @@ Book it now. Nobody is watching this turn, so do not ask clarifying questions:
 - Resolve the account from the card, wallet or app name if one is mentioned;
   look up the accounts if you need to.
 - If the text names a date or time, use it — it is when it actually happened.
+- If an entry under Recent in your memory is about this money (a payment it expects,
+  how to book it), book it the way that entry says — it is what the owner agreed, and
+  it wins over past transactions and a payee's default category — then close that entry
+  with close_recent_items.
 - description is the merchant or bank string as the text gives it. Leave memo
   empty unless the text says something the row doesn't already show (items
   bought, what it was for) — never a retelling of the notification, its sender,

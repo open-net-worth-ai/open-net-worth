@@ -152,6 +152,38 @@ def test_a_quote_that_shares_no_word_with_the_item_grounds_nothing():
     assert guard({"new": [item]}, user_words(history), {})["new"] == []
 
 
+TYPED = user_words(
+    [
+        {
+            "role": "user",
+            "content": "ok, for utliities since he only wnet for 2 days -> put $5 only",
+        }
+    ]
+)
+
+
+def test_a_quote_the_model_tidied_of_the_persons_typos_still_grounds():
+    """Live 2026-10-29: the model quoted "utilities ... went" for the person's "utliities ...
+    wnet", and the exact match dropped the one correct entry of the chat."""
+    item = _open(
+        "When Sam's PayNow arrives: book Utilities S$5",
+        "for utilities since he only went for 2 days",
+    )
+    assert guard({"new": [item]}, TYPED, {})["new"] == [
+        {"content": "When Sam's PayNow arrives: book Utilities S$5", "section": "open_items"}
+    ]
+
+
+@pytest.mark.parametrize(
+    "quote",
+    ["for groceries since she stayed for 3 weeks", "put the rest on the card"],
+    ids=["same-shape-other-words", "never-said"],
+)
+def test_a_tidied_quote_is_still_held_to_what_the_person_typed(quote):
+    item = _open("When Sam's PayNow arrives: book Utilities S$5", quote)
+    assert guard({"new": [item]}, TYPED, {})["new"] == []
+
+
 def test_an_attachment_or_harness_note_is_not_the_persons_words():
     history = [
         {

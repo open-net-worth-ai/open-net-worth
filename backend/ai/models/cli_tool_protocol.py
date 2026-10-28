@@ -484,7 +484,7 @@ def parse_tool_calls(text: str) -> list[dict]:
     for match in _TOOL_CALL_RE.finditer(_normalize_short_fence(text)):
         raw = next((g for g in match.groups() if g), "")
         try:
-            obj = json.loads(raw.strip())
+            obj = _loads_call(raw.strip())
         except (TypeError, ValueError) as exc:
             # The XML dialect: a bare `<invoke>` block, or `<function_calls>` wrapping one.
             invoked = _invoke_calls(match.group(0))
@@ -539,6 +539,48 @@ def parse_tool_calls(text: str) -> list[dict]:
                 log.warning("cli_tools: implausible tool name %r in block: %.500s", name, raw)
             calls.append({"name": name, "input": payload})
     return _drop_placeholders(calls, text)
+
+
+def _loads_call(body: str):
+    """``json.loads``, except that a body which is whole but for its last closing brackets
+    is closed and read. Live 2026-10-29 (claude_cli:sonnet, a Capture): every
+    ``add_transactions`` ended ``]}]}`` — one ``}`` short — so three attempts in a row were
+    dropped and nothing was booked. Only a body that runs out while every string is closed
+    is completed; anything broken earlier stays malformed."""
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError as exc:
+        closers = _missing_closers(body) if exc.pos >= len(body.rstrip()) else None
+        if not closers:
+            raise
+        obj = json.loads(body + closers)
+        log.info("cli_tools: tool-call block was missing %r at its end — closed it", closers)
+        return obj
+
+
+def _missing_closers(body: str) -> str | None:
+    """The brackets still open at the end of ``body``, closed innermost first; None when the
+    end falls inside a string or a bracket closes what it did not open."""
+    stack: list[str] = []
+    in_string = escaped = False
+    for ch in body:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+        elif ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append("}" if ch == "{" else "]")
+        elif ch in "}]":
+            if not stack or stack.pop() != ch:
+                return None
+    if in_string or not stack:
+        return None
+    return "".join(reversed(stack))
 
 
 _MALFORMED_LOG_CHARS = 4_000

@@ -95,7 +95,10 @@ def _fmt_chat_search_line() -> str:
             return ""
     except Exception:
         return ""
-    return "\nIf the user refers to an earlier conversation, search_past_conversations can find it."
+    return (
+        "\nIf the user refers to an earlier conversation, search_past_conversations can find it "
+        "and read_past_conversation can read it."
+    )
 
 
 def memory_block() -> str:

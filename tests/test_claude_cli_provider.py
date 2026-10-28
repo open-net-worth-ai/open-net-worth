@@ -2318,3 +2318,46 @@ def test_a_lone_empty_call_and_different_tools_still_dispatch():
         '<tool_call>{"name": "get_lots", "input": {"position_id": "P"}}</tool_call>'
     )
     assert [c["name"] for c in mixed] == ["list_grants", "get_lots"]
+
+
+def test_a_block_short_of_its_last_closing_brace_is_closed_and_read():
+    """Live 2026-10-29 (claude_cli:sonnet, a Capture): every add_transactions ended ``]}]}``,
+    one ``}`` short, so three attempts were dropped and nothing was booked."""
+    from backend.ai.models.cli_tool_protocol import parse_tool_calls
+
+    body = (
+        '{"name": "add_transactions", "input": {"transactions": [{"date": "2026-10-29", '
+        '"amount": 540, "splits": [{"category": "Rent", "amount": 500}, '
+        '{"category": "Utilities", "amount": 40}]}]}'
+    )
+    assert parse_tool_calls(f"<tool_call>{body}</tool_call>") == [
+        {
+            "name": "add_transactions",
+            "input": {
+                "transactions": [
+                    {
+                        "date": "2026-10-29",
+                        "amount": 540,
+                        "splits": [
+                            {"category": "Rent", "amount": 500},
+                            {"category": "Utilities", "amount": 40},
+                        ],
+                    }
+                ]
+            },
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        '{"name": "add_transactions", "input": {"memo": "cut off mid-str',  # ends in a string
+        '{"name": "add_transactions", "input": {"a": [1, 2}}',  # a bracket closes the wrong one
+        '{"name": "add_transactions", "input": {"a": 1,, "b": 2}}',  # broken before the end
+    ],
+)
+def test_a_block_broken_anywhere_but_its_last_brackets_stays_malformed(body):
+    from backend.ai.models.cli_tool_protocol import parse_tool_calls
+
+    assert parse_tool_calls(f"<tool_call>{body}</tool_call>") == []

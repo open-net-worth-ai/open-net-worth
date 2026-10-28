@@ -972,7 +972,7 @@ function RouterShellInner() {
   useEffect(() => {
     if (!isMobile) return
     const onDockOpen = () => {
-      void navigate({ to: '/lucius' })
+      void navigate({ to: '/lucius', search: { conversation: undefined } })
     }
     window.addEventListener('lx-dock-open', onDockOpen)
     return () => window.removeEventListener('lx-dock-open', onDockOpen)
@@ -1060,6 +1060,22 @@ function RouterShellInner() {
     else setChatOpen(true)
   }
 
+  // /lucius?conversation=<id> (a past-chat link opened in a new tab, or typed): switch to it, then
+  // drop the param so back and refresh don't keep switching to it. A plain click on the link in
+  // a reply never gets here — ChatLink switches in place.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const conversationParam = (location.search as any)?.conversation
+  useEffect(() => {
+    if (location.pathname !== '/lucius') return
+    if (typeof conversationParam !== 'string' || !conversationParam) return
+    chatSwitchConversationRef.current?.(conversationParam)
+    void navigate({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      search: ((prev: any) => ({ ...prev, conversation: undefined })) as any,
+      replace: true,
+    })
+  }, [location.pathname, conversationParam, navigate])
+
   useEffect(() => {
     return subscribeDesktopCommands((command) => {
       if (command.type === 'import-files') {
@@ -1083,12 +1099,13 @@ function RouterShellInner() {
           search: { account: undefined, txn: undefined, review: undefined },
         })
       } else if (command.type === 'open-lucius') {
-        void navigate({ to: '/lucius' })
+        void navigate({ to: '/lucius', search: { conversation: undefined } })
       } else if (command.type === 'new-conversation') {
         routeNewConversation(luciusDockVisibleRef.current, {
           startFresh: () => chatStartFreshRef.current?.(),
           focusPanel: () => chatRequestOpenRef.current?.(),
-          openLuciusTab: () => void navigate({ to: '/lucius' }),
+          openLuciusTab: () =>
+            void navigate({ to: '/lucius', search: { conversation: undefined } }),
         })
       } else if (command.type === 'resume') {
         invalidateQueryCache(() => true)
@@ -1831,7 +1848,7 @@ function RouterShellInner() {
                       // Lucius is the main tab, not a floating dock over Dashboard — the
                       // conversation that just onboarded the book should BE the screen you land
                       // on, not a panel over an empty net-worth chart with nothing in it yet.
-                      navigate({ to: '/lucius' })
+                      navigate({ to: '/lucius', search: { conversation: undefined } })
                       setChatOpen(true)
                       setProfileVersion((v) => v + 1)
                       checkFreshSetup()
