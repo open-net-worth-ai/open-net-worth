@@ -42,7 +42,11 @@ class InvestmentThesisUpdate(NestedInput):
         ),
     )
     reason: Optional[str] = Field(
-        default=None, description="Why they own it, or would buy it. At most 280 characters."
+        default=None,
+        description=(
+            "Why they own it, or would buy it, and how long they plan to hold if they said, "
+            "e.g. 'holding to 2029'. At most 280 characters."
+        ),
     )
     breaks_if: Optional[str] = Field(
         default=None,

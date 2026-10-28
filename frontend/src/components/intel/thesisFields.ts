@@ -33,7 +33,7 @@ export const reasonLabel = (held: boolean): string => (held ? 'Why you own it' :
 
 export const reasonExample = (held: boolean): string =>
   held
-    ? 'e.g. Cloud revenue keeps growing 30%+ a year while margins hold.'
+    ? 'e.g. Cloud revenue keeps growing 30%+ a year while margins hold. Holding 3+ years.'
     : 'e.g. Leader in AI chips, but too expensive today.'
 
 export const BREAKS_IF_LABEL = 'Thesis breaks if'

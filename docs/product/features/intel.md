@@ -68,7 +68,8 @@ Open the ticker's page and click **Add** (or **Edit**) on the **Your Thesis** ca
 place edits the whole thesis. Click **Save thesis** when you're done:
 
 - **Why you'd buy it** (**Why you own it** for a stock you hold) — one line on why you care, e.g.
-  *"Leader in AI chips, but too expensive today"*.
+  *"Leader in AI chips, but too expensive today"*. If you plan to hold for a set time, say so here
+  too, e.g. *"Holding at least 3 years, to Oct 2029"* — there's no separate field for it.
 - **Buy at or under** (and optionally **…but not under**) — your buy zone.
 - **Fair value**.
 
