@@ -2732,11 +2732,20 @@
        published — the asymmetric margin. index.css already resets this at this width for
        every modal EXCEPT the workspace tier; this is that missing case. */
     right: 0;
+    /* Docked to the VISIBLE bottom, as every other phone sheet is (index.css): iOS does not
+       shrink the layout viewport for the keyboard, so a sheet docked to its bottom sat behind
+       the keyboard and iOS scrolled the whole page up to reveal the focused field — the
+       header and everything above the field went off the top (owner, 2026-10-29, Tell Lucius
+       on a memory topic). 0 with no keyboard. */
+    padding-bottom: calc(
+      100dvh - var(--visual-viewport-top, 0px) - var(--visual-viewport-height, 100dvh)
+    );
   }
   .ui-modal-card--workspace.onw-settings {
     flex-direction: column;
-    height: var(--sheet-max-height);
-    max-height: var(--sheet-max-height);
+    /* …and no taller than what is visible above the keyboard, so its head stays on screen */
+    height: var(--sheet-visible-max-height);
+    max-height: var(--sheet-visible-max-height);
     border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
     animation: onw-settings-sheet-up 0.26s cubic-bezier(0.32, 0.72, 0, 1);
     /* Whole-card drag-to-dismiss surface (useSheetDragToDismiss, wired via Modal's
@@ -2762,6 +2771,16 @@
   }
   .onw-settings > .ui-modal__body {
     flex-direction: column;
+  }
+  /* While a field has focus the keyboard covers the home indicator, so the pane's inset for it
+     was an empty band between the field and the keyboard. Focus, as for the tab bar
+     (index.css), not a guess at whether a keyboard is up. */
+  .ui-modal-card--workspace.onw-settings:has(
+      textarea:focus,
+      input:not([type='checkbox']):not([type='radio']):not([type='range']):focus
+    )
+    .rd-set-body {
+    padding-bottom: 12px;
   }
   .onw-settings .rd-set-nav {
     width: 100%;
@@ -3029,10 +3048,14 @@
     padding: 0;
     right: 0;
     align-items: flex-end;
+    /* the visible bottom, as the Settings sheet itself (above) */
+    padding-bottom: calc(
+      100dvh - var(--visual-viewport-top, 0px) - var(--visual-viewport-height, 100dvh)
+    );
   }
   .onw-settings .rd-modal {
     width: 100%;
-    max-height: 90vh;
+    max-height: min(90vh, var(--sheet-visible-max-height));
     border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
   }
   .onw-settings .rd-modal-foot {
@@ -3043,7 +3066,7 @@
   }
   .onw-settings .rd-modal.rd-mem-modal {
     height: 85vh;
-    height: 85dvh;
+    height: min(85dvh, var(--sheet-visible-max-height));
   }
   /* a topic row stacks: name and date on top, the preview under them */
   .onw-settings .rd-mem-topic-open {
