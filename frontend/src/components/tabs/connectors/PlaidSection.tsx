@@ -157,12 +157,21 @@ export function PlaidSection() {
     if (manual) setChecking(true)
     try {
       const r = await authFetch('/api/plaid/link/complete', { method: 'POST' })
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}))
-        setLinkErr(d.detail || 'Could not complete the bank link.')
+      if (r.status === 404 || r.status === 405) {
+        // The server predates this page (it was updated while the app ran) — this link can't
+        // finish, and polling again won't change that.
+        setLinkErr('Open Net Worth was updated while this page was open. Reload, then link again.')
         setWaiting(false)
         return
       }
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        setLinkErr(d.detail || 'Could not complete the bank link.')
+        // Only "no link in progress" is final; anything else may clear on the next check.
+        if (r.status === 422) setWaiting(false)
+        return
+      }
+      setLinkErr(null)
       const d = (await r.json()) as { status: string }
       if (d.status === 'linked') {
         setWaiting(false)
@@ -228,6 +237,7 @@ export function PlaidSection() {
     )
   }
 
+  const needsLink = cfg.has_secret && !cfg.has_access_token && !waiting
   const set = <K extends keyof PlaidForm>(k: K, v: PlaidForm[K]) =>
     setForm((f) => f && { ...f, [k]: v })
 
@@ -306,17 +316,29 @@ export function PlaidSection() {
         </Text>
       )}
 
-      {/* ── Bank link flow (Hosted Link → paste public token → exchange) ── */}
+      {/* ── Bank link flow (Hosted Link → the server reads the public token back) ── */}
       <Stack gap="--space-3">
         <Text size="sm" tone="ink">
           {cfg.has_access_token ? 'Linked bank' : 'Link a bank'}
         </Text>
+        {needsLink && (
+          <Text size="xs" tone="muted">
+            Credentials saved. Next: click <b>Link bank</b> and sign in at your bank — Plaid opens
+            in your browser, and this form finishes the link once Plaid says you can close it.
+          </Text>
+        )}
         <Cluster gap="--space-3" align="center" wrap>
-          <Button size="sm" loading={linking} disabled={!cfg.has_secret} onClick={linkBank}>
+          <Button
+            size="sm"
+            variant={needsLink ? 'primary' : 'secondary'}
+            loading={linking}
+            disabled={!cfg.has_secret}
+            onClick={linkBank}
+          >
             {cfg.has_access_token ? 'Re-link bank' : 'Link bank'}
           </Button>
           <Text size="xs" tone="faint">
-            Opens Plaid Hosted Link in a new tab.
+            Opens Plaid in your browser.
           </Text>
         </Cluster>
 

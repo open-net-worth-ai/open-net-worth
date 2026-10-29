@@ -85,3 +85,50 @@ it('Check now reports a session that has not finished yet', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Check now' }))
   expect(await screen.findByText(/Plaid has not finished yet/)).toBeTruthy()
 })
+
+it('tells the user to click Link bank once credentials are saved', async () => {
+  render(<PlaidSection />)
+  expect(await screen.findByText(/Credentials saved\. Next: click/)).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Link bank' }))
+  await screen.findByText('Waiting for you to finish at Plaid…')
+  expect(screen.queryByText(/Credentials saved\. Next: click/)).toBeNull()
+})
+
+function failComplete(status: number) {
+  const base = mockAuthFetch.getMockImplementation()!
+  mockAuthFetch.mockImplementation(async (url: string, init?: RequestInit) =>
+    url === '/api/plaid/link/complete'
+      ? ({ ok: false, status, json: async () => ({ detail: 'Method Not Allowed' }) } as Response)
+      : base(url, init),
+  )
+}
+
+it('an out-of-date server says reload instead of a raw "Method Not Allowed"', async () => {
+  failComplete(405)
+  render(<PlaidSection />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Link bank' }))
+  await screen.findByText('Waiting for you to finish at Plaid…')
+  await act(() => vi.advanceTimersByTimeAsync(3000))
+  expect(await screen.findByText(/was updated while this page was open\. Reload/)).toBeTruthy()
+  expect(screen.queryByText('Method Not Allowed')).toBeNull()
+  expect(screen.queryByText('Waiting for you to finish at Plaid…')).toBeNull()
+})
+
+it('a passing server error keeps checking, and the link still completes', async () => {
+  failComplete(502)
+  render(<PlaidSection />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Link bank' }))
+  await screen.findByText('Waiting for you to finish at Plaid…')
+  await act(() => vi.advanceTimersByTimeAsync(3000))
+  expect(screen.getByText('Waiting for you to finish at Plaid…')).toBeTruthy()
+
+  mockAuthFetch.mockImplementation(async (url: string) => {
+    if (url === '/api/plaid/link/complete') return okJson({ status: 'linked' })
+    if (url === '/api/connectors/plaid/accounts')
+      return okJson({ status: 'ok', provider_label: 'Plaid', accounts: [] })
+    return okJson(url === '/api/plaid/status' ? STATUS : [])
+  })
+  await act(() => vi.advanceTimersByTimeAsync(3000))
+  expect(await screen.findByText(/Bank linked/)).toBeTruthy()
+  expect(screen.queryByText('Method Not Allowed')).toBeNull()
+})
