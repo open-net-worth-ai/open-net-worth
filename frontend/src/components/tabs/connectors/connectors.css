@@ -1453,6 +1453,26 @@
   font-size: 13.5px;
   font-weight: 700;
 }
+/* An empty tab's starting picks: cards centred in the empty view (one or two sit in the
+   middle rather than hugging the left of a three-column grid), their text left-aligned. */
+.cn-page .cn-emptypicks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin: 10px 0 6px;
+  text-align: left;
+}
+.cn-page .cn-emptypicks > .cn-dircard {
+  flex: 0 1 calc((100% - 20px) / 3);
+  min-width: 0;
+}
+@media (max-width: 560px) {
+  .cn-page .cn-emptypicks > .cn-dircard {
+    flex-basis: 100%;
+  }
+}
 .cn-page .rd-empty-body {
   font-size: 12.5px;
   color: var(--faint);

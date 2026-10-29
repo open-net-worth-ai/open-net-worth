@@ -148,23 +148,26 @@ describe('promoted until set up', () => {
     expect(bySection.channels![0].id).toBe('telegram')
   })
 
-  it('draws an EMPTY tab with picks like a populated one — no contradicting empty state', () => {
+  it('puts an EMPTY tab’s picks inside its empty view, and says how many there are in all', () => {
     const onSuggest = vi.fn()
     render(
       <ConnectorList
         entries={[]}
-        filters={{ query: '', tab: 'channels', statusFilter: 'all' }}
+        filters={{ query: '', tab: 'mcp', statusFilter: 'all' }}
         onOpen={vi.fn()}
         onReconnect={vi.fn()}
         onBrowse={vi.fn()}
         onAddBank={vi.fn()}
         onSuggest={onSuggest}
         sectionSuggestions={suggestionsBySection([])}
+        familyTotals={{ mcp: 17 }}
       />,
     )
-    expect(screen.queryByText(/Nothing in Channels yet/)).toBeNull()
-    expect(screen.getByRole('button', { name: /Add a channel/ })).toBeTruthy()
-    const group = screen.getByLabelText('Suggested channels')
-    expect(group.textContent).toContain('Telegram')
+    expect(screen.getByText(/Nothing in MCP yet/)).toBeTruthy()
+    expect(screen.queryByText('Suggested')).toBeNull()
+    expect(screen.getByLabelText('Start with MCP servers').textContent).toContain(
+      'Interactive Brokers',
+    )
+    expect(screen.getByRole('button', { name: 'Browse all 17 MCP servers' })).toBeTruthy()
   })
 })

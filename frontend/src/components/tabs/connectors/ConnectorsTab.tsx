@@ -68,6 +68,12 @@ export function ConnectorsTab(): JSX.Element {
     () => (query.trim() || statusFilter !== 'all' ? undefined : suggestionsBySection(connectors)),
     [connectors, query, statusFilter],
   )
+  const familyTotals = useMemo(() => {
+    const rows = resolveDirectory(connectors).filter((d) => !d.generic)
+    return Object.fromEntries(
+      FAMILY_SECTIONS.map((s) => [s.key, filterDirectory(rows, s.key, '', 'popular').length]),
+    )
+  }, [connectors])
   const [detailId, setDetailId] = useState<string | null>(null)
   /** The MCP server whose connection is being edited — the add flow, reopened pre-filled. */
   const [editMcpId, setEditMcpId] = useState<string | null>(null)
@@ -380,6 +386,7 @@ export function ConnectorsTab(): JSX.Element {
             onAddBank={() => setBankPickerOpen(true)}
             suggestions={suggestions}
             sectionSuggestions={sectionSuggestions}
+            familyTotals={familyTotals}
             onSuggest={(d) => (skipsPreview(d) ? openDirectory('mcp') : openLandingPage(d.id))}
           />
         )}

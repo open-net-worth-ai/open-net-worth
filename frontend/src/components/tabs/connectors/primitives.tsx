@@ -234,15 +234,19 @@ export function Empty({
   title,
   body,
   action,
+  children,
 }: {
   title: ReactNode
   body?: ReactNode
   action?: ReactNode
+  /** Content between the copy and the action — e.g. a few connectors to start with. */
+  children?: ReactNode
 }): JSX.Element {
   return (
     <div className="rd-empty">
       <div className="rd-empty-title">{title}</div>
       {body ? <div className="rd-empty-body">{body}</div> : null}
+      {children}
       {action}
     </div>
   )
