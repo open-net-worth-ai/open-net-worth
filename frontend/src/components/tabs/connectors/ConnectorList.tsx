@@ -131,12 +131,25 @@ export function ConnectorList({
   if (sections.length === 0 && notAdded) return notAdded
   if (sections.length === 0) {
     const copy = emptyStateFor(filters)
+    // An empty tab (nothing in Channels yet) still offers its picks — Telegram for Channels,
+    // IBKR and Coinbase for MCP — instead of only a Browse & add button.
     return (
-      <Empty
-        title={copy.title}
-        body={copy.body}
-        action={<Btn onClick={() => onBrowse(copy.actionFamily)}>{copy.actionLabel}</Btn>}
-      />
+      <>
+        <Empty
+          title={copy.title}
+          body={copy.body}
+          action={<Btn onClick={() => onBrowse(copy.actionFamily)}>{copy.actionLabel}</Btn>}
+        />
+        <SuggestedBlock
+          rows={sectionSuggestions?.[filters.tab]}
+          onSuggest={onSuggest}
+          label={
+            filters.tab === 'all'
+              ? 'Suggested connectors'
+              : `Suggested ${FAMILY_SECTIONS.find((s) => s.key === filters.tab)?.title.toLowerCase()}`
+          }
+        />
+      </>
     )
   }
 
@@ -160,22 +173,12 @@ export function ConnectorList({
               />
             ))}
           </div>
-          {onSuggest && filters.tab !== 'all' && sectionSuggestions?.[section.key]?.length ? (
-            <div className="cn-suggest" aria-label={`Suggested ${section.title.toLowerCase()}`}>
-              <div className="cn-suggest-h">Suggested</div>
-              <div className="cn-suggestgrid">
-                {sectionSuggestions[section.key]!.map((d) => (
-                  <DirectoryCard
-                    key={d.id}
-                    d={d}
-                    suggested
-                    onAdd={onSuggest}
-                    onPreview={onSuggest}
-                    onConfigure={onSuggest}
-                  />
-                ))}
-              </div>
-            </div>
+          {filters.tab !== 'all' ? (
+            <SuggestedBlock
+              rows={sectionSuggestions?.[section.key]}
+              onSuggest={onSuggest}
+              label={`Suggested ${section.title.toLowerCase()}`}
+            />
           ) : null}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
             <button className="cn-addlink" onClick={() => onBrowse(section.key)}>
@@ -195,24 +198,45 @@ export function ConnectorList({
           </div>
         </div>
       ))}
-      {onSuggest && filters.tab === 'all' && sectionSuggestions?.all?.length ? (
-        <div className="cn-suggest" aria-label="Suggested connectors">
-          <div className="cn-suggest-h">Suggested</div>
-          <div className="cn-suggestgrid">
-            {sectionSuggestions.all.map((d) => (
-              <DirectoryCard
-                key={d.id}
-                d={d}
-                suggested
-                onAdd={onSuggest}
-                onPreview={onSuggest}
-                onConfigure={onSuggest}
-              />
-            ))}
-          </div>
-        </div>
+      {filters.tab === 'all' ? (
+        <SuggestedBlock
+          rows={sectionSuggestions?.all}
+          onSuggest={onSuggest}
+          label="Suggested connectors"
+        />
       ) : null}
       {notAdded}
     </>
+  )
+}
+
+/** The Suggested heading + dashed cards — ONE rendering for a section, the All tab and an
+ *  empty tab, so the three can't drift. Renders nothing when there is nothing to suggest. */
+function SuggestedBlock({
+  rows,
+  onSuggest,
+  label,
+}: {
+  rows?: DirectoryRow[]
+  onSuggest?: (row: DirectoryRow) => void
+  label: string
+}): JSX.Element | null {
+  if (!onSuggest || !rows?.length) return null
+  return (
+    <div className="cn-suggest" aria-label={label}>
+      <div className="cn-suggest-h">Suggested</div>
+      <div className="cn-suggestgrid">
+        {rows.map((d) => (
+          <DirectoryCard
+            key={d.id}
+            d={d}
+            suggested
+            onAdd={onSuggest}
+            onPreview={onSuggest}
+            onConfigure={onSuggest}
+          />
+        ))}
+      </div>
+    </div>
   )
 }

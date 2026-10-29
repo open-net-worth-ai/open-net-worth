@@ -126,9 +126,12 @@ export function resolveDirectory(
 export const SECTION_SUGGESTION_COUNT = 3
 
 /** Who Suggested leads with, in order — curated, not just "popular": the connectors most worth
- *  a new user's first click (owner's pick, 2026-10-29: Plaid, IBKR, Coinbase), then backups so
- *  there are still three once some are added. Anything not listed only fills in after these. */
+ *  a new user's first click (owner's pick, 2026-10-29: Email, Telegram, Plaid, IBKR, Coinbase),
+ *  then backups so there are still three once some are added — each shows until it is set up.
+ *  Anything not listed only fills in after these. */
 export const SUGGESTION_PRIORITY: readonly string[] = [
+  'email',
+  'telegram',
   'plaid',
   'mcp-ibkr',
   'mcp-coinbase',

@@ -238,7 +238,7 @@ export const CATALOG: CatalogEntry[] = [
     // No support link: support for this connector is us, and sending someone with a connector
     // problem to telegram.org/support would be the wrong desk.
     mcp: false,
-    popular: false,
+    popular: true,
     tools: [],
   },
 
@@ -258,7 +258,7 @@ export const CATALOG: CatalogEntry[] = [
     // server. There is no vendor service in the middle whose policy would govern it.
     homepageUrl: 'https://opennetworth.ai',
     mcp: false,
-    popular: false,
+    popular: true,
     tools: ['email_search_messages', 'email_get_messages', 'email_send_message'],
   },
   {

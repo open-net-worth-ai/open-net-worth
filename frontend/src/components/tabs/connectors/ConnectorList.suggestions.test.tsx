@@ -51,12 +51,8 @@ describe('suggestionsBySection', () => {
     expect(bySection.mcp!.length).toBe(SECTION_SUGGESTION_COUNT)
   })
 
-  it('leads with the curated picks — Plaid, IBKR, Coinbase — and drops one already added', () => {
-    expect(suggestionsBySection([]).all!.map((d) => d.id)).toEqual([
-      'plaid',
-      'mcp-ibkr',
-      'mcp-coinbase',
-    ])
+  it('leads with the curated picks and drops one already added', () => {
+    expect(suggestionsBySection([]).all!.map((d) => d.id)).toEqual(['email', 'telegram', 'plaid'])
     expect(
       suggestionsBySection([])
         .mcp!.map((d) => d.id)
@@ -141,5 +137,33 @@ describe('the list', () => {
     )
     expect(screen.getByText('Brokerage')).toBeTruthy()
     expect(screen.getByText('Market data')).toBeTruthy()
+  })
+})
+
+describe('promoted until set up', () => {
+  it('leads Data sources with Email and an empty Channels tab with Telegram', () => {
+    const bySection = suggestionsBySection([])
+    expect(bySection.all!.map((d) => d.id)).toEqual(['email', 'telegram', 'plaid'])
+    expect(bySection.data![0].id).toBe('email')
+    expect(bySection.channels![0].id).toBe('telegram')
+  })
+
+  it('still offers its picks on an EMPTY tab, under the empty state', () => {
+    const onSuggest = vi.fn()
+    render(
+      <ConnectorList
+        entries={[]}
+        filters={{ query: '', tab: 'channels', statusFilter: 'all' }}
+        onOpen={vi.fn()}
+        onReconnect={vi.fn()}
+        onBrowse={vi.fn()}
+        onAddBank={vi.fn()}
+        onSuggest={onSuggest}
+        sectionSuggestions={suggestionsBySection([])}
+      />,
+    )
+    expect(screen.getByText(/Nothing in Channels yet/)).toBeTruthy()
+    const group = screen.getByLabelText('Suggested channels')
+    expect(group.textContent).toContain('Telegram')
   })
 })

@@ -40,8 +40,9 @@ category in the row of small tags under **All · Channels · Data sources · Web
 tag on any card, to see only that kind; click it again (or **All**) to clear it. On a phone the
 category tags sit behind the filter icon beside search, which lights up while one is picked. A server you've
 already added shows once, with a settings gear instead of **+**. **Suggested**
-lists up to three popular connectors you haven't added yet — once at the bottom of **All**, or
-under the section on a single tab such as **MCP**, and at the top of **Browse & add** before you
+lists up to three connectors you haven't added yet — Email, Telegram, Plaid, Interactive Brokers and
+Coinbase first — once at the bottom of **All**, or under the section on a single tab such as
+**MCP** (even a tab with nothing set up yet), and at the top of **Browse & add** before you
 search or filter; click one to read about it and add it. **Sort** orders the full list below it:
 **Popular** puts the connectors you've added first, then popular ones, then the rest A–Z.
 
