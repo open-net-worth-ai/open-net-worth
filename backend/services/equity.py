@@ -288,7 +288,6 @@ def _create_locked_position(inst: dict, change: dict, total_units: float) -> str
             "account_id": change.get("account_id"),
             "account_name": change.get("account_name"),
             "vesting_state": "unvested",
-            "note": change.get("note", ""),
             # A shell: its units are re-derived from the grant's tranches once it exists.
             "_grant_managed_ok": True,
         }

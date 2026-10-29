@@ -85,7 +85,6 @@ class Position(ONBaseModel):
     cost_currency: Optional[str] = None
     vesting_state: VestingState = VestingState.vested
     acquired_at: Optional[str] = None
-    note: str = ""
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -109,7 +108,6 @@ class PositionCreate(ONBaseModel):
     cost_basis: Optional[float] = None
     cost_currency: Optional[str] = None
     vesting_state: VestingState = VestingState.vested
-    note: str = ""
 
     @field_validator("cost_basis", mode="before")
     @classmethod
@@ -127,7 +125,6 @@ class PositionUpdate(ONBaseModel):
     cost_basis: Optional[float] = None
     cost_currency: Optional[str] = None
     vesting_state: Optional[VestingState] = None
-    note: Optional[str] = None
 
     @field_validator("cost_basis", mode="before")
     @classmethod

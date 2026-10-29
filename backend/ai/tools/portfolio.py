@@ -917,7 +917,7 @@ def _build_position_update_change(input_data: dict) -> tuple[Optional[dict], Opt
         )
     except OpenNetWorthError as exc:
         return None, exc.message or str(exc)
-    _display_fields = ("quantity", "cost_basis", "cost_currency", "vesting_state", "note")
+    _display_fields = ("quantity", "cost_basis", "cost_currency", "vesting_state")
     before = {k: row.get(k) for k in _display_fields}
     before["cost_currency"] = row.get("currency")
     after = {**before, **{k: v for k, v in changes.items() if k in _display_fields}}
@@ -1062,7 +1062,6 @@ def _build_position_add_change(input_data: dict) -> tuple[Optional[dict], Option
         "acquired_at": input_data.get("acquired_at") or None,
         "fees": input_data.get("fees") or 0,
         "idempotency_key": input_data.get("idempotency_key") or None,
-        "note": input_data.get("note", ""),
         "reason": input_data.get("reason", ""),
         "display": {
             "symbol": inst.get("symbol", ""),
@@ -1123,7 +1122,7 @@ class ApplyPositionUpdateItem(BaseModel):
     changes: Dict[str, Any] = Field(
         json_schema_extra=_bare_object_schema,
         description=(
-            "Fields to change: note, account_id, account_name. Any other key is REFUSED. quantity, cost_basis and cost_currency are NEVER editable — they are derived from the position's records (its lots; for a grant, its vesting schedule and vests), so record what happened instead with acquire_lots / dispose_lots, correct a wrong lot with update_lots, or use the grant tools. vesting_state is set only by the grant tools."
+            "Fields to change: account_id, account_name. Any other key is REFUSED. quantity, cost_basis and cost_currency are NEVER editable — they are derived from the position's records (its lots; for a grant, its vesting schedule and vests), so record what happened instead with acquire_lots / dispose_lots, correct a wrong lot with update_lots, or use the grant tools. vesting_state is set only by the grant tools."
         ),
     )
 
@@ -1138,7 +1137,7 @@ class ApplyPositionUpdateInput(ToolInput):
     changes: Optional[Dict[str, Any]] = Field(
         default=None,
         description=(
-            "Fields to change: note, account_id, account_name. account_id moves to an existing account (its lots move with it); account_name creates/reuses by name. quantity/cost_basis/cost_currency/vesting_state are REFUSED "
+            "Fields to change: account_id, account_name. account_id moves to an existing account (its lots move with it); account_name creates/reuses by name. quantity/cost_basis/cost_currency/vesting_state are REFUSED "
             '(derived from records). e.g. {"account_id": "acc-123"}'
         ),
         json_schema_extra=_bare_object_schema,
@@ -1155,7 +1154,7 @@ class ApplyPositionUpdateInput(ToolInput):
 @tool(
     "update_positions",
     description=(
-        "Change an existing position (note, account_id/account_name). quantity, cost_basis and cost_currency are DERIVED from the position's records and are always REFUSED — record a buy/sale instead (acquire_lots / dispose_lots), or correct a wrong lot's date/quantity/cost with update_lots. vesting_state belongs to the grant tools. Moving a position to another account moves its lots too. Identify the position by its position_id (from get_portfolio). To move a position to a different custodian, pass account_id (from list_accounts) or account_name inside changes. On an interactive turn this raises a confirm card (no write yet, shows from→to accounts if moving venues); the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller applies immediately, no card. For several positions at once, pass `updates` (a list of {position_id, changes}) instead — one call, and ONE confirm card for the whole batch."
+        "Move an existing position to another account (account_id/account_name). quantity, cost_basis and cost_currency are DERIVED from the position's records and are always REFUSED — record a buy/sale instead (acquire_lots / dispose_lots), or correct a wrong lot's date/quantity/cost with update_lots. vesting_state belongs to the grant tools. Moving a position to another account moves its lots too. Identify the position by its position_id (from get_portfolio). To move a position to a different custodian, pass account_id (from list_accounts) or account_name inside changes. On an interactive turn this raises a confirm card (no write yet, shows from→to accounts if moving venues); the user's approval then runs it server-side with exactly the values the card showed. Never call it again to confirm and never restate the values — there is nothing for you to pass back. An unattended/automated caller applies immediately, no card. For several positions at once, pass `updates` (a list of {position_id, changes}) instead — one call, and ONE confirm card for the whole batch."
     ),
     # Batch array only — the bare single-item fields are still ACCEPTED by the handler,
     # just not advertised (see schema_from_model.schema_of_batch_only).
@@ -1267,7 +1266,6 @@ class ApplyPositionAddItem(ToolInput):
         default=None,
         description="Per-item dedupe key (e.g. the broker order id) — never one key for the whole batch.",
     )
-    note: Optional[str] = Field(default=None)
 
 
 class ApplyPositionAddInput(ToolInput):
@@ -1296,7 +1294,6 @@ class ApplyPositionAddInput(ToolInput):
     idempotency_key: Optional[str] = Field(
         default=None, description="Copy from the proposed change"
     )
-    note: Optional[str] = Field(default=None)
     adds: Optional[List[ApplyPositionAddItem]] = Field(
         default=None,
         min_length=1,

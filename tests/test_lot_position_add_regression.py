@@ -394,8 +394,11 @@ def test_update_position_refuses_quantity_on_lot_backed_position(isolated):
     with pytest.raises(ValidationError, match="derived from its records"):
         pos_svc.update_position(pos_id, {"cost_basis": 1.0})
     # Non-aggregate fields stay editable.
-    updated = pos_svc.update_position(pos_id, {"note": "hello"})
-    assert updated["note"] == "hello"
+    other = AccountStore().create(
+        {"name": "Other Brokerage", "kind": "asset", "type": "investment", "currency": "USD"}
+    )
+    updated = pos_svc.update_position(pos_id, {"account_id": other["id"]})
+    assert updated["account_id"] == other["id"]
     # Aggregate untouched.
     assert float(PositionStore().find_by_id(pos_id)["quantity"]) == 70.0
 

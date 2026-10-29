@@ -7069,7 +7069,7 @@
               "type": "string"
             },
             "changes": {
-              "description": "Fields to change: note, account_id, account_name. Any other key is REFUSED. quantity, cost_basis and cost_currency are NEVER editable — they are derived from the position's records (its lots; for a grant, its vesting schedule and vests), so record what happened instead with acquire_lots / dispose_lots, correct a wrong lot with update_lots, or use the grant tools. vesting_state is set only by the grant tools.",
+              "description": "Fields to change: account_id, account_name. Any other key is REFUSED. quantity, cost_basis and cost_currency are NEVER editable — they are derived from the position's records (its lots; for a grant, its vesting schedule and vests), so record what happened instead with acquire_lots / dispose_lots, correct a wrong lot with update_lots, or use the grant tools. vesting_state is set only by the grant tools.",
               "type": "object"
             }
           },
@@ -7145,9 +7145,6 @@
             "idempotency_key": {
               "type": "string",
               "description": "Per-item dedupe key (e.g. the broker order id) — never one key for the whole batch."
-            },
-            "note": {
-              "type": "string"
             }
           },
           "required": [

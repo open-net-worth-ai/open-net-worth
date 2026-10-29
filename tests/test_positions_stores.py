@@ -923,8 +923,12 @@ def test_apply_position_change_add_update_remove(isolated):
     assert len(AccountStore().all()) == 1
 
     # UPDATE by position_id — the editable fields; quantity follows the lots instead.
-    ps.apply_position_change({"type": "update", "position_id": pid, "changes": {"note": "cold"}})
-    assert PositionStore().find_by_id(pid)["note"] == "cold"
+    ps.apply_position_change(
+        {"type": "update", "position_id": pid, "changes": {"account_name": "Ledger Nano"}}
+    )
+    assert AccountStore().find_by_id(PositionStore().find_by_id(pid)["account_id"])["name"] == (
+        "Ledger Nano"
+    )
     from backend.services import lots as lots_service
 
     lots_service.apply_lot_change(
@@ -1296,14 +1300,16 @@ def test_grant_managed_position_allows_account_id(isolated):
     assert updated["account_id"] == acct_b["id"]
 
 
-def test_grant_managed_position_allows_note(isolated):
-    """note is not a protected field — grant-managed positions can have their note changed."""
+def test_a_position_has_no_note_to_update(isolated):
+    """Retired 2026-10-29: a position carries no free-text note — a note belongs to a lot."""
+    from backend.core.errors import ValidationError
     from backend.services import positions as ps
 
     pos_id, _ = _seed_grant_managed_position(isolated)
 
-    updated = ps.update_position(pos_id, {"note": "moved to new custodian"})
-    assert updated["note"] == "moved to new custodian"
+    with pytest.raises(ValidationError, match="unsupported position update field"):
+        ps.update_position(pos_id, {"note": "moved to new custodian"})
+    assert "note" not in PositionStore().find_by_id(pos_id)
 
 
 def test_non_grant_position_figures_are_refused_with_guidance(isolated):

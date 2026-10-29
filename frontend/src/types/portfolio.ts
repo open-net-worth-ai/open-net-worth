@@ -21,7 +21,8 @@ export interface Row {
   cost_basis: string
   currency: string
   ticker: string
-  note: string
+  // Account and owned-asset rows only — a position has no note.
+  note?: string
   color?: string
   // Present on market positions (from positions_service.hydrated); absent on cash/account rows.
   symbol?: string

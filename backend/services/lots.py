@@ -765,7 +765,6 @@ def _ensure_acquire_position(change: dict) -> dict | None:
         instrument_id=inst_id,
         account_id=acct_id,
         cost_currency=change.get("cost_currency") or inst.get("quote_currency"),
-        note=change.get("note", ""),
     )
 
 

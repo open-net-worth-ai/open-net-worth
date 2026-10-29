@@ -173,7 +173,6 @@ def add_position(
     account_id: str,
     cost_currency: str | None = None,
     vesting_state: str = "vested",
-    note: str = "",
     acquired_at: str | None = None,
 ) -> dict:
     """Create an EMPTY position shell. Its quantity and cost basis come from the records the
@@ -188,13 +187,12 @@ def add_position(
             if cost_currency is not None
             else None,
             "vesting_state": vesting_state or "vested",
-            "note": note or "",
             "acquired_at": acquired_at or None,
         }
     )
 
 
-_UPDATABLE_FIELDS = {"vesting_state", "note", "account_id"}
+_UPDATABLE_FIELDS = {"vesting_state", "account_id"}
 
 _FIGURES_ARE_DERIVED = (
     "a position's quantity and cost basis are derived from its records, so they can't be "
@@ -581,7 +579,6 @@ def _apply_add(change: dict) -> dict:
         account_id=account["id"],
         cost_currency=cost_currency,
         vesting_state=vesting,
-        note=change.get("note", ""),
         acquired_at=change.get("acquired_at"),
     )
     result = {"ok": True, "position_id": pos["id"], "instrument": inst.get("symbol")}
@@ -1012,7 +1009,6 @@ def hydrated(
                 "ticker": _row_ticker(inst),
                 "unit": inst.get("unit", ""),
                 "quote_per_unit": qpu,
-                "note": pos.get("note", ""),
                 # ── day-P&L (Pillar 1): quote currency; None = no prior day yet ──
                 "prev_price": prev,
                 "day_change": day_change,

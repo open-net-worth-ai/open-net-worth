@@ -687,9 +687,10 @@ def test_registry_dispatch_preserves_proposed_change(monkeypatch):
         "quantity": 10,
         "cost_basis": 150.0,
         "bucket": "liquid",
-        "note": "",
     }
     monkeypatch.setattr(_ps, "hydrated_one", lambda pid: fake_row)
+    monkeypatch.setattr(_ps, "validate_position_update", lambda pid, changes: None)
+    monkeypatch.setattr(_ps, "find_account", lambda **_: None)
     monkeypatch.setattr(tool_registry, "should_preview_write", lambda: True)
 
     import backend.ai.tools as tools
@@ -698,7 +699,7 @@ def test_registry_dispatch_preserves_proposed_change(monkeypatch):
     text, proposed = asyncio.run(
         tools.execute_tool(
             "update_positions",
-            {"position_id": "pos-1", "changes": {"note": "core"}},
+            {"position_id": "pos-1", "changes": {"account_name": "Saxo"}},
             tool_use_id="toolu_cost_diet_test",
         )
     )
