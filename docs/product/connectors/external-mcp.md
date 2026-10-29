@@ -42,8 +42,7 @@ category tags sit behind the filter icon beside search, which lights up while on
 already added shows once, with a settings gear instead of **+**. **Suggested**
 lists up to three connectors you haven't added yet — Email, Telegram, Plaid, Interactive Brokers and
 Coinbase first — once at the bottom of **All**, or under the section on a single tab such as
-**MCP** — and on a tab with nothing set up yet, inside its empty view, beside a button that says
-how many there are in all (for example **Browse all 18 MCP servers**) — and at the top of **Browse & add** before you
+**MCP** — and on a tab with nothing set up yet, inside its empty view, under **Browse & add** — and at the top of **Browse & add** before you
 search or filter; click one to read about it and add it. **Sort** orders the full list below it:
 **Popular** puts the connectors you've added first, then popular ones, then the rest A–Z.
 

@@ -17,19 +17,10 @@ import {
   FAMILY_SECTIONS,
   inFamily,
   type ConnectorEntry,
-  type FamilyKey,
   type FamilySection,
   type FamilyTab,
   type StatusFilter,
 } from './model'
-
-/** What a family's members are called in running text — "Browse all 17 MCP servers". */
-const FAMILY_NOUN: Record<FamilyKey, string> = {
-  channels: 'channels',
-  data: 'data sources',
-  web: 'web providers',
-  mcp: 'MCP servers',
-}
 
 export interface ListFilters {
   query: string
@@ -91,8 +82,6 @@ export interface ConnectorListProps {
   suggestions?: DirectoryRow[]
   /** Open a suggestion's own page in Browse & add, where it is added. */
   onSuggest?: (row: DirectoryRow) => void
-  /** How many directory entries each family has — the empty view's "Browse all N …" count. */
-  familyTotals?: Partial<Record<FamilyKey, number>>
   /** Up to three not-yet-added entries per section, like the Assets screen's "Add more":
    *  on a family tab under that section's rows, on All as ONE block (`all`) after every
    *  section — never a block per section there. Absent while searching or filtering. */
@@ -109,7 +98,6 @@ export function ConnectorList({
   suggestions = [],
   onSuggest,
   sectionSuggestions,
-  familyTotals,
 }: ConnectorListProps): JSX.Element {
   const sections = visibleSections(entries, filters)
   const notAdded =
@@ -145,24 +133,16 @@ export function ConnectorList({
     const copy = emptyStateFor(filters)
     const section = FAMILY_SECTIONS.find((s) => s.key === filters.tab)
     const picks = sectionSuggestions?.[filters.tab]
-    // An empty family tab shows a few connectors to start with INSIDE its empty view, and the
-    // button names how many there are in all — a separate "Suggested" row under "Nothing here
-    // yet" read as two contradicting messages, and as if those three were all there is.
+    // An empty family tab shows a few connectors to start with INSIDE its empty view, under its
+    // Browse & add (primary — it is the tab's one real action) — a separate "Suggested" row under
+    // "Nothing here yet" read as two contradicting messages, and as if those few were all there is.
     if (section && onSuggest && picks?.length) {
-      const total = familyTotals?.[section.key] ?? 0
       return (
-        <Empty
-          title={copy.title}
-          body={FAMILY_BLURB[section.key]}
-          action={
-            <Btn onClick={() => onBrowse(section.key)}>
-              {total > picks.length
-                ? `Browse all ${total} ${FAMILY_NOUN[section.key]}`
-                : copy.actionLabel}
-            </Btn>
-          }
-        >
-          <div className="cn-emptypicks" aria-label={`Start with ${FAMILY_NOUN[section.key]}`}>
+        <Empty title={copy.title} body={FAMILY_BLURB[section.key]}>
+          <Btn variant="primary" onClick={() => onBrowse(section.key)}>
+            {copy.actionLabel}
+          </Btn>
+          <div className="cn-emptypicks" aria-label={`Start with ${section.title}`}>
             {picks.map((d) => (
               <DirectoryCard
                 key={d.id}
