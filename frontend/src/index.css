@@ -137,14 +137,15 @@
   body *::-webkit-scrollbar-corner {
     background: transparent;
   }
+  /* Two short, faint strokes tucked into the corner — the box is the scrollbar's 10px square. */
   body textarea::-webkit-resizer {
     background: linear-gradient(
       135deg,
-      transparent 0 52%,
-      var(--muted) 52% 58%,
-      transparent 58% 70%,
-      var(--muted) 70% 76%,
-      transparent 76%
+      transparent 0 66%,
+      color-mix(in srgb, var(--muted) 45%, transparent) 66% 71%,
+      transparent 71% 82%,
+      color-mix(in srgb, var(--muted) 45%, transparent) 82% 87%,
+      transparent 87%
     );
   }
   /* Phones: no visible scrollbar at all. The document bar is already hidden above, but inner
@@ -13083,6 +13084,18 @@ body.hide-amounts .money * {
   }
   .asd-thesis-form .ui-segmented__seg {
     padding-inline: var(--space-2);
+  }
+  /* The form reads at the card's own 13px, not the 14px default a full-width form uses. */
+  .asd-thesis-form .ui-input,
+  .asd-thesis-form .ui-money-field__prefix {
+    font-size: var(--text-base);
+  }
+  .asd-thesis-text {
+    font-size: var(--text-base);
+    line-height: 1.55;
+    min-height: 0;
+    resize: none;
+    overflow: hidden;
   }
   .asd-thesis-grid {
     display: grid;

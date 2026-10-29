@@ -1,10 +1,11 @@
-import { useId, useState, type CSSProperties } from 'react'
+import { useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react'
 import {
   Button,
   FormField,
   SegmentedControl,
   TextArea,
   TextField,
+  type TextAreaProps,
   type TextFieldProps,
 } from '../ui'
 import { getCurrencySymbol } from '../../utils/format'
@@ -158,9 +159,8 @@ export function ThesisEditor({ instrumentId, thesis, held, currency, onSaved, on
         </FormField>
       )}
       <FormField label={reasonLabel(held)} htmlFor={`${id}-reason`}>
-        <TextArea
+        <GrowingText
           id={`${id}-reason`}
-          rows={3}
           maxLength={280}
           value={draft.reason}
           placeholder={reasonExample(held)}
@@ -169,9 +169,8 @@ export function ThesisEditor({ instrumentId, thesis, held, currency, onSaved, on
       </FormField>
       {held && (
         <FormField label={BREAKS_IF_LABEL} htmlFor={`${id}-breaks`}>
-          <TextArea
+          <GrowingText
             id={`${id}-breaks`}
-            rows={3}
             maxLength={280}
             value={draft.breaks_if}
             placeholder={BREAKS_IF_EXAMPLE}
@@ -220,4 +219,17 @@ export function ThesisEditor({ instrumentId, thesis, held, currency, onSaved, on
       </div>
     </div>
   )
+}
+
+/** A text box that grows with its text — a 280-character note fits without a scrollbar or a
+ *  resize grip in the narrow rail. */
+function GrowingText(props: TextAreaProps) {
+  const box = useRef<HTMLTextAreaElement>(null)
+  useLayoutEffect(() => {
+    const el = box.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight + 2}px`
+  }, [props.value])
+  return <TextArea ref={box} rows={2} className="asd-thesis-text" {...props} />
 }
