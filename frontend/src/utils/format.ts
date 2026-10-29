@@ -346,6 +346,23 @@ export function fCompact(n: number, maxFrac = 2): string {
   }
 }
 
+/** Scale an amount of at least a million to a 2-decimal figure in M, B or T, picking the unit
+ *  after rounding so 999,995,000 reads 1.00B rather than 1000.00M. Returns null below 1e6
+ *  (callers keep their own K/unit rules there). Shared by the plan tab's money labels so their
+ *  units agree with fBaseCompact on the charts: 24,946,080,000 → { value: '24.95', unit: 'B' }. */
+export function millionsUp(n: number): { value: string; unit: 'M' | 'B' | 'T' } | null {
+  const a = Math.abs(n)
+  if (a < 1e6) return null
+  const scales = [
+    { div: 1e6, unit: 'M' },
+    { div: 1e9, unit: 'B' },
+    { div: 1e12, unit: 'T' },
+  ] as const
+  let i = a >= 1e12 ? 2 : a >= 1e9 ? 1 : 0
+  if (i < 2 && Number((a / scales[i]!.div).toFixed(2)) >= 1000) i++
+  return { value: (a / scales[i]!.div).toFixed(2), unit: scales[i]!.unit }
+}
+
 /** Extract just the currency symbol for a given ISO 4217 code (uses base currency if omitted). */
 export function getCurrencySymbol(currency?: string): string {
   const code = (currency || _baseCurrency).toUpperCase()

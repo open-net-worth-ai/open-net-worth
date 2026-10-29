@@ -14,7 +14,7 @@ import { reportScreenFill } from '../../intro/screenState'
 import { FlowIcon, X } from './icons'
 import { ChartArea } from '../../../ui/icons'
 import { fBase } from './planData'
-import { getCurrencySymbol } from '../../../utils/format'
+import { getCurrencySymbol, millionsUp } from '../../../utils/format'
 import { useCashflowData } from './useCashflowData'
 import type { MappedRow } from './useCashflowData'
 import { useRegisterScreenFacts, useRegisterScreenPrompts } from '../../../lucius/useScreenContract'
@@ -32,7 +32,8 @@ function fCF(n: number): string {
   const a = Math.abs(n),
     s = n < 0 ? '−' : ''
   const sym = getCurrencySymbol()
-  if (a >= 1e6) return s + sym + (a / 1e6).toFixed(2) + 'M'
+  const big = millionsUp(a)
+  if (big) return s + sym + big.value + big.unit
   if (a >= 1e3) return s + sym + (a / 1e3).toFixed(2) + 'K'
   return s + sym + a.toFixed(0)
 }

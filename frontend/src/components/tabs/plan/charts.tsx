@@ -7,6 +7,9 @@ import { fBase, fBaseCompact } from '../../../utils/format'
 import type { BandRow } from './planData'
 
 const VW = 760 // svg viewBox width (preserveAspectRatio none → x maps linearly to container)
+// Vertical px the end-of-line value label needs clear of a y-axis tick: about half the label's
+// height (10px text + 2px padding) plus half a tick's height (8.5px text), with a little buffer.
+const END_LABEL_CLEAR_PX = 14
 
 // Shared hover overlay: maps pointer X → nearest data index, draws a crosshair + tooltip.
 export function useHover(points: unknown[]) {
@@ -169,6 +172,7 @@ export function FanChart({
   const fragHi = fragile && retInRange ? Math.min(maxAge, retireAge! + 5) : null
   const dist = retInRange ? nestEggDist : null
   const { ref, hi, onMove, onLeave } = useHover(bands)
+  const endLabelY = yAt(bands[bands.length - 1]!.p50)
   const [drag, setDrag] = useState(false)
   const chipRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const [chipShift, setChipShift] = useState<Record<string, number>>({})
@@ -938,10 +942,11 @@ export function FanChart({
       </div>
       {!hb && (
         <div
+          data-testid="fan-end-label"
           style={{
             position: 'absolute',
             right: 10,
-            top: yAt(bands[bands.length - 1]!.p50) + 'px',
+            top: endLabelY + 'px',
             transform: 'translateY(-50%)',
             fontSize: 10,
             fontWeight: 700,
@@ -956,13 +961,17 @@ export function FanChart({
         </div>
       )}
       {/* Y-axis money scale — overlaid at the RIGHT edge, ON TOP of the plot (does NOT reserve/push
-          space). Faint text + a translucent chip so it stays readable over the fan. */}
+          space). Faint text + a translucent chip so it stays readable over the fan. A tick whose
+          row the end-of-line value label occupies is dropped: both sit at the right edge, and the
+          line's own value is the more useful number there. */}
       {!hb &&
         [1, 2, 3].map((i) => {
           const y = padT + (i / 4) * (H - padT - padB)
+          if (Math.abs(y - endLabelY) < END_LABEL_CLEAR_PX) return null
           return (
             <div
               key={'yax' + i}
+              data-testid="fan-y-tick"
               style={{
                 position: 'absolute',
                 right: 4,
