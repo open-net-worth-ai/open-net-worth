@@ -108,7 +108,7 @@ describe('the list', () => {
 
   it('finds a connector by its category', () => {
     const broker = entry({ id: 'mcp:broker', name: 'Acme', categories: ['Brokerage'] })
-    const other = entry({ id: 'mcp:other', name: 'Other', categories: ['Search'] })
+    const other = entry({ id: 'mcp:other', name: 'Other', categories: ['Web search'] })
     const found = visibleSections([broker, other], {
       query: 'brokerage',
       tab: 'all',

@@ -49,7 +49,7 @@ function nativeRow(overrides: Partial<DirectoryRow> = {}): Partial<DirectoryRow>
     name: 'Serper',
     mcp: false,
     families: ['Web'],
-    categories: ['Search', 'Browsing'],
+    categories: ['Web search', 'Browsing'],
     publisher: 'Serper',
     verification: 'unverified',
     tools: ['web_search', 'fetch_page'],
@@ -306,7 +306,11 @@ describe('tool chips show the raw registry name, not a human label', () => {
     const { container } = preview(nativeRow())
     expect(chip(container, 'web_search')).toBeTruthy()
     expect(chip(container, 'fetch_page')).toBeTruthy()
-    expect(container.textContent).not.toContain('Web search')
+    // Scoped to the Tools row: the Categories row legitimately carries a "Web search" tag.
+    const tools = [...container.querySelectorAll('.cn-sublabel')].find((n) =>
+      n.textContent?.startsWith('Tools'),
+    )!.parentElement!
+    expect(tools.textContent).not.toContain('Web search')
   })
 
   it('renders a tool DISCOVERED on a server we have never seen, unchanged', () => {
@@ -330,7 +334,7 @@ describe('Categories describe the connector, never echo its lane', () => {
     const { container } = preview(nativeRow())
     expect(screen.getByText('Categories').textContent).toContain('2')
     expect([...container.querySelectorAll('.cn-tagchip')].map((n) => n.textContent)).toContain(
-      'Search',
+      'Web search',
     )
   })
 

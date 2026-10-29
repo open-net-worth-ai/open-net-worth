@@ -152,7 +152,7 @@ describe('categories describe the connector; families are the lane', () => {
     expect(cats('mcp-quickbooks')).toEqual(['Accounting'])
     expect(cats('mcp-xero')).toEqual(['Accounting'])
     expect(cats('plaid')).toEqual(['Banking'])
-    expect(cats('web_search:serper')).toEqual(['Search'])
+    expect(cats('web_search:serper')).toEqual(['Web search'])
     expect(cats('mcp-playwright')).toEqual(['Browsing'])
     expect(cats('telegram')).toEqual(['Messaging'])
   })

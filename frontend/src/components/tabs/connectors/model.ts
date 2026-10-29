@@ -142,8 +142,8 @@ export const CONNECTOR_CATEGORIES = [
   'Messaging',
   'Payments',
   'Research',
-  'Search',
   'Tax',
+  'Web search',
 ] as const
 
 export type ConnectorCategory = (typeof CONNECTOR_CATEGORIES)[number]
@@ -163,8 +163,8 @@ export const CATEGORY_HUE: Record<ConnectorCategory, string> = {
   Messaging: 'var(--crypto)',
   Payments: 'var(--recv)',
   Research: 'var(--violet)',
-  Search: 'var(--contingent)',
   Tax: 'var(--tax)',
+  'Web search': 'var(--contingent)',
 }
 
 // ── status ──────────────────────────────────────────────────────────────────

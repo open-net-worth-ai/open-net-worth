@@ -35,7 +35,7 @@ QuickBooks Online, Xero, Mercury, Interactive Brokers, Robinhood, moomoo, Expens
 AvaTax, Twelve Data, SEC EDGAR and FRED.
 
 Each connector shows coloured tags for what it's for, such as **Brokerage**, **Banking** or
-**Search**. Searching the Connectors page matches those tags too. In **Browse & add**, click a
+**Web search**. Searching the Connectors page matches those tags too. In **Browse & add**, click a
 category in the row of small tags under **All · Channels · Data sources · Web · MCP**, or click a
 tag on any card, to see only that kind; click it again (or **All**) to clear it. A server you've
 already added shows once, with a settings gear instead of **+**. **Suggested**

@@ -393,7 +393,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:duckduckgo',
     name: 'DuckDuckGo',
     families: ['Web'],
-    categories: ['Search'],
+    categories: ['Web search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:duckduckgo"]`.
@@ -415,7 +415,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:tavily',
     name: 'Tavily',
     families: ['Web'],
-    categories: ['Search'],
+    categories: ['Web search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:tavily"]`.
@@ -432,7 +432,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:perplexity',
     name: 'Perplexity (Sonar)',
     families: ['Web'],
-    categories: ['Search'],
+    categories: ['Web search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:perplexity"]`.
@@ -450,7 +450,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:serper',
     name: 'Serper',
     families: ['Web'],
-    categories: ['Search'],
+    categories: ['Web search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:serper"]`.
@@ -467,7 +467,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:google_pse',
     name: 'Google Programmable Search',
     families: ['Web'],
-    categories: ['Search'],
+    categories: ['Web search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:google_pse"]`.
@@ -484,7 +484,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:firecrawl',
     name: 'Firecrawl',
     families: ['Web'],
-    categories: ['Search', 'Browsing'],
+    categories: ['Web search', 'Browsing'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:firecrawl"]`.
@@ -556,7 +556,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'mcp-firecrawl',
     name: 'Firecrawl',
     families: ['MCP'],
-    categories: ['Browsing', 'Search'],
+    categories: ['Browsing', 'Web search'],
     icon: 'search',
     hue: 'var(--apt)',
     sub: 'Crawl + scrape sites into clean markdown',

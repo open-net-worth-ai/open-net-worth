@@ -928,10 +928,29 @@
 }
 /* The directory's category filter: a row of the SAME small pills the cards carry, under the
    (larger) family chips — picked = solid hue, so the active one reads at a glance. */
+/* On a card the tags sit on its bottom edge, so cards of different description lengths
+   in one grid row line their tags up. */
+.cn-page .cn-dircard > .cn-cats {
+  margin-top: auto;
+}
 .cn-page .cn-catrow {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+/* Fourteen chips wrapped into four lines of the sticky header on a phone — one row that
+   scrolls sideways keeps the header short. After the base rule, so it wins. */
+@media (max-width: 560px) {
+  .cn-page .cn-catrow {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -20px;
+    padding: 0 20px;
+  }
+  .cn-page .cn-catrow > .cn-cat {
+    flex: none;
+  }
 }
 /* In the filter row the hue is only an outline until picked — a full row of tinted fills
    was too loud (owner review, 2026-10-29). Border + line-height keep the 18px pill. */
