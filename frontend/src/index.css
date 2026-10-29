@@ -9997,7 +9997,7 @@ body.hide-amounts .money * {
     /* Rail scales with the pane (clamp) instead of a rigid 340px: pinned at 340 on a
      wide pane, shrinks toward a 240 floor as the pane narrows, so both columns give
      ground together rather than the chart shouldering it all. */
-    grid-template-columns: minmax(0, 1fr) clamp(240px, 30%, 340px);
+    grid-template-columns: minmax(0, 1fr) var(--asd-rail-w, clamp(240px, 30%, 340px));
     gap: var(--space-7);
     /* stretch (not start): .asd-main must match the row's real height — usually set by
      the taller .asd-rail (Your Position/Key Facts/Peers) — so the sticky .asd-ask-bar
@@ -10022,6 +10022,47 @@ body.hide-amounts .money * {
     flex-direction: column;
     gap: var(--space-5);
     min-width: 0;
+    position: relative;
+  }
+
+  /* Drag handle on the rail's left edge (useRailResize sets --asd-rail-w on .asd-body). It
+     hangs into the grid gap, centred on it, with a 1px line that shows on hover/drag. */
+  .asd-rail-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--space-7) / -2 - 3px);
+    width: 7px;
+    cursor: col-resize;
+    touch-action: none;
+    z-index: 1;
+  }
+  .asd-rail-handle::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 3px;
+    width: 1px;
+    background: transparent;
+    transition: background-color 0.14s;
+  }
+  @media (hover: hover) {
+    .asd-rail-handle:hover::after {
+      background: var(--line-strong);
+    }
+  }
+  .asd-rail-handle:active::after {
+    background: var(--ink);
+  }
+  @media (pointer: coarse) {
+    .asd-rail-handle {
+      left: calc(var(--space-7) / -2 - 12px);
+      width: 24px;
+    }
+    .asd-rail-handle::after {
+      left: 12px;
+    }
   }
 
   /* A rail card rendered TWICE (index.css companion: AssetDetailView.tsx) — once for

@@ -49,6 +49,7 @@ import { PeersCard } from './PeersCard'
 import { FundamentalsSnapshot } from './FundamentalsSnapshot'
 import { TechnicalsWidget } from './TechnicalsWidget'
 import { AcquireLotForm } from '../shared/AcquireLotForm'
+import { useRailResize } from './useRailResize'
 
 type DetailTab = 'overview' | 'analysis' | 'position'
 const DETAIL_TAB_VALUES: DetailTab[] = ['overview', 'analysis', 'position']
@@ -109,6 +110,12 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
   // Prefetched at the top level (not gated on the Analysis tab) + session-cached,
   // so the Analysis tab is ready before it's ever opened and never re-fetches.
   const analyst = useAnalystConsensus(instrumentId)
+  const {
+    bodyRef: railBodyRef,
+    railRef,
+    style: railStyle,
+    handleProps: railHandleProps,
+  } = useRailResize()
   const [activeTab, setActiveTab] = useState<DetailTab>(() => loadDetailTab(search.sub))
   // One effect covers three cases: (1) mirror a manual tab click into the URL, (2) deep-link /
   // back-forward (?sub=analysis) for the SAME instrument, and (3) the Intel tab reusing one
@@ -896,7 +903,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
       )}
 
       {/* Body */}
-      <div className="asd-body">
+      <div className="asd-body" ref={railBodyRef} style={railStyle}>
         <div className="asd-main">
           {/* Chart */}
           {activeTab === 'overview' && (
@@ -1252,7 +1259,15 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
             reflows to a single column at, see index.css) — the narrow layout instead
             places Your Position inline in Overview and Facts/Peers inline in Analysis
             (below), each next to the content it's actually about. */}
-        <div className="asd-rail asd-desktop-only">
+        <div className="asd-rail asd-desktop-only" ref={railRef}>
+          <div
+            className="asd-rail-handle"
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize side panel"
+            title="Drag to resize · double-click to reset"
+            {...railHandleProps}
+          />
           {yourPositionBlock}
           {thesisBlock}
           {priceAlertsBlock}
