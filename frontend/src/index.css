@@ -13043,6 +13043,18 @@ body.hide-amounts .money * {
   .asd-thesis-form .ui-segmented__seg {
     padding-inline: var(--space-2);
   }
+  /* The form reads at the card's own 13px, not the 14px default a full-width form uses. */
+  .asd-thesis-form .ui-input,
+  .asd-thesis-form .ui-money-field__prefix {
+    font-size: var(--text-base);
+  }
+  .asd-thesis-text {
+    font-size: var(--text-base);
+    line-height: 1.55;
+    min-height: 0;
+    resize: none;
+    overflow: hidden;
+  }
   .asd-thesis-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
