@@ -19,6 +19,7 @@ import {
   Text,
 } from '../../ui'
 import { authFetch } from '../../../api/client'
+import { getBaseCurrency } from '../../../utils/format'
 import type { Account, AccountCreate, AccountUpdate, AccountPrefill, ExternalId } from './types'
 import { ACCOUNT_TYPES, TYPE_LABELS, TYPE_MEANING, TYPE_ICON, LIABILITY_TYPES } from './categories'
 import type { AccountType } from './categories'
@@ -92,7 +93,7 @@ function blankForm(): AccountForm {
     name: '',
     type: 'cash',
     institution: '',
-    currency: 'SGD',
+    currency: getBaseCurrency(),
     initial: '0',
     asOf: '',
     lastFour: '',
@@ -209,7 +210,7 @@ export default function AccountModal({
           ...blankForm(),
           type: prefill.type ?? 'cash',
           name: prefill.name ?? '',
-          currency: prefill.currency ?? 'SGD',
+          currency: prefill.currency ?? getBaseCurrency(),
           lastFour: prefill.lastFour ?? '',
           institution: prefill.institution ?? '',
           initial: prefill.initial ?? '0',

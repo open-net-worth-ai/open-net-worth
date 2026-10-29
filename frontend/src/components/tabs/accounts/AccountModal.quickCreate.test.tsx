@@ -4,8 +4,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import AccountModal from './AccountModal'
 import type { Account, AccountCreate, AccountUpdate } from './types'
+import { setBaseCurrency } from '../../../utils/format'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  setBaseCurrency('SGD')
+})
 
 function createdAccount(): Account {
   return {
@@ -93,6 +97,36 @@ describe('AccountModal quick create', () => {
 
     resolveSave(createdAccount())
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Adding…' })).toBeNull())
+  })
+
+  it('defaults the currency to the base currency, not SGD', () => {
+    setBaseCurrency('USD')
+    const onSave = vi.fn()
+    renderAdd(onSave)
+
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'Checking' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
+
+    expect((onSave.mock.calls[0]?.[0] as AccountCreate).currency).toBe('USD')
+  })
+
+  it('falls back to the base currency when a prefill carries none', () => {
+    setBaseCurrency('USD')
+    const onSave = vi.fn()
+    render(
+      <AccountModal
+        open
+        mode="add"
+        institutions={[]}
+        prefill={{ type: 'retirement', name: '401k' }}
+        onClose={vi.fn()}
+        onSave={onSave}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add account' }))
+
+    expect((onSave.mock.calls[0]?.[0] as AccountCreate).currency).toBe('USD')
   })
 
   it('cannot be dismissed while creation is pending', () => {
