@@ -137,3 +137,17 @@ describe('the endpoint is what you are trusting', () => {
     expect(container.querySelector('code.rd-code')).toBeNull()
   })
 })
+
+describe('a name and icon read from a website', () => {
+  it('says which site they came from and keeps the Unknown badge', () => {
+    const { container } = render(
+      <VendorTrust
+        verification="unknown"
+        url="https://api.broker.example/mcp"
+        identitySource="www.broker.example"
+      />,
+    )
+    expect(container.textContent).toContain('Name and icon from www.broker.example’s website')
+    expect(screen.getByText('Unknown publisher')).toBeTruthy()
+  })
+})

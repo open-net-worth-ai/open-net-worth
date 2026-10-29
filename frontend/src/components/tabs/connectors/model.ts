@@ -374,6 +374,8 @@ export interface ConnectorDetailEntry extends ConnectorEntry {
   verification: VerificationState
   /** The URL or local command, verbatim — what you are actually trusting (spec §5). */
   url?: string
+  /** The website host a user-added MCP server's name/icon came from — a claim, shown as one. */
+  identitySource?: string
   toolGroups: ToolGroup[]
   /** Flat tool list, in wire order, before grouping. */
   tools: string[]

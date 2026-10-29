@@ -75,6 +75,13 @@ instructions, and enter what they give you in the form (or add it as a custom se
 A local command needs its runtime installed on the machine running Open Net Worth — Node.js for
 `npx`, [uv](https://docs.astral.sh/uv/) for `uvx`.
 
+For a remote server, Open Net Worth fills in a readable name and icon from what the server says
+about itself, or else from its website — for example `api.ibkr.com` shows as **Interactive
+Brokers** with its logo. The server's page says which website they came from. This is what the
+site says about itself, not a check of who runs the server, so the badge still reads **Unknown
+publisher**. A name you typed yourself is never replaced. **⋯ → Refresh tools list** reads the
+name and icon again.
+
 ## Check that it works
 
 Ask Lucius to use it, for example after adding Playwright:

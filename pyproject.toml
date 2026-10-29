@@ -192,6 +192,7 @@ markers = [
     "integration: requires ANTHROPIC_API_KEY and makes LLM calls",
     "network: requires live network access (Yahoo/CoinGecko); skipped in default suite",
     "real_price_backfill: opts OUT of conftest's no-op patch of positions._trigger_backfill_async",
+    "real_site_identity: opts OUT of conftest's no-op patch of mcp.site_identity.lookup",
     "real_session_title: opts OUT of conftest's no-op patch of session_titles.schedule_title",
 ]
 

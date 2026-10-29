@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 
 from backend.core.errors import NotFoundError
@@ -298,6 +298,26 @@ def probe_mcp_client_progress(probe_id: str):
     server-chosen text, sanitized and capped at the ingress (``mcp.probe_progress``).
     """
     return probe_progress.snapshot(probe_id)
+
+
+@router.get("/api/mcp-clients/{server_id}/icon")
+def mcp_client_icon(server_id: str):
+    """The server's cached display icon (``mcp.site_identity``) — raster bytes typed by their
+    magic, never by the site's header, served with ``nosniff`` and a script-free CSP so the
+    bytes can never be reinterpreted as a page on our origin. 404 when there is none."""
+    found = _store().site_icon(server_id)
+    if found is None:
+        raise HTTPException(404, "no icon")
+    data, mime = found
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "Cache-Control": "private, max-age=86400",
+        },
+    )
 
 
 @router.post("/api/mcp-clients/{server_id}/test")

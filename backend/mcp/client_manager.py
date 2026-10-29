@@ -64,6 +64,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import time
 import urllib.parse
 from typing import Dict, List, Optional, Tuple
 
@@ -73,7 +74,7 @@ from backend.core.tool_use_context import get_tool_use_id
 from backend.core.untrusted import sanitize_untrusted
 from backend.db.mcp_client_store import McpClientStore
 from backend.db.pending_plan_store import PendingPlanStore
-from backend.mcp import oauth_flow, probe_progress
+from backend.mcp import oauth_flow, probe_progress, site_identity
 from backend.mcp.client import (
     Deadline,
     McpCallError,
@@ -873,10 +874,16 @@ class McpClientManager:
         server = self._store.find(server_id)
         if server is None:
             return {"error": f"unknown mcp server: {server_id}"}
-        self._discover(server, deadline=probe_deadline(server.transport))
+        self._discover(server, deadline=probe_deadline(server.transport), refresh_identity=True)
         return self._store.public_one(server_id) or {"error": "not found"}
 
-    def _discover(self, server: McpServerConfig, *, deadline: Optional[Deadline] = None) -> None:
+    def _discover(
+        self,
+        server: McpServerConfig,
+        *,
+        deadline: Optional[Deadline] = None,
+        refresh_identity: bool = False,
+    ) -> None:
         """Handshake + ``tools/list`` against one server, persisting what came back.
 
         The ``initialize`` result is NOT discarded: its ``serverInfo`` is what the server
@@ -915,9 +922,33 @@ class McpClientManager:
             logger.warning("mcp connect failed for '%s': %s", server.id, exc)
             self._store.record_discovery(server.id, [], "error", str(exc))
             return
-        self._store.record_discovery(
-            server.id, tools, "ok", None, server_info=parse_server_info(handshake)
-        )
+        info = parse_server_info(handshake)
+        self._store.record_discovery(server.id, tools, "ok", None, server_info=info)
+        self._refresh_site_identity(server.id, info, force=refresh_identity)
+
+    def _refresh_site_identity(self, server_id: str, info: ServerInfo, *, force: bool) -> None:
+        """Look up a remote server's display name + icon (``mcp.site_identity``) after a good
+        handshake. A human Refresh (``force``) always re-reads; unattended boot discovery reads
+        only a server never checked, so a restart never re-fetches every website. Renames the
+        row only while it still carries its URL-host default. Never raises."""
+        server = self._store.find(server_id)
+        if server is None or server.transport != "http" or (server.site_checked_at and not force):
+            return
+        try:
+            found = site_identity.lookup(
+                server.url, server_title=info.title, server_icons=list(info.icons)
+            )
+            self._store.record_site_identity(
+                server_id,
+                name=found.name,
+                source=found.source,
+                icon=found.icon,
+                icon_type=found.icon_type,
+                checked_at=time.time(),
+                rename_from=_endpoint_derived_name(server),
+            )
+        except Exception:  # noqa: BLE001 — a cosmetic lookup must never fail a discovery
+            logger.warning("mcp site identity lookup failed for '%s'", server_id, exc_info=True)
 
     # ── probe (test a config WITHOUT persisting anything) ────────────────────────
 
@@ -975,7 +1006,12 @@ class McpClientManager:
         # materially worse than its self-report, which is exactly why we keep serverInfo.
         # Note this fallback is for the editable Name field ONLY: ``publisher`` is never
         # back-filled this way, because a host is not an author.
-        suggested_name = info.name or _endpoint_derived_name(config) or provisional_id
+        suggested_name = (
+            _site_name_for_probe(config, info)
+            or info.name
+            or _endpoint_derived_name(config)
+            or provisional_id
+        )
         suggested_id = unique_server_id(
             slug_server_id(suggested_name), [s.id for s in self._store.all()]
         )
@@ -990,7 +1026,19 @@ class McpClientManager:
         }
 
 
-def _endpoint_derived_name(config: McpServerProbe) -> str:
+def _site_name_for_probe(config: McpServerProbe, info: ServerInfo) -> Optional[str]:
+    """The add flow's Name pre-fill: the server's own display ``title``, else its website's
+    name (``mcp.site_identity``, no icon fetched — the probe persists nothing)."""
+    if config.transport != "http":
+        return info.title
+    try:
+        return site_identity.lookup(config.url, server_title=info.title, want_icon=False).name
+    except Exception:  # noqa: BLE001 — a cosmetic lookup must never fail the probe
+        logger.debug("mcp probe site-name lookup failed", exc_info=True)
+        return info.title
+
+
+def _endpoint_derived_name(config: "McpServerProbe | McpServerConfig") -> str:
     """A best-effort name from the endpoint itself — the FALLBACK when a server reports no
     ``serverInfo.name``.
 

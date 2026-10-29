@@ -115,6 +115,10 @@ class ServerInfo:
 
     name: Optional[str] = None
     version: Optional[str] = None
+    # MCP 2025-06-18's human display name and 2025-11-25's ``icons`` (https/data URIs only —
+    # fetched and sniffed later by ``mcp.site_identity``, never rendered from here).
+    title: Optional[str] = None
+    icons: tuple[str, ...] = ()
     publisher: Optional[str] = None
     homepage_url: Optional[str] = None
     repo_url: Optional[str] = None
@@ -285,6 +289,14 @@ class McpServerConfig(ONBaseModel):
     verification: Literal["verified", "unverified", "unknown"] = "unknown"
     last_status: Optional[str] = None  # ok | connect_error | auth_error | error | never
     last_error: Optional[str] = None
+    # The display name + icon the handshake or the endpoint's website gave
+    # (``mcp.site_identity``) — a CLAIM, never a verification; ``site_source`` is the host it
+    # came from (``None`` = the server itself). The icon BYTES live in state only
+    # (``McpClientStore.site_icon``), never on this object.
+    site_name: Optional[str] = None
+    site_source: Optional[str] = None
+    site_icon_type: Optional[str] = None
+    site_checked_at: Optional[float] = None
 
     @field_validator("id")
     @classmethod

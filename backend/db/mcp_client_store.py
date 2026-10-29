@@ -41,6 +41,7 @@ transport, no offer/dispatch logic (that lives in ``mcp/client_manager``).
 
 from __future__ import annotations
 
+import base64
 from contextlib import contextmanager
 from typing import Any, Iterator, List, Optional
 
@@ -85,6 +86,8 @@ _PUBLIC_FIELDS = (
     "verification",
     "last_status",
     "last_error",
+    "site_name",
+    "site_source",
 )
 
 # Where each McpServerConfig field lives.
@@ -97,6 +100,10 @@ _STATE_FIELDS = (
     "server_info_instructions",
     "last_status",
     "last_error",
+    "site_name",
+    "site_source",
+    "site_icon_type",
+    "site_checked_at",
 )
 _SECRET_FIELDS = ("url", "command", "args", "env", "auth_header", "token")
 # McpOAuth's secrets ride as ``oauth_<field>``; the rest of the block is state.
@@ -331,6 +338,57 @@ class McpClientStore:
             )
             return self._read(server_id, conn)
 
+    def record_site_identity(
+        self,
+        server_id: str,
+        *,
+        name: Optional[str],
+        source: Optional[str],
+        icon: Optional[bytes],
+        icon_type: Optional[str],
+        checked_at: float,
+        rename_from: Optional[str] = None,
+    ) -> Optional[McpServerConfig]:
+        """Cache what ``mcp.site_identity.lookup`` found — like ``record_discovery``, not in
+        ``update()``'s patchable set, so no request body can choose a server's icon. A lookup
+        that found nothing keeps the previous answer (a site briefly down must not blank a
+        working icon) but still stamps ``site_checked_at``.
+
+        ``rename_from`` renames the row to ``name`` only while it still carries that exact
+        auto-derived default (its URL host) — a name the user chose is never overwritten."""
+        cid = mcp_connector_id(server_id)
+        with _unit(None) as conn:
+            row = self._store.get(cid, conn=conn)
+            if row is None:
+                return None
+            patch: dict[str, Any] = {"site_checked_at": checked_at}
+            if name:
+                patch.update(site_name=name, site_source=source)
+            if icon and icon_type:
+                patch.update(
+                    site_icon=base64.b64encode(icon).decode("ascii"),
+                    site_icon_type=icon_type,
+                    site_source=source,
+                )
+            self._store.merge_state(cid, patch, conn=conn)
+            if name and rename_from and row["name"] == rename_from:
+                self._store.set_name(cid, name, conn=conn)
+            return self._read(server_id, conn)
+
+    def site_icon(self, server_id: str) -> Optional[tuple[bytes, str]]:
+        """The cached icon as ``(bytes, mime)`` — its type is the one ``site_identity``
+        sniffed from magic bytes, never a header the site sent."""
+        with get_engine().connect() as conn:
+            row = self._store.get(mcp_connector_id(server_id), conn=conn)
+        state = (row or {}).get("state") or {}
+        blob, kind = state.get("site_icon"), state.get("site_icon_type")
+        if not isinstance(blob, str) or not isinstance(kind, str):
+            return None
+        try:
+            return base64.b64decode(blob), kind
+        except ValueError:
+            return None
+
     def set_oauth(
         self, server_id: str, oauth: McpOAuth, *, conn: Optional[Connection] = None
     ) -> Optional[McpServerConfig]:
@@ -439,6 +497,8 @@ class McpClientStore:
         # each caller re-deriving it and the two families disagreeing.
         out["endpoint"] = endpoint_of(config)
         out["oauth"] = McpClientStore._oauth_summary(config)
+        # A version, not a flag: it busts the browser's cache of the icon route on a refetch.
+        out["icon_version"] = int(config.site_checked_at or 0) if config.site_icon_type else None
         return out
 
     def public_one(self, server_id: str) -> Optional[dict]:

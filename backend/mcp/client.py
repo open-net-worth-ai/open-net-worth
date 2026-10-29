@@ -459,7 +459,7 @@ def parse_server_info(result: Any) -> ServerInfo:
     ``initialize`` result.
 
     Per the MCP spec the handshake answers with ``serverInfo: {name, version}`` (newer
-    revisions add ``title``/``websiteUrl``); the add flow pre-fills its Name field from that
+    revisions add ``title``/``websiteUrl``/``icons``); the add flow pre-fills its Name field from that
     name (§7 step 2) instead of guessing from a URL host. ``publisher``/``repositoryUrl`` are
     NOT in the spec — some servers volunteer them, so we keep them when present and leave
     them ``None`` when not, rather than fabricating provenance. ``instructions`` is a
@@ -481,6 +481,8 @@ def parse_server_info(result: Any) -> ServerInfo:
     return ServerInfo(
         name=_clean_info_field(info.get("name")),
         version=_clean_info_field(info.get("version")),
+        title=_clean_info_field(info.get("title")),
+        icons=_clean_info_icons(info.get("icons")),
         publisher=_clean_info_field(info.get("publisher") or info.get("vendor")),
         homepage_url=_clean_info_url(info.get("websiteUrl") or info.get("homepageUrl")),
         repo_url=_clean_info_url(info.get("repositoryUrl") or info.get("repository")),
@@ -494,6 +496,25 @@ def _clean_info_field(value: Any) -> Optional[str]:
         return None  # a number / dict / None is not a name; do not coerce it into one
     cleaned = value.strip()
     return cleaned[:MAX_SERVER_INFO_CHARS] if cleaned else None
+
+
+def _clean_info_icons(value: Any) -> tuple[str, ...]:
+    """``serverInfo.icons`` as at most four ``https:``/``data:image`` sources. Only the URI is
+    kept: the bytes are fetched, size-capped and typed by magic later (``mcp.site_identity``),
+    so a declared ``mimeType`` (an SVG, say) is never trusted."""
+    if not isinstance(value, list):
+        return ()
+    out: list[str] = []
+    for entry in value:
+        src = entry.get("src") if isinstance(entry, dict) else None
+        if not isinstance(src, str):
+            continue
+        src = src.strip()
+        if src.lower().startswith("https://") and len(src) <= 2048:
+            out.append(src)
+        elif src.lower().startswith("data:image/") and len(src) <= 256 * 1024:
+            out.append(src)
+    return tuple(out[:4])
 
 
 def _clean_instructions(value: Any) -> Optional[str]:

@@ -243,6 +243,14 @@ function endpointOf(c: Connector): string | undefined {
   return [command, ...args].join(' ')
 }
 
+/** A user-added MCP server's own icon, served from our origin (`mcp.site_identity` fetched,
+ *  sniffed and cached it). `icon_version` busts the browser's cache when it is re-fetched. */
+function mcpIconUrl(c: Connector): string | undefined {
+  const version = configOf(c).icon_version
+  if (typeof version !== 'number') return undefined
+  return `/api/mcp-clients/${encodeURIComponent(c.id.slice(MCP_PREFIX.length))}/icon?v=${version}`
+}
+
 /** Fold one wire connector into the shape every screen renders. */
 export function toEntry(c: Connector): ConnectorDetailEntry {
   const kind = kindOf(c)
@@ -267,8 +275,9 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     // A native connector's id IS its catalog id, so it resolves directly. An MCP server's is
     // whatever the user named it, so it never resolves directly and inherits from the catalog
     // entry its ENDPOINT matches instead — the same join, and the same reason, as provenance:
-    // a server calling itself `stripe` must not be able to borrow Stripe's mark.
-    logo: provenance?.logo ?? (mcp ? undefined : connectorLogo(c.id)),
+    // a server calling itself `stripe` must not be able to borrow Stripe's mark. Absent a
+    // catalog match, a server shows the icon IT or its website declared — never ours.
+    logo: provenance?.logo ?? (mcp ? mcpIconUrl(c) : connectorLogo(c.id)),
     families: FAMILIES[kind] ?? ['MCP'],
     tag: c.id.startsWith(WEB_SEARCH_PREFIX) && cfg.is_active === true ? 'Default' : undefined,
     statusText: status.statusText,
@@ -293,6 +302,7 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     // one click later. `catalog` is a leaf precisely so this lookup isn't a cycle.
     verification: provenance?.verification ?? (developer ? 'unverified' : 'unknown'),
     url: endpointOf(c),
+    identitySource: mcp ? str(cfg, 'site_source') || undefined : undefined,
     tools,
     toolGroups: buildToolGroups(c.tools ?? []),
     prompts: PROMPTS[kind] ?? [],

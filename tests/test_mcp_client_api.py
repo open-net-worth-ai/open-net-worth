@@ -733,3 +733,110 @@ def test_enabling_a_server_that_already_listed_its_tools_reaches_out_to_nothing(
 
     connectors_service.set_connector_enabled("mcp:known", True)
     assert calls == []
+
+
+# ── display name + icon from the server's own website (mcp.site_identity) ────────────────
+
+
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 40
+
+
+def _fake_identity(monkeypatch, *, name="Example Brokers", source="www.broker.example"):
+    from backend.mcp import site_identity
+
+    calls: list[str] = []
+
+    def fake(url, **_kw):
+        calls.append(url)
+        return site_identity.SiteIdentity(
+            name=name, icon=_PNG, icon_type="image/png", source=source
+        )
+
+    monkeypatch.setattr(site_identity, "lookup", fake)
+    return calls
+
+
+def test_discovery_names_a_host_named_server_after_its_site_and_serves_its_icon(
+    client, monkeypatch
+):
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    _fake_identity(monkeypatch)
+    c.post(
+        "/api/mcp-clients",
+        json={
+            "id": "api-broker-example",
+            "name": "api.broker.example",
+            "url": "https://api.broker.example/mcp",
+            "enabled": True,
+        },
+    )
+    listed = c.get("/api/mcp-clients").json()["servers"][0]
+    assert listed["name"] == "Example Brokers"
+    assert listed["site_source"] == "www.broker.example"
+    assert isinstance(listed["icon_version"], int)
+
+    icon = c.get("/api/mcp-clients/api-broker-example/icon")
+    assert icon.status_code == 200
+    assert icon.content == _PNG
+    assert icon.headers["content-type"] == "image/png"
+    assert icon.headers["x-content-type-options"] == "nosniff"
+    assert "default-src 'none'" in icon.headers["content-security-policy"]
+
+
+def test_a_name_the_user_chose_is_never_overwritten(client, monkeypatch):
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    _fake_identity(monkeypatch)
+    c.post(
+        "/api/mcp-clients",
+        json={
+            "id": "mine",
+            "name": "My broker",
+            "url": "https://api.broker.example/mcp",
+            "enabled": True,
+        },
+    )
+    assert c.get("/api/mcp-clients").json()["servers"][0]["name"] == "My broker"
+
+
+def test_a_request_body_cannot_choose_a_servers_identity(client, monkeypatch):
+    c, _ = client
+    c.post(
+        "/api/mcp-clients",
+        json={
+            "id": "liar",
+            "url": "https://mcp.example.com/mcp",
+            "site_name": "Bank",
+            "site_source": "bank.example",
+        },
+    )
+    listed = c.get("/api/mcp-clients").json()["servers"][0]
+    assert listed["site_name"] is None and listed["site_source"] is None
+    assert c.get("/api/mcp-clients/liar/icon").status_code == 404
+
+
+def test_boot_discovery_reads_a_website_once_and_refresh_reads_it_again(client, monkeypatch):
+    from backend.mcp.client_manager import get_manager
+
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    calls = _fake_identity(monkeypatch)
+    c.post(
+        "/api/mcp-clients",
+        json={"id": "once", "url": "https://api.broker.example/mcp", "enabled": True},
+    )
+    assert len(calls) == 1
+    server = get_manager()._store.find("once")
+    get_manager()._discover(server)  # the unattended boot path
+    assert len(calls) == 1
+    c.post("/api/mcp-clients/once/test")  # the human "Refresh tools list"
+    assert len(calls) == 2
+
+
+def test_the_probe_prefills_the_sites_name(client, monkeypatch):
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS, server_info={"name": "broker-mcp"})
+    _fake_identity(monkeypatch)
+    res = c.post("/api/mcp-clients/probe", json={"url": "https://api.broker.example/mcp"})
+    assert res.json()["suggested_name"] == "Example Brokers"

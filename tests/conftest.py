@@ -754,6 +754,24 @@ def _no_background_price_backfill(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_site_identity_lookup(request, monkeypatch):
+    """Stop every MCP discovery from fetching a REAL website for its display name/icon.
+
+    ``mcp.site_identity.lookup`` runs after each successful handshake (and in the probe), so
+    any test that discovers an ``https://mcp.example.com`` server would otherwise reach the
+    internet. Tests of the lookup itself mark themselves ``real_site_identity`` and fake the
+    fetch layer instead.
+    """
+    if "real_site_identity" in request.keywords:
+        yield
+        return
+    from backend.mcp import site_identity as _site_identity
+
+    monkeypatch.setattr(_site_identity, "lookup", lambda *_a, **_k: _site_identity.SiteIdentity())
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _no_background_session_title(request, monkeypatch):
     """Stop a chat POST from starting a REAL title call in the background.
 
