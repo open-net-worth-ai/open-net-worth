@@ -762,6 +762,62 @@ export const CATALOG: CatalogEntry[] = [
     tools: [],
   },
   {
+    id: 'mcp-alpaca',
+    name: 'Alpaca MCP',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades stocks, options & crypto; paper trading by default',
+    desc: 'Connect Alpaca’s own MCP server, run on this machine, to let Lucius trade at Alpaca — unlike the read-only Alpaca data source, which only imports positions. It reads your account, positions, orders and market data, and places, changes and cancels stock, option and crypto orders. It starts on paper trading: add ALPACA_PAPER_TRADE=false to the environment variables for real money. Every trading tool here asks for your approval before it runs unless you change that. Needs uv on this machine, and an Alpaca API key pair pasted into the environment variables.',
+    publisher: 'Alpaca',
+    verification: 'verified',
+    // alpacahq/alpaca-mcp-server is Alpaca's own org; the PyPI package links back to it.
+    repoUrl: 'https://github.com/alpacahq/alpaca-mcp-server',
+    supportUrl: 'https://github.com/alpacahq/alpaca-mcp-server/issues',
+    privacyUrl: 'https://files.alpaca.markets/disclosures/PrivacyPolicy.pdf',
+    mcp: true,
+    popular: false,
+    tools: ['place_stock_order', 'place_option_order', 'place_crypto_order'],
+  },
+  {
+    id: 'mcp-coinbase',
+    name: 'Coinbase',
+    families: ['MCP'],
+    categories: ['Crypto'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades crypto on Coinbase; balances, orders, fills, fees',
+    desc: 'Connect Coinbase’s own MCP server — part of the Coinbase CLI, run on this machine — to let Lucius trade on Coinbase Advanced Trade. It reads balances, portfolios, orders, fills, fees and market data; previews, places, edits and cancels orders; converts between assets; and moves funds between your own portfolios (never out to an external address). Every write tool here asks for your approval before it runs unless you change that. Coinbase’s hosted server only admits apps it has approved; this local one needs none. Needs Node.js 22 or later, and a Coinbase developer API key whose permissions you choose when you create it.',
+    publisher: 'Coinbase',
+    verification: 'verified',
+    // @coinbase/coinbase-cli is published by Coinbase's own npm accounts. Help-centre and
+    // privacy pages refuse non-browser clients, so they are the links left out here.
+    homepageUrl: 'https://docs.cdp.coinbase.com/coinbase-cli/overview',
+    mcp: true,
+    popular: false,
+    tools: ['coinbase_orders_create', 'coinbase_orders_preview', 'coinbase_balance'],
+  },
+  {
+    id: 'mcp-okx',
+    name: 'OKX',
+    families: ['MCP'],
+    categories: ['Crypto'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades spot, perpetuals & options on OKX; demo by default',
+    desc: 'Connect OKX’s own Agent Trade Kit server, run on this machine, to let Lucius trade on OKX. It reads balances, positions, orders, fills and bills, and places, amends and cancels spot, perpetual-swap and option orders, including algo orders and grid bots. It starts in OKX’s demo (simulated) trading: remove --demo from the arguments for real money, or add --read-only to allow no orders at all. Every trading tool here asks for your approval before it runs unless you change that. Needs Node.js 18 or later, and an OKX API key, secret and passphrase.',
+    publisher: 'OKX',
+    verification: 'verified',
+    // okx/agent-trade-kit is OKX's own org; the @okx_ai npm package is maintained from OKG.
+    repoUrl: 'https://github.com/okx/agent-trade-kit',
+    supportUrl: 'https://github.com/okx/agent-trade-kit/issues',
+    privacyUrl: 'https://www.okx.com/help/privacy-policy-statement',
+    mcp: true,
+    popular: false,
+    tools: ['spot_place_order', 'swap_place_order', 'account_get_balance'],
+  },
+  {
     id: 'mcp-expensify',
     name: 'Expensify',
     families: ['MCP'],
@@ -945,6 +1001,27 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
     auth: 'oauth',
   },
   'mcp-moomoo': { transport: 'remote', url: 'https://mcp.moomoo.com/mcp', auth: 'oauth' },
+  // The three below run on this machine. Each env block is the vendor's own variable NAMES
+  // (verified in its code, 2026-10-29) — never a value, a preset must not ship one. The
+  // no-real-money default lives elsewhere: Alpaca's own default is paper, OKX's is `--demo`.
+  'mcp-alpaca': {
+    transport: 'local',
+    command: 'uvx',
+    args: 'alpaca-mcp-server',
+    env: 'ALPACA_API_KEY=\nALPACA_SECRET_KEY=',
+  },
+  'mcp-coinbase': {
+    transport: 'local',
+    command: 'npx',
+    args: '-y @coinbase/coinbase-cli mcp',
+    env: 'COINBASE_KEY_ID=\nCOINBASE_KEY_SECRET=',
+  },
+  'mcp-okx': {
+    transport: 'local',
+    command: 'npx',
+    args: '-y @okx_ai/okx-trade-mcp --demo',
+    env: 'OKX_API_KEY=\nOKX_SECRET_KEY=\nOKX_PASSPHRASE=',
+  },
   // Trailing slash is deliberate: the bare `/mcp` 308-redirects here, and the trailing form is
   // what Expensify's own help-centre config block publishes. Presetting the redirect would work
   // but adds a hop for no reason.

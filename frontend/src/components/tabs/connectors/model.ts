@@ -134,6 +134,7 @@ export const CONNECTOR_CATEGORIES = [
   // Reads or renders web pages (a browser, a scraper). Not "Web": that is a FAMILY, and a
   // category that repeats the lane says nothing (every search provider read "Search · Web").
   'Browsing',
+  'Crypto',
   'Economic data',
   'Email',
   'Expenses',
@@ -155,6 +156,7 @@ export const CATEGORY_HUE: Record<ConnectorCategory, string> = {
   Banking: 'var(--liquid)',
   Brokerage: 'var(--ibkr)',
   Browsing: 'var(--bad-light)',
+  Crypto: 'var(--crypto)',
   'Economic data': 'var(--cat-retirement)',
   Email: 'var(--overfunded)',
   Expenses: 'var(--apt)',

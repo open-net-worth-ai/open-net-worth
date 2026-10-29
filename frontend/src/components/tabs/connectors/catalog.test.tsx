@@ -270,6 +270,10 @@ describe('MCP provenance — what we confirmed, stated exactly', () => {
     // Each vendor's own docs publish the endpoint: Robinhood's Help Center, moomoo's OpenAPI docs.
     ['mcp-robinhood', 'Robinhood', 'verified'],
     ['mcp-moomoo', 'moomoo', 'verified'],
+    // Local servers each vendor publishes from its own org: alpacahq, @coinbase, okx.
+    ['mcp-alpaca', 'Alpaca', 'verified'],
+    ['mcp-coinbase', 'Coinbase', 'verified'],
+    ['mcp-okx', 'OKX', 'verified'],
     ['mcp-expensify', 'Expensify', 'verified'],
     ['mcp-avalara', 'Avalara', 'verified'],
     ['mcp-twelvedata', 'Twelve Data', 'verified'],
