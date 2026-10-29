@@ -16,7 +16,7 @@
 
 import type { CSSProperties, JSX } from 'react'
 import { DirectoryCard } from './DirectoryCard'
-import { SECTION_SUGGESTION_COUNT } from './directoryRows'
+import { pickSuggestions } from './directoryRows'
 import { Empty } from './primitives'
 import { Icons } from './icons'
 import { ArrowUpDown, ListFilter } from '../../../ui/icons'
@@ -24,7 +24,6 @@ import { CATEGORY_HUE, CONNECTOR_CATEGORIES, type ConnectorCategory } from './mo
 import {
   DIRECTORY_FAMILY_CHIPS,
   filterDirectory,
-  popularEntries,
   type DirectoryRow,
   type DirectoryFamilyFilter,
   type DirectorySort,
@@ -81,9 +80,7 @@ export function DirectoryBrowser({
   // connectors already added and, unlike the grid, ignored Sort. A shortcut through the DEFAULT
   // view only — once the user has filtered or searched,
   // it is noise competing with the result they asked for.
-  const suggested = popularEntries(entries)
-    .filter((d) => !d.installed && !d.generic)
-    .slice(0, SECTION_SUGGESTION_COUNT)
+  const suggested = pickSuggestions(entries, 'all')
   const showSuggested =
     !query.trim() && family === 'all' && category === 'all' && suggested.length > 0
 

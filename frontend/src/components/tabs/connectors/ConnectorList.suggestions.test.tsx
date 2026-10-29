@@ -51,14 +51,28 @@ describe('suggestionsBySection', () => {
     expect(bySection.mcp!.length).toBe(SECTION_SUGGESTION_COUNT)
   })
 
-  it('puts popular entries first and drops one already added', () => {
-    const fresh = suggestionsBySection([]).mcp!
-    expect(fresh.every((d) => d.popular)).toBe(true)
-    expect(fresh.map((d) => d.id)).toContain('mcp-ibkr')
+  it('leads with the curated picks — Plaid, IBKR, Coinbase — and drops one already added', () => {
+    expect(suggestionsBySection([]).all!.map((d) => d.id)).toEqual([
+      'plaid',
+      'mcp-ibkr',
+      'mcp-coinbase',
+    ])
+    expect(
+      suggestionsBySection([])
+        .mcp!.map((d) => d.id)
+        .slice(0, 2),
+    ).toEqual(['mcp-ibkr', 'mcp-coinbase'])
 
     const withIbkr = suggestionsBySection([IBKR_MCP]).mcp!
     expect(withIbkr.map((d) => d.id)).not.toContain('mcp-ibkr')
+    expect(withIbkr[0].id).toBe('mcp-coinbase')
     expect(withIbkr.length).toBe(SECTION_SUGGESTION_COUNT)
+  })
+
+  it('never suggests Playwright — it is not promoted', () => {
+    for (const rows of Object.values(suggestionsBySection([]))) {
+      expect(rows!.some((d) => d.id === 'mcp-playwright')).toBe(false)
+    }
   })
 })
 

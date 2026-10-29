@@ -125,25 +125,45 @@ export function resolveDirectory(
 /** How many not-yet-added connectors a list section suggests under its rows. */
 export const SECTION_SUGGESTION_COUNT = 3
 
-/** Per list section, and for the All tab as a whole: the first few entries not added yet, popular first and otherwise in
- *  catalog order — never the generic "Custom MCP server" slot, which has its own add link.
- *  An MCP catalog entry counts as added when an installed server answers at its endpoint:
- *  the directory lists that server as its own row, so `installed` alone is false for it. */
-export function suggestionsBySection(
-  connectors: Connector[],
-): Partial<Record<FamilyTab, DirectoryRow[]>> {
-  const rows = resolveDirectory(connectors)
+/** Who Suggested leads with, in order — curated, not just "popular": the connectors most worth
+ *  a new user's first click (owner's pick, 2026-10-29: Plaid, IBKR, Coinbase), then backups so
+ *  there are still three once some are added. Anything not listed only fills in after these. */
+export const SUGGESTION_PRIORITY: readonly string[] = [
+  'plaid',
+  'mcp-ibkr',
+  'mcp-coinbase',
+  'mcp-robinhood',
+  'simplefin',
+  'enable_banking',
+]
+
+/** Up to three entries to suggest for one family (or `all`): not added yet, never the generic
+ *  "Custom MCP server" slot (it has its own add link), `SUGGESTION_PRIORITY` first in its
+ *  order, then the rest in Sort: Popular order. An MCP catalog entry also counts as added when
+ *  an installed server answers at its endpoint. */
+export function pickSuggestions(rows: DirectoryRow[], family: FamilyTab): DirectoryRow[] {
   const installedEndpoints = new Set(
     rows.filter((d) => d.installed && d.mcp && d.url).map((d) => d.url!.trim()),
   )
   const added = (d: DirectoryRow) =>
     d.installed || installedEndpoints.has(previewEndpoint(d)?.trim() ?? '')
-  const pick = (family: FamilyTab) =>
-    filterDirectory(rows, family, '', 'popular')
-      .filter((d) => !added(d) && !d.generic)
-      .slice(0, SECTION_SUGGESTION_COUNT)
+  const rank = (d: DirectoryRow) => {
+    const i = SUGGESTION_PRIORITY.indexOf(d.id)
+    return i < 0 ? SUGGESTION_PRIORITY.length : i
+  }
+  return filterDirectory(rows, family, '', 'popular')
+    .filter((d) => !added(d) && !d.generic && (d.popular || rank(d) < SUGGESTION_PRIORITY.length))
+    .sort((a, b) => rank(a) - rank(b))
+    .slice(0, SECTION_SUGGESTION_COUNT)
+}
+
+/** Per list section, and for the All tab as a whole (`pickSuggestions` for each). */
+export function suggestionsBySection(
+  connectors: Connector[],
+): Partial<Record<FamilyTab, DirectoryRow[]>> {
+  const rows = resolveDirectory(connectors)
   return Object.fromEntries([
-    ['all', pick('all')],
-    ...FAMILY_SECTIONS.map((s) => [s.key, pick(s.key)]),
+    ['all', pickSuggestions(rows, 'all')],
+    ...FAMILY_SECTIONS.map((s) => [s.key, pickSuggestions(rows, s.key)]),
   ])
 }

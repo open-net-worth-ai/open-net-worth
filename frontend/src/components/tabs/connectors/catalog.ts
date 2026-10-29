@@ -552,7 +552,7 @@ export const CATALOG: CatalogEntry[] = [
     repoUrl: 'https://github.com/microsoft/playwright-mcp',
     supportUrl: 'https://github.com/microsoft/playwright-mcp/issues',
     mcp: true,
-    popular: true,
+    popular: false,
     tools: [
       'browser_navigate',
       'browser_snapshot',
