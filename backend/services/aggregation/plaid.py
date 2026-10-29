@@ -126,7 +126,44 @@ def create_link_token(redirect: str = "") -> dict:
     link_token = (data.get("link_token") or "").strip()
     if not link:
         raise ValidationError("Plaid did not return a hosted-link URL")
+    # Hosted Link ends on Plaid's own "you can close this window" page and never hands the
+    # user a public token — ``complete_hosted_link`` reads it back with this token.
+    store.update({"link_token": link_token})
     return {"link": link, "link_token": link_token, "expiration": data.get("expiration")}
+
+
+def _session_public_token(data: dict) -> str:
+    """The public token of the most recent finished Hosted Link session in a
+    ``/link/token/get`` response, else ``""`` (the user has not finished yet)."""
+    for session in reversed(data.get("link_sessions") or []):
+        results = session.get("results") or {}
+        for item in reversed(results.get("item_add_results") or []):
+            token = str(item.get("public_token") or "").strip()
+            if token:
+                return token
+        legacy = str((session.get("on_success") or {}).get("public_token") or "").strip()
+        if legacy:
+            return legacy
+    return ""
+
+
+def complete_hosted_link() -> dict:
+    """Finish the Hosted Link flow the app started: POST ``/link/token/get`` with the stored
+    link token, and exchange the session's public token once the user has finished at their
+    bank. Returns ``{status: "pending"}`` while they haven't, else the exchange result with
+    ``status: "linked"``; the link token is cleared once used. Raises ``ValidationError`` when
+    no link is in flight or Plaid refuses."""
+    store = PlaidConfigStore()
+    link_token = store.link_token()
+    if not link_token:
+        raise ValidationError("No Plaid link is in progress — click Link bank first")
+    data = _post(store, "/link/token/get", {"link_token": link_token})
+    public_token = _session_public_token(data)
+    if not public_token:
+        return {"status": "pending"}
+    result = exchange_public_token(public_token)
+    store.clear_link_token()
+    return {"status": "linked", **result}
 
 
 def exchange_public_token(public_token: str) -> dict:

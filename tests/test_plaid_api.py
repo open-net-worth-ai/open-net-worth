@@ -38,6 +38,12 @@ def client(db_isolated, monkeypatch):
         lambda public_token: {"item_id": "item-9", "has_access_token": True},
     )
 
+    monkeypatch.setattr(
+        svc,
+        "complete_hosted_link",
+        lambda: {"status": "linked", "item_id": "item-9", "has_access_token": True},
+    )
+
     app = FastAPI()
     from backend.api.plaid_api import router
 
@@ -112,3 +118,20 @@ def test_link_bad_config_returns_422(client, monkeypatch):
     monkeypatch.setattr(svc, "create_link_token", _raise)
     r = client.post("/api/plaid/link", json={})
     assert r.status_code == 422
+
+
+def test_link_complete_returns_the_linked_item(client):
+    r = client.post("/api/plaid/link/complete")
+    assert r.status_code == 200
+    assert r.json() == {"status": "linked", "item_id": "item-9", "has_access_token": True}
+
+
+def test_link_complete_without_a_link_returns_422(client, monkeypatch):
+    from backend.core.errors import ValidationError
+    from backend.services.aggregation import plaid as svc
+
+    def _raise():
+        raise ValidationError("No Plaid link is in progress")
+
+    monkeypatch.setattr(svc, "complete_hosted_link", _raise)
+    assert client.post("/api/plaid/link/complete").status_code == 422

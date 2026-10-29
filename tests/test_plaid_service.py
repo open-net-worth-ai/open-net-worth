@@ -91,6 +91,98 @@ def test_create_link_token_requires_creds():
         svc.create_link_token("")
 
 
+# ── complete_hosted_link (Hosted Link never shows the user a public token) ─────────────
+
+
+def _route(responses: dict, calls: list):
+    def fake_post(url, json=None, timeout=None):
+        path = url.split(".plaid.com", 1)[1]
+        calls.append((path, json))
+        return _Resp(responses[path])
+
+    return fake_post
+
+
+def test_create_link_token_stores_the_link_token_server_side(monkeypatch):
+    from backend.db.plaid_config_store import PlaidConfigStore
+
+    PlaidConfigStore().update({"client_id": "cid", "secret": "skey"})
+    monkeypatch.setattr(
+        svc.httpx,
+        "post",
+        lambda *a, **k: _Resp({"link_token": "link-1", "hosted_link_url": "https://h/1"}),
+    )
+    svc.create_link_token("")
+    assert PlaidConfigStore().link_token() == "link-1"
+    assert "link_token" not in PlaidConfigStore().public()
+
+
+def test_complete_hosted_link_is_pending_until_the_user_finishes(monkeypatch):
+    _configured_store(link_token="link-1")
+    calls: list = []
+    monkeypatch.setattr(
+        svc.httpx,
+        "post",
+        _route({"/link/token/get": {"link_sessions": [{"link_session_id": "s1"}]}}, calls),
+    )
+    assert svc.complete_hosted_link() == {"status": "pending"}
+    assert calls == [
+        ("/link/token/get", {"client_id": "cid", "secret": "skey", "link_token": "link-1"})
+    ]
+
+
+def test_complete_hosted_link_exchanges_the_session_public_token(monkeypatch):
+    from backend.db.plaid_config_store import PlaidConfigStore
+
+    PlaidConfigStore().update({"client_id": "cid", "secret": "skey", "link_token": "link-1"})
+    calls: list = []
+    session = {"results": {"item_add_results": [{"public_token": "public-prod-1"}]}}
+    monkeypatch.setattr(
+        svc.httpx,
+        "post",
+        _route(
+            {
+                "/link/token/get": {"link_sessions": [session]},
+                "/item/public_token/exchange": {"access_token": "access-7", "item_id": "item-7"},
+            },
+            calls,
+        ),
+    )
+    out = svc.complete_hosted_link()
+    assert out == {"status": "linked", "item_id": "item-7", "has_access_token": True}
+    assert calls[1] == (
+        "/item/public_token/exchange",
+        {"client_id": "cid", "secret": "skey", "public_token": "public-prod-1"},
+    )
+    store = PlaidConfigStore()
+    assert store.access_token() == "access-7"
+    assert store.link_token() == ""
+
+
+def test_complete_hosted_link_reads_the_legacy_on_success_shape(monkeypatch):
+    _configured_store(link_token="link-1")
+    calls: list = []
+    monkeypatch.setattr(
+        svc.httpx,
+        "post",
+        _route(
+            {
+                "/link/token/get": {"link_sessions": [{"on_success": {"public_token": "pub-2"}}]},
+                "/item/public_token/exchange": {"access_token": "access-8", "item_id": "i"},
+            },
+            calls,
+        ),
+    )
+    assert svc.complete_hosted_link()["status"] == "linked"
+    assert calls[1][1]["public_token"] == "pub-2"
+
+
+def test_complete_hosted_link_without_a_link_in_flight_refuses():
+    _configured_store()
+    with pytest.raises(ValidationError):
+        svc.complete_hosted_link()
+
+
 # ── exchange_public_token ──────────────────────────────────────────────────────────────
 
 

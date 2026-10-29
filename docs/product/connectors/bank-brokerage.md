@@ -96,8 +96,9 @@ US banks and cards, through your own Plaid developer account.
    **Production (live)**, matching the secret you copied. Click **Save**.
 4. Reopen the form (**⋯ → Edit configuration**) and click **Link bank**. Plaid's sign-in page
    opens in a new tab; sign in at your bank there.
-5. When Plaid finishes, copy the public token it gives you, paste it into **Public token** and
-   click **Complete link**. The **Accounts** list then shows the bank's accounts — link them.
+5. When Plaid says **You can close this window now**, close that tab and come back. The link
+   finishes on its own — the form shows **Bank linked** within a few seconds (click **Check
+   now** to skip the wait). The **Accounts** list then shows the bank's accounts — link them.
 
 Use **Re-link bank** to connect again if your bank asks you to sign in afresh.
 

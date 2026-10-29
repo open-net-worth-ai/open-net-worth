@@ -46,6 +46,9 @@ DEFAULTS: dict = {
     # The bearer access token minted by the public-token exchange (write-only) + the Item id.
     "access_token": "",
     "item_id": "",
+    # The Hosted Link session in flight (write-only): Hosted Link never shows the user a public
+    # token, so the app reads it back from ``/link/token/get`` with this token.
+    "link_token": "",
     # status / fetch state
     "last_synced_at": None,  # "Last fetched" in the UI
     "last_status": "never_run",  # never_run | ok | auth_error | connect_error | error
@@ -58,7 +61,7 @@ class PlaidConfigStore(AggregatorConfigStore):
     LABEL = "Plaid"
     DEFAULTS = DEFAULTS
     CONFIG_KEYS = ("client_id", "environment")
-    SECRET_KEYS = ("secret", "access_token", "item_id")
+    SECRET_KEYS = ("secret", "access_token", "item_id", "link_token")
     STATE_KEYS = ("last_synced_at", "last_status", "last_error")
 
     def _normalized(self, merged: dict) -> dict:
@@ -92,6 +95,15 @@ class PlaidConfigStore(AggregatorConfigStore):
 
     def access_token(self) -> str:
         return (self.get().get("access_token") or "").strip()
+
+    def link_token(self) -> str:
+        return (self.get().get("link_token") or "").strip()
+
+    def clear_link_token(self) -> None:
+        """Forget a finished Hosted Link session (``update()`` treats blank as "keep")."""
+        with self._unit(None) as c:
+            self._ensure(c)
+            self._connectors.set_secrets(self.KIND, {"link_token": None}, conn=c)
 
     def has_secret(self) -> bool:
         """Whether the client_id + secret credential pair is set."""

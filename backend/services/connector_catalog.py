@@ -416,7 +416,7 @@ _KINDS: tuple[ConnectorKind, ...] = (
         "plaid",
         "Plaid",
         _needs(secrets=("secret", "access_token"), config=("client_id",)),
-        secret_fields=_secrets("secret", minted=("access_token", "item_id")),
+        secret_fields=_secrets("secret", minted=("access_token", "item_id", "link_token")),
         config_keys=("client_id", "environment"),
     ),
     _kind(

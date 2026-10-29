@@ -7,6 +7,8 @@ Thin router over ``db.PlaidConfigStore`` + ``services.aggregation.plaid``:
     secret leaves the saved one unchanged (write-only-secret discipline).
   * ``POST /api/plaid/link``      — start the consent flow → returns the Plaid Hosted Link
     ``link`` the user opens (no frontend Link-SDK needed).
+  * ``POST /api/plaid/link/complete`` — after the user finishes Hosted Link, read the session's
+    public_token back from Plaid and exchange it (``pending`` until they have finished).
   * ``POST /api/plaid/exchange``  — exchange the public_token (delivered after Hosted Link)
     for an access token + item_id (persisted write-only).
 
@@ -85,6 +87,17 @@ async def plaid_link(body: PlaidLinkRequest):
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
     return result
+
+
+@router.post("/api/plaid/link/complete")
+async def plaid_link_complete():
+    """Finish the Hosted Link session ``/api/plaid/link`` started → ``{status: "pending"}``
+    until the user is done at their bank, then ``{status: "linked", item_id, ...}``. No link
+    in flight / Plaid refusal → 422. Blocking httpx off the loop."""
+    try:
+        return await asyncio.to_thread(plaid_service.complete_hosted_link)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 
 
 @router.post("/api/plaid/exchange")

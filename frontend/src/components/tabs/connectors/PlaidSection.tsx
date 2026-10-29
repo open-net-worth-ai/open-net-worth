@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../../api/client'
 import {
   Stack,
@@ -21,8 +21,9 @@ import { ConnectorAccountsList } from './ConnectorAccountsList'
 // access token stays write-only. The GET echoes only `has_secret` / `has_access_token`; a blank
 // secret field leaves the saved value unchanged. The bank LINK flow uses Plaid HOSTED LINK (no
 // frontend Link-SDK): "Link bank" opens a Plaid-returned URL in a new tab where the user
-// authenticates at their bank; Plaid returns a public_token which the user pastes back here →
-// "Complete link" exchanges it for an access token. This form owns the config fields (creds /
+// authenticates at their bank. Hosted Link ends on Plaid's own "you can close this window" page
+// and never shows a public token, so this form polls POST /api/plaid/link/complete — the server
+// reads the session's public token back from Plaid and exchanges it for an access token. This form owns the config fields (creds /
 // environment / enable) + Link; fetching/booking transactions is now Lucius's job via a
 // template (see the connector page's Automate button) — the unified /api/connectors PATCH owns the
 // card-header enable toggle. Save lives in the modal footer — see ./formSave.
@@ -55,6 +56,10 @@ function plaidFormOf(c: PlaidStatus): PlaidForm {
   }
 }
 
+// How often, and for how long, to ask the server whether the Hosted Link session finished.
+const LINK_POLL_MS = 3000
+const LINK_POLL_LIMIT_MS = 15 * 60 * 1000
+
 const ENV_OPTIONS = [
   { value: 'sandbox', label: 'Sandbox (test banks)' },
   { value: 'production', label: 'Production (live)' },
@@ -70,8 +75,12 @@ export function PlaidSection() {
   // Bank-link flow state.
   const [linking, setLinking] = useState(false)
   const [linkErr, setLinkErr] = useState<string | null>(null)
-  const [publicToken, setPublicToken] = useState('')
-  const [exchanging, setExchanging] = useState(false)
+  const [waiting, setWaiting] = useState(false)
+  const [checking, setChecking] = useState(false)
+  const [linkedNote, setLinkedNote] = useState(false)
+  // Bumped after a successful link so the Accounts list re-fetches the bank's accounts.
+  const [accountsKey, setAccountsKey] = useState(0)
+  const pollStarted = useRef(0)
 
   function load() {
     setError(false)
@@ -133,33 +142,55 @@ export function PlaidSection() {
         return
       }
       const data = (await r.json()) as { link: string }
-      if (data.link) window.open(data.link, '_blank', 'noopener,noreferrer')
+      if (data.link) {
+        window.open(data.link, '_blank', 'noopener,noreferrer')
+        setLinkedNote(false)
+        pollStarted.current = Date.now()
+        setWaiting(true)
+      }
     } finally {
       setLinking(false)
     }
   }
 
-  async function completeLink() {
-    if (!publicToken.trim()) return
-    setExchanging(true)
-    setLinkErr(null)
+  const checkLink = useCallback(async (manual: boolean) => {
+    if (manual) setChecking(true)
     try {
-      const r = await authFetch('/api/plaid/exchange', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ public_token: publicToken.trim() }),
-      })
+      const r = await authFetch('/api/plaid/link/complete', { method: 'POST' })
       if (!r.ok) {
         const d = await r.json().catch(() => ({}))
         setLinkErr(d.detail || 'Could not complete the bank link.')
+        setWaiting(false)
         return
       }
-      setPublicToken('')
-      load()
+      const d = (await r.json()) as { status: string }
+      if (d.status === 'linked') {
+        setWaiting(false)
+        setLinkErr(null)
+        setLinkedNote(true)
+        setAccountsKey((k) => k + 1)
+        load()
+      } else if (manual) {
+        setLinkErr('Plaid has not finished yet — complete the sign-in in the Plaid tab first.')
+      }
+    } catch {
+      if (manual) setLinkErr('Could not reach the server.')
     } finally {
-      setExchanging(false)
+      if (manual) setChecking(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    if (!waiting) return
+    const id = window.setInterval(() => {
+      if (Date.now() - pollStarted.current > LINK_POLL_LIMIT_MS) {
+        setWaiting(false)
+        return
+      }
+      void checkLink(false)
+    }, LINK_POLL_MS)
+    return () => window.clearInterval(id)
+  }, [waiting, checkLink])
 
   const setSecret = useCallback((v: string) => setForm((f) => f && { ...f, secret: v }), [])
   const secret = useSecretReveal({
@@ -207,9 +238,9 @@ export function PlaidSection() {
         <a href="https://plaid.com/docs/" target="_blank" rel="noreferrer">
           Plaid
         </a>{' '}
-        API credentials, then link a bank — you&apos;ll sign in at your own bank in a new tab and
-        paste the public token Plaid gives you back into the field below. Fetching and booking
-        transactions is Lucius's job — automate it with a template below.
+        API credentials, then link a bank — you&apos;ll sign in at your own bank in a new tab, and
+        the link completes here on its own once Plaid says you can close that window. Fetching and
+        booking transactions is Lucius's job — automate it with a template below.
       </Text>
 
       {cfg.configured && !cfg.enabled && (
@@ -289,38 +320,36 @@ export function PlaidSection() {
           </Text>
         </Cluster>
 
-        <FormField
-          label="Public token"
-          htmlFor="conn-plaid-pubtok"
-          help="After finishing Hosted Link, paste the public token Plaid returns here."
-        >
-          <TextField
-            id="conn-plaid-pubtok"
-            value={publicToken}
-            placeholder="public-sandbox-…"
-            onChange={(e) => setPublicToken(e.target.value)}
-          />
-        </FormField>
+        {waiting && (
+          <Cluster gap="--space-3" align="center" wrap>
+            <Text size="xs" tone="faint">
+              Waiting for you to finish at Plaid…
+            </Text>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={checking}
+              onClick={() => checkLink(true)}
+            >
+              Check now
+            </Button>
+          </Cluster>
+        )}
+
+        {linkedNote && !waiting && (
+          <Text size="xs" tone="good">
+            Bank linked. Its accounts are listed below — link each one to an account here.
+          </Text>
+        )}
 
         {linkErr && (
           <Text size="xs" tone="bad">
             {linkErr}
           </Text>
         )}
-
-        <Cluster gap="--space-3" align="center">
-          <Button
-            size="sm"
-            loading={exchanging}
-            disabled={!publicToken.trim()}
-            onClick={completeLink}
-          >
-            Complete link
-          </Button>
-        </Cluster>
       </Stack>
 
-      <ConnectorAccountsList provider="plaid" providerLabel="Plaid" />
+      <ConnectorAccountsList key={accountsKey} provider="plaid" providerLabel="Plaid" />
     </Stack>
   )
 }

@@ -50,7 +50,7 @@ def test_notify_channels():
     [
         ("email", {"password"}, set()),
         ("webhook", {"url", "secret"}, set()),
-        ("plaid", {"secret"}, {"access_token", "item_id"}),
+        ("plaid", {"secret"}, {"access_token", "item_id", "link_token"}),
         ("lunch_flow", {"client_secret"}, {"access_token", "refresh_token"}),
         ("enable_banking", {"private_key"}, {"session_id"}),
         ("yodlee", {"secret", "password"}, {"cobrand_session_token", "user_session_token"}),
