@@ -4,12 +4,15 @@
 // is one click away on the detail page. Deliberately absent, and not to be re-added: a
 // Configure button (the whole row already opens the detail page), an enable/disable toggle
 // (destructive-adjacent — it belongs where the consequences are visible), a Test button,
-// a family label and a sub-line.
+// a family label and a sub-line. The category chips (what it is FOR — `Brokerage`, `Search`)
+// are the one exception, added on owner request (2026-10-29): with several MCP servers in one
+// list, the name alone did not say what each was for.
 
 import type { JSX, KeyboardEvent } from 'react'
 import { EntityRow } from '../../../lucius/EntityRow'
 import { Badge, Btn, Mono } from './primitives'
 import { Icons } from './icons'
+import { CategoryChips } from './DirectoryCard'
 import type { ConnectorEntry } from './model'
 
 export interface ConnectorRowProps {
@@ -63,6 +66,7 @@ export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps):
         <div className="cn-name">
           <b>{entry.name}</b>
           {entry.tag ? <span className="cn-tag">{entry.tag}</span> : null}
+          {entry.categories?.length ? <CategoryChips categories={entry.categories} /> : null}
         </div>
       </div>
       <div className="cn-meta">

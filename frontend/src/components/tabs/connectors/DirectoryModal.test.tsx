@@ -217,8 +217,9 @@ describe('Popular tiles', () => {
   })
 
   it('hide once a family chip is picked', () => {
-    const { container, getByText } = open()
-    fireEvent.click(getByText('Web'))
+    const { container, getByRole } = open()
+    // A role query, not text: "Web" is also a category chip on the cards now.
+    fireEvent.click(getByRole('button', { name: 'Web' }))
     expect(container.querySelector('.cn-poprow')).toBeFalsy()
   })
 })

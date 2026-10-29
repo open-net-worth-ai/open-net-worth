@@ -6,8 +6,16 @@
 // except the directory itself.
 
 import { isInstalled, toEntry } from './adapter'
-import { CATALOG, catalogProvenanceFor, type CatalogEntry, type DirectoryRow } from './catalog'
+import {
+  CATALOG,
+  catalogProvenanceFor,
+  filterDirectory,
+  previewEndpoint,
+  type CatalogEntry,
+  type DirectoryRow,
+} from './catalog'
 import { connectorLogo } from './logos'
+import { FAMILY_SECTIONS, type FamilyKey } from './model'
 import type { Connector } from './types'
 
 const MCP_PREFIX = 'mcp:'
@@ -92,4 +100,30 @@ export function resolveDirectory(
     })
   }
   return rows
+}
+
+/** How many not-yet-added connectors a list section suggests under its rows. */
+export const SECTION_SUGGESTION_COUNT = 3
+
+/** Per list section: the first few entries not added yet, popular first and otherwise in
+ *  catalog order — never the generic "Custom MCP server" slot, which has its own add link.
+ *  An MCP catalog entry counts as added when an installed server answers at its endpoint:
+ *  the directory lists that server as its own row, so `installed` alone is false for it. */
+export function suggestionsBySection(
+  connectors: Connector[],
+): Partial<Record<FamilyKey, DirectoryRow[]>> {
+  const rows = resolveDirectory(connectors)
+  const installedEndpoints = new Set(
+    rows.filter((d) => d.installed && d.mcp && d.url).map((d) => d.url!.trim()),
+  )
+  const added = (d: DirectoryRow) =>
+    d.installed || installedEndpoints.has(previewEndpoint(d)?.trim() ?? '')
+  return Object.fromEntries(
+    FAMILY_SECTIONS.map((s) => [
+      s.key,
+      filterDirectory(rows, s.key, '', 'popular')
+        .filter((d) => !added(d) && !d.generic)
+        .slice(0, SECTION_SUGGESTION_COUNT),
+    ]),
+  )
 }

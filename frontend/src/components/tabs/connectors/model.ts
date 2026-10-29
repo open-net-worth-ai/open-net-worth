@@ -240,6 +240,10 @@ export interface ConnectorEntry {
    *  Absent for everything else, which renders the tinted glyph instead. */
   logo?: string
   families: ConnectorFamily[]
+  /** What the connector is FOR (`Brokerage`, `Search`…) — the catalog entry's topics, matched
+   *  by id for a native connector and by endpoint for an MCP server. Empty for a server we have
+   *  no catalog entry for: a user's own endpoint gets no invented topic. */
+  categories?: ConnectorCategory[]
   /** Optional inline tag beside the name, e.g. DuckDuckGo's `Default`. */
   tag?: string
   /** One vocabulary: `Connected` for every healthy connector (spec §2). */

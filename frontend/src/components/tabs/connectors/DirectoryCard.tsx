@@ -21,6 +21,9 @@ export interface DirectoryCardProps {
   onPreview: (entry: DirectoryRow) => void
   /** Open an already-installed entry's detail page. */
   onConfigure: (entry: DirectoryRow) => void
+  /** A suggestion under a list section — the dashed "add this" slot the Assets screen's
+   *  "Add more" tiles use, rather than a card in the directory grid. */
+  suggested?: boolean
 }
 
 export function DirectoryCard({
@@ -28,6 +31,7 @@ export function DirectoryCard({
   onAdd,
   onPreview,
   onConfigure,
+  suggested = false,
 }: DirectoryCardProps): JSX.Element {
   // Clicking the card body ALWAYS opens the entry's landing page — installed or not. Only the
   // action ON that page differs (Add vs. the installed entry's route-to-settings), so browsing
@@ -46,7 +50,7 @@ export function DirectoryCard({
       // preview) — a dashed border marks it as a build-your-own slot, not a real product
       // sitting in the grid alongside Playwright MCP and the rest (owner review, 2026-08-19:
       // "the custom mcp server shouldn't be as other row").
-      className={'cn-dircard' + (d.generic ? ' generic' : '')}
+      className={'cn-dircard' + (d.generic ? ' generic' : '') + (suggested ? ' suggested' : '')}
       onClick={activate}
       // The prototype leaves this div keyboard-inert. Handling Enter/Space is invisible to the
       // pixel diff and is required of a role="button" by the UI Quality Gate.
@@ -97,6 +101,20 @@ export function DirectoryCard({
         )}
       </div>
       <div className="cn-dircard-desc">{d.sub}</div>
+      {d.categories.length > 0 ? <CategoryChips categories={d.categories} /> : null}
     </div>
+  )
+}
+
+/** What a connector is FOR, as small chips — the same topics the preview page lists. */
+export function CategoryChips({ categories }: { categories: readonly string[] }): JSX.Element {
+  return (
+    <span className="cn-cats">
+      {categories.map((c) => (
+        <span key={c} className="cn-cat">
+          {c}
+        </span>
+      ))}
+    </span>
   )
 }

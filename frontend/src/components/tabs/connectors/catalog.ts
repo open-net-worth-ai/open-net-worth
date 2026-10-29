@@ -999,7 +999,7 @@ export function filterDirectory(
   const q = query.trim().toLowerCase()
   return entries
     .filter((d) => family === 'all' || d.families.includes(FAMILY_OF_FILTER[family]))
-    .filter((d) => !q || matchesSearch(`${d.name} ${d.sub}`, q))
+    .filter((d) => !q || matchesSearch(`${d.name} ${d.sub} ${d.categories.join(' ')}`, q))
     .sort((a, b) =>
       sort === 'az' ? a.name.localeCompare(b.name) : (b.popular ? 1 : 0) - (a.popular ? 1 : 0),
     )

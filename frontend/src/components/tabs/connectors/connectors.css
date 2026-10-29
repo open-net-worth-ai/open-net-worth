@@ -892,9 +892,47 @@
 }
 @media (max-width: 560px) {
   .cn-page .cn-dirgrid,
-  .cn-page .cn-poprow {
+  .cn-page .cn-poprow,
+  .cn-page .cn-suggestgrid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── category chips + per-section suggestions ──────────────────────────────── */
+.cn-page .cn-cats {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+.cn-page .cn-cat {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--bg-2);
+  border-radius: 999px;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+.cn-page .cn-suggest {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+.cn-page .cn-suggest-h {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.cn-page .cn-suggestgrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.cn-page .cn-dircard.suggested {
+  border-style: dashed;
+  background: transparent;
 }
 
 /* ── connector header (the landing page's and the detail page's identity block) ──

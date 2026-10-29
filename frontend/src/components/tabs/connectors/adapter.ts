@@ -6,7 +6,7 @@
 // servers. Family grouping, install state, status vocabulary and tool grouping are all
 // derived here so every screen reads one truth.
 
-import { catalogProvenanceFor } from './catalog'
+import { CATALOG, catalogProvenanceFor } from './catalog'
 import { connectorLogo } from './logos'
 import type { McpEditTarget } from './mcpConfig'
 import type { OAuthSummary } from './mcpApi'
@@ -279,6 +279,9 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     // catalog match, a server shows the icon IT or its website declared — never ours.
     logo: provenance?.logo ?? (mcp ? mcpIconUrl(c) : connectorLogo(c.id)),
     families: FAMILIES[kind] ?? ['MCP'],
+    categories: mcp
+      ? (provenance?.categories ?? [])
+      : (CATALOG.find((e) => e.id === c.id)?.categories ?? []),
     tag: c.id.startsWith(WEB_SEARCH_PREFIX) && cfg.is_active === true ? 'Default' : undefined,
     statusText: status.statusText,
     tone: status.tone,

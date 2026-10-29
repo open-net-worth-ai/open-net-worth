@@ -25,7 +25,7 @@ import { ConnectorDetail } from './ConnectorDetail'
 import { ConnectorConfig, hasConfigForm } from './ConnectorConfig'
 import { DirectoryModal } from './DirectoryModal'
 import { filterDirectory, skipsPreview } from './catalog'
-import { resolveDirectory } from './directoryRows'
+import { resolveDirectory, suggestionsBySection } from './directoryRows'
 import { InstitutionPickerModal } from './InstitutionPickerModal'
 import { McpEditModal } from './McpEditModal'
 import { deleteMcpServer } from './mcpApi'
@@ -61,6 +61,12 @@ export function ConnectorsTab(): JSX.Element {
           )
         : [],
     [connectors, tab, query],
+  )
+  // The unsearched, unfiltered list also offers up to three popular connectors per section
+  // that aren't added yet — the Connectors twin of the Assets screen's "Add more".
+  const sectionSuggestions = useMemo(
+    () => (query.trim() || statusFilter !== 'all' ? undefined : suggestionsBySection(connectors)),
+    [connectors, query, statusFilter],
   )
   const [detailId, setDetailId] = useState<string | null>(null)
   /** The MCP server whose connection is being edited — the add flow, reopened pre-filled. */
@@ -373,6 +379,7 @@ export function ConnectorsTab(): JSX.Element {
             onBrowse={openDirectory}
             onAddBank={() => setBankPickerOpen(true)}
             suggestions={suggestions}
+            sectionSuggestions={sectionSuggestions}
             onSuggest={(d) => (skipsPreview(d) ? openDirectory('mcp') : openLandingPage(d.id))}
           />
         )}
