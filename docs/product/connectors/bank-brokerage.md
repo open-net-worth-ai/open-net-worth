@@ -50,11 +50,18 @@ fetch from the provider's website and which fields to fill in.
    To come back to the form later — for example to link a bank after saving your keys — open the
    connector and choose **⋯ (More actions) → Edit configuration**.
 3. **Link each provider account to one of your accounts.** At the bottom of the connector's form
-   is an **Accounts** list with one row per account the provider can see. For each row, open
-   **Link to an account…** and pick the matching account in Open Net Worth, or pick **+ Create
-   account…** to make one on the spot. A linked row then reads **Linked to "*account name*"**;
-   **Unlink** undoes it. Lucius only books into linked accounts — for an unlinked one he asks you
-   instead of guessing.
+   is an **Accounts** list with one row per account the provider can see, grouped by type (cash,
+   credit cards, loans, retirement…) where the provider says what each account is. For each row:
+   - **Add** creates a new account in Open Net Worth, with the form already filled in — name,
+     type, currency, last four digits, and today's balance as the starting balance (for a card or
+     loan, the amount owed). Check them and click **Add account**.
+   - **Link…** ties it to an account you already have instead — pick it from the list.
+
+   Either way the link saves straight away; there's nothing else to save. A linked row reads
+   **Linked to "*account name*"**, and **Unlink** undoes it. Linking imports nothing by itself —
+   once an account is linked, the list shows **Next: bring in transactions** with a **Sync
+   automatically…** button. Lucius only books into linked accounts — for an unlinked one he asks
+   you instead of guessing.
 4. **Check it works, then turn on syncing.** Ask Lucius, for example:
 
    > *Fetch my SimpleFIN transactions from the last 7 days and show me what's new.*

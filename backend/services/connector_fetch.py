@@ -29,6 +29,7 @@ from typing import Optional
 from backend.core.errors import ValidationError
 from backend.core.untrusted import sanitize_untrusted
 from backend.core.user_time import user_today
+from backend.models.account import AccountType
 from backend.services import ledger as ledger_service
 from backend.services.aggregation import providers
 from backend.services.aggregation.providers import FetchWindow, Provider, UnknownProvider
@@ -110,6 +111,11 @@ def _sanitize_row(row: dict) -> dict:
             out[field] = sanitize_untrusted(value)
     _cap_identity_fields(out)
     return out
+
+
+def _known_account_type(value: object) -> str | None:
+    """A provider's suggested app account type, kept only if it is one of the seven."""
+    return value if isinstance(value, str) and value in AccountType.__members__ else None
 
 
 def _sanitize_account(account: dict) -> dict:
@@ -240,7 +246,7 @@ def _linked_only_accounts(linked: dict[str, dict]) -> list[dict]:
                 "balance": None,
             }
         )
-        | {"linked_account_id": info.get("linked_account_id")}
+        | {"account_type": None, "linked_account_id": info.get("linked_account_id")}
         for pid, info in linked.items()
     ]
 
@@ -486,7 +492,8 @@ def fetch(
 def provider_accounts(provider_key: str) -> dict:
     """The account list ONLY, no transaction fetch — ``GET /api/connectors/{id}/accounts``
     (``api/connectors_api.py``, L1) calls this directly. Returns ``{status, provider_label,
-    accounts: [{provider_account_id, name, mask, currency, balance, linked_account_id}]}``.
+    accounts: [{provider_account_id, name, mask, currency, balance, account_type,
+    linked_account_id}]}`` — ``account_type`` is the provider's suggested app type, or None.
 
     A pure READ (C-B2/S-F7): unlike ``fetch()``, this NEVER calls ``store.record_status``
     or publishes a sync event — opening the Connectors tab's link picker must not look like
@@ -552,6 +559,7 @@ def provider_accounts(provider_key: str) -> dict:
                 "mask": clean.get("mask"),
                 "currency": clean.get("currency"),
                 "balance": clean.get("balance"),
+                "account_type": _known_account_type(clean.get("account_type")),
                 "linked_account_id": (linked.get(pid) or {}).get("linked_account_id"),
             }
         )

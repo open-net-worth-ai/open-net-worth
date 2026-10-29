@@ -101,8 +101,11 @@ describe('ConnectorAccountsList — status branches (CDS-UI-8)', () => {
     })
     render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
 
-    expect(await screen.findByLabelText('Link Checking to an account')).toBeTruthy()
-    expect(screen.getByText('Linked to "Existing Checking"')).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'Add' })).toBeTruthy()
+    expect(
+      screen.getByRole('button', { name: 'Link Checking to an existing account' }),
+    ).toBeTruthy()
+    expect(screen.getByText('Linked to “Existing Checking”')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Unlink' })).toBeTruthy()
   })
 
@@ -167,7 +170,7 @@ describe('ConnectorAccountsList — status branches (CDS-UI-8)', () => {
     })
     render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
     expect(await screen.findByText("Couldn't reach Plaid.")).toBeTruthy()
-    expect(screen.getByText('Linked to "Existing Checking"')).toBeTruthy()
+    expect(screen.getByText('Linked to “Existing Checking”')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Unlink' })).toBeTruthy()
   })
 
@@ -189,7 +192,7 @@ describe('ConnectorAccountsList — status branches (CDS-UI-8)', () => {
     })
     render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
     expect(await screen.findByText('Not set up yet')).toBeTruthy()
-    expect(screen.getByText('Linked to "Existing Checking"')).toBeTruthy()
+    expect(screen.getByText('Linked to “Existing Checking”')).toBeTruthy()
   })
 
   it('error (or unmapped): error copy + Retry, not a raw status string', async () => {
@@ -240,6 +243,9 @@ describe('ConnectorAccountsList — link (CDS-UI-5)', () => {
       },
     })
     render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Link Checking to an existing account' }),
+    )
     const select = await screen.findByLabelText('Link Checking to an account')
     fireEvent.change(select, { target: { value: 'acc_1' } })
 
@@ -298,7 +304,7 @@ describe('ConnectorAccountsList — unlink (CDS-UI-7)', () => {
 })
 
 describe('ConnectorAccountsList — create account (CDS-UI-6)', () => {
-  it('"+ Create account…" opens AccountModal prefilled, then POSTs and links', async () => {
+  it('"Add" opens AccountModal prefilled, then POSTs and links', async () => {
     let postBody: unknown,
       putUrl = '',
       putBody: unknown
@@ -325,8 +331,7 @@ describe('ConnectorAccountsList — create account (CDS-UI-6)', () => {
       },
     })
     render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
-    const select = await screen.findByLabelText('Link New Savings to an account')
-    fireEvent.change(select, { target: { value: '__create__' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Add' }))
 
     expect(await screen.findByRole('dialog')).toBeTruthy()
     expect(screen.getByDisplayValue('New Savings')).toBeTruthy()

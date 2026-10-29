@@ -20,7 +20,7 @@ import {
 } from '../../ui'
 import { authFetch } from '../../../api/client'
 import type { Account, AccountCreate, AccountUpdate, AccountPrefill, ExternalId } from './types'
-import { ACCOUNT_TYPES, TYPE_LABELS, TYPE_MEANING, LIABILITY_TYPES } from './categories'
+import { ACCOUNT_TYPES, TYPE_LABELS, TYPE_MEANING, TYPE_ICON, LIABILITY_TYPES } from './categories'
 import type { AccountType } from './categories'
 import { ChevronRight } from '../../../ui/icons'
 
@@ -53,15 +53,7 @@ function displayOpening(value: number, isAsset: boolean): string {
 
 // Seven-type vocab (ADR 2026-09-07-seven-account-types-one-axis) — one row per type, in
 // TYPE_ORDER; the label + meaning are the shared, final copy from categories.ts.
-const ICON: Record<AccountType, string> = {
-  cash: 'banknote',
-  fixed_deposit: 'coins',
-  investment: 'trending',
-  retirement: 'umbrella',
-  receivable: 'incoming',
-  credit: 'card',
-  loan: 'home',
-}
+const ICON = TYPE_ICON
 const TYPE_ROWS = ACCOUNT_TYPES.map((t) => ({
   t,
   ic: ICON[t],
@@ -220,6 +212,7 @@ export default function AccountModal({
           currency: prefill.currency ?? 'SGD',
           lastFour: prefill.lastFour ?? '',
           institution: prefill.institution ?? '',
+          initial: prefill.initial ?? '0',
         })
       } else {
         setStep('quick')

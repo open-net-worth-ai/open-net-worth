@@ -240,7 +240,30 @@ class TestNormalizeHelpers:
             "mask": "0000",
             "currency": "USD",
             "balance": 150.25,
+            "account_type": None,
         }
+
+    @pytest.mark.parametrize(
+        ("plaid_type", "subtype", "expected"),
+        [
+            ("depository", "checking", "cash"),
+            ("depository", "savings", "cash"),
+            ("depository", "cd", "fixed_deposit"),
+            ("credit", "credit card", "credit"),
+            ("loan", "mortgage", "loan"),
+            ("loan", "student", "loan"),
+            ("investment", "401k", "retirement"),
+            ("investment", "ira", "retirement"),
+            ("investment", "brokerage", "investment"),
+            ("other", None, None),
+            (None, None, None),
+        ],
+    )
+    def test_account_to_common_suggests_the_app_account_type(self, plaid_type, subtype, expected):
+        from backend.services.aggregation.plaid import _account_to_common
+
+        account = {"account_id": "A1", "type": plaid_type, "subtype": subtype, "balances": {}}
+        assert _account_to_common(account)["account_type"] == expected
 
     def test_account_to_common_falls_back_to_name_and_unofficial_currency(self):
         from backend.services.aggregation.plaid import _account_to_common
@@ -451,6 +474,7 @@ class TestFetchWindow:
                 "mask": None,
                 "currency": "USD",
                 "balance": 100.0,
+                "account_type": None,
             }
         ]
         assert len(window.rows) == 1

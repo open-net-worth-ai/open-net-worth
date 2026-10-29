@@ -1,0 +1,101 @@
+// One provider account in the connector "Accounts" list: what it is (type icon, name, last four,
+// balance) and its next step — Add it as a new account or Link… it to an existing one, or, once
+// linked, show where it lands with a quiet Unlink.
+import { useState } from 'react'
+import { Button, Select } from '../../ui'
+import { AccIcon } from '../accounts/ds'
+import { fCur } from '../accounts/format'
+import { TYPE_COLOR, TYPE_ICON } from '../accounts/categories'
+import { isOwed, type ProviderAccountRow } from './accountRows'
+
+interface Props {
+  row: ProviderAccountRow
+  linkedName: string
+  accountOptions: { value: string; label: string }[]
+  busy: boolean
+  onAdd: () => void
+  onLink: (accountId: string) => void
+  onUnlink: () => void
+}
+
+export function ConnectorAccountRow({
+  row,
+  linkedName,
+  accountOptions,
+  busy,
+  onAdd,
+  onLink,
+  onUnlink,
+}: Props) {
+  const [picking, setPicking] = useState(false)
+  const type = row.account_type
+  const linked = !!row.linked_account_id
+
+  return (
+    <div className={`conn-acct-row${linked ? ' conn-acct-row--linked' : ''}`}>
+      <span
+        className="conn-acct-ico"
+        style={type ? { color: TYPE_COLOR[type] } : undefined}
+        aria-hidden="true"
+      >
+        <AccIcon name={type ? TYPE_ICON[type] : 'banknote'} size={16} />
+      </span>
+      <div className="conn-acct-main">
+        <div className="conn-acct-name">{row.name}</div>
+        <div className="conn-acct-sub">
+          {row.mask ? `•${row.mask}` : ''}
+          {linked && row.mask ? ' · ' : ''}
+          {linked && <span className="conn-acct-linked">Linked to “{linkedName}”</span>}
+        </div>
+      </div>
+      {row.balance != null && (
+        <div className="conn-acct-bal">
+          {fCur(row.balance, row.currency, { cents: true })}
+          {isOwed(row) && <span className="conn-acct-owed"> owed</span>}
+        </div>
+      )}
+      <div className="conn-acct-actions">
+        {linked ? (
+          <Button size="sm" variant="ghost" loading={busy} onClick={onUnlink}>
+            Unlink
+          </Button>
+        ) : picking ? (
+          <>
+            <Select
+              aria-label={`Link ${row.name} to an account`}
+              placeholder="Choose an account…"
+              value=""
+              disabled={busy}
+              options={accountOptions}
+              onChange={(e) => {
+                if (e.target.value) {
+                  setPicking(false)
+                  onLink(e.target.value)
+                }
+              }}
+            />
+            <Button size="sm" variant="ghost" onClick={() => setPicking(false)}>
+              Cancel
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button size="sm" loading={busy} onClick={onAdd}>
+              Add
+            </Button>
+            {accountOptions.length > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                aria-label={`Link ${row.name} to an existing account`}
+                onClick={() => setPicking(true)}
+              >
+                Link…
+              </Button>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

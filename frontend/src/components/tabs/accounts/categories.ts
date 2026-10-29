@@ -157,6 +157,17 @@ export const TYPE_COLOR: Record<AccountType, string> = {
   loan: '#e2554f',
 }
 
+/** The `AccIcon` glyph for each type — the add-account picker and the connector account list. */
+export const TYPE_ICON: Record<AccountType, string> = {
+  cash: 'banknote',
+  fixed_deposit: 'coins',
+  investment: 'trending',
+  retirement: 'umbrella',
+  receivable: 'incoming',
+  credit: 'card',
+  loan: 'home',
+}
+
 export const LIABILITY_TYPES: ReadonlySet<AccountType> = new Set(['credit', 'loan'])
 
 export const TYPE_ORDER = ACCOUNT_TYPES

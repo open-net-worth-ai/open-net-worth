@@ -442,6 +442,8 @@ export interface AccountPrefill {
   currency?: string
   lastFour?: string
   institution?: string
+  /** The opening balance as the form shows it — for a card or loan, the amount owed. */
+  initial?: string
 }
 
 // ── Derived / selector types ──────────────────────────────────────────────

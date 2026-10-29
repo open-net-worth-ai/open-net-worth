@@ -45,6 +45,7 @@ import httpx
 
 from backend.core.errors import ValidationError
 from backend.db.plaid_config_store import PlaidConfigStore
+from backend.models.account import AccountType
 from backend.services import ledger as ledger_service
 from backend.services.aggregation.providers import FetchWindow, derived_ref
 
@@ -225,6 +226,60 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
 # ── normalize + fetch_window ─────────────────────────────────────────────────────────
 
 
+# Plaid investment subtypes that are tax-advantaged retirement wrappers (Plaid's account-type
+# schema, US + Canada); every other investment subtype is a plain brokerage account.
+_RETIREMENT_SUBTYPES = frozenset(
+    {
+        "401a",
+        "401k",
+        "403b",
+        "457b",
+        "529",
+        "ira",
+        "keogh",
+        "lif",
+        "lira",
+        "lrif",
+        "lrsp",
+        "pension",
+        "prif",
+        "profit sharing plan",
+        "qshr",
+        "rdsp",
+        "retirement",
+        "rlif",
+        "roth",
+        "roth 401k",
+        "rrif",
+        "rrsp",
+        "sarsep",
+        "sep ira",
+        "simple ira",
+        "sipp",
+        "thrift savings plan",
+    }
+)
+
+
+def _suggested_account_type(account: dict) -> str | None:
+    """Plaid's ``type``/``subtype`` → the app's account type, as a SUGGESTION for the create
+    form (the user still picks; nothing is stored from it). ``None`` when Plaid's type says
+    nothing useful (``other``, or absent)."""
+    kind = str(account.get("type") or "").lower()
+    subtype = str(account.get("subtype") or "").lower()
+    if kind == "depository":
+        return AccountType.fixed_deposit.value if subtype == "cd" else AccountType.cash.value
+    if kind == "credit":
+        return AccountType.credit.value
+    if kind == "loan":
+        return AccountType.loan.value
+    if kind == "investment":
+        if subtype in _RETIREMENT_SUBTYPES:
+            return AccountType.retirement.value
+        return AccountType.investment.value
+    return None
+
+
 def _account_to_common(account: dict) -> dict:
     """A Plaid account → the common ``accounts[]`` shape (RFC §A)."""
     name = account.get("official_name") or account.get("name") or "Plaid account"
@@ -238,6 +293,7 @@ def _account_to_common(account: dict) -> dict:
         "mask": account.get("mask"),
         "currency": currency,
         "balance": balances.get("current"),
+        "account_type": _suggested_account_type(account),
     }
 
 
