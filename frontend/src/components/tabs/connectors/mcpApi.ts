@@ -86,16 +86,52 @@ export function parseArgs(raw: string): string[] {
   return raw.trim() ? raw.trim().split(/\s+/) : []
 }
 
-/** `KEY=value` per line → a map. Blank lines and keyless lines are dropped, never sent empty. */
+const PEM_BLOCK = /^-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----$/
+
+/**
+ * A PEM private key rebuilt into the one shape OpenSSL reads: header, base64 body in 64-char
+ * lines, footer. Whatever way it was pasted — real line breaks, literal `\n` escapes (a JSON
+ * key file's `privateKey`, quotes included), or all on one line — the child gets a key that
+ * parses; Coinbase's CLI, for one, passes the variable to Node's crypto as-is and both the
+ * escaped and the one-line forms fail there with ERR_OSSL_UNSUPPORTED. Anything that is not a
+ * whole PEM block is returned untouched.
+ */
+export function normalizePem(value: string): string {
+  const unquoted = /^"[\s\S]*"$/.test(value) ? value.slice(1, -1) : value
+  const m = PEM_BLOCK.exec(unquoted.replace(/\\n/g, '\n').trim())
+  if (!m) return value
+  const body = m[2].replace(/\s+/g, '')
+  const lines = body.match(/.{1,64}/g) ?? []
+  return [`-----BEGIN ${m[1]}-----`, ...lines, `-----END ${m[1]}-----`, ''].join('\n')
+}
+
+/**
+ * `KEY=value` per line → a map. Blank lines and keyless lines are dropped, never sent empty.
+ * A value that opens a PEM block (`-----BEGIN …-----`) runs on to its `-----END …-----` line,
+ * so a private key pasted with its own line breaks stays one value — and the saved set,
+ * revealed back into the box as `KEY=value` lines, parses to exactly what was saved.
+ */
 export function parseEnv(raw: string): Record<string, string> {
   const out: Record<string, string> = {}
+  let pemKey: string | null = null
   for (const line of raw.split('\n')) {
     const trimmed = line.trim()
+    if (pemKey !== null) {
+      out[pemKey] += '\n' + trimmed
+      if (/^-----END [A-Z0-9 ]+-----"?$/.test(trimmed)) pemKey = null
+      continue
+    }
     if (!trimmed) continue
     const eq = trimmed.indexOf('=')
     if (eq <= 0) continue
-    out[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim()
+    const key = trimmed.slice(0, eq).trim()
+    const value = trimmed.slice(eq + 1).trim()
+    out[key] = value
+    if (/^"?-----BEGIN [A-Z0-9 ]+-----/.test(value) && !/-----END [A-Z0-9 ]+-----"?$/.test(value)) {
+      pemKey = key
+    }
   }
+  for (const key of Object.keys(out)) out[key] = normalizePem(out[key])
   return out
 }
 

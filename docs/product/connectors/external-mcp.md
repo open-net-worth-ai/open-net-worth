@@ -60,7 +60,15 @@ search or filter; click one to read about it and add it. **Sort** orders the ful
      **Source repository** link says where. The trading ones start without real money where the
      vendor offers that: Alpaca MCP on paper trading, OKX with `--demo` in its arguments, Kraken
      with only market data, a read-only account and paper trading; the card says how to switch.
-     Coinbase needs Node.js 22 or later; Alpaca MCP needs [uv](https://docs.astral.sh/uv/); Kraken
+     A value that is a private key (`-----BEGIN … KEY-----` … `-----END … KEY-----`) can be
+     pasted as it is — over several lines, on one line, or with `\n` in place of the line breaks,
+     the way a downloaded JSON key file holds it; the app rebuilds it into a key the server can
+     read.
+     Coinbase needs Node.js 22 or later and a key created at
+     [portal.cdp.coinbase.com](https://portal.cdp.coinbase.com/api-keys/secret) with
+     **Signature algorithm: ECDSA** (Advanced Trade refuses the default Ed25519 key): its key name
+     (`organizations/…/apiKeys/…`) goes in `COINBASE_KEY_ID` and its private key in
+     `COINBASE_KEY_SECRET`. Alpaca MCP needs [uv](https://docs.astral.sh/uv/); Kraken
      needs the [Kraken CLI](https://github.com/krakenfx/kraken-cli) installed first (macOS or
      Linux).
 4. Click **Connect**. The app starts the server, checks it answers, and lists its tools — *Testing
@@ -91,7 +99,7 @@ instructions, and enter what they give you in the form (or add it as a custom se
      the screen picks up the result once you finish, whichever window you signed in from.
    - **Local command (stdio)** — enter the **Command** (for example `npx` or `uvx`), the
      **Arguments** (for example `-y @modelcontextprotocol/server-filesystem /path/to/folder`) and
-     any **Environment variables**, one `NAME=value` per line.
+     any **Environment variables**, one `NAME=value` per line (a private key may span several lines).
 4. Click **Connect**, review the tools, and click **Add server** — the same as steps 4–5 above.
 
 A local command needs its runtime installed on the machine running Open Net Worth — Node.js for

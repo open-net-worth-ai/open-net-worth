@@ -790,7 +790,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades crypto on Coinbase; balances, orders, fills, fees',
-    desc: 'Connect Coinbase’s own MCP server — part of the Coinbase CLI, run on this machine — to let Lucius trade on Coinbase Advanced Trade. It reads balances, portfolios, orders, fills, fees and market data; previews, places, edits and cancels orders; converts between assets; and moves funds between your own portfolios (never out to an external address). Every write tool here asks for your approval before it runs unless you change that. Coinbase’s hosted server only admits apps it has approved; this local one needs none. Needs Node.js 22 or later, and a Coinbase developer API key whose permissions you choose when you create it.',
+    desc: 'Connect Coinbase’s own MCP server — part of the Coinbase CLI, run on this machine — to let Lucius trade on Coinbase Advanced Trade. It reads balances, portfolios, orders, fills, fees and market data; previews, places, edits and cancels orders; converts between assets; and moves funds between your own portfolios (never out to an external address). Every write tool here asks for your approval before it runs unless you change that. Coinbase’s hosted server only admits apps it has approved; this local one needs none. Needs Node.js 22 or later, and a Coinbase developer API key whose permissions you choose when you create it — pick ECDSA as its signature algorithm, since Advanced Trade refuses Ed25519 keys.',
     publisher: 'Coinbase',
     verification: 'verified',
     // @coinbase/coinbase-cli is published by Coinbase's own npm accounts. Help-centre and

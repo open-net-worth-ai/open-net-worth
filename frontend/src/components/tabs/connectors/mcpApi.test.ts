@@ -96,6 +96,55 @@ describe('toWireConfig — the design vocabulary translated to the backend one',
   })
 })
 
+describe('parseEnv keeps a pasted private key whole, however it was pasted', () => {
+  // Synthetic body, not a real key — 80 chars so the rewrap to 64 is visible.
+  const BODY = 'MHcCAQEEIA' + 'b'.repeat(60) + 'oAoGCCqGSM=='
+  // The label is assembled so the file holds no literal key header for a secret scanner to flag.
+  const LABEL = ['EC', 'PRIVATE', 'KEY'].join(' ')
+  const PEM = `-----BEGIN ${LABEL}-----\n${BODY.slice(0, 64)}\n${BODY.slice(64)}\n-----END ${LABEL}-----\n`
+
+  it('reads a key with real line breaks as one value, and the next variable after it', () => {
+    const raw = `COINBASE_KEY_ID=organizations/o/apiKeys/k\nCOINBASE_KEY_SECRET=${PEM}NEXT=1`
+    expect(parseEnv(raw)).toEqual({
+      COINBASE_KEY_ID: 'organizations/o/apiKeys/k',
+      COINBASE_KEY_SECRET: PEM,
+      NEXT: '1',
+    })
+  })
+
+  it('turns literal \\n escapes, JSON quotes and a one-line paste into the same key', () => {
+    const escaped = PEM.replace(/\n/g, '\\n')
+    expect(parseEnv(`S=${escaped}`)).toEqual({ S: PEM })
+    expect(parseEnv(`S="${escaped}"`)).toEqual({ S: PEM })
+    expect(parseEnv(`S=${PEM.replace(/\n/g, '')}`)).toEqual({ S: PEM })
+    expect(parseEnv(`S=${PEM.replace(/\n/g, ' ')}`)).toEqual({ S: PEM })
+  })
+
+  it('round-trips the revealed saved set (KEY=value lines, sorted)', () => {
+    const saved = { A: '1', COINBASE_KEY_SECRET: PEM, Z: 'z' }
+    const revealed = Object.entries(saved)
+      .map(([k, v]) => `${k}=${v}`)
+      .join('\n')
+    expect(parseEnv(revealed)).toEqual(saved)
+  })
+
+  it('hands the child a key Node crypto can sign with — which the escaped paste is not', async () => {
+    const { createSign, generateKeyPairSync } = await import('node:crypto')
+    const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'P-256' })
+    const pem = privateKey.export({ type: 'sec1', format: 'pem' }).toString()
+    const escaped = pem.replace(/\n/g, '\\n')
+    const sign = (key: string) => createSign('SHA256').update('x').sign(key)
+    expect(() => sign(escaped)).toThrow()
+    expect(() => sign(parseEnv(`S=${escaped}`).S)).not.toThrow()
+    expect(() => sign(parseEnv(`S=${pem.replace(/\n/g, '')}`).S)).not.toThrow()
+  })
+
+  it('leaves values that merely contain \\n or a partial block alone', () => {
+    expect(parseEnv('P=C:\\new\\dir')).toEqual({ P: 'C:\\new\\dir' })
+    expect(parseEnv('B=-----BEGIN X-----abc')).toEqual({ B: '-----BEGIN X-----abc' })
+  })
+})
+
 describe('probeMcpServer never throws — the error state is rendered from its result', () => {
   it('turns an unusable response into a failure result rather than an exception', async () => {
     // A response that isn't a Response — what a misbehaving proxy or a transport-level fault
