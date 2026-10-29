@@ -14,10 +14,11 @@
 // Both are inline styles because the prototype styles them inline — connectors.css is a verbatim
 // port of the prototype stylesheet and carries no rule for either.
 
-import type { JSX } from 'react'
+import type { CSSProperties, JSX } from 'react'
 import { DirectoryCard } from './DirectoryCard'
 import { Empty, Mono } from './primitives'
 import { Icons } from './icons'
+import { CATEGORY_HUE, CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
 import {
   DIRECTORY_FAMILY_CHIPS,
   filterDirectory,
@@ -40,6 +41,9 @@ export interface DirectoryBrowserProps {
   onQuery: (query: string) => void
   sort: DirectorySort
   onSort: (sort: DirectorySort) => void
+  /** One category, or every one. A card's tag picks it too. */
+  category: ConnectorCategory | 'all'
+  onCategory: (category: ConnectorCategory | 'all') => void
   onAdd: (entry: DirectoryRow) => void
   onPreview: (entry: DirectoryRow) => void
   onConfigure: (entry: DirectoryRow) => void
@@ -53,15 +57,22 @@ export function DirectoryBrowser({
   onQuery,
   sort,
   onSort,
+  category,
+  onCategory,
   onAdd,
   onPreview,
   onConfigure,
 }: DirectoryBrowserProps): JSX.Element {
-  const shown = filterDirectory(entries, family, query, sort)
+  const shown = filterDirectory(entries, family, query, sort, category)
+  // Only the categories something in this family actually carries — an option that can only
+  // ever produce "No matches" is a dead end.
+  const categories = CONNECTOR_CATEGORIES.filter((c) =>
+    filterDirectory(entries, family, '', sort, c).some(() => true),
+  )
   const popular = popularEntries(entries)
   // Popular is a shortcut through the DEFAULT view — once the user has filtered or searched,
   // it is noise competing with the result they asked for.
-  const showPopular = !query.trim() && family === 'all' && popular.length > 0
+  const showPopular = !query.trim() && family === 'all' && category === 'all' && popular.length > 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -75,7 +86,7 @@ export function DirectoryBrowser({
           padding: '18px 20px 14px',
           display: 'flex',
           flexDirection: 'column',
-          gap: 14,
+          gap: 12,
           borderBottom: '1px solid var(--line)',
         }}
       >
@@ -122,6 +133,30 @@ export function DirectoryBrowser({
             <option value="az">Sort: A–Z</option>
           </select>
         </div>
+        {categories.length > 1 ? (
+          <div className="cn-catrow" role="group" aria-label="Filter by category">
+            <button
+              type="button"
+              className={'cn-cat pick' + (category === 'all' ? ' on' : '')}
+              aria-pressed={category === 'all'}
+              onClick={() => onCategory('all')}
+            >
+              All
+            </button>
+            {categories.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={'cn-cat pick' + (category === c ? ' on' : '')}
+                style={{ '--cat-hue': CATEGORY_HUE[c] } as CSSProperties}
+                aria-pressed={category === c}
+                onClick={() => onCategory(category === c ? 'all' : c)}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div
@@ -163,6 +198,7 @@ export function DirectoryBrowser({
               onAdd={onAdd}
               onPreview={onPreview}
               onConfigure={onConfigure}
+              onCategory={onCategory}
             />
           ))}
         </div>

@@ -100,8 +100,10 @@ export const Icons: Record<IconKey, IconComponent> = {
       <circle cx={12} cy={17.3} r={0.4} />
     </Svg>
   ),
+  // Two axis-aligned strokes at 13px on a 24-unit grid land ~0.9px wide on a half pixel, which
+  // antialiases into a blur — `crispEdges` snaps them to the pixel grid, same geometry.
   plus: () => (
-    <Svg width={13} height={13}>
+    <Svg width={13} height={13} shapeRendering="crispEdges">
       <line x1={12} y1={5} x2={12} y2={19} />
       <line x1={5} y1={12} x2={19} y2={12} />
     </Svg>

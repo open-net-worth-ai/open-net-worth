@@ -147,7 +147,7 @@ def test_a_money_bearing_field_is_never_promoted_into_the_label():
 def test_connector_tagged_tool_carries_its_connector_as_owner():
     d = describe_tool_call("ibkr_get_status", {})
     assert d["owner_id"] == "ibkr"
-    assert d["owner_name"] == "Interactive Brokers"
+    assert d["owner_name"] == "IBKR Flex"
 
 
 def test_untagged_tool_is_owned_by_core_and_shows_no_breadcrumb():

@@ -946,6 +946,7 @@ class McpClientManager:
                 icon_type=found.icon_type,
                 checked_at=time.time(),
                 rename_from=_endpoint_derived_name(server),
+                reserved_names=_builtin_connector_names(),
             )
         except Exception:  # noqa: BLE001 — a cosmetic lookup must never fail a discovery
             logger.warning("mcp site identity lookup failed for '%s'", server_id, exc_info=True)
@@ -1006,12 +1007,11 @@ class McpClientManager:
         # materially worse than its self-report, which is exactly why we keep serverInfo.
         # Note this fallback is for the editable Name field ONLY: ``publisher`` is never
         # back-filled this way, because a host is not an author.
-        suggested_name = (
-            _site_name_for_probe(config, info)
-            or info.name
-            or _endpoint_derived_name(config)
-            or provisional_id
-        )
+        site_name = _site_name_for_probe(config, info)
+        suggested_name = site_name or info.name or _endpoint_derived_name(config) or provisional_id
+        taken = _builtin_connector_names() | {s.name for s in self._store.all()}
+        if site_name and suggested_name.strip().lower() in {n.strip().lower() for n in taken}:
+            suggested_name = f"{suggested_name} (MCP)"  # beside a built-in of the same name
         suggested_id = unique_server_id(
             slug_server_id(suggested_name), [s.id for s in self._store.all()]
         )
@@ -1024,6 +1024,15 @@ class McpClientManager:
             "trust": _probe_trust(probe_config, info),
             "error": None,
         }
+
+
+def _builtin_connector_names() -> frozenset[str]:
+    """Names of the built-in connectors, which exist without a ``connectors`` row. Local import:
+    ``services`` is ai-free (layer contract) and imports ``backend.mcp`` only lazily, so this
+    edge cannot cycle at import time."""
+    from backend.services.connector_catalog import builtins
+
+    return frozenset(b.name for b in builtins())
 
 
 def _site_name_for_probe(config: McpServerProbe, info: ServerInfo) -> Optional[str]:

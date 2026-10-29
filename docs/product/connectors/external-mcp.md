@@ -34,10 +34,13 @@ The directory includes ready-made entries — Playwright (a real web browser), F
 QuickBooks Online, Xero, Mercury, Interactive Brokers, Robinhood, moomoo, Expensify, Avalara
 AvaTax, Twelve Data, SEC EDGAR and FRED.
 
-Each connector shows small tags for what it's for, such as **Brokerage**, **Banking** or
-**Search**, and searching the Connectors page matches those tags too. Under each section,
-**Suggested** lists up to three popular connectors you haven't added yet; click one to read about
-it and add it.
+Each connector shows coloured tags for what it's for, such as **Brokerage**, **Banking** or
+**Search**. Searching the Connectors page matches those tags too. In **Browse & add**, click a
+category in the row of small tags under **All · Channels · Data sources · Web · MCP**, or click a
+tag on any card, to see only that kind; click it again (or **All**) to clear it. A server you've
+already added shows once, with a settings gear instead of **+**. **Suggested**
+lists up to three popular connectors you haven't added yet — once at the bottom of **All**, or
+under the section on a single tab such as **MCP**; click one to read about it and add it.
 
 1. Open **Connectors** in the sidebar, click **Browse & add**, and choose **MCP**.
 2. Click a card to read what it does and which tools it offers, then click **Add**. The connection

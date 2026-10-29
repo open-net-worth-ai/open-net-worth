@@ -37,7 +37,7 @@ describe('catalogProvenanceFor — matched by endpoint, never by name', () => {
       repoUrl: 'https://github.com/microsoft/playwright-mcp',
       homepageUrl: undefined,
       logo: '/connector-logos/playwright.svg',
-      categories: ['Web'],
+      categories: ['Browsing'],
     })
   })
 
@@ -70,8 +70,13 @@ describe('the detail page and the directory card agree', () => {
     expect(detail.verification).toBe('verified')
     expect(detail.developer).toBe('Firecrawl')
 
-    // …and the directory row for the very same server says the same thing.
-    const row = resolveDirectory([installed]).find((r) => r.id === 'mcp:firecrawl')!
+    // …and the directory shows the very same server as ONE card — the catalog entry, marked
+    // installed and pointing at the live server — saying the same thing.
+    const rows = resolveDirectory([installed])
+    expect(rows.find((r) => r.id === 'mcp:firecrawl')).toBeUndefined()
+    const row = rows.find((r) => r.id === 'mcp-firecrawl')!
+    expect(row.installed).toBe(true)
+    expect(row.installedId).toBe('mcp:firecrawl')
     expect(row.verification).toBe('verified')
     expect(row.publisher).toBe('Firecrawl')
   })

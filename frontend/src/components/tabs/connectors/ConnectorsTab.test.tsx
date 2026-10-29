@@ -111,7 +111,8 @@ describe('a connector that is not in the list is still reachable and configurabl
    *  renders forty-odd cards and this block opens it four times over. */
   function directoryButton(container: HTMLElement, label: string) {
     return waitFor(() => {
-      const found = container.querySelector<HTMLElement>(`button[aria-label="${label}"]`)
+      // Scoped to the dialog: the list's own Suggested cards carry the same Add labels.
+      const found = document.querySelector<HTMLElement>(`.rd-modal button[aria-label="${label}"]`)
       if (!found) throw new Error(`no directory button labelled "${label}"`)
       return found
     })
@@ -129,8 +130,9 @@ describe('a connector that is not in the list is still reachable and configurabl
 
   it('lands the directory’s Add ON Plaid’s real form — Add already said "set this up"', async () => {
     const { container } = await renderTab()
-    // Plaid is filtered out of the list — this is the whole point of the directory route.
-    expect(screen.queryByText('Bank + card aggregation')).toBeNull()
+    // Plaid is filtered out of the list's ROWS (it may still be a Suggested card) — this is the
+    // whole point of the directory route.
+    expect(container.querySelector('.cn-list')?.textContent).not.toContain('Plaid')
 
     await openDirectory(container, 'Add Plaid')
 

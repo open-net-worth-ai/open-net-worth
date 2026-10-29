@@ -118,6 +118,9 @@ export interface DirectoryRow extends DirectoryEntry {
   supportUrl?: string
   privacyUrl?: string
   generic?: boolean
+  /** The live connector behind an installed row when its id differs from the row's — an MCP
+   *  server matched to this catalog entry by endpoint (`mcp:api-ibkr-com` for `mcp-ibkr`). */
+  installedId?: string
 }
 
 /**
@@ -390,7 +393,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:duckduckgo',
     name: 'DuckDuckGo',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:duckduckgo"]`.
@@ -412,7 +415,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:tavily',
     name: 'Tavily',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:tavily"]`.
@@ -429,7 +432,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:perplexity',
     name: 'Perplexity (Sonar)',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:perplexity"]`.
@@ -447,7 +450,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:serper',
     name: 'Serper',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:serper"]`.
@@ -464,7 +467,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:google_pse',
     name: 'Google Programmable Search',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Search'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:google_pse"]`.
@@ -481,7 +484,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'web_search:firecrawl',
     name: 'Firecrawl',
     families: ['Web'],
-    categories: ['Search', 'Web'],
+    categories: ['Search', 'Browsing'],
     icon: 'search',
     hue: 'var(--warn)',
     // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["web_search:firecrawl"]`.
@@ -529,7 +532,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'mcp-playwright',
     name: 'Playwright MCP',
     families: ['MCP'],
-    categories: ['Web'],
+    categories: ['Browsing'],
     icon: 'cpu',
     hue: 'var(--apt)',
     sub: 'Real browser rendering for Lucius in chat',
@@ -553,7 +556,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'mcp-firecrawl',
     name: 'Firecrawl',
     families: ['MCP'],
-    categories: ['Web', 'Search'],
+    categories: ['Browsing', 'Search'],
     icon: 'search',
     hue: 'var(--apt)',
     sub: 'Crawl + scrape sites into clean markdown',
@@ -995,10 +998,12 @@ export function filterDirectory(
   family: DirectoryFamilyFilter,
   query: string,
   sort: DirectorySort,
+  category: ConnectorCategory | 'all' = 'all',
 ): DirectoryRow[] {
   const q = query.trim().toLowerCase()
   return entries
     .filter((d) => family === 'all' || d.families.includes(FAMILY_OF_FILTER[family]))
+    .filter((d) => category === 'all' || d.categories.includes(category))
     .filter((d) => !q || matchesSearch(`${d.name} ${d.sub} ${d.categories.join(' ')}`, q))
     .sort((a, b) =>
       sort === 'az' ? a.name.localeCompare(b.name) : (b.popular ? 1 : 0) - (a.popular ? 1 : 0),

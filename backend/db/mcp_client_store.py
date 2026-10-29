@@ -348,6 +348,7 @@ class McpClientStore:
         icon_type: Optional[str],
         checked_at: float,
         rename_from: Optional[str] = None,
+        reserved_names: frozenset[str] = frozenset(),
     ) -> Optional[McpServerConfig]:
         """Cache what ``mcp.site_identity.lookup`` found — like ``record_discovery``, not in
         ``update()``'s patchable set, so no request body can choose a server's icon. A lookup
@@ -372,8 +373,23 @@ class McpClientStore:
                 )
             self._store.merge_state(cid, patch, conn=conn)
             if name and rename_from and row["name"] == rename_from:
-                self._store.set_name(cid, name, conn=conn)
+                self._store.set_name(
+                    cid, self._free_name(cid, name, reserved_names, conn), conn=conn
+                )
             return self._read(server_id, conn)
+
+    def _free_name(self, cid: str, name: str, reserved: frozenset[str], conn: Connection) -> str:
+        """``name``, unless another connector already shows it — then ``"<name> (MCP)"``. The
+        built-in connectors hold names a vendor's site may also claim, so a site-derived rename
+        must not hand Lucius's @-mention list two rows with the same name. ``reserved`` carries
+        the built-ins that exist without a row (the caller reads them; ``db`` can't)."""
+        taken = {n.strip().lower() for n in reserved} | {
+            str(r["name"]).strip().lower() for r in self._store.list(conn=conn) if r["id"] != cid
+        }
+        if name.strip().lower() not in taken:
+            return name
+        suffixed = f"{name} (MCP)"
+        return suffixed if suffixed.strip().lower() not in taken else name
 
     def site_icon(self, server_id: str) -> Optional[tuple[bytes, str]]:
         """The cached icon as ``(bytes, mime)`` — its type is the one ``site_identity``

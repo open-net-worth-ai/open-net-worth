@@ -8,10 +8,11 @@
 //  2. The verified marker is a "Verified" TEXT badge, never a green check: a checkmark
 //     sitting beside an Add button read as "already added".
 
-import type { JSX } from 'react'
+import type { CSSProperties, JSX } from 'react'
 import { Btn, Mono } from './primitives'
 import { Icons } from './icons'
 import { skipsPreview, type DirectoryRow } from './catalog'
+import { CATEGORY_HUE, type ConnectorCategory } from './model'
 
 export interface DirectoryCardProps {
   d: DirectoryRow
@@ -24,6 +25,8 @@ export interface DirectoryCardProps {
   /** A suggestion under a list section — the dashed "add this" slot the Assets screen's
    *  "Add more" tiles use, rather than a card in the directory grid. */
   suggested?: boolean
+  /** Filter the directory to one category — makes the card's tags buttons. */
+  onCategory?: (category: ConnectorCategory) => void
 }
 
 export function DirectoryCard({
@@ -32,6 +35,7 @@ export function DirectoryCard({
   onPreview,
   onConfigure,
   suggested = false,
+  onCategory,
 }: DirectoryCardProps): JSX.Element {
   // Clicking the card body ALWAYS opens the entry's landing page — installed or not. Only the
   // action ON that page differs (Add vs. the installed entry's route-to-settings), so browsing
@@ -101,20 +105,48 @@ export function DirectoryCard({
         )}
       </div>
       <div className="cn-dircard-desc">{d.sub}</div>
-      {d.categories.length > 0 ? <CategoryChips categories={d.categories} /> : null}
+      {d.categories.length > 0 ? (
+        <CategoryChips categories={d.categories} onPick={onCategory} />
+      ) : null}
     </div>
   )
 }
 
-/** What a connector is FOR, as small chips — the same topics the preview page lists. */
-export function CategoryChips({ categories }: { categories: readonly string[] }): JSX.Element {
+/** What a connector is FOR, as small tinted chips — the same topics the preview page lists.
+ *  With `onPick` each chip is a button that filters by its category (without opening the
+ *  card it sits on). */
+export function CategoryChips({
+  categories,
+  onPick,
+}: {
+  categories: readonly ConnectorCategory[]
+  onPick?: (category: ConnectorCategory) => void
+}): JSX.Element {
   return (
     <span className="cn-cats">
-      {categories.map((c) => (
-        <span key={c} className="cn-cat">
-          {c}
-        </span>
-      ))}
+      {categories.map((c) => {
+        const style = { '--cat-hue': CATEGORY_HUE[c] ?? 'var(--muted)' } as CSSProperties
+        return onPick ? (
+          <button
+            key={c}
+            type="button"
+            className="cn-cat pick"
+            style={style}
+            aria-label={`Show ${c} connectors`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onPick(c)
+            }}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            {c}
+          </button>
+        ) : (
+          <span key={c} className="cn-cat" style={style}>
+            {c}
+          </span>
+        )
+      })}
     </span>
   )
 }

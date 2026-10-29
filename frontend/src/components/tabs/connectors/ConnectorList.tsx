@@ -17,7 +17,6 @@ import {
   FAMILY_SECTIONS,
   inFamily,
   type ConnectorEntry,
-  type FamilyKey,
   type FamilySection,
   type FamilyTab,
   type StatusFilter,
@@ -83,9 +82,10 @@ export interface ConnectorListProps {
   suggestions?: DirectoryRow[]
   /** Open a suggestion's own page in Browse & add, where it is added. */
   onSuggest?: (row: DirectoryRow) => void
-  /** Up to three not-yet-added entries per section, shown under its rows like the Assets
-   *  screen's "Add more" — absent while searching or filtering by status. */
-  sectionSuggestions?: Partial<Record<FamilyKey, DirectoryRow[]>>
+  /** Up to three not-yet-added entries per section, like the Assets screen's "Add more":
+   *  on a family tab under that section's rows, on All as ONE block (`all`) after every
+   *  section — never a block per section there. Absent while searching or filtering. */
+  sectionSuggestions?: Partial<Record<FamilyTab, DirectoryRow[]>>
 }
 
 export function ConnectorList({
@@ -160,7 +160,7 @@ export function ConnectorList({
               />
             ))}
           </div>
-          {onSuggest && sectionSuggestions?.[section.key]?.length ? (
+          {onSuggest && filters.tab !== 'all' && sectionSuggestions?.[section.key]?.length ? (
             <div className="cn-suggest" aria-label={`Suggested ${section.title.toLowerCase()}`}>
               <div className="cn-suggest-h">Suggested</div>
               <div className="cn-suggestgrid">
@@ -195,6 +195,23 @@ export function ConnectorList({
           </div>
         </div>
       ))}
+      {onSuggest && filters.tab === 'all' && sectionSuggestions?.all?.length ? (
+        <div className="cn-suggest" aria-label="Suggested connectors">
+          <div className="cn-suggest-h">Suggested</div>
+          <div className="cn-suggestgrid">
+            {sectionSuggestions.all.map((d) => (
+              <DirectoryCard
+                key={d.id}
+                d={d}
+                suggested
+                onAdd={onSuggest}
+                onPreview={onSuggest}
+                onConfigure={onSuggest}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
       {notAdded}
     </>
   )

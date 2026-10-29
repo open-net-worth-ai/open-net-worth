@@ -63,13 +63,35 @@ describe('suggestionsBySection', () => {
 })
 
 describe('the list', () => {
-  it('shows a section’s suggestions under its rows, and opens one on click', () => {
+  it('on All, shows ONE suggestion block after every section — never one per section', () => {
+    const suggestions = suggestionsBySection([IBKR_MCP])
+    render(
+      <ConnectorList
+        entries={[
+          entry({ id: 'mcp:api-ibkr-com', name: 'Interactive Brokers' }),
+          entry({ id: 'telegram', name: 'Telegram', families: ['Channel'] }),
+        ]}
+        filters={{ query: '', tab: 'all', statusFilter: 'all' }}
+        onOpen={vi.fn()}
+        onReconnect={vi.fn()}
+        onBrowse={vi.fn()}
+        onAddBank={vi.fn()}
+        onSuggest={vi.fn()}
+        sectionSuggestions={suggestions}
+      />,
+    )
+    expect(screen.getAllByText('Suggested')).toHaveLength(1)
+    expect(screen.getByLabelText('Suggested connectors')).toBeTruthy()
+    expect(screen.queryByLabelText('Suggested mcp')).toBeNull()
+  })
+
+  it('on a family tab, shows that section’s suggestions under its rows, and opens one', () => {
     const onSuggest = vi.fn()
     const suggestions = suggestionsBySection([IBKR_MCP])
     render(
       <ConnectorList
         entries={[entry({ id: 'mcp:api-ibkr-com', name: 'Interactive Brokers' })]}
-        filters={{ query: '', tab: 'all', statusFilter: 'all' }}
+        filters={{ query: '', tab: 'mcp', statusFilter: 'all' }}
         onOpen={vi.fn()}
         onReconnect={vi.fn()}
         onBrowse={vi.fn()}

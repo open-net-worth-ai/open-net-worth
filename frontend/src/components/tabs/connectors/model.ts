@@ -131,6 +131,9 @@ export const CONNECTOR_CATEGORIES = [
   'Accounting',
   'Banking',
   'Brokerage',
+  // Reads or renders web pages (a browser, a scraper). Not "Web": that is a FAMILY, and a
+  // category that repeats the lane says nothing (every search provider read "Search · Web").
+  'Browsing',
   'Economic data',
   'Email',
   'Expenses',
@@ -141,10 +144,28 @@ export const CONNECTOR_CATEGORIES = [
   'Research',
   'Search',
   'Tax',
-  'Web',
 ] as const
 
 export type ConnectorCategory = (typeof CONNECTOR_CATEGORIES)[number]
+
+/** One hue per category, from the theme's own tokens so every chip follows light/dark mode —
+ *  distinct enough that a list of servers reads as what each is FOR at a glance. */
+export const CATEGORY_HUE: Record<ConnectorCategory, string> = {
+  Accounting: 'var(--bond)',
+  Banking: 'var(--liquid)',
+  Brokerage: 'var(--ibkr)',
+  Browsing: 'var(--bad-light)',
+  'Economic data': 'var(--cat-retirement)',
+  Email: 'var(--overfunded)',
+  Expenses: 'var(--apt)',
+  Filings: 'var(--locked)',
+  'Market data': 'var(--act-teal)',
+  Messaging: 'var(--crypto)',
+  Payments: 'var(--recv)',
+  Research: 'var(--violet)',
+  Search: 'var(--contingent)',
+  Tax: 'var(--tax)',
+}
 
 // ── status ──────────────────────────────────────────────────────────────────
 

@@ -8,6 +8,7 @@
 import { isInstalled, toEntry } from './adapter'
 import {
   CATALOG,
+  MCP_INSTALL_PRESETS,
   catalogProvenanceFor,
   filterDirectory,
   previewEndpoint,
@@ -15,7 +16,7 @@ import {
   type DirectoryRow,
 } from './catalog'
 import { connectorLogo } from './logos'
-import { FAMILY_SECTIONS, type FamilyKey } from './model'
+import { FAMILY_SECTIONS, type FamilyTab } from './model'
 import type { Connector } from './types'
 
 const MCP_PREFIX = 'mcp:'
@@ -45,7 +46,25 @@ export function resolveDirectory(
   // them — so the card badge and the vendor-trust panel can't disagree with the catalog.
   // `logo` is looked up from the id rather than authored beside the entry, so a mark cannot be
   // attached to the wrong card by hand; an entry with none keeps its tinted category glyph.
+  // An installed MCP server whose endpoint IS a catalog entry's merges into that card (gear,
+  // not +) instead of listing a second card for the same server beside it.
+  const serverByEndpoint = new Map<string, Connector>()
+  for (const c of installed) {
+    const url = c.id.startsWith(MCP_PREFIX) ? toEntry(c).url?.trim() : undefined
+    if (url && !serverByEndpoint.has(url)) serverByEndpoint.set(url, c)
+  }
+  const merged = new Set<string>()
+
   const rows: DirectoryRow[] = catalog.map((entry) => {
+    const preset = entry.mcp ? MCP_INSTALL_PRESETS[entry.id] : undefined
+    const endpoint =
+      preset?.transport === 'remote'
+        ? preset.url
+        : preset
+          ? [preset.command, preset.args].filter(Boolean).join(' ')
+          : ''
+    const server = endpoint ? serverByEndpoint.get(endpoint.trim()) : undefined
+    if (server) merged.add(server.id)
     const live = liveById.get(entry.id)
     // `sub`/`desc`/`tools`: for a NATIVE entry these read the SAME `short_description`/
     // `long_description`/`tools` the connector's own installed detail page renders (`toEntry`,
@@ -66,13 +85,14 @@ export function resolveDirectory(
       tools: liveText?.tools || entry.tools || [],
       logo: connectorLogo(entry.id),
       developer: entry.publisher ?? undefined,
-      installed: installedIds.has(entry.id),
+      installed: installedIds.has(entry.id) || !!server,
+      ...(server ? { installedId: server.id, url: toEntry(server).url } : {}),
     }
   })
 
   const known = new Set(catalog.map((e) => e.id))
   for (const c of installed) {
-    if (!c.id.startsWith(MCP_PREFIX) || known.has(c.id)) continue
+    if (!c.id.startsWith(MCP_PREFIX) || known.has(c.id) || merged.has(c.id)) continue
     // `toEntry` already folds in catalog provenance when the endpoint matches a catalog server,
     // so an installed Playwright MCP keeps its real verification here too.
     const e = toEntry(c)
@@ -105,25 +125,25 @@ export function resolveDirectory(
 /** How many not-yet-added connectors a list section suggests under its rows. */
 export const SECTION_SUGGESTION_COUNT = 3
 
-/** Per list section: the first few entries not added yet, popular first and otherwise in
+/** Per list section, and for the All tab as a whole: the first few entries not added yet, popular first and otherwise in
  *  catalog order — never the generic "Custom MCP server" slot, which has its own add link.
  *  An MCP catalog entry counts as added when an installed server answers at its endpoint:
  *  the directory lists that server as its own row, so `installed` alone is false for it. */
 export function suggestionsBySection(
   connectors: Connector[],
-): Partial<Record<FamilyKey, DirectoryRow[]>> {
+): Partial<Record<FamilyTab, DirectoryRow[]>> {
   const rows = resolveDirectory(connectors)
   const installedEndpoints = new Set(
     rows.filter((d) => d.installed && d.mcp && d.url).map((d) => d.url!.trim()),
   )
   const added = (d: DirectoryRow) =>
     d.installed || installedEndpoints.has(previewEndpoint(d)?.trim() ?? '')
-  return Object.fromEntries(
-    FAMILY_SECTIONS.map((s) => [
-      s.key,
-      filterDirectory(rows, s.key, '', 'popular')
-        .filter((d) => !added(d) && !d.generic)
-        .slice(0, SECTION_SUGGESTION_COUNT),
-    ]),
-  )
+  const pick = (family: FamilyTab) =>
+    filterDirectory(rows, family, '', 'popular')
+      .filter((d) => !added(d) && !d.generic)
+      .slice(0, SECTION_SUGGESTION_COUNT)
+  return Object.fromEntries([
+    ['all', pick('all')],
+    ...FAMILY_SECTIONS.map((s) => [s.key, pick(s.key)]),
+  ])
 }

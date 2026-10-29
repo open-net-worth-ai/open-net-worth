@@ -846,14 +846,22 @@
   color: var(--muted);
   line-height: 1.5;
 }
+/* `.cn-tag` (Default) and `.cn-cat` (Brokerage, Search…) sit side by side on a row, so they
+   share ONE pill: same size, weight, height and shape — only the hue says which is which. */
+.cn-page .cn-tag,
+.cn-page .cn-cat {
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 18px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 999px;
+  white-space: nowrap;
+}
 .cn-page .cn-tag {
-  font-size: 9.5px;
-  font-weight: 700;
-  letter-spacing: 0.03em;
   color: var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-radius: 999px;
-  padding: 2px 7px;
 }
 .cn-page .cn-verified-tag {
   font-size: 9.5px;
@@ -896,6 +904,12 @@
   .cn-page .cn-suggestgrid {
     grid-template-columns: 1fr;
   }
+  /* A phone row has no room for name + tags + status on one line: the tags drop under the
+     name rather than squeezing it to "Yahoo Fina…". */
+  .cn-page .cn-row .cn-name {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
 }
 
 /* ── category chips + per-section suggestions ──────────────────────────────── */
@@ -906,13 +920,42 @@
   min-width: 0;
 }
 .cn-page .cn-cat {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--muted);
-  background: var(--bg-2);
-  border-radius: 999px;
-  padding: 1px 7px;
-  white-space: nowrap;
+  color: var(--cat-hue, var(--muted));
+  background: color-mix(in srgb, var(--cat-hue, var(--muted)) 14%, transparent);
+}
+.cn-page .cn-cat.pick {
+  cursor: pointer;
+}
+/* The directory's category filter: a row of the SAME small pills the cards carry, under the
+   (larger) family chips — picked = solid hue, so the active one reads at a glance. */
+.cn-page .cn-catrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+/* In the filter row the hue is only an outline until picked — a full row of tinted fills
+   was too loud (owner review, 2026-10-29). Border + line-height keep the 18px pill. */
+.cn-page .cn-catrow .cn-cat {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--cat-hue, var(--muted)) 45%, transparent);
+  line-height: 16px;
+}
+.cn-page .cn-cat.pick.on {
+  color: var(--surface);
+  background: var(--cat-hue, var(--ink));
+  border-color: transparent;
+}
+@media (hover: hover) {
+  .cn-page .cn-cat.pick:not(.on):hover {
+    background: color-mix(in srgb, var(--cat-hue, var(--muted)) 24%, transparent);
+  }
+  .cn-page .cn-catrow .cn-cat.pick:not(.on):hover {
+    background: color-mix(in srgb, var(--cat-hue, var(--muted)) 10%, transparent);
+  }
+}
+.cn-page .cn-cat.pick:focus-visible {
+  outline: 2px solid var(--cat-hue, var(--accent));
+  outline-offset: 1px;
 }
 .cn-page .cn-suggest {
   display: flex;

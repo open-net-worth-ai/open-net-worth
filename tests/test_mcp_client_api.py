@@ -840,3 +840,42 @@ def test_the_probe_prefills_the_sites_name(client, monkeypatch):
     _fake_identity(monkeypatch)
     res = c.post("/api/mcp-clients/probe", json={"url": "https://api.broker.example/mcp"})
     assert res.json()["suggested_name"] == "Example Brokers"
+
+
+def test_a_site_name_a_builtin_connector_already_uses_gets_an_mcp_suffix(client, monkeypatch):
+    """A vendor's site may claim a name a built-in connector already shows; two identical rows
+    in Lucius's @-mention list cannot be told apart."""
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    _fake_identity(monkeypatch, name="Plaid")
+    c.post(
+        "/api/mcp-clients",
+        json={
+            "id": "mcp-plaid-example",
+            "name": "mcp.plaid.example",
+            "url": "https://mcp.plaid.example/mcp",
+            "enabled": True,
+        },
+    )
+    assert c.get("/api/mcp-clients").json()["servers"][0]["name"] == "Plaid (MCP)"
+
+    res = c.post("/api/mcp-clients/probe", json={"url": "https://mcp.plaid.example/mcp"})
+    assert res.json()["suggested_name"] == "Plaid (MCP)"
+
+
+def test_ibkrs_mcp_server_keeps_its_own_name_beside_ibkr_flex(client, monkeypatch):
+    """The built-in IBKR connector is "IBKR Flex" (the Flex report import), so IBKR's hosted MCP
+    server is simply "Interactive Brokers" — no suffix needed."""
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    _fake_identity(monkeypatch, name="Interactive Brokers")
+    c.post(
+        "/api/mcp-clients",
+        json={
+            "id": "api-ibkr-com",
+            "name": "api.ibkr.com",
+            "url": "https://api.ibkr.com/v1/api/mcp-public",
+            "enabled": True,
+        },
+    )
+    assert c.get("/api/mcp-clients").json()["servers"][0]["name"] == "Interactive Brokers"

@@ -15,7 +15,7 @@ import { McpAddFlowBody, McpAddFlowFooter, useMcpAddFlow } from './McpAddFlow'
 import { type DirectoryRow, type DirectoryFamilyFilter, type DirectorySort } from './catalog'
 import { resolveDirectory } from './directoryRows'
 import { toEntry } from './adapter'
-import type { FocusConnectorOptions } from './model'
+import type { ConnectorCategory, FocusConnectorOptions } from './model'
 import type { Connector } from './types'
 
 const MCP_PREFIX = 'mcp:'
@@ -55,6 +55,7 @@ export function DirectoryModal({
   const [directoryFamily, setDirectoryFamily] = useState<DirectoryFamilyFilter>(family)
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<DirectorySort>('popular')
+  const [category, setCategory] = useState<ConnectorCategory | 'all'>('all')
   const [preview, setPreview] = useState<DirectoryRow | null>(
     () => entries.find((e) => e.id === previewId) ?? null,
   )
@@ -117,7 +118,7 @@ export function DirectoryModal({
    *  form" — it is already set up. Deliberately the bare focus call. */
   const configure = (entry: DirectoryRow) => {
     close()
-    onFocusConnector(entry.id)
+    onFocusConnector(entry.installedId ?? entry.id)
   }
 
   const add = (entry: DirectoryRow) => {
@@ -136,7 +137,9 @@ export function DirectoryModal({
 
   if (!open) return null
 
-  const live = preview ? connectors.find((c) => c.id === preview.id) : undefined
+  const live = preview
+    ? connectors.find((c) => c.id === (preview.installedId ?? preview.id))
+    : undefined
   const liveEntry = live ? toEntry(live) : undefined
 
   const title = mcpOpen ? (
@@ -177,11 +180,16 @@ export function DirectoryModal({
         <DirectoryBrowser
           entries={entries}
           family={directoryFamily}
-          onFamily={setDirectoryFamily}
+          onFamily={(f) => {
+            setDirectoryFamily(f)
+            setCategory('all')
+          }}
           query={query}
           onQuery={setQuery}
           sort={sort}
           onSort={setSort}
+          category={category}
+          onCategory={setCategory}
           onAdd={add}
           onPreview={setPreview}
           onConfigure={configure}

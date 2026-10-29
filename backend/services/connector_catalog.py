@@ -483,7 +483,9 @@ _KINDS: tuple[ConnectorKind, ...] = (
     ),
     _kind(
         "ibkr",
-        "Interactive Brokers",
+        # "IBKR Flex", not "Interactive Brokers": IBKR's own MCP server names itself that, and
+        # this is the Flex report import (the directory card has always said "IBKR Flex").
+        "IBKR Flex",
         _needs(secrets=("flex_token",), config=("flex_query_id",)),
         secret_fields=_secrets("flex_token"),
         config_keys=("flex_query_id", "base_url"),
