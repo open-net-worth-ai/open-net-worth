@@ -180,8 +180,9 @@ create stories.
 ## Asset pages: why a stock moved
 
 Click any ticker to open its page. To give the side panel (Your Position, Your Thesis, alerts,
-analyst consensus) more room, drag its left edge; the page remembers the width, and a
-double-click on the edge puts it back to the default. Under the chart, **Notable Price Movement** explains each
+analyst consensus) more room, drag its left edge; the page remembers the width. To go back
+to the default width, drag the edge back until it snaps into place (the edge turns blue), or
+double-click it. Under the chart, **Notable Price Movement** explains each
 trading session: the close, the % change, the after-hours price, and a short paragraph on why it
 moved, with the articles it's based on. While the market is open the top row updates live. A
 session with no coverage says *"No notable coverage found"* instead of guessing.

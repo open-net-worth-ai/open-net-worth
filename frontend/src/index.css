@@ -9191,7 +9191,16 @@ body.hide-amounts .money * {
     display: inline-flex;
     align-items: center;
     gap: 3px;
+    padding: 0;
+    border: none;
+    background: none;
     color: var(--good);
+    font: inherit;
+    cursor: pointer;
+  }
+  .acct-head-linked:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
   }
 
   .acct-row-linked {
@@ -10070,6 +10079,14 @@ body.hide-amounts .money * {
   }
   .asd-rail-handle:active::after {
     background: var(--ink);
+  }
+  /* Snapped to the automatic width mid-drag — a wider accent line says "this is the default". */
+  .asd-rail-handle--snapped::after,
+  .asd-rail-handle--snapped:active::after {
+    left: 2px;
+    width: 3px;
+    border-radius: 2px;
+    background: var(--accent);
   }
   @media (pointer: coarse) {
     .asd-rail-handle {

@@ -7,6 +7,15 @@ export const RAIL_MIN = 240
 export const RAIL_MAX = 560
 // The chart column keeps at least half the body, however far the rail is dragged.
 const RAIL_MAX_SHARE = 0.5
+// The automatic width — mirrors index.css's `clamp(240px, 30%, 340px)` on .asd-body.
+const AUTO_SHARE = 0.3
+const AUTO_MAX = 340
+// Within this many px of the automatic width, a drag snaps back to it (and forgets the share).
+const SNAP_PX = 20
+
+function autoWidth(body: number): number {
+  return Math.min(AUTO_MAX, Math.max(RAIL_MIN, body * AUTO_SHARE))
+}
 
 function readShare(): number | null {
   try {
@@ -28,9 +37,11 @@ function writeShare(share: number | null) {
 
 /** Drag-to-resize for the asset page's right rail. null = the automatic width (index.css's
  *  `clamp(240px, 30%, 340px)`); a number = the SHARE of `.asd-body` the user dragged to, so the
- *  rail still scales with the pane when the Lucius dock opens or closes. */
+ *  rail still scales with the pane when the Lucius dock opens or closes. Dragging back near the
+ *  automatic width snaps to it (`snapped` lights the handle), as does a double-click. */
 export function useRailResize() {
   const [share, setShare] = useState<number | null>(readShare)
+  const [snapped, setSnapped] = useState(false)
   const shareRef = useRef(share)
   const bodyEl = useRef<HTMLDivElement | null>(null)
   const railEl = useRef<HTMLDivElement | null>(null)
@@ -57,13 +68,17 @@ export function useRailResize() {
     // The handle sits on the rail's LEFT edge — dragging left widens it.
     const want = drag.current.startWidth + drag.current.startX - e.clientX
     const max = Math.min(RAIL_MAX, body * RAIL_MAX_SHARE)
-    const next = Math.min(max, Math.max(RAIL_MIN, want)) / body
+    const px = Math.min(max, Math.max(RAIL_MIN, want))
+    const snap = Math.abs(px - autoWidth(body)) <= SNAP_PX
+    const next = snap ? null : px / body
     shareRef.current = next
     setShare(next)
+    setSnapped(snap)
   }, [])
   const onEnd = useCallback(() => {
     drag.current = null
     document.body.style.cursor = ''
+    setSnapped(false)
     writeShare(shareRef.current)
   }, [])
   const onPointerDown = usePointerResize({ onStart, onMove, onEnd })
@@ -80,5 +95,5 @@ export function useRailResize() {
           '--asd-rail-w': `clamp(${RAIL_MIN}px, ${(share * 100).toFixed(2)}%, ${RAIL_MAX}px)`,
         } as CSSProperties)
 
-  return { bodyRef, railRef, style, handleProps: { onPointerDown, onDoubleClick } }
+  return { bodyRef, railRef, style, snapped, handleProps: { onPointerDown, onDoubleClick } }
 }

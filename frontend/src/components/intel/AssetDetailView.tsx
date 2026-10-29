@@ -114,6 +114,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
     bodyRef: railBodyRef,
     railRef,
     style: railStyle,
+    snapped: railSnapped,
     handleProps: railHandleProps,
   } = useRailResize()
   const [activeTab, setActiveTab] = useState<DetailTab>(() => loadDetailTab(search.sub))
@@ -1261,11 +1262,11 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
             (below), each next to the content it's actually about. */}
         <div className="asd-rail asd-desktop-only" ref={railRef}>
           <div
-            className="asd-rail-handle"
+            className={`asd-rail-handle${railSnapped ? ' asd-rail-handle--snapped' : ''}`}
             role="separator"
             aria-orientation="vertical"
             aria-label="Resize side panel"
-            title="Drag to resize · double-click to reset"
+            title="Drag to resize · drag back or double-click for the default width"
             {...railHandleProps}
           />
           {yourPositionBlock}

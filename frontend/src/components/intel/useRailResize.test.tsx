@@ -55,6 +55,15 @@ describe('useRailResize', () => {
     expect(body.style.getPropertyValue('--asd-rail-w')).toBe('clamp(240px, 24.00%, 560px)')
   })
 
+  it('snaps back to the automatic width when dragged near it', () => {
+    localStorage.setItem(RAIL_SHARE_KEY, '0.4')
+    const { body, handle } = mount()
+    // Rail measures 300 and the automatic width at a 1000px body is 30% = 300; 310 is in range.
+    dragBy(handle, -10)
+    expect(body.style.getPropertyValue('--asd-rail-w')).toBe('')
+    expect(localStorage.getItem(RAIL_SHARE_KEY)).toBeNull()
+  })
+
   it('restores a saved share and double-click resets to automatic', () => {
     localStorage.setItem(RAIL_SHARE_KEY, '0.35')
     const { body, handle } = mount()
