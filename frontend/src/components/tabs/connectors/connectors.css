@@ -1052,10 +1052,29 @@
   gap: 10px;
 }
 /* Phone: one card per row. AFTER the base rule — in the shared 560px block above it lost the
-   cascade to the three-column rule (same-specificity, later wins). */
+   cascade to the three-column rule (same-specificity, later wins). `.swipe` (Browse & add) is
+   instead ONE row that scrolls sideways, snapping card by card, each card ~80% wide so the next
+   one peeks in — the owner's call for the directory, where stacking pushed the list a screen
+   down. It bleeds to the sheet's edges so the peek isn't clipped by the body's padding. */
 @media (max-width: 560px) {
   .cn-page .cn-suggestgrid {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .cn-page .cn-suggestgrid.swipe {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    margin: 0 -20px;
+    padding: 0 20px 2px;
+    scroll-padding: 0 20px;
+  }
+  .cn-page .cn-suggestgrid.swipe::-webkit-scrollbar {
+    display: none;
+  }
+  .cn-page .cn-suggestgrid.swipe > .cn-dircard {
+    flex: 0 0 80%;
+    scroll-snap-align: start;
   }
 }
 .cn-page .cn-dircard.suggested {

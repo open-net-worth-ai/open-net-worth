@@ -197,7 +197,7 @@ export function DirectoryBrowser({
         {showSuggested && (
           <div className="cn-suggest" aria-label="Suggested connectors">
             <div className="cn-suggest-h">Suggested</div>
-            <div className="cn-suggestgrid">
+            <div className="cn-suggestgrid swipe">
               {suggested.map((d) => (
                 <DirectoryCard
                   key={d.id}
