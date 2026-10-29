@@ -107,15 +107,7 @@ export function DirectoryBrowser({
             aria-label="Search directory"
           />
         </span>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            flexWrap: 'wrap',
-          }}
-        >
+        <div className="cn-dirfilters">
           <div className="cn-chiprow">
             {DIRECTORY_FAMILY_CHIPS.map(([k, l]) => (
               <button

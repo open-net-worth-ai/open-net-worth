@@ -736,6 +736,14 @@
   gap: 7px;
   flex-wrap: wrap;
 }
+/* The directory's family chips + Sort row. */
+.cn-page .cn-dirfilters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
 .cn-page .cn-chip {
   font: inherit;
   font-size: 12px;
@@ -972,6 +980,32 @@
 }
 .cn-page .cn-catrow > .cn-cat {
   flex: none;
+}
+/* Phone: the family chips and Sort share ONE line — the chips scroll sideways like the category
+   row below, Sort stays pinned at the right end. Wrapping put Sort on a line of its own. After
+   the base `.cn-chiprow` rule, so it wins. */
+@media (max-width: 560px) {
+  .cn-page .cn-dirfilters {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .cn-page .cn-dirfilters > .cn-chiprow {
+    flex: 1 1 auto;
+    min-width: 0;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
+  }
+  .cn-page .cn-dirfilters > .cn-chiprow::-webkit-scrollbar {
+    display: none;
+  }
+  .cn-page .cn-dirfilters > .cn-chiprow > .cn-chip {
+    flex: none;
+  }
+  .cn-page .cn-dirfilters > .cn-sortselect {
+    flex: none;
+  }
 }
 /* In the filter row the hue is only an outline until picked — a full row of tinted fills
    was too loud (owner review, 2026-10-29). Sized BETWEEN the family chips above (12px, ~30px
@@ -1654,6 +1688,12 @@
     width: 100%;
     max-height: 90vh;
     border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+  }
+  /* The big sheets (Browse & add, the MCP add/edit flow) are lists and forms you scroll: on a
+     phone they rise to just under the status bar instead of stopping at 86% of the screen. */
+  .cn-page .rd-modal.xl {
+    height: calc(100dvh - env(safe-area-inset-top) - 8px);
+    max-height: calc(100dvh - env(safe-area-inset-top) - 8px);
   }
   /* The shared sheet handle (`.ui-modal-handle`, index.css): drag the sheet down to close it. */
   .cn-page .rd-modal .ui-modal-handle-wrap {
