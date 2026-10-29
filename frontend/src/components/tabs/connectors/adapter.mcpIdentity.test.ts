@@ -20,16 +20,14 @@ function mcp(config: Record<string, unknown>): Connector {
 }
 
 describe('an MCP server identity', () => {
-  it('uses the cached icon route, versioned, and names where it came from', () => {
+  it('uses the cached icon route, versioned', () => {
     const entry = toEntry(mcp({ icon_version: 1793269380, site_source: 'www.broker.example' }))
     expect(entry.logo).toBe('/api/mcp-clients/api-broker-example/icon?v=1793269380')
-    expect(entry.identitySource).toBe('www.broker.example')
     expect(entry.verification).toBe('unknown')
   })
 
   it('falls back to the glyph when no icon was found', () => {
     const entry = toEntry(mcp({ icon_version: null }))
     expect(entry.logo).toBeUndefined()
-    expect(entry.identitySource).toBeUndefined()
   })
 })

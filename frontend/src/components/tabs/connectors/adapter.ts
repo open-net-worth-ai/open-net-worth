@@ -305,7 +305,6 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     // one click later. `catalog` is a leaf precisely so this lookup isn't a cycle.
     verification: provenance?.verification ?? (developer ? 'unverified' : 'unknown'),
     url: endpointOf(c),
-    identitySource: mcp ? str(cfg, 'site_source') || undefined : undefined,
     tools,
     toolGroups: buildToolGroups(c.tools ?? []),
     prompts: PROMPTS[kind] ?? [],

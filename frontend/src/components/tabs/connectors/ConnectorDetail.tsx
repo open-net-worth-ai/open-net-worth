@@ -481,7 +481,6 @@ export function ConnectorDetail({
               developer={entry.developer}
               verification={entry.verification}
               url={entry.url}
-              identitySource={entry.identitySource}
             />
           ) : null}
 

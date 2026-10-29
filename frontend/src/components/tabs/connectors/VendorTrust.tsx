@@ -176,9 +176,6 @@ export interface VendorTrustProps {
   verification: VerificationState
   /** The URL or local command, verbatim — what you are actually trusting is the endpoint. */
   url?: string
-  /** The website host the displayed name/icon was read from — stated so a site's own
-   *  branding is never mistaken for a publisher we checked. */
-  identitySource?: string
 }
 
 // Spec §5 gives the note two shapes — one for a known publisher, one for a server the user
@@ -205,12 +202,7 @@ const NOTE: Record<VerificationState, string> = {
   unknown: UNKNOWN_NOTE,
 }
 
-export function VendorTrust({
-  developer,
-  verification,
-  url,
-  identitySource,
-}: VendorTrustProps): JSX.Element {
+export function VendorTrust({ developer, verification, url }: VendorTrustProps): JSX.Element {
   const publisher = developer?.trim() ?? ''
   const badge = BADGE[verification]
   return (
@@ -250,12 +242,6 @@ export function VendorTrust({
         </div>
       )}
       {url ? <code className="rd-code">{url}</code> : null}
-      {identitySource ? (
-        <div className="rd-help" style={{ fontSize: 12 }}>
-          Name and icon from {identitySource}’s website — what the site says about itself, not a
-          publisher we checked.
-        </div>
-      ) : null}
       <div className="rd-help" style={{ fontSize: 12 }}>
         {NOTE[verification]}
       </div>
