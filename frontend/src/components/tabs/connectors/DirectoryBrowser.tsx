@@ -16,7 +16,8 @@
 
 import type { CSSProperties, JSX } from 'react'
 import { DirectoryCard } from './DirectoryCard'
-import { Empty, Mono } from './primitives'
+import { SECTION_SUGGESTION_COUNT } from './directoryRows'
+import { Empty } from './primitives'
 import { Icons } from './icons'
 import { ArrowUpDown } from '../../../ui/icons'
 import { CATEGORY_HUE, CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
@@ -24,7 +25,6 @@ import {
   DIRECTORY_FAMILY_CHIPS,
   filterDirectory,
   popularEntries,
-  skipsPreview,
   type DirectoryRow,
   type DirectoryFamilyFilter,
   type DirectorySort,
@@ -76,10 +76,16 @@ export function DirectoryBrowser({
   const categories = CONNECTOR_CATEGORIES.filter((c) =>
     filterDirectory(entries, family, '', sort, c).some(() => true),
   )
-  const popular = popularEntries(entries)
-  // Popular is a shortcut through the DEFAULT view — once the user has filtered or searched,
+  // Suggested — the same block, cards and rule as the Connectors list's (popular, not added yet,
+  // never the generic slot, at most three). It replaced a "Popular" tile row that repeated
+  // connectors already added and, unlike the grid, ignored Sort. A shortcut through the DEFAULT
+  // view only — once the user has filtered or searched,
   // it is noise competing with the result they asked for.
-  const showPopular = !query.trim() && family === 'all' && category === 'all' && popular.length > 0
+  const suggested = popularEntries(entries)
+    .filter((d) => !d.installed && !d.generic)
+    .slice(0, SECTION_SUGGESTION_COUNT)
+  const showSuggested =
+    !query.trim() && family === 'all' && category === 'all' && suggested.length > 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -188,29 +194,28 @@ export function DirectoryBrowser({
           minHeight: MODAL_BODY_MIN_HEIGHT,
         }}
       >
-        {showPopular && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-            <span className="cn-sublabel">Popular</span>
-            <div className="cn-poprow">
-              {popular.map((d) => (
-                <button
+        {showSuggested && (
+          <div className="cn-suggest" aria-label="Suggested connectors">
+            <div className="cn-suggest-h">Suggested</div>
+            <div className="cn-suggestgrid">
+              {suggested.map((d) => (
+                <DirectoryCard
                   key={d.id}
-                  className="cn-poptile"
-                  onClick={() => {
-                    if (d.installed) onConfigure(d)
-                    else if (skipsPreview(d)) onAdd(d)
-                    else onPreview(d)
-                  }}
-                >
-                  <Mono icon={d.icon} hue={d.hue} logo={d.logo} />
-                  <b>{d.name}</b>
-                  {d.installed ? <Icons.settings /> : <Icons.plus />}
-                </button>
+                  d={d}
+                  suggested
+                  onAdd={onAdd}
+                  onPreview={onPreview}
+                  onConfigure={onConfigure}
+                  onCategory={onCategory}
+                />
               ))}
             </div>
           </div>
         )}
 
+        {/* Labels the full, sortable list only when Suggested sits above it — otherwise the
+            grid is the whole view and needs no heading. */}
+        {showSuggested ? <div className="cn-suggest-h">All connectors</div> : null}
         <div className="cn-dirgrid">
           {shown.map((d) => (
             <DirectoryCard

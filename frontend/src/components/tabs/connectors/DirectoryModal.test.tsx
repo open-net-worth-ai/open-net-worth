@@ -208,20 +208,45 @@ describe('the 480px results floor', () => {
   })
 })
 
-describe('Popular tiles', () => {
-  it('show on the unfiltered, unsearched view only', () => {
+describe('Suggested (the Connectors list’s block, not a separate Popular row)', () => {
+  const suggested = (container: HTMLElement) =>
+    container.querySelector('[aria-label="Suggested connectors"]')
+
+  it('shows on the unfiltered, unsearched view only', () => {
     const { container, getByLabelText } = open()
-    expect(container.querySelector('.cn-poprow')).toBeTruthy()
+    expect(suggested(container)).toBeTruthy()
 
     fireEvent.change(getByLabelText('Search directory'), { target: { value: 'tav' } })
-    expect(container.querySelector('.cn-poprow')).toBeFalsy()
+    expect(suggested(container)).toBeFalsy()
   })
 
-  it('hide once a family chip is picked', () => {
+  it('hides once a family chip is picked', () => {
     const { container, getByRole } = open()
     // A role query, not text: "Web" is also a category chip on the cards now.
     fireEvent.click(getByRole('button', { name: 'Web' }))
-    expect(container.querySelector('.cn-poprow')).toBeFalsy()
+    expect(suggested(container)).toBeFalsy()
+  })
+
+  it('offers at most three, never one already added, as the dashed suggested cards', () => {
+    const { container } = open({
+      connectors: [
+        {
+          id: 'telegram',
+          kind: 'telegram',
+          name: 'Telegram',
+          enabled: true,
+          status: 'active',
+          pausable: true,
+          config: {},
+          secrets_public: {},
+          tools: [],
+        },
+      ],
+    })
+    const cards = [...suggested(container)!.querySelectorAll('.cn-dircard.suggested')]
+    expect(cards.length).toBeGreaterThan(0)
+    expect(cards.length).toBeLessThanOrEqual(3)
+    expect(cards.some((c) => c.textContent?.includes('Telegram'))).toBe(false)
   })
 })
 
