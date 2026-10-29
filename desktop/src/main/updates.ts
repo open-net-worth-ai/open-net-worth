@@ -7,6 +7,8 @@ const FIRST_CHECK_MS = 30_000;
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
 // "Later" (and an unanswered notification) keeps a version that cannot download quietly from asking again for a day.
 export const REMIND_AFTER_MS = 24 * 60 * 60 * 1000;
+// Restart to Update asks for the newest version first, but never holds the restart longer than this.
+const LATEST_BEFORE_INSTALL_MS = 5_000;
 
 export type UpdatePhase = 'idle' | 'checking' | 'downloading' | 'ready' | 'available';
 
@@ -61,6 +63,7 @@ export class UpdateController {
   private requested = false;
   private detecting = false;
   private asking = false;
+  private superseding = false;
   private remindAt = 0;
   private remindVersion: string | null = null;
   private timers: NodeJS.Timeout[] = [];
@@ -72,8 +75,8 @@ export class UpdateController {
   start(feedUrl: string): void {
     if (!this.updater) return;
     this.updater.setFeedURL({ url: feedUrl });
-    this.updater.on('checking-for-update', () => { if (this.requested) this.set('checking'); });
-    this.updater.on('update-available', () => { if (this.requested) this.set('downloading'); });
+    this.updater.on('checking-for-update', () => { if (this.requested && !this.superseding) this.set('checking'); });
+    this.updater.on('update-available', () => { if (this.requested && !this.superseding) this.set('downloading'); });
     this.updater.on('update-not-available', () => this.downloadFailed());
     this.updater.on('error', (error: unknown) => this.downloadFailed(error));
     this.updater.on('update-manual', () => this.manualInstall());
@@ -94,7 +97,7 @@ export class UpdateController {
 
   async checkNow(): Promise<void> {
     if (!this.updater) { this.hooks.openReleases(); return; }
-    if (this.phase === 'ready') { this.hooks.install(); return; }
+    if (this.phase === 'ready') { await this.installNewest(); return; }
     if (this.phase === 'available') { await this.offerUpdate(); return; }
     if (this.phase === 'checking' || this.phase === 'downloading') { await this.hooks.ask('An update is downloading.', 'You will be told when it is ready to install.', ['OK']); return; }
     await this.detect(true);
@@ -103,7 +106,36 @@ export class UpdateController {
   async offerRestart(): Promise<void> {
     const version = this.readyVersion ? ` ${this.readyVersion}` : '';
     const choice = await this.hooks.ask(`Open Net Worth${version} is ready to install.`, 'The app will close your book safely, install the update and reopen. If you choose Later, it installs the next time you quit.', ['Restart Now', 'Later']);
-    if (choice === 0) this.hooks.install();
+    if (choice === 0) await this.installNewest();
+  }
+
+  // A release can come out after another finished downloading. Installing the staged one would
+  // land the person on a version that immediately offers the next, so the newer one replaces it first.
+  private async installNewest(): Promise<void> {
+    if (this.superseding) { this.manual = true; await this.hooks.ask(`Downloading Open Net Worth ${this.availableVersion}…`, `It is newer than ${this.readyVersion}, so it installs instead. You will be asked to restart when it is ready.`, ['OK']); return; }
+    if (this.detecting) return;
+    this.detecting = true;
+    let latest: string | null;
+    try { latest = await Promise.race([this.hooks.newerVersion(), new Promise<null>(done => setTimeout(done, LATEST_BEFORE_INSTALL_MS, null).unref?.())]); } catch { latest = null; } finally { this.detecting = false; }
+    if (this.phase !== 'ready') return;
+    if (!this.supersedes(latest)) { this.hooks.install(); return; }
+    const staged = this.readyVersion;
+    this.manual = true;
+    this.supersede(latest);
+    if (this.superseding) await this.hooks.ask(`Downloading Open Net Worth ${latest}…`, `It came out after ${staged} was downloaded, so it installs instead. You will be asked to restart when it is ready.`, ['OK']);
+  }
+
+  private supersedes(version: string | null): version is string {
+    const skipped = this.hooks.skippedVersion();
+    return Boolean(version && this.readyVersion && isNewer(version, this.readyVersion) && !(skipped && !isNewer(version, skipped)));
+  }
+
+  // The staged update stays installable (phase stays ready) until the newer one has downloaded.
+  private supersede(version: string): void {
+    this.availableVersion = version;
+    this.requested = true;
+    this.superseding = true;
+    try { this.updater!.checkForUpdates(); } catch (error) { this.downloadFailed(error); }
   }
 
   async offerUpdate(): Promise<void> {
@@ -134,6 +166,7 @@ export class UpdateController {
   }
 
   private async detect(manual: boolean): Promise<void> {
+    if (this.phase === 'ready' && !manual) { await this.detectNewerThanStaged(); return; }
     if (!this.updater || this.detecting || this.phase !== 'idle' && this.phase !== 'available') return;
     this.detecting = true;
     this.manual = manual;
@@ -155,6 +188,15 @@ export class UpdateController {
     this.offerQuietly();
   }
 
+  // Background checks keep running once an update is staged, so a later release replaces it quietly.
+  private async detectNewerThanStaged(): Promise<void> {
+    if (!this.updater || this.detecting || this.superseding) return;
+    this.detecting = true;
+    let version: string | null;
+    try { version = await this.hooks.newerVersion(); } catch { return; } finally { this.detecting = false; }
+    if (this.phase === 'ready' && !this.superseding && this.supersedes(version)) this.supersede(version);
+  }
+
   // A background find downloads without asking: nothing installs until a restart or the next quit,
   // and the menu turns into Restart to Update once it lands.
   private download(): void {
@@ -172,16 +214,17 @@ export class UpdateController {
   private downloaded(name: string | null): void {
     if (!this.requested) return;
     this.requested = false;
+    this.superseding = false;
     // The release NAME is "Open Net Worth 0.1.25 Beta"; the detected version is the bare number.
     this.readyVersion = this.availableVersion ?? name?.replace(/^(Open Net Worth\s+)?v?/, '') ?? null;
     this.set('ready');
-    this.stop();
     if (this.manual) { this.manual = false; void this.offerRestart(); return; }
     this.hooks.notify(`Open Net Worth ${this.readyVersion ?? 'update'} is ready. Restart to update, or it installs the next time you quit.`, () => { void this.offerRestart(); });
   }
 
   private manualInstall(): void {
     if (!this.requested) return;
+    if (this.superseding) { this.keepStaged(); return; }
     this.requested = false;
     this.set('available');
     if (this.manual) { this.hooks.openReleases(); return; }
@@ -201,6 +244,7 @@ export class UpdateController {
   // local build): no retry can fix that, only installing the release by hand.
   private downloadFailed(error?: unknown): void {
     if (!this.requested) return;
+    if (this.superseding) { this.keepStaged(); return; }
     this.requested = false;
     this.set(this.availableVersion ? 'available' : 'idle');
     if (!this.manual) return;
@@ -211,6 +255,18 @@ export class UpdateController {
       ? this.hooks.ask('This copy of Open Net Worth cannot install updates itself.', `Download Open Net Worth${version} from the download page and install it over this one. Your book is not affected.`, ['Open Download Page', 'Later'])
       : this.hooks.ask('The update could not be downloaded.', 'Check your internet connection and choose Check for Updates… to try again, or get it from the download page. Your book is not affected.', ['Open Download Page', 'OK']);
     void ask.then(choice => { if (choice === 0) this.hooks.openReleases(); });
+  }
+
+  // The staged update is still on disk, so a newer one that cannot download leaves it to install;
+  // a person who was waiting on the newer one is offered the staged one rather than nothing.
+  private keepStaged(): void {
+    this.requested = false;
+    this.superseding = false;
+    this.availableVersion = this.readyVersion;
+    if (!this.manual) return;
+    this.manual = false;
+    void this.hooks.ask('The newer update could not be downloaded.', `Restart now to install Open Net Worth ${this.readyVersion ?? 'update'}, or choose Later to install it the next time you quit.`, ['Restart Now', 'Later'])
+      .then(choice => { if (choice === 0) this.hooks.install(); });
   }
 
   // Shown once, on the first launch after an update installed. An install from before the

@@ -347,7 +347,10 @@ BACKGROUND find then calls the updater straight away, quietly — it fetches the
 `opennetworth.ai/update/<platform-arch>/<version>`
 (→ `update.electronjs.org/open-net-worth-ai/open-net-worth-releases`) — and on
 `update-downloaded` the menu (and tray) reads **Restart to Update**, which
-installs at once when chosen, plus one notification; nothing installs before a restart or the next
+installs at once when chosen, plus one notification. Checks keep running while an update is staged: a
+release newer than the staged one re-runs the updater quietly (phase stays `ready`, so the staged one
+still installs on quit or if the newer download fails), and **Restart to Update** first asks for the
+latest version (bounded at 5 s) and downloads a newer one before installing; nothing installs before a restart or the next
 quit, and it never restarts on its own (ADR `2026-10-17-desktop-updates-download-in-the-background`).
 On a plain quit, ShipIt verifies the new bundle for several seconds AFTER the app exits and cancels
 the update ("App Still Running Error") if the app is running again by then. So a macOS launch first

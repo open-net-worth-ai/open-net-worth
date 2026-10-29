@@ -90,6 +90,82 @@ test('a background find downloads quietly, and the menu offers Restart to Update
   assert.deepEqual(calls.asked, []);
 });
 
+async function staged(options: Options = {}) {
+  const run = started(options);
+  await background(run.updates);
+  run.updater.emit('update-downloaded', {}, '', 'v0.2.0');
+  await tick();
+  assert.equal(run.updates.readyVersion, '0.2.0');
+  return run;
+}
+
+test('a release that comes out after one is staged replaces it in the background instead of being left for later', async () => {
+  const { updater, calls, state, updates } = await staged();
+  state.found = '0.3.0';
+  await background(updates);
+  assert.equal(updater.checks, 2);
+  updater.emit('checking-for-update');
+  updater.emit('update-available');
+  assert.equal(updates.phase, 'ready');
+  assert.equal(updates.menuLabel, 'Restart to Update');
+  updater.emit('update-downloaded', {}, '', 'v0.3.0');
+  await tick();
+  assert.equal(updates.readyVersion, '0.3.0');
+  assert.equal(calls.notified.at(-1), 'Open Net Worth 0.3.0 is ready. Restart to update, or it installs the next time you quit.');
+  await background(updates);
+  assert.equal(updater.checks, 2);
+  await updates.checkNow();
+  assert.equal(calls.installed, 1);
+});
+
+test('Restart to Update downloads a newer release first, then asks to restart into it', async () => {
+  const { updater, calls, state, updates } = await staged({ answers: [0] });
+  state.found = '0.3.0';
+  await updates.checkNow();
+  assert.equal(calls.installed, 0);
+  assert.equal(updater.checks, 2);
+  assert.equal(calls.asked.at(-1)!.message, 'Downloading Open Net Worth 0.3.0…');
+  updater.emit('update-downloaded', {}, '', 'v0.3.0');
+  await tick();
+  assert.equal(calls.asked.at(-1)!.message, 'Open Net Worth 0.3.0 is ready to install.');
+  assert.equal(calls.installed, 1);
+  assert.equal(updates.readyVersion, '0.3.0');
+});
+
+test('a newer release that fails to download keeps the staged one installable', async () => {
+  const quiet = await staged();
+  quiet.state.found = '0.3.0';
+  await background(quiet.updates);
+  quiet.updater.emit('error', new Error('net::ERR_INTERNET_DISCONNECTED'));
+  await tick();
+  assert.equal(quiet.updates.phase, 'ready');
+  assert.equal(quiet.updates.readyVersion, '0.2.0');
+  assert.deepEqual(quiet.calls.asked, []);
+
+  const waiting = await staged({ answers: [0] });
+  waiting.state.found = '0.3.0';
+  await waiting.updates.checkNow();
+  waiting.updater.emit('error', new Error('net::ERR_INTERNET_DISCONNECTED'));
+  await tick();
+  assert.equal(waiting.calls.asked.at(-1)!.message, 'The newer update could not be downloaded.');
+  assert.equal(waiting.calls.installed, 1);
+  assert.equal(waiting.updates.readyVersion, '0.2.0');
+});
+
+test('Restart to Update installs the staged version when it is still the newest or the newer one was skipped', async () => {
+  const same = await staged();
+  await same.updates.checkNow();
+  assert.equal(same.calls.installed, 1);
+  assert.equal(same.updater.checks, 1);
+
+  const skipped = await staged();
+  skipped.state.found = '0.3.0';
+  skipped.state.skipped = '0.3.0';
+  await skipped.updates.checkNow();
+  assert.equal(skipped.calls.installed, 1);
+  assert.equal(skipped.updater.checks, 1);
+});
+
 test('Download and Install says the download started, labels the menu, and ends in the restart dialog', async () => {
   const { updater, calls, updates } = started({ answers: [0, 1] });
   await updates.checkNow();

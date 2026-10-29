@@ -155,6 +155,10 @@ The app checks for a new version 30 seconds after it starts and every 4 hours af
    small **Installing Open Net Worth X…** window shows while it does. On a Mac the install finishes
    a few seconds after the app closes; if you open it again during those seconds, a notification
    says **Installing Open Net Worth X…** and the app reopens by itself, updated, once it's done.
+   If an even newer version comes out while one is waiting, the app keeps checking and swaps the
+   newer one in. Choosing **Restart to Update** also checks first: when a newer version is out, it
+   downloads that one and asks you to restart into it, so you never land on a version that
+   immediately offers the next.
 3. After restarting, a notification confirms "Open Net Worth was updated to X."
 
 To check right away: **Open Net Worth → Check for Updates…** on macOS, **Help → Check for
