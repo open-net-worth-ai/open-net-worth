@@ -91,6 +91,25 @@ export function ConnectorAccountsList({
     if (!res.ok) throw new Error()
   }
 
+  // Names of accounts created here, until the shared account list refreshes with them.
+  const [newNames, setNewNames] = useState<Record<string, string>>({})
+
+  /** Show a link change the moment the write succeeds. The re-fetch behind it asks the provider
+   *  for live balances, which can take a couple of seconds; the row must not wait on that. */
+  function showLinked(providerAccountId: string, accountId: string | null) {
+    setData(
+      (d) =>
+        d && {
+          ...d,
+          accounts: d.accounts.map((a) =>
+            a.provider_account_id === providerAccountId
+              ? { ...a, linked_account_id: accountId }
+              : a,
+          ),
+        },
+    )
+  }
+
   async function link(row: ProviderAccountRow, accountId: string) {
     const acct = appAccounts.find((a) => a.id === accountId)
     if (!acct) return
@@ -101,6 +120,7 @@ export function ConnectorAccountsList({
         ...(acct.external_ids ?? []),
         { source: provider, ref: row.provider_account_id, name: row.name, mask: row.mask },
       ])
+      showLinked(row.provider_account_id, accountId)
       load()
       void refreshAppAccounts()
     } catch {
@@ -128,6 +148,7 @@ export function ConnectorAccountsList({
           (e) => !(e.source === provider && e.ref === row.provider_account_id),
         ),
       )
+      showLinked(row.provider_account_id, null)
       load()
       void refreshAppAccounts()
     } catch {
@@ -159,6 +180,8 @@ export function ConnectorAccountsList({
             mask: creatingFor.mask,
           },
         ])
+        setNewNames((n) => ({ ...n, [acct.id]: acct.name }))
+        showLinked(creatingFor.provider_account_id, acct.id)
       } catch {
         setActionErr('Account created, but linking it failed — link it manually below.')
       }
@@ -171,14 +194,13 @@ export function ConnectorAccountsList({
 
   function linkedName(accountId: string | null): string {
     if (!accountId) return ''
-    return appAccounts.find((a) => a.id === accountId)?.name ?? 'that account'
+    return (
+      appAccounts.find((a) => a.id === accountId)?.name ?? newNames[accountId] ?? 'that account'
+    )
   }
 
   const linkedCount = data?.accounts.filter((a) => a.linked_account_id).length ?? 0
-  const accountOptions = appAccounts.map((a) => ({
-    value: a.id,
-    label: `${a.name} (${a.institution || 'No institution'})`,
-  }))
+  const pickAccounts = appAccounts.map((a) => fromApiAccount(a as unknown as ApiAccount))
 
   return (
     <Stack gap="--space-3">
@@ -258,7 +280,7 @@ export function ConnectorAccountsList({
                   key={row.provider_account_id}
                   row={row}
                   linkedName={linkedName(row.linked_account_id)}
-                  accountOptions={accountOptions}
+                  accounts={pickAccounts}
                   busy={busyId === row.provider_account_id}
                   onAdd={() => setCreatingFor(row)}
                   onLink={(accountId) => void link(row, accountId)}

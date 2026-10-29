@@ -2,8 +2,10 @@
 // balance) and its next step — Add it as a new account or Link… it to an existing one, or, once
 // linked, show where it lands with a quiet Unlink.
 import { useState } from 'react'
-import { Button, Select } from '../../ui'
+import { Button } from '../../ui'
 import { AccIcon } from '../accounts/ds'
+import { AddAccountSelect } from '../accounts/pickers'
+import type { Account } from '../accounts/types'
 import { fCur } from '../accounts/format'
 import { TYPE_COLOR, TYPE_ICON } from '../accounts/categories'
 import { isOwed, type ProviderAccountRow } from './accountRows'
@@ -11,7 +13,8 @@ import { isOwed, type ProviderAccountRow } from './accountRows'
 interface Props {
   row: ProviderAccountRow
   linkedName: string
-  accountOptions: { value: string; label: string }[]
+  // The app's own accounts, for Link… — the same searchable, type-grouped picker as the ledger.
+  accounts: Account[]
   busy: boolean
   onAdd: () => void
   onLink: (accountId: string) => void
@@ -21,7 +24,7 @@ interface Props {
 export function ConnectorAccountRow({
   row,
   linkedName,
-  accountOptions,
+  accounts,
   busy,
   onAdd,
   onLink,
@@ -61,19 +64,22 @@ export function ConnectorAccountRow({
           </Button>
         ) : picking ? (
           <>
-            <Select
+            <div
+              className="conn-acct-pick"
+              role="group"
               aria-label={`Link ${row.name} to an account`}
-              placeholder="Choose an account…"
-              value=""
-              disabled={busy}
-              options={accountOptions}
-              onChange={(e) => {
-                if (e.target.value) {
+            >
+              <AddAccountSelect
+                accounts={accounts}
+                value=""
+                autoOpen
+                advance={() => {}}
+                onChange={(id) => {
                   setPicking(false)
-                  onLink(e.target.value)
-                }
-              }}
-            />
+                  onLink(id)
+                }}
+              />
+            </div>
             <Button size="sm" variant="ghost" onClick={() => setPicking(false)}>
               Cancel
             </Button>
@@ -83,7 +89,7 @@ export function ConnectorAccountRow({
             <Button size="sm" loading={busy} onClick={onAdd}>
               Add
             </Button>
-            {accountOptions.length > 0 && (
+            {accounts.length > 0 && (
               <Button
                 size="sm"
                 variant="ghost"

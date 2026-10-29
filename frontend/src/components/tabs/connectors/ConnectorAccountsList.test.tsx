@@ -5,7 +5,7 @@
 // entry), and create-account-then-link.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
@@ -26,7 +26,7 @@ const appAccounts = [
     id: 'acc_1',
     name: 'Existing Checking',
     kind: 'asset',
-    type: 'checking',
+    type: 'cash',
     institution: 'Chase',
     currency: 'USD',
     balance: 0,
@@ -246,8 +246,10 @@ describe('ConnectorAccountsList — link (CDS-UI-5)', () => {
     fireEvent.click(
       await screen.findByRole('button', { name: 'Link Checking to an existing account' }),
     )
-    const select = await screen.findByLabelText('Link Checking to an account')
-    fireEvent.change(select, { target: { value: 'acc_1' } })
+    // The ledger's own searchable account picker opens straight away.
+    const picker = await screen.findByRole('group', { name: 'Link Checking to an account' })
+    expect(within(picker).getByPlaceholderText('Search accounts…')).toBeTruthy()
+    fireEvent.mouseDown(within(picker).getByRole('button', { name: 'Existing Checking' }))
 
     await waitFor(() => expect(putUrl).toBe('/api/accounts/acc_1'))
     expect(putBody).toEqual({

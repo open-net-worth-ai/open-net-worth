@@ -9284,8 +9284,8 @@ body.hide-amounts .money * {
     align-items: center;
     gap: var(--space-3);
   }
-  .conn-acct-actions .ui-select {
-    min-width: 180px;
+  .conn-acct-pick {
+    min-width: 220px;
   }
   @media (max-width: 640px) {
     .conn-acct-row {

@@ -59,8 +59,8 @@ fetch from the provider's website and which fields to fill in.
 
    Either way the link saves straight away; there's nothing else to save. A linked row reads
    **Linked to "*account name*"**, and **Unlink** undoes it. Linking imports nothing by itself —
-   once an account is linked, the list shows **Next: bring in transactions** with a **Sync
-   automatically…** button. Lucius only books into linked accounts — for an unlinked one he asks
+   once an account is linked, the list shows **Next: bring in transactions** with a **Set up
+   automation** button. Lucius only books into linked accounts — for an unlinked one he asks
    you instead of guessing.
 4. **Check it works, then turn on syncing.** Ask Lucius, for example:
 

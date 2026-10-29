@@ -1,9 +1,18 @@
-// What to do once a connector has a linked account: linking books nothing, so say so, and offer
+// What to do once a connector has a linked account: linking imports nothing, so say so, and offer
 // the one step that brings transactions in — the connector's sync Automation (as a draft the user
-// reviews) — or the sentence to ask Lucius for a one-off fetch.
+// reviews, on the template's own schedule) — or the sentence to ask Lucius for a one-off fetch.
 import { useRouter } from '@tanstack/react-router'
 import { Button, Text } from '../../ui'
-import { templateKeyForConnector } from '../automations/automationTemplates'
+import { ALL_TEMPLATES, templateKeyForConnector } from '../automations/automationTemplates'
+
+/** "every 6 hours" / "every hour" — the template's own interval, so the copy can't drift. */
+function cadence(templateKey: string | null): string | null {
+  const trigger = ALL_TEMPLATES.find((t) => t.key === templateKey)?.trigger
+  if (!trigger || trigger.kind !== 'schedule' || trigger.type !== 'interval') return null
+  const hours = Math.round((trigger.seconds ?? 0) / 3600)
+  if (hours < 1) return null
+  return hours === 1 ? 'every hour' : `every ${hours} hours`
+}
 
 export function ConnectorNextStep({
   provider,
@@ -20,6 +29,8 @@ export function ConnectorNextStep({
   const router = useRouter({ warn: false }) as ReturnType<typeof useRouter> | undefined
   const templateKey = templateKeyForConnector(provider)
   if (linkedCount === 0) return null
+  const every = cadence(templateKey)
+  const target = linkedCount === 1 ? 'your linked account' : 'your linked accounts'
 
   const openTemplate = () => {
     if (!templateKey) return
@@ -34,20 +45,21 @@ export function ConnectorNextStep({
         Next: bring in transactions
       </Text>
       <Text size="xs" tone="muted">
-        Linking books nothing on its own. Lucius fetches the last 14 days from {providerLabel} and
-        books them into the linked {linkedCount === 1 ? 'account' : 'accounts'}, skipping anything
-        already there.
+        Linking doesn&apos;t import anything yet.{' '}
+        {templateKey
+          ? `Set up an automation and Lucius will add new transactions from ${providerLabel} to ${target}${every ? ` ${every}` : ''}.`
+          : `Ask Lucius to add transactions from ${providerLabel} to ${target}.`}
         {unlinkedCount > 0 &&
-          ` ${unlinkedCount} unlinked ${unlinkedCount === 1 ? 'account is' : 'accounts are'} left out — he'll ask before touching ${unlinkedCount === 1 ? 'it' : 'them'}.`}
+          ` ${unlinkedCount} ${unlinkedCount === 1 ? "account isn't" : "accounts aren't"} linked, so ${unlinkedCount === 1 ? "it'll" : "they'll"} be skipped.`}
       </Text>
       <div className="conn-next-actions">
         {templateKey && (
           <Button size="sm" variant="primary" onClick={openTemplate}>
-            Sync automatically…
+            Set up automation
           </Button>
         )}
         <Text size="xs" tone="faint">
-          Or ask Lucius now: “Fetch my {providerLabel} transactions and book them.”
+          Or ask Lucius now: “Fetch my {providerLabel} transactions.”
         </Text>
       </div>
     </div>
