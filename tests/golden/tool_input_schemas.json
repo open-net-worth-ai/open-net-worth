@@ -10555,5 +10555,47 @@
       "handles"
     ],
     "type": "object"
+  },
+  "simplefin_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "plaid_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "lunch_money_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "lunch_flow_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "ynab_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "enable_banking_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "yodlee_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
   }
 }

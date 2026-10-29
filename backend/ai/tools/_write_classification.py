@@ -141,6 +141,16 @@ READ_ONLY_TOOLS = frozenset(
         "yodlee_get_status",
         "alpaca_get_status",
         "ibkr_get_status",
+        # Each bank provider's account list (ai/tools/connector_fetch.py) — traced:
+        # services.connector_fetch.provider_accounts is a PURE read by design (C-B2/S-F7: it
+        # never calls store.record_status or publishes a sync event, unlike fetch()).
+        "simplefin_list_accounts",
+        "plaid_list_accounts",
+        "lunch_money_list_accounts",
+        "lunch_flow_list_accounts",
+        "ynab_list_accounts",
+        "enable_banking_list_accounts",
+        "yodlee_list_accounts",
         # The connector CONFIGURATION reads (ai/tools/connector_config.py). Traced:
         # get_connector_tools folds services.connectors.list_connectors() (pure store
         # reads + in-memory synthesis) with tool_permissions.get_all_permissions() (one

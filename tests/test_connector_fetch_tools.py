@@ -789,3 +789,49 @@ def test_provider_table_has_no_leftover_sync_or_domain_fields():
     provider = providers_module.PROVIDERS["simplefin"]
     assert not hasattr(provider, "domains")
     assert not hasattr(provider, "sync")
+
+
+# ── <provider>_list_accounts — the account list alone, no transaction fetch ──────────────
+
+
+def test_list_accounts_returns_the_accounts_from_one_accounts_only_call(
+    configured_store, monkeypatch
+):
+    calls: list[dict] = []
+
+    def _fake(*a, **kwargs):
+        calls.append(kwargs)
+        return FetchWindow(accounts=[_account()], rows=[_row()])
+
+    monkeypatch.setattr(simplefin_svc, "fetch_window", _fake)
+    before = configured_store.get()["last_synced_at"]
+
+    text, proposed = asyncio.run(execute_tool("simplefin_list_accounts", {}))
+
+    body = json.loads(text)
+    assert proposed is None
+    assert body["status"] == "ok"
+    assert [a["provider_account_id"] for a in body["accounts"]] == ["acc-provider-1"]
+    assert body["accounts"][0]["linked_account_id"] is None
+    assert "transactions" not in body
+    assert len(calls) == 1 and calls[0]["accounts_only"] is True
+    # A pure read — "Last fetched" is the fetch tool's to stamp, never this one's.
+    assert configured_store.get()["last_synced_at"] == before
+
+
+def test_list_accounts_reports_a_dormant_connector_without_calling_the_provider(monkeypatch):
+    def _boom(*a, **k):
+        raise AssertionError("fetch_window must not be called when not configured")
+
+    monkeypatch.setattr(simplefin_svc, "fetch_window", _boom)
+    body = json.loads(asyncio.run(execute_tool("simplefin_list_accounts", {}))[0])
+    assert body["status"] == "not_configured"
+    assert body["accounts"] == []
+
+
+def test_every_bank_connector_has_its_own_list_accounts_tool():
+    bank = ("simplefin", "plaid", "lunch_money", "lunch_flow", "ynab", "enable_banking", "yodlee")
+    for provider in bank:
+        name = f"{provider}_list_accounts"
+        assert name in registered_tool_names(), name
+        assert tool_connector(name) == provider

@@ -260,7 +260,12 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # 2026-10-27-an-investment-thesis-lives-on-the-instrument) add three non-CORE tools —
     # get/set/delete_investment_theses — a new domain, ~2.5K chars after trimming
     # get_investment_theses' description; the watchlist intent fields it absorbs shed a little.
-    budget = 465_000
+    # 2026-10-29: 465_000 -> 468_000. Seven `<provider>_list_accounts` tools (one per bank
+    # connector, ai/tools/connector_fetch.py) — a provider's accounts without fetching any
+    # transactions, so "which accounts are there?" stops costing a full fetch. ~270 chars each
+    # after trimming the description to one sentence; all connector-scoped, so the CORE default
+    # offer is unchanged.
+    budget = 468_000
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

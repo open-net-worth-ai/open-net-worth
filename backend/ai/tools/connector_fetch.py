@@ -15,7 +15,12 @@ description/handler five times over (see ``docs/ai/TOOL_CONVENTIONS.md`` on
 ``schema_of``/derived schemas — each still gets its OWN ``schema_of(..., tool_name=...)``
 call so ``derived_schemas()`` records all seven individually).
 
-Yodlee's tool is registered here too (byte-identical shape) but is hidden from discovery
+Each provider also gets ``<provider>_list_accounts`` (``_register_list_accounts_tool``): the
+account list ALONE — ``services.connector_fetch.provider_accounts``, the same pure read the
+Connectors screen's Accounts list makes — so "which accounts are there?" (or the
+``provider_account_id`` to link with ``update_accounts``) never costs a transaction fetch.
+
+Yodlee's tools are registered here too (byte-identical shape) but is hidden from discovery
 AND refused at dispatch by ``ai.tools._connector_gate.DISABLED_CONNECTORS`` — enterprise-only
 pricing (ADR ``2026-08-14-hide-yodlee-enterprise-only-pricing``), same policy as
 ``yodlee_get_status``.
@@ -135,6 +140,33 @@ def _register_fetch_tool(provider_key: str, tool_name: str) -> None:
     )(handler)
 
 
+class ListAccountsInput(ToolInput):
+    """No arguments — the provider is the tool's identity."""
+
+
+def _register_list_accounts_tool(provider_key: str, tool_name: str) -> None:
+    """Register one ``<provider>_list_accounts`` tool — the provider's accounts, no rows."""
+    provider = PROVIDERS[provider_key]
+    description = (
+        f"List the {provider.label} accounts (balance, suggested account_type, "
+        "linked_account_id or null) — no transactions. Link one via update_accounts "
+        f"external_ids source='{provider_key}', ref=provider_account_id."
+    )
+
+    async def handler(input_data: dict):
+        from backend.services import connector_fetch as connector_fetch_service
+
+        result = await asyncio.to_thread(connector_fetch_service.provider_accounts, provider_key)
+        return json.dumps(result, ensure_ascii=False), None
+
+    tool(
+        tool_name,
+        description=description,
+        input_schema=schema_of(ListAccountsInput, tool_name=tool_name),
+        connector=provider_key,
+    )(handler)
+
+
 _register_fetch_tool("simplefin", "simplefin_fetch_transactions")
 _register_fetch_tool("plaid", "plaid_fetch_transactions")
 _register_fetch_tool("lunch_money", "lunch_money_fetch_transactions")
@@ -142,3 +174,11 @@ _register_fetch_tool("lunch_flow", "lunch_flow_fetch_transactions")
 _register_fetch_tool("ynab", "ynab_fetch_transactions")
 _register_fetch_tool("enable_banking", "enable_banking_fetch_transactions")
 _register_fetch_tool("yodlee", "yodlee_fetch_transactions")
+
+_register_list_accounts_tool("simplefin", "simplefin_list_accounts")
+_register_list_accounts_tool("plaid", "plaid_list_accounts")
+_register_list_accounts_tool("lunch_money", "lunch_money_list_accounts")
+_register_list_accounts_tool("lunch_flow", "lunch_flow_list_accounts")
+_register_list_accounts_tool("ynab", "ynab_list_accounts")
+_register_list_accounts_tool("enable_banking", "enable_banking_list_accounts")
+_register_list_accounts_tool("yodlee", "yodlee_list_accounts")
