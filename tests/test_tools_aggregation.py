@@ -556,11 +556,11 @@ _PROMOTED_STATUS_TOOLS = {
 def test_every_promoted_status_tool_dispatches_scoped_to_its_own_provider(every_provider_path):
     """Each promoted tool reads exactly its own provider — never widened to every one.
 
-    Yodlee excluded: DISABLED, refused before dispatch reaches its handler at all — see
-    the dedicated "Yodlee: DISABLED" section above.
+    Yodlee and IBKR Flex excluded: DISABLED, refused before dispatch reaches the handler at
+    all — see the dedicated "Yodlee: DISABLED" section above.
     """
     for name, provider in _PROMOTED_STATUS_TOOLS.items():
-        if provider == "yodlee":
+        if provider in ("yodlee", "ibkr"):
             continue
         body, proposed = call(name)
         assert proposed is None, name

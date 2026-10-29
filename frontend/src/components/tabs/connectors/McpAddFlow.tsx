@@ -44,6 +44,7 @@ import {
   isValidMcpUrl,
   slugify,
   uniqueServerId,
+  type McpAuth,
   type McpConnectionForm,
   type McpEditTarget,
 } from './mcpConfig'
@@ -156,6 +157,11 @@ export interface McpAddFlow {
   toolGroups: ToolGroup[]
   meta: VendorMeta
   error: string
+  /** What the failed probe's 401 asked for, when it disagrees with the chosen Authentication —
+   *  the error step offers a one-click switch. */
+  needsAuth: McpAuth | null
+  /** Switch Authentication to what the server asked for and go back to the form. */
+  switchAuth: (auth: McpAuth) => void
   pasteOpen: boolean
   setPasteOpen: (open: boolean) => void
   perms: PermissionMap
@@ -218,6 +224,7 @@ export function useMcpAddFlow({
       : UNKNOWN_VENDOR,
   )
   const [error, setError] = useState('')
+  const [needsAuth, setNeedsAuth] = useState<McpAuth | null>(null)
   const [pasteOpen, setPasteOpen] = useState(false)
   // The saved levels, so an edit shows what the server actually has (spec §3) and writes back
   // only what the user changed.
@@ -516,6 +523,7 @@ export function useMcpAddFlow({
 
   const runConnect = () => {
     setError('')
+    setNeedsAuth(null)
     if (form.auth === 'oauth') {
       if (oauthStatus !== 'signed_in') {
         signIn()
@@ -572,6 +580,8 @@ export function useMcpAddFlow({
       stopPolling()
       if (!result.ok) {
         setError(result.error || 'Could not reach the server.')
+        const asked = result.needs_auth ?? null
+        setNeedsAuth(asked && asked !== form.auth ? asked : null)
         setStep('error')
         return
       }
@@ -656,6 +666,13 @@ export function useMcpAddFlow({
     toolGroups: buildToolGroups(discoveredTools),
     meta,
     error,
+    needsAuth,
+    switchAuth: (auth) => {
+      setFormState((f) => ({ ...f, auth }))
+      setNeedsAuth(null)
+      setError('')
+      setStep('form')
+    },
     pasteOpen,
     setPasteOpen,
     perms,
@@ -856,6 +873,18 @@ export function McpAddFlowBody({ flow }: { flow: McpAddFlow }): JSX.Element {
           >
             <Icons.warn /> {flow.error || 'Could not reach the server.'}
           </div>
+          {flow.needsAuth ? (
+            <div className="cn-authhint" role="status">
+              <span>
+                {flow.needsAuth === 'oauth'
+                  ? 'This server needs you to sign in. Switch Authentication to OAuth, then connect again.'
+                  : 'This server needs a key. Switch Authentication to API key and paste it.'}
+              </span>
+              <Btn size="xs" variant="primary" onClick={() => flow.switchAuth(flow.needsAuth!)}>
+                {flow.needsAuth === 'oauth' ? 'Switch to OAuth' : 'Use an API key'}
+              </Btn>
+            </div>
+          ) : null}
           <span className="rd-help">
             Fix the URL, command, or credentials above and test again. Nothing is saved until the
             server is actually reached.

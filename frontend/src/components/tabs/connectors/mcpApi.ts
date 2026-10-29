@@ -64,6 +64,9 @@ export interface McpProbeResult {
   trust: McpTrust | null
   /** The REAL connect error, shown inline — never a generic string. */
   error: string | null
+  /** What a 401 asked for — `oauth` (sign in) or `key` (paste a token) — so the form can offer
+   *  the fix instead of leaving a bare HTTP 401. Absent from an older backend. */
+  needs_auth?: 'oauth' | 'key' | null
 }
 
 function probeFailure(error: string): McpProbeResult {

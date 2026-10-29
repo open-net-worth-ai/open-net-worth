@@ -912,6 +912,21 @@
   }
 }
 
+/* The error step's "this server needs you to sign in" fix — the action next to its reason. */
+.cn-page .cn-authhint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: var(--radius-lg);
+  padding: 10px 13px;
+}
+
 /* ── category chips + per-section suggestions ──────────────────────────────── */
 .cn-page .cn-cats {
   display: inline-flex;
@@ -1600,8 +1615,9 @@
   }
   /* The status filter (All/Connected/Attention) doesn't fit next to the family tabs at
      phone width and wraps to its own row, doubling the pinned bar's height. Dropped rather
-     than collapsed to an icon — each card already shows its own attention state. */
-  .cn-page .rd-seg {
+     than collapsed to an icon — each card already shows its own attention state. ONLY that
+     filter: a bare `.rd-seg` here also hid the add form's Transport and Authentication. */
+  .cn-page .cn-statusseg {
     display: none;
   }
 

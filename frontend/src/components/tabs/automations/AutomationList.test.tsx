@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { AutomationList } from './AutomationList'
-import { CONNECTOR_SYNC_TEMPLATES } from './automationTemplates'
+import { CONNECTOR_SYNC_TEMPLATES, RETIRED_SYNC_TEMPLATES } from './automationTemplates'
 
 afterEach(cleanup)
 
@@ -64,7 +64,7 @@ it('shows Recommended first, then the 8 connector syncs, then the rest', () => {
     'Weekly report template',
     'Monthly report template',
   ])
-  expect(CONNECTOR_SYNC_TEMPLATES).toHaveLength(8)
+  expect(CONNECTOR_SYNC_TEMPLATES).toHaveLength(7)
   for (const template of CONNECTOR_SYNC_TEMPLATES) {
     expect(
       within(sections[1] as HTMLElement).getByRole('button', { name: `${template.name} template` }),
@@ -132,8 +132,13 @@ it('the 6 bank templates say "bring it in line" and "never override something I 
   }
 })
 
-it('the IBKR template gets the same correction wording, adapted to its own subject', () => {
-  const ibkr = CONNECTOR_SYNC_TEMPLATES.find((t) => t.key === 'sync_ibkr')!
+it('offers no IBKR Flex sync — it is retired, its template kept aside', () => {
+  expect(CONNECTOR_SYNC_TEMPLATES.some((t) => t.key === 'sync_ibkr')).toBe(false)
+  expect(RETIRED_SYNC_TEMPLATES.map((t) => t.key)).toEqual(['sync_ibkr'])
+})
+
+it('the retired IBKR template keeps the same correction wording, adapted to its own subject', () => {
+  const ibkr = RETIRED_SYNC_TEMPLATES.find((t) => t.key === 'sync_ibkr')!
   expect(ibkr.instructions).toContain('bring it in line')
   expect(ibkr.instructions).toContain('never override something I changed by hand')
   expect(ibkr.instructions).toContain('flag it and tell me')

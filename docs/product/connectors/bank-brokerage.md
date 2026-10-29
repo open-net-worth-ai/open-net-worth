@@ -1,12 +1,12 @@
 ---
 title: Bank & brokerage connectors
-description: Set up SimpleFIN, Plaid, Enable Banking, Lunch Flow, Lunch Money, YNAB, Alpaca or Interactive Brokers so Lucius can fetch and book your transactions.
+description: Set up SimpleFIN, Plaid, Enable Banking, Lunch Flow, Lunch Money, YNAB or Alpaca so Lucius can fetch and book your transactions.
 category: connectors
 order: 60
 audience: [user]
 status: beta
 related: [lucius/automations, lucius/overview, features/importing, getting-started/what-is-open-net-worth]
-keywords: [plaid, simplefin, enable banking, lunch flow, lunch money, ynab, alpaca, ibkr, interactive brokers, bank sync, brokerage sync, setup, sync template, last fetched]
+keywords: [plaid, simplefin, enable banking, lunch flow, lunch money, ynab, alpaca, interactive brokers, ibkr flex retired, bank sync, brokerage sync, setup, sync template, last fetched]
 ---
 
 # Bank & brokerage connectors
@@ -32,7 +32,7 @@ place a trade.
 | Spending already tracked in Lunch Money | **Lunch Money** | A Lunch Money access token. |
 | Spending already tracked in YNAB | **YNAB** | A YNAB personal access token. |
 | An Alpaca brokerage account | **Alpaca** | An Alpaca API key pair. |
-| An Interactive Brokers account | **IBKR Flex** | A Flex Web Service token and a Flex Query ID. |
+| An Interactive Brokers account | **Interactive Brokers** (an MCP server, under **Browse & add → MCP**) | Your IBKR login — you sign in on IBKR's own page. See [External MCP servers](external-mcp.md). |
 
 Every connector also needs a working AI model, because fetching and booking happen in a
 conversation with Lucius — see [What happens if I don't connect an AI
@@ -199,24 +199,11 @@ and cash.
 
 ## Interactive Brokers (IBKR Flex)
 
-Positions, trades, dividends and other cash activity from Interactive Brokers, through its Flex
-Web Service. Figures arrive about a day behind — Flex is a daily report, not a live feed.
-
-1. In IBKR's Client Portal (Account Management), go to **Performance & Reports → Flex Queries**.
-2. Create an **Activity** Flex Query:
-   - Set **Format** to **XML**.
-   - Include the sections **Open Positions**, **Trades** and **Cash Transactions**.
-   - Set the **Period** to cover at least the last 14 days (for example *Last 30 Calendar Days*).
-   - Save it and note its numeric **Query ID** from the Flex Queries list.
-3. On the same page, open **Flex Web Service Configuration**, turn the service on and generate a
-   **token**. Copy it.
-4. In Open Net Worth: **Connectors → Browse & add → IBKR Flex → Add connector**.
-5. Fill in **Flex token** and **Flex query ID** and click **Save**.
-6. Link the IBKR account in the **Accounts** list.
-
-A fetch can take a little while: IBKR prepares the report first and the app waits for it. Shares
-and ETFs are priced automatically; options and futures you price yourself. The Flex token can
-only export data — it cannot place or cancel orders.
+IBKR Flex is no longer offered in **Browse & add**. Interactive Brokers now runs its own server
+for apps like this one: it reads your live positions, balances and trades (Flex was a day-late
+report) and can place orders you approve. Add it from **Browse & add → MCP → Interactive
+Brokers** — see [External MCP servers](external-mcp.md). If you set up IBKR Flex before, it still
+appears in your Connectors list so you can see and remove it, but it is no longer supported.
 
 ## Yodlee
 
@@ -290,8 +277,7 @@ claimed? setup tokens are one-time)* means the same thing.
 
 **"*Provider* rejected the saved credentials" / Last fetched · credentials need attention** — the
 key or token is wrong, expired or revoked. Open **⋯ → Edit configuration** and paste a fresh one.
-IBKR Flex tokens expire after the period you chose when generating them; Enable Banking consent
-lasts about 90 days.
+Enable Banking consent lasts about 90 days.
 
 **"*Provider* is rate-limiting requests right now"** — the provider is throttling you. Wait a
 while and try again; if it keeps happening, make the Automation run less often.
@@ -319,9 +305,6 @@ HTTPS address, and click **Connect bank** again.
 
 **YNAB fetches nothing** — your token can see several budgets and none is picked. Choose one under
 **Budget**.
-
-**IBKR fetch fails or is empty** — check the Flex Query's **Format** is **XML**, it includes Open
-Positions, Trades and Cash Transactions, and its period covers recent days.
 
 **Lucius says he can't fetch** — make sure an AI model is connected and the connector isn't
 paused.

@@ -137,6 +137,9 @@ export type DirectorySort = 'popular' | 'az'
  *
  * Deliberately ABSENT, and why:
  *  - Webhook — its backend works (`webhook`), but it is intentionally not an addable card (§8).
+ *  - IBKR Flex — retired 2026-10-29 for IBKR's own hosted MCP server (`mcp-ibkr`), which reads
+ *    live where Flex is a day-late report. Backend kept (`disabled=True`); its entry lives in
+ *    `RETIRED_CATALOG` below, unshown. ADR 2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server.
  *  - Yodlee — its backend works fully (`yodlee`), same as any other data source here. Hidden
  *    2026-08-14 (ADR 2026-08-14-hide-yodlee-enterprise-only-pricing): Yodlee requires an
  *    enterprise sales contract with no public self-serve tier — real reported minimums are
@@ -170,6 +173,28 @@ export type DirectorySort = 'popular' | 'az'
  *     copy is pinned the same way, just on the backend side — see
  *     `tests/test_connectors_service.py`.
  */
+/** Entries withdrawn from the directory but kept, so a revert is one move back into
+ *  `CATALOG`. Never rendered or searched. */
+export const RETIRED_CATALOG: CatalogEntry[] = [
+  {
+    id: 'ibkr',
+    name: 'IBKR Flex',
+    families: ['Data source'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--ibkr)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["ibkr"]`.
+    publisher: 'Interactive Brokers',
+    verification: 'unverified',
+    homepageUrl: 'https://www.interactivebrokers.com/docs/web-api/flex-web-service/introduction',
+    supportUrl: 'https://www.interactivebrokers.com/en/support/customer-service.php',
+    privacyUrl: 'https://www.interactivebrokers.com/en/accounts/legalDocuments/privacy.php',
+    mcp: false,
+    popular: false,
+    tools: ['get_connector_status', 'connector_sync'],
+  },
+]
+
 export const CATALOG: CatalogEntry[] = [
   // ── Channels ───────────────────────────────────────────────────────────────
   {
@@ -294,23 +319,6 @@ export const CATALOG: CatalogEntry[] = [
     homepageUrl: 'https://www.ynab.com',
     supportUrl: 'https://support.ynab.com',
     privacyUrl: 'https://www.ynab.com/privacy-policy',
-    mcp: false,
-    popular: false,
-    tools: ['get_connector_status', 'connector_sync'],
-  },
-  {
-    id: 'ibkr',
-    name: 'IBKR Flex',
-    families: ['Data source'],
-    categories: ['Brokerage'],
-    icon: 'investments',
-    hue: 'var(--ibkr)',
-    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["ibkr"]`.
-    publisher: 'Interactive Brokers',
-    verification: 'unverified',
-    homepageUrl: 'https://www.interactivebrokers.com/docs/web-api/flex-web-service/introduction',
-    supportUrl: 'https://www.interactivebrokers.com/en/support/customer-service.php',
-    privacyUrl: 'https://www.interactivebrokers.com/en/accounts/legalDocuments/privacy.php',
     mcp: false,
     popular: false,
     tools: ['get_connector_status', 'connector_sync'],
@@ -693,7 +701,7 @@ export const CATALOG: CatalogEntry[] = [
     categories: ['Brokerage'],
     icon: 'investments',
     hue: 'var(--ibkr)',
-    sub: 'Positions, balances, market data and orders at IBKR',
+    sub: 'Trades stocks, options & futures; live positions and P&L',
     desc: 'Connect Interactive Brokers’ own hosted server to let Lucius work with your IBKR account directly. It exposes account balances, positions, trades, orders and performance; quotes, price history, option chains and contract search; screeners, watchlists, price alerts and IBKR’s company research. It can also act: it previews, submits, modifies and cancels orders, and edits watchlists, alerts and saved screeners — every one of those tools asks for your approval before it runs, unless you change that. Useful for reconciling IBKR positions against what is recorded here, checking an allocation or a day’s move, researching a holding, or drafting an order you review before it goes. Sign-in happens on IBKR’s own login screen over OAuth, for one account at a time; you can revoke it in Client Portal under Settings › Manage Third-Party Consents.',
     publisher: 'Interactive Brokers',
     verification: 'verified',
@@ -721,7 +729,7 @@ export const CATALOG: CatalogEntry[] = [
     categories: ['Brokerage'],
     icon: 'investments',
     hue: 'var(--apt)',
-    sub: 'Read every account; trade only in a separate agent account',
+    sub: 'Trades US stocks in an agent account; reads every account',
     desc: 'Connect Robinhood’s own hosted Trading server to let Lucius see your Robinhood investing. It can read every Robinhood account you hold — account numbers, positions, balances and order history included — but it can only place trades inside a separate Agentic account that Robinhood opens when you connect, using only the money you move into it. Robinhood describes it as a beta that trades US equities for now. Robinhood sends a push notification for each trade, and every trading tool here asks for your approval before it runs unless you change that. Useful for reconciling Robinhood positions against what is recorded here, reviewing allocation and order history, or trying an idea with a small, ring-fenced balance. Sign-in happens on Robinhood’s own screen over OAuth.',
     publisher: 'Robinhood',
     verification: 'verified',
@@ -741,7 +749,7 @@ export const CATALOG: CatalogEntry[] = [
     categories: ['Brokerage'],
     icon: 'investments',
     hue: 'var(--apt)',
-    sub: 'Quotes, research and trading on your moomoo account',
+    sub: 'Trades and researches: quotes, options, live positions',
     desc: 'Connect moomoo’s own hosted server to let Lucius work with your moomoo account through moomoo OpenAPI. moomoo describes it as real-time quotes, derivatives screening, fundamentals and technicals, portfolio management and trade execution — so it can act on your account, and every trading tool here asks for your approval before it runs unless you change that. Unlike moomoo’s older API route it needs no OpenD gateway running on this machine. Useful for checking moomoo positions against what is recorded here, researching a holding, or screening options. Sign-in happens on moomoo’s own consent page over OAuth.',
     publisher: 'moomoo',
     verification: 'verified',

@@ -69,10 +69,11 @@ def test_an_enabled_email_is_reported_active(email_connected):
 
 def test_omitting_connectors_reports_every_kind(everything_configured):
     rows = _call()["connectors"]
-    for cid in ("email", "telegram", "webhook", "plaid", "ibkr", "yahoo_finance", "coingecko"):
+    for cid in ("email", "telegram", "webhook", "plaid", "yahoo_finance", "coingecko"):
         assert cid in rows, cid
     assert mcp_connector_id("marker-srv") in rows
     assert "yodlee" not in rows  # DISABLED_CONNECTORS: neither offered nor accepted
+    assert "ibkr" not in rows  # retired IBKR Flex — the same
 
 
 def test_an_aggregator_row_is_the_same_uniform_shape(db_isolated):

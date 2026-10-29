@@ -453,9 +453,17 @@ describe('the Automate action', () => {
   })
 
   it('maps a bank or broker to its sync template', () => {
-    renderDetail(entry())
+    renderDetail(entry({ id: 'alpaca', name: 'Alpaca', kind: 'alpaca' }))
     fireEvent.click(screen.getByRole('button', { name: 'Automate' }))
-    expect(navigate).toHaveBeenCalledWith({ to: '/automations', search: { template: 'sync_ibkr' } })
+    expect(navigate).toHaveBeenCalledWith({
+      to: '/automations',
+      search: { template: 'sync_alpaca' },
+    })
+  })
+
+  it('offers no Automate for retired IBKR Flex — its sync template is not offered', () => {
+    renderDetail(entry())
+    expect(screen.queryByRole('button', { name: 'Automate' })).toBeNull()
   })
 
   it('is not offered for a connector with nothing to automate, or one that is paused', () => {

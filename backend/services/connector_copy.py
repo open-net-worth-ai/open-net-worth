@@ -172,12 +172,22 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             "Fetch new SimpleFIN transactions for a date window; nothing is booked.",
             read_only=True,
         ),
+        _t(
+            "simplefin_list_accounts",
+            "List the SimpleFIN accounts and which of yours each is linked to; no transactions.",
+            read_only=True,
+        ),
     ],
     "plaid": [
         _t("plaid_get_status", "Read the Plaid connector status and sync stats."),
         _t(
             "plaid_fetch_transactions",
             "Fetch new Plaid transactions for a date window; nothing is booked.",
+            read_only=True,
+        ),
+        _t(
+            "plaid_list_accounts",
+            "List the Plaid accounts and which of yours each is linked to; no transactions.",
             read_only=True,
         ),
     ],
@@ -188,6 +198,11 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             "Fetch new Lunch Money transactions for a date window; nothing is booked.",
             read_only=True,
         ),
+        _t(
+            "lunch_money_list_accounts",
+            "List the Lunch Money accounts and which of yours each is linked to; no transactions.",
+            read_only=True,
+        ),
     ],
     "lunch_flow": [
         _t("lunch_flow_get_status", "Read the Lunch Flow connector status and sync stats."),
@@ -196,12 +211,22 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             "Fetch new Lunch Flow transactions for a date window; nothing is booked.",
             read_only=True,
         ),
+        _t(
+            "lunch_flow_list_accounts",
+            "List the Lunch Flow accounts and which of yours each is linked to; no transactions.",
+            read_only=True,
+        ),
     ],
     "ynab": [
         _t("ynab_get_status", "Read the YNAB connector status and sync stats."),
         _t(
             "ynab_fetch_transactions",
             "Fetch new YNAB transactions for a date window; nothing is booked.",
+            read_only=True,
+        ),
+        _t(
+            "ynab_list_accounts",
+            "List the YNAB accounts and which of yours each is linked to; no transactions.",
             read_only=True,
         ),
     ],
@@ -215,12 +240,22 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             "Fetch new Enable Banking transactions for a date window; nothing is booked.",
             read_only=True,
         ),
+        _t(
+            "enable_banking_list_accounts",
+            "List the Enable Banking accounts and which of yours each is linked to; no transactions.",
+            read_only=True,
+        ),
     ],
     "yodlee": [
         _t("yodlee_get_status", "Read the Yodlee connector status and sync stats."),
         _t(
             "yodlee_fetch_transactions",
             "Fetch new Yodlee transactions for a date window; nothing is booked.",
+            read_only=True,
+        ),
+        _t(
+            "yodlee_list_accounts",
+            "List the Yodlee accounts and which of yours each is linked to; no transactions.",
             read_only=True,
         ),
     ],
@@ -318,8 +353,8 @@ SHORT: dict[str, str] = {
     "ynab": "Transactions already tracked in your YNAB budget.",
     "enable_banking": "Bank accounts from the EU and UK, under PSD2.",
     "yodlee": "Bank and card accounts, worldwide.",
-    "alpaca": "Holdings from an Alpaca brokerage account.",
-    "ibkr": "Positions, trades and cash activity from Interactive Brokers.",
+    "alpaca": "Read-only: imports your Alpaca positions and cash",
+    "ibkr": "Read-only: daily import of IBKR positions, trades, cash",
     "yahoo_finance": "Prices for stocks, ETFs and supported major crypto — no key needed.",
     "coingecko": "Crypto prices, search and facts — the fallback behind Yahoo Finance.",
     "mcp": "A third-party tool server you connected.",

@@ -270,10 +270,13 @@ def test_a_token_minted_by_the_senders_authorization_is_never_moved():
     assert flow.moved_state == ()
 
 
-def test_yodlee_alone_is_withdrawn_by_policy():
-    assert {k for k, v in CATALOG.items() if v.disabled} == {"yodlee"}
+def test_yodlee_and_ibkr_flex_alone_are_withdrawn_by_policy():
+    """Yodlee (enterprise-only pricing) and IBKR Flex (retired 2026-10-29 for IBKR's own MCP
+    server) — code kept, neither offered."""
+    assert {k for k, v in CATALOG.items() if v.disabled} == {"yodlee", "ibkr"}
     from backend.ai.tools._connector_gate import DISABLED_CONNECTORS
     from backend.services.aggregation.providers import PROVIDER_KEYS, PROVIDERS
 
-    assert DISABLED_CONNECTORS == frozenset({"yodlee"})
+    assert DISABLED_CONNECTORS == frozenset({"yodlee", "ibkr"})
     assert "yodlee" in PROVIDERS and "yodlee" not in PROVIDER_KEYS
+    assert "ibkr" in PROVIDERS and "ibkr" not in PROVIDER_KEYS

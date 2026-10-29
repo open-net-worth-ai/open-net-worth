@@ -40,7 +40,7 @@ Other templates on the same page:
 
 - **Sync a connector** — one per bank or broker connector (**Sync SimpleFIN**, **Sync Plaid**,
   **Sync Lunch Money**, **Sync Lunch Flow**, **Sync YNAB**, **Sync Enable Banking**, **Sync
-  Alpaca**, **Sync Interactive Brokers**). Each fetches new activity on a schedule and books it.
+  Alpaca**). Each fetches new activity on a schedule and books it.
   You can also start these from the **Automate** button on the connector's own page.
 - **Start from a template** — **Subscription creep**, **Budget pacing**, **Cash floor guard**,
   **Large charge alert**; **Browse all templates** adds **New payee check** and **Portfolio

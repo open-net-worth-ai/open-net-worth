@@ -349,7 +349,7 @@ export function ConnectorsTab(): JSX.Element {
                 ...FAMILY_SECTIONS.map((s) => ({ key: s.key, label: s.title })),
               ]}
             />
-            <div className="rd-seg">
+            <div className="rd-seg cn-statusseg">
               {STATUS_FILTERS.map(([k, label]) => (
                 <button
                   key={k}

@@ -161,10 +161,12 @@ async def test_a_level_on_one_provider_does_not_reach_its_sibling(armed):
     what this test needs to demonstrate a leak would look like."""
     perms.set_tool_permission("plaid", "plaid_get_status", "always_allow")
 
-    assert perms.stored_tool_level("ibkr", "ibkr_get_status") is None
-    text, proposed = await _dispatch("ibkr_get_status", tool_use_id="toolu_sibling")
-    assert text is None and proposed["grant_tool"] == "ibkr_get_status", (
-        "IBKR's status inherited Plaid's permission"
+    # Alpaca, not IBKR: IBKR Flex is retired (DISABLED_CONNECTORS), so its tools are refused
+    # before the permission gate is ever consulted — the leak this pins could not show there.
+    assert perms.stored_tool_level("alpaca", "alpaca_get_status") is None
+    text, proposed = await _dispatch("alpaca_get_status", tool_use_id="toolu_sibling")
+    assert text is None and proposed["grant_tool"] == "alpaca_get_status", (
+        "Alpaca's status inherited Plaid's permission"
     )
 
 

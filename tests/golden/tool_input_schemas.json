@@ -2508,7 +2508,7 @@
           "type": "string"
         },
         "type": "array",
-        "description": "Connector ids as Connectors shows them: 'email', 'telegram', 'webhook', 'plaid', 'ibkr', 'yahoo_finance', 'web_search:tavily', 'mcp:<server>'… Omit for all."
+        "description": "Connector ids as Connectors shows them: 'email', 'telegram', 'webhook', 'plaid', 'yahoo_finance', 'web_search:tavily', 'mcp:<server>'… Omit for all."
       }
     },
     "type": "object",

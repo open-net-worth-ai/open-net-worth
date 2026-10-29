@@ -131,8 +131,8 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   },
 ]
 
-/** One template per OFFERED connector (Yodlee excluded — `disabled=True` server-side, hidden
- *  from the directory, no template). Display names are the exact provider labels from
+/** One template per OFFERED connector (Yodlee and IBKR Flex excluded — `disabled=True`
+ *  server-side, hidden from the directory; IBKR Flex's kept in `RETIRED_SYNC_TEMPLATES`). Display names are the exact provider labels from
  *  `backend/services/aggregation/providers.py`, not the raw connector key. Email's template
  *  (`mail_ledger`) is in RECOMMENDED_TEMPLATES; its instructions live in the
  *  log-transactions-from-email starter skill, so a fix reaches every unedited copy. */
@@ -245,21 +245,6 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
   },
-  {
-    key: 'sync_ibkr',
-    name: 'Sync Interactive Brokers',
-    description: 'Fetch IBKR activity and book trades and cash events.',
-    instructions:
-      'Fetch new IBKR activity and book it. Add or update positions from the ' +
-      'snapshot. Never remove a position; tell me about any that are missing. Use the linked ' +
-      'account for each transaction; if it isn’t linked, ask me instead of guessing. If ' +
-      'something changed after booking, bring it in line, but never override something I ' +
-      'changed by hand. If something was withdrawn, flag it and tell me. Never delete ' +
-      'anything. Message me only when something was booked or something went wrong.',
-    trigger: { kind: 'schedule', type: 'interval', seconds: 21600 },
-    execution: { kind: 'lucius' },
-    permission_mode: 'auto',
-  },
 ]
 
 export const ALL_TEMPLATES: AutomationTemplate[] = [
@@ -289,3 +274,23 @@ export const TEMPLATE_ICONS: Record<string, LucideIcon> = {
   mail_ledger: Mail,
   ...Object.fromEntries(CONNECTOR_SYNC_TEMPLATES.map((template) => [template.key, Link2])),
 }
+
+/** Sync templates for retired connectors — kept so a revert is one move back, never shown.
+ *  IBKR Flex: ADR 2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server. */
+export const RETIRED_SYNC_TEMPLATES: AutomationTemplate[] = [
+  {
+    key: 'sync_ibkr',
+    name: 'Sync Interactive Brokers',
+    description: 'Fetch IBKR activity and book trades and cash events.',
+    instructions:
+      'Fetch new IBKR activity and book it. Add or update positions from the ' +
+      'snapshot. Never remove a position; tell me about any that are missing. Use the linked ' +
+      'account for each transaction; if it isn’t linked, ask me instead of guessing. If ' +
+      'something changed after booking, bring it in line, but never override something I ' +
+      'changed by hand. If something was withdrawn, flag it and tell me. Never delete ' +
+      'anything. Message me only when something was booked or something went wrong.',
+    trigger: { kind: 'schedule', type: 'interval', seconds: 21600 },
+    execution: { kind: 'lucius' },
+    permission_mode: 'auto',
+  },
+]

@@ -165,9 +165,18 @@ class McpCallError(Exception):
     carry it: the synchronous probe's own ephemeral HTTP response.
     """
 
-    def __init__(self, message: str, *, safe_summary: Optional[str] = None):
+    def __init__(
+        self,
+        message: str,
+        *,
+        safe_summary: Optional[str] = None,
+        auth_challenge: Optional[str] = None,
+    ):
         super().__init__(message)
         self._safe_summary = safe_summary
+        # What a 401 asked for (``auth_challenge_of``): ``oauth`` / ``key`` / ``None``. Lets the
+        # add flow say "this server needs you to sign in" instead of a bare HTTP 401.
+        self.auth_challenge = auth_challenge
 
     @property
     def safe_summary(self) -> str:
@@ -381,7 +390,12 @@ class McpClientConnection:
                     f"server '{self._config.id}' returned HTTP 401: {detail}"
                 ) from exc
             raise McpCallError(
-                f"server '{self._config.id}' returned HTTP {exc.code}: {detail}"
+                f"server '{self._config.id}' returned HTTP {exc.code}: {detail}",
+                auth_challenge=(
+                    auth_challenge_of(exc.headers.get("WWW-Authenticate") if exc.headers else None)
+                    if exc.code == 401
+                    else None
+                ),
             ) from exc
         except UnsafeUrlError as exc:
             raise McpCallError(f"server '{self._config.id}' url is not allowed: {exc}") from exc
@@ -452,6 +466,19 @@ class McpClientConnection:
         elif self._config.auth_type == "header":
             headers[self._config.auth_header or "Authorization"] = token
         return headers
+
+
+def auth_challenge_of(header: Optional[str]) -> Optional[str]:
+    """What a 401's ``WWW-Authenticate`` asks for: ``"oauth"`` when it points at OAuth
+    protected-resource metadata (MCP's sign-in discovery, RFC 9728's ``resource_metadata``),
+    ``"key"`` for any other Bearer challenge (a token you paste), else ``None``. Only a hint for
+    the add flow's copy — never a decision about what to send."""
+    value = (header or "").lower()
+    if "resource_metadata" in value:
+        return "oauth"
+    if "bearer" in value:
+        return "key"
+    return None
 
 
 def parse_server_info(result: Any) -> ServerInfo:

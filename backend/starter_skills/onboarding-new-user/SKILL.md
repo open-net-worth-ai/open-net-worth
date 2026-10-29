@@ -39,7 +39,7 @@ Mistakes seen in testing — each one cost the user patience:
 - **Their money, starting from today.** The book starts from today's balances — no history needed. Ask for their main bank account and main card and what each holds today, two easy ways: tell you the bank and the balance, or drop a screenshot of their banking app's account list right here (the paperclip, or drag it in) — you read it and confirm before saving anything, since a misread balance is worse than a slow one. Call `show_guide` with `attach` first only when they are on the spending path or have said they have a statement or screenshot; for anyone else, leave the paperclip dark. Each account opens with today's balance, and new transactions arrive from here on.
   Past transactions are optional — never a requirement and never a reason to stall. Once the accounts exist, and only on the spending or budget branch, offer them once in one line: "if you'd like to see where last month went, drop last month's statement and I'll bring it in." If they'd rather not, move on.
   Mention the other routes only if they ask or one clearly fits:
-  - **A bank or broker** — the Connectors tab (for Interactive Brokers, remind them to set the Flex Query format to XML; the import fails without it).
+  - **A bank or broker** — the Connectors tab.
   - **Statement files**, for history — CSV, OFX, QIF, XLSX, CAMT, MT940, PDF.
   - **A backup of this app** — Settings > Data.
   - **Coming from YNAB or Actual Budget** — a full budget migration is not built yet; the YNAB connector syncs their transactions only. Say exactly that, so they don't plan around something that isn't there.

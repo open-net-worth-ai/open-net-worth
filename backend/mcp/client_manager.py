@@ -994,7 +994,7 @@ class McpClientManager:
                     handshake = conn.initialize()
                     tools = conn.list_tools()
         except McpCallError as exc:
-            return _probe_failure(str(exc))
+            return _probe_failure(str(exc), exc.auth_challenge)
         except Exception as exc:  # noqa: BLE001 — a buggy server must not 500 the add flow
             logger.warning("mcp probe failed for '%s': %s", provisional_id, exc)
             return _probe_failure(str(exc))
@@ -1020,6 +1020,7 @@ class McpClientManager:
             "suggested_id": suggested_id,
             "trust": _probe_trust(probe_config, info),
             "error": None,
+            "needs_auth": None,
         }
 
 
@@ -1089,8 +1090,9 @@ def _probe_trust(config: McpServerConfig, info: ServerInfo) -> dict:
     }
 
 
-def _probe_failure(error: str) -> dict:
-    """The probe's failure shape — same keys as success so the client parses one thing."""
+def _probe_failure(error: str, needs_auth: Optional[str] = None) -> dict:
+    """The probe's failure shape — same keys as success so the client parses one thing.
+    ``needs_auth`` is what a 401 asked for (``oauth``/``key``), so the form can offer the fix."""
     return {
         "ok": False,
         "server_info": None,
@@ -1099,6 +1101,7 @@ def _probe_failure(error: str) -> dict:
         "suggested_id": "",
         "trust": None,
         "error": error,
+        "needs_auth": needs_auth,
     }
 
 

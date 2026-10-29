@@ -20,6 +20,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { render, cleanup, act, renderHook } from '@testing-library/react'
 import {
   CATALOG,
+  RETIRED_CATALOG,
   MCP_INSTALL_PRESETS,
   catalogProvenanceFor,
   previewEndpoint,
@@ -158,10 +159,9 @@ describe('categories describe the connector; families are the lane', () => {
   })
 
   it('does not tag a positions-import feed as market data', () => {
-    // Alpaca and IBKR both SELL market data; neither connector here imports any. A category
-    // is what the connector is for in this app, not what the vendor's catalogue covers.
+    // Alpaca SELLS market data; this connector imports none. A category is what the connector
+    // is for in this app, not what the vendor's catalogue covers.
     expect(byId('alpaca').categories).not.toContain('Market data')
-    expect(byId('ibkr').categories).not.toContain('Market data')
   })
 
   it('does not tag a read-only banking server as payments', () => {
@@ -215,13 +215,6 @@ describe('native entries carry links too, and every one was fetched', () => {
       ['plaid', 'homepageUrl', 'https://plaid.com/docs/link/'],
       ['plaid', 'privacyUrl', 'https://plaid.com/legal/#end-user-privacy-policy'],
       ['alpaca', 'privacyUrl', 'https://files.alpaca.markets/disclosures/PrivacyPolicy.pdf'],
-      // The URLs search engines point at (`ibkrcampus.com/...`, `/campus/ibkr-api-page/...`)
-      // all 301 into a 404. This is the path that answers.
-      [
-        'ibkr',
-        'homepageUrl',
-        'https://www.interactivebrokers.com/docs/web-api/flex-web-service/introduction',
-      ],
       ['enable_banking', 'homepageUrl', 'https://enablebanking.com/docs/api/reference/'],
       ['web_search:serper', 'privacyUrl', 'https://serper.dev/privacy'],
       [
@@ -519,5 +512,12 @@ describe('a hosted server with no repo renders cleanly', () => {
       <DirectoryPreview d={rowFor('mcp-sec-edgar')} onAdd={noop} onConfigure={noop} />,
     )
     expect(hrefs(container)).toContain('https://github.com/stefanoamorelli/sec-edgar-mcp')
+  })
+})
+
+describe('retired entries', () => {
+  it('keeps IBKR Flex out of the directory, its entry set aside rather than deleted', () => {
+    expect(CATALOG.some((e) => e.id === 'ibkr')).toBe(false)
+    expect(RETIRED_CATALOG.map((e) => e.id)).toEqual(['ibkr'])
   })
 })

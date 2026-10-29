@@ -9,7 +9,7 @@ import { readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { LOGO_FILES, connectorLogo } from './logos'
-import { CATALOG } from './catalog'
+import { CATALOG, RETIRED_CATALOG } from './catalog'
 
 const LOGO_DIR = fileURLToPath(new URL('../../../../public/connector-logos', import.meta.url))
 
@@ -66,7 +66,8 @@ describe('a mark is attached by ID, never by a name a user chose', () => {
 
 describe('every mapped id is a real catalog entry', () => {
   it('has no orphan keys — a typo would silently render nothing', () => {
-    const ids = new Set(CATALOG.map((e) => e.id))
+    // A retired entry keeps its mark: a connector already set up still lists with it.
+    const ids = new Set([...CATALOG, ...RETIRED_CATALOG].map((e) => e.id))
     for (const id of Object.keys(LOGO_FILES)) {
       expect(ids.has(id), id).toBe(true)
     }

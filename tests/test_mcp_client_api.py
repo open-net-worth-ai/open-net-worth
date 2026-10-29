@@ -879,3 +879,38 @@ def test_ibkrs_mcp_server_keeps_its_own_name_beside_ibkr_flex(client, monkeypatc
         },
     )
     assert c.get("/api/mcp-clients").json()["servers"][0]["name"] == "Interactive Brokers"
+
+
+# ── a 401 says what kind of login it wants (the add flow's "switch to OAuth" hint) ─────────
+
+
+@pytest.mark.parametrize(
+    ("challenge", "expected"),
+    [
+        (
+            'Bearer resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"',
+            "oauth",
+        ),
+        ('Bearer realm="api"', "key"),
+        (None, None),
+    ],
+)
+def test_a_401_probe_reports_what_login_the_server_wants(client, monkeypatch, challenge, expected):
+    import io
+    import urllib.error
+
+    from backend.mcp import client as client_module
+
+    def unauthorized(request, timeout=None):
+        headers = {"WWW-Authenticate": challenge} if challenge else {}
+        raise urllib.error.HTTPError(
+            request.full_url, 401, "Unauthorized", headers, io.BytesIO(b"authentication required")
+        )
+
+    monkeypatch.setattr(client_module, "_urlopen", unauthorized)
+    c, _ = client
+    res = c.post("/api/mcp-clients/probe", json={"url": "https://mcp.example.com/mcp"})
+    body = res.json()
+    assert body["ok"] is False
+    assert "401" in body["error"]
+    assert body["needs_auth"] == expected

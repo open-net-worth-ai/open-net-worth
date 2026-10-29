@@ -150,7 +150,7 @@ class ConnectorStatusInput(ToolInput):
         default=None,
         description=(
             "Connector ids as Connectors shows them: 'email', 'telegram', 'webhook', "
-            "'plaid', 'ibkr', 'yahoo_finance', 'web_search:tavily', 'mcp:<server>'… "
+            "'plaid', 'yahoo_finance', 'web_search:tavily', 'mcp:<server>'… "
             "Omit for all."
         ),
     )
@@ -211,7 +211,7 @@ class SetConnectorEnabledInput(ToolInput):
     description=(
         "Enable or disable a connector. Connector ids are fixed: 'email', 'webhook', "
         "'telegram', 'simplefin', 'plaid', 'lunch_money', 'lunch_flow', 'ynab', "
-        "'enable_banking', 'alpaca', 'ibkr', plus 'web_search:<provider>' and "
+        "'enable_banking', 'alpaca', plus 'web_search:<provider>' and "
         "'mcp:<server_id>'. Returns the connector's id, name, kind, enabled flag and status — "
         "never its configuration (endpoints, hosts, commands and credentials are read by the "
         "user in Connectors, not by you). "

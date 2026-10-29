@@ -167,7 +167,11 @@ describe('Edit configuration reopens the setup drawer PRE-FILLED', () => {
     expect((screen.getByLabelText(labelStartingWith('Server URL')) as HTMLInputElement).value).toBe(
       'https://mcp.firecrawl.dev',
     )
-    expect((screen.getByLabelText('Authentication') as HTMLSelectElement).value).toBe('key')
+    expect(
+      within(screen.getByRole('group', { name: 'Authentication' }))
+        .getByRole('button', { name: 'API key' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true')
   })
 
   it('never echoes the saved token into the form payload — the box opens empty', async () => {
@@ -321,7 +325,11 @@ describe('editing an OAuth server', () => {
     mockApi({}, [OAUTH_SERVER])
     await openKebabItem('Edit configuration', 'Mercury')
 
-    expect((screen.getByLabelText('Authentication') as HTMLSelectElement).value).toBe('oauth')
+    expect(
+      within(screen.getByRole('group', { name: 'Authentication' }))
+        .getByRole('button', { name: 'OAuth' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true')
   })
 
   it('shows the connected-account summary, never a raw token field', async () => {

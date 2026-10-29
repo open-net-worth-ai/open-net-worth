@@ -284,9 +284,17 @@ def test_search_does_not_surface_a_disabled_connectors_tool():
 
 
 def test_search_surfaces_the_tool_once_its_connector_is_enabled():
+    connectors_service.set_connector_enabled("alpaca", True)
+    results = _search_tools("alpaca positions sync")
+    assert "alpaca_fetch_positions" in results
+
+
+def test_search_never_surfaces_retired_ibkr_flex_even_when_enabled():
+    """IBKR Flex is retired (DISABLED_CONNECTORS) — Lucius never finds its tools."""
     connectors_service.set_connector_enabled("ibkr", True)
     results = _search_tools("interactive brokers flex sync")
-    assert "ibkr_fetch_activity" in results
+    assert "ibkr_fetch_activity" not in results
+    assert "ibkr_get_status" not in results
 
 
 def test_search_still_surfaces_internal_tools_regardless_of_connector_state():
@@ -296,7 +304,7 @@ def test_search_still_surfaces_internal_tools_regardless_of_connector_state():
 
 def test_search_never_surfaces_yodlee_even_when_enabled():
     """Contrast with test_search_surfaces_the_tool_once_its_connector_is_enabled just
-    above: enabling IBKR's store flag unhides it from search; enabling Yodlee's does not
+    above: enabling Alpaca's store flag unhides it from search; enabling Yodlee's does not
     — DISABLED_CONNECTORS overrides the store."""
     connectors_service.set_connector_enabled("yodlee", True)
     results = _search_tools("yodlee bank sync status")

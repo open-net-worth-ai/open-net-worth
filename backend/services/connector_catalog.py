@@ -489,6 +489,10 @@ _KINDS: tuple[ConnectorKind, ...] = (
         _needs(secrets=("flex_token",), config=("flex_query_id",)),
         secret_fields=_secrets("flex_token"),
         config_keys=("flex_query_id", "base_url"),
+        # Retired 2026-10-29: IBKR's own hosted MCP server (directory entry `mcp-ibkr`) reads
+        # live positions and trades where Flex is a day-late batch report. Code kept; flip this
+        # to bring it back. ADR `2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server`.
+        disabled=True,
     ),
     _kind(
         "yahoo_finance",

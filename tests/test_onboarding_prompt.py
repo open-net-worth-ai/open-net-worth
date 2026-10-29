@@ -150,12 +150,11 @@ def test_the_skill_is_both_host_and_model_invocable(db_isolated):
     assert allows_model_invocation(skill.get("claude")) is True
 
 
-def test_the_skill_mentions_ibkr_xml_format(db_isolated):
-    """If the user sets up Interactive Brokers via Connectors, the onboarding skill instructs
-    reminding them to set the Flex Query format to XML."""
+def test_the_skill_no_longer_coaches_the_retired_ibkr_flex_setup(db_isolated):
+    """IBKR Flex is retired (ADR 2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server): Lucius
+    must not walk a new user through a Flex Query it can no longer use."""
     body = _onboarding_skill_body()
-    assert "Interactive Brokers" in body
-    assert "XML" in body
+    assert "Flex" not in body
 
 
 def _onboarding_reference(name: str) -> str:

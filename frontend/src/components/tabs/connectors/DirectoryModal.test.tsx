@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, cleanup, fireEvent, waitFor } from '@testing-library/react'
+import { render, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 import { DirectoryModal } from './DirectoryModal'
 import type { Connector } from './types'
 
@@ -316,6 +316,35 @@ describe('step 1 → step 2: an unreached server is never saved', () => {
     expect(paths).not.toContain('/api/mcp-clients')
   })
 
+  it('offers the fix when a 401 says the server wants a sign-in, and switches in one click', async () => {
+    mockAuthFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ok: false,
+        server_info: null,
+        tools: [],
+        suggested_name: '',
+        suggested_id: '',
+        error: "server 'mcp-example-com' returned HTTP 401: authentication required",
+        needs_auth: 'oauth',
+      }),
+    })
+
+    const { getByText, getByLabelText, getByRole } = openAddForm()
+    fireEvent.change(getByLabelText(labelStartingWith('Server URL')), {
+      target: { value: 'https://mcp.example.com' },
+    })
+    fireEvent.click(getByText('Connect'))
+
+    await waitFor(() => expect(getByText(/needs you to sign in/)).toBeTruthy())
+    fireEvent.click(getByRole('button', { name: 'Switch to OAuth' }))
+
+    // Back on the form, with OAuth picked and its own one-line hint showing.
+    const auth = within(getByRole('group', { name: 'Authentication' }))
+    expect(auth.getByRole('button', { name: 'OAuth' }).getAttribute('aria-pressed')).toBe('true')
+    expect(getByText(/Sign in on the vendor/)).toBeTruthy()
+  })
+
   it('persists nothing when the probe ENDPOINT itself fails, not just the server', async () => {
     // A 503 from our own API is a different failure from "the MCP server refused", and it must
     // land in the same place: an inline error with Back/Retry, and nothing written.
@@ -448,7 +477,11 @@ describe('OAuth sign-in — the popup + poll lifecycle', () => {
     fireEvent.change(view.getByLabelText(labelStartingWith('Server URL')), {
       target: { value: 'https://mcp.mercury.com/mcp' },
     })
-    fireEvent.change(view.getByLabelText('Authentication'), { target: { value: 'oauth' } })
+    fireEvent.click(
+      within(view.getByRole('group', { name: 'Authentication' })).getByRole('button', {
+        name: 'OAuth',
+      }),
+    )
   }
 
   let popup: { location: { href: string }; closed: boolean; close: ReturnType<typeof vi.fn> }
@@ -666,7 +699,11 @@ describe('OAuth sign-in — the popup + poll lifecycle', () => {
     expect((view.getByLabelText(labelStartingWith('Server URL')) as HTMLInputElement).value).toBe(
       'https://mcp.mercury.com/mcp',
     )
-    expect((view.getByLabelText('Authentication') as HTMLSelectElement).value).toBe('oauth')
+    expect(
+      within(view.getByRole('group', { name: 'Authentication' }))
+        .getByRole('button', { name: 'OAuth' })
+        .getAttribute('aria-pressed'),
+    ).toBe('true')
   })
 })
 
@@ -693,7 +730,11 @@ describe('abandoning the add flow after a completed sign-in deletes the dormant 
     fireEvent.change(view.getByLabelText(labelStartingWith('Server URL')), {
       target: { value: 'https://mcp.mercury.com/mcp' },
     })
-    fireEvent.change(view.getByLabelText('Authentication'), { target: { value: 'oauth' } })
+    fireEvent.click(
+      within(view.getByRole('group', { name: 'Authentication' })).getByRole('button', {
+        name: 'OAuth',
+      }),
+    )
   }
 
   let popup: { location: { href: string }; closed: boolean; close: ReturnType<typeof vi.fn> }
