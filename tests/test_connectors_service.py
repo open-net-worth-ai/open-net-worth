@@ -82,6 +82,7 @@ def test_empty_state_has_builtin_transports_no_mcp():
         "has_access_token": False,
         "has_item_id": False,
         "has_link_token": False,
+        "has_items": False,
     }
     eb = next(v for v in views if v.id == "enable_banking")
     assert eb.kind == "enable_banking"
@@ -151,6 +152,7 @@ def test_plaid_view_reflects_store_and_hides_secret():
         "has_access_token": True,
         "has_item_id": False,
         "has_link_token": False,
+        "has_items": False,
     }
     assert pl.config["client_id"] == "cid"
     # No secret VALUE (secret / access token) leaks anywhere in the serialized view.

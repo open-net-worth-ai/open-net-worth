@@ -195,6 +195,10 @@ export function statusOf(c: Connector): {
 } {
   const cfg = configOf(c)
   const lastStatus = str(cfg, 'last_status')
+  // A bank that wants its sign-in renewed: the keys are fine, nothing syncs until Reconnect.
+  if (lastStatus === 'reconnect_needed') {
+    return { statusText: 'Sign-in needed', tone: 'bad', attention: true }
+  }
   if (ERROR_STATUSES.has(c.status) || ERROR_STATUSES.has(lastStatus)) {
     const authError = c.status === 'auth_error' || lastStatus === 'auth_error'
     return { statusText: authError ? 'Auth error' : 'Error', tone: 'bad', attention: true }

@@ -55,7 +55,7 @@ _MAX_FETCH_ROWS = 5000
 # list: they are structural keys the ledger dedup floor and the snapshot store key off of,
 # never rendered as prose, and must stay byte-stable across re-fetches of the same row.
 _ROW_TEXT_FIELDS = ("description", "memo", "currency")
-_ACCOUNT_TEXT_FIELDS = ("name", "mask", "currency")
+_ACCOUNT_TEXT_FIELDS = ("name", "mask", "currency", "institution")
 _POSITION_TEXT_FIELDS = ("symbol", "currency")
 # Cap on any single string leaf inside a stashed `raw` payload (S-F3) — generous enough for
 # a real provider field, small enough that a hostile/malformed response can't balloon a
@@ -246,7 +246,11 @@ def _linked_only_accounts(linked: dict[str, dict]) -> list[dict]:
                 "balance": None,
             }
         )
-        | {"account_type": None, "linked_account_id": info.get("linked_account_id")}
+        | {
+            "account_type": None,
+            "institution": None,
+            "linked_account_id": info.get("linked_account_id"),
+        }
         for pid, info in linked.items()
     ]
 
@@ -471,6 +475,9 @@ def fetch(
         "accounts": accounts,
         "transactions": public_rows,
         "changes": changes,
+        # Part of the provider failed while the rest answered (one of several Plaid banks with
+        # an expired login, say) — say so, so it is never a silent gap.
+        "warnings": [sanitize_untrusted(w, max_len=300) for w in window.warnings],
         "counts": {
             "fetched": fetched_count,
             "already_booked": already_booked,
@@ -560,6 +567,7 @@ def provider_accounts(provider_key: str) -> dict:
                 "currency": clean.get("currency"),
                 "balance": clean.get("balance"),
                 "account_type": _known_account_type(clean.get("account_type")),
+                "institution": clean.get("institution"),
                 "linked_account_id": (linked.get(pid) or {}).get("linked_account_id"),
             }
         )

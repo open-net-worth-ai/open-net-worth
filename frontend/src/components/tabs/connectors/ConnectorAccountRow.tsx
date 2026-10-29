@@ -49,8 +49,8 @@ export function ConnectorAccountRow({
       <div className="conn-acct-main">
         <div className="conn-acct-name">{row.name}</div>
         <div className="conn-acct-sub">
-          {row.mask ? `•${row.mask}` : ''}
-          {linked && row.mask ? ' · ' : ''}
+          {[row.mask ? `•${row.mask}` : '', row.institution || ''].filter(Boolean).join(' · ')}
+          {linked && (row.mask || row.institution) ? ' · ' : ''}
           {linked && (
             <span className={live ? 'conn-acct-linked' : 'conn-acct-linked conn-acct-linked--off'}>
               Linked to “{linkedName}”

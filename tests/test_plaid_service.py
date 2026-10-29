@@ -149,7 +149,12 @@ def test_complete_hosted_link_exchanges_the_session_public_token(monkeypatch):
         ),
     )
     out = svc.complete_hosted_link()
-    assert out == {"status": "linked", "item_id": "item-7", "has_access_token": True}
+    assert out == {
+        "status": "linked",
+        "item_id": "item-7",
+        "institution_name": "",
+        "has_access_token": True,
+    }
     assert calls[1] == (
         "/item/public_token/exchange",
         {"client_id": "cid", "secret": "skey", "public_token": "public-prod-1"},
@@ -195,10 +200,10 @@ def test_exchange_public_token_persists_access(monkeypatch):
         svc.httpx, "post", lambda *a, **k: _Resp({"access_token": "access-9", "item_id": "item-9"})
     )
     out = svc.exchange_public_token("public-token-xyz")
-    assert out == {"item_id": "item-9", "has_access_token": True}
-    cfg = PlaidConfigStore().get()
-    assert cfg["access_token"] == "access-9"
-    assert cfg["item_id"] == "item-9"
+    assert out == {"item_id": "item-9", "institution_name": "", "has_access_token": True}
+    store = PlaidConfigStore()
+    assert store.access_token() == "access-9"
+    assert [i["item_id"] for i in store.items()] == ["item-9"]
 
 
 def test_exchange_requires_token():
@@ -241,6 +246,7 @@ class TestNormalizeHelpers:
             "currency": "USD",
             "balance": 150.25,
             "account_type": None,
+            "institution": None,
         }
 
     @pytest.mark.parametrize(
@@ -475,6 +481,7 @@ class TestFetchWindow:
                 "currency": "USD",
                 "balance": 100.0,
                 "account_type": None,
+                "institution": None,
             }
         ]
         assert len(window.rows) == 1

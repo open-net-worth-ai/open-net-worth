@@ -9184,6 +9184,42 @@ body.hide-amounts .money * {
     flex-wrap: wrap;
   }
 
+  /* Plaid's linked banks (connectors/PlaidBanksStep) — one row per bank with its own Remove. */
+  .plaid-banks {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+  .plaid-bank {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+  }
+  .plaid-bank + .plaid-bank {
+    border-top: 1px solid var(--line);
+  }
+  .plaid-bank-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .plaid-bank-name {
+    color: var(--ink);
+    font-size: var(--text-sm);
+    font-weight: 500;
+  }
+  .plaid-bank-sub {
+    color: var(--faint);
+    font-size: var(--text-xs);
+  }
+  .plaid-bank-sub--warn {
+    color: var(--warn);
+  }
+
   /* Connector setup steps (connectors/SetupStep) — ① keys → ② link a bank → ③ choose accounts.
      The number carries the state: accent ring for the current step, a green check once done,
      faint for a step that can't start yet. */

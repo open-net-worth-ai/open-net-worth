@@ -11,6 +11,8 @@ export interface ProviderAccountRow {
   balance: number | null
   // The provider's suggested app account type (one of the seven), or null.
   account_type: AccountType | null
+  // The bank the account sits at, when one connector links several (Plaid); else null.
+  institution?: string | null
   linked_account_id: string | null
 }
 
@@ -57,7 +59,7 @@ export function prefillFor(row: ProviderAccountRow, providerLabel: string): Acco
     name: row.name,
     currency: row.currency,
     lastFour: row.mask,
-    institution: providerLabel,
+    institution: row.institution || providerLabel,
     initial:
       row.balance == null || row.account_type == null
         ? undefined

@@ -6,7 +6,7 @@
 // suggested type (ConnectorAccountRow): Add opens AccountModal prefilled, the row menu links an
 // existing account, a linked row offers Unlink; once anything is linked, ConnectorNextStep says
 // how transactions come in. Region 1.D of .claude/rfcs/connectors-as-data-sources-ui-spec.md.
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { Stack, Text, EmptyState, ErrorState, Loading } from '../../ui'
 import { useAccounts, type AccountLike } from '../../../hooks/serverState'
@@ -47,6 +47,7 @@ const KNOWN_NON_ERROR_STATUSES = new Set([
   'not_configured',
   'disabled',
   'auth_error',
+  'reconnect_needed',
   'rate_limited',
   'connect_error',
 ])
@@ -214,9 +215,15 @@ export function ConnectorAccountsList({
   // the rows below are only the links left on your accounts — nothing syncs through them.
   const live = data?.status === 'ok'
   const total = data?.accounts.length ?? 0
+  // Report only when the counts CHANGE — the callback itself may be a fresh closure each
+  // render, and depending on it would re-fire (and re-render the parent) forever.
+  const onCountsRef = useRef(onCounts)
   useEffect(() => {
-    onCounts?.({ linked: linkedCount, total, live })
-  }, [onCounts, linkedCount, total, live])
+    onCountsRef.current = onCounts
+  })
+  useEffect(() => {
+    onCountsRef.current?.({ linked: linkedCount, total, live })
+  }, [linkedCount, total, live])
   const pickAccounts = appAccounts.map((a) => fromApiAccount(a as unknown as ApiAccount))
 
   return (
@@ -262,6 +269,12 @@ export function ConnectorAccountsList({
         <EmptyState
           title="Paused"
           body={`${providerLabel} is paused. Resume it above to see its accounts.`}
+        />
+      )}
+      {data && data.status === 'reconnect_needed' && (
+        <ErrorState
+          message={`Your bank wants you to sign in again — use Reconnect above. Nothing syncs from it until then.`}
+          onRetry={load}
         />
       )}
       {data && data.status === 'auth_error' && (

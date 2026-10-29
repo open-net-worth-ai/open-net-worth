@@ -176,3 +176,28 @@ it('step ④ waits for a linked account, then offers the sync automation', async
   expect(await within(ready).findByRole('button', { name: 'Set up automation' })).toBeTruthy()
   expect(screen.getByRole('region', { name: 'Step 3: Choose and link accounts' })).toBeTruthy()
 })
+
+it("removing a bank re-reads step ③, so that bank's accounts leave the list", async () => {
+  const withBanks = {
+    ...STATUS,
+    configured: true,
+    has_access_token: true,
+    banks: [
+      { key: 'k1', institution_name: 'Wells Fargo', linked_at: null },
+      { key: 'k2', institution_name: 'Chase', linked_at: null },
+    ],
+  }
+  mockAuthFetch.mockImplementation(async (url: string) => {
+    if (url === '/api/plaid/status') return okJson(withBanks)
+    if (url === '/api/plaid/banks/k1/remove') return okJson({ removed: true, banks_left: 1 })
+    if (url === '/api/connectors/plaid/accounts')
+      return okJson({ status: 'ok', provider_label: 'Plaid', accounts: [] })
+    return okJson([])
+  })
+  render(<PlaidSection />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove Wells Fargo' }))
+  const before = calls('/api/connectors/plaid/accounts')
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove' }))
+  await act(() => vi.advanceTimersByTimeAsync(50))
+  await vi.waitFor(() => expect(calls('/api/connectors/plaid/accounts')).toBeGreaterThan(before))
+})

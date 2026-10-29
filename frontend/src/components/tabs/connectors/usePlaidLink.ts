@@ -17,11 +17,17 @@ export interface PlaidLink {
   checking: boolean
   /** True once a link this page started has completed. */
   justLinked: boolean
+  /** The bank name when the completed link renewed an ALREADY-linked bank (update mode). */
+  renewed: string | null
+  /** What that renewal was: a renewed sign-in, or the bank's account picker re-opened. */
+  renewedKind: 'reconnect' | 'accounts'
   error: string | null
   setError: (e: string | null) => void
   /** Bumped on each completed link, so the Accounts list re-fetches the bank's accounts. */
   linkCount: number
-  start: () => Promise<void>
+  /** Link a new bank — or, with `bank`, renew that linked bank (Plaid update mode, which keeps
+   *  its accounts and their links); `addAccounts` re-opens its account picker. */
+  start: (opts?: { bank?: string; addAccounts?: boolean }) => Promise<void>
   checkNow: () => void
 }
 
@@ -30,6 +36,8 @@ export function usePlaidLink(onLinked: () => void): PlaidLink {
   const [waiting, setWaiting] = useState(false)
   const [checking, setChecking] = useState(false)
   const [justLinked, setJustLinked] = useState(false)
+  const [renewed, setRenewed] = useState<string | null>(null)
+  const [renewedKind, setRenewedKind] = useState<'reconnect' | 'accounts'>('reconnect')
   const [error, setError] = useState<string | null>(null)
   const [linkCount, setLinkCount] = useState(0)
   const pollStarted = useRef(0)
@@ -38,14 +46,16 @@ export function usePlaidLink(onLinked: () => void): PlaidLink {
     onLinkedRef.current = onLinked
   })
 
-  async function start() {
+  async function start(opts?: { bank?: string; addAccounts?: boolean }) {
     setStarting(true)
     setError(null)
     try {
       const r = await authFetch('/api/plaid/link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
+        body: JSON.stringify(
+          opts?.bank ? { bank: opts.bank, add_accounts: !!opts.addAccounts } : {},
+        ),
       })
       if (!r.ok) {
         const d = await r.json().catch(() => ({}))
@@ -56,6 +66,8 @@ export function usePlaidLink(onLinked: () => void): PlaidLink {
       if (data.link) {
         window.open(data.link, '_blank', 'noopener,noreferrer')
         setJustLinked(false)
+        setRenewed(null)
+        setRenewedKind(opts?.addAccounts ? 'accounts' : 'reconnect')
         pollStarted.current = Date.now()
         setWaiting(true)
       }
@@ -83,10 +95,11 @@ export function usePlaidLink(onLinked: () => void): PlaidLink {
         return
       }
       setError(null)
-      const d = (await r.json()) as { status: string }
+      const d = (await r.json()) as { status: string; mode?: string; institution_name?: string }
       if (d.status === 'linked') {
         setWaiting(false)
         setJustLinked(true)
+        setRenewed(d.mode === 'update' ? d.institution_name || 'The bank' : null)
         setLinkCount((k) => k + 1)
         onLinkedRef.current()
         // Every open screen re-reads — the connector's own "Not connected" badge included.
@@ -118,6 +131,8 @@ export function usePlaidLink(onLinked: () => void): PlaidLink {
     waiting,
     checking,
     justLinked,
+    renewed,
+    renewedKind,
     error,
     setError,
     linkCount,

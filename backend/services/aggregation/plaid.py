@@ -44,7 +44,7 @@ from typing import Optional
 import httpx
 
 from backend.core.errors import ValidationError
-from backend.db.plaid_config_store import PlaidConfigStore
+from backend.db.plaid_config_store import PlaidConfigStore, bank_key
 from backend.models.account import AccountType
 from backend.services import ledger as ledger_service
 from backend.services.aggregation.providers import FetchWindow, derived_ref
@@ -87,14 +87,17 @@ def _post(store: PlaidConfigStore, path: str, payload: dict) -> dict:
         raise ValidationError(f"could not reach Plaid: {exc}") from exc
     if resp.status_code not in (200, 201):
         # Plaid error bodies carry {error_code, error_message}; surface what's useful.
-        detail = ""
+        detail, code = "", ""
         try:
             data = resp.json()
-            detail = data.get("error_message") or data.get("error_code") or ""
+            code = str(data.get("error_code") or "")
+            detail = data.get("error_message") or code or ""
         except Exception:
             detail = ""
         raise ValidationError(
-            f"Plaid {path} failed: HTTP {resp.status_code}" + (f" — {detail}" if detail else "")
+            f"Plaid {path} failed: HTTP {resp.status_code}" + (f" — {detail}" if detail else ""),
+            plaid_error_code=code,
+            http_status=resp.status_code,
         )
     return resp.json() or {}
 
@@ -102,22 +105,38 @@ def _post(store: PlaidConfigStore, path: str, payload: dict) -> dict:
 # ── link token + public-token exchange (the consent flow) ─────────────────────────────
 
 
-def create_link_token(redirect: str = "") -> dict:
+def create_link_token(redirect: str = "", *, bank: str = "", add_accounts: bool = False) -> dict:
     """Start the bank-consent flow → return a Plaid **Hosted Link** URL the USER opens.
 
     POSTs ``/link/token/create`` with ``hosted_link`` so the link runs entirely in a browser
-    (NO frontend Link-SDK dependency). Returns ``{link, link_token, expiration}``. Requires
-    credentials. Raises ``ValidationError`` on a bad config / auth / transport failure."""
+    (NO frontend Link-SDK dependency). Returns ``{link, link_token, expiration}``.
+
+    With ``bank`` (a public ``bank_key``) this is Plaid **update mode** for that ALREADY-linked
+    bank — renew its sign-in (``ITEM_LOGIN_REQUIRED``, an expiring consent) or, with
+    ``add_accounts``, re-open its account picker. Update mode keeps the same Item and access
+    token, so the bank's accounts — and every link to them in the book — survive; linking it
+    afresh would mint new account ids and strand those links. Per Plaid, ``products`` must be
+    OMITTED in update mode. Requires credentials. Raises ``ValidationError`` on a bad config /
+    auth / transport failure, or an unknown ``bank``."""
     store = PlaidConfigStore()
     payload: dict = {
         "client_name": _CLIENT_NAME,
         "language": _LINK_LANGUAGE,
         "country_codes": _LINK_COUNTRY_CODES,
         "user": {"client_user_id": "open-net-worth"},
-        "products": _LINK_PRODUCTS,
         # Hosted Link — Plaid hosts the whole flow; the user just opens this URL.
         "hosted_link": {},
     }
+    item = None
+    if bank:
+        item = store.item_by_key(bank)
+        if item is None:
+            raise ValidationError("That bank is not linked")
+        payload["access_token"] = item["access_token"]
+        if add_accounts:
+            payload["update"] = {"account_selection_enabled": True}
+    else:
+        payload["products"] = _LINK_PRODUCTS
     redirect_url = (redirect or "").strip()
     if redirect_url:
         payload["redirect_uri"] = redirect_url
@@ -130,22 +149,25 @@ def create_link_token(redirect: str = "") -> dict:
     # Hosted Link ends on Plaid's own "you can close this window" page and never hands the
     # user a public token — ``complete_hosted_link`` reads it back with this token.
     store.update({"link_token": link_token})
+    store.set_pending_link_bank(bank if item is not None else None)
     return {"link": link, "link_token": link_token, "expiration": data.get("expiration")}
 
 
-def _session_public_token(data: dict) -> str:
+def _session_public_token(data: dict) -> tuple[str, dict]:
     """The public token of the most recent finished Hosted Link session in a
-    ``/link/token/get`` response, else ``""`` (the user has not finished yet)."""
+    ``/link/token/get`` response, with the bank it was for (``{institution_id, name}``, empty
+    when Plaid omits it); ``("", {})`` while the user has not finished yet."""
     for session in reversed(data.get("link_sessions") or []):
         results = session.get("results") or {}
         for item in reversed(results.get("item_add_results") or []):
             token = str(item.get("public_token") or "").strip()
             if token:
-                return token
-        legacy = str((session.get("on_success") or {}).get("public_token") or "").strip()
+                return token, dict(item.get("institution") or {})
+        on_success = session.get("on_success") or {}
+        legacy = str(on_success.get("public_token") or "").strip()
         if legacy:
-            return legacy
-    return ""
+            return legacy, dict((on_success.get("metadata") or {}).get("institution") or {})
+    return "", {}
 
 
 def complete_hosted_link() -> dict:
@@ -159,21 +181,51 @@ def complete_hosted_link() -> dict:
     if not link_token:
         raise ValidationError("No Plaid link is in progress — click Link bank first")
     data = _post(store, "/link/token/get", {"link_token": link_token})
-    public_token = _session_public_token(data)
+    renewing = store.pending_link_bank()
+    if renewing:
+        return _complete_update_mode(store, renewing, data)
+    public_token, institution = _session_public_token(data)
     if not public_token:
         return {"status": "pending"}
-    result = exchange_public_token(public_token)
+    result = exchange_public_token(public_token, institution=institution)
     store.clear_link_token()
     return {"status": "linked", **result}
 
 
-def exchange_public_token(public_token: str) -> dict:
-    """Swap a ``public_token`` (delivered after the user finishes Hosted Link) for an
-    ``access_token`` + ``item_id``, persisted as write-only secrets on the config store.
+def _complete_update_mode(store: PlaidConfigStore, bank: str, data: dict) -> dict:
+    """An update-mode session changes no token (Plaid: nothing to exchange) — it is done once
+    a session reports ``finished_at``. A session Plaid ended with an error says so instead of
+    pretending the bank was renewed."""
+    finished = [s for s in (data.get("link_sessions") or []) if s.get("finished_at")]
+    if not finished:
+        return {"status": "pending"}
+    session = finished[-1]
+    exit_info = session.get("exit") or (session.get("results") or {}).get("exit") or {}
+    error = (exit_info.get("error") or {}) if isinstance(exit_info, dict) else {}
+    store.clear_link_token()
+    store.set_pending_link_bank(None)
+    if error:
+        message = error.get("display_message") or error.get("error_message") or "Plaid ended it"
+        raise ValidationError(f"The bank wasn't reconnected: {message}")
+    store.mark_reconnect(needed=set(), ok={bank})
+    item = store.item_by_key(bank) or {}
+    return {
+        "status": "linked",
+        "mode": "update",
+        "institution_name": item.get("institution_name") or "",
+        "has_access_token": True,
+    }
 
-    POSTs ``/item/public_token/exchange``. Returns ``{item_id, has_access_token}`` (never
-    the access token itself). Raises ``ValidationError`` on a bad/used token / auth
-    failure."""
+
+def exchange_public_token(public_token: str, *, institution: Optional[dict] = None) -> dict:
+    """Swap a ``public_token`` (delivered after the user finishes Hosted Link) for an
+    ``access_token`` + ``item_id`` and ADD that bank to the linked list (write-only secrets
+    on the config store) — linking a second bank never drops the first; re-linking the same
+    bank replaces its entry. ``institution`` is the bank Plaid reported for the session.
+
+    POSTs ``/item/public_token/exchange``. Returns ``{item_id, institution_name,
+    has_access_token}`` (never the access token itself). Raises ``ValidationError`` on a
+    bad/used token / auth failure."""
     token = (public_token or "").strip()
     if not token:
         raise ValidationError("public_token is required")
@@ -184,24 +236,90 @@ def exchange_public_token(public_token: str) -> dict:
     item_id = (data.get("item_id") or "").strip()
     if not access_token:
         raise ValidationError("Plaid did not return an access token")
-    store.update({"access_token": access_token, "item_id": item_id})
-    return {"item_id": item_id, "has_access_token": True}
+    inst = institution or {}
+    name = str(inst.get("name") or "").strip()
+    inst_id = str(inst.get("institution_id") or "").strip()
+    store.add_item(
+        {
+            "item_id": item_id,
+            "access_token": access_token,
+            "institution_id": inst_id,
+            "institution_name": name,
+        }
+    )
+    # Linking a bank that is already linked is a re-link (a fresh sign-in): retire the older
+    # Item — revoked at Plaid FIRST, dropped here only once Plaid has let it go, so a token is
+    # never thrown away while its Item could still be live there.
+    if inst_id:
+        for old in [i for i in store.items() if i.get("item_id") != item_id]:
+            if (old.get("institution_id") or "") == inst_id:
+                _retire_item(store, old)
+    return {"item_id": item_id, "institution_name": name, "has_access_token": True}
+
+
+# Plaid says the bank's sign-in must be renewed — the Item needs update mode (Reconnect).
+_RECONNECT_CODES = frozenset(
+    {"ITEM_LOGIN_REQUIRED", "PENDING_EXPIRATION", "PENDING_DISCONNECT", "ACCESS_NOT_GRANTED"}
+)
+
+# Plaid says the Item is gone already — safe to forget it locally.
+_ITEM_GONE_CODES = frozenset({"ITEM_NOT_FOUND", "INVALID_ACCESS_TOKEN"})
+
+
+def _retire_item(store: PlaidConfigStore, item: dict) -> bool:
+    """Revoke one Item at Plaid (``/item/remove``), then drop it here. Only a confirmed
+    revoke — or Plaid saying the Item no longer exists — removes the local entry: on a
+    transport/5xx failure the entry (the ONLY copy of its token) stays, and this returns False,
+    so it can be revoked later instead of staying live at Plaid with no way back to it."""
+    try:
+        _post(store, "/item/remove", {"access_token": item["access_token"]})
+    except ValidationError as exc:
+        if exc.context.get("plaid_error_code") not in _ITEM_GONE_CODES:
+            logger.warning("plaid: /item/remove failed, keeping the bank linked: %s", exc)
+            return False
+    store.remove_item(item.get("item_id") or "")
+    return True
+
+
+def remove_bank(key: str) -> dict:
+    """Unlink ONE bank by its public ``bank_key``: tell Plaid to drop the Item
+    (``/item/remove``)
+    and remove it here only once Plaid confirms (or says it is already gone). The other banks
+    are untouched. Raises ``ValidationError`` for an unknown key, or when Plaid can't be
+    reached — then nothing changes, so the token is never lost."""
+    store = PlaidConfigStore()
+    item = next((i for i in store.items() if bank_key(i.get("item_id") or "") == key), None)
+    if item is None:
+        raise ValidationError("That bank is not linked")
+    if not _retire_item(store, item):
+        raise ValidationError(
+            "Couldn't reach Plaid to remove that bank — nothing changed. Try again in a moment."
+        )
+    return {"removed": True, "banks_left": len(store.items())}
+
+
+def remove_all_banks() -> None:
+    """Revoke every linked bank at Plaid — the connector's Remove hook runs this before the
+    local row and its secrets are erased. Best effort per bank: one failure never blocks the
+    rest (the Remove dialog already says access may stay live until revoked at Plaid)."""
+    store = PlaidConfigStore()
+    for item in store.items():
+        _retire_item(store, item)
 
 
 # ── transaction listing (windowed, RFC §B) ─────────────────────────────────────────────
 
 
-def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date: str) -> dict:
-    """POST ``/transactions/get`` paged via ``count``/``offset`` until every row in
-    ``[start_date, end_date]`` is fetched. Returns ``{transactions[], accounts{account_id:
-    account}}``. Raises ``ValidationError`` on auth/transport failure."""
-    access_token = store.access_token()
-    if not access_token:
-        raise ValidationError("Plaid is not linked (no access token)")
-
+def _fetch_item(
+    store: PlaidConfigStore, access_token: str, *, start_date: str, end_date: str
+) -> dict:
+    """ONE bank's ``/transactions/get``, paged via ``count``/``offset`` until every row in
+    ``[start_date, end_date]`` is fetched. Returns ``{transactions[], accounts{id: account},
+    truncated}``. Raises ``ValidationError`` on auth/transport failure."""
     transactions: list[dict] = []
     accounts: dict[str, dict] = {}
     offset = 0
+    truncated = True
     for _ in range(_MAX_FETCH_PAGES):
         payload = {
             "access_token": access_token,
@@ -219,8 +337,55 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
         total = data.get("total_transactions")
         offset += len(page)
         if not page or (isinstance(total, int) and offset >= total):
+            truncated = False
             break
-    return {"transactions": transactions, "accounts": accounts}
+    return {"transactions": transactions, "accounts": accounts, "truncated": truncated}
+
+
+def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date: str) -> dict:
+    """``/transactions/get`` for EVERY linked bank, merged. Each account carries its bank's
+    name (``_institution``). One bank failing (an expired login, say) never sinks the others:
+    its error becomes a warning naming the bank and the result is marked incomplete; only when
+    every bank fails does this raise. Returns ``{transactions[], accounts{id: account},
+    warnings[], complete}``."""
+    items = store.items()
+    if not items:
+        raise ValidationError("Plaid is not linked (no access token)")
+
+    transactions: list[dict] = []
+    accounts: dict[str, dict] = {}
+    warnings: list[str] = []
+    complete = True
+    first_error: Optional[ValidationError] = None
+    needed, answered = set(), set()
+    for item in items:
+        bank = item.get("institution_name") or "a linked bank"
+        key = bank_key(item.get("item_id") or "")
+        try:
+            got = _fetch_item(store, item["access_token"], start_date=start_date, end_date=end_date)
+        except ValidationError as exc:
+            first_error = first_error or exc
+            if exc.context.get("plaid_error_code") in _RECONNECT_CODES:
+                needed.add(key)
+                warnings.append(f"{bank}: its sign-in expired — reconnect it on the Plaid page")
+            else:
+                warnings.append(f"{bank}: {exc}")
+            complete = False
+            continue
+        answered.add(key)
+        transactions.extend(got["transactions"])
+        for acct_id, acct in got["accounts"].items():
+            accounts[acct_id] = {**acct, "_institution": item.get("institution_name") or ""}
+        complete = complete and not got["truncated"]
+    store.mark_reconnect(needed=needed, ok=answered)
+    if first_error is not None and len(warnings) == len(items):
+        raise first_error
+    return {
+        "transactions": transactions,
+        "accounts": accounts,
+        "warnings": warnings,
+        "complete": complete,
+    }
 
 
 # ── normalize + fetch_window ─────────────────────────────────────────────────────────
@@ -294,6 +459,8 @@ def _account_to_common(account: dict) -> dict:
         "currency": currency,
         "balance": balances.get("current"),
         "account_type": _suggested_account_type(account),
+        # Which linked bank the account sits at — several banks share one Plaid connector.
+        "institution": account.get("_institution") or None,
     }
 
 
@@ -399,9 +566,9 @@ def fetch_window(
     accounts_by_id = fetched["accounts"]
     accounts = [_account_to_common(a) for a in accounts_by_id.values()]
 
+    warnings = fetched.get("warnings") or []
     rows: list[dict] = []
     if not accounts_only:
-        truncated = len(fetched["transactions"]) >= _PAGE_SIZE * _MAX_FETCH_PAGES
         for plaid_txn in fetched["transactions"]:
             account_id = str(plaid_txn.get("account_id") or "").strip()
             if not account_id or (account and account_id != account):
@@ -409,8 +576,10 @@ def fetch_window(
             row = _txn_to_row(plaid_txn, accounts_by_id.get(account_id, {}), account_id)
             if row is not None:
                 rows.append(row)
-        return FetchWindow(accounts=accounts, rows=rows, complete=not truncated)
-    return FetchWindow(accounts=accounts, rows=rows, complete=True)
+        return FetchWindow(
+            accounts=accounts, rows=rows, complete=fetched["complete"], warnings=warnings
+        )
+    return FetchWindow(accounts=accounts, rows=rows, complete=True, warnings=warnings)
 
 
 def classify_error(exc: Exception) -> str:
@@ -421,6 +590,9 @@ def classify_error(exc: Exception) -> str:
     rather than reporting every one as auth_error (which would tell a user to re-enter
     working credentials over a transient outage)."""
     if isinstance(exc, ValidationError):
+        if exc.context.get("plaid_error_code") in _RECONNECT_CODES:
+            # The keys are fine — the BANK wants its sign-in renewed (Reconnect, update mode).
+            return "reconnect_needed"
         msg = str(exc).lower()
         if "could not reach plaid" in msg:
             return "connect_error"

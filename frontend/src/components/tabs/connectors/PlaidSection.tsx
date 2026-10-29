@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { authFetch } from '../../../api/client'
 import {
   Stack,
-  Cluster,
   Text,
   Button,
   FormField,
@@ -18,6 +17,7 @@ import { ConnectorAccountsList } from './ConnectorAccountsList'
 import { SetupStep, type SetupStepState } from './SetupStep'
 import { usePlaidLink } from './usePlaidLink'
 import { ConnectorNextStep } from './ConnectorNextStep'
+import { PlaidBanksStep, type PlaidBank } from './PlaidBanksStep'
 
 // Plaid connector setup over /api/plaid/* — three numbered steps, in the order a new user must
 // follow: ① the API keys (client_id + write-only secret + environment), ② link a bank (Hosted
@@ -38,6 +38,9 @@ interface PlaidStatus {
   last_synced_at: string | null
   last_status: string
   last_error: string | null
+  /** The last fetch reached some banks but not others — which, and why. */
+  last_caution?: string | null
+  banks: PlaidBank[]
 }
 
 interface PlaidForm {
@@ -75,6 +78,8 @@ export function PlaidSection() {
   const [editingKeys, setEditingKeys] = useState(false)
   // Step ③'s list reports how many of the bank's accounts are linked — step ④ depends on it.
   const [counts, setCounts] = useState({ linked: 0, total: 0, live: false })
+  // Bumped when a bank is removed, so step ③ re-reads the accounts that are left.
+  const [banksVersion, setBanksVersion] = useState(0)
 
   function load() {
     setError(false)
@@ -276,73 +281,33 @@ export function PlaidSection() {
         )}
       </SetupStep>
 
-      <SetupStep
-        n={2}
-        title="Link your bank"
+      <PlaidBanksStep
+        banks={cfg.banks ?? []}
+        caution={cfg.last_caution ?? null}
         state={linkState}
-        aside={
-          linked &&
-          !link.waiting && (
-            <Button size="sm" variant="ghost" loading={link.starting} onClick={linkBank}>
-              Re-link bank
-            </Button>
-          )
-        }
-      >
-        <Stack gap="--space-3">
-          {link.waiting ? (
-            <Cluster gap="--space-3" align="center" wrap>
-              <Text size="xs" tone="muted">
-                Waiting for you to finish at Plaid… this page finishes on its own.
-              </Text>
-              <Button size="sm" variant="secondary" loading={link.checking} onClick={link.checkNow}>
-                Check now
-              </Button>
-            </Cluster>
-          ) : linked ? (
-            <Text size="xs" tone={link.justLinked ? 'good' : 'muted'}>
-              {link.justLinked ? 'Bank linked. ' : 'Linked. '}Choose its accounts below.
-            </Text>
-          ) : (
-            <>
-              <Text size="xs" tone="muted">
-                Sign in at your bank in your browser. When Plaid says you can close the window, come
-                back — this page finishes the link on its own.
-              </Text>
-              <Cluster gap="--space-3" align="center" wrap>
-                <Button
-                  size="sm"
-                  variant="primary"
-                  loading={link.starting || saving}
-                  disabled={!keysEntered}
-                  onClick={linkBank}
-                >
-                  Link bank
-                </Button>
-                {!keysEntered && (
-                  <Text size="xs" tone="faint">
-                    Enter your Client ID and Secret first.
-                  </Text>
-                )}
-              </Cluster>
-            </>
-          )}
-          {link.error && (
-            <Text size="xs" tone="bad">
-              {link.error}
-            </Text>
-          )}
-        </Stack>
-      </SetupStep>
+        link={link}
+        keysEntered={keysEntered}
+        saving={saving}
+        onLink={() => void linkBank()}
+        onChanged={() => {
+          load()
+          setBanksVersion((v) => v + 1)
+        }}
+      />
 
       <SetupStep n={3} title="Choose and link accounts" state={accountsState}>
         <Stack gap="--space-3">
           <ConnectorAccountsList
-            key={link.linkCount}
+            key={`${link.linkCount}-${banksVersion}`}
             provider="plaid"
             providerLabel="Plaid"
             embedded
-            onCounts={setCounts}
+            onCounts={(c) => {
+              setCounts(c)
+              // The list's live read is what discovers a bank whose sign-in expired — re-read
+              // the status so its Reconnect shows now, not on the next visit.
+              load()
+            }}
             notConfiguredText={{
               title: 'No bank linked yet',
               body: 'Link a bank above — its accounts appear here.',

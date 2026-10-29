@@ -156,6 +156,17 @@ GATE_EXEMPT_READ_SHAPED: frozenset[str] = frozenset(
         "yodlee_fetch_transactions",
         "alpaca_fetch_positions",
         "ibkr_fetch_activity",
+        # Each bank's account list (2026-10-29) — a NARROWER read than the fetch above (accounts
+        # and balances only, no transactions) that writes nothing at all. Measured: the Sync
+        # Plaid automation calls it to resolve which accounts are linked, and an "ask" default
+        # parked every unattended run on an approval card.
+        "simplefin_list_accounts",
+        "plaid_list_accounts",
+        "lunch_money_list_accounts",
+        "lunch_flow_list_accounts",
+        "ynab_list_accounts",
+        "enable_banking_list_accounts",
+        "yodlee_list_accounts",
     }
 )
 

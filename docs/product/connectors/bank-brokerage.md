@@ -115,13 +115,24 @@ US banks and cards, through your own Plaid developer account.
 5. When Plaid says **You can close this window now**, close that tab and come back. The link
    finishes on its own — step ② shows **Bank linked** within a few seconds (click **Check
    now** to skip the wait).
-6. **③ Choose and link accounts** — the bank's accounts, grouped by type. **Add** each one you
+   **Have accounts at more than one bank?** Click **Link another bank** in step ② and sign in
+   there too — one Plaid connector holds as many banks as you link. Each bank is listed by name
+   with its own **Remove**, which stops that bank's accounts syncing (transactions already
+   imported stay) without touching your other banks. To renew a bank's sign-in or add accounts
+   at it, use its own **Reconnect** / **Add accounts** — linking the same bank again as a new
+   bank gives its accounts new identities, and links you made to the old ones stop matching.
+6. **③ Choose and link accounts** — every linked bank's accounts, grouped by type, each showing
+   which bank it's at. **Add** each one you
    want to track, or **Link…** it to an account you already have.
 7. **④ Bring in transactions** — linking imports nothing by itself. Click **Set up automation**
    to have Lucius add new transactions to your linked accounts on a schedule, or ask him for a
    one-off fetch. Unlinked accounts are skipped.
 
-To change your keys later, click **Edit keys** on step ①, then **Save**. Use **Re-link bank** to connect again if your bank asks you to sign in afresh.
+To change your keys later, click **Edit keys** on step ①, then **Save**. **If a bank's sign-in expires** (a new password, a security check, or a consent your bank set to
+expire), that bank shows **Sign-in expired** in step ② and nothing syncs from it. Click
+**Reconnect** and sign in again — it renews the same connection, so the bank's accounts and every
+link you made to them stay exactly as they were. Opened a new account at a bank you already
+linked? Click **Add accounts** on that bank to pick it; existing links are untouched.
 
 ## Enable Banking
 

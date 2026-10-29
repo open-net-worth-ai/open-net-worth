@@ -160,6 +160,30 @@ def _needs(secrets: tuple[str, ...] = (), config: tuple[str, ...] = ()) -> Calla
     return configured
 
 
+def _plaid_configured(row: Row, have: Have) -> bool:
+    """Keys plus at least one linked bank — the multi-bank list, or the legacy single token."""
+    return bool(
+        "secret" in have
+        and ("items" in have or "access_token" in have)
+        and _text(row["config"].get("client_id"))
+    )
+
+
+def _remove_plaid(connector_id: str) -> None:
+    """Revoke every linked bank at Plaid BEFORE clearing the local row — the same
+    revoke-before-delete shape as Lunch Flow. Best effort: a bank Plaid can't be reached for
+    is still erased locally (the Remove dialog says access may stay live at Plaid)."""
+    from backend.services.aggregation.plaid import remove_all_banks
+
+    try:
+        remove_all_banks()
+    except Exception:
+        logger.warning("plaid: revoking linked banks on Remove failed", exc_info=True)
+    from backend.db.plaid_config_store import PlaidConfigStore
+
+    PlaidConfigStore().reset()
+
+
 def _always(row: Row, have: Have) -> bool:
     return True
 
@@ -430,9 +454,10 @@ _KINDS: tuple[ConnectorKind, ...] = (
     _kind(
         "plaid",
         "Plaid",
-        _needs(secrets=("secret", "access_token"), config=("client_id",)),
-        secret_fields=_secrets("secret", minted=("access_token", "item_id", "link_token")),
+        _plaid_configured,
+        secret_fields=_secrets("secret", minted=("access_token", "item_id", "link_token", "items")),
         config_keys=("client_id", "environment"),
+        remove=_remove_plaid,
     ),
     _kind(
         "lunch_money",
