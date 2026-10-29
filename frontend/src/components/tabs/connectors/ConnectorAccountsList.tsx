@@ -54,9 +54,19 @@ const KNOWN_NON_ERROR_STATUSES = new Set([
 export function ConnectorAccountsList({
   provider,
   providerLabel,
+  embedded = false,
+  notConfiguredText,
+  onCounts,
 }: {
   provider: string
   providerLabel: string
+  /** Inside a setup step whose own title names the list — drop the "Accounts" heading, and
+   *  leave "bring in transactions" to the parent's own step (it gets the counts via onCounts). */
+  embedded?: boolean
+  /** How many accounts are linked, of how many, and whether the provider answered. */
+  onCounts?: (counts: { linked: number; total: number; live: boolean }) => void
+  /** What to say while the provider isn't set up (default: add your credentials above). */
+  notConfiguredText?: { title: string; body: string }
 }) {
   const [data, setData] = useState<ConnectorAccountsResponse | null>(null)
   const [loadErr, setLoadErr] = useState(false)
@@ -200,21 +210,30 @@ export function ConnectorAccountsList({
   }
 
   const linkedCount = data?.accounts.filter((a) => a.linked_account_id).length ?? 0
+  // The provider answered: its accounts are live. Anything else (removed, paused, failing) means
+  // the rows below are only the links left on your accounts — nothing syncs through them.
+  const live = data?.status === 'ok'
+  const total = data?.accounts.length ?? 0
+  useEffect(() => {
+    onCounts?.({ linked: linkedCount, total, live })
+  }, [onCounts, linkedCount, total, live])
   const pickAccounts = appAccounts.map((a) => fromApiAccount(a as unknown as ApiAccount))
 
   return (
     <Stack gap="--space-3">
       <div className="conn-acct-head">
-        <Text size="sm" tone="ink">
-          Accounts
-        </Text>
-        {data && data.accounts.length > 0 && (
+        {!embedded && (
+          <Text size="sm" tone="ink">
+            Accounts
+          </Text>
+        )}
+        {live && data.accounts.length > 0 && (
           <Text size="xs" tone="faint">
             {linkedCount} of {data.accounts.length} added
           </Text>
         )}
       </div>
-      {data && data.accounts.length > 0 && linkedCount < data.accounts.length && (
+      {live && data.accounts.length > 0 && linkedCount < data.accounts.length && (
         <Text size="xs" tone="muted">
           Add each account you want to track, or link it to one you already have. Nothing is
           imported until Lucius fetches transactions.
@@ -232,8 +251,11 @@ export function ConnectorAccountsList({
       )}
       {data && data.status === 'not_configured' && (
         <EmptyState
-          title="Not set up yet"
-          body={`Add your ${providerLabel} credentials above to see its accounts here.`}
+          title={notConfiguredText?.title ?? 'Not set up yet'}
+          body={
+            notConfiguredText?.body ??
+            `Add your ${providerLabel} credentials above to see its accounts here.`
+          }
         />
       )}
       {data && data.status === 'disabled' && (
@@ -266,6 +288,14 @@ export function ConnectorAccountsList({
           from the picker just because the live call couldn't run"). The status banners above
           explain why live options/balances may be missing; they must not also hide a link a
           user already made. */}
+      {data && data.status === 'not_configured' && linkedCount > 0 && (
+        <Text size="xs" tone="muted">
+          Left over from before: {providerLabel} isn&apos;t connected, so nothing syncs into{' '}
+          {linkedCount === 1 ? 'this account' : 'these accounts'}. Unlink{' '}
+          {linkedCount === 1 ? 'it' : 'them'}, or link a bank above to use{' '}
+          {linkedCount === 1 ? 'it' : 'them'} again.
+        </Text>
+      )}
       {data && data.accounts.length > 0 && (
         <div className="conn-acct-list">
           {groupRows(data.accounts).map((group) => (
@@ -281,6 +311,7 @@ export function ConnectorAccountsList({
                   row={row}
                   linkedName={linkedName(row.linked_account_id)}
                   accounts={pickAccounts}
+                  live={live}
                   busy={busyId === row.provider_account_id}
                   onAdd={() => setCreatingFor(row)}
                   onLink={(accountId) => void link(row, accountId)}
@@ -291,7 +322,7 @@ export function ConnectorAccountsList({
           ))}
         </div>
       )}
-      {data && (
+      {live && !embedded && (
         <ConnectorNextStep
           provider={provider}
           providerLabel={providerLabel}

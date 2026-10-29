@@ -142,7 +142,10 @@ describe.each(SECTIONS)(
 
       render(<Component />)
 
-      await waitFor(() => expect(screen.getByText('Accounts')).toBeTruthy())
+      // The list's heading — "Accounts", or the setup step that holds it ("Choose accounts").
+      await waitFor(() =>
+        expect(screen.getByText(/^(Choose and link accounts|Accounts)$/)).toBeTruthy(),
+      )
       expect(screen.queryByRole('button', { name: /sync now/i })).toBeNull()
       expect(screen.queryByText(/sync now/i)).toBeNull()
       expect(screen.queryByText(/poll interval/i)).toBeNull()

@@ -5,7 +5,7 @@
 // POST /api/plaid/link/complete — and re-fetch the Accounts list once the bank is linked.
 
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { PlaidSection } from './PlaidSection'
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
@@ -56,7 +56,7 @@ const calls = (url: string) => mockAuthFetch.mock.calls.filter(([u]) => u === ur
 it('completes the link by itself once Plaid says the session finished', async () => {
   render(<PlaidSection />)
   fireEvent.click(await screen.findByRole('button', { name: 'Link bank' }))
-  expect(await screen.findByText('Waiting for you to finish at Plaid…')).toBeTruthy()
+  expect(await screen.findByText(/Waiting for you to finish at Plaid/)).toBeTruthy()
   expect(window.open).toHaveBeenCalledWith(
     'https://hosted.plaid.com/link/1',
     '_blank',
@@ -66,13 +66,13 @@ it('completes the link by itself once Plaid says the session finished', async ()
 
   await act(() => vi.advanceTimersByTimeAsync(3000))
   expect(calls('/api/plaid/link/complete')).toBe(1)
-  expect(screen.getByText('Waiting for you to finish at Plaid…')).toBeTruthy()
+  expect(screen.getByText(/Waiting for you to finish at Plaid/)).toBeTruthy()
 
   const accountsBefore = calls('/api/connectors/plaid/accounts')
   completeStatus = 'linked'
   await act(() => vi.advanceTimersByTimeAsync(3000))
   expect(await screen.findByText(/Bank linked/)).toBeTruthy()
-  expect(screen.queryByText('Waiting for you to finish at Plaid…')).toBeNull()
+  expect(screen.queryByText(/Waiting for you to finish at Plaid/)).toBeNull()
   expect(calls('/api/connectors/plaid/accounts')).toBeGreaterThan(accountsBefore)
 
   await act(() => vi.advanceTimersByTimeAsync(9000))
@@ -86,12 +86,23 @@ it('Check now reports a session that has not finished yet', async () => {
   expect(await screen.findByText(/Plaid has not finished yet/)).toBeTruthy()
 })
 
-it('tells the user to click Link bank once credentials are saved', async () => {
+it('Link bank saves unsaved keys first, then opens Plaid — no "Save or Link first?"', async () => {
+  const unsaved = { ...STATUS, has_secret: false, client_id: '' }
+  const base = mockAuthFetch.getMockImplementation()!
+  const order: string[] = []
+  mockAuthFetch.mockImplementation(async (url: string, init?: RequestInit) => {
+    if (url === '/api/plaid/config' || url === '/api/plaid/link') order.push(url)
+    if (url === '/api/plaid/status') return okJson(unsaved)
+    return base(url, init)
+  })
   render(<PlaidSection />)
-  expect(await screen.findByText(/Credentials saved\. Next: click/)).toBeTruthy()
-  fireEvent.click(screen.getByRole('button', { name: 'Link bank' }))
-  await screen.findByText('Waiting for you to finish at Plaid…')
-  expect(screen.queryByText(/Credentials saved\. Next: click/)).toBeNull()
+  const linkBtn = await screen.findByRole('button', { name: 'Link bank' })
+  expect(screen.getByText('Enter your Client ID and Secret first.')).toBeTruthy()
+  fireEvent.change(screen.getByLabelText(/^Client ID/), { target: { value: 'cid' } })
+  fireEvent.change(screen.getByLabelText(/^Secret/), { target: { value: 'sec' } })
+  fireEvent.click(linkBtn)
+  await screen.findByText(/Waiting for you to finish at Plaid/)
+  expect(order).toEqual(['/api/plaid/config', '/api/plaid/link'])
 })
 
 function failComplete(status: number) {
@@ -107,20 +118,20 @@ it('an out-of-date server says reload instead of a raw "Method Not Allowed"', as
   failComplete(405)
   render(<PlaidSection />)
   fireEvent.click(await screen.findByRole('button', { name: 'Link bank' }))
-  await screen.findByText('Waiting for you to finish at Plaid…')
+  await screen.findByText(/Waiting for you to finish at Plaid/)
   await act(() => vi.advanceTimersByTimeAsync(3000))
   expect(await screen.findByText(/was updated while this page was open\. Reload/)).toBeTruthy()
   expect(screen.queryByText('Method Not Allowed')).toBeNull()
-  expect(screen.queryByText('Waiting for you to finish at Plaid…')).toBeNull()
+  expect(screen.queryByText(/Waiting for you to finish at Plaid/)).toBeNull()
 })
 
 it('a passing server error keeps checking, and the link still completes', async () => {
   failComplete(502)
   render(<PlaidSection />)
   fireEvent.click(await screen.findByRole('button', { name: 'Link bank' }))
-  await screen.findByText('Waiting for you to finish at Plaid…')
+  await screen.findByText(/Waiting for you to finish at Plaid/)
   await act(() => vi.advanceTimersByTimeAsync(3000))
-  expect(screen.getByText('Waiting for you to finish at Plaid…')).toBeTruthy()
+  expect(screen.getByText(/Waiting for you to finish at Plaid/)).toBeTruthy()
 
   mockAuthFetch.mockImplementation(async (url: string) => {
     if (url === '/api/plaid/link/complete') return okJson({ status: 'linked' })
@@ -131,4 +142,37 @@ it('a passing server error keeps checking, and the link still completes', async 
   await act(() => vi.advanceTimersByTimeAsync(3000))
   expect(await screen.findByText(/Bank linked/)).toBeTruthy()
   expect(screen.queryByText('Method Not Allowed')).toBeNull()
+})
+
+it('step ④ waits for a linked account, then offers the sync automation', async () => {
+  const linkedStatus = { ...STATUS, configured: true, has_access_token: true }
+  const row = (linked: string | null) => ({
+    provider_account_id: 'p1',
+    name: 'Gold Checking',
+    mask: '0000',
+    currency: 'USD',
+    balance: 110,
+    account_type: 'cash',
+    linked_account_id: linked,
+  })
+  const serve = (linked: string | null) =>
+    mockAuthFetch.mockImplementation(async (url: string) => {
+      if (url === '/api/plaid/status') return okJson(linkedStatus)
+      if (url === '/api/connectors/plaid/accounts')
+        return okJson({ status: 'ok', provider_label: 'Plaid', accounts: [row(linked)] })
+      return okJson([{ id: 'acc_1', name: 'Everyday Checking', type: 'cash', external_ids: [] }])
+    })
+
+  serve(null)
+  const { unmount } = render(<PlaidSection />)
+  const step4 = await screen.findByRole('region', { name: 'Step 4: Bring in transactions' })
+  expect(await within(step4).findByText(/Link an account above first/)).toBeTruthy()
+  expect(within(step4).queryByRole('button', { name: 'Set up automation' })).toBeNull()
+  unmount()
+
+  serve('acc_1')
+  render(<PlaidSection />)
+  const ready = await screen.findByRole('region', { name: 'Step 4: Bring in transactions' })
+  expect(await within(ready).findByRole('button', { name: 'Set up automation' })).toBeTruthy()
+  expect(screen.getByRole('region', { name: 'Step 3: Choose and link accounts' })).toBeTruthy()
 })

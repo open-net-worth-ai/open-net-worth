@@ -59,6 +59,7 @@ export function fromApiAccount(api: ApiAccount, holdingsBase = 0): Account {
       mask: e.mask,
       linkedAt: e.linked_at,
       providerLabel: e.provider_label,
+      status: e.status ?? 'connected',
     })),
     apr: api.apr ?? null,
     principal: api.principal ?? null,

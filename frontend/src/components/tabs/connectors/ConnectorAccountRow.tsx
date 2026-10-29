@@ -15,6 +15,8 @@ interface Props {
   linkedName: string
   // The app's own accounts, for Link… — the same searchable, type-grouped picker as the ledger.
   accounts: Account[]
+  // False when the connector isn't answering — a linked row is then a leftover, shown muted.
+  live?: boolean
   busy: boolean
   onAdd: () => void
   onLink: (accountId: string) => void
@@ -25,6 +27,7 @@ export function ConnectorAccountRow({
   row,
   linkedName,
   accounts,
+  live = true,
   busy,
   onAdd,
   onLink,
@@ -48,7 +51,11 @@ export function ConnectorAccountRow({
         <div className="conn-acct-sub">
           {row.mask ? `•${row.mask}` : ''}
           {linked && row.mask ? ' · ' : ''}
-          {linked && <span className="conn-acct-linked">Linked to “{linkedName}”</span>}
+          {linked && (
+            <span className={live ? 'conn-acct-linked' : 'conn-acct-linked conn-acct-linked--off'}>
+              Linked to “{linkedName}”
+            </span>
+          )}
         </div>
       </div>
       {row.balance != null && (

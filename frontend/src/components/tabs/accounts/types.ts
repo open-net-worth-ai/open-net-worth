@@ -19,7 +19,11 @@ export interface ApiExternalId {
   mask: string
   linked_at: string
   provider_label: string
+  /** The connector's state: `paused` or `disconnected` (removed) means nothing syncs here. */
+  status?: LinkStatus
 }
+
+export type LinkStatus = 'connected' | 'paused' | 'disconnected'
 
 export interface ApiAccount {
   id: string
@@ -188,6 +192,7 @@ export interface ExternalId {
   mask: string
   linkedAt: string
   providerLabel: string
+  status: LinkStatus
 }
 
 export interface Account {

@@ -103,6 +103,8 @@ function AccountRow({ a, sel, onSelect }: AccountRowProps) {
   const value = accountValue(a)
   const due = needsReconciling(a)
   const linked = [...new Set((a.externalIds ?? []).map((e) => e.providerLabel))].join(', ')
+  // Green only while every link is live — a paused or removed connector syncs nothing.
+  const linkLive = (a.externalIds ?? []).every((e) => e.status === 'connected')
   const balanceStr = isSec
     ? fBase(value, { cents: true })
     : `${fCur(a.balance, a.currency, { cents: true })} ${a.currency}`
@@ -133,7 +135,10 @@ function AccountRow({ a, sel, onSelect }: AccountRowProps) {
           <span className="acct-row-sub">
             {a.lastFour && '•••' + a.lastFour}
             {linked && (
-              <span className="acct-row-linked" title={`Linked to ${linked}`}>
+              <span
+                className={linkLive ? 'acct-row-linked' : 'acct-row-linked acct-row-linked--off'}
+                title={linkLive ? `Linked to ${linked}` : `Linked to ${linked} — not syncing`}
+              >
                 <Link2 size={11} aria-label={`Linked to ${linked}`} />
               </span>
             )}

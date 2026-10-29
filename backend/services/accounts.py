@@ -377,6 +377,25 @@ def provider_label(source: str | None) -> str:
     return source
 
 
+def link_statuses() -> dict[str, str]:
+    """Each connector's state as an account link sees it: ``"connected"`` (switched on) or
+    ``"paused"`` (switched off), keyed by connector id. A source with no entry has no connector
+    any more — removed, or never set up — and reads as ``"disconnected"`` (``link_status``).
+    ONE lean read (``enabled_flags``: id + enabled, no JSON parsed) — it sits on the account
+    serializer's path, so a caller with several links reads it once, not per link."""
+    from backend.db.connector_store import ConnectorStore
+
+    return {
+        row["id"]: "connected" if row["enabled"] else "paused"
+        for row in ConnectorStore().enabled_flags()
+    }
+
+
+def link_status(source: str | None, statuses: dict[str, str]) -> str:
+    """``source``'s state from a ``link_statuses()`` read — absent means ``"disconnected"``."""
+    return statuses.get(source or "", "disconnected")
+
+
 def linked_accounts_for_source(source: str) -> list[dict]:
     """The ``GET /api/connectors/{id}/accounts`` LINKED block, derived ONLY from
     ``Account.external_ids`` — no live provider balance (``currency``/``balance`` are always

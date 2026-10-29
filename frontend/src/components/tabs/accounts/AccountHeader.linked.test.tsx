@@ -51,7 +51,8 @@ function header(externalIds: unknown[]) {
   )
 }
 
-const link = (ref: string) => ({
+const link = (ref: string, status = 'connected') => ({
+  status,
   source: 'plaid',
   ref,
   name: 'Gold Checking',
@@ -77,4 +78,16 @@ it("tapping it opens that connector's page", () => {
 it('says nothing for an account with no links', () => {
   const { container } = header([])
   expect(container.querySelector('.acct-head-linked')).toBeNull()
+})
+
+it('a removed connector reads "Plaid · disconnected", muted, and still opens the connector', () => {
+  header([link('p1', 'disconnected')])
+  const marker = screen.getByRole('button', { name: 'Plaid · disconnected' })
+  expect(marker.className).toContain('acct-head-linked--off')
+  expect(marker.getAttribute('title')).toMatch(/was removed — nothing syncs into this account/)
+})
+
+it('a paused connector reads "Plaid · paused"', () => {
+  header([link('p1', 'paused')])
+  expect(screen.getByRole('button', { name: 'Plaid · paused' })).toBeTruthy()
 })

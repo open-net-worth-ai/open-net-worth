@@ -19,11 +19,14 @@ export function ConnectorNextStep({
   providerLabel,
   linkedCount,
   unlinkedCount,
+  bare = false,
 }: {
   provider: string
   providerLabel: string
   linkedCount: number
   unlinkedCount: number
+  /** Inside a setup step that supplies its own frame and title — render the body only. */
+  bare?: boolean
 }) {
   // Optional: these forms also render outside the router (tests, previews).
   const router = useRouter({ warn: false }) as ReturnType<typeof useRouter> | undefined
@@ -39,11 +42,8 @@ export function ConnectorNextStep({
     else window.location.assign(`/automations?template=${encodeURIComponent(templateKey)}`)
   }
 
-  return (
-    <div className="conn-next" role="region" aria-label="Next step">
-      <Text size="sm" tone="ink" weight={600}>
-        Next: bring in transactions
-      </Text>
+  const body = (
+    <>
       <Text size="xs" tone="muted">
         Linking doesn&apos;t import anything yet.{' '}
         {templateKey
@@ -62,6 +62,15 @@ export function ConnectorNextStep({
           Or ask Lucius now: “Fetch my {providerLabel} transactions.”
         </Text>
       </div>
+    </>
+  )
+  if (bare) return <div className="conn-next-body">{body}</div>
+  return (
+    <div className="conn-next" role="region" aria-label="Next step">
+      <Text size="sm" tone="ink" weight={600}>
+        Next: bring in transactions
+      </Text>
+      {body}
     </div>
   )
 }

@@ -28,11 +28,11 @@ const acct = (id: string, name: string, type: string | null, linked: string | nu
   linked_account_id: linked,
 })
 
-function serve(accounts: unknown[]) {
+function serve(accounts: unknown[], status = 'ok') {
   mockAuthFetch.mockImplementation(async (url: string) => {
     const body =
       url === '/api/connectors/plaid/accounts'
-        ? { status: 'ok', provider_label: 'Plaid', accounts }
+        ? { status, provider_label: 'Plaid', accounts }
         : [{ id: 'acc_1', name: 'My Checking', external_ids: [] }]
     return { ok: true, json: async () => body } as Response
   })
@@ -61,4 +61,14 @@ it('once an account is linked, says how transactions come in and opens the sync 
   expect(screen.getByText('1 of 2 added')).toBeTruthy()
   fireEvent.click(within(next).getByRole('button', { name: 'Set up automation' }))
   expect(assign).toHaveBeenCalledWith('/automations?template=sync_plaid')
+})
+
+it('after a Remove, a leftover link is explained and nothing invites syncing it', async () => {
+  serve([acct('1', 'Gold Checking', null, 'acc_1')], 'not_configured')
+  render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
+  expect(await screen.findByText(/Left over from before: Plaid isn't connected/)).toBeTruthy()
+  expect(screen.getByText(/Linked to/).className).toContain('conn-acct-linked--off')
+  expect(screen.queryByRole('region', { name: 'Next step' })).toBeNull()
+  expect(screen.queryByText(/of 1 added/)).toBeNull()
+  expect(screen.getByRole('button', { name: 'Unlink' })).toBeTruthy()
 })

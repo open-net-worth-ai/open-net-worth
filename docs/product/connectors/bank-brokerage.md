@@ -60,7 +60,10 @@ fetch from the provider's website and which fields to fill in.
    Either way the link saves straight away; there's nothing else to save. A linked row reads
    **Linked to "*account name*"**, and **Unlink** undoes it. On the **Accounts** screen, a
    linked account shows a green link icon in the sidebar and the connector's name (for
-   example **Plaid**) in its header. Linking imports nothing by itself —
+   example **Plaid**) in its header — tap the name to open the connector. If the connector is
+   paused or removed, both turn grey and the header reads **Plaid · paused** or **Plaid ·
+   disconnected**: nothing syncs into that account until you resume or set it up again. A
+   removed connector's old links stay listed on its page so you can unlink them. Linking imports nothing by itself —
    once an account is linked, the list shows **Next: bring in transactions** with a **Set up
    automation** button. Lucius only books into linked accounts — for an unlinked one he asks
    you instead of guessing.
@@ -100,16 +103,25 @@ US banks and cards, through your own Plaid developer account.
    Keys**, copy your **client_id** and the **secret** for the environment you want. *Sandbox*
    uses fake test banks; *Production* reaches your real bank and needs Plaid to approve your
    account first.
-2. In Open Net Worth: **Connectors → Browse & add → Plaid → Add connector**.
-3. Fill in **Client ID**, **Secret**, and **Environment** — **Sandbox (test banks)** or
-   **Production (live)**, matching the secret you copied. Click **Save**.
-4. Reopen the form (**⋯ → Edit configuration**) and click **Link bank**. Plaid's sign-in page
-   opens in a new tab; sign in at your bank there.
+2. In Open Net Worth: **Connectors → Browse & add → Plaid → Add connector**. The form walks
+   you through four numbered steps; a finished step shows a green check.
+3. **① Your Plaid keys** — fill in **Client ID** and **Secret**, and pick **Sandbox** or
+   **Production** to match the secret you copied. In Sandbox, Plaid's test bank login is
+   `user_good` / `pass_good`.
+4. **② Link your bank** — click **Link bank**. It saves your keys first, then opens Plaid's
+   sign-in page in your browser; sign in at your bank there. If Plaid offers to share extra
+   details (account holder names, account and routing numbers), you can leave them unchecked —
+   Open Net Worth only reads transactions and balances.
 5. When Plaid says **You can close this window now**, close that tab and come back. The link
-   finishes on its own — the form shows **Bank linked** within a few seconds (click **Check
-   now** to skip the wait). The **Accounts** list then shows the bank's accounts — link them.
+   finishes on its own — step ② shows **Bank linked** within a few seconds (click **Check
+   now** to skip the wait).
+6. **③ Choose and link accounts** — the bank's accounts, grouped by type. **Add** each one you
+   want to track, or **Link…** it to an account you already have.
+7. **④ Bring in transactions** — linking imports nothing by itself. Click **Set up automation**
+   to have Lucius add new transactions to your linked accounts on a schedule, or ask him for a
+   one-off fetch. Unlinked accounts are skipped.
 
-Use **Re-link bank** to connect again if your bank asks you to sign in afresh.
+To change your keys later, click **Edit keys** on step ①, then **Save**. Use **Re-link bank** to connect again if your bank asks you to sign in afresh.
 
 ## Enable Banking
 

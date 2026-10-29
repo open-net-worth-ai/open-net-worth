@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { authFetch } from '../../../api/client'
 import {
   Stack,
@@ -8,25 +8,25 @@ import {
   FormField,
   TextField,
   PasswordField,
-  Select,
+  SegmentedControl,
   useSecretReveal,
 } from '../../ui'
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
 import { ConnectorStatusLine } from './ConnectorStatusLine'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
+import { SetupStep, type SetupStepState } from './SetupStep'
+import { usePlaidLink } from './usePlaidLink'
+import { ConnectorNextStep } from './ConnectorNextStep'
 
-// Plaid connector config over /api/plaid/* (per-provider plane), mirroring EnableBankingSection.
-// The secret is read back through its own eye (GET /api/connectors/plaid/secret/secret) — the
-// access token stays write-only. The GET echoes only `has_secret` / `has_access_token`; a blank
-// secret field leaves the saved value unchanged. The bank LINK flow uses Plaid HOSTED LINK (no
-// frontend Link-SDK): "Link bank" opens a Plaid-returned URL in a new tab where the user
-// authenticates at their bank. Hosted Link ends on Plaid's own "you can close this window" page
-// and never shows a public token, so this form polls POST /api/plaid/link/complete — the server
-// reads the session's public token back from Plaid and exchanges it for an access token. This form owns the config fields (creds /
-// environment / enable) + Link; fetching/booking transactions is now Lucius's job via a
-// template (see the connector page's Automate button) — the unified /api/connectors PATCH owns the
-// card-header enable toggle. Save lives in the modal footer — see ./formSave.
+// Plaid connector setup over /api/plaid/* — three numbered steps, in the order a new user must
+// follow: ① the API keys (client_id + write-only secret + environment), ② link a bank (Hosted
+// Link, see ./usePlaidLink — "Link bank" saves unsaved keys first, so there is no "Save or Link
+// first?" question), ③ choose which of the bank's accounts to track (ConnectorAccountsList).
+// The secret is read back through its own eye (GET /api/connectors/plaid/secret/secret); the
+// access token stays write-only. Fetching/booking transactions is Lucius's job (the list's
+// "Next" step opens the sync Automation). The footer Save (./formSave) stays for editing keys
+// later; the unified /api/connectors PATCH owns the card-header enable toggle.
 
 interface PlaidStatus {
   configured: boolean
@@ -56,14 +56,15 @@ function plaidFormOf(c: PlaidStatus): PlaidForm {
   }
 }
 
-// How often, and for how long, to ask the server whether the Hosted Link session finished.
-const LINK_POLL_MS = 3000
-const LINK_POLL_LIMIT_MS = 15 * 60 * 1000
-
 const ENV_OPTIONS = [
-  { value: 'sandbox', label: 'Sandbox (test banks)' },
-  { value: 'production', label: 'Production (live)' },
+  { value: 'sandbox', label: 'Sandbox' },
+  { value: 'production', label: 'Production' },
 ]
+
+const ENV_HELP: Record<string, string> = {
+  sandbox: "Plaid's test banks — sign in with user_good / pass_good. Use the Sandbox secret.",
+  production: 'Your real bank. Needs Plaid to approve your account, and the Production secret.',
+}
 
 export function PlaidSection() {
   const [cfg, setCfg] = useState<PlaidStatus | null>(null)
@@ -71,16 +72,9 @@ export function PlaidSection() {
   const [error, setError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
-
-  // Bank-link flow state.
-  const [linking, setLinking] = useState(false)
-  const [linkErr, setLinkErr] = useState<string | null>(null)
-  const [waiting, setWaiting] = useState(false)
-  const [checking, setChecking] = useState(false)
-  const [linkedNote, setLinkedNote] = useState(false)
-  // Bumped after a successful link so the Accounts list re-fetches the bank's accounts.
-  const [accountsKey, setAccountsKey] = useState(0)
-  const pollStarted = useRef(0)
+  const [editingKeys, setEditingKeys] = useState(false)
+  // Step ③'s list reports how many of the bank's accounts are linked — step ④ depends on it.
+  const [counts, setCounts] = useState({ linked: 0, total: 0, live: false })
 
   function load() {
     setError(false)
@@ -94,6 +88,7 @@ export function PlaidSection() {
   }
 
   useEffect(load, [])
+  const link = usePlaidLink(load)
 
   async function save(): Promise<boolean> {
     if (!form || !cfg) return false
@@ -113,10 +108,11 @@ export function PlaidSection() {
       })
       if (!r.ok) {
         const d = await r.json().catch(() => ({}))
-        setSaveErr(d.detail || 'Could not save the credentials.')
+        setSaveErr(d.detail || 'Could not save the keys.')
         return false
       }
       setForm((f) => f && { ...f, secret: '' })
+      setEditingKeys(false)
       load()
       return true
     } catch {
@@ -126,80 +122,6 @@ export function PlaidSection() {
       setSaving(false)
     }
   }
-
-  async function linkBank() {
-    setLinking(true)
-    setLinkErr(null)
-    try {
-      const r = await authFetch('/api/plaid/link', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}))
-        setLinkErr(d.detail || 'Could not start the bank link. Save your credentials first.')
-        return
-      }
-      const data = (await r.json()) as { link: string }
-      if (data.link) {
-        window.open(data.link, '_blank', 'noopener,noreferrer')
-        setLinkedNote(false)
-        pollStarted.current = Date.now()
-        setWaiting(true)
-      }
-    } finally {
-      setLinking(false)
-    }
-  }
-
-  const checkLink = useCallback(async (manual: boolean) => {
-    if (manual) setChecking(true)
-    try {
-      const r = await authFetch('/api/plaid/link/complete', { method: 'POST' })
-      if (r.status === 404 || r.status === 405) {
-        // The server predates this page (it was updated while the app ran) — this link can't
-        // finish, and polling again won't change that.
-        setLinkErr('Open Net Worth was updated while this page was open. Reload, then link again.')
-        setWaiting(false)
-        return
-      }
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}))
-        setLinkErr(d.detail || 'Could not complete the bank link.')
-        // Only "no link in progress" is final; anything else may clear on the next check.
-        if (r.status === 422) setWaiting(false)
-        return
-      }
-      setLinkErr(null)
-      const d = (await r.json()) as { status: string }
-      if (d.status === 'linked') {
-        setWaiting(false)
-        setLinkErr(null)
-        setLinkedNote(true)
-        setAccountsKey((k) => k + 1)
-        load()
-      } else if (manual) {
-        setLinkErr('Plaid has not finished yet — complete the sign-in in the Plaid tab first.')
-      }
-    } catch {
-      if (manual) setLinkErr('Could not reach the server.')
-    } finally {
-      if (manual) setChecking(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!waiting) return
-    const id = window.setInterval(() => {
-      if (Date.now() - pollStarted.current > LINK_POLL_LIMIT_MS) {
-        setWaiting(false)
-        return
-      }
-      void checkLink(false)
-    }, LINK_POLL_MS)
-    return () => window.clearInterval(id)
-  }, [waiting, checkLink])
 
   const setSecret = useCallback((v: string) => setForm((f) => f && { ...f, secret: v }), [])
   const secret = useSecretReveal({
@@ -237,141 +159,218 @@ export function PlaidSection() {
     )
   }
 
-  const needsLink = cfg.has_secret && !cfg.has_access_token && !waiting
+  const keysEntered = !!form.client_id.trim() && (!!form.secret.trim() || cfg.has_secret)
+  const keysDirty =
+    form.client_id.trim() !== (cfg.client_id || '') ||
+    form.environment !== cfg.environment ||
+    !!form.secret.trim()
+  const keysSaved = cfg.has_secret && !keysDirty
+  const showKeyFields = !cfg.has_secret || editingKeys || keysDirty
+  // A link this page just completed counts at once — not only after the status reload lands.
+  const linked = cfg.has_access_token || link.justLinked
+
+  /** Link bank saves unsaved keys first — never a "Save or Link first?" choice. */
+  async function linkBank() {
+    if (!keysSaved && !(await save())) return
+    await link.start()
+  }
+
+  const keysState: SetupStepState = keysSaved ? 'done' : 'current'
+  const linkState: SetupStepState = linked ? 'done' : keysEntered ? 'current' : 'todo'
+  const hasLinkedAccount = counts.live && counts.linked > 0
+  const accountsState: SetupStepState = hasLinkedAccount ? 'done' : linked ? 'current' : 'todo'
+  const syncState: SetupStepState = hasLinkedAccount ? 'current' : 'todo'
   const set = <K extends keyof PlaidForm>(k: K, v: PlaidForm[K]) =>
     setForm((f) => f && { ...f, [k]: v })
 
   return (
     <Stack gap="--space-4">
-      <Text size="sm" tone="faint">
-        Add your{' '}
-        <a href="https://plaid.com/docs/" target="_blank" rel="noreferrer">
+      <Text size="sm" tone="muted">
+        Connect US and Canadian bank accounts through your own{' '}
+        <a href="https://dashboard.plaid.com" target="_blank" rel="noreferrer">
           Plaid
         </a>{' '}
-        API credentials, then link a bank — you&apos;ll sign in at your own bank in a new tab, and
-        the link completes here on its own once Plaid says you can close that window. Fetching and
-        booking transactions is Lucius's job — automate it with a template below.
+        developer account. Read-only: nothing here can move money.
       </Text>
 
       {cfg.configured && !cfg.enabled && (
         <Text size="xs" tone="warn">
-          Currently paused — saving here won&apos;t resume it. Use Resume on the connector card to
-          turn it back on.
+          Paused — nothing syncs. Use Resume on the connector card to turn it back on.
         </Text>
       )}
-
-      <ConnectorStatusLine lastSyncedAt={cfg.last_synced_at} lastStatus={cfg.last_status} />
       {cfg.last_error && (
         <Text size="xs" tone="bad">
           Last error: {cfg.last_error}
         </Text>
       )}
 
-      <FormField
-        label="Client ID"
-        htmlFor="conn-plaid-id"
-        required
-        help="Your Plaid client_id (from the Plaid dashboard)."
-      >
-        <TextField
-          id="conn-plaid-id"
-          value={form.client_id}
-          placeholder="000000000000000000000000"
-          onChange={(e) => set('client_id', e.target.value)}
-        />
-      </FormField>
-
-      <FormField
-        label="Secret"
-        htmlFor="conn-plaid-secret"
-        required
-        help={secret.caption || 'Your Plaid secret for the selected environment.'}
-        error={
-          secret.error ||
-          (secretTouched.touched && !secretValid ? 'A Plaid secret is required.' : undefined)
+      <SetupStep
+        n={1}
+        title="Your Plaid keys"
+        state={keysState}
+        aside={
+          !showKeyFields && (
+            <Button size="sm" variant="ghost" onClick={() => setEditingKeys(true)}>
+              Edit keys
+            </Button>
+          )
         }
       >
-        <PasswordField
-          id="conn-plaid-secret"
-          value={form.secret}
-          placeholder={cfg.has_secret ? '••••••••' : 'secret'}
-          onChange={(e) => set('secret', e.target.value)}
-          onBlur={secretTouched.onBlur}
-          {...secret.fieldProps}
-        />
-      </FormField>
-
-      <FormField label="Environment" htmlFor="conn-plaid-env">
-        <Select
-          id="conn-plaid-env"
-          value={form.environment}
-          options={ENV_OPTIONS}
-          onChange={(e) => set('environment', e.target.value)}
-        />
-      </FormField>
-
-      {saveErr && (
-        <Text size="xs" tone="bad">
-          {saveErr}
-        </Text>
-      )}
-
-      {/* ── Bank link flow (Hosted Link → the server reads the public token back) ── */}
-      <Stack gap="--space-3">
-        <Text size="sm" tone="ink">
-          {cfg.has_access_token ? 'Linked bank' : 'Link a bank'}
-        </Text>
-        {needsLink && (
-          <Text size="xs" tone="muted">
-            Credentials saved. Next: click <b>Link bank</b> and sign in at your bank — Plaid opens
-            in your browser, and this form finishes the link once Plaid says you can close it.
-          </Text>
-        )}
-        <Cluster gap="--space-3" align="center" wrap>
-          <Button
-            size="sm"
-            variant={needsLink ? 'primary' : 'secondary'}
-            loading={linking}
-            disabled={!cfg.has_secret}
-            onClick={linkBank}
-          >
-            {cfg.has_access_token ? 'Re-link bank' : 'Link bank'}
-          </Button>
-          <Text size="xs" tone="faint">
-            Opens Plaid in your browser.
-          </Text>
-        </Cluster>
-
-        {waiting && (
-          <Cluster gap="--space-3" align="center" wrap>
+        {showKeyFields ? (
+          <Stack gap="--space-3">
             <Text size="xs" tone="faint">
-              Waiting for you to finish at Plaid…
+              From the Plaid dashboard → Developers → Keys.
             </Text>
-            <Button
-              size="sm"
-              variant="secondary"
-              loading={checking}
-              onClick={() => checkLink(true)}
+            <FormField label="Client ID" htmlFor="conn-plaid-id" required>
+              <TextField
+                id="conn-plaid-id"
+                value={form.client_id}
+                placeholder="24 characters"
+                onChange={(e) => set('client_id', e.target.value)}
+              />
+            </FormField>
+            <FormField
+              label="Secret"
+              htmlFor="conn-plaid-secret"
+              required
+              help={secret.caption || undefined}
+              error={
+                secret.error ||
+                (secretTouched.touched && !secretValid ? 'A Plaid secret is required.' : undefined)
+              }
             >
-              Check now
+              <PasswordField
+                id="conn-plaid-secret"
+                value={form.secret}
+                placeholder={cfg.has_secret ? '••••••••' : 'The secret for the environment below'}
+                onChange={(e) => set('secret', e.target.value)}
+                onBlur={secretTouched.onBlur}
+                {...secret.fieldProps}
+              />
+            </FormField>
+            <Stack gap="--space-1">
+              <Text size="xs" tone="ink" weight={500}>
+                Environment
+              </Text>
+              <SegmentedControl
+                ariaLabel="Environment"
+                options={ENV_OPTIONS}
+                value={form.environment}
+                onChange={(v) => set('environment', v)}
+              />
+              <Text size="xs" tone="faint">
+                {ENV_HELP[form.environment]}
+              </Text>
+            </Stack>
+            {saveErr && (
+              <Text size="xs" tone="bad">
+                {saveErr}
+              </Text>
+            )}
+          </Stack>
+        ) : (
+          <Text size="xs" tone="muted">
+            {cfg.environment === 'production' ? 'Production' : 'Sandbox'} · Client ID ••
+            {cfg.client_id.slice(-4)}
+          </Text>
+        )}
+      </SetupStep>
+
+      <SetupStep
+        n={2}
+        title="Link your bank"
+        state={linkState}
+        aside={
+          linked &&
+          !link.waiting && (
+            <Button size="sm" variant="ghost" loading={link.starting} onClick={linkBank}>
+              Re-link bank
             </Button>
-          </Cluster>
-        )}
+          )
+        }
+      >
+        <Stack gap="--space-3">
+          {link.waiting ? (
+            <Cluster gap="--space-3" align="center" wrap>
+              <Text size="xs" tone="muted">
+                Waiting for you to finish at Plaid… this page finishes on its own.
+              </Text>
+              <Button size="sm" variant="secondary" loading={link.checking} onClick={link.checkNow}>
+                Check now
+              </Button>
+            </Cluster>
+          ) : linked ? (
+            <Text size="xs" tone={link.justLinked ? 'good' : 'muted'}>
+              {link.justLinked ? 'Bank linked. ' : 'Linked. '}Choose its accounts below.
+            </Text>
+          ) : (
+            <>
+              <Text size="xs" tone="muted">
+                Sign in at your bank in your browser. When Plaid says you can close the window, come
+                back — this page finishes the link on its own.
+              </Text>
+              <Cluster gap="--space-3" align="center" wrap>
+                <Button
+                  size="sm"
+                  variant="primary"
+                  loading={link.starting || saving}
+                  disabled={!keysEntered}
+                  onClick={linkBank}
+                >
+                  Link bank
+                </Button>
+                {!keysEntered && (
+                  <Text size="xs" tone="faint">
+                    Enter your Client ID and Secret first.
+                  </Text>
+                )}
+              </Cluster>
+            </>
+          )}
+          {link.error && (
+            <Text size="xs" tone="bad">
+              {link.error}
+            </Text>
+          )}
+        </Stack>
+      </SetupStep>
 
-        {linkedNote && !waiting && (
-          <Text size="xs" tone="good">
-            Bank linked. Its accounts are listed below — link each one to an account here.
-          </Text>
-        )}
+      <SetupStep n={3} title="Choose and link accounts" state={accountsState}>
+        <Stack gap="--space-3">
+          <ConnectorAccountsList
+            key={link.linkCount}
+            provider="plaid"
+            providerLabel="Plaid"
+            embedded
+            onCounts={setCounts}
+            notConfiguredText={{
+              title: 'No bank linked yet',
+              body: 'Link a bank above — its accounts appear here.',
+            }}
+          />
+        </Stack>
+      </SetupStep>
 
-        {linkErr && (
-          <Text size="xs" tone="bad">
-            {linkErr}
-          </Text>
-        )}
-      </Stack>
-
-      <ConnectorAccountsList key={accountsKey} provider="plaid" providerLabel="Plaid" />
+      <SetupStep n={4} title="Bring in transactions" state={syncState}>
+        <Stack gap="--space-2">
+          {hasLinkedAccount ? (
+            <ConnectorNextStep
+              provider="plaid"
+              providerLabel="Plaid"
+              linkedCount={counts.linked}
+              unlinkedCount={counts.total - counts.linked}
+              bare
+            />
+          ) : (
+            <Text size="xs" tone="muted">
+              Link an account above first — then Lucius can add its transactions.
+            </Text>
+          )}
+          {cfg.last_synced_at && (
+            <ConnectorStatusLine lastSyncedAt={cfg.last_synced_at} lastStatus={cfg.last_status} />
+          )}
+        </Stack>
+      </SetupStep>
     </Stack>
   )
 }

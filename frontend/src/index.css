@@ -9184,6 +9184,69 @@ body.hide-amounts .money * {
     flex-wrap: wrap;
   }
 
+  /* Connector setup steps (connectors/SetupStep) — ① keys → ② link a bank → ③ choose accounts.
+     The number carries the state: accent ring for the current step, a green check once done,
+     faint for a step that can't start yet. */
+  .setup-step {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4) var(--space-4);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+  }
+  .setup-step--current {
+    border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  }
+  .setup-step-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 28px;
+  }
+  .setup-step-n {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1.5px solid var(--line-strong);
+    color: var(--faint);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .setup-step--current .setup-step-n {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .setup-step--done .setup-step-n {
+    border-color: var(--good);
+    background: var(--good);
+    color: var(--surface);
+  }
+  .setup-step-title {
+    flex: 1;
+    margin: 0;
+    color: var(--ink);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+  .setup-step--todo .setup-step-title {
+    color: var(--muted);
+  }
+  .setup-step-aside {
+    flex: none;
+  }
+  .setup-step-body {
+    padding-left: calc(22px + var(--space-2));
+  }
+  .setup-step--todo .setup-step-body {
+    opacity: 0.7;
+  }
+
   /* Connector "Accounts" list (connectors/ConnectorAccountRow) — one compact row per provider
      account, grouped by type: icon · name over •mask · balance · its one next step. */
   /* Account header — "• Plaid" with a link glyph when the account is linked to a connector. */
@@ -9208,6 +9271,10 @@ body.hide-amounts .money * {
     margin-left: 4px;
     color: var(--good);
     vertical-align: -1px;
+  }
+  .acct-head-linked--off,
+  .acct-row-linked--off {
+    color: var(--faint);
   }
 
   .conn-acct-head {
@@ -9277,6 +9344,9 @@ body.hide-amounts .money * {
   .conn-acct-linked {
     color: var(--good);
   }
+  .conn-acct-linked--off {
+    color: var(--faint);
+  }
   .conn-acct-bal {
     flex: none;
     color: var(--ink);
@@ -9302,6 +9372,11 @@ body.hide-amounts .money * {
     border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+  }
+  .conn-next-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
   }
   .conn-next-actions {
     display: flex;

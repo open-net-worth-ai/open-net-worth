@@ -487,13 +487,22 @@ def account_with_balance(
 
 def _hydrated_external_ids(ids: list[dict]) -> list[dict]:
     """``external_ids``, each entry carrying its provider's display ``provider_label``
-    (UI spec: server-side labels, no frontend copy of the provider-name table)."""
-    from backend.services.accounts import provider_label
+    (UI spec: server-side labels, no frontend copy of the provider-name table) and its
+    connector's ``status`` — ``connected`` / ``paused`` / ``disconnected`` (removed), so a
+    link whose connector is gone never still reads as live. No links, no connector read."""
+    from backend.services.accounts import link_status, link_statuses, provider_label
 
+    entries = [entry for entry in ids if isinstance(entry, dict)]
+    if not entries:
+        return []
+    statuses = link_statuses()
     return [
-        {**entry, "provider_label": provider_label(entry.get("source"))}
-        for entry in ids
-        if isinstance(entry, dict)
+        {
+            **entry,
+            "provider_label": provider_label(entry.get("source")),
+            "status": link_status(entry.get("source"), statuses),
+        }
+        for entry in entries
     ]
 
 

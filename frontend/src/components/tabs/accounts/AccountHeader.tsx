@@ -29,7 +29,7 @@ import {
   Upload,
   User,
 } from '../../../ui/icons'
-import type { Account } from './types'
+import type { Account, LinkStatus } from './types'
 import { fCur } from './data'
 import { ReviewStrip, TxnCount } from './ReviewStrip'
 import { typeLabel } from './categories'
@@ -313,6 +313,13 @@ export interface AccountHeaderProps {
 
 // ── AccountHeader ─────────────────────────────────────────────────────────────
 
+const LINK_TITLE: Record<LinkStatus, (label: string) => string> = {
+  connected: (label) => `Linked to ${label} — open its connector`,
+  paused: (label) => `${label} is paused — nothing syncs into this account until you resume it`,
+  disconnected: (label) =>
+    `${label} was removed — nothing syncs into this account. Tap to set it up again.`,
+}
+
 export function AccountHeader({
   account,
   dueInfo,
@@ -337,10 +344,10 @@ export function AccountHeader({
   onStartReview,
 }: AccountHeaderProps) {
   const chatComposer = useChatComposerOptional()
-  // The connectors this account is linked to (server-derived label), one entry per connector.
+  // The connectors this account is linked to (server-derived label + state), one per connector.
   const linkedProviders = [
-    ...new Map((account.externalIds ?? []).map((e) => [e.source, e.providerLabel])),
-  ].map(([source, label]) => ({ source, label }))
+    ...new Map((account.externalIds ?? []).map((e) => [e.source, e])).values(),
+  ].map((e) => ({ source: e.source, label: e.providerLabel, status: e.status }))
   // Optional: the header also renders outside the router (tests).
   const router = useRouter({ warn: false }) as ReturnType<typeof useRouter> | undefined
   const openConnector = (source: string) => {
@@ -407,17 +414,22 @@ export function AccountHeader({
                   <span>•••{account.lastFour}</span>
                 </>
               )}
-              {linkedProviders.map(({ source, label }) => (
+              {linkedProviders.map(({ source, label, status }) => (
                 <Fragment key={source}>
                   <span className="sep">•</span>
                   <button
                     type="button"
-                    className="acct-head-linked"
-                    title={`Linked to ${label} — open its connector`}
+                    className={
+                      status === 'connected'
+                        ? 'acct-head-linked'
+                        : 'acct-head-linked acct-head-linked--off'
+                    }
+                    title={LINK_TITLE[status](label)}
                     onClick={() => openConnector(source)}
                   >
                     <Link2 size={12} aria-hidden="true" />
                     {label}
+                    {status !== 'connected' && ` · ${status}`}
                   </button>
                 </Fragment>
               ))}
