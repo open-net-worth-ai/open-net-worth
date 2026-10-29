@@ -158,12 +158,6 @@ describe('categories describe the connector; families are the lane', () => {
     expect(cats('telegram')).toEqual(['Messaging'])
   })
 
-  it('does not tag a positions-import feed as market data', () => {
-    // Alpaca SELLS market data; this connector imports none. A category is what the connector
-    // is for in this app, not what the vendor's catalogue covers.
-    expect(byId('alpaca').categories).not.toContain('Market data')
-  })
-
   it('does not tag a read-only banking server as payments', () => {
     // Mercury's server explicitly cannot move money, send a payment, or change anything.
     expect(byId('mcp-mercury').categories).toEqual(['Banking'])
@@ -214,7 +208,6 @@ describe('native entries carry links too, and every one was fetched', () => {
     const expected: [string, 'homepageUrl' | 'supportUrl' | 'privacyUrl', string][] = [
       ['plaid', 'homepageUrl', 'https://plaid.com/docs/link/'],
       ['plaid', 'privacyUrl', 'https://plaid.com/legal/#end-user-privacy-policy'],
-      ['alpaca', 'privacyUrl', 'https://files.alpaca.markets/disclosures/PrivacyPolicy.pdf'],
       ['enable_banking', 'homepageUrl', 'https://enablebanking.com/docs/api/reference/'],
       ['web_search:serper', 'privacyUrl', 'https://serper.dev/privacy'],
       [
@@ -274,6 +267,7 @@ describe('MCP provenance — what we confirmed, stated exactly', () => {
     ['mcp-alpaca', 'Alpaca', 'verified'],
     ['mcp-coinbase', 'Coinbase', 'verified'],
     ['mcp-okx', 'OKX', 'verified'],
+    ['mcp-kraken', 'Kraken', 'verified'],
     ['mcp-expensify', 'Expensify', 'verified'],
     ['mcp-avalara', 'Avalara', 'verified'],
     ['mcp-twelvedata', 'Twelve Data', 'verified'],
@@ -520,8 +514,8 @@ describe('a hosted server with no repo renders cleanly', () => {
 })
 
 describe('retired entries', () => {
-  it('keeps IBKR Flex out of the directory, its entry set aside rather than deleted', () => {
-    expect(CATALOG.some((e) => e.id === 'ibkr')).toBe(false)
-    expect(RETIRED_CATALOG.map((e) => e.id)).toEqual(['ibkr'])
+  it('keeps IBKR Flex and the Alpaca data source out, their entries set aside not deleted', () => {
+    expect(CATALOG.some((e) => e.id === 'ibkr' || e.id === 'alpaca')).toBe(false)
+    expect(RETIRED_CATALOG.map((e) => e.id).sort()).toEqual(['alpaca', 'ibkr'])
   })
 })

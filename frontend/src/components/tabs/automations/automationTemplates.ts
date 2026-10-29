@@ -131,8 +131,8 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   },
 ]
 
-/** One template per OFFERED connector (Yodlee and IBKR Flex excluded — `disabled=True`
- *  server-side, hidden from the directory; IBKR Flex's kept in `RETIRED_SYNC_TEMPLATES`). Display names are the exact provider labels from
+/** One template per OFFERED connector (Yodlee, Alpaca and IBKR Flex excluded — `disabled=True`
+ *  server-side, hidden from the directory; Alpaca's and IBKR Flex's kept in `RETIRED_SYNC_TEMPLATES`). Display names are the exact provider labels from
  *  `backend/services/aggregation/providers.py`, not the raw connector key. Email's template
  *  (`mail_ledger`) is in RECOMMENDED_TEMPLATES; its instructions live in the
  *  log-transactions-from-email starter skill, so a fix reaches every unedited copy. */
@@ -233,18 +233,6 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
   },
-  {
-    key: 'sync_alpaca',
-    name: 'Sync Alpaca',
-    description: 'Fetch Alpaca positions and keep the portfolio current.',
-    instructions:
-      'Fetch my Alpaca positions and cash. Add or update positions from the ' +
-      'snapshot. Never remove a position; tell me about any that are missing. Message me ' +
-      'only when something changed or something went wrong.',
-    trigger: { kind: 'schedule', type: 'interval', seconds: 3600 },
-    execution: { kind: 'lucius' },
-    permission_mode: 'auto',
-  },
 ]
 
 export const ALL_TEMPLATES: AutomationTemplate[] = [
@@ -278,6 +266,18 @@ export const TEMPLATE_ICONS: Record<string, LucideIcon> = {
 /** Sync templates for retired connectors — kept so a revert is one move back, never shown.
  *  IBKR Flex: ADR 2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server. */
 export const RETIRED_SYNC_TEMPLATES: AutomationTemplate[] = [
+  {
+    key: 'sync_alpaca',
+    name: 'Sync Alpaca',
+    description: 'Fetch Alpaca positions and keep the portfolio current.',
+    instructions:
+      'Fetch my Alpaca positions and cash. Add or update positions from the ' +
+      'snapshot. Never remove a position; tell me about any that are missing. Message me ' +
+      'only when something changed or something went wrong.',
+    trigger: { kind: 'schedule', type: 'interval', seconds: 3600 },
+    execution: { kind: 'lucius' },
+    permission_mode: 'auto',
+  },
   {
     key: 'sync_ibkr',
     name: 'Sync Interactive Brokers',

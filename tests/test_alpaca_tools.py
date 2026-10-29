@@ -36,18 +36,23 @@ def isolate(tmp_path, monkeypatch):
     yield
 
 
-def test_status_tool_hides_keys():
+def test_status_hides_keys():
+    """The Alpaca data source is retired (DISABLED_CONNECTORS) — kept code, refused tools — so
+    this pins the key-hiding property on the status read the tool used, not on dispatch."""
     from backend.db.alpaca_config_store import AlpacaConfigStore
+    from backend.services.aggregation.providers import PROVIDERS
 
     AlpacaConfigStore().update({"api_key_id": "PKSECRET", "secret_key": "topsecret"})
-    # Alpaca's status is now a row in the merged get_connector_status read; `alpaca_get_status`
-    # still dispatches (alias) and still scopes to Alpaca alone.
-    wrapper, _ = call("alpaca_get_status")
-    body = wrapper["providers"]["alpaca"]
+    body = PROVIDERS["alpaca"].public_status()
     assert body["has_keys"] is True
     blob = json.dumps(body)
     assert "PKSECRET" not in blob
     assert "topsecret" not in blob
+
+
+def test_the_retired_status_tool_is_refused_on_dispatch():
+    wrapper, _ = call("alpaca_get_status")
+    assert "disabled" in json.dumps(wrapper)
 
 
 def test_trading_tools_are_gone_from_the_registry():

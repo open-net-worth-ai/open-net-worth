@@ -46,7 +46,7 @@ it('renders SVG chevrons instead of text glyphs in both toolbar menus', () => {
 // The gallery leads with "Recommended" (email logging, then the three reports), then "Sync a
 // connector" (CDS-UI-9: one card per offered provider, no Yodlee — disabled server-side, no
 // template), both always shown; "Start from a template" comes last.
-it('shows Recommended first, then the 8 connector syncs, then the rest', () => {
+it('shows Recommended first, then the 6 connector syncs, then the rest', () => {
   renderList()
   const sections = [...document.querySelectorAll('.a3-tpl-section')]
   expect(sections.map((s) => s.querySelector('.a3-sec-label')?.textContent)).toEqual([
@@ -64,7 +64,7 @@ it('shows Recommended first, then the 8 connector syncs, then the rest', () => {
     'Weekly report template',
     'Monthly report template',
   ])
-  expect(CONNECTOR_SYNC_TEMPLATES).toHaveLength(7)
+  expect(CONNECTOR_SYNC_TEMPLATES).toHaveLength(6)
   for (const template of CONNECTOR_SYNC_TEMPLATES) {
     expect(
       within(sections[1] as HTMLElement).getByRole('button', { name: `${template.name} template` }),
@@ -76,7 +76,7 @@ it('shows Recommended first, then the 8 connector syncs, then the rest', () => {
 // CDS-UI-10: clicking a "Sync <Provider>" card hands the caller the RIGHT template — an
 // interval trigger at 21600s for banks/IBKR, 3600s for Alpaca, lucius execution, auto
 // permission_mode.
-it('hands the exact template to onTemplate for both a bank and Alpaca', () => {
+it('hands the exact template to onTemplate for a bank sync', () => {
   const onTemplate = renderList()
   fireEvent.click(screen.getByRole('button', { name: 'Browse all templates' }))
 
@@ -86,11 +86,6 @@ it('hands the exact template to onTemplate for both a bank and Alpaca', () => {
   expect(bank.trigger).toEqual({ kind: 'schedule', type: 'interval', seconds: 21600 })
   expect(bank.execution).toEqual({ kind: 'lucius' })
   expect(bank.permission_mode).toBe('auto')
-
-  const alpaca = CONNECTOR_SYNC_TEMPLATES.find((t) => t.key === 'sync_alpaca')!
-  screen.getByRole('button', { name: `${alpaca.name} template` }).click()
-  expect(onTemplate).toHaveBeenLastCalledWith(alpaca)
-  expect(alpaca.trigger).toEqual({ kind: 'schedule', type: 'interval', seconds: 3600 })
 })
 
 // CDS-UI-2 (no poll-interval anywhere) / general no-Sync-now regression guard for the
@@ -132,9 +127,10 @@ it('the 6 bank templates say "bring it in line" and "never override something I 
   }
 })
 
-it('offers no IBKR Flex sync — it is retired, its template kept aside', () => {
+it('offers no sync for a retired connector — IBKR Flex, Alpaca — their templates kept aside', () => {
   expect(CONNECTOR_SYNC_TEMPLATES.some((t) => t.key === 'sync_ibkr')).toBe(false)
-  expect(RETIRED_SYNC_TEMPLATES.map((t) => t.key)).toEqual(['sync_ibkr'])
+  expect(CONNECTOR_SYNC_TEMPLATES.some((t) => t.key === 'sync_alpaca')).toBe(false)
+  expect(RETIRED_SYNC_TEMPLATES.map((t) => t.key).sort()).toEqual(['sync_alpaca', 'sync_ibkr'])
 })
 
 it('the retired IBKR template keeps the same correction wording, adapted to its own subject', () => {
@@ -146,8 +142,8 @@ it('the retired IBKR template keeps the same correction wording, adapted to its 
   expect(ibkr.instructions).not.toContain('was withdrawn after booking, tell me')
 })
 
-it('the Alpaca template is unchanged by CDS-6 (positions-only, no correction sentence)', () => {
-  const alpaca = CONNECTOR_SYNC_TEMPLATES.find((t) => t.key === 'sync_alpaca')!
+it('the retired Alpaca template is unchanged by CDS-6 (positions-only, no correction sentence)', () => {
+  const alpaca = RETIRED_SYNC_TEMPLATES.find((t) => t.key === 'sync_alpaca')!
   expect(alpaca.instructions).toBe(
     'Fetch my Alpaca positions and cash. Add or update positions from the ' +
       'snapshot. Never remove a position; tell me about any that are missing. Message me ' +

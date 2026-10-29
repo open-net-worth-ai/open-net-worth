@@ -39,8 +39,8 @@ if that's what you use; with neither set up, they appear in the app.
 Other templates on the same page:
 
 - **Sync a connector** — one per bank or broker connector (**Sync SimpleFIN**, **Sync Plaid**,
-  **Sync Lunch Money**, **Sync Lunch Flow**, **Sync YNAB**, **Sync Enable Banking**, **Sync
-  Alpaca**). Each fetches new activity on a schedule and books it.
+  **Sync Lunch Money**, **Sync Lunch Flow**, **Sync YNAB**, **Sync Enable Banking**). Each fetches
+  new activity on a schedule and books it.
   You can also start these from the **Automate** button on the connector's own page.
 - **Start from a template** — **Subscription creep**, **Budget pacing**, **Cash floor guard**,
   **Large charge alert**; **Browse all templates** adds **New payee check** and **Portfolio

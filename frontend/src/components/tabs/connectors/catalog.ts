@@ -137,6 +137,8 @@ export type DirectorySort = 'popular' | 'az'
  *
  * Deliberately ABSENT, and why:
  *  - Webhook — its backend works (`webhook`), but it is intentionally not an addable card (§8).
+ *  - Alpaca (data source) — retired 2026-10-29 for Alpaca's own MCP server (`mcp-alpaca`), which
+ *    trades too; same treatment as IBKR Flex below.
  *  - IBKR Flex — retired 2026-10-29 for IBKR's own hosted MCP server (`mcp-ibkr`), which reads
  *    live where Flex is a day-late report. Backend kept (`disabled=True`); its entry lives in
  *    `RETIRED_CATALOG` below, unshown. ADR 2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server.
@@ -176,6 +178,26 @@ export type DirectorySort = 'popular' | 'az'
 /** Entries withdrawn from the directory but kept, so a revert is one move back into
  *  `CATALOG`. Never rendered or searched. */
 export const RETIRED_CATALOG: CatalogEntry[] = [
+  {
+    id: 'alpaca',
+    name: 'Alpaca',
+    families: ['Data source'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--crypto)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["alpaca"]`.
+    publisher: 'Alpaca Securities',
+    verification: 'unverified',
+    homepageUrl: 'https://docs.alpaca.markets/us/docs/trading-api',
+    supportUrl: 'https://alpaca.markets/support',
+    // A PDF, and deliberately: alpaca.markets/privacy and /privacy-policy both answer 200
+    // with a rendered "page not found", which a status check alone would have shipped. This
+    // is the target Alpaca's own footer links to.
+    privacyUrl: 'https://files.alpaca.markets/disclosures/PrivacyPolicy.pdf',
+    mcp: false,
+    popular: false,
+    tools: ['get_connector_status', 'connector_sync'],
+  },
   {
     id: 'ibkr',
     name: 'IBKR Flex',
@@ -319,26 +341,6 @@ export const CATALOG: CatalogEntry[] = [
     homepageUrl: 'https://www.ynab.com',
     supportUrl: 'https://support.ynab.com',
     privacyUrl: 'https://www.ynab.com/privacy-policy',
-    mcp: false,
-    popular: false,
-    tools: ['get_connector_status', 'connector_sync'],
-  },
-  {
-    id: 'alpaca',
-    name: 'Alpaca',
-    families: ['Data source'],
-    categories: ['Brokerage'],
-    icon: 'investments',
-    hue: 'var(--crypto)',
-    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["alpaca"]`.
-    publisher: 'Alpaca Securities',
-    verification: 'unverified',
-    homepageUrl: 'https://docs.alpaca.markets/us/docs/trading-api',
-    supportUrl: 'https://alpaca.markets/support',
-    // A PDF, and deliberately: alpaca.markets/privacy and /privacy-policy both answer 200
-    // with a rendered "page not found", which a status check alone would have shipped. This
-    // is the target Alpaca's own footer links to.
-    privacyUrl: 'https://files.alpaca.markets/disclosures/PrivacyPolicy.pdf',
     mcp: false,
     popular: false,
     tools: ['get_connector_status', 'connector_sync'],
@@ -784,7 +786,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'mcp-coinbase',
     name: 'Coinbase',
     families: ['MCP'],
-    categories: ['Crypto'],
+    categories: ['Brokerage', 'Crypto'],
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades crypto on Coinbase; balances, orders, fills, fees',
@@ -802,7 +804,7 @@ export const CATALOG: CatalogEntry[] = [
     id: 'mcp-okx',
     name: 'OKX',
     families: ['MCP'],
-    categories: ['Crypto'],
+    categories: ['Brokerage', 'Crypto'],
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades spot, perpetuals & options on OKX; demo by default',
@@ -816,6 +818,27 @@ export const CATALOG: CatalogEntry[] = [
     mcp: true,
     popular: false,
     tools: ['spot_place_order', 'swap_place_order', 'account_get_balance'],
+  },
+  {
+    id: 'mcp-kraken',
+    name: 'Kraken',
+    families: ['MCP'],
+    categories: ['Brokerage', 'Crypto'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Crypto market data, balances, paper trading; live opt-in',
+    desc: 'Connect Kraken’s own MCP server — part of the Kraken CLI, run on this machine — to let Lucius work with your Kraken account. As set up here it reads market data, your balances, orders, trades and ledgers, and paper-trades with no real money. Live spot orders are opt-in: add trade to the -s list in the arguments (futures for futures); keep funding out unless you want deposits and withdrawals offered. Every trading tool here asks for your approval before it runs unless you change that. Install the Kraken CLI first (macOS or Linux), and paste a Kraken API key and secret — create the key with only the permissions you want allowed.',
+    publisher: 'Kraken',
+    verification: 'verified',
+    // krakenfx/kraken-cli is Kraken's own org; v0.5.1 moved the server to its own `kraken-mcp`
+    // binary (`kraken mcp` in older docs now only prints a pointer to it).
+    repoUrl: 'https://github.com/krakenfx/kraken-cli',
+    homepageUrl: 'https://docs.kraken.com/home/mcp',
+    supportUrl: 'https://github.com/krakenfx/kraken-cli/issues',
+    privacyUrl: 'https://www.kraken.com/legal/privacy',
+    mcp: true,
+    popular: false,
+    tools: ['kraken_balance', 'kraken_paper_buy', 'kraken_trades_history'],
   },
   {
     id: 'mcp-expensify',
@@ -1015,6 +1038,14 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
     command: 'npx',
     args: '-y @coinbase/coinbase-cli mcp',
     env: 'COINBASE_KEY_ID=\nCOINBASE_KEY_SECRET=',
+  },
+  // Needs the Kraken CLI installed (its own installer or release binary — no npm/PyPI
+  // package). No live-order or funding services by default: market, read-only account, paper.
+  'mcp-kraken': {
+    transport: 'local',
+    command: 'kraken-mcp',
+    args: '-s market,account,paper',
+    env: 'KRAKEN_API_KEY=\nKRAKEN_API_SECRET=',
   },
   'mcp-okx': {
     transport: 'local',

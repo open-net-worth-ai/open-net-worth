@@ -62,6 +62,7 @@ export const LOGO_FILES: Record<string, string> = {
   'mcp-alpaca': 'alpaca-mcp.png',
   'mcp-coinbase': 'coinbase.png',
   'mcp-okx': 'okx.png',
+  'mcp-kraken': 'kraken.png',
   'mcp-expensify': 'expensify.svg',
   'mcp-avalara': 'avalara.png',
   'mcp-twelvedata': 'twelvedata.svg',

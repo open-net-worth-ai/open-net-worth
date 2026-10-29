@@ -284,9 +284,9 @@ def test_search_does_not_surface_a_disabled_connectors_tool():
 
 
 def test_search_surfaces_the_tool_once_its_connector_is_enabled():
-    connectors_service.set_connector_enabled("alpaca", True)
-    results = _search_tools("alpaca positions sync")
-    assert "alpaca_fetch_positions" in results
+    connectors_service.set_connector_enabled("simplefin", True)
+    results = _search_tools("simplefin bank transactions fetch")
+    assert "simplefin_fetch_transactions" in results
 
 
 def test_search_never_surfaces_retired_ibkr_flex_even_when_enabled():
@@ -304,7 +304,7 @@ def test_search_still_surfaces_internal_tools_regardless_of_connector_state():
 
 def test_search_never_surfaces_yodlee_even_when_enabled():
     """Contrast with test_search_surfaces_the_tool_once_its_connector_is_enabled just
-    above: enabling Alpaca's store flag unhides it from search; enabling Yodlee's does not
+    above: enabling SimpleFIN's store flag unhides it from search; enabling Yodlee's does not
     — DISABLED_CONNECTORS overrides the store."""
     connectors_service.set_connector_enabled("yodlee", True)
     results = _search_tools("yodlee bank sync status")

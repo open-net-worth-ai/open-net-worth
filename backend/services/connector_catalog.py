@@ -480,6 +480,10 @@ _KINDS: tuple[ConnectorKind, ...] = (
         _needs(secrets=("api_key_id", "secret_key")),
         secret_fields=_secrets("api_key_id", "secret_key"),
         config_keys=("environment",),
+        # Retired 2026-10-29 for Alpaca's own MCP server (directory entry `mcp-alpaca`), which
+        # reads AND trades where this only imported positions. Code kept; flip to bring back.
+        # ADR `2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server` (its Alpaca amendment).
+        disabled=True,
     ),
     _kind(
         "ibkr",

@@ -453,11 +453,11 @@ describe('the Automate action', () => {
   })
 
   it('maps a bank or broker to its sync template', () => {
-    renderDetail(entry({ id: 'alpaca', name: 'Alpaca', kind: 'alpaca' }))
+    renderDetail(entry({ id: 'plaid', name: 'Plaid', kind: 'plaid' }))
     fireEvent.click(screen.getByRole('button', { name: 'Automate' }))
     expect(navigate).toHaveBeenCalledWith({
       to: '/automations',
-      search: { template: 'sync_alpaca' },
+      search: { template: 'sync_plaid' },
     })
   })
 

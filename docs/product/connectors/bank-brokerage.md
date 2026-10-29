@@ -1,6 +1,6 @@
 ---
 title: Bank & brokerage connectors
-description: Set up SimpleFIN, Plaid, Enable Banking, Lunch Flow, Lunch Money, YNAB or Alpaca so Lucius can fetch and book your transactions.
+description: Set up SimpleFIN, Plaid, Enable Banking, Lunch Flow, Lunch Money or YNAB so Lucius can fetch and book your transactions.
 category: connectors
 order: 60
 audience: [user]
@@ -31,7 +31,7 @@ place a trade.
 | Banks in other countries | **Lunch Flow** | A Lunch Flow developer client ID and secret. |
 | Spending already tracked in Lunch Money | **Lunch Money** | A Lunch Money access token. |
 | Spending already tracked in YNAB | **YNAB** | A YNAB personal access token. |
-| An Alpaca brokerage account | **Alpaca** | An Alpaca API key pair. |
+| An Alpaca brokerage account | **Alpaca MCP** (a server run on this machine, under **Browse & add → MCP**) | An Alpaca API key pair. See [External MCP servers](external-mcp.md). |
 | An Interactive Brokers account | **Interactive Brokers** (an MCP server, under **Browse & add → MCP**) | Your IBKR login — you sign in on IBKR's own page. See [External MCP servers](external-mcp.md). |
 
 Every connector also needs a working AI model, because fetching and booking happen in a
@@ -184,20 +184,12 @@ Categories are not copied from YNAB — they're left for you or an Automation to
 
 ## Alpaca
 
-Your Alpaca holdings and cash, kept up to date in your portfolio. Alpaca reports what you hold
-*now*, not a transaction history.
-
-1. Sign in at [Alpaca](https://app.alpaca.markets). Switch to the account you want — **paper**
-   (practice) or **live** — and generate an API key pair from its dashboard. Copy the **key ID**
-   and the **secret key** (the secret is shown only once).
-2. In Open Net Worth: **Connectors → Browse & add → Alpaca → Add connector**.
-3. Fill in **API key id** and **Secret key**, and set **Environment** to **Paper account** or
-   **Live account** to match the keys. Click **Save**.
-4. Link the Alpaca account in the **Accounts** list. Once connected, the form shows a **Paper** or
-   **LIVE** badge and your Alpaca cash and buying power.
-
-Alpaca keys could place trades if used elsewhere; this app never does — it only reads positions
-and cash.
+The read-only Alpaca data source is no longer offered in **Browse & add**. Alpaca's own MCP
+server replaces it: it reads your account and positions too, and can place stock, option and
+crypto orders you approve — starting on paper trading. Add it from **Browse & add → MCP → Alpaca
+MCP** — see [External MCP servers](external-mcp.md). If you set up the old Alpaca connector
+before, it still appears in your Connectors list so you can see and remove it, but it is no
+longer supported.
 
 ## Interactive Brokers (IBKR Flex)
 
@@ -223,8 +215,6 @@ edit; click **Create automation** to switch it on. You'll find the same drafts u
 | Connector | Default schedule |
 |---|---|
 | SimpleFIN, Plaid, Lunch Money, Lunch Flow, YNAB, Enable Banking | Every 6 hours |
-| Interactive Brokers | Every 6 hours |
-| Alpaca | Every hour |
 
 The schedule and the wording are yours to change. Each run:
 

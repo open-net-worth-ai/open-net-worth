@@ -44,3 +44,13 @@ a hide, not a removal.
 - The `ibkr` store, API, service, section component and their tests are untouched.
 - An existing IBKR Flex setup keeps its row but Lucius can no longer fetch it, exactly as with
   Yodlee; there is no automatic migration of its accounts to the MCP server.
+
+## Amendment (same day) — the read-only Alpaca data source, too
+
+Alpaca publishes its own MCP server (`alpacahq/alpaca-mcp-server`, run with `uvx`), added as the
+Verified `mcp-alpaca` directory entry. It reads the account and positions the `alpaca` data
+source imported, and can also place stock, option and crypto orders, starting on paper trading.
+The `alpaca` kind is retired exactly like `ibkr` above: `disabled=True`, its id gone from the
+Lucius-facing connector-id examples, its directory entry and `sync_alpaca` template moved to
+`RETIRED_CATALOG` / `RETIRED_SYNC_TEMPLATES`, docs pointing to the MCP server. No user had it
+set up on the instance it was decided on.
