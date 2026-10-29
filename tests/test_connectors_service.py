@@ -1040,13 +1040,29 @@ def test_native_views_carry_descriptions_and_known_tool_names():
         # .claude/rfcs/2026-08-10-connectors-architecture.md §B3) — never the generic
         # bulk `get_connector_status`/`connector_sync` pair, which has no single owning
         # connector and is therefore never listed on any one connector's detail page.
-        "simplefin": ["simplefin_get_status", "simplefin_fetch_transactions"],
-        "plaid": ["plaid_get_status", "plaid_fetch_transactions"],
-        "lunch_money": ["lunch_money_get_status", "lunch_money_fetch_transactions"],
-        "lunch_flow": ["lunch_flow_get_status", "lunch_flow_fetch_transactions"],
-        "ynab": ["ynab_get_status", "ynab_fetch_transactions"],
-        "enable_banking": ["enable_banking_get_status", "enable_banking_fetch_transactions"],
-        "yodlee": ["yodlee_get_status", "yodlee_fetch_transactions"],
+        "simplefin": [
+            "simplefin_get_status",
+            "simplefin_fetch_transactions",
+            "simplefin_list_accounts",
+        ],
+        "plaid": ["plaid_get_status", "plaid_fetch_transactions", "plaid_list_accounts"],
+        "lunch_money": [
+            "lunch_money_get_status",
+            "lunch_money_fetch_transactions",
+            "lunch_money_list_accounts",
+        ],
+        "lunch_flow": [
+            "lunch_flow_get_status",
+            "lunch_flow_fetch_transactions",
+            "lunch_flow_list_accounts",
+        ],
+        "ynab": ["ynab_get_status", "ynab_fetch_transactions", "ynab_list_accounts"],
+        "enable_banking": [
+            "enable_banking_get_status",
+            "enable_banking_fetch_transactions",
+            "enable_banking_list_accounts",
+        ],
+        "yodlee": ["yodlee_get_status", "yodlee_fetch_transactions", "yodlee_list_accounts"],
         "alpaca": ["alpaca_get_status", "alpaca_fetch_positions"],
         "ibkr": ["ibkr_get_status", "ibkr_fetch_activity"],
         # Each web-search provider card is its OWN id-scoped entry too (``_decorate``'s

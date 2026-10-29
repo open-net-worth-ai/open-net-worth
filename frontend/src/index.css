@@ -9186,6 +9186,21 @@ body.hide-amounts .money * {
 
   /* Connector "Accounts" list (connectors/ConnectorAccountRow) — one compact row per provider
      account, grouped by type: icon · name over •mask · balance · its one next step. */
+  /* Account header — "• Plaid" with a link glyph when the account is linked to a connector. */
+  .acct-head-linked {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--good);
+  }
+
+  .acct-row-linked {
+    display: inline-flex;
+    margin-right: 4px;
+    color: var(--good);
+    vertical-align: -1px;
+  }
+
   .conn-acct-head {
     display: flex;
     align-items: baseline;

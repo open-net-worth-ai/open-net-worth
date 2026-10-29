@@ -20,6 +20,7 @@ import {
   ClockAlert,
   Download,
   FileText,
+  Link2,
   MoreHorizontal,
   Pencil,
   Tags,
@@ -335,6 +336,8 @@ export function AccountHeader({
   onStartReview,
 }: AccountHeaderProps) {
   const chatComposer = useChatComposerOptional()
+  // The connectors this account is linked to, by name (server-derived label, deduped).
+  const linkedProviders = [...new Set((account.externalIds ?? []).map((e) => e.providerLabel))]
   const [viewStatement, setViewStatement] = useState(false)
   const [showStatements, setShowStatements] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -393,6 +396,18 @@ export function AccountHeader({
                 <>
                   <span className="sep">•</span>
                   <span>•••{account.lastFour}</span>
+                </>
+              )}
+              {linkedProviders.length > 0 && (
+                <>
+                  <span className="sep">•</span>
+                  <span
+                    className="acct-head-linked"
+                    title={`Linked to ${linkedProviders.join(', ')} — transactions come in from there`}
+                  >
+                    <Link2 size={12} aria-hidden="true" />
+                    {linkedProviders.join(', ')}
+                  </span>
                 </>
               )}
             </div>

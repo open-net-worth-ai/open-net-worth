@@ -13,7 +13,7 @@ import { EntityRow } from '../../../lucius/EntityRow'
 import type { Account, AccountGroup } from './types'
 import { accountValue, fBase, fCur } from './data'
 import { TYPE_ORDER, typeLabel } from './categories'
-import { ChevronRight } from '../../../ui/icons'
+import { ChevronRight, Link2 } from '../../../ui/icons'
 import { countNeedsReconciling, needReconcilingLabel, needsReconciling } from './reconcileDue'
 
 // ── Local icon helpers (SVG, pixel-centered) ─────────────────────────────────
@@ -102,6 +102,7 @@ function AccountRow({ a, sel, onSelect }: AccountRowProps) {
   // (positions + settlement cash); a plain account reads in its own currency.
   const value = accountValue(a)
   const due = needsReconciling(a)
+  const linked = [...new Set((a.externalIds ?? []).map((e) => e.providerLabel))].join(', ')
   const balanceStr = isSec
     ? fBase(value, { cents: true })
     : `${fCur(a.balance, a.currency, { cents: true })} ${a.currency}`
@@ -128,8 +129,13 @@ function AccountRow({ a, sel, onSelect }: AccountRowProps) {
       <span className="acct-row-id">
         <span className="acct-row-name">{a.name}</span>
         {/* No type: the group heading above already says it. */}
-        {(a.lastFour || due) && (
+        {(a.lastFour || due || linked) && (
           <span className="acct-row-sub">
+            {linked && (
+              <span className="acct-row-linked" title={`Linked to ${linked}`}>
+                <Link2 size={11} aria-label={`Linked to ${linked}`} />
+              </span>
+            )}
             {a.lastFour && '•••' + a.lastFour}
             {a.lastFour && due && ' · '}
             {due && <span className="acct-due">Needs reconciling</span>}
