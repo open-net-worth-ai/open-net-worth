@@ -7,7 +7,8 @@
  * app.jsx ReconcilePopover.
  */
 
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRouter } from '@tanstack/react-router'
 import { useChatComposerOptional } from '../../../state/chatComposer'
 import { StatementViewer, StatementsModal } from './StatementsSection'
 import { Button, FormField, TextField } from '../../ui'
@@ -336,8 +337,16 @@ export function AccountHeader({
   onStartReview,
 }: AccountHeaderProps) {
   const chatComposer = useChatComposerOptional()
-  // The connectors this account is linked to, by name (server-derived label, deduped).
-  const linkedProviders = [...new Set((account.externalIds ?? []).map((e) => e.providerLabel))]
+  // The connectors this account is linked to (server-derived label), one entry per connector.
+  const linkedProviders = [
+    ...new Map((account.externalIds ?? []).map((e) => [e.source, e.providerLabel])),
+  ].map(([source, label]) => ({ source, label }))
+  // Optional: the header also renders outside the router (tests).
+  const router = useRouter({ warn: false }) as ReturnType<typeof useRouter> | undefined
+  const openConnector = (source: string) => {
+    if (router) void router.navigate({ to: '/connectors', search: { connector: source } as never })
+    else window.location.assign(`/connectors?connector=${encodeURIComponent(source)}`)
+  }
   const [viewStatement, setViewStatement] = useState(false)
   const [showStatements, setShowStatements] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -398,18 +407,20 @@ export function AccountHeader({
                   <span>•••{account.lastFour}</span>
                 </>
               )}
-              {linkedProviders.length > 0 && (
-                <>
+              {linkedProviders.map(({ source, label }) => (
+                <Fragment key={source}>
                   <span className="sep">•</span>
-                  <span
+                  <button
+                    type="button"
                     className="acct-head-linked"
-                    title={`Linked to ${linkedProviders.join(', ')} — transactions come in from there`}
+                    title={`Linked to ${label} — open its connector`}
+                    onClick={() => openConnector(source)}
                   >
                     <Link2 size={12} aria-hidden="true" />
-                    {linkedProviders.join(', ')}
-                  </span>
-                </>
-              )}
+                    {label}
+                  </button>
+                </Fragment>
+              ))}
             </div>
           </div>
         </div>

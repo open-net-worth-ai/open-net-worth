@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 //
 // An account linked to a connector says so in its header line ("• Plaid", with a link glyph),
-// so linking on the Connectors page is visible where the account itself is read.
+// so linking on the Connectors page is visible where the account itself is read — and tapping it
+// opens that connector's page.
 
-import { afterEach, expect, it } from 'vitest'
-import { cleanup, render, screen } from '@testing-library/react'
+import { afterEach, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { AccountHeader } from './AccountHeader'
 import { fromApiAccount } from './data'
 import type { ApiAccount } from './types'
@@ -61,8 +62,16 @@ const link = (ref: string) => ({
 
 it('names the connector once, however many of its accounts are linked here', () => {
   header([link('p1'), link('p2')])
-  const marker = screen.getByTitle('Linked to Plaid — transactions come in from there')
-  expect(marker.textContent).toBe('Plaid')
+  expect(screen.getAllByRole('button', { name: 'Plaid' })).toHaveLength(1)
+})
+
+it("tapping it opens that connector's page", () => {
+  const assign = vi.fn()
+  vi.stubGlobal('location', { ...window.location, assign })
+  header([link('p1')])
+  fireEvent.click(screen.getByRole('button', { name: 'Plaid' }))
+  expect(assign).toHaveBeenCalledWith('/connectors?connector=plaid')
+  vi.unstubAllGlobals()
 })
 
 it('says nothing for an account with no links', () => {
