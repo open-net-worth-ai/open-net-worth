@@ -37,7 +37,8 @@ OKX, Kraken, Expensify, Avalara AvaTax, Twelve Data, SEC EDGAR and FRED.
 Each connector shows coloured tags for what it's for, such as **Brokerage**, **Banking** or
 **Web search**. Searching the Connectors page matches those tags too. In **Browse & add**, click a
 category in the row of small tags under **All · Channels · Data sources · Web · MCP**, or click a
-tag on any card, to see only that kind; click it again (or **All**) to clear it. A server you've
+tag on any card, to see only that kind; click it again (or **All**) to clear it. On a phone the
+category tags sit behind the filter icon beside search, which lights up while one is picked. A server you've
 already added shows once, with a settings gear instead of **+**. **Suggested**
 lists up to three popular connectors you haven't added yet — once at the bottom of **All**, or
 under the section on a single tab such as **MCP**, and at the top of **Browse & add** before you

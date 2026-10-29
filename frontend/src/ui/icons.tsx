@@ -53,6 +53,8 @@ export {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  // ── Connectors directory: the phone's category filter (beside Sort) ──
+  ListFilter,
   RefreshCw,
   X,
   Link2,

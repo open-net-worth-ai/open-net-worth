@@ -759,6 +759,12 @@
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
 }
+/* A category is active: the icon says so, since the chip row that would show it is hidden. */
+.cn-page .cn-sorticon.on {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface2));
+}
 .cn-page .cn-sorticon > select {
   position: absolute;
   inset: 0;
@@ -1000,6 +1006,10 @@
   }
   .cn-page .cn-sorticon {
     display: inline-flex;
+  }
+  /* The category chips fold into the filter icon above. */
+  .cn-page .cn-catrow {
+    display: none;
   }
   /* Search and the Sort icon share one 40px line — a comfortable thumb target, and level. */
   .cn-page .cn-dirsearchrow .cn-dirsearch input {

@@ -19,7 +19,7 @@ import { DirectoryCard } from './DirectoryCard'
 import { SECTION_SUGGESTION_COUNT } from './directoryRows'
 import { Empty } from './primitives'
 import { Icons } from './icons'
-import { ArrowUpDown } from '../../../ui/icons'
+import { ArrowUpDown, ListFilter } from '../../../ui/icons'
 import { CATEGORY_HUE, CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
 import {
   DIRECTORY_FAMILY_CHIPS,
@@ -118,6 +118,23 @@ export function DirectoryBrowser({
           {/* Phone only: Sort as an icon beside search (the text select below is hidden there),
               so the family chips get their row to themselves. A native select laid over the
               icon keeps the platform's own picker and its accessibility. */}
+          {/* Phone only, like Sort: the category filter as an icon — the chip row below is
+              hidden there, so the header is one line of family chips instead of two. */}
+          <label className={'cn-sorticon' + (category !== 'all' ? ' on' : '')} title="Category">
+            <ListFilter size={16} aria-hidden />
+            <select
+              value={category}
+              onChange={(e) => onCategory(e.target.value as ConnectorCategory | 'all')}
+              aria-label="Filter by category"
+            >
+              <option value="all">All categories</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
           <label className="cn-sorticon" title="Sort">
             <ArrowUpDown size={16} aria-hidden />
             <select
