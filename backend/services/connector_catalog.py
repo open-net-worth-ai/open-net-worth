@@ -343,6 +343,21 @@ def remove_mcp_server(server_id: str) -> None:
     get_manager().reconcile_pooled_connection(server_id)
 
 
+def discover_mcp_tools_if_unlisted(server_id: str) -> None:
+    """Run the "Refresh tools list" handshake for an ENABLED server that has never listed its
+    tools. A server saved without the add flow's test step (an OAuth sign-in finished after the
+    add screen gave up) read Connected with an empty tool list, and nothing said why. Never
+    raises — ``test_connect`` records a failure as ``last_status``/``last_error``, so the row
+    reads Error instead of Connected. Same ai-free ``services → mcp`` edge as above."""
+    from backend.db.mcp_client_store import McpClientStore
+    from backend.mcp.client_manager import get_manager
+
+    server = McpClientStore().find(server_id)
+    if server is None or not server.enabled or server.discovered_tools:
+        return
+    get_manager().test_connect(server_id)
+
+
 def _remove_mcp(connector_id: str) -> None:
     remove_mcp_server(connector_id[len(MCP_CONNECTOR_PREFIX) :])
 

@@ -237,6 +237,8 @@ def update_mcp_client(server_id: str, body: McpServerUpdate):
         endpoint_changed or spawn_changed or before.enabled != updated.enabled
     ):
         get_manager().reconcile_pooled_connection(server_id)
+    if before is not None and not before.enabled and updated.enabled:
+        connector_catalog.discover_mcp_tools_if_unlisted(server_id)
     return store.public_one(server_id)
 
 

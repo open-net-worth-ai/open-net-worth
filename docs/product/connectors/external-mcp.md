@@ -93,7 +93,9 @@ Open the server under **Connectors**:
   browser, so to re-test with it, reveal it with the eye icon or paste it again. The transport
   can't be changed — add the server again instead.
 - **⋯ → Refresh tools list** — pick up tools the server added since you connected it.
-- **Pause** / **Resume** — Lucius loses access to its tools while paused.
+- **Pause** / **Resume** — Lucius loses access to its tools while paused. Resuming a server that
+  has never listed its tools connects to it and lists them; if it can't be reached, it shows an
+  error instead of Connected.
 - **⋯ → Remove connector** — removes the server and its saved credentials.
 - **Reconnect** — appears if the server stopped answering or a sign-in expired.
 

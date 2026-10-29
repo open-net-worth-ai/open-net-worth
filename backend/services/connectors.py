@@ -41,6 +41,7 @@ from backend.services.connector_catalog import (
     ConnectorKind,
     builtins,
     copy_for,
+    discover_mcp_tools_if_unlisted,
     display_name,
     kind_of,
 )
@@ -302,6 +303,8 @@ def set_connector_enabled(connector_id: str, enabled: bool) -> ConnectorView:
             store.ensure(connector_id, kind.kind, builtin.name, config=builtin.config, conn=conn)
         store.set_enabled(connector_id, enabled, conn=conn)
     _reconcile_notify_channel(kind)
+    if enabled and kind.kind == "mcp":
+        discover_mcp_tools_if_unlisted(connector_id[len(MCP_CONNECTOR_PREFIX) :])
     return get_connector(connector_id)
 
 

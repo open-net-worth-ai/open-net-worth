@@ -681,3 +681,55 @@ def test_the_add_flow_leaves_the_ladder_populated_at_the_chosen_levels(app_clien
     # D4: configured + enabled + reachable is "active" — never "not_configured", and never
     # the MCP-only `last_status` vocabulary ("ok") in a field that holds the shared one.
     assert view["status"] == "active"
+
+
+# ── switching on a server that has never listed its tools discovers them ───────────────────
+#
+# Regression: an OAuth sign-in that finished after the add screen gave up saved the server
+# dormant with no tools; switching it on from the Connectors list read "Connected" with an
+# empty ladder until the user knew to press "Refresh tools list".
+
+
+def test_enabling_a_toolless_server_discovers_its_tools(client, monkeypatch):
+    c, _ = client
+    c.post("/api/mcp-clients", json={"id": "late", "url": "https://mcp.example.com/mcp"})
+    calls = _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+
+    res = c.patch("/api/mcp-clients/late", json={"enabled": True})
+    assert res.status_code == 200
+    assert len(res.json()["discovered_tools"]) == 4
+    assert res.json()["last_status"] == "ok"
+    assert calls == ["initialize", "tools/list"]
+
+
+def test_enabling_through_the_connectors_toggle_discovers_its_tools(client, monkeypatch):
+    """The Connectors list's Resume (and Lucius's set_connector_enabled) go through
+    ``services.connectors.set_connector_enabled``, not the MCP route — the path the bug took."""
+    from backend.services import connectors as connectors_service
+
+    c, _ = client
+    c.post("/api/mcp-clients", json={"id": "late", "url": "https://mcp.example.com/mcp"})
+    calls = _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+
+    connectors_service.set_connector_enabled("mcp:late", True)
+    listed = c.get("/api/mcp-clients").json()["servers"][0]
+    assert len(listed["discovered_tools"]) == 4
+    assert calls == ["initialize", "tools/list"]
+
+
+def test_enabling_a_server_that_already_listed_its_tools_reaches_out_to_nothing(
+    client, monkeypatch
+):
+    from backend.services import connectors as connectors_service
+
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    c.post(
+        "/api/mcp-clients",
+        json={"id": "known", "url": "https://mcp.example.com/mcp", "enabled": True},
+    )
+    connectors_service.set_connector_enabled("mcp:known", False)
+    calls = _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+
+    connectors_service.set_connector_enabled("mcp:known", True)
+    assert calls == []
