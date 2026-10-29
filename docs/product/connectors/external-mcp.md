@@ -31,14 +31,15 @@ There are two kinds:
 ## Add a server from the directory
 
 The directory includes ready-made entries — Playwright (a real web browser), Firecrawl, Stripe,
-QuickBooks Online, Xero, Mercury, Expensify, Avalara AvaTax, Twelve Data, SEC EDGAR and FRED.
+QuickBooks Online, Xero, Mercury, Interactive Brokers, Robinhood, moomoo, Expensify, Avalara
+AvaTax, Twelve Data, SEC EDGAR and FRED.
 
 1. Open **Connectors** in the sidebar, click **Browse & add**, and choose **MCP**.
 2. Click a card to read what it does and which tools it offers, then click **Add**. The connection
    form opens with the address or command already filled in.
 3. Fill in what the server needs:
-   - **OAuth** servers (Mercury, Expensify, Avalara, Twelve Data): click **Connect** and sign in
-     to the vendor in the window that opens.
+   - **OAuth** servers (Mercury, Interactive Brokers, Robinhood, moomoo, Expensify, Avalara,
+     Twelve Data): click **Connect** and sign in to the vendor in the window that opens.
    - **API key** servers (Stripe): paste the key into **API key**. For Stripe, a *restricted*
      key with only the permissions you want is the safer choice.
    - **Local commands** with **Environment variables (optional)** pre-listed (Firecrawl, Xero, SEC
@@ -130,7 +131,8 @@ their server at any time.
   data, never as instructions from you, and is cleaned and shortened before Lucius sees it. That
   lowers the risk; it doesn't remove it — which is why approval is the default.
 - **Some servers write to real accounts.** Stripe, QuickBooks, Xero and Mercury tools can create or
-  change records in those services. The directory card says so when that's the case.
+  change records in those services, and Interactive Brokers, Robinhood and moomoo tools can place
+  orders (Robinhood only in a separate agent account it opens for you). The directory card says so when that's the case.
 
 What protects you:
 

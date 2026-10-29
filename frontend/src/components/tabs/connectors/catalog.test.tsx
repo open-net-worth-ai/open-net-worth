@@ -270,6 +270,12 @@ describe('MCP provenance — what we confirmed, stated exactly', () => {
     ['mcp-quickbooks', 'Intuit', 'verified'],
     ['mcp-xero', 'Xero', 'verified'],
     ['mcp-mercury', 'Mercury', 'verified'],
+    // IBKR publishes this endpoint itself (ai-integrations page, connector v1.1.5 release notes,
+    // 2026-07-28 press release) and serves it from api.ibkr.com.
+    ['mcp-ibkr', 'Interactive Brokers', 'verified'],
+    // Each vendor's own docs publish the endpoint: Robinhood's Help Center, moomoo's OpenAPI docs.
+    ['mcp-robinhood', 'Robinhood', 'verified'],
+    ['mcp-moomoo', 'moomoo', 'verified'],
     ['mcp-expensify', 'Expensify', 'verified'],
     ['mcp-avalara', 'Avalara', 'verified'],
     ['mcp-twelvedata', 'Twelve Data', 'verified'],

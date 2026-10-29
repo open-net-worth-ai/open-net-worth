@@ -684,6 +684,73 @@ export const CATALOG: CatalogEntry[] = [
     tools: [],
   },
   {
+    id: 'mcp-ibkr',
+    name: 'Interactive Brokers',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--ibkr)',
+    sub: 'Positions, balances, market data and orders at IBKR',
+    desc: 'Connect Interactive Brokers’ own hosted server to let Lucius work with your IBKR account directly. It exposes account balances, positions, trades, orders and performance; quotes, price history, option chains and contract search; screeners, watchlists, price alerts and IBKR’s company research. It can also act: it previews, submits, modifies and cancels orders, and edits watchlists, alerts and saved screeners — every one of those tools asks for your approval before it runs, unless you change that. Useful for reconciling IBKR positions against what is recorded here, checking an allocation or a day’s move, researching a holding, or drafting an order you review before it goes. Sign-in happens on IBKR’s own login screen over OAuth, for one account at a time; you can revoke it in Client Portal under Settings › Manage Third-Party Consents.',
+    publisher: 'Interactive Brokers',
+    verification: 'verified',
+    // IBKR's own pages publish this exact endpoint for "any MCP client": the AI-integrations
+    // page, the connector v1.1.5 release notes (ibkrguides.com) and the 2026-07-28 press release.
+    homepageUrl: 'https://www.interactivebrokers.com/en/trading/ai-integrations.php',
+    supportUrl: 'https://www.interactivebrokers.com/en/support/customer-service.php',
+    privacyUrl: 'https://www.interactivebrokers.com/en/accounts/legalDocuments/privacy.php',
+    mcp: true,
+    popular: true,
+    tools: [
+      'get_account_positions',
+      'get_account_balances',
+      'get_account_trades',
+      'get_price_snapshot',
+      'get_option_data',
+      'preview_order',
+      'submit_order',
+    ],
+  },
+  {
+    id: 'mcp-robinhood',
+    name: 'Robinhood',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Read every account; trade only in a separate agent account',
+    desc: 'Connect Robinhood’s own hosted Trading server to let Lucius see your Robinhood investing. It can read every Robinhood account you hold — account numbers, positions, balances and order history included — but it can only place trades inside a separate Agentic account that Robinhood opens when you connect, using only the money you move into it. Robinhood describes it as a beta that trades US equities for now. Robinhood sends a push notification for each trade, and every trading tool here asks for your approval before it runs unless you change that. Useful for reconciling Robinhood positions against what is recorded here, reviewing allocation and order history, or trying an idea with a small, ring-fenced balance. Sign-in happens on Robinhood’s own screen over OAuth.',
+    publisher: 'Robinhood',
+    verification: 'verified',
+    // Robinhood's Help Center publishes this endpoint ("Onboarding an external agent"), and its
+    // 2026-05-27 newsroom post announces the Trading MCP server.
+    homepageUrl: 'https://robinhood.com/us/en/support/articles/agentic-trading-overview/',
+    supportUrl: 'https://robinhood.com/us/en/support/',
+    privacyUrl: 'https://robinhood.com/us/en/support/articles/privacy-policy/',
+    mcp: true,
+    popular: true,
+    tools: [],
+  },
+  {
+    id: 'mcp-moomoo',
+    name: 'moomoo',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Quotes, research and trading on your moomoo account',
+    desc: 'Connect moomoo’s own hosted server to let Lucius work with your moomoo account through moomoo OpenAPI. moomoo describes it as real-time quotes, derivatives screening, fundamentals and technicals, portfolio management and trade execution — so it can act on your account, and every trading tool here asks for your approval before it runs unless you change that. Unlike moomoo’s older API route it needs no OpenD gateway running on this machine. Useful for checking moomoo positions against what is recorded here, researching a holding, or screening options. Sign-in happens on moomoo’s own consent page over OAuth.',
+    publisher: 'moomoo',
+    verification: 'verified',
+    // moomoo's OpenAPI docs (open.moomoo.com/mcp-docs) publish this endpoint and its OAuth flow.
+    homepageUrl: 'https://open.moomoo.com/mcp-docs/overview',
+    supportUrl: 'https://www.moomoo.com/us/support',
+    privacyUrl: 'https://www.moomoo.com/privacy',
+    mcp: true,
+    popular: false,
+    tools: [],
+  },
+  {
     id: 'mcp-expensify',
     name: 'Expensify',
     families: ['MCP'],
@@ -858,6 +925,15 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
     env: 'XERO_CLIENT_ID=\nXERO_CLIENT_SECRET=',
   },
   'mcp-mercury': { transport: 'remote', url: 'https://mcp.mercury.com/mcp', auth: 'oauth' },
+  // The address IBKR publishes for "any MCP client" (connector v1.1.5 release notes) — the same
+  // OAuth server behind its Claude/ChatGPT/Grok directory listings.
+  'mcp-ibkr': { transport: 'remote', url: 'https://api.ibkr.com/v1/api/mcp-public', auth: 'oauth' },
+  'mcp-robinhood': {
+    transport: 'remote',
+    url: 'https://agent.robinhood.com/mcp/trading',
+    auth: 'oauth',
+  },
+  'mcp-moomoo': { transport: 'remote', url: 'https://mcp.moomoo.com/mcp', auth: 'oauth' },
   // Trailing slash is deliberate: the bare `/mcp` 308-redirects here, and the trailing form is
   // what Expensify's own help-centre config block publishes. Presetting the redirect would work
   // but adds a hop for no reason.
