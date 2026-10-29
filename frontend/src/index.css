@@ -137,14 +137,15 @@
   body *::-webkit-scrollbar-corner {
     background: transparent;
   }
+  /* Two short, faint strokes tucked into the corner — the box is the scrollbar's 10px square. */
   body textarea::-webkit-resizer {
     background: linear-gradient(
       135deg,
-      transparent 0 52%,
-      var(--muted) 52% 58%,
-      transparent 58% 70%,
-      var(--muted) 70% 76%,
-      transparent 76%
+      transparent 0 66%,
+      color-mix(in srgb, var(--muted) 45%, transparent) 66% 71%,
+      transparent 71% 82%,
+      color-mix(in srgb, var(--muted) 45%, transparent) 82% 87%,
+      transparent 87%
     );
   }
   /* Phones: no visible scrollbar at all. The document bar is already hidden above, but inner
