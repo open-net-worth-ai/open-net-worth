@@ -133,6 +133,9 @@ export interface McpOAuthState {
   /** The connected-account summary — seeded from a saved server on an edit, refreshed by every
    *  successful Test connect. `null` before any server has ever signed in. */
   summary: OAuthSummary | null
+  /** The vendor's authorize URL while `pending` (browser only) — the fallback link for a
+   *  sign-in window the browser opened without handing us a handle to it (Arc, Dia). */
+  authorizeUrl: string | null
   signIn: () => void
   /** Stops polling, closes the popup, and drops the staged flow client-side — the state itself
    *  is simply left to expire on its own TTL (RFC §4.3; see `oauthSignIn.ts`'s doc comment on
@@ -245,6 +248,7 @@ export function useMcpAddFlow({
   const [oauthNeedsClientId, setOauthNeedsClientId] = useState(false)
   const [oauthClientId, setOauthClientId] = useState('')
   const [oauthSummary, setOauthSummary] = useState<OAuthSummary | null>(editing?.oauth ?? null)
+  const [oauthAuthorizeUrl, setOauthAuthorizeUrl] = useState<string | null>(null)
   // The server id a completed sign-in is bound to, for the brand-new ADD case only — an EDIT
   // always targets `editing.serverId` directly. Set once the callback's dormant row is found
   // (see `resolveNewOAuthServerId`); a ref because it drives `runConnect`/`finish` without
@@ -277,6 +281,7 @@ export function useMcpAddFlow({
     setOauthRedirectUris([])
     setOauthNeedsClientId(false)
     setOauthSummary(null)
+    setOauthAuthorizeUrl(null)
   }
 
   /**
@@ -309,49 +314,55 @@ export function useMcpAddFlow({
     setOauthReason(null)
     setOauthRedirectUris([])
     setOauthNeedsClientId(false)
+    setOauthAuthorizeUrl(null)
     oauthHandleRef.current?.cancel()
     const clientId = oauthClientId.trim() || undefined
     const body: OAuthBeginBody = editing
       ? { server_id: editing.serverId, client_id: clientId }
       : { url: form.url.trim(), client_id: clientId }
-    oauthHandleRef.current = startOAuthSignIn(body, (outcome) => {
-      oauthHandleRef.current = null
-      if (!outcome.ok) {
-        setOauthStatus('error')
-        setOauthReason(outcome.reason)
-        setOauthError(outcome.error)
-        setOauthNeedsClientId(outcome.needsClientId)
-        setOauthRedirectUris(outcome.redirectUris)
-        return
-      }
-      if (editing) {
-        oauthServerIdRef.current = editing.serverId
-        setOauthStatus('signed_in')
-        runOAuthTestConnect(editing.serverId)
-        return
-      }
-      // A brand-new add: the callback already persisted a dormant server for this url the
-      // instant it completed (`oauth_flow.complete`) — but it never learns that id any other
-      // way, so the one read left is finding it in the live list.
-      const urlAtSignIn = form.url
-      void (async () => {
-        const servers = await listMcpServers()
-        const known = new Set(takenIds)
-        const candidates = servers.filter(
-          (s) => s.auth_type === 'oauth' && s.url === urlAtSignIn.trim(),
-        )
-        const found = candidates.find((s) => !known.has(s.id)) ?? candidates[0]
-        if (!found) {
+    oauthHandleRef.current = startOAuthSignIn(
+      body,
+      (outcome) => {
+        oauthHandleRef.current = null
+        setOauthAuthorizeUrl(null)
+        if (!outcome.ok) {
           setOauthStatus('error')
-          setOauthError("Signed in, but couldn't find the new server — try again.")
+          setOauthReason(outcome.reason)
+          setOauthError(outcome.error)
+          setOauthNeedsClientId(outcome.needsClientId)
+          setOauthRedirectUris(outcome.redirectUris)
           return
         }
-        oauthServerIdRef.current = found.id
-        setOauthSummary(found.oauth)
-        setOauthStatus('signed_in')
-        runOAuthTestConnect(found.id)
-      })()
-    })
+        if (editing) {
+          oauthServerIdRef.current = editing.serverId
+          setOauthStatus('signed_in')
+          runOAuthTestConnect(editing.serverId)
+          return
+        }
+        // A brand-new add: the callback already persisted a dormant server for this url the
+        // instant it completed (`oauth_flow.complete`) — but it never learns that id any other
+        // way, so the one read left is finding it in the live list.
+        const urlAtSignIn = form.url
+        void (async () => {
+          const servers = await listMcpServers()
+          const known = new Set(takenIds)
+          const candidates = servers.filter(
+            (s) => s.auth_type === 'oauth' && s.url === urlAtSignIn.trim(),
+          )
+          const found = candidates.find((s) => !known.has(s.id)) ?? candidates[0]
+          if (!found) {
+            setOauthStatus('error')
+            setOauthError("Signed in, but couldn't find the new server — try again.")
+            return
+          }
+          oauthServerIdRef.current = found.id
+          setOauthSummary(found.oauth)
+          setOauthStatus('signed_in')
+          runOAuthTestConnect(found.id)
+        })()
+      },
+      (url) => setOauthAuthorizeUrl(url),
+    )
   }
 
   const cancelSignIn = () => {
@@ -360,6 +371,7 @@ export function useMcpAddFlow({
     setOauthStatus('idle')
     setOauthError(null)
     setOauthReason(null)
+    setOauthAuthorizeUrl(null)
   }
 
   const stopPolling = () => {
@@ -663,6 +675,7 @@ export function useMcpAddFlow({
       clientId: oauthClientId,
       setClientId: setOauthClientId,
       summary: oauthSummary,
+      authorizeUrl: oauthAuthorizeUrl,
       signIn,
       cancel: cancelSignIn,
     },

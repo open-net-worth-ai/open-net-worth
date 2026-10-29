@@ -65,6 +65,8 @@ instructions, and enter what they give you in the form (or add it as a custom se
    - **Remote server (URL)** — enter the **Server URL** (starting with `https://`, or `http://`
      for a server on your own machine), then choose **Authentication**: **None**, **API key**
      (sent to the server as a bearer token), or **OAuth** (you sign in to the vendor in a pop-up).
+     If no sign-in window appears, click **Open the sign-in page** under "Waiting for sign-in…";
+     the screen picks up the result once you finish, whichever window you signed in from.
    - **Local command (stdio)** — enter the **Command** (for example `npx` or `uvx`), the
      **Arguments** (for example `-y @modelcontextprotocol/server-filesystem /path/to/folder`) and
      any **Environment variables**, one `NAME=value` per line.
