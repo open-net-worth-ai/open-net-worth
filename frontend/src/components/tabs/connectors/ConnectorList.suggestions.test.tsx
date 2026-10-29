@@ -148,7 +148,7 @@ describe('promoted until set up', () => {
     expect(bySection.channels![0].id).toBe('telegram')
   })
 
-  it('still offers its picks on an EMPTY tab, under the empty state', () => {
+  it('draws an EMPTY tab with picks like a populated one — no contradicting empty state', () => {
     const onSuggest = vi.fn()
     render(
       <ConnectorList
@@ -162,7 +162,8 @@ describe('promoted until set up', () => {
         sectionSuggestions={suggestionsBySection([])}
       />,
     )
-    expect(screen.getByText(/Nothing in Channels yet/)).toBeTruthy()
+    expect(screen.queryByText(/Nothing in Channels yet/)).toBeNull()
+    expect(screen.getByRole('button', { name: /Add a channel/ })).toBeTruthy()
     const group = screen.getByLabelText('Suggested channels')
     expect(group.textContent).toContain('Telegram')
   })

@@ -10,7 +10,7 @@ import type { JSX } from 'react'
 import { Badge, Btn, Empty } from './primitives'
 import { Icons } from './icons'
 import { ConnectorRow } from './ConnectorRow'
-import { emptyStateFor } from './emptyState'
+import { emptyStateFor, FAMILY_BLURB } from './emptyState'
 import { DirectoryCard } from './DirectoryCard'
 import { matchesSearch, type DirectoryRow } from './catalog'
 import {
@@ -131,25 +131,37 @@ export function ConnectorList({
   if (sections.length === 0 && notAdded) return notAdded
   if (sections.length === 0) {
     const copy = emptyStateFor(filters)
-    // An empty tab (nothing in Channels yet) still offers its picks — Telegram for Channels,
-    // IBKR and Coinbase for MCP — instead of only a Browse & add button.
+    const section = FAMILY_SECTIONS.find((s) => s.key === filters.tab)
+    const picks = sectionSuggestions?.[filters.tab]
+    // An empty family tab with picks to offer reads like a populated one — heading, one line on
+    // what the tab is for, the suggestions, the usual add link — not a "Nothing here yet" block
+    // followed by "…but here's something", which read as two contradicting messages.
+    if (section && onSuggest && picks?.length) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="cn-colhead">
+            <span style={{ fontSize: 12.5, fontWeight: 700 }}>{section.title}</span>
+          </div>
+          <span className="rd-help">{FAMILY_BLURB[section.key]}</span>
+          <SuggestedBlock
+            rows={picks}
+            onSuggest={onSuggest}
+            label={`Suggested ${section.title.toLowerCase()}`}
+          />
+          <div>
+            <button className="cn-addlink" onClick={() => onBrowse(section.key)}>
+              <Icons.plus /> {section.add}
+            </button>
+          </div>
+        </div>
+      )
+    }
     return (
-      <>
-        <Empty
-          title={copy.title}
-          body={copy.body}
-          action={<Btn onClick={() => onBrowse(copy.actionFamily)}>{copy.actionLabel}</Btn>}
-        />
-        <SuggestedBlock
-          rows={sectionSuggestions?.[filters.tab]}
-          onSuggest={onSuggest}
-          label={
-            filters.tab === 'all'
-              ? 'Suggested connectors'
-              : `Suggested ${FAMILY_SECTIONS.find((s) => s.key === filters.tab)?.title.toLowerCase()}`
-          }
-        />
-      </>
+      <Empty
+        title={copy.title}
+        body={copy.body}
+        action={<Btn onClick={() => onBrowse(copy.actionFamily)}>{copy.actionLabel}</Btn>}
+      />
     )
   }
 

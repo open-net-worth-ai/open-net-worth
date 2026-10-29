@@ -17,7 +17,8 @@
 import { FAMILY_SECTIONS, type FamilyKey, type FamilyTab, type StatusFilter } from './model'
 
 /** One line on what a family is for — spec §1's lane cards, verbatim in substance. */
-const FAMILY_BLURB: Record<FamilyKey, string> = {
+/** What each family is for — one line, shared by the empty state and an empty tab's picks. */
+export const FAMILY_BLURB: Record<FamilyKey, string> = {
   channels: 'Channels are how Lucius reaches you — notifications, questions, and approvals.',
   data: 'Data sources bring balances, transactions, and positions in.',
   web: 'Web providers give Lucius live search and page reads.',
