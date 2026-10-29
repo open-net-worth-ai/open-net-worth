@@ -2478,7 +2478,7 @@ def test_a_level_nothing_recognises_proposes_rather_than_fires(manager, monkeypa
 
     text, proposed, _images = asyncio.run(mgr.call_external_tool("mcp__drive__search_files", {}))
     assert proposed is not None and proposed["type"] == "external_mcp_call"
-    assert "Awaiting your confirmation" in text
+    assert text is None  # paused: no result until the card is answered
     assert "call_args" not in captured  # nothing was sent to the server
 
 

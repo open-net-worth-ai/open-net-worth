@@ -220,15 +220,16 @@ class ExternalDispatcher(Protocol):
     ``schemas()`` returns the namespaced Anthropic tool schemas to UNION into the
     interactive offer (every advertised tool of each enabled server except the ones the
     permission config ``block``s). ``call(name, args)`` dispatches one namespaced external
-    call and returns ``(fenced_text, proposed_change | None, image_attachment_ids)``. The
+    call and returns ``(fenced_text | None, proposed_change | None, image_attachment_ids)``. The
     outcome is decided by ONE authority — that tool's level in ``services.tool_permissions``,
     with nothing above it (ADR ``2026-08-13-mcp-permission-config-is-the-single-authority``):
       * ``block`` → refuse; nothing is staged and nothing is sent;
       * ``ask`` (the DEFAULT for an unconfigured tool) → WRITE NOTHING, stage the call
         ``{server_id, tool, args}`` verbatim under the in-flight ``tool_use_id``
         (``core.tool_use_context.get_tool_use_id()``) in the SAME ``PendingPlanStore`` every
-        other gated tool uses, and return a ``proposed_change`` dict (type
-        ``external_mcp_call``) for the confirm card — no nonce, no minted token;
+        other gated tool uses, and return ``None`` text (the turn loop's paused sentinel — no
+        result yet) with a ``proposed_change`` dict (type ``external_mcp_call``) for the
+        confirm card — no nonce, no minted token;
       * ``allow`` → fire the real external ``tools/call`` and return the fenced text with
         ``None``.
 
@@ -272,7 +273,8 @@ class ExternalDispatcher(Protocol):
 
     async def call(
         self, name: str, args: dict
-    ) -> Tuple[str, Optional[dict], list[str]]: ...  # pragma: no cover - structural protocol
+    ) -> Tuple[Optional[str], Optional[dict], list[str]]:  # pragma: no cover - structural protocol
+        ...
 
     async def apply_confirmed(
         self, name: str, args: dict
@@ -283,7 +285,7 @@ class ExternalDispatcher(Protocol):
 # An async callable form is accepted too, but the manager registers the object. The 3rd tuple
 # element is the attachment id of any image the call captured (e.g. a screenshot) — empty when
 # none; see ``McpClientManager._persist_result_images``.
-ExternalCall = Callable[[str, dict], Awaitable[Tuple[str, Optional[dict], list[str]]]]
+ExternalCall = Callable[[str, dict], Awaitable[Tuple[Optional[str], Optional[dict], list[str]]]]
 
 _dispatcher: Optional[ExternalDispatcher] = None
 

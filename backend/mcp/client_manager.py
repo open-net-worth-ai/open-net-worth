@@ -252,7 +252,7 @@ class McpClientManager:
                 return tool
         return None
 
-    async def call(self, name: str, args: dict) -> Tuple[str, Optional[dict], list[str]]:
+    async def call(self, name: str, args: dict) -> Tuple[Optional[str], Optional[dict], list[str]]:
         """Seam entrypoint — alias for ``call_external_tool`` (the ``ExternalDispatcher`` shape)."""
         return await self.call_external_tool(name, args)
 
@@ -313,12 +313,12 @@ class McpClientManager:
 
     async def call_external_tool(
         self, name: str, args: dict
-    ) -> Tuple[str, Optional[dict], list[str]]:
-        """Dispatch one namespaced external call → ``(fenced_text, proposed_change | None,
+    ) -> Tuple[Optional[str], Optional[dict], list[str]]:
+        """Dispatch one namespaced external call → ``(fenced_text | None, proposed_change | None,
         image_attachment_ids)``.
 
         The permission level is the ONLY thing that decides the outcome: ``blocked`` refuses,
-        ``needs_approval`` returns a ``proposed_change`` having written nothing, and
+        ``needs_approval`` returns ``None`` text and a ``proposed_change`` having written nothing, and
         ``always_allow`` fires. Nothing
         above or below that may override it — not the tool's shape, not the server, and not
         which surface the turn is running on (an ``always_allow`` fires unattended too; see
@@ -393,13 +393,10 @@ class McpClientManager:
             session_id=get_session_id(),
             change=change,
         )
-        return (
-            mcp_external.fence_external_output(
-                label, f"Awaiting your confirmation to run '{tool}' on '{label}'."
-            ),
-            change,
-            [],
-        )
+        # ``None`` text is the turn loop's PAUSED sentinel: the tool_use stays result-less until
+        # the card is answered. A placeholder result here made a sibling group look complete,
+        # so approving one of two cards resumed the turn without the other (2026-10-29).
+        return None, change, []
 
     async def apply_confirmed(self, name: str, args: dict) -> Tuple[str, Optional[dict], list[str]]:
         """Fire an ALREADY-REDEEMED external-MCP call — the confirm→apply path.

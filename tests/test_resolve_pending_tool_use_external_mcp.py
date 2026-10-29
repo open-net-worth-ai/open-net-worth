@@ -281,3 +281,49 @@ async def test_a_tool_blocked_while_the_card_waited_is_refused_not_fired(env, mo
     ]
     assert len(result_blocks) == 1
     assert "blocked" in result_blocks[0]["content"].lower()
+
+
+# ── 4. Two gated external calls in one round wait for BOTH answers ──────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_two_external_cards_in_one_round_resume_only_after_both_are_answered(
+    env, monkeypatch
+):
+    """Owner incident 2026-10-29: two IBKR reads in one round, both approved — the model said
+    the second "waits on approval". The staged call carried a "pending for user confirmation"
+    placeholder result, so approving the FIRST card completed the sibling group and resumed the
+    turn on that placeholder; the second approval then had no open tool_use to land on."""
+    _tmp, captured = env
+    provider = _ScriptedProvider(
+        [("mcp__drive__transfer", {"amount": 1}), ("mcp__drive__transfer", {"amount": 2})]
+    )
+    _install(monkeypatch, provider)
+    session_id = "test-ext-mcp-two-cards"
+
+    staged = [
+        ev["tool_use_id"]
+        for ev in await _drain(
+            assistant.run(session_id, [{"role": "user", "content": "both"}], "s")
+        )
+        if ev.get("type") == "proposed_change"
+    ]
+    assert staged == ["t0", "t1"]
+
+    await _drain(assistant.resolve_pending_tool_use(session_id, "t0", "approve", "s"))
+    assert provider.calls == 1, "the turn must not resume while t1 is still unanswered"
+
+    await _drain(assistant.resolve_pending_tool_use(session_id, "t1", "approve", "s"))
+    assert provider.calls == 2
+    assert captured["call_args"]["arguments"] == {"amount": 2}
+
+    _, history = assistant.get_or_create_session(session_id)
+    results = {
+        b["tool_use_id"]: b["content"]
+        for m in history
+        if m.get("role") == "user"
+        for b in (m.get("content") or [])
+        if isinstance(b, dict) and b.get("type") == "tool_result"
+    }
+    assert set(results) == {"t0", "t1"}
+    assert all("external result" in text for text in results.values()), results
