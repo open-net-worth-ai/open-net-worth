@@ -953,11 +953,14 @@
   }
 }
 /* In the filter row the hue is only an outline until picked — a full row of tinted fills
-   was too loud (owner review, 2026-10-29). Border + line-height keep the 18px pill. */
+   was too loud (owner review, 2026-10-29). Sized BETWEEN the family chips above (12px, ~30px
+   tall) and the card tags (10.5px, 18px): the card-tag size read as an afterthought there. */
 .cn-page .cn-catrow .cn-cat {
   background: transparent;
   border: 1px solid color-mix(in srgb, var(--cat-hue, var(--muted)) 45%, transparent);
-  line-height: 16px;
+  font-size: 11.5px;
+  line-height: 22px;
+  padding: 0 10px;
 }
 .cn-page .cn-cat.pick.on {
   color: var(--surface);
