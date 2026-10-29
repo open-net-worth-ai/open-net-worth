@@ -57,7 +57,12 @@ export function DirectoryModal({
   const [sort, setSort] = useState<DirectorySort>('popular')
   const [category, setCategory] = useState<ConnectorCategory | 'all'>('all')
   const [preview, setPreview] = useState<DirectoryRow | null>(
-    () => entries.find((e) => e.id === previewId) ?? null,
+    // `installedId` too: an installed server merged into its catalog card (`mcp-ibkr` for
+    // `mcp:api-ibkr-com`) has no row of its own, so its "View details" must land on that card.
+    () =>
+      (previewId
+        ? entries.find((e) => e.id === previewId || e.installedId === previewId)
+        : undefined) ?? null,
   )
   const [mcpOpen, setMcpOpen] = useState(false)
 

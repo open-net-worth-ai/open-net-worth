@@ -53,6 +53,7 @@ function open(props: Partial<Parameters<typeof DirectoryModal>[0]> = {}) {
       onAdded={props.onAdded}
       toast={props.toast}
       family={props.family}
+      previewId={props.previewId}
     />,
   )
 }
@@ -975,5 +976,27 @@ describe('paste is not a separate mode', () => {
 
     expect(view.getByText(/Couldn't parse that yet/)).toBeTruthy()
     expect((view.getByLabelText('Config snippet') as HTMLTextAreaElement).value).toBe('{ oops')
+  })
+})
+
+describe('an installed server merged into its catalog card', () => {
+  const IBKR_SERVER: Connector = {
+    id: 'mcp:api-ibkr-com',
+    kind: 'mcp',
+    name: 'Interactive Brokers',
+    enabled: true,
+    status: 'active',
+    pausable: true,
+    config: { transport: 'http', url: 'https://api.ibkr.com/v1/api/mcp-public' },
+    secrets_public: {},
+    tools: [],
+  }
+
+  it("opens ON that card from the server's View details, not on the plain browse", () => {
+    // The server has no directory row of its own any more — it is the `mcp-ibkr` card — so a
+    // lookup by its id alone fell through to the grid, and View details reopened Browse & add.
+    const { container } = open({ connectors: [IBKR_SERVER], previewId: 'mcp:api-ibkr-com' })
+    expect(container.querySelector('.cn-dirgrid')).toBeNull()
+    expect(container.textContent).toContain('Interactive Brokers')
   })
 })

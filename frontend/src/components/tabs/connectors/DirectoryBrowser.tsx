@@ -33,6 +33,12 @@ import {
  *  jumps between them (spec §6 and §7 pin the same number). */
 export const MODAL_BODY_MIN_HEIGHT = 480
 
+/** Scroll a tapped category chip to the middle of its one-line row, so the chips past it
+ *  (the ones cut off at the edge) come into view. Optional call: jsdom has no scrollIntoView. */
+function revealChip(chip: HTMLElement): void {
+  chip.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+}
+
 export interface DirectoryBrowserProps {
   entries: DirectoryRow[]
   family: DirectoryFamilyFilter
@@ -139,7 +145,10 @@ export function DirectoryBrowser({
               type="button"
               className={'cn-cat pick' + (category === 'all' ? ' on' : '')}
               aria-pressed={category === 'all'}
-              onClick={() => onCategory('all')}
+              onClick={(e) => {
+                revealChip(e.currentTarget)
+                onCategory('all')
+              }}
             >
               All
             </button>
@@ -150,7 +159,10 @@ export function DirectoryBrowser({
                 className={'cn-cat pick' + (category === c ? ' on' : '')}
                 style={{ '--cat-hue': CATEGORY_HUE[c] } as CSSProperties}
                 aria-pressed={category === c}
-                onClick={() => onCategory(category === c ? 'all' : c)}
+                onClick={(e) => {
+                  revealChip(e.currentTarget)
+                  onCategory(category === c ? 'all' : c)
+                }}
               >
                 {c}
               </button>

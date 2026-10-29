@@ -933,24 +933,31 @@
 .cn-page .cn-dircard > .cn-cats {
   margin-top: auto;
 }
+/* ONE line that scrolls sideways at every width — fourteen chips wrapped into two (desktop)
+   or four (phone) lines of the sticky header. Bleeds to the header's edges, which fade so a
+   cut-off chip reads as "more this way"; a tapped chip scrolls itself to the centre
+   (`DirectoryBrowser`), revealing its neighbours. */
 .cn-page .cn-catrow {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -20px;
+  padding: 0 20px;
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 20px,
+    #000 calc(100% - 20px),
+    transparent
+  );
 }
-/* Fourteen chips wrapped into four lines of the sticky header on a phone — one row that
-   scrolls sideways keeps the header short. After the base rule, so it wins. */
-@media (max-width: 560px) {
-  .cn-page .cn-catrow {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    margin: 0 -20px;
-    padding: 0 20px;
-  }
-  .cn-page .cn-catrow > .cn-cat {
-    flex: none;
-  }
+.cn-page .cn-catrow::-webkit-scrollbar {
+  display: none;
+}
+.cn-page .cn-catrow > .cn-cat {
+  flex: none;
 }
 /* In the filter row the hue is only an outline until picked — a full row of tinted fills
    was too loud (owner review, 2026-10-29). Sized BETWEEN the family chips above (12px, ~30px
