@@ -23,6 +23,7 @@ import {
   RETIRED_CATALOG,
   MCP_INSTALL_PRESETS,
   catalogProvenanceFor,
+  filterDirectory,
   previewEndpoint,
   type CatalogEntry,
   type DirectoryRow,
@@ -517,5 +518,32 @@ describe('retired entries', () => {
   it('keeps IBKR Flex and the Alpaca data source out, their entries set aside not deleted', () => {
     expect(CATALOG.some((e) => e.id === 'ibkr' || e.id === 'alpaca')).toBe(false)
     expect(RETIRED_CATALOG.map((e) => e.id).sort()).toEqual(['alpaca', 'ibkr'])
+  })
+})
+
+describe('Sort: Popular', () => {
+  it('lists what you have first, then the popular picks, then the rest — each A–Z', () => {
+    const plaid = {
+      id: 'plaid',
+      kind: 'plaid',
+      name: 'Plaid',
+      enabled: true,
+      status: 'active' as const,
+      pausable: true,
+      config: {},
+      secrets_public: {},
+      tools: [],
+    }
+    const rows = filterDirectory(resolveDirectory([plaid]), 'data', '', 'popular')
+    const names = rows.map((r) => r.name)
+    expect(names[0]).toBe('Plaid')
+    const rest = rows.slice(1)
+    const rank = (r: (typeof rows)[number]) => (r.installed ? 0 : r.popular ? 1 : 2)
+    for (let i = 1; i < rest.length; i++) {
+      const [a, b] = [rest[i - 1], rest[i]]
+      expect(rank(a) < rank(b) || (rank(a) === rank(b) && a.name.localeCompare(b.name) <= 0)).toBe(
+        true,
+      )
+    }
   })
 })

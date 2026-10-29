@@ -42,7 +42,8 @@ category tags sit behind the filter icon beside search, which lights up while on
 already added shows once, with a settings gear instead of **+**. **Suggested**
 lists up to three popular connectors you haven't added yet — once at the bottom of **All**, or
 under the section on a single tab such as **MCP**, and at the top of **Browse & add** before you
-search or filter; click one to read about it and add it. **Sort** orders the full list below it.
+search or filter; click one to read about it and add it. **Sort** orders the full list below it:
+**Popular** puts the connectors you've added first, then popular ones, then the rest A–Z.
 
 1. Open **Connectors** in the sidebar, click **Browse & add**, and choose **MCP**.
 2. Click a card to read what it does and which tools it offers, then click **Add**. The connection

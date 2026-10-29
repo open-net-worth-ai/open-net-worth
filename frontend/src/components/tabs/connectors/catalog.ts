@@ -1121,9 +1121,17 @@ export function filterDirectory(
     .filter((d) => family === 'all' || d.families.includes(FAMILY_OF_FILTER[family]))
     .filter((d) => category === 'all' || d.categories.includes(category))
     .filter((d) => !q || matchesSearch(`${d.name} ${d.sub} ${d.categories.join(' ')}`, q))
-    .sort((a, b) =>
-      sort === 'az' ? a.name.localeCompare(b.name) : (b.popular ? 1 : 0) - (a.popular ? 1 : 0),
-    )
+    .sort((a, b) => (sort === 'az' ? byName(a, b) : byPopular(a, b)))
+}
+
+const byName = (a: DirectoryRow, b: DirectoryRow) => a.name.localeCompare(b.name)
+
+/** "Popular": what you already have first, then the popular picks, then everything else —
+ *  each group A–Z. Before, only the popular flag counted and the rest kept the catalog's
+ *  hand-written order, so the list read as unsorted (owner review, 2026-10-29). */
+function byPopular(a: DirectoryRow, b: DirectoryRow): number {
+  const rank = (d: DirectoryRow) => (d.installed ? 0 : d.popular ? 1 : 2)
+  return rank(a) - rank(b) || byName(a, b)
 }
 
 /** Popular tiles show ONLY on the unfiltered, unsearched view (spec §6). */
