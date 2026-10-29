@@ -24,6 +24,7 @@ from backend.core.llm_seam import (
 from backend.core.urls import hostname as _hostname
 from backend.core.user_time import user_now
 from backend.db.evidence_store import EvidenceStore
+from backend.db.instrument_store import InstrumentStore
 from backend.db.intel_stories_store import IntelStoriesStore
 from backend.monitoring.collect import gather_evidence, gather_rss
 from backend.services import ledger as ledger_service
@@ -548,6 +549,44 @@ def _reviewed_stories(stories: list[dict], evidence_urls: dict[str, str]) -> lis
     return accepted
 
 
+def _base_symbol(ticker: object) -> str:
+    """`RR.L` → `RR`, `BTC-USD` → `BTC`: listing and pair suffixes don't change the subject."""
+    return re.split(r"[.\-/]", str(ticker or "").strip().upper(), maxsplit=1)[0]
+
+
+def _story_symbol(story: dict) -> str:
+    """The symbol a story is really about — its instrument's, else its own stored ticker (which
+    an earlier mis-match may already have overwritten)."""
+    iid = story.get("instrument_id")
+    if iid:
+        try:
+            symbol = (InstrumentStore().find_by_id(iid) or {}).get("symbol")
+        except Exception:
+            logger.debug("intel_agent: instrument lookup failed for %s", iid, exc_info=True)
+            symbol = None
+        if symbol:
+            return _base_symbol(symbol)
+    return _base_symbol(story.get("ticker"))
+
+
+def _same_subject_or_none(existing: dict | None, s: dict) -> dict | None:
+    """`existing` unless the model's ticker names a different company than the story is about.
+    A model that echoes the wrong story id must not file one company's news on another's story."""
+    if not existing:
+        return None
+    theirs, mine = _base_symbol(s.get("ticker")), _story_symbol(existing)
+    if theirs and mine and theirs != mine:
+        logger.warning(
+            "intel_agent: rejected match — %s (%s) is about %s, model said %s",
+            existing.get("id"),
+            existing.get("label"),
+            mine,
+            theirs,
+        )
+        return None
+    return existing
+
+
 def _persist_story(
     store: IntelStoriesStore,
     s: dict,
@@ -578,11 +617,11 @@ def _persist_story(
 
     existing = None
     if s.get("id"):
-        existing = store.find_by_id(s["id"])
+        existing = _same_subject_or_none(store.find_by_id(s["id"]), s)
     if not existing and s.get("ticker"):
-        existing = store.find_story_by_ticker(s["ticker"])
+        existing = _same_subject_or_none(store.find_story_by_ticker(s["ticker"]), s)
     if not existing:
-        existing = store.find_story_by_label(s["label"])
+        existing = _same_subject_or_none(store.find_story_by_label(s["label"]), s)
 
     story_type = s.get("type") or default_type or "asset"
     # For macro stories, attach the deterministic computed exposure (never from the LLM).
@@ -593,11 +632,14 @@ def _persist_story(
         # row's own type — never silently fall back to the create-only default (I11).
         effective_type = s.get("type") or existing.get("type") or default_type or "asset"
 
+        # The story's subject is fixed: its ticker never changes, and a new label is taken only
+        # when the model named a ticker that _same_subject_or_none just vouched for.
+        vouched = bool(s.get("ticker")) or not _story_symbol(existing)
         update: dict = {
             **existing,
             "type": effective_type,
-            "label": s.get("label") or existing["label"],
-            "ticker": s.get("ticker") or existing.get("ticker", ""),
+            "label": (s.get("label") if vouched else None) or existing["label"],
+            "ticker": existing.get("ticker") or s.get("ticker", ""),
             "status": s["status"],
             "current_summary": s["summary"],
             "portfolio_impact": s.get("portfolio_impact", ""),
