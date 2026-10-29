@@ -736,6 +736,35 @@
   gap: 7px;
   flex-wrap: wrap;
 }
+/* Search, plus (phone only) the Sort icon beside it. */
+.cn-page .cn-dirsearchrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cn-page .cn-dirsearchrow > .cn-dirsearch {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cn-page .cn-sorticon {
+  display: none;
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.cn-page .cn-sorticon > select {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
 /* The directory's family chips + Sort row. */
 .cn-page .cn-dirfilters {
   display: flex;
@@ -981,9 +1010,9 @@
 .cn-page .cn-catrow > .cn-cat {
   flex: none;
 }
-/* Phone: the family chips and Sort share ONE line — the chips scroll sideways like the category
-   row below, Sort stays pinned at the right end. Wrapping put Sort on a line of its own. After
-   the base `.cn-chiprow` rule, so it wins. */
+/* Phone: Sort moves up beside search as an icon (`.cn-sorticon`), and the family chips get the
+   whole line, scrolling sideways like the category row below. Wrapping had put Sort on a line
+   of its own. After the base `.cn-chiprow` / `.cn-sorticon` rules, so it wins. */
 @media (max-width: 560px) {
   .cn-page .cn-dirfilters {
     flex-wrap: nowrap;
@@ -1004,7 +1033,14 @@
     flex: none;
   }
   .cn-page .cn-dirfilters > .cn-sortselect {
-    flex: none;
+    display: none;
+  }
+  .cn-page .cn-sorticon {
+    display: inline-flex;
+  }
+  /* Search and the Sort icon share one 40px line — a comfortable thumb target, and level. */
+  .cn-page .cn-dirsearchrow .cn-dirsearch input {
+    height: 40px;
   }
 }
 /* In the filter row the hue is only an outline until picked — a full row of tinted fills

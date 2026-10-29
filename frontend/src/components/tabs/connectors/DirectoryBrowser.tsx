@@ -18,6 +18,7 @@ import type { CSSProperties, JSX } from 'react'
 import { DirectoryCard } from './DirectoryCard'
 import { Empty, Mono } from './primitives'
 import { Icons } from './icons'
+import { ArrowUpDown } from '../../../ui/icons'
 import { CATEGORY_HUE, CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
 import {
   DIRECTORY_FAMILY_CHIPS,
@@ -96,17 +97,33 @@ export function DirectoryBrowser({
           borderBottom: '1px solid var(--line)',
         }}
       >
-        <span className="cn-dirsearch">
-          <Icons.search />
-          <input
-            className="rd-input"
-            type="search"
-            placeholder="Search connectors…"
-            value={query}
-            onChange={(e) => onQuery(e.target.value)}
-            aria-label="Search directory"
-          />
-        </span>
+        <div className="cn-dirsearchrow">
+          <span className="cn-dirsearch">
+            <Icons.search />
+            <input
+              className="rd-input"
+              type="search"
+              placeholder="Search connectors…"
+              value={query}
+              onChange={(e) => onQuery(e.target.value)}
+              aria-label="Search directory"
+            />
+          </span>
+          {/* Phone only: Sort as an icon beside search (the text select below is hidden there),
+              so the family chips get their row to themselves. A native select laid over the
+              icon keeps the platform's own picker and its accessibility. */}
+          <label className="cn-sorticon" title="Sort">
+            <ArrowUpDown size={16} aria-hidden />
+            <select
+              value={sort}
+              onChange={(e) => onSort(e.target.value as DirectorySort)}
+              aria-label="Sort directory"
+            >
+              <option value="popular">Popular</option>
+              <option value="az">A–Z</option>
+            </select>
+          </label>
+        </div>
         <div className="cn-dirfilters">
           <div className="cn-chiprow">
             {DIRECTORY_FAMILY_CHIPS.map(([k, l]) => (
