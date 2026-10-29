@@ -900,8 +900,7 @@
 }
 @media (max-width: 560px) {
   .cn-page .cn-dirgrid,
-  .cn-page .cn-poprow,
-  .cn-page .cn-suggestgrid {
+  .cn-page .cn-poprow {
     grid-template-columns: 1fr;
   }
   /* A phone row has no room for name + tags + status on one line: the tags drop under the
@@ -1012,10 +1011,19 @@
   font-weight: 600;
   color: var(--muted);
 }
+/* `minmax(0, 1fr)`, not `1fr`: a bare 1fr track can't shrink below its card's min-content, so
+   a long name pushed the row wider than the screen and it scrolled sideways. */
 .cn-page .cn-suggestgrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+/* Phone: one card per row. AFTER the base rule — in the shared 560px block above it lost the
+   cascade to the three-column rule (same-specificity, later wins). */
+@media (max-width: 560px) {
+  .cn-page .cn-suggestgrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .cn-page .cn-dircard.suggested {
   border-style: dashed;
