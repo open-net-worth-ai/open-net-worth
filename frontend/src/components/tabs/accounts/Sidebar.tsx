@@ -131,12 +131,12 @@ function AccountRow({ a, sel, onSelect }: AccountRowProps) {
         {/* No type: the group heading above already says it. */}
         {(a.lastFour || due || linked) && (
           <span className="acct-row-sub">
+            {a.lastFour && '•••' + a.lastFour}
             {linked && (
               <span className="acct-row-linked" title={`Linked to ${linked}`}>
                 <Link2 size={11} aria-label={`Linked to ${linked}`} />
               </span>
             )}
-            {a.lastFour && '•••' + a.lastFour}
             {a.lastFour && due && ' · '}
             {due && <span className="acct-due">Needs reconciling</span>}
           </span>
