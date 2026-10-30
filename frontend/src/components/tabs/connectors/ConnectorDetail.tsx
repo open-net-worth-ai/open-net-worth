@@ -37,6 +37,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { templateKeyForConnector } from '../automations/automationTemplates'
 import { BackTitle, Badge, Btn, Kebab, Modal, Mono, type KebabItem } from './primitives'
 import { useConnectorSaveHost } from './formSave'
+import { useIsMobile } from '../../../hooks/useIsMobile'
 import { PermissionLadder } from './PermissionLadder'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {
@@ -189,6 +190,7 @@ export function ConnectorDetail({
   const openTemplate = (key: string) =>
     void navigate({ to: '/automations', search: { template: key } as never } as never)
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const isMobile = useIsMobile()
   const [removing, setRemoving] = useState(false)
   const [confirmingPause, setConfirmingPause] = useState(false)
   const [pausing, setPausing] = useState(false)
@@ -374,6 +376,45 @@ export function ConnectorDetail({
     )
   }
 
+  // `lg` matches the landing page's Add — this page's primary action is the same weight of
+  // decision. On a phone it moves to the footer beside Done (the header keeps only the ⋮
+  // inline), so it never hangs on a row of its own under the name.
+  const stateAction = alwaysOn ? null : entry.attention ? (
+    configForm ? (
+      // A native connector's "Reconnect" here is ALWAYS an already-enabled,
+      // already-configured connector (that's the only way `attention` is true —
+      // see `services/connectors.py::_status`), so there is nothing to flip and
+      // no connection test to run yet (EmailUnifiedSection's own note: "a real
+      // cross-connector test flow is a future addition"). The fix lives in its
+      // credentials, so this opens the same config view "Edit configuration"
+      // does, rather than routing through `onReconnect`'s enable-flip/OAuth path.
+      <Btn size="lg" variant="primary" onClick={() => setConfiguringId(entry.id)}>
+        Reconnect
+      </Btn>
+    ) : (
+      <Btn size="lg" variant="primary" disabled={reconnecting} onClick={onReconnect}>
+        {reconnecting ? 'Reconnecting…' : 'Reconnect'}
+      </Btn>
+    )
+  ) : entry.enabled ? (
+    <>
+      {automateKey ? (
+        // Puts the connector to work: opens its Automation template (logging from
+        // the mailbox, a bank or broker sync) as an unsaved draft.
+        <Btn size="lg" onClick={() => openTemplate(automateKey)}>
+          Automate
+        </Btn>
+      ) : null}
+      <Btn size="lg" variant="danger" onClick={() => setConfirmingPause(true)}>
+        Pause
+      </Btn>
+    </>
+  ) : (
+    <Btn size="lg" variant="primary" onClick={connect}>
+      {setupPending ? 'Connect' : 'Resume'}
+    </Btn>
+  )
+
   return (
     <>
       <Modal
@@ -382,9 +423,16 @@ export function ConnectorDetail({
         size="lg"
         escapeDisabled={confirmingRemove || confirmingPause}
         footer={
-          <Btn variant="primary" onClick={onClose}>
-            Done
-          </Btn>
+          <>
+            {isMobile ? stateAction : null}
+            <Btn
+              size={isMobile ? 'lg' : undefined}
+              variant={isMobile && stateAction ? 'secondary' : 'primary'}
+              onClick={onClose}
+            >
+              Done
+            </Btn>
+          </>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -393,45 +441,16 @@ export function ConnectorDetail({
             // `lg` matches the landing page's Add — this page's primary action is the same
             // weight of decision, and the two headers are now the same block. The kebab keeps
             // its dense icon size: spec §9 excludes small icon-only actions from any bump.
+            compact={isMobile}
             actions={
-              <>
-                {alwaysOn ? null : entry.attention ? (
-                  configForm ? (
-                    // A native connector's "Reconnect" here is ALWAYS an already-enabled,
-                    // already-configured connector (that's the only way `attention` is true —
-                    // see `services/connectors.py::_status`), so there is nothing to flip and
-                    // no connection test to run yet (EmailUnifiedSection's own note: "a real
-                    // cross-connector test flow is a future addition"). The fix lives in its
-                    // credentials, so this opens the same config view "Edit configuration"
-                    // does, rather than routing through `onReconnect`'s enable-flip/OAuth path.
-                    <Btn size="lg" variant="primary" onClick={() => setConfiguringId(entry.id)}>
-                      Reconnect
-                    </Btn>
-                  ) : (
-                    <Btn size="lg" variant="primary" disabled={reconnecting} onClick={onReconnect}>
-                      {reconnecting ? 'Reconnecting…' : 'Reconnect'}
-                    </Btn>
-                  )
-                ) : entry.enabled ? (
-                  <>
-                    {automateKey ? (
-                      // Puts the connector to work: opens its Automation template (logging from
-                      // the mailbox, a bank or broker sync) as an unsaved draft.
-                      <Btn size="lg" onClick={() => openTemplate(automateKey)}>
-                        Automate
-                      </Btn>
-                    ) : null}
-                    <Btn size="lg" variant="danger" onClick={() => setConfirmingPause(true)}>
-                      Pause
-                    </Btn>
-                  </>
-                ) : (
-                  <Btn size="lg" variant="primary" onClick={connect}>
-                    {setupPending ? 'Connect' : 'Resume'}
-                  </Btn>
-                )}
+              isMobile ? (
                 <Kebab items={kebabItems} />
-              </>
+              ) : (
+                <>
+                  {stateAction}
+                  <Kebab items={kebabItems} />
+                </>
+              )
             }
           />
 
@@ -549,12 +568,15 @@ export function ConnectorDetail({
 function Identity({
   entry,
   actions,
+  compact = false,
 }: {
   entry: ConnectorDetailEntry
   actions?: ReactNode
+  /** Phone layout: the only action is the ⋮, kept inline at the top right. */
+  compact?: boolean
 }): JSX.Element {
   return (
-    <div className="cn-idhead">
+    <div className={compact ? 'cn-idhead cn-idhead-compact' : 'cn-idhead'}>
       <Mono icon={entry.icon} hue={entry.hue} logo={entry.logo} size="lg" />
       <div className="cn-idhead-main">
         <div className="cn-idhead-name">

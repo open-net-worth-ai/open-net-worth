@@ -1733,6 +1733,18 @@
     flex: 1 0 100%;
     justify-content: flex-end;
   }
+  /* …except when the only thing left in the header is the ⋮ (ConnectorDetail on a phone, its
+     state action having moved to the footer): that stays inline, top-right beside the name. */
+  .cn-page .cn-idhead-compact {
+    flex-wrap: nowrap;
+  }
+  .cn-page .cn-idhead-compact .cn-idhead-main {
+    flex-basis: auto;
+  }
+  .cn-page .cn-idhead-compact .cn-idhead-actions {
+    flex: none;
+    align-self: flex-start;
+  }
 
   .cn-page .rd-modal-scrim {
     padding: 0;
