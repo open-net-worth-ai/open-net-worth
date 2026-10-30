@@ -453,7 +453,10 @@ class SearchConnectorDirectoryInput(ToolInput):
 
     query: Optional[str] = Field(
         default=None,
-        description="Keywords, e.g. 'interactive brokers'.",
+        description=(
+            "Names or keywords. Several in one search is fine, e.g. 'bybit webull' — any word "
+            "matches, best matches first."
+        ),
     )
     category: Optional[str] = Field(
         default=None,

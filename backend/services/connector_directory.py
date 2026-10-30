@@ -66,12 +66,20 @@ def _setup(connect: dict) -> dict:
     return {"method": kind, "needs": _SETUP_TEXT[kind]}
 
 
-def _words_match(hay: str, query: str) -> bool:
-    """Every word must appear; a plural finds its singular (the frontend's ``matchesSearch``)."""
+def _word_hits(hay: str, query: str) -> int:
+    """How many of the query's words appear; a plural finds its singular.
+
+    ANY word is enough to match, and more words matched ranks higher. Requiring every word
+    made "bybit webull" match nothing, so Lucius had to search once per name — a search for
+    what the user can connect usually names several apps (live test, 2026-10-31). A multi-word
+    name still wins its own search: "interactive brokers" puts IBKR (2 hits) above every
+    other brokerage (1).
+    """
     hay = hay.lower()
-    return all(
-        w in hay or (len(w) > 3 and w.endswith("s") and w[:-1] in hay)
+    return sum(
+        1
         for w in query.lower().split()
+        if w in hay or (len(w) > 3 and w.endswith("s") and w[:-1] in hay)
     )
 
 
@@ -132,20 +140,23 @@ def _row(entry: dict, native: dict[str, str], endpoints: Optional[set[str]]) -> 
 def search(query: str = "", category: str = "") -> dict:
     query, category = query.strip(), category.strip().lower()
     native, endpoints = _installed_state()
+    hits = {
+        e["id"]: _word_hits(
+            f"{e['name']} {e.get('sub', '')} {e['publisher'] or ''} "
+            f"{' '.join(e['categories'])} {' '.join(e['families'])}",
+            query,
+        )
+        if query
+        else 0
+        for e in entries()
+    }
     matched = [
         e
         for e in entries()
         if (not category or category in (c.lower() for c in e["categories"]))
-        and (
-            not query
-            or _words_match(
-                f"{e['name']} {e.get('sub', '')} {e['publisher'] or ''} "
-                f"{' '.join(e['categories'])} {' '.join(e['families'])}",
-                query,
-            )
-        )
+        and (not query or hits[e["id"]] > 0)
     ]
-    matched.sort(key=lambda e: (not e["popular"], e["name"].lower()))
+    matched.sort(key=lambda e: (-hits[e["id"]], not e["popular"], e["name"].lower()))
     page = [_row(e, native, endpoints) for e in matched[:MAX_RESULTS]]
     return {"connectors": page, "showing": len(page), "total": len(matched)}
 

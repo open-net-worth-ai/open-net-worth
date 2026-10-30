@@ -204,3 +204,21 @@ def test_open_setup_reason_must_be_short_text():
         _validate_command_semantics("connectors.open_setup", {"id": "email", "reason": "ok"})
         is None
     )
+
+
+# Live test, 2026-10-31: asked about Bybit AND Webull, Lucius searched "bybit webull", got nothing
+# (every word had to match) and had to search once per name.
+
+
+def test_one_search_finds_several_named_apps(db):
+    from backend.services import connector_directory
+
+    ids = [c["id"] for c in connector_directory.search("bybit webull")["connectors"]]
+    assert "mcp-bybit" in ids and "mcp-webull" in ids
+
+
+def test_a_multi_word_name_still_ranks_its_own_entry_first(db):
+    from backend.services import connector_directory
+
+    rows = connector_directory.search("interactive brokers")["connectors"]
+    assert rows[0]["id"] == "mcp-ibkr"
