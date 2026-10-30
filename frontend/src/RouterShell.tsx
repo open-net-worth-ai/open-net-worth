@@ -104,6 +104,7 @@ import { useIsMobile } from './hooks/useIsMobile'
 import { useTimezoneCapture } from './hooks/useTimezoneCapture'
 import { useVisualViewportVars } from './hooks/useVisualViewportVars'
 import { NewVersionBanner } from './NewVersionBanner'
+import { DesktopUpdateNotices } from './DesktopUpdateNotices'
 import { isLuciusDockVisible, routeNewConversation, useLuciusTab } from './hooks/useLuciusTab'
 // Static, not a lazy chunk (2026-09-05): a first open used to wait on a ~17 KB (gzipped)
 // download with a `null` fallback — a blank beat after the tap, and one more chunk that can
@@ -1409,6 +1410,7 @@ function RouterShellInner() {
                 {/* Inside the shell for its tab-bar clearance contract (--mobile-tabbar-clearance). */}
                 <div {...behindFirstRunWrap}>
                   <NewVersionBanner />
+                  <DesktopUpdateNotices />
                 </div>
                 <nav
                   className={`sidebar${sidebarExpanded ? ' expanded' : ''}${drawerOpen ? ' drawer-open' : ''}`}

@@ -232,6 +232,31 @@ try {
   });
   assert.equal((await readFile(saved)).subarray(0, 2).toString(), "PK");
   check("native export writes portable ZIP outside the book");
+  assert.deepEqual(
+    await page.evaluate(() => window.onwDesktopClient.getUpdateState()),
+    { ready: false, version: null, available: false },
+  );
+  assert.equal(await page.evaluate(() => window.onwDesktopClient.takeWhatsNew()), null);
+  await app.evaluate(({ BrowserWindow }) => {
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send("desktop-client:update-state", { ready: false, version: "9.9.9", available: true });
+  });
+  const availableBar = page.getByRole("status").filter({ hasText: "Open Net Worth 9.9.9 is available" });
+  await availableBar.waitFor();
+  await page.screenshot({ path: "qa/artifacts/update-available-bar.png" });
+  // No update is really pending here, so the main process answers and opens nothing.
+  await availableBar.getByRole("button", { name: "Update", exact: true }).click();
+  assert.equal(await page.evaluate(() => window.onwDesktopClient.offerUpdate()), undefined);
+  await app.evaluate(({ BrowserWindow }) => {
+    for (const window of BrowserWindow.getAllWindows())
+      window.webContents.send("desktop-client:update-state", { ready: true, version: "9.9.9" });
+  });
+  const updateBar = page.getByRole("status").filter({ hasText: "Open Net Worth 9.9.9 is ready" });
+  await updateBar.waitFor();
+  await page.screenshot({ path: "qa/artifacts/update-ready-bar.png" });
+  await updateBar.getByRole("button", { name: "Later", exact: true }).click();
+  await updateBar.waitFor({ state: "detached" });
+  check("update state and What's new reach the page; an available and a ready update each show their bar");
   await menu("Settings…");
   await page.getByRole("button", { name: "Desktop", exact: true }).click();
   await page

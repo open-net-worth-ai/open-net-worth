@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { test } from 'node:test';
-import { UpdateController, updateFeedUrl, updatesSupported, type UpdateHooks } from '../src/main/updates';
+import { UpdateController, releaseHighlights, releasePage, updateFeedUrl, updatesSupported, type UpdateHooks } from '../src/main/updates';
 
 class FakeUpdater extends EventEmitter {
   feed = '';
@@ -389,6 +389,53 @@ test('the first launch after an update says so once; a fresh install or the same
   const clicked = announce('0.1.6', true);
   clicked.click!();
   assert.equal(clicked.releases, 1);
+});
+
+test('announceUpdate says whether this launch is the first after an update, so the page can show What\'s new once', () => {
+  const updated = (previous: string | null, earlierInstall: boolean) => new UpdateController(new FakeUpdater(), harness().hooks, '0.1.7').announceUpdate(previous, earlierInstall);
+  assert.equal(updated('0.1.6', true), true);
+  assert.equal(updated(null, true), true);
+  assert.equal(updated(null, false), false);
+  assert.equal(updated('0.1.7', true), false);
+  assert.equal(updated('0.1.8', true), false);
+});
+
+test('What\'s new reads the release\'s Highlights as plain text, the same bullets the release page leads with', () => {
+  const notes = '## Highlights\n\n- You can **split** a transaction from [Accounts](https://x.test)\n- `Import` reads PDFs\n\n## New\n\n- **Accounts:** other line\n\n## Fixes\n\n- **Budget:** fix\n\nSource: abc';
+  assert.deepEqual(releaseHighlights(notes), ['You can split a transaction from Accounts', 'Import reads PDFs']);
+});
+
+test('notes without Highlights fall back to New then Fixes, scope labels dropped, at most six', () => {
+  const notes = '## New\n\n- **Accounts:** a\n- b\n\n## Fixes\n\n- **Budget:** c\n- d\n- e\n- f\n- g\n\n## Polish\n\n- p';
+  assert.deepEqual(releaseHighlights(notes), ['a', 'b', 'c', 'd', 'e', 'f']);
+  assert.deepEqual(releaseHighlights(''), []);
+  assert.deepEqual(releaseHighlights('## Polish\n\n- only polish'), []);
+  assert.equal(releaseHighlights(`## Highlights\n\n- ${'x'.repeat(400)}`)[0].length, 280);
+});
+
+test('very long notes or lines are skipped before any pattern runs on them', () => {
+  const started = Date.now();
+  assert.deepEqual(releaseHighlights(`## Highlights\n\n- ${'['.repeat(10_000)}\n- kept`), ['kept']);
+  assert.deepEqual(releaseHighlights(`## ${' '.repeat(500_000)}x\n- a`), []);
+  assert.deepEqual(releaseHighlights(`${'x'.repeat(70_000)}\n## Highlights\n- late`), []);
+  assert.ok(Date.now() - started < 1000);
+});
+
+test('the restart confirm never stacks: a second request while it is open is ignored', async () => {
+  let release: (choice: number) => void = () => {};
+  const { calls, hooks } = harness();
+  hooks.ask = (message) => { calls.asked.push({ message, buttons: [] }); return new Promise(done => { release = done; }); };
+  const controller = new UpdateController(new FakeUpdater(), hooks, '0.1.0');
+  const first = controller.offerRestart();
+  await controller.offerRestart();
+  assert.equal(calls.asked.length, 1);
+  release(1);
+  await first;
+  assert.equal(calls.installed, 0);
+});
+
+test('the release link names the installed version, not the latest', () => {
+  assert.equal(releasePage('0.1.7'), 'https://github.com/open-net-worth-ai/open-net-worth-releases/releases/tag/v0.1.7');
 });
 
 test('the install progress page names the version, runs no script, and escapes what it shows', async () => {

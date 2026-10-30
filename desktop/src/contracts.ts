@@ -1,6 +1,12 @@
 export interface NativeFile { name: string; type: string; bytes: Uint8Array }
 export interface DesktopConnection { mode: 'local' | 'server'; serverUrl: string | null; bookFolder: string | null }
 export interface HistoryState { canGoBack: boolean; canGoForward: boolean }
+// `ready`: an update has downloaded and installs on restart or the next quit. `available`: a newer
+// version exists but has not downloaded (this install cannot update itself, a download failed, or
+// the person chose Later); `offerUpdate` opens the same choice as the menu's Update Available….
+export interface DesktopUpdateState { ready: boolean; version: string | null; available?: boolean }
+// Shown once, inside the app, on the first launch after an update installed.
+export interface DesktopWhatsNew { version: string; highlights: string[]; releaseUrl: string }
 export interface DesktopClientBridge {
   version: 1;
   getConnection(): Promise<DesktopConnection>;
@@ -11,6 +17,11 @@ export interface DesktopClientBridge {
   openActivitySettings?(): Promise<void>;
   reportProblem?(error?: string): Promise<void>;
   reportHistory?(state: HistoryState): void;
+  getUpdateState?(): Promise<DesktopUpdateState>;
+  onUpdateState?(listener: (state: DesktopUpdateState) => void): () => void;
+  restartToUpdate?(): Promise<void>;
+  offerUpdate?(): Promise<void>;
+  takeWhatsNew?(): Promise<DesktopWhatsNew | null>;
   onCommand(listener: (command: DesktopCommand) => void): () => void;
 }
 export interface ImportSelection { cancelled: boolean; files: NativeFile[] }

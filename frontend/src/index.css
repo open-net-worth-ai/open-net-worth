@@ -19252,6 +19252,161 @@ body.hide-amounts .money * {
   font-weight: 600;
   cursor: pointer;
 }
+/* Desktop "update ready" pill (DesktopUpdateNotices): Later reads as strongly as Restart,
+   only without the fill. */
+.app-update-later {
+  flex: none;
+  min-height: 29px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.app-update-later:hover {
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+
+/* What's new after a desktop update: one celebratory moment (the burst), everything else quiet. */
+.whats-new .ui-modal__heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.whats-new .ui-modal__head {
+  position: relative;
+  z-index: 1; /* the X stays clickable above the hero it overlaps */
+  justify-content: flex-end;
+  margin-bottom: -28px;
+}
+.whats-new__hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 12px 0 24px;
+  outline: none;
+}
+.whats-new__burst {
+  position: absolute;
+  left: 50%;
+  top: 48px;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.whats-new__confetti {
+  position: absolute;
+  width: 6px;
+  height: 10px;
+  margin: -5px 0 0 -3px;
+  border-radius: 1.5px;
+  background: var(--hue);
+  opacity: 0;
+  animation-name: whats-new-confetti;
+  animation-fill-mode: forwards;
+}
+.whats-new__confetti--round {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+/* Out and up fast (decelerating), then a gravity fall (accelerating) while it tumbles and fades. */
+@keyframes whats-new-confetti {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) rotate(0deg) rotateX(0deg) scale(0.5);
+    animation-timing-function: cubic-bezier(0.15, 0.65, 0.35, 1);
+  }
+  8% {
+    opacity: 1;
+  }
+  35% {
+    transform: translate(calc(var(--x) * 0.7), calc(var(--peak) * -1))
+      rotate(calc(var(--spin) * 0.35)) rotateX(calc(var(--flip) * 0.35)) scale(1);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.75, 0.55);
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(var(--x), calc(var(--fall) - var(--peak))) rotate(var(--spin))
+      rotateX(var(--flip)) scale(1);
+  }
+}
+.whats-new__badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--good) 18%, var(--surface));
+  color: var(--good);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--good) 8%, transparent);
+  animation: whats-new-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes whats-new-pop {
+  from {
+    transform: scale(0.6) rotate(-12deg);
+  }
+  to {
+    transform: scale(1) rotate(0deg);
+  }
+}
+.whats-new__headline {
+  position: relative;
+  margin: 18px 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.whats-new__lede {
+  position: relative;
+  margin: 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+.whats-new-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 14px;
+}
+.whats-new-list__item {
+  display: grid;
+  grid-template-columns: 32px 1fr;
+  gap: 12px;
+  align-items: center; /* the tile sits centred on the whole item, one line or two */
+  line-height: 1.45;
+}
+.whats-new-list__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--hue) 16%, transparent);
+  color: var(--hue);
+}
+@media (prefers-reduced-motion: reduce) {
+  .whats-new__confetti,
+  .whats-new__badge {
+    animation: none;
+  }
+  .whats-new__confetti {
+    opacity: 0;
+  }
+}
 
 /* ── Money flow (Sankey) marks — shared by Plan's Money flow modal and the Dashboard card
    (components/shared/moneyFlowLayout.ts). The four spending-group hues are existing theme
