@@ -579,12 +579,32 @@ export function OutlookTab(props: OutlookTabProps) {
   // in useOutlookFire that commits one render before its fetch actually resolves, so an effect
   // here keyed on it could mark props.fireVersion "handled" using a still-stale `f` — permanently
   // skipping the real re-seed once the fresh config lands a moment later.
+  //
+  // fireVersion also advances on every app-wide '*' data_changed event (Plan passes
+  // fireVersion + the 'profile' data version, and '*' matches every domain) — including the one
+  // this tab's own PUT /api/plan/baseline triggers. So a bump alone is not "the user saved new
+  // settings": re-seed only when the fetched config VALUES differ from the last seed. Without
+  // this, each refetch reset the levers (a dragged Retire pill snapped back to the plan age) and
+  // re-saved the baseline, whose write fired another '*' — a refetch/save loop about once a second.
   const seededVer = useRef(-1)
+  const seededFireKey = useRef<string | null>(null)
   useEffect(() => {
     if (fireConfigVersion !== props.fireVersion || seededVer.current === props.fireVersion) return
     const firstSeed = seededVer.current === -1
     seededVer.current = props.fireVersion
+    const fireKey = JSON.stringify([
+      f.monthlySaving,
+      f.expectedReturn,
+      f.volatility,
+      f.monthlyRetirementSpend,
+      f.withdrawalRate,
+      f.lifeExpectancy,
+      f.targetAge,
+    ])
+    const unchanged = fireKey === seededFireKey.current
+    seededFireKey.current = fireKey
     if (firstSeed && baseOverride) return
+    if (!firstSeed && unchanged) return
     setSaving(f.monthlySaving)
     setRet(f.expectedReturn)
     setVol(f.volatility)

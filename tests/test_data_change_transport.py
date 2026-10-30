@@ -23,6 +23,10 @@ from backend.core import data_events
         ("HEAD", "/api/accounts", 200, False),
         ("OPTIONS", "/api/accounts", 200, False),
         ("POST", "/external", 200, False),
+        # Outlook simulations compute only; announcing them refetched every screen per drag move
+        ("POST", "/api/plan/outlook", 200, False),
+        ("POST", "/api/plan/outlook/insights", 200, False),
+        ("PUT", "/api/plan/baseline", 200, True),
     ],
 )
 async def test_only_successful_api_write_notifies_after_final_body(

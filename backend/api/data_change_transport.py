@@ -6,6 +6,11 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from backend.core import data_events
 
+# POST endpoints that only compute and write nothing. Announcing them as data changes made every
+# open screen refetch on each Outlook simulation (dragging the Retire pill posts one per move).
+# Keep this an explicit list: a route joins it only after checking it never writes.
+READ_ONLY_POSTS = frozenset({"/api/plan/outlook", "/api/plan/outlook/insights"})
+
 
 class DataChangeMiddleware:
     def __init__(self, app: ASGIApp):
@@ -16,6 +21,7 @@ class DataChangeMiddleware:
             scope["type"] != "http"
             or scope["method"] not in {"POST", "PUT", "PATCH", "DELETE"}
             or not scope["path"].startswith("/api/")
+            or (scope["method"] == "POST" and scope["path"] in READ_ONLY_POSTS)
         ):
             await self.app(scope, receive, send)
             return
