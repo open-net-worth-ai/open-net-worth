@@ -33,7 +33,6 @@ import { signInWithOAuth } from './oauthSignIn'
 import { savePermissions } from './permissions'
 import { mcpAuthType, toEntry, toMcpEditTarget } from './adapter'
 import { CONNECTORS_KEY, useConnectors } from './useConnectors'
-import { oneLine } from './oneLine'
 import {
   useRegisterScreenCommands,
   useRegisterScreenFacts,
@@ -176,20 +175,19 @@ export function ConnectorsTab(): JSX.Element {
   // Lucius's `connectors.open_setup`: UI state only. It opens the same form a card's `+` (or an
   // installed row's settings) does; the user enters credentials and clicks Connect themselves.
   // A command that lands before the list has loaded waits in a ref for it.
-  const pendingSetup = useRef<{ id: string; reason: string; connect: boolean } | null>(null)
-  function applySetup({ id, reason, connect }: { id: string; reason: string; connect: boolean }) {
+  const pendingSetup = useRef<{ id: string; connect: boolean } | null>(null)
+  function applySetup({ id, connect }: { id: string; connect: boolean }) {
     const target = setupTargetFor(connectors, id)
     if (target.kind === 'unknown') {
       toast("Lucius suggested a connector that isn't in the directory.")
       return
     }
-    if (reason) toast(`Lucius suggested: “${reason}”`)
     if (target.kind === 'add') {
       setDetailId(null)
       setDirectoryPreviewId(null)
       setDirectoryAddId(target.id)
       // Set only by Lucius's card on the user's own Connect click (never by the model — the
-      // backend refuses any argument but id and reason): go straight on to the sign-in.
+      // backend refuses any argument but id): go straight on to the sign-in.
       setDirectoryAutoConnect(connect)
       setDirectoryFamily('all')
     } else {
@@ -206,7 +204,6 @@ export function ConnectorsTab(): JSX.Element {
       handler: (args) => {
         const request = {
           id: typeof args.id === 'string' ? args.id.trim() : '',
-          reason: typeof args.reason === 'string' ? oneLine(args.reason) : '',
           connect: args.connect === true,
         }
         if (initialLoading) pendingSetup.current = request

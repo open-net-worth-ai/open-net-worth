@@ -475,7 +475,7 @@ class SearchConnectorDirectoryInput(ToolInput):
         "for adjacent capabilities, broad recommendations, or a connector they ignored. Offer "
         "exactly the ones they asked for: name three and each gets its own card; suggest one at "
         "a time only when YOU are proposing. To offer one, call run_screen_command connectors.open_setup with the exact id "
-        "(optional 'reason', one line): it only opens the form, the user enters credentials and "
+        ": it only opens the form, the user enters credentials and "
         "clicks Connect; id 'custom' opens the Add custom server form for any MCP server we "
         "don't list — the directory is curated, not the limit. You cannot add one or take "
         "keys. Afterwards call this again and read "

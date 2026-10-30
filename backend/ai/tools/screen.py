@@ -338,15 +338,12 @@ def _validate_command_semantics(name: str, args: dict) -> str | None:
         return None
     from backend.services import connector_directory
 
-    extra = set(args) - {"id", "reason"}
+    extra = set(args) - {"id"}
     if extra:
         # `connect` (go straight to the sign-in) is set by the card on the user's own click,
         # never by the model — a model-sent one would start a sign-in nobody asked for.
-        return f"connectors.open_setup takes only 'id' and 'reason', not {sorted(extra)}"
+        return f"connectors.open_setup takes only 'id', not {sorted(extra)}"
     connector_id = args.get("id")
-    reason = args.get("reason")
-    if reason is not None and (not isinstance(reason, str) or len(reason) > 200):
-        return "arg 'reason' must be one line of at most 200 characters"
     if connector_id == connector_directory.CUSTOM_SETUP_ID:
         return None
     if connector_id not in connector_directory.entry_ids():

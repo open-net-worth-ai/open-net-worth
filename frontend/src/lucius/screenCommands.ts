@@ -94,10 +94,7 @@ export const CONNECTORS_OPEN_SETUP_SPEC: ScreenCommandSpec = {
   description:
     'Open a directory connector’s setup form, or id "custom" for the Add custom server form (UI only). The user enters credentials and clicks Connect; nothing is added until then.',
   route: 'connectors',
-  params: [
-    { name: 'id', type: 'string', required: true },
-    { name: 'reason', type: 'string' },
-  ],
+  params: [{ name: 'id', type: 'string', required: true }],
 }
 
 export const OFFSCREEN_COMMAND_CATALOG: ScreenCommandSpec[] = [

@@ -194,23 +194,6 @@ def test_unreadable_mcp_store_never_leaks_its_error_to_the_model(db, monkeypatch
     assert out["connectors"][0]["installed"] is None and "could not be read" in out["note"]
 
 
-def test_open_setup_reason_must_be_short_text():
-    from backend.ai.tools.screen import _validate_command_semantics
-
-    assert _validate_command_semantics(
-        "connectors.open_setup", {"id": "email", "reason": "x" * 201}
-    )
-    assert _validate_command_semantics("connectors.open_setup", {"id": "email", "reason": 5})
-    assert (
-        _validate_command_semantics("connectors.open_setup", {"id": "email", "reason": "ok"})
-        is None
-    )
-
-
-# Live test, 2026-10-31: asked about Bybit AND Webull, Lucius searched "bybit webull", got nothing
-# (every word had to match) and had to search once per name.
-
-
 def test_one_search_finds_several_named_apps(db):
     from backend.services import connector_directory
 
@@ -255,4 +238,5 @@ def test_open_setup_refuses_a_model_sent_connect():
     msg = _validate_command_semantics(
         "connectors.open_setup", {"id": "mcp-webull", "connect": True}
     )
+    assert _validate_command_semantics("connectors.open_setup", {"id": "mcp-webull", "reason": "x"})
     assert msg and "connect" in msg

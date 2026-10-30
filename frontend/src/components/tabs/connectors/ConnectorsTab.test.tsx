@@ -364,19 +364,6 @@ describe('connectors.open_setup (Lucius) — opens a form, changes nothing', () 
     expect(await screen.findByLabelText(/^Client ID/)).toBeTruthy()
   })
 
-  it('shows the reason it was suggested', async () => {
-    await renderTab()
-    act(() =>
-      dispatchScreenCommand({
-        name: 'connectors.open_setup',
-        args: { id: 'plaid', reason: 'To read your bank transactions' },
-      }),
-    )
-    expect(
-      await screen.findByText('Lucius suggested: “To read your bank transactions”'),
-    ).toBeTruthy()
-  })
-
   it('fails cleanly on an id the directory does not have', async () => {
     await renderTab()
     act(() => dispatchScreenCommand({ name: 'connectors.open_setup', args: { id: 'nope' } }))

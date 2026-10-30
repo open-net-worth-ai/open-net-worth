@@ -62,14 +62,12 @@ it('shows a sign-in connector as a card from OUR catalog; Connect opens the sign
   const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
   const command = {
     name: 'connectors.open_setup',
-    args: { id: 'mcp-webull', reason: 'Track your\u202e brokerage\n account' },
+    args: { id: 'mcp-webull' },
   }
   const { container } = render(<ScreenCommandChip command={command} route="connectors" />)
   expect(screen.getByText('Webull')).toBeTruthy()
   expect(screen.getByText('Verified')).toBeTruthy()
   expect(screen.getByText('By Webull')).toBeTruthy()
-  // No reason line — Lucius's own message beside the card already says why.
-  expect(container.querySelector('.cmd-setup-reason')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: /connect/i }))
   // The window opens ON the click, so the sign-in a moment later isn't popup-blocked.
   expect(openSpy).toHaveBeenCalledWith('about:blank', 'onw-mcp-oauth', expect.any(String))
