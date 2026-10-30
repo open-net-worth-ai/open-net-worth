@@ -93,7 +93,8 @@ instructions, and enter what they give you in the form (or add it as a custom se
 
 ## Add any other server
 
-1. **Connectors → Browse & add → MCP → Custom MCP server**.
+1. **Connectors → Browse & add → Add custom server** — the row pinned at the top of the list
+   ("Don't see yours?"). A search that finds nothing offers it too.
 2. If the server's README has a JSON config block (the `"mcpServers": { … }` kind), click **Paste
    from a config snippet** and paste it — the fields below fill themselves in. Otherwise:
 3. Pick a **Transport**:

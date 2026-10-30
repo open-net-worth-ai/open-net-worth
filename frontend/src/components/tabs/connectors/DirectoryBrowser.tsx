@@ -17,7 +17,7 @@
 import type { JSX } from 'react'
 import { DirectoryCard } from './DirectoryCard'
 import { pickSuggestions } from './directoryRows'
-import { Empty } from './primitives'
+import { Btn, Empty } from './primitives'
 import { Icons } from './icons'
 import { ArrowUpDown, ListFilter } from '../../../ui/icons'
 import { CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
@@ -86,6 +86,14 @@ export function DirectoryBrowser({
     filterDirectory(entries, f, query, sort, category).length
   const categoryCount = (c: ConnectorCategory | 'all') =>
     filterDirectory(entries, family, query, sort, c).length
+  // The build-your-own slot is pinned ABOVE the grid as its own row, not left as one card
+  // among thirty: buried there, people never learned they could add a server we don't list
+  // (owner, 2026-10-31). It shows wherever an MCP server could be what you are looking for —
+  // the All and MCP views before any category narrows them, and every empty search.
+  const custom = entries.find((e) => e.generic)
+  const showCustom =
+    !!custom && (family === 'all' || family === 'mcp') && category === 'all' && !query.trim()
+  const grid = shown.filter((d) => !d.generic)
   const suggested = pickSuggestions(entries, 'all')
   const showSuggested =
     !query.trim() && family === 'all' && category === 'all' && suggested.length > 0
@@ -222,6 +230,8 @@ export function DirectoryBrowser({
           minHeight: MODAL_BODY_MIN_HEIGHT,
         }}
       >
+        {showCustom && custom ? <CustomServerRow onAdd={() => onAdd(custom)} /> : null}
+
         {showSuggested && (
           <div className="cn-suggest" aria-label="Suggested connectors">
             <div className="cn-suggest-h">Suggested</div>
@@ -245,7 +255,7 @@ export function DirectoryBrowser({
             grid is the whole view and needs no heading. */}
         {showSuggested ? <div className="cn-suggest-h">All connectors</div> : null}
         <div className="cn-dirgrid">
-          {shown.map((d) => (
+          {grid.map((d) => (
             <DirectoryCard
               key={d.id}
               d={d}
@@ -256,10 +266,43 @@ export function DirectoryBrowser({
             />
           ))}
         </div>
-        {shown.length === 0 ? (
-          <Empty title="No matches" body="Try a different search or category." />
+        {grid.length === 0 ? (
+          <Empty
+            title="No matches"
+            body={
+              custom
+                ? 'Try a different search or category — or connect it yourself as a custom MCP server.'
+                : 'Try a different search or category.'
+            }
+          >
+            {custom ? (
+              <Btn variant="primary" onClick={() => onAdd(custom)}>
+                <Icons.plus /> Add a custom MCP server
+              </Btn>
+            ) : null}
+          </Empty>
         ) : null}
       </div>
+    </div>
+  )
+}
+
+/** "Don't see yours?" — the custom MCP server, as a row of its own at the top of the list. */
+function CustomServerRow({ onAdd }: { onAdd: () => void }): JSX.Element {
+  return (
+    <div className="cn-customrow">
+      <span className="cn-customrow-ic" aria-hidden>
+        <Icons.cpu />
+      </span>
+      <div className="cn-customrow-text">
+        <div className="cn-customrow-title">Don’t see yours? Add a custom MCP server</div>
+        <div className="cn-customrow-sub">
+          Connect any MCP server by its URL or a command run on this machine.
+        </div>
+      </div>
+      <Btn variant="primary" onClick={onAdd}>
+        <Icons.plus /> Add custom server
+      </Btn>
     </div>
   )
 }

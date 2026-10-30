@@ -267,11 +267,14 @@ describe('opening a card resets .rd-modal-body scroll — it must never inherit 
   })
 })
 
-describe('the generic MCP card skips the preview', () => {
-  it('goes straight to the add form when the card body is clicked', () => {
+describe('the custom MCP server skips the preview', () => {
+  it('is pinned above the grid, not a card in it, and goes straight to the add form', () => {
     const { container, getByText, queryByText } = open()
     fireEvent.click(getByText('MCP'))
-    fireEvent.click(card(container, 'Custom MCP server'))
+    // Its own row at the top — buried as one card among thirty, people never found it.
+    expect(container.querySelector('.cn-customrow')).toBeTruthy()
+    expect(container.querySelector('.cn-dirgrid')?.textContent).not.toContain('Custom MCP server')
+    fireEvent.click(getByText('Add custom server'))
 
     // Step 1 of the add flow, not a preview page.
     expect(getByText('Connect')).toBeTruthy()
@@ -296,7 +299,7 @@ describe('step 1 → step 2: an unreached server is never saved', () => {
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getByText('Add custom server'))
     return view
   }
 
@@ -495,7 +498,7 @@ describe('OAuth sign-in — the popup + poll lifecycle', () => {
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getByText('Add custom server'))
     return view
   }
 
@@ -748,7 +751,7 @@ describe('abandoning the add flow after a completed sign-in deletes the dormant 
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getByText('Add custom server'))
     return view
   }
 
@@ -937,7 +940,7 @@ describe("the review step renders the PROBE's own provenance (spec §5)", () => 
   async function reviewCustomServer() {
     const view = open()
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getByText('Add custom server'))
     fireEvent.change(view.getByLabelText(labelStartingWith('Server URL')), {
       target: { value: 'https://mcp.x.test' },
     })
@@ -1014,7 +1017,7 @@ describe('paste is not a separate mode', () => {
   it('fills the very same fields typing would, and shares the same Test connect', () => {
     const view = open()
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getByText('Add custom server'))
 
     fireEvent.click(view.getByText('Paste from a config snippet'))
     fireEvent.change(view.getByLabelText('Config snippet'), {
@@ -1037,7 +1040,7 @@ describe('paste is not a separate mode', () => {
   it('says so plainly when a snippet will not parse, without clearing the box', () => {
     const view = open()
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(card(view.container, 'Custom MCP server'))
+    fireEvent.click(view.getByText('Add custom server'))
     fireEvent.click(view.getByText('Paste from a config snippet'))
     fireEvent.change(view.getByLabelText('Config snippet'), { target: { value: '{ oops' } })
 
@@ -1104,5 +1107,17 @@ describe('on a phone the preview’s action lives in the footer, not the header'
     fireEvent.click(card(container, 'Telegram'))
     const foot = container.querySelector('.rd-modal-foot') as HTMLElement
     expect(within(foot).getByText('Open settings')).toBeTruthy()
+  })
+})
+
+describe('a search that finds nothing', () => {
+  it('offers the custom MCP server as the way forward', () => {
+    const { getByLabelText, getByText } = open()
+    fireEvent.change(getByLabelText('Search directory'), {
+      target: { value: 'zzz-no-such-vendor' },
+    })
+    expect(getByText('No matches')).toBeTruthy()
+    fireEvent.click(getByText('Add a custom MCP server'))
+    expect(getByText('Connect')).toBeTruthy()
   })
 })

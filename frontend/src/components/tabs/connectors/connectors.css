@@ -842,6 +842,49 @@
 /* The one card with no real product behind it (no logo, no publisher, nothing to preview) —
    dashed border marks it as a build-your-own slot rather than a specific item sitting in the
    grid alongside real, named servers (owner review, 2026-08-19). */
+/* The custom MCP server, pinned above the directory grid as its own row (DirectoryBrowser). */
+.cn-page .cn-customrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+}
+.cn-page .cn-customrow-ic {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.cn-page .cn-customrow-text {
+  flex: 1;
+  min-width: 0;
+}
+.cn-page .cn-customrow-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cn-page .cn-customrow-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+@media (max-width: 560px) {
+  .cn-page .cn-customrow {
+    flex-wrap: wrap;
+  }
+  .cn-page .cn-customrow > .rd-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
 .cn-page .cn-dircard.generic {
   border-style: dashed;
   background: transparent;
