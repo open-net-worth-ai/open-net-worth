@@ -1954,7 +1954,10 @@ def resolve_transaction_row(
         row["category"] = None
     else:
         cat = row.get("category") or None  # "" → None
-        if cat:
+        # The SPLIT sentinel is a code constant _apply_splits stamped over ≥2 validated lines —
+        # never looked up as a row: a book whose store never got the seeded ``split`` row (one
+        # not booted by the app) refused every split as "Unknown category 'split'".
+        if cat and not (cat == SPLIT and row.get("splits")):
             from backend.services import categories as categories_service
 
             resolved = categories_service.resolve_category_ref(cat, rows=category_rows)
