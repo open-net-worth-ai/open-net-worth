@@ -626,6 +626,16 @@
     width: 26px;
     height: 26px;
   }
+  /* The side panel is one drop target, so its mask covers the whole panel above every layer. */
+  .lx-dropmask--side {
+    inset: 8px;
+    z-index: 50;
+    font-size: 14px;
+  }
+  .lx-dropmask--side svg {
+    width: 34px;
+    height: 34px;
+  }
   /* The screen-awareness bar keeps its own card (border + --bg-2 fill, see .lx-scope below) —
    it is a distinct control with a toggle and a Peek panel, not a band of the text field. */
   /* Vertical stack: editor spans full width on top; toolbar row sits below. */

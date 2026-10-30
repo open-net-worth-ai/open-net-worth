@@ -52,8 +52,9 @@ message.
 
 ## Attach a file or picture
 
-Click the paperclip (**Attach file or image**) or drop a file into the message box: a statement
-(PDF, CSV, Excel), a receipt photo, a screenshot of your banking app, a Word document. Then say
+Click the paperclip (**Attach file or image**) or drop a file anywhere on the Lucius panel (or
+into the message box of the floating dock): a statement (PDF, CSV, Excel), a receipt photo, a
+screenshot of your banking app, a Word document. Then say
 what to do — *"import this"*, *"log these purchases"*, *"what's my deductible?"*. Files you send
 are stored so the conversation can refer back to them (they're listed in **Settings → Data →
 Uploaded files**). To keep one with your other papers, ask Lucius to save it to
