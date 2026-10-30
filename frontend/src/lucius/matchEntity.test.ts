@@ -91,6 +91,20 @@ describe('typeMatch', () => {
     expect(typeMatch('agent', 'agents')).toBe(false)
   })
 
+  it('every registered type answers to its own name, singular and plural', () => {
+    // "@connector" found nothing while connector (and 18 other types) had no synonym entry.
+    expect(typeMatch('connector', 'connector')).toBe(true)
+    expect(typeMatch('connector', 'connectors')).toBe(true)
+    expect(typeMatch('connector', 'conn')).toBe(true)
+    expect(typeMatch('report', 'reports')).toBe(true)
+    expect(typeMatch('commitment', 'commitments')).toBe(true)
+    expect(typeMatch('funding_source', norm('funding sources'))).toBe(true)
+  })
+
+  it('an unregistered type stays silent even for its own name', () => {
+    expect(typeMatch('no_such_type', 'no_such_type')).toBe(false)
+  })
+
   it('@skills → true for type "skill"', () => {
     expect(typeMatch('skill', 'skills')).toBe(true)
   })

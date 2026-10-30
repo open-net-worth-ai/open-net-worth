@@ -5,7 +5,7 @@
 // Import and use in the picker — do NOT scatter type checks elsewhere.
 
 import type { MentionRow } from './mentionRow'
-import { labelFor } from './entityRegistry'
+import { descriptorFor, labelFor } from './entityRegistry'
 import { pluralize } from '../utils/pluralize'
 
 // Maps each real mention type to its natural-language synonyms (singular, plural, informal).
@@ -111,15 +111,30 @@ export function searchHay(row: MentionRow): string {
 }
 
 /**
- * True when the normalized query prefixes (or exactly matches) one of the type's synonyms.
+ * Every word a type answers to: its own name and registry label, singular and plural, then
+ * the hand-kept TYPE_SYNONYMS aliases. Derived so a newly registered type is searchable by
+ * name without being listed ("@connector" found nothing while it was missing from the table).
+ */
+export function typeNames(type: string): string[] {
+  // Only a registered type answers to its own name — a retired one ("agent") stays silent.
+  const d = descriptorFor(type)
+  const own = d ? [...new Set([norm(type), norm(d.label)].filter(Boolean))] : []
+  const words = new Set<string>()
+  for (const w of own) {
+    words.add(w)
+    words.add(norm(pluralize(w, 2)))
+  }
+  return [...words, ...(TYPE_SYNONYMS[type] ?? [])]
+}
+
+/**
+ * True when the normalized query prefixes (or exactly matches) one of the type's names.
  * Requires nq.length >= 3 to prevent short-query flooding.
- * The SYNONYM startsWith the QUERY (so "acc" → "account"), NOT the other way around.
+ * The NAME startsWith the QUERY (so "acc" → "account"), NOT the other way around.
  */
 export function typeMatch(type: string, nq: string): boolean {
   if (nq.length < 3) return false
-  const syns = TYPE_SYNONYMS[type]
-  if (!syns) return false
-  return syns.some((s) => s === nq || s.startsWith(nq))
+  return typeNames(type).some((s) => s === nq || s.startsWith(nq))
 }
 
 export interface MatchResult {
