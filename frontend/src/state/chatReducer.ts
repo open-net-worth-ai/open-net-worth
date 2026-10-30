@@ -1000,11 +1000,15 @@ export async function consumeEventStream(
               args: event.command.args ?? {},
             })
           }
-          if (event.status === 'parked') {
+          // A connector setup keeps its card even when Connectors was already open and the form
+          // opened at once: the card names the connector and carries Connect (owner, 2026-10-31:
+          // "where is that connect card gone?"). Every other command's chip is only for parked.
+          const setup = event.command?.name === 'connectors.open_setup'
+          if (event.status === 'parked' || setup) {
             appendBlock(ownerId, {
               type: 'screen_command',
               command: { name: event.command?.name ?? '', args: event.command?.args ?? {} },
-              open: event.open ?? {},
+              open: event.open ?? (setup ? { route: 'connectors' } : {}),
             })
           }
         } else if (event.type === 'write_receipt') {

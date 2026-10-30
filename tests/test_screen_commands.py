@@ -399,6 +399,20 @@ def test_rehydrate_appends_parked_chip_block():
     _maybe_append_screen_command_block(None, parked)  # tolerates missing owner
     _maybe_append_screen_command_block(blocks, "not json")
     assert len(blocks) == 1
+    # …except a connector setup: its card names the connector and carries Connect, so it stays
+    # even when Connectors was already open and the form opened at once (owner, 2026-10-31).
+    setup = json.dumps(
+        {
+            "status": "dispatched",
+            "command": {"name": "connectors.open_setup", "args": {"id": "mcp-webull"}},
+        }
+    )
+    _maybe_append_screen_command_block(blocks, setup)
+    assert blocks[-1] == {
+        "type": "screen_command",
+        "command": {"name": "connectors.open_setup", "args": {"id": "mcp-webull"}},
+        "open": {"route": "connectors"},
+    }
 
 
 def test_every_screen_block_is_recognized_and_hidden_from_display():
