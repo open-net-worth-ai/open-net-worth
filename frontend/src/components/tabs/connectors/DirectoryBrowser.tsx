@@ -124,9 +124,10 @@ export function DirectoryBrowser({
   }, [])
 
   return (
-    // Header to list is 16px, the same step as every gap inside the list: the header keeps 12px
-    // of its own below the chips (room for the shadow) and the column adds 4.
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+    // Header to list is 16px, the same step as every gap inside the list — all of it OUTSIDE the
+    // header. Padding inside it is solid sheet colour, which showed as a dark band between the
+    // chips and the fade once the list scrolled (owner, 2026-10-31).
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div
         ref={headRef}
         className={'cn-dirhead' + (scrolled ? ' scrolled' : '')}
@@ -136,7 +137,7 @@ export function DirectoryBrowser({
           zIndex: 2,
           background: 'var(--modal-bg)',
           margin: '-18px -20px 0',
-          padding: '18px 20px 12px',
+          padding: '18px 20px 0',
           display: 'flex',
           flexDirection: 'column',
           gap: 12,
