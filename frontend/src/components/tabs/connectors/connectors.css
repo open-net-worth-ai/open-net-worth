@@ -1857,6 +1857,15 @@
   .cn-page .rd-modal-foot .rd-btn:not(:only-child) {
     flex: 1;
   }
+  /* Every footer button on a phone is the large, thumb-sized one — the preview's own action
+     already was, so Close / Add custom server / Cancel / Connect sat shorter beside it
+     (owner, 2026-10-31). One size per place, never per button. */
+  .cn-page .rd-modal-foot .rd-btn {
+    height: 38px;
+    padding: 0 20px;
+    font-size: 13.5px;
+    border-radius: var(--radius-lg);
+  }
   /* A two-line sub in --faint read as a truncated fragment once the header narrowed. */
   .cn-page .cn-idhead-sub {
     color: var(--muted);
