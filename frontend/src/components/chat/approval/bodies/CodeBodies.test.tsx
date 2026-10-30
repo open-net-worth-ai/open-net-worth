@@ -58,7 +58,11 @@ describe('code approval cards — shared contract', () => {
       // The one fold an external MCP card has is its raw call (owner, 2026-10-31); a code
       // card shows its source unfolded.
       const folds = [...container.querySelectorAll('details summary')].map((x) => x.textContent)
-      expect(folds).toEqual(change.type === 'external_mcp_call' ? ['Raw call'] : [])
+      expect(folds).toEqual(
+        change.type === 'external_mcp_call' && Object.keys(change.display?.args ?? {}).length
+          ? ['Raw call']
+          : [],
+      )
     },
   )
 })
@@ -106,6 +110,8 @@ describe('external_mcp_call card', () => {
     const base = fixture('external_mcp_call · ordinary')
     mount({ ...base, args: {}, display: { ...base.display, args: {} } })
     expect(screen.getByText('No arguments')).toBeTruthy()
+    // A raw call of `{}` adds nothing to "No arguments".
+    expect(screen.queryByText('Raw call')).toBeNull()
   })
 })
 

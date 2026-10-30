@@ -36,11 +36,13 @@ export function ExternalMcpCallPreview({ change }: { change: ProposedChange }) {
           ))}
         </ApprovalFacts>
       )}
-      <ApprovalDetails summary="Raw call">
-        <ApprovalCode>
-          {JSON.stringify({ name: d.name || change.tool, arguments: args }, null, 2)}
-        </ApprovalCode>
-      </ApprovalDetails>
+      {entries.length > 0 && (
+        <ApprovalDetails summary="Raw call">
+          <ApprovalCode>
+            {JSON.stringify({ name: d.name || change.tool, arguments: args }, null, 2)}
+          </ApprovalCode>
+        </ApprovalDetails>
+      )}
       {d.is_money_movement && (
         <ApprovalNote tone="bad">
           Looks like money movement: a trade, transfer or payment.

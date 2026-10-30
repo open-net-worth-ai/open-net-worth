@@ -181,7 +181,10 @@ def _group_block(tools: list, key: str, limit: int, offset: int) -> dict:
 @tool(
     "get_connector_tools",
     description=(
-        "What can a connector do, and what needs approval? Lists every tool it contributes, "
+        "What can a connector do, and what needs approval? Lists EVERY tool it contributes — "
+        "the complete set, not search hits — so use it when the user asks what a server or "
+        "connector can do, or before saying it has no tool for something. To find a tool for a "
+        "task, find_tools(query=…) is cheaper. "
         "grouped into read-only vs. write tools, each with its current level — 'always_allow' (runs "
         "without asking, unattended included), 'needs_approval' (raises a confirm card the "
         "user taps first; the DEFAULT for anything undecided), or 'blocked' (refused "
