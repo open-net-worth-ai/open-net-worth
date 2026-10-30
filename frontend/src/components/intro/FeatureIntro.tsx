@@ -6,7 +6,14 @@ import type { ReactNode } from 'react'
 import { Check } from 'lucide-react'
 import { Button, Modal } from '../ui'
 import { Spark } from '../../lucius/identity'
-import { guidedThisVisit, inFirstRun, markGuided, modalOpen, useTourShowing } from './tourTarget'
+import {
+  guidedThisVisit,
+  inFirstRun,
+  markGuided,
+  modalOpen,
+  useTourShowing,
+  otherModalOpen,
+} from './tourTarget'
 import './intro.css'
 
 export interface IntroPoint {
@@ -54,8 +61,14 @@ export function FeatureIntro({ open, steps, lucius, secondary, onClose }: Featur
   const [claimed, setClaimed] = useState(false)
   // Nor on top of a dialog the user already has open (a statement import, say): an intro there
   // left that dialog inert under it. It waits for the dialog to close.
-  const due = open && !touring && !inFirstRun()
-  useRecheck(due && !claimed && !guidedThisVisit())
+  // And it steps aside for one that opens AFTER it: Lucius's setup card lands on Connectors, the
+  // intro claims the screen a beat before the setup form mounts, and ended up on top of it
+  // (owner test, 2026-10-31). It yields for the rest of the visit, still unseen, so a later
+  // visit shows it — never back in the middle of what the user is doing.
+  const [yielded, setYielded] = useState(false)
+  const due = open && !touring && !inFirstRun() && !yielded
+  useRecheck(due && (claimed || !guidedThisVisit()))
+  if (due && claimed && otherModalOpen()) setYielded(true)
   const shown = due && (claimed || (!modalOpen() && !guidedThisVisit()))
   useEffect(() => {
     if (shown && !claimed) {

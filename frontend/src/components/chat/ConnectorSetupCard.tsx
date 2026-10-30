@@ -6,6 +6,7 @@
 // The button does exactly what the chip did: re-dispatch the command and go to Connectors, where
 // the user fills in credentials and clicks Connect themselves.
 import { CATALOG, MCP_INSTALL_PRESETS } from '../tabs/connectors/catalog'
+import { icon } from '../tabs/connectors/icons'
 import { connectorLogo } from '../tabs/connectors/logos'
 import { preopenSignInWindow } from '../tabs/connectors/oauthSignIn'
 import type { ReactNode } from 'react'
@@ -30,6 +31,9 @@ export function ConnectorSetupCard({
   const entry = entryFor(id)
   if (!entry) return fallback
   const logo = connectorLogo(entry.id)
+  // No brand mark (Email, Webhook): its own icon in its own hue on a tint, as its Connectors
+  // tile draws it. The custom server keeps the Connectors icon.
+  const glyph = entry.generic ? null : icon(entry.icon)()
   // A hosted server that signs in over OAuth (IBKR, Webull…) connects in one click, like Claude's
   // connector cards: Connect opens the provider's sign-in. Anything needing a key or a local
   // command opens its form to fill in.
@@ -37,8 +41,19 @@ export function ConnectorSetupCard({
   const signsIn = preset?.transport === 'remote' && preset.auth === 'oauth'
   return (
     <div className="cmd-setup-card">
-      <span className="cmd-setup-logo" aria-hidden="true">
-        {logo ? <img src={logo} alt="" /> : <Share2 size={16} />}
+      <span
+        className="cmd-setup-logo"
+        aria-hidden="true"
+        style={
+          !logo && glyph
+            ? {
+                color: entry.hue,
+                background: `color-mix(in srgb, ${entry.hue} 14%, transparent)`,
+              }
+            : undefined
+        }
+      >
+        {logo ? <img src={logo} alt="" /> : (glyph ?? <Share2 size={16} />)}
       </span>
       <div className="cmd-setup-main">
         <div className="cmd-setup-name">

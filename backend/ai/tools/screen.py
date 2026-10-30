@@ -416,15 +416,21 @@ async def run_screen_command(input_data: dict):
     }
     if not cmd.get("live"):
         payload["open"] = {"route": cmd.get("route") or ""}
-        outcome = (
-            "set it up: on a sign-in connector the card's Connect goes straight to the "
-            "provider's own sign-in, otherwise it opens the form — nothing is connected until "
-            "they finish it themselves"
-            if name == "connectors.open_setup"
-            else "see the what-if applied"
-        )
+    if name == "connectors.open_setup":
+        # The chat draws a card for this connector whether or not Connectors was open, at the
+        # point of this call — ABOVE the reply that follows. "The chip below" pointed the user
+        # the wrong way (owner test, 2026-10-31).
         payload["note"] = (
-            f"screen not open — the reply shows a navigation chip; tell the user to tap it to {outcome}"
+            "The chat now shows a card for this connector, placed above your reply. Call it "
+            "'the card' — not a chip, and not 'below'. Its button: Connect goes straight to the "
+            "provider's own sign-in for a sign-in connector; Set up opens the form otherwise. "
+            "Nothing is connected until the user finishes it themselves."
+            + ("" if not cmd.get("live") else " The form is already open on Connectors.")
+        )
+    elif not cmd.get("live"):
+        payload["note"] = (
+            "screen not open — the reply shows a navigation chip; tell the user to tap it to "
+            "see the what-if applied"
         )
     logger.info("run_screen_command: %s (%s)", name, payload["status"])
     return json.dumps(payload), None

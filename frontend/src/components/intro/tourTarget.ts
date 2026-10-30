@@ -58,9 +58,19 @@ export function inFirstRun(): boolean {
   return window.location.pathname.startsWith('/setup')
 }
 
+const DIALOGS = '[role="dialog"][aria-modal="true"], .modal-overlay'
+
 /** A modal is up: a tour waits rather than stack a second overlay on it. */
 export function modalOpen(): boolean {
-  return !!document.querySelector('[role="dialog"][aria-modal="true"], .modal-overlay')
+  return !!document.querySelector(DIALOGS)
+}
+
+/** A modal OTHER than a feature intro's own (`.fi-modal`) is up — what an intro already on
+ *  screen checks, since it is a dialog itself. */
+export function otherModalOpen(): boolean {
+  return Array.from(document.querySelectorAll(DIALOGS)).some(
+    (el) => !el.matches('.fi-modal') && !el.querySelector('.fi-modal') && !el.closest('.fi-modal'),
+  )
 }
 
 // One guide per visit, of any kind: once an intro, tour or tip has shown, every other one waits,
