@@ -42,6 +42,30 @@ export interface DirectoryPreviewProps {
   prompts?: string[]
   onAdd: (entry: DirectoryRow) => void
   onConfigure: (entry: DirectoryRow) => void
+  /** On a phone the modal pins the action in its footer (`PreviewAction`) instead, so the
+   *  header drops it rather than show it twice. */
+  actionInFooter?: boolean
+}
+
+/** The one action the preview exists to drive. `lg`, not `xs`: at the dense in-row size it
+ *  read as the lightest thing in a header built around a 52px tile. */
+export function PreviewAction({
+  d,
+  onAdd,
+  onConfigure,
+  className,
+}: Pick<DirectoryPreviewProps, 'd' | 'onAdd' | 'onConfigure'> & {
+  className?: string
+}): JSX.Element {
+  return d.installed ? (
+    <Btn size="lg" className={className} onClick={() => onConfigure(d)}>
+      Open settings
+    </Btn>
+  ) : (
+    <Btn size="lg" variant="primary" className={className} onClick={() => onAdd(d)}>
+      Add{d.mcp ? '' : ' connector'}
+    </Btn>
+  )
 }
 
 /** Where the publisher lives. Docs page first — it is the one a reader wants; the repo is the
@@ -209,7 +233,7 @@ function Header({
         </div>
         <div className="cn-idhead-sub">{d.sub}</div>
       </div>
-      <div className="cn-idhead-actions">{action}</div>
+      {action ? <div className="cn-idhead-actions">{action}</div> : null}
     </div>
   )
 }
@@ -221,6 +245,7 @@ export function DirectoryPreview({
   prompts,
   onAdd,
   onConfigure,
+  actionInFooter = false,
 }: DirectoryPreviewProps): JSX.Element {
   return (
     <div
@@ -234,18 +259,8 @@ export function DirectoryPreview({
       <Header
         d={d}
         status={d.installed && statusText ? <Badge tone={statusTone}>{statusText}</Badge> : null}
-        // `lg`, not `xs`: this is the one action the whole page exists to drive, and at the
-        // dense in-row size it read as the lightest thing in a header built around a 52px tile.
         action={
-          d.installed ? (
-            <Btn size="lg" onClick={() => onConfigure(d)}>
-              Open settings
-            </Btn>
-          ) : (
-            <Btn size="lg" variant="primary" onClick={() => onAdd(d)}>
-              Add{d.mcp ? '' : ' connector'}
-            </Btn>
-          )
+          actionInFooter ? null : <PreviewAction d={d} onAdd={onAdd} onConfigure={onConfigure} />
         }
       />
 

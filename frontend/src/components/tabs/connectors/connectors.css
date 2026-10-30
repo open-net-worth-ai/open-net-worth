@@ -1580,6 +1580,12 @@
   flex: none;
 }
 
+/* The preview's action, moved into the footer on a phone (DirectoryModal): the sheet's ONE
+   action, so it spans the footer rather than hanging off its right edge. */
+.cn-page .rd-modal-foot .cn-foot-action {
+  flex: 1;
+}
+
 /* ── misc ─────────────────────────────────────────────────────────────────── */
 .cn-page .rd-hr {
   height: 1px;
@@ -1757,6 +1763,10 @@
   /* a lone footer button does not stretch full width — only multi-button footers split evenly */
   .cn-page .rd-modal-foot .rd-btn:not(:only-child) {
     flex: 1;
+  }
+  /* A two-line sub in --faint read as a truncated fragment once the header narrowed. */
+  .cn-page .cn-idhead-sub {
+    color: var(--muted);
   }
 }
 

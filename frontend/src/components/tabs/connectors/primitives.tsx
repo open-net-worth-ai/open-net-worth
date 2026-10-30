@@ -46,9 +46,18 @@ export interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'xs' | 'lg'
 }
 
-export function Btn({ variant = 'secondary', size, children, ...rest }: BtnProps): JSX.Element {
+export function Btn({
+  variant = 'secondary',
+  size,
+  className,
+  children,
+  ...rest
+}: BtnProps): JSX.Element {
   return (
-    <button className={`rd-btn ${variant}${size ? ' ' + size : ''}`} {...rest}>
+    <button
+      className={`rd-btn ${variant}${size ? ' ' + size : ''}${className ? ' ' + className : ''}`}
+      {...rest}
+    >
       {children}
     </button>
   )

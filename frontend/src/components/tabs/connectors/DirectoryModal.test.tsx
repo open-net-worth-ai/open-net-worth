@@ -1066,3 +1066,42 @@ describe('an installed server merged into its catalog card', () => {
     expect(container.textContent).toContain('Interactive Brokers')
   })
 })
+
+describe('on a phone the preview’s action lives in the footer, not the header', () => {
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows ONE full-width Add in the footer, no header action and no footer Back', () => {
+    const onFocusConnector = vi.fn()
+    const { container, getAllByText } = open({ onFocusConnector })
+    fireEvent.click(card(container, 'Telegram'))
+
+    expect(container.querySelector('.cn-idhead-actions')).toBeNull()
+    const foot = container.querySelector('.rd-modal-foot') as HTMLElement
+    expect(within(foot).queryByText('Back')).toBeNull()
+    const add = within(foot).getByText('Add connector')
+    expect(add.className).toContain('cn-foot-action')
+    expect(getAllByText('Add connector')).toHaveLength(1)
+
+    fireEvent.click(add)
+    expect(onFocusConnector).toHaveBeenCalledWith('telegram', { configure: true })
+  })
+
+  it('shows Open settings there for an installed connector', () => {
+    const { container } = open({
+      connectors: [connector({ id: 'telegram', name: 'Telegram', status: 'active' })],
+    })
+    fireEvent.click(card(container, 'Telegram'))
+    const foot = container.querySelector('.rd-modal-foot') as HTMLElement
+    expect(within(foot).getByText('Open settings')).toBeTruthy()
+  })
+})

@@ -10,7 +10,8 @@
 import { useState, type JSX } from 'react'
 import { BackTitle, Btn, Modal } from './primitives'
 import { DirectoryBrowser } from './DirectoryBrowser'
-import { DirectoryPreview } from './DirectoryPreview'
+import { DirectoryPreview, PreviewAction } from './DirectoryPreview'
+import { useIsMobile } from '../../../hooks/useIsMobile'
 import { McpAddFlowBody, McpAddFlowFooter, useMcpAddFlow } from './McpAddFlow'
 import { type DirectoryRow, type DirectoryFamilyFilter, type DirectorySort } from './catalog'
 import { resolveDirectory } from './directoryRows'
@@ -55,6 +56,7 @@ export function DirectoryModal({
   const [directoryFamily, setDirectoryFamily] = useState<DirectoryFamilyFilter>(family)
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<DirectorySort>('popular')
+  const isMobile = useIsMobile()
   const [category, setCategory] = useState<ConnectorCategory | 'all'>('all')
   const [preview, setPreview] = useState<DirectoryRow | null>(
     // `installedId` too: an installed server merged into its catalog card (`mcp-ibkr` for
@@ -160,6 +162,10 @@ export function DirectoryModal({
 
   const footer = mcpOpen ? (
     <McpAddFlowFooter flow={flow} onCancel={leaveMcpFlow} />
+  ) : preview && isMobile ? (
+    // The header's ‹ Back and the sheet's ✕ already leave, so on a phone the footer carries
+    // the action instead: always in view, in thumb reach, and steady while the body scrolls.
+    <PreviewAction d={preview} onAdd={add} onConfigure={configure} className="cn-foot-action" />
   ) : preview ? (
     <Btn onClick={() => setPreview(null)}>Back</Btn>
   ) : (
@@ -180,6 +186,7 @@ export function DirectoryModal({
           prompts={liveEntry?.prompts}
           onAdd={add}
           onConfigure={configure}
+          actionInFooter={isMobile}
         />
       ) : (
         <DirectoryBrowser
