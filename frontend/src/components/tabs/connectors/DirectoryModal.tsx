@@ -7,7 +7,7 @@
 // Spec §9's geometry: header and footer are `flex: none` and only `.rd-modal-body` scrolls, so
 // each view supplies its own body and the footer is composed HERE — never inside a step.
 
-import { useLayoutEffect, useState, type JSX } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { BackTitle, Btn, Modal } from './primitives'
 import { DirectoryBrowser } from './DirectoryBrowser'
 import { Icons } from './icons'
@@ -45,6 +45,9 @@ export interface DirectoryModalProps {
   /** Open straight onto the MCP add form of this NOT-yet-installed entry, preset pre-filled —
    *  the path its card's `+` takes. Seeds the first render only, like `previewId`. */
   addId?: string
+  /** With `addId`: start the sign-in at once — the user already clicked Connect on Lucius's
+   *  card, which opened the sign-in window on that click (`preopenSignInWindow`). */
+  autoConnect?: boolean
   toast?: (message: string) => void
 }
 
@@ -58,6 +61,7 @@ export function DirectoryModal({
   onAdded,
   previewId,
   addId,
+  autoConnect = false,
   toast,
 }: DirectoryModalProps): JSX.Element | null {
   const entries = resolveDirectory(connectors)
@@ -97,6 +101,16 @@ export function DirectoryModal({
     if (addEntry) flow.start(addEntry)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Lucius's Connect: once the preset has filled the form, run the same Connect the footer's
+  // button runs — for a sign-in server, that is the sign-in. Once, and only for OAuth presets.
+  const autoConnected = useRef(false)
+  useEffect(() => {
+    if (!autoConnect || !addEntry || autoConnected.current) return
+    if (flow.step !== 'form' || flow.form.auth !== 'oauth' || !flow.form.url) return
+    autoConnected.current = true
+    flow.runConnect()
+  })
 
   function close() {
     flow.discardAbandonedOAuthServer()

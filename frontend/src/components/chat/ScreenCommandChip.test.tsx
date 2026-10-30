@@ -52,3 +52,62 @@ it('routes a parked Automation draft to the shared review editor screen', () => 
     expect.objectContaining({ to: '/automations' }),
   )
 })
+
+// Owner, 2026-10-31: a suggested connector gets a card naming it — logo, name, publisher,
+// verification, Lucius's reason — not a bare "Set up connector" chip. A sign-in connector
+// connects in one click, like Claude's connector cards.
+it('shows a sign-in connector as a card from OUR catalog; Connect opens the sign-in window', () => {
+  const seen = vi.fn()
+  onScreenCommand('connectors.', seen)
+  const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+  const command = {
+    name: 'connectors.open_setup',
+    args: { id: 'mcp-webull', reason: 'Track your\u202e brokerage\n account' },
+  }
+  const { container } = render(<ScreenCommandChip command={command} route="connectors" />)
+  expect(screen.getByText('Webull')).toBeTruthy()
+  expect(screen.getByText('Verified')).toBeTruthy()
+  expect(screen.getByText('By Webull')).toBeTruthy()
+  // The model's reason, cleaned of control and bidi-override characters.
+  expect(container.querySelector('.cmd-setup-reason')?.textContent).toBe(
+    'Lucius: “Track your  brokerage  account”',
+  )
+  fireEvent.click(screen.getByRole('button', { name: /connect/i }))
+  // The window opens ON the click, so the sign-in a moment later isn't popup-blocked.
+  expect(openSpy).toHaveBeenCalledWith('about:blank', 'onw-mcp-oauth', expect.any(String))
+  expect(seen).toHaveBeenCalledWith({ ...command, args: { ...command.args, connect: true } })
+  expect(navigateMock.mock.calls.at(-1)?.[0]).toEqual(
+    expect.objectContaining({ to: '/connectors' }),
+  )
+  openSpy.mockRestore()
+})
+
+it('a key or local-command connector says Set up and opens its form, no sign-in window', () => {
+  const seen = vi.fn()
+  onScreenCommand('connectors.', seen)
+  const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+  const command = { name: 'connectors.open_setup', args: { id: 'mcp-bybit' } }
+  render(<ScreenCommandChip command={command} route="connectors" />)
+  fireEvent.click(screen.getByRole('button', { name: /set up/i }))
+  expect(openSpy).not.toHaveBeenCalled()
+  expect(seen).toHaveBeenCalledWith(command)
+  openSpy.mockRestore()
+})
+
+it('shows the custom-server card for id custom, and the plain chip for an id it cannot name', () => {
+  const { unmount } = render(
+    <ScreenCommandChip
+      command={{ name: 'connectors.open_setup', args: { id: 'custom' } }}
+      route="connectors"
+    />,
+  )
+  expect(screen.getByText('Custom MCP server')).toBeTruthy()
+  unmount()
+  render(
+    <ScreenCommandChip
+      command={{ name: 'connectors.open_setup', args: { id: 'zzz' } }}
+      route="connectors"
+    />,
+  )
+  expect(screen.getByRole('button', { name: /set up connector/i })).toBeTruthy()
+})

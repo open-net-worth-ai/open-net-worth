@@ -246,3 +246,13 @@ def test_open_setup_accepts_custom_for_the_custom_server_form():
     from backend.ai.tools.screen import _validate_command_semantics
 
     assert _validate_command_semantics("connectors.open_setup", {"id": "custom"}) is None
+
+
+def test_open_setup_refuses_a_model_sent_connect():
+    """`connect` starts a sign-in; only the card sets it, on the user's click."""
+    from backend.ai.tools.screen import _validate_command_semantics
+
+    msg = _validate_command_semantics(
+        "connectors.open_setup", {"id": "mcp-webull", "connect": True}
+    )
+    assert msg and "connect" in msg

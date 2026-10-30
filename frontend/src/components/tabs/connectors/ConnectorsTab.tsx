@@ -33,6 +33,7 @@ import { signInWithOAuth } from './oauthSignIn'
 import { savePermissions } from './permissions'
 import { mcpAuthType, toEntry, toMcpEditTarget } from './adapter'
 import { CONNECTORS_KEY, useConnectors } from './useConnectors'
+import { oneLine } from './oneLine'
 import {
   useRegisterScreenCommands,
   useRegisterScreenFacts,
@@ -49,11 +50,6 @@ import {
 } from './model'
 
 const MCP_PREFIX = 'mcp:'
-
-// Control and bidi-override characters out, capped: the text is the model's, shown in our chrome.
-// eslint-disable-next-line no-control-regex
-const UNSAFE_TEXT = /[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g
-const oneLine = (text: string) => text.replace(UNSAFE_TEXT, ' ').trim().slice(0, 200)
 
 export function ConnectorsTab(): JSX.Element {
   const { connectors, entries, initialLoading, error, refresh } = useConnectors()
@@ -85,6 +81,7 @@ export function ConnectorsTab(): JSX.Element {
   const [directoryPreviewId, setDirectoryPreviewId] = useState<string | null>(null)
   /** The not-yet-installed MCP entry whose add form the directory opens ON. */
   const [directoryAddId, setDirectoryAddId] = useState<string | null>(null)
+  const [directoryAutoConnect, setDirectoryAutoConnect] = useState(false)
   const [bankPickerOpen, setBankPickerOpen] = useState(false)
   /** The MCP server a Reconnect click is currently signing in for — an OAuth reconnect is a
    *  popup + poll, not an instant call, so this both guards against a rapid double-click
@@ -179,8 +176,8 @@ export function ConnectorsTab(): JSX.Element {
   // Lucius's `connectors.open_setup`: UI state only. It opens the same form a card's `+` (or an
   // installed row's settings) does; the user enters credentials and clicks Connect themselves.
   // A command that lands before the list has loaded waits in a ref for it.
-  const pendingSetup = useRef<{ id: string; reason: string } | null>(null)
-  function applySetup({ id, reason }: { id: string; reason: string }) {
+  const pendingSetup = useRef<{ id: string; reason: string; connect: boolean } | null>(null)
+  function applySetup({ id, reason, connect }: { id: string; reason: string; connect: boolean }) {
     const target = setupTargetFor(connectors, id)
     if (target.kind === 'unknown') {
       toast("Lucius suggested a connector that isn't in the directory.")
@@ -191,6 +188,9 @@ export function ConnectorsTab(): JSX.Element {
       setDetailId(null)
       setDirectoryPreviewId(null)
       setDirectoryAddId(target.id)
+      // Set only by Lucius's card on the user's own Connect click (never by the model — the
+      // backend refuses any argument but id and reason): go straight on to the sign-in.
+      setDirectoryAutoConnect(connect)
       setDirectoryFamily('all')
     } else {
       openConnector(target.id, { configure: target.kind === 'form' })
@@ -207,6 +207,7 @@ export function ConnectorsTab(): JSX.Element {
         const request = {
           id: typeof args.id === 'string' ? args.id.trim() : '',
           reason: typeof args.reason === 'string' ? oneLine(args.reason) : '',
+          connect: args.connect === true,
         }
         if (initialLoading) pendingSetup.current = request
         else applySetupRef.current(request)
@@ -527,9 +528,11 @@ export function ConnectorsTab(): JSX.Element {
           family={directoryFamily}
           previewId={directoryPreviewId ?? undefined}
           addId={directoryAddId ?? undefined}
+          autoConnect={directoryAutoConnect}
           onClose={() => {
             setDirectoryFamily(null)
             setDirectoryAddId(null)
+            setDirectoryAutoConnect(false)
           }}
           onFocusConnector={openConnector}
           onAdded={() => void reload()}

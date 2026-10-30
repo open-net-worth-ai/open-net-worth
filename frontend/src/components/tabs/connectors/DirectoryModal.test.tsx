@@ -55,6 +55,8 @@ function open(props: Partial<Parameters<typeof DirectoryModal>[0]> = {}) {
       family={props.family}
       previewId={props.previewId}
       loading={props.loading}
+      addId={props.addId}
+      autoConnect={props.autoConnect}
     />,
   )
 }
@@ -1163,5 +1165,22 @@ describe('before the connectors read lands', () => {
     expect(container.querySelector('.cn-dirgrid')).toBeNull()
     // The header still works: search and tabs don't depend on what is installed.
     expect(container.querySelector('.cn-dirfilters .rd-tabs')).toBeTruthy()
+  })
+})
+
+describe("Lucius's Connect on a sign-in connector", () => {
+  it('opens the add form AND starts the sign-in, without a second click', async () => {
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null)
+    mockAuthFetch.mockResolvedValue({ ok: true, json: async () => ({ ok: false, error: 'x' }) })
+    open({ addId: 'mcp-webull', autoConnect: true })
+    await waitFor(() =>
+      expect(mockAuthFetch.mock.calls.map((c) => c[0])).toContain('/api/mcp-clients/oauth/begin'),
+    )
+    openSpy.mockRestore()
+  })
+
+  it('without it, the form waits for the user', () => {
+    open({ addId: 'mcp-webull' })
+    expect(mockAuthFetch.mock.calls.map((c) => c[0])).not.toContain('/api/mcp-clients/oauth/begin')
   })
 })

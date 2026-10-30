@@ -48,6 +48,15 @@ function openBlankPopup(): Window | null {
   }
 }
 
+/** Open the sign-in window NOW, on the user's click, for a sign-in that starts a moment later on
+ *  another screen (Lucius's setup card: "Connect" → Connectors → the add flow). The flow's own
+ *  `window.open` then reuses this window by its name instead of opening a new one — which the
+ *  popup blocker would refuse, being no longer a direct response to the click. The desktop app
+ *  signs in through the system browser, so it opens nothing here. */
+export function preopenSignInWindow(): void {
+  if (!desktopBridge()) openBlankPopup()
+}
+
 export interface OAuthSignInHandle {
   /** Stop polling and close the popup. Sends no request — the staged flow is simply left to
    *  expire on its own 10-minute TTL (`oauth_pending.TTL_SECONDS`); there is no backend

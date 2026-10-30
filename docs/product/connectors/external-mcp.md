@@ -36,12 +36,21 @@ feed and more, with who publishes it, whether it is **Verified**, and what you w
 ready (a sign-in, an API key, or a runtime such as Node.js). He suggests one connector at a time
 and only when it fits what you asked.
 
-If you want it, a **Set up connector** button opens that connector's own form in Connectors with
+If you want it, Lucius shows a card for that connector: its logo, who publishes it, whether it
+is **Verified**, and a one-line reason. For a connector you sign in to (Interactive Brokers,
+Webull, Robinhood and the like), **Connect** goes straight to the provider's own sign-in page; for
+one that needs an API key or runs on this machine, **Set up** opens its form in Connectors with
 its details already filled in. **Lucius never adds a connector, never sees or types your keys, and
-nothing is saved until you click Connect or Sign in yourself.** After you finish he re-checks that
-it is connected rather than assuming it worked. For a connector you already have, the button opens
-its settings instead. Unattended runs (an Automation, for instance) can't open the form; Lucius
-just tells you what to set up.
+nothing is saved until you finish the sign-in or click Connect yourself.** After you finish he
+re-checks that it is connected rather than assuming it worked. For a connector you already have,
+the card opens its settings instead. Unattended runs (an Automation, for instance) can't open
+anything; Lucius just tells you what to set up.
+
+The directory is a curated list, not everything you can connect. Ask about an app that isn't in
+it and Lucius looks for the vendor's own MCP server on the web first. He calls one official only
+when it's on the vendor's own site or official GitHub, and gives you the link and address. Then
+he offers the **Add custom server** form, or another way in (a statement import, email, or
+recording it by hand) if there's no official server.
 
 ## Add a server from the directory
 

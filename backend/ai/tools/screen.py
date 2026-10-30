@@ -338,6 +338,11 @@ def _validate_command_semantics(name: str, args: dict) -> str | None:
         return None
     from backend.services import connector_directory
 
+    extra = set(args) - {"id", "reason"}
+    if extra:
+        # `connect` (go straight to the sign-in) is set by the card on the user's own click,
+        # never by the model — a model-sent one would start a sign-in nobody asked for.
+        return f"connectors.open_setup takes only 'id' and 'reason', not {sorted(extra)}"
     connector_id = args.get("id")
     reason = args.get("reason")
     if reason is not None and (not isinstance(reason, str) or len(reason) > 200):
@@ -412,7 +417,9 @@ async def run_screen_command(input_data: dict):
     if not cmd.get("live"):
         payload["open"] = {"route": cmd.get("route") or ""}
         outcome = (
-            "open the setup form — nothing is connected until they click Connect themselves"
+            "set it up: on a sign-in connector the card's Connect goes straight to the "
+            "provider's own sign-in, otherwise it opens the form — nothing is connected until "
+            "they finish it themselves"
             if name == "connectors.open_setup"
             else "see the what-if applied"
         )
