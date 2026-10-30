@@ -269,6 +269,16 @@ describe('MCP provenance — what we confirmed, stated exactly', () => {
     ['mcp-coinbase', 'Coinbase', 'verified'],
     ['mcp-okx', 'OKX', 'verified'],
     ['mcp-kraken', 'Kraken', 'verified'],
+    // Each published on the broker's own domain (docs or support pages, 2026-10-31).
+    ['mcp-webull', 'Webull', 'verified'],
+    ['mcp-longbridge', 'Longbridge', 'verified'],
+    ['mcp-tiger', 'Tiger Brokers', 'verified'],
+    ['mcp-zerodha', 'Zerodha', 'verified'],
+    ['mcp-upstox', 'Upstox', 'verified'],
+    // Local server released from PublicDotCom's own repo via a PyPI trusted publisher.
+    ['mcp-public', 'Public.com', 'verified'],
+    // Bybit's GitHub-verified org; npm maintainers are @bybit.com accounts.
+    ['mcp-bybit', 'Bybit', 'verified'],
     ['mcp-expensify', 'Expensify', 'verified'],
     ['mcp-avalara', 'Avalara', 'verified'],
     ['mcp-twelvedata', 'Twelve Data', 'verified'],

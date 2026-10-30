@@ -38,7 +38,7 @@ from backend.core.net_guard import UnsafeUrlError, resolve_owner_url
 from backend.core.pinned_http import pinned_opener
 from backend.core.redact_error import redact_error
 from backend.core.untrusted import sanitize_untrusted
-from backend.mcp.sse import parse_rpc_body
+from backend.mcp.sse import USER_AGENT, parse_rpc_body
 from backend.models.mcp_client import McpServerConfig, ServerInfo, redact_endpoint
 
 logger = logging.getLogger(__name__)
@@ -447,6 +447,7 @@ class McpClientConnection:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream",
+            "User-Agent": USER_AGENT,
         }
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id

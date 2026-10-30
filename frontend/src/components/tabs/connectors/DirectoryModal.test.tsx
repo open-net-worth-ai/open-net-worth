@@ -191,9 +191,10 @@ describe('the 480px results floor', () => {
     // Any term matching exactly two cards will do — the COUNT is what this pins, not the word.
     // ("aggregation" used to match Plaid + Yodlee; "bank and card feeds" matched Plaid + Yodlee
     // too, until Yodlee's catalog entry was removed 2026-08-14 — see
-    // docs/adr/2026-08-14-hide-yodlee-enterprise-only-pricing.md.)
+    // docs/adr/2026-08-14-hide-yodlee-enterprise-only-pricing.md; "read-only" stopped being
+    // two once Upstox and Tiger joined, 2026-10-31.)
     fireEvent.change(getByLabelText('Search directory'), {
-      target: { value: 'read-only' },
+      target: { value: 'paper trading' },
     })
     expect(grid().querySelectorAll('.cn-dircard').length).toBe(2)
     expect(results().style.minHeight).toBe('480px')

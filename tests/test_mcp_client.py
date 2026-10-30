@@ -1993,6 +1993,21 @@ def test_accept_header_offers_both_json_and_event_stream(monkeypatch):
     assert headers["accept"] == "application/json, text/event-stream"
 
 
+def test_every_request_names_open_net_worth_not_python_urllib(monkeypatch):
+    """Cloudflare's error 1010 refuses urllib's default ``Python-urllib/x.y`` — Zerodha's
+    mcp.kite.trade and Upstox's mcp.upstox.com both 403'd the app until it named itself."""
+    from backend.mcp.client import McpClientConnection
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        "backend.mcp.client._urlopen",
+        _make_dual_accept_urlopen(captured, sse=False),
+    )
+    McpClientConnection(McpServerConfig(id="kite", url="https://mcp.kite.trade/mcp")).initialize()
+    headers = {k.lower(): v for k, v in captured["headers"].items()}
+    assert headers["user-agent"].startswith("OpenNetWorth/")
+
+
 def test_accept_header_json_only_would_406_against_a_real_server(monkeypatch):
     """The other half of the pin: confirms the fake itself reproduces the bug (a lone
     ``application/json`` Accept 406s), so the passing test above is proven to test something

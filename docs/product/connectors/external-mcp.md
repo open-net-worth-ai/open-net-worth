@@ -6,7 +6,7 @@ order: 40
 audience: [user, operator]
 status: stable
 related: [lucius/permissions, lucius/confirm-cards, connectors/web-search]
-keywords: [mcp, model context protocol, third-party, stdio, local command, remote server, oauth, api key, playwright, stripe, setup, security]
+keywords: [mcp, model context protocol, third-party, stdio, local command, remote server, oauth, api key, playwright, stripe, setup, security, brokerage, webull, longbridge, tiger brokers, zerodha, kite, upstox, public.com, bybit]
 ---
 
 # External MCP servers
@@ -31,8 +31,9 @@ There are two kinds:
 ## Add a server from the directory
 
 The directory includes ready-made entries — Playwright (a real web browser), Firecrawl, Stripe,
-QuickBooks Online, Xero, Mercury, Interactive Brokers, Robinhood, moomoo, Alpaca MCP, Coinbase,
-OKX, Kraken, Expensify, Avalara AvaTax, Twelve Data, SEC EDGAR and FRED.
+QuickBooks Online, Xero, Mercury, Interactive Brokers, Robinhood, moomoo, Webull, Longbridge, Tiger
+Brokers, Zerodha Kite, Upstox, Public.com, Alpaca MCP, Coinbase, OKX, Kraken, Bybit, Expensify,
+Avalara AvaTax, Twelve Data, SEC EDGAR and FRED.
 
 Each connector shows coloured tags for what it's for, such as **Brokerage**, **Banking** or
 **Web search**. Searching the Connectors page matches those tags too. In **Browse & add**, click a
@@ -50,16 +51,21 @@ search or filter; click one to read about it and add it. **Sort** orders the ful
 2. Click a card to read what it does and which tools it offers, then click **Add**. The connection
    form opens with the address or command already filled in.
 3. Fill in what the server needs:
-   - **OAuth** servers (Mercury, Interactive Brokers, Robinhood, moomoo, Expensify, Avalara,
-     Twelve Data): click **Connect** and sign in to the vendor in the window that opens.
+   - **OAuth** servers (Mercury, Interactive Brokers, Robinhood, moomoo, Webull, Longbridge,
+     Tiger Brokers, Upstox, Expensify, Avalara, Twelve Data): click **Connect** and sign in to the
+     vendor in the window that opens.
+   - **Zerodha Kite** needs nothing to connect. Once it's added, ask Lucius to log in to Kite,
+     open the link it gives you, and sign in on Zerodha's own page.
    - **API key** servers (Stripe): paste the key into **API key**. For Stripe, a *restricted*
      key with only the permissions you want is the safer choice.
    - **Local commands** with **Environment variables (optional)** pre-listed (Firecrawl, Xero, SEC
-     EDGAR, FRED, Alpaca MCP, Coinbase, OKX, Kraken): fill in the value after each `=`, for example
+     EDGAR, FRED, Public.com, Alpaca MCP, Coinbase, OKX, Kraken, Bybit): fill in the value after each `=`, for example
      `FRED_API_KEY=abc123`. Get the value from the vendor — the card's **Documentation** or
      **Source repository** link says where. The trading ones start without real money where the
      vendor offers that: Alpaca MCP on paper trading, OKX with `--demo` in its arguments, Kraken
      with only market data, a read-only account and paper trading; the card says how to switch.
+     Public.com has no paper mode, and Bybit trades for real unless you add `BYBIT_TESTNET=true`
+     — for either, an API key with only the permissions you want is the limit.
      A value that is a private key (`-----BEGIN … KEY-----` … `-----END … KEY-----`) can be
      pasted as it is — over several lines, on one line, or with `\n` in place of the line breaks,
      the way a downloaded JSON key file holds it; the app rebuilds it into a key the server can
@@ -68,7 +74,8 @@ search or filter; click one to read about it and add it. **Sort** orders the ful
      [portal.cdp.coinbase.com](https://portal.cdp.coinbase.com/api-keys/secret) with
      **Signature algorithm: ECDSA** (Advanced Trade refuses the default Ed25519 key): its key name
      (`organizations/…/apiKeys/…`) goes in `COINBASE_KEY_ID` and its private key in
-     `COINBASE_KEY_SECRET`. Alpaca MCP needs [uv](https://docs.astral.sh/uv/); Kraken
+     `COINBASE_KEY_SECRET`. Alpaca MCP and Public.com need [uv](https://docs.astral.sh/uv/);
+     Bybit needs Node.js 20.6 or later; Kraken
      needs the [Kraken CLI](https://github.com/krakenfx/kraken-cli) installed first (macOS or
      Linux).
 4. Click **Connect**. The app starts the server, checks it answers, and lists its tools — *Testing
@@ -159,9 +166,10 @@ their server at any time.
   data, never as instructions from you, and is cleaned and shortened before Lucius sees it. That
   lowers the risk; it doesn't remove it — which is why approval is the default.
 - **Some servers write to real accounts.** Stripe, QuickBooks, Xero and Mercury tools can create or
-  change records in those services, and Interactive Brokers, Robinhood, moomoo, Alpaca MCP,
-  Coinbase, OKX and Kraken tools can place orders (Robinhood only in a separate agent account it opens
-  for you). The directory card says so when that's the case. For a server you run with an API
+  change records in those services, and Interactive Brokers, Robinhood, moomoo, Longbridge,
+  Public.com, Alpaca MCP, Coinbase, OKX, Kraken and Bybit tools can place orders (Robinhood only in a
+  separate agent account it opens for you; Webull's only as instructions you confirm in the Webull
+  app; Zerodha Kite's only GTT orders). Tiger Brokers and Upstox are read-only. The directory card says so when that's the case. For a server you run with an API
   key, the key's own permissions are the limit — create it with only what you want allowed.
 
 What protects you:
