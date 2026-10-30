@@ -29,6 +29,7 @@ or block a teardown.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from collections import deque
 from typing import Optional, Protocol
@@ -49,6 +50,12 @@ TAIL_LINES = 12
 # What the error message quotes: the LAST couple of lines, which is where "npm ERR! 404" or
 # the download that is still running actually lives.
 ERROR_TAIL_LINES = 2
+
+# A line that states what failed: "Error: Cannot find module …", "TypeError: …",
+# "ModuleNotFoundError: …", "npm error 404 …", "error: unrecognized argument", "ERR_…".
+_FAILURE_LINE = re.compile(
+    r"(^|\s)(\w*(Error|Exception)\b:?|error\b:?|ERR_[A-Z_]+|Cannot find module|command not found)",
+)
 
 _READ_CHUNK_BYTES = 8192
 
@@ -88,7 +95,15 @@ class StderrTail:
         persisted as ``last_error``. Sanitizing is the CALLER's (it owns the surrounding
         message), which is what ``stdio_client._StdioSession._explain`` does.
         """
-        tail = self.lines()[-ERROR_TAIL_LINES:]
+        lines = self.lines()
+        # A crashed runtime ends its report with boilerplate — Node prints a stack, a closing
+        # brace and "Node.js v26.0.0" — so the last lines said nothing ("} • Node.js v26.0.0",
+        # owner, 2026-10-31). Quote the last line that names the failure instead, when there is
+        # one; otherwise the end of the output, as before.
+        named = [ln for ln in lines if _FAILURE_LINE.search(ln)]
+        if named:
+            return named[-1].strip()[:max_chars]
+        tail = lines[-ERROR_TAIL_LINES:]
         if not tail:
             return ""
         joined = " • ".join(tail)
