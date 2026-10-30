@@ -2176,22 +2176,33 @@
     border-radius: var(--radius-lg);
     background: var(--surface);
   }
+  /* The Connectors tile, exactly (connectors.css .cn-tile / .plate / .cn-tile-logo): a 34px
+     plate with a hairline, the mark inset 6px — edge to edge it looked crushed (owner, 2026-10-31). */
   .cmd-setup-logo {
     flex: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 9px;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
     overflow: hidden;
     background: #fff;
+    border: 1px solid var(--line);
     color: var(--lucius);
   }
   .cmd-setup-logo img {
     width: 100%;
     height: 100%;
+    display: block;
+    padding: 6px;
+    box-sizing: border-box;
     object-fit: contain;
+  }
+  .cmd-setup-logo svg {
+    width: 17px;
+    height: 17px;
+    display: block;
   }
   .cmd-setup-main {
     flex: 1;

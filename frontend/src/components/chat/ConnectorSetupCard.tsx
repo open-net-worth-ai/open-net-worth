@@ -49,6 +49,7 @@ export function ConnectorSetupCard({
             ? {
                 color: entry.hue,
                 background: `color-mix(in srgb, ${entry.hue} 14%, transparent)`,
+                borderColor: `color-mix(in srgb, ${entry.hue} 30%, transparent)`,
               }
             : undefined
         }
