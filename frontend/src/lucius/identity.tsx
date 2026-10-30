@@ -27,6 +27,10 @@ export const GLYPH_SVG: Record<string, string> = {
     '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 13.7 10.3 21 12 13.7 13.7 12 21 10.3 13.7 3 12 10.3 10.3Z"/></svg>',
   skill:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4 9.5 20"/></svg>',
+  // The sidebar's Connectors icon (lucide Share2) — for a connector with no brand mark of its
+  // own (Email, Webhook), which otherwise fell through to a bare colour swatch.
+  connector:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>',
 }
 
 // TYPE_MARKER_SVG — uniform markers for user-created rule/scheduled_task types.
