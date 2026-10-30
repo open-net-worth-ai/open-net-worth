@@ -170,3 +170,25 @@ export function suggestionsBySection(
     ...FAMILY_SECTIONS.map((s) => [s.key, pickSuggestions(rows, s.key)]),
   ])
 }
+
+/** Where a "set this connector up" request lands, decided from live state. An id the directory
+ *  does not have is `unknown` — never guessed at. Matches `installedId` too, so an MCP server
+ *  merged into its catalog card opens its own settings. */
+export type SetupTarget =
+  | { kind: 'unknown' }
+  | { kind: 'settings'; id: string }
+  | { kind: 'form'; id: string }
+  | { kind: 'add'; id: string }
+
+export function setupTargetFor(
+  connectors: Connector[],
+  id: string,
+  catalog: CatalogEntry[] = CATALOG,
+): SetupTarget {
+  const row = resolveDirectory(connectors, catalog).find(
+    (r) => !r.generic && (r.id === id || r.installedId === id),
+  )
+  if (!row) return { kind: 'unknown' }
+  if (row.installed) return { kind: 'settings', id: row.installedId ?? row.id }
+  return row.mcp ? { kind: 'add', id: row.id } : { kind: 'form', id: row.id }
+}

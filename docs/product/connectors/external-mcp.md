@@ -28,6 +28,21 @@ There are two kinds:
   `npx -y @playwright/mcp@latest`. It runs with the same access to this computer as Open Net
   Worth itself.
 
+## Ask Lucius what you can connect
+
+Ask "what can I connect?", or ask for something that needs an app you haven't connected, and
+Lucius searches the same directory Browse & add shows: broker, exchange, accounting, email, bank
+feed and more, with who publishes it, whether it is **Verified**, and what you will need to have
+ready (a sign-in, an API key, or a runtime such as Node.js). He suggests one connector at a time
+and only when it fits what you asked.
+
+If you want it, a **Set up connector** button opens that connector's own form in Connectors with
+its details already filled in. **Lucius never adds a connector, never sees or types your keys, and
+nothing is saved until you click Connect or Sign in yourself.** After you finish he re-checks that
+it is connected rather than assuming it worked. For a connector you already have, the button opens
+its settings instead. Unattended runs (an Automation, for instance) can't open the form; Lucius
+just tells you what to set up.
+
 ## Add a server from the directory
 
 The directory includes ready-made entries — Playwright (a real web browser), Firecrawl, Stripe,

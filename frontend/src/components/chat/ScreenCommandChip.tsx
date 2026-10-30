@@ -15,6 +15,7 @@ import { ArrowRight } from '../../ui/icons'
 const ROUTES: Record<string, { label: string; to: string; search?: Record<string, string> }> = {
   'plan-outlook': { label: 'View on Outlook', to: '/plan', search: { sub: 'outlook' } },
   automations: { label: 'Review automation', to: '/automations' },
+  connectors: { label: 'Set up connector', to: '/connectors' },
 }
 
 export function ScreenCommandChip({

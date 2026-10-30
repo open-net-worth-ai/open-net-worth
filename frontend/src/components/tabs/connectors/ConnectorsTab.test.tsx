@@ -8,6 +8,9 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
 import { ConnectorsTab } from './ConnectorsTab'
+import { act } from '@testing-library/react'
+import { _resetBusForTests, dispatchScreenCommand } from '../../../lucius/bus'
+import { setupTargetFor } from './directoryRows'
 import { clearQueryCache } from '../../../state/queryCache'
 import type { Connector } from './types'
 
@@ -340,5 +343,53 @@ describe('the footer points inbound MCP at Settings → MCP', () => {
     const link = within(container).getByRole('link', { name: 'Settings → MCP' })
     expect(link.getAttribute('href')).toBe('/settings?sub=mcp')
     expect(container.textContent).not.toContain('Settings → Developer')
+  })
+})
+
+describe('connectors.open_setup (Lucius) — opens a form, changes nothing', () => {
+  afterEach(() => _resetBusForTests())
+
+  it('opens a directory MCP entry on its add form with the preset pre-filled', async () => {
+    await renderTab()
+    act(() => dispatchScreenCommand({ name: 'connectors.open_setup', args: { id: 'mcp-ibkr' } }))
+
+    // The add flow for a hosted OAuth server: its endpoint is pre-filled, nothing is saved.
+    expect(await screen.findByDisplayValue('https://api.ibkr.com/v1/api/mcp-public')).toBeTruthy()
+    expect(authFetch.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false)
+  })
+
+  it('opens a native connector on its configuration form', async () => {
+    await renderTab()
+    act(() => dispatchScreenCommand({ name: 'connectors.open_setup', args: { id: 'plaid' } }))
+    expect(await screen.findByLabelText(/^Client ID/)).toBeTruthy()
+  })
+
+  it('shows the reason it was suggested', async () => {
+    await renderTab()
+    act(() =>
+      dispatchScreenCommand({
+        name: 'connectors.open_setup',
+        args: { id: 'plaid', reason: 'To read your bank transactions' },
+      }),
+    )
+    expect(
+      await screen.findByText('Lucius suggested: “To read your bank transactions”'),
+    ).toBeTruthy()
+  })
+
+  it('fails cleanly on an id the directory does not have', async () => {
+    await renderTab()
+    act(() => dispatchScreenCommand({ name: 'connectors.open_setup', args: { id: 'nope' } }))
+    expect(await screen.findByText(/isn't in the directory/)).toBeTruthy()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('resolves the target from live state', () => {
+    const telegram = { ...TELEGRAM }
+    expect(setupTargetFor([telegram], 'telegram')).toEqual({ kind: 'settings', id: 'telegram' })
+    expect(setupTargetFor([PLAID_UNCONFIGURED], 'plaid')).toEqual({ kind: 'form', id: 'plaid' })
+    expect(setupTargetFor([], 'mcp-ibkr')).toEqual({ kind: 'add', id: 'mcp-ibkr' })
+    expect(setupTargetFor([], 'mcp-custom')).toEqual({ kind: 'unknown' })
+    expect(setupTargetFor([], 'zzz')).toEqual({ kind: 'unknown' })
   })
 })

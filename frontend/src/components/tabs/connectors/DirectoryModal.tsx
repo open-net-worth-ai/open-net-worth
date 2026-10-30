@@ -7,7 +7,7 @@
 // Spec §9's geometry: header and footer are `flex: none` and only `.rd-modal-body` scrolls, so
 // each view supplies its own body and the footer is composed HERE — never inside a step.
 
-import { useState, type JSX } from 'react'
+import { useLayoutEffect, useState, type JSX } from 'react'
 import { BackTitle, Btn, Modal } from './primitives'
 import { DirectoryBrowser } from './DirectoryBrowser'
 import { DirectoryPreview, PreviewAction } from './DirectoryPreview'
@@ -38,6 +38,9 @@ export interface DirectoryModalProps {
    *  first render only (the modal is unmounted while closed, so it re-seeds per open); after
    *  that the modal owns its own view and Back returns to the grid as usual. */
   previewId?: string
+  /** Open straight onto the MCP add form of this NOT-yet-installed entry, preset pre-filled —
+   *  the path its card's `+` takes. Seeds the first render only, like `previewId`. */
+  addId?: string
   toast?: (message: string) => void
 }
 
@@ -49,6 +52,7 @@ export function DirectoryModal({
   onFocusConnector,
   onAdded,
   previewId,
+  addId,
   toast,
 }: DirectoryModalProps): JSX.Element | null {
   const entries = resolveDirectory(connectors)
@@ -66,7 +70,8 @@ export function DirectoryModal({
         ? entries.find((e) => e.id === previewId || e.installedId === previewId)
         : undefined) ?? null,
   )
-  const [mcpOpen, setMcpOpen] = useState(false)
+  const addEntry = addId ? entries.find((e) => e.id === addId && e.mcp && !e.installed) : undefined
+  const [mcpOpen, setMcpOpen] = useState(!!addEntry)
 
   const takenIds = connectors
     .filter((c) => c.id.startsWith(MCP_PREFIX))
@@ -80,6 +85,13 @@ export function DirectoryModal({
       close()
     },
   })
+
+  // Before paint, so the add form never shows empty for a frame. Runs once: the flow is then the
+  // user's to drive.
+  useLayoutEffect(() => {
+    if (addEntry) flow.start(addEntry)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function close() {
     flow.discardAbandonedOAuthServer()

@@ -10594,5 +10594,20 @@
     "properties": {},
     "type": "object",
     "required": []
+  },
+  "search_connector_directory": {
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Keywords, e.g. 'interactive brokers'."
+      },
+      "category": {
+        "type": "string",
+        "description": "One category, e.g. Brokerage, Banking, Crypto, Accounting."
+      }
+    },
+    "type": "object",
+    "required": []
   }
 }
