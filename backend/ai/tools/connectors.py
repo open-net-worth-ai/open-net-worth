@@ -126,6 +126,19 @@ def _status_row(view) -> dict:
     return row
 
 
+# What the user could ADD, not what is set up. The ready-made MCP servers in Browse & add (brokers,
+# exchanges, accounting…) live only in the frontend directory, so neither this tool nor
+# list_mcp_servers can see them — Lucius listed "everything available" without one broker
+# (owner report, 2026-10-31). The doc is the one list kept current with the directory; pointing
+# at it avoids a second list here that would drift.
+DIRECTORY_NOTE = (
+    "These are the connectors already in the app. Connectors → Browse & add also offers "
+    "ready-made MCP servers the user can add — brokers, crypto exchanges, accounting and more. "
+    "They appear here only once added. To say which exist, read_doc(doc_id="
+    "'connectors/external-mcp', section='add-a-server-from-the-directory')."
+)
+
+
 def _connector_status(requested: list[str]) -> dict:
     """ONE read over the view the Connectors screen renders (``list_connectors``)."""
     from backend.ai.tools._connector_gate import DISABLED_CONNECTORS
@@ -140,7 +153,10 @@ def _connector_status(requested: list[str]) -> dict:
             "known_connector_ids": known,
         }
     wanted = set(requested or known)
-    return {"connectors": {v.id: _status_row(v) for v in views if v.id in wanted}}
+    result: dict = {"connectors": {v.id: _status_row(v) for v in views if v.id in wanted}}
+    if not requested:
+        result["more_in_directory"] = DIRECTORY_NOTE
+    return result
 
 
 class ConnectorStatusInput(ToolInput):
@@ -163,7 +179,8 @@ class ConnectorStatusInput(ToolInput):
         "enabled, status (not_configured/configured/active/error) and, when failing, the "
         "error. Check this instead of asking the user whether something is connected. Never "
         "returns secrets or configuration. The user connects things in Connectors, never you; "
-        "fetching a feed's data is a separate tool (plaid_fetch_transactions, …)."
+        "fetching a feed's data is a separate tool (plaid_fetch_transactions, …). Lists only "
+        "what is already in the app — for what the user could add, follow more_in_directory."
     ),
     input_schema=schema_of(ConnectorStatusInput, tool_name="get_connector_status"),
 )
