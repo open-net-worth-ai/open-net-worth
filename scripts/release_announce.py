@@ -10,9 +10,10 @@ and polish change and names the areas most of them touched.
     python3 scripts/release_announce.py --version 0.1.31 \
         --release-url https://github.com/<org>/<repo>/releases/tag/v0.1.31 notes.md
 
-`DISCORD_WEBHOOK_URL` is the channel's webhook; without it (or with `--dry-run`) the payload is
-printed instead of sent. Standalone on purpose: the
-releases repo fetches this one file at the source commit, like `release_notes.py`.
+`DISCORD_WEBHOOK_URL` holds one channel webhook or several, separated by spaces or commas; each
+gets the same post, and one failing doesn't stop the rest. Without any (or with `--dry-run`) the
+payload is printed instead of sent. Standalone on purpose: the releases repo fetches this one file
+at the source commit, like `release_notes.py`.
 """
 
 from __future__ import annotations
@@ -109,6 +110,10 @@ def build_payload(version: str, release_url: str, bullets: list[str], sections: 
     }
 
 
+def webhooks(value: str) -> list[str]:
+    return [hook for hook in re.split(r"[\s,]+", value) if hook]
+
+
 def post(webhook: str, payload: dict) -> None:
     request = urllib.request.Request(
         webhook + ("&" if "?" in webhook else "?") + "wait=true",
@@ -134,13 +139,19 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     payload = build_payload(args.version, args.release_url, bullets_for(sections), sections)
 
-    webhook = os.environ.get("DISCORD_WEBHOOK_URL", "")
-    if args.dry_run or not webhook:
+    hooks = webhooks(os.environ.get("DISCORD_WEBHOOK_URL", ""))
+    if args.dry_run or not hooks:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
         return 0
-    post(webhook, payload)
-    print(f"release_announce: announced {args.version}")
-    return 0
+    failed = 0
+    for number, hook in enumerate(hooks, 1):
+        try:
+            post(hook, payload)
+        except Exception as exc:  # one channel failing must not keep the post from the others
+            failed += 1
+            print(f"release_announce: channel {number} of {len(hooks)} failed ({exc})")
+    print(f"release_announce: announced {args.version} in {len(hooks) - failed} of {len(hooks)}")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
