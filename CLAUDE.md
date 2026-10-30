@@ -300,6 +300,10 @@ One line each — full reasoning and the scar behind each is in
   `services/connector_catalog.py`; never add a connector list anywhere else. Data access is
   `db/connector_store.ConnectorStore`. Connectors read no environment variables.
   ADR `2026-10-10-connectors-live-in-a-connectors-table-and-secrets-in-connector-secrets`.
+- Lucius discovers connectors with `search_connector_directory`, reading `services/connector_directory.json` —
+  a DERIVED snapshot of the frontend `catalog.ts` (`npm run sync:connector-directory`; a vitest fails on drift).
+  Setup is the human-only screen command `connectors.open_setup`: it opens a form, never writes config or
+  touches a secret. ADR `2026-10-31-lucius-discovers-connectors-from-a-synced-snapshot-and-setup-stays-human`.
 
 ## AI tools
 

@@ -89,10 +89,22 @@ export const AUTOMATIONS_REVIEW_DRAFT_SPEC: ScreenCommandSpec = {
   ],
 }
 
+export const CONNECTORS_OPEN_SETUP_SPEC: ScreenCommandSpec = {
+  name: 'connectors.open_setup',
+  description:
+    'Open a directory connector’s setup form (UI only). The user enters credentials and clicks Connect; nothing is added until then.',
+  route: 'connectors',
+  params: [
+    { name: 'id', type: 'string', required: true },
+    { name: 'reason', type: 'string' },
+  ],
+}
+
 export const OFFSCREEN_COMMAND_CATALOG: ScreenCommandSpec[] = [
   PLAN_STAGE_WHATIF_SPEC,
   PLAN_RESET_SPEC,
   AUTOMATIONS_REVIEW_DRAFT_SPEC,
+  CONNECTORS_OPEN_SETUP_SPEC,
 ]
 
 const MAX_MANIFEST_COMMANDS = 12

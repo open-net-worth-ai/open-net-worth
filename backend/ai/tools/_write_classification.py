@@ -132,6 +132,9 @@ READ_ONLY_TOOLS = frozenset(
         # PLUS, since 2026-08-13 (RFC §B3), each provider's own first-class, single-
         # provider twin — same underlying providers_service.status([key]) read, no write.
         "get_connector_status",
+        # Reads the curated directory snapshot plus live connector/MCP-server state; returns
+        # booleans and our own catalog text, never an endpoint or credential.
+        "search_connector_directory",
         "simplefin_get_status",
         "plaid_get_status",
         "lunch_money_get_status",

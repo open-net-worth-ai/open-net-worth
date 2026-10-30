@@ -331,6 +331,22 @@ def _validate_command_args(cmd: dict, args: dict) -> str | None:
     return None
 
 
+def _validate_command_semantics(name: str, args: dict) -> str | None:
+    """The one command whose argument is a closed set the backend owns: a connector id must be
+    one the directory returned, so a made-up id is refused here rather than opening nothing."""
+    if name != "connectors.open_setup":
+        return None
+    from backend.services import connector_directory
+
+    connector_id = args.get("id")
+    reason = args.get("reason")
+    if reason is not None and (not isinstance(reason, str) or len(reason) > 200):
+        return "arg 'reason' must be one line of at most 200 characters"
+    if connector_id not in connector_directory.entry_ids():
+        return connector_directory.unknown_id_message(str(connector_id))
+    return None
+
+
 class RunScreenCommandInput(ToolInput):
     """Schema-of-record for ``run_screen_command`` (see ``schema_from_model``)."""
 
@@ -383,7 +399,7 @@ async def run_screen_command(input_data: dict):
         return json.dumps(
             {"error": f"unknown screen command '{name}' — available this turn: {avail}"}
         ), None
-    err = _validate_command_args(cmd, args)
+    err = _validate_command_args(cmd, args) or _validate_command_semantics(name, args)
     if err:
         return json.dumps({"error": err}), None
 
@@ -393,9 +409,13 @@ async def run_screen_command(input_data: dict):
     }
     if not cmd.get("live"):
         payload["open"] = {"route": cmd.get("route") or ""}
+        outcome = (
+            "open the setup form — nothing is connected until they click Connect themselves"
+            if name == "connectors.open_setup"
+            else "see the what-if applied"
+        )
         payload["note"] = (
-            "screen not open — the reply shows a navigation chip; tell the user to tap "
-            "it to see the what-if applied"
+            f"screen not open — the reply shows a navigation chip; tell the user to tap it to {outcome}"
         )
     logger.info("run_screen_command: %s (%s)", name, payload["status"])
     return json.dumps(payload), None

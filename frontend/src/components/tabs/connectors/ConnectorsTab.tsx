@@ -11,7 +11,7 @@
 // RouterShell and LuciusDock host this tab, and every "Ask Lucius" affordance routes to
 // the real composer prefill.
 
-import { useEffect, useMemo, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { authFetch } from '../../../api/client'
 import { invalidateQueryCache } from '../../../state/queryCache'
@@ -25,7 +25,7 @@ import { ConnectorDetail } from './ConnectorDetail'
 import { ConnectorConfig, hasConfigForm } from './ConnectorConfig'
 import { DirectoryModal } from './DirectoryModal'
 import { filterDirectory, skipsPreview } from './catalog'
-import { resolveDirectory, suggestionsBySection } from './directoryRows'
+import { resolveDirectory, setupTargetFor, suggestionsBySection } from './directoryRows'
 import { InstitutionPickerModal } from './InstitutionPickerModal'
 import { McpEditModal } from './McpEditModal'
 import { deleteMcpServer } from './mcpApi'
@@ -33,7 +33,11 @@ import { signInWithOAuth } from './oauthSignIn'
 import { savePermissions } from './permissions'
 import { mcpAuthType, toEntry, toMcpEditTarget } from './adapter'
 import { CONNECTORS_KEY, useConnectors } from './useConnectors'
-import { useRegisterScreenFacts } from '../../../lucius/useScreenContract'
+import {
+  useRegisterScreenCommands,
+  useRegisterScreenFacts,
+} from '../../../lucius/useScreenContract'
+import { CONNECTORS_OPEN_SETUP_SPEC } from '../../../lucius/screenCommands'
 import {
   FAMILY_SECTIONS,
   STATUS_FILTERS,
@@ -45,6 +49,11 @@ import {
 } from './model'
 
 const MCP_PREFIX = 'mcp:'
+
+// Control and bidi-override characters out, capped: the text is the model's, shown in our chrome.
+// eslint-disable-next-line no-control-regex
+const UNSAFE_TEXT = /[\u0000-\u001f\u007f\u200e\u200f\u202a-\u202e\u2066-\u2069]/g
+const oneLine = (text: string) => text.replace(UNSAFE_TEXT, ' ').trim().slice(0, 200)
 
 export function ConnectorsTab(): JSX.Element {
   const { connectors, entries, initialLoading, error, refresh } = useConnectors()
@@ -74,6 +83,8 @@ export function ConnectorsTab(): JSX.Element {
   /** `null` = the directory is closed; otherwise the family it opened pre-filtered to. */
   const [directoryFamily, setDirectoryFamily] = useState<FamilyTab | null>(null)
   const [directoryPreviewId, setDirectoryPreviewId] = useState<string | null>(null)
+  /** The not-yet-installed MCP entry whose add form the directory opens ON. */
+  const [directoryAddId, setDirectoryAddId] = useState<string | null>(null)
   const [bankPickerOpen, setBankPickerOpen] = useState(false)
   /** The MCP server a Reconnect click is currently signing in for — an OAuth reconnect is a
    *  popup + poll, not an instant call, so this both guards against a rapid double-click
@@ -114,6 +125,7 @@ export function ConnectorsTab(): JSX.Element {
   const openDirectory = (family: FamilyTab) => {
     setDetailId(null)
     setDirectoryPreviewId(null)
+    setDirectoryAddId(null)
     setDirectoryFamily(family)
   }
 
@@ -122,6 +134,7 @@ export function ConnectorsTab(): JSX.Element {
   const openLandingPage = (connectorId: string) => {
     setDetailId(null)
     setDirectoryPreviewId(connectorId)
+    setDirectoryAddId(null)
     setDirectoryFamily('all')
   }
 
@@ -136,6 +149,7 @@ export function ConnectorsTab(): JSX.Element {
    *  plain focus and lands exactly where it always did. */
   function openConnector(connectorId: string, opts?: FocusConnectorOptions) {
     setDirectoryFamily(null)
+    setDirectoryAddId(null)
     setBankPickerOpen(false)
     setRoutedCountry(opts?.country)
     setConfigureOnOpen(opts?.configure === true)
@@ -161,6 +175,50 @@ export function ConnectorsTab(): JSX.Element {
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, linkedConnector])
+
+  // Lucius's `connectors.open_setup`: UI state only. It opens the same form a card's `+` (or an
+  // installed row's settings) does; the user enters credentials and clicks Connect themselves.
+  // A command that lands before the list has loaded waits in a ref for it.
+  const pendingSetup = useRef<{ id: string; reason: string } | null>(null)
+  function applySetup({ id, reason }: { id: string; reason: string }) {
+    const target = setupTargetFor(connectors, id)
+    if (target.kind === 'unknown') {
+      toast("Lucius suggested a connector that isn't in the directory.")
+      return
+    }
+    if (reason) toast(`Lucius suggested: “${reason}”`)
+    if (target.kind === 'add') {
+      setDetailId(null)
+      setDirectoryPreviewId(null)
+      setDirectoryAddId(target.id)
+      setDirectoryFamily('all')
+    } else {
+      openConnector(target.id, { configure: target.kind === 'form' })
+    }
+  }
+  const applySetupRef = useRef(applySetup)
+  useEffect(() => {
+    applySetupRef.current = applySetup
+  })
+  useRegisterScreenCommands([
+    {
+      spec: CONNECTORS_OPEN_SETUP_SPEC,
+      handler: (args) => {
+        const request = {
+          id: typeof args.id === 'string' ? args.id.trim() : '',
+          reason: typeof args.reason === 'string' ? oneLine(args.reason) : '',
+        }
+        if (initialLoading) pendingSetup.current = request
+        else applySetupRef.current(request)
+      },
+    },
+  ])
+  useEffect(() => {
+    const request = pendingSetup.current
+    if (initialLoading || !request) return
+    pendingSetup.current = null
+    applySetupRef.current(request)
+  }, [initialLoading])
 
   async function reload() {
     invalidateQueryCache(CONNECTORS_KEY)
@@ -467,7 +525,11 @@ export function ConnectorsTab(): JSX.Element {
           connectors={connectors}
           family={directoryFamily}
           previewId={directoryPreviewId ?? undefined}
-          onClose={() => setDirectoryFamily(null)}
+          addId={directoryAddId ?? undefined}
+          onClose={() => {
+            setDirectoryFamily(null)
+            setDirectoryAddId(null)
+          }}
           onFocusConnector={openConnector}
           onAdded={() => void reload()}
           toast={toast}
