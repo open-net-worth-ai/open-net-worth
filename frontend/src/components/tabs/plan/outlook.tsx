@@ -24,6 +24,7 @@ import { fBaseCompact, getCurrencySymbol } from '../../../utils/format'
 import { fBaseWhole, fSigned } from './planData'
 import { authFetch } from '../../../api/client'
 import { FanChart, RbdChart } from './charts'
+import { fireReseedAction, fireSeedKey } from './fireReseed'
 import { X, Plus, Info, Chevron } from './icons'
 import { Spark } from '../../../lucius/identity'
 import { useOutlookFire } from './useOutlookFire'
@@ -133,8 +134,12 @@ export interface OutlookTabProps {
    *  until then, never a confirmed value. Keeps useOutlookFire from seeding (and simulating)
    *  off that placeholder, which otherwise flashes a real-looking but wrong odds % on open. */
   totalLoading?: boolean
-  /** Bumped by the shell's FIRE Settings modal on save → re-fetch /api/fire. */
+  /** Bumped by the shell's FIRE Settings modal on save AND by any 'profile' data change (which
+   *  includes every app-wide '*' write) → re-fetch /api/fire. */
   fireVersion: number
+  /** The FIRE Settings save counter alone (no data-change noise): an advance is an explicit
+   *  save, which re-seeds the levers even when the saved values equal the previous ones. */
+  fireSaveVersion?: number
   /** False while this sub-tab is mounted-but-hidden — gates the sim so it doesn't compute
    *  until the user actually views Outlook. */
   active?: boolean
@@ -580,31 +585,26 @@ export function OutlookTab(props: OutlookTabProps) {
   // here keyed on it could mark props.fireVersion "handled" using a still-stale `f` — permanently
   // skipping the real re-seed once the fresh config lands a moment later.
   //
-  // fireVersion also advances on every app-wide '*' data_changed event (Plan passes
-  // fireVersion + the 'profile' data version, and '*' matches every domain) — including the one
-  // this tab's own PUT /api/plan/baseline triggers. So a bump alone is not "the user saved new
-  // settings": re-seed only when the fetched config VALUES differ from the last seed. Without
-  // this, each refetch reset the levers (a dragged Retire pill snapped back to the plan age) and
-  // re-saved the baseline, whose write fired another '*' — a refetch/save loop about once a second.
+  // A fireVersion advance is not always a settings save: see fireReseed.ts. Re-seed only on an
+  // explicit save (fireSaveVersion advanced) or when the seeding values changed.
   const seededVer = useRef(-1)
   const seededFireKey = useRef<string | null>(null)
+  const seededSaveVer = useRef(props.fireSaveVersion ?? 0)
   useEffect(() => {
     if (fireConfigVersion !== props.fireVersion || seededVer.current === props.fireVersion) return
     const firstSeed = seededVer.current === -1
     seededVer.current = props.fireVersion
-    const fireKey = JSON.stringify([
-      f.monthlySaving,
-      f.expectedReturn,
-      f.volatility,
-      f.monthlyRetirementSpend,
-      f.withdrawalRate,
-      f.lifeExpectancy,
-      f.targetAge,
-    ])
-    const unchanged = fireKey === seededFireKey.current
+    const fireKey = fireSeedKey(f)
+    const saveVer = props.fireSaveVersion ?? 0
+    const action = fireReseedAction({
+      firstSeed,
+      hasSavedBaseline: !!baseOverride,
+      explicitSave: saveVer !== seededSaveVer.current,
+      configChanged: fireKey !== seededFireKey.current,
+    })
     seededFireKey.current = fireKey
-    if (firstSeed && baseOverride) return
-    if (!firstSeed && unchanged) return
+    seededSaveVer.current = saveVer
+    if (action === 'skip') return
     setSaving(f.monthlySaving)
     setRet(f.expectedReturn)
     setVol(f.volatility)
@@ -615,7 +615,7 @@ export function OutlookTab(props: OutlookTabProps) {
     // A later explicit settings save (Settings modal, or a Lucius profile edit) is the new
     // source of truth for the saved plan too — sync the Outlook baseline to match instead of
     // letting it keep silently shadowing the fresh values in BASE.* (the "plan: X" captions).
-    if (!firstSeed) {
+    if (action === 'seed-and-save') {
       void saveBaseline({
         saving: f.monthlySaving,
         ret: f.expectedReturn,
