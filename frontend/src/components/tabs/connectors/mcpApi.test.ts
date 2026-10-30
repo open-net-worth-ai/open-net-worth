@@ -135,8 +135,8 @@ describe('parseEnv keeps a pasted private key whole, however it was pasted', () 
     const escaped = pem.replace(/\n/g, '\\n')
     const sign = (key: string) => createSign('SHA256').update('x').sign(key)
     expect(() => sign(escaped)).toThrow()
-    expect(() => sign(parseEnv(`S=${escaped}`).S)).not.toThrow()
-    expect(() => sign(parseEnv(`S=${pem.replace(/\n/g, '')}`).S)).not.toThrow()
+    expect(() => sign(parseEnv(`S=${escaped}`).S ?? '')).not.toThrow()
+    expect(() => sign(parseEnv(`S=${pem.replace(/\n/g, '')}`).S ?? '')).not.toThrow()
   })
 
   it('leaves values that merely contain \\n or a partial block alone', () => {

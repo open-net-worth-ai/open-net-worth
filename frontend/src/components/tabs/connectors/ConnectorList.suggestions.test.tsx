@@ -61,7 +61,7 @@ describe('suggestionsBySection', () => {
 
     const withIbkr = suggestionsBySection([IBKR_MCP]).mcp!
     expect(withIbkr.map((d) => d.id)).not.toContain('mcp-ibkr')
-    expect(withIbkr[0].id).toBe('mcp-coinbase')
+    expect(withIbkr[0]?.id).toBe('mcp-coinbase')
     expect(withIbkr.length).toBe(SECTION_SUGGESTION_COUNT)
   })
 
@@ -144,8 +144,8 @@ describe('promoted until set up', () => {
   it('leads Data sources with Email and an empty Channels tab with Telegram', () => {
     const bySection = suggestionsBySection([])
     expect(bySection.all!.map((d) => d.id)).toEqual(['email', 'telegram', 'plaid'])
-    expect(bySection.data![0].id).toBe('email')
-    expect(bySection.channels![0].id).toBe('telegram')
+    expect(bySection.data![0]?.id).toBe('email')
+    expect(bySection.channels![0]?.id).toBe('telegram')
   })
 
   it('puts an EMPTY tab’s picks inside its empty view, above Browse & add', () => {

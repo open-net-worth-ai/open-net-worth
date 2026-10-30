@@ -109,7 +109,7 @@ describe('a connector that is not in the list is still reachable and configurabl
   /** The directory's own control for one catalog entry — its `+`, or its gear once
    *  installed. Found by `aria-label` rather than an accessible-name role scan: the grid
    *  renders forty-odd cards and this block opens it four times over. */
-  function directoryButton(container: HTMLElement, label: string) {
+  function directoryButton(label: string) {
     return waitFor(() => {
       // Scoped to the dialog: the list's own Suggested cards carry the same Add labels.
       const found = document.querySelector<HTMLElement>(`.rd-modal button[aria-label="${label}"]`)
@@ -118,9 +118,9 @@ describe('a connector that is not in the list is still reachable and configurabl
     })
   }
 
-  async function openDirectory(container: HTMLElement, label: string) {
+  async function openDirectory(label: string) {
     fireEvent.click(screen.getByRole('button', { name: /Browse & add/ }))
-    fireEvent.click(await directoryButton(container, label))
+    fireEvent.click(await directoryButton(label))
   }
 
   /** The modal title, which IS the back control on every view below the list. */
@@ -134,7 +134,7 @@ describe('a connector that is not in the list is still reachable and configurabl
     // whole point of the directory route.
     expect(container.querySelector('.cn-list')?.textContent).not.toContain('Plaid')
 
-    await openDirectory(container, 'Add Plaid')
+    await openDirectory('Add Plaid')
 
     // No Connect tap in between: the extra one was the defect. These are PlaidSection's own
     // fields, so it is the one real config surface and not a duplicate built for this entry.
@@ -145,7 +145,7 @@ describe('a connector that is not in the list is still reachable and configurabl
 
   it('leaves the user on the detail page when they back out of that form', async () => {
     const { container } = await renderTab()
-    await openDirectory(container, 'Add Plaid')
+    await openDirectory('Add Plaid')
     await screen.findByLabelText(/^Client ID/)
 
     fireEvent.click(backControl(container)) // `‹ Plaid`
@@ -158,8 +158,8 @@ describe('a connector that is not in the list is still reachable and configurabl
   })
 
   it('opens the PLAIN detail page from an installed entry’s gear, never the form', async () => {
-    const { container } = await renderTab()
-    await openDirectory(container, 'Configure Telegram')
+    await renderTab()
+    await openDirectory('Configure Telegram')
 
     // Telegram already holds credentials, so its gear means "show me its settings page".
     expect(await screen.findByRole('button', { name: 'Pause' })).toBeTruthy()
