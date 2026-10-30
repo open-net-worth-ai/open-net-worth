@@ -26,6 +26,8 @@ column says otherwise.
 | `tiger` | https://c1.itigergrowtha.com/portal5/static/media/logo.152.1b48fddb.png (declared in itiger.com's and tigerbrokers.com.sg's own `<link rel="apple-touch-icon">`) | png | 152×152 | none found | 2026-10-31 |
 | `zerodha-kite` | https://kite.zerodha.com/static/images/browser-icons/apple-touch-icon-152x152.png (declared on kite.zerodha.com; zerodha.com itself declares only a 48×48 favicon) | png | 152×152 | none found | 2026-10-31 |
 | `upstox` | https://upstox.com/marketing-page-assets/favicon/favicon-196x196.png (the largest icon declared on upstox.com's own homepage) | png | 196×196 | none found | 2026-10-31 |
+| `public` | **Owner-provided**, not fetched: public.com refuses non-browser clients on every icon path. The owner supplied Public.com's logo (the two-dot mark above the "public.com" wordmark); the dot mark alone was cropped out and centred on white — no recolouring or redrawing. | png | 144×144 | none found | 2026-10-31 |
+| `bybit` | **Owner-provided**, not fetched: bybit.com declares only an inline 256×256 icon and refuses scripted downloads. The owner supplied Bybit's app icon (the BYBIT wordmark on its dark square); the white margin around the square was cropped off, nothing else changed. | png | 500×500 | none found | 2026-10-31 |
 | `enable_banking` | https://enablebanking.com/apple-touch-icon.png (enablebanking.com's own declared icon) | png | 180×180 | https://enablebanking.com/brand-guidelines/ exists but is a JS-only SPA (Vue) — no static asset links could be extracted without a browser | 2026-08-14 |
 | `tavily` | https://tavily.com/logos/tavily-mark-black.svg (official brand page) | svg | vector | https://tavily.com/brand (page title: "Brand Guidelines \| Tavily") | 2026-08-14 |
 | `perplexity` | https://www.perplexity.ai/favicon.svg (perplexity.ai's own root-served favicon; homepage and /press are behind a Cloudflare bot challenge that blocks plain fetches, this static path was not) | svg | vector | none reachable — /press returned 403 (Cloudflare challenge) | 2026-08-14 |
@@ -170,5 +172,3 @@ column says otherwise.
   still the same dark-background text treatment) — using it would ship a blurry mark under a
   technicality, which the sourcing rules call out explicitly to avoid. Falls back cleanly to
   the tinted glyph.
-
-Not sourced, 2026-10-31: **Public.com** (public.com refuses non-browser clients on every icon path; its GitHub org avatar is only 90×90) and **Bybit** (bybit.com serves only a 48px favicon.ico; its GitHub org avatar is a JPEG). Both fall back to the tinted glyph.

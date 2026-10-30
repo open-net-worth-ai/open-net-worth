@@ -1016,15 +1016,21 @@
     height: 40px;
   }
 }
-/* In the filter row the hue is only an outline until picked — a full row of tinted fills
-   was too loud (owner review, 2026-10-29). Sized BETWEEN the family chips above (12px, ~30px
-   tall) and the card tags (10.5px, 18px): the card-tag size read as an afterthought there. */
+/* The filter row wears the family chips' neutral look — one hue per category across a whole row
+   read as cheap (owner review, 2026-10-31); the hues stay on the cards' tags. Sized BETWEEN the
+   family chips above (12px, ~30px tall) and the card tags (10.5px, 18px). */
 .cn-page .cn-catrow .cn-cat {
-  background: transparent;
-  border: 1px solid color-mix(in srgb, var(--cat-hue, var(--muted)) 45%, transparent);
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px solid var(--line);
   font-size: 11.5px;
   line-height: 22px;
   padding: 0 10px;
+}
+.cn-page .cn-catrow .cn-cat.pick.on {
+  color: var(--ink);
+  background: var(--selected);
+  border-color: var(--line-strong);
 }
 .cn-page .cn-cat.pick.on {
   color: var(--surface);
@@ -1036,7 +1042,9 @@
     background: color-mix(in srgb, var(--cat-hue, var(--muted)) 24%, transparent);
   }
   .cn-page .cn-catrow .cn-cat.pick:not(.on):hover {
-    background: color-mix(in srgb, var(--cat-hue, var(--muted)) 10%, transparent);
+    color: var(--ink);
+    background: var(--surface2);
+    border-color: var(--line-strong);
   }
 }
 .cn-page .cn-cat.pick:focus-visible {

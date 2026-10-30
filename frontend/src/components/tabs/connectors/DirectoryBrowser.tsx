@@ -14,13 +14,13 @@
 // Both are inline styles because the prototype styles them inline — connectors.css is a verbatim
 // port of the prototype stylesheet and carries no rule for either.
 
-import type { CSSProperties, JSX } from 'react'
+import type { JSX } from 'react'
 import { DirectoryCard } from './DirectoryCard'
 import { pickSuggestions } from './directoryRows'
 import { Empty } from './primitives'
 import { Icons } from './icons'
 import { ArrowUpDown, ListFilter } from '../../../ui/icons'
-import { CATEGORY_HUE, CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
+import { CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
 import {
   DIRECTORY_FAMILY_CHIPS,
   filterDirectory,
@@ -186,7 +186,6 @@ export function DirectoryBrowser({
                 key={c}
                 type="button"
                 className={'cn-cat pick' + (category === c ? ' on' : '')}
-                style={{ '--cat-hue': CATEGORY_HUE[c] } as CSSProperties}
                 aria-pressed={category === c}
                 onClick={(e) => {
                   revealChip(e.currentTarget)

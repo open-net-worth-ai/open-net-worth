@@ -68,6 +68,8 @@ export const LOGO_FILES: Record<string, string> = {
   'mcp-tiger': 'tiger.png',
   'mcp-zerodha': 'zerodha-kite.png',
   'mcp-upstox': 'upstox.png',
+  'mcp-public': 'public.png',
+  'mcp-bybit': 'bybit.png',
   'mcp-expensify': 'expensify.svg',
   'mcp-avalara': 'avalara.png',
   'mcp-twelvedata': 'twelvedata.svg',
