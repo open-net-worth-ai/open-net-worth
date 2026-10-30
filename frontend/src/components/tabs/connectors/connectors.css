@@ -876,12 +876,23 @@
     width: 24px;
   }
 }
-/* Browse & add's sticky header (DirectoryBrowser): a soft shadow once the list scrolls under it. */
-.cn-page .cn-dirhead {
-  transition: box-shadow 0.15s ease;
+/* Browse & add's sticky header (DirectoryBrowser): once the list scrolls under it, cards fade out
+   beneath the chips instead of being cut at a hard edge — the Documents screen's fade (24px), as
+   a gradient hanging below the header in the sheet's own colour. Never at the top. */
+.cn-page .cn-dirhead::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 24px;
+  background: linear-gradient(to bottom, var(--modal-bg), transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
 }
-.cn-page .cn-dirhead.scrolled {
-  box-shadow: 0 10px 16px -12px rgb(0 0 0 / 0.55);
+.cn-page .cn-dirhead.scrolled::after {
+  opacity: 1;
 }
 /* The custom MCP server, pinned above the directory grid as its own row (DirectoryBrowser). */
 .cn-page .cn-customrow {

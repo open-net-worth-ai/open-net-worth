@@ -523,6 +523,7 @@ export function ConnectorsTab(): JSX.Element {
         <DirectoryModal
           open
           connectors={connectors}
+          loading={initialLoading}
           family={directoryFamily}
           previewId={directoryPreviewId ?? undefined}
           addId={directoryAddId ?? undefined}

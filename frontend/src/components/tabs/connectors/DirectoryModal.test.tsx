@@ -54,6 +54,7 @@ function open(props: Partial<Parameters<typeof DirectoryModal>[0]> = {}) {
       toast={props.toast}
       family={props.family}
       previewId={props.previewId}
+      loading={props.loading}
     />,
   )
 }
@@ -1149,5 +1150,18 @@ describe('filter counts', () => {
     const onAll = brokerage()
     fireEvent.click(getByRole('tab', { name: /^Data sources/ }))
     expect(brokerage()).not.toBe(onAll)
+  })
+})
+
+describe('before the connectors read lands', () => {
+  // Opened early, the directory read every connector as not added: Email offered with a +, and
+  // Suggested proposing what the user already had (owner, 2026-10-31).
+  it('waits with a skeleton instead of guessing what is installed', () => {
+    const { container, queryByLabelText, getByText } = open({ loading: true })
+    expect(getByText('Loading connectors…')).toBeTruthy()
+    expect(queryByLabelText('Suggested connectors')).toBeNull()
+    expect(container.querySelector('.cn-dirgrid')).toBeNull()
+    // The header still works: search and tabs don't depend on what is installed.
+    expect(container.querySelector('.cn-dirfilters .rd-tabs')).toBeTruthy()
   })
 })

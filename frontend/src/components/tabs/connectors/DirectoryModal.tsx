@@ -27,6 +27,9 @@ export interface DirectoryModalProps {
   onClose: () => void
   /** Live connector state — what makes a catalog entry read as installed. */
   connectors: Connector[]
+  /** True until the connectors read first lands. Until then nothing is known to be installed,
+   *  so the list waits rather than offering what the user already has. */
+  loading?: boolean
   /** Pre-filter, so a section's "+ Add a data source" opens the directory already scoped. */
   family?: DirectoryFamilyFilter
   /** Open a connector's detail page. The directory closes first. `opts` says whether the
@@ -49,6 +52,7 @@ export function DirectoryModal({
   open,
   onClose,
   connectors,
+  loading = false,
   family = 'all',
   onFocusConnector,
   onAdded,
@@ -214,6 +218,7 @@ export function DirectoryModal({
       ) : (
         <DirectoryBrowser
           entries={entries}
+          loading={loading}
           family={directoryFamily}
           onFamily={(f) => {
             setDirectoryFamily(f)

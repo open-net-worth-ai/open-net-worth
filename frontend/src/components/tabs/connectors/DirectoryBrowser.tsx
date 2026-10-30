@@ -15,6 +15,7 @@
 // port of the prototype stylesheet and carries no rule for either.
 
 import { useEffect, useRef, useState, type JSX } from 'react'
+import { TabSkeleton } from '../../ui'
 import { DirectoryCard } from './DirectoryCard'
 import { pickSuggestions } from './directoryRows'
 import { Btn, Empty, Tabs } from './primitives'
@@ -45,6 +46,9 @@ function revealChip(chip: HTMLElement): void {
 
 export interface DirectoryBrowserProps {
   entries: DirectoryRow[]
+  /** The connectors read hasn't landed: which entries are installed is unknown. The list waits
+   *  — a guess would show Email as "add" with a +, and suggest what the user already has. */
+  loading?: boolean
   family: DirectoryFamilyFilter
   onFamily: (family: DirectoryFamilyFilter) => void
   query: string
@@ -61,6 +65,7 @@ export interface DirectoryBrowserProps {
 
 export function DirectoryBrowser({
   entries,
+  loading = false,
   family,
   onFamily,
   query,
@@ -241,17 +246,39 @@ export function DirectoryBrowser({
           minHeight: MODAL_BODY_MIN_HEIGHT,
         }}
       >
-        {showCustom && custom ? <CustomServerRow onAdd={() => onAdd(custom)} /> : null}
+        {loading ? (
+          <TabSkeleton variant="connectors" label="Loading connectors…" header={false} />
+        ) : (
+          <>
+            {showCustom && custom ? <CustomServerRow onAdd={() => onAdd(custom)} /> : null}
 
-        {showSuggested && (
-          <div className="cn-suggest" aria-label="Suggested connectors">
-            <div className="cn-suggest-h">Suggested</div>
-            <div className="cn-suggestgrid swipe">
-              {suggested.map((d) => (
+            {showSuggested && (
+              <div className="cn-suggest" aria-label="Suggested connectors">
+                <div className="cn-suggest-h">Suggested</div>
+                <div className="cn-suggestgrid swipe">
+                  {suggested.map((d) => (
+                    <DirectoryCard
+                      key={d.id}
+                      d={d}
+                      suggested
+                      onAdd={onAdd}
+                      onPreview={onPreview}
+                      onConfigure={onConfigure}
+                      onCategory={onCategory}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Labels the full, sortable list only when Suggested sits above it — otherwise the
+                grid is the whole view and needs no heading. */}
+            {showSuggested ? <div className="cn-suggest-h">All connectors</div> : null}
+            <div className="cn-dirgrid">
+              {grid.map((d) => (
                 <DirectoryCard
                   key={d.id}
                   d={d}
-                  suggested
                   onAdd={onAdd}
                   onPreview={onPreview}
                   onConfigure={onConfigure}
@@ -259,40 +286,24 @@ export function DirectoryBrowser({
                 />
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Labels the full, sortable list only when Suggested sits above it — otherwise the
-            grid is the whole view and needs no heading. */}
-        {showSuggested ? <div className="cn-suggest-h">All connectors</div> : null}
-        <div className="cn-dirgrid">
-          {grid.map((d) => (
-            <DirectoryCard
-              key={d.id}
-              d={d}
-              onAdd={onAdd}
-              onPreview={onPreview}
-              onConfigure={onConfigure}
-              onCategory={onCategory}
-            />
-          ))}
-        </div>
-        {grid.length === 0 ? (
-          <Empty
-            title="No matches"
-            body={
-              custom
-                ? 'Try a different search or category — or connect it yourself as a custom MCP server.'
-                : 'Try a different search or category.'
-            }
-          >
-            {custom ? (
-              <Btn variant="primary" onClick={() => onAdd(custom)}>
-                <Icons.plus /> Add a custom MCP server
-              </Btn>
+            {grid.length === 0 ? (
+              <Empty
+                title="No matches"
+                body={
+                  custom
+                    ? 'Try a different search or category — or connect it yourself as a custom MCP server.'
+                    : 'Try a different search or category.'
+                }
+              >
+                {custom ? (
+                  <Btn variant="primary" onClick={() => onAdd(custom)}>
+                    <Icons.plus /> Add a custom MCP server
+                  </Btn>
+                ) : null}
+              </Empty>
             ) : null}
-          </Empty>
-        ) : null}
+          </>
+        )}
       </div>
     </div>
   )
