@@ -1123,3 +1123,31 @@ describe('a search that finds nothing', () => {
     expect(getByText('Connect')).toBeTruthy()
   })
 })
+
+describe('filter counts', () => {
+  const tabCounts = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('.cn-dirfilters .rd-tab')).map((t) => t.textContent)
+
+  it('a tab counts its whole kind — a chip or a search never changes it', () => {
+    const { container, getByLabelText } = open()
+    const before = tabCounts(container)
+    const brokerage = Array.from(container.querySelectorAll('.cn-catrow .cn-cat')).find((c) =>
+      c.textContent?.startsWith('Brokerage'),
+    ) as HTMLElement
+    fireEvent.click(brokerage)
+    expect(tabCounts(container)).toEqual(before)
+    fireEvent.change(getByLabelText('Search directory'), { target: { value: 'coinbase' } })
+    expect(tabCounts(container)).toEqual(before)
+  })
+
+  it('a chip counts within the tab you are on', () => {
+    const { container, getByRole } = open()
+    const brokerage = () =>
+      Array.from(container.querySelectorAll('.cn-catrow .cn-cat')).find((c) =>
+        c.textContent?.startsWith('Brokerage'),
+      )?.textContent
+    const onAll = brokerage()
+    fireEvent.click(getByRole('tab', { name: /^Data sources/ }))
+    expect(brokerage()).not.toBe(onAll)
+  })
+})

@@ -80,12 +80,15 @@ export function DirectoryBrowser({
   // connectors already added and, unlike the grid, ignored Sort. A shortcut through the DEFAULT
   // view only — once the user has filtered or searched,
   // it is noise competing with the result they asked for.
-  // Each chip's number is what tapping it would show: the OTHER row's pick and the search
-  // still apply, so a count never promises more cards than the grid then holds.
+  // A number describes the thing it sits on, never a combination of filters: a tab is a place,
+  // so its count is that kind's total and does not move with a chip or a search; a chip
+  // narrows within the current tab, so it counts there. Search changes no number — it only
+  // narrows the grid (owner review, 2026-10-31: "MCP 26" dropping to 14 on a chip read as
+  // connectors disappearing).
   const familyCount = (f: DirectoryFamilyFilter) =>
-    filterDirectory(entries, f, query, sort, category).length
+    filterDirectory(entries, f, '', sort, 'all').filter((d) => !d.generic).length
   const categoryCount = (c: ConnectorCategory | 'all') =>
-    filterDirectory(entries, family, query, sort, c).length
+    filterDirectory(entries, family, '', sort, c).filter((d) => !d.generic).length
   // The build-your-own slot is pinned ABOVE the grid as its own row, not left as one card
   // among thirty: buried there, people never learned they could add a server we don't list
   // (owner, 2026-10-31). It shows wherever an MCP server could be what you are looking for —
