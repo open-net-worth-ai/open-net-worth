@@ -207,7 +207,7 @@ describe('the boxed trust panel is gone from this page', () => {
     const { container } = preview({ verification: 'unverified' })
     expect(screen.queryByText('Unverified publisher')).toBeNull()
     expect(screen.queryByText('Verified publisher')).toBeNull()
-    expect(screen.queryByText('Unknown publisher')).toBeNull()
+    expect(screen.queryByText('Unverified publisher')).toBeNull()
     expect(container.textContent).not.toContain('third-party MCP server')
   })
 

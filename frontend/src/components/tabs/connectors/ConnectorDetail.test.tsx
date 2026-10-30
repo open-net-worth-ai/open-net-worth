@@ -382,7 +382,7 @@ describe('the publisher panel is MCP-only (spec §5)', () => {
     )
     // the defect: a generic server reading "Developed by Open Net Worth"
     expect(screen.queryByText(/^Developed by/)).toBeNull()
-    expect(screen.getByText('Unknown publisher')).toBeTruthy()
+    expect(screen.getByText('Unverified publisher')).toBeTruthy()
     expect(screen.getByText(/can’t vouch for its code/)).toBeTruthy()
   })
 

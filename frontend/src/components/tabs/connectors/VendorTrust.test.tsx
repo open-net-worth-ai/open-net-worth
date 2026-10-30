@@ -32,7 +32,6 @@ describe('verified — vendor-official', () => {
     expect(screen.getByText('Microsoft (Playwright)')).toBeTruthy()
     expect(screen.getByText('Verified publisher')).toBeTruthy()
     expect(screen.queryByText('Unverified publisher')).toBeNull()
-    expect(screen.queryByText('Unknown publisher')).toBeNull()
   })
 
   it('carries the third-party note WITHOUT the community caveat', () => {
@@ -69,7 +68,7 @@ describe('unverified — real and known, but not vendor-official', () => {
 describe('unknown — no publisher at all', () => {
   it('claims no author and badges the publisher unknown', () => {
     render(<VendorTrust verification="unknown" />)
-    expect(screen.getByText('Unknown publisher')).toBeTruthy()
+    expect(screen.getByText('Unverified publisher')).toBeTruthy()
     expect(screen.queryByText('Open Net Worth')).toBeNull()
   })
 
@@ -81,7 +80,7 @@ describe('unknown — no publisher at all', () => {
 
   it('treats a blank publisher string as no publisher', () => {
     render(<VendorTrust developer="   " verification="unknown" />)
-    expect(screen.getByText('Unknown publisher')).toBeTruthy()
+    expect(screen.getByText('Unverified publisher')).toBeTruthy()
   })
 })
 
@@ -103,7 +102,7 @@ describe('the trust badge sits naturally whether or not there is a name beside i
     const { container } = render(<VendorTrust verification="unknown" />)
     const row = header(container)!
     expect(row.textContent).toContain('Publisher')
-    expect(row.textContent).toContain('Unknown publisher')
+    expect(row.textContent).toContain('Unverified publisher')
   })
 
   it('still spaces name and badge apart when a publisher IS named', () => {

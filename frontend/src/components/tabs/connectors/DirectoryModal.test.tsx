@@ -981,7 +981,7 @@ describe("the review step renders the PROBE's own provenance (spec §5)", () => 
     })
     const { getByText, container } = await reviewCustomServer()
 
-    expect(getByText('Unknown publisher')).toBeTruthy() // the BADGE says it
+    expect(getByText('Unverified publisher')).toBeTruthy() // the BADGE says it
     expect(getByText(/can’t vouch for its code/)).toBeTruthy()
     // ...and the name slot stays empty. The prototype passed the literal string "Unknown
     // publisher" as the publisher NAME, which made the panel print the known-publisher note.
@@ -1007,14 +1007,14 @@ describe("the review step renders the PROBE's own provenance (spec §5)", () => 
     await waitFor(() => expect(view.getByText(/Reachable — 1 tool found/)).toBeTruthy())
 
     expect(view.getByText('Verified publisher')).toBeTruthy()
-    expect(view.queryByText('Unknown publisher')).toBeNull()
+    expect(view.queryByText('Unverified publisher')).toBeNull()
   })
 
   it('still renders a panel when a backend sends no trust block at all', async () => {
     probeReturning(undefined)
     const { getByText } = await reviewCustomServer()
     expect(getByText('Publisher')).toBeTruthy()
-    expect(getByText('Unknown publisher')).toBeTruthy()
+    expect(getByText('Unverified publisher')).toBeTruthy()
   })
 })
 
