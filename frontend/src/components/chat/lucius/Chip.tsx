@@ -19,6 +19,7 @@ import { colorFor, C } from '../../../lucius/mentionColors'
 import { isSafeCssColor, renderMaskableSublabel } from '../../../utils/mentionable'
 import { labelFor } from '../../../lucius/entityRegistry'
 import { X } from '../../../ui/icons'
+import { useToolOwnerLogos } from '../toolActivity/useToolOwnerLogos'
 
 export interface ChipProps {
   mention: MentionRef
@@ -47,6 +48,9 @@ export function Chip({
   onClick,
 }: ChipProps) {
   const { type, label } = mention
+  const connectorLogo = useToolOwnerLogos(type === 'connector' ? [mention.ref] : [])(
+    type === 'connector' ? mention.ref : '',
+  ).logo
 
   // 'agent' joins 'screen'/'source' as a UI-side chip type: the mention REGISTRY carries no
   // 'agent' provider (agent is a SURFACE — `surfaces ⊆ {entity,agent,verb}` — and routing
@@ -90,6 +94,8 @@ export function Chip({
   // at step 1. All other types get their TYPE_COLOR default.
   function renderGlyph() {
     if (isVerb) return null
+
+    if (connectorLogo) return <img className="chip-logo" src={connectorLogo} alt="" />
 
     if (isScope || isSource) {
       return <span className="chip-glyph">◉</span>

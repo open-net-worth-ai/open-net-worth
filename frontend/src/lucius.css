@@ -2105,6 +2105,25 @@
     height: 14px;
     display: block;
   }
+  /* A connector's brand mark — the logo its Connectors card shows, on a white tile so dark
+     marks stay legible on the dark theme. */
+  .id-logo,
+  .chip-logo {
+    display: block;
+    flex: none;
+    object-fit: contain;
+    background: #fff;
+  }
+  .id-logo {
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+  }
+  .chip-logo {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+  }
   .id-swatch {
     width: 11px;
     height: 11px;

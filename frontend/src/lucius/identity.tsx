@@ -123,6 +123,8 @@ export interface IdentityItem {
   tone?: string
   /** single emoji replaces the glyph/mono for any type that supports it */
   emoji?: string
+  /** a brand mark (a connector's logo) — replaces every glyph when set */
+  logo?: string
 }
 
 // ── IdentityInner — the inner identity node; caller wraps it in a sized box ──
@@ -140,6 +142,8 @@ export interface IdentityItem {
 export function IdentityInner({ item }: { item: IdentityItem }) {
   const t = item.type
   const color = colorFor(item)
+
+  if (item.logo) return <img className="id-logo" src={item.logo} alt="" />
 
   if (t === 'agent') {
     if (item.primary || item.id === 'lucius') {

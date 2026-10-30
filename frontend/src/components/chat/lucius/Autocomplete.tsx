@@ -20,6 +20,7 @@ import { useMentionables } from '../../../hooks/useMentionables'
 import type { MentionRow } from '../../../hooks/useMentionables'
 import { allHandles } from '../../../lucius/screenContract'
 import { Identity, Spark } from '../../../lucius/identity'
+import { useToolOwnerLogos } from '../toolActivity/useToolOwnerLogos'
 import { norm } from '../../../lucius/matchEntity'
 import { C } from '../../../lucius/mentionColors'
 import {
@@ -165,6 +166,10 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
     retry,
     remoteItems = [],
   } = useMentionables(query, { surfaces })
+  // A connector row wears its own brand mark, the same one its Connectors card shows.
+  const connectorLookFor = useToolOwnerLogos(
+    backendItems.filter((r) => r.type === 'connector').map((r) => r.id),
+  )
 
   // Screen handles become pseudo-MentionRows of type 'source'.
   const handles = allHandles()
@@ -476,6 +481,7 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
             label: row.label,
             id: row.id,
             dot: itemDot,
+            logo: row.type === 'connector' ? connectorLookFor(row.id).logo : undefined,
           }
 
           return (
