@@ -149,6 +149,25 @@ async function close() {
 async function accounts() {
   return page.evaluate(async () => (await fetch("/api/accounts")).json());
 }
+// Restoring a backup gives the book a new id. The page notices on its next setup-status read,
+// drops the old book's caches and reloads onto the new one (frontend/src/utils/bookIdentity.ts),
+// a few hundred ms AFTER the URL has already moved on. A fetch or evaluate that straddles the
+// reload dies with "Failed to fetch" / "Execution context was destroyed", so wait until the page
+// has reconciled with the server's current book and no reload is pending.
+async function onCurrentBook() {
+  await page.waitForFunction(
+    async () => {
+      try {
+        const { book_id } = await (await fetch("/api/setup-status")).json();
+        return localStorage.getItem("onw-book-id") === book_id && sessionStorage.getItem("onw-book-reload") === null;
+      } catch {
+        return false; // the old document is going away mid-reload
+      }
+    },
+    undefined,
+    { polling: 100 },
+  );
+}
 const preferences = (selectedBookFolder) => ({
   background: false,
   launchAtLogin: false,
@@ -342,6 +361,7 @@ try {
   await shot('qa/artifacts/first-launch-restore-preview.png');
   await page.getByRole("button",{name:"Restore this backup"}).click();
   await page.waitForURL(/\/setup\/model$/);
+  await onCurrentBook();
   assert.equal((await page.evaluate(async () => (await fetch('/api/setup-status')).json())).restore_pending, true);
   assert.ok((await accounts()).some(account=>account.name==='Explicit Book'));
   check("restore follows empty folder selection, previews without importing, and continues to AI setup with the restored book");
