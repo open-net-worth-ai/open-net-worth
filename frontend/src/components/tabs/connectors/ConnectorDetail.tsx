@@ -251,7 +251,19 @@ export function ConnectorDetail({
     })
   }
 
+  // A healthy, running connector's actions (Automate, Pause) are occasional — on a phone they
+  // live in the ⋮ rather than earn a footer slot beside Done. Only a FIX (Reconnect / Connect
+  // / Resume) is promoted to the footer there, since it is the one thing the page is for.
+  const running = !alwaysOn && !entry.attention && entry.enabled
+  const phoneRunningItems: KebabItem[] =
+    isMobile && running
+      ? [
+          ...(automateKey ? [{ label: 'Automate', onClick: () => openTemplate(automateKey) }] : []),
+          { label: 'Pause connector', onClick: () => setConfirmingPause(true) },
+        ]
+      : []
   const kebabItems: KebabItem[] = [
+    ...phoneRunningItems,
     { label: 'View details', onClick: onViewDetails },
     ...(configForm
       ? [{ label: 'Edit configuration', onClick: () => setConfiguringId(entry.id) }]
@@ -414,6 +426,7 @@ export function ConnectorDetail({
       {setupPending ? 'Connect' : 'Resume'}
     </Btn>
   )
+  const phoneFix = isMobile && !running ? stateAction : null
 
   return (
     <>
@@ -424,14 +437,14 @@ export function ConnectorDetail({
         escapeDisabled={confirmingRemove || confirmingPause}
         footer={
           <>
-            {isMobile ? stateAction : null}
             <Btn
               size={isMobile ? 'lg' : undefined}
-              variant={isMobile && stateAction ? 'secondary' : 'primary'}
+              variant={phoneFix ? 'secondary' : 'primary'}
               onClick={onClose}
             >
               Done
             </Btn>
+            {phoneFix}
           </>
         }
       >

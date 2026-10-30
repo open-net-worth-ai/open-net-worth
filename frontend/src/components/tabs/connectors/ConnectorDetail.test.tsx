@@ -475,7 +475,7 @@ describe('the Automate action', () => {
   })
 })
 
-describe('on a phone the state action joins Done in the footer; the header keeps only the ⋮', () => {
+describe('on a phone a running connector keeps Pause in the ⋮; only a fix reaches the footer', () => {
   beforeEach(() => {
     vi.stubGlobal('matchMedia', (query: string) => ({
       matches: true,
@@ -488,24 +488,30 @@ describe('on a phone the state action joins Done in the footer; the header keeps
     vi.unstubAllGlobals()
   })
 
-  it('puts Pause beside a secondary Done, and leaves the ⋮ inline in a compact header', () => {
+  it('shows Done alone in the footer and Pause in the ⋮, in a compact header', () => {
     const { container, onSetEnabled } = renderDetail(entry({ enabled: true }))
     const head = container.querySelector('.cn-idhead') as HTMLElement
     expect(head.className).toContain('cn-idhead-compact')
-    expect(within(head).queryByRole('button', { name: 'Pause' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull()
 
     const foot = container.querySelector('.rd-modal-foot') as HTMLElement
-    expect(within(foot).getByRole('button', { name: 'Done' }).className).toContain('secondary')
-    fireEvent.click(within(foot).getByRole('button', { name: 'Pause' }))
+    expect(within(foot).getAllByRole('button')).toHaveLength(1)
+    expect(within(foot).getByRole('button', { name: 'Done' }).className).toContain('primary')
+
+    openKebab(container)
+    fireEvent.click(screen.getByText('Pause connector'))
     const confirmDialog = container.querySelectorAll<HTMLElement>('.rd-modal')[1]!
     fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Pause' }))
     expect(onSetEnabled).toHaveBeenCalledWith(false)
   })
 
-  it('keeps Done primary when there is no state action to pair it with', () => {
-    const { container } = renderDetail(entry({ enabled: true }), { alwaysOn: true })
+  it('promotes Resume to the footer, primary and last, beside a secondary Done', () => {
+    const { container, onSetEnabled } = renderDetail(entry({ enabled: false }))
     const foot = container.querySelector('.rd-modal-foot') as HTMLElement
-    expect(within(foot).getAllByRole('button')).toHaveLength(1)
-    expect(within(foot).getByRole('button', { name: 'Done' }).className).toContain('primary')
+    const buttons = within(foot).getAllByRole('button')
+    expect(buttons.map((b) => b.textContent)).toEqual(['Done', 'Resume'])
+    expect(buttons[0]!.className).toContain('secondary')
+    fireEvent.click(buttons[1]!)
+    expect(onSetEnabled).toHaveBeenCalledWith(true)
   })
 })
