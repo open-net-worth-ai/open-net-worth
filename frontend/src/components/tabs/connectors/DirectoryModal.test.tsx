@@ -224,7 +224,7 @@ describe('Suggested (the Connectors list’s block, not a separate Popular row)'
   it('hides once a family chip is picked', () => {
     const { container, getByRole } = open()
     // A role query, not text: "Web" is also a category chip on the cards now.
-    fireEvent.click(getByRole('button', { name: 'Web' }))
+    fireEvent.click(getByRole('tab', { name: /^Web/ }))
     expect(suggested(container)).toBeFalsy()
   })
 
@@ -269,12 +269,14 @@ describe('opening a card resets .rd-modal-body scroll — it must never inherit 
 
 describe('the custom MCP server skips the preview', () => {
   it('is pinned above the grid, not a card in it, and goes straight to the add form', () => {
-    const { container, getByText, queryByText } = open()
+    const { container, getByText, getAllByText, queryByText } = open()
     fireEvent.click(getByText('MCP'))
-    // Its own row at the top — buried as one card among thirty, people never found it.
+    // Its own row at the top AND a footer button beside Close — buried as one card among
+    // thirty, people never found it.
     expect(container.querySelector('.cn-customrow')).toBeTruthy()
+    expect(container.querySelector('.rd-modal-foot')?.textContent).toContain('Add custom server')
     expect(container.querySelector('.cn-dirgrid')?.textContent).not.toContain('Custom MCP server')
-    fireEvent.click(getByText('Add custom server'))
+    fireEvent.click(getAllByText('Add custom server')[1])
 
     // Step 1 of the add flow, not a preview page.
     expect(getByText('Connect')).toBeTruthy()
@@ -299,7 +301,7 @@ describe('step 1 → step 2: an unreached server is never saved', () => {
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getByText('Add custom server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0])
     return view
   }
 
@@ -498,7 +500,7 @@ describe('OAuth sign-in — the popup + poll lifecycle', () => {
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getByText('Add custom server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0])
     return view
   }
 
@@ -751,7 +753,7 @@ describe('abandoning the add flow after a completed sign-in deletes the dormant 
   function openAddForm(props: Parameters<typeof open>[0] = {}) {
     const view = open(props)
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getByText('Add custom server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0])
     return view
   }
 
@@ -940,7 +942,7 @@ describe("the review step renders the PROBE's own provenance (spec §5)", () => 
   async function reviewCustomServer() {
     const view = open()
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getByText('Add custom server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0])
     fireEvent.change(view.getByLabelText(labelStartingWith('Server URL')), {
       target: { value: 'https://mcp.x.test' },
     })
@@ -1017,7 +1019,7 @@ describe('paste is not a separate mode', () => {
   it('fills the very same fields typing would, and shares the same Test connect', () => {
     const view = open()
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getByText('Add custom server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0])
 
     fireEvent.click(view.getByText('Paste from a config snippet'))
     fireEvent.change(view.getByLabelText('Config snippet'), {
@@ -1040,7 +1042,7 @@ describe('paste is not a separate mode', () => {
   it('says so plainly when a snippet will not parse, without clearing the box', () => {
     const view = open()
     fireEvent.click(view.getByText('MCP'))
-    fireEvent.click(view.getByText('Add custom server'))
+    fireEvent.click(view.getAllByText('Add custom server')[0])
     fireEvent.click(view.getByText('Paste from a config snippet'))
     fireEvent.change(view.getByLabelText('Config snippet'), { target: { value: '{ oops' } })
 

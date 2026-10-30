@@ -10,6 +10,7 @@
 import { useState, type JSX } from 'react'
 import { BackTitle, Btn, Modal } from './primitives'
 import { DirectoryBrowser } from './DirectoryBrowser'
+import { Icons } from './icons'
 import { DirectoryPreview, PreviewAction } from './DirectoryPreview'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { McpAddFlowBody, McpAddFlowFooter, useMcpAddFlow } from './McpAddFlow'
@@ -144,6 +145,8 @@ export function DirectoryModal({
 
   if (!open) return null
 
+  const customEntry = entries.find((e) => e.generic)
+
   const live = preview
     ? connectors.find((c) => c.id === (preview.installedId ?? preview.id))
     : undefined
@@ -169,7 +172,15 @@ export function DirectoryModal({
   ) : preview ? (
     <Btn onClick={() => setPreview(null)}>Back</Btn>
   ) : (
-    <Btn onClick={close}>Close</Btn>
+    <>
+      {/* Always in reach, whatever the list is scrolled to (owner, 2026-10-31). */}
+      {customEntry ? (
+        <Btn variant="primary" onClick={() => add(customEntry)}>
+          <Icons.plus /> Add custom server
+        </Btn>
+      ) : null}
+      <Btn onClick={close}>Close</Btn>
+    </>
   )
 
   const scrollKey = mcpOpen ? 'mcp' : preview ? `preview:${preview.id}` : 'browse'

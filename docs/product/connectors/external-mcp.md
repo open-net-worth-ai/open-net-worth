@@ -37,8 +37,9 @@ Avalara AvaTax, Twelve Data, SEC EDGAR and FRED.
 
 Each connector shows coloured tags for what it's for, such as **Brokerage**, **Banking** or
 **Web search**. Searching the Connectors page matches those tags too. In **Browse & add**, click a
-category in the row of small tags under **All · Channels · Data sources · Web · MCP**, or click a
-tag on any card, to see only that kind; click it again (or **All**) to clear it. On a phone the
+category in the row of small tags under the **All · Channels · Data sources · Web · MCP** tabs, or click
+a tag on any card, to see only that kind; click it again to clear it. Each tab and tag shows how many
+connectors it holds. On a phone the
 category tags sit behind the filter icon beside search, which lights up while one is picked. A server you've
 already added shows once, with a settings gear instead of **+**. **Suggested**
 lists up to three connectors you haven't added yet — Email, Telegram, Plaid, Interactive Brokers and
@@ -93,8 +94,8 @@ instructions, and enter what they give you in the form (or add it as a custom se
 
 ## Add any other server
 
-1. **Connectors → Browse & add → Add custom server** — the row pinned at the top of the list
-   ("Don't see yours?"). A search that finds nothing offers it too.
+1. **Connectors → Browse & add → Add custom server** — in the row pinned at the top of the list
+   ("Don't see yours?") or beside **Close** at the bottom. A search that finds nothing offers it too.
 2. If the server's README has a JSON config block (the `"mcpServers": { … }` kind), click **Paste
    from a config snippet** and paste it — the fields below fill themselves in. Otherwise:
 3. Pick a **Transport**:

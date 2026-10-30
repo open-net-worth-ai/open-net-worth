@@ -17,7 +17,7 @@
 import type { JSX } from 'react'
 import { DirectoryCard } from './DirectoryCard'
 import { pickSuggestions } from './directoryRows'
-import { Btn, Empty } from './primitives'
+import { Btn, Empty, Tabs } from './primitives'
 import { Icons } from './icons'
 import { ArrowUpDown, ListFilter } from '../../../ui/icons'
 import { CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
@@ -159,21 +159,18 @@ export function DirectoryBrowser({
           </label>
         </div>
         <div className="cn-dirfilters">
-          <div className="cn-chiprow">
-            {DIRECTORY_FAMILY_CHIPS.map(([k, l]) => (
-              <button
-                key={k}
-                className={'cn-chip' + (family === k ? ' on' : '')}
-                aria-pressed={family === k}
-                onClick={() => onFamily(k)}
-              >
-                {l}
-                <span className="cn-chipcount" aria-hidden>
-                  {familyCount(k)}
-                </span>
-              </button>
-            ))}
-          </div>
+          {/* The KIND of connector is a tab, like the Connectors page's own tabs; what it is
+              FOR is a chip below. Two rows of identical pills read as one messy row, with a
+              confusing "All" in each (owner review, 2026-10-31). */}
+          <Tabs
+            tabs={DIRECTORY_FAMILY_CHIPS.map(([k, l]) => ({
+              key: k,
+              label: l,
+              count: familyCount(k),
+            }))}
+            value={family}
+            onChange={onFamily}
+          />
           <select
             className="rd-select cn-sortselect"
             style={{ width: 'auto' }}
@@ -187,20 +184,8 @@ export function DirectoryBrowser({
         </div>
         {categories.length > 1 ? (
           <div className="cn-catrow" role="group" aria-label="Filter by category">
-            <button
-              type="button"
-              className={'cn-cat pick' + (category === 'all' ? ' on' : '')}
-              aria-pressed={category === 'all'}
-              onClick={(e) => {
-                revealChip(e.currentTarget)
-                onCategory('all')
-              }}
-            >
-              All
-              <span className="cn-chipcount" aria-hidden>
-                {categoryCount('all')}
-              </span>
-            </button>
+            {/* No "All" chip of its own: nothing picked IS all, and a picked chip clears
+                when tapped again. The tab above already says "All". */}
             {categories.map((c) => (
               <button
                 key={c}

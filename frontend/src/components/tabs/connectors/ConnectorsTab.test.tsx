@@ -100,8 +100,8 @@ describe('Browse & add is mounted, not a placeholder', () => {
       (l) => l.textContent?.trim() === 'Add a channel',
     )!
     fireEvent.click(link)
-    const chips = await screen.findAllByRole('button', { name: 'Channels' })
-    expect(chips.some((c) => c.getAttribute('aria-pressed') === 'true')).toBe(true)
+    const tabs = await screen.findAllByRole('tab', { name: /^Channels/ })
+    expect(tabs.some((t) => t.getAttribute('aria-selected') === 'true')).toBe(true)
   })
 })
 
