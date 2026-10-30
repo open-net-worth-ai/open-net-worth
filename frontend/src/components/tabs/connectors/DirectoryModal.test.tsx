@@ -1184,3 +1184,33 @@ describe("Lucius's Connect on a sign-in connector", () => {
     expect(mockAuthFetch.mock.calls.map((c) => c[0])).not.toContain('/api/mcp-clients/oauth/begin')
   })
 })
+
+describe('Save without connecting', () => {
+  function openCustomForm(props: Parameters<typeof open>[0] = {}) {
+    const view = open(props)
+    fireEvent.click(view.getAllByText('Add custom server')[0])
+    return view
+  }
+
+  it('stores the server switched off and untested, and says so', async () => {
+    mockAuthFetch.mockResolvedValue({ ok: true, json: async () => ({ id: 'gemini' }) })
+    const toast = vi.fn()
+    const onAdded = vi.fn()
+    const { getByText, getByLabelText } = openCustomForm({ toast, onAdded })
+    fireEvent.click(getByText('Local command (stdio)'))
+    fireEvent.change(getByLabelText(labelStartingWith('Command')), { target: { value: 'node' } })
+    fireEvent.click(getByText('Save'))
+    await waitFor(() => expect(onAdded).toHaveBeenCalled())
+    // One POST, switched off — and no probe: the server is never reached.
+    const calls = mockAuthFetch.mock.calls
+    expect(calls.map((c) => c[0])).toEqual(['/api/mcp-clients'])
+    const body = JSON.parse((calls[0]![1] as { body: string }).body)
+    expect(body).toMatchObject({ transport: 'stdio', command: 'node', enabled: false })
+    expect(toast).toHaveBeenCalledWith(expect.stringMatching(/saved, switched off/))
+  })
+
+  it('offers Save only once there is something to save', () => {
+    const { queryByText } = openCustomForm()
+    expect(queryByText('Save')).toBeNull()
+  })
+})

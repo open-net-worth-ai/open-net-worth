@@ -451,12 +451,19 @@ export async function createMcpServer(input: {
   config: McpWireConfig
   /** Per-tool levels chosen on step 4. Every tool defaults to `needs_approval` (spec §4). */
   tool_permissions: Record<string, string>
+  /** False saves it switched off and untested (the add form's Save); the server is not reached. */
+  enabled?: boolean
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const res = await authFetch('/api/mcp-clients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: input.id, name: input.name, ...input.config, enabled: true }),
+      body: JSON.stringify({
+        id: input.id,
+        name: input.name,
+        ...input.config,
+        enabled: input.enabled ?? true,
+      }),
     })
     if (!res.ok) return { ok: false, error: await errorDetail(res, 'Could not add the server') }
 

@@ -136,6 +136,10 @@ instructions, and enter what they give you in the form (or add it as a custom se
      any **Environment variables**, one `NAME=value` per line (a private key may span several lines).
 4. Click **Connect**, review the tools, and click **Add server** — the same as steps 4–5 above.
 
+Not ready to connect yet (real keys still to come, a build still to finish)? Click **Save** instead
+of **Connect**, on the form or on a failed test. The server is kept, switched off and untested;
+turn it on from its settings when you're ready, and it is tested then.
+
 A local command needs its runtime installed on the machine running Open Net Worth — Node.js for
 `npx`, [uv](https://docs.astral.sh/uv/) for `uvx`.
 

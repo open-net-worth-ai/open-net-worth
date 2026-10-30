@@ -88,8 +88,12 @@ export function DirectoryModal({
 
   const flow = useMcpAddFlow({
     takenIds,
-    onSaved: (name, toolCount) => {
-      toast?.(`${name} added — ${toolCount} tool${toolCount === 1 ? '' : 's'} ready for Lucius`)
+    onSaved: (name, toolCount, opts) => {
+      toast?.(
+        opts?.dormant
+          ? `${name} saved, switched off — turn it on from its settings to test it`
+          : `${name} added — ${toolCount} tool${toolCount === 1 ? '' : 's'} ready for Lucius`,
+      )
       onAdded?.()
       close()
     },
