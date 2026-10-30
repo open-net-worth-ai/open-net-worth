@@ -176,7 +176,9 @@ Open the server under **Connectors**:
 ## Permissions — start cautious
 
 Every tool from an MCP server starts at **Needs approval**: Lucius shows you exactly what he's
-about to call and waits for you. You can change each tool's level under **Tool permissions**, or
+about to call and waits for you. The approval card is titled by the tool's own name, with the
+server beside it and the arguments listed underneath. Open **Raw call** to see the exact request
+the server will receive. You can change each tool's level under **Tool permissions**, or
 by choosing **Always allow** on an approval card. See [Permissions](../lucius/permissions.md).
 
 Tools are listed under **Read-only tools** or **Write & delete tools**. When the server marks a

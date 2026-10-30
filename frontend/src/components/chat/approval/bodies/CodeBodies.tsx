@@ -2,6 +2,7 @@ import type { ProposedChange } from '../../../../types/chat'
 import { humanizeType } from '../cardTypes'
 import {
   ApprovalCode,
+  ApprovalDetails,
   ApprovalFact,
   ApprovalFacts,
   ApprovalLead,
@@ -15,7 +16,8 @@ const languageName = (language: unknown) =>
   typeof language === 'string' && language ? humanizeType(language) : null
 
 /** external_mcp_call — the args about to be sent, so the user sees exactly what will run. The
- * lead (tool + server) is rendered once by CardBody. The money-movement note only says what the
+ * tool and server are the card's title (CardHeader); the raw call is folded below the facts,
+ * byte-for-byte what goes to the server. The money-movement note only says what the
  * call looks like — never that it is gated, since the permission config alone decides that. */
 export function ExternalMcpCallPreview({ change }: { change: ProposedChange }) {
   const d = change.display || {}
@@ -34,6 +36,11 @@ export function ExternalMcpCallPreview({ change }: { change: ProposedChange }) {
           ))}
         </ApprovalFacts>
       )}
+      <ApprovalDetails summary="Raw call">
+        <ApprovalCode>
+          {JSON.stringify({ name: d.name || change.tool, arguments: args }, null, 2)}
+        </ApprovalCode>
+      </ApprovalDetails>
       {d.is_money_movement && (
         <ApprovalNote tone="bad">
           Looks like money movement: a trade, transfer or payment.

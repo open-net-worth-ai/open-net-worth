@@ -1192,6 +1192,12 @@
   .change-preview-header--danger {
     color: var(--bad);
   }
+  /* An external MCP card is titled by the tool's own name, as the server spells it. */
+  .change-preview-tool {
+    font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
   .change-preview-label {
     font-size: var(--ac-caps);
     font-weight: 500;
