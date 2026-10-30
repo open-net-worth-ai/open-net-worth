@@ -194,10 +194,25 @@
 .cn-page .rd-tabs {
   display: flex;
   gap: 2px;
-  border-bottom: 1px solid var(--line);
+  /* The baseline is drawn INSIDE the box (not a border) so the picked tab's bar can sit on it
+     without being clipped by the sideways scroll below. */
+  box-shadow: inset 0 -1px 0 var(--line);
+  /* One line, always: a tab label never wraps ("Data sources" broke in two on a phone) — the
+     row scrolls sideways instead, on every screen that uses it. A scroll box may SHRINK in a
+     column layout (its min-height drops to 0), which squashed the row to half height in the
+     page header — so it never shrinks and never scrolls vertically. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex: none;
+  scrollbar-width: none;
+}
+.cn-page .rd-tabs::-webkit-scrollbar {
+  display: none;
 }
 .cn-page .rd-tab {
   appearance: none;
+  flex: none;
+  white-space: nowrap;
   background: none;
   border: none;
   color: var(--muted);
@@ -225,7 +240,7 @@
   position: absolute;
   left: 10px;
   right: 10px;
-  bottom: -1px;
+  bottom: 0;
   height: 2px;
   border-radius: 2px 2px 0 0;
   background: var(--ink);
@@ -513,6 +528,27 @@
   flex: 0 1 220px;
   min-width: 90px;
 }
+/* A button label with a short twin for a phone: one line, search and button side by side. */
+.cn-page .cn-label-narrow {
+  display: none;
+}
+@media (max-width: 560px) {
+  .cn-page .rd-masthead-toolbar {
+    flex-wrap: nowrap;
+  }
+  .cn-page .rd-masthead-toolbar > .rd-search {
+    flex: 1 1 auto;
+  }
+  .cn-page .rd-masthead-toolbar > .rd-btn {
+    flex: none;
+  }
+  .cn-page .cn-label-wide {
+    display: none;
+  }
+  .cn-page .cn-label-narrow {
+    display: inline;
+  }
+}
 .cn-page .rd-search input {
   height: 30px;
   border-radius: var(--radius-lg);
@@ -730,12 +766,6 @@
   transform: translateY(-50%);
   color: var(--faint);
 }
-.cn-page .cn-chiprow {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-wrap: wrap;
-}
 /* Search, plus (phone only) the Sort icon beside it. */
 .cn-page .cn-dirsearchrow {
   display: flex;
@@ -779,28 +809,6 @@
   gap: 12px;
   flex-wrap: wrap;
 }
-.cn-page .cn-chip {
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-  background: var(--surface2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 6px 13px;
-  cursor: pointer;
-}
-@media (hover: hover) {
-  .cn-page .cn-chip:hover {
-    color: var(--ink);
-    border-color: var(--line-strong);
-  }
-}
-.cn-page .cn-chip.on {
-  color: var(--ink);
-  background: var(--selected);
-  border-color: var(--line-strong);
-}
 /* How many cards a filter chip holds — quieter than its label, brighter once picked. */
 .cn-page .cn-chipcount {
   margin-left: 5px;
@@ -808,7 +816,6 @@
   font-variant-numeric: tabular-nums;
   color: var(--faint, var(--muted));
 }
-.cn-page .cn-chip.on .cn-chipcount,
 .cn-page .cn-cat.on .cn-chipcount {
   color: var(--muted);
 }
@@ -845,23 +852,14 @@
    dashed border marks it as a build-your-own slot rather than a specific item sitting in the
    grid alongside real, named servers (owner review, 2026-08-19). */
 /* Browse & add's family tabs ARE the Connectors page's tabs — same component, same look, no
-   overrides (owner, 2026-10-31: one design system, not a variant per screen). The only thing
-   added here is layout: on a narrow sheet they scroll sideways rather than wrap. */
+   overrides (owner, 2026-10-31: one design system, not a variant per screen). */
 .cn-page .cn-dirfilters > .rd-tabs {
   flex: 1 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: none;
 }
-.cn-page .cn-dirfilters > .rd-tabs::-webkit-scrollbar {
-  display: none;
-}
-.cn-page .cn-dirfilters > .rd-tabs > .rd-tab {
-  flex: none;
-}
-/* On a phone the tabs run past the edge; the fade says there are more this way. */
+/* On a phone a tab row runs past the edge; the fade says there are more this way. */
 @media (max-width: 560px) {
-  .cn-page .cn-dirfilters > .rd-tabs {
+  .cn-page .rd-tabs {
     mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
   }
 }
@@ -1056,27 +1054,12 @@
 .cn-page .cn-catrow > .cn-cat {
   flex: none;
 }
-/* Phone: Sort moves up beside search as an icon (`.cn-sorticon`), and the family chips get the
-   whole line, scrolling sideways like the category row below. Wrapping had put Sort on a line
-   of its own. After the base `.cn-chiprow` / `.cn-sorticon` rules, so it wins. */
+/* Phone: Sort and the category filter become icons beside search (`.cn-sorticon`), so the search
+   row stays one line. After the base `.cn-sorticon` rule, so it wins. */
 @media (max-width: 560px) {
   .cn-page .cn-dirfilters {
     flex-wrap: nowrap;
     gap: 8px;
-  }
-  .cn-page .cn-dirfilters > .cn-chiprow {
-    flex: 1 1 auto;
-    min-width: 0;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
-  }
-  .cn-page .cn-dirfilters > .cn-chiprow::-webkit-scrollbar {
-    display: none;
-  }
-  .cn-page .cn-dirfilters > .cn-chiprow > .cn-chip {
-    flex: none;
   }
   .cn-page .cn-dirsearchrow > .cn-sortselect {
     display: none;

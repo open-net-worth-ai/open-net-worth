@@ -336,8 +336,11 @@ export function ConnectorsTab(): JSX.Element {
                 aria-label="Search connectors"
               />
             </span>
-            <Btn variant="primary" onClick={() => openDirectory('all')}>
-              <Icons.plus /> Browse &amp; add
+            <Btn variant="primary" onClick={() => openDirectory('all')} aria-label="Browse & add">
+              <Icons.plus />
+              {/* A phone keeps search and this button on ONE line, so the label shortens there. */}
+              <span className="cn-label-wide">Browse &amp; add</span>
+              <span className="cn-label-narrow">Add</span>
             </Btn>
           </div>
           <div className="rd-masthead-subrow">
