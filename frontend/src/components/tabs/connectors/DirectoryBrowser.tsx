@@ -19,7 +19,7 @@ import { DirectoryCard } from './DirectoryCard'
 import { pickSuggestions } from './directoryRows'
 import { Btn, Empty, Tabs } from './primitives'
 import { Icons } from './icons'
-import { ArrowUpDown, ListFilter } from '../../../ui/icons'
+import { ArrowUpDown, ListFilter, Share2 } from '../../../ui/icons'
 import { CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
 import {
   DIRECTORY_FAMILY_CHIPS,
@@ -302,8 +302,9 @@ export function DirectoryBrowser({
 function CustomServerRow({ onAdd }: { onAdd: () => void }): JSX.Element {
   return (
     <div className="cn-customrow">
+      {/* The Connectors screen's own nav icon — this row IS "add a connector". */}
       <span className="cn-customrow-ic" aria-hidden>
-        <Icons.cpu />
+        <Share2 size={16} />
       </span>
       <div className="cn-customrow-text">
         <div className="cn-customrow-title">Don’t see yours? Add a custom MCP server</div>
