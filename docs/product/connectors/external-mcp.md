@@ -116,6 +116,13 @@ connection test succeeds.
 QuickBooks Online has no ready-made settings — follow the links on its card for the vendor's own
 instructions, and enter what they give you in the form (or add it as a custom server, below).
 
+
+Click a server to see what it does before adding it, including the **Tools** it offers. Before you
+add it, that's the full list read from the publisher's own code or documentation, marked **as of**
+the version or date it was read. Where a publisher lists only some of its tools, the row says
+**Example tools**. Once it's connected, the list is the one the server actually gave this app,
+marked **from your connection**. A long list shows its first nine tools; **Show all** opens the rest.
+
 ## Add any other server
 
 1. **Connectors → Browse & add → Add custom server** — in the row pinned at the top of the list

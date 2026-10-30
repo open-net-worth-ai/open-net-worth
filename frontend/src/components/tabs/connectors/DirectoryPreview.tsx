@@ -33,6 +33,7 @@ import { Icons } from './icons'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, PublisherLine } from './VendorTrust'
 import { MODAL_BODY_MIN_HEIGHT } from './DirectoryBrowser'
 import { previewEndpoint, type DirectoryRow } from './catalog'
+import { resolveToolList } from './toolList'
 
 export interface DirectoryPreviewProps {
   d: DirectoryRow
@@ -45,6 +46,8 @@ export interface DirectoryPreviewProps {
   /** On a phone the modal pins the action in its footer (`PreviewAction`) instead, so the
    *  header drops it rather than show it twice. */
   actionInFooter?: boolean
+  /** The tools the CONNECTED server actually advertised — beats any recorded list. */
+  liveTools?: string[]
 }
 
 /** The one action the preview exists to drive. `lg`, not `xs`: at the dense in-row size it
@@ -85,20 +88,48 @@ interface Chip {
 
 const plainChip = (value: string): Chip => ({ key: value, label: value })
 
-/** A labelled chip row. Three of these, identical but for their contents. */
-function ChipRow({ label, items }: { label: string; items: Chip[] }): JSX.Element | null {
+/** A tool list longer than this folds behind "Show all N" — 37 Coinbase or ~400 Bybit chips
+ *  would push the description's Details footer off the page (owner, 2026-10-31). */
+const CHIP_FOLD = 9
+
+/** A labelled chip row. `note` is a muted aside after the count (where a tool list came from). */
+function ChipRow({
+  label,
+  items,
+  note,
+  fold = false,
+}: {
+  label: string
+  items: Chip[]
+  note?: string
+  fold?: boolean
+}): JSX.Element | null {
+  const [expanded, setExpanded] = useState(false)
   if (!items.length) return null
+  const folded = fold && !expanded && items.length > CHIP_FOLD
+  const shown = folded ? items.slice(0, CHIP_FOLD) : items
   return (
     <div>
       <div className="cn-sublabel" style={{ marginBottom: 8 }}>
         {label} <Badge>{items.length}</Badge>
+        {note ? <span className="cn-chipnote">{note}</span> : null}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-        {items.map((c) => (
+        {shown.map((c) => (
           <span key={c.key} className="cn-tagchip">
             {c.label}
           </span>
         ))}
+        {fold && items.length > CHIP_FOLD ? (
+          <button
+            type="button"
+            className="cn-tagchip cn-chipmore"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((v) => !v)}
+          >
+            {expanded ? 'Show less' : `Show all ${items.length}`}
+          </button>
+        ) : null}
       </div>
     </div>
   )
@@ -246,7 +277,9 @@ export function DirectoryPreview({
   onAdd,
   onConfigure,
   actionInFooter = false,
+  liveTools,
 }: DirectoryPreviewProps): JSX.Element {
+  const toolList = resolveToolList(d, liveTools)
   return (
     <div
       style={{
@@ -273,7 +306,12 @@ export function DirectoryPreview({
         mcp={d.mcp}
       />
 
-      <ChipRow label="Tools" items={d.tools.map(plainChip)} />
+      <ChipRow
+        label={toolList.label}
+        items={toolList.names.map(plainChip)}
+        note={toolList.note}
+        fold
+      />
       <ChipRow label="Prompt suggestions" items={(prompts ?? []).map(plainChip)} />
       {/* The connector's TOPICS, never its family. The family is the lane the reader is
           already browsing — printing it back as the sole "category" (Stripe → `MCP`) said

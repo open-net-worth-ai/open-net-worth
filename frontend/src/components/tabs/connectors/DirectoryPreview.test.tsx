@@ -57,11 +57,15 @@ function nativeRow(overrides: Partial<DirectoryRow> = {}): Partial<DirectoryRow>
   }
 }
 
-function preview(overrides: Partial<DirectoryRow> = {}, props: { prompts?: string[] } = {}) {
+function preview(
+  overrides: Partial<DirectoryRow> = {},
+  props: { prompts?: string[]; liveTools?: string[] } = {},
+) {
   return render(
     <DirectoryPreview
       d={row(overrides)}
       prompts={props.prompts}
+      liveTools={props.liveTools}
       onAdd={() => {}}
       onConfigure={() => {}}
     />,
@@ -282,14 +286,14 @@ describe('Details — the endpoint kept its place, in a footer rather than a pan
 describe('the chip rows survive the simplification', () => {
   it('counts tools, prompts and categories', () => {
     preview({}, { prompts: ['Scrape this page', 'Crawl the docs'] })
-    expect(screen.getByText('Tools').textContent).toContain('2')
+    expect(screen.getByText('Example tools').textContent).toContain('2')
     expect(screen.getByText('Prompt suggestions').textContent).toContain('2')
     expect(screen.getByText('Categories').textContent).toContain('1')
   })
 
   it('drops a row rather than rendering an empty one', () => {
     preview({ tools: [], categories: [] })
-    expect(screen.queryByText('Tools')).toBeNull()
+    expect(screen.queryByText('Example tools')).toBeNull()
     expect(screen.queryByText('Prompt suggestions')).toBeNull()
     expect(screen.queryByText('Categories')).toBeNull()
   })
@@ -403,5 +407,53 @@ describe('the header — a large tile, the title centred against it, one heavy a
     expect(container.querySelector('.cn-tile-logo')).toBeNull()
     expect(container.querySelector('.cn-tile svg')).toBeTruthy()
     expect(container.querySelector('.cn-tile')?.className).not.toContain('plate')
+  })
+})
+
+describe('which tool list the preview shows', () => {
+  // Scoped to the tools row: the Categories row carries chips of its own.
+  const toolChips = (c: HTMLElement) =>
+    [
+      ...[...c.querySelectorAll('.cn-sublabel')]
+        .find((n) => /tools/i.test(n.textContent ?? ''))!
+        .parentElement!.querySelectorAll('.cn-tagchip:not(.cn-chipmore)'),
+    ].map((n) => n.textContent)
+  const many = Array.from({ length: 37 }, (_, i) => `tool_${i + 1}`)
+
+  it('labels a third-party sample "Example tools", so 3 never reads as the whole set', () => {
+    preview()
+    expect(screen.getByText('Example tools')).toBeTruthy()
+    expect(screen.queryByText('Tools')).toBeNull()
+  })
+
+  it("calls a native connector's list plain Tools — we wrote it, it is the whole set", () => {
+    preview(nativeRow())
+    expect(screen.getByText('Tools')).toBeTruthy()
+  })
+
+  it('shows what the CONNECTED server advertised, with its real count', () => {
+    const { container } = preview({ installed: true }, { liveTools: ['a', 'b', 'c', 'd'] })
+    expect(screen.getByText('Tools').textContent).toContain('4')
+    expect(screen.getByText('from your connection')).toBeTruthy()
+    expect(toolChips(container)).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('ignores a live list for an entry that is not installed', () => {
+    preview({}, { liveTools: ['a', 'b'] })
+    expect(screen.getByText('Example tools').textContent).toContain('2')
+  })
+
+  it('folds a long list to nine behind "Show all N", and opens it in place', () => {
+    const { container } = preview({ installed: true }, { liveTools: many })
+    expect(toolChips(container)).toHaveLength(9)
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 37' }))
+    expect(toolChips(container)).toHaveLength(37)
+    fireEvent.click(screen.getByRole('button', { name: 'Show less' }))
+    expect(toolChips(container)).toHaveLength(9)
+  })
+
+  it('never folds a short list', () => {
+    preview({ installed: true }, { liveTools: many.slice(0, 9) })
+    expect(screen.queryByRole('button', { name: /Show all/ })).toBeNull()
   })
 })

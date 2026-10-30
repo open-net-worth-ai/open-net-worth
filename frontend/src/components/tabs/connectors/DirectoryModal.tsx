@@ -229,6 +229,7 @@ export function DirectoryModal({
           statusText={liveEntry?.statusText}
           statusTone={liveEntry?.tone}
           prompts={liveEntry?.prompts}
+          liveTools={live?.tools?.map((t) => t.name)}
           onAdd={add}
           onConfigure={configure}
           actionInFooter={isMobile}

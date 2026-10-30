@@ -1249,6 +1249,25 @@
   border-radius: 999px;
   padding: 4px 11px;
 }
+/* "Show all N" closes a folded tool row: a chip's shape, the accent's colour, so it reads as
+   the row's last item and as something to press. */
+.cn-page .cn-chipmore {
+  cursor: pointer;
+  color: var(--accent);
+  background: transparent;
+  border-style: dashed;
+}
+.cn-page .cn-chipmore:hover {
+  border-style: solid;
+}
+/* Where a tool list came from ("as of v0.0.11"), after the row's count — not shouted. */
+.cn-page .cn-chipnote {
+  margin-left: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--fg-3);
+}
 .cn-page .cn-permlist {
   display: flex;
   flex-direction: column;
