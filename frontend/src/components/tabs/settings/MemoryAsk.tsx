@@ -6,6 +6,7 @@
 // which facts moved (owner report, 2026-10-28).
 import { useLayoutEffect, useRef, useState } from 'react'
 import { ArrowUp } from '../../../ui/icons'
+import { TurnActivity } from '../../chat/TurnActivity'
 import type { InstructChange, InstructOutcome } from '../../../hooks/useMemoryFacts'
 
 const KIND: Record<InstructChange['change'], string> = {
@@ -35,7 +36,7 @@ function ChangeList({ changes }: { changes: InstructChange[] }) {
           <div className={c.change === 'removed' ? 'rd-mem-change-t is-gone' : 'rd-mem-change-t'}>
             {c.text}
           </div>
-          {c.was && <div className="rd-mem-change-was">Was: {c.was}</div>}
+          {c.was && <div className="rd-mem-change-was">Before: {c.was}</div>}
         </li>
       ))}
     </ul>
@@ -114,7 +115,9 @@ export function MemoryAskBox({
 
   return (
     <div className="rd-mem-dock">
-      {outcome && <MemoryOutcome key={outcome.n} outcome={outcome.out} />}
+      {/* The chat's own working line while Lucius thinks: a spinner on the send button alone
+          did not say anything was happening (owner, 2026-10-31). */}
+      {busy ? <TurnActivity /> : outcome && <MemoryOutcome key={outcome.n} outcome={outcome.out} />}
       <form
         className="rd-mem-ask"
         onSubmit={(e) => {

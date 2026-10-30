@@ -185,8 +185,7 @@ describe('MemoryBrowser', () => {
       target: { value: 'my card number is on file' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
-    const line = await screen.findByRole('status')
-    expect(within(line).getByText('No changes were made.')).toBeTruthy()
+    const line = (await screen.findByText('No changes were made.')).closest('[role="status"]')!
     expect(within(line).queryByText(/Card numbers/)).toBeNull()
     fireEvent.click(within(line).getByRole('button', { name: 'See why' }))
     expect(
@@ -194,6 +193,30 @@ describe('MemoryBrowser', () => {
     ).toBeTruthy()
     expect(within(line).getByText(/never remembered/)).toBeTruthy()
     expect(toast).not.toHaveBeenCalled()
+  })
+
+  it("shows the chat's working line while Lucius works, then the outcome in its place", async () => {
+    let finish: () => void = () => {}
+    authFetch.mockImplementation((url: string) =>
+      url === '/api/memory/instruct'
+        ? new Promise((resolve) => {
+            finish = () =>
+              resolve(
+                json({ added: 0, updated: 0, removed: 0, rejected: [], changes: [], reply: '' }),
+              )
+          })
+        : json({ facts: sampleFacts(), total: 11 }),
+    )
+    await renderBrowser()
+    fireEvent.change(screen.getByLabelText('Tell Lucius what to remember or change'), {
+      target: { value: 'forget the old rent' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
+    const working = await screen.findByText(/…$/, { selector: '.lx-activity-word' })
+    expect(working.closest('.lx-activity')).toBeTruthy()
+    finish()
+    expect(await screen.findByText('No changes were made.')).toBeTruthy()
+    expect(document.querySelector('.lx-activity')).toBeNull()
   })
 
   it('sends on Enter, and Shift+Enter starts a new line', async () => {

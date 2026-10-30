@@ -145,11 +145,10 @@ describe('MemorySheet', () => {
         }),
       ),
     )
-    const line = await screen.findByRole('status')
-    expect(within(line).getByText('Added 1 · Updated 1')).toBeTruthy()
+    const line = (await screen.findByText('Added 1 · Updated 1')).closest('[role="status"]')!
     expect(within(line).getByText('Has a dog named Beans')).toBeTruthy()
     expect(within(line).getByText('Money · Housing')).toBeTruthy()
-    expect(within(line).getByText('Was: Rent goes up every March')).toBeTruthy()
+    expect(within(line).getByText('Before: Rent goes up every March')).toBeTruthy()
     expect((box as HTMLInputElement).value).toBe('')
     // the cursor comes back to the box, so focus never falls to the dialog itself
     await waitFor(() => expect(document.activeElement).toBe(box))

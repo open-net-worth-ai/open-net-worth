@@ -1728,11 +1728,16 @@
   justify-content: flex-end;
   gap: 6px;
 }
-/* The outcome of the last "Tell Lucius" message, a line above the box: what happened on the
-   left, See why / Hide on the right, Lucius's reason and the changes under it when open */
+/* The outcome of the last "Tell Lucius" message, a card above the box: what happened on the
+   left, See why / Hide on the right, Lucius's reason and the changes under it when open. A card
+   in full-strength text, not muted lines: as plain grey text it ran into the topic above it and
+   could hardly be read (owner, 2026-10-31). */
 .onw-settings .rd-mem-outcome {
   margin-bottom: var(--space-3);
-  padding-inline: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--ink) 4%, var(--modal-bg));
   font-size: var(--text-base);
 }
 .onw-settings .rd-mem-outcome-head {
@@ -1740,29 +1745,37 @@
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
-  color: var(--muted);
+  color: var(--ink);
+  font-weight: 600;
 }
 .onw-settings .rd-mem-outcome-toggle {
   flex: none;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--muted);
+  color: var(--ink);
   font: inherit;
+  font-weight: 500;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 .onw-settings .rd-mem-outcome-toggle:hover {
-  color: var(--ink);
+  text-decoration-color: currentColor;
 }
 .onw-settings .rd-mem-outcome-body {
-  margin-top: var(--space-2);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
   max-height: 40vh;
   overflow-y: auto;
 }
 .onw-settings .rd-mem-outcome-reply,
 .onw-settings .rd-mem-outcome-refused {
-  margin: 0 0 var(--space-2);
+  margin: 0;
   color: var(--ink);
+  line-height: 1.5;
   overflow-wrap: anywhere;
 }
 .onw-settings .rd-mem-outcome-refused {
@@ -1770,27 +1783,50 @@
 }
 .onw-settings .rd-mem-changes-list {
   list-style: none;
-  margin: var(--space-2) 0 0;
+  margin: var(--space-3) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
 }
+.onw-settings .rd-mem-outcome-body > .rd-mem-changes-list:first-child {
+  margin-top: 0;
+}
+/* each change on an edge in its kind's colour, so added / updated / forgotten read at a glance */
+.onw-settings .rd-mem-changes-list > li {
+  --kind: var(--lucius);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--kind);
+  line-height: 1.5;
+}
+.onw-settings .rd-mem-changes-list > li:has(.is-added) {
+  --kind: var(--good);
+}
+.onw-settings .rd-mem-changes-list > li:has(.is-removed) {
+  --kind: var(--bad);
+}
 .onw-settings .rd-mem-change-meta {
   display: flex;
+  align-items: center;
   gap: var(--space-2);
   font-size: var(--text-sm);
   color: var(--muted);
 }
 .onw-settings .rd-mem-change-kind {
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--kind) 18%, transparent);
+  color: var(--kind);
   font-weight: 600;
-  color: var(--ink);
+}
+.onw-settings .rd-mem-change-kind.is-removed {
+  color: var(--bad-light);
 }
 .onw-settings .rd-mem-change-where {
   overflow-wrap: anywhere;
-}
-.onw-settings .rd-mem-change-kind.is-removed {
-  color: var(--bad);
 }
 .onw-settings .rd-mem-change-t {
   color: var(--ink);
@@ -1801,9 +1837,13 @@
   text-decoration: line-through;
 }
 .onw-settings .rd-mem-change-was {
-  color: var(--faint);
+  color: var(--muted);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
+}
+/* While Lucius works: the chat's own working line (TurnActivity), in the outcome's slot */
+.onw-settings .rd-mem-dock .lx-activity {
+  padding: 0 var(--space-2) var(--space-3);
 }
 /* Claude-style composer: a box that grows with the text, the round send pinned bottom-right */
 .onw-settings .rd-mem-ask {
