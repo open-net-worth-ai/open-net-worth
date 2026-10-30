@@ -270,6 +270,44 @@
     border-radius: 8px;
     line-height: 1.55;
   }
+  /* The Copy button sits in the block's corner: on hover (or keyboard focus) with a mouse,
+     always on a touch screen, which can't hover. */
+  .msg-code {
+    position: relative;
+  }
+  .msg-code-copy {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--muted);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .msg-code:hover .msg-code-copy,
+  .msg-code-copy:focus-visible,
+  .msg-code-copy.copied {
+    opacity: 1;
+  }
+  .msg-code-copy.copied {
+    color: var(--good);
+  }
+  @media (hover: none) {
+    .msg-code-copy {
+      opacity: 1;
+    }
+  }
   .msg-assistant .msg-text pre code {
     display: block;
     background: none;
