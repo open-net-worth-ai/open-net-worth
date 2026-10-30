@@ -259,6 +259,27 @@
     font-family: monospace;
   }
 
+  /* A fenced block is ONE box. Without its own rule the inline-code style above landed on the
+     <code> inside it and, being inline, painted a pill per line — four commands read as four
+     separate snippets (owner, 2026-10-31). The block gets the box; the code inside resets. */
+  .msg-assistant .msg-text pre {
+    margin: 8px 0;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    line-height: 1.55;
+  }
+  .msg-assistant .msg-text pre code {
+    display: block;
+    background: none;
+    border: 0;
+    padding: 0;
+    border-radius: 0;
+    font-size: 12.5px;
+    white-space: pre;
+  }
+
   /* Links in Lucius's own prose (e.g. "Sources: Reuters, Bloomberg, ..."). Browsers'
    default blue/visited-purple has no relation to this palette and reads as broken
    on the dark surface — style with the Lucius identity color instead (this text IS
