@@ -13292,10 +13292,12 @@ body.hide-amounts .money * {
   .lots-table--accts th:nth-child(3),
   .lots-table--accts th:nth-child(4),
   .lots-table--accts th:nth-child(5),
+  .lots-table--accts th:nth-child(6),
   .lots-table--accts td:nth-child(2),
   .lots-table--accts td:nth-child(3),
   .lots-table--accts td:nth-child(4),
-  .lots-table--accts td:nth-child(5) {
+  .lots-table--accts td:nth-child(5),
+  .lots-table--accts td:nth-child(6) {
     text-align: right;
   }
 

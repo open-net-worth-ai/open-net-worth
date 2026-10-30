@@ -3,7 +3,16 @@ import { Panel } from '../ui'
 import { authFetch } from '../../api/client'
 import { LotsPanel } from '../shared/LotsPanel'
 import type { WriteTarget } from '../shared/LotsPanel'
-import { fBase, fDate, fPct, plClass, getCurrencySymbol, priceDigits } from '../../utils/format'
+import {
+  fAmountNative,
+  fBase,
+  fDate,
+  fPct,
+  fPrice,
+  plClass,
+  getCurrencySymbol,
+  priceDigits,
+} from '../../utils/format'
 import type { AssetPosition } from '../../types/assetDetail'
 import type { RealizedPnl, IncomeSummary } from '../../types/portfolio'
 
@@ -98,6 +107,14 @@ export function PositionSubtab({
       }
 
   const sym = getCurrencySymbol(position.cost_currency)
+  // A sub-unit cost takes fPrice's adaptive precision — SHIB at 0.0000241 read "$0.00".
+  const avgCost = (n: number) =>
+    n > 0 && n < 1
+      ? fPrice(n, priceDigits(assetClass))
+      : n.toLocaleString(undefined, {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: priceDigits(assetClass) ?? 4,
+        })
   const hasPL = position.unrealized_pl_base != null && position.unrealized_pl_pct != null
   // cost basis in the base currency = market value − unrealized P&L (the inverse of the
   // backend's pl = market − cost); null when cost is unknown.
@@ -119,11 +136,7 @@ export function PositionSubtab({
           />
           <Cell
             label="Avg cost"
-            value={
-              position.cost_basis != null
-                ? `${sym}${position.cost_basis.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: priceDigits(assetClass) ?? 4 })}`
-                : '—'
-            }
+            value={position.cost_basis != null ? `${sym}${avgCost(position.cost_basis)}` : '—'}
             sub={costBaseTotal != null ? `basis ${fBase(costBaseTotal)}` : 'basis unknown'}
           />
           <Cell
@@ -169,6 +182,7 @@ export function PositionSubtab({
                   <th>Account</th>
                   <th>Quantity</th>
                   <th>Market value</th>
+                  <th>Avg cost</th>
                   <th>Cost basis</th>
                   <th>Unrealized P&amp;L</th>
                 </tr>
@@ -181,7 +195,12 @@ export function PositionSubtab({
                     <td>{fBase(a.market_value_base)}</td>
                     <td>
                       {a.cost_basis != null
-                        ? `${getCurrencySymbol(a.cost_currency)}${a.cost_basis.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: priceDigits(assetClass) ?? 4 })}`
+                        ? `${getCurrencySymbol(a.cost_currency)}${avgCost(a.cost_basis)}`
+                        : '—'}
+                    </td>
+                    <td>
+                      {a.cost_basis != null
+                        ? `${getCurrencySymbol(a.cost_currency)}${fAmountNative(a.quantity * a.cost_basis, a.cost_currency)}`
                         : '—'}
                     </td>
                     <td
