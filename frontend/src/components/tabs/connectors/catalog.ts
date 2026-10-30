@@ -1182,7 +1182,9 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
     transport: 'local',
     command: 'npx',
     args: '-y @coinbase/coinbase-cli mcp',
-    env: 'COINBASE_KEY_ID=\nCOINBASE_KEY_SECRET=',
+    // COINBASE_ENV names the built-in `live` environment. Without it every call fails with
+    // "no environment configured" — the keys alone are not enough (verified 2026-10-31).
+    env: 'COINBASE_ENV=live\nCOINBASE_KEY_ID=\nCOINBASE_KEY_SECRET=',
   },
   // Needs the Kraken CLI installed (its own installer or release binary — no npm/PyPI
   // package). No live-order or funding services by default: market, read-only account, paper.

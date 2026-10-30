@@ -74,7 +74,8 @@ search or filter; click one to read about it and add it. **Sort** orders the ful
      [portal.cdp.coinbase.com](https://portal.cdp.coinbase.com/api-keys/secret) with
      **Signature algorithm: ECDSA** (Advanced Trade refuses the default Ed25519 key): its key name
      (`organizations/…/apiKeys/…`) goes in `COINBASE_KEY_ID` and its private key in
-     `COINBASE_KEY_SECRET`. Alpaca MCP and Public.com need [uv](https://docs.astral.sh/uv/);
+     `COINBASE_KEY_SECRET`; keep the pre-filled `COINBASE_ENV=live` line, without which every
+     Coinbase tool fails with "no environment configured". Alpaca MCP and Public.com need [uv](https://docs.astral.sh/uv/);
      Bybit needs Node.js 20.6 or later; Kraken
      needs the [Kraken CLI](https://github.com/krakenfx/kraken-cli) installed first (macOS or
      Linux).
