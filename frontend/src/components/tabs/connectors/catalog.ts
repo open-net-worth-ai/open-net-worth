@@ -704,7 +704,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--ibkr)',
     sub: 'Trades stocks, options & futures; live positions and P&L',
-    desc: 'Connect Interactive Brokers’ own hosted server to let Lucius work with your IBKR account directly. It exposes account balances, positions, trades, orders and performance; quotes, price history, option chains and contract search; screeners, watchlists, price alerts and IBKR’s company research. It can also act: it previews, submits, modifies and cancels orders, and edits watchlists, alerts and saved screeners — every one of those tools asks for your approval before it runs, unless you change that. Useful for reconciling IBKR positions against what is recorded here, checking an allocation or a day’s move, researching a holding, or drafting an order you review before it goes. Sign-in happens on IBKR’s own login screen over OAuth, for one account at a time; you can revoke it in Client Portal under Settings › Manage Third-Party Consents.',
+    desc: 'Connect Interactive Brokers’ own hosted server to let Lucius work with your IBKR account directly. It exposes account balances, positions, trades, orders and performance; quotes, price history, option chains and contract search; screeners, watchlists, price alerts and IBKR’s company research. It can also act: it previews, submits, modifies and cancels orders, and edits watchlists, alerts and saved screeners. Useful for reconciling IBKR positions against what is recorded here, checking an allocation or a day’s move, researching a holding, or drafting an order you review before it goes. Sign-in happens on IBKR’s own login screen over OAuth, for one account at a time; you can revoke it in Client Portal under Settings › Manage Third-Party Consents.',
     publisher: 'Interactive Brokers',
     verification: 'verified',
     // IBKR's own pages publish this exact endpoint for "any MCP client": the AI-integrations
@@ -732,7 +732,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades US stocks in an agent account; reads every account',
-    desc: 'Connect Robinhood’s own hosted Trading server to let Lucius see your Robinhood investing. It can read every Robinhood account you hold — account numbers, positions, balances and order history included — but it can only place trades inside a separate Agentic account that Robinhood opens when you connect, using only the money you move into it. Robinhood describes it as a beta that trades US equities for now. Robinhood sends a push notification for each trade, and every trading tool here asks for your approval before it runs unless you change that. Useful for reconciling Robinhood positions against what is recorded here, reviewing allocation and order history, or trying an idea with a small, ring-fenced balance. Sign-in happens on Robinhood’s own screen over OAuth.',
+    desc: 'Connect Robinhood’s own hosted Trading server to let Lucius see your Robinhood investing. It can read every Robinhood account you hold — account numbers, positions, balances and order history included — but it can only place trades inside a separate Agentic account that Robinhood opens when you connect, using only the money you move into it. Robinhood describes it as a beta that trades US equities for now. Robinhood sends a push notification for each trade. Useful for reconciling Robinhood positions against what is recorded here, reviewing allocation and order history, or trying an idea with a small, ring-fenced balance. Sign-in happens on Robinhood’s own screen over OAuth.',
     publisher: 'Robinhood',
     verification: 'verified',
     // Robinhood's Help Center publishes this endpoint ("Onboarding an external agent"), and its
@@ -752,7 +752,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades and researches: quotes, options, live positions',
-    desc: 'Connect moomoo’s own hosted server to let Lucius work with your moomoo account through moomoo OpenAPI. moomoo describes it as real-time quotes, derivatives screening, fundamentals and technicals, portfolio management and trade execution — so it can act on your account, and every trading tool here asks for your approval before it runs unless you change that. Unlike moomoo’s older API route it needs no OpenD gateway running on this machine. Useful for checking moomoo positions against what is recorded here, researching a holding, or screening options. Sign-in happens on moomoo’s own consent page over OAuth.',
+    desc: 'Connect moomoo’s own hosted server to let Lucius work with your moomoo account through moomoo OpenAPI. moomoo describes it as real-time quotes, derivatives screening, fundamentals and technicals, portfolio management and trade execution, so it can act on your account. Unlike moomoo’s older API route it needs no OpenD gateway running on this machine. Useful for checking moomoo positions against what is recorded here, researching a holding, or screening options. Sign-in happens on moomoo’s own consent page over OAuth.',
     publisher: 'moomoo',
     verification: 'verified',
     // moomoo's OpenAPI docs (open.moomoo.com/mcp-docs) publish this endpoint and its OAuth flow.
@@ -771,7 +771,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades stocks, options & crypto; paper trading by default',
-    desc: 'Connect Alpaca’s own MCP server, run on this machine, to let Lucius trade at Alpaca — unlike the read-only Alpaca data source, which only imports positions. It reads your account, positions, orders and market data, and places, changes and cancels stock, option and crypto orders. It starts on paper trading: add ALPACA_PAPER_TRADE=false to the environment variables for real money. Every trading tool here asks for your approval before it runs unless you change that. Needs uv on this machine, and an Alpaca API key pair pasted into the environment variables.',
+    desc: 'Connect Alpaca’s own MCP server, run on this machine, to let Lucius trade at Alpaca — unlike the read-only Alpaca data source, which only imports positions. It reads your account, positions, orders and market data, and places, changes and cancels stock, option and crypto orders. It starts on paper trading: add ALPACA_PAPER_TRADE=false to the environment variables for real money. Needs uv on this machine, and an Alpaca API key pair pasted into the environment variables.',
     publisher: 'Alpaca',
     verification: 'verified',
     // alpacahq/alpaca-mcp-server is Alpaca's own org; the PyPI package links back to it.
@@ -790,7 +790,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades crypto on Coinbase; balances, orders, fills, fees',
-    desc: 'Connect Coinbase’s own MCP server — part of the Coinbase CLI, run on this machine — to let Lucius trade on Coinbase Advanced Trade. It reads balances, portfolios, orders, fills, fees and market data; previews, places, edits and cancels orders; converts between assets; and moves funds between your own portfolios (never out to an external address). Every write tool here asks for your approval before it runs unless you change that. Coinbase’s hosted server only admits apps it has approved; this local one needs none. Needs Node.js 22 or later, and a Coinbase developer API key whose permissions you choose when you create it — pick ECDSA as its signature algorithm, since Advanced Trade refuses Ed25519 keys.',
+    desc: 'Connect Coinbase’s own MCP server — part of the Coinbase CLI, run on this machine — to let Lucius trade on Coinbase Advanced Trade. It reads balances, portfolios, orders, fills, fees and market data; previews, places, edits and cancels orders; converts between assets; and moves funds between your own portfolios (never out to an external address). Needs Node.js 22 or later, and a Coinbase developer API key whose permissions you choose when you create it — pick ECDSA as its signature algorithm, since Advanced Trade refuses Ed25519 keys.',
     publisher: 'Coinbase',
     verification: 'verified',
     // @coinbase/coinbase-cli is published by Coinbase's own npm accounts. Help-centre and
@@ -808,7 +808,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades spot, perpetuals & options on OKX; demo by default',
-    desc: 'Connect OKX’s own Agent Trade Kit server, run on this machine, to let Lucius trade on OKX. It reads balances, positions, orders, fills and bills, and places, amends and cancels spot, perpetual-swap and option orders, including algo orders and grid bots. It starts in OKX’s demo (simulated) trading: remove --demo from the arguments for real money, or add --read-only to allow no orders at all. Every trading tool here asks for your approval before it runs unless you change that. Needs Node.js 18 or later, and an OKX API key, secret and passphrase.',
+    desc: 'Connect OKX’s own Agent Trade Kit server, run on this machine, to let Lucius trade on OKX. It reads balances, positions, orders, fills and bills, and places, amends and cancels spot, perpetual-swap and option orders, including algo orders and grid bots. It starts in OKX’s demo (simulated) trading: remove --demo from the arguments for real money, or add --read-only to allow no orders at all. Needs Node.js 18 or later, and an OKX API key, secret and passphrase.',
     publisher: 'OKX',
     verification: 'verified',
     // okx/agent-trade-kit is OKX's own org; the @okx_ai npm package is maintained from OKG.
@@ -827,7 +827,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Crypto market data, balances, paper trading; live opt-in',
-    desc: 'Connect Kraken’s own MCP server — part of the Kraken CLI, run on this machine — to let Lucius work with your Kraken account. As set up here it reads market data, your balances, orders, trades and ledgers, and paper-trades with no real money. Live spot orders are opt-in: add trade to the -s list in the arguments (futures for futures); keep funding out unless you want deposits and withdrawals offered. Every trading tool here asks for your approval before it runs unless you change that. Install the Kraken CLI first (macOS or Linux), and paste a Kraken API key and secret — create the key with only the permissions you want allowed.',
+    desc: 'Connect Kraken’s own MCP server — part of the Kraken CLI, run on this machine — to let Lucius work with your Kraken account. As set up here it reads market data, your balances, orders, trades and ledgers, and paper-trades with no real money. Live spot orders are opt-in: add trade to the -s list in the arguments (futures for futures); keep funding out unless you want deposits and withdrawals offered. Install the Kraken CLI first (macOS or Linux), and paste a Kraken API key and secret — create the key with only the permissions you want allowed.',
     publisher: 'Kraken',
     verification: 'verified',
     // krakenfx/kraken-cli is Kraken's own org; v0.5.1 moved the server to its own `kraken-mcp`
@@ -848,7 +848,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Accounts, positions, quotes; orders you confirm in Webull',
-    desc: 'Connect Webull’s own hosted server (Webull Cloud MCP) to let Lucius work with your Webull account. It reads your accounts, balances, positions, orders and market data, and can stage stock, option, futures and crypto orders — which Webull holds as instructions until you confirm each one in the Webull app, on top of the approval this app asks for first. You choose which accounts and which capability groups to grant on Webull’s own consent page, signed in over OAuth with your Webull trading password. Market data needs a Webull subscription.',
+    desc: 'Connect Webull’s own hosted server (Webull Cloud MCP) to let Lucius work with your Webull account. It reads your accounts, balances, positions, orders and market data, and can stage stock, option, futures and crypto orders — which Webull holds as instructions until you confirm each one in the Webull app. You choose which accounts and which capability groups to grant on Webull’s own consent page, signed in over OAuth with your Webull trading password. Market data needs a Webull subscription.',
     publisher: 'Webull',
     verification: 'verified',
     // developer.webull.com documents this endpoint (AI-friendly Resources → MCP); its 401
@@ -869,7 +869,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades US & HK stocks and options; quotes, positions, alerts',
-    desc: 'Connect Longbridge’s own hosted server to let Lucius work with your Longbridge account (Singapore, Hong Kong or US). It reads quotes, options, fundamentals, your account and portfolio, and places, changes and cancels orders, plus price alerts and recurring investment plans — so it can act on your account with real money, and every trading tool here asks for your approval before it runs unless you change that. Sign-in happens on Longbridge’s own consent page over OAuth. Customers in mainland China use https://mcp.longbridge.cn instead.',
+    desc: 'Connect Longbridge’s own hosted server to let Lucius work with your Longbridge account (Singapore, Hong Kong or US). It reads quotes, options, fundamentals, your account and portfolio, and places, changes and cancels orders, plus price alerts and recurring investment plans, so it can act on your account with real money. Sign-in happens on Longbridge’s own consent page over OAuth. Customers in mainland China use https://mcp.longbridge.cn instead.',
     publisher: 'Longbridge',
     verification: 'verified',
     // open.longbridge.com/docs/mcp publishes this endpoint; the server is longbridge/
@@ -909,7 +909,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Indian holdings, positions, margins & quotes; GTT orders',
-    desc: 'Connect Zerodha’s own hosted Kite MCP server to let Lucius read your Zerodha account — holdings, positions, margins, orders, mutual funds, live quotes and price history on NSE, BSE and MCX. Zerodha’s hosted server places no regular orders; it does let you set, change and delete GTT (good-till-triggered) orders, and those tools ask for your approval before they run unless you change that. It is free. Connecting needs no key: once it is added, ask Lucius to log in to Kite, open the link it gives you, and sign in on Zerodha’s own page with your 2FA.',
+    desc: 'Connect Zerodha’s own hosted Kite MCP server to let Lucius read your Zerodha account — holdings, positions, margins, orders, mutual funds, live quotes and price history on NSE, BSE and MCX. Zerodha’s hosted server places no regular orders; it does let you set, change and delete GTT (good-till-triggered) orders. It is free. Connecting needs no key: once it is added, ask Lucius to log in to Kite, open the link it gives you, and sign in on Zerodha’s own page with your 2FA.',
     publisher: 'Zerodha',
     verification: 'verified',
     // Zerodha's support article "Connect Zerodha with an AI assistant" publishes this address;
@@ -953,7 +953,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades US stocks, options & crypto; live money only',
-    desc: 'Connect Public.com’s own MCP server, run on this machine, to let Lucius trade at Public.com. It reads your portfolio, quotes and tax lots, estimates an order’s cost before it is sent, and places, replaces and cancels stock, ETF, option (including multi-leg), crypto and event-contract orders. Public.com offers no paper or read-only mode, so every order is real money — every trading tool here asks for your approval before it runs unless you change that. Needs uv on this machine, and a Public.com API secret from Settings → API pasted into the environment variables.',
+    desc: 'Connect Public.com’s own MCP server, run on this machine, to let Lucius trade at Public.com. It reads your portfolio, quotes and tax lots, estimates an order’s cost before it is sent, and places, replaces and cancels stock, ETF, option (including multi-leg), crypto and event-contract orders. Public.com offers no paper or read-only mode, so every order is real money. Needs uv on this machine, and a Public.com API secret from Settings → API pasted into the environment variables.',
     publisher: 'Public.com',
     verification: 'verified',
     // PyPI publicdotcom-mcp-server is released by PublicDotCom/publicdotcom-mcp-server through a
@@ -973,7 +973,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades crypto spot, perps & options; live unless testnet',
-    desc: 'Connect Bybit’s own MCP server, run on this machine, to let Lucius work with your Bybit account. It reads market data, balances, positions, orders and history, and places, amends and cancels spot, perpetual and option orders, sets leverage and places Earn orders — close to 400 tools in all. It connects to Bybit’s live exchange unless you add BYBIT_TESTNET=true to the environment variables, and it has no read-only switch of its own: create the API key with only the permissions you want allowed (read-only, if Lucius should not trade). Every trading tool here asks for your approval before it runs unless you change that. Needs Node.js 20.6 or later, and a Bybit API key and secret.',
+    desc: 'Connect Bybit’s own MCP server, run on this machine, to let Lucius work with your Bybit account. It reads market data, balances, positions, orders and history, and places, amends and cancels spot, perpetual and option orders, sets leverage and places Earn orders — close to 400 tools in all. It connects to Bybit’s live exchange unless you add BYBIT_TESTNET=true to the environment variables, and it has no read-only switch of its own: create the API key with only the permissions you want allowed (read-only, if Lucius should not trade). Needs Node.js 20.6 or later, and a Bybit API key and secret.',
     publisher: 'Bybit',
     verification: 'verified',
     // bybit-exchange/trading-mcp is Bybit's GitHub-verified org; the npm package's maintainers
