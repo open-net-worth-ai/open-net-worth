@@ -118,7 +118,9 @@ export function DirectoryBrowser({
           display: 'flex',
           flexDirection: 'column',
           gap: 12,
-          borderBottom: '1px solid var(--line)',
+          // No bottom rule: the tabs' own baseline already separates this block, and a second
+          // line under the search row boxed it in (owner, 2026-10-31). The solid background
+          // still hides cards cleanly as they scroll under it.
         }}
       >
         <div className="cn-dirfilters">
