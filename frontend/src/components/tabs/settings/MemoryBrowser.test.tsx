@@ -157,6 +157,36 @@ describe('MemoryBrowser', () => {
     expect(toast).not.toHaveBeenCalled()
   })
 
+  it('one change reads as one sentence, with no restated reply or badge', async () => {
+    serve({
+      added: 0,
+      updated: 1,
+      removed: 0,
+      rejected: [],
+      changes: [
+        {
+          change: 'updated',
+          where: 'Plans · Debt reduction',
+          text: 'Pays down debt first, around the bills that cannot be cut',
+          was: 'Puts day-to-day needs first',
+        },
+      ],
+      reply: 'Updated: paying down debt is now your priority.',
+    })
+    await renderBrowser()
+    fireEvent.change(screen.getByLabelText('Tell Lucius what to remember or change'), {
+      target: { value: 'debt first, but some bills stay' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
+    const line = (await screen.findByText('Updated a memory in Debt reduction')).closest(
+      '[role="status"]',
+    )!
+    expect(within(line).getByText(/Pays down debt first/)).toBeTruthy()
+    expect(within(line).getByText('Before: Puts day-to-day needs first')).toBeTruthy()
+    expect(within(line).queryByText(/paying down debt is now your priority/)).toBeNull()
+    expect(line.querySelector('.rd-mem-change-kind')).toBeNull()
+  })
+
   it('the list-level change box sends no topic', async () => {
     await renderBrowser()
     fireEvent.change(screen.getByLabelText('Tell Lucius what to remember or change'), {

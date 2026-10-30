@@ -1802,10 +1802,10 @@
   border-left: 2px solid var(--kind);
   line-height: 1.5;
 }
-.onw-settings .rd-mem-changes-list > li:has(.is-added) {
+.onw-settings .rd-mem-changes-list > li.is-added {
   --kind: var(--good);
 }
-.onw-settings .rd-mem-changes-list > li:has(.is-removed) {
+.onw-settings .rd-mem-changes-list > li.is-removed {
   --kind: var(--bad);
 }
 .onw-settings .rd-mem-change-meta {
@@ -1816,13 +1816,10 @@
   color: var(--muted);
 }
 .onw-settings .rd-mem-change-kind {
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--kind) 18%, transparent);
   color: var(--kind);
   font-weight: 600;
 }
-.onw-settings .rd-mem-change-kind.is-removed {
+.onw-settings .rd-mem-changes-list > li.is-removed .rd-mem-change-kind {
   color: var(--bad-light);
 }
 .onw-settings .rd-mem-change-where {
