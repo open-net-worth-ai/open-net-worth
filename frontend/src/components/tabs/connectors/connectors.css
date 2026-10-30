@@ -203,7 +203,13 @@
      page header — so it never shrinks and never scrolls vertically. */
   overflow-x: auto;
   overflow-y: hidden;
-  flex: none;
+  /* Narrow to fit its parent (that is what makes it scroll), but never get shorter than its
+     content: `flex: none` stopped the squash and also stopped the narrowing, so the row ran
+     past its parent's edge with nothing to scroll (owner, 2026-10-31). */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  min-height: max-content;
   scrollbar-width: none;
 }
 .cn-page .rd-tabs::-webkit-scrollbar {

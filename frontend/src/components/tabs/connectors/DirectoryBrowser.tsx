@@ -36,7 +36,11 @@ export const MODAL_BODY_MIN_HEIGHT = 480
 /** Scroll a tapped category chip to the middle of its one-line row, so the chips past it
  *  (the ones cut off at the edge) come into view. Optional call: jsdom has no scrollIntoView. */
 function revealChip(chip: HTMLElement): void {
-  chip.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  // Next frame, after the pick's re-render — run inline, that re-render cancelled the smooth
+  // scroll mid-way (the shared tabs hit the same thing).
+  requestAnimationFrame(() =>
+    chip.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'center' }),
+  )
 }
 
 export interface DirectoryBrowserProps {
