@@ -124,6 +124,21 @@ def _facts(item: dict, snap: dict, findings: list[dict], ctx: dict, analyst: dic
         ),
         analyst=analyst,
         findings=findings,
+        thesis_read=_thesis_read(item, snap, key),
+    )
+
+
+def _thesis_read(item: dict, snap: dict, key: str) -> dict | None:
+    from backend.services import investment_theses, thesis_judgment
+
+    try:
+        iid = item.get("instrument_id") or investment_theses.thesis_instrument_for_item(item)
+    except Exception:
+        return None
+    return thesis_judgment.compact(
+        thesis_judgment.for_instrument(
+            iid, snap.get("price"), ticker=key, currency=snap.get("currency") or "", held=False
+        )
     )
 
 

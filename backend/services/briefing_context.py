@@ -26,7 +26,7 @@ from datetime import date
 
 from backend.services import commitments as commitments_service
 from backend.services import planning as planning_service
-from backend.services import recurring_baseline
+from backend.services import recurring_baseline, thesis_judgment
 from backend.services.actions import read_actions
 from backend.services.budget_engines import base as budget_engines
 from backend.services.budget_engines import service as budget_engines_service
@@ -110,6 +110,34 @@ def movers_lines(book: dict) -> list[str]:
     if flat:
         lines.append(f"  ({flat} more holdings with no move today)")
     return lines
+
+
+def thesis_judgments(book: dict) -> tuple[dict[str, dict], dict[str, str]]:
+    """``({symbol: judgment}, {symbol: name})`` for every owned holding (its Investments row's
+    price) and watched ticker with an investment thesis — {} when the book has none."""
+    from backend.services.watch_signals import watched_items
+    from backend.services.watchlist import read_watchlist
+
+    rows = book["merged_rows"]
+    held = {(r.get("symbol") or "").upper() for r in rows}
+    try:
+        watched = watched_items(read_watchlist(), held, include_auto=False)
+    except Exception:
+        logger.warning("briefing watchlist unavailable for theses", exc_info=True)
+        watched = []
+    judgments = thesis_judgment.book_judgments(rows, watched)
+    names = {(r.get("symbol") or "").upper(): r.get("name") or "" for r in rows}
+    names.update({(i.get("value") or "").upper(): i.get("label") or "" for i in watched})
+    return judgments, {t: names.get(t, "") for t in judgments}
+
+
+def thesis_lines(judgments: dict[str, dict], names: dict[str, str]) -> list[str]:
+    """One cited line per thesis — the briefing's view of where each price sits against it."""
+    return [
+        f"  {names.get(t) or t} ({t}, {'held' if j['held'] else 'watched'}): "
+        f"{thesis_judgment.cite_line(j)}"
+        for t, j in judgments.items()
+    ]
 
 
 def _due_line(event: dict, today: date, base: str) -> str:

@@ -8,6 +8,7 @@ you said you'd buy in", which is the difference between a price alert and an edu
 
 from __future__ import annotations
 
+from backend.services import thesis_judgment
 from backend.services.watch_findings import finding as _finding
 
 FAIR_VALUE_GAP_PCT = 10.0  # this far under your fair value is worth saying
@@ -77,6 +78,35 @@ def intent_findings(snap: dict, intent: dict | None) -> list[dict]:
                 )
             )
     return out
+
+
+def held_thesis_findings(snap: dict, thesis: dict | None) -> list[dict]:
+    """A HELD name read against its full thesis: at its stop, at or nearing its trim level, or
+    nearing its fair value (``thesis_judgment``'s one stance). A move alone is never one of
+    these — that is the point of a thesis. The pulse only; it raises no story or alert."""
+    price = snap.get("price")
+    j = thesis_judgment.judge(thesis, price, held=True) if price else None
+    if not j:
+        return []
+    lv = j["levels"]
+    stance = j["stance"]
+    if stance == "below_stop":
+        level = lv["stop_below"]["price"]
+        return [_finding("at_stop", "bad", 50, "medium", f"At or below your stop of {_fmt(level)}")]
+    if stance in ("above_trim", "near_trim"):
+        level = lv["trim_above"]
+        if stance == "above_trim":
+            text = f"At or above your trim level of {_fmt(level['price'])}"
+        else:
+            text = (
+                f"{abs(level['distance_pct']):.0f}% under your trim level of {_fmt(level['price'])}"
+            )
+        return [_finding(stance, "warn", 40 if stance == "above_trim" else 25, "low", text)]
+    if stance == "near_fair_value":
+        level = lv["fair_value"]
+        text = f"{abs(level['distance_pct']):.0f}% under your fair value of {_fmt(level['price'])}"
+        return [_finding("near_fair_value", "warn", 14, "low", text)]
+    return []
 
 
 def thesis_of(item: dict) -> str:
