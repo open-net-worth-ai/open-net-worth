@@ -813,7 +813,9 @@
   color: var(--muted);
 }
 .cn-page .rd-select.cn-sortselect {
-  height: 30px;
+  height: auto;
+  align-self: stretch;
+  flex: none;
   padding: 0 28px 0 13px;
   font-size: 12px;
   border-radius: var(--radius-lg);
@@ -842,7 +844,9 @@
 /* The one card with no real product behind it (no logo, no publisher, nothing to preview) —
    dashed border marks it as a build-your-own slot rather than a specific item sitting in the
    grid alongside real, named servers (owner review, 2026-08-19). */
-/* Browse & add's family tabs share their line with Sort, and scroll sideways rather than wrap. */
+/* Browse & add's family tabs ARE the Connectors page's tabs — same component, same look, no
+   overrides (owner, 2026-10-31: one design system, not a variant per screen). The only thing
+   added here is layout: on a narrow sheet they scroll sideways rather than wrap. */
 .cn-page .cn-dirfilters > .rd-tabs {
   flex: 1 1 auto;
   min-width: 0;
@@ -1074,7 +1078,7 @@
   .cn-page .cn-dirfilters > .cn-chiprow > .cn-chip {
     flex: none;
   }
-  .cn-page .cn-dirfilters > .cn-sortselect {
+  .cn-page .cn-dirsearchrow > .cn-sortselect {
     display: none;
   }
   .cn-page .cn-sorticon {

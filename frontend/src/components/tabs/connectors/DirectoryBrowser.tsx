@@ -114,6 +114,20 @@ export function DirectoryBrowser({
           borderBottom: '1px solid var(--line)',
         }}
       >
+        <div className="cn-dirfilters">
+          {/* The KIND of connector is a tab, like the Connectors page's own tabs; what it is
+              FOR is a chip below. Two rows of identical pills read as one messy row, with a
+              confusing "All" in each (owner review, 2026-10-31). */}
+          <Tabs
+            tabs={DIRECTORY_FAMILY_CHIPS.map(([k, l]) => ({
+              key: k,
+              label: l,
+              count: familyCount(k),
+            }))}
+            value={family}
+            onChange={onFamily}
+          />
+        </div>
         <div className="cn-dirsearchrow">
           <span className="cn-dirsearch">
             <Icons.search />
@@ -157,20 +171,6 @@ export function DirectoryBrowser({
               <option value="az">A–Z</option>
             </select>
           </label>
-        </div>
-        <div className="cn-dirfilters">
-          {/* The KIND of connector is a tab, like the Connectors page's own tabs; what it is
-              FOR is a chip below. Two rows of identical pills read as one messy row, with a
-              confusing "All" in each (owner review, 2026-10-31). */}
-          <Tabs
-            tabs={DIRECTORY_FAMILY_CHIPS.map(([k, l]) => ({
-              key: k,
-              label: l,
-              count: familyCount(k),
-            }))}
-            value={family}
-            onChange={onFamily}
-          />
           <select
             className="rd-select cn-sortselect"
             style={{ width: 'auto' }}
