@@ -252,3 +252,39 @@ def test_provider_exception_is_isolated(monkeypatch):
     r = search(_query(q="", types=frozenset({"bad", "good"}), surfaces=frozenset({"entity"})))
     assert any(item["id"] == "1" for item in r["items"])
     assert all(item["type"] != "bad" for item in r["items"])
+
+
+# ── Type qualifier ("@payee vietnam airlines") ───────────────────────────────
+
+
+def _recording_provider(type_: str, seen: dict[str, str]) -> MentionProvider:
+    """A provider that records the text it was asked for and returns one row named by it."""
+
+    def _search(q: SearchQuery) -> list[dict]:
+        seen[type_] = q.q
+        return [{"type": type_, "id": type_, "label": "Vietnam Airlines"}]
+
+    return MentionProvider(
+        type=type_, surfaces=frozenset({"entity"}), icon="◆", resolve=lambda r: None, search=_search
+    )
+
+
+def test_leading_type_word_scopes_that_type_to_the_rest(monkeypatch):
+    """A type named first searches the rest of the phrase; every other type still gets the
+    whole phrase, so a name that merely starts with a type word keeps matching as typed."""
+    seen: dict[str, str] = {}
+    for t in ("payee", "transaction"):
+        monkeypatch.setitem(_reg.REGISTRY, t, _recording_provider(t, seen))
+
+    search(_query(q="payee vietnam airlines", types=frozenset({"payee", "transaction"})))
+    assert seen == {"payee": "vietnam airlines", "transaction": "payee vietnam airlines"}
+
+    search(_query(q="payees vietnam", types=frozenset({"payee", "transaction"})))
+    assert seen["payee"] == "vietnam"
+
+
+def test_single_word_is_never_a_qualifier(monkeypatch):
+    seen: dict[str, str] = {}
+    monkeypatch.setitem(_reg.REGISTRY, "payee", _recording_provider("payee", seen))
+    search(_query(q="payees", types=frozenset({"payee"})))
+    assert seen == {"payee": "payees"}

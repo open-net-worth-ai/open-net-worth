@@ -196,7 +196,7 @@ export function IdentityInner({ item }: { item: IdentityItem }) {
 export function Identity({ item }: { item: IdentityItem }) {
   const isMono = item.type === 'agent' && !item.primary && item.id !== 'lucius' && !item.emoji
   return (
-    <span className={'ac-item-ic id-box' + (isMono ? ' mono' : '')}>
+    <span className={'ac-item-ic id-box' + (isMono ? ' mono' : '') + (item.logo ? ' plate' : '')}>
       <IdentityInner item={item} />
     </span>
   )

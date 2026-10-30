@@ -34,7 +34,8 @@ them, not just the few that fit in the mixed list — and **All** to see everyth
 computer, ⌘← and ⌘→ step between tabs. Typing more starts again from **All**.
 
 Type a kind instead of a name to list them — any kind works, singular or plural: `@accounts`,
-`@payees`, `@connectors`, `@reports`, and `@docs` or `@files` for your [Documents](documents.md).
+`@payees`, `@connectors`, `@reports`, and `@docs` or `@files` for your [Documents](documents.md). Put a
+kind before a name to search only that kind: `@payee vietnam airlines`, `@account savings`.
 
 ## `/` — run a skill
 

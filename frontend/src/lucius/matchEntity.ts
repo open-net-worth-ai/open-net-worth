@@ -137,6 +137,18 @@ export function typeMatch(type: string, nq: string): boolean {
   return typeNames(type).some((s) => s === nq || s.startsWith(nq))
 }
 
+/**
+ * "payee vietnam airlines" → a payee whose name holds "vietnam airlines": a leading word that
+ * names the row's type, then a name. The server's `split_type_qualifier` is the twin rule.
+ * A single word is never a qualifier — that is a name, or a whole-type listing ("@payees").
+ */
+export function qualifiedMatch(row: MentionRow, query: string): boolean {
+  const m = /^(\S+)\s+(.*\S)\s*$/.exec(query.trim())
+  if (!m) return false
+  const rest = norm(m[2])
+  return !!rest && typeMatch(row.type, norm(m[1])) && searchHay(row).includes(rest)
+}
+
 export interface MatchResult {
   ok: boolean
   hint?: string
@@ -159,6 +171,7 @@ export function matchEntity(row: MentionRow, query: string): MatchResult {
       const label = labelFor(row.type)
       return { ok: true, hint: pluralize(label, 2) }
     }
+    if (qualifiedMatch(row, query)) return { ok: true }
     return { ok: false }
   }
 

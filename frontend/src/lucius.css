@@ -2114,10 +2114,18 @@
     object-fit: contain;
     background: #fff;
   }
+  /* The whole tile is the plate, as on the Connectors page (.cn-tile.plate) — a small white
+     square inside the grey tile read as a box in a box, with the mark crammed to its edges. */
+  .ac-item-ic.id-box.plate {
+    background: #fff;
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
   .id-logo {
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
+    width: 100%;
+    height: 100%;
+    padding: 4px;
+    box-sizing: border-box;
+    background: transparent;
   }
   .chip-logo {
     width: 14px;

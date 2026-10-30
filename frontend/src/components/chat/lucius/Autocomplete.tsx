@@ -21,7 +21,7 @@ import type { MentionRow } from '../../../hooks/useMentionables'
 import { allHandles } from '../../../lucius/screenContract'
 import { Identity, Spark } from '../../../lucius/identity'
 import { useToolOwnerLogos } from '../toolActivity/useToolOwnerLogos'
-import { norm } from '../../../lucius/matchEntity'
+import { norm, qualifiedMatch } from '../../../lucius/matchEntity'
 import { C } from '../../../lucius/mentionColors'
 import {
   parseTransactionSublabel,
@@ -219,7 +219,8 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
       r.hint != null ||
       norm(r.label).includes(nq) ||
       norm(r.search ?? '').includes(nq) ||
-      norm(r.sublabel ?? '').includes(nq)
+      norm(r.sublabel ?? '').includes(nq) ||
+      qualifiedMatch(r, query)
     // In the active tab's scope: its own section, or — for a type tab — that type wherever
     // it sits (an on-screen connector still shows under "On this screen").
     const show = (key: string, r: MentionRow) =>
@@ -313,7 +314,7 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
     }
 
     return { groupRows: rows, items }
-  }, [mode, nq, backendItems, handleRows, chosenIds, remoteItems, scope, scopeType])
+  }, [mode, nq, query, backendItems, handleRows, chosenIds, remoteItems, scope, scopeType])
 
   // Section tabs — one per group present for this query (owner request 2026-08-11), keyed so
   // a type's local and "everywhere" groups share one tab. A tab FILTERS the list to its
