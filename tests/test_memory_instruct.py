@@ -352,8 +352,8 @@ def test_edit_refuses_text_over_the_limit_and_full_numbers(db_isolated):
     MemoryStore().insert(_fact("m_1", "Gets paid on the 25th"))
 
     with pytest.raises(ValidationError) as long_text:
-        instruct_mod.edit_fact("m_1", "x" * 281)
-    assert "280" in long_text.value.message
+        instruct_mod.edit_fact("m_1", "x" * 501)
+    assert "500" in long_text.value.message
     with pytest.raises(ValidationError):
         instruct_mod.edit_fact("m_1", "Card 4111 1111 1111 1111")
     with pytest.raises(NotFoundError):
@@ -367,7 +367,7 @@ def test_edit_route_maps_errors(client):
     ok = client.patch("/api/memory/facts/m_1", json={"content": "Gets paid on the 1st"})
     assert ok.status_code == 200 and ok.json()["content"] == "Gets paid on the 1st"
     assert client.patch("/api/memory/facts/m_1", json={"content": "  "}).status_code == 422
-    too_long = client.patch("/api/memory/facts/m_1", json={"content": "x" * 281})
-    assert too_long.status_code == 422 and "280" in too_long.json()["detail"]
+    too_long = client.patch("/api/memory/facts/m_1", json={"content": "x" * 501})
+    assert too_long.status_code == 422 and "500" in too_long.json()["detail"]
     assert client.patch("/api/memory/facts/nope", json={"content": "x"}).status_code == 404
     assert [f["content"] for f in MemoryStore().all_facts()] == ["Gets paid on the 1st"]

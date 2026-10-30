@@ -279,7 +279,7 @@ def test_apply_appends_instruction_lines_never_replaces_notes(client):
         [
             _item("a", "instructions", value="Always show amounts in SGD"),
             _item("b", "instructions", value="be brief."),
-            _item("c", "instructions", value="x" * 281),
+            _item("c", "instructions", value="x" * 501),
             _item("d", "instructions", value="  "),
         ],
     )
@@ -346,7 +346,7 @@ def test_apply_reports_what_the_memory_choke_refuses_and_skips_duplicates(client
             _item("2", "memory", section="you", topic="Profile", content="speaks french"),
             _item("3", "memory", section="you", content="Passport number K1234567"),
             _item("4", "memory", section="nowhere", content="Fine"),
-            _item("5", "memory", section="other", content="y" * 300),
+            _item("5", "memory", section="other", content="y" * 600),
             _item("6", "memory", section="you", content="Has a health condition", sensitive=True),
             {"destination": "memory"},
             {"line": "z", "destination": "teleport"},

@@ -2,7 +2,7 @@
 
 Extraction, the dialog's edit and "Tell Lucius", ``remember_fact`` / ``forget_fact`` and the
 passes that sort and tidy all hand it the same ``ops`` shape. It enforces what a prompt cannot:
-a known section, one topic spelling per name, the 280-character limit, a valid expiry, no
+a known section, one topic spelling per name, the length limit (``FACT_MAX_CHARS``), a valid expiry, no
 full card / account / ID numbers or passwords whatever the source, sensitive topics only when
 the user allows them, and — for the background pass — no ledger figures.
 

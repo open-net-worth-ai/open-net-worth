@@ -13,7 +13,7 @@ from datetime import date, timedelta
 
 from backend.evals.memory.spec import QUALITY, SAFETY, Check, Outcome
 
-FACT_MAX_CHARS = 280
+FACT_MAX_CHARS = 500
 _PRONOUNS = re.compile(r"\b(i|my|me|mine|we|our|ours|you|your|yours)\b", re.IGNORECASE)
 
 
@@ -109,7 +109,7 @@ def third_person(name: str = "written in the third person", severity: str = QUAL
     return Check(name, severity, test)
 
 
-def within_limit(name: str = "within 280 characters", severity: str = QUALITY) -> Check:
+def within_limit(name: str = "within 500 characters", severity: str = QUALITY) -> Check:
     def test(o: Outcome):
         long = [f for f in o.new_facts() if len(str(f.get("content") or "")) > FACT_MAX_CHARS]
         return None if not long else f"{len(long[0]['content'])} characters"

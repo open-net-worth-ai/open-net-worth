@@ -257,7 +257,7 @@ One line each — full reasoning and the scar behind each is in
 
 **AI harness**
 - Tool results are bounded AT THE TOOL — filter before you cap.
-- Memory keeps only what has no other home — five fixed sections, a topic name per fact, every fact shown in full with its date, ≤280 chars; memory is context, never truth; one routing guide `ai.memory_structure.ROUTING_GUIDE`; one writer `ai.memory_write.apply_memory_change`; a background pass never deletes a fact (it retires), and a user's forget leaves only a hash in `memory_forgotten` that refuses an implicit re-add (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home`, amendment 7).
+- Memory keeps only what has no other home — five fixed sections, a topic name per fact, every fact shown in full with its date, ≤500 chars (prompts aim for 280; an over-long extracted fact is shortened once, not dropped); memory is context, never truth; one routing guide `ai.memory_structure.ROUTING_GUIDE`; one writer `ai.memory_write.apply_memory_change`; a background pass never deletes a fact (it retires), and a user's forget leaves only a hash in `memory_forgotten` that refuses an implicit re-add (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home`, amendments 7 and 12).
 - Codex gets our tools as real (dynamic) tool calls that the HOST captures and runs — Codex never
   executes one; text `<tool_call>` is the fallback (ADR `2026-10-03-codex-tools-are-native-calls-the-host-runs`).
   The Codex turn stays OPEN across tool rounds — the call parks and the next round answers it

@@ -4948,7 +4948,7 @@
     "additionalProperties": false,
     "properties": {
       "content": {
-        "description": "The fact, one concise self-contained statement of at most 280 characters, in the third person (e.g. 'Rents a flat in Tampines')",
+        "description": "The fact, one concise self-contained statement under 280 characters (never over 500), in the third person (e.g. 'Rents a flat in Tampines')",
         "type": "string"
       },
       "section": {

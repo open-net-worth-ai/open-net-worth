@@ -94,8 +94,8 @@ def _prompt(instruction: str, listing: str, today: str, scope: str) -> str:
 The user is editing what you remember about them. Apply their instruction to the memory
 below: add what is new, rewrite what it corrects (reuse that fact's id), and remove what it
 says is no longer true or should be forgotten. Change nothing the instruction does not touch.
-Keep each fact a concise, self-contained statement of at most {ms.FACT_MAX_CHARS} characters in the
-third person ("Has a dog named Beans"). Every fact goes in a section ({", ".join(ms.SECTIONS)})
+Keep each fact a concise, self-contained statement under {ms.FACT_TARGET_CHARS} characters (never over
+{ms.FACT_MAX_CHARS}) in the third person ("Has a dog named Beans"). Every fact goes in a section ({", ".join(ms.SECTIONS)})
 and, except in open_items, under a short topic name (reuse a listed one when it fits). Something
 decided or in flight over the next two weeks — an agreement about a payment someone owes and how
 to book it, something to come back to — is Recent (section open_items), written ready to act on,

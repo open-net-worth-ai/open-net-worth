@@ -220,7 +220,7 @@ def test_extractor_lists_a_saved_fact_whatever_the_setting(isolated, monkeypatch
 
 def test_extractor_lists_every_fact_in_full_with_its_place(isolated, monkeypatch):
     store = memory_store.MemoryStore()
-    long_text = "Z" * 280
+    long_text = "Z" * 500
     store.bulk_insert(
         [
             _stored(

@@ -116,7 +116,7 @@ Topics in use: {topics}
 For each note, reply with ONE of:
 - file it: {{"id": "...", "section": "<key>", "topic": "<name>"}}. Never change its words —
   except a note marked [over {ms.FACT_MAX_CHARS} characters], which MUST carry a "content"
-  that says the same thing in at most {ms.FACT_MAX_CHARS} characters, adding nothing, and a
+  that says the same thing in under {ms.FACT_TARGET_CHARS} characters, adding nothing, and a
   note marked [reword], which MUST carry a "content" that says the same thing in the house
   voice. {mv.VOICE_RULE} A [reword] content drops a leading "As of <date>:" but otherwise keeps
   every number and date exactly as written (copy "2026-10-26" as "2026-10-26"), every quoted
