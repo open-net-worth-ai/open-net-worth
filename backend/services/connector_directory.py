@@ -43,6 +43,21 @@ def entries() -> tuple[dict, ...]:
     return tuple(json.loads(_SNAPSHOT.read_text(encoding="utf-8"))["entries"])
 
 
+# The id that opens the Add custom server form: any MCP server the directory doesn't list.
+CUSTOM_SETUP_ID = "custom"
+
+# The directory is curated, not the limit. Asked about Gemini and Binance, Lucius said they "have
+# no connector" (live, 2026-10-31) — but any vendor MCP server can be added as a custom one.
+BEYOND_DIRECTORY = (
+    "The directory is our curated list, not everything the user can connect. An app missing "
+    "here may still publish its own MCP server, which the user can add themselves in Browse & "
+    "add -> Add custom server (its URL or local command). Never say an app 'has no connector' "
+    "from this list alone: say it isn't in the directory, then offer the custom route "
+    f"(run_screen_command connectors.open_setup with id '{CUSTOM_SETUP_ID}' opens that form) "
+    "or another way in — a statement/CSV import, email ingestion, or recording it by hand."
+)
+
+
 def entry_ids() -> list[str]:
     return [e["id"] for e in entries()]
 
@@ -52,7 +67,8 @@ def unknown_id_message(connector_id: str) -> str:
     hint = f" Closest: {', '.join(repr(c) for c in close)}." if close else ""
     return (
         f"'{connector_id}' is not a connector in the directory.{hint} "
-        "Call search_connector_directory and use an id exactly as it returns."
+        "Call search_connector_directory and use an id exactly as it returns, or "
+        f"'{CUSTOM_SETUP_ID}' for the Add custom server form."
     )
 
 

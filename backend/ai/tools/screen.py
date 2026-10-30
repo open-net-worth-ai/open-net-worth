@@ -342,6 +342,8 @@ def _validate_command_semantics(name: str, args: dict) -> str | None:
     reason = args.get("reason")
     if reason is not None and (not isinstance(reason, str) or len(reason) > 200):
         return "arg 'reason' must be one line of at most 200 characters"
+    if connector_id == connector_directory.CUSTOM_SETUP_ID:
+        return None
     if connector_id not in connector_directory.entry_ids():
         return connector_directory.unknown_id_message(str(connector_id))
     return None

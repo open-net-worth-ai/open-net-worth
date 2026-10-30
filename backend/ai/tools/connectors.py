@@ -475,7 +475,9 @@ class SearchConnectorDirectoryInput(ToolInput):
         "for adjacent capabilities, broad recommendations, or a connector they ignored; one at a "
         "time. To offer one, call run_screen_command connectors.open_setup with the exact id "
         "(optional 'reason', one line): it only opens the form, the user enters credentials and "
-        "clicks Connect. You cannot add one or take keys. Afterwards call this again and read "
+        "clicks Connect; id 'custom' opens the Add custom server form for any MCP server we "
+        "don't list — the directory is curated, not the limit. You cannot add one or take "
+        "keys. Afterwards call this again and read "
         "'installed'; never assume it worked."
     ),
     input_schema=schema_of(SearchConnectorDirectoryInput, tool_name="search_connector_directory"),
@@ -503,5 +505,9 @@ async def search_connector_directory(input_data: dict):
     elif result["total"] > result["showing"]:
         result["note"] = "More matched — narrow with a more specific query or a category."
     elif not result["total"]:
-        result["note"] = "Nothing in the directory matches. Say so; do not invent a connector."
+        result["note"] = (
+            "Nothing in the directory matches — that means not listed, not 'cannot be "
+            "connected'. Do not invent a directory entry; see beyond_directory."
+        )
+    result["beyond_directory"] = connector_directory.BEYOND_DIRECTORY
     return json.dumps(result, ensure_ascii=False), None

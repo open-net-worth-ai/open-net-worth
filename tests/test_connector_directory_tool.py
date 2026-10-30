@@ -128,6 +128,7 @@ def test_no_secret_shaped_fields_or_endpoints_reach_the_model(db):
         "showing",
         "total",
         "note",
+        "beyond_directory",
         "id",
         "name",
         "publisher",
@@ -222,3 +223,26 @@ def test_a_multi_word_name_still_ranks_its_own_entry_first(db):
 
     rows = connector_directory.search("interactive brokers")["connectors"]
     assert rows[0]["id"] == "mcp-ibkr"
+
+
+# Live, 2026-10-31: asked about Gemini and Binance, Lucius said they "have no connector" — the
+# directory read as the limit of what can be connected.
+
+
+def test_every_search_says_the_directory_is_not_the_limit(db):
+    import asyncio
+    import json
+
+    from backend.ai.tools import execute_tool
+
+    for query in ("binance", "webull"):
+        text, _ = asyncio.run(execute_tool("search_connector_directory", {"query": query}))
+        out = json.loads(text)
+        assert "Add custom server" in out["beyond_directory"]
+        assert "'custom'" in out["beyond_directory"]
+
+
+def test_open_setup_accepts_custom_for_the_custom_server_form():
+    from backend.ai.tools.screen import _validate_command_semantics
+
+    assert _validate_command_semantics("connectors.open_setup", {"id": "custom"}) is None

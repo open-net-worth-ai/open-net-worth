@@ -390,6 +390,8 @@ describe('connectors.open_setup (Lucius) — opens a form, changes nothing', () 
     expect(setupTargetFor([PLAID_UNCONFIGURED], 'plaid')).toEqual({ kind: 'form', id: 'plaid' })
     expect(setupTargetFor([], 'mcp-ibkr')).toEqual({ kind: 'add', id: 'mcp-ibkr' })
     expect(setupTargetFor([], 'mcp-custom')).toEqual({ kind: 'unknown' })
+    // 'custom' is the Add custom server form — any MCP server the directory doesn't list.
+    expect(setupTargetFor([], 'custom')).toEqual({ kind: 'add', id: 'mcp-custom' })
     expect(setupTargetFor([], 'zzz')).toEqual({ kind: 'unknown' })
   })
 })
