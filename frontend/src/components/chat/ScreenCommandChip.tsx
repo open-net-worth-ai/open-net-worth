@@ -53,14 +53,7 @@ export function ScreenCommandChip({
   )
   // A suggested connector gets a card naming it; an id we can't resolve keeps the plain chip.
   if (command.name === 'connectors.open_setup' && typeof command.args?.id === 'string') {
-    return (
-      <ConnectorSetupCard
-        id={command.args.id}
-        reason={command.args.reason}
-        onOpen={open}
-        fallback={chip}
-      />
-    )
+    return <ConnectorSetupCard id={command.args.id} onOpen={open} fallback={chip} />
   }
   return chip
 }

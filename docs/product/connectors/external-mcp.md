@@ -37,7 +37,7 @@ ready (a sign-in, an API key, or a runtime such as Node.js). He suggests one con
 and only when it fits what you asked.
 
 If you want it, Lucius shows a card for that connector: its logo, who publishes it, whether it
-is **Verified**, and a one-line reason. For a connector you sign in to (Interactive Brokers,
+is **Verified**, and one button. For a connector you sign in to (Interactive Brokers,
 Webull, Robinhood and the like), **Connect** goes straight to the provider's own sign-in page; for
 one that needs an API key or runs on this machine, **Set up** opens its form in Connectors with
 its details already filled in. **Lucius never adds a connector, never sees or types your keys, and

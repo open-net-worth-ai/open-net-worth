@@ -54,7 +54,7 @@ it('routes a parked Automation draft to the shared review editor screen', () => 
 })
 
 // Owner, 2026-10-31: a suggested connector gets a card naming it — logo, name, publisher,
-// verification, Lucius's reason — not a bare "Set up connector" chip. A sign-in connector
+// verification — not a bare "Set up connector" chip. A sign-in connector
 // connects in one click, like Claude's connector cards.
 it('shows a sign-in connector as a card from OUR catalog; Connect opens the sign-in window', () => {
   const seen = vi.fn()
@@ -68,10 +68,8 @@ it('shows a sign-in connector as a card from OUR catalog; Connect opens the sign
   expect(screen.getByText('Webull')).toBeTruthy()
   expect(screen.getByText('Verified')).toBeTruthy()
   expect(screen.getByText('By Webull')).toBeTruthy()
-  // The model's reason, cleaned of control and bidi-override characters.
-  expect(container.querySelector('.cmd-setup-reason')?.textContent).toBe(
-    'Lucius: “Track your  brokerage  account”',
-  )
+  // No reason line — Lucius's own message beside the card already says why.
+  expect(container.querySelector('.cmd-setup-reason')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: /connect/i }))
   // The window opens ON the click, so the sign-in a moment later isn't popup-blocked.
   expect(openSpy).toHaveBeenCalledWith('about:blank', 'onw-mcp-oauth', expect.any(String))

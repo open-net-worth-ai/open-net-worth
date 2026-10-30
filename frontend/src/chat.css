@@ -2165,7 +2165,7 @@
   }
 
   /* The card a suggested connector gets in place of the chip (ConnectorSetupCard): its own
-     logo on a white tile, name + Verified, publisher, Lucius's reason, and one Set up button. */
+     logo on a white tile, name + Verified, publisher, and one Set up / Connect button. */
   .cmd-setup-card {
     display: flex;
     align-items: center;
@@ -2218,14 +2218,6 @@
     font-size: 12px;
     color: var(--muted);
     margin-top: 2px;
-  }
-  .cmd-setup-reason {
-    font-size: 12px;
-    color: var(--muted);
-    margin-top: 4px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
   .cmd-setup-btn {
     flex: none;
