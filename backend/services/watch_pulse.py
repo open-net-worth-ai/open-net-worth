@@ -18,9 +18,9 @@ import logging
 from datetime import datetime
 
 from backend.core.errors import ValidationError
-from backend.services import investment_theses, watch_context, watch_signals
+from backend.services import investment_theses, thesis_judgment, watch_context, watch_signals
 from backend.services import watch_rules as rules
-from backend.services.watch_intent import in_buy_zone, thesis_of
+from backend.services.watch_intent import held_thesis_findings, in_buy_zone, thesis_of
 from backend.services.watch_trend import row_trend
 
 logger = logging.getLogger(__name__)
@@ -250,6 +250,13 @@ def _move_view(ctx: dict, key: str) -> dict | None:
     }
 
 
+def _thesis_of_item(item: dict, theses: dict[str, dict]) -> dict | None:
+    if not theses:
+        return None
+    iid = item.get("instrument_id") or investment_theses.thesis_instrument_for_item(item)
+    return theses.get(iid) if iid else None
+
+
 def _round(v: float | None) -> float | None:
     return round(v, 2) if v is not None else None
 
@@ -273,6 +280,7 @@ def build_pulse(now: datetime | None = None, population: str = "watched") -> dic
     if not items:
         return out
     stories = _live_stories_by_ticker()
+    theses = investment_theses.theses_by_instrument()
     rows: list[dict] = []
     missing: list[dict] = []
     for item in items:
@@ -280,7 +288,21 @@ def build_pulse(now: datetime | None = None, population: str = "watched") -> dic
         if evaluated is None:
             continue
         snap, findings = evaluated
+        thesis = _thesis_of_item(item, theses)
+        if population == "held" and thesis:
+            findings = sorted(
+                [*findings, *held_thesis_findings(snap, thesis)], key=lambda f: -f["weight"]
+            )
         row = _row(item, snap, findings, ctx, stories.get(item["value"].strip().upper(), []))
+        row["thesis_read"] = thesis_judgment.compact(
+            thesis_judgment.judge(
+                thesis,
+                snap.get("price"),
+                held=population == "held",
+                currency=snap.get("currency") or "",
+                ticker=row["ticker"],
+            )
+        )
         rows.append(row)
         if population == "watched" and _needs_history(item, row, ctx):
             missing.append(item)

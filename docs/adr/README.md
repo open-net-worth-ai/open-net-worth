@@ -514,3 +514,4 @@ away**. To change a recorded decision, add a **new** ADR and flip the old one's 
 | [2026-10-27-an-investment-thesis-lives-on-the-instrument](2026-10-27-an-investment-thesis-lives-on-the-instrument.md) | An investment thesis lives on the instrument | Accepted | 2026-10-27 |
 | [2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server](2026-10-29-retire-ibkr-flex-for-ibkrs-own-mcp-server.md) | IBKR Flex retired for IBKR's own hosted MCP server | Accepted | 2026-10-29 |
 | [2026-10-31-lucius-discovers-connectors-from-a-synced-snapshot-and-setup-stays-human](2026-10-31-lucius-discovers-connectors-from-a-synced-snapshot-and-setup-stays-human.md) | Lucius discovers connectors from a synced snapshot; setup stays human-only | Accepted | 2026-10-31 |
+| [2026-10-31-advice-on-a-ticker-is-judged-against-its-thesis](2026-10-31-advice-on-a-ticker-is-judged-against-its-thesis.md) | Advice on a ticker is judged against its investment thesis | Accepted | 2026-10-31 |

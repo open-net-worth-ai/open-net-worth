@@ -91,7 +91,7 @@ class GetPortfolioInput(ToolInput):
 @tool(
     "get_portfolio",
     description=(
-        "Get the user's portfolio — positions with label, category, asset_class, quantity, price, cost_basis, currency, ticker, vesting_state.\n\nReturns EVERY position when called with no arguments (that is the right call for a portfolio total or an allocation breakdown). When you want one holding, filter instead: query='AAPL' matches symbol or name, or narrow with asset_class / account_id / vesting_state. asset_class, vesting_state and account_ids each accept a LIST as well as a single value (OR'd within the field) — 'what do I hold at IBKR or Binance' is ONE call with account_ids=[a,b], never one per account. The response reports `showing` and `total`, so a filtered read never looks like the whole book.\n\nVESTING_STATE MATTERS FOR ANY TOTAL: 'vested' rows are OWNED; 'unvested' rows are equity-grant units NOT owned yet (forfeited if the person leaves). NEVER sum an unvested row into a portfolio total, allocation breakdown, or 'what am I worth' answer. `summary.owned_base`/`summary.unvested_base` already do this split over whatever positions this call returned — use them instead of hand-summing price×quantity. get_net_worth / get_net_worth_history report the same split as `net_worth`/`unvested_base`.\n\nTODAY (unfiltered): `today` {pl_base, pct, top_movers} is the screens' figure; use it, never get_returns."
+        "Get the user's portfolio — positions with label, category, asset_class, quantity, price, cost_basis, currency, ticker, vesting_state, and `thesis` (the user's own investment thesis read at today's price — role, reason, breaks_if, levels, stance; judge any move against it, never the move alone) when one exists.\n\nReturns EVERY position when called with no arguments (that is the right call for a portfolio total or an allocation breakdown). When you want one holding, filter instead: query='AAPL' matches symbol or name, or narrow with asset_class / account_id / vesting_state. asset_class, vesting_state and account_ids each accept a LIST as well as a single value (OR'd within the field) — 'what do I hold at IBKR or Binance' is ONE call with account_ids=[a,b], never one per account. The response reports `showing` and `total`, so a filtered read never looks like the whole book.\n\nVESTING_STATE MATTERS FOR ANY TOTAL: 'vested' rows are OWNED; 'unvested' rows are equity-grant units NOT owned yet (forfeited if the person leaves). NEVER sum an unvested row into a portfolio total, allocation breakdown, or 'what am I worth' answer. `summary.owned_base`/`summary.unvested_base` already do this split over whatever positions this call returned — use them instead of hand-summing price×quantity. get_net_worth / get_net_worth_history report the same split as `net_worth`/`unvested_base`.\n\nTODAY (unfiltered): `today` {pl_base, pct, top_movers} is the screens' figure; use it, never get_returns."
     ),
     input_schema=schema_of(GetPortfolioInput, tool_name="get_portfolio"),
 )
@@ -115,6 +115,7 @@ async def get_portfolio(input_data: dict):
         if ticker and ticker in _root._NAMES_CACHE:
             p["company_name"] = _root._NAMES_CACHE[ticker]
         projected.append(p)
+    _attach_theses(selected, projected)
 
     # summary is SERVER-computed over exactly the rows this call is returning (the full
     # book when unfiltered, the matched subset when filtered) — a guarantee, not just
@@ -142,6 +143,20 @@ async def get_portfolio(input_data: dict):
                 f"Showing {len(projected)} of {total} positions — filtered, not truncated. `summary` above covers only this subset too — do not use it (or the rows) to compute a whole-portfolio total; call unfiltered for that."
             )
     return json.dumps(out, ensure_ascii=False), None
+
+
+def _attach_theses(rows: list[dict], projected: list[dict]) -> None:
+    """A position whose instrument has an investment thesis carries ``thesis``: the user's role,
+    reason, breaks-if and levels, read at this row's price (``services.thesis_judgment``)."""
+    from backend.services import thesis_judgment
+
+    judgments = thesis_judgment.book_judgments(rows)
+    if not judgments:
+        return
+    for row, p in zip(rows, projected):
+        j = judgments.get((row.get("ticker") or row.get("symbol") or "").strip().upper())
+        if j:
+            p["thesis"] = thesis_judgment.compact(j)
 
 
 def _book_today(base: str) -> dict:

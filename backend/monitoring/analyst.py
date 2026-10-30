@@ -204,6 +204,7 @@ from backend.monitoring.analyst_prompt import (
     source_dicts,
 )
 from backend.monitoring.text_sanitize import content_tokens, sanitize_untrusted_text, tokenize
+from backend.services import thesis_guard, thesis_judgment
 from backend.services.intel_stories import apply_story_change
 from backend.services.watchlist import is_topic, read_watchlist
 
@@ -354,6 +355,8 @@ _TIMELINE_TITLES = {"new": "New development", "update": "Update"}
 # _build_prompts), but this is the belt-and-suspenders backstop so even a verbose model can't
 # ship a wall of text: a hard cap, truncated at a sentence boundary rather than mid-word.
 _ALERT_MAX_CHARS = 800
+# One action, with room for the thesis it cites (role, reason, breaks-if, price against each level).
+_ACTION_MAX_CHARS = 700
 
 
 def _analysis_model() -> str | None:
@@ -1376,7 +1379,7 @@ def _update_signal(
     mv = payload.get("mv")
 
     impact_note = (parsed.get("impact") or "")[:200]
-    actions = [str(a)[:200] for a in (parsed.get("actions") or [])[:1]]
+    actions = [str(a)[:_ACTION_MAX_CHARS] for a in (parsed.get("actions") or [])[:1]]
     source_url = _verified_source_url((parsed.get("source_url") or "").strip(), evidence)
 
     # Lead framing matches the trigger: news_spike/material_news have no price move, so don't
@@ -2422,7 +2425,7 @@ def _create_news_spike_signal(
     label = payload.get("label") or row.get("ticker") or "?"
     ticker = row.get("ticker") or "?"
     why = (parsed.get("why") or "")[:300]
-    actions = [str(a)[:200] for a in (parsed.get("actions") or [])[:1]]
+    actions = [str(a)[:_ACTION_MAX_CHARS] for a in (parsed.get("actions") or [])[:1]]
     now = datetime.now(timezone.utc).isoformat()
     subject = row.get("subject") or ""
     iid = subject[len("asset:") :] if subject.startswith("asset:") else ""
@@ -2499,6 +2502,39 @@ def _gather_position_context(
     except Exception as exc:
         logger.debug("analyst: position context failed for %s: %s", ticker, type(exc).__name__)
         return "(not currently held)", profile
+
+
+def _thesis_judgment(subject: str, ticker: str, payload: dict, *, held: bool) -> dict | None:
+    """The user's investment thesis for this asset, read at the event's price
+    (``services.thesis_judgment``; the last price on file when the event carries none) — None
+    for a topic or a ticker with no thesis, which leaves the analysis exactly as it was."""
+    iid = subject[len("asset:") :] if subject.startswith("asset:") else ""
+    if not iid or not _has_thesis(iid):
+        return None
+    return thesis_judgment.for_instrument(iid, payload.get("current"), ticker=ticker, held=held)
+
+
+def _has_thesis(instrument_id: str) -> bool:
+    try:
+        from backend.services import investment_theses
+
+        return bool(investment_theses.thesis_for(instrument_id))
+    except Exception:
+        return False
+
+
+def _judged_against_thesis(parsed: dict, thesis: dict | None) -> dict:
+    """The model's advice held to the user's thesis: an action or a message sentence that says to
+    sell when the thesis does not (price above the stop, no "thesis broken" named) is replaced by
+    the thesis's own advice, and the thesis is cited. Unchanged with no thesis."""
+    if not thesis:
+        return parsed
+    return {
+        **parsed,
+        "actions": thesis_guard.guard_actions(parsed.get("actions"), thesis)[:1],
+        "message": thesis_guard.guard_text(parsed.get("message") or "", thesis, cite=False),
+        "thesis_line": thesis_judgment.cite_line(thesis),
+    }
 
 
 def _is_held_instrument(instrument_id: str) -> bool:
@@ -3090,6 +3126,11 @@ async def _process_linked_pair(
     )
     asset_iid = asset_subject[len("asset:") :] if asset_subject.startswith("asset:") else ""
     held_instrument_id = asset_iid if asset_iid and _is_held_instrument(asset_iid) else ""
+    thesis = _thesis_judgment(
+        asset_subject, asset_ticker, asset_payload, held=bool(held_instrument_id)
+    )
+    if thesis:
+        position_ctx = f"{position_ctx}\n\n{thesis_judgment.prompt_block(thesis, asset_label)}"
     # Correction (ADR .../cross-subject-fan-out-and-asset-brief-consolidation): key_issues is
     # requested for a watched-not-held asset too, not held-only — see `_process_row`'s own
     # identical held/watched resolution for the full reasoning.
@@ -3110,6 +3151,8 @@ async def _process_linked_pair(
         is_held=bool(held_instrument_id),
         want_key_issues=bool(brief_instrument_id),
     )
+    if thesis:
+        system_prompt += thesis_judgment.THESIS_RULE
     result = await complete_model(
         user_prompt,
         _AnalysisOutput,
@@ -3128,7 +3171,7 @@ async def _process_linked_pair(
         pa_store.mark_done(asset_row["id"])
         return 2
 
-    parsed = result.model_dump()
+    parsed = _judged_against_thesis(result.model_dump(), thesis)
     if not _analysis_matches_subject(asset_row, parsed):
         logger.warning("analyst: skipped off-subject analysis for %s", asset_subject)
         pa_store.mark_done(topic_row["id"])
@@ -3396,10 +3439,14 @@ async def _process_row(
         pa_store.mark_done(row_id)
         return 0
 
+    thesis = None
     if is_topic:
         position_ctx, profile = topic_analyst.topic_context(payload)
     else:
         position_ctx, profile = _gather_position_context(subject, ticker, label, payload)
+        thesis = _thesis_judgment(subject, ticker, payload, held=bool(held_instrument_id))
+        if thesis:
+            position_ctx = f"{position_ctx}\n\n{thesis_judgment.prompt_block(thesis, label)}"
 
     user_prompt, system_prompt = _build_prompts(
         row,
@@ -3412,6 +3459,8 @@ async def _process_row(
         is_held=bool(held_instrument_id),
         want_key_issues=bool(brief_instrument_id),
     )
+    if thesis:
+        system_prompt += thesis_judgment.THESIS_RULE
     result = await complete_model(
         user_prompt,
         _AnalysisOutput,
@@ -3441,7 +3490,7 @@ async def _process_row(
         _log_phase_timing()
         pa_store.mark_done(row_id)
         return 1
-    parsed = result.model_dump()
+    parsed = _judged_against_thesis(result.model_dump(), thesis)
     if not _analysis_matches_subject(row, parsed):
         logger.warning("analyst: skipped off-subject analysis for %s", subject)
         _log_phase_timing()
@@ -3619,6 +3668,9 @@ def _format_analysis(
             parts += ["", f"• {actions[0]}"]
         body = "\n".join(p for p in parts if p is not None)
     message = _truncate_at_sentence_boundary(f"{header}\n\n{body}".rstrip(), _ALERT_MAX_CHARS)
+    # The thesis citation rides AFTER the cap, like the sources: a long body can't cut it off.
+    if parsed.get("thesis_line") and "thesis" not in body.lower():
+        message += f"\n\n{parsed['thesis_line']}"
     if sources:
         message += "\n\nSources:\n" + "\n".join(f"• {s}" for s in sources)
     return message

@@ -29,6 +29,7 @@ from backend.db.alert_store import _resolve_instrument_id_by_ticker, alert_cache
 from backend.db.intel_stories_store import IntelStoriesStore
 from backend.monitoring.analyst_prompt import render_news_context_block, sanitize_snippets
 from backend.services import alerts as alerts_service
+from backend.services import thesis_guard, thesis_judgment
 from backend.services.fx_cache import load_fx_cache
 from backend.services.intel_stories import apply_story_change
 
@@ -679,6 +680,13 @@ async def _fire_alert_condition(
     position_ctx = _build_position_context(
         ticker, {"label": label}, row, fx, all_rows, current_price
     )
+    thesis = thesis_judgment.for_instrument(
+        instrument_id, current_price, ticker=ticker, currency=currency
+    )
+    if thesis:
+        position_ctx += (
+            f"\n\n{thesis_judgment.prompt_block(thesis, label)}\n{thesis_judgment.THESIS_RULE}"
+        )
     # _news_context_for_alert already swallows its own failures (returns "" — see its
     # docstring), but the call is wrapped here too, defense-in-depth: the alert must still
     # fire+push even if a future change to that helper — or the news-context machinery it
@@ -719,6 +727,9 @@ async def _fire_alert_condition(
             move_pct=move_pct,
         )
 
+    if thesis:
+        # The narration's advice held to the thesis (an unsupported "sell" replaced), cited.
+        signal["action_items"] = thesis_guard.guard_actions(signal.get("action_items"), thesis)
     apply_story_change(signal)
     logger.info("price_monitor: alert fired — %s %s %s %g", ticker, op_str, currency, target)
     channels = list(condition.get("channels") or [])
