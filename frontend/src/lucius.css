@@ -2151,7 +2151,8 @@
   }
   .ac-item-sub {
     font-size: 11px;
-    color: var(--faint);
+    /* --muted, not --faint: --faint is ~3.3:1 on the popup at 11px — too dim to read. */
+    color: var(--muted);
     margin-top: 1px;
     white-space: nowrap;
     overflow: hidden;

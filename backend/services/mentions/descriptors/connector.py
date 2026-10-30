@@ -39,15 +39,30 @@ def _connector_rows(query: SearchQuery) -> list[dict]:
             "kind": v.kind,
             "enabled": v.enabled,
             "status": v.status,
+            "last_status": str((v.config or {}).get("last_status") or ""),
         }
         for v in list_connectors()
     ]
 
 
+_ERROR_STATUSES = frozenset({"error", "connect_error", "auth_error", "failed"})
+
+
 def _connector_sublabel(row: dict) -> str:
-    status = row.get("status") or ""
-    enabled = bool(row.get("enabled"))
-    return f"{status} • {'on' if enabled else 'off'}".strip(" •")
+    """The Connectors page's own words for a connector's state — the server twin of
+    ``statusOf`` in ``frontend/src/components/tabs/connectors/adapter.ts``, so a picker row
+    says "Connected" where the card does, never the raw ``active`` / ``not_configured``. No
+    trailing on/off: "Connected" already means on, "Not connected"/"Disconnected" off."""
+    status = str(row.get("status") or "")
+    last = str(row.get("last_status") or "")
+    if last == "reconnect_needed":
+        return "Sign-in needed"
+    if status in _ERROR_STATUSES or last in _ERROR_STATUSES:
+        return "Auth error" if "auth_error" in (status, last) else "Error"
+    if row.get("enabled"):
+        return "Connected"
+    configured = str(row.get("id") or "").startswith("mcp:") or status != "not_configured"
+    return "Disconnected" if configured else "Not connected"
 
 
 register(
