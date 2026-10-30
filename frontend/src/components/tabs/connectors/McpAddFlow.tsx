@@ -39,6 +39,7 @@ import { MODAL_BODY_MIN_HEIGHT } from './DirectoryBrowser'
 import { MCP_INSTALL_PRESETS, type DirectoryRow } from './catalog'
 import {
   EMPTY_MCP_FORM,
+  displayName,
   formFromEditTarget,
   guessServerName,
   isValidMcpUrl,
@@ -240,6 +241,9 @@ export function useMcpAddFlow({
   // `.then()` tell "am I still the one the user is looking at" and no-op if not, rather than
   // clobbering whatever the user did in the meantime (a fresh probe, or the form again).
   const activeTokenRef = useRef<string | null>(null)
+  // The directory card's name, when the flow began from one. A server's self-reported name is
+  // often a package slug (Coinbase's CLI says `coinbase`), so the card we list it under wins.
+  const catalogNameRef = useRef<string | null>(null)
 
   // ── OAuth sign-in (RFC `2026-08-14-mcp-oauth` §4.2/§4.3) ──────────────────────
   // `connected` alone is not enough to seed `signed_in`: a refresh can fail and mark
@@ -419,6 +423,8 @@ export function useMcpAddFlow({
     resetOAuthState()
     setOauthClientId('')
     const preset = entry ? MCP_INSTALL_PRESETS[entry.id] : undefined
+    // The generic slot names no server — the server's own report has to do there.
+    catalogNameRef.current = entry && entry.id !== 'mcp-custom' ? entry.name : null
     setFormState({
       ...EMPTY_MCP_FORM,
       transport: preset?.transport ?? 'remote',
@@ -506,7 +512,7 @@ export function useMcpAddFlow({
       setFormState((f) =>
         editing
           ? { ...f, name: f.name.trim() || result.name }
-          : { ...f, name: result.name, serverId: result.id },
+          : { ...f, name: catalogNameRef.current ?? displayName(result.name), serverId: result.id },
       )
       setMeta((m) =>
         mergeTrust(m, {
@@ -588,7 +594,8 @@ export function useMcpAddFlow({
       const discovered = result.tools.map((t) => t.name)
       // `suggested_name` is already `serverInfo.name` with the backend's own endpoint-derived
       // fallback; `guessServerName` only covers a server that reported nothing at all.
-      const name = result.suggested_name.trim() || guessServerName(form)
+      const name =
+        catalogNameRef.current ?? displayName(result.suggested_name.trim() || guessServerName(form))
       setDiscoveredTools(result.tools)
       // Every NEWLY discovered tool starts at Needs approval — no tiering, no exceptions
       // (spec §4). On an edit the tools already permissioned keep the level they have: a
