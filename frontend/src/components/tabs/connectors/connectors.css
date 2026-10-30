@@ -801,6 +801,17 @@
   background: var(--selected);
   border-color: var(--line-strong);
 }
+/* How many cards a filter chip holds — quieter than its label, brighter once picked. */
+.cn-page .cn-chipcount {
+  margin-left: 5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint, var(--muted));
+}
+.cn-page .cn-chip.on .cn-chipcount,
+.cn-page .cn-cat.on .cn-chipcount {
+  color: var(--muted);
+}
 .cn-page .rd-select.cn-sortselect {
   height: 30px;
   padding: 0 28px 0 13px;

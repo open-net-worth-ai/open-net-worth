@@ -80,6 +80,12 @@ export function DirectoryBrowser({
   // connectors already added and, unlike the grid, ignored Sort. A shortcut through the DEFAULT
   // view only — once the user has filtered or searched,
   // it is noise competing with the result they asked for.
+  // Each chip's number is what tapping it would show: the OTHER row's pick and the search
+  // still apply, so a count never promises more cards than the grid then holds.
+  const familyCount = (f: DirectoryFamilyFilter) =>
+    filterDirectory(entries, f, query, sort, category).length
+  const categoryCount = (c: ConnectorCategory | 'all') =>
+    filterDirectory(entries, family, query, sort, c).length
   const suggested = pickSuggestions(entries, 'all')
   const showSuggested =
     !query.trim() && family === 'all' && category === 'all' && suggested.length > 0
@@ -124,10 +130,10 @@ export function DirectoryBrowser({
               onChange={(e) => onCategory(e.target.value as ConnectorCategory | 'all')}
               aria-label="Filter by category"
             >
-              <option value="all">All categories</option>
+              <option value="all">All categories ({categoryCount('all')})</option>
               {categories.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {c} ({categoryCount(c)})
                 </option>
               ))}
             </select>
@@ -154,6 +160,9 @@ export function DirectoryBrowser({
                 onClick={() => onFamily(k)}
               >
                 {l}
+                <span className="cn-chipcount" aria-hidden>
+                  {familyCount(k)}
+                </span>
               </button>
             ))}
           </div>
@@ -180,6 +189,9 @@ export function DirectoryBrowser({
               }}
             >
               All
+              <span className="cn-chipcount" aria-hidden>
+                {categoryCount('all')}
+              </span>
             </button>
             {categories.map((c) => (
               <button
@@ -193,6 +205,9 @@ export function DirectoryBrowser({
                 }}
               >
                 {c}
+                <span className="cn-chipcount" aria-hidden>
+                  {categoryCount(c)}
+                </span>
               </button>
             ))}
           </div>
