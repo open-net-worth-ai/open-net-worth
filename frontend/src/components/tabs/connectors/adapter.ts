@@ -297,7 +297,11 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     sub: c.short_description || endpointOf(c) || '',
     desc: c.long_description || c.short_description || '',
     developer: provenance?.publisher ?? developer?.name,
-    developerUrl: mcp ? undefined : developer?.url,
+    // An MCP server we recognise links its publisher exactly as its directory card does
+    // (homepage, else repository) — the two screens must not disagree (D26).
+    developerUrl: mcp
+      ? (provenance?.homepageUrl ?? provenance?.repoUrl ?? undefined)
+      : developer?.url,
     mcp,
     // The wire view carries no provenance of its own, so this is honest about what it knows:
     // a publisher we recognise reads `unverified`, and a server the user pointed us at reads

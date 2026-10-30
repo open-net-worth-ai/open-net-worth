@@ -30,4 +30,16 @@ describe('an MCP server identity', () => {
     const entry = toEntry(mcp({ icon_version: null }))
     expect(entry.logo).toBeUndefined()
   })
+
+  // The connected detail page said "Developed by Coinbase" with no link while the directory
+  // card for the same server linked it (owner report, 2026-10-31).
+  it('links a recognised publisher the way its directory card does', () => {
+    const entry = toEntry(mcp({ url: 'https://mcp.moomoo.com/mcp' }))
+    expect(entry.developer).toBe('moomoo')
+    expect(entry.developerUrl).toBe('https://open.moomoo.com/mcp-docs/overview')
+  })
+
+  it('links nothing for a server it does not recognise', () => {
+    expect(toEntry(mcp({})).developerUrl).toBeUndefined()
+  })
 })
