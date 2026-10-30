@@ -868,6 +868,13 @@
   .cn-page .rd-tabs {
     mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
   }
+  /* Room past the last tab as wide as the fade, so scrolled to the end it sits clear of it.
+     A spacer, not padding: Safari drops end padding from a sideways scroll area. */
+  .cn-page .rd-tabs::after {
+    content: '';
+    flex: none;
+    width: 24px;
+  }
 }
 /* The custom MCP server, pinned above the directory grid as its own row (DirectoryBrowser). */
 .cn-page .cn-customrow {
