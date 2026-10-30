@@ -14,7 +14,7 @@
 // Both are inline styles because the prototype styles them inline — connectors.css is a verbatim
 // port of the prototype stylesheet and carries no rule for either.
 
-import type { JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import { DirectoryCard } from './DirectoryCard'
 import { pickSuggestions } from './directoryRows'
 import { Btn, Empty, Tabs } from './primitives'
@@ -105,16 +105,33 @@ export function DirectoryBrowser({
   const showSuggested =
     !query.trim() && family === 'all' && category === 'all' && suggested.length > 0
 
+  // A soft shadow under the sticky header once the list has scrolled under it — never at the
+  // top, where it would only be one more line (owner review, 2026-10-31).
+  const headRef = useRef<HTMLDivElement>(null)
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const body = headRef.current?.closest('.rd-modal-body')
+    if (!body) return
+    const onScroll = () => setScrolled(body.scrollTop > 0)
+    onScroll()
+    body.addEventListener('scroll', onScroll, { passive: true })
+    return () => body.removeEventListener('scroll', onScroll)
+  }, [])
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    // Header to list is 16px, the same step as every gap inside the list: the header keeps 12px
+    // of its own below the chips (room for the shadow) and the column adds 4.
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div
+        ref={headRef}
+        className={'cn-dirhead' + (scrolled ? ' scrolled' : '')}
         style={{
           position: 'sticky',
           top: -18,
           zIndex: 2,
           background: 'var(--modal-bg)',
           margin: '-18px -20px 0',
-          padding: '18px 20px 14px',
+          padding: '18px 20px 12px',
           display: 'flex',
           flexDirection: 'column',
           gap: 12,

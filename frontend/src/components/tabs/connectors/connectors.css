@@ -876,6 +876,13 @@
     width: 24px;
   }
 }
+/* Browse & add's sticky header (DirectoryBrowser): a soft shadow once the list scrolls under it. */
+.cn-page .cn-dirhead {
+  transition: box-shadow 0.15s ease;
+}
+.cn-page .cn-dirhead.scrolled {
+  box-shadow: 0 10px 16px -12px rgb(0 0 0 / 0.55);
+}
 /* The custom MCP server, pinned above the directory grid as its own row (DirectoryBrowser). */
 .cn-page .cn-customrow {
   display: flex;
@@ -947,7 +954,8 @@
 .cn-page .cn-cat {
   font: inherit;
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   line-height: 18px;
   padding: 0 7px;
   border: 0;
@@ -955,8 +963,9 @@
   white-space: nowrap;
 }
 .cn-page .cn-tag {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: color-mix(in srgb, var(--accent) 78%, var(--muted));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .cn-page .cn-verified-tag {
   font-size: 9.5px;
@@ -1027,9 +1036,13 @@
   gap: 5px;
   min-width: 0;
 }
+/* Quiet on purpose (owner, 2026-10-31: "more subtle, more premium"): a softened hue, a faint
+   fill and a hairline outline in that hue, at medium weight — the tag labels the card without
+   competing with its name. The hairline is an inset shadow so it adds no size. */
 .cn-page .cn-cat {
-  color: var(--cat-hue, var(--muted));
-  background: color-mix(in srgb, var(--cat-hue, var(--muted)) 14%, transparent);
+  color: color-mix(in srgb, var(--cat-hue, var(--muted)) 78%, var(--muted));
+  background: color-mix(in srgb, var(--cat-hue, var(--muted)) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cat-hue, var(--muted)) 18%, transparent);
 }
 .cn-page .cn-cat.pick {
   cursor: pointer;
@@ -1096,6 +1109,7 @@
   color: var(--muted);
   background: var(--surface2);
   border: 1px solid var(--line);
+  box-shadow: none;
   font-size: 11.5px;
   line-height: 22px;
   padding: 0 10px;
@@ -1112,7 +1126,7 @@
 }
 @media (hover: hover) {
   .cn-page .cn-cat.pick:not(.on):hover {
-    background: color-mix(in srgb, var(--cat-hue, var(--muted)) 24%, transparent);
+    background: color-mix(in srgb, var(--cat-hue, var(--muted)) 14%, transparent);
   }
   .cn-page .cn-catrow .cn-cat.pick:not(.on):hover {
     color: var(--ink);
