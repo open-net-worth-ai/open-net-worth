@@ -1476,8 +1476,9 @@ def _advance_refresh_stage(
 
 
 def _brief_carry_forward(row: dict) -> dict:
-    """The three fields `_land_analysis` never computes — key_issues/portfolio_impact/
-    portfolio_narrative — read verbatim off `row`. A tiny pure helper (R1 fix, security-review
+    """The fields `_land_analysis` never computes — the Analyst's take (key_issues,
+    portfolio_impact/narrative, position_verdict, its written-at and in-flight stamps) — read
+    verbatim off `row`. A tiny pure helper (R1 fix, security-review
     2026-08-29) so both write sites in `_land_analysis` can re-derive this from a FRESH store
     read taken immediately before EACH write, instead of once from the `prior` snapshot
     `_do_refresh` captured before this refresh's slow evidence/search work even started. A stale
@@ -1488,6 +1489,9 @@ def _brief_carry_forward(row: dict) -> dict:
         "key_issues": row.get("key_issues") or [],
         "portfolio_impact": row.get("portfolio_impact"),
         "portfolio_narrative": row.get("portfolio_narrative") or "",
+        "position_verdict": row.get("position_verdict"),
+        "key_issues_synthesized_at": row.get("key_issues_synthesized_at"),
+        "key_issues_refresh_stage": row.get("key_issues_refresh_stage"),
     }
 
 
@@ -1812,7 +1816,11 @@ async def _do_refresh(
     # the progress marker: gathering is done, the facts/peers/description synthesis is about to
     # start. key_issues/facts/peers/description carry forward from `prior` UNCHANGED — never
     # regressed to blank while synthesis is still in flight.
-    store.upsert_brief({**prior, "instrument_id": instrument_id, "refresh_stage": "analysing"})
+    # A FRESH read, not `prior`: the search above awaited, and the Analyst's take rewrite may
+    # have stamped `key_issues_refresh_stage` (or landed a take) meanwhile — writing `prior`
+    # back wiped that stamp and the page stopped showing the rewrite in progress.
+    current = store.get(instrument_id) or prior
+    store.upsert_brief({**current, "instrument_id": instrument_id, "refresh_stage": "analysing"})
 
     try:
         key_issues_count = await _land_analysis(
