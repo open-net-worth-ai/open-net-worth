@@ -180,7 +180,10 @@ Open the server under **Connectors**:
   can't be changed — add the server again instead.
 - **⋯ → Refresh tools list** — pick up tools the server added since you connected it. You rarely
   need it: the app re-reads every server's list when it starts and once a day, and a local server
-  that announces a change is re-read straight away (after the next call to it).
+  that announces a change is re-read straight away (after the next call to it). If a daily
+  re-read can't reach the server, its tools stay as they were and it's tried again every hour;
+  only after three misses in a row does the card show the error and Lucius stop offering its
+  tools. A server that comes back is picked up within the hour.
 - **Pause** / **Resume** — Lucius loses access to its tools while paused. Resuming a server that
   has never listed its tools connects to it and lists them; if it can't be reached, it shows an
   error instead of Connected.

@@ -289,6 +289,9 @@ class McpServerConfig(ONBaseModel):
     verification: Literal["verified", "unverified", "unknown"] = "unknown"
     last_status: Optional[str] = None  # ok | connect_error | auth_error | error | never
     last_error: Optional[str] = None
+    # Unattended re-reads that failed in a row while the last good tool list was kept
+    # (``McpClientManager.refresh_tools``); a successful read resets it.
+    refresh_failures: int = 0
     # The display name + icon the handshake or the endpoint's website gave
     # (``mcp.site_identity``) — a CLAIM, never a verification; ``site_source`` is the host it
     # came from (``None`` = the server itself). The icon BYTES live in state only

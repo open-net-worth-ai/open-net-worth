@@ -86,6 +86,7 @@ _PUBLIC_FIELDS = (
     "verification",
     "last_status",
     "last_error",
+    "refresh_failures",
     "site_name",
     "site_source",
 )
@@ -100,6 +101,7 @@ _STATE_FIELDS = (
     "server_info_instructions",
     "last_status",
     "last_error",
+    "refresh_failures",
     "site_name",
     "site_source",
     "site_icon_type",
@@ -324,6 +326,7 @@ class McpClientStore:
                     "server_info_name": info.name,
                     "server_info_version": info.version,
                     "server_info_instructions": info.instructions,
+                    **({"refresh_failures": None} if status == "ok" else {}),
                 },
                 conn=conn,
             )
@@ -337,6 +340,19 @@ class McpClientStore:
                 conn=conn,
             )
             return self._read(server_id, conn)
+
+    def record_refresh_failure(self, server_id: str) -> int:
+        """Count one more failed UNATTENDED re-read in a row and return the run's length.
+
+        The cached tools and status are left alone; ``record_discovery`` with ``ok`` ends the run."""
+        cid = mcp_connector_id(server_id)
+        with _unit(None) as conn:
+            row = self._store.get(cid, conn=conn)
+            if row is None:
+                return 0
+            count = int(row["state"].get("refresh_failures") or 0) + 1
+            self._store.merge_state(cid, {"refresh_failures": count}, conn=conn)
+            return count
 
     def record_site_identity(
         self,

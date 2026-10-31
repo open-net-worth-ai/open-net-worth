@@ -117,6 +117,10 @@ _PROBE_FALLBACK_ID = "server"
 # clean, retryable tool-error instead of an unbounded wait.
 _CALL_LOCK_ACQUIRE_TIMEOUT_SECONDS = 5.0
 
+# Scheduled re-reads in a row that may fail before a server's cached tools are dropped and its
+# card shows the error. Retried hourly, so this is about three hours of a real outage.
+REFRESH_FAILURES_BEFORE_ERROR = 3
+
 # How long an ADMIN action (disable/delete/reconcile, process shutdown) waits to acquire a
 # server's lock the polite way before forcing eviction without it (security review H2c). Short
 # on purpose: an operator's only remedy for a misbehaving server must never itself hang behind
@@ -811,13 +815,25 @@ class McpClientManager:
         server can take as long as it likes without delaying the app becoming ready to serve
         requests.
         """
+        self._connect_all(self._store.enabled(), unattended=False)
+
+    def refresh_tools(self, *, only_unhealthy: bool = False) -> None:
+        """The scheduled re-read: every enabled server (daily), or only those whose last read
+        failed (hourly). Unlike boot, ONE failed read keeps the last good tool list — a
+        30-second blip must not hide a server's tools until somebody notices; the error shows
+        only after ``REFRESH_FAILURES_BEFORE_ERROR`` failures in a row."""
         servers = self._store.enabled()
+        if only_unhealthy:
+            servers = [s for s in servers if s.last_status != "ok" or s.refresh_failures > 0]
+        self._connect_all(servers, unattended=True)
+
+    def _connect_all(self, servers: List[McpServerConfig], *, unattended: bool) -> None:
         if not servers:
             return
         threads = [
             threading.Thread(
                 target=self._connect_one_at_boot,
-                args=(server,),
+                args=(server, unattended),
                 daemon=True,
                 name=f"mcp-connect:{server.id}",
             )
@@ -828,14 +844,33 @@ class McpClientManager:
         for t in threads:
             t.join()
 
-    def _connect_one_at_boot(self, server: McpServerConfig) -> None:
-        """One server's boot-connect attempt — runs in its own thread. Never raises."""
+    def _connect_one_at_boot(self, server: McpServerConfig, unattended: bool = False) -> None:
+        """One server's connect attempt — runs in its own thread. Never raises."""
         if server.transport == "stdio":
-            self._boot_connect_one(server)
+            self._boot_connect_one(server, unattended=unattended)
         else:
-            self._discover(server)
+            self._discover(server, unattended=unattended)
 
-    def _boot_connect_one(self, server: McpServerConfig) -> None:
+    def _record_failure(
+        self, server_id: str, status: str, error: str, *, unattended: bool, auth: bool = False
+    ) -> None:
+        """Persist a failed read — or, for an unattended re-read of a server whose last read
+        was good, count it and keep the cached tools until the run reaches the threshold.
+        A sign-in failure is never softened: no retry fixes it, the user has to act."""
+        if unattended and not auth:
+            current = self._store.find(server_id)
+            if current is not None and current.last_status == "ok" and current.discovered_tools:
+                failures = self._store.record_refresh_failure(server_id)
+                if failures < REFRESH_FAILURES_BEFORE_ERROR:
+                    logger.info(
+                        "mcp '%s' re-read failed (%d in a row) — keeping its last tool list",
+                        server_id,
+                        failures,
+                    )
+                    return
+        self._store.record_discovery(server_id, [], status, error)
+
+    def _boot_connect_one(self, server: McpServerConfig, *, unattended: bool = False) -> None:
         """Spawn/reuse ``server``'s pooled stdio connection, then discover its tools on that
         SAME connection (one spawn, not two). Shared by ``connect_enabled`` (boot) and
         ``reconcile_pooled_connection`` (a create/update via the Connectors UI) — both want
@@ -863,12 +898,14 @@ class McpClientManager:
             except McpCallError as exc:
                 logger.warning("mcp connect_error for '%s': %s", server.id, exc.safe_summary)
                 self._close_locked(server.id)
-                self._store.record_discovery(server.id, [], "connect_error", exc.safe_summary)
+                self._record_failure(
+                    server.id, "connect_error", exc.safe_summary, unattended=unattended
+                )
                 return
             except Exception as exc:  # noqa: BLE001
                 logger.warning("mcp connect failed for '%s': %s", server.id, exc)
                 self._close_locked(server.id)
-                self._store.record_discovery(server.id, [], "error", str(exc))
+                self._record_failure(server.id, "error", str(exc), unattended=unattended)
                 return
         self._store.record_discovery(
             server.id, tools, "ok", None, server_info=parse_server_info(handshake)
@@ -900,6 +937,7 @@ class McpClientManager:
         *,
         deadline: Optional[Deadline] = None,
         refresh_identity: bool = False,
+        unattended: bool = False,
     ) -> None:
         """Handshake + ``tools/list`` against one server, persisting what came back.
 
@@ -933,11 +971,17 @@ class McpClientManager:
                 tools = conn.list_tools()
         except McpCallError as exc:
             logger.warning("mcp connect_error for '%s': %s", server.id, exc.safe_summary)
-            self._store.record_discovery(server.id, [], "connect_error", exc.safe_summary)
+            self._record_failure(
+                server.id,
+                "connect_error",
+                exc.safe_summary,
+                unattended=unattended,
+                auth=exc.auth_challenge is not None,
+            )
             return
         except Exception as exc:  # noqa: BLE001
             logger.warning("mcp connect failed for '%s': %s", server.id, exc)
-            self._store.record_discovery(server.id, [], "error", str(exc))
+            self._record_failure(server.id, "error", str(exc), unattended=unattended)
             return
         info = parse_server_info(handshake)
         self._store.record_discovery(server.id, tools, "ok", None, server_info=info)
