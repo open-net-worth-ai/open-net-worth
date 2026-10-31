@@ -101,10 +101,12 @@ export function PositionVerdictLine({
   }
   return (
     <div className="asd-verdict">
-      <span className={`asd-verdict-action asd-verdict-action--${verdict.action}`}>
-        {ACTION_LABEL[verdict.action]}
-      </span>
-      <p className="asd-verdict-why">{verdict.why}</p>
+      <p className="asd-verdict-why">
+        <span className={`asd-verdict-action asd-verdict-action--${verdict.action}`}>
+          {ACTION_LABEL[verdict.action]}
+        </span>
+        {verdict.why}
+      </p>
       {suggestions.length > 0 && (
         <div className="asd-verdict-suggestions">
           {suggestions.map((c) => (

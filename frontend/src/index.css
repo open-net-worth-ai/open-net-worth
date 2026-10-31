@@ -13574,8 +13574,8 @@ body.hide-amounts .money * {
     color: var(--ink);
   }
 
-  /* The take's verdict (PositionVerdictLine), under the reasoning: the call as a small tag on its
-     own line, its reason in muted text below, then the suggestions as rounded chips. */
+  /* The take's verdict (PositionVerdictLine), under the reasoning: the call as a small inline tag
+     leading its reason (muted, wrapping under the tag like ordinary text), then the chips. */
   .asd-verdict {
     display: flex;
     flex-direction: column;
@@ -13584,6 +13584,9 @@ body.hide-amounts .money * {
   }
 
   .asd-verdict-action {
+    display: inline-block;
+    margin-right: var(--space-3);
+    vertical-align: 1px;
     padding: 1px var(--space-2);
     border-radius: var(--radius-sm);
     font-size: var(--text-2xs);
@@ -13595,7 +13598,6 @@ body.hide-amounts .money * {
   }
 
   .asd-verdict-why {
-    margin-top: var(--space-2);
     font-size: var(--text-sm);
     line-height: 1.55;
     color: var(--muted);
