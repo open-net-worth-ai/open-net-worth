@@ -13609,15 +13609,13 @@ body.hide-amounts .money * {
     background: color-mix(in srgb, var(--pos) 16%, transparent);
   }
 
+  /* Trim and Sell are both "reduce" — amber, never red: selling a winner is good news, and a
+     red tag read it as an alarm. */
   .asd-verdict-action--trim,
+  .asd-verdict-action--sell,
   .asd-verdict-action--wait {
     color: var(--warn);
     background: color-mix(in srgb, var(--warn) 16%, transparent);
-  }
-
-  .asd-verdict-action--sell {
-    color: var(--neg);
-    background: color-mix(in srgb, var(--neg) 16%, transparent);
   }
 
   .asd-verdict-suggestions {
