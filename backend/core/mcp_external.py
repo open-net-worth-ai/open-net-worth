@@ -233,6 +233,12 @@ class ExternalDispatcher(Protocol):
       * ``allow`` → fire the real external ``tools/call`` and return the fenced text with
         ``None``.
 
+    ``fire_allowed(name, args)`` (``permissions_v2``) fires a call the caller's gate
+    (``ai.permissions``) has already allowed although the tool's level is Ask — Skip, the Auto
+    judge's allow, the running Automation's own Always allowed list. The mode and those lists are
+    decided in ``ai``; the manager re-checks only the hard refusals (unknown or disabled server, a
+    tool at ``blocked``).
+
     ``image_attachment_ids`` is the durable attachment id of any image content block the call
     returned (a screenshot, e.g.) — persisted (``mcp.client_manager._persist_result_images``)
     the same way a chat photo upload is, so it can be shown to the user as a real image
@@ -274,6 +280,11 @@ class ExternalDispatcher(Protocol):
     async def call(
         self, name: str, args: dict
     ) -> Tuple[Optional[str], Optional[dict], list[str]]:  # pragma: no cover - structural protocol
+        ...
+
+    async def fire_allowed(
+        self, name: str, args: dict
+    ) -> Tuple[str, Optional[dict], list[str]]:  # pragma: no cover - structural protocol
         ...
 
     async def apply_confirmed(

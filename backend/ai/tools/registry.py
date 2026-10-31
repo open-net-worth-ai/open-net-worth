@@ -49,6 +49,8 @@ class Tool:
     connector: Optional[str] = None
     preview_adapter: Optional[PreviewAdapter] = None
     precheck: Optional[Precheck] = None
+    external_effect: bool = False
+    unavailable: Optional[Callable[[], Optional[str]]] = None
 
 
 _REGISTRY: dict[str, Tool] = {}
@@ -75,8 +77,22 @@ def tool(
     connector: Optional[str] = None,
     preview_adapter: Optional[PreviewAdapter] = None,
     precheck: Optional[Precheck] = None,
+    external_effect: bool = False,
+    unavailable: Optional[Callable[[], Optional[str]]] = None,
 ) -> Callable[[Handler], Handler]:
     """Register an async tool handler under ``name``. Raises on duplicate name.
+
+    ``external_effect`` marks a tool that acts OUTSIDE the owner's own data: it sends something out
+    of this install (email, Telegram, a webhook) or runs code on the owner's machine
+    (``run_code`` / ``run_script``). Under ``permissions_v2`` such a tool is seeded Ask whatever
+    domains it writes (``ai.tools._confirm_gate_v2.is_gated_tool``); the old gate never reads it.
+
+    ``unavailable`` is a FEATURE SWITCH, not an approval: a callable that returns a refusal
+    message while the feature behind the tool is switched off (the code sandbox's kill switches),
+    else ``None``. Under ``permissions_v2`` ``dispatch`` asks it BEFORE the Auto judge and the
+    permission gate, so a call that cannot run is refused at once — no card, no judge call. The
+    handler keeps its own check, which is what refuses an approval redeemed after the switch was
+    turned off. The old gate never reads it.
 
     ``mutates`` self-declares which data domains this tool WRITES (e.g. ``("ledger",)``;
     ``("*",)`` = everything). The dispatch loop aggregates them into one ``data_changed``
@@ -157,6 +173,8 @@ def tool(
             connector,
             preview_adapter,
             precheck,
+            external_effect,
+            unavailable,
         )
         _validator_for.cache_clear()  # a name queried before registration cached a None
         return fn
@@ -203,9 +221,9 @@ def should_preview_write() -> bool:
     name = (_active_call.get() or {}).get("canonical")
     if not name:
         return False
-    from backend.ai.tools import _confirm_gate as _gate
+    from backend.ai.permissions import engine
 
-    return _gate.should_gate(name)
+    return engine().should_gate(name)
 
 
 def stage_write(
@@ -241,6 +259,7 @@ def stage_write(
     only when there is no ``tool_use_id`` to bind to, which ``should_preview_write`` has
     already failed closed on.
     """
+    from backend.ai.permissions import engine
     from backend.ai.tools._confirm_gate import CONFIRM_TOKEN_KEY, preview_failed_result
     from backend.core.chat_session import get_session_id
     from backend.core.tool_use_context import get_tool_use_id
@@ -263,6 +282,7 @@ def stage_write(
         "grant_tool": tool_name,
         "tool_use_id": tool_use_id,
         "session_id": session_id,
+        **engine().automation_ref(),
     }
     PendingPlanStore().stage_pending(
         tool_use_id,
@@ -347,6 +367,13 @@ def tool_schema(name: str) -> Optional[dict]:
     """
     entry = _REGISTRY.get(name)
     return entry.input_schema if entry and isinstance(entry.input_schema, dict) else None
+
+
+def tool_description(name: str) -> Optional[str]:
+    """A registered tool's description, or None for an unknown name — read by the Auto judge,
+    which classifies a call from the tool's own words rather than from any list."""
+    entry = _REGISTRY.get(name)
+    return entry.description if entry else None
 
 
 def iter_registered_tools():
@@ -442,6 +469,26 @@ def mutated_domains(name: str) -> tuple[str, ...]:
     if call is not None and call.get("canonical") == t.name and call.get("domains"):
         return call["domains"]
     return t.mutates
+
+
+def written_domains(name: str) -> tuple[str, ...]:
+    """Domains ``name`` genuinely CHANGES — its ``mutates=`` tag, ``()`` for a read or an unknown
+    tool. Static on purpose: a handler's in-flight narrowing (``declare_mutated_domains``) can
+    only shrink a write's footprint, never turn a write into a read or a read into a write."""
+    t = _REGISTRY.get(name)
+    return t.mutates if t is not None else ()
+
+
+def has_external_effect(name: str) -> bool:
+    """Whether ``name`` declares ``external_effect=`` (it sends something out of this install or
+    runs code on the owner's machine) — ``False`` for an unknown tool."""
+    t = _REGISTRY.get(name)
+    return bool(t and t.external_effect)
+
+
+def is_write_tool(name: str) -> bool:
+    """Whether ``name`` changes something of the owner's (declares ``mutates=``)."""
+    return bool(written_domains(name))
 
 
 def mutating_tool_domains() -> dict[str, tuple[str, ...]]:
@@ -783,6 +830,61 @@ def external_args_error(name: str, schema: dict, input_data: dict) -> Optional[s
     return f"invalid arguments for {name}: " + "; ".join(lines)
 
 
+def _refusal_before_gate(
+    name: str, entry: Tool, input_data: dict, gate: Any
+) -> Tuple[Optional[str], dict]:
+    """``(refusal, args)``: why ``dispatch`` refuses this call before the permission gate — a
+    connector withdrawn by policy, arguments the schema rejects, a feature switched off — as the
+    JSON error it returns, or ``None``. ``args`` is the input as the gate will see it (stringified
+    containers decoded).
+
+    A connector withdrawn by POLICY (ai.tools._connector_gate.DISABLED_CONNECTORS) is refused
+    unconditionally, before the handler ever runs — the one exception to `connector=`'s ordinary
+    "discovery only, never blocks dispatch" contract (see the `tool()` docstring above).
+    `entry.connector` is None for every untagged/bulk tool, and `None in DISABLED_CONNECTORS` is
+    simply False, so this never touches them.
+    """
+    from backend.ai.tools._connector_gate import DISABLED_CONNECTORS
+
+    if entry.connector in DISABLED_CONNECTORS:
+        return (
+            json.dumps(
+                {
+                    "error": (
+                        f"the '{entry.connector}' connector is disabled in this build (not "
+                        f"merely unconfigured) — {name} cannot be called."
+                    )
+                }
+            ),
+            input_data,
+        )
+    # Decode stringified containers before validating, so the handler receives what the
+    # schema says it should. See coerce_stringified_containers for the live failure.
+    input_data = coerce_stringified_containers(name, input_data)
+    problem = validation_error(name, input_data)
+    if problem is not None:
+        return json.dumps({"error": problem}), input_data
+    off = gate.unavailable_refusal(entry, input_data)
+    if off is not None:
+        return json.dumps({"error": off}), input_data
+    return None, input_data
+
+
+def judgeable_input(name: str, input_data: dict, tool_use_id: Optional[str]) -> Optional[dict]:
+    """The arguments ``dispatch`` would hand the Auto judge for this call, or ``None`` when it
+    refuses the call first (unknown tool, refusal before the gate). The step's batch judge
+    (``auto_judge_batch``) asks this so it judges exactly what ``prepare`` will be asked about."""
+    from backend.ai.permissions import engine
+
+    gate = engine()
+    input_data = gate.clean_input(input_data, tool_use_id)
+    entry = _REGISTRY.get(name)
+    if entry is None:
+        return None
+    refusal, input_data = _refusal_before_gate(name, entry, input_data, gate)
+    return None if refusal is not None else input_data
+
+
 async def dispatch(
     name: str, input_data: dict, *, tool_use_id: Optional[str] = None
 ) -> Tuple[Optional[str], Optional[dict]]:
@@ -826,6 +928,10 @@ async def dispatch(
     from backend.core.tool_use_context import set_tool_use_id
 
     set_tool_use_id(tool_use_id)
+    from backend.ai.permissions import engine
+
+    gate = engine()
+    input_data = gate.clean_input(input_data, tool_use_id)
     entry = _REGISTRY.get(name)
     if entry is None:
         unknown = json.dumps({"error": f"unknown tool: {name}"})
@@ -834,32 +940,10 @@ async def dispatch(
         # PREVIOUS dispatch's narrowing, which ``_active_call`` still holds by design.
         _record_call(name, invoked, input_data, unknown, started, ())
         return unknown, None
-    # A connector withdrawn by POLICY (ai.tools._connector_gate.DISABLED_CONNECTORS) is
-    # refused here, unconditionally, before the handler ever runs — the one exception to
-    # `connector=`'s ordinary "discovery only, never blocks dispatch" contract (see the
-    # `tool()` docstring above). `entry.connector` is None for every untagged/bulk tool, and
-    # `None in DISABLED_CONNECTORS` is simply False, so this never touches them.
-    from backend.ai.tools._connector_gate import DISABLED_CONNECTORS
-
-    if entry.connector in DISABLED_CONNECTORS:
-        refused = json.dumps(
-            {
-                "error": (
-                    f"the '{entry.connector}' connector is disabled in this build (not "
-                    f"merely unconfigured) — {name} cannot be called."
-                )
-            }
-        )
-        _record_call(name, invoked, input_data, refused, started, ())
-        return refused, None
-    # Decode stringified containers before validating, so the handler receives what the
-    # schema says it should. See coerce_stringified_containers for the live failure.
-    input_data = coerce_stringified_containers(name, input_data)
-    problem = validation_error(name, input_data)
-    if problem is not None:
-        invalid = json.dumps({"error": problem})
-        _record_call(name, invoked, input_data, invalid, started, ())
-        return invalid, None
+    refusal, input_data = _refusal_before_gate(name, entry, input_data, gate)
+    if refusal is not None:
+        _record_call(name, invoked, input_data, refusal, started, ())
+        return refusal, None
     # ── The permission gate (approval model RFC 2026-07-20 §13.1; E4) ────────────────────
     # Consumed HERE, once, rather than per-tool: a universal policy wired call-site by
     # call-site is a policy whose coverage depends on remembering, and the two-of-163 state
@@ -867,7 +951,16 @@ async def dispatch(
     # for why staging at dispatch does NOT reintroduce the hazard the 2026-07-19 ADR
     # deferred (that deferral is about the CONFIRM half splicing history; this returns an
     # ordinary tool_result and splices nothing).
-    gated, input_data = _permission_gate(name, input_data)
+    #
+    # Under ``permissions_v2`` an Auto-mode Ask is decided by a model call (``ai.auto_judge``), so
+    # it is awaited here, BEFORE the sync gate and before any handler: the self-staging tools ask
+    # ``should_preview_write()`` from inside their handler and need the answer to exist.
+    await gate.prepare(name, input_data)
+    in_flight = _dispatch_gate.set(gate)
+    try:
+        gated, input_data = _permission_gate(name, input_data)
+    finally:
+        _dispatch_gate.reset(in_flight)
     if gated is not None:
         text, proposed = gated
         # Domains are hardcoded (): nothing ran, so nothing was written. A staged/paused
@@ -978,6 +1071,10 @@ def _demo_refusal(name: str) -> Optional[Tuple[Optional[str], Optional[dict]]]:
     return text, None
 
 
+# The gate ``dispatch`` picked for the call in flight, so one tool call reads the flag once.
+_dispatch_gate: ContextVar[Any] = ContextVar("dispatch_permission_gate", default=None)
+
+
 def _permission_gate(
     name: str, input_data: dict
 ) -> Tuple[Optional[Tuple[Optional[str], Optional[dict]]], dict]:
@@ -1023,13 +1120,19 @@ def _permission_gate(
     demo_refused = _demo_refusal(name)
     if demo_refused is not None:
         return demo_refused, input_data
-    try:
-        from backend.ai.tools import _confirm_gate as _gate
+    from backend.ai.permissions import engine
 
+    # ``dispatch`` has already read the flag for this call and hands the gate down; a direct caller
+    # (a test, a script) reads it here.
+    _gate = _dispatch_gate.get() or engine()
+    try:
         level = _gate.effective_level(name)
         if level == "blocked":
             logger.info("tool permission: refusing blocked tool %s", name)
             return _gate.blocked_result(name), input_data
+        refused = _gate.automation_refusal(name)
+        if refused is not None:
+            return refused, input_data
 
         token = (input_data or {}).get(_gate.CONFIRM_TOKEN_KEY)
         if token and not _gate.self_stages(name):
@@ -1044,9 +1147,7 @@ def _permission_gate(
         if _gate.should_gate_dispatch(name, level=level):
             return _gate.stage_generic(name, input_data), input_data
     except Exception:  # noqa: BLE001 — see docstring
-        logger.warning(
-            "permission gate: check failed for %s; executing ungated", name, exc_info=True
-        )
+        return _gate.gate_error(name, input_data)
     return None, input_data
 
 
