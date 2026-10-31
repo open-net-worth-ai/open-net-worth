@@ -64,7 +64,7 @@ it('shows a sign-in connector as a card from OUR catalog; Connect opens the sign
     name: 'connectors.open_setup',
     args: { id: 'mcp-webull' },
   }
-  const { container } = render(<ScreenCommandChip command={command} route="connectors" />)
+  render(<ScreenCommandChip command={command} route="connectors" />)
   expect(screen.getByText('Webull')).toBeTruthy()
   expect(screen.getByText('Verified')).toBeTruthy()
   expect(screen.getByText('By Webull')).toBeTruthy()

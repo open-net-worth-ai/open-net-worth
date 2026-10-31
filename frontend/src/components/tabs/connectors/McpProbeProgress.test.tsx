@@ -89,6 +89,8 @@ function connectingFlow(
     runConnect: () => {},
     back: () => {},
     finish: () => {},
+    saveDormant: () => {},
+    canSave: false,
     discardAbandonedOAuthServer: () => {},
   }
 }
