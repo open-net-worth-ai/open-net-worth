@@ -5,6 +5,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ChevronDown } from '../../../ui/icons'
+import { useFlag } from '../../../hooks/useFlag'
 import { fetchToolDetail } from '../../../utils/chatStore'
 import type { Cluster, ToolItem } from './cluster'
 import { failureOf } from './cluster'
@@ -92,6 +93,7 @@ function BusyDots() {
 /** One call's own expandable detail — used for a single-call row and for each member of an
  *  expanded multi-call cluster. */
 function CallDetail({ item, sessionId }: { item: ToolItem; sessionId?: string }) {
+  const declinedIsNotFailure = useFlag('permissions_v2') === true
   const elided = item.resultElided !== undefined || item.inputElided !== undefined
   const [detail, setDetail] = useState<{
     input?: Record<string, unknown>
@@ -161,7 +163,7 @@ function CallDetail({ item, sessionId }: { item: ToolItem; sessionId?: string })
       loadingLabel={busy ? 'Waiting for result…' : 'Loading full result…'}
       failedToLoad={failedToLoad || unavailable}
       onRetry={canFetch ? load : undefined}
-      resultFailed={failureOf({ ...item, result }).failed}
+      resultFailed={failureOf({ ...item, result }, declinedIsNotFailure).failed}
     />
   )
 }

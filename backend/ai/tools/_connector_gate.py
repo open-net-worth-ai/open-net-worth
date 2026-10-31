@@ -72,6 +72,44 @@ def permission_owner(tool_name: str) -> str:
     return owner or CORE_CONNECTOR_ID
 
 
+def permission_key(tool_name: str) -> tuple[str, str]:
+    """``(owner, tool)`` — the permission-table key the decision for ``tool_name`` lives under
+    (``permissions_v2``).
+
+    ``(permission_owner(tool_name), tool_name)`` for every tool but two: ``web_search`` and
+    ``fetch_page`` call the ACTIVE search provider, so they BELONG to the search connector —
+    their key is the active provider's own tool (``tavily_search`` / ``tavily_fetch_page``, under
+    ``web_search:tavily``). That page is their one control: a level set on the provider's tool
+    cannot be bypassed by calling the generic one. With no provider active they keep their own
+    (``core``) key. A failed provider lookup RAISES: the caller decides what not knowing means (the
+    gate asks; it never lets the search through).
+    """
+    from backend.ai.tools.web_search_providers import active_provider_tool
+
+    target = active_provider_tool(tool_name) or tool_name
+    return permission_owner(target), target
+
+
+def permission_catalog() -> list[tuple[str, str, bool]]:
+    """Every registry tool that has its own permission value: ``(owner, tool, asks_by_default)``
+    (``permissions_v2``). Two kinds are left out on purpose: ``web_search`` and ``fetch_page`` —
+    they belong to the ACTIVE search provider's value — and a tool of a connector withdrawn by
+    policy (``DISABLED_CONNECTORS``), which dispatch refuses before any level is read."""
+    from backend.ai.tools._confirm_gate_v2 import is_gated_tool
+    from backend.ai.tools.misc import ACTIVE_PROVIDER_VERBS
+    from backend.ai.tools.registry import registered_tool_names
+
+    catalog: list[tuple[str, str, bool]] = []
+    for name in registered_tool_names():
+        if name in ACTIVE_PROVIDER_VERBS:
+            continue
+        owner = permission_owner(name)
+        if owner in DISABLED_CONNECTORS:
+            continue
+        catalog.append((owner, name, is_gated_tool(name)))
+    return catalog
+
+
 def hidden_connector_tools() -> frozenset[str]:
     """Every tool name currently hidden from discovery: it carries a ``connector=`` tag
     AND (that connector is not (yet) enabled OR that connector is in

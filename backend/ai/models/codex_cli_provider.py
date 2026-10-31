@@ -85,7 +85,7 @@ from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConfigurationError, ExternalServiceError, ProviderTimeoutError
 
 from . import codex_app_server, codex_live_turn, codex_turn_claims
-from .base import AIProvider
+from .base import AIProvider, log_text_cap
 from .cli_tool_protocol import (
     NATIVE_TOOLS_NOTE,
     ToolCallScanner,
@@ -803,7 +803,7 @@ class CodexCliProvider(AIProvider):
         # Owner incident 2026-08-31 (KODK, openai_provider's own equivalent fix): log the
         # actual response text, not just token counts. Bounded, logged only — see
         # openai_provider.complete's matching comment for why this isn't in cost_log.
-        _LOG_TEXT_CAP = 8000
+        _LOG_TEXT_CAP = log_text_cap(source)
         log.info(
             "complete_done  source=%s  transport=codex_cli  model=%s  basis=%s  input=%d  "
             "cached=%d  output=%d  cost_usd=%.5f  content_chars=%d\n"

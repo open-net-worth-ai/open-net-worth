@@ -245,13 +245,16 @@ async def _apply_via_confirm_token(tool_name: str, change: dict) -> dict:
     twin of ``_apply_ledger_confirm`` for ``_CONFIRM_TOKEN_TOOLS``'s change types. Also
     re-runs that tool's own outcome re-check against what the card promised, which the
     direct-dispatch branches below skip."""
+    from backend.ai.permissions import engine
     from backend.ai.tools import execute_tool
     from backend.ai.tools._confirm_gate import CONFIRM_TOKEN_KEY
 
     token = change.get(CONFIRM_TOKEN_KEY)
     if not token:
         raise RuntimeError(f"{tool_name} confirm card carries no confirm token — cannot apply")
-    text, _ = await execute_tool(tool_name, {CONFIRM_TOKEN_KEY: token})
+    text, _ = await execute_tool(
+        tool_name, {CONFIRM_TOKEN_KEY: token}, **engine().confirm_call_kwargs(token)
+    )
     import json as _json
 
     return _json.loads(text) if isinstance(text, str) else (text or {})

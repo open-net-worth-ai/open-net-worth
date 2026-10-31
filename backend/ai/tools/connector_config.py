@@ -61,6 +61,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import Field
 
+from backend.ai.permissions import engine
 from backend.ai.tools.connectors import DIRECTORY_NOTE
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of
@@ -140,7 +141,9 @@ class GetConnectorToolsInput(ToolInput):
     offset: Optional[int] = Field(default=None, description="Skip this many tools. Default 0.")
 
 
-def _group_block(tools: list, key: str, limit: int, offset: int) -> dict:
+def _group_block(
+    tools: list, key: str, limit: int, offset: int, defaults: Optional[dict[str, str]] = None
+) -> dict:
     """One group's block: the DERIVED aggregate level over the WHOLE group, plus a page.
 
     The aggregate is computed over every tool in the group BEFORE the page is cut — a level
@@ -168,6 +171,7 @@ def _group_block(tools: list, key: str, limit: int, offset: int) -> dict:
                 "level": t.level,
                 "description": _clean(t.description, _MAX_DESCRIPTION_CHARS),
                 "source": t.source,
+                **({"default": defaults.get(t.name)} if defaults else {}),
             }
             for t in page
         ],
@@ -201,19 +205,18 @@ def _group_block(tools: list, key: str, limit: int, offset: int) -> dict:
 async def get_connector_tools(input_data: dict):
     from backend.core.errors import NotFoundError
     from backend.services import connectors as connectors_service
-    from backend.services import tool_permissions
 
     connector_id = str(input_data.get("connector_id") or "").strip()
     if not connector_id:
         return json.dumps({"error": "connector_id is required"}, ensure_ascii=False), None
 
     try:
-        view = connectors_service.get_connector(connector_id)
+        view = connectors_service.get_connector(connector_id, ladder_v2=engine().ladder_v2)
     except NotFoundError:
         # The full id list rides along rather than a "call X for the list" pointer: there
         # is no tool that lists connectors, and naming this one would send the model in a
         # circle. The set is bounded by the install's own connectors, so it is cheap.
-        known = [v.id for v in connectors_service.list_connectors()]
+        known = [v.id for v in connectors_service.list_connectors(ladder_v2=engine().ladder_v2)]
         close = did_you_mean(connector_id, known)
         head = f"unknown connector: {connector_id}."
         if close:
@@ -222,12 +225,19 @@ async def get_connector_tools(input_data: dict):
 
     limit, offset = _page_bounds(input_data, _TOOL_PAGE)
     wanted = input_data.get("group")
+    default_level, tool_defaults = engine().connector_defaults(view)
     blocks = []
     for key, is_read in (("read", True), ("write", False)):
         if wanted and wanted != key:
             continue
         blocks.append(
-            _group_block([t for t in view.tools if t.read_only is is_read], key, limit, offset)
+            _group_block(
+                [t for t in view.tools if t.read_only is is_read],
+                key,
+                limit,
+                offset,
+                tool_defaults,
+            )
         )
 
     total = sum(b["total"] for b in blocks)
@@ -238,13 +248,19 @@ async def get_connector_tools(input_data: dict):
         "enabled": view.enabled,
         "status": view.status,
         # Shipped every time so nothing hardcodes what an undecided tool means.
-        "default_level": tool_permissions.DEFAULT_LEVEL,
+        "default_level": default_level,
         "groups": blocks,
         "showing": showing,
         "total": total,
         "has_more": any(b["has_more"] for b in blocks),
     }
     notes: list[str] = []
+    if tool_defaults:
+        notes.append(
+            "Each tool's 'default' is the level it starts at and Reset restores: a read runs, a "
+            "change or a send asks. An undecided tool is at its default, not necessarily "
+            "'needs_approval'."
+        )
     if not total:
         notes.append(
             f"'{view.id}' contributes no tools"

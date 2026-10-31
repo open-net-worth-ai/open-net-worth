@@ -61,9 +61,27 @@ class Flag:
 
 
 # THE REGISTRY. Declare a flag here and nowhere else; retire it by deleting its entry in the
-# same PR that deletes its old code path. Empty on purpose: the mechanism ships before any
-# feature needs it (the test suite declares its own example flag).
-FLAGS: tuple[Flag, ...] = ()
+# same PR that deletes its old code path. The test suite declares its own example flag
+# (``tests/flags.py``) on top of these.
+FLAGS: tuple[Flag, ...] = (
+    Flag(
+        name="permissions_v2",
+        description=(
+            "A new permissions model. Each tool has one setting: Always allow, Ask or Block. "
+            "In Auto mode a model judges each Ask call and only stops you when it is unsure. "
+            "Approval cards answer Approve, Always allow or Deny. Automations get their own "
+            "Always allowed and Blocked tool lists. Settings > Permissions lists the built-in "
+            "tools, and a connector's tools are set on its own page. The YOLO and "
+            "unattended-script switches are retired while this is on. "
+            "Details: Lucius > Permissions v2."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 10, 31),
+        remove_by=date(2027, 1, 31),
+        kind="release",
+    ),
+)
 
 
 def build_registry(flags: tuple[Flag, ...]) -> dict[str, Flag]:

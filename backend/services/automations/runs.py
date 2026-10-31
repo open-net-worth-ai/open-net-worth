@@ -28,6 +28,11 @@ from .run_context import configured_trigger, last_completed_run
 from .schedules import compute_next_run, ran_slot_floor
 
 logger = logging.getLogger(__name__)
+
+# An Automation run's conversation id is always minted as ``automation-run-{run_id}``, so a
+# session id with this prefix names an Automation run even after the run or its Automation is gone.
+AUTOMATION_SESSION_PREFIX = "automation-run-"
+
 _tasks: set[asyncio.Task] = set()
 _tasks_by_run: dict[str, asyncio.Task] = {}
 _ALL_STATUSES = frozenset({"running", "waiting", "completed", "failed", "cancelled"})
@@ -105,7 +110,7 @@ async def run_automation(
     draft = {
         "id": run_id,
         "automation_id": automation_id,
-        "session_id": f"automation-run-{run_id}",
+        "session_id": f"{AUTOMATION_SESSION_PREFIX}{run_id}",
         "status": "running",
         "trigger": trigger_data,
         "execution": automation.get("execution") or {},
@@ -265,9 +270,16 @@ def request_for_run(
         payload=dict(payload if payload is not None else run.get("context") or {}),
         permission_mode=automation.get("permission_mode") or "manual",
         always_allowed=always_allowed,
+        blocked=[str(tool) for tool in automation.get("blocked") or []],
         configured_trigger=configured_trigger(automation),
         last_completed_run=last_completed_run(automation["id"], run),
     )
+
+
+def is_automation_session(session_id: Optional[str]) -> bool:
+    """Whether ``session_id`` is an Automation run's conversation id, whether or not the run row
+    (or the Automation behind it) still exists."""
+    return bool(session_id) and str(session_id).startswith(AUTOMATION_SESSION_PREFIX)
 
 
 def automation_run_for_session(session_id: str) -> tuple[dict, dict] | None:
@@ -422,13 +434,19 @@ def _merge_steps(existing: list[dict], current: list[dict]) -> list[dict]:
     return result
 
 
-def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
+def grant_automation_tool(
+    session_id: str, tool: str, scope: str, *, clear_blocked: bool = False
+) -> bool:
     """Persist a grant locally when ``session_id`` belongs to an Automation run.
 
     Two scopes (2026-08-02): ``once`` stores nothing — approving the card IS the grant — and
     ``always`` appends to this Automation's standing ``always_allowed`` list, so the tool stops
     raising a card for it. Keeping the grant on the Automation rather than in the global
-    table is what stops an Automation inheriting a permission granted in an unrelated chat.
+    table is what stops one card tap changing a tool for every other caller.
+
+    ``clear_blocked`` (``permissions_v2``): a tool is never on both lists, so allowing it here takes
+    it off this Automation's Blocked list. With the flag off the Blocked list is not this path's to
+    touch.
     """
     owned = automation_run_for_session(session_id)
     if owned is None:
@@ -438,6 +456,9 @@ def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
         always_allowed = [
             dict(item) for item in automation.get("always_allowed") or [] if isinstance(item, dict)
         ]
+        current = automation.get("blocked") or []
+        blocked = [name for name in current if name != tool] if clear_blocked else current
+        changes: dict = {}
         if not any(tool in (item.get("tools") or []) for item in always_allowed):
             always_allowed.append(
                 {
@@ -446,15 +467,13 @@ def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
                     "tools": [tool],
                 }
             )
+            changes["always_allowed"] = always_allowed
+        if len(blocked) != len(current):
+            changes["blocked"] = blocked
+        if changes:
             from .service import apply_automation_change
 
-            apply_automation_change(
-                {
-                    "op": "update",
-                    "id": automation["id"],
-                    "changes": {"always_allowed": always_allowed},
-                }
-            )
+            apply_automation_change({"op": "update", "id": automation["id"], "changes": changes})
         return True
     return scope == "once"
 

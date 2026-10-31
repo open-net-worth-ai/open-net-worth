@@ -62,6 +62,21 @@ def _kill_switch_on() -> bool:
     return code_execution_enabled()
 
 
+_CODE_OFF = (
+    "Code execution is off. Ask the user to turn on the "
+    "'Code execution (Lucius scripts)' toggle in Settings → Developer — note "
+    "this is a DIFFERENT toggle from 'Bundled script skills' in the same section. "
+    "Once it's on, ask me again and I'll show you the script for approval."
+)
+
+
+def _code_execution_off() -> Optional[str]:
+    """The refusal while the kill switch is off, else ``None``. Registered as the tool's
+    ``unavailable=`` so ``permissions_v2`` refuses before any card or judge call; the handler
+    re-checks it, which is what refuses an approval redeemed after the switch went off."""
+    return None if _kill_switch_on() else _CODE_OFF
+
+
 def _auto_run_on() -> bool:
     from backend.db.app_config_store import code_execution_auto_run
 
@@ -140,22 +155,16 @@ class RunCodeInput(ToolInput):
         "running a quick script. The first run in a conversation asks the user for permission."
     ),
     input_schema=schema_of(RunCodeInput, tool_name="run_code"),
+    external_effect=True,
+    unavailable=_code_execution_off,
 )
 async def run_code(input_data: dict):
     """Run model-authored code in the sandbox, gated by the kill switch + per-conversation /
     instance grant. No grant → stage the source + return a ``code_run`` permission card."""
     # Gate B — kill switch (RFC §4.3).
-    if not _kill_switch_on():
-        return json.dumps(
-            {
-                "error": (
-                    "Code execution is off. Ask the user to turn on the "
-                    "'Code execution (Lucius scripts)' toggle in Settings → Developer — note "
-                    "this is a DIFFERENT toggle from 'Bundled script skills' in the same section. "
-                    "Once it's on, ask me again and I'll show you the script for approval."
-                )
-            }
-        ), None
+    off = _code_execution_off()
+    if off is not None:
+        return json.dumps({"error": off}), None
 
     source = (input_data.get("source") or "").strip()
     if not source:
@@ -169,6 +178,13 @@ async def run_code(input_data: dict):
             return json.dumps({"error": f"input exceeds the {MAX_INPUT_BYTES}-byte cap"}), None
     except (TypeError, ValueError) as e:
         return json.dumps({"error": f"input is not JSON-serializable: {e}"}), None
+
+    # Under ``permissions_v2`` the ordinary permission gate decided before this handler ran, and
+    # an approval re-runs it on the staged arguments: no card of its own, no standing flag.
+    from backend.ai.permissions import engine
+
+    if not engine().in_handler_cards:
+        return await _run_and_format(source, script_input)
 
     purpose = (input_data.get("purpose") or "").strip()
 

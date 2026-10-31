@@ -1,5 +1,5 @@
 """
-GET    /api/tool-permissions                          — every stored decision, app-wide
+GET    /api/tool-permissions                          — the app-wide list of tool values
 PUT    /api/tool-permissions/{tool}                   — set one tool's level (owner resolved here)
 DELETE /api/tool-permissions/{tool}                   — forget one tool's decision
 
@@ -20,10 +20,10 @@ The connector-scoped routes answer "what has the user decided about THIS connect
 the client already holds that connector's tool list, so the response is a bare map. The
 app-wide route answers "what has the user decided, anywhere" — the revocation surface —
 so each row carries its own owner and the join onto the live registry that says whether
-its tool still resolves. That join happens HERE rather than in ``services`` because
-``services`` sits BELOW ``ai`` in the dependency rule and cannot import the registry,
-while ``api -> ai`` is exactly the allowed direction (the same split ``api/news_sources``
-uses to join poller health).
+its tool still resolves. That join happens in ``ai.permission_api`` (``ai.permission_api_v2``
+under ``permissions_v2``; ``ai.permissions.permission_api()`` picks, so this router never
+branches) rather than in ``services``, which sits BELOW ``ai`` in the dependency rule and
+cannot import the registry.
 
 The join earns its keep: a decision does NOT survive a tool rename (RFC §15.1 — it is
 keyed on the canonical name at the time), so after a rename the old key stops resolving
@@ -61,17 +61,14 @@ whole permission UI.
 
 from __future__ import annotations
 
-import logging
-from typing import Annotated, Dict, List, Literal, Optional
+from typing import Annotated, Any, Callable, List, Literal, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, StringConstraints
 
+from backend.ai.permissions import permission_api
 from backend.core.errors import OpenNetWorthError, to_http_status
-from backend.models.mcp_client import MCP_CONNECTOR_PREFIX
-from backend.services import tool_permissions as permissions_service
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Typed at the edge so a stale client's fourth level is a 422 here, never a silently
@@ -89,39 +86,6 @@ MAX_TOOL_NAME_CHARS = 200
 ToolName = Annotated[str, StringConstraints(max_length=MAX_TOOL_NAME_CHARS)]
 
 
-class PermissionsResponse(BaseModel):
-    connector_id: str
-    # What an ABSENT tool means. Shipped on every response so the client never hardcodes it.
-    default_level: str = permissions_service.DEFAULT_LEVEL
-    # Only tools with a STORED decision. Everything else is at ``default_level``.
-    permissions: Dict[str, str] = {}
-
-
-class DecisionRow(BaseModel):
-    """One stored decision, app-wide — the Settings › Permissions row."""
-
-    tool: str
-    # The tool's OWNER: a connector id, ``mcp:<server>``, or ``core`` for an unscoped tool.
-    connector_id: str
-    level: str
-    updated_at: str = ""
-    # False when the stored tool name no longer resolves in the registry — a rename retired
-    # it, so the decision is already inert. Rendered as a "no longer available" row rather
-    # than hidden: a permission the user set and can no longer see is the failure this
-    # surface exists to fix. Always True for the reserved ``*`` yolo row and for any
-    # MCP-owned tool, neither of which is a registry name.
-    tool_exists: bool = True
-
-
-class DecisionsResponse(BaseModel):
-    permissions: List[DecisionRow]
-    total: int
-    # Whether the blanket "stop asking me" row is armed. Reported from the STORED row
-    # rather than computed, so this surface can never disagree with the gate it describes
-    # (E3: an env-var implementation once reported OFF while confirmations were skipped).
-    yolo: bool = False
-
-
 class SetLevelRequest(BaseModel):
     level: Level
     # The tool's OWNER, when the CALLER already knows it (Settings › Permissions always
@@ -131,9 +95,8 @@ class SetLevelRequest(BaseModel):
     # all, and two servers may each advertise a ``search``.
     connector_id: Optional[str] = None
     # WHICH conversation this decision was made in — NOT a scope. When it belongs to an
-    # Automation run the permission is routed to that Automation's own ``allowed`` list
-    # instead of the global table, so an Automation cannot inherit a permission granted in
-    # an unrelated chat.
+    # Automation run, Always allow goes to THAT Automation's own list instead of the global
+    # table, so a card tap in one cannot change the tool for every other caller.
     session_id: Optional[str] = None
 
 
@@ -158,156 +121,88 @@ class GroupLevelRequest(BaseModel):
     level: Level
 
 
-def _response(connector_id: str) -> PermissionsResponse:
-    return PermissionsResponse(
-        connector_id=connector_id,
-        default_level=permissions_service.DEFAULT_LEVEL,
-        permissions=dict(permissions_service.get_connector_permissions(connector_id)),
-    )
+def _answer(call: Callable[[Any], dict]) -> dict:
+    """Run one ``permission_api()`` call and map a domain error to its HTTP status."""
+    try:
+        return call(permission_api())
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 
 
-@router.get("/api/connectors/{connector_id}/permissions", response_model=PermissionsResponse)
-def get_permissions(connector_id: str) -> PermissionsResponse:
+@router.get("/api/connectors/{connector_id}/permissions")
+def get_permissions(connector_id: str) -> dict:
     """Every stored level for one connector.
 
     Never 404s on an unknown connector: "no decisions recorded" and "no such connector"
     are the same empty map, and the ladder is legitimately read for a connector that is
     not persisted yet (the add-an-MCP-server flow permissions what step 2 discovered).
     """
-    return _response(connector_id)
+    return _answer(lambda api: api.connector(connector_id))
 
 
-@router.put(
-    "/api/connectors/{connector_id}/permissions/{tool_name}", response_model=PermissionsResponse
-)
-def set_tool_permission(
-    connector_id: str, tool_name: str, req: ToolLevelRequest
-) -> PermissionsResponse:
+@router.put("/api/connectors/{connector_id}/permissions/{tool_name}")
+def set_tool_permission(connector_id: str, tool_name: str, req: ToolLevelRequest) -> dict:
     """Set ONE tool's level, then return the connector's full map so the caller never
     needs a second round trip to re-render the ladder."""
-    try:
-        permissions_service.set_tool_permission(connector_id, tool_name, req.level)
-    except OpenNetWorthError as exc:
-        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
-    return _response(connector_id)
+    return _answer(lambda api: api.set_connector_tool(connector_id, tool_name, req.level))
 
 
-@router.put("/api/connectors/{connector_id}/permissions", response_model=PermissionsResponse)
-def set_group_permission(connector_id: str, req: GroupLevelRequest) -> PermissionsResponse:
+@router.put("/api/connectors/{connector_id}/permissions")
+def set_group_permission(connector_id: str, req: GroupLevelRequest) -> dict:
     """Stamp one level onto every tool named — the group control.
 
     Deliberately LOSSY: a per-tool override inside the group is overwritten. That is the
     control's purpose (§4 — "make this whole group behave"), and it is how a Custom group
     is flattened back to uniform in one action.
     """
-    try:
-        permissions_service.set_group_permission(connector_id, req.tools, req.level)
-    except OpenNetWorthError as exc:
-        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
-    return _response(connector_id)
+    return _answer(lambda api: api.set_connector_group(connector_id, req.tools, req.level))
 
 
-@router.delete("/api/connectors/{connector_id}/permissions", response_model=PermissionsResponse)
-def clear_permissions(connector_id: str) -> PermissionsResponse:
-    """Forget every stored decision for this connector — its tools return to
-    ``default_level`` (UNSET, not a stored ``needs_approval``).
+@router.delete("/api/connectors/{connector_id}/permissions")
+def clear_permissions(connector_id: str) -> dict:
+    """Forget every stored decision for this connector — its tools return to their default.
 
     Idempotent: clearing a connector with nothing stored returns the same empty map rather
     than 404ing, so a double-tap and a removed-then-re-added connector behave identically.
     """
-    cleared = permissions_service.clear_connector_permissions(connector_id)
-    if cleared:
-        logger.info("connector permissions cleared via API: %s (%d)", connector_id, cleared)
-    return _response(connector_id)
+    return _answer(lambda api: api.clear_connector(connector_id))
 
 
-# ── App-wide: the revocation surface (Settings › Permissions) ────────────────────────
+# ── App-wide: Settings › Permissions, the Automation picker ──────────────────────────
 
 
-def _decisions() -> List[DecisionRow]:
-    from backend.ai.tools.registry import registered_tool_names
-
-    live = set(registered_tool_names())
-    rows: List[DecisionRow] = []
-    for row in permissions_service.list_decisions():
-        tool = str(row.get("tool") or "")
-        owner = str(row.get("connector_id") or "")
-        if not tool or not owner:
-            continue
-        # A name only has to resolve when the REGISTRY is what owns it. An MCP tool is
-        # advertised by its own server and a `*` yolo row is not a tool at all, so neither
-        # can be judged against the registry — calling either one stale would be a lie the
-        # user cannot act on.
-        registry_owned = not owner.startswith(MCP_CONNECTOR_PREFIX)
-        exists = tool in live if registry_owned and tool != permissions_service.YOLO_TOOL else True
-        rows.append(
-            DecisionRow(
-                tool=tool,
-                connector_id=owner,
-                level=str(row.get("level") or ""),
-                updated_at=str(row.get("updated_at") or ""),
-                tool_exists=exists,
-            )
-        )
-    return rows
+@router.get("/api/tool-permissions")
+def get_all_tool_permissions() -> dict:
+    """The app-wide list: the stored decisions, or (``permissions_v2``) every tool and its
+    value — including the ones made through a connector's own ladder, because there is only one
+    table."""
+    return _answer(lambda api: api.list_tools())
 
 
-def _decisions_response() -> DecisionsResponse:
-    rows = _decisions()
-    return DecisionsResponse(
-        permissions=rows, total=len(rows), yolo=permissions_service.yolo_enabled()
-    )
-
-
-@router.get("/api/tool-permissions", response_model=DecisionsResponse)
-def get_all_tool_permissions() -> DecisionsResponse:
-    """Every stored decision in the app, newest first — including the ones made through a
-    connector's own ladder, because after the merge there is only one place they live."""
-    return _decisions_response()
-
-
-@router.put("/api/tool-permissions/{tool:path}", response_model=DecisionsResponse)
-def set_any_tool_permission(tool: str, req: SetLevelRequest) -> DecisionsResponse:
+@router.put("/api/tool-permissions/{tool:path}")
+def set_any_tool_permission(tool: str, req: SetLevelRequest) -> dict:
     """Set one tool's level, then return the full list so the caller never needs a second
     round trip.
 
     ``{tool:path}`` rather than ``{tool}`` so the reserved ``*`` yolo row is settable and
-    revocable through this same route — arming and disarming the single most powerful
-    permission here must not be a second code path in a design whose whole claim is that
-    there is exactly one.
+    revocable through this same route.
 
     The OWNER comes from ``connector_id`` when the caller supplied one and is RESOLVED from
     the registry otherwise (see ``SetLevelRequest.connector_id``). A resolved name is also
     required to BE a registered tool, so a decision is only ever recorded against a name
-    the gate will actually look up; a caller-supplied owner is
-    taken at face value, exactly as the connector-scoped routes take theirs, because the
-    registry is not the authority on an MCP server's tool list.
+    the gate will actually look up; a caller-supplied owner is taken at face value, exactly
+    as the connector-scoped routes take theirs, because the registry is not the authority on
+    an MCP server's tool list.
 
-    ``session_id`` names the CONVERSATION, not a scope. When it belongs to an Automation
-    run an ``always_allow`` is routed to that Automation's own ``allowed`` list, so an
-    Automation can never inherit a permission granted in an unrelated chat.
+    ``session_id`` names the CONVERSATION, not a scope; what it changes is in
+    ``ai.permission_api`` / ``ai.permission_api_v2``.
     """
-    tool = (tool or "").strip()
-    if not tool:
-        raise HTTPException(status_code=422, detail="tool: is required")
-    tool, owner = _resolve_owner(tool, req.connector_id)
-
-    if req.session_id and req.level == "always_allow":
-        from backend.services.automations.runs import grant_automation_tool
-
-        if grant_automation_tool(req.session_id, tool, "always"):
-            return _decisions_response()
-
-    try:
-        permissions_service.set_tool_permission(owner, tool, req.level)
-    except OpenNetWorthError as exc:
-        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
-    return _decisions_response()
+    return _answer(lambda api: api.set_tool(tool, req.level, req.connector_id, req.session_id))
 
 
 @router.delete("/api/tool-permissions/{tool:path}")
 def clear_any_tool_permission(tool: str, connector_id: Optional[str] = None) -> dict:
-    """Forget one tool's decision — it returns to its DEFAULT. 404 when nothing was stored.
+    """Forget one tool's decision — it returns to its DEFAULT (Reset, under ``permissions_v2``).
 
     Clearing a STALE row (a tool since renamed away) is deliberately allowed: the row is
     real even though the tool is not, and leaving the user unable to clear it would be the
@@ -316,28 +211,4 @@ def clear_any_tool_permission(tool: str, connector_id: Optional[str] = None) -> 
     a stale or MCP-owned row's owner cannot be re-derived from a registry that no longer
     knows the name, so the client hands back the one it was shown.
     """
-    tool = (tool or "").strip()
-    tool, owner = _resolve_owner(tool, connector_id)
-    if not permissions_service.clear_tool_permission(owner, tool):
-        raise HTTPException(status_code=404, detail=f"No permission decision for tool: {tool}")
-    return {"cleared": tool}
-
-
-def _resolve_owner(tool: str, supplied: Optional[str]) -> tuple[str, str]:
-    """``(canonical_tool, owner)``. A supplied owner is taken verbatim; otherwise the tool
-    must be a live registry name, whose ``connector=`` tag (or ``core``) is the owner.
-
-    422s an unknown name only when nothing was supplied — with an explicit owner there is
-    nothing to look up and no way to be wrong about it.
-    """
-    from backend.ai.tools._connector_gate import permission_owner
-    from backend.ai.tools.registry import registered_tool_names
-
-    owner = (supplied or "").strip()
-    if tool == permissions_service.YOLO_TOOL:
-        return tool, owner or permissions_service.CORE_CONNECTOR_ID
-    if owner:
-        return tool, owner
-    if tool not in set(registered_tool_names()):
-        raise HTTPException(status_code=422, detail=f"tool: unknown tool: {tool}")
-    return tool, permission_owner(tool)
+    return _answer(lambda api: api.reset_tool(tool, connector_id))

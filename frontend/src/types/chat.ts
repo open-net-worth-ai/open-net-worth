@@ -211,6 +211,12 @@ export interface ProposedChange {
   // disabled ✓/✗ state instead of the Confirm/Dismiss buttons, so a re-render
   // from storage (reload / conversation switch / panel reopen) can't re-fire it.
   status?: 'confirmed' | 'dismissed'
+  // permissions_v2 only: WHICH of the three answers the owner gave, stored with the card so a
+  // reload (or a conversation switch) still reads "Approved", "Always allowed" or "Denied" —
+  // `status` alone cannot tell an approval from an Always allow. Approved runs this call once;
+  // Always allowed runs it AND stores the permission (chat: global; Automation run: that
+  // Automation's list); Denied refuses this call only and stores nothing.
+  resolution?: 'approved' | 'always_allowed' | 'denied'
   // The server REFUSED to redeem this approval (already answered elsewhere, or superseded by a
   // later message) — nothing ran. Set alongside clearing `status`, so a card the user tapped
   // stops claiming "✓ Approved" above the red error (ADR `2026-07-30-approvals-never-expire`).
@@ -304,6 +310,10 @@ export interface ProposedChange {
   // silently keying off an external server's tool would be exactly the kind of collision
   // this codebase has been burned by.
   grant_tool?: string
+  // permissions_v2 only: present when the call belongs to an Automation run — the Automation's
+  // id. It is what makes the card's Always allow write to THIS Automation's own list (routed
+  // server-side from `session_id`), never to the global table.
+  automation_id?: string
 }
 
 // Ledger write-confirm cards (txn_create / txn_update / txn_bulk; mirrors backend

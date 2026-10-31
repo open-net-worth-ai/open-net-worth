@@ -3,6 +3,18 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import AsyncGenerator, List
 
+#: How much of a ``complete()`` reply a provider writes to the log (diagnostic, bounded).
+LOG_TEXT_CAP = 8000
+
+#: Sources whose reply is model-written from a call's own arguments and stays out of the log:
+#: the Auto judge's reason can carry a payee, an amount or a note from the call it judged.
+_UNLOGGED_SOURCES = frozenset({"auto_approval"})
+
+
+def log_text_cap(source: str) -> int:
+    """How many characters of a ``complete()`` reply may be logged for ``source`` (0 = none)."""
+    return 0 if source in _UNLOGGED_SOURCES else LOG_TEXT_CAP
+
 
 class AIProvider(ABC):
     """Abstract interface for AI chat providers. The provider is chosen in Settings → AI Model."""

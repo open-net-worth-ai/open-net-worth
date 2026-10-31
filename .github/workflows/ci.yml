@@ -153,6 +153,12 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
       - name: pytest (not integration)
         run: python3 -m pytest -q -m "not integration"
+      # docs/FEATURE_FLAGS.md: the run above proves the flag-off path (every old test, unchanged);
+      # this one runs the permission / confirm / judge / MCP / Automation suites with
+      # permissions_v2 on. Old files whose assertions are the OLD behaviour are not in the list;
+      # their *_v2 twins are. Drop this step with the flag.
+      - name: pytest (permissions_v2 on)
+        run: python3 -m pytest -q -m "not integration" --flag permissions_v2=on $(cat tests/permissions_v2_on_files.txt)
 
   # --- test-windows: the backend imports and the Windows-ported areas pass on windows-latest.
   # The focused list is every area with platform-specific code (locks, process trees, anchored

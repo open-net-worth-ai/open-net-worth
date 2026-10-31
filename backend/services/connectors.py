@@ -34,7 +34,7 @@ from backend.db.connector_store import ConnectorStore, serialized_unit_of_work
 from backend.db.engine import get_engine
 from backend.models.connector import ConnectorTool, ConnectorView
 from backend.models.mcp_client import MCP_CONNECTOR_PREFIX
-from backend.services import tool_permissions
+from backend.services import tool_permissions, tool_permissions_v2
 from backend.services.connector_catalog import (
     CATALOG,
     Builtin,
@@ -125,6 +125,52 @@ def _level_of(stored: dict[str, str], yolo: bool):
     return level
 
 
+def _level_of_v2(kind: ConnectorKind, stored: dict[str, str], yolo: bool):
+    """A tool's value under ``permissions_v2`` — what dispatch (``ai.tools._confirm_gate_v2.
+    effective_level``, or ``mcp.client_manager`` for an external MCP tool) will actually do. Its
+    row, and failing that what an unset tool is worth: an external MCP tool asks; a native tool
+    follows what it does — a real change or a send asks, a read runs — unless a stored YOLO
+    switch says to stop asking. Cannot call the gate (it lives in ``ai/``, which ``services`` may
+    not import); ``tool_permissions_v2.unrowed_level`` is the tier-legal route to the same answer,
+    so the page and dispatch cannot disagree (ADR
+    ``2026-08-17-connector-ladder-shows-the-real-effective-default``)."""
+
+    def level(name: str) -> str:
+        explicit = stored.get(name)
+        if explicit:
+            return explicit
+        if kind.kind == "mcp":
+            return tool_permissions_v2.DEFAULT_LEVEL
+        return tool_permissions_v2.unrowed_level(name, yolo=yolo, auto_run=False)
+
+    return level
+
+
+def view_default_levels(view: ConnectorView) -> tuple[str, dict[str, str]]:
+    """``(default_level, {tool: seed})`` for one connector (``permissions_v2``) — the value each
+    tool is seeded with and Reset restores, so a client can show "default" beside a value the
+    owner changed.
+
+    ``default_level`` is what a tool NOT in the map takes: ``needs_approval`` for an external MCP
+    server, ``always_allow`` (a read) for a native connector. The map carries every tool the
+    connector lists, so a native connector's sends read ``needs_approval`` there."""
+    if view.kind == "mcp":
+        return tool_permissions_v2.DEFAULT_LEVEL, {
+            t.name: tool_permissions_v2.DEFAULT_LEVEL for t in view.tools
+        }
+    return "always_allow", {t.name: tool_permissions_v2.seed_level(t.name) for t in view.tools}
+
+
+def default_levels(connector_id: str) -> tuple[str, dict[str, str]]:
+    """``view_default_levels`` by id. Never raises on an unknown id: a connector that does not
+    exist has no tools to list (an ``mcp:`` id still reads the cautious default)."""
+    try:
+        return view_default_levels(get_connector(connector_id, ladder_v2=True))
+    except NotFoundError:
+        mcp = connector_id.startswith(MCP_CONNECTOR_PREFIX)
+        return (tool_permissions_v2.DEFAULT_LEVEL if mcp else "always_allow"), {}
+
+
 def _tools(
     kind: ConnectorKind, row: Row, level, native: list[ConnectorTool]
 ) -> list[ConnectorTool]:
@@ -193,9 +239,14 @@ def _rows_and_secrets() -> tuple[dict[str, Row], dict[str, frozenset]]:
         return rows, store.secret_field_map(conn=conn)
 
 
-def list_connectors() -> List[ConnectorView]:
+def list_connectors(*, ladder_v2: bool = False) -> List[ConnectorView]:
     """Every connector, built-ins first and MCP servers after. Never raises on an empty table:
-    a fresh instance still lists every built-in as ``not_configured``."""
+    a fresh instance still lists every built-in as ``not_configured``.
+
+    ``ladder_v2`` is the caller's choice of how each tool's level is DISPLAYED (``permissions_v2``
+    shows what a tool is worth with no row, main shows the cautious default); a caller that does
+    not show levels leaves it off. The choice is made by the caller (``ai.permissions.engine()``),
+    never here."""
     rows, secrets = _rows_and_secrets()
     # ONE bulk permission read for the whole list — this sits under ``enabled_connector_ids()``'s
     # sibling hot paths, where a per-connector read would be a per-connector table scan.
@@ -209,7 +260,9 @@ def list_connectors() -> List[ConnectorView]:
             row,
             secrets.get(row["id"], none),
             ctx,
-            _level_of(levels.get(row["id"]) or {}, yolo),
+            _level_of_v2(kind, levels.get(row["id"]) or {}, yolo)
+            if ladder_v2
+            else _level_of(levels.get(row["id"]) or {}, yolo),
         )
         for kind, row in _entries(rows)
     ]
@@ -226,9 +279,9 @@ def enabled_connector_ids() -> frozenset[str]:
     )
 
 
-def get_connector(connector_id: str) -> ConnectorView:
+def get_connector(connector_id: str, *, ladder_v2: bool = False) -> ConnectorView:
     """One connector by id. Raises ``NotFoundError`` (→ HTTP 404) if unknown."""
-    for view in list_connectors():
+    for view in list_connectors(ladder_v2=ladder_v2):
         if view.id == connector_id:
             return view
     raise NotFoundError(f"unknown connector: {connector_id}", connector_id=connector_id)

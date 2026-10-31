@@ -37,6 +37,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from starlette.concurrency import run_in_threadpool
 
+from backend.ai.permissions import engine
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.models.connector import ConnectorPatch
 from backend.services import connectors as connectors_service
@@ -60,7 +61,12 @@ async def _reload_telegram_if_needed(connector_id: str) -> bool:
 def list_connectors():
     """The connector list. An empty table still returns every built-in connector as
     ``not_configured`` — never 500."""
-    return {"connectors": [v.model_dump() for v in connectors_service.list_connectors()]}
+    ladder_v2 = engine().ladder_v2
+    return {
+        "connectors": [
+            v.model_dump() for v in connectors_service.list_connectors(ladder_v2=ladder_v2)
+        ]
+    }
 
 
 @router.get("/api/connectors/{connector_id:path}/accounts")
@@ -94,7 +100,9 @@ def get_connector_accounts(connector_id: str):
 def get_connector(connector_id: str):
     """One connector by id. 404 if unknown. (``:path`` so an ``mcp:<id>`` id round-trips.)"""
     try:
-        return connectors_service.get_connector(connector_id).model_dump()
+        return connectors_service.get_connector(
+            connector_id, ladder_v2=engine().ladder_v2
+        ).model_dump()
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 

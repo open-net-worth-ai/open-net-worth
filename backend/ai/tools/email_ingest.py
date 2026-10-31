@@ -655,6 +655,7 @@ class SendEmailInput(ToolInput):
     # id from the URL) but dispatch resolved the owner as "core" — so it was silently NEVER
     # consulted. This tag makes the write and read paths agree.
     connector="email",
+    external_effect=True,
 )
 async def email_send_message(input_data: dict):
     import asyncio

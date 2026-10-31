@@ -20,6 +20,7 @@ from typing import Callable, Optional
 
 _provider: Optional[Callable[[], list[str]]] = None
 _writes_provider: Optional[Callable[[str], bool]] = None
+_asks_by_default_provider: Optional[Callable[[str], bool]] = None
 
 
 def register_tool_name_provider(fn: Optional[Callable[[], list[str]]]) -> None:
@@ -62,6 +63,34 @@ def tool_writes(name: str) -> bool:
     writes"), so a caller filtering for read-only tools gets an empty result rather than
     silently treating every tool as safe."""
     fn = _writes_provider
+    if fn is None:
+        return True
+    try:
+        return bool(fn(name))
+    except Exception:  # pragma: no cover - defensive; fail closed
+        return True
+
+
+def register_tool_asks_by_default_provider(fn: Optional[Callable[[str], bool]]) -> None:
+    """Install the "does an undecided call to this tool ask first?" provider (``ai/tools``
+    registers it at import). Read only under ``permissions_v2``.
+
+    The answer follows what the tool DOES — a real change, or a send out of this install, asks; a
+    read runs (``ai.tools._confirm_gate_v2.is_gated_tool``). It is a SEED, not a permission: a
+    level the owner stored always outranks it. It exists so ``services`` — the permission table's
+    seed rule and the Connectors page's ladder, which must DISPLAY the level that will actually
+    fire — can ask the question without importing ``ai``."""
+    global _asks_by_default_provider
+    _asks_by_default_provider = fn
+
+
+def tool_asks_by_default(name: str) -> bool:
+    """True when an undecided call to ``name`` asks the owner first.
+
+    Fails CLOSED — an unregistered provider or a raising one answers ``True`` ("asks"), so a
+    display that cannot reach the registry shows the cautious level rather than promising a tool
+    runs freely."""
+    fn = _asks_by_default_provider
     if fn is None:
         return True
     try:

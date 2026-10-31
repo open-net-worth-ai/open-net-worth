@@ -26,6 +26,7 @@ _EDITABLE_FIELDS = frozenset(
         "trigger",
         "permission_mode",
         "always_allowed",
+        "blocked",
         "model",
         "effort",
         "max_runs",
@@ -44,6 +45,10 @@ def register_automation_cleanup(handler: Optional[CleanupHandler]) -> None:
     _cleanup_handler = handler
 
 
+#: The mode an Automation gets when nothing says otherwise.
+DEFAULT_PERMISSION_MODE = "auto"
+
+
 def validated_trigger(raw: Any, *, now: datetime | None = None, previous: object = None) -> dict:
     """Names resolve to ids first, then the trigger validates — so "Grab" and its id meet as
     one payee in the conflict check, and a dedupe sees ids, not spellings."""
@@ -57,8 +62,15 @@ def validated_trigger(raw: Any, *, now: datetime | None = None, previous: object
 
 
 def validate_automation(
-    value: object, *, now: datetime | None = None, previous_trigger: object = None
+    value: object,
+    *,
+    now: datetime | None = None,
+    previous_trigger: object = None,
+    check_blocked: bool = False,
 ) -> dict:
+    """``check_blocked`` is True only when the caller is SETTING the Blocked list (``permissions_v2``
+    writes both lists together). Otherwise the stored list rides along untouched and unchecked: an
+    edit made with the flag off never touches it, never trips over it, and so never loses it."""
     if not isinstance(value, dict):
         raise ValidationError("automation must be an object")
     clean = dict(value)
@@ -70,10 +82,15 @@ def validate_automation(
         raise ValidationError("automation instructions are required")
     trigger = validated_trigger(clean.get("trigger"), now=now, previous=previous_trigger)
     execution = _validate_execution(clean.get("execution"))
-    permission_mode = str(clean.get("permission_mode") or "auto").strip()
+    permission_mode = str(clean.get("permission_mode") or DEFAULT_PERMISSION_MODE).strip()
     if permission_mode not in {"manual", "auto", "skip"}:
         raise ValidationError("automation permission_mode must be manual, auto, or skip")
     always_allowed = _validate_always_allowed(clean.get("always_allowed") or [])
+    blocked = (
+        _validate_blocked(clean.get("blocked") or [], always_allowed)
+        if check_blocked
+        else list(clean.get("blocked") or [])
+    )
     status = clean.get("status") or "active"
     if status not in {"active", "paused", "completed"}:
         raise ValidationError("automation status must be active or paused")
@@ -98,6 +115,7 @@ def validate_automation(
         "execution": execution,
         "permission_mode": permission_mode,
         "always_allowed": always_allowed,
+        "blocked": blocked,
         "model": str(clean.get("model") or "").strip(),
         "effort": effort,
         "max_runs": max_runs,
@@ -108,9 +126,13 @@ def validate_automation(
 def validate_new_automation(value: object, *, now: datetime | None = None) -> dict:
     """Everything the create op refuses, with no write — so a draft that cannot be created
     is refused before anyone is asked to approve it (the confirm gate's pre-stage check)."""
-    clean = validate_automation(value, now=now)
+    clean = validate_automation(value, now=now, check_blocked=_sets_blocked(value))
     _refuse_caller_completed(clean["status"])
     return clean
+
+
+def _sets_blocked(value: object) -> bool:
+    return isinstance(value, dict) and "blocked" in value
 
 
 def _validate_always_allowed(value: object) -> list[dict]:
@@ -146,6 +168,27 @@ def _validate_always_allowed(value: object) -> list[dict]:
             permission["tools"] = list(dict.fromkeys(tool.strip() for tool in tools))
         result.append(permission)
     return result
+
+
+def _validate_blocked(value: object, always_allowed: list[dict]) -> list[str]:
+    """The tools this Automation refuses, as plain tool names. A tool cannot be both allowed
+    and blocked on one Automation: the two lists are one control with two answers per tool."""
+    if not isinstance(value, list) or any(
+        not isinstance(tool, str) or not tool.strip() for tool in value
+    ):
+        raise ValidationError("automation blocked must be a list of tool names")
+    blocked = list(dict.fromkeys(tool.strip() for tool in value))
+    allowed = {
+        name
+        for item in always_allowed
+        for name in [*item.get("tools", []), item.get("capability", "")]
+    }
+    both = sorted(allowed.intersection(blocked))
+    if both:
+        raise ValidationError(
+            f"a tool cannot be both always allowed and blocked in one Automation: {', '.join(both)}"
+        )
+    return blocked
 
 
 def _validate_execution(value: object) -> dict:
@@ -202,7 +245,10 @@ def apply_automation_change(change: dict) -> dict:
         if _trigger_really_changes(existing, changes, now):
             changes.setdefault("status", "active")
         merged = validate_automation(
-            {**existing, **changes}, now=now, previous_trigger=existing.get("trigger")
+            {**existing, **changes},
+            now=now,
+            previous_trigger=existing.get("trigger"),
+            check_blocked="blocked" in changes,
         )
         if "trigger" in changes:
             merged["trigger"] = pin_price_instrument(merged["trigger"])
@@ -287,7 +333,10 @@ def preview_automation_updates(updates: list[dict]) -> list[dict]:
             raise ValidationError(f"unknown automation fields: {', '.join(sorted(unknown))}")
 
         merged = validate_automation(
-            {**existing, **changes_raw}, now=now, previous_trigger=existing.get("trigger")
+            {**existing, **changes_raw},
+            now=now,
+            previous_trigger=existing.get("trigger"),
+            check_blocked="blocked" in changes_raw,
         )
         field_changes: dict[str, dict[str, object]] = {}
 
