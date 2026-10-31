@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, render } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { BandRow } from './planData'
 import { FanChart } from './charts'
 
@@ -40,5 +40,25 @@ describe('FanChart end-of-line label vs y-axis ticks', () => {
     )
 
     expect(getAllByTestId('fan-y-tick').map(topPx)).toEqual([57.5, 101, 144.5])
+  })
+
+  it('uses the rendered label and tick heights, not a fixed gap', () => {
+    // A taller label (text zoom, a bigger font): 30px label + 10px tick → clear = 20 + 2 = 22px,
+    // so the end label at y ≈ 122.75 now collides with BOTH the 101 and 144.5 rows (21.75px away).
+    const rect = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        const h = { 'fan-end-label': 30, 'fan-y-tick': 10 }[this.dataset.testid ?? ''] ?? 0
+        return { height: h, width: 0, top: 0, left: 0, right: 0, bottom: h } as DOMRect
+      })
+    try {
+      const { getAllByTestId } = render(
+        <FanChart bands={[band(40, 5, 10, 50), band(60, 10, 39, 100)]} />,
+      )
+
+      expect(getAllByTestId('fan-y-tick').map(topPx)).toEqual([57.5])
+    } finally {
+      rect.mockRestore()
+    }
   })
 })

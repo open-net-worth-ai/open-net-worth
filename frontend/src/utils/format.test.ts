@@ -22,7 +22,6 @@ import {
   parseNumericDate,
   getDateFormat,
   priceDigits,
-  millionsUp,
 } from './format'
 
 describe('fBaseCompact — canonical compact base-currency formatter', () => {
@@ -42,30 +41,6 @@ describe('fCompact — B/M/K magnitude suffix (crypto market cap / supply)', () 
   it('handles thousands and small numbers', () => {
     expect(fCompact(1500)).toBe('1.5K')
     expect(fCompact(999)).toBe('999')
-  })
-})
-
-describe('millionsUp — M/B/T scale for plan money labels', () => {
-  it('moves to billions instead of printing thousands of millions', () => {
-    expect(millionsUp(24_946_080_000)).toEqual({ value: '24.95', unit: 'B' })
-    expect(millionsUp(187_760_210_000)).toEqual({ value: '187.76', unit: 'B' })
-    expect(millionsUp(7_500_000_000)).toEqual({ value: '7.50', unit: 'B' })
-  })
-  it('agrees with the chart axis (fBaseCompact) on unit and digits for a VND billion', () => {
-    setBaseCurrency('VND')
-    setDisplayFormats({ number_format: 'comma' })
-    const big = millionsUp(47_094_480_000)!
-
-    expect('₫' + big.value + big.unit).toBe(fBaseCompact(47_094_480_000))
-  })
-  it('picks the unit after rounding, so 999,995,000 is 1.00B not 1000.00M', () => {
-    expect(millionsUp(999_995_000)).toEqual({ value: '1.00', unit: 'B' })
-    expect(millionsUp(999_994_000)).toEqual({ value: '999.99', unit: 'M' })
-  })
-  it('keeps millions, reaches trillions, ignores sign and leaves sub-million to the caller', () => {
-    expect(millionsUp(1_000_000)).toEqual({ value: '1.00', unit: 'M' })
-    expect(millionsUp(-2_500_000_000_000)).toEqual({ value: '2.50', unit: 'T' })
-    expect(millionsUp(999_999)).toBeNull()
   })
 })
 

@@ -13,8 +13,8 @@ import { SCREEN_INTROS } from '../../intro/screenIntros'
 import { reportScreenFill } from '../../intro/screenState'
 import { FlowIcon, X } from './icons'
 import { ChartArea } from '../../../ui/icons'
-import { fBase } from './planData'
-import { getCurrencySymbol, millionsUp } from '../../../utils/format'
+import { fBase, fCF } from './planData'
+import { getCurrencySymbol } from '../../../utils/format'
 import { useCashflowData } from './useCashflowData'
 import type { MappedRow } from './useCashflowData'
 import { useRegisterScreenFacts, useRegisterScreenPrompts } from '../../../lucius/useScreenContract'
@@ -27,16 +27,6 @@ import { cardCaveat } from '../../../utils/cardCaveat'
 import type { RegisterFilter } from './budget'
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-
-function fCF(n: number): string {
-  const a = Math.abs(n),
-    s = n < 0 ? '−' : ''
-  const sym = getCurrencySymbol()
-  const big = millionsUp(a)
-  if (big) return s + sym + big.value + big.unit
-  if (a >= 1e3) return s + sym + (a / 1e3).toFixed(2) + 'K'
-  return s + sym + a.toFixed(0)
-}
 
 const CAT_COLOR: Record<string, string> = {
   Commitment: 'var(--bad)',

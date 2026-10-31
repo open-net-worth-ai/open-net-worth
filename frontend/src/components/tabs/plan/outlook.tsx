@@ -20,8 +20,8 @@ import { useState, useEffect, useMemo, useRef, useTransition } from 'react'
 import type { ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as PD from './planData'
-import { fBaseCompact, getCurrencySymbol, millionsUp } from '../../../utils/format'
-import { fBaseWhole, fSigned } from './planData'
+import { fBaseCompact, getCurrencySymbol } from '../../../utils/format'
+import { fBaseWhole, fCoarse, fSigned } from './planData'
 import { authFetch } from '../../../api/client'
 import { FanChart, RbdChart } from './charts'
 import { X, Plus, Info, Chevron } from './icons'
@@ -287,17 +287,6 @@ function accTone(v: number, kind: 'cf' | 'nw') {
   const a = Math.abs(v),
     b = ACC_BANDS[kind] ?? ACC_BANDS.cf
   return a <= b[0]! ? 'good' : a <= b[1]! ? 'warn' : 'bad'
-}
-// coarse money for guidance figures — no false precision (S$307,800 → "S$310k"). A million and
-// up scales to M/B/T like the chart axis (₫24,946,080,000 → "₫24.95B", not "₫24946.08M").
-function fCoarse(n: number) {
-  const a = Math.abs(n),
-    s = n < 0 ? '−' : ''
-  const sym = getCurrencySymbol()
-  const big = millionsUp(a)
-  if (big) return s + sym + big.value.replace(/\.?0+$/, '') + big.unit
-  if (a >= 1e3) return s + sym + Math.round(a / 1e4) * 10 + 'k'
-  return s + sym + Math.round(a)
 }
 
 // ── Click-to-type lever (slider + editable value) — ported from the old Projections tab ──
