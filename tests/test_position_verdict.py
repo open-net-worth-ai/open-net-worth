@@ -79,6 +79,7 @@ def test_the_thesis_level_wins_and_distances_come_from_todays_price():
         "action": "hold",
         "why": "x",
         "currency": "USD",
+        "order": None,
         "levels": [
             {"kind": "stop", "price": 50.0, "source": "thesis", "distance_pct": -50.0},
             {"kind": "trim", "price": 120.0, "source": "lucius", "distance_pct": 20.0},
@@ -143,6 +144,7 @@ def test_the_synthesis_asks_for_a_verdict_and_stores_it_on_the_brief(
     assert '"verdict": {"action": "hold|add|trim|sell"' in calls[0]["system"]
     assert "verdict: your ONE call on this position" in calls[0]["system"]
     stored = AssetBriefStore().get("inst-aapl")["position_verdict"]
+    assert stored.pop("at")
     assert stored == {
         "action": "hold",
         "why": "A close below the stop would mean earnings, not mood.",
@@ -150,3 +152,123 @@ def test_the_synthesis_asks_for_a_verdict_and_stores_it_on_the_brief(
         "price_at": 85.0,
         "stop": 70.0,
     }
+
+
+# ── the next take is shown the previous call ────────────────────────────────────
+
+_PRIOR = {
+    "action": "hold",
+    "why": "Cloud demand is strong.",
+    "held": True,
+    "price_at": 100.0,
+    "stop": 88.0,
+    "trim": 120.0,
+    "at": "2026-10-31T08:10:00+00:00",
+}
+
+
+def test_the_previous_call_is_told_with_its_levels_and_date():
+    block = pv.prior_block(_PRIOR, held=True, currency="USD")
+    assert block.startswith(
+        "YOUR PREVIOUS CALL on this position (2026-10-31, price then USD 100): HOLD — "
+        "Cloud demand is strong."
+    )
+    assert "Levels you suggested then: stop USD 88, trim USD 120." in block
+    assert "never move a level only because the price moved" in block
+
+
+def test_no_previous_call_or_one_for_the_other_side_is_no_block():
+    assert pv.prior_block(None, held=True) == ""
+    assert pv.prior_block(_PRIOR, held=False) == ""
+
+
+def test_the_synthesis_prompt_carries_the_previous_call(
+    tmp_path,
+    monkeypatch,
+    db_isolated,
+    aapl_thesis,  # noqa: F811
+):
+    import backend.monitoring.analyst as analyst_mod
+    from backend.db.asset_brief_store import AssetBriefStore
+
+    AssetBriefStore().upsert_brief({"instrument_id": "inst-aapl", "position_verdict": _PRIOR})
+    calls, _ = _stub_analyst(monkeypatch, tmp_path, db_isolated, llm_response=_REPLY)
+    monkeypatch.setattr(analyst_mod, "_is_held_instrument", lambda iid: iid == "inst-aapl")
+    _seed_signal(tmp_path, db_isolated)
+    _seed_pending_row(tmp_path, db_isolated)
+
+    asyncio.run(analyst_mod.run_analysis_sweep())
+
+    assert "YOUR PREVIOUS CALL on this position" in calls[0]["prompt"]
+    assert "stop USD 88" in calls[0]["prompt"]
+
+
+def test_a_watched_ticker_is_told_its_price(monkeypatch, db_isolated, aapl_thesis):  # noqa: F811
+    import backend.monitoring.analyst as analyst_mod
+    from backend.services import thesis_judgment
+
+    monkeypatch.setattr(thesis_judgment, "local_price", lambda inst: 85.5)
+    assert analyst_mod._verdict_context("inst-aapl", held=False) == "\n\nCurrent price: USD 85.5"
+    assert analyst_mod._verdict_context("inst-aapl", held=True) == ""
+
+
+# ── a call that moves money carries the order to place ──────────────────────────
+
+
+def test_a_trim_carries_its_order_capped_at_the_position():
+    raw = {"action": "trim", "why": "x", "quantity": 25, "limit": 102}
+    v = pv.normalize(raw, held=True, price=100.0, held_qty=100)
+    assert v["order"] == {"side": "sell", "quantity": 25.0, "limit": 102.0}
+    shown = pv.compose(v, None, held=True, price=100.0, currency="USD")
+    assert shown["order"] == {"side": "sell", "quantity": 25.0, "limit": 102.0}
+
+
+@pytest.mark.parametrize(
+    ("raw", "held_qty", "order"),
+    [
+        ({"action": "sell", "quantity": 150}, 100, None),  # more than is held
+        ({"action": "sell", "quantity": 10}, None, None),  # holding unknown
+        ({"action": "add", "quantity": 10, "limit": 300}, 100, {"side": "buy", "quantity": 10.0}),
+        ({"action": "hold", "quantity": 10}, 100, None),
+        ({"action": "trim", "quantity": 0}, 100, None),
+    ],
+)
+def test_an_order_that_cannot_be_placed_is_dropped(raw, held_qty, order):
+    v = pv.normalize({"why": "x", **raw}, held=True, price=100.0, held_qty=held_qty)
+    assert v.get("order") == order
+
+
+def test_a_watched_buy_is_an_order_too_and_the_next_take_is_told_it():
+    v = pv.normalize(
+        {"action": "buy", "why": "x", "quantity": 5, "limit": 98}, held=False, price=100.0
+    )
+    assert v["order"] == {"side": "buy", "quantity": 5.0, "limit": 98.0}
+    assert "Order you suggested then: buy 5 at USD 98 limit." in pv.prior_block(
+        v, held=False, currency="USD"
+    )
+
+
+# ── a chat bound to the stock carries the call ──────────────────────────────────
+
+
+def test_a_chat_about_the_stock_is_told_the_take_and_its_call(db_isolated, aapl_thesis):  # noqa: F811
+    from backend.db.asset_brief_store import AssetBriefStore
+    from backend.services.mentions.resolve import session_brief_block
+
+    AssetBriefStore().upsert_brief(
+        {
+            "instrument_id": "inst-aapl",
+            "portfolio_narrative": "Large holding that ran ahead of earnings.",
+            "position_verdict": {
+                **_PRIOR,
+                "action": "trim",
+                "order": {"side": "sell", "quantity": 7, "limit": 101},
+            },
+        }
+    )
+    block = session_brief_block("inst-aapl", "Apple")
+    assert "lucius_take: Large holding that ran ahead of earnings." in block
+    assert (
+        "lucius_call: TRIM — Cloud demand is strong. Order: sell 7 at a USD 101 limit. "
+        "Levels: stop USD 50 (your thesis), trim USD 180 (your thesis). (as of 2026-10-31)"
+    ) in block

@@ -463,10 +463,12 @@ def _output_skeleton(include_key_issues: bool, is_held: bool = True) -> str:
             'your position — never a number>", '
             + (
                 '"verdict": {"action": "hold|add|trim|sell", "why": "<one plain sentence>", '
-                '"stop": <price or null>, "trim": <price or null>}'
+                '"stop": <price or null>, "trim": <price or null>, '
+                '"quantity": <shares or null>, "limit": <price or null>}'
                 if is_held
                 else '"verdict": {"action": "buy|wait", "why": "<one plain sentence>", '
-                '"entry": <price or null>}'
+                '"entry": <price or null>, "quantity": <shares or null>, '
+                '"limit": <price or null>}'
             )
         )
     return base + "}"
@@ -572,15 +574,20 @@ def _verdict_instruction(is_held: bool) -> str:
             "verdict: your ONE call on this position today — action is exactly one of hold, "
             "add, trim, sell. why: one plain sentence (20 words max) naming what would change "
             "the call. stop: the price below which you would sell; trim: the price above which "
-            "you would take some profit — real prices near today's, in the asset's own "
-            "currency, or null if you can't ground one. If YOUR THESIS is given, follow it: "
-            "sell only past its stop or once its breaks_if has happened. "
+            "you would take some profit — real prices in the asset's own currency, or null "
+            "if you can't ground one. If YOUR THESIS is given, follow it: "
+            "sell only past its stop or once its breaks_if has happened. For add, trim or sell, "
+            "make it an order someone could place: quantity — how many shares/units to buy or "
+            "sell (a sell is never more than the position quantity above; a trim is part of it); "
+            "limit — the limit price, close to today's. Null both for hold. "
         )
     return (
         "verdict: your ONE call on this ticker today — action is exactly buy or wait. why: one "
         "plain sentence (20 words max) naming what would change the call. entry: the price at "
         "or below which buying makes sense, in the asset's own currency, or null if you can't "
-        "ground one. If YOUR THESIS gives a buy zone, the call is buy only inside it. "
+        "ground one. If YOUR THESIS gives a buy zone, the call is buy only inside it. For buy, "
+        "make it an order someone could place: quantity — a starter position sized for this "
+        "investor's portfolio; limit — the limit price, close to today's. Null both for wait. "
     )
 
 
@@ -1036,8 +1043,9 @@ class _AnalysisOutput(BaseModel):
         default_factory=dict,
         description="ONLY when explicitly asked (a HELD or WATCHED asset subject): the take's one "
         'call — held: {"action": "hold|add|trim|sell", "why": str, "stop": number|null, '
-        '"trim": number|null}; watched: {"action": "buy|wait", "why": str, "entry": '
-        "number|null}. Leave EMPTY for every other call.",
+        '"trim": number|null, "quantity": number|null, "limit": number|null}; watched: '
+        '{"action": "buy|wait", "why": str, "entry": number|null, "quantity": number|null, '
+        '"limit": number|null}. Leave EMPTY for every other call.',
     )
 
     @field_validator("key_issues", mode="before")
@@ -2714,7 +2722,7 @@ def _write_asset_brief_synthesis(
                 parsed.get("portfolio_narrative") or "",
                 source_dicts(evidence),
                 now,
-                verdict=_brief_verdict(instrument_id, parsed, held),
+                verdict=_brief_verdict(instrument_id, parsed, held, now),
             )
         else:
             asset_brief.stamp_key_issues_checked(instrument_id, now)
@@ -2737,13 +2745,58 @@ def _write_asset_brief_synthesis(
         )
 
 
-def _brief_verdict(instrument_id: str, parsed: dict, held: bool) -> dict | None:
-    """The synthesis's verdict, checked against the last price on file (no network)."""
+def _verdict_context(instrument_id: str, *, held: bool) -> str:
+    """What the take's call needs beyond the position block: the price of a watched ticker (a
+    holding's block already has it) and the previous call with its levels, so a level moves
+    because something changed, not because the price did. "" on any failure — never blocks."""
+    try:
+        from backend.db.asset_brief_store import AssetBriefStore
+        from backend.db.instrument_store import InstrumentStore
+
+        inst = InstrumentStore().find_by_id(instrument_id) or {}
+        currency = inst.get("quote_currency") or ""
+        parts = []
+        price = None if held or not inst else thesis_judgment.local_price(inst)
+        if price:
+            parts.append(f"Current price: {currency} {price:g}".replace("  ", " "))
+        prior = (AssetBriefStore().get(instrument_id) or {}).get("position_verdict")
+        block = position_verdict.prior_block(prior, held=held, currency=currency)
+        if block:
+            parts.append(block)
+    except Exception as exc:
+        logger.debug(
+            "analyst: verdict context failed for %s: %s", instrument_id, type(exc).__name__
+        )
+        return ""
+    return "".join(f"\n\n{p}" for p in parts)
+
+
+def _brief_verdict(instrument_id: str, parsed: dict, held: bool, now: str) -> dict | None:
+    """The synthesis's verdict, checked against the last price on file (no network), stamped
+    with when it was made so the next take can be shown it."""
     from backend.db.instrument_store import InstrumentStore
 
     inst = InstrumentStore().find_by_id(instrument_id) or {}
     price = thesis_judgment.local_price(inst) if inst else None
-    return position_verdict.normalize(parsed.get("verdict"), held=held, price=price)
+    verdict = position_verdict.normalize(
+        parsed.get("verdict"), held=held, price=price, held_qty=_held_quantity(instrument_id)
+    )
+    return {**verdict, "at": now} if verdict else None
+
+
+def _held_quantity(instrument_id: str) -> float | None:
+    """Sellable units held (vested), the cap on a suggested sell — None when unreadable."""
+    try:
+        from backend.api.portfolio import read_rows
+
+        rows = [
+            r
+            for r in read_rows()
+            if r.get("instrument_id") == instrument_id and r.get("vesting_state") != "unvested"
+        ]
+        return sum(float(r.get("quantity") or 0) for r in rows) or None
+    except Exception:
+        return None
 
 
 def _load_all_evidence_rows_cached(cache: dict) -> list[dict]:
@@ -3183,6 +3236,8 @@ async def _process_linked_pair(
     brief_instrument_id = held_instrument_id or (
         asset_iid if asset_iid and _is_watched_instrument(asset_iid) else ""
     )
+    if brief_instrument_id:
+        position_ctx += _verdict_context(brief_instrument_id, held=bool(held_instrument_id))
     analyst_block = (
         await _fetch_analyst_consensus_block(brief_instrument_id) if brief_instrument_id else ""
     )
@@ -3495,6 +3550,8 @@ async def _process_row(
         thesis = _thesis_judgment(subject, ticker, payload, held=bool(held_instrument_id))
         if thesis:
             position_ctx = f"{position_ctx}\n\n{thesis_judgment.prompt_block(thesis, label)}"
+        if brief_instrument_id:
+            position_ctx += _verdict_context(brief_instrument_id, held=bool(held_instrument_id))
 
     user_prompt, system_prompt = _build_prompts(
         row,

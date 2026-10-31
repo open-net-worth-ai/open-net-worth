@@ -312,10 +312,18 @@ export interface VerdictLevel {
   distance_pct: number | null
 }
 
+/** The order behind a trim / sell / add / buy: how many units, and a limit price when plausible. */
+export interface VerdictOrder {
+  side: 'buy' | 'sell'
+  quantity: number
+  limit?: number
+}
+
 export interface PositionVerdict {
   action: 'hold' | 'add' | 'trim' | 'sell' | 'buy' | 'wait'
   why: string
   levels: VerdictLevel[]
+  order?: VerdictOrder | null
   currency: string
 }
 

@@ -1030,13 +1030,16 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                         </div>
                       ) : (
                         <>
+                          <p className="asd-pi-body">{portfolio_impact}</p>
                           {data.position_verdict && (
                             <PositionVerdictLine
                               verdict={data.position_verdict}
                               priceMaxFrac={priceMaxFrac}
+                              instrumentId={instrumentId}
+                              name={asset.name}
+                              ticker={asset.ticker}
                             />
                           )}
-                          <p className="asd-pi-body">{portfolio_impact}</p>
                         </>
                       )}
                     </div>
