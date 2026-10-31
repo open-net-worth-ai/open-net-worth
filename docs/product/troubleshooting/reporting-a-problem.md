@@ -33,7 +33,7 @@ closes it too.
      open or the app couldn't start.
 2. Under **What happened?**, describe what you did and what went wrong. This is the only
    required field.
-3. Optionally add your **Email** so we can reply about this report.
+3. Optionally add your **Email**. We only use it to tell you when the fix is out.
 4. Leave **Include recent logs** ticked unless you'd rather not share them. Read the log lines
    in the box below it — you can edit or delete any of them. With no logs yet, the box is greyed
    out and there are no lines to show. **Show exactly what is sent**
@@ -43,6 +43,8 @@ closes it too.
 When it's sent you'll see **Thank you. Your report was sent.** and a **Reference** — quote it if
 you write to us about the same problem. We aim to investigate and fix reports within 48 hours.
 
+Prefer to talk it through? The dialog also links to our [Discord](https://discord.gg/eCGBd4zg3B).
+
 ## What a report contains
 
 Everything is shown to you before it's sent:
@@ -50,7 +52,7 @@ Everything is shown to you before it's sent:
 | Field | What it is |
 |---|---|
 | What happened? | Your description. |
-| Email | Optional — only used to reply about this report. |
+| Email | Optional — only used to tell you when the fix is out. |
 | Error | Only when you started from an error: the message it showed. You can edit it. |
 | Version, Platform, Mode, Screen | The app version, your operating system, whether you're using the desktop app, a browser on the same machine, or a server, and which screen you were on (such as `/accounts`). |
 | Recent logs | Up to the last 200 log lines, only if **Include recent logs** is ticked. |

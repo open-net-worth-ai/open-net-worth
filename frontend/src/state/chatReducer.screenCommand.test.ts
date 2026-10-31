@@ -71,3 +71,39 @@ describe('parked screen command -> chip block', () => {
     expect(chip).toBeDefined()
   })
 })
+
+describe('a connector setup that ran at once (Connectors already open)', () => {
+  it('still gets its card, pointed at Connectors; other live commands do not', async () => {
+    chatSessions.apply('conv-setup', (s) => ({
+      ...s,
+      messages: [assistantMsg('m1')],
+      openAssistantId: 'm1',
+    }))
+    const setup = JSON.stringify({
+      type: 'screen_command',
+      tool_use_id: 'toolu_setup',
+      status: 'dispatched',
+      command: { name: 'connectors.open_setup', args: { id: 'mcp-webull' } },
+      open: null,
+    })
+    const reset = JSON.stringify({
+      type: 'screen_command',
+      tool_use_id: 'toolu_reset',
+      status: 'dispatched',
+      command: { name: 'plan.reset', args: {} },
+      open: null,
+    })
+    await consumeEventStream('conv-setup', sseResponse([setup, reset]), {
+      suggestionsEnabled: false,
+    })
+    const blocks = chatSessions.getSlice('conv-setup').messages[0]?.blocks ?? []
+    const cards = blocks.filter((b) => b.type === 'screen_command')
+    expect(cards).toEqual([
+      {
+        type: 'screen_command',
+        command: { name: 'connectors.open_setup', args: { id: 'mcp-webull' } },
+        open: { route: 'connectors' },
+      },
+    ])
+  })
+})

@@ -33,6 +33,7 @@ dl{display:grid;grid-template-columns:max-content 1fr;gap:6px 18px;margin:0;padd
 .check input{appearance:none;-webkit-appearance:none;flex:none;width:16px;height:16px;margin:2px 0 0;border-radius:4px;border:1.5px solid var(--line-strong);background:transparent no-repeat center;cursor:inherit}
 .check input:checked{background-color:var(--fr-gold);border-color:var(--fr-gold);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='11' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'/%3E%3C/svg%3E")}
 .check input:disabled{opacity:.5}.check-text{display:flex;flex-direction:column;gap:2px}.check-label{line-height:1.3}.check.off .check-label{opacity:.6}.check-desc{font-size:var(--text-sm);color:var(--faint);line-height:1.35}
+.hint{margin:6px 0 0;font-size:13px;color:var(--muted)}.community{margin:var(--space-6) 0 0;font-size:13px;color:var(--muted)}.link{padding:0;border:0;background:none;font:inherit;color:var(--ink);text-decoration:underline;cursor:pointer}
 details{margin-top:var(--space-6)}summary{cursor:pointer;color:var(--muted)}pre{margin:var(--space-3) 0 0;padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius-sm);white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}
 footer{flex:none;border-top:1px solid var(--line);padding:var(--space-5) var(--space-8)}.bar{max-width:640px;margin:0 auto;display:flex;gap:var(--space-4);justify-content:flex-end;flex-wrap:wrap}
 .status{max-width:640px;margin:0 auto var(--space-4);font-size:13px}.status:empty{display:none}.status.bad{color:var(--bad)}.status .addr{user-select:text;-webkit-user-select:text;font-weight:600;color:var(--ink)}
@@ -60,6 +61,7 @@ const guarded=run=>async()=>{busy=true;refresh();status('');try{await run()}catc
 const fallback=message=>{const node=status(message+' You can copy the report or email it to ',true);const address=document.createElement('span');address.className='addr';address.textContent=${JSON.stringify(SUPPORT_EMAIL)};node.append(address,'.');$('copy').hidden=false;$('email').hidden=false};
 for(const field of Object.values(fields))if(field)field.addEventListener('input',refresh);fields.include.addEventListener('change',refresh);
 $('send').addEventListener('click',guarded(async()=>{const sent=await bridge.send(payload());$('form').hidden=true;$('foot').hidden=true;$('done').hidden=false;if(sent.id)$('reference').textContent='Reference '+sent.id;$('close').focus()}));
+$('discord').addEventListener('click',guarded(async()=>{await bridge.community()}));
 $('copy').addEventListener('click',guarded(async()=>{await bridge.copy(payload());status('Copied. Paste it wherever you like.')}));
 $('email').addEventListener('click',guarded(async()=>{await bridge.email(payload());status('Your mail app opened with the start of the report. The whole report, logs included, is on your clipboard to paste.')}));
 const close=()=>{if(!busy)bridge.close()};
@@ -75,12 +77,12 @@ export function reportPage(draft: ReportPayload, theme: 'dark' | 'light', overla
 ${STYLE}</style></head><body><div id="scrim" class="scrim"><div class="card" role="dialog" aria-modal="true" aria-labelledby="title">
 <div class="scroll"><main><div id="form"><div class="head"><h1 id="title">Report a problem</h1>${CLOSE}</div>
 <label for="description">What happened?</label><textarea id="description" rows="5" maxlength="${LIMITS.description}"></textarea>
-<label for="email">Email <span class="req">(optional)</span></label><input id="email" type="email" maxlength="${LIMITS.email}" autocomplete="off">
+<label for="email">Email <span class="req">(optional)</span></label><input id="email" type="email" maxlength="${LIMITS.email}" autocomplete="off" aria-describedby="email-hint"><p id="email-hint" class="hint">We’ll only use it to tell you when the fix is out.</p>
 ${draft.error ? `<label for="error">Error</label><textarea id="error" rows="3" maxlength="${LIMITS.error}" class="mono"></textarea>` : ''}
 <p class="label">Sent with the report</p><dl><dt>Version</dt><dd>${escapeHtml(draft.app_version)}</dd><dt>Platform</dt><dd>${escapeHtml(draft.platform)}</dd><dt>Mode</dt><dd>${draft.mode}</dd>${draft.screen ? `<dt>Screen</dt><dd>${escapeHtml(draft.screen)}</dd>` : ''}</dl>
 <label class="check${logs ? '' : ' off'}"><input id="include" type="checkbox"><span class="check-text"><span class="check-label">Include recent logs</span><span class="check-desc">${logs ? 'Amounts, names and keys are masked.' : 'No logs yet.'}</span></span></label>
 ${logs ? `<textarea id="logs" class="mono" rows="9" aria-label="Recent logs" maxlength="${LIMITS.logs}" spellcheck="false"></textarea>` : ''}
-<details><summary>Show exactly what is sent</summary><pre id="json"></pre></details></div>
+<details><summary>Show exactly what is sent</summary><pre id="json"></pre></details><p class="community">Prefer to chat? <button id="discord" class="link" type="button">Join us on Discord</button></p></div>
 <div id="done" class="done" hidden><h1>Thank you. Your report was sent.</h1><p>We will investigate and fix this within 48 hours!</p><p id="reference"></p><div class="actions"><button id="close" class="primary" type="button">Close</button></div></div></main></div>
 <footer id="foot"><div id="status" class="status" role="status" aria-live="polite"></div><div class="bar"><button id="cancel" type="button">Cancel</button><button id="copy" type="button" hidden>Copy report</button><button id="email" type="button" hidden>Email instead</button><button id="send" class="primary" type="button">Send report</button></div></footer>
 </div></div><script type="application/json" id="draft">${json(draft)}</script><script nonce="onw-report">${SCRIPT}</script></body></html>`;

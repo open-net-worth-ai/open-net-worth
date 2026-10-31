@@ -28,6 +28,8 @@ import { LuciusDragTip, LuciusScreenTip } from '../../intro/LuciusTours'
 import { captureAndSerialize } from '../../../lucius/screenContract'
 import { commandCatalogSnapshot } from '../../../lucius/screenCommands'
 import { useChatComposer } from '../../../state/chatComposer'
+import { FileDropMask } from './FileDropMask'
+import { useFileDropZone } from './useFileDropZone'
 import { useScreenSnapshot } from '../../../state/screenSnapshot'
 import type { MentionRow } from '../../../hooks/useMentionables'
 import { Paperclip, AtSign, ArrowUp } from '../../../ui/icons'
@@ -112,6 +114,9 @@ export interface LuciusComposerProps {
    *  anchor, which would otherwise collide with the greeting above. Default false keeps the
    *  dock/mobile's existing upward behavior untouched. */
   homeMode?: boolean
+  /** Handle file drags on the composer itself. The side panel turns this off and makes the
+   *  whole panel the drop target, feeding files in through the handle's `addFiles`. */
+  fileDrop?: boolean
   /** Release editor focus after a valid send so a phone's software keyboard closes.
    *  The mobile Lucius surface opts in; desktop composers keep focus for rapid follow-ups. */
   dismissKeyboardOnSend?: boolean
@@ -130,6 +135,8 @@ export interface LuciusComposerHandle {
    *  handoff when mention chips are being drained from the pending store concurrently. */
   setText(text: string): void
   isEmpty(): boolean
+  /** Attach files dropped somewhere other than the composer (the side panel's drop zone). */
+  addFiles(files: FileList): void
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -169,6 +176,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
       leadingControls = null,
       homeMode = false,
       dismissKeyboardOnSend = false,
+      fileDrop = true,
     },
     ref,
   ) {
@@ -184,7 +192,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
     const [trigger, setTrigger] = useState<ComposerTrigger | null>(null)
     const [isEmpty, setIsEmpty] = useState(true)
     const att = useComposerAttachments()
-    const { attachments, clear: clearAttachments } = att
+    const { attachments, clear: clearAttachments, addFiles: addAttachmentFiles } = att
     const [attDetail, setAttDetail] = useState<AttachmentItem | null>(null)
     // Why a send did not go (or is waiting), said where the reader is looking. A refused send
     // used to do nothing at all: the text stayed in the box, no reason, and a second attempt
@@ -198,7 +206,6 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
     // Send was pressed while a file was still uploading: it fires when the last upload lands
     // instead of being thrown away.
     const [sendWhenReady, setSendWhenReady] = useState(false)
-    const [dragOver, setDragOver] = useState(false)
     const [chipDetail, setChipDetail] = useState<MentionDetailData | null>(null)
 
     const {
@@ -239,6 +246,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
       setNotice((n) => (n?.refused ? null : n))
       att.addFiles(files)
     }
+    const drop = useFileDropZone(addFiles, fileDrop)
 
     function removeAtt(id: string) {
       att.remove(id)
@@ -551,11 +559,16 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
         isEmpty() {
           return isEmpty && attachments.length === 0
         },
+        addFiles(files: FileList) {
+          setNotice((n) => (n?.refused ? null : n))
+          addAttachmentFiles(files)
+        },
       }),
       [
         isEmpty,
         attachments,
         clearAttachments,
+        addAttachmentFiles,
         respondingAgent,
         pendingSkills,
         setPendingSkills,
@@ -568,25 +581,17 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
     return (
       <div
         ref={composeRootRef}
-        className={'lx-compose' + (dragOver ? ' dragfile' : '')}
+        className={'lx-compose' + (drop.over ? ' dragfile' : '')}
         onDrop={(e) => {
           // Always prevent default so entity-drags (non-file) don't inject their
           // text/label into the contenteditable — the chip is inserted imperatively
           // via the pendingMentions path (dragRightClick → addMention → insertChip).
           e.preventDefault()
-          if (e.dataTransfer?.files?.length) {
-            e.stopPropagation()
-            addFiles(e.dataTransfer.files)
-          }
-          setDragOver(false)
+          drop.handlers.onDrop(e)
         }}
-        onDragOver={(e) => {
-          if ([...(e.dataTransfer?.types ?? [])].includes('Files')) {
-            e.preventDefault()
-            setDragOver(true)
-          }
-        }}
-        onDragLeave={() => setDragOver(false)}
+        onDragEnter={drop.handlers.onDragEnter}
+        onDragOver={drop.handlers.onDragOver}
+        onDragLeave={drop.handlers.onDragLeave}
         onPaste={(e) => {
           const files = e.clipboardData?.files
           if (files?.length) {
@@ -595,21 +600,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
           }
         }}
       >
-        {dragOver && (
-          <div className="lx-dropmask">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M12 3v13M7 8l5-5 5 5" />
-            </svg>
-            Drop files to attach
-          </div>
-        )}
+        {drop.over && <FileDropMask />}
 
         {showScreenBar && !homeMode && (
           <>

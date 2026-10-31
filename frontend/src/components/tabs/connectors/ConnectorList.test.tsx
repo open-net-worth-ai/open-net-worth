@@ -243,3 +243,13 @@ describe('rows', () => {
     expect(onReconnect).toHaveBeenCalledWith(PLAID)
   })
 })
+
+describe('the @ mention a row offers', () => {
+  it('says the status in the card\'s own words, with no trailing "• on"', () => {
+    const { container } = renderList([TELEGRAM, PLAID])
+    const subs = Array.from(container.querySelectorAll('[data-entity-sublabel]')).map((n) =>
+      n.getAttribute('data-entity-sublabel'),
+    )
+    expect(subs).toEqual(['Connected', 'Auth error'])
+  })
+})

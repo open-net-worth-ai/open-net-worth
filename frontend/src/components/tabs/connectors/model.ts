@@ -396,6 +396,10 @@ export interface ConnectorDetailEntry extends ConnectorEntry {
    *  2026-08-21: the installed page previously never linked ANY native publisher, even
    *  though the browse-time preview always did). */
   developerUrl?: string
+  /** The version an MCP server reported in its last handshake. */
+  version?: string
+  /** An MCP server's handshake `instructions` — guidance it gives an AI, shown folded. */
+  instructions?: string
   /** True for an external MCP server — gates the vendor-trust panel (spec §5). */
   mcp: boolean
   verification: VerificationState

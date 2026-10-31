@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { release } from 'node:os';
 import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { DesktopCommand, DesktopConnection, DesktopSettings } from '../contracts';
+import type { DesktopCommand, DesktopConnection, DesktopSettings, DesktopUpdateState, DesktopWhatsNew } from '../contracts';
 import { BackendSupervisor } from './backend';
 import { chooseImportFiles, saveExport } from './dialogs';
 import { readSelectedFiles, supportedFile } from './files';
@@ -43,8 +43,8 @@ import { hostedStatePage } from './hosted-state-page';
 import { MoveActions } from './move-actions';
 import { LocalEndpoint, type MoveEndpoint } from './move-endpoint';
 import { PRIVATE_CLOUD_ENABLED, assertPrivateCloudEnabled, displayVersion } from './feature-flags';
-import { RELEASES_PAGE, UpdateController, updateFeedUrl, updatesSupported } from './updates';
-import { LATEST_RELEASE_API, LinuxUpdater, fetchLatestVersion, linuxUpdatesSupported, relaunchAppImage } from './linux-updates';
+import { RELEASES_PAGE, UpdateController, releaseHighlights, releasePage, updateFeedUrl, updatesSupported } from './updates';
+import { LATEST_RELEASE_API, LinuxUpdater, fetchLatestVersion, fetchReleaseNotes, linuxUpdatesSupported, relaunchAppImage } from './linux-updates';
 import { LinuxAutostart, autostartPath } from './linux-autostart';
 import { loginItemOptions, squirrelUpdateExe } from './login-item';
 import squirrelStartup from 'electron-squirrel-startup';
@@ -93,6 +93,10 @@ let earlyLink: string | null = deepLinkArgument(process.argv);
 let loginLaunch = false;
 let updates: UpdateController | null = null;
 let installingUpdate = false;
+// Handed to the page once, on the first launch after an update installed.
+let whatsNew: Promise<DesktopWhatsNew> | null = null;
+const PAGE_UPDATE_DIALOG_COOLDOWN_MS = 30_000;
+let pageUpdateDialogAfter = 0;
 let replacingWindow = false;
 class PresentedError extends Error {}
 
@@ -193,6 +197,19 @@ function installLinuxUpdate(): void {
   });
 }
 
+function updateState(): DesktopUpdateState {
+  if (updates?.phase === 'ready') return { ready: true, version: updates.readyVersion, available: false };
+  if (updates?.phase === 'available') return { ready: false, version: updates.availableVersion, available: true };
+  return { ready: false, version: null, available: false };
+}
+
+// Notes that cannot be fetched still leave the note, with only the link to the release.
+async function loadWhatsNew(version: string): Promise<DesktopWhatsNew> {
+  let highlights: string[] = [];
+  try { highlights = releaseHighlights(await fetchReleaseNotes(fetch, version)); } catch { /* Offline or not published yet. */ }
+  return { version, highlights, releaseUrl: releasePage(version) };
+}
+
 function startUpdates(): void {
   const linux = linuxUpdatesSupported(app.isPackaged, process.platform, process.arch, qaMode, process.env);
   const supported = linux || updatesSupported(app.isPackaged, process.platform, qaMode, process.env, existsSync(squirrelUpdateExe(process.execPath)));
@@ -204,7 +221,7 @@ function startUpdates(): void {
       notification.on('click', onClick);
       notification.show();
     },
-    changed: () => { if (!quitting) { installMenu(); installTray(); } },
+    changed: () => { if (!quitting) { installMenu(); installTray(); main?.sendUpdateState(updateState()); } },
     install: process.platform === 'linux' ? installLinuxUpdate : installUpdate,
     openReleases: () => { void shell.openExternal(RELEASES_PAGE); },
     newerVersion: () => fetchLatestVersion(fetch, app.getVersion()),
@@ -213,7 +230,7 @@ function startUpdates(): void {
   }, app.getVersion());
   if (supported) updates.start(linux ? LATEST_RELEASE_API : updateFeedUrl(process.platform, process.arch, app.getVersion()));
   if (app.isPackaged && !qaMode && preferences && preferences.current.lastRunVersion !== app.getVersion()) {
-    updates.announceUpdate(preferences.current.lastRunVersion, earlierInstall);
+    if (updates.announceUpdate(preferences.current.lastRunVersion, earlierInstall)) whatsNew = loadWhatsNew(app.getVersion());
     void preferences.save({ lastRunVersion: app.getVersion() });
   }
 }
@@ -569,6 +586,23 @@ function registerIpc(): void {
     const { canGoBack, canGoForward } = (state ?? {}) as Record<string, unknown>;
     if (typeof canGoBack !== 'boolean' || typeof canGoForward !== 'boolean') return;
     try { main?.authorizeClient(event); main?.setHistory({ canGoBack, canGoForward }); } catch { /* Untrusted frames cannot drive the menu. */ }
+  });
+  ipcMain.handle('desktop-client:update-state', event => { main!.authorizeClient(event); return updateState(); });
+  // The page only ever OPENS the native choice; installing needs the person's answer in that
+  // dialog, never a page call alone. After a dialog it opened closes, the page waits before
+  // opening another, so a hostile page cannot reopen it the moment it is dismissed.
+  const pageUpdateDialog = async (event: Electron.IpcMainInvokeEvent, phase: 'ready' | 'available', open: () => Promise<void>) => {
+    main!.authorizeClient(event);
+    if (updates?.phase !== phase || starting || quitting || Date.now() < pageUpdateDialogAfter) return;
+    try { await open(); } finally { pageUpdateDialogAfter = Date.now() + PAGE_UPDATE_DIALOG_COOLDOWN_MS; }
+  };
+  ipcMain.handle('desktop-client:restart-to-update', event => pageUpdateDialog(event, 'ready', () => updates!.offerRestart()));
+  ipcMain.handle('desktop-client:offer-update', event => pageUpdateDialog(event, 'available', () => updates!.offerUpdate()));
+  ipcMain.handle('desktop-client:whats-new', event => {
+    main!.authorizeClient(event);
+    const pending = whatsNew;
+    whatsNew = null;
+    return pending;
   });
   ipcMain.on('desktop-client:commands-ready', event => { try { main?.authorizeClient(event); main?.ready(); } catch { /* Untrusted frames receive no commands. */ } });
   ipcMain.handle('desktop:book-choice', (event) => {

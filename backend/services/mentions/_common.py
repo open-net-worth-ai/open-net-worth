@@ -78,16 +78,42 @@ def _norm_q(s: str) -> str:
     return _RE_NON_ALNUM.sub("", s.lower())
 
 
+_PLURAL_AS_IS = frozenset({"news", "returns"})
+
+
+def _plural(word: str) -> str:
+    if word in _PLURAL_AS_IS:
+        return word
+    if re.search(r"[^aeiou]y$", word):
+        return word[:-1] + "ies"
+    if re.search(r"(s|x|z|ch|sh)$", word):
+        return word + "es"
+    return word + "s"
+
+
+def _type_names(mention_type: str) -> list[str]:
+    """Every word ``mention_type`` answers to: its own name and its registered label, each
+    singular and plural, then the hand-kept aliases. Derived, so a newly registered type is
+    searchable by name without anyone remembering to list it ("@connector" found nothing
+    while 19 types were missing from ``_TYPE_SYNONYMS``)."""
+    from backend.services.mentions.registry import DESCRIPTORS
+
+    d = DESCRIPTORS.get(mention_type)
+    # Only a registered type answers to its own name — a retired one ("agent") stays silent.
+    own = {_norm_q(mention_type), _norm_q(d.label)} - {""} if d else set()
+    names = [n for word in sorted(own) for n in (word, _plural(word))]
+    return names + _TYPE_SYNONYMS.get(mention_type, [])
+
+
 def _type_synonym_match(mention_type: str, q: str) -> str | None:
     """Return a hint string if ``q`` (>=3 chars, normalized) equals or is a prefix of any
-    synonym for ``mention_type``.  Returns ``None`` if no synonym matches."""
+    name of ``mention_type`` (see ``_type_names``).  Returns ``None`` if none matches."""
     if len(q) < 3:
         return None
     nq = _norm_q(q)
     if len(nq) < 3:
         return None
-    syns = _TYPE_SYNONYMS.get(mention_type, [])
-    for s in syns:
+    for s in _type_names(mention_type):
         if s == nq or s.startswith(nq):
             return s
     return None

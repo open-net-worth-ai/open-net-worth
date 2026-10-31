@@ -91,6 +91,28 @@ def test_the_error_tail_quotes_the_end_and_stays_capped():
     assert len(tail.error_tail(5)) == 5  # the cap is the cap, whatever the lines are
 
 
+def test_a_runtime_crash_quotes_the_line_that_names_the_failure():
+    """Node's real crash, in shape: the error, then a stack long enough to push it out of the
+    12-line tail, then "}" and "Node.js v26.0.0". The quote is still the error line."""
+    stack = [f"    at frame{i} (node:internal/modules/cjs/loader:{i}:15)\n" for i in range(8)]
+    tail = _drained(
+        [
+            b"node:internal/modules/cjs/loader:1478\n",
+            b"  throw err;\n",
+            b"  ^\n",
+            b"\n",
+            b"Error: Cannot find module '/tmp/missing/dist/index.js'\n",
+            *[line.encode() for line in stack],
+            b"  code: 'MODULE_NOT_FOUND',\n",
+            b"  requireStack: []\n",
+            b"}\n",
+            b"\n",
+            b"Node.js v26.0.0\n",
+        ]
+    )
+    assert tail.error_tail(300) == "Error: Cannot find module '/tmp/missing/dist/index.js'"
+
+
 def test_an_empty_stream_quotes_nothing():
     assert _drained([]).error_tail(300) == ""
 

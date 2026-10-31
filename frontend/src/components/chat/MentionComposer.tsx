@@ -22,6 +22,7 @@ import { GLYPH_SVG, TYPE_MARKER_SVG } from '../../lucius/identity'
 import { colorFor, C } from '../../lucius/mentionColors'
 import { isSafeCssColor } from '../../utils/mentionable'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { connectorLook } from './toolActivity/useToolOwnerLogos'
 
 export type ComposerTrigger = { kind: '@' | '/'; query: string }
 
@@ -165,7 +166,16 @@ function buildChipEl(m: MentionRef): HTMLElement {
   // Transaction direction and account color are passed as item.dot so colorFor()
   // returns them at step 1 (explicit per-item override).
   const glEl = document.createElement('span')
-  if (isScope || isSource) {
+  // The picker loaded the connectors read before this chip could be picked, so the mark is
+  // already resolvable here — the same one the Connectors card shows.
+  const logo = m.type === 'connector' ? connectorLook(m.ref).logo : undefined
+  if (logo) {
+    const img = document.createElement('img')
+    img.className = 'chip-logo'
+    img.src = logo
+    img.alt = ''
+    chip.appendChild(img)
+  } else if (isScope || isSource) {
     glEl.className = 'chip-glyph'
     glEl.textContent = '◉'
   } else if (isAgent) {
@@ -189,7 +199,7 @@ function buildChipEl(m: MentionRef): HTMLElement {
     else if (TYPE_MARKER_SVG[m.type] !== undefined) glEl.innerHTML = TYPE_MARKER_SVG[m.type] ?? ''
     else glEl.textContent = iconFor(m.type)
   }
-  chip.appendChild(glEl)
+  if (!logo) chip.appendChild(glEl)
 
   const nameEl = document.createElement('span')
   nameEl.className = 'chip-name'

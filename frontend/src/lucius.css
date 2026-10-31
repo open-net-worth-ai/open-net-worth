@@ -626,6 +626,16 @@
     width: 26px;
     height: 26px;
   }
+  /* The side panel is one drop target, so its mask covers the whole panel above every layer. */
+  .lx-dropmask--side {
+    inset: 8px;
+    z-index: 50;
+    font-size: 14px;
+  }
+  .lx-dropmask--side svg {
+    width: 34px;
+    height: 34px;
+  }
   /* The screen-awareness bar keeps its own card (border + --bg-2 fill, see .lx-scope below) —
    it is a distinct control with a toggle and a Peek panel, not a band of the text field. */
   /* Vertical stack: editor spans full width on top; toolbar row sits below. */
@@ -2105,6 +2115,33 @@
     height: 14px;
     display: block;
   }
+  /* A connector's brand mark — the logo its Connectors card shows, on a white tile so dark
+     marks stay legible on the dark theme. */
+  .id-logo,
+  .chip-logo {
+    display: block;
+    flex: none;
+    object-fit: contain;
+    background: #fff;
+  }
+  /* The whole tile is the plate, as on the Connectors page (.cn-tile.plate) — a small white
+     square inside the grey tile read as a box in a box, with the mark crammed to its edges. */
+  .ac-item-ic.id-box.plate {
+    background: #fff;
+    box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .id-logo {
+    width: 100%;
+    height: 100%;
+    padding: 4px;
+    box-sizing: border-box;
+    background: transparent;
+  }
+  .chip-logo {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+  }
   .id-swatch {
     width: 11px;
     height: 11px;
@@ -2124,7 +2161,8 @@
   }
   .ac-item-sub {
     font-size: 11px;
-    color: var(--faint);
+    /* --muted, not --faint: --faint is ~3.3:1 on the popup at 11px — too dim to read. */
+    color: var(--muted);
     margin-top: 1px;
     white-space: nowrap;
     overflow: hidden;

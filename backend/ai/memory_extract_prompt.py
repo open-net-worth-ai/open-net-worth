@@ -111,7 +111,8 @@ offering, proposing or waiting for an answer is never a Recent entry. At most
 {ms.RECENT_MAX_NEW_PER_PASS} new Recent entries. Only Recent entries take an expires_at (the day
 after it no longer matters).
 
-Each fact is at most {ms.FACT_MAX_CHARS} characters. For each fact choose:
+Keep each fact concise: one or two sentences, under {ms.FACT_TARGET_CHARS} characters, never over
+{ms.FACT_MAX_CHARS}. For each fact choose:
   - section: one of {", ".join(ms.SECTIONS)} (open_items is Recent: it lapses after
     {ms.OPEN_ITEM_DEFAULT_DAYS} days unless you give an expires_at, and takes no topic)
   - topic: a short name for the subject. Reuse a name from "Topics in use" below when one fits;
@@ -119,7 +120,21 @@ Each fact is at most {ms.FACT_MAX_CHARS} characters. For each fact choose:
   - sensitive: true for {ms.SENSITIVE_TOPICS} — on an update too, when its new text is about one. Never store a full card, account, ID or passport number or a password.
 
 Decide whether each fact UPDATES an existing memory (reuse its id) or is NEW. If the
-conversation contradicts an existing memory, prefer an update (latest wins). If a fact is
+conversation contradicts an existing memory, prefer an update (latest wins) — even when the change
+is a passing remark ("it varies, but just keep $10" turns a varying amount into a flat one).
+
+The shapes that are easy to miss, each with made-up names (copy the shape, never the facts):
+  - "ok I applied, waiting for the result" after choosing a loan, a card or a provider → a Recent
+    entry: "Applied for the Northwind loan ($40k, 24 months) for the renovation; awaiting a
+    decision. 2% early-repayment fee, so treat it as full-term." Its expires_at is the day the
+    decision stops mattering.
+  - "they offered only 10k, which I rejected" → said in that same Recent entry ("Turned down
+    Acme's $10k offer"), so no later run proposes the offer again.
+  - "<item> → groceries for me", correcting how something was booked where a payee rule cannot
+    say it (the shop sells many kinds of things) → Money, Bookkeeping: "Books tissues and
+    cleaning supplies under Groceries".
+A fact holds what the person said or agreed. Lucius's explanation of it ("so it counts as
+income", "which keeps the plan covered") is not part of the fact. If a fact is
 no longer true, list its id under "remove". If the conversation re-confirms an existing
 memory without changing it, list its id under "mentioned".
 

@@ -10,7 +10,14 @@
 //   An item never appears in two sections (tested via matchEntity ok+hint logic).
 
 import { describe, it, expect } from 'vitest'
-import { norm, typeMatch, searchHay, matchEntity, TYPE_SYNONYMS } from './matchEntity'
+import {
+  norm,
+  typeMatch,
+  searchHay,
+  matchEntity,
+  qualifiedMatch,
+  TYPE_SYNONYMS,
+} from './matchEntity'
 import type { MentionRow } from './mentionRow'
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -89,6 +96,20 @@ describe('typeMatch', () => {
 
   it('@agents → false: the agent type was retired (2026-08-02)', () => {
     expect(typeMatch('agent', 'agents')).toBe(false)
+  })
+
+  it('every registered type answers to its own name, singular and plural', () => {
+    // "@connector" found nothing while connector (and 18 other types) had no synonym entry.
+    expect(typeMatch('connector', 'connector')).toBe(true)
+    expect(typeMatch('connector', 'connectors')).toBe(true)
+    expect(typeMatch('connector', 'conn')).toBe(true)
+    expect(typeMatch('report', 'reports')).toBe(true)
+    expect(typeMatch('commitment', 'commitments')).toBe(true)
+    expect(typeMatch('funding_source', norm('funding sources'))).toBe(true)
+  })
+
+  it('an unregistered type stays silent even for its own name', () => {
+    expect(typeMatch('no_such_type', 'no_such_type')).toBe(false)
   })
 
   it('@skills → true for type "skill"', () => {
@@ -335,5 +356,31 @@ describe('matchEntity', () => {
   it('prefix direction inverted: "accountsXYZ" is NOT a prefix of any synonym → no match', () => {
     const r = row('account', 'Meridian Multiplier', '')
     expect(matchEntity(r, 'accountsXYZ').ok).toBe(false)
+  })
+})
+
+// ── leading type word ("@payee vietnam airlines") ───────────────────────────
+
+describe('qualifiedMatch', () => {
+  const payee = row('payee', 'Vietnam Airlines', '12 transactions', 'p1')
+  const txn = row('transaction', 'Vietnam Airlines', '-1,200 USD', 't1')
+
+  it('a leading type word scopes the rest of the phrase to that type', () => {
+    expect(matchEntity(payee, 'payee vietnam airlines').ok).toBe(true)
+    expect(matchEntity(payee, 'payees vietnam').ok).toBe(true)
+    expect(matchEntity(payee, 'merchant vietnam').ok).toBe(true)
+  })
+
+  it('another type is not matched by a qualifier that names a different type', () => {
+    expect(matchEntity(txn, 'payee vietnam airlines').ok).toBe(false)
+  })
+
+  it('the rest must still match the name', () => {
+    expect(matchEntity(payee, 'payee grab').ok).toBe(false)
+  })
+
+  it('a single word is never a qualifier', () => {
+    expect(qualifiedMatch(payee, 'payee')).toBe(false)
+    expect(qualifiedMatch(payee, 'payee   ')).toBe(false)
   })
 })

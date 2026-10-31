@@ -39,6 +39,7 @@ import { MODAL_BODY_MIN_HEIGHT } from './DirectoryBrowser'
 import { MCP_INSTALL_PRESETS, type DirectoryRow } from './catalog'
 import {
   EMPTY_MCP_FORM,
+  displayName,
   formFromEditTarget,
   guessServerName,
   isValidMcpUrl,
@@ -184,6 +185,10 @@ export interface McpAddFlow {
   runConnect: () => void
   back: () => void
   finish: () => void
+  /** Save without connecting: the server is stored switched off and untested, to be tested
+   *  later from its settings. Add only; `canSave` says whether the form holds enough. */
+  saveDormant: () => void
+  canSave: boolean
   /** Deletes the dormant, live-credentialed OAuth server row THIS session's sign-in minted, if
    *  the flow is being left without it ever having been claimed by a successful `finish()`. A
    *  no-op on an edit (`editing`'s row predates this session and must survive every dismiss path
@@ -205,7 +210,8 @@ export function useMcpAddFlow({
   /** A saved server to reopen the flow ON. Read once, at mount — the host renders this hook's
    *  modal only while it is open, so there is no stale-target effect to keep in sync. */
   editing?: McpEditTarget | null
-  onSaved: (name: string, toolCount: number) => void
+  /** `dormant`: saved switched off without a connection test (the form's Save). */
+  onSaved: (name: string, toolCount: number, opts?: { dormant?: boolean }) => void
 }): McpAddFlow {
   const [step, setStep] = useState<McpStep>('form')
   const [form, setFormState] = useState<McpConnectionForm>(() =>
@@ -240,6 +246,9 @@ export function useMcpAddFlow({
   // `.then()` tell "am I still the one the user is looking at" and no-op if not, rather than
   // clobbering whatever the user did in the meantime (a fresh probe, or the form again).
   const activeTokenRef = useRef<string | null>(null)
+  // The directory card's name, when the flow began from one. A server's self-reported name is
+  // often a package slug (Coinbase's CLI says `coinbase`), so the card we list it under wins.
+  const catalogNameRef = useRef<string | null>(null)
 
   // ── OAuth sign-in (RFC `2026-08-14-mcp-oauth` §4.2/§4.3) ──────────────────────
   // `connected` alone is not enough to seed `signed_in`: a refresh can fail and mark
@@ -419,6 +428,8 @@ export function useMcpAddFlow({
     resetOAuthState()
     setOauthClientId('')
     const preset = entry ? MCP_INSTALL_PRESETS[entry.id] : undefined
+    // The generic slot names no server — the server's own report has to do there.
+    catalogNameRef.current = entry && entry.id !== 'mcp-custom' ? entry.name : null
     setFormState({
       ...EMPTY_MCP_FORM,
       transport: preset?.transport ?? 'remote',
@@ -506,7 +517,7 @@ export function useMcpAddFlow({
       setFormState((f) =>
         editing
           ? { ...f, name: f.name.trim() || result.name }
-          : { ...f, name: result.name, serverId: result.id },
+          : { ...f, name: catalogNameRef.current ?? displayName(result.name), serverId: result.id },
       )
       setMeta((m) =>
         mergeTrust(m, {
@@ -588,7 +599,8 @@ export function useMcpAddFlow({
       const discovered = result.tools.map((t) => t.name)
       // `suggested_name` is already `serverInfo.name` with the backend's own endpoint-derived
       // fallback; `guessServerName` only covers a server that reported nothing at all.
-      const name = result.suggested_name.trim() || guessServerName(form)
+      const name =
+        catalogNameRef.current ?? displayName(result.suggested_name.trim() || guessServerName(form))
       setDiscoveredTools(result.tools)
       // Every NEWLY discovered tool starts at Needs approval — no tiering, no exceptions
       // (spec §4). On an edit the tools already permissioned keep the level they have: a
@@ -656,6 +668,49 @@ export function useMcpAddFlow({
     })()
   }
 
+  // Save without connecting (owner, 2026-10-31): a server whose test can't pass yet — real keys
+  // still to come, a build still to finish — no longer has to be retyped later. Stored switched
+  // off, so nothing is spawned or reached; enabling it from its settings runs the test then.
+  const canSave =
+    !editing && (form.transport === 'remote' ? isValidMcpUrl(form.url) : !!form.command.trim())
+  const saveDormant = () => {
+    if (!canSave || saving) return
+    setSaving(true)
+    void (async () => {
+      const name =
+        form.name.trim() ||
+        catalogNameRef.current ||
+        displayName(guessServerName(form)) ||
+        'MCP server'
+      // An OAuth sign-in already minted the row, dormant; saving names it rather than adding a
+      // second one under a new id.
+      const oauthCreatedId = form.auth === 'oauth' ? oauthServerIdRef.current : null
+      const res = oauthCreatedId
+        ? await updateMcpServer({
+            id: oauthCreatedId,
+            name,
+            config: toWireConfig(form, savedAuth),
+            replaceEnv: false,
+            tool_permissions: {},
+          })
+        : await createMcpServer({
+            id: uniqueServerId(name, takenIds),
+            name,
+            config: toWireConfig(form, savedAuth),
+            tool_permissions: {},
+            enabled: false,
+          })
+      setSaving(false)
+      if (!res.ok) {
+        setError(res.error)
+        setStep('error')
+        return
+      }
+      if (oauthCreatedId) oauthServerIdRef.current = null
+      onSaved(name, 0, { dormant: true })
+    })()
+  }
+
   return {
     step,
     mode: editing ? 'edit' : 'add',
@@ -707,6 +762,8 @@ export function useMcpAddFlow({
       setStep('form')
     },
     finish,
+    saveDormant,
+    canSave,
     discardAbandonedOAuthServer,
   }
 }
@@ -886,8 +943,9 @@ export function McpAddFlowBody({ flow }: { flow: McpAddFlow }): JSX.Element {
             </div>
           ) : null}
           <span className="rd-help">
-            Fix the URL, command, or credentials above and test again. Nothing is saved until the
-            server is actually reached.
+            {flow.canSave
+              ? 'Fix the URL, command, or credentials and test again — or Save to keep it, switched off, and test it later from its settings.'
+              : 'Fix the URL, command, or credentials above and test again.'}
           </span>
         </div>
       )}
@@ -1021,10 +1079,18 @@ export function McpAddFlowFooter({
   onCancel: () => void
 }): JSX.Element {
   if (flow.step === 'connecting') return <Btn disabled>Testing…</Btn>
+  // Save keeps what was typed without a passing test (stored switched off) — on the form, and on
+  // the failed test too, where real keys still to come is the usual reason it failed.
+  const save = flow.canSave ? (
+    <Btn disabled={flow.saving} onClick={flow.saveDormant}>
+      {flow.saving ? 'Saving…' : 'Save'}
+    </Btn>
+  ) : null
   if (flow.step === 'error') {
     return (
       <>
         <Btn onClick={flow.back}>Back</Btn>
+        {save}
         <Btn variant="primary" onClick={flow.runConnect}>
           Retry
         </Btn>
@@ -1055,6 +1121,7 @@ export function McpAddFlowFooter({
   return (
     <>
       <Btn onClick={onCancel}>Cancel</Btn>
+      {save}
       <Btn variant="primary" disabled={!flow.canConnect} onClick={flow.runConnect}>
         {flow.form.auth === 'oauth' && flow.oauth.status === 'pending' ? 'Signing in…' : 'Connect'}
       </Btn>

@@ -4,7 +4,7 @@
 // here is the one the previous design got wrong: a server we did not publish must claim
 // NO author — never "Developed by Open Net Worth" over unaudited third-party code.
 
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react'
 import { ConnectorDetail } from './ConnectorDetail'
 import { buildToolGroups, type ConnectorDetailEntry } from './model'
@@ -382,7 +382,7 @@ describe('the publisher panel is MCP-only (spec §5)', () => {
     )
     // the defect: a generic server reading "Developed by Open Net Worth"
     expect(screen.queryByText(/^Developed by/)).toBeNull()
-    expect(screen.getByText('Unknown publisher')).toBeTruthy()
+    expect(screen.getByText('Unverified publisher')).toBeTruthy()
     expect(screen.getByText(/can’t vouch for its code/)).toBeTruthy()
   })
 
@@ -472,5 +472,46 @@ describe('the Automate action', () => {
     cleanup()
     renderDetail(entry({ enabled: false }))
     expect(screen.queryByRole('button', { name: 'Automate' })).toBeNull()
+  })
+})
+
+describe('on a phone a running connector keeps Pause in the ⋮; only a fix reaches the footer', () => {
+  beforeEach(() => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('shows Done alone in the footer and Pause in the ⋮, in a compact header', () => {
+    const { container, onSetEnabled } = renderDetail(entry({ enabled: true }))
+    const head = container.querySelector('.cn-idhead') as HTMLElement
+    expect(head.className).toContain('cn-idhead-compact')
+    expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull()
+
+    const foot = container.querySelector('.rd-modal-foot') as HTMLElement
+    expect(within(foot).getAllByRole('button')).toHaveLength(1)
+    expect(within(foot).getByRole('button', { name: 'Done' }).className).toContain('primary')
+
+    openKebab(container)
+    fireEvent.click(screen.getByText('Pause connector'))
+    const confirmDialog = container.querySelectorAll<HTMLElement>('.rd-modal')[1]!
+    fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Pause' }))
+    expect(onSetEnabled).toHaveBeenCalledWith(false)
+  })
+
+  it('promotes Resume to the footer, primary and last, beside a secondary Done', () => {
+    const { container, onSetEnabled } = renderDetail(entry({ enabled: false }))
+    const foot = container.querySelector('.rd-modal-foot') as HTMLElement
+    const buttons = within(foot).getAllByRole('button')
+    expect(buttons.map((b) => b.textContent)).toEqual(['Done', 'Resume'])
+    expect(buttons[0]!.className).toContain('secondary')
+    fireEvent.click(buttons[1]!)
+    expect(onSetEnabled).toHaveBeenCalledWith(true)
   })
 })

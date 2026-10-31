@@ -11,7 +11,7 @@
 // RouterShell and LuciusDock host this tab, and every "Ask Lucius" affordance routes to
 // the real composer prefill.
 
-import { useEffect, useMemo, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { authFetch } from '../../../api/client'
 import { invalidateQueryCache } from '../../../state/queryCache'
@@ -25,7 +25,7 @@ import { ConnectorDetail } from './ConnectorDetail'
 import { ConnectorConfig, hasConfigForm } from './ConnectorConfig'
 import { DirectoryModal } from './DirectoryModal'
 import { filterDirectory, skipsPreview } from './catalog'
-import { resolveDirectory, suggestionsBySection } from './directoryRows'
+import { resolveDirectory, setupTargetFor, suggestionsBySection } from './directoryRows'
 import { InstitutionPickerModal } from './InstitutionPickerModal'
 import { McpEditModal } from './McpEditModal'
 import { deleteMcpServer } from './mcpApi'
@@ -33,7 +33,11 @@ import { signInWithOAuth } from './oauthSignIn'
 import { savePermissions } from './permissions'
 import { mcpAuthType, toEntry, toMcpEditTarget } from './adapter'
 import { CONNECTORS_KEY, useConnectors } from './useConnectors'
-import { useRegisterScreenFacts } from '../../../lucius/useScreenContract'
+import {
+  useRegisterScreenCommands,
+  useRegisterScreenFacts,
+} from '../../../lucius/useScreenContract'
+import { CONNECTORS_OPEN_SETUP_SPEC } from '../../../lucius/screenCommands'
 import {
   FAMILY_SECTIONS,
   STATUS_FILTERS,
@@ -74,6 +78,9 @@ export function ConnectorsTab(): JSX.Element {
   /** `null` = the directory is closed; otherwise the family it opened pre-filtered to. */
   const [directoryFamily, setDirectoryFamily] = useState<FamilyTab | null>(null)
   const [directoryPreviewId, setDirectoryPreviewId] = useState<string | null>(null)
+  /** The not-yet-installed MCP entry whose add form the directory opens ON. */
+  const [directoryAddId, setDirectoryAddId] = useState<string | null>(null)
+  const [directoryAutoConnect, setDirectoryAutoConnect] = useState(false)
   const [bankPickerOpen, setBankPickerOpen] = useState(false)
   /** The MCP server a Reconnect click is currently signing in for — an OAuth reconnect is a
    *  popup + poll, not an instant call, so this both guards against a rapid double-click
@@ -114,6 +121,7 @@ export function ConnectorsTab(): JSX.Element {
   const openDirectory = (family: FamilyTab) => {
     setDetailId(null)
     setDirectoryPreviewId(null)
+    setDirectoryAddId(null)
     setDirectoryFamily(family)
   }
 
@@ -122,6 +130,7 @@ export function ConnectorsTab(): JSX.Element {
   const openLandingPage = (connectorId: string) => {
     setDetailId(null)
     setDirectoryPreviewId(connectorId)
+    setDirectoryAddId(null)
     setDirectoryFamily('all')
   }
 
@@ -136,6 +145,7 @@ export function ConnectorsTab(): JSX.Element {
    *  plain focus and lands exactly where it always did. */
   function openConnector(connectorId: string, opts?: FocusConnectorOptions) {
     setDirectoryFamily(null)
+    setDirectoryAddId(null)
     setBankPickerOpen(false)
     setRoutedCountry(opts?.country)
     setConfigureOnOpen(opts?.configure === true)
@@ -161,6 +171,52 @@ export function ConnectorsTab(): JSX.Element {
     return () => cancelAnimationFrame(raf)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLoading, linkedConnector])
+
+  // Lucius's `connectors.open_setup`: UI state only. It opens the same form a card's `+` (or an
+  // installed row's settings) does; the user enters credentials and clicks Connect themselves.
+  // A command that lands before the list has loaded waits in a ref for it.
+  const pendingSetup = useRef<{ id: string; connect: boolean } | null>(null)
+  function applySetup({ id, connect }: { id: string; connect: boolean }) {
+    const target = setupTargetFor(connectors, id)
+    if (target.kind === 'unknown') {
+      toast("Lucius suggested a connector that isn't in the directory.")
+      return
+    }
+    if (target.kind === 'add') {
+      setDetailId(null)
+      setDirectoryPreviewId(null)
+      setDirectoryAddId(target.id)
+      // Set only by Lucius's card on the user's own Connect click (never by the model — the
+      // backend refuses any argument but id): go straight on to the sign-in.
+      setDirectoryAutoConnect(connect)
+      setDirectoryFamily('all')
+    } else {
+      openConnector(target.id, { configure: target.kind === 'form' })
+    }
+  }
+  const applySetupRef = useRef(applySetup)
+  useEffect(() => {
+    applySetupRef.current = applySetup
+  })
+  useRegisterScreenCommands([
+    {
+      spec: CONNECTORS_OPEN_SETUP_SPEC,
+      handler: (args) => {
+        const request = {
+          id: typeof args.id === 'string' ? args.id.trim() : '',
+          connect: args.connect === true,
+        }
+        if (initialLoading) pendingSetup.current = request
+        else applySetupRef.current(request)
+      },
+    },
+  ])
+  useEffect(() => {
+    const request = pendingSetup.current
+    if (initialLoading || !request) return
+    pendingSetup.current = null
+    applySetupRef.current(request)
+  }, [initialLoading])
 
   async function reload() {
     invalidateQueryCache(CONNECTORS_KEY)
@@ -313,10 +369,25 @@ export function ConnectorsTab(): JSX.Element {
     return facts
   })
 
+  // The same soft shadow Browse & add shows: only once the list has slid under the pinned
+  // header, never at rest. Measured, not scrollTop — the page's scroll box is an ancestor.
+  const mastheadRef = useRef<HTMLElement>(null)
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const head = mastheadRef.current
+    const content = head?.nextElementSibling
+    if (!head || !content) return
+    const onScroll = () =>
+      setScrolled(content.getBoundingClientRect().top < head.getBoundingClientRect().bottom - 1)
+    onScroll()
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    return () => document.removeEventListener('scroll', onScroll, { capture: true })
+  }, [])
+
   return (
     <div className="cn-page" data-ctx-region="content" data-ctx-title="Connectors">
       {/* Static chrome — up during the first load too, so only the list is a skeleton. */}
-      <header className="rd-masthead">
+      <header ref={mastheadRef} className={'rd-masthead' + (scrolled ? ' scrolled' : '')}>
         <div className="rd-masthead-head">
           <div className="rd-masthead-title">Connectors</div>
           <div className="rd-masthead-sub">
@@ -336,8 +407,11 @@ export function ConnectorsTab(): JSX.Element {
                 aria-label="Search connectors"
               />
             </span>
-            <Btn variant="primary" onClick={() => openDirectory('all')}>
-              <Icons.plus /> Browse &amp; add
+            <Btn variant="primary" onClick={() => openDirectory('all')} aria-label="Browse & add">
+              <Icons.plus />
+              {/* A phone keeps search and this button on ONE line, so the label shortens there. */}
+              <span className="cn-label-wide">Browse &amp; add</span>
+              <span className="cn-label-narrow">Add</span>
             </Btn>
           </div>
           <div className="rd-masthead-subrow">
@@ -462,9 +536,16 @@ export function ConnectorsTab(): JSX.Element {
         <DirectoryModal
           open
           connectors={connectors}
+          loading={initialLoading}
           family={directoryFamily}
           previewId={directoryPreviewId ?? undefined}
-          onClose={() => setDirectoryFamily(null)}
+          addId={directoryAddId ?? undefined}
+          autoConnect={directoryAutoConnect}
+          onClose={() => {
+            setDirectoryFamily(null)
+            setDirectoryAddId(null)
+            setDirectoryAutoConnect(false)
+          }}
           onFocusConnector={openConnector}
           onAdded={() => void reload()}
           toast={toast}

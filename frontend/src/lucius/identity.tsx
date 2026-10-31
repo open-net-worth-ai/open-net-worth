@@ -27,6 +27,10 @@ export const GLYPH_SVG: Record<string, string> = {
     '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 13.7 10.3 21 12 13.7 13.7 12 21 10.3 13.7 3 12 10.3 10.3Z"/></svg>',
   skill:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4 9.5 20"/></svg>',
+  // The sidebar's Connectors icon (lucide Share2) — for a connector with no brand mark of its
+  // own (Email, Webhook), which otherwise fell through to a bare colour swatch.
+  connector:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>',
 }
 
 // TYPE_MARKER_SVG — uniform markers for user-created rule/scheduled_task types.
@@ -123,6 +127,8 @@ export interface IdentityItem {
   tone?: string
   /** single emoji replaces the glyph/mono for any type that supports it */
   emoji?: string
+  /** a brand mark (a connector's logo) — replaces every glyph when set */
+  logo?: string
 }
 
 // ── IdentityInner — the inner identity node; caller wraps it in a sized box ──
@@ -140,6 +146,8 @@ export interface IdentityItem {
 export function IdentityInner({ item }: { item: IdentityItem }) {
   const t = item.type
   const color = colorFor(item)
+
+  if (item.logo) return <img className="id-logo" src={item.logo} alt="" />
 
   if (t === 'agent') {
     if (item.primary || item.id === 'lucius') {
@@ -192,7 +200,7 @@ export function IdentityInner({ item }: { item: IdentityItem }) {
 export function Identity({ item }: { item: IdentityItem }) {
   const isMono = item.type === 'agent' && !item.primary && item.id !== 'lucius' && !item.emoji
   return (
-    <span className={'ac-item-ic id-box' + (isMono ? ' mono' : '')}>
+    <span className={'ac-item-ic id-box' + (isMono ? ' mono' : '') + (item.logo ? ' plate' : '')}>
       <IdentityInner item={item} />
     </span>
   )

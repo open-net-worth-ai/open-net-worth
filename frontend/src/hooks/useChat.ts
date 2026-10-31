@@ -5,6 +5,7 @@ import type { MentionRef } from '../types/mentions'
 import type { ScreenSnapshotWire } from '../state/screenSnapshot'
 import {
   applyRestoreResult,
+  completeUnfinishedTail,
   loadMessages,
   reconcileWithRemote,
   withRestoreMarks,
@@ -89,6 +90,13 @@ function isRicher(fresher: Message[], prev: Message[]): boolean {
   return blockCount(fresher) > blockCount(prev)
 }
 
+/** What to show after a transcript re-read: the server's copy when it is richer, ours
+ *  completed with the reply we never saw finish, or ours carrying the server's restore marks. */
+function pickFresher(fresher: Message[], prev: Message[]): Message[] {
+  if (isRicher(fresher, prev)) return fresher
+  return completeUnfinishedTail(prev, fresher) ?? withRestoreMarks(prev, fresher)
+}
+
 /** Adopt the transcript re-read that ends an attach, unless a fresher attach owns the view. */
 function adoptReconciled(ownerId: string, full: Message[] | null): void {
   // NOT gated on `cancelled`: the attach ending is what flips the slice idle,
@@ -110,7 +118,7 @@ function adoptReconciled(ownerId: string, full: Message[] | null): void {
   if (chatSessions.getSlice(ownerId).status === 'streaming') {
     return forgetRevision(ownerId)
   }
-  setMessages(ownerId, (prev) => (isRicher(full, prev) ? full : withRestoreMarks(prev, full)))
+  setMessages(ownerId, (prev) => pickFresher(full, prev))
 }
 
 /** Paint a send that never reached the server: the failure IS assistant output, so it gets
@@ -217,9 +225,7 @@ export function useChat(
         if (cancelled) return forgetRevision(conversationId)
         // Only adopt it if nothing else has touched the conversation meanwhile — a turn
         // the user started while this was in flight owns the state now.
-        setMessages(conversationId, (prev) =>
-          isRicher(fresher, prev) ? fresher : withRestoreMarks(prev, fresher),
-        )
+        setMessages(conversationId, (prev) => pickFresher(fresher, prev))
       })
     return () => {
       cancelled = true

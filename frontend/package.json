@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "sync:connector-directory": "vite-node scripts/sync-connector-directory.ts",
+    "check:connector-tools": "vite-node scripts/check-connector-tools.ts",
     "build:tokens": "node scripts/build-tokens.mjs",
     "prebuild": "node scripts/build-tokens.mjs",
     "lint": "eslint .",

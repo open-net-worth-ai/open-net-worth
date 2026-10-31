@@ -259,6 +259,65 @@
     font-family: monospace;
   }
 
+  /* A fenced block is ONE box. Without its own rule the inline-code style above landed on the
+     <code> inside it and, being inline, painted a pill per line — four commands read as four
+     separate snippets (owner, 2026-10-31). The block gets the box; the code inside resets. */
+  .msg-assistant .msg-text pre {
+    margin: 8px 0;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    line-height: 1.55;
+  }
+  /* The Copy button sits in the block's corner: on hover (or keyboard focus) with a mouse,
+     always on a touch screen, which can't hover. */
+  .msg-code {
+    position: relative;
+  }
+  .msg-code-copy {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--muted);
+    font: inherit;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .msg-code:hover .msg-code-copy,
+  .msg-code-copy:focus-visible,
+  .msg-code-copy.copied {
+    opacity: 1;
+  }
+  .msg-code-copy.copied {
+    color: var(--good);
+  }
+  @media (hover: none) {
+    .msg-code-copy {
+      opacity: 1;
+    }
+  }
+  .msg-assistant .msg-text pre code {
+    display: block;
+    background: none;
+    border: 0;
+    padding: 0;
+    border-radius: 0;
+    font-size: 12.5px;
+    white-space: pre;
+  }
+
   /* Links in Lucius's own prose (e.g. "Sources: Reuters, Bloomberg, ..."). Browsers'
    default blue/visited-purple has no relation to this palette and reads as broken
    on the dark surface — style with the Lucius identity color instead (this text IS
@@ -1132,6 +1191,12 @@
   /* A destructive write (delete, remove) — toned once, here, not again on its lead. */
   .change-preview-header--danger {
     color: var(--bad);
+  }
+  /* An external MCP card is titled by the tool's own name, as the server spells it. */
+  .change-preview-tool {
+    font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+    font-weight: 600;
+    overflow-wrap: anywhere;
   }
   .change-preview-label {
     font-size: var(--ac-caps);
@@ -2162,6 +2227,89 @@
     font-size: 12px;
     display: inline-flex;
     align-items: center;
+  }
+
+  /* The card a suggested connector gets in place of the chip (ConnectorSetupCard): its own
+     logo on a white tile, name + Verified, publisher, and one Set up / Connect button. */
+  .cmd-setup-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    max-width: 460px;
+    padding: 12px 14px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  /* The Connectors tile, exactly (connectors.css .cn-tile / .plate / .cn-tile-logo): a 34px
+     plate with a hairline, the mark inset 6px — edge to edge it looked crushed (owner, 2026-10-31). */
+  .cmd-setup-logo {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid var(--line);
+    color: var(--lucius);
+  }
+  .cmd-setup-logo img {
+    width: 100%;
+    height: 100%;
+    display: block;
+    padding: 6px;
+    box-sizing: border-box;
+    object-fit: contain;
+  }
+  .cmd-setup-logo svg {
+    width: 17px;
+    height: 17px;
+    display: block;
+  }
+  .cmd-setup-main {
+    flex: 1;
+    min-width: 0;
+  }
+  .cmd-setup-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .cmd-setup-badge {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--good);
+    background: color-mix(in srgb, var(--good) 14%, transparent);
+    border-radius: 999px;
+    padding: 2px 7px;
+  }
+  .cmd-setup-sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .cmd-setup-btn {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: var(--ink);
+    color: var(--surface);
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
   }
 
   /* ── Inline artifact (Lucius-generated HTML/SVG document) ──────────────────────

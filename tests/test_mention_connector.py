@@ -6,7 +6,7 @@ connector config store — so these tests patch that service to return synthetic
 ``ConnectorView`` objects and assert:
   - the type is in REGISTRY (and register() did NOT raise the forbidden-store guard)
   - generic search returns connector rows with value == id (the resolver ref)
-  - the sublabel has the expected "{status} • on/off" shape
+  - the sublabel uses the Connectors page's words ("Connected", "Not connected", …)
   - generic resolve returns the projected (allowlisted) fields for a known id
   - NO secret-named field is EVER present in any search/resolve output
 """
@@ -119,12 +119,27 @@ def test_connector_search_returns_rows_with_resolver_ref_id():
 
 
 def test_connector_search_sublabel_status_and_enabled():
+    """The Connectors page's words, never the raw status code or a lowercase "on"."""
     desc = REGISTRY["connector"]
     with patch("backend.services.connectors.list_connectors", return_value=_views()):
         rows = desc.search(_q(q=""))
     by_id = {r["id"]: r for r in rows}
-    assert by_id["email"]["sublabel"] == "active • on"
-    assert by_id["ibkr"]["sublabel"] == "not_configured • off"
+    assert by_id["email"]["sublabel"] == "Connected"
+    assert by_id["ibkr"]["sublabel"] == "Not connected"
+
+
+def test_connector_sublabel_covers_every_state_like_the_connectors_page():
+    from backend.services.mentions.descriptors.connector import _connector_sublabel as label
+
+    assert label({"id": "plaid", "enabled": False, "status": "configured"}) == "Disconnected"
+    assert label({"id": "mcp:x", "enabled": False, "status": "not_configured"}) == "Disconnected"
+    assert label({"id": "plaid", "enabled": True, "status": "error"}) == "Error"
+    assert label(
+        {"id": "plaid", "enabled": True, "status": "active", "last_status": "auth_error"}
+    ) == ("Auth error")
+    assert label({"id": "plaid", "enabled": True, "last_status": "reconnect_needed"}) == (
+        "Sign-in needed"
+    )
 
 
 def test_connector_search_substring_match_on_kind():

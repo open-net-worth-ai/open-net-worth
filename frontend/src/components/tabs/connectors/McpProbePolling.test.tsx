@@ -25,6 +25,8 @@ vi.mock('./mcpApi', async (importOriginal) => {
 })
 
 import { useMcpAddFlow, PROBE_POLL_MS } from './McpAddFlow'
+import { resolveDirectory } from './directoryRows'
+import { displayName } from './mcpConfig'
 import { fetchProbeProgress, probeMcpServer, type McpProbeResult } from './mcpApi'
 
 const probeMock = vi.mocked(probeMcpServer)
@@ -285,5 +287,42 @@ describe('tracking when the command last spoke', () => {
 
     // t=1 stamps ['a']; t=2 sees the same tail and must not re-stamp; t=3 brings 'b'.
     expect(result.current.activity.lastOutputAt).toBe(3)
+  })
+})
+
+describe('the name a new server is saved under', () => {
+  const found = (name: string) => ({
+    ok: true,
+    server_info: { name, version: '1' },
+    tools: [{ name: 'ping' }],
+    suggested_name: name,
+    suggested_id: name,
+    trust: null,
+    error: null,
+  })
+
+  it('is the directory card’s name, not the slug the server reports', async () => {
+    // Coinbase's CLI reports `coinbase`; Bybit's reports `trading-mcp`.
+    probeMock.mockResolvedValue(found('trading-mcp'))
+    const { result } = renderHook(() => useMcpAddFlow({ takenIds: [], onSaved: () => {} }))
+    const bybit = resolveDirectory([]).find((r) => r.id === 'mcp-bybit')!
+    act(() => result.current.start(bybit))
+    act(() => result.current.runConnect())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(result.current.step).toBe('review')
+    expect(result.current.form.name).toBe('Bybit')
+  })
+
+  it('capitalizes a custom server’s all-lowercase name, and only that', async () => {
+    probeMock.mockResolvedValue(found('coinbase'))
+    const { result } = startFlow()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(result.current.form.name).toBe('Coinbase')
+    expect(displayName('iCloud')).toBe('iCloud')
+    expect(displayName('Kite Connect')).toBe('Kite Connect')
   })
 })

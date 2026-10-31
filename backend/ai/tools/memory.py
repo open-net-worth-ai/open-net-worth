@@ -9,6 +9,7 @@ from pydantic import Field
 
 from backend.ai.memory_structure import (
     FACT_MAX_CHARS,
+    FACT_TARGET_CHARS,
     OPEN_ITEM_DEFAULT_DAYS,
     OPEN_ITEM_MAX_DAYS,
     routing_guide_for_tool,
@@ -22,8 +23,8 @@ class RememberFactInput(ToolInput):
 
     content: str = Field(
         description=(
-            f"The fact, one concise self-contained statement of at most {FACT_MAX_CHARS} "
-            "characters, in the third person (e.g. 'Rents a flat in Tampines')"
+            f"The fact, one concise self-contained statement under {FACT_TARGET_CHARS} characters "
+            f"(never over {FACT_MAX_CHARS}), in the third person (e.g. 'Rents a flat in Tampines')"
         ),
     )
     section: Literal["you", "money", "plans", "open_items", "other"] = Field(

@@ -215,6 +215,31 @@ A bar shows today's price against your levels, and each level lists how far away
 belongs to the stock, not to an account or a watchlist: it's shared by every account that holds
 it, and it stays when you sell or stop watching.
 
+#### How Lucius uses your thesis
+
+Once a stock has a thesis, Lucius judges every price move and entry point against it, not
+against the move alone. That covers the alerts on a sharp drop or a burst of news, price-alert
+write-ups, Intel stories, the daily briefing, the Holdings pulse and chat. Whenever one of
+them says what to do about that stock, it cites your thesis: the role, your reason (including
+any holding period you wrote in it, like *"Holding 3+ years"*), what would break it, and where
+today's price sits against your stop, buy zone, fair value and trim level.
+
+- **A drop that leaves the thesis intact is noise, not a sell signal.** Say a speculative
+  stock you're holding for 3+ years falls 15%. If it's still above your stop and nothing in
+  **Thesis breaks if** has happened, Lucius tells you to hold, says why, and doesn't suggest
+  selling or trimming.
+- **Selling comes up only for a reason your thesis gives:** the price is at or below your stop,
+  or the news shows the **Thesis breaks if** event has happened. Lucius then writes
+  *"thesis broken:"* and names what happened.
+- **A rise alone isn't a signal.** Getting close to your trim level or fair value is worth
+  flagging, and reaching the trim level is when Lucius may suggest trimming. The Holdings pulse
+  flags a stock at its stop, at or near its trim level, or nearing its fair value.
+- **For a stock you watch, entering your buy zone is the signal.** Below the floor of the zone,
+  Lucius asks you to check what would break the thesis before buying.
+
+A stock with no thesis is judged the way it always was. Stop and trim levels don't fire
+alerts of their own; set a price alert if you want a push when the price gets there.
+
 ## Run a scan now
 
 Intel scans on a schedule. To scan now, click **Scan** at the top of the page, then **Scan now**.

@@ -10,6 +10,7 @@ import {
   CATALOG,
   MCP_INSTALL_PRESETS,
   catalogProvenanceFor,
+  endpointKey,
   filterDirectory,
   previewEndpoint,
   type CatalogEntry,
@@ -50,7 +51,7 @@ export function resolveDirectory(
   // not +) instead of listing a second card for the same server beside it.
   const serverByEndpoint = new Map<string, Connector>()
   for (const c of installed) {
-    const url = c.id.startsWith(MCP_PREFIX) ? toEntry(c).url?.trim() : undefined
+    const url = c.id.startsWith(MCP_PREFIX) ? endpointKey(toEntry(c).url) : undefined
     if (url && !serverByEndpoint.has(url)) serverByEndpoint.set(url, c)
   }
   const merged = new Set<string>()
@@ -63,7 +64,7 @@ export function resolveDirectory(
         : preset
           ? [preset.command, preset.args].filter(Boolean).join(' ')
           : ''
-    const server = endpoint ? serverByEndpoint.get(endpoint.trim()) : undefined
+    const server = endpoint ? serverByEndpoint.get(endpointKey(endpoint)) : undefined
     if (server) merged.add(server.id)
     const live = liveById.get(entry.id)
     // `sub`/`desc`/`tools`: for a NATIVE entry these read the SAME `short_description`/
@@ -146,10 +147,10 @@ export const SUGGESTION_PRIORITY: readonly string[] = [
  *  an installed server answers at its endpoint. */
 export function pickSuggestions(rows: DirectoryRow[], family: FamilyTab): DirectoryRow[] {
   const installedEndpoints = new Set(
-    rows.filter((d) => d.installed && d.mcp && d.url).map((d) => d.url!.trim()),
+    rows.filter((d) => d.installed && d.mcp && d.url).map((d) => endpointKey(d.url)),
   )
   const added = (d: DirectoryRow) =>
-    d.installed || installedEndpoints.has(previewEndpoint(d)?.trim() ?? '')
+    d.installed || installedEndpoints.has(endpointKey(previewEndpoint(d)))
   const rank = (d: DirectoryRow) => {
     const i = SUGGESTION_PRIORITY.indexOf(d.id)
     return i < 0 ? SUGGESTION_PRIORITY.length : i
@@ -169,4 +170,31 @@ export function suggestionsBySection(
     ['all', pickSuggestions(rows, 'all')],
     ...FAMILY_SECTIONS.map((s) => [s.key, pickSuggestions(rows, s.key)]),
   ])
+}
+
+/** Where a "set this connector up" request lands, decided from live state. An id the directory
+ *  does not have is `unknown` — never guessed at. Matches `installedId` too, so an MCP server
+ *  merged into its catalog card opens its own settings. */
+export type SetupTarget =
+  | { kind: 'unknown' }
+  | { kind: 'settings'; id: string }
+  | { kind: 'form'; id: string }
+  | { kind: 'add'; id: string }
+
+export function setupTargetFor(
+  connectors: Connector[],
+  id: string,
+  catalog: CatalogEntry[] = CATALOG,
+): SetupTarget {
+  // `custom` is the Add custom server form — any MCP server the directory doesn't list.
+  if (id === 'custom') {
+    const generic = catalog.find((e) => e.generic)
+    return generic ? { kind: 'add', id: generic.id } : { kind: 'unknown' }
+  }
+  const row = resolveDirectory(connectors, catalog).find(
+    (r) => !r.generic && (r.id === id || r.installedId === id),
+  )
+  if (!row) return { kind: 'unknown' }
+  if (row.installed) return { kind: 'settings', id: row.installedId ?? row.id }
+  return row.mcp ? { kind: 'add', id: row.id } : { kind: 'form', id: row.id }
 }

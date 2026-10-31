@@ -1,5 +1,6 @@
 export const UPDATE_REPO = 'open-net-worth-ai/open-net-worth-releases';
 export const RELEASES_PAGE = `https://github.com/${UPDATE_REPO}/releases/latest`;
+export const releasePage = (version: string): string => `https://github.com/${UPDATE_REPO}/releases/tag/v${version}`;
 // Every installed app asks OUR domain; opennetworth.ai/update/* redirects to the current feed
 // (update.electronjs.org today), so storage can move without shipping an app update.
 export const UPDATE_FEED = 'https://opennetworth.ai/update';
@@ -103,9 +104,15 @@ export class UpdateController {
     await this.detect(true);
   }
 
+  // One dialog at a time: the page's Restart button reaches this too, and must not stack them.
   async offerRestart(): Promise<void> {
-    const version = this.readyVersion ? ` ${this.readyVersion}` : '';
-    const choice = await this.hooks.ask(`Open Net Worth${version} is ready to install.`, 'The app will close your book safely, install the update and reopen. If you choose Later, it installs the next time you quit.', ['Restart Now', 'Later']);
+    if (this.asking) return;
+    this.asking = true;
+    let choice: number;
+    try {
+      const version = this.readyVersion ? ` ${this.readyVersion}` : '';
+      choice = await this.hooks.ask(`Open Net Worth${version} is ready to install.`, 'The app will close your book safely, install the update and reopen. If you choose Later, it installs the next time you quit.', ['Restart Now', 'Later']);
+    } finally { this.asking = false; }
     if (choice === 0) await this.installNewest();
   }
 
@@ -271,9 +278,10 @@ export class UpdateController {
 
   // Shown once, on the first launch after an update installed. An install from before the
   // version was recorded has no previous version, only an earlier book or server choice.
-  announceUpdate(previousVersion: string | null, earlierInstall: boolean): void {
+  announceUpdate(previousVersion: string | null, earlierInstall: boolean): boolean {
     const updated = previousVersion ? isNewer(this.currentVersion, previousVersion) : earlierInstall;
     if (updated) this.hooks.notify(`Open Net Worth was updated to ${this.currentVersion}.`, () => this.hooks.openReleases());
+    return updated;
   }
 
   private set(phase: UpdatePhase): void {
@@ -281,4 +289,33 @@ export class UpdateController {
     this.phase = phase;
     this.hooks.changed();
   }
+}
+
+const MAX_HIGHLIGHTS = 6;
+const MAX_HIGHLIGHT_CHARS = 280;
+// Bounds on GitHub-supplied text before any regex runs on it: real notes are a few KB.
+const MAX_NOTES_CHARS = 64_000;
+const MAX_LINE_CHARS = 2_000;
+
+// The same bullets the release page and the Discord post lead with (scripts/release_announce.py):
+// the release's Highlights, else its first New then Fixes lines. Plain text only — the page shows
+// them as text, so Markdown emphasis, code and links are reduced to their words.
+export function releaseHighlights(notes: string): string[] {
+  const sections = new Map<string, string[]>();
+  let current: string[] | null = null;
+  for (const raw of notes.slice(0, MAX_NOTES_CHARS).split('\n')) {
+    if (raw.length > MAX_LINE_CHARS) continue;
+    const line = raw.trim();
+    const heading = /^##\s+(.+?)\s*$/.exec(line);
+    if (heading) { current = sections.get(heading[1]) ?? []; sections.set(heading[1], current); }
+    else if (current && line.startsWith('- ')) current.push(line.slice(2).trim());
+  }
+  const highlights = sections.get('Highlights') ?? [];
+  const items = highlights.length ? highlights : [...sections.get('New') ?? [], ...sections.get('Fixes') ?? []].map(item => item.replace(/^\*\*[^*]+:\*\*\s*/, ''));
+  return items.slice(0, MAX_HIGHLIGHTS).map(plainText).filter(Boolean);
+}
+
+function plainText(item: string): string {
+  const text = item.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim();
+  return text.length > MAX_HIGHLIGHT_CHARS ? `${text.slice(0, MAX_HIGHLIGHT_CHARS - 1)}…` : text;
 }

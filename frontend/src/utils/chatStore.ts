@@ -246,6 +246,39 @@ export function shouldAdoptRemote(local: Message[] | null, remote: Message[]): b
   return blockCount(remote) > blockCount(local)
 }
 
+/** A reply this browser saw START but never saw finish — the page was suspended (a phone
+    switching apps) after the thinking arrived and before the answer did. Both copies hold
+    the same messages with the same blocks, so neither `shouldAdoptRemote` nor
+    `useChat.isRicher` can tell the half-drawn bubble from the finished one, and the cache
+    won forever: thinking on screen, no answer, on the phone AND after a restart (live report
+    2026-10-30). Returns `local` with its last bubble replaced by the server's finished reply,
+    or null when that is not the case.
+
+    The server writes a turn's user message and reply together, AT THE END — so mid-turn its
+    tail still ends on the PREVIOUS reply. Both checks below rule that out: the server's last
+    reply must answer the same user message as ours, and must not be the reply before it. */
+export function completeUnfinishedTail(
+  local: Message[] | null,
+  remote: Message[],
+): Message[] | null {
+  if (!local || local.length < 2 || remote.length < 2) return null
+  const mine = local[local.length - 1]
+  const theirs = remote[remote.length - 1]
+  if (mine.role !== 'assistant' || mine.usage || mine.error) return null
+  if (theirs.role !== 'assistant' || theirs.error || !theirs.text?.trim()) return null
+  if (theirs.text.trim().length <= (mine.text ?? '').trim().length) return null
+  const myAsk = local[local.length - 2]
+  const theirAsk = remote[remote.length - 2]
+  if (myAsk.role !== 'user' || theirAsk.role !== 'user') return null
+  if ((myAsk.text ?? '').trim() !== (theirAsk.text ?? '').trim()) return null
+  if ((myAsk.attachments?.length ?? 0) !== (theirAsk.attachments?.length ?? 0)) return null
+  const previousReply = local[local.length - 3]
+  if (previousReply?.role === 'assistant' && previousReply.text.trim() === theirs.text.trim()) {
+    return null
+  }
+  return [...local.slice(0, -1), theirs]
+}
+
 /**
  * Second-pass reconcile against the backend transcript, for a conversation that was
  * served from the local cache.
@@ -271,6 +304,11 @@ export async function reconcileWithRemote(
   // adding a message, so a cache taken before the card existed has the same last id and
   // would win forever — `shouldAdoptRemote` folds that in beside the advanced-past check.
   if (!shouldAdoptRemote(local, remote)) {
+    const completed = completeUnfinishedTail(local, remote)
+    if (completed) {
+      void saveMessages(convId, completed)
+      return completed
+    }
     // The cache stays — but whether a message is restored is the SERVER's fact, never this
     // browser's: a restore (or its Undo) made in another tab or device must show here too.
     const marked = local ? withRestoreMarks(local, remote) : local

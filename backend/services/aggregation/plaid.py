@@ -499,6 +499,33 @@ def _txn_description(plaid_txn: dict) -> str:
     return (str(info).strip() if info else "") or "Plaid"
 
 
+# Plaid's own confidence in its category; below these the hint is noise, so none is offered.
+_HINT_CONFIDENCE = frozenset({"VERY_HIGH", "HIGH", "MEDIUM"})
+
+
+def _readable(code: str) -> str:
+    """``FOOD_AND_DRINK`` → ``Food and drink``."""
+    words = code.replace("_", " ").strip().lower()
+    return words[:1].upper() + words[1:]
+
+
+def _category_hint(plaid_txn: dict) -> str | None:
+    """Plaid's own category for the transaction, readable — ``"Food and drink: Fast food" (a plain colon — the untrusted-text sanitizer strips "›")``
+    — as a HINT for choosing one of the user's categories, never a category itself. From
+    ``personal_finance_category`` (primary + detailed, the detailed code minus its primary
+    prefix); ``None`` when Plaid sends none, or rates its own confidence LOW/UNKNOWN."""
+    pfc = plaid_txn.get("personal_finance_category") or {}
+    primary = str(pfc.get("primary") or "").strip()
+    if not primary:
+        return None
+    confidence = str(pfc.get("confidence_level") or "").upper()
+    if confidence and confidence not in _HINT_CONFIDENCE:
+        return None
+    detailed = str(pfc.get("detailed") or "").strip()
+    rest = detailed[len(primary) :].strip("_") if detailed.startswith(primary) else detailed
+    return f"{_readable(primary)}: {_readable(rest)}" if rest else _readable(primary)
+
+
 def _txn_to_row(plaid_txn: dict, account: dict, account_id: str) -> dict | None:
     """One Plaid transaction → the common normalized row shape (RFC §A step 3).
 
@@ -538,6 +565,7 @@ def _txn_to_row(plaid_txn: dict, account: dict, account_id: str) -> dict | None:
         "description": description,
         "memo": None,
         "pending": bool(plaid_txn.get("pending")),
+        "category_hint": _category_hint(plaid_txn),
         "supersedes_ref": f"{account_id}:{pending_id}" if pending_id else None,
     }
 

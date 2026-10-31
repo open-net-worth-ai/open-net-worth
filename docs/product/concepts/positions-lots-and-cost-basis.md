@@ -33,6 +33,12 @@ the vesting schedule, and vested-but-not-yet-delivered units from the vests wait
 To change how much you hold, record what happened — a buy, a sale, a transfer, or a correction
 to a lot — and the holding follows. Moving a holding to another account moves its lots with it.
 
+A holding's **Position** tab opens with a **Held at** table naming the account it's in — one row
+per account when you hold the same thing in more than one. Each row shows the quantity, market value, **Avg cost** per unit,
+**Cost basis** (what you paid in total for that account's units, fees included) and unrealized
+profit/loss. A per-unit cost under one unit of currency is shown at full precision, so a coin
+bought at $0.0000241 never reads as $0.00.
+
 ## Lots: what you actually paid
 
 Every purchase is a **lot**: an acquired date, a quantity, and a **cost basis** — what you paid,

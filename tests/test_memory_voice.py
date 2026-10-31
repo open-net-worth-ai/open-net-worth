@@ -56,7 +56,7 @@ def test_a_rewording_that_keeps_every_number_name_and_quote_passes():
         "Splits the S$2,400 rent with Priya (Priya Raman) 60/40 since 1 Mar 2026; 'Rent' category.",
         "Splits the S$2,400 rent with Priya (Priya Raman) 60/40 since 2026-03-01; 'Rental' category.",
         "User splits the S$2,400 rent with Priya (Priya Raman) 60/40 since 2026-03-01; 'Rent'.",
-        "x" * 281,
+        "x" * 501,
         "",
     ],
     ids=["number", "name", "date-format", "quote", "still-off-voice", "too-long", "empty"],

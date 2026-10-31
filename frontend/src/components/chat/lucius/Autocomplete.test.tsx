@@ -2,7 +2,7 @@
 //
 // Autocomplete.test.tsx — render smoke tests for the inline grouped picker (W2A).
 
-import { createRef } from 'react'
+import { createRef, type Ref } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { render, cleanup, fireEvent, act } from '@testing-library/react'
 
@@ -28,7 +28,9 @@ const BASE_ITEM: MentionRow = {
 }
 
 // Default mock: one local item, no error, no remote items.
-const mockUseMentionables = vi.fn<() => UseMentionablesResult>(() => ({
+const mockUseMentionables = vi.fn<
+  (query?: string, opts?: { surfaces?: string[]; types?: string[] }) => UseMentionablesResult
+>(() => ({
   items: [BASE_ITEM],
   loading: false,
   error: false,
@@ -37,7 +39,8 @@ const mockUseMentionables = vi.fn<() => UseMentionablesResult>(() => ({
 }))
 
 vi.mock('../../../hooks/useMentionables', () => ({
-  useMentionables: () => mockUseMentionables(),
+  useMentionables: (query: string, opts: { surfaces?: string[]; types?: string[] }) =>
+    mockUseMentionables(query, opts),
 }))
 
 vi.mock('../../../lucius/screenContract', () => ({
@@ -439,7 +442,7 @@ describe('Autocomplete', () => {
       onScreen: false,
     }
 
-    it('renders one tab per section present and highlights the first as active', () => {
+    const renderVantage = (ref?: Ref<AutocompleteHandle>) => {
       mockUseMentionables.mockReturnValue({
         items: [ON_SCREEN_ITEM],
         loading: false,
@@ -447,56 +450,6 @@ describe('Autocomplete', () => {
         retry: NOOP_RETRY,
         remoteItems: [REMOTE_ITEM],
       })
-      render(
-        <Autocomplete
-          mode="@"
-          query="vantage"
-          visibleIds={EMPTY_SET}
-          onPick={NOOP}
-          onClose={NOOP}
-        />,
-      )
-      const tabs = Array.from(document.querySelectorAll('.ac-tab'))
-      // Everywhere rows are grouped by type (2026-08-11) — REMOTE_ITEM's type is 'account'.
-      expect(tabs.map((t) => t.textContent)).toEqual(['On this screen', 'Account'])
-      expect(tabs[0]!.classList.contains('active')).toBe(true)
-      expect(tabs[1]!.classList.contains('active')).toBe(false)
-    })
-
-    it('clicking a tab activates it and moves the keyboard highlight into its section', () => {
-      mockUseMentionables.mockReturnValue({
-        items: [ON_SCREEN_ITEM],
-        loading: false,
-        error: false,
-        retry: NOOP_RETRY,
-        remoteItems: [REMOTE_ITEM],
-      })
-      render(
-        <Autocomplete
-          mode="@"
-          query="vantage"
-          visibleIds={EMPTY_SET}
-          onPick={NOOP}
-          onClose={NOOP}
-        />,
-      )
-      const tabs = Array.from(document.querySelectorAll('.ac-tab'))
-      fireEvent.click(tabs[1]!)
-      expect(tabs[1]!.classList.contains('active')).toBe(true)
-      expect(tabs[0]!.classList.contains('active')).toBe(false)
-      const hi = document.querySelector('.ac-item.hi')
-      expect(hi?.textContent).toContain('Vantage Brokerage')
-    })
-
-    it('moveSection (the imperative handle Composer.tsx drives) cycles forward and clamps at the last section', () => {
-      mockUseMentionables.mockReturnValue({
-        items: [ON_SCREEN_ITEM],
-        loading: false,
-        error: false,
-        retry: NOOP_RETRY,
-        remoteItems: [REMOTE_ITEM],
-      })
-      const ref = createRef<AutocompleteHandle>()
       render(
         <Autocomplete
           ref={ref}
@@ -507,11 +460,63 @@ describe('Autocomplete', () => {
           onClose={NOOP}
         />,
       )
+    }
+    const tabEls = () => Array.from(document.querySelectorAll('.ac-tab'))
+    const activeTab = () => document.querySelector('.ac-tab.active')?.textContent
+    const zones = () => Array.from(document.querySelectorAll('.ac-zone')).map((z) => z.textContent)
+
+    it('renders an All tab then one tab per section present, with All active', () => {
+      renderVantage()
+      // Everywhere rows are grouped by type (2026-08-11) — REMOTE_ITEM's type is 'account'.
+      expect(tabEls().map((t) => t.textContent)).toEqual(['All', 'On this screen', 'Account'])
+      expect(activeTab()).toBe('All')
+    })
+
+    it('clicking a tab filters the list to that section, and All brings everything back', () => {
+      renderVantage()
+      fireEvent.click(tabEls()[1]!)
+      expect(activeTab()).toBe('On this screen')
+      expect(zones()).toEqual(['◉On this screen'])
+      expect(document.querySelectorAll('.ac-item')).toHaveLength(1)
+      // The strip keeps every tab while one narrows the list.
+      expect(tabEls().map((t) => t.textContent)).toEqual(['All', 'On this screen', 'Account'])
+
+      fireEvent.click(tabEls()[0]!)
+      expect(activeTab()).toBe('All')
+      expect(document.querySelectorAll('.ac-item')).toHaveLength(2)
+    })
+
+    it('a type tab asks the backend for that type alone', () => {
+      renderVantage()
+      expect(mockUseMentionables).toHaveBeenLastCalledWith(
+        'vantage',
+        expect.objectContaining({ types: undefined }),
+      )
+      fireEvent.click(tabEls()[2]!)
+      expect(activeTab()).toBe('Account')
+      expect(mockUseMentionables).toHaveBeenLastCalledWith(
+        'vantage',
+        expect.objectContaining({ types: ['account'] }),
+      )
+      const names = Array.from(document.querySelectorAll('.ac-item-name')).map((n) => n.textContent)
+      expect(names).toEqual(['Vantage Brokerage'])
+      expect(zones()).toEqual(['Account'])
+    })
+
+    it('moveSection (the imperative handle Composer.tsx drives) steps through tabs and clamps at the ends', () => {
+      const ref = createRef<AutocompleteHandle>()
+      renderVantage(ref)
       act(() => ref.current!.moveSection(1))
-      expect(document.querySelectorAll('.ac-tab')[1]!.classList.contains('active')).toBe(true)
-      // Only 2 sections exist — a further +1 must clamp, not go out of bounds.
+      expect(activeTab()).toBe('On this screen')
       act(() => ref.current!.moveSection(1))
-      expect(document.querySelectorAll('.ac-tab')[1]!.classList.contains('active')).toBe(true)
+      expect(activeTab()).toBe('Account')
+      // Last tab — a further +1 must clamp, not go out of bounds.
+      act(() => ref.current!.moveSection(1))
+      expect(activeTab()).toBe('Account')
+      act(() => ref.current!.moveSection(-1))
+      act(() => ref.current!.moveSection(-1))
+      act(() => ref.current!.moveSection(-1))
+      expect(activeTab()).toBe('All')
     })
 
     it('renders no tab strip when only one section is present', () => {

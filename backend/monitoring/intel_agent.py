@@ -28,7 +28,7 @@ from backend.db.instrument_store import InstrumentStore
 from backend.db.intel_stories_store import IntelStoriesStore
 from backend.monitoring.collect import gather_evidence, gather_rss
 from backend.services import ledger as ledger_service
-from backend.services import run_ledger
+from backend.services import run_ledger, thesis_guard, thesis_judgment
 from backend.services.countries import country_name
 from backend.services.evidence import prune_evidence
 from backend.services.feeds import resolve_intel_feeds, resolve_opportunity_feeds
@@ -425,6 +425,13 @@ def _build_context(rows: list[dict], fx: dict, profile: dict, watchlist: dict, b
         or "(no foreign-currency holdings)"
     )
 
+    theses = thesis_judgment.book_judgments(market_rows, _watched_items(watchlist, held_tickers))
+    theses_section = (
+        f"\nYOUR INVESTMENT THESES (the user's own — judge every move and entry against them):\n"
+        f"{thesis_judgment.theses_block(theses)}"
+        if theses
+        else ""
+    )
     return f"""Date: {user_now().strftime("%A, %d %B %Y %H:%M")}
 Base currency: {base}
 FX: {fx_pairs}
@@ -449,7 +456,7 @@ PROFILE:
   Country of residence: {", ".join(country_name(c) for c in profile.get("countries_of_residence") or []) or "not set"}
   Goals: {_active_goals_summary()}
   Notes: {profile.get("notes", "")}
-"""
+{theses_section}"""
 
 
 def _existing_stories_block(stories: list[dict]) -> str:
@@ -624,6 +631,7 @@ def _persist_story(
         existing = _same_subject_or_none(store.find_story_by_label(s["label"]), s)
 
     story_type = s.get("type") or default_type or "asset"
+    _hold_to_thesis(s)
     # For macro stories, attach the deterministic computed exposure (never from the LLM).
     affected = computed_affected_holdings if story_type == "macro" else None
 
@@ -671,6 +679,17 @@ def _persist_story(
         }
         apply_story_change(new_story, new_entry=new_entry)
         logger.info("intel_agent: created story — %s [%s]", s["label"], s["status"])
+
+
+def _hold_to_thesis(s: dict) -> None:
+    """A story about a ticker with a thesis gives the thesis's advice, cited — an unsupported
+    "sell" in its actions or summary is replaced (``services.thesis_judgment``). No thesis: no-op."""
+    if not s.get("ticker"):
+        return
+    j = thesis_judgment.for_ticker(s["ticker"], None)
+    if j:
+        s["action_items"] = thesis_guard.guard_actions(s.get("action_items"), j)
+        s["summary"] = thesis_guard.guard_text(s.get("summary") or "", j, cite=False)
 
 
 def _archive_stale_stories(store: IntelStoriesStore, days: int = STALE_STORY_DAYS) -> int:

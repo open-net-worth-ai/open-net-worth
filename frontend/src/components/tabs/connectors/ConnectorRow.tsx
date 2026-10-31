@@ -52,7 +52,9 @@ export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps):
         enabled: it.enabled ? 'on' : 'off',
         status: it.statusText,
       })}
-      sublabel={`${entry.statusText} • ${entry.enabled ? 'on' : 'off'}`}
+      // "Connected" already means on and "Not connected"/"Disconnected" off — a trailing
+      // lowercase "• on" only repeated it (the server's picker row says the same words).
+      sublabel={entry.statusText}
       // Every connector chip rendered as the same grey glyph — the glyph identifies the TYPE,
       // and per-entity distinction comes from color, which this row never forwarded.
       color={entry.hue}

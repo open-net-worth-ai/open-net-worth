@@ -20,7 +20,8 @@ import { useMentionables } from '../../../hooks/useMentionables'
 import type { MentionRow } from '../../../hooks/useMentionables'
 import { allHandles } from '../../../lucius/screenContract'
 import { Identity, Spark } from '../../../lucius/identity'
-import { norm } from '../../../lucius/matchEntity'
+import { useToolOwnerLogos } from '../toolActivity/useToolOwnerLogos'
+import { norm, qualifiedMatch } from '../../../lucius/matchEntity'
 import { C } from '../../../lucius/mentionColors'
 import {
   parseTransactionSublabel,
@@ -63,6 +64,8 @@ export interface AutocompleteHandle {
 type HeadRow = {
   kind: 'head'
   label: string
+  /** Section identity behind its tab: 'screen' | 'sources' | 'agents' | `type:<type>`. */
+  key: string
   spark?: boolean
   eye?: boolean
   src?: boolean
@@ -154,6 +157,12 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
   // to close from outside (e.g. outside-click). Silence unused-var check.
   void onClose
 
+  // The section tab the list is narrowed to (null = All). A type tab also re-asks the backend
+  // for that type alone: the unscoped page is a 40-row sample taking turns across ~20 types,
+  // so it holds only a row or two of each — tapping "Connector" showed one connector.
+  const [scope, setScope] = useState<string | null>(null)
+  const scopeType = scope?.startsWith('type:') ? scope.slice('type:'.length) : null
+
   // Fetch from backend (includes entity + agent surfaces on @; verb on /).
   const surfaces: string[] = mode === '@' ? ['entity', 'agent'] : ['verb']
   // Default remoteItems/error/retry so the component is resilient to a hook/mock that
@@ -164,7 +173,11 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
     error = false,
     retry,
     remoteItems = [],
-  } = useMentionables(query, { surfaces })
+  } = useMentionables(query, { surfaces, types: scopeType ? [scopeType] : undefined })
+  // A connector row wears its own brand mark, the same one its Connectors card shows.
+  const connectorLookFor = useToolOwnerLogos(
+    backendItems.filter((r) => r.type === 'connector').map((r) => r.id),
+  )
 
   // Screen handles become pseudo-MentionRows of type 'source'.
   const handles = allHandles()
@@ -206,7 +219,12 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
       r.hint != null ||
       norm(r.label).includes(nq) ||
       norm(r.search ?? '').includes(nq) ||
-      norm(r.sublabel ?? '').includes(nq)
+      norm(r.sublabel ?? '').includes(nq) ||
+      qualifiedMatch(r, query)
+    // In the active tab's scope: its own section, or — for a type tab — that type wherever
+    // it sits (an on-screen connector still shows under "On this screen").
+    const show = (key: string, r: MentionRow) =>
+      scope === null || scope === key || (scopeType !== null && r.type === scopeType)
 
     if (mode === '@') {
       // On this screen (rows with onScreen=true from the backend/DOM harvest).
@@ -219,32 +237,37 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
       // transaction is the least likely thing meant by typing an entity's name —
       // every other type sorts first.
       const onScreen = backendItems
-        .filter((r) => r.onScreen && !alreadyChosen(r) && matchQ(r))
+        .filter((r) => r.onScreen && !alreadyChosen(r) && matchQ(r) && show('screen', r))
         .sort((a, b) => Number(a.type === 'transaction') - Number(b.type === 'transaction'))
       if (onScreen.length) {
-        rows.push({ kind: 'head', label: 'On this screen', eye: true })
+        rows.push({ kind: 'head', label: 'On this screen', key: 'screen', eye: true })
         onScreen.forEach((r) => push(r))
       }
 
       // Deeper sources (screen handles)
-      const srcRows = handleRows.filter((r) => !alreadyChosen(r))
+      const srcRows = handleRows.filter((r) => !alreadyChosen(r) && show('sources', r))
       if (srcRows.length) {
-        rows.push({ kind: 'head', label: 'Deeper sources', src: true })
+        rows.push({ kind: 'head', label: 'Deeper sources', key: 'sources', src: true })
         srcRows.forEach((r) => push(r))
       }
 
       // Talk to (agent surface rows)
       const agents = backendItems.filter(
-        (r) => r.surface === 'agent' && !alreadyChosen(r) && matchQ(r),
+        (r) => r.surface === 'agent' && !alreadyChosen(r) && matchQ(r) && show('agents', r),
       )
       if (agents.length) {
-        rows.push({ kind: 'head', label: 'Talk to', spark: true })
+        rows.push({ kind: 'head', label: 'Talk to', key: 'agents', spark: true })
         agents.forEach((r) => push(r, true))
       }
 
       // Entity groups by type (non-agent, non-onScreen, non-remote backend results)
       const localEntityItems = backendItems.filter(
-        (r) => r.surface !== 'agent' && !r.onScreen && !alreadyChosen(r) && matchQ(r),
+        (r) =>
+          r.surface !== 'agent' &&
+          !r.onScreen &&
+          !alreadyChosen(r) &&
+          matchQ(r) &&
+          show(`type:${r.type}`, r),
       )
       // Exclude rows that will appear in the Everywhere group (remote-only backend rows).
       const remoteKeys = new Set(remoteItems.map((r) => `${r.type}:${r.value}`))
@@ -257,7 +280,7 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
         byType[r.type]!.push(r)
       })
       Object.entries(byType).forEach(([type, typeRows]) => {
-        rows.push({ kind: 'head', label: labelFor(type) })
+        rows.push({ kind: 'head', label: labelFor(type), key: `type:${type}` })
         typeRows.forEach((r) => push(r))
       })
 
@@ -267,14 +290,16 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
       // ranking happened to return first buried everything else, same problem the
       // "On this screen" type-tier sort above exists to fix, just for the remote pool.
       // Each type gets its own header — and, via the section tabs below, its own tab.
-      const everywhereRows = remoteItems.filter((r) => r.surface !== 'agent' && !alreadyChosen(r))
+      const everywhereRows = remoteItems.filter(
+        (r) => r.surface !== 'agent' && !alreadyChosen(r) && show(`type:${r.type}`, r),
+      )
       const everywhereByType: Record<string, MentionRow[]> = {}
       everywhereRows.forEach((r) => {
         if (!everywhereByType[r.type]) everywhereByType[r.type] = []
         everywhereByType[r.type]!.push(r)
       })
       Object.entries(everywhereByType).forEach(([type, typeRows]) => {
-        rows.push({ kind: 'head', label: labelFor(type), remote: true })
+        rows.push({ kind: 'head', label: labelFor(type), key: `type:${type}`, remote: true })
         typeRows.forEach((r) => push(r))
       })
     } else {
@@ -289,57 +314,43 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
     }
 
     return { groupRows: rows, items }
-  }, [mode, nq, backendItems, handleRows, chosenIds, remoteItems])
+  }, [mode, nq, query, backendItems, handleRows, chosenIds, remoteItems, scope, scopeType])
 
-  // Section tabs — one per group header actually present for this query (owner request
-  // 2026-08-11). groupRowIndex is the header's own position in groupRows, used to find its
-  // rendered DOM node for the scroll-jump; itemIdx is the FIRST item's `idx` in that section
-  // (if any — a section can be header-only while its own fetch is still loading), so jumping
-  // to a section also moves the keyboard highlight into it rather than leaving `hi` stranded
-  // in whatever section it was last in.
-  const sections = useMemo(
-    () =>
-      groupRows.reduce<{ label: string; groupRowIndex: number; itemIdx: number | null }[]>(
-        (acc, r, i) => {
-          if (r.kind === 'head') {
-            acc.push({ label: r.label, groupRowIndex: i, itemIdx: null })
-          } else if (acc.length && acc[acc.length - 1]!.itemIdx === null) {
-            acc[acc.length - 1]!.itemIdx = r.idx
-          }
-          return acc
-        },
-        [],
-      ),
-    [groupRows],
-  )
-  const [activeSection, setActiveSection] = useState(0)
-  const headRefs = useRef(new Map<number, HTMLDivElement>())
-  const tabRefs = useRef(new Map<number, HTMLButtonElement>())
+  // Section tabs — one per group present for this query (owner request 2026-08-11), keyed so
+  // a type's local and "everywhere" groups share one tab. A tab FILTERS the list to its
+  // section, it doesn't scroll to it: scrolling left every later section showing beneath, so
+  // the tab looked like it did nothing.
+  const sections = useMemo(() => {
+    const byKey = new Map<string, { key: string; label: string }>()
+    for (const r of groupRows) {
+      if (r.kind === 'head' && !byKey.has(r.key)) byKey.set(r.key, { key: r.key, label: r.label })
+    }
+    return [...byKey.values()]
+  }, [groupRows])
+  // While a tab narrows the list, its own groups are all `sections` holds — the strip keeps
+  // showing the tabs the unscoped list had, so you can step to another one or back to All.
+  // Compared by content: `sections` is a fresh array whenever a caller hands in fresh props
+  // (a default `chosenIds`), and storing each one would re-render forever.
+  const [unscopedSections, setUnscopedSections] = useState(sections)
+  const sectionsSig = sections.map((s) => `${s.key}\u0000${s.label}`).join('\u0001')
+  useEffect(() => {
+    if (scope === null) setUnscopedSections(sections)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, sectionsSig])
+  const tabs = scope === null ? sections : unscopedSections
+  const tabKeys: (string | null)[] = [null, ...tabs.map((s) => s.key)]
+  const tabRefs = useRef(new Map<string | null, HTMLButtonElement>())
 
-  const jumpToSection = (sectionIdx: number) => {
-    const s = sections[sectionIdx]
-    if (!s) return
-    // MUST be false, not just "not set true here": a stale `true` left over from an
-    // earlier ArrowUp/ArrowDown press (move() below) made the SEPARATE "scroll
-    // highlighted item into view" effect (keyed on [hi]) ALSO fire right after this
-    // function's own scroll assignment below — using its own different math (align the
-    // ITEM, not the section header, and only nudge the minimum distance needed) — which
-    // silently overrode landing on the header at all (owner report 2026-08-11, "when
-    // switching section, it needs to show from the start of the section... including
-    // the header").
+  const selectScope = (key: string | null) => {
+    // A stale `true` from an earlier ArrowUp/ArrowDown would make the [hi] effect below
+    // scroll to the highlighted row instead of starting the narrowed list at its top.
     kbdNav.current = false
-    setActiveSection(sectionIdx)
-    if (s.itemIdx !== null) setHi(s.itemIdx)
-    const el = headRefs.current.get(s.groupRowIndex)
-    const sc = scrollRef.current
-    if (el && sc) sc.scrollTop = el.offsetTop
-    // The tab strip itself scrolls horizontally (more sections than fit at once —
-    // owner report 2026-08-11, "it doesn't scroll to see everything here"). Bring the
-    // newly-active tab into view within .ac-tabs specifically: `inline` for the
-    // horizontal axis .ac-tabs actually overflows on, `block: 'nearest'` so this never
-    // ALSO scrolls .ac-scroll or the page — scrollIntoView walks every scrollable
-    // ancestor by default, and .ac-scroll (just adjusted above) is one of them.
-    tabRefs.current.get(sectionIdx)?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+    setScope(key)
+    setHi(0)
+    if (scrollRef.current) scrollRef.current.scrollTop = 0
+    // `block: 'nearest'` so this only scrolls the horizontal .ac-tabs strip — scrollIntoView
+    // walks every scrollable ancestor by default, .ac-scroll and the page included.
+    tabRefs.current.get(key)?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
   }
 
   // Keyboard nav via imperative handle.
@@ -358,18 +369,20 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
         return items.length
       },
       moveSection(d: 1 | -1) {
-        if (sections.length < 2) return
-        jumpToSection(Math.max(0, Math.min(sections.length - 1, activeSection + d)))
+        if (tabs.length < 2) return
+        const at = Math.max(0, tabKeys.indexOf(scope))
+        selectScope(tabKeys[Math.max(0, Math.min(tabKeys.length - 1, at + d))] ?? null)
       },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [items, hi, onPick, sections, activeSection],
+    [items, hi, onPick, tabs, scope],
   )
 
-  // Reset highlight + active section when query or mode changes.
+  // Reset highlight + scope when query or mode changes: a new query brings a new set of
+  // sections, so a tab picked for the old one may not exist in it.
   useEffect(() => {
     setHi(0)
-    setActiveSection(0)
+    setScope(null)
     if (scrollRef.current) scrollRef.current.scrollTop = 0
   }, [nq, mode])
 
@@ -414,21 +427,21 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
       }
       ref={popRef}
     >
-      {mode === '@' && sections.length > 1 && (
+      {mode === '@' && tabs.length > 1 && (
         <div className="ac-tabs" role="tablist" aria-label="Result sections">
-          {sections.map((s, i) => (
+          {[{ key: null, label: 'All' }, ...tabs].map((s) => (
             <button
-              key={s.groupRowIndex}
+              key={s.key ?? 'all'}
               type="button"
               role="tab"
               ref={(el) => {
-                if (el) tabRefs.current.set(i, el)
-                else tabRefs.current.delete(i)
+                if (el) tabRefs.current.set(s.key, el)
+                else tabRefs.current.delete(s.key)
               }}
-              aria-selected={i === activeSection}
-              className={'ac-tab' + (i === activeSection ? ' active' : '')}
+              aria-selected={s.key === scope}
+              className={'ac-tab' + (s.key === scope ? ' active' : '')}
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => jumpToSection(i)}
+              onClick={() => selectScope(s.key)}
             >
               {s.label}
             </button>
@@ -439,14 +452,7 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
         {groupRows.map((r, i) => {
           if (r.kind === 'head') {
             return (
-              <div
-                key={`h${i}`}
-                ref={(el) => {
-                  if (el) headRefs.current.set(i, el)
-                  else headRefs.current.delete(i)
-                }}
-                className={'ac-zone' + (r.remote ? ' remote' : '')}
-              >
+              <div key={`h${i}`} className={'ac-zone' + (r.remote ? ' remote' : '')}>
                 {r.spark && <Spark size={11} />}
                 {r.eye && <span className="ac-eye">◉</span>}
                 {r.src && <span className="ac-eye">◷</span>}
@@ -476,6 +482,7 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
             label: row.label,
             id: row.id,
             dot: itemDot,
+            logo: row.type === 'connector' ? connectorLookFor(row.id).logo : undefined,
           }
 
           return (
@@ -579,7 +586,7 @@ export const Autocomplete = forwardRef<AutocompleteHandle, AutocompleteProps>(fu
           <span>
             <span className="mx-kbd">↑↓</span>navigate
           </span>
-          {mode === '@' && sections.length > 1 && (
+          {mode === '@' && tabs.length > 1 && (
             // The section-switch shortcut has NO other affordance — it's a modifier
             // combo, not a click target — so without this it's simply undiscoverable
             // (owner report 2026-08-11, "how the fuck can user know that?"). Same

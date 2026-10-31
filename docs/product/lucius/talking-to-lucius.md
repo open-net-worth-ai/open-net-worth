@@ -52,8 +52,9 @@ message.
 
 ## Attach a file or picture
 
-Click the paperclip (**Attach file or image**) or drop a file into the message box: a statement
-(PDF, CSV, Excel), a receipt photo, a screenshot of your banking app, a Word document. Then say
+Click the paperclip (**Attach file or image**) or drop a file anywhere on the Lucius panel (or
+into the message box of the floating dock): a statement (PDF, CSV, Excel), a receipt photo, a
+screenshot of your banking app, a Word document. Then say
 what to do — *"import this"*, *"log these purchases"*, *"what's my deductible?"*. Files you send
 are stored so the conversation can refer back to them (they're listed in **Settings → Data →
 Uploaded files**). To keep one with your other papers, ask Lucius to save it to
@@ -138,6 +139,17 @@ stands:
 
 "Read" is remembered by your Open Net Worth server, not by one window: reading a reply on your
 phone, in another browser or in the desktop app clears **New reply** everywhere.
+
+### Back and Forward move between conversations
+
+Opening a conversation — from the list, from a link in one of Lucius's replies, or by starting a
+new one — is a step your browser remembers, so **Back** returns to the conversation you were in and
+**Forward** goes to it again. This works on the Lucius page, in the side panel, in the floating chat
+and on a phone. On the Lucius page the address shows the open conversation
+(`/lucius?conversation=…`), so reloading keeps it open and you can copy the link. A new conversation
+stays at plain `/lucius` until you send its first message; if you go **Back** from a new one you
+never typed in, it's simply dropped. In the side panel and the floating chat the page's own address
+doesn't change.
 
 Lucius keeps working when you leave — switch apps, lock your phone, close the tab, or open another
 conversation. When you come back, the conversation catches up on its own. **Loading messages** or **Catching up…** appear

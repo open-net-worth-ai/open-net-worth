@@ -230,6 +230,13 @@ function permsOf(c: Connector): PermissionMap {
 function displayName(c: Connector): string {
   // "Web search · Tavily" → "Tavily"; the family section already says Web.
   if (c.id.startsWith(WEB_SEARCH_PREFIX)) return c.name.replace(/^Web search\s*•\s*/, '') || c.name
+  // An MCP server still named what its handshake called itself ("gemini-mcp") shows the
+  // human title the same handshake gave ("Gemini"); a name the user typed always wins.
+  if (c.id.startsWith(MCP_PREFIX)) {
+    const cfg = configOf(c)
+    const title = str(cfg, 'server_info_title')
+    if (title && c.name === str(cfg, 'server_info_name')) return title
+  }
   return c.name || c.id
 }
 
@@ -296,8 +303,14 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     configured: mcp || c.status !== 'not_configured',
     sub: c.short_description || endpointOf(c) || '',
     desc: c.long_description || c.short_description || '',
+    version: mcp ? str(cfg, 'server_info_version') || undefined : undefined,
+    instructions: mcp ? str(cfg, 'server_info_instructions') || undefined : undefined,
     developer: provenance?.publisher ?? developer?.name,
-    developerUrl: mcp ? undefined : developer?.url,
+    // An MCP server we recognise links its publisher exactly as its directory card does
+    // (homepage, else repository) — the two screens must not disagree (D26).
+    developerUrl: mcp
+      ? (provenance?.homepageUrl ?? provenance?.repoUrl ?? undefined)
+      : developer?.url,
     mcp,
     // The wire view carries no provenance of its own, so this is honest about what it knows:
     // a publisher we recognise reads `unverified`, and a server the user pointed us at reads

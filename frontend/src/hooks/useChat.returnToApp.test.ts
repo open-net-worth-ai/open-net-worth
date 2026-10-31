@@ -25,6 +25,7 @@ vi.mock('../utils/chatStore', () => ({
   reconcileWithRemote: (...args: unknown[]) => mockReconcile(...args),
   saveMessages: vi.fn(),
   withRestoreMarks: (target: unknown) => target,
+  completeUnfinishedTail: () => null,
 }))
 
 import { useChat } from './useChat'

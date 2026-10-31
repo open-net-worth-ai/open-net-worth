@@ -160,7 +160,7 @@ class TestRememberFact:
 
     @pytest.mark.parametrize(
         "content, needle",
-        [("x" * 281, "280"), ("Card 4111 1111 1111 1111", "last 4")],
+        [("x" * 501, "500"), ("Card 4111 1111 1111 1111", "last 4")],
     )
     def test_a_refusal_comes_back_as_a_message_and_stores_nothing(self, isolated, content, needle):
         settings_store_mod.MemorySettingsStore().set_enabled(True)

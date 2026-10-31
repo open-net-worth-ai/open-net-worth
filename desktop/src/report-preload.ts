@@ -6,5 +6,6 @@ if (process.isMainFrame && location.protocol === 'data:') {
     copy: (report: unknown) => ipcRenderer.invoke('desktop-report:copy', report),
     email: (report: unknown) => ipcRenderer.invoke('desktop-report:email', report),
     close: () => ipcRenderer.invoke('desktop-report:close'),
+    community: () => ipcRenderer.invoke('desktop-report:community'),
   }));
 }

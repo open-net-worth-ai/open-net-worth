@@ -329,3 +329,20 @@ def test_short_query_no_synonym_expansion(monkeypatch):
     rows = search_holding(_query(q="st"))
     # Only name-matched rows appear; "st" is not in "VOO" so no rows.
     assert all(r.get("search") is None for r in rows)
+
+
+def test_every_registered_type_answers_to_its_own_name():
+    """Typing ``@connector`` found nothing while 19 registered types had no ``_TYPE_SYNONYMS``
+    entry — every type now matches its own name and label, singular and plural."""
+    from backend.services.mentions.registry import DESCRIPTORS
+
+    for type_, d in DESCRIPTORS.items():
+        label = d.label.lower().replace(" ", "")
+        assert _type_synonym_match(type_, type_.replace("_", "")), type_
+        assert _type_synonym_match(type_, label), type_
+    assert _type_synonym_match("connector", "connectors") == "connectors"
+    assert _type_synonym_match("commitment", "commitments") == "commitments"
+
+
+def test_unregistered_type_stays_silent():
+    assert _type_synonym_match("agent", "agents") is None

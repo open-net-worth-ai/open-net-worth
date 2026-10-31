@@ -1395,6 +1395,12 @@ def _with_cache_policy(response, path: str):
         response.headers["Cache-Control"] = "no-store"
     elif "_astro/" in path or "/assets/" in path or path.startswith("assets/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path.startswith("connector-logos/"):
+        # Brand marks keep their names when replaced, so not immutable — but left with no
+        # header the browser guessed a few hours from their recent mtime and re-asked for
+        # every tile each time Browse & add opened, so logos arrived late, worst over a
+        # slow link (owner, 2026-10-31). A day fresh, then shown at once while re-checked.
+        response.headers["Cache-Control"] = "public, max-age=86400, stale-while-revalidate=604800"
     return response
 
 

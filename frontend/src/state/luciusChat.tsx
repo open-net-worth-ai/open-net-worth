@@ -3,6 +3,7 @@
 // Owns one useChat() + useConversations() instance mounted once at the RouterShell
 // level so the dock and side panel share the SAME conversation thread.
 
+import { markChatSwitch } from './chatHistory'
 import {
   createContext,
   useCallback,
@@ -145,7 +146,8 @@ export interface LuciusChatValue {
   setEffort: (effort: EffortChoice) => void
   updateConversationMeta: (id: string, messageCount: number, firstUserMessage?: string) => void
   renameConversation: (id: string, title: string) => void
-  createConversation: () => string
+  /** `replaceHistory`: a new chat the app opened on its own, not a navigation Back should undo. */
+  createConversation: (opts?: { replaceHistory?: boolean }) => string
   switchConversation: (id: string, selection?: ConversationSelection) => void
   deleteConversation: (id: string) => void
   setConversationModel: (id: string, model: string) => void
@@ -252,10 +254,14 @@ export function LuciusChatProvider({ children }: ProviderProps) {
   // resets it on its own. Without this, a new conversation started model reset to the
   // instance default while effort silently carried over from whatever was last picked —
   // the same "new conversation" action leaving two related controls out of sync.
-  const createConversation = useCallback(() => {
-    setEffort(DEFAULT_EFFORT)
-    return createConversationRaw()
-  }, [createConversationRaw, setEffort])
+  const createConversation = useCallback(
+    (opts?: { replaceHistory?: boolean }) => {
+      setEffort(DEFAULT_EFFORT)
+      if (!opts?.replaceHistory) markChatSwitch()
+      return createConversationRaw()
+    },
+    [createConversationRaw, setEffort],
+  )
   const pendingAutomationSelectionRef = useRef<{
     id: string
     selection: ConversationSelection
@@ -304,9 +310,11 @@ export function LuciusChatProvider({ children }: ProviderProps) {
           )
         }
       }
+      if (id !== activeId) markChatSwitch()
       switchConversationRaw(id)
     },
     [
+      activeId,
       modelInfo.loaded,
       applyAutomationSelection,
       setConversationModelRaw,

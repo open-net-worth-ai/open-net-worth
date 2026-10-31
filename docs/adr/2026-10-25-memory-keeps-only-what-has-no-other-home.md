@@ -634,3 +634,32 @@ checked by synthetic benchmark cases that pull both ways (E25–E27, U04–U06):
   On the Claude CLI transport every `add_transactions` in the replay ended one `}` short, so
   nothing was booked; only a body whose strings are all closed and whose brackets nest is
   completed, anything broken earlier stays malformed.
+
+## Amendment 12 (2026-10-30) — a 500-character limit, and a too-long fact is shortened, not lost
+
+Decision 3 said an extracted fact over 280 characters "is dropped and logged". On the owner's book
+that lost the one fact a chat produced: a loan application still awaiting a decision, at 293
+characters. The extractor runs with reasoning off and cannot count characters, the conversation's
+cursor advanced anyway so nothing retried, and the log line carried only the reason.
+
+- **Two numbers, not one.** `FACT_MAX_CHARS` = 500 is the hard limit the write choke enforces
+  (a user edit, `remember_fact`, an import, the sort, an extraction). `FACT_TARGET_CHARS` = 280 is
+  what every prompt asks for ("under 280, never over 500"), so facts stay as short as before and
+  the read side still shows each one whole.
+- **One retry.** `ai/memory_shorten.shorten_long_facts` sends every new or updated extracted fact
+  over 500 characters to the memory model in ONE call (`source=memory_shorten`), asking for the
+  lasting fact under 280 with nothing added. The shortened wording passes the choke's guards like
+  any other. A reply still over the limit leaves the fact to be refused, and its text is logged at
+  WARNING, so a loss is visible.
+- **The extractor reads the person, not the plumbing.** `ai/memory_transcript.readable_block`
+  drops the context blocks the app attaches to a user turn (screen catalog or snapshot,
+  `<turn_context>`, @-mention, skill body), unwraps the `user_msg` fence and shrinks a chat
+  channel's reply quote to a 160-character pointer; an attachment's text stays. On the owner's
+  chats this cut what the extractor read by 66–78% (one chat 44,910 → 15,371 characters), and an
+  "ok" sent with a screen block is now the trivial turn it always was.
+- **Easily missed shapes, taught by example.** An audit of every chat since amendment 9 found the
+  extractor right to keep nothing in ten of thirteen, and missing: an application awaiting a
+  decision, an offer turned down, an item-level category choice no payee rule can express, and a
+  passing remark that changes a stored figure ("it varies, but just keep $10"). The prompt now
+  shows each shape with made-up names, says a passing correction is still an UPDATE, and keeps
+  Lucius's explanations out of a fact. A dry run over those chats caught all four.

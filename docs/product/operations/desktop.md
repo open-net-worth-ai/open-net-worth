@@ -150,7 +150,10 @@ The app checks for a new version 30 seconds after it starts and every 4 hours af
 
 1. When one is out, it downloads in the background — nothing to answer — and the menu shows
    **Downloading Update…**.
-2. When it's ready, you get a notification and the menu shows **Restart to Update**. Choose it to restart now, or keep working: the update installs the next time you
+2. When it's ready, you get a notification, the menu shows **Restart to Update**, and a small
+   **Open Net Worth X is ready** bar appears at the bottom of the window with **Restart** and
+   **Later** (the bar shows even if notifications are off; **Restart** asks you to confirm with
+   **Restart Now**). Restart now, or keep working: the update installs the next time you
    quit. The app never restarts on its own, and it closes your book safely before installing — a
    small **Installing Open Net Worth X…** window shows while it does. On a Mac the install finishes
    a few seconds after the app closes; if you open it again during those seconds, a notification
@@ -159,7 +162,14 @@ The app checks for a new version 30 seconds after it starts and every 4 hours af
    newer one in. Choosing **Restart to Update** also checks first: when a newer version is out, it
    downloads that one and asks you to restart into it, so you never land on a version that
    immediately offers the next.
-3. After restarting, a notification confirms "Open Net Worth was updated to X."
+3. After restarting, a notification confirms "Open Net Worth was updated to X.", and the window
+   shows **What's new in X** once: the release's highlights, with **All changes** to open its full
+   release notes. If the notes can't be loaded (offline), it says so and offers **See what's new** to open them.
+
+When a new version can't download by itself — this copy can't update itself (a Linux `.deb`, or
+an AppImage in a read-only folder), the download failed, or you chose **Later** — the bar says
+**Open Net Worth X is available** instead, and **Update** opens the same choice as the menu's
+**Update Available…**: download and install it, open the download page, or skip that version.
 
 To check right away: **Open Net Worth → Check for Updates…** on macOS, **Help → Check for
 Updates…** on Windows and Linux. A manual check asks first — **Download and Install**, **Skip This

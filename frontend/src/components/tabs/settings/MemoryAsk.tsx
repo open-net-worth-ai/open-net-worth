@@ -1,11 +1,12 @@
 // "Tell Lucius what to remember or change" — one message, one memory-model call that adds,
 // rewrites or forgets (POST /api/memory/instruct). A box that grows with what is typed (Enter
 // sends, Shift+Enter starts a new line), pinned to the bottom of the list, and above it the
-// outcome as one line — "No changes were made." / "Added 1 · Updated 1" — with See why for
-// Lucius's own reason and what changed: a count alone ("Updated 2") left the person guessing
-// which facts moved (owner report, 2026-10-28).
+// outcome in one sentence — "No changes were made." / "Updated a memory in Housing" — with what
+// changed under it, or See why for Lucius's own reason when nothing did: a count alone
+// ("Updated 2") left the person guessing which facts moved (owner reports, 2026-10-28/31).
 import { useLayoutEffect, useRef, useState } from 'react'
 import { ArrowUp } from '../../../ui/icons'
+import { TurnActivity } from '../../chat/TurnActivity'
 import type { InstructChange, InstructOutcome } from '../../../hooks/useMemoryFacts'
 
 const KIND: Record<InstructChange['change'], string> = {
@@ -14,40 +15,55 @@ const KIND: Record<InstructChange['change'], string> = {
   removed: 'Forgot',
 }
 
-function headline(changes: InstructChange[]): string {
-  if (!changes.length) return 'No changes were made.'
-  const n = (kind: InstructChange['change']) => changes.filter((c) => c.change === kind).length
-  return (['added', 'updated', 'removed'] as const)
-    .filter((k) => n(k))
-    .map((k) => `${KIND[k]} ${n(k)}`)
-    .join(' · ')
+/** The topic a change landed in — "Debt reduction" from "Plans · Debt reduction". */
+function topicOf(where: string): string {
+  return where.split(' · ').pop() || where
 }
 
+/** One sentence for what happened: "Updated a memory in Debt reduction", "Changed 3 memories".
+ *  A bare count ("Updated 1") read as nothing (owner, 2026-10-31). */
+function headline(changes: InstructChange[]): string {
+  if (!changes.length) return 'No changes were made.'
+  if (changes.length === 1) {
+    const [c] = changes
+    return `${KIND[c.change]} a memory${c.where ? ` in ${topicOf(c.where)}` : ''}`
+  }
+  // each line below says which kind, so the count is all the heading needs
+  return `Changed ${changes.length} memories`
+}
+
+/** Each change: the text as it now stands, and what it said before. Which kind and where only
+ *  when there are several — for one, the headline already says both. */
 function ChangeList({ changes }: { changes: InstructChange[] }) {
+  const several = changes.length > 1
   return (
     <ul className="rd-mem-changes-list">
       {changes.map((c, i) => (
-        <li key={i}>
-          <div className="rd-mem-change-meta">
-            <span className={`rd-mem-change-kind is-${c.change}`}>{KIND[c.change]}</span>
-            <span className="rd-mem-change-where">{c.where}</span>
-          </div>
+        <li key={i} className={`is-${c.change}`}>
+          {several && (
+            <div className="rd-mem-change-meta">
+              <span className="rd-mem-change-kind">{KIND[c.change]}</span>
+              {c.where && <span className="rd-mem-change-where">{topicOf(c.where)}</span>}
+            </div>
+          )}
           <div className={c.change === 'removed' ? 'rd-mem-change-t is-gone' : 'rd-mem-change-t'}>
             {c.text}
           </div>
-          {c.was && <div className="rd-mem-change-was">Was: {c.was}</div>}
+          {c.was && <div className="rd-mem-change-was">Before: {c.was}</div>}
         </li>
       ))}
     </ul>
   )
 }
 
-/** The outcome line. Open by itself when something changed; "No changes were made." stays a
- *  line until See why is asked for. */
+/** The outcome. Open by itself when something changed, and then the changes ARE the answer —
+ *  Lucius's own sentence only restated them, so it shows only when nothing changed (behind See
+ *  why) or beside something he refused. */
 function MemoryOutcome({ outcome }: { outcome: InstructOutcome }) {
   const { changes, reply, refused } = outcome
   const [open, setOpen] = useState(changes.length > 0)
-  const hasDetail = Boolean(reply || refused || changes.length)
+  const why = changes.length ? '' : reply
+  const hasDetail = Boolean(why || refused || changes.length)
   return (
     <div className="rd-mem-outcome" role="status">
       <div className="rd-mem-outcome-head">
@@ -59,13 +75,13 @@ function MemoryOutcome({ outcome }: { outcome: InstructOutcome }) {
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
           >
-            {open ? 'Hide' : changes.length ? 'See details' : 'See why'}
+            {open ? 'Hide' : changes.length ? 'Show' : 'See why'}
           </button>
         )}
       </div>
       {open && (
         <div className="rd-mem-outcome-body">
-          {reply && <p className="rd-mem-outcome-reply">{reply}</p>}
+          {why && <p className="rd-mem-outcome-reply">{why}</p>}
           {refused && <p className="rd-mem-outcome-refused">{refused}</p>}
           {changes.length > 0 && <ChangeList changes={changes} />}
         </div>
@@ -114,7 +130,9 @@ export function MemoryAskBox({
 
   return (
     <div className="rd-mem-dock">
-      {outcome && <MemoryOutcome key={outcome.n} outcome={outcome.out} />}
+      {/* The chat's own working line while Lucius thinks: a spinner on the send button alone
+          did not say anything was happening (owner, 2026-10-31). */}
+      {busy ? <TurnActivity /> : outcome && <MemoryOutcome key={outcome.n} outcome={outcome.out} />}
       <form
         className="rd-mem-ask"
         onSubmit={(e) => {
