@@ -279,7 +279,8 @@ def test_every_dispatch_site_consults_the_permission_store():
     gap is now closed, and what has to be pinned instead is the closure: this app has
     exactly TWO dispatch paths, and BOTH read the permission store.
 
-      * internal tools -> ``ai/tools/registry.dispatch`` -> ``_confirm_gate.effective_level``
+      * internal tools -> ``ai/tools/registry.dispatch`` -> ``ai.permissions.engine()`` ->
+        ``_confirm_gate.effective_level`` (``_confirm_gate_v2`` when ``permissions_v2`` is on)
       * external MCP   -> ``mcp/client_manager``
 
     A THIRD reader appearing is not automatically wrong — but it is a new place a permission
@@ -301,8 +302,13 @@ def test_every_dispatch_site_consults_the_permission_store():
     # accident would blind this test to the layer most likely to grow a second answer.
     not_a_dispatch_site = {
         "services/tool_permissions.py",  # DEFINES these reads
+        "services/tool_permissions_v2.py",  # the permissions_v2 twin: re-exports and extends them
         "db/tool_permission_store.py",  # the storage underneath them
         "api/tool_permissions.py",  # REST: reads to DISPLAY and to write, never to decide
+        # The REST behaviour the router calls (ai.permissions.permission_api picks one by the
+        # permissions_v2 flag): the router's former inline code, same reads, same purpose.
+        "ai/permission_api.py",
+        "ai/permission_api_v2.py",
         # `_decorate`'s `_level` helper: the Connectors permission LADDER's displayed
         # default for an undecided tool (security review finding #4 / ADR
         # `2026-08-17-connector-ladder-shows-the-real-effective-default`) — reads
@@ -332,6 +338,7 @@ def test_every_dispatch_site_consults_the_permission_store():
 
     assert set(callers) == {
         "ai/tools/_confirm_gate.py",
+        "ai/tools/_confirm_gate_v2.py",
         "mcp/client_manager.py",
     }, (
         "the permission store is read somewhere new. Every dispatch site MUST consult it, "
