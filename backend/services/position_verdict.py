@@ -177,7 +177,9 @@ def prior_block(stored: dict | None, *, held: bool, currency: str = "") -> str:
             "Actions you suggested then: " + "; ".join(action_text(a, unit) for a in actions) + "."
         )
     lines.append(
-        "Start from this call. If the price has crossed one of those levels, say so plainly. "
+        "Start from this call's verdict and levels (choose today's actions afresh — a past call "
+        "with none is no reason to propose none). If the price has crossed one of those levels, "
+        "say so plainly. "
         "If you change the action or move a level, say in verdict.why what changed to "
         "justify it — never move a level only because the price moved."
     )

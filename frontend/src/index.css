@@ -13671,7 +13671,8 @@ body.hide-amounts .money * {
     flex: none;
   }
 
-  /* The empty thesis card: Lucius leads with a tinted pill, writing it yourself is a quiet link. */
+  /* The empty thesis card: a line on what a thesis holds, then the same pill pair as an empty
+     alerts card (Build with Lucius, then the manual way). */
   .asd-thesis-start {
     display: flex;
     flex-direction: column;
@@ -13679,7 +13680,7 @@ body.hide-amounts .money * {
     gap: var(--space-3);
   }
 
-  /* An empty alerts card: Build with Lucius beside the manual add. */
+  /* An empty alerts or thesis card: Build with Lucius beside the manual way. */
   .asd-alerts-start {
     display: flex;
     flex-wrap: wrap;
@@ -13717,29 +13718,13 @@ body.hide-amounts .money * {
     cursor: pointer;
   }
 
-  .asd-thesis-write {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: var(--muted);
-    font: inherit;
-    font-size: var(--text-xs);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-    cursor: pointer;
-  }
-
   @media (hover: hover) {
     .asd-thesis-lucius:hover {
       background: color-mix(in srgb, var(--lucius) 24%, transparent);
     }
-    .asd-thesis-write:hover {
-      color: var(--ink);
-    }
   }
 
-  .asd-thesis-lucius:focus-visible,
-  .asd-thesis-write:focus-visible {
+  .asd-thesis-lucius:focus-visible {
     outline: 2px solid var(--lucius);
     outline-offset: 2px;
   }

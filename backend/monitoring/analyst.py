@@ -392,7 +392,9 @@ def _event_framing(row: dict, payload: dict, label: str, ticker: str) -> tuple[s
         event_line = f"{label} ({ticker}) — periodic check-in (no new trigger this tick)"
         question = (
             "  why: any DEVELOPMENT worth noting since your last note (if genuinely nothing "
-            "has changed, say so plainly — that is a valid, expected answer here)\n"
+            "has changed, say so plainly — that is a valid, expected answer here; it is about "
+            "the news only — your verdict and its actions still cover the position as it "
+            "stands)\n"
         )
         return event_line, question, "YOUR POSITION"
 
@@ -581,7 +583,9 @@ def _verdict_instruction(is_held: bool) -> str:
         "itself is to trade. Protection is different: when you give a stop or trim and no alert "
         "in YOUR PRICE ALERTS sits near it (or there are none at all), propose an alert there "
         "so the user hears when your level is reached. Never propose an alert those already "
-        "cover. With nothing to trade and nothing left unguarded, leave actions EMPTY. "
+        "cover. Actions are about the position as it stands, not only today's news — a quiet day "
+        "with nothing new still gets that alert when your level is unguarded. With nothing to "
+        "trade and nothing left unguarded, leave actions EMPTY. "
     )
     if is_held:
         return (

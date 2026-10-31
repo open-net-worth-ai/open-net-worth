@@ -117,18 +117,25 @@ export function ThesisStart({
       </Button>
     )
   }
-  // Lucius leads; writing it yourself stays one quiet click away.
+  // The same pair as an empty alerts card: Build with Lucius, then the manual way.
   return (
     <div className="asd-thesis-start">
       <p className="asd-thesis-start-blurb">{blurb}</p>
-      <BuildWithLucius
-        sym={sym}
-        instrumentId={instrumentId}
-        prompt={thesisBuildPrompt(sym, held)}
-      />
-      <button type="button" className="asd-thesis-write" onClick={onClick}>
-        or write it yourself
-      </button>
+      <div className="asd-alerts-start">
+        <BuildWithLucius
+          sym={sym}
+          instrumentId={instrumentId}
+          prompt={thesisBuildPrompt(sym, held)}
+        />
+        <Button
+          variant="secondary"
+          size="sm"
+          iconLeft={<Plus size={14} aria-hidden="true" />}
+          onClick={onClick}
+        >
+          Add thesis
+        </Button>
+      </div>
     </div>
   )
 }
