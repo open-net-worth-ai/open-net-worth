@@ -6,7 +6,7 @@ order: 30
 audience: [user]
 status: stable
 related: [concepts/the-ledger, concepts/categories, features/accounts, features/categories-payees, features/budgeting]
-keywords: [transactions, ledger, register, split, transfer, reconcile, needs review, receipts, cleared, approve]
+keywords: [transactions, ledger, register, split, transfer, reconcile, needs review, receipts, cleared, approve, hide, hidden]
 ---
 
 # Transactions and the ledger
@@ -51,8 +51,27 @@ The drawer always lists **Memo** and **Tags**, showing a dash when they are empt
 whom — including a **Reverted** entry when a chat Restore put it back) and its **Receipts** — see [Attach a receipt](importing.md#attach-a-receipt).
 
 To change many at once, tick the rows' checkboxes. A bar appears for setting the category,
-marking them cleared, uncleared or reviewed, deleting them, and (under **More**) moving them to
-another account or setting a description.
+marking them cleared, uncleared or reviewed, deleting them, and (under **More**) hiding them,
+moving them to another account or setting a description.
+
+## Hide transactions from the register
+
+Hiding tidies the register. It is display-only: a hidden transaction still counts in every
+balance, your net worth, the budget and reports, and Lucius still sees it.
+
+- **One transaction:** open its detail drawer and click **Hide**.
+- **Several:** tick their rows, then **More** › **Hide from Register**.
+
+To see hidden transactions again, open **Display** above the register and tick **Show hidden
+transactions**. They show dimmed, with a **Hidden** tag. **Show hidden transactions** turns itself
+off when you leave the Accounts tab, so a transaction you hid never stays out of sight because of
+a setting you forgot about. **Reset** in the same menu brings back every column and turns it off.
+
+To list only the hidden ones — the way to find them on a phone, where there is no **Display**
+menu — type `status:hidden` in the search box, or pick **Hidden** from its status suggestions.
+
+Click **Unhide** in the drawer, or **More** › **Unhide** for a selection, to bring them back for
+good.
 
 ## Mark transactions cleared
 
@@ -69,7 +88,7 @@ The Starting Balance transaction is always cleared.
 
 Type in the search box above the register to search payee, memo and category. Click into the
 empty box for one-click filters — **Uncategorized**, **Uncleared** and **Needs review** — or type
-them: `uncategorized`, `status:uncleared`, `status:review`. Cleared and Uncleared are one choice:
+them: `uncategorized`, `status:uncleared`, `status:review`, `status:hidden`. Cleared and Uncleared are one choice:
 picking one replaces the other.
 
 ## Review new transactions

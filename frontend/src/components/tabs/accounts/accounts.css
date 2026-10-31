@@ -2837,8 +2837,8 @@ body.hide-amounts .mask.l::after {
   color: var(--ink);
   border-color: var(--ink);
 }
-/* Columns picker button — mirrors the date-range .acct-viewbtn treatment (muted glyph, accent when
-   any column is hidden). */
+/* Display picker button — mirrors the date-range .acct-viewbtn treatment (muted glyph, accent when
+   any column is hidden or hidden rows are listed). */
 .acct-colbtn {
   gap: 7px;
 }
@@ -7521,6 +7521,19 @@ select.acct-addin {
 .acct-tr.needs-review {
   box-shadow: inset 2px 0 0 var(--warn, #e0a032);
 }
+/* Only visible while "Show hidden transactions" is on — dimmed so it reads as set aside. */
+.acct-tr.is-hidden {
+  opacity: 0.55;
+}
+.acct-hidden-pill {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  border-radius: 999px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
 /* ── transaction detail drawer ── */
 /* Clear the resizable Lucius chat panel (same chat-clearance as .modal-overlay): the scrim +
    right-docked drawer end at the panel's left edge, so the drawer never hides behind it.
@@ -8221,6 +8234,29 @@ select.acct-addin {
   padding: 10px 14px;
   cursor: pointer;
 }
+.acct-detail-hide {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  cursor: pointer;
+}
+.acct-detail-hide:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+@media (hover: hover) {
+  .acct-detail-hide:hover:not([disabled]) {
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+  }
+}
 .acct-detail-del:disabled {
   color: var(--muted);
   cursor: not-allowed;
@@ -8348,6 +8384,7 @@ select.acct-addin {
     padding-bottom: calc(14px + var(--safe-b));
   }
   .acct-detail.sheet .acct-detail-edit,
+  .acct-detail.sheet .acct-detail-hide,
   .acct-detail.sheet .acct-detail-del,
   .acct-detail.sheet .acct-detail-review-btn {
     min-height: var(--tap-min);

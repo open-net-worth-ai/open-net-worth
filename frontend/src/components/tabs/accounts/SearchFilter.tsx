@@ -325,6 +325,7 @@ export function parseSegment(
         if (lv.startsWith('clear')) return { field: 'cleared', value: true, label: 'Cleared' }
         if (lv.startsWith('need') || lv.startsWith('review'))
           return { field: 'review', value: true, label: 'Needs review' }
+        if (lv.startsWith('hid')) return { field: 'hidden', value: true, label: 'Hidden' }
       }
       if (f === 'amount') {
         const n = parseFloat(val.replace(/[^0-9.]/g, ''))
@@ -469,6 +470,8 @@ export function buildSuggestions(
         pre: 'Status',
         disp: 'Uncleared',
       })
+    if (all || (ql && (scope === 'status' ? 'hidden'.startsWith(ql) : 'hidden'.includes(ql))))
+      out.push({ field: 'hidden', value: true, label: 'Hidden', pre: 'Status', disp: 'Hidden' })
   }
   const uncatHit =
     scope === 'category'
@@ -745,6 +748,9 @@ export interface FiltersProps {
   showAccount: boolean
   /** Register column-visibility model (see columns.tsx). */
   columnVis: ColumnVisibility
+  /** Whether hidden transactions are listed — a row toggle in the same picker. */
+  showHidden: boolean
+  onToggleShowHidden: () => void
 }
 
 export function Filters({
@@ -760,6 +766,8 @@ export function Filters({
   onAddTxn,
   showAccount,
   columnVis,
+  showHidden,
+  onToggleShowHidden,
 }: FiltersProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
@@ -997,6 +1005,8 @@ export function Filters({
         hidden={columnVis.hidden}
         onToggle={columnVis.toggle}
         onReset={columnVis.reset}
+        showHidden={showHidden}
+        onToggleShowHidden={onToggleShowHidden}
       />
       <button className="acct-filter-add" onClick={onAddTxn} aria-label="Add transaction">
         <IconPlus size={12} />

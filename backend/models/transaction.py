@@ -137,6 +137,10 @@ class Transaction(ONBaseModel):
     # sources (manual / bank sync / automation) default False.
     needs_review: bool = False
 
+    # Register declutter: a hidden row drops out of the register unless "Show hidden" is on.
+    # Display-only — every balance, net-worth, budget and report fold still counts it.
+    hidden: bool = False
+
     source: TxnSource = TxnSource.manual
     # Provenance/dedup — ONE list (ADR 2026-07-21, collapsing the 2026-07-20 scalar+list split):
     # every ``{"source": str|None, "ref": str}`` pair this row owns. ``source`` is the namespace

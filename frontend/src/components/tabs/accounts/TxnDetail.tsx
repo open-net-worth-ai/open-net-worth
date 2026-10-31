@@ -17,7 +17,7 @@ import {
 import { toBase, fBase } from './format'
 import { txnMentionSublabel, fDate } from '../../../utils/format'
 import { EntityRow } from '../../../lucius/EntityRow'
-import { Minus, Plus, X, ChevronUp, ChevronDown } from '../../../ui/icons'
+import { Minus, Plus, X, ChevronUp, ChevronDown, Eye, EyeOff } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { usePointerResize } from '../../../hooks/usePointerResize'
 import { DRAG_SURFACE_PROPS, useSheetDragToDismiss } from '../../../hooks/useSheetDragToDismiss'
@@ -50,6 +50,7 @@ const CHANGE_FIELD_LABEL: Record<string, string> = {
   memo: 'Memo',
   date: 'Date',
   cleared: 'Cleared',
+  hidden: 'Hidden',
   kind: 'Type',
   tags: 'Tags',
   from_account_id: 'From account',
@@ -118,6 +119,9 @@ export interface TxnDetailProps {
   /** Flip cleared ⇄ uncleared from View, at once — like the register's cleared column. Omitted
    *  (the import review's drafts), the status shows but can't be flipped there. */
   onToggleCleared?: (txn: Txn, cleared: boolean) => void
+  /** Hide ⇄ unhide from the register (display-only). Omitted (the import review's drafts),
+   *  the drawer offers no Hide button. */
+  onToggleHidden?: (txn: Txn, hidden: boolean) => void
   onManagePayees: () => void
   onCreateCategory: (
     prefill: string,
@@ -878,6 +882,7 @@ interface ViewBodyProps {
   onDelete: (txn: Txn) => void
   onMarkReviewed: (txn: Txn) => void
   onToggleCleared?: (txn: Txn, cleared: boolean) => void
+  onToggleHidden?: (txn: Txn, hidden: boolean) => void
   /** The row itself has not arrived yet — see TxnDetail's `loading`. */
   pending?: boolean
   actionError?: string | null
@@ -902,6 +907,7 @@ function ViewBody({
   onDelete,
   onMarkReviewed,
   onToggleCleared,
+  onToggleHidden,
   pending = false,
   actionError,
 }: ViewBodyProps) {
@@ -1634,6 +1640,25 @@ function ViewBody({
         <button className="acct-detail-edit" onClick={onEdit}>
           Edit transaction
         </button>
+        {onToggleHidden && (
+          <button
+            className="acct-detail-hide"
+            disabled={pending}
+            onClick={() => onToggleHidden(txn, !txn.hidden)}
+            title={
+              txn.hidden
+                ? 'Show this transaction in the register again'
+                : 'Hide from the register. It still counts in every balance, budget and report.'
+            }
+          >
+            {txn.hidden ? (
+              <Eye size={14} aria-hidden="true" />
+            ) : (
+              <EyeOff size={14} aria-hidden="true" />
+            )}
+            {txn.hidden ? 'Unhide' : 'Hide'}
+          </button>
+        )}
         <button
           className="acct-detail-del"
           disabled={isStartingBalance}
@@ -1733,6 +1758,7 @@ export default function TxnDetail({
   onDelete,
   onMarkReviewed,
   onToggleCleared,
+  onToggleHidden,
   onManagePayees,
   onCreateCategory,
   onLoadActivity,
@@ -2093,6 +2119,7 @@ export default function TxnDetail({
                   onDelete={onDelete}
                   onMarkReviewed={onMarkReviewed}
                   onToggleCleared={onToggleCleared}
+                  onToggleHidden={onToggleHidden}
                   actionError={actionError}
                 />
               )}

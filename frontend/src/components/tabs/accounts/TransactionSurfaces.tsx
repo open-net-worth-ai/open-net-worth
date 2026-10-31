@@ -29,6 +29,7 @@ import {
   loadTransactionStatementLinks,
   resolveOrCreatePayeeId,
   setTransactionCleared,
+  setTransactionHidden,
   updateTransaction,
 } from './transactionApi'
 import type {
@@ -344,6 +345,15 @@ export function TransactionSurfacesProvider({
           onToggleCleared={(txn, cleared) => {
             clearDetailFailure()
             void setTransactionCleared(txn.id, cleared)
+              .then((updated) => {
+                setDetail((d) => (d && d.id === txn.id ? { ...d, txn: updated } : d))
+                noteRowChange(updated)
+              })
+              .catch((e) => noteDetailFailure(txn.id, e, 'Update failed'))
+          }}
+          onToggleHidden={(txn, hidden) => {
+            clearDetailFailure()
+            void setTransactionHidden(txn.id, hidden)
               .then((updated) => {
                 setDetail((d) => (d && d.id === txn.id ? { ...d, txn: updated } : d))
                 noteRowChange(updated)

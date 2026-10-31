@@ -132,7 +132,7 @@ function Harness({
 const head = (c: HTMLElement) => c.querySelector('.acct-reg-head') as HTMLElement
 const headCols = (c: HTMLElement) => c.querySelectorAll('.acct-reg-head .acct-h').length
 function openPicker(c: HTMLElement): HTMLElement {
-  fireEvent.click(within(c).getByTitle('Show or hide columns'))
+  fireEvent.click(within(c).getByTitle('Display options'))
   return c.querySelector('[role="dialog"]') as HTMLElement
 }
 
@@ -212,7 +212,7 @@ describe('Register column-visibility picker', () => {
     expect(within(head(container)).queryByText('Memo')).toBeNull()
   })
 
-  it('“Show all” restores every hidden column', () => {
+  it('“Reset” restores every hidden column', () => {
     const { container } = render(<Harness txns={[makeTxn({ memo: 'x' })]} />)
     const cols0 = headCols(container)
     let dialog = openPicker(container)
@@ -220,7 +220,7 @@ describe('Register column-visibility picker', () => {
     fireEvent.click(within(dialog).getByText('Source'))
     expect(headCols(container)).toBe(cols0 - 2)
     dialog = container.querySelector('[role="dialog"]') as HTMLElement
-    fireEvent.click(within(dialog).getByText('Show all'))
+    fireEvent.click(within(dialog).getByText('Reset'))
     expect(headCols(container)).toBe(cols0)
     expect(localStorage.getItem(REG_VIS_KEY)).toBe('[]')
   })

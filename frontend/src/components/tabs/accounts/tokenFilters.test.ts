@@ -38,6 +38,8 @@ function baseFilters(patch: Partial<TxnFilters> = {}): TxnFilters {
     amounts: [],
     uncategorized: false,
     batchId: null,
+    showHidden: false,
+    hiddenOnly: false,
     ...patch,
   }
 }
@@ -392,6 +394,21 @@ describe('token → TxnFilters → query string (server-side filtering wire form
 
   it('an unfiltered TxnFilters sends no token-derived params (just pagination)', () => {
     const qs = buildTxnQueryString(baseFilters(), 0)
-    expect(qs).toBe('limit=75&offset=0')
+    expect(qs).toBe('hidden=false&limit=75&offset=0')
+  })
+
+  it('hidden rows are left out unless Show hidden is on', () => {
+    expect(buildTxnQueryString(baseFilters(), 0)).toContain('hidden=false')
+    expect(buildTxnQueryString(baseFilters({ showHidden: true }), 0)).not.toContain('hidden')
+  })
+
+  it('a Status: Hidden token lists ONLY hidden rows, whatever Show hidden says', () => {
+    const tokens: FilterToken[] = [{ field: 'hidden', value: true, label: 'Hidden' }]
+    const patch = tokensToFilterPatch(tokens, noResolve)
+    expect(patch.hiddenOnly).toBe(true)
+    expect(buildTxnQueryString(baseFilters(patch), 0)).toContain('hidden=true')
+    expect(buildTxnQueryString(baseFilters({ ...patch, showHidden: true }), 0)).toContain(
+      'hidden=true',
+    )
   })
 })

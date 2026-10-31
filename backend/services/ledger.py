@@ -2403,6 +2403,33 @@ def bulk_create_transactions(
     return created, skipped
 
 
+# ── Hidden toggle ──────────────────────────────────────────────────────────────
+
+
+def set_transaction_hidden(txn_id: str, hidden: bool) -> dict | None:
+    """Hide/unhide one transaction from the register. Display-only: no balance, net-worth,
+    budget or report fold reads the flag, so there is no rebuild and no money event — just the
+    flag and ONE "update" audit event when it actually changes. Returns the updated row, or
+    None if it doesn't exist."""
+    existing = transactions.find_by_id(txn_id)
+    updated = transactions.set_hidden(txn_id, hidden)
+    if updated is None:
+        return None
+    prior = bool(existing.get("hidden")) if existing else None
+    if prior == bool(hidden):
+        return updated
+    from backend.services import audit as audit_service
+
+    audit_service.record_txn_event(
+        "update",
+        txn_id,
+        source=updated.get("source"),
+        before={"hidden": prior},
+        after={"hidden": bool(hidden)},
+    )
+    return updated
+
+
 # ── Cleared toggle ──────────────────────────────────────────────────────────────
 
 
@@ -3216,6 +3243,7 @@ _BULK_UPDATE_FIELDS = {
     "to_account_id",
     "description",  # bank/matching string (ADR 2026-07-17)
     "memo",  # personal, display-only
+    "hidden",  # register declutter, display-only
 }
 
 
@@ -3254,6 +3282,7 @@ def bulk_update_transactions(ids: list[str], changes: dict) -> dict:
       - ``tags`` (list[str]): ADD tags — additive UNION with the row's existing tags
         (never clobbers / drops existing tags).
       - ``cleared`` (bool): SET the cleared flag (via set_transaction_cleared).
+      - ``hidden`` (bool): SET the register-declutter flag (via set_transaction_hidden).
       - ``payee_id`` (str | None): LINK each row to the payee entity (must exist —
         validated up front so an unknown id fails the whole batch before any row is
         touched). Pass ``None`` to CLEAR the payee link. A transfer/adjustment row is
@@ -3283,6 +3312,7 @@ def bulk_update_transactions(ids: list[str], changes: dict) -> dict:
     set_category = changes.get("category")
     add_tags = changes.get("tags")
     set_cleared = changes.get("cleared")
+    set_hidden = changes.get("hidden")
     has_payee_change = "payee_id" in changes
     set_payee = changes.get("payee_id")  # None = clear the link
     has_review_change = "needs_review" in changes
@@ -3374,6 +3404,9 @@ def bulk_update_transactions(ids: list[str], changes: dict) -> dict:
             touched = True
         if set_cleared is not None:
             set_transaction_cleared(txn_id, bool(set_cleared))
+            touched = True
+        if set_hidden is not None:
+            set_transaction_hidden(txn_id, bool(set_hidden))
             touched = True
         if touched:
             updated.append(txn_id)

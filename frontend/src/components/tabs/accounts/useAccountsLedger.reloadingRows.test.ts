@@ -50,6 +50,8 @@ const DEFAULTS: TxnFilters = {
   amounts: [],
   uncategorized: false,
   batchId: null,
+  showHidden: false,
+  hiddenOnly: false,
 }
 
 let releaseTxns: Array<() => void> = []

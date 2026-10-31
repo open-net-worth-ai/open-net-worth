@@ -332,6 +332,10 @@ export function AccountsTab({
   // Register column visibility (localStorage-backed) — `hidden` flows to the Register (filters
   // `cols`), the toggle/reset to the toolbar's Columns picker (rendered by Filters).
   const columnVis = useColumnVisibility()
+  // Register declutter: hidden rows are left out of the register unless this is on. A view
+  // choice for this visit, not a stored setting — a hidden row should never stay hidden from
+  // the user by an option they've forgotten they turned on.
+  const [showHidden, setShowHidden] = useState(false)
   const [adding, setAdding] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [acctModal, setAcctModal] = useState<{
@@ -883,14 +887,23 @@ export function AccountsTab({
     }
     const { dateFrom, dateTo } = combineDateRange(presetFrom, presetTo, filter.tokens)
     const patch = tokensToFilterPatch(filter.tokens, { resolvePayeeId })
-    L.setFilters({ accountId: selectedId, dateFrom, dateTo, ...patch })
+    L.setFilters({ accountId: selectedId, dateFrom, dateTo, showHidden, ...patch })
     // This is a fresh (non-append) view, not a loadMore append — the previously loaded scroll
     // position almost certainly no longer matches the new (often much shorter) result set, which
     // could otherwise leave the "near bottom" check in the .acct-main onScroll handler true and
     // spuriously fire loadMore() right after the filter change (REG2).
     if (mainRef.current) mainRef.current.scrollTop = 0
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter.preset, filter.cfM, filter.cfY, filter.ctM, filter.ctY, filter.tokens, selectedId])
+  }, [
+    filter.preset,
+    filter.cfM,
+    filter.cfY,
+    filter.ctM,
+    filter.ctY,
+    filter.tokens,
+    selectedId,
+    showHidden,
+  ])
 
   // Skip the very first run — an effect fires on mount too, which would immediately wipe out
   // a selection just restored from PENDING_SELECTION_KEY (the mobile "Ask Lucius" round trip).
@@ -1365,6 +1378,8 @@ export function AccountsTab({
     review: selList.filter((t) => t.needsReview).length,
     clear: selList.filter((t) => !t.cleared).length,
     unclear: selList.filter((t) => t.cleared).length,
+    hide: selList.filter((t) => !t.hidden).length,
+    unhide: selList.filter((t) => t.hidden).length,
   }
   const bulkCategory = (cat: string) =>
     runBulk(ids(), { category: cat }, (n) => 'Re-categorised ' + n)
@@ -1411,6 +1426,24 @@ export function AccountsTab({
       return
     }
     runBulk(reviewIds, { needs_review: false }, (n) => `${n} marked as reviewed`)
+  }
+  // Hiding drops the rows out of view unless "Show hidden" is on — then, like a move, the
+  // selection clears rather than counting rows that are no longer on screen.
+  const bulkSetHidden = (v: boolean) => {
+    const targetIds = selList.filter((t) => !!t.hidden !== v).map((t) => t.id)
+    if (targetIds.length === 0) {
+      showToast(v ? 'All selected are already hidden' : 'None of the selected are hidden')
+      return
+    }
+    runBulk(
+      targetIds,
+      { hidden: v },
+      (n) =>
+        v
+          ? `${n} hidden${showHidden ? '' : isMobile ? ' · search Status: Hidden to find them' : ' · Display › Show hidden brings them back'}`
+          : `${n} unhidden`,
+      !v || showHidden,
+    )
   }
   const bulkMemo = (text: string) =>
     runBulk(ids(), { description: text }, (n) => 'Description set on ' + n)
@@ -2138,6 +2171,8 @@ export function AccountsTab({
                     onAddTxn={handleAddTxn}
                     showAccount={showAccount}
                     columnVis={columnVis}
+                    showHidden={showHidden}
+                    onToggleShowHidden={() => setShowHidden((v) => !v)}
                   />
                   <ActiveChips
                     filter={filter}
@@ -2200,6 +2235,8 @@ export function AccountsTab({
             onMarkCleared={() => bulkSetCleared(true)}
             onMarkUncleared={() => bulkSetCleared(false)}
             onMarkReviewed={bulkMarkReviewed}
+            onHide={() => bulkSetHidden(true)}
+            onUnhide={() => bulkSetHidden(false)}
             actionable={actionable}
             onDuplicate={() => void bulkDuplicate()}
             onMemo={bulkMemo}

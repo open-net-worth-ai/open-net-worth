@@ -156,6 +156,7 @@ export function fromApiTxn(api: ApiTxn): Txn {
     createdAt: api.created_at ?? api.date,
     deleted: api.deleted ?? false,
     needsReview: api.needs_review ?? false,
+    hidden: api.hidden ?? false,
     via: api.via ?? null,
     automationId: api.automation_id ?? null,
     externalRefs: (api.external_refs ?? []).map((e) => ({

@@ -200,6 +200,10 @@ class ClearedBody(BaseModel):
     cleared: bool  # the new reconciliation state for the transaction
 
 
+class HiddenBody(BaseModel):
+    hidden: bool  # True drops the row from the register unless "Show hidden" is on
+
+
 class DetachRefBody(BaseModel):
     # Caps (security review L4) — FastAPI validates a Pydantic body field for real (unlike an
     # AI-tool schema's advisory max_length), so these are actual enforcement, not just a hint.
@@ -309,6 +313,7 @@ class BulkTxnChanges(BaseModel):
     category: Optional[str] = None  # SET the category (validated; skipped on adjustment only)
     tags: Optional[List[str]] = None  # ADD these tags (additive union — never clobbers)
     cleared: Optional[bool] = None  # SET the cleared flag
+    hidden: Optional[bool] = None  # SET the register-declutter flag (display-only)
     payee_id: Optional[str] = (
         None  # LINK the payee entity (validated; skipped on transfer/adjustment)
     )
@@ -331,6 +336,7 @@ class BulkTxnUpdateFlat(BaseModel):
     category: Optional[str] = None
     tags: Optional[List[str]] = None
     cleared: Optional[bool] = None
+    hidden: Optional[bool] = None
     payee_id: Optional[str] = None
     needs_review: Optional[bool] = None
     to_account_id: Optional[str] = None
@@ -852,6 +858,9 @@ def get_transactions(
     cleared: Optional[bool] = None,
     needs_review: Optional[bool] = None,
     uncategorized: Optional[bool] = None,
+    # Register declutter. None = every row (the default for every non-register caller);
+    # False = hide hidden rows. Like a date range it narrows, never implies all-time.
+    hidden: Optional[bool] = None,
     amount: Optional[str] = None,
     batch_id: Optional[str] = None,
 ):
@@ -928,6 +937,7 @@ def get_transactions(
             cleared=cleared,
             needs_review=needs_review,
             uncategorized=uncategorized,
+            hidden=hidden,
             limit=limit,
             offset=offset or 0,
         )
@@ -1056,6 +1066,8 @@ def get_transactions(
         txns = [t for t in txns if t["needs_review"] == needs_review]
     if uncategorized is not None:
         txns = [t for t in txns if svc.is_uncategorized(t) == uncategorized]
+    if hidden is not None:
+        txns = [t for t in txns if bool(t.get("hidden", False)) == hidden]
     if source:
         wanted_sources = set(source)
         txns = [t for t in txns if t["source"] in wanted_sources]
@@ -1234,6 +1246,15 @@ def set_transaction_cleared(txn_id: str, body: ClearedBody):
         updated = svc.set_transaction_cleared(txn_id, body.cleared)
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+    if updated is None:
+        raise HTTPException(404, "Transaction not found")
+    return updated
+
+
+@router.patch("/api/transactions/{txn_id}/hidden")
+def set_transaction_hidden(txn_id: str, body: HiddenBody):
+    """Hide/unhide a transaction from the register — display-only, no balance moves."""
+    updated = svc.set_transaction_hidden(txn_id, body.hidden)
     if updated is None:
         raise HTTPException(404, "Transaction not found")
     return updated

@@ -82,6 +82,8 @@ const DEFAULT_FILTERS: TxnFilters = {
   amounts: [],
   uncategorized: false,
   batchId: null,
+  showHidden: false,
+  hiddenOnly: false,
 }
 
 // Holdings by account_id (market value in base currency)
@@ -292,6 +294,8 @@ export function buildTxnQueryString(filters: TxnFilters, offset: number): string
   if (filters.needsReview) p.set('needs_review', 'true')
   if (filters.uncategorized) p.set('uncategorized', 'true')
   if (filters.batchId) p.set('batch_id', filters.batchId)
+  if (filters.hiddenOnly) p.set('hidden', 'true')
+  else if (!filters.showHidden) p.set('hidden', 'false')
   appendEach(p, 'tag', filters.tags)
   appendEach(p, 'payee_id', filters.payeeIds)
   appendEach(p, 'source', filters.source)

@@ -24,6 +24,8 @@ import {
   Trash2,
   ChevronLeft,
   MoreHorizontal,
+  Eye,
+  EyeOff,
 } from '../../../ui/icons'
 
 // Hoisted out of BulkBar — a component declared during render is re-created (and its state
@@ -48,11 +50,13 @@ export interface BulkBarProps {
   onMarkCleared: () => void
   onMarkUncleared: () => void
   onMarkReviewed: () => void
+  onHide: () => void
+  onUnhide: () => void
   /** How many of the selected rows each action would ACTUALLY change. An action that would
    *  change nothing is DISABLED rather than hidden — hiding it makes the menu change height
    *  between selections, and a greyed row with a reason explains itself where a missing one
    *  just looks broken. Omit to leave every action enabled. */
-  actionable?: { review: number; clear: number; unclear: number }
+  actionable?: { review: number; clear: number; unclear: number; hide: number; unhide: number }
   onDuplicate: () => void
   onMemo: (text: string) => void
   onMove: (accountId: string) => void
@@ -73,6 +77,8 @@ export function BulkBar({
   onMarkCleared,
   onMarkUncleared,
   onMarkReviewed,
+  onHide,
+  onUnhide,
   actionable,
   onDuplicate,
   onMemo,
@@ -92,6 +98,8 @@ export function BulkBar({
   const nReview = actionable?.review
   const nCleared = actionable?.clear
   const nUncleared = actionable?.unclear
+  const nHide = actionable?.hide
+  const nUnhide = actionable?.unhide
   const close = () => {
     setMenu(null)
     setMoveOpen(false)
@@ -186,6 +194,25 @@ export function BulkBar({
       >
         <Check className="acct-bm-ic" size={14} aria-hidden="true" />
         Mark as Reviewed
+      </button>
+      <div className="acct-bm-div" />
+      <button
+        className="acct-bm-item"
+        onClick={() => act(onHide)}
+        disabled={nHide === 0}
+        title={whyDisabled(nHide, 'Every selected transaction is already hidden')}
+      >
+        <EyeOff className="acct-bm-ic" size={14} aria-hidden="true" />
+        Hide from Register
+      </button>
+      <button
+        className="acct-bm-item"
+        onClick={() => act(onUnhide)}
+        disabled={nUnhide === 0}
+        title={whyDisabled(nUnhide, 'No selected transaction is hidden')}
+      >
+        <Eye className="acct-bm-ic" size={14} aria-hidden="true" />
+        Unhide
       </button>
       <div className="acct-bm-div" />
       <button className="acct-bm-item" onClick={() => act(onDuplicate)}>

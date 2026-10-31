@@ -222,6 +222,7 @@ REVIEWED_SAFE = frozenset(
     DELETE /api/transactions/{txn_id}
     PUT /api/transactions/{txn_id}
     PATCH /api/transactions/{txn_id}/cleared
+    PATCH /api/transactions/{txn_id}/hidden
     DELETE /api/transactions/{txn_id}/receipts/{receipt_id}
     POST /api/transactions/{txn_id}/refs/detach
     DELETE /api/vault/artifacts/{artifact_id}

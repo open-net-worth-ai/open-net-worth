@@ -54,6 +54,8 @@ function renderFilters() {
       onAddTxn={() => {}}
       showAccount={false}
       columnVis={columnVis}
+      showHidden={false}
+      onToggleShowHidden={() => {}}
     />,
   )
 }

@@ -55,6 +55,8 @@ export {
   ArrowUpDown,
   // ── Connectors directory: the phone's category filter (beside Sort) ──
   ListFilter,
+  // ── Accounts register: the Display picker (columns + hidden rows) ──
+  SlidersHorizontal,
   RefreshCw,
   X,
   Link2,

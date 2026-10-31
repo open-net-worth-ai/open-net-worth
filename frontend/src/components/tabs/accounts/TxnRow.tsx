@@ -250,7 +250,12 @@ export function TxnRow({
           status: it.cleared ? 'Cleared' : 'Uncleared',
           kind: it.kind,
         })}
-        className={'acct-tr' + (selected ? ' sel' : '') + (t.needsReview ? ' needs-review' : '')}
+        className={
+          'acct-tr' +
+          (selected ? ' sel' : '') +
+          (t.needsReview ? ' needs-review' : '') +
+          (t.hidden ? ' is-hidden' : '')
+        }
         data-opening={t.source === 'opening' ? '' : undefined}
         style={{ gridTemplateColumns: tmpl, cursor: 'pointer' }}
         onClick={scheduleOpen}
@@ -448,6 +453,13 @@ export function TxnRow({
                 title="Added by an import, Lucius or an automation, and not confirmed by you yet. Approving only clears this flag."
               >
                 Review
+              </span>
+            ) : t.hidden ? (
+              <span
+                className="acct-hidden-pill"
+                title="Hidden from the register. Still counted in every balance, budget and report."
+              >
+                Hidden
               </span>
             ) : (
               <SourceIcon source={t.source} />

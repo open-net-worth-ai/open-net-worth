@@ -1,5 +1,6 @@
 /**
- * columns.tsx — Register column-visibility model + the "Columns" toolbar picker.
+ * columns.tsx — Register column-visibility model + the "Display" toolbar picker (columns, and
+ * whether hidden transactions are listed).
  *
  * Mirrors the width-persistence pattern in Register.tsx (localStorage `acctColW_v1`):
  * here `acctColVis_v1` stores the HIDDEN set (an array of column keys), so a column
@@ -11,6 +12,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { REG_COLS, type RegCol } from './Register'
 import { AdvCheck } from './pickers'
+import { SlidersHorizontal } from '../../../ui/icons'
 
 export const REG_VIS_KEY = 'acctColVis_v1'
 
@@ -80,9 +82,19 @@ export interface ColumnsPickerProps {
   hidden: Set<string>
   onToggle: (key: string) => void
   onReset: () => void
+  /** Rows: list hidden transactions too (dimmed). Omitted, the Rows section isn't offered. */
+  showHidden?: boolean
+  onToggleShowHidden?: () => void
 }
 
-export function ColumnsPicker({ showAccount, hidden, onToggle, onReset }: ColumnsPickerProps) {
+export function ColumnsPicker({
+  showAccount,
+  hidden,
+  onToggle,
+  onReset,
+  showHidden = false,
+  onToggleShowHidden,
+}: ColumnsPickerProps) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
@@ -104,34 +116,27 @@ export function ColumnsPicker({ showAccount, hidden, onToggle, onReset }: Column
   // "Hidden" only counts columns currently on offer — a key persisted from the all-accounts
   // view (e.g. a hidden `account`) shouldn't light up the button while a single account is open.
   const hiddenCount = cols.filter((c) => hidden.has(c.key)).length
+  const isDefault = hiddenCount === 0 && !showHidden
+  // Back to defaults: every column, hidden rows left out. Not "Show all" — beside "Show hidden
+  // transactions" that read as if it would list the hidden rows too.
+  const reset = () => {
+    onReset()
+    if (showHidden) onToggleShowHidden?.()
+  }
   return (
     <div className="acct-advwrap" ref={ref}>
       <button
-        className={'acct-advbtn acct-colbtn' + (hiddenCount > 0 ? ' on' : '')}
+        className={'acct-advbtn acct-colbtn' + (isDefault ? '' : ' on')}
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title="Show or hide columns"
+        title="Display options"
       >
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <rect x="3" y="4" width="18" height="16" rx="2" />
-          <path d="M9 4v16M15 4v16" />
-        </svg>
-        <span className="acct-viewlbl">
-          Columns{hiddenCount > 0 ? ` • ${cols.length - hiddenCount}` : ''}
-        </span>
+        <SlidersHorizontal size={14} aria-hidden="true" />
+        <span className="acct-viewlbl">Display</span>
       </button>
       {open && (
-        <div className="acct-advpop acct-colpop" role="dialog" aria-label="Show or hide columns">
+        <div className="acct-advpop acct-colpop" role="dialog" aria-label="Display options">
           <div className="acct-advbody">
             <div className="acct-advgroup">
               <div className="acct-advsec">Columns</div>
@@ -141,10 +146,18 @@ export function ColumnsPicker({ showAccount, hidden, onToggle, onReset }: Column
                 </AdvCheck>
               ))}
             </div>
+            {onToggleShowHidden && (
+              <div className="acct-advgroup">
+                <div className="acct-advsec">Rows</div>
+                <AdvCheck checked={showHidden} onChange={onToggleShowHidden}>
+                  Show hidden transactions
+                </AdvCheck>
+              </div>
+            )}
           </div>
           <div className="acct-advfoot">
-            <button className="acct-advclear" onClick={onReset} disabled={hiddenCount === 0}>
-              Show all
+            <button className="acct-advclear" onClick={reset} disabled={isDefault}>
+              Reset
             </button>
             <button className="acct-advdone" onClick={() => setOpen(false)}>
               Done

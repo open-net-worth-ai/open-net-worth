@@ -96,6 +96,8 @@ export interface ApiTxn {
   base_amount: number
   base_currency?: string | null
   cleared: boolean
+  /** Register declutter (display-only) — absent on rows written before it existed. */
+  hidden?: boolean
   source?: string | null
   created_at?: string | null
   /** Review queue only: the automation that fired the create ("via …") and its stable id. */
@@ -175,6 +177,9 @@ export interface Txn {
   createdAt: string
   deleted: boolean
   needsReview: boolean
+  /** Hidden from the register unless "Show hidden" is on. Display-only: still counted in every
+   *  balance, budget and report. */
+  hidden?: boolean
   /** Review queue only: the automation that fired the create ("via …") and its stable id. */
   via?: string | null
   automationId?: string | null
@@ -392,6 +397,7 @@ export interface BulkUpdateData {
   category?: string | null
   tags?: string[]
   cleared?: boolean
+  hidden?: boolean
   payee_id?: string | null
   needs_review?: boolean
   to_account_id?: string | null
@@ -504,6 +510,11 @@ export interface TxnFilters {
   /** Exactly the rows created/merged by ONE statement import (Statement Import's "View
    *  imported" deep-link — mirrors GET /api/transactions?batch_id=X). Null = no filter. */
   batchId: string | null
+  /** Include hidden rows. Off (the default) sends `hidden=false`; on sends nothing. */
+  showHidden: boolean
+  /** The `Status: Hidden` token — ONLY hidden rows (`hidden=true`), whatever showHidden says.
+   *  The one way back to a hidden row on a phone, where the Display picker is not shown. */
+  hiddenOnly: boolean
 }
 
 export type TxnSortKey = 'date' | 'amount' | 'description' | 'category'

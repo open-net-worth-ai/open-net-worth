@@ -391,6 +391,7 @@ class TransactionStore:
         cleared: bool | None = None,
         needs_review: bool | None = None,
         uncategorized: bool | None = None,
+        hidden: bool | None = None,
         include_deleted: bool = False,
     ) -> list[ColumnElement]:
         """SQL WHERE predicates for every SQL-pushable `query_txns`/`query_txns_page` filter
@@ -446,6 +447,11 @@ class TransactionStore:
                 or_(transactions.c.category.is_(None), transactions.c.category == ""),
             )
             clauses.append(is_unsorted if uncategorized else ~is_unsorted)
+        if hidden is not None:
+            # Payload-only flag (no promoted column): a row written before it existed has no
+            # key at all, which reads as not hidden.
+            flag = transactions.c.payload["hidden"].as_boolean()
+            clauses.append(flag.is_(True) if hidden else or_(flag.is_(None), flag.is_(False)))
         return clauses
 
     def query_txns(
@@ -587,6 +593,7 @@ class TransactionStore:
         cleared: bool | None = None,
         needs_review: bool | None = None,
         uncategorized: bool | None = None,
+        hidden: bool | None = None,
         include_deleted: bool = False,
         limit: int,
         offset: int = 0,
@@ -616,6 +623,7 @@ class TransactionStore:
             cleared=cleared,
             needs_review=needs_review,
             uncategorized=uncategorized,
+            hidden=hidden,
             include_deleted=include_deleted,
         )
         where = and_(*clauses) if clauses else literal(True)
@@ -883,6 +891,12 @@ class TransactionStore:
     ) -> dict | None:
         """Set the reconciliation cleared flag on one transaction (cleared/reconcile MVP)."""
         return self.update_by_id(txn_id, {"cleared": bool(cleared)}, conn=conn)
+
+    def set_hidden(
+        self, txn_id: str, hidden: bool, *, conn: Connection | None = None
+    ) -> dict | None:
+        """Set the register-declutter flag on one transaction (display-only)."""
+        return self.update_by_id(txn_id, {"hidden": bool(hidden)}, conn=conn)
 
     def mark_cleared_reconciled(
         self, account_id: str, on_date: str, *, conn: Connection | None = None
@@ -1245,6 +1259,8 @@ def make_transaction(data: dict) -> dict:
         # Review queue (Accounts redesign): import/AI creates land True (the service decides at
         # the choke point); approve clears it, reject soft-deletes. Default False.
         "needs_review": bool(data.get("needs_review", False)),
+        # Register declutter only — no money fold reads it. Carried through the edit rebuild.
+        "hidden": bool(data.get("hidden", False)),
         "source": data.get("source", "manual"),
         # Provenance/dedup {source, ref} pairs — ONE ordered list, [0] = origin (ADR 2026-07-21).
         "external_refs": _norm_ext_refs(data.get("external_refs")),

@@ -21,13 +21,19 @@ describe('empty search box offers the status filters', () => {
 
 describe('status: narrows by what is typed', () => {
   it('a bare status: lists every status', () => {
-    expect(fields('status:')).toEqual(['review:true', 'cleared:true', 'cleared:false'])
+    expect(fields('status:')).toEqual([
+      'review:true',
+      'cleared:true',
+      'cleared:false',
+      'hidden:true',
+    ])
   })
 
   it.each([
     ['status:cleared', 'cleared:true'],
     ['status:uncl', 'cleared:false'],
     ['status:review', 'review:true'],
+    ['status:hid', 'hidden:true'],
   ])('%s offers %s first, so Enter adds it', (draft, first) => {
     expect(fields(draft)[0]).toBe(first)
   })

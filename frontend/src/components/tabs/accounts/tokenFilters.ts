@@ -70,6 +70,7 @@ export type TokenFilterPatch = Pick<
   | 'needsReview'
   | 'uncategorized'
   | 'batchId'
+  | 'hiddenOnly'
 >
 
 /** Translate `filter.tokens` into the server-side multi-value filter fields.
@@ -95,6 +96,7 @@ export function tokensToFilterPatch(tokens: FilterToken[], ctx: TokenFilterCtx):
   let qField: TxnQField = 'any'
   let cleared: boolean | null = null
   let needsReview = false
+  let hiddenOnly = false
   let uncategorized = false
   let batchId: string | null = null
 
@@ -131,6 +133,9 @@ export function tokensToFilterPatch(tokens: FilterToken[], ctx: TokenFilterCtx):
         break
       case 'review':
         needsReview = true
+        break
+      case 'hidden':
+        hiddenOnly = true
         break
       case 'cleared':
         cleared = !!t.value
@@ -175,6 +180,7 @@ export function tokensToFilterPatch(tokens: FilterToken[], ctx: TokenFilterCtx):
     needsReview,
     uncategorized,
     batchId,
+    hiddenOnly,
   }
 }
 
