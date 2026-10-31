@@ -225,6 +225,16 @@ def sanitize_search_results(results: list[dict]) -> list[dict]:
     return cleaned
 
 
+# The tools that run the ACTIVE search provider instead of naming one, and which of that
+# provider's own tools (``<id>_search`` / ``<id>_fetch_page``) each one IS for permission
+# purposes under ``permissions_v2``: they belong to the search connector, so its page is their one
+# control (``web_search_providers.active_provider_tool``, ``_connector_gate.permission_key``).
+ACTIVE_PROVIDER_VERBS: dict[str, str] = {
+    "web_search": "search",
+    "fetch_page": "fetch",
+}
+
+
 class WebSearchInput(ToolInput):
     query: str = Field(
         description="Search query — be specific, include tickers/company names/locations",

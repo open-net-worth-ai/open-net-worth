@@ -34,7 +34,7 @@ from backend.db.connector_store import ConnectorStore, serialized_unit_of_work
 from backend.db.engine import get_engine
 from backend.models.connector import ConnectorTool, ConnectorView
 from backend.models.mcp_client import MCP_CONNECTOR_PREFIX
-from backend.services import tool_permissions
+from backend.services import tool_permissions, tool_permissions_v2
 from backend.services.connector_catalog import (
     CATALOG,
     Builtin,
@@ -45,6 +45,7 @@ from backend.services.connector_catalog import (
     display_name,
     kind_of,
 )
+from backend.services.feature_flags import enabled
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +126,52 @@ def _level_of(stored: dict[str, str], yolo: bool):
     return level
 
 
+def _level_of_v2(kind: ConnectorKind, stored: dict[str, str], yolo: bool):
+    """A tool's value under ``permissions_v2`` — what dispatch (``ai.tools._confirm_gate_v2.
+    effective_level``, or ``mcp.client_manager`` for an external MCP tool) will actually do. Its
+    row, and failing that what an unset tool is worth: an external MCP tool asks; a native tool
+    follows what it does — a real change or a send asks, a read runs — unless a stored YOLO
+    switch says to stop asking. Cannot call the gate (it lives in ``ai/``, which ``services`` may
+    not import); ``tool_permissions_v2.unrowed_level`` is the tier-legal route to the same answer,
+    so the page and dispatch cannot disagree (ADR
+    ``2026-08-17-connector-ladder-shows-the-real-effective-default``)."""
+
+    def level(name: str) -> str:
+        explicit = stored.get(name)
+        if explicit:
+            return explicit
+        if kind.kind == "mcp":
+            return tool_permissions_v2.DEFAULT_LEVEL
+        return tool_permissions_v2.unrowed_level(name, yolo=yolo, auto_run=False)
+
+    return level
+
+
+def view_default_levels(view: ConnectorView) -> tuple[str, dict[str, str]]:
+    """``(default_level, {tool: seed})`` for one connector (``permissions_v2``) — the value each
+    tool is seeded with and Reset restores, so a client can show "default" beside a value the
+    owner changed.
+
+    ``default_level`` is what a tool NOT in the map takes: ``needs_approval`` for an external MCP
+    server, ``always_allow`` (a read) for a native connector. The map carries every tool the
+    connector lists, so a native connector's sends read ``needs_approval`` there."""
+    if view.kind == "mcp":
+        return tool_permissions_v2.DEFAULT_LEVEL, {
+            t.name: tool_permissions_v2.DEFAULT_LEVEL for t in view.tools
+        }
+    return "always_allow", {t.name: tool_permissions_v2.seed_level(t.name) for t in view.tools}
+
+
+def default_levels(connector_id: str) -> tuple[str, dict[str, str]]:
+    """``view_default_levels`` by id. Never raises on an unknown id: a connector that does not
+    exist has no tools to list (an ``mcp:`` id still reads the cautious default)."""
+    try:
+        return view_default_levels(get_connector(connector_id))
+    except NotFoundError:
+        mcp = connector_id.startswith(MCP_CONNECTOR_PREFIX)
+        return (tool_permissions_v2.DEFAULT_LEVEL if mcp else "always_allow"), {}
+
+
 def _tools(
     kind: ConnectorKind, row: Row, level, native: list[ConnectorTool]
 ) -> list[ConnectorTool]:
@@ -201,6 +248,7 @@ def list_connectors() -> List[ConnectorView]:
     # sibling hot paths, where a per-connector read would be a per-connector table scan.
     levels = tool_permissions.get_all_permissions()
     yolo = tool_permissions.yolo_enabled()
+    v2 = enabled("permissions_v2")
     ctx: dict = {}
     none: frozenset = frozenset()
     return [
@@ -209,7 +257,9 @@ def list_connectors() -> List[ConnectorView]:
             row,
             secrets.get(row["id"], none),
             ctx,
-            _level_of(levels.get(row["id"]) or {}, yolo),
+            _level_of_v2(kind, levels.get(row["id"]) or {}, yolo)
+            if v2
+            else _level_of(levels.get(row["id"]) or {}, yolo),
         )
         for kind, row in _entries(rows)
     ]

@@ -21,6 +21,7 @@ from backend.ai import (
     turns,
 )
 from backend.ai.attachments import build_user_content
+from backend.ai.permissions import engine as permission_engine
 from backend.ai.prompts import build_system_prompt
 from backend.ai.tool_text import ONBOARDING_INIT, is_harness_note
 from backend.api import demo_visitor
@@ -807,6 +808,9 @@ async def stop_chat(session_id: str, request: Request, body: StopRequest = StopR
 class ResolvePendingRequest(BaseModel):
     tool_use_id: str
     decision: str  # "approve" | "deny"
+    # Under ``permissions_v2`` the card's Always allow: the standing permission was written by its
+    # own request; this only says which answer the card was, so a reload can label it.
+    always: bool = False
 
 
 @router.post("/api/chat/{session_id}/resolve")
@@ -826,6 +830,7 @@ async def resolve_pending(session_id: str, req: ResolvePendingRequest):
     from backend.services.automations.runs import automation_run_for_session
 
     automation_owned = automation_run_for_session(session_id) is not None
+    permission_engine().record_resolution(session_id, req.tool_use_id, req.decision, req.always)
 
     async def _events(turn_id: str) -> AsyncGenerator[dict, None]:
         if automation_owned:

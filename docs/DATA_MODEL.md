@@ -340,6 +340,16 @@ Settings › Permissions surface, replacing the deleted `/api/grants`. The conne
 `connectors_api`'s `{connector_id:path}` route — order is load-bearing) is unchanged in shape,
 now speaking the renamed levels and carrying no `enforced` field.
 
+**Under the `permissions_v2` flag (ADR `2026-10-11-permissions-are-one-value-per-tool`) the table
+is unchanged — same rows, same shape, no migration.** The new model reads it differently: a tool
+with no row takes its seed when asked (`services.tool_permissions_v2.seed_level`: a change or a send
+asks, a read runs, an external MCP tool asks) and nothing writes a default, so every stored row is
+the owner's decision and Reset deletes the row. A stored YOLO row (`(core, "*")`) and the
+`code_execution_auto_run` flag keep working as read-time rules; `web_search` / `fetch_page` read the
+active search provider's row. Two additions the old code ignores: the Automation payload's
+`blocked` list and the session meta's `tool_resolutions` map (`{tool_use_id: approved |
+always_allowed | denied}`, written only while the flag is on).
+
 **Revision 0043 (2026-08-17, security-review follow-up)** is a second forward-only DELETE on
 this table, no schema change: after `send_email`/`search_messages`/`get_messages` were tagged
 `connector="email"` (fixing an owner-resolution mismatch — an `email`-owned row from the

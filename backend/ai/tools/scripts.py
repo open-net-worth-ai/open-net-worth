@@ -77,6 +77,22 @@ class RunScriptInput(ToolInput):
     )
 
 
+_SCRIPTS_OFF = (
+    "Script-bundling skills are disabled for this instance "
+    "(Settings → Developer → Bundled script skills is off). "
+    "Ask the operator to enable the feature."
+)
+
+
+def _script_execution_off() -> Optional[str]:
+    """The refusal while the Bundled script skills switch is off, else ``None``. Registered as
+    the tool's ``unavailable=`` so ``permissions_v2`` refuses before any card or judge call; the
+    handler's own gate 2 below is what refuses an approval redeemed after the switch went off."""
+    from backend.db.app_config_store import script_skills_enabled
+
+    return None if script_skills_enabled() else _SCRIPTS_OFF
+
+
 @tool(
     "run_script",
     description=(
@@ -91,6 +107,8 @@ class RunScriptInput(ToolInput):
         "add_transactions / the recording tools after you receive the result."
     ),
     input_schema=schema_of(RunScriptInput, tool_name="run_script"),
+    external_effect=True,
+    unavailable=_script_execution_off,
 )
 async def run_script(input_data: dict):  # noqa: C901 — gate-heavy by design
     """Dispatch a script run through the sandbox after checking all S4 gates."""
@@ -139,10 +157,16 @@ async def run_script(input_data: dict):  # noqa: C901 — gate-heavy by design
     # apart at Automations, which can park on a durable card someone taps hours afterwards
     # (which is why `can_render_card` says True for them, correctly, for its own question).
     # `core.unattended` answers only the presence question; this is its one reader, pinned
-    # by tests/test_unattended_signal.py.
+    # by tests/test_unattended_signal.py. Under `permissions_v2` this switch is retired: the tool's
+    # permission value and the approval mode decide, the same in a chat and in a run.
+    from backend.ai.permissions import engine
     from backend.core.unattended import is_unattended
 
-    if is_unattended() and not script_skills_unattended_enabled():
+    if (
+        engine().unattended_script_switch
+        and is_unattended()
+        and not script_skills_unattended_enabled()
+    ):
         return json.dumps(
             {
                 "error": (
