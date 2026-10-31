@@ -179,6 +179,8 @@
 }
 /* Detail page: the server's reported version, and its AI instructions folded (ConnectorDetail). */
 .cn-page .cn-version {
+  font-size: 12px;
+  font-weight: 400;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }

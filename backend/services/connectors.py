@@ -25,6 +25,7 @@ imports ``backend.ai`` and would make any other such edge a ``services → ai`` 
 from __future__ import annotations
 
 import logging
+import re
 from typing import Iterator, List
 
 from backend.core.channels import unregister_channel
@@ -157,6 +158,19 @@ def _config(kind: ConnectorKind, row: Row, have: frozenset, ctx: dict) -> dict:
     return {k: v for k, v in merged.items() if k not in kind.private_state}
 
 
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s")
+_SUBTITLE_CHARS = 160
+
+
+def _first_sentence(text: str | None) -> str | None:
+    if not text:
+        return None
+    sentence = _SENTENCE_END.split(" ".join(text.split()), maxsplit=1)[0]
+    if len(sentence) <= _SUBTITLE_CHARS:
+        return sentence or None
+    return sentence[:_SUBTITLE_CHARS].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
 def _view(kind: ConnectorKind, row: Row, have: frozenset, ctx: dict, level) -> ConnectorView:
     connector_id = row["id"]
     enabled = bool(row["enabled"]) or not kind.pausable
@@ -167,9 +181,13 @@ def _view(kind: ConnectorKind, row: Row, have: frozenset, ctx: dict, level) -> C
         # The server's OWN one-line description (handshake ``serverInfo.description``, sanitized
         # at capture) beats the generic fallback every custom server would share. Its
         # ``instructions`` are guidance for an AI, not a description — the detail page shows
-        # them on their own, folded (``config.server_info_instructions``).
+        # them on their own, folded (``config.server_info_instructions``) — though with no
+        # description their first sentence is still the best one-line subtitle we have.
         described = row["state"].get("server_info_description")
-        short, long = (described, described) if described else (short, long)
+        if described:
+            short, long = described, described
+        else:
+            short = _first_sentence(row["state"].get("server_info_instructions")) or short
     return ConnectorView(
         id=connector_id,
         kind=kind.kind,

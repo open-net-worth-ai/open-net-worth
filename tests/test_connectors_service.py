@@ -1201,17 +1201,29 @@ def test_mcp_view_uses_the_servers_own_description_not_its_instructions():
     assert view.config["server_info_title"] == "Interactive Brokers"
 
 
-def test_mcp_view_with_only_instructions_keeps_the_generic_description():
+def test_mcp_view_with_only_instructions_subtitles_with_their_first_sentence():
+    """No description → the instructions' first sentence is the subtitle; the detail page's
+    description stays generic, since the whole text is already in the fold."""
     svc = _svc()
     from backend.db.mcp_client_store import McpClientStore
     from backend.models.mcp_client import McpServerConfig, ServerInfo
 
     store = McpClientStore()
     store.create(McpServerConfig(id="gem", url="https://mcp.example.com"))
-    store.record_discovery("gem", [], status="ok", server_info=ServerInfo(instructions="Use me."))
+    text = "This server reaches the Example exchange.\nCall whats_new first. Prices are v1.2."
+    store.record_discovery("gem", [], status="ok", server_info=ServerInfo(instructions=text))
     view = svc.get_connector("mcp:gem")
-    assert view.long_description != "Use me."
-    assert view.config["server_info_instructions"] == "Use me."
+    assert view.short_description == "This server reaches the Example exchange."
+    assert "whats_new" not in view.long_description
+    assert view.config["server_info_instructions"] == text
+
+
+def test_mcp_view_shortens_a_long_first_sentence_at_a_word():
+    from backend.services.connectors import _first_sentence
+
+    subtitle = _first_sentence("Tools for " + "trading and positions, " * 12 + "end.")
+    assert len(subtitle) <= 161 and subtitle.endswith("…")
+    assert not subtitle[:-1].endswith((" ", ","))
 
 
 def test_mcp_view_falls_back_to_generic_description_with_no_permission_talk():

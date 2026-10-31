@@ -493,29 +493,18 @@ export function ConnectorDetail({
             MCP server. The vendor is still visible elsewhere on the card (name, logo,
             description) and in the Details footer's "Vendor" field, so nothing is hidden — this
             line just answers one question cleanly: did WE build this. */}
-          {entry.developer || entry.version ? (
+          {entry.developer ? (
             <div style={{ fontSize: 13, fontWeight: 400, color: 'var(--ink)' }}>
-              {entry.developer ? (
-                <>
-                  Developed by{' '}
-                  {entry.mcp ? (
-                    entry.developerUrl ? (
-                      <ExternalLink href={entry.developerUrl}>{entry.developer}</ExternalLink>
-                    ) : (
-                      entry.developer
-                    )
-                  ) : (
-                    <ExternalLink href={FIRST_PARTY_URL}>{FIRST_PARTY_PUBLISHER}</ExternalLink>
-                  )}
-                </>
-              ) : null}
-              {/* The version the server reported — a custom server with no publisher still
-                  says which release it is running. */}
-              {entry.version ? (
-                <span className="cn-version">
-                  {entry.developer ? ' · ' : ''}v{entry.version.replace(/^v/i, '')}
-                </span>
-              ) : null}
+              Developed by{' '}
+              {entry.mcp ? (
+                entry.developerUrl ? (
+                  <ExternalLink href={entry.developerUrl}>{entry.developer}</ExternalLink>
+                ) : (
+                  entry.developer
+                )
+              ) : (
+                <ExternalLink href={FIRST_PARTY_URL}>{FIRST_PARTY_PUBLISHER}</ExternalLink>
+              )}
             </div>
           ) : null}
 
@@ -612,6 +601,9 @@ function Identity({
       <div className="cn-idhead-main">
         <div className="cn-idhead-name">
           {entry.name}
+          {entry.version ? (
+            <span className="cn-version">v{entry.version.replace(/^v/i, '')}</span>
+          ) : null}
           {entry.tag ? <span className="cn-tag">{entry.tag}</span> : null}
           <Badge tone={entry.tone}>{entry.statusText}</Badge>
         </div>

@@ -157,9 +157,10 @@ publisher**. A name you typed yourself is never replaced. **⋯ → Refresh tool
 name and icon again.
 
 A server's page also shows what it says about itself: its display title as the name (unless you
-typed one), its one-line description under the name, the version it's running (for example
-**v1.0.1**), and, folded, **The server's instructions for AI** — the usage notes it ships for AI
-assistants. Servers that send none of these keep the generic text.
+typed one), the version it's running beside the name (for example **v1.0.1**), its one-line
+description under the name, and, folded, **The server's instructions for AI** — the usage notes it
+ships for AI assistants. A server with no description is subtitled with the first sentence of those
+instructions; one that sends neither keeps the generic text.
 
 **Updates.** A remote server updates itself — the vendor changes it, and its next answer comes
 from the new version. A local server runs until the app restarts; most directory servers launch with
