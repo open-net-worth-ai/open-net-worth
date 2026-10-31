@@ -67,6 +67,9 @@ class ResetResponse(BaseModel):
     level: Optional[str] = None
 
 
+_GENERIC_SEARCH_TOOLS = ("web_search", "fetch_page")
+
+
 def _first_sentence(text: str) -> str:
     """The tool description's first sentence, capped — enough to tell tools apart in a list."""
     line = " ".join((text or "").split())
@@ -81,15 +84,20 @@ class PermissionApiV2:
 
     def set_connector_tool(self, connector_id: str, tool_name: str, level: str) -> dict:
         permissions_service.set_tool_permission(connector_id, tool_name, level)
+        self._mirror_search(connector_id, tool_name, level)
         return self._connector_response(connector_id)
 
     def set_connector_group(self, connector_id: str, tools: list[str], level: str) -> dict:
         permissions_service.set_group_permission(connector_id, tools, level)
+        for tool_name in tools:
+            self._mirror_search(connector_id, tool_name, level)
         return self._connector_response(connector_id)
 
     def clear_connector(self, connector_id: str) -> dict:
         """Reset every tool of this connector to its seed value. Idempotent: resetting a
         connector that is already at its seeds returns the same map rather than 404ing."""
+        for tool_name in self._active_search_tools(connector_id):
+            self._unmirror_search(connector_id, tool_name)
         reset = permissions_service.reset_connector_permissions(connector_id)
         if reset:
             logger.info("connector permissions reset via API: %s (%d)", connector_id, reset)
@@ -124,7 +132,7 @@ class PermissionApiV2:
         if session_id and level == "always_allow":
             from backend.services.automations import runs
 
-            if runs.grant_automation_tool(session_id, requested, "always"):
+            if runs.grant_automation_tool(session_id, requested, "always", clear_blocked=True):
                 # The open Automation page shows this list; a stale copy would be saved back over
                 # this card's change by the next edit there.
                 from backend.core.data_events import publish
@@ -137,6 +145,7 @@ class PermissionApiV2:
                 raise ConflictError("This Automation no longer exists, so nothing was changed.")
 
         permissions_service.set_tool_permission(owner, tool, level)
+        self._mirror_search(owner, tool, level)
         return self._list_response()
 
     def reset_tool(self, tool: str, connector_id: Optional[str]) -> dict:
@@ -145,9 +154,61 @@ class PermissionApiV2:
         and the listing carries it: a stale or MCP-owned row's owner cannot be re-derived from a
         registry that no longer knows the name."""
         tool = (tool or "").strip()
+        explicit = (connector_id or "").strip()
+        if explicit and permissions_service.stored_tool_level(explicit, tool) is not None:
+            # The row the client was shown, exactly: a search tool's name would otherwise resolve
+            # to the active provider's row and leave this one (the ``core`` copy) behind.
+            level = permissions_service.reset_tool_permission(explicit, tool)
+            self._unmirror_search(explicit, tool)
+            return ResetResponse(reset=tool, level=level).model_dump()
         tool, owner = self._resolve_owner(tool, connector_id)
         level = permissions_service.reset_tool_permission(owner, tool)
+        self._unmirror_search(owner, tool)
         return ResetResponse(reset=tool, level=level).model_dump()
+
+    # ── search: the generic tools' ``core`` copy ───────────────────────────────────────────
+    #
+    # ``web_search`` / ``fetch_page`` take the active search provider's row (``_resolve_owner``).
+    # Main's gate, which the flag can switch back to, reads only the ``core`` row of the generic
+    # name. So a level set on the active provider's tool is also written to that ``core`` row: the
+    # flag going off then never lifts a Block or an Ask the owner set here, and the gate under the
+    # flag takes the stricter of the two, so the copy cannot disagree with the provider's row. Reset
+    # removes both. Nothing else is written outside the owner's own choice.
+
+    @staticmethod
+    def _active_search_tools(owner: str) -> list[str]:
+        """The active provider's search / fetch tool names when ``owner`` is its connector."""
+        from backend.ai.tools.misc import ACTIVE_PROVIDER_VERBS
+        from backend.ai.tools.web_search_providers import active_provider_tool
+
+        if not owner.startswith("web_search:"):
+            return []
+        names = (active_provider_tool(generic) for generic in ACTIVE_PROVIDER_VERBS)
+        return [name for name in names if name]
+
+    @classmethod
+    def _generic_of(cls, owner: str, tool: str) -> Optional[str]:
+        if tool not in cls._active_search_tools(owner):
+            return None
+        from backend.ai.tools.web_search_providers import generic_of_active_tool
+
+        return generic_of_active_tool(tool)
+
+    @classmethod
+    def _mirror_search(cls, owner: str, tool: str, level: str) -> None:
+        generic = cls._generic_of(owner, tool)
+        if generic:
+            permissions_service.set_tool_permission(
+                permissions_service.CORE_CONNECTOR_ID, generic, level
+            )
+
+    @classmethod
+    def _unmirror_search(cls, owner: str, tool: str) -> None:
+        generic = cls._generic_of(owner, tool)
+        if generic:
+            permissions_service.clear_tool_permission(
+                permissions_service.CORE_CONNECTOR_ID, generic
+            )
 
     @staticmethod
     def _connector_response(connector_id: str) -> dict:
@@ -185,18 +246,21 @@ class PermissionApiV2:
             for r in permissions_service.list_decisions()
         }
         yolo, auto_run = permissions_service.stop_asking_switches()
+        copies = cls._search_copies(stored)
         rows: List[ToolPermissionRow] = []
         listed: set[tuple[str, str]] = set()
         for owner, tool, _asks in permission_catalog():
             row = stored.get((owner, tool)) or {}
             level = row.get("level")
+            if level not in permissions_service.LEVELS:
+                level = permissions_service.unrowed_level(tool, yolo=yolo, auto_run=auto_run)
             rows.append(
                 ToolPermissionRow(
                     tool=tool,
                     connector_id=owner,
-                    level=level
-                    if level in permissions_service.LEVELS
-                    else permissions_service.unrowed_level(tool, yolo=yolo, auto_run=auto_run),
+                    # What dispatch will do: for the active provider's search / fetch tool, the
+                    # stricter of its own row and the ``core`` copy of the generic name.
+                    level=permissions_service.most_restrictive(level, copies.get(tool)) or level,
                     default_level=permissions_service.seed_level(tool),
                     description=_first_sentence(tool_description(tool) or ""),
                     updated_at=str(row.get("updated_at") or ""),
@@ -220,6 +284,8 @@ class PermissionApiV2:
         for (owner, tool), row in stored.items():
             if not owner or not tool or (owner, tool) in listed:
                 continue
+            if owner == permissions_service.CORE_CONNECTOR_ID and tool in _GENERIC_SEARCH_TOOLS:
+                continue  # the copy ``_mirror_search`` keeps; the provider's tool is the control
             is_mcp = owner.startswith(MCP_CONNECTOR_PREFIX)
             rows.append(
                 ToolPermissionRow(
@@ -233,6 +299,19 @@ class PermissionApiV2:
             )
         core = permissions_service.CORE_CONNECTOR_ID
         return sorted(rows, key=lambda r: (r.connector_id != core, r.connector_id, r.tool))
+
+    @staticmethod
+    def _search_copies(stored: dict) -> dict[str, str]:
+        """``{active provider tool: level of the core copy of its generic name}``."""
+        from backend.ai.tools.web_search_providers import active_provider_tool
+
+        copies: dict[str, str] = {}
+        for generic in _GENERIC_SEARCH_TOOLS:
+            provider_tool = active_provider_tool(generic)
+            core = stored.get((permissions_service.CORE_CONNECTOR_ID, generic)) or {}
+            if provider_tool and core.get("level") in permissions_service.LEVELS:
+                copies[provider_tool] = core["level"]
+        return copies
 
     @classmethod
     def _list_response(cls) -> dict:

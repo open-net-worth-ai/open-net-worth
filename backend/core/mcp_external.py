@@ -239,6 +239,10 @@ class ExternalDispatcher(Protocol):
     decided in ``ai``; the manager re-checks only the hard refusals (unknown or disabled server, a
     tool at ``blocked``).
 
+    Under ``permissions_v2`` the caller also passes ``call(..., card_extras=...)`` (the conversation /
+    Automation the card belongs to, merged into the staged card so its Always allow lands on that
+    Automation's own list). The flag-off caller does not.
+
     ``image_attachment_ids`` is the durable attachment id of any image content block the call
     returned (a screenshot, e.g.) — persisted (``mcp.client_manager._persist_result_images``)
     the same way a chat photo upload is, so it can be shown to the user as a real image

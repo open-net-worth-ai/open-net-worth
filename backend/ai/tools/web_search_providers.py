@@ -164,6 +164,15 @@ def active_provider_tool(generic: str) -> str | None:
     return _PROVIDER_TOOLS.get((provider_id, verb)) if provider_id else None
 
 
+def generic_of_active_tool(tool_name: str) -> str | None:
+    """The generic tool (``web_search`` or ``fetch_page``) whose permission ``tool_name`` carries
+    right now, i.e. ``tool_name`` is the ACTIVE provider's own search / fetch tool; else ``None``."""
+    for generic in ACTIVE_PROVIDER_VERBS:
+        if active_provider_tool(generic) == tool_name:
+            return generic
+    return None
+
+
 def _register(spec: ProviderSpec) -> None:
     """Register one (<id>_search, <id>_fetch_page) pair for ``spec``.
 

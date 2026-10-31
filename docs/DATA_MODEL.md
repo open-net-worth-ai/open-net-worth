@@ -346,7 +346,7 @@ with no row takes its seed when asked (`services.tool_permissions_v2.seed_level`
 asks, a read runs, an external MCP tool asks) and nothing writes a default, so every stored row is
 the owner's decision and Reset deletes the row. A stored YOLO row (`(core, "*")`) and the
 `code_execution_auto_run` flag keep working as read-time rules; `web_search` / `fetch_page` read the
-active search provider's row. Two additions the old code ignores: the Automation payload's
+active search provider's row (and a level set on the active provider's search / fetch tool is also written to the `core` row of `web_search` / `fetch_page`, which the old gate reads, so switching the flag off never lifts a Block; the effective level is the stricter of the two). Two additions the old code ignores: the Automation payload's
 `blocked` list and the session meta's `tool_resolutions` map (`{tool_use_id: approved |
 always_allowed | denied}`, written only while the flag is on).
 

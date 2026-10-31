@@ -156,6 +156,18 @@ def _usage_event(
     }
 
 
+# The Auto-approval judge (``ai/auto_judge.py``, ``permissions_v2``) reads untrusted arguments and
+# must run with NO tools. This CLI is started with ``--dangerously-skip-permissions`` and offers no
+# switch that turns its own tools off, so a judge here could be steered into running one. It is
+# therefore unavailable on this transport: the judge treats any error as "ask", and the call
+# becomes an ordinary confirm card.
+_JUDGE_SOURCES = frozenset({"auto_approval"})
+_NO_JUDGE = (
+    "The Auto-approval judge cannot run on the Antigravity CLI: it cannot be limited to no tools. "
+    "Pick another model for the judge in Settings -> AI; until then a call that needs a decision asks you."
+)
+
+
 class AntigravityCliProvider(AIProvider):
     """AIProvider implementation backed by the local `agy` CLI binary."""
 
@@ -250,6 +262,8 @@ class AntigravityCliProvider(AIProvider):
         response_format: dict | None = None,  # noqa: ARG002
         effort: str = "",
     ) -> str:
+        if source in _JUDGE_SOURCES:
+            raise ConfigurationError(_NO_JUDGE)
         if not model:
             from backend.db.model_config_store import ModelConfigStore
 

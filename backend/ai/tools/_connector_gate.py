@@ -81,16 +81,12 @@ def permission_key(tool_name: str) -> tuple[str, str]:
     their key is the active provider's own tool (``tavily_search`` / ``tavily_fetch_page``, under
     ``web_search:tavily``). That page is their one control: a level set on the provider's tool
     cannot be bypassed by calling the generic one. With no provider active they keep their own
-    (``core``) key.
+    (``core``) key. A failed provider lookup RAISES: the caller decides what not knowing means (the
+    gate asks; it never lets the search through).
     """
-    try:
-        from backend.ai.tools.web_search_providers import active_provider_tool
+    from backend.ai.tools.web_search_providers import active_provider_tool
 
-        provider_tool = active_provider_tool(tool_name)
-    except Exception:  # noqa: BLE001 — a lookup failure must not stop a search dispatching
-        logger.warning("permission key: provider lookup failed for %s", tool_name, exc_info=True)
-        provider_tool = None
-    target = provider_tool or tool_name
+    target = active_provider_tool(tool_name) or tool_name
     return permission_owner(target), target
 
 

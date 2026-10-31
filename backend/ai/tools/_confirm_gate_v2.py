@@ -70,7 +70,7 @@ from typing import Optional
 
 from backend.core import mcp_external
 from backend.models.mcp_client import mcp_connector_id
-from backend.services.tool_permissions_v2 import DEFAULT_LEVEL, unrowed_level
+from backend.services.tool_permissions_v2 import DEFAULT_LEVEL, most_restrictive, unrowed_level
 
 logger = logging.getLogger(__name__)
 
@@ -133,19 +133,32 @@ def _stored_decision(tool_name: str) -> Optional[str]:
 
     Read from ``_permission_key``: the tool's own ``(owner, name)`` — except ``web_search`` and
     ``fetch_page``, which BELONG to the active search connector and so resolve to that provider's
-    own tool. The search connector's page is their one control. A provider with no row of its own
-    yet falls back to a restrictive ``core:`` row for the generic tool (an Ask or a Block set
-    before the tool moved to the connector), so that decision is never lifted by the move.
-    """
-    owner, name = _permission_key(tool_name)
-    level = _stored_level(owner, name)
-    if level is None and name != tool_name and not mcp_external.is_external(tool_name):
-        from backend.ai.tools._connector_gate import permission_owner
+    own tool. The search connector's page is their one control, and the generic tool's own
+    ``core:`` row (a decision made before the tool moved to the connector, or the copy the app keeps
+    so the flag can go off without lifting a Block) counts too: the effective level is the MOST
+    restrictive of the two, so neither can lift the other.
 
-        core = _stored_level(permission_owner(tool_name), tool_name)
-        if core in _RESTRICTIVE:
-            return core
-    return level
+    A provider lookup that fails is an Ask, never Always allow: not knowing which connector governs
+    a search is no reason to let it run.
+    """
+    from backend.ai.tools.misc import ACTIVE_PROVIDER_VERBS
+
+    if tool_name not in ACTIVE_PROVIDER_VERBS:
+        owner, name = _permission_key(tool_name)
+        return _stored_level(owner, name)
+    try:
+        owner, name = _permission_key(tool_name)
+    except Exception:  # noqa: BLE001 — see the docstring
+        logger.warning(
+            "permission: provider lookup failed for %s; asking", tool_name, exc_info=True
+        )
+        return "needs_approval"
+    level = _stored_level(owner, name)
+    if name == tool_name:
+        return level
+    from backend.ai.tools._connector_gate import permission_owner
+
+    return most_restrictive(level, _stored_level(permission_owner(tool_name), tool_name))
 
 
 def _permission_key(tool_name: str) -> tuple[str, str]:
@@ -158,9 +171,6 @@ def _permission_key(tool_name: str) -> tuple[str, str]:
     from backend.ai.tools._connector_gate import permission_key
 
     return permission_key(tool_name)
-
-
-_RESTRICTIVE = ("needs_approval", "blocked")
 
 
 def _stored_level(owner: str, tool_name: str) -> Optional[str]:

@@ -434,7 +434,9 @@ def _merge_steps(existing: list[dict], current: list[dict]) -> list[dict]:
     return result
 
 
-def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
+def grant_automation_tool(
+    session_id: str, tool: str, scope: str, *, clear_blocked: bool = False
+) -> bool:
     """Persist a grant locally when ``session_id`` belongs to an Automation run.
 
     Two scopes (2026-08-02): ``once`` stores nothing — approving the card IS the grant — and
@@ -442,7 +444,9 @@ def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
     raising a card for it. Keeping the grant on the Automation rather than in the global
     table is what stops one card tap changing a tool for every other caller.
 
-    A tool is never on both lists: allowing it here takes it off this Automation's Blocked list.
+    ``clear_blocked`` (``permissions_v2``): a tool is never on both lists, so allowing it here takes
+    it off this Automation's Blocked list. With the flag off the Blocked list is not this path's to
+    touch.
     """
     owned = automation_run_for_session(session_id)
     if owned is None:
@@ -452,7 +456,8 @@ def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
         always_allowed = [
             dict(item) for item in automation.get("always_allowed") or [] if isinstance(item, dict)
         ]
-        blocked = [name for name in automation.get("blocked") or [] if name != tool]
+        current = automation.get("blocked") or []
+        blocked = [name for name in current if name != tool] if clear_blocked else current
         changes: dict = {}
         if not any(tool in (item.get("tools") or []) for item in always_allowed):
             always_allowed.append(
@@ -463,7 +468,7 @@ def grant_automation_tool(session_id: str, tool: str, scope: str) -> bool:
                 }
             )
             changes["always_allowed"] = always_allowed
-        if len(blocked) != len(automation.get("blocked") or []):
+        if len(blocked) != len(current):
             changes["blocked"] = blocked
         if changes:
             from .service import apply_automation_change
