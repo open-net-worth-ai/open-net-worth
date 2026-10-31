@@ -4384,7 +4384,7 @@
     "properties": {
       "position_id": {
         "type": "string",
-        "description": "position_id from get_portfolio. Required unless `position_ids` (the batch form) is used instead."
+        "description": "position_id from get_portfolio. Required unless `position_ids` or `ticker` is used."
       },
       "position_ids": {
         "items": {
@@ -4392,6 +4392,10 @@
         },
         "type": "array",
         "description": "Batch form: lots for SEVERAL positions in one call — e.g. every AAPL position held across custodians. `limit`/`offset`/`open_only` apply to EACH position individually (not across the combined set); each position gets its OWN `totals` block — a cost basis is never meaningfully summed across different instruments/currencies, so there is no combined grand total. Omit the single `position_id` field when using this."
+      },
+      "ticker": {
+        "type": "string",
+        "description": "Every position holding this ticker, at every custodian."
       },
       "open_only": {
         "type": "boolean",

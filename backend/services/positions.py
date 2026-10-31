@@ -778,6 +778,20 @@ def get_position(position_id: str) -> dict | None:
     return PositionStore().find_by_id(position_id)
 
 
+def position_ids_for_ticker(ticker: str) -> list[str]:
+    """Every position (one per custodian, sold-out included — their lots are history) whose
+    instrument's display ticker or symbol is ``ticker``, case-insensitively."""
+    wanted = str(ticker or "").strip().upper()
+    if not wanted:
+        return []
+    matching = {
+        i["id"]
+        for i in InstrumentStore().all()
+        if wanted in {_row_ticker(i).upper(), str(i.get("symbol") or "").upper()}
+    }
+    return [p["id"] for p in PositionStore().all() if p.get("instrument_id") in matching]
+
+
 def hydrated_one(position_id: str) -> dict | None:
     """A single hydrated row by position_id — for building change diffs/displays."""
     return next((r for r in hydrated() if r.get("position_id") == position_id), None)
