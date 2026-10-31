@@ -276,9 +276,9 @@ def _candidate_schemas() -> list[dict]:
     # Import TOOL_SCHEMAS from the package (populated at import time).
     from backend.ai.tools import TOOL_SCHEMAS
     from backend.ai.tools._connector_gate import hidden_connector_tools
-    from backend.ai.tools.catalog import _CATALOG_HIDDEN
+    from backend.ai.tools.catalog import hidden_tools
 
-    hidden = _CATALOG_HIDDEN | hidden_connector_tools()
+    hidden = hidden_tools() | hidden_connector_tools()
     candidates: list[dict] = [s for s in TOOL_SCHEMAS if s.get("name") not in hidden]
     universe = _reachable_universe()
     if universe is not None:

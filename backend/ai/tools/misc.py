@@ -12,6 +12,7 @@ from typing import List, Literal, Optional
 from pydantic import Field
 
 from backend.ai.search import get_search_provider
+from backend.ai.search.switch import search_results
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of, schema_of_no_required
 from backend.core.untrusted import sanitize_untrusted
@@ -255,7 +256,7 @@ async def web_search(input_data: dict):
     max_results = min(int(input_data.get("max_results", 8)), 15)
     logger.info("web_search: %s", query)
     try:
-        results = await get_search_provider().search(query, max_results)
+        results = await search_results(get_search_provider(), query, max_results)
     except Exception as exc:
         logger.error("web_search failed: %s", exc)
         raise
