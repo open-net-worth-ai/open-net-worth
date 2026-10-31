@@ -266,13 +266,13 @@ def test_rule2_an_always_allow_core_row_never_lifts_anything(surface, generic, p
 
 
 @pytest.mark.parametrize(("generic", "provider_tool"), GENERIC)
-def test_rule2_the_providers_own_row_outranks_a_restrictive_core_row(
+def test_rule2_the_providers_always_allow_does_not_lift_a_restrictive_core_row(
     surface, generic, provider_tool
 ):
     perms.set_tool_permission(CORE, generic, "blocked")
     perms.set_tool_permission("web_search:duckduckgo", provider_tool, "always_allow")
 
-    assert gate.effective_level(generic) == "always_allow"
+    assert gate.effective_level(generic) == "blocked"
 
 
 @pytest.mark.asyncio
@@ -293,7 +293,10 @@ def test_rule2_setting_a_level_on_the_generic_tool_writes_the_providers_row(
         client.put(f"/api/tool-permissions/{generic}", json={"level": "blocked"}).status_code == 200
     )
 
-    assert _stored() == {("web_search:duckduckgo", provider_tool): "blocked"}
+    assert _stored() == {
+        ("web_search:duckduckgo", provider_tool): "blocked",
+        (CORE, generic): "blocked",
+    }
     assert client.delete(f"/api/tool-permissions/{generic}").status_code == 200
     assert _stored() == {}
 

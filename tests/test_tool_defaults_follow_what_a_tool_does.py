@@ -227,7 +227,7 @@ def test_the_ladder_shows_an_external_mcp_tool_asking_by_default(db_isolated):
 def test_the_ladder_shows_exactly_what_dispatch_does(db_isolated):
     seen = 0
     for connector_id in ("plaid", "telegram", "webhook", "email", "web_search:duckduckgo"):
-        for t in connectors_service.get_connector(connector_id).tools:
+        for t in connectors_service.get_connector(connector_id, ladder_v2=True).tools:
             assert t.level == gate.effective_level(t.name), (connector_id, t.name)
             seen += 1
     assert seen >= 8
@@ -242,7 +242,7 @@ def test_the_ladder_reports_per_tool_defaults(db_isolated):
 
 def test_a_stored_level_shows_on_the_ladder_beside_the_default(db_isolated):
     perms.set_tool_permission("plaid", "plaid_get_status", "blocked")
-    view = connectors_service.get_connector("plaid")
+    view = connectors_service.get_connector("plaid", ladder_v2=True)
     levels = {t.name: t.level for t in view.tools}
     _, defaults = connectors_service.view_default_levels(view)
     assert levels["plaid_get_status"] == "blocked"
@@ -313,8 +313,8 @@ def test_asking_on_the_provider_tool_makes_the_generic_tool_ask(
 def test_a_stray_core_row_for_the_generic_tool_cannot_lift_the_connectors_value(
     surface, duckduckgo_active
 ):
-    """No second control that disagrees: an Always allow under ``core:web_search`` is never read,
-    and the provider's own row, once it has one, outranks any ``core:`` row."""
+    """Neither row can lift the other: an Always allow under ``core:web_search`` lifts nothing, and
+    a restrictive ``core:`` row is not lifted by the provider's own Always allow either."""
     perms.set_tool_permission(perms.CORE_CONNECTOR_ID, "web_search", "always_allow")
     perms.set_tool_permission("web_search:duckduckgo", "duckduckgo_search", "blocked")
 
@@ -323,7 +323,7 @@ def test_a_stray_core_row_for_the_generic_tool_cannot_lift_the_connectors_value(
     perms.set_tool_permission("web_search:duckduckgo", "duckduckgo_search", "always_allow")
     perms.set_tool_permission(perms.CORE_CONNECTOR_ID, "web_search", "blocked")
 
-    assert gate.effective_level("web_search") == "always_allow"
+    assert gate.effective_level("web_search") == "blocked"
 
 
 def test_a_restrictive_core_row_applies_while_the_provider_has_no_row(surface, duckduckgo_active):
@@ -349,7 +349,8 @@ def test_a_level_on_a_provider_that_is_not_active_does_not_reach_the_generic_too
 def test_setting_a_level_on_the_generic_tool_sets_it_on_the_search_connector(
     db_isolated, duckduckgo_active, generic, provider_tool
 ):
-    """The REST route (and so Settings → Permissions) never writes a ``core`` row for it."""
+    """The REST route (and so Settings → Permissions) writes the provider's row, plus a ``core``
+    copy so the flag going off does not lift it; Reset removes both."""
     from fastapi.testclient import TestClient
 
     from backend.main import app
@@ -360,11 +361,10 @@ def test_setting_a_level_on_the_generic_tool_sets_it_on_the_search_connector(
         res = client.put(f"/api/tool-permissions/{generic}", json={"level": "blocked"})
         assert res.status_code == 200
         assert perms.stored_tool_level("web_search:duckduckgo", provider_tool) == "blocked"
-        assert perms.stored_tool_level(perms.CORE_CONNECTOR_ID, generic) is None
+        assert perms.stored_tool_level(perms.CORE_CONNECTOR_ID, generic) == "blocked"
         assert gate.effective_level(generic) == "blocked"
 
-        # Reset deletes the PROVIDER's row, which is back to its seed; the generic tool never
-        # gets one.
+        # Reset deletes the provider's row and the copy: back to the seed.
         assert client.delete(f"/api/tool-permissions/{generic}").status_code == 200
         assert perms.stored_tool_level("web_search:duckduckgo", provider_tool) is None
         assert gate.effective_level(generic) == "always_allow"

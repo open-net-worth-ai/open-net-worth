@@ -148,7 +148,7 @@ def test_always_allow_takes_the_tool_off_the_blocked_list(run_pair):
     automation, run = run_pair
     _set_blocked(automation["id"], ["email_send_message"])
 
-    grant_automation_tool(run["session_id"], "email_send_message", "always")
+    grant_automation_tool(run["session_id"], "email_send_message", "always", clear_blocked=True)
 
     assert _blocked(automation["id"]) == []
     assert "email_send_message" in _granted_tools(automation["id"])

@@ -93,7 +93,7 @@ def test_every_family_carries_a_real_level_defaulting_to_ask(svc, perms):
     _server(store)
     store.record_discovery("gmail", [{"name": "send_message", "description": "Send."}], status="ok")
 
-    by_id = {v.id: v for v in svc.list_connectors()}
+    by_id = {v.id: v for v in svc.list_connectors(ladder_v2=True)}
     native = {t.name: t.level for t in by_id["email"].tools}
     assert native == {
         "email_search_messages": "always_allow",
@@ -107,7 +107,7 @@ def test_every_family_carries_a_real_level_defaulting_to_ask(svc, perms):
 def test_a_stored_level_reaches_the_view(svc, perms):
     perms.set_tool_permission("email", "email_send_message", "always_allow")
     perms.set_tool_permission("email", "email_get_messages", "blocked")
-    levels = {t.name: t.level for t in svc.get_connector("email").tools}
+    levels = {t.name: t.level for t in svc.get_connector("email", ladder_v2=True).tools}
     assert levels == {
         # Unset AND read-shaped -> always_allow (the exemption), not the raw default —
         # see test_every_family_carries_a_real_level_defaulting_to_ask above.
@@ -128,11 +128,11 @@ def test_a_fetch_tools_default_level_is_always_allow_but_a_stored_level_still_go
 
     PlaidConfigStore().update({"enabled": True, "client_id": "cid", "secret": "shh"})
 
-    levels = {t.name: t.level for t in svc.get_connector("plaid").tools}
+    levels = {t.name: t.level for t in svc.get_connector("plaid", ladder_v2=True).tools}
     assert levels["plaid_fetch_transactions"] == "always_allow"
 
     perms.set_tool_permission("plaid", "plaid_fetch_transactions", "needs_approval")
-    levels = {t.name: t.level for t in svc.get_connector("plaid").tools}
+    levels = {t.name: t.level for t in svc.get_connector("plaid", ladder_v2=True).tools}
     assert levels["plaid_fetch_transactions"] == "needs_approval"
 
 
@@ -143,10 +143,10 @@ def test_a_level_is_never_written_onto_the_shared_native_bundle(svc, perms):
     from backend.services import connector_copy
 
     perms.set_tool_permission("web_search:tavily", "tavily_search", "blocked")
-    view = svc.get_connector("web_search:tavily")
+    view = svc.get_connector("web_search:tavily", ladder_v2=True)
     assert {t.name: t.level for t in view.tools}["tavily_search"] == "blocked"
     assert [t.level for t in connector_copy.TOOLS["web_search:tavily"]] == ["ask", "ask"]
-    other = svc.get_connector("web_search:serper")
+    other = svc.get_connector("web_search:serper", ladder_v2=True)
     assert {t.name: t.level for t in other.tools}["serper_search"] == "always_allow"
 
 
@@ -165,7 +165,7 @@ def test_read_only_grouping_prefers_the_servers_own_hint(svc):
         ],
         status="ok",
     )
-    groups = {t.name: t.read_only for t in svc.get_connector("mcp:gmail").tools}
+    groups = {t.name: t.read_only for t in svc.get_connector("mcp:gmail", ladder_v2=True).tools}
     assert groups == {
         "send_message": True,
         "get_inbox": False,
@@ -178,7 +178,7 @@ def test_web_search_is_grouped_read_despite_the_name_allowlist(svc):
     """``tavily_search``/``tavily_fetch_page`` read the web and write nothing, but the verb
     sits in the MIDDLE of the name (connector-first), not as a prefix, so the conservative
     allowlist alone would file the search half under Write without an explicit override."""
-    by_id = {v.id: v for v in svc.list_connectors()}
+    by_id = {v.id: v for v in svc.list_connectors(ladder_v2=True)}
     tools = {t.name: t.read_only for t in by_id["web_search:tavily"].tools}
     assert tools == {"tavily_search": True, "tavily_fetch_page": True}
 

@@ -54,3 +54,12 @@ tests/test_tool_defaults_follow_what_a_tool_does.py
 tests/test_tool_permission_card_scope.py
 tests/test_tool_permissions_api_v2.py
 tests/test_tool_permissions_v2.py
+tests/test_dispatch_gate.py
+tests/test_batch_path_is_gated.py
+tests/test_dangling_tool_use_approval.py
+tests/test_chat_confirm_grants.py
+tests/test_chat_confirm.py
+tests/test_connector_confirm_token_tools.py
+tests/test_discovery_gate.py
+tests/test_external_discovery_gate.py
+tests/test_permissions_v2_review_fixes.py
