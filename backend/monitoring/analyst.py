@@ -577,8 +577,11 @@ def _verdict_instruction(is_held: bool) -> str:
         '<limit price, or null for market>} or a price alert {"type": "alert", "when": '
         '"below|above", "price": <price>}. A trim can be staged (e.g. sell part at one price '
         "and more at a higher one); an alert can sit at any price that matters, not only your "
-        "stop or trim. Never propose an alert YOUR PRICE ALERTS already cover. Most of the time "
-        "the right answer is to do nothing: leave actions EMPTY unless one genuinely helps. "
+        "stop or trim. Trading is usually the wrong move: propose an order only when your call "
+        "itself is to trade. Protection is different: when you give a stop or trim and no alert "
+        "in YOUR PRICE ALERTS sits near it (or there are none at all), propose an alert there "
+        "so the user hears when your level is reached. Never propose an alert those already "
+        "cover. With nothing to trade and nothing left unguarded, leave actions EMPTY. "
     )
     if is_held:
         return (
