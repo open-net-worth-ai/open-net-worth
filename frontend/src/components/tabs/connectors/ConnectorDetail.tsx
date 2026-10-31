@@ -37,6 +37,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { templateKeyForConnector } from '../automations/automationTemplates'
 import { BackTitle, Badge, Btn, Kebab, Modal, Mono, type KebabItem } from './primitives'
 import { useConnectorSaveHost } from './formSave'
+import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { PermissionLadderSwitch } from './PermissionLadderSwitch'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
@@ -135,6 +136,8 @@ export function ConnectorDetail({
   onConfigClosed,
   onSaved,
 }: ConnectorDetailProps): JSX.Element {
+  // permissions_v2 names the level Ask; the dialog below must use the word the ladder shows.
+  const askLabel = useFlag('permissions_v2') === true ? 'Ask' : 'Needs approval'
   // Optimistic mirror of the saved levels: the ladder must respond to a click without
   // waiting for a round trip. Reseeded whenever a different connector is shown, and
   // whenever the server's own view of the levels changes underneath us.
@@ -313,7 +316,7 @@ export function ConnectorDetail({
                 ? `the ${entry.tools.length} tool${entry.tools.length === 1 ? '' : 's'} it offers`
                 : 'access to it'}
               , and every permission level you set for them is forgotten — so adding this server
-              again starts it back at Needs approval rather than inheriting what you allowed before.
+              again starts it back at {askLabel} rather than inheriting what you allowed before.
               Nothing else on this instance is touched. This can&apos;t be undone. If you just want
               to pause it without losing your saved credentials, use Pause instead.
             </>

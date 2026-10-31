@@ -39,6 +39,7 @@ import { CitationChips } from './lucius/CitationChips'
 import { stripFence, stripScreenContext, stripConfirmHandshake } from '../../utils/untrusted'
 import { Chip } from './lucius/Chip'
 import { ToolActivity } from './toolActivity/ToolActivity'
+import { useFlag } from '../../hooks/useFlag'
 import { failureOf } from './toolActivity/cluster'
 import type { ActionItem, ThinkingItem } from './toolActivity/cluster'
 import { ThinkingBlock } from './toolActivity/ThinkingRow'
@@ -381,12 +382,12 @@ function firstUnansweredChangeId(m: Message): string | undefined {
 
 /** Each failed call's error, keyed by its tool_use_id — the id its confirm card shares — so an
  *  approved card whose call then failed says so instead of keeping a green "✓ Approved". */
-function callFailures(m: Message): Map<string, string> {
+function callFailures(m: Message, declinedIsNotFailure: boolean): Map<string, string> {
   const failures = new Map<string, string>()
   for (const block of m.blocks || []) {
     const item = actionItemFor(block)
     if (item?.type !== 'tool') continue
-    const { failed, message } = failureOf(item)
+    const { failed, message } = failureOf(item, declinedIsNotFailure)
     if (failed) failures.set(item.id, message)
   }
   return failures
@@ -935,7 +936,8 @@ export function MessageBubble({
 
   // One decision on screen at a time — see firstUnansweredChangeId.
   const firstUnanswered = firstUnansweredChangeId(m)
-  const failures = callFailures(m)
+  const declinedIsNotFailure = useFlag('permissions_v2') === true
+  const failures = callFailures(m, declinedIsNotFailure)
 
   const respond = onRespondToChange
     ? (changeId: string | undefined, status: 'confirmed' | 'dismissed') =>

@@ -130,4 +130,15 @@ describe('ModelSection — the Auto-approval judge row (permissions_v2=false)', 
     await screen.findByRole('button', { name: 'Memory' })
     expect(screen.queryByRole('button', { name: 'Auto-approval judge' })).toBeNull()
   })
+
+  it('a judge model pinned earlier neither counts as an override nor shows', async () => {
+    mockAuthFetch.mockImplementation(async (url: string) =>
+      route(String(url), { approval: 'anthropic:claude-haiku-4-5' }),
+    )
+    render(<ModelSection toast={vi.fn()} />)
+
+    await screen.findByRole('button', { name: 'Memory' })
+    expect(screen.getByText('All tasks use your default model')).toBeTruthy()
+    expect(screen.queryByText(/Auto-approval judge/)).toBeNull()
+  })
 })

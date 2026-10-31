@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { grantTool, PermissionRefusedError, type GrantScope } from '../../api/toolPermissionsV2'
+import {
+  grantTool,
+  PermissionRefusedError,
+  setToolPermission as setToolPermissionV2,
+  type GrantScope,
+} from '../../api/toolPermissionsV2'
 import type { ProposedChange } from '../../types/chat'
 import {
   mcpConnectorId,
@@ -197,24 +202,42 @@ export function ChangePreviewV2({
     setGrantBusy('always')
     setGrantedScope('always')
     setGrantError(null)
+    let answered: GrantScope = 'always'
     try {
-      const ok = await setMcpToolPermission(
-        mcpConnectorId(change.server_id ?? ''),
-        change.tool ?? '',
-        'always_allow',
-      )
-      if (!ok) throw new Error('permission update failed')
-    } catch {
+      if (change.automation_id) {
+        // Inside an Automation run the standing permission is that Automation's own, exactly as
+        // for a native card: the server files the namespaced tool name on its Always allowed list
+        // and, if the Automation is gone, writes nothing and says so.
+        await setToolPermissionV2({
+          tool: `mcp__${change.server_id ?? ''}__${change.tool ?? ''}`,
+          level: 'always_allow',
+          connector_id: mcpConnectorId(change.server_id ?? ''),
+          session_id: change.session_id,
+        })
+      } else {
+        const ok = await setMcpToolPermission(
+          mcpConnectorId(change.server_id ?? ''),
+          change.tool ?? '',
+          'always_allow',
+        )
+        if (!ok) throw new Error('permission update failed')
+      }
+    } catch (err) {
       // Mirrors handleGrant above: the approval for THIS call still stands (tapping Always
       // allow IS an approval of the current call) — only the STANDING permission failed to
-      // save, so we proceed and say so rather than silently pretending it stuck.
+      // save, so we proceed and say so rather than silently pretending it stuck. Nothing was
+      // allowed, so the call is recorded as Approved (once), never "Always allowed".
+      answered = 'once'
+      setGrantedScope('once')
       setGrantError(
-        "Couldn't save the permanent permission — this call is approved, but you'll be asked again.",
+        err instanceof PermissionRefusedError
+          ? `${err.message} This call is approved this once.`
+          : "Couldn't save the permanent permission — this call is approved, but you'll be asked again.",
       )
     } finally {
       setGrantBusy(null)
     }
-    handleConfirm('always')
+    handleConfirm(answered)
   }
 
   function handleMcpAllowOnce() {
