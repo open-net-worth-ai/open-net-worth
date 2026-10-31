@@ -61,9 +61,26 @@ class Flag:
 
 
 # THE REGISTRY. Declare a flag here and nowhere else; retire it by deleting its entry in the
-# same PR that deletes its old code path. Empty on purpose: the mechanism ships before any
-# feature needs it (the test suite declares its own example flag).
-FLAGS: tuple[Flag, ...] = ()
+# same PR that deletes its old code path. The test suite declares its own example flag.
+FLAGS: tuple[Flag, ...] = (
+    Flag(
+        name="search_reads_results",
+        description=(
+            "Web search reads the pages behind its top three results and hands Lucius the "
+            "passages that match your search, instead of only the search engine's snippet. "
+            "A search takes a few seconds longer and returns more text; with Tavily or "
+            "Firecrawl each page read is billed by the provider. The separate X search tool "
+            "is hidden (Lucius searches X through an ordinary search), and an Automation that "
+            "allows X search allows web search. Off: searches return snippets only, as before. "
+            "More in Help: Web search reads its results (Experimental)."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 10, 31),
+        remove_by=date(2027, 1, 31),
+        kind="release",
+    ),
+)
 
 
 def build_registry(flags: tuple[Flag, ...]) -> dict[str, Flag]:
