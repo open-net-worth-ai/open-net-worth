@@ -324,7 +324,10 @@ export function LuciusHome({
     freshSessionCheckedRef.current = true
     if (!sessionStorage.getItem(FRESH_SESSION_KEY)) {
       sessionStorage.setItem(FRESH_SESSION_KEY, '1')
-      startFresh()
+      startFreshConversation(
+        { conversations, activeId, createConversation },
+        { replaceHistory: true },
+      )
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

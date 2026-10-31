@@ -80,6 +80,7 @@ import { openReportProblem } from './state/reportProblem'
 import { ScreenSnapshotProvider } from './state/screenSnapshot'
 import { AssetNavProvider } from './state/assetNav'
 import { LuciusChatProvider, useLuciusChat } from './state/luciusChat'
+import { ChatHistorySync } from './components/chat/ChatHistorySync'
 import { startFreshConversation } from './utils/freshConversation'
 import { useDataVersion } from './hooks/useDataVersion'
 import { connectDataEvents } from './lucius/dataEventsStream'
@@ -1061,22 +1062,6 @@ function RouterShellInner() {
     else setChatOpen(true)
   }
 
-  // /lucius?conversation=<id> (a past-chat link opened in a new tab, or typed): switch to it, then
-  // drop the param so back and refresh don't keep switching to it. A plain click on the link in
-  // a reply never gets here — ChatLink switches in place.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const conversationParam = (location.search as any)?.conversation
-  useEffect(() => {
-    if (location.pathname !== '/lucius') return
-    if (typeof conversationParam !== 'string' || !conversationParam) return
-    chatSwitchConversationRef.current?.(conversationParam)
-    void navigate({
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      search: ((prev: any) => ({ ...prev, conversation: undefined })) as any,
-      replace: true,
-    })
-  }, [location.pathname, conversationParam, navigate])
-
   useEffect(() => {
     return subscribeDesktopCommands((command) => {
       if (command.type === 'import-files') {
@@ -1398,6 +1383,7 @@ function RouterShellInner() {
                 switchConversationRef={chatSwitchConversationRef}
                 startFreshRef={chatStartFreshRef}
               />
+              <ChatHistorySync />
               <div
                 className={`app-shell${luciusDockVisible ? ' chat-open' : ''}${drawerOpen ? ' drawer-open' : ''}${isMobile ? ' mb-shell' : ''}`}
               >
