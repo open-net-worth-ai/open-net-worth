@@ -680,7 +680,9 @@ function TaskModels({
   const judgePicker = useFlag('permissions_v2') === true
   const taskGroups = judgePicker ? TASK_GROUPS_V2 : TASK_GROUPS
   const taskRows = judgePicker ? TASK_ROWS_V2 : TASK_ROWS
-  const keys = Object.keys(over).filter((k) => over[k])
+  // A judge model pinned while the flag was on is kept, but it is not a task of this screen while
+  // the flag is off: it neither counts nor shows.
+  const keys = Object.keys(over).filter((k) => over[k] && (judgePicker || k !== 'approval'))
   const label = (k: string) => (taskRows.find(([kk]) => kk === k) || [, k])[1] as string
   const resolved = (k: string) => over[k] || defaultModel
   // Only a positively-declared text-only model warns. An unknown model id is UNKNOWN, not

@@ -9,6 +9,9 @@ import type { ComponentProps } from 'react'
 vi.mock('./useFlag', () => ({
   useFlag: () => undefined,
   overrideFlagsForTests: () => () => {},
+  FEATURE_FLAGS_KEY: '/api/feature-flags',
+  // Never settles: the list is still loading.
+  fetchFeatureFlags: () => new Promise(() => {}),
 }))
 vi.mock('../api/client', () => ({ authFetch: vi.fn() }))
 vi.mock('../components/chat/ChangePreview', () => ({
