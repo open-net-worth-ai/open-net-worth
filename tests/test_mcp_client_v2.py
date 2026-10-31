@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import pytest
 
+from backend.ai.permissions import engine
 from tests.test_mcp_client import (  # noqa: F401 — fixtures and helpers shared with the old file
     _allow,
     _cfg,
@@ -39,7 +40,7 @@ def test_manager_offers_every_advertised_tool(manager, monkeypatch):
     )
     mgr.connect_enabled()
 
-    schemas = mgr.external_tool_schemas()
+    schemas = engine().external_schemas(mgr)
     names = {sc["name"] for sc in schemas}
     assert names == {
         "mcp__drive__search_files",
@@ -66,6 +67,6 @@ def test_allowed_tool_carries_no_approval_hint(manager, monkeypatch):
     mgr.connect_enabled()
     _allow("drive", "get_portfolio")
 
-    schema = next(iter(mgr.external_tool_schemas()))
+    schema = next(iter(engine().external_schemas(mgr)))
     assert "Set to Ask" not in schema["description"]
     assert "UNVERIFIED" in schema["description"]  # still fenced as third-party
