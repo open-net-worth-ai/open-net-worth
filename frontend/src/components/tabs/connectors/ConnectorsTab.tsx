@@ -369,10 +369,25 @@ export function ConnectorsTab(): JSX.Element {
     return facts
   })
 
+  // The same soft shadow Browse & add shows: only once the list has slid under the pinned
+  // header, never at rest. Measured, not scrollTop — the page's scroll box is an ancestor.
+  const mastheadRef = useRef<HTMLElement>(null)
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const head = mastheadRef.current
+    const content = head?.nextElementSibling
+    if (!head || !content) return
+    const onScroll = () =>
+      setScrolled(content.getBoundingClientRect().top < head.getBoundingClientRect().bottom - 1)
+    onScroll()
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    return () => document.removeEventListener('scroll', onScroll, { capture: true })
+  }, [])
+
   return (
     <div className="cn-page" data-ctx-region="content" data-ctx-title="Connectors">
       {/* Static chrome — up during the first load too, so only the list is a skeleton. */}
-      <header className="rd-masthead">
+      <header ref={mastheadRef} className={'rd-masthead' + (scrolled ? ' scrolled' : '')}>
         <div className="rd-masthead-head">
           <div className="rd-masthead-title">Connectors</div>
           <div className="rd-masthead-sub">
