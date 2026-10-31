@@ -48,7 +48,8 @@ With no floor set, the warning fires only when cash is projected to go below zer
 
 ## Read the overview
 
-- The headline is **Household cash above floor**, or **Short $X** (whole dollars, and "at
+- The headline is **Cash stays above your $X safety floor** (with no floor set, **Cash stays
+  above zero**), or **Short $X** (whole dollars, and "at
   today's exchange rates" when your book spans more than one currency) — the deepest your cash is
   projected to fall below your floor within the timeframe you picked (12 months to start). The
   line underneath names the month cash first dips below the floor and, if different, the month
@@ -60,7 +61,8 @@ With no floor set, the warning fires only when cash is projected to go below zer
 - The four figures under the headline: **Committed remaining**, **Due in 30 days**, **Recurring
   funding / mo** and **Cash earmarked**. **Due in 30 days** is everything going out from today
   through day 30, auto-debits and goal set-asides included, the same total as the Dashboard's
-  **Next 30 days**. **Recurring funding / mo** counts only the monthly funding sources (budget
+  **Next 30 days**. A to-do that repeats one of your funding sources (same date and amount, such
+  as "loan disbursed") is money coming in, so it is not counted. **Recurring funding / mo** counts only the monthly funding sources (budget
   envelope top-ups) feeding these commitments, so it can read S$0.00 next to a scheduled
   set-aside: a one-off or scheduled set-aside on a goal counts under **Due in 30 days** instead.
 - **Needs your attention** lists payments overdue, payments that look paid, and actions coming

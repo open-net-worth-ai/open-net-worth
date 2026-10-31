@@ -129,7 +129,7 @@ export function Masthead({
           </>
         ) : (
           <>
-            Household cash stays above your floor —{' '}
+            Cash stays above your safety floor —{' '}
             <b className={moneyClass()}>{fBase(monthlySetAside(list))}/mo</b> set aside across your
             synced budget targets.
           </>
@@ -163,7 +163,11 @@ export function Masthead({
                 {atRisk ? <WarnIcon /> : <CheckIcon />}
               </span>
               <span className={moneyClass('c2-sum-hero', atRisk ? 'neg' : 'pos')}>
-                {atRisk ? `Short ${fBaseWhole(shortfall)}` : 'Household cash above floor'}
+                {atRisk
+                  ? `Short ${fBaseWhole(shortfall)}`
+                  : floor > 0
+                    ? `Cash stays above your ${fBaseWhole(floor)} safety floor`
+                    : 'Cash stays above zero'}
               </span>
             </div>
             <span className="c2-sum-sub">
@@ -172,7 +176,7 @@ export function Masthead({
                   Cash dips below{' '}
                   {floor > 0 ? (
                     <>
-                      your <b>{fBase(floor)}</b> floor
+                      your <b>{fBase(floor)}</b> safety floor
                     </>
                   ) : (
                     <b>zero</b>
@@ -188,17 +192,7 @@ export function Masthead({
                   {cov.spans_currencies && ", at today's exchange rates"}.
                 </>
               ) : (
-                <>
-                  Household cushion stays clear of{' '}
-                  {floor > 0 ? (
-                    <>
-                      your <b>{fBase(floor)}</b> floor
-                    </>
-                  ) : (
-                    <b>zero</b>
-                  )}
-                  .
-                </>
+                <>For the next {horizon} months, after every planned payment.</>
               )}
             </span>
           </div>

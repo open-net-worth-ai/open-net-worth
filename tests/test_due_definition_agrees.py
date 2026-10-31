@@ -213,3 +213,66 @@ def test_arrived_funding_is_not_projected_a_second_time(book):
         if delta > 0
     ]
     assert sorted(inflows) == [8_000.0, 12_000.0, 30_000.0, 50_000.0]
+
+
+def test_a_to_do_that_restates_a_funding_source_is_not_money_going_out(book):
+    """A to-do can repeat a funding source as a reminder ("S$60,000 loan disbursed", "set aside
+    S$5,112.50"), same date and amount. It is the same money COMING IN, so it never adds to
+    what is due or overdue; the funding source is the one row that reports it (2026-11-01: a
+    loan payout and a set-aside counted as S$65,112.50 going out on the Commitments masthead)."""
+    CommitmentsStore().create(
+        {
+            "id": "flat",
+            "name": "Flat Purchase",
+            "kind": "purchase",
+            "currency": "SGD",
+            "installments": [_installment("i4", "4th installment", 20, 40_000.0)],
+            "actions": [
+                {
+                    "id": "loan_todo",
+                    "label": "Loan disbursed",
+                    "due_date": _day(3),
+                    "amount": 60_000.0,
+                    "status": "pending",
+                },
+                {
+                    "id": "save_todo",
+                    "label": "Set aside (Nov)",
+                    "due_date": _day(-2),
+                    "amount": 5_112.5,
+                    "status": "pending",
+                },
+                {
+                    "id": "fee",
+                    "label": "Pay legal fee",
+                    "due_date": _day(5),
+                    "amount": 900.0,
+                    "status": "pending",
+                },
+            ],
+            "funding_plan": [
+                {
+                    "id": "loan",
+                    "label": "Bank loan",
+                    "type": "loan",
+                    "amount": 60_000.0,
+                    "currency": "SGD",
+                    "available_date": _day(3),
+                },
+                {
+                    "id": "save",
+                    "label": "Set-aside Nov",
+                    "type": "income",
+                    "amount": 5_112.5,
+                    "currency": "SGD",
+                    "available_date": _day(-2),
+                },
+            ],
+        }
+    )
+    summary = commitments_service.due_summary()
+
+    assert {e["label"] for e in summary["due"]} == {"4th installment", "Pay legal fee"}
+    assert summary["due_total_base"] == 40_900.0
+    assert summary["overdue"] == []
+    assert [e["label"] for e in summary["funding_due"]] == ["Bank loan"]
