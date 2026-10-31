@@ -29,8 +29,9 @@ Brief schema:
                                   the API's `portfolio_impact` field at request time — see
                                   services.asset_detail._compose_portfolio_impact.
     position_verdict : dict|None  the take's action line from the same synthesis —
-                                  {action, why, held, price_at, stop?/trim?/entry?}; shaped by
-                                  services.position_verdict (normalize on write, compose on read).
+                                  {action, why, held, price_at, at, stop?/trim?/entry?}; shaped by
+                                  services.position_verdict (normalize on write, compose on read,
+                                  prior_block for the next take's prompt).
     key_issues_synthesized_at : ISO|None  when key_issues/portfolio_narrative last landed, OR
                                   the last time a COMPLETED synthesis pass checked and found
                                   nothing to show (H1 fix, security-review 2026-08-29 —
