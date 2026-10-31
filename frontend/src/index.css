@@ -76,6 +76,10 @@
      The page still scrolls — we just don't render the bar. Inner .app-shell /
      .lx-side scroll areas keep their own thin styled scrollbars below. */
     scrollbar-width: none; /* Firefox */
+    /* iOS Safari inflates multi-line text blocks in landscape ("text autosizing"),
+     so paragraphs render far larger than the short labels beside them. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
   html::-webkit-scrollbar {
     display: none; /* WebKit (Chrome/Safari/Edge) */
