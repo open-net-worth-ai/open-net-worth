@@ -63,6 +63,11 @@ repos:
         entry: python3 scripts/docs_impact.py
         language: system
         stages: [commit-msg]
+      - id: commit-msg-guard
+        name: "commit-msg-guard (no ticker you hold, instrument id or denylist entry in the message)"
+        entry: .venv/bin/python3 -m backend.scripts.commit_msg_guard
+        language: system
+        stages: [commit-msg]
       - id: docs-lint
         name: "docs-lint (product docs corpus contract — a bad page breaks Lucius's search_docs)"
         entry: .venv/bin/python3 -m backend.scripts.docs_lint

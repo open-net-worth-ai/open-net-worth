@@ -370,6 +370,9 @@ owner's private denylist (kept outside the repo: `~/.config/open-net-worth/priva
 locally, the `PRIVACY_DENYLIST` secret in CI). It runs in the pre-commit hook, as a Claude Code
 hook on every agent `git commit` / `git push` / `gh pr create` (`.claude/settings.json`), and as
 the CI `privacy` job on every PR and push — with `pii_lint` (ID/phone/account shapes) and gitleaks.
+Commit MESSAGES are public too: the commit-msg hook `backend/scripts/commit_msg_guard.py` refuses
+one that names a ticker the owner holds (read live from their own DB), one of their instrument
+ids, or a denylist entry — write examples with ACME and made-up numbers, never the real book.
 Never bypass it (`--no-verify`, editing the allowlists to get green) and never "fix" a finding by
 renaming the value: replace real data with synthetic data. QA evidence (screenshots, statements,
 recordings) goes in gitignored scratch folders, never the tree.
