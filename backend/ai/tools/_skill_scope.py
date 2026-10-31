@@ -46,6 +46,12 @@ _active_bundles: ContextVar[dict[str, dict]] = ContextVar("skill_active_bundles"
 # mean different things here and must never be collapsed with ``or``.
 _offer_scope: ContextVar[Optional[frozenset]] = ContextVar("offer_scope", default=None)
 
+# The tool names a feature flag retires from every offer THIS turn, resolved once when the turn
+# starts (``assistant.run``) so an offer build or a dispatch never re-reads the flag. ``None`` =
+# not resolved: ``catalog.hidden_tools`` then resolves it on the spot. A failed read resolves to
+# the empty set (nothing retired), never to "no restriction" on anything else.
+_turn_retired: ContextVar[Optional[frozenset]] = ContextVar("turn_retired_tools", default=None)
+
 # Is there a user in the loop this turn? ``False`` (the default) = interactive.
 #
 # Deliberately SEPARATE from the offer above. Unattendedness used to be inferred from "a
@@ -128,6 +134,17 @@ def clear_scope() -> None:
     _active_invocation_ids.set(())
     _offer_scope.set(None)
     _active_bundles.set({})
+    _turn_retired.set(None)
+
+
+def set_turn_retired(names) -> None:
+    """Pin the flag-retired tool names for this turn (see ``_turn_retired``)."""
+    _turn_retired.set(frozenset(names))
+
+
+def turn_retired() -> Optional[frozenset]:
+    """The names pinned for this turn, or None when none were."""
+    return _turn_retired.get()
 
 
 def clear_inline_activation() -> None:
@@ -147,6 +164,7 @@ class ScopeSnapshot(NamedTuple):
     active_bundles: dict[str, dict]
     offer_scope: Optional[frozenset]
     active_invocation_ids: tuple[str, ...]
+    turn_retired: Optional[frozenset] = None
 
 
 def snapshot_scope() -> ScopeSnapshot:
@@ -166,6 +184,7 @@ def snapshot_scope() -> ScopeSnapshot:
         active_bundles=dict(_active_bundles.get()),
         offer_scope=_offer_scope.get(),
         active_invocation_ids=_active_invocation_ids.get(),
+        turn_retired=_turn_retired.get(),
     )
 
 
@@ -177,6 +196,7 @@ def restore_scope(snapshot: ScopeSnapshot) -> None:
     _active_bundles.set(dict(snapshot.active_bundles))
     _offer_scope.set(snapshot.offer_scope)
     _active_invocation_ids.set(snapshot.active_invocation_ids)
+    _turn_retired.set(snapshot.turn_retired)
 
 
 def set_offer_scope(tool_names) -> None:

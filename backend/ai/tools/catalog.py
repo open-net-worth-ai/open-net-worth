@@ -33,10 +33,17 @@ _CATALOG_HIDDEN: frozenset[str] = frozenset()
 
 def hidden_tools() -> frozenset[str]:
     """Every tool kept out of what the model is offered: the permanent hides above plus any tool a
-    feature flag has retired (``ai/search/switch.retired_tools``, empty while its flag is off)."""
-    from backend.ai.search.switch import retired_tools
+    feature flag has retired (``ai/search/switch.retired_tools``, empty while its flag is off).
+    The flag is read once per turn (``assistant.run`` pins it in ``_skill_scope``); a caller
+    outside a turn resolves it here."""
+    from backend.ai.tools._skill_scope import turn_retired
 
-    return _CATALOG_HIDDEN | retired_tools()
+    retired = turn_retired()
+    if retired is None:
+        from backend.ai.search.switch import retired_tools
+
+        retired = retired_tools()
+    return _CATALOG_HIDDEN | retired
 
 
 # Summaries survive ONLY on the external-MCP path (see the module docstring): an

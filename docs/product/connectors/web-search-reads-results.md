@@ -26,12 +26,12 @@ results** at the same moment and gives Lucius the passages that best match what 
 - A search takes a second or two longer, and never more than about five.
 - A page that is slow, blocked or has nothing relevant is skipped: that result keeps its snippet
   and the search carries on.
-- Lucius can still read a whole page when an excerpt isn't enough — see
-  [Reading a page](web-search.md#reading-a-page).
+- When an excerpt isn't enough, Lucius can read more of a page — up to its first 15,000
+  characters — see [Reading a page](web-search.md#reading-a-page).
 - With **Tavily** or **Firecrawl**, each page read is billed by the provider like any other page
   read (a few tenths of a cent each), on top of the search, and shows in **Settings → Cost &
   Performance**. The other providers download the pages from the machine running Open Net Worth at no extra
-  charge, so those sites see its address.
+  charge, so those sites see its IP address and a plain `OpenNetWorth/1.0` User-Agent.
 - The same rules apply to the pages as to any page Lucius reads: only public web pages, never an
   address on your private network, and page text is treated as information, never as instructions.
 

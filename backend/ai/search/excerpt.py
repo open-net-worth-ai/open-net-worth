@@ -20,6 +20,8 @@ _PASSAGE_MAX_CHARS = 700
 _PASSAGE_MIN_WORDS = 5
 _MIN_PROSE_RATIO = 0.6
 _MAX_STRUCTURAL_RATIO = 0.08
+# A model- or user-written query can be a paragraph; scoring cost grows with terms x passages.
+MAX_QUERY_TERMS = 32
 _STRUCTURAL_CHARS = frozenset("<>{}[]();=/|\\")
 _ELLIPSIS = " […] "
 
@@ -43,10 +45,10 @@ def _stem(word: str) -> str:
 
 def query_terms(query: str) -> list[str]:
     """The distinct, ordered, stemmed content words of ``query`` (stopwords dropped unless the
-    query is nothing but stopwords)."""
+    query is nothing but stopwords), the first ``MAX_QUERY_TERMS`` of them."""
     words = [w for w in _WORD_RE.findall(query.lower()) if len(w) > 1 or w.isdigit()]
     kept = [w for w in words if w not in _STOPWORDS] or words
-    return list(dict.fromkeys(_stem(w) for w in kept))
+    return list(dict.fromkeys(_stem(w) for w in kept))[:MAX_QUERY_TERMS]
 
 
 def _windows(block: str) -> list[str]:

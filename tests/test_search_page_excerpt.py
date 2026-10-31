@@ -115,3 +115,9 @@ def test_identical_boilerplate_paragraphs_count_once():
         _page(repeated, repeated, repeated, _RELEVANT), "Nvidia earnings guidance"
     )
     assert excerpt.count("disclaimer") == 1
+
+
+def test_query_terms_are_capped():
+    words = [f"term{i}" for i in range(100)]
+    assert query_terms(" ".join(words)) == words[:32]
+    assert build_excerpt(_RELEVANT, " ".join(words) + " Nvidia") == ""  # Nvidia fell past the cap

@@ -5,7 +5,7 @@ category: connectors
 order: 50
 audience: [user]
 status: stable
-related: [lucius/permissions, connectors/external-mcp, features/intel]
+related: [lucius/permissions, connectors/external-mcp, features/intel, connectors/web-search-reads-results]
 keywords: [web search, duckduckgo, tavily, perplexity, serper, google, programmable search, firecrawl, fetch page, api key, default provider, setup]
 ---
 
@@ -127,3 +127,5 @@ search the entire web.
 - [Permissions](../lucius/permissions.md) — setting a level per provider
 - [Intel](../features/intel.md) — the news scans that also use web search
 - [External MCP servers](external-mcp.md) — add other tools, such as a full browser
+- [Web search reads its results (Experimental)](web-search-reads-results.md) — an optional switch that
+  reads the pages behind the top results
