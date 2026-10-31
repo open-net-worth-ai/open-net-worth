@@ -147,9 +147,9 @@ One line each — full reasoning and the scar behind each is in
   `2026-10-14-today-is-the-regular-session-on-every-surface`, whose "today" decision the owner
   reverted: the price shown follows the pre/post print, ADR `2026-09-01-extended-price-consistency`).
 - Advice about a ticker with an investment thesis is judged against it by ONE authority
-  (`services/thesis_judgment`: stance, citation, `THESIS_RULE`) and held to it by ONE guard
-  (`services/thesis_guard`): sell advice survives only past the stop or with a named "thesis
-  broken:"; no thesis ⇒ unchanged (ADR `2026-10-31-advice-on-a-ticker-is-judged-against-its-thesis`).
+  (`services/thesis_judgment`: stance, citation, `THESIS_RULE`) — the model is told; its words
+  are never rewritten afterwards, and the citation beside them is computed from the price; no
+  thesis ⇒ unchanged (ADR `2026-10-31-advice-on-a-ticker-is-judged-against-its-thesis` + amendment).
 
 **Cross-screen facts**
 - Overdue and due-in-30-days are ONE function (`commitments.due_summary`), the runway is ONE

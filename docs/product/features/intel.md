@@ -237,6 +237,10 @@ today's price sits against your stop, buy zone, fair value and trim level.
 - **For a stock you watch, entering your buy zone is the signal.** Below the floor of the zone,
   Lucius asks you to check what would break the thesis before buying.
 
+Lucius's advice is shown in its own words. The thesis line under an alert (where the price sits
+against your levels) is worked out from the price itself, so it's right even when you disagree
+with the advice above it.
+
 A stock with no thesis is judged the way it always was. Stop and trim levels don't fire
 alerts of their own; set a price alert if you want a push when the price gets there.
 

@@ -28,7 +28,7 @@ from backend.db.instrument_store import InstrumentStore
 from backend.db.intel_stories_store import IntelStoriesStore
 from backend.monitoring.collect import gather_evidence, gather_rss
 from backend.services import ledger as ledger_service
-from backend.services import run_ledger, thesis_guard, thesis_judgment
+from backend.services import run_ledger, thesis_judgment
 from backend.services.countries import country_name
 from backend.services.evidence import prune_evidence
 from backend.services.feeds import resolve_intel_feeds, resolve_opportunity_feeds
@@ -631,7 +631,6 @@ def _persist_story(
         existing = _same_subject_or_none(store.find_story_by_label(s["label"]), s)
 
     story_type = s.get("type") or default_type or "asset"
-    _hold_to_thesis(s)
     # For macro stories, attach the deterministic computed exposure (never from the LLM).
     affected = computed_affected_holdings if story_type == "macro" else None
 
@@ -679,17 +678,6 @@ def _persist_story(
         }
         apply_story_change(new_story, new_entry=new_entry)
         logger.info("intel_agent: created story — %s [%s]", s["label"], s["status"])
-
-
-def _hold_to_thesis(s: dict) -> None:
-    """A story about a ticker with a thesis gives the thesis's advice, cited — an unsupported
-    "sell" in its actions or summary is replaced (``services.thesis_judgment``). No thesis: no-op."""
-    if not s.get("ticker"):
-        return
-    j = thesis_judgment.for_ticker(s["ticker"], None)
-    if j:
-        s["action_items"] = thesis_guard.guard_actions(s.get("action_items"), j)
-        s["summary"] = thesis_guard.guard_text(s.get("summary") or "", j, cite=False)
 
 
 def _archive_stale_stories(store: IntelStoriesStore, days: int = STALE_STORY_DAYS) -> int:

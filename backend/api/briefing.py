@@ -31,7 +31,7 @@ from backend.services import briefing_context as facts
 from backend.services import investments_book as investments_book_service
 from backend.services import ledger as ledger_service
 from backend.services import portfolio_rows as portfolio_rows_service
-from backend.services import thesis_guard, thesis_judgment
+from backend.services import thesis_judgment
 from backend.services.fx_cache import load_fx_cache
 
 router = APIRouter()
@@ -585,8 +585,6 @@ async def _generate_briefing(total_nw: float) -> dict:
     # synchronously, which would otherwise hold the whole event loop for the request.
     book = await asyncio.to_thread(_invested_book, base_ccy)
     context = await asyncio.to_thread(_build_context, total_nw, book)
-    # Read again (cheap: the theses table) to hold the reply's advice to the same theses.
-    theses = await asyncio.to_thread(facts.thesis_judgments, book)
     prompt = context
 
     prefs = profile.get("briefing_preferences") or {}
@@ -648,11 +646,9 @@ async def _generate_briefing(total_nw: float) -> dict:
         }
 
     if result is not None:
-        judgments, names = theses
         return {
-            # Advice about a ticker with a thesis is held to it (an unsupported "sell" replaced).
-            "note": thesis_guard.guard_book_text(result.note, judgments, names),
-            "actions": thesis_guard.guard_book_actions(result.actions, judgments, names),
+            "note": result.note,
+            "actions": result.actions,
             "chat_suggestion": result.chat_suggestion,
         }
     # No usable structured briefing even after a reask (the seam already logged the reason) —
