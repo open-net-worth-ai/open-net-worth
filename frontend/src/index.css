@@ -13580,7 +13580,7 @@ body.hide-amounts .money * {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: var(--space-2);
+    margin-top: var(--space-3);
   }
 
   .asd-verdict-action {
@@ -13595,7 +13595,7 @@ body.hide-amounts .money * {
   }
 
   .asd-verdict-why {
-    margin-top: calc(-1 * var(--space-1));
+    margin-top: var(--space-2);
     font-size: var(--text-sm);
     line-height: 1.55;
     color: var(--muted);
@@ -13622,6 +13622,7 @@ body.hide-amounts .money * {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
+    margin-top: var(--space-5);
   }
 
   /* A suggestion: a rounded pill with a soft lift, in Lucius's tint — tapping it hands the
