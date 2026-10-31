@@ -1,7 +1,7 @@
 // Pure helpers behind the connector "Accounts" list: the row shape the server sends, how rows
 // group by their suggested account type, and what "Add" seeds the account form with.
-import { LIABILITY_TYPES, TYPE_LABELS, TYPE_ORDER } from '../accounts/categories'
-import type { AccountPrefill, AccountType } from '../accounts/types'
+import { LIABILITY_TYPES, TYPE_LABELS, TYPE_ORDER, type AccountType } from '../accounts/categories'
+import type { AccountPrefill } from '../accounts/types'
 
 export interface ProviderAccountRow {
   provider_account_id: string

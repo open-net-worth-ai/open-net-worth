@@ -557,7 +557,9 @@ describe('Sort: Popular', () => {
     const rest = rows.slice(1)
     const rank = (r: (typeof rows)[number]) => (r.installed ? 0 : r.popular ? 1 : 2)
     for (let i = 1; i < rest.length; i++) {
-      const [a, b] = [rest[i - 1], rest[i]]
+      const a = rest[i - 1]
+      const b = rest[i]
+      if (!a || !b) throw new Error(`no directory row at ${i}`)
       expect(rank(a) < rank(b) || (rank(a) === rank(b) && a.name.localeCompare(b.name) <= 0)).toBe(
         true,
       )

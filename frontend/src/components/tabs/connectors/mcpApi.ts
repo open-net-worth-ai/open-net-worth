@@ -99,10 +99,12 @@ const PEM_BLOCK = /^-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----$/
 export function normalizePem(value: string): string {
   const unquoted = /^"[\s\S]*"$/.test(value) ? value.slice(1, -1) : value
   const m = PEM_BLOCK.exec(unquoted.replace(/\\n/g, '\n').trim())
-  if (!m) return value
-  const body = m[2].replace(/\s+/g, '')
+  const label = m?.[1]
+  const rawBody = m?.[2]
+  if (label === undefined || rawBody === undefined) return value
+  const body = rawBody.replace(/\s+/g, '')
   const lines = body.match(/.{1,64}/g) ?? []
-  return [`-----BEGIN ${m[1]}-----`, ...lines, `-----END ${m[1]}-----`, ''].join('\n')
+  return [`-----BEGIN ${label}-----`, ...lines, `-----END ${label}-----`, ''].join('\n')
 }
 
 /**
@@ -131,7 +133,7 @@ export function parseEnv(raw: string): Record<string, string> {
       pemKey = key
     }
   }
-  for (const key of Object.keys(out)) out[key] = normalizePem(out[key])
+  for (const [key, value] of Object.entries(out)) out[key] = normalizePem(value)
   return out
 }
 

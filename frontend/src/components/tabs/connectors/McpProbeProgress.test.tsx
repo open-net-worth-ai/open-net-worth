@@ -60,6 +60,8 @@ function connectingFlow(
     toolGroups: [],
     meta: { publisher: null, verification: 'unknown', curated: false, endpoint: '' },
     error: '',
+    needsAuth: null,
+    switchAuth: () => {},
     pasteOpen: false,
     setPasteOpen: () => {},
     perms: {},
@@ -79,6 +81,7 @@ function connectingFlow(
       clientId: '',
       setClientId: () => {},
       summary: null,
+      authorizeUrl: null,
       signIn: () => {},
       cancel: () => {},
     },
@@ -86,6 +89,8 @@ function connectingFlow(
     runConnect: () => {},
     back: () => {},
     finish: () => {},
+    saveDormant: () => {},
+    canSave: false,
     discardAbandonedOAuthServer: () => {},
   }
 }

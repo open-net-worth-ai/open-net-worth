@@ -24,8 +24,8 @@ function topicOf(where: string): string {
  *  A bare count ("Updated 1") read as nothing (owner, 2026-10-31). */
 function headline(changes: InstructChange[]): string {
   if (!changes.length) return 'No changes were made.'
-  if (changes.length === 1) {
-    const [c] = changes
+  const [c] = changes
+  if (changes.length === 1 && c) {
     return `${KIND[c.change]} a memory${c.where ? ` in ${topicOf(c.where)}` : ''}`
   }
   // each line below says which kind, so the count is all the heading needs
