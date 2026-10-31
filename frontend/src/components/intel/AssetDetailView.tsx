@@ -10,7 +10,7 @@ import { fetchPositionIncome } from '../../api/portfolio'
 import type { IncomeSummary } from '../../types/portfolio'
 import { keyIssuesPassActive } from '../../types/assetDetail'
 import { Button, EmptyState, ErrorState, Panel, Text } from '../ui'
-import { Sunrise, Sunset, RotateCcw, TrendingUp, TrendingDown } from '../../ui/icons'
+import { Info, Sunrise, Sunset, RotateCcw, TrendingUp, TrendingDown } from '../../ui/icons'
 // The underline tab bar already used on the Connectors page (`.rd-tabs`/`.rd-tab`) — reused
 // here rather than SegmentedControl's pill style. See the `.asd-subtabs` CSS below for why the
 // styling is duplicated (scoped to `.asd-subtabs`) instead of importing connectors.css.
@@ -1049,7 +1049,10 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                               ticker={asset.ticker}
                             />
                           )}
-                          <p className="asd-pi-disclaimer">{TAKE_NOT_ADVICE}</p>
+                          <p className="asd-pi-disclaimer">
+                            <Info size={12} aria-hidden="true" />
+                            <span>{TAKE_NOT_ADVICE}</span>
+                          </p>
                         </>
                       )}
                     </div>

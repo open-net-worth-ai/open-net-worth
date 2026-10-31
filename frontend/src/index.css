@@ -13660,10 +13660,18 @@ body.hide-amounts .money * {
   }
 
   .asd-pi-disclaimer {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-1);
     margin-top: var(--space-2);
     font-size: var(--text-2xs);
     line-height: 1.5;
     color: var(--muted);
+  }
+
+  .asd-pi-disclaimer svg {
+    flex: none;
+    margin-top: 2px;
   }
 
   /* Stands in for .asd-pi-body while generating (owner ask 2026-08-30) — shimmering line
