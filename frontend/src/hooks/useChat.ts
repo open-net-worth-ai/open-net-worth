@@ -597,7 +597,7 @@ export function useChat(
   // the tab" would lose the continuation — the part that actually applies the approved
   // action's follow-through.
   const resolvePendingToolUse = useCallback(
-    async (toolUseId: string, decision: 'approve' | 'deny') => {
+    async (toolUseId: string, decision: 'approve' | 'deny', options?: { always?: boolean }) => {
       // You can only approve a card you are looking at — captured once, same as sendMessage.
       const ownerId = conversationId
       // Re-enter the streaming state on the SAME assistant message the card lives on. The
@@ -619,11 +619,15 @@ export function useChat(
       if (cardMessage) openAssistant(ownerId, cardMessage.id)
       updateLastAssistant(ownerId, (m) => {
         const status: ProposedChange['status'] = decision === 'approve' ? 'confirmed' : 'dismissed'
+        const resolution: ProposedChange['resolution'] =
+          decision === 'deny' ? 'denied' : options?.always ? 'always_allowed' : 'approved'
         // `refused: undefined` clears any previous refusal, so a re-tap of a card the
         // server refused once paints its tick again (and can be un-painted again if it
         // refuses again).
         const answer = (c: ProposedChange): ProposedChange =>
-          c.id === toolUseId ? { ...c, status, refused: undefined, undelivered: undefined } : c
+          c.id === toolUseId
+            ? { ...c, status, resolution, refused: undefined, undelivered: undefined }
+            : c
         const proposedChanges = m.proposedChanges?.map(answer)
         const blocks = m.blocks?.map((block) =>
           block.type === 'change' && block.change.id === toolUseId
@@ -644,7 +648,11 @@ export function useChat(
         const res = await authFetch(`/api/chat/${ownerId}/resolve`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tool_use_id: toolUseId, decision }),
+          body: JSON.stringify({
+            tool_use_id: toolUseId,
+            decision,
+            ...(options?.always ? { always: true } : {}),
+          }),
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         await res.json() // {session_id, turn_id, accepted} — the attach effect takes it from here

@@ -133,6 +133,9 @@ export function failureOf(item: ToolItem): { failed: boolean; message: string } 
   }
   if (!parsed || typeof parsed !== 'object') return plainTextFailure(raw)
   const obj = parsed as Record<string, unknown>
+  // The owner pressed Deny: the call did not run, but nothing FAILED — the card already says
+  // "Denied", and a "1 failed" beside it would say the opposite of what happened.
+  if (obj.declined_by === 'user') return { failed: false, message: '' }
   const err = obj.error
   if (typeof err === 'string' && err.trim()) return { failed: true, message: err.trim() }
   if (err !== undefined && err !== null) return { failed: true, message: 'The call failed.' }
