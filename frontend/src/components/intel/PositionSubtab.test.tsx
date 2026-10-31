@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, cleanup, waitFor } from '@testing-library/react'
+import { render, cleanup, waitFor, within } from '@testing-library/react'
 import { fDate } from '../../utils/format'
 import { PositionSubtab } from './PositionSubtab'
 import type { AssetPosition } from '../../types/assetDetail'
@@ -229,9 +229,11 @@ const INCOME_SUMMARY = {
 
 describe('PositionSubtab', () => {
   it('renders the 6-cell summary strip from the position', () => {
-    const { getByText } = render(
+    const { container } = render(
       <PositionSubtab position={POSITION} symbol="AAPL" instrumentId="inst-1" income={null} />,
     )
+    // Scoped: Held at repeats Avg cost / Market value as column headers and 120 as a row.
+    const { getByText } = within(container.querySelector<HTMLElement>('.asd-pos-summary')!)
     for (const label of [
       'Quantity',
       'Avg cost',
@@ -284,11 +286,13 @@ describe('PositionSubtab', () => {
     expect(getByText('Realized P&L')).toBeTruthy()
   })
 
-  it('does not render the per-account table for a single-account holding', () => {
-    const { queryByText } = render(
+  it('names the one account in Held at for a single-account holding', () => {
+    const { getByText } = render(
       <PositionSubtab position={POSITION} symbol="AAPL" instrumentId="inst-1" income={null} />,
     )
-    expect(queryByText('Held at')).toBeNull()
+    expect(getByText('Held at')).toBeTruthy()
+    expect(getByText('Brokerage')).toBeTruthy()
+    expect(getByText('$58,704.00')).toBeTruthy() // 120 × 489.2 total cost basis
   })
 
   it('does not render the Unvested cell when the position has no locked exposure', () => {

@@ -173,7 +173,7 @@ export function PositionSubtab({
         </div>
       </div>
 
-      {position.per_account.length > 1 && (
+      {position.per_account.length > 0 && (
         <Panel className="asd-pos-accounts" title="Held at">
           <div style={{ overflowX: 'auto' }}>
             <table className="lots-table lots-table--accts">
