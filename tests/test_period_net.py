@@ -38,6 +38,10 @@ def env(monkeypatch, db_isolated):
     import backend.api.ledger as api_ledger_mod
 
     monkeypatch.setattr(api_ledger_mod, "load_fx_cache", lambda: dict(_RATES))
+    # create_transaction stamps base_amount through core.fx's loader, not the router's.
+    from backend.core import fx
+
+    monkeypatch.setattr(fx, "_fx_rates_loader", lambda: dict(_RATES))
 
     # The account under test is in a NON-base currency, so period_net_base actually
     # exercises the FX conversion (not just an identity pass-through).
