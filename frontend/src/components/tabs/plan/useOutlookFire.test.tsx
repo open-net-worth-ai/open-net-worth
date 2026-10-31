@@ -7,7 +7,7 @@
 // @vitest-environment jsdom
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { clearQueryCache } from '../../../state/queryCache'
+import { clearQueryCache, fetchCachedQuery } from '../../../state/queryCache'
 import { useOutlookFire } from './useOutlookFire'
 
 const authFetch = vi.fn<typeof fetch>()
@@ -137,6 +137,39 @@ describe('useOutlookFire', () => {
     )
     act(() => result.current.retry())
     await waitFor(() => expect(result.current.configVersion).toBe(2))
+    expect(result.current.config.monthlyRetirementSpend).toBe(25_000_000)
+  })
+  it('a version refresh never joins a fetch that left before the write', async () => {
+    // A write elsewhere started a refetch with the OLD row; a profile edit then lands and
+    // advances fireVersion while that request is still out. Joining it would hand back the
+    // pre-edit row, which the Outlook then treats as "nothing changed" and drops the edit.
+    const url = '/api/fire?current_nw=500000'
+    authFetch.mockImplementation(() => response(fireRow(500000)))
+    const { result, rerender } = renderHook(
+      ({ fireVersion }) => useOutlookFire(500000, fireVersion, false),
+      { initialProps: { fireVersion: 1 } },
+    )
+    await waitFor(() => expect(result.current.configVersion).toBe(1))
+
+    let finishStale!: (value: Response) => void
+    authFetch.mockImplementationOnce(
+      () =>
+        new Promise<Response>((resolve) => {
+          finishStale = resolve
+        }),
+    )
+    const stale = fetchCachedQuery(url, async () => (await authFetch(url)).json())
+    authFetch.mockImplementation(() =>
+      response({ ...fireRow(500000), monthly_retirement_spending: 25_000_000 }),
+    )
+    rerender({ fireVersion: 2 })
+    await waitFor(() => expect(result.current.configVersion).toBe(2))
+    expect(result.current.config.monthlyRetirementSpend).toBe(25_000_000)
+
+    await act(async () => {
+      finishStale(new Response(JSON.stringify(fireRow(500000)), { status: 200 }))
+      await stale
+    })
     expect(result.current.config.monthlyRetirementSpend).toBe(25_000_000)
   })
 })

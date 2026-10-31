@@ -2,10 +2,55 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
+from fastapi import FastAPI
 
-from backend.api.data_change_transport import DataChangeMiddleware
+from backend.api import plan_outlook
+from backend.api.data_change_transport import DataChangeMiddleware, compute_only
 from backend.core import data_events
+
+
+class _CopyScope:
+    """Stands in for DemoVisitorMiddleware, which passes a COPY of the scope inward."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        await self.app({**scope}, receive, send)
+
+
+@pytest.mark.asyncio
+async def test_a_compute_only_post_is_not_announced_but_a_real_write_is(monkeypatch):
+    # Outlook simulations compute only; announcing them refetched every screen per drag move.
+    changed = []
+    monkeypatch.setattr(data_events, "publish", changed.append)
+    app = FastAPI()
+
+    @app.post("/api/plan/outlook")
+    @compute_only
+    def simulate():
+        return {"ok": True}
+
+    @app.put("/api/plan/baseline")
+    def save():
+        return {"ok": True}
+
+    app.add_middleware(_CopyScope)
+    app.add_middleware(DataChangeMiddleware)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://t"
+    ) as client:
+        assert (await client.post("/api/plan/outlook")).status_code == 200
+        assert changed == []
+        assert (await client.put("/api/plan/baseline")).status_code == 200
+        assert changed == [["*"]]
+
+
+def test_the_outlook_simulations_are_marked_compute_only():
+    for endpoint in (plan_outlook.post_outlook, plan_outlook.post_insights):
+        assert getattr(endpoint, "__onw_compute_only__", False), endpoint.__name__
 
 
 @pytest.mark.asyncio
@@ -23,10 +68,6 @@ from backend.core import data_events
         ("HEAD", "/api/accounts", 200, False),
         ("OPTIONS", "/api/accounts", 200, False),
         ("POST", "/external", 200, False),
-        # Outlook simulations compute only; announcing them refetched every screen per drag move
-        ("POST", "/api/plan/outlook", 200, False),
-        ("POST", "/api/plan/outlook/insights", 200, False),
-        ("PUT", "/api/plan/baseline", 200, True),
     ],
 )
 async def test_only_successful_api_write_notifies_after_final_body(
