@@ -63,9 +63,10 @@ balance, your net worth, the budget and reports, and Lucius still sees it.
 - **Several:** tick their rows, then **More** › **Hide from Register**.
 
 To see hidden transactions again, open **Display** above the register and tick **Show hidden
-transactions**. They show dimmed, with a **Hidden** tag. **Show hidden transactions** turns itself
-off when you leave the Accounts tab, so a transaction you hid never stays out of sight because of
-a setting you forgot about. **Reset** in the same menu brings back every column and turns it off.
+transactions**. They look like any other row; open one and its drawer offers **Unhide**. **Show
+hidden transactions** turns itself off when you leave the Accounts tab, so a transaction you hid
+never stays out of sight because of a setting you forgot about. **Reset** in the same menu brings
+back every column and turns it off.
 
 To list only the hidden ones — the way to find them on a phone, where there is no **Display**
 menu — type `status:hidden` in the search box, or pick **Hidden** from its status suggestions.

@@ -7521,19 +7521,6 @@ select.acct-addin {
 .acct-tr.needs-review {
   box-shadow: inset 2px 0 0 var(--warn, #e0a032);
 }
-/* Only visible while "Show hidden transactions" is on — dimmed so it reads as set aside. */
-.acct-tr.is-hidden {
-  opacity: 0.55;
-}
-.acct-hidden-pill {
-  font-size: 9.5px;
-  font-weight: 600;
-  color: var(--muted);
-  background: color-mix(in srgb, var(--muted) 16%, transparent);
-  border-radius: 999px;
-  padding: 2px 7px;
-  white-space: nowrap;
-}
 /* ── transaction detail drawer ── */
 /* Clear the resizable Lucius chat panel (same chat-clearance as .modal-overlay): the scrim +
    right-docked drawer end at the panel's left edge, so the drawer never hides behind it.
