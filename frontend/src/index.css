@@ -13678,6 +13678,18 @@ body.hide-amounts .money * {
     gap: var(--space-2);
   }
 
+  /* "Build with Lucius" speaks in Lucius's own colour. */
+  .ui-btn--ghost.asd-thesis-lucius {
+    color: var(--lucius);
+  }
+
+  @media (hover: hover) {
+    .ui-btn--ghost.asd-thesis-lucius:hover:not(:disabled) {
+      color: var(--lucius);
+      background: color-mix(in srgb, var(--lucius) 12%, transparent);
+    }
+  }
+
   /* Stands in for .asd-pi-body while generating (owner ask 2026-08-30) — shimmering line
      placeholders, never the bare numbers-only lead line styled as if it were a complete take.
      Reuses the shared Skeleton primitive; widths vary to read as prose lines, not a bar chart. */

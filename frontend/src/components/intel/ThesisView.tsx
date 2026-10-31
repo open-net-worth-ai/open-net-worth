@@ -119,6 +119,7 @@ export function ThesisStart({
         <Button
           variant="ghost"
           size="sm"
+          className="asd-thesis-lucius"
           iconLeft={<Sparkles size={13} aria-hidden="true" />}
           onClick={buildWithLucius}
         >
