@@ -143,6 +143,14 @@ test('the dialog page embeds the draft as data, shows one primary button and hol
   assert.match(html, new RegExp(SUPPORT_EMAIL));
 });
 
+test('the dialog page says why it asks for an email, and offers Discord without naming any URL', async () => {
+  const html = reportPage(await buildDraft(environment(), {}), 'dark');
+  assert.match(html, /tell you when the fix is out/);
+  assert.match(html, /aria-describedby="email-hint"/);
+  assert.match(html, /<button id="discord"[^>]*>Join us on Discord<\/button>/);
+  assert.doesNotMatch(html, /discord\.gg/, 'the main process opens the one community link it knows');
+});
+
 // Runs the page's own script over stand-in elements for exactly the ids the markup has: a missing
 // optional field (the Error box, absent from a sidebar report) once threw before Cancel, Esc and the
 // close button were wired, leaving a sheet nobody could close.

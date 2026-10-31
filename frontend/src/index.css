@@ -19706,6 +19706,11 @@ body.hide-amounts .mf-lbl-amt {
   margin: 0;
   overflow-wrap: anywhere;
 }
+.report-problem__community {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
 .report-problem__exact summary {
   cursor: pointer;
   color: var(--muted);

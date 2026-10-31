@@ -4,6 +4,7 @@
 // identically whichever way it was made.
 
 export const SUPPORT_EMAIL = 'support@opennetworth.ai'
+export const COMMUNITY_URL = 'https://discord.gg/eCGBd4zg3B'
 
 export const REPORT_LIMITS = {
   description: 5000,

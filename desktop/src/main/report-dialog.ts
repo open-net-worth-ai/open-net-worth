@@ -1,7 +1,7 @@
 import { BrowserWindow, clipboard, ipcMain, nativeTheme, session, shell, type IpcMainInvokeEvent } from 'electron';
 import { join } from 'node:path';
 import { buildDraft, emailHref, reportText, sendReport, validateReport, type ReportEnvironment, type ReportTrigger } from './problem-report';
-import { reportsEndpoint } from './report-config';
+import { COMMUNITY_URL, reportsEndpoint } from './report-config';
 import { reportPage } from './report-page';
 
 interface ReportActions {
@@ -35,6 +35,8 @@ export class ReportDialog {
       clipboard.writeText(reportText(report));
       await shell.openExternal(emailHref(report));
     });
+    // The page names no URL: main opens the one community link it knows.
+    ipcMain.handle('desktop-report:community', async event => { this.authorize(event); await shell.openExternal(COMMUNITY_URL); });
     ipcMain.handle('desktop-report:close', event => { this.authorize(event); if (!this.sending) this.window?.close(); });
   }
 
