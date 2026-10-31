@@ -3323,8 +3323,14 @@ async def _process_linked_pair(
     )
 
     if brief_instrument_id:
+        # Stamped when the take is WRITTEN, not when its evidence was read: "Analysis updated
+        # Xs ago" on the page means the take the user is now looking at, not the model call's start.
         _write_asset_brief_synthesis(
-            brief_instrument_id, parsed, evidence, read_time, held=bool(held_instrument_id)
+            brief_instrument_id,
+            parsed,
+            evidence,
+            datetime.now(timezone.utc).isoformat(),
+            held=bool(held_instrument_id),
         )
 
     # A linked pair is, BY CONSTRUCTION, about the same instrument (that's the definition of
@@ -3632,8 +3638,14 @@ async def _process_row(
     )
 
     if brief_instrument_id:
+        # Stamped when the take is WRITTEN, not when its evidence was read: "Analysis updated
+        # Xs ago" on the page means the take the user is now looking at, not the model call's start.
         _write_asset_brief_synthesis(
-            brief_instrument_id, parsed, evidence, read_time, held=bool(held_instrument_id)
+            brief_instrument_id,
+            parsed,
+            evidence,
+            datetime.now(timezone.utc).isoformat(),
+            held=bool(held_instrument_id),
         )
 
     # Owner override of RFC intel-signals-data-model §4's "NO-GO" —
