@@ -272,6 +272,10 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
   const status = statusOf(c)
   // Matched by ENDPOINT — the thing being trusted, and the one part a user can't rename.
   const provenance = mcp ? catalogProvenanceFor(endpointOf(c)) : null
+  // A server that describes itself (handshake `serverInfo.description`) is believed first; the
+  // directory's text beats the rest — the instructions' first sentence is guidance for an AI,
+  // and the generic line says nothing.
+  const selfDescribed = mcp ? str(cfg, 'server_info_description') : ''
   // id-before-kind: web-search's six providers share one `kind` ("web_search") but
   // each has its own real publisher, so the specific id wins when it has its own entry —
   // same lookup order `connector_catalog.copy_for` uses backend-side for description/tools.
@@ -301,8 +305,10 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     // An MCP server is configured the moment it is in the store — its endpoint WAS the
     // setup. Everything else earns it by holding credentials.
     configured: mcp || c.status !== 'not_configured',
-    sub: c.short_description || endpointOf(c) || '',
-    desc: c.long_description || c.short_description || '',
+    sub: selfDescribed || provenance?.sub || c.short_description || endpointOf(c) || '',
+    desc: selfDescribed
+      ? ''
+      : provenance?.desc || c.long_description || (mcp ? '' : c.short_description) || '',
     version: mcp ? str(cfg, 'server_info_version') || undefined : undefined,
     instructions: mcp ? str(cfg, 'server_info_instructions') || undefined : undefined,
     developer: provenance?.publisher ?? developer?.name,

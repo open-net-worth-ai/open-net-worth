@@ -31,7 +31,7 @@ describe('catalogProvenanceFor — matched by endpoint, never by name', () => {
   it('attributes a server launched with the catalog command', () => {
     const preset = MCP_INSTALL_PRESETS['mcp-playwright']!
     const endpoint = [preset.command, preset.args].filter(Boolean).join(' ')
-    expect(catalogProvenanceFor(endpoint)).toEqual({
+    expect(catalogProvenanceFor(endpoint)).toMatchObject({
       publisher: 'Microsoft',
       verification: 'verified',
       repoUrl: 'https://github.com/microsoft/playwright-mcp',

@@ -105,6 +105,10 @@ export interface CatalogProvenance {
   /** What the entry is FOR. Same inheritance, same reason — an installed server should not
    *  lose the topical tags its own catalog card carries. */
   categories: ConnectorCategory[]
+  /** The entry's subtitle and description. Same inheritance: a listed server's page reads
+   *  what its directory card read, not the generic text a hand-added server falls back to. */
+  sub?: string
+  desc?: string
 }
 
 /** A resolved directory row: the wire-facing `DirectoryEntry` plus the provenance the preview
@@ -1370,6 +1374,8 @@ export function catalogProvenanceFor(endpoint: string | undefined): CatalogProve
         homepageUrl: entry.homepageUrl,
         logo: connectorLogo(entry.id),
         categories: entry.categories,
+        sub: entry.sub,
+        desc: entry.desc,
       }
     }
   }

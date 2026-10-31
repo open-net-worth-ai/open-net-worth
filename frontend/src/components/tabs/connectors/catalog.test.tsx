@@ -389,6 +389,8 @@ describe('install presets', () => {
         // must not read one thing on its card and another on its detail page.
         logo: connectorLogo(entry.id),
         categories: entry.categories,
+        sub: entry.sub,
+        desc: entry.desc,
       })
     }
   })

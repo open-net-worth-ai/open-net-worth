@@ -476,14 +476,7 @@ LONG: dict[str, str] = {
         "(from CoinGecko's own site) for a higher one — Pro plans set their own limits with "
         "CoinGecko directly."
     ),
-    # This is the FALLBACK only — ``connectors._decorate`` swaps it for the server's own ``instructions``
-    # (captured at handshake time, ``mcp.client.parse_server_info``) when one was reported, so
-    # a self-describing server never shows this generic line at all.
-    #
-    # Deliberately says nothing about the permission ladder (moved here from an earlier
-    # version that did): the ladder control right below this text already explains its own
-    # semantics per tool (ConnectorDetail.tsx), so repeating it here was redundant, and it
-    # made this the one description in the whole file that read as a warning label instead of
-    # a description.
-    "mcp": "A third-party server you connected. Lucius can call whatever tools it offers.",
+    # No "mcp" entry: a custom server's page has no paragraph. Its subtitle is the one line
+    # about it, and the publisher panel and Tool permissions below already say it is a
+    # third-party server and what Lucius may call.
 }

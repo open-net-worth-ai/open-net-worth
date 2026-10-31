@@ -1157,7 +1157,7 @@ def test_mcp_view_maps_discovered_tools_as_mcp_source_no_token_leak():
     assert [t.name for t in mcp.tools] == ["search_messages", "send_message"]
     assert all(t.source == "mcp" for t in mcp.tools)
     assert mcp.tools[0].description == "Search the inbox."
-    assert mcp.short_description and mcp.long_description
+    assert mcp.short_description
     assert "mcp-token" not in json.dumps(mcp.model_dump())
 
 
@@ -1194,7 +1194,7 @@ def test_mcp_view_uses_the_servers_own_description_not_its_instructions():
     )
     view = svc.get_connector("mcp:ibkr")
     assert view.short_description == "Trade and query positions at Interactive Brokers."
-    assert view.long_description == "Trade and query positions at Interactive Brokers."
+    assert view.long_description == ""  # the subtitle is the one line; no paragraph repeats it
     assert view.config["server_info_instructions"] == (
         "Always call get_positions before placing an order."
     )
@@ -1226,19 +1226,18 @@ def test_mcp_view_shortens_a_long_first_sentence_at_a_word():
     assert not subtitle[:-1].endswith((" ", ","))
 
 
-def test_mcp_view_falls_back_to_generic_description_with_no_permission_talk():
-    """No ``instructions`` reported → the generic ``mcp`` fallback, which must say nothing
-    about the permission ladder — that explanation lives beside the ladder control itself,
-    not duplicated into every custom server's description text."""
+def test_mcp_view_with_nothing_reported_has_a_generic_subtitle_and_no_paragraph():
+    """No description or instructions → the generic one-line subtitle and no paragraph: the
+    publisher panel and Tool permissions on the same page already say it is a third-party
+    server and what Lucius may call."""
     svc = _svc()
     from backend.db.mcp_client_store import McpClientStore
     from backend.models.mcp_client import McpServerConfig
 
     McpClientStore().create(McpServerConfig(id="srv", url="https://mcp.example.com"))
     view = svc.get_connector("mcp:srv")
-    assert view.long_description
-    for word in ("permission", "approve", "approval", "allow", "watching"):
-        assert word not in view.long_description.lower()
+    assert view.short_description
+    assert view.long_description == ""
 
 
 def test_mcp_status_is_the_shared_vocabulary_and_stdio_counts_as_configured():

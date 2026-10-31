@@ -178,16 +178,16 @@ def _view(kind: ConnectorKind, row: Row, have: frozenset, ctx: dict, level) -> C
     status = _status(enabled, kind.configured(row, have), error or None)
     short, long, native = copy_for(connector_id, kind)
     if kind.kind == "mcp":
-        # The server's OWN one-line description (handshake ``serverInfo.description``, sanitized
-        # at capture) beats the generic fallback every custom server would share. Its
+        # The subtitle is the server's OWN one-line description (handshake
+        # ``serverInfo.description``, sanitized at capture), over the generic fallback every
+        # custom server would share; there is no paragraph under it. Its
         # ``instructions`` are guidance for an AI, not a description — the detail page shows
         # them on their own, folded (``config.server_info_instructions``) — though with no
         # description their first sentence is still the best one-line subtitle we have.
         described = row["state"].get("server_info_description")
-        if described:
-            short, long = described, described
-        else:
-            short = _first_sentence(row["state"].get("server_info_instructions")) or short
+        instructions = row["state"].get("server_info_instructions")
+        short = described or _first_sentence(instructions) or short
+        long = ""
     return ConnectorView(
         id=connector_id,
         kind=kind.kind,

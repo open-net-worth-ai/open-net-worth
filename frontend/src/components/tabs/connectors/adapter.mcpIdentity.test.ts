@@ -42,4 +42,33 @@ describe('an MCP server identity', () => {
   it('links nothing for a server it does not recognise', () => {
     expect(toEntry(mcp({})).developerUrl).toBeUndefined()
   })
+
+  // A listed server's page read the generic hand-added text under its name (owner report,
+  // 2026-11-01): it reads what its directory card reads.
+  it('describes a listed server with its directory text', () => {
+    const entry = toEntry({
+      ...mcp({ url: 'https://api.ibkr.com/v1/api/mcp-public' }),
+      short_description: 'A third-party tool server you connected.',
+    })
+    expect(entry.sub).toMatch(/stocks, options & futures/)
+    expect(entry.desc).toMatch(/hosted server/)
+  })
+
+  it('gives a hand-added server no paragraph under its subtitle', () => {
+    const entry = toEntry({ ...mcp({}), short_description: 'Trades at Example Brokers.' })
+    expect(entry.sub).toBe('Trades at Example Brokers.')
+    expect(entry.desc).toBe('')
+  })
+
+  it("believes a listed server's own description over the directory's", () => {
+    const entry = toEntry({
+      ...mcp({
+        url: 'https://api.ibkr.com/v1/api/mcp-public',
+        server_info_description: 'Trade at Interactive Brokers.',
+      }),
+      short_description: 'Trade at Interactive Brokers.',
+    })
+    expect(entry.sub).toBe('Trade at Interactive Brokers.')
+    expect(entry.desc).toBe('')
+  })
 })
