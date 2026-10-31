@@ -257,7 +257,12 @@ async def refresh_asset(
     from backend.monitoring.analyst import trigger_on_demand_brief_refresh
     from backend.monitoring.asset_brief import refresh_asset_brief
 
-    # Refresh also rewrites Lucius's take (its call and chips) right away, in the background —
-    # the news/facts refresh below is what this response reports on.
+    result = await refresh_asset_brief(instrument_id, force=force)
+    # Then Lucius rewrites its take (its call and chips) in the background. Started only AFTER
+    # the news refresh has saved the brief — run side by side, that save overwrote the take's
+    # "analysing" stamp from a stale copy and the card's Updating badge vanished mid-rewrite.
+    # The one yield lets the task claim its row and stamp "analysing" (all before its first
+    # await) so the page's refetch on this response already sees the rewrite in flight.
     asyncio.create_task(trigger_on_demand_brief_refresh(instrument_id, force=True))
-    return await refresh_asset_brief(instrument_id, force=force)
+    await asyncio.sleep(0)
+    return result

@@ -1259,7 +1259,8 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
               (there's already content on screen whenever this fires), only this non-blocking
               indicator. */}
           {((refreshing && data?.refresh_stage !== 'ready') ||
-            (backgroundRefreshing && data?.key_issues_refresh_stage !== 'ready')) &&
+            (backgroundRefreshing && data?.key_issues_refresh_stage !== 'ready') ||
+            keyIssuesPassActive(data)) &&
             (hasNews || hasIssues) &&
             !generatingLuciusTake && (
               <div className="asd-ask-bar mb-anchored">

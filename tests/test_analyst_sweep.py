@@ -7167,6 +7167,42 @@ def test_refresh_rewrites_a_fresh_take_once_however_many_times_it_is_clicked(
     assert len(complete_calls) == 1
 
 
+def test_refresh_returns_with_the_take_rewrite_already_marked_in_flight(monkeypatch, db_isolated):
+    """The Refresh route saves the news first, then starts the take rewrite — so the page's
+    refetch on the response sees "analysing" (the badge stays up until the new take lands),
+    and the news save can no longer overwrite that stamp from a stale copy."""
+    import backend.db.asset_brief_store as abs_mod
+    import backend.monitoring.analyst as analyst_mod
+    import backend.monitoring.asset_brief as asset_brief_mod
+    from backend.api.intel_assets import refresh_asset
+
+    _seed_on_demand_instrument(db_isolated, iid="inst-od-route")
+    abs_mod.AssetBriefStore().upsert_brief(
+        {
+            "instrument_id": "inst-od-route",
+            "key_issues_synthesized_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+    async def _news(iid, force=False):
+        return {"refreshed": True}
+
+    async def _slow_take(row, store):
+        await asyncio.sleep(3600)
+
+    monkeypatch.setattr(asset_brief_mod, "refresh_asset_brief", _news)
+    monkeypatch.setattr(analyst_mod, "_process_row", _slow_take)
+
+    async def _click():
+        result = await refresh_asset("inst-od-route", force=True)
+        stage = abs_mod.AssetBriefStore().get("inst-od-route").get("key_issues_refresh_stage")
+        return result, stage
+
+    result, stage = asyncio.run(_click())
+    assert result == {"refreshed": True}
+    assert stage == "analysing"
+
+
 def test_trigger_on_demand_brief_refresh_skips_unknown_instrument(monkeypatch, db_isolated):
     """(d) An instrument_id that doesn't resolve to a real instrument (never seeded here) never
     triggers this — nothing to freshen or price a take against. Owner decision 2026-08-31:
