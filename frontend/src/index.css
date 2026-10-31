@@ -13574,32 +13574,31 @@ body.hide-amounts .money * {
     color: var(--ink);
   }
 
-  /* The take's verdict (PositionVerdictLine), under the reasoning: the call as a small tag with
-     its reason, then the suggestions as rounded chips. */
+  /* The take's verdict (PositionVerdictLine), under the reasoning: the call as a small tag on its
+     own line, its reason in muted text below, then the suggestions as rounded chips. */
   .asd-verdict {
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
-  }
-
-  .asd-verdict-call {
-    font-size: var(--text-sm);
-    line-height: 1.55;
-    color: var(--ink);
+    align-items: flex-start;
+    gap: var(--space-2);
   }
 
   .asd-verdict-action {
-    display: inline-block;
-    margin-right: var(--space-1);
     padding: 1px var(--space-2);
     border-radius: var(--radius-sm);
     font-size: var(--text-2xs);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    vertical-align: 1px;
     color: var(--ink);
     background: color-mix(in srgb, var(--lucius) 22%, transparent);
+  }
+
+  .asd-verdict-why {
+    margin-top: calc(-1 * var(--space-1));
+    font-size: var(--text-sm);
+    line-height: 1.55;
+    color: var(--muted);
   }
 
   .asd-verdict-action--add,
