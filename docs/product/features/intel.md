@@ -201,16 +201,18 @@ a sentence on why and what would change it. Each new take is shown Lucius's prev
 keeps its levels unless something has changed, and if the price falls through its stop it says so
 plainly: it either calls **Sell**, or says why it's holding.
 
-Below the call are at most two buttons, each handing Lucius a request ready to send:
+Most of the time the call is to do nothing, and then there's nothing to tap. When Lucius decides
+an action would help, up to two buttons follow, each handing Lucius a request ready to send:
 
 - **The order**, for a call that moves money, e.g. *Sell 7 at $243.41*: how many shares, never
   more than you hold, and a limit price close to today's. Open Net Worth can't place a trade with
   your broker itself; Lucius can record the sale once it has filled.
-- **An alert**, e.g. *Alert me below $209.67 or above $269.92*. The lower price is the stop, where
+- **An alert**, only when Lucius judges a new one would help, e.g. *Alert me below $209.67 or above
+  $269.92*. The lower price is the stop, where
   Lucius would sell to cap the loss (for a stock you watch, the price to buy at); the higher one
   is where it would take some profit. A level you set in **Your Thesis** always replaces Lucius's.
-  Lucius is told the price alerts you already have on the stock: it reuses one when it fits, and
-  doesn't offer this button when your alerts already cover its levels.
+  Lucius is told the price alerts you already have on the stock, reuses one when it fits, and
+  doesn't offer this when your alerts already cover its levels.
 
 On a computer the request lands in the Lucius box at the bottom of the screen; on a phone you're
 taken to the Lucius tab with it typed in. Nothing happens until you press send.
@@ -222,7 +224,9 @@ treat its suggestions as information, not advice.
 
 Every asset page has a **Your Thesis** card under **Your Position**: why you own the stock (or
 would buy it) and the prices that matter to you. Click **Edit**, change what you like, and **Save
-thesis**.
+thesis**. With no thesis yet, **Build with Lucius** opens a chat about the stock instead: Lucius
+asks one question at a time, suggests an answer from your position and the latest news for each,
+and saves the thesis once you agree.
 
 - For a stock you **own**, the thesis also has a **role** — **Core** (the long-term base of your
   portfolio), **Satellite** (an active bet around it) or **Speculative** (a small, high-risk bet);

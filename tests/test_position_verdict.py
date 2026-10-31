@@ -80,7 +80,7 @@ def test_the_thesis_level_wins_and_distances_come_from_todays_price():
         "why": "x",
         "currency": "USD",
         "order": None,
-        "alert": True,
+        "alert": False,
         "levels": [
             {"kind": "stop", "price": 50.0, "source": "thesis", "distance_pct": -50.0},
             {"kind": "trim", "price": 120.0, "source": "lucius", "distance_pct": 20.0},
@@ -303,12 +303,13 @@ def test_the_take_context_carries_the_alerts(monkeypatch, db_isolated, aapl_thes
     assert "YOUR PRICE ALERTS on this ticker: ≤ USD 80 (Floor)." in ctx
 
 
-def test_lucius_can_say_the_users_alerts_already_cover_its_levels():
+def test_an_alert_is_offered_only_when_lucius_asks_for_one():
+    """No action is the default: without an explicit ``alert: true`` there is no alert button."""
     v = pv.normalize(
-        {"action": "hold", "why": "x", "stop": 80, "alert": False}, held=True, price=100.0
+        {"action": "hold", "why": "x", "stop": 80, "alert": True}, held=True, price=100.0
     )
-    assert v["alert"] is False
-    assert pv.compose(v, None, held=True, price=100.0, currency="USD")["alert"] is False
-    v = pv.normalize({"action": "hold", "why": "x", "stop": 80}, held=True, price=100.0)
-    assert "alert" not in v
     assert pv.compose(v, None, held=True, price=100.0, currency="USD")["alert"] is True
+    for raw in ({"alert": False}, {}, {"alert": "yes"}):
+        v = pv.normalize({"action": "hold", "why": "x", "stop": 80, **raw}, held=True, price=100.0)
+        assert "alert" not in v
+        assert pv.compose(v, None, held=True, price=100.0, currency="USD")["alert"] is False

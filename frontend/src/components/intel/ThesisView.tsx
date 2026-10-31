@@ -1,4 +1,5 @@
-import { Plus } from 'lucide-react'
+import { Plus, Sparkles } from 'lucide-react'
+import { useChatComposerOptional } from '../../state/chatComposer'
 import { Button, InfoPopover } from '../ui'
 import type { InvestmentThesis } from '../../types/assetDetail'
 import { BREAKS_IF_LABEL, thesisLevels, type ROLES, type ThesisLevel } from './thesisFields'
@@ -61,24 +62,70 @@ function PriceBar({
 }
 
 /** No thesis yet: the prompt is the button that starts one. */
+/** The brief "Build with Lucius" hands the chat: interview the user one question at a time for
+ *  every field the thesis form has, ground suggestions in their real position and the news, then
+ *  save it. Held and watched differ the way the form does (role/breaks-if/stop/trim vs buy zone
+ *  and fair value). */
+export function thesisBuildPrompt(sym: string, held: boolean): string {
+  const fields = held
+    ? 'why I own it; its role in my portfolio (core, satellite or speculative); how long I plan ' +
+      'to hold it; what would prove me wrong (the business fact that breaks the thesis); the ' +
+      'price below which I would sell (my stop); and the price above which I would take some ' +
+      'profit (my trim level)'
+    : 'why I would buy it; what would prove the case wrong; the price range I would buy in (my ' +
+      'buy zone); and what I think it is worth (fair value)'
+  const grounding = held
+    ? 'my actual position (cost, weight, gain or loss)'
+    : 'its current price and valuation'
+  return (
+    `Help me build my investment thesis for ${sym}. Interview me one question at a time, ` +
+    `covering ${fields}. Before each question, suggest a sensible answer from ${grounding}, the ` +
+    'latest news and the analyst view, and keep it short. Push back if my reasoning has gaps. ' +
+    'When we have agreed every part, show me the full thesis and save it as my thesis for ' +
+    `${sym} once I confirm.`
+  )
+}
+
 export function ThesisStart({
   sym,
   held,
   onClick,
+  instrumentId,
 }: {
   sym: string
   held: boolean
   onClick: () => void
+  /** With it (and a chat to send to), a second button builds the thesis with Lucius. */
+  instrumentId?: string
 }) {
+  const composer = useChatComposerOptional()
+  const buildWithLucius = () => {
+    if (!instrumentId) return
+    composer?.addMention({ type: 'instrument', ref: instrumentId, label: sym }, { open: false })
+    composer?.setPendingText(thesisBuildPrompt(sym, held), { keepChips: true })
+    window.dispatchEvent(new Event('lx-dock-open'))
+  }
   return (
-    <Button
-      variant="secondary"
-      size="sm"
-      iconLeft={<Plus size={13} aria-hidden="true" />}
-      onClick={onClick}
-    >
-      {held ? `Write down why you own ${sym}` : `Write down why you’d buy ${sym}`}
-    </Button>
+    <div className="asd-thesis-start">
+      <Button
+        variant="secondary"
+        size="sm"
+        iconLeft={<Plus size={13} aria-hidden="true" />}
+        onClick={onClick}
+      >
+        {held ? `Write down why you own ${sym}` : `Write down why you’d buy ${sym}`}
+      </Button>
+      {composer && instrumentId && (
+        <Button
+          variant="ghost"
+          size="sm"
+          iconLeft={<Sparkles size={13} aria-hidden="true" />}
+          onClick={buildWithLucius}
+        >
+          Build with Lucius
+        </Button>
+      )}
+    </div>
   )
 }
 

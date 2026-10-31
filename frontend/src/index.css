@@ -13671,6 +13671,13 @@ body.hide-amounts .money * {
     flex: none;
   }
 
+  /* The empty thesis card's two ways in: write it yourself, or build it with Lucius. */
+  .asd-thesis-start {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
   /* Stands in for .asd-pi-body while generating (owner ask 2026-08-30) — shimmering line
      placeholders, never the bare numbers-only lead line styled as if it were a complete take.
      Reuses the shared Skeleton primitive; widths vary to read as prose lines, not a bar chart. */

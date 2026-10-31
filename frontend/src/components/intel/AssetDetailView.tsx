@@ -533,6 +533,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
     <AssetAlertsCard
       ticker={asset.ticker}
       assetName={asset.name}
+      displaySymbol={displayTicker(asset)}
       assetClass={asset.asset_class}
       instrumentId={data.instrument_id}
       itemId={watchlist.item_id ?? null}

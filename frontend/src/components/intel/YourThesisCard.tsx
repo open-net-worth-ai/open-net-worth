@@ -79,7 +79,12 @@ export function YourThesisCard({
       ) : hasContent && current ? (
         <ThesisView thesis={current} held={held} price={price} fmt={fmt} />
       ) : (
-        <ThesisStart sym={ticker} held={held} onClick={() => setEditing(true)} />
+        <ThesisStart
+          sym={ticker}
+          held={held}
+          instrumentId={instrumentId}
+          onClick={() => setEditing(true)}
+        />
       )}
     </Panel>
   )

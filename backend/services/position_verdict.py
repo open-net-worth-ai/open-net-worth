@@ -75,8 +75,8 @@ def normalize(
     if action not in (HELD_ACTIONS if held else WATCHED_ACTIONS) or not why:
         return None
     out: dict = {"action": action, "why": why[:_WHY_MAX], "held": held}
-    if raw.get("alert") is False:
-        out["alert"] = False
+    if raw.get("alert") is True:
+        out["alert"] = True
     if price and price > 0:
         out["price_at"] = price
         for kind in _levels_for(held):
@@ -168,7 +168,7 @@ def compose(
         "why": stored.get("why") or "",
         "levels": levels,
         "order": stored.get("order") or None,
-        "alert": stored.get("alert", True) is not False,
+        "alert": stored.get("alert") is True,
         "currency": currency,
     }
 

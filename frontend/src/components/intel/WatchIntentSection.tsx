@@ -86,7 +86,12 @@ export function WatchIntentSection({ sym, instrumentId, price = null, onSaved }:
       ) : hasContent && thesis ? (
         <ThesisView thesis={thesis} held={ctx.held} price={price} fmt={fmt} />
       ) : (
-        <ThesisStart sym={sym} held={ctx.held} onClick={() => setEditing(true)} />
+        <ThesisStart
+          sym={sym}
+          held={ctx.held}
+          instrumentId={ctx.instrument_id}
+          onClick={() => setEditing(true)}
+        />
       )}
     </Panel>
   )

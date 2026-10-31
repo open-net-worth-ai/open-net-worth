@@ -27,6 +27,8 @@ interface EditTarget {
 interface Props {
   ticker: string
   assetName: string
+  /** The ticker as the page shows it (a coin's symbol, not its price-feed id) — for copy. */
+  displaySymbol?: string
   assetClass: string
   /** The asset's instrument id — the modal's 52-week track reads the quote stats by it. */
   instrumentId?: string
@@ -54,6 +56,7 @@ interface Props {
 export function AssetAlertsCard({
   ticker,
   assetName,
+  displaySymbol,
   assetClass,
   instrumentId,
   itemId,
@@ -112,7 +115,7 @@ export function AssetAlertsCard({
         ) : (
           <>
             <Text size="sm" tone="faint">
-              Get notified when {assetName} crosses a price you set.
+              Get notified when {displaySymbol || ticker} crosses a price you set.
             </Text>
             <Button
               variant="primary"

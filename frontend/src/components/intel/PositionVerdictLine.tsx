@@ -17,13 +17,6 @@ const ACTION_LABEL: Record<PositionVerdict['action'], string> = {
   wait: 'Wait',
 }
 
-const PLAN: Partial<Record<PositionVerdict['action'], [string, string]>> = {
-  sell: ['Plan the sale', 'the sale'],
-  trim: ['Plan the trim', 'the trim'],
-  add: ['Plan adding', 'adding to the position'],
-  buy: ['Plan the buy', 'the buy'],
-}
-
 interface Suggestion {
   label: string
   prompt: string
@@ -37,13 +30,10 @@ function orderText(o: VerdictOrder, money: (v: number) => string): string {
   return `${verb} ${units(o.quantity)}${o.limit ? ` at ${money(o.limit)}` : ''}`
 }
 
-/** At most two suggestions: the order (or a plan when there is none), then one alert on the
- *  levels — below the stop / buy price, above the trim level — unless Lucius said the user's
- *  own alerts already cover them (`alert: false`). Each is worded as a reply to
- *  Lucius's own call; the stock rides along as a mention, which carries the take itself. */
+/** Only what Lucius explicitly decided: the order behind a call that moves money, and an alert
+ *  on its levels when it said one would help (`alert: true`). Nothing is the usual answer. */
 function suggestionsFor(verdict: PositionVerdict, money: (v: number) => string): Suggestion[] {
   const out: Suggestion[] = []
-  const plan = PLAN[verdict.action]
   const order = verdict.order
   if (order) {
     const how = order.limit ? `at a ${money(order.limit)} limit` : 'at market'
@@ -51,15 +41,10 @@ function suggestionsFor(verdict: PositionVerdict, money: (v: number) => string):
       label: orderText(order, money),
       prompt: `${order.side === 'sell' ? 'Sell' : 'Buy'} ${units(order.quantity)} ${how}, as you suggested.`,
     })
-  } else if (plan) {
-    out.push({
-      label: plan[0],
-      prompt: `Walk me through ${plan[1]} as you suggested: how much, the tax and fees, and what it changes in my portfolio.`,
-    })
   }
-  const levels = verdict.alert === false ? [] : verdict.levels
-  const below = levels.find((l) => l.kind !== 'trim')
-  const above = levels.find((l) => l.kind === 'trim')
+  if (verdict.alert !== true) return out
+  const below = verdict.levels.find((l) => l.kind !== 'trim')
+  const above = verdict.levels.find((l) => l.kind === 'trim')
   const when = [
     below && `falls to ${money(below.price)}`,
     above && `rises to ${money(above.price)}`,

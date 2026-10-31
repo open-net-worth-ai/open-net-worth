@@ -579,9 +579,10 @@ def _verdict_instruction(is_held: bool) -> str:
             "sell only past its stop or once its breaks_if has happened. For add, trim or sell, "
             "make it an order someone could place: quantity — how many shares/units to buy or "
             "sell (a sell is never more than the position quantity above; a trim is part of it); "
-            "limit — the limit price, close to today's. Null both for hold. alert — true to "
-            "offer a price alert at your stop/trim; false when YOUR PRICE ALERTS already cover "
-            "them or you gave no levels. "
+            "limit — the limit price, close to today's. Null both for hold. alert — true ONLY "
+            "when a new price alert at your stop/trim would genuinely help and YOUR PRICE ALERTS "
+            "don't already cover them; otherwise false. Most of the time the right answer is to "
+            "do nothing — no order, no alert. "
         )
     return (
         "verdict: your ONE call on this ticker today — action is exactly buy or wait. why: one "
@@ -590,8 +591,9 @@ def _verdict_instruction(is_held: bool) -> str:
         "ground one. If YOUR THESIS gives a buy zone, the call is buy only inside it. For buy, "
         "make it an order someone could place: quantity — a starter position sized for this "
         "investor's portfolio; limit — the limit price, close to today's. Null both for wait. "
-        "alert — true to offer a price alert at your entry; false when YOUR PRICE ALERTS already "
-        "cover it or you gave none. "
+        "alert — true ONLY when a new price alert at your entry would genuinely help and YOUR "
+        "PRICE ALERTS don't already cover it; otherwise false. Most of the time the right answer "
+        "is to do nothing. "
     )
 
 

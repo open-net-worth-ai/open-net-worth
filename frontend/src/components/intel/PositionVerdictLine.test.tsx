@@ -7,6 +7,7 @@ import { PositionVerdictLine } from './PositionVerdictLine'
 import type { PositionVerdict } from '../../types/assetDetail'
 
 const TRIM: PositionVerdict = {
+  alert: true,
   action: 'trim',
   why: 'Up a lot.',
   currency: 'USD',
@@ -75,8 +76,11 @@ describe('PositionVerdictLine', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('offers no alert when Lucius says the user’s alerts already cover the levels', () => {
-    renderWithComposer({ ...TRIM, alert: false })
+  it('shows only what Lucius decided — no alert unless it asked, no fallback plan button', () => {
+    renderWithComposer({ ...TRIM, alert: undefined })
     expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Sell 25 at $270.00'])
+    cleanup()
+    renderWithComposer({ ...TRIM, alert: undefined, order: null })
+    expect(screen.queryByRole('button')).toBeNull()
   })
 })
