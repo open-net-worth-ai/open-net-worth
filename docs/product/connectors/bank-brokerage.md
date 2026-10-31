@@ -246,6 +246,10 @@ The schedule and the wording are yours to change. Each run:
 - **Never books the same transaction twice.** One it already booked is skipped.
 - **Uses the linked account** for each transaction, and asks you about any account that isn't
   linked instead of guessing.
+- **Picks a category only when it clearly fits one of yours.** Lucius uses the merchant and, for
+  Plaid, the bank's own category (for example *Food and drink: Fast food* → **Dining out**). If
+  nothing clearly matches — or the payee already has a default category of its own — the
+  transaction stays **Uncategorized** for you to sort; he never invents a category.
 - **Brings a changed transaction in line, but never over your own edits.** If your bank changes
   something already booked — a pending charge that settles at a different amount, a date that
   moves — Lucius updates it. If you'd already changed that amount or date by hand, he keeps your

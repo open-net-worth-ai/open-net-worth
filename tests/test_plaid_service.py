@@ -622,3 +622,52 @@ class TestClassifyError:
 
     def test_generic_exception_is_error(self):
         assert svc.classify_error(RuntimeError("unexpected")) == "error"
+
+
+# ── category_hint — the bank's own category, offered as a hint ───────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("pfc", "expected"),
+    [
+        (
+            {
+                "primary": "FOOD_AND_DRINK",
+                "detailed": "FOOD_AND_DRINK_FAST_FOOD",
+                "confidence_level": "VERY_HIGH",
+            },
+            "Food and drink: Fast food",
+        ),
+        (
+            {"primary": "TRANSPORTATION", "detailed": "TRANSPORTATION_TAXIS_AND_RIDE_SHARES"},
+            "Transportation: Taxis and ride shares",
+        ),
+        ({"primary": "TRAVEL", "detailed": "", "confidence_level": "HIGH"}, "Travel"),
+        ({"primary": "GENERAL_MERCHANDISE", "detailed": "X", "confidence_level": "LOW"}, None),
+        ({"primary": "GENERAL_MERCHANDISE", "confidence_level": "UNKNOWN"}, None),
+        ({}, None),
+    ],
+)
+def test_category_hint_is_readable_and_only_offered_when_plaid_is_confident(pfc, expected):
+    txn = {
+        "transaction_id": "t1",
+        "amount": 10,
+        "date": "2026-10-20",
+        "name": "x",
+        "personal_finance_category": pfc,
+    }
+    row = svc._txn_to_row(txn, {}, "acct-1")
+    assert row["category_hint"] == expected
+
+
+def test_a_transaction_without_plaid_categories_has_no_hint():
+    row = svc._txn_to_row({"transaction_id": "t1", "amount": 5, "date": "2026-10-20"}, {}, "a")
+    assert row["category_hint"] is None
+
+
+def test_the_hint_survives_the_fetch_pipelines_text_sanitizer_unchanged():
+    from backend.core.untrusted import sanitize_untrusted
+
+    pfc = {"primary": "FOOD_AND_DRINK", "detailed": "FOOD_AND_DRINK_FAST_FOOD"}
+    hint = svc._category_hint({"personal_finance_category": pfc})
+    assert sanitize_untrusted(hint) == hint == "Food and drink: Fast food"
