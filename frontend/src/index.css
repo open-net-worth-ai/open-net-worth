@@ -13574,6 +13574,80 @@ body.hide-amounts .money * {
     color: var(--ink);
   }
 
+  /* The take's action line (PositionVerdictLine): the call as a pill, why beside it, then the
+     levels that would change it. */
+  .asd-verdict {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .asd-verdict-call {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+  }
+
+  .asd-verdict-action {
+    flex: none;
+    padding: 2px var(--space-3);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--ink);
+    background: color-mix(in srgb, var(--lucius) 22%, transparent);
+  }
+
+  .asd-verdict-action--add,
+  .asd-verdict-action--buy {
+    color: var(--pos);
+    background: color-mix(in srgb, var(--pos) 16%, transparent);
+  }
+
+  .asd-verdict-action--trim,
+  .asd-verdict-action--wait {
+    color: var(--warn);
+    background: var(--warn-tint);
+  }
+
+  .asd-verdict-action--sell {
+    color: var(--neg);
+    background: color-mix(in srgb, var(--neg) 16%, transparent);
+  }
+
+  .asd-verdict-why {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+
+  .asd-verdict-levels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1) var(--space-5);
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    font-size: var(--text-xs);
+  }
+
+  .asd-verdict-level-name {
+    color: var(--muted);
+  }
+
+  .asd-verdict-level-price {
+    font-weight: 600;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .asd-verdict-level-meta {
+    color: var(--muted);
+  }
+
   /* Stands in for .asd-pi-body while generating (owner ask 2026-08-30) — shimmering line
      placeholders, never the bare numbers-only lead line styled as if it were a complete take.
      Reuses the shared Skeleton primitive; widths vary to read as prose lines, not a bar chart. */
