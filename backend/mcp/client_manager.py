@@ -547,12 +547,32 @@ class McpClientManager:
         try:
             conn = self._get_or_spawn_connection_locked(server)
             try:
-                return conn.call_tool(tool, args)
+                result = conn.call_tool(tool, args)
             except McpCallError:
                 self._close_locked(server.id)
                 raise
+            if conn.take_tools_changed():
+                self._relist_locked(server, conn)
+            return result
         finally:
             lock.release()
+
+    def _relist_locked(self, server: McpServerConfig, conn: StdioMcpClientConnection) -> None:
+        """Re-read ``tools/list`` after the server announced a change, on the SAME child.
+
+        Caller holds the server's RPC lock. The call that carried the notice already
+        succeeded, so a failed re-list only logs — the cached list stays as it was."""
+        try:
+            handshake = conn.initialize()
+            tools = conn.list_tools()
+        except Exception as exc:  # noqa: BLE001
+            summary = exc.safe_summary if isinstance(exc, McpCallError) else str(exc)
+            logger.warning("mcp tools re-list failed for '%s': %s", server.id, summary)
+            return
+        logger.info("mcp '%s' changed its toolset — now %d tools", server.id, len(tools))
+        self._store.record_discovery(
+            server.id, tools, "ok", None, server_info=parse_server_info(handshake)
+        )
 
     def _rpc_lock_for(self, server_id: str) -> threading.Lock:
         """The persistent per-server lock, created on first use. Cheap/short critical

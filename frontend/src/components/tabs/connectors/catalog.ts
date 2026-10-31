@@ -1147,7 +1147,7 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
   'mcp-firecrawl': {
     transport: 'local',
     command: 'npx',
-    args: '-y firecrawl-mcp',
+    args: '-y firecrawl-mcp@latest',
     env: 'FIRECRAWL_API_KEY=',
   },
   // Stripe documents OAuth first but explicitly supports a restricted API key as an
@@ -1175,13 +1175,13 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
   'mcp-alpaca': {
     transport: 'local',
     command: 'uvx',
-    args: 'alpaca-mcp-server',
+    args: 'alpaca-mcp-server@latest',
     env: 'ALPACA_API_KEY=\nALPACA_SECRET_KEY=',
   },
   'mcp-coinbase': {
     transport: 'local',
     command: 'npx',
-    args: '-y @coinbase/coinbase-cli mcp',
+    args: '-y @coinbase/coinbase-cli@latest mcp',
     // COINBASE_ENV names the built-in `live` environment. Without it every call fails with
     // "no environment configured" — the keys alone are not enough (verified 2026-10-31).
     env: 'COINBASE_ENV=live\nCOINBASE_KEY_ID=\nCOINBASE_KEY_SECRET=',
@@ -1203,19 +1203,19 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
   'mcp-public': {
     transport: 'local',
     command: 'uvx',
-    args: 'publicdotcom-mcp-server',
+    args: 'publicdotcom-mcp-server@latest',
     env: 'PUBLIC_COM_SECRET=',
   },
   'mcp-bybit': {
     transport: 'local',
     command: 'npx',
-    args: '-y bybit-official-trading-server',
+    args: '-y bybit-official-trading-server@latest',
     env: 'BYBIT_API_KEY=\nBYBIT_API_SECRET=',
   },
   'mcp-okx': {
     transport: 'local',
     command: 'npx',
-    args: '-y @okx_ai/okx-trade-mcp --demo',
+    args: '-y @okx_ai/okx-trade-mcp@latest --demo',
     env: 'OKX_API_KEY=\nOKX_SECRET_KEY=\nOKX_PASSPHRASE=',
   },
   // Trailing slash is deliberate: the bare `/mcp` 308-redirects here, and the trailing form is
@@ -1235,7 +1235,7 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
   'mcp-fred': {
     transport: 'local',
     command: 'npx',
-    args: '-y fred-mcp-server',
+    args: '-y fred-mcp-server@latest',
     env: 'FRED_API_KEY=',
   },
 }

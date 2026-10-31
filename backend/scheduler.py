@@ -6,6 +6,7 @@ Jobs:
   - intel_scan       : every N hours (from watchlist config)
   - watchlist_sync   : daily + shortly after boot — reconciles the auto-managed
                        "My holdings" watchlist against owned positions
+  - mcp_tools_refresh: daily — re-reads each external MCP server's tool list
 
 Call reschedule(config) to update intervals at runtime (e.g. when Lucius changes config).
 """
@@ -494,6 +495,21 @@ def _schedule_rss_hot_job(config: dict) -> None:
     logger.info("scheduler: rss_poll_hot scheduled — every %ds", _HOT_INTERVAL_SECONDS)
 
 
+async def _run_mcp_tools_refresh() -> None:
+    """Re-read every enabled external MCP server's tool list.
+
+    Boot and the human Test button were the only re-reads, so a remote server that gained a
+    tool stayed invisible to Lucius until a restart. A stdio server re-lists on its pooled
+    child (no respawn); an HTTP one gets a fresh handshake. Never raises."""
+    logger.info("scheduler: mcp_tools_refresh starting")
+    try:
+        from backend.mcp.client_manager import get_manager
+
+        await asyncio.to_thread(get_manager().connect_enabled)
+    except Exception:
+        logger.exception("scheduler: mcp_tools_refresh failed")
+
+
 async def _run_watchlist_sync() -> None:
     """Reconcile the auto-managed "My holdings" watchlist against owned positions.
 
@@ -639,6 +655,16 @@ def start() -> None:
         misfire_grace_time=3600,
     )
     logger.info("scheduler: daily_backup scheduled — daily at 03:30 local")
+
+    # Boot already listed every server's tools, so the first re-read is a day out.
+    _scheduler.add_job(
+        _run_mcp_tools_refresh,
+        trigger=IntervalTrigger(hours=24),
+        id="mcp_tools_refresh",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    logger.info("scheduler: mcp_tools_refresh scheduled — every 24h")
 
     # Auto-managed "My holdings" watchlist reconciliation (see _run_watchlist_sync). Daily,
     # plus a kick-start a few seconds after boot: holdings can change while the server is

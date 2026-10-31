@@ -316,7 +316,7 @@
           "FIRECRAWL_API_KEY"
         ]
       },
-      "endpoint": "npx -y firecrawl-mcp"
+      "endpoint": "npx -y firecrawl-mcp@latest"
     },
     {
       "id": "mcp-stripe",
@@ -477,7 +477,7 @@
           "ALPACA_SECRET_KEY"
         ]
       },
-      "endpoint": "uvx alpaca-mcp-server"
+      "endpoint": "uvx alpaca-mcp-server@latest"
     },
     {
       "id": "mcp-coinbase",
@@ -503,7 +503,7 @@
           "COINBASE_KEY_SECRET"
         ]
       },
-      "endpoint": "npx -y @coinbase/coinbase-cli mcp"
+      "endpoint": "npx -y @coinbase/coinbase-cli@latest mcp"
     },
     {
       "id": "mcp-okx",
@@ -529,7 +529,7 @@
           "OKX_PASSPHRASE"
         ]
       },
-      "endpoint": "npx -y @okx_ai/okx-trade-mcp --demo"
+      "endpoint": "npx -y @okx_ai/okx-trade-mcp@latest --demo"
     },
     {
       "id": "mcp-kraken",
@@ -672,7 +672,7 @@
           "PUBLIC_COM_SECRET"
         ]
       },
-      "endpoint": "uvx publicdotcom-mcp-server"
+      "endpoint": "uvx publicdotcom-mcp-server@latest"
     },
     {
       "id": "mcp-bybit",
@@ -697,7 +697,7 @@
           "BYBIT_API_SECRET"
         ]
       },
-      "endpoint": "npx -y bybit-official-trading-server"
+      "endpoint": "npx -y bybit-official-trading-server@latest"
     },
     {
       "id": "mcp-expensify",
@@ -802,7 +802,7 @@
           "FRED_API_KEY"
         ]
       },
-      "endpoint": "npx -y fred-mcp-server"
+      "endpoint": "npx -y fred-mcp-server@latest"
     }
   ]
 }

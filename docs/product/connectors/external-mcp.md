@@ -156,6 +156,11 @@ about itself, not a check of who runs the server, so the badge still reads **Unk
 publisher**. A name you typed yourself is never replaced. **⋯ → Refresh tools list** reads the
 name and icon again.
 
+**Updates.** A remote server updates itself — the vendor changes it, and its next answer comes
+from the new version. A local server runs until the app restarts; most directory servers launch with
+`@latest`, so each restart starts the newest release (a little slower to start, and it needs
+the internet to check). A command you typed yourself runs exactly what you wrote.
+
 ## Check that it works
 
 Ask Lucius to use it, for example after adding Playwright:
@@ -173,7 +178,9 @@ Open the server under **Connectors**:
   The connection is tested again before anything is saved. A saved key is never sent back to your
   browser, so to re-test with it, reveal it with the eye icon or paste it again. The transport
   can't be changed — add the server again instead.
-- **⋯ → Refresh tools list** — pick up tools the server added since you connected it.
+- **⋯ → Refresh tools list** — pick up tools the server added since you connected it. You rarely
+  need it: the app re-reads every server's list when it starts and once a day, and a local server
+  that announces a change is re-read straight away (after the next call to it).
 - **Pause** / **Resume** — Lucius loses access to its tools while paused. Resuming a server that
   has never listed its tools connects to it and lists them; if it can't be reached, it shows an
   error instead of Connected.
