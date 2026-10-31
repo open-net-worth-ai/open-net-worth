@@ -37,8 +37,8 @@
       /* iOS 27 draws a system blur over the top of an installed web app unless WebKit finds an
          opaque position:fixed box at the top edge — at least ~6px tall, 80% wide, within 4px
          of the top (a 1px strip was ignored). It also tints the status bar from that box's
-         background-color, so it inherits the theme background; an open modal or sheet hides it
-         so iOS finds the scrim instead (src/utils/statusBarTint.ts). `background-clip: text` with
+         background-color, so it inherits the theme background (an open modal or sheet
+         overrides it with its scrim colour: src/utils/statusBarTint.ts). `background-clip: text` with
          no text paints nothing, so the box never covers the page (FreshRSS#9382, tested on
          iPhone and iPad). A real element: a pseudo-element is invisible to the check. */
       #status-bar-sampler {
