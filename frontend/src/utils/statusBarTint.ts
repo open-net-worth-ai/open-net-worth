@@ -1,47 +1,17 @@
 // iOS tints the installed app's status bar from #status-bar-sampler (index.html), the fixed box
-// at the top edge. The bar is outside the page, so a modal's scrim can't dim it, and the sampler
-// sits above every scrim: a bright band over a dimmed page. While a full-screen fixed overlay
-// covers the top edge, the sampler takes the colour actually painted there — every layer down to
-// that overlay, over the theme background — and inherits the theme again once it closes. Read
-// from the DOM rather than mirrored per scrim: the app has a dozen, each with its own alpha.
+// at the top edge. It sits above every scrim, so an open modal left a bright band over a dimmed
+// page — and re-tinting it to the scrim's colour lagged the page visibly, iOS repainting the bar
+// a beat after the box changed. While a full-screen fixed overlay covers the top edge the box
+// steps aside, so the scrim itself is what iOS finds there and extends under the bar; it comes
+// back once the overlay closes. Read from the DOM: the app has a dozen scrims.
 import { isStandalonePwa } from './pwa'
 
-export type Rgba = [number, number, number, number]
-
-export function parseColor(value: string): Rgba | null {
-  const srgb = value.match(/^color\(srgb ([^)]+)\)$/)
-  const legacy = value.match(/^rgba?\(([^)]+)\)$/)
-  const body = srgb?.[1] ?? legacy?.[1]
-  if (!body) return null
-  const [r, g, b, a = 1, ...rest] = body
-    .split(/[\s,/]+/)
-    .filter(Boolean)
-    .map(Number)
-  if (r === undefined || g === undefined || b === undefined || rest.length) return null
-  if ([r, g, b, a].some(Number.isNaN)) return null
-  const scale = srgb ? 255 : 1
-  return [r * scale, g * scale, b * scale, a]
-}
-
-/** `layers` top → bottom, each already at its effective alpha; `base` is opaque. */
-export function compositeOver(base: Rgba, layers: Rgba[]): Rgba {
-  return layers.reduceRight<Rgba>(
-    (acc, [r, g, b, a]) => [
-      r * a + acc[0] * (1 - a),
-      g * a + acc[1] * (1 - a),
-      b * a + acc[2] * (1 - a),
-      1,
-    ],
-    base,
-  )
-}
-
-function effectiveAlpha(el: Element, alpha: number): number {
-  let a = alpha
-  for (let n: Element | null = el; n && n !== document.documentElement; n = n.parentElement) {
-    a *= Number(getComputedStyle(n).opacity || 1)
-  }
-  return a
+export function parseAlpha(value: string): number {
+  if (value === 'transparent') return 0
+  const body = value.match(/^(?:rgba?|color)\(([^)]+)\)$/)?.[1]
+  const parts = body?.split(/[\s,/]+/).filter(Boolean) ?? []
+  const alpha = value.startsWith('color(') ? parts[4] : parts[3]
+  return body ? Number(alpha ?? 1) : 0
 }
 
 function coversViewport(el: Element, style: CSSStyleDeclaration): boolean {
@@ -50,49 +20,32 @@ function coversViewport(el: Element, style: CSSStyleDeclaration): boolean {
   return r.top <= 1 && r.height >= window.innerHeight * 0.9 && r.width >= window.innerWidth * 0.5
 }
 
-/** The colour painted at the top edge while an overlay covers it, else null. */
-export function topEdgeTint(sampler: Element): string | null {
-  const root = document.documentElement
-  const base = parseColor(getComputedStyle(root).backgroundColor)
-  if (!base) return null
-  const layers: Rgba[] = []
+/** A full-screen fixed overlay with a visible background is painted at the top edge. */
+export function overlayCoversTopEdge(sampler: Element): boolean {
   for (const el of document.elementsFromPoint(window.innerWidth / 2, 1)) {
-    if (el === sampler || el === root || el === document.body) continue
+    if (el === sampler) continue
     const style = getComputedStyle(el)
-    const bg = parseColor(style.backgroundColor)
-    const alpha = bg ? effectiveAlpha(el, bg[3]) : 0
-    if (!bg || alpha <= 0) continue
-    layers.push([bg[0], bg[1], bg[2], alpha])
-    if (coversViewport(el, style)) {
-      const [r, g, b] = compositeOver([base[0], base[1], base[2], 1], layers).map(Math.round)
-      return `rgb(${r}, ${g}, ${b})`
-    }
+    if (parseAlpha(style.backgroundColor) > 0 && coversViewport(el, style)) return true
   }
-  return null
+  return false
 }
 
 export function watchStatusBarTint(): void {
   const sampler = document.getElementById('status-bar-sampler')
   if (!sampler || !isStandalonePwa()) return
-  let queued = false
+  // Straight from the observer, not a frame later: the box must leave in the scrim's own frame.
   const sync = () => {
-    queued = false
-    const next = topEdgeTint(sampler) ?? ''
-    if (sampler.style.backgroundColor !== next) sampler.style.backgroundColor = next
+    const next = overlayCoversTopEdge(sampler) ? 'none' : ''
+    if (sampler.style.display !== next) sampler.style.display = next
   }
-  const schedule = () => {
-    if (queued) return
-    queued = true
-    requestAnimationFrame(sync)
-  }
-  new MutationObserver(schedule).observe(document.body, {
+  new MutationObserver(sync).observe(document.body, {
     childList: true,
     subtree: true,
     attributes: true,
     attributeFilter: ['class', 'data-state', 'style'],
   })
   for (const type of ['animationend', 'transitionend']) {
-    document.addEventListener(type, schedule, true)
+    document.addEventListener(type, sync, true)
   }
-  window.addEventListener('resize', schedule)
+  window.addEventListener('resize', sync)
 }
