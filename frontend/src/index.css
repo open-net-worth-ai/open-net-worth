@@ -13659,6 +13659,13 @@ body.hide-amounts .money * {
     outline-offset: 2px;
   }
 
+  .asd-pi-disclaimer {
+    margin-top: var(--space-2);
+    font-size: var(--text-2xs);
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
   /* Stands in for .asd-pi-body while generating (owner ask 2026-08-30) — shimmering line
      placeholders, never the bare numbers-only lead line styled as if it were a complete take.
      Reuses the shared Skeleton primitive; widths vary to read as prose lines, not a bar chart. */

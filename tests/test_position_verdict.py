@@ -272,3 +272,31 @@ def test_a_chat_about_the_stock_is_told_the_take_and_its_call(db_isolated, aapl_
         "lucius_call: TRIM — Cloud demand is strong. Order: sell 7 at a USD 101 limit. "
         "Levels: stop USD 50 (your thesis), trim USD 180 (your thesis). (as of 2026-10-31)"
     ) in block
+
+
+# ── the take is told the user's price alerts ────────────────────────────────────
+
+
+def test_price_alerts_are_told_so_a_level_reuses_one_already_set():
+    block = pv.alerts_block(
+        [
+            {"op": "<=", "value": 112, "name": "Stop review", "kind": "price"},
+            {"op": ">=", "value": 5, "kind": "move"},  # a daily-move alert is not a level
+            {"op": ">=", "value": 150},
+        ],
+        currency="USD",
+    )
+    assert block.startswith("YOUR PRICE ALERTS on this ticker: ≤ USD 112 (Stop review); ≥ USD 150.")
+    assert pv.alerts_block([], currency="USD") == ""
+    assert pv.alerts_block([{"op": ">=", "value": 5, "kind": "move"}]) == ""
+
+
+def test_the_take_context_carries_the_alerts(monkeypatch, db_isolated, aapl_thesis):  # noqa: F811
+    import backend.monitoring.analyst as analyst_mod
+    from backend.services import alerts
+
+    monkeypatch.setattr(
+        alerts, "list_alerts", lambda ticker: [{"op": "<=", "value": 80, "name": "Floor"}]
+    )
+    ctx = analyst_mod._verdict_context("inst-aapl", held=True)
+    assert "YOUR PRICE ALERTS on this ticker: ≤ USD 80 (Floor)." in ctx

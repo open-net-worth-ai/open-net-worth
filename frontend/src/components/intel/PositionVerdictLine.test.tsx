@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ChatComposerProvider, useChatComposer } from '../../state/chatComposer'
 import { PositionVerdictLine } from './PositionVerdictLine'
-import type { PositionVerdict } from '../../types/assetDetail'
+import type { PositionVerdict, PriceAlertCondition } from '../../types/assetDetail'
 
 const TRIM: PositionVerdict = {
   action: 'trim',
@@ -17,7 +17,7 @@ const TRIM: PositionVerdict = {
   ],
 }
 
-function renderWithComposer(verdict: PositionVerdict) {
+function renderWithComposer(verdict: PositionVerdict, alerts: PriceAlertCondition[] = []) {
   const seen: { pending: string | null; mentions: unknown[] } = { pending: null, mentions: [] }
   function Probe() {
     const c = useChatComposer()
@@ -34,6 +34,7 @@ function renderWithComposer(verdict: PositionVerdict) {
         ticker="ACME"
         priceMaxFrac={2}
         verdict={verdict}
+        alerts={alerts}
       />
     </ChatComposerProvider>,
   )
@@ -73,5 +74,19 @@ describe('PositionVerdictLine', () => {
     renderWithComposer({ action: 'hold', why: 'Nothing changed.', currency: 'USD', levels: [] })
     expect(screen.getByText('Hold')).toBeTruthy()
     expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('leaves out a level an existing price alert already watches', () => {
+    renderWithComposer(TRIM, [{ op: '<=', value: 112, kind: 'price' }])
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+      'Sell 25 at $270.00',
+      'Alert me above $160.00',
+    ])
+    cleanup()
+    renderWithComposer(TRIM, [
+      { op: '<=', value: 112 },
+      { op: '>=', value: 160.5 },
+    ])
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Sell 25 at $270.00'])
   })
 })

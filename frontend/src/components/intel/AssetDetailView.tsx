@@ -42,6 +42,10 @@ import { YourPositionCard } from './YourPositionCard'
 import { PositionSubtab } from './PositionSubtab'
 import { YourThesisCard } from './YourThesisCard'
 import { PositionVerdictLine } from './PositionVerdictLine'
+
+/** Under every take: it's an opinion, and Lucius isn't licensed to give advice. */
+const TAKE_NOT_ADVICE =
+  "Lucius isn't a licensed financial adviser. This is its view, not financial advice — the decision is always yours."
 import { ClosedPositionHistory } from './ClosedPositionHistory'
 import { AssetWatchlistMenu } from './AssetWatchlistMenu'
 import { AssetAlertsCard } from './AssetAlertsCard'
@@ -1007,7 +1011,7 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                         {/* Card-scoped counterpart to the page-level RefreshingBanner (owner
                             clarification, ADR addendum "an on-demand top-up"): the banner alone
                             doesn't make clear THIS card is what's being refreshed. */}
-                        {(backgroundRefreshing || generating) && (
+                        {(backgroundRefreshing || generating || keyIssuesPassActive(data)) && (
                           <span
                             className="asd-pi-updating"
                             role="status"
@@ -1038,8 +1042,10 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                               instrumentId={instrumentId}
                               name={asset.name}
                               ticker={asset.ticker}
+                              alerts={data.watchlist.price_alerts}
                             />
                           )}
+                          <p className="asd-pi-disclaimer">{TAKE_NOT_ADVICE}</p>
                         </>
                       )}
                     </div>

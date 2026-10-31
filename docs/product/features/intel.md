@@ -209,9 +209,14 @@ Below the call are at most two buttons, each handing Lucius a request ready to s
 - **An alert**, e.g. *Alert me below $209.67 or above $269.92*. The lower price is the stop, where
   Lucius would sell to cap the loss (for a stock you watch, the price to buy at); the higher one
   is where it would take some profit. A level you set in **Your Thesis** always replaces Lucius's.
+  Lucius is told the price alerts you already have on the stock and reuses one when it fits, and
+  a level an alert already watches isn't offered again.
 
 On a computer the request lands in the Lucius box at the bottom of the screen; on a phone you're
 taken to the Lucius tab with it typed in. Nothing happens until you press send.
+
+A line at the bottom of the card is a reminder that Lucius isn't a licensed financial adviser: the
+take is its view, not financial advice, and the decision is always yours.
 
 ### Your Thesis
 

@@ -28,6 +28,7 @@ _THESIS_FIELD = {"stop": "stop_below", "trim": "trim_above", "entry": "buy_below
 # of the price the call was made at (outside it the order stays, without a limit).
 _ORDER_SIDE = {"add": "buy", "buy": "buy", "trim": "sell", "sell": "sell"}
 _LIMIT_BAND = (0.8, 1.2)
+_ALERT_OPS = {"<=": "≤", "<": "<", ">=": "≥", ">": ">"}
 
 
 def _levels_for(held: bool) -> tuple[str, ...]:
@@ -115,6 +116,27 @@ def prior_block(stored: dict | None, *, held: bool, currency: str = "") -> str:
         "justify it — never move a level only because the price moved."
     )
     return "\n".join(lines)
+
+
+def alerts_block(alerts: list[dict], *, currency: str = "") -> str:
+    """The user's price alerts on this ticker as prompt context, or "" with none — so a take
+    reuses a level the user already watches instead of suggesting one a hair away from it."""
+    unit = f"{currency} " if currency else ""
+    shown = []
+    for a in alerts:
+        value = _num(a.get("value"))
+        if (a.get("kind") or "price") != "price" or not value or a.get("op") not in _ALERT_OPS:
+            continue
+        name = " ".join(str(a.get("name") or "").split())[:60]
+        shown.append(f"{_ALERT_OPS[a['op']]} {unit}{value:g}" + (f" ({name})" if name else ""))
+    if not shown:
+        return ""
+    return (
+        "YOUR PRICE ALERTS on this ticker: "
+        + "; ".join(shown)
+        + ". Where one fits your call, use it as the level rather than suggesting a level just "
+        "beside it."
+    )
 
 
 def compose(

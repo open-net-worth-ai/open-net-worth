@@ -2750,8 +2750,9 @@ def _write_asset_brief_synthesis(
 
 def _verdict_context(instrument_id: str, *, held: bool) -> str:
     """What the take's call needs beyond the position block: the price of a watched ticker (a
-    holding's block already has it) and the previous call with its levels, so a level moves
-    because something changed, not because the price did. "" on any failure — never blocks."""
+    holding's block already has it), the previous call with its levels — so a level moves
+    because something changed, not because the price did — and the user's price alerts on it,
+    so a level reuses one already set. "" on any failure — never blocks."""
     try:
         from backend.db.asset_brief_store import AssetBriefStore
         from backend.db.instrument_store import InstrumentStore
@@ -2766,6 +2767,13 @@ def _verdict_context(instrument_id: str, *, held: bool) -> str:
         block = position_verdict.prior_block(prior, held=held, currency=currency)
         if block:
             parts.append(block)
+        ticker = (inst.get("price_source_id") or "").upper()
+        if ticker:
+            from backend.services.alerts import list_alerts
+
+            alerts = position_verdict.alerts_block(list_alerts(ticker), currency=currency)
+            if alerts:
+                parts.append(alerts)
     except Exception as exc:
         logger.debug(
             "analyst: verdict context failed for %s: %s", instrument_id, type(exc).__name__
