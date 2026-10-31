@@ -215,6 +215,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
       clearPendingMentions,
       setPendingSkills,
       pendingText,
+      pendingTextKeepsChips,
       clearPendingText,
     } = useChatComposer()
     const { enabled: screenEnabledGlobal, pinnedHandleIds } = useScreenSnapshot()
@@ -235,10 +236,11 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
     // as pendingMentions so it lands in the VISIBLE surface only, mounted or not.
     useEffect(() => {
       if (!active || !pendingText || !mentionRef.current) return
-      mentionRef.current.setText(pendingText)
+      if (pendingTextKeepsChips) mentionRef.current.appendText(` ${pendingText}`)
+      else mentionRef.current.setText(pendingText)
       mentionRef.current.focus()
       clearPendingText()
-    }, [active, pendingText, clearPendingText])
+    }, [active, pendingText, pendingTextKeepsChips, clearPendingText])
 
     // ── Attachment helpers ────────────────────────────────────────────────────
 
