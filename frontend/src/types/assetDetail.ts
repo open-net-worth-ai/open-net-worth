@@ -324,6 +324,8 @@ export interface PositionVerdict {
   why: string
   levels: VerdictLevel[]
   order?: VerdictOrder | null
+  /** False when Lucius judged the user's own price alerts already cover these levels. */
+  alert?: boolean
   currency: string
 }
 

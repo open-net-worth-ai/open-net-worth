@@ -43,9 +43,6 @@ import { PositionSubtab } from './PositionSubtab'
 import { YourThesisCard } from './YourThesisCard'
 import { PositionVerdictLine } from './PositionVerdictLine'
 
-/** Under every take: it's an opinion, and Lucius isn't licensed to give advice. */
-const TAKE_NOT_ADVICE =
-  "Lucius isn't a licensed financial adviser. This is its view, not financial advice — the decision is always yours."
 import { ClosedPositionHistory } from './ClosedPositionHistory'
 import { AssetWatchlistMenu } from './AssetWatchlistMenu'
 import { AssetAlertsCard } from './AssetAlertsCard'
@@ -55,6 +52,10 @@ import { FundamentalsSnapshot } from './FundamentalsSnapshot'
 import { TechnicalsWidget } from './TechnicalsWidget'
 import { AcquireLotForm } from '../shared/AcquireLotForm'
 import { useRailResize } from './useRailResize'
+
+/** Under every take: Lucius's view is an opinion, never licensed advice. */
+const TAKE_NOT_ADVICE =
+  'Lucius isn’t a licensed financial adviser. Treat its suggestions as information, not advice.'
 
 type DetailTab = 'overview' | 'analysis' | 'position'
 const DETAIL_TAB_VALUES: DetailTab[] = ['overview', 'analysis', 'position']
@@ -1042,7 +1043,6 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                               instrumentId={instrumentId}
                               name={asset.name}
                               ticker={asset.ticker}
-                              alerts={data.watchlist.price_alerts}
                             />
                           )}
                           <p className="asd-pi-disclaimer">{TAKE_NOT_ADVICE}</p>

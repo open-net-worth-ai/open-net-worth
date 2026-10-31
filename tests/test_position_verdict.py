@@ -80,6 +80,7 @@ def test_the_thesis_level_wins_and_distances_come_from_todays_price():
         "why": "x",
         "currency": "USD",
         "order": None,
+        "alert": True,
         "levels": [
             {"kind": "stop", "price": 50.0, "source": "thesis", "distance_pct": -50.0},
             {"kind": "trim", "price": 120.0, "source": "lucius", "distance_pct": 20.0},
@@ -300,3 +301,14 @@ def test_the_take_context_carries_the_alerts(monkeypatch, db_isolated, aapl_thes
     )
     ctx = analyst_mod._verdict_context("inst-aapl", held=True)
     assert "YOUR PRICE ALERTS on this ticker: ≤ USD 80 (Floor)." in ctx
+
+
+def test_lucius_can_say_the_users_alerts_already_cover_its_levels():
+    v = pv.normalize(
+        {"action": "hold", "why": "x", "stop": 80, "alert": False}, held=True, price=100.0
+    )
+    assert v["alert"] is False
+    assert pv.compose(v, None, held=True, price=100.0, currency="USD")["alert"] is False
+    v = pv.normalize({"action": "hold", "why": "x", "stop": 80}, held=True, price=100.0)
+    assert "alert" not in v
+    assert pv.compose(v, None, held=True, price=100.0, currency="USD")["alert"] is True

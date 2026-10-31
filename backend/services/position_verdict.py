@@ -75,6 +75,8 @@ def normalize(
     if action not in (HELD_ACTIONS if held else WATCHED_ACTIONS) or not why:
         return None
     out: dict = {"action": action, "why": why[:_WHY_MAX], "held": held}
+    if raw.get("alert") is False:
+        out["alert"] = False
     if price and price > 0:
         out["price_at"] = price
         for kind in _levels_for(held):
@@ -135,7 +137,7 @@ def alerts_block(alerts: list[dict], *, currency: str = "") -> str:
         "YOUR PRICE ALERTS on this ticker: "
         + "; ".join(shown)
         + ". Where one fits your call, use it as the level rather than suggesting a level just "
-        "beside it."
+        "beside it, and set verdict.alert false when these already cover your levels."
     )
 
 
@@ -166,6 +168,7 @@ def compose(
         "why": stored.get("why") or "",
         "levels": levels,
         "order": stored.get("order") or None,
+        "alert": stored.get("alert", True) is not False,
         "currency": currency,
     }
 

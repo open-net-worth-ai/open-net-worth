@@ -1,9 +1,4 @@
-import type {
-  PositionVerdict,
-  PriceAlertCondition,
-  VerdictLevel,
-  VerdictOrder,
-} from '../../types/assetDetail'
+import type { PositionVerdict, VerdictOrder } from '../../types/assetDetail'
 import { useChatComposerOptional } from '../../state/chatComposer'
 import { fPrice, getCurrencySymbol } from '../../utils/format'
 
@@ -42,26 +37,11 @@ function orderText(o: VerdictOrder, money: (v: number) => string): string {
   return `${verb} ${units(o.quantity)}${o.limit ? ` at ${money(o.limit)}` : ''}`
 }
 
-/** Whether a price alert already watches this level: same direction, within 0.5% of it. */
-function alreadyAlerted(level: VerdictLevel, alerts: PriceAlertCondition[]): boolean {
-  const falling = level.kind !== 'trim'
-  return alerts.some(
-    (a) =>
-      (a.kind ?? 'price') === 'price' &&
-      (falling ? a.op === '<' || a.op === '<=' : a.op === '>' || a.op === '>=') &&
-      Math.abs(a.value / level.price - 1) <= 0.005,
-  )
-}
-
 /** At most two suggestions: the order (or a plan when there is none), then one alert on the
- *  levels — below the stop / buy price, above the trim level — leaving out any level a price
- *  alert already watches. Each is worded as a reply to
+ *  levels — below the stop / buy price, above the trim level — unless Lucius said the user's
+ *  own alerts already cover them (`alert: false`). Each is worded as a reply to
  *  Lucius's own call; the stock rides along as a mention, which carries the take itself. */
-function suggestionsFor(
-  verdict: PositionVerdict,
-  money: (v: number) => string,
-  alerts: PriceAlertCondition[],
-): Suggestion[] {
+function suggestionsFor(verdict: PositionVerdict, money: (v: number) => string): Suggestion[] {
   const out: Suggestion[] = []
   const plan = PLAN[verdict.action]
   const order = verdict.order
@@ -77,9 +57,9 @@ function suggestionsFor(
       prompt: `Walk me through ${plan[1]} as you suggested: how much, the tax and fees, and what it changes in my portfolio.`,
     })
   }
-  const open = verdict.levels.filter((l) => !alreadyAlerted(l, alerts))
-  const below = open.find((l) => l.kind !== 'trim')
-  const above = open.find((l) => l.kind === 'trim')
+  const levels = verdict.alert === false ? [] : verdict.levels
+  const below = levels.find((l) => l.kind !== 'trim')
+  const above = levels.find((l) => l.kind === 'trim')
   const when = [
     below && `falls to ${money(below.price)}`,
     above && `rises to ${money(above.price)}`,
@@ -102,19 +82,17 @@ export function PositionVerdictLine({
   instrumentId,
   name,
   ticker,
-  alerts = [],
 }: {
   verdict: PositionVerdict
   priceMaxFrac?: number
   instrumentId: string
   name: string
   ticker?: string | null
-  alerts?: PriceAlertCondition[]
 }) {
   const composer = useChatComposerOptional()
   const sym = verdict.currency ? getCurrencySymbol(verdict.currency) : ''
   const money = (v: number) => `${sym}${fPrice(v, priceMaxFrac)}`
-  const suggestions = composer ? suggestionsFor(verdict, money, alerts) : []
+  const suggestions = composer ? suggestionsFor(verdict, money) : []
   const send = (prompt: string) => {
     composer?.addMention(
       { type: 'instrument', ref: instrumentId, label: ticker || name },

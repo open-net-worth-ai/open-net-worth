@@ -464,11 +464,11 @@ def _output_skeleton(include_key_issues: bool, is_held: bool = True) -> str:
             + (
                 '"verdict": {"action": "hold|add|trim|sell", "why": "<one plain sentence>", '
                 '"stop": <price or null>, "trim": <price or null>, '
-                '"quantity": <shares or null>, "limit": <price or null>}'
+                '"quantity": <shares or null>, "limit": <price or null>, "alert": true|false}'
                 if is_held
                 else '"verdict": {"action": "buy|wait", "why": "<one plain sentence>", '
                 '"entry": <price or null>, "quantity": <shares or null>, '
-                '"limit": <price or null>}'
+                '"limit": <price or null>, "alert": true|false}'
             )
         )
     return base + "}"
@@ -579,7 +579,9 @@ def _verdict_instruction(is_held: bool) -> str:
             "sell only past its stop or once its breaks_if has happened. For add, trim or sell, "
             "make it an order someone could place: quantity — how many shares/units to buy or "
             "sell (a sell is never more than the position quantity above; a trim is part of it); "
-            "limit — the limit price, close to today's. Null both for hold. "
+            "limit — the limit price, close to today's. Null both for hold. alert — true to "
+            "offer a price alert at your stop/trim; false when YOUR PRICE ALERTS already cover "
+            "them or you gave no levels. "
         )
     return (
         "verdict: your ONE call on this ticker today — action is exactly buy or wait. why: one "
@@ -588,6 +590,8 @@ def _verdict_instruction(is_held: bool) -> str:
         "ground one. If YOUR THESIS gives a buy zone, the call is buy only inside it. For buy, "
         "make it an order someone could place: quantity — a starter position sized for this "
         "investor's portfolio; limit — the limit price, close to today's. Null both for wait. "
+        "alert — true to offer a price alert at your entry; false when YOUR PRICE ALERTS already "
+        "cover it or you gave none. "
     )
 
 
@@ -1043,9 +1047,9 @@ class _AnalysisOutput(BaseModel):
         default_factory=dict,
         description="ONLY when explicitly asked (a HELD or WATCHED asset subject): the take's one "
         'call — held: {"action": "hold|add|trim|sell", "why": str, "stop": number|null, '
-        '"trim": number|null, "quantity": number|null, "limit": number|null}; watched: '
-        '{"action": "buy|wait", "why": str, "entry": number|null, "quantity": number|null, '
-        '"limit": number|null}. Leave EMPTY for every other call.',
+        '"trim": number|null, "quantity": number|null, "limit": number|null, "alert": bool}; '
+        'watched: {"action": "buy|wait", "why": str, "entry": number|null, "quantity": '
+        'number|null, "limit": number|null, "alert": bool}. Leave EMPTY for every other call.',
     )
 
     @field_validator("key_issues", mode="before")
