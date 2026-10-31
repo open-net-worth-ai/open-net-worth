@@ -1340,8 +1340,19 @@ export function skipsPreview(entry: DirectoryRow): boolean {
  * and the only part a user cannot rename. A server pointed at a different endpoint therefore
  * inherits nothing, which is the safe direction: it falls back to `unknown`.
  */
+/** How two endpoints are compared: whitespace collapsed and a package's version tag dropped
+ *  (`pkg@latest`, `@scope/pkg@1.2.3` → the bare name), so a server saved before the catalog
+ *  started launching `@latest` still matches its card. Twin: `connector_directory._endpoint_key`. */
+export function endpointKey(endpoint: string | undefined): string {
+  return (endpoint ?? '')
+    .trim()
+    .split(/\s+/)
+    .map((token) => token.replace(/^(@?[^@\s]+)@[^@\s/]+$/, '$1'))
+    .join(' ')
+}
+
 export function catalogProvenanceFor(endpoint: string | undefined): CatalogProvenance | null {
-  const needle = endpoint?.trim()
+  const needle = endpointKey(endpoint)
   if (!needle) return null
   for (const entry of CATALOG) {
     if (!entry.mcp) continue
@@ -1351,7 +1362,7 @@ export function catalogProvenanceFor(endpoint: string | undefined): CatalogProve
       preset.transport === 'remote'
         ? preset.url
         : [preset.command, preset.args].filter(Boolean).join(' ')
-    if (known && known.trim() === needle) {
+    if (known && endpointKey(known) === needle) {
       return {
         publisher: entry.publisher,
         verification: entry.verification,

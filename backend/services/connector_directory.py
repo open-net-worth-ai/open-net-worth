@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
@@ -123,7 +124,17 @@ def _installed_state() -> tuple[dict[str, str], Optional[set[str]]]:
         # them, so it is logged here and never reaches the model.
         logger.warning("connector directory: installed MCP servers unreadable", exc_info=True)
         return native, None
-    return native, {e for e in endpoints if e}
+    return native, {_endpoint_key(e) for e in endpoints if e}
+
+
+_VERSION_TAG = re.compile(r"^(@?[^@\s]+)@[^@\s/]+$")
+
+
+def _endpoint_key(endpoint: str) -> str:
+    """Whitespace collapsed and a package's version tag dropped (``pkg@latest`` → ``pkg``), so a
+    server saved before its catalog entry started launching ``@latest`` still counts as installed.
+    Twin of the frontend's ``endpointKey``."""
+    return " ".join(_VERSION_TAG.sub(r"\1", t) for t in endpoint.split())
 
 
 def _live_blurb(connector_id: str) -> str:
@@ -139,7 +150,9 @@ def _row(entry: dict, native: dict[str, str], endpoints: Optional[set[str]]) -> 
     installed: Optional[bool]
     if entry["mcp"]:
         endpoint = entry.get("endpoint", "")
-        installed = None if endpoints is None else bool(endpoint) and endpoint in endpoints
+        installed = (
+            None if endpoints is None else bool(endpoint) and _endpoint_key(endpoint) in endpoints
+        )
         status: Optional[str] = None
     else:
         status = native.get(entry["id"])

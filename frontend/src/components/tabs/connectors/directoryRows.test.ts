@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { resolveDirectory } from './directoryRows'
-import { catalogProvenanceFor, CATALOG, MCP_INSTALL_PRESETS } from './catalog'
+import { catalogProvenanceFor, CATALOG, MCP_INSTALL_PRESETS, endpointKey } from './catalog'
 import { toEntry } from './adapter'
 import type { Connector } from './types'
 
@@ -39,6 +39,16 @@ describe('catalogProvenanceFor — matched by endpoint, never by name', () => {
       logo: '/connector-logos/playwright.svg',
       categories: ['Browsing'],
     })
+  })
+
+  it('still knows a server saved without the @latest the catalog now launches', () => {
+    // Coinbase was added as `npx -y @coinbase/coinbase-cli mcp`; the preset gained `@latest`.
+    expect(catalogProvenanceFor('npx -y @coinbase/coinbase-cli mcp')?.logo).toBe(
+      catalogProvenanceFor('npx -y @coinbase/coinbase-cli@latest mcp')?.logo,
+    )
+    expect(catalogProvenanceFor('npx -y @coinbase/coinbase-cli@1.2.0 mcp')).not.toBeNull()
+    expect(endpointKey('npx -y @scope/pkg@latest --demo')).toBe('npx -y @scope/pkg --demo')
+    expect(endpointKey('uvx  pkg@2.0.1')).toBe('uvx pkg')
   })
 
   it('attributes nothing to an unrecognised endpoint', () => {

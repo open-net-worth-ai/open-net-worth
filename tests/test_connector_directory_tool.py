@@ -240,3 +240,19 @@ def test_open_setup_refuses_a_model_sent_connect():
     )
     assert _validate_command_semantics("connectors.open_setup", {"id": "mcp-webull", "reason": "x"})
     assert msg and "connect" in msg
+
+
+def test_a_server_saved_before_the_catalog_added_latest_still_counts_as_installed(db):
+    from backend.db.mcp_client_store import McpClientStore
+
+    McpClientStore().create(
+        McpServerConfig(
+            id="cb",
+            name="coinbase",
+            transport="stdio",
+            command="npx",
+            args=["-y", "@coinbase/coinbase-cli", "mcp"],
+        )
+    )
+    rows = _call({"query": "coinbase"})["connectors"]
+    assert next(c for c in rows if c["id"] == "mcp-coinbase")["installed"] is True
