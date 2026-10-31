@@ -156,6 +156,11 @@ about itself, not a check of who runs the server, so the badge still reads **Unk
 publisher**. A name you typed yourself is never replaced. **⋯ → Refresh tools list** reads the
 name and icon again.
 
+A server's page also shows what it says about itself: its display title as the name (unless you
+typed one), its one-line description under the name, the version it's running (for example
+**v1.0.1**), and, folded, **The server's instructions for AI** — the usage notes it ships for AI
+assistants. Servers that send none of these keep the generic text.
+
 **Updates.** A remote server updates itself — the vendor changes it, and its next answer comes
 from the new version. A local server runs until the app restarts; most directory servers launch with
 `@latest`, so each restart starts the newest release (a little slower to start, and it needs

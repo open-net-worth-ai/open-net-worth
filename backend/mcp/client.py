@@ -510,6 +510,7 @@ def parse_server_info(result: Any) -> ServerInfo:
         name=_clean_info_field(info.get("name")),
         version=_clean_info_field(info.get("version")),
         title=_clean_info_field(info.get("title")),
+        description=_clean_description(info.get("description")),
         icons=_clean_info_icons(info.get("icons")),
         publisher=_clean_info_field(info.get("publisher") or info.get("vendor")),
         homepage_url=_clean_info_url(info.get("websiteUrl") or info.get("homepageUrl")),
@@ -557,6 +558,15 @@ def _clean_instructions(value: Any) -> Optional[str]:
     if not isinstance(value, str):
         return None
     cleaned = sanitize_untrusted(value, max_len=MAX_SERVER_INSTRUCTIONS_CHARS).strip()
+    return cleaned or None
+
+
+def _clean_description(value: Any) -> Optional[str]:
+    """``serverInfo.description``: prose a person reads, so sanitized like ``instructions``,
+    but a subtitle — capped at a short label's length."""
+    if not isinstance(value, str):
+        return None
+    cleaned = " ".join(sanitize_untrusted(value, max_len=MAX_SERVER_INFO_CHARS).split())
     return cleaned or None
 
 

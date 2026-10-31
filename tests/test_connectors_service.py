@@ -1171,10 +1171,11 @@ def test_mcp_view_undiscovered_has_empty_tools():
     assert svc.get_connector("mcp:srv").tools == []
 
 
-def test_mcp_view_uses_the_servers_own_instructions_when_present():
-    """A custom server's handshake ``instructions`` (captured by ``record_discovery``) becomes
-    its ``long_description`` in place of the generic fallback — so a self-describing server
-    doesn't show the same boilerplate every other custom server shares."""
+def test_mcp_view_uses_the_servers_own_description_not_its_instructions():
+    """A custom server's handshake ``serverInfo.description`` becomes its subtitle and
+    description in place of the generic fallback. Its ``instructions`` are guidance for an AI,
+    not a description — they stay in ``config.server_info_instructions`` for the detail page's
+    fold, and never become the card's text."""
     svc = _svc()
     from backend.db.mcp_client_store import McpClientStore
     from backend.models.mcp_client import McpServerConfig, ServerInfo
@@ -1185,10 +1186,32 @@ def test_mcp_view_uses_the_servers_own_instructions_when_present():
         "ibkr",
         [{"name": "get_positions", "description": "List positions."}],
         status="ok",
-        server_info=ServerInfo(instructions="Trade and query positions at Interactive Brokers."),
+        server_info=ServerInfo(
+            title="Interactive Brokers",
+            description="Trade and query positions at Interactive Brokers.",
+            instructions="Always call get_positions before placing an order.",
+        ),
     )
     view = svc.get_connector("mcp:ibkr")
+    assert view.short_description == "Trade and query positions at Interactive Brokers."
     assert view.long_description == "Trade and query positions at Interactive Brokers."
+    assert view.config["server_info_instructions"] == (
+        "Always call get_positions before placing an order."
+    )
+    assert view.config["server_info_title"] == "Interactive Brokers"
+
+
+def test_mcp_view_with_only_instructions_keeps_the_generic_description():
+    svc = _svc()
+    from backend.db.mcp_client_store import McpClientStore
+    from backend.models.mcp_client import McpServerConfig, ServerInfo
+
+    store = McpClientStore()
+    store.create(McpServerConfig(id="gem", url="https://mcp.example.com"))
+    store.record_discovery("gem", [], status="ok", server_info=ServerInfo(instructions="Use me."))
+    view = svc.get_connector("mcp:gem")
+    assert view.long_description != "Use me."
+    assert view.config["server_info_instructions"] == "Use me."
 
 
 def test_mcp_view_falls_back_to_generic_description_with_no_permission_talk():

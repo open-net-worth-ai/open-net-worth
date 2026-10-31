@@ -1189,6 +1189,18 @@ def test_parse_server_info_pure_cases():
     assert parse_server_info({"serverInfo": {"name": {"nested": 1}}}).name is None
 
 
+def test_parse_server_info_keeps_a_short_clean_description():
+    """``serverInfo.description`` is untrusted prose shown as a subtitle: whitespace
+    collapsed, capped, and a non-string is dropped."""
+    from backend.mcp.client import MAX_SERVER_INFO_CHARS, parse_server_info
+
+    info = parse_server_info({"serverInfo": {"description": "  Trades\n crypto  on Gemini "}})
+    assert info.description == "Trades crypto on Gemini"
+    long = parse_server_info({"serverInfo": {"description": "x" * 5000}}).description
+    assert long is not None and len(long) <= MAX_SERVER_INFO_CHARS
+    assert parse_server_info({"serverInfo": {"description": 42}}).description is None
+
+
 # ── provenance / vendor trust (§5) ─────────────────────────────────────────────
 
 

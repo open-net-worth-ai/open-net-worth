@@ -118,6 +118,8 @@ class ServerInfo:
     # MCP 2025-06-18's human display name and 2025-11-25's ``icons`` (https/data URIs only —
     # fetched and sniffed later by ``mcp.site_identity``, never rendered from here).
     title: Optional[str] = None
+    # 2025-11-25's one-line ``description`` — what the card's subtitle shows.
+    description: Optional[str] = None
     icons: tuple[str, ...] = ()
     publisher: Optional[str] = None
     homepage_url: Optional[str] = None
@@ -271,6 +273,10 @@ class McpServerConfig(ONBaseModel):
     # reporting nothing, a blank, or a non-string lands ``None``.
     server_info_name: Optional[str] = None
     server_info_version: Optional[str] = None
+    # The handshake's display ``title`` and one-line ``description`` — the card's name (while
+    # the row still carries the server's own ``name``) and subtitle.
+    server_info_title: Optional[str] = None
+    server_info_description: Optional[str] = None
     # The server's own ``instructions`` string from the ``initialize`` handshake — used as
     # this server's detail-page/directory description when present (``services.connectors``
     # falls back to the generic ``mcp`` copy when it is ``None``).

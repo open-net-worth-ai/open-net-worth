@@ -177,6 +177,28 @@
 .cn-page .rd-masthead.scrolled::after {
   opacity: 1;
 }
+/* Detail page: the server's reported version, and its AI instructions folded (ConnectorDetail). */
+.cn-page .cn-version {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cn-page .cn-fold > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+  width: fit-content;
+}
+.cn-page .cn-fold > summary:hover {
+  color: var(--ink);
+}
+.cn-page .cn-fold > p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 /* collision neutraliser — tabs/automations.css ships an unlayered, unscoped .rd-masthead of
    its own. Scoping settles the properties both sheets declare; these are the ones only THAT
    sheet declares, so without stating them here they land on this masthead the moment the

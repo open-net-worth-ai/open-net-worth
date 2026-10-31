@@ -493,19 +493,37 @@ export function ConnectorDetail({
             MCP server. The vendor is still visible elsewhere on the card (name, logo,
             description) and in the Details footer's "Vendor" field, so nothing is hidden — this
             line just answers one question cleanly: did WE build this. */}
-          {entry.developer ? (
+          {entry.developer || entry.version ? (
             <div style={{ fontSize: 13, fontWeight: 400, color: 'var(--ink)' }}>
-              Developed by{' '}
-              {entry.mcp ? (
-                entry.developerUrl ? (
-                  <ExternalLink href={entry.developerUrl}>{entry.developer}</ExternalLink>
-                ) : (
-                  entry.developer
-                )
-              ) : (
-                <ExternalLink href={FIRST_PARTY_URL}>{FIRST_PARTY_PUBLISHER}</ExternalLink>
-              )}
+              {entry.developer ? (
+                <>
+                  Developed by{' '}
+                  {entry.mcp ? (
+                    entry.developerUrl ? (
+                      <ExternalLink href={entry.developerUrl}>{entry.developer}</ExternalLink>
+                    ) : (
+                      entry.developer
+                    )
+                  ) : (
+                    <ExternalLink href={FIRST_PARTY_URL}>{FIRST_PARTY_PUBLISHER}</ExternalLink>
+                  )}
+                </>
+              ) : null}
+              {/* The version the server reported — a custom server with no publisher still
+                  says which release it is running. */}
+              {entry.version ? (
+                <span className="cn-version">
+                  {entry.developer ? ' · ' : ''}v{entry.version.replace(/^v/i, '')}
+                </span>
+              ) : null}
             </div>
+          ) : null}
+
+          {entry.instructions ? (
+            <details className="cn-fold">
+              <summary>The server&rsquo;s instructions for AI</summary>
+              <p>{entry.instructions}</p>
+            </details>
           ) : null}
 
           {entry.mcp ? (
