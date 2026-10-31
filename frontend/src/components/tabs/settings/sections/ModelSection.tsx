@@ -17,6 +17,7 @@ import {
   modelRejectsImages,
   useModels,
 } from '../../../../hooks/useModels'
+import { useFlag } from '../../../../hooks/useFlag'
 import { getCachedQueryData, useCachedFetchState } from '../../../../state/queryCache'
 import { openReportProblem } from '../../../../state/reportProblem'
 import { useCliDetectionPoll } from '../../../../hooks/useCliDetectionPoll'
@@ -169,6 +170,24 @@ const TASK_GROUPS: [string, [string, string, string, boolean?][]][] = [
 ]
 const TASK_ROWS = TASK_GROUPS.flatMap(([, rows]) => rows)
 const VISION_TASKS = TASK_ROWS.filter((r) => r[3])
+
+// permissions_v2 only: the Auto judge's own row, the last of the Assistant group.
+const TASK_GROUPS_V2: typeof TASK_GROUPS = TASK_GROUPS.map(([group, rows]) =>
+  group === 'Assistant'
+    ? [
+        group,
+        [
+          ...rows,
+          [
+            'approval',
+            'Auto-approval judge',
+            'Decides whether Auto mode must ask before a call. Unset uses the model your conversation is running on — pin a fast, non-reasoning model for snappier Auto. The pending call and your last few messages are sent to it.',
+          ],
+        ],
+      ]
+    : [group, rows],
+)
+const TASK_ROWS_V2 = TASK_GROUPS_V2.flatMap(([, rows]) => rows)
 
 // Two states, plainly named: GREEN = you can use it, RED = you cannot. "Unreachable" was
 // amber, which read as a caution when it is just as broken as a rejected key — neither one
@@ -656,8 +675,13 @@ function TaskModels({
   onSave: (next: Record<string, string | null>) => void
 }) {
   const over = taskModels
+  // The ONE switch point for permissions_v2 here: the judge picker exists only while it is on
+  // (and not before the flag list has loaded).
+  const judgePicker = useFlag('permissions_v2') === true
+  const taskGroups = judgePicker ? TASK_GROUPS_V2 : TASK_GROUPS
+  const taskRows = judgePicker ? TASK_ROWS_V2 : TASK_ROWS
   const keys = Object.keys(over).filter((k) => over[k])
-  const label = (k: string) => (TASK_ROWS.find(([kk]) => kk === k) || [, k])[1] as string
+  const label = (k: string) => (taskRows.find(([kk]) => kk === k) || [, k])[1] as string
   const resolved = (k: string) => over[k] || defaultModel
   // Only a positively-declared text-only model warns. An unknown model id is UNKNOWN, not
   // incapable — the model field takes free text, so warning on anything unrecognised would
@@ -700,13 +724,13 @@ function TaskModels({
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 12.5, fontWeight: 600 }}>
             {keys.length
-              ? keys.length + ' of ' + TASK_ROWS.length + ' tasks overridden'
+              ? keys.length + ' of ' + taskRows.length + ' tasks overridden'
               : 'All tasks use your default model'}
           </div>
           <div className="rd-help" style={{ marginTop: 3, display: 'block', lineHeight: 1.5 }}>
             {keys.length
               ? keys.map(label).join(' • ')
-              : TASK_ROWS.length + ' routable tasks — override only the ones you care about.'}
+              : taskRows.length + ' routable tasks — override only the ones you care about.'}
           </div>
         </div>
         {keys.length ? (
@@ -722,7 +746,7 @@ function TaskModels({
           </Btn>
         ) : null}
       </div>
-      {TASK_GROUPS.map(([group, rows]) => (
+      {taskGroups.map(([group, rows]) => (
         // A keyed Fragment, NOT a display:contents div. Both keep the wrapper out of the
         // layout, but a real element still sits in the DOM tree — so the panel's
         // `.rd-panel-body > .rd-subhead` rule (its padding and background band) stopped
@@ -740,12 +764,16 @@ function TaskModels({
                     models={models}
                     value={over[k] || ''}
                     defaultLabel={
-                      'Default' +
-                      (vision && modelRejectsImages(defaultModel, models, defaultModel)
-                        ? ' (no vision)'
-                        : '')
+                      k === 'approval'
+                        ? 'Same as chat model'
+                        : 'Default' +
+                          (vision && modelRejectsImages(defaultModel, models, defaultModel)
+                            ? ' (no vision)'
+                            : '')
                     }
-                    defaultModelId={defaultModel}
+                    // The judge, unset, follows the CONVERSATION's model, not the instance
+                    // default — naming the default here would be wrong whenever they differ.
+                    defaultModelId={k === 'approval' ? undefined : defaultModel}
                     annotate={
                       vision ? (m) => (m.vision === false ? '— no vision' : undefined) : undefined
                     }

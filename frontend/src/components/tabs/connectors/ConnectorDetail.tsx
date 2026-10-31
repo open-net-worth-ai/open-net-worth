@@ -38,7 +38,7 @@ import { templateKeyForConnector } from '../automations/automationTemplates'
 import { BackTitle, Badge, Btn, Kebab, Modal, Mono, type KebabItem } from './primitives'
 import { useConnectorSaveHost } from './formSave'
 import { useIsMobile } from '../../../hooks/useIsMobile'
-import { PermissionLadder } from './PermissionLadder'
+import { PermissionLadderSwitch } from './PermissionLadderSwitch'
 import { ExternalLink, FIRST_PARTY_PUBLISHER, FIRST_PARTY_URL, VendorTrust } from './VendorTrust'
 import {
   stampGroup,
@@ -563,7 +563,7 @@ export function ConnectorDetail({
                 <div className="rd-help" style={{ marginBottom: 8, fontSize: 12.5 }}>
                   Choose when Lucius is allowed to use these tools.
                 </div>
-                <PermissionLadder
+                <PermissionLadderSwitch
                   groups={entry.toolGroups}
                   perms={perms}
                   onSetTool={(tool, level) =>

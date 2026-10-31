@@ -21,7 +21,7 @@ import { WriteReceiptChip } from './WriteReceiptChip'
 import { useAnchoredPopover } from './anchoredPopover'
 import { ScreenCommandChip } from './ScreenCommandChip'
 import { CodeBlock } from './CodeBlock'
-import { ChangePreview } from './ChangePreview'
+import { ChangePreviewSwitch } from './ChangePreviewSwitch'
 import { DuplicateReview } from './DuplicateReview'
 import {
   Search,
@@ -191,7 +191,11 @@ interface Props {
   // Resolve a paused (awaiting-approval) tool_use — RFC 2026-07-22. Present on every real
   // chat surface; optional only so a read-only render (Inbox / agent findings, which use
   // ProposedChangeDiff instead) never needs to supply one.
-  onResolvePendingToolUse?: (toolUseId: string, decision: 'approve' | 'deny') => void
+  onResolvePendingToolUse?: (
+    toolUseId: string,
+    decision: 'approve' | 'deny',
+    options?: { always?: boolean },
+  ) => void
   onRespondToChange?: (
     messageId: string,
     changeId: string | undefined,
@@ -398,7 +402,11 @@ function renderGroupedBlock(
   i: number,
   onSendMessage: (text: string) => void,
   onRespond?: (changeId: string | undefined, status: 'confirmed' | 'dismissed') => void,
-  onResolvePendingToolUse?: (toolUseId: string, decision: 'approve' | 'deny') => void,
+  onResolvePendingToolUse?: (
+    toolUseId: string,
+    decision: 'approve' | 'deny',
+    options?: { always?: boolean },
+  ) => void,
   sessionId?: string,
   firstUnansweredChange?: string,
 ) {
@@ -493,7 +501,7 @@ function renderGroupedBlock(
     if (!changeIsVisible(block.change, firstUnansweredChange)) return null
     return (
       <div key={i} className="msg-proposed-changes">
-        <ChangePreview
+        <ChangePreviewSwitch
           change={block.change}
           onResolvePendingToolUse={onResolvePendingToolUse}
           onRespond={onRespond && ((status) => onRespond(block.change.id, status))}
@@ -1002,7 +1010,7 @@ export function MessageBubble({
                 if (!changeIsVisible(block.change, firstUnanswered)) return null
                 return (
                   <div key={i} className="msg-proposed-changes">
-                    <ChangePreview
+                    <ChangePreviewSwitch
                       change={block.change}
                       onResolvePendingToolUse={onResolvePendingToolUse}
                       onRespond={respond && ((status) => respond(block.change.id, status))}
@@ -1102,7 +1110,7 @@ export function MessageBubble({
             {m.proposedChanges
               .filter((change) => changeIsVisible(change, firstUnanswered))
               .map((change, i) => (
-                <ChangePreview
+                <ChangePreviewSwitch
                   key={i}
                   change={change}
                   onResolvePendingToolUse={onResolvePendingToolUse}

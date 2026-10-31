@@ -32,7 +32,7 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
 import { Btn } from './primitives'
 import { Icons } from './icons'
-import { PermissionLadder } from './PermissionLadder'
+import { PermissionLadderSwitch } from './PermissionLadderSwitch'
 import { VendorTrust } from './VendorTrust'
 import { McpConnectionFields } from './McpConnectionFields'
 import { MODAL_BODY_MIN_HEIGHT } from './DirectoryBrowser'
@@ -1051,7 +1051,7 @@ export function McpAddFlowBody({ flow }: { flow: McpAddFlow }): JSX.Element {
             <div className="rd-help" style={{ marginBottom: 8, fontSize: 12.5 }}>
               Choose when Lucius is allowed to use these tools.
             </div>
-            <PermissionLadder
+            <PermissionLadderSwitch
               groups={flow.toolGroups}
               perms={flow.perms}
               onSetTool={flow.setTool}
