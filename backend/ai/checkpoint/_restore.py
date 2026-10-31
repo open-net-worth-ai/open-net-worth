@@ -28,7 +28,7 @@ from pathlib import Path
 
 from backend.core.io import _atomic_write_bytes
 
-from . import _context, _index
+from . import _context, _index, _replay
 
 logger = logging.getLogger("backend.ai.checkpoint")
 
@@ -485,8 +485,8 @@ def _assert_restorable_accounts(images: list[tuple[str, dict | None]]) -> None:
 
     A checkpoint taken before the seven-type migration holds images typed `brokerage`,
     `savings`, `mortgage`… Replaying one puts a row back that `band_of` raises on, so every
-    net-worth read fails afterwards with nothing pointing at the cause. Checked BEFORE phase 1
-    deletes anything, so the whole restore aborts with both worlds untouched — the file phase
+    net-worth read fails afterwards with nothing pointing at the cause. Checked BEFORE the
+    replay changes anything, so the whole restore aborts with both worlds untouched — the file phase
     runs only after this transaction commits."""
     from backend.core.errors import DataIntegrityError
     from backend.models.account import ACCOUNT_BAND
@@ -506,21 +506,14 @@ def _assert_restorable_accounts(images: list[tuple[str, dict | None]]) -> None:
 
 def _replay_write_log(cp_id: str) -> None:
     """Replay `cp_id`'s write_log rows (DB pre-turn images, spec D7) inside ONE
-    transaction, TWO-PHASE (I2, reproduced — amends the single-phase delete-then-
-    insert-per-row description in the write_log ADR): phase 1 deletes every row
-    this checkpoint touched (by pk, regardless of before_payload — a None image
-    means the pk was NEW this turn, so restore must remove it too); phase 2
-    re-inserts every non-None before-image. A turn whose write PERMUTED row order
-    (e.g. ``PayloadTableStore.replace_all([b, a])`` on a table that had ``[a, b]``,
-    which reassigns both rows' ``seq`` under the new order) could not be restored
-    under the old single-phase, reverse-seq, per-row delete-then-insert: reinserting
-    row A at its ORIGINAL seq collided with row B, which still occupied that seq
-    because it had not been touched yet — IntegrityError on the table's unique seq
-    index, restore fail-closed but broken for that whole turn class. Splitting into
-    two phases makes row ORDER irrelevant WITHIN one table: by the time phase 2
-    runs, every touched row is already gone, so the original per-table seqs —
-    mutually unique in the pre-turn data by construction — can never collide with
-    each other or with an untouched row's seq.
+    transaction. The row steps live in ``_replay.apply_images``: park unique columns,
+    insert rows the turn deleted, UPDATE rows it edited IN PLACE, delete rows it created.
+    It used to delete every touched pk and re-insert its image — which fired every FK
+    from an UNTOUCHED row at an edited one: RESTRICT failed the restore (a transaction
+    on an edited account), CASCADE silently took the children with it (2026-11-01).
+    Parking keeps the permutation guarantee the old two-phase delete gave (I2): a turn
+    whose write PERMUTED row order (``PayloadTableStore.replace_all([b, a])`` swapping
+    two rows' ``seq``) restores without a unique-index collision.
 
     TABLE ORDER, ACROSS tables, is NOT arbitrary either (plan 3 task 4 — found the
     hard way, by a real cross-table restore, once the money core gave this mechanism
@@ -533,10 +526,9 @@ def _replay_write_log(cp_id: str) -> None:
     table's own seq-desc row order — the permutation proof above still holds), and
     the TABLES themselves are ordered by ``metadata.sorted_tables`` — SQLAlchemy's
     own FK-dependency topological sort (parents before children; the order a fresh
-    ``create_all`` would use). Phase 1 walks tables in REVERSE of that order
-    (children first, so no parent delete can be blocked by a still-live child);
-    phase 2 walks it FORWARD (parents first, so no child insert can be blocked by a
-    not-yet-restored parent). No schema in this app has a real FK cycle (the two
+    ``create_all`` would use). Inserts and updates walk it FORWARD (parents first, so
+    no child can point at a not-yet-restored parent); deletes walk it in REVERSE
+    (children first, so no parent delete is blocked by a still-live child). No schema in this app has a real FK cycle (the two
     circular-shaped relationships — ``accounts.opening_txn_id`` and
     ``transactions.merged_into`` — are deliberately NOT modeled as FKs for exactly
     this reason, per tables.py's own comments), so ``sorted_tables`` always succeeds.
@@ -551,7 +543,7 @@ def _replay_write_log(cp_id: str) -> None:
 
     wl = db_tables.write_log
     # FR-M4 — hold the per-table write locks for exactly the tables this checkpoint touched
-    # while the two-phase DELETE/re-INSERT runs, so a restore is mutually excluded against a
+    # while the replay runs, so a restore is mutually excluded against a
     # live turn's locked_unit_of_work money choke (and any other single-writer table choke).
     # Discover the touched-table set with a short read FIRST — a committed checkpoint's
     # write_log rows are immutable, so the set can't change before the locked replay below
@@ -579,29 +571,37 @@ def _replay_write_log(cp_id: str) -> None:
         by_table: dict[str, list[tuple[str, dict | None]]] = {}
         for table_name, pk, before_payload in rows:
             by_table.setdefault(table_name, []).append((pk, before_payload))
-        # Parents-before-children order; reversed for phase 1, as-is for phase 2 — see
+        # Parents-before-children order; reversed for deletes, as-is otherwise — see
         # the TABLE ORDER docstring section above.
         table_order = [t.name for t in db_tables.metadata.sorted_tables if t.name in by_table]
 
         _assert_restorable_accounts(by_table.get("accounts") or [])
+        txn_ids = [pk for pk, _ in by_table.get("transactions") or []]
+        txn_images = _txn_images(txn_ids, conn)
 
-        # Phase 1: delete every touched pk, CHILD TABLES FIRST — including the
-        # before_payload=None ones (a pk this turn newly inserted, so restore must
-        # remove it too).
-        for table_name in reversed(table_order):
-            table = db_tables.metadata.tables[table_name]
-            pk_col = _single_pk_col(table)
-            for pk, _before_payload in by_table[table_name]:
-                conn.execute(table.delete().where(pk_col == _pk_param(pk_col, pk)))
-        # Phase 2: re-insert every non-None before-image, PARENT TABLES FIRST. Every
-        # touched row (every table) is already gone by now, so no original seq can
-        # collide with another row still in flight.
-        for table_name in table_order:
-            table = db_tables.metadata.tables[table_name]
-            for pk, before_payload in by_table[table_name]:
-                if before_payload is None:
-                    continue
-                conn.execute(table.insert().values(**before_payload))
+        _replay.apply_images(conn, by_table, table_order)
+        if txn_ids:
+            _record_txn_reverts(cp_id, txn_images, _txn_images(txn_ids, conn), conn)
+
+
+def _txn_images(txn_ids: list[str], conn) -> dict[str, dict | None]:
+    from backend.db.transaction_store import TransactionStore
+
+    store = TransactionStore()
+    return {tid: store.find_by_id(tid, conn=conn) for tid in txn_ids}
+
+
+def _record_txn_reverts(cp_id: str, current: dict, restored: dict, conn) -> None:
+    """``txn_audit`` is checkpoint-excluded, so the replay leaves the reverted edit as each
+    row's last audited word — append a ``revert`` per changed transaction, inside the
+    replay's own transaction so the trail and the data land together."""
+    from backend.services import audit
+
+    cp = _index.find_checkpoint(cp_id) or {}
+    note = "Undid a restore" if cp.get("kind") == "pre_restore" else "Restored to before a change"
+    audit.record_txn_reverts(
+        {tid: (current.get(tid), restored.get(tid)) for tid in current}, note=note, conn=conn
+    )
 
 
 def _commit_staged_restore_files(staged: list[tuple[str, Path, Path | None]]) -> list[str]:

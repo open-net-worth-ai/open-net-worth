@@ -276,5 +276,6 @@ export const ACTION_VERB: Record<string, string> = {
   rejected: 'Rejected',
   split: 'Split',
   merged: 'Merged',
+  reverted: 'Reverted',
   deleted: 'Deleted',
 }

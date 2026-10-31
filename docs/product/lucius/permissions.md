@@ -129,6 +129,10 @@ longer offers **Undo**.
 Restoring to before an earlier message hides **Restore** on the later messages of that
 conversation while the restore stands. **Undo** brings them back.
 
+A restore keeps each transaction's history: the **Activity** in its drawer still lists the edit
+Lucius made, followed by a **Reverted** entry showing what the restore put back (and another if
+you **Undo** it).
+
 The first time Lucius changes your data, a one-time tip points at that message's **Restore**.
 
 ## Troubleshooting

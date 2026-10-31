@@ -48,7 +48,7 @@ or just by telling Lucius: *"I paid $42.80 for dinner at Nando's on my Visa yest
 
 The drawer always lists **Memo** and **Tags**, showing a dash when they are empty; add either with
 **Edit transaction**. It also shows the transaction's **Activity** (every change made to it, and by
-whom) and its **Receipts** — see [Attach a receipt](importing.md#attach-a-receipt).
+whom — including a **Reverted** entry when a chat Restore put it back) and its **Receipts** — see [Attach a receipt](importing.md#attach-a-receipt).
 
 To change many at once, tick the rows' checkboxes. A bar appears for setting the category,
 marking them cleared, uncleared or reviewed, deleting them, and (under **More**) moving them to

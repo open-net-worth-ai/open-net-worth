@@ -366,3 +366,25 @@ capture via the same write_log primary-key collision technique the previous amen
 introduced (a real `IntegrityError`, not a mocked one), the staged-restore recovery path via an
 injected failure in the commit-phase rename call. See
 `.superpowers/sdd/2026-08-07-storage-plan3-money-core/task-1-report.md`.
+
+## Amendment (2026-11-01 — an edited row is restored IN PLACE)
+
+The two-phase replay (I2: delete every touched pk, then re-insert every before-image) deleted rows
+the turn had only EDITED. A delete fires every foreign key pointing at that row from a row the turn
+never touched: `transactions.from/to_account_id` → `accounts` is RESTRICT, so restoring a turn that
+renamed an account with any transaction failed the whole restore (`FOREIGN KEY constraint failed`);
+`transaction_splits`/`transaction_external_refs` → `transactions`, `signal_timeline_entries` →
+`intel_stories` and `session_messages` → `sessions` are CASCADE, so a parent edit captured without
+its children silently took them with it — the parent's payload still listed the external refs while
+the child table that dedup reads no longer held them. Deferring FK checks was rejected: Postgres
+FKs are not `DEFERRABLE`, and a deferred CASCADE still cascades.
+
+`ai/checkpoint/_replay.apply_images` replaces the two phases with four steps in the same locked
+transaction: **park** one non-FK column of each unique index (`seq`, `idx`, `normalized_name`, …)
+on every touched row that exists now; **insert** rows the turn deleted, parents first; **update**
+rows the turn edited in place, parents first; **delete** rows the turn created, children first. An
+edited row is never deleted, so no untouched row's FK fires. Parking keeps I2's guarantee (a
+permuted `seq` order restores without a unique collision); a parked integer is `-(2**30 + n)`
+(inside Postgres `INTEGER`), a parked text `~restore-park:n`. The replay stays idempotent — on a
+second run every row is either present (re-parked, updated to the same image) or already gone.
+Regression: `tests/db/test_restore_updates_in_place.py`.
