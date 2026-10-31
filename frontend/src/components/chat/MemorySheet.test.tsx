@@ -145,7 +145,9 @@ describe('MemorySheet', () => {
         }),
       ),
     )
-    const line = (await screen.findByText('Changed 2 memories')).closest('[role="status"]')!
+    const line = (await screen.findByText('Changed 2 memories')).closest<HTMLElement>(
+      '[role="status"]',
+    )!
     expect(within(line).getByText('Has a dog named Beans')).toBeTruthy()
     // several changes: each says which kind and which topic
     expect(within(line).getByText('Housing')).toBeTruthy()

@@ -178,9 +178,9 @@ describe('MemoryBrowser', () => {
       target: { value: 'debt first, but some bills stay' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
-    const line = (await screen.findByText('Updated a memory in Debt reduction')).closest(
-      '[role="status"]',
-    )!
+    const line = (
+      await screen.findByText('Updated a memory in Debt reduction')
+    ).closest<HTMLElement>('[role="status"]')!
     expect(within(line).getByText(/Pays down debt first/)).toBeTruthy()
     expect(within(line).getByText('Before: Puts day-to-day needs first')).toBeTruthy()
     expect(within(line).queryByText(/paying down debt is now your priority/)).toBeNull()
@@ -215,7 +215,9 @@ describe('MemoryBrowser', () => {
       target: { value: 'my card number is on file' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
-    const line = (await screen.findByText('No changes were made.')).closest('[role="status"]')!
+    const line = (await screen.findByText('No changes were made.')).closest<HTMLElement>(
+      '[role="status"]',
+    )!
     expect(within(line).queryByText(/Card numbers/)).toBeNull()
     fireEvent.click(within(line).getByRole('button', { name: 'See why' }))
     expect(

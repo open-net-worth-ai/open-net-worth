@@ -5,7 +5,7 @@
 
 import { afterEach, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { PlaidBanksStep } from './PlaidBanksStep'
+import { PlaidBanksStep, type PlaidBank } from './PlaidBanksStep'
 import type { PlaidLink } from './usePlaidLink'
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
@@ -31,10 +31,13 @@ const idle: PlaidLink = {
   checkNow: () => {},
 }
 
-const BANKS = [
-  { key: 'k1', institution_name: 'Wells Fargo', linked_at: '2026-10-20T00:00:00Z' },
-  { key: 'k2', institution_name: 'Chase', linked_at: '2026-10-29T00:00:00Z' },
-]
+const WELLS_FARGO: PlaidBank = {
+  key: 'k1',
+  institution_name: 'Wells Fargo',
+  linked_at: '2026-10-20T00:00:00Z',
+}
+const CHASE: PlaidBank = { key: 'k2', institution_name: 'Chase', linked_at: '2026-10-29T00:00:00Z' }
+const BANKS: PlaidBank[] = [WELLS_FARGO, CHASE]
 
 function step(banks = BANKS, onChanged = () => {}) {
   return render(
@@ -99,7 +102,7 @@ it('a bank whose sign-in expired offers Reconnect, which renews THAT bank in pla
   const start = vi.fn(async () => {})
   render(
     <PlaidBanksStep
-      banks={[{ ...BANKS[0], needs_reconnect: true }, BANKS[1]]}
+      banks={[{ ...WELLS_FARGO, needs_reconnect: true }, CHASE]}
       state="done"
       link={{ ...idle, start }}
       keysEntered

@@ -52,6 +52,22 @@ def test_read_shaped_tools_do_not_need_approval_even_though_they_write():
         assert policy.needs_approval(tool, writes=True) is False, tool
 
 
+# Exempt tools that write NOTHING (no `mutates=` tag, listed in READ_ONLY_TOOLS): the bank
+# account lists. They are exempt for permission only — nothing to refresh afterwards.
+_NEVER_WRITE = frozenset(
+    f"{provider}_list_accounts"
+    for provider in (
+        "simplefin",
+        "plaid",
+        "lunch_money",
+        "lunch_flow",
+        "ynab",
+        "enable_banking",
+        "yodlee",
+    )
+)
+
+
 def test_the_exempt_class_is_the_expected_curated_set_not_a_heuristic():
     # A name heuristic would sweep in propose_position_update (find-or-CREATEs an account).
     # This pins the reviewed membership so an accidental add/removal is a red diff, not silent.
@@ -64,6 +80,10 @@ def test_the_exempt_class_is_the_expected_curated_set_not_a_heuristic():
     # same "reading your own inbox is a read" argument as email above; design intent
     # confirmed with the owner (otherwise every template Automation run parks on an
     # approval card for a fetch that books nothing itself).
+    # 2026-10-29: the seven `<provider>_list_accounts` tools joined (b4f30b3) — a narrower read
+    # than the fetch that writes nothing at all, so unlike every member above they carry no
+    # `mutates=` tag; the exemption exists only so an "ask" connector default does not park
+    # an unattended sync run (see _NEVER_WRITE above).
     assert policy.GATE_EXEMPT_READ_SHAPED == frozenset(
         {
             "email_search_messages",
@@ -81,6 +101,7 @@ def test_the_exempt_class_is_the_expected_curated_set_not_a_heuristic():
             "alpaca_fetch_positions",
             "ibkr_fetch_activity",
         }
+        | _NEVER_WRITE
     )
 
 
@@ -99,7 +120,12 @@ def test_end_to_end_read_shaped_tools_are_not_gated_but_still_carry_mutates():
 
     for tool in policy.GATE_EXEMPT_READ_SHAPED:
         assert is_gated_tool(tool) is False, tool
-        assert registry.mutated_domains(tool), f"{tool} lost its freshness tag"
+        if tool in _NEVER_WRITE:
+            assert not registry.mutated_domains(tool), (
+                f"{tool} is read-only; it must not claim a write"
+            )
+        else:
+            assert registry.mutated_domains(tool), f"{tool} lost its freshness tag"
     assert is_gated_tool("update_model_config") is True
     assert is_gated_tool("create_account") is True
 

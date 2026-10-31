@@ -49,7 +49,7 @@ describe('startOAuthSignIn with no popup handle', () => {
     mockPoll.mockResolvedValue({ status: 'ok', error: null })
     await vi.advanceTimersByTimeAsync(1500)
     expect(onOutcome).toHaveBeenCalledTimes(1)
-    expect(onOutcome.mock.calls[0][0]).toMatchObject({ ok: true, error: null })
+    expect(onOutcome.mock.calls[0]?.[0]).toMatchObject({ ok: true, error: null })
   })
 
   it('ends with the backend error once the staged flow expires', async () => {
@@ -63,7 +63,7 @@ describe('startOAuthSignIn with no popup handle', () => {
     })
     await vi.advanceTimersByTimeAsync(1500)
     expect(onOutcome).toHaveBeenCalledTimes(1)
-    expect(onOutcome.mock.calls[0][0]).toMatchObject({
+    expect(onOutcome.mock.calls[0]?.[0]).toMatchObject({
       ok: false,
       error: 'This sign-in attempt has expired or is unknown.',
     })

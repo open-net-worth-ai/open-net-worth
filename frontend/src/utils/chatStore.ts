@@ -264,11 +264,13 @@ export function completeUnfinishedTail(
   if (!local || local.length < 2 || remote.length < 2) return null
   const mine = local[local.length - 1]
   const theirs = remote[remote.length - 1]
+  if (!mine || !theirs) return null
   if (mine.role !== 'assistant' || mine.usage || mine.error) return null
   if (theirs.role !== 'assistant' || theirs.error || !theirs.text?.trim()) return null
   if (theirs.text.trim().length <= (mine.text ?? '').trim().length) return null
   const myAsk = local[local.length - 2]
   const theirAsk = remote[remote.length - 2]
+  if (!myAsk || !theirAsk) return null
   if (myAsk.role !== 'user' || theirAsk.role !== 'user') return null
   if ((myAsk.text ?? '').trim() !== (theirAsk.text ?? '').trim()) return null
   if ((myAsk.attachments?.length ?? 0) !== (theirAsk.attachments?.length ?? 0)) return null
