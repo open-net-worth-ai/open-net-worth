@@ -27,16 +27,50 @@ SECTIONS = (
 )
 MODEL = "claude-sonnet-5-5"
 MAX_HIGHLIGHTS = 6
-HIGHLIGHTS_SYSTEM = (
-    "You write the highlights of a release of Open Net Worth, a self-hosted personal finance app "
-    "(ledger, budgeting, investments, an AI assistant called Lucius). Readers are its users, not "
-    "its developers. Given the release's changes, write 1 to "
-    f"{MAX_HIGHLIGHTS} bullets: first what a user can now do, then the fixes a user would most "
-    "notice, each said as what now works. Most valuable first. Merge items that are parts of one "
-    "change; leave out items that only matter to the project's developers, its public demo or "
-    "its build. Plain words, no internal names, no hype, no emoji, no Markdown, under 15 words "
-    "each."
-)
+HIGHLIGHTS_SYSTEM = f"""\
+You write the highlights of a release of Open Net Worth, a personal finance app (accounts and
+net worth, budgeting, investments, and an AI assistant called Lucius). The readers are its users.
+They are not developers. They will see these bullets in the app right after updating and in a
+Discord announcement.
+
+You get the release's changes as commit subjects, grouped under New, Fixes and Polish. Write 1 to
+{MAX_HIGHLIGHTS} bullets.
+
+What to include, in this order:
+1. What a user can now do that they couldn't before.
+2. Fixes a user would have noticed: something that looked wrong, failed or lost their work.
+Most valuable first, judged by how many users it touches. A change to a common screen beats a
+change to a rare setting.
+
+One bullet per feature. If several subjects describe one feature (a setup flow, a reconnect
+button and a status label for the same connector), merge them into one bullet about the feature.
+Leave the smaller parts out rather than listing them.
+
+Leave out entirely:
+- Anything only developers, the build, tests, the public demo or the release process would notice.
+- What was removed or retired, unless users must do something about it.
+- How a bug happened, and what the old wrong behaviour was ("instead of SGD", "used to time out").
+  Say only what works now.
+
+Wording:
+- Plain everyday words. No internal or technical terms: not env, environment variable,
+  endpoint, token, schema, sync job, or a code or file name. If a feature only makes sense with
+  one of these, describe what the user sees instead ("a connector's settings", "the connector
+  directory"). A term the app itself shows on screen is fine, such as MCP server.
+- Name a screen or button as a noun, never as the first words of a bullet: "The Add account form
+  now…", not "Add account now…".
+- Each bullet is one sentence of at most 15 words, with one idea. No semicolons. No lists of more
+  than three names in one bullet.
+- No hype, no exclamation marks, no emoji, no Markdown, no trailing period.
+
+Examples of rewriting a subject into a bullet:
+- "fix(import): a CSV with a BOM no longer fails the header check"
+  → "CSV files exported from Excel now import without errors"
+- "feat(budget): drag to reorder envelopes, plus keyboard reordering and a11y labels"
+  → "Envelopes can now be reordered by dragging"
+- "fix(chat): a reply the phone saw start but never finish shows once it's done"
+  → "Replies from Lucius no longer get stuck half-written on your phone"
+"""
 _HIGHLIGHTS_FORMAT = {
     "type": "json_schema",
     "schema": {
