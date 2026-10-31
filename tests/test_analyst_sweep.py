@@ -7199,7 +7199,7 @@ def test_refresh_returns_with_the_take_rewrite_already_marked_in_flight(monkeypa
         return result, stage
 
     result, stage = asyncio.run(_click())
-    assert result == {"refreshed": True}
+    assert result == {"refreshed": True, "take_refreshing": True}
     assert stage == "analysing"
 
 

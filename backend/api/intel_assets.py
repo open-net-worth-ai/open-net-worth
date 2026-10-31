@@ -265,4 +265,9 @@ async def refresh_asset(
     # await) so the page's refetch on this response already sees the rewrite in flight.
     asyncio.create_task(trigger_on_demand_brief_refresh(instrument_id, force=True))
     await asyncio.sleep(0)
-    return result
+    from backend.db.asset_brief_store import AssetBriefStore
+
+    stage = (AssetBriefStore().get(instrument_id) or {}).get("key_issues_refresh_stage")
+    # Tells the page the take IS being rewritten even when the news half declined ("rate
+    # limited" / "fresh") — so it shows progress, not "try again shortly".
+    return {**result, "take_refreshing": stage in ("analysing", "retrying")}

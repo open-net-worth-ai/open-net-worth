@@ -163,8 +163,11 @@ export function useAssetDetail(instrumentId: string): UseAssetDetailResult {
         // (force) so the user knows why nothing changed instead of tapping again. The silent
         // on-open auto-refresh (force=false) stays silent — the user never asked for it.
         if (force && res.ok) {
-          const body: { refreshed?: boolean; reason?: string } = await res.json().catch(() => ({}))
-          if (body.refreshed === false) {
+          const body: { refreshed?: boolean; reason?: string; take_refreshing?: boolean } =
+            await res.json().catch(() => ({}))
+          // The news half can decline (refreshed recently) while Lucius's take is still being
+          // rewritten — that is progress, not "try again shortly".
+          if (body.refreshed === false && !body.take_refreshing) {
             setRefreshNotice(
               (body.reason && REFRESH_DECLINED_MESSAGES[body.reason]) || 'Refresh unavailable',
             )

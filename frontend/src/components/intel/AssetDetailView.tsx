@@ -623,6 +623,10 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
             <span className="asd-updated-at" role="status">
               {refreshNotice}
             </span>
+          ) : refreshing || keyIssuesPassActive(data) ? (
+            <span className="asd-updated-at" role="status">
+              Updating analysis…
+            </span>
           ) : (
             data.last_refreshed_at && (
               <span className="asd-updated-at" title={fDateTime(data.last_refreshed_at)}>
