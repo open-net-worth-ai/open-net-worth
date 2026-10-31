@@ -1373,7 +1373,8 @@ export function ChatPanel({
                 </div>
                 {!homeMode && (
                   <div className="lx-side-empty-hint">
-                    Use @ to add context with accounts, transactions, and more. Use / for skills.
+                    Use @, or drag anything on screen in, to add context with accounts,
+                    transactions, and more. Use / for skills.
                   </div>
                 )}
               </div>

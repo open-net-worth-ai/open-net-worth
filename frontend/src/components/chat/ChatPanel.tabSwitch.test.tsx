@@ -271,7 +271,7 @@ describe('the dock empty state', () => {
     expect(screen.getByText('Good evening, Alex')).toBeTruthy()
     expect(
       screen.getByText(
-        'Use @ to add context with accounts, transactions, and more. Use / for skills.',
+        'Use @, or drag anything on screen in, to add context with accounts, transactions, and more. Use / for skills.',
       ),
     ).toBeTruthy()
     expect(screen.queryByText('Your Personal Wealth Manager')).toBeNull()
