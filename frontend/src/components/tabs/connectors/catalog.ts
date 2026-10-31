@@ -872,8 +872,8 @@ export const CATALOG: CatalogEntry[] = [
     categories: ['Brokerage'],
     icon: 'investments',
     hue: 'var(--apt)',
-    sub: 'Trades US & HK stocks and options; quotes, positions, alerts',
-    desc: 'Connect Longbridge’s own hosted server to let Lucius work with your Longbridge account (Singapore, Hong Kong or US). It reads quotes, options, fundamentals, your account and portfolio, and places, changes and cancels orders, plus price alerts and recurring investment plans, so it can act on your account with real money. Sign-in happens on Longbridge’s own consent page over OAuth. Customers in mainland China use https://mcp.longbridge.cn instead.',
+    sub: 'Trades stocks and options; US, HK, SG and China quotes',
+    desc: 'Connect Longbridge’s own hosted server to let Lucius work with your Longbridge account (Singapore, Hong Kong or US). It reads quotes for US, Hong Kong, Singapore and China A-share listings, options, fundamentals, your account and portfolio, and places, changes and cancels orders, plus price alerts and recurring investment plans, so it can act on your account with real money. Which markets you can trade depends on your Longbridge account and region. Sign-in happens on Longbridge’s own consent page over OAuth. Customers in mainland China use https://mcp.longbridge.cn instead.',
     publisher: 'Longbridge',
     verification: 'verified',
     // open.longbridge.com/docs/mcp publishes this endpoint; the server is longbridge/

@@ -586,7 +586,7 @@
       ],
       "publisher": "Longbridge",
       "verification": "verified",
-      "sub": "Trades US & HK stocks and options; quotes, positions, alerts",
+      "sub": "Trades stocks and options; US, HK, SG and China quotes",
       "popular": false,
       "mcp": true,
       "connect": {
