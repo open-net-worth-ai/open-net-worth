@@ -126,6 +126,16 @@ def _status_row(view) -> dict:
     return row
 
 
+# What the user could ADD, not what is set up. The ready-made MCP servers in Browse & add (brokers,
+# exchanges, accounting…) are a curated directory, searchable with search_connector_directory
+# (owner report, 2026-10-31: "what connectors are available?" named no broker).
+DIRECTORY_NOTE = (
+    "These are the connectors already in the app. Connectors → Browse & add also offers "
+    "ready-made ones the user can add — brokers, crypto exchanges, accounting and more. "
+    "To say which exist, call search_connector_directory."
+)
+
+
 def _connector_status(requested: list[str]) -> dict:
     """ONE read over the view the Connectors screen renders (``list_connectors``)."""
     from backend.ai.tools._connector_gate import DISABLED_CONNECTORS
@@ -140,7 +150,10 @@ def _connector_status(requested: list[str]) -> dict:
             "known_connector_ids": known,
         }
     wanted = set(requested or known)
-    return {"connectors": {v.id: _status_row(v) for v in views if v.id in wanted}}
+    result: dict = {"connectors": {v.id: _status_row(v) for v in views if v.id in wanted}}
+    if not requested:
+        result["more_in_directory"] = DIRECTORY_NOTE
+    return result
 
 
 class ConnectorStatusInput(ToolInput):
@@ -163,7 +176,8 @@ class ConnectorStatusInput(ToolInput):
         "enabled, status (not_configured/configured/active/error) and, when failing, the "
         "error. Check this instead of asking the user whether something is connected. Never "
         "returns secrets or configuration. The user connects things in Connectors, never you; "
-        "fetching a feed's data is a separate tool (plaid_fetch_transactions, …)."
+        "fetching a feed's data is a separate tool (plaid_fetch_transactions, …). Lists only "
+        "what is already in the app — for what the user could add, use search_connector_directory."
     ),
     input_schema=schema_of(ConnectorStatusInput, tool_name="get_connector_status"),
 )
@@ -432,3 +446,69 @@ async def alpaca_get_status(input_data: dict):
 )
 async def ibkr_get_status(input_data: dict):
     return await _provider_status("ibkr")
+
+
+class SearchConnectorDirectoryInput(ToolInput):
+    """Schema-of-record for ``search_connector_directory`` (see ``schema_from_model``)."""
+
+    query: Optional[str] = Field(
+        default=None,
+        description=(
+            "Names or keywords. Several in one search is fine, e.g. 'bybit webull' — any word "
+            "matches, best matches first."
+        ),
+    )
+    category: Optional[str] = Field(
+        default=None,
+        description="One category, e.g. Brokerage, Banking, Crypto, Accounting.",
+    )
+
+
+@tool(
+    "search_connector_directory",
+    description=(
+        "Search the connectors the user can add in Connectors -> Browse & add: built-in ones "
+        "and ready-made MCP servers (brokers, exchanges, accounting). Each result: exact id, "
+        "publisher, 'verification' (verified / unverified = listed by us, not the vendor's own "
+        "server / unknown), categories, what the user needs ready, 'installed'. Use it only when the user asks "
+        "what they can connect, or a task needs data from an app they have not connected - never "
+        "for adjacent capabilities, broad recommendations, or a connector they ignored. Offer "
+        "exactly the ones they asked for: name three and each gets its own card; suggest one at "
+        "a time only when YOU are proposing. To offer one, call run_screen_command connectors.open_setup with the exact id "
+        ": it only opens the form, the user enters credentials and "
+        "clicks Connect; id 'custom' opens the Add custom server form for any MCP server we "
+        "don't list — the directory is curated, not the limit. You cannot add one or take "
+        "keys. Afterwards call this again and read "
+        "'installed'; never assume it worked."
+    ),
+    input_schema=schema_of(SearchConnectorDirectoryInput, tool_name="search_connector_directory"),
+    mutates=(),
+)
+async def search_connector_directory(input_data: dict):
+    from backend.services import connector_directory
+
+    category = str(input_data.get("category") or "")
+    if category and category.lower() not in (c.lower() for c in connector_directory.categories()):
+        return json.dumps(
+            {
+                "error": f"unknown category '{category}'",
+                "categories": connector_directory.categories(),
+            },
+            ensure_ascii=False,
+        ), None
+    result = await asyncio.to_thread(
+        connector_directory.search, str(input_data.get("query") or ""), category
+    )
+    if any(c["installed"] is None for c in result["connectors"]):
+        result["note"] = (
+            "Whether MCP servers are already installed could not be read; say so rather than guess."
+        )
+    elif result["total"] > result["showing"]:
+        result["note"] = "More matched — narrow with a more specific query or a category."
+    elif not result["total"]:
+        result["note"] = (
+            "Nothing in the directory matches — that means not listed, not 'cannot be "
+            "connected'. Do not invent a directory entry; see beyond_directory."
+        )
+    result["beyond_directory"] = connector_directory.BEYOND_DIRECTORY
+    return json.dumps(result, ensure_ascii=False), None

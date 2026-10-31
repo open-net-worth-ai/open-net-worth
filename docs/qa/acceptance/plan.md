@@ -271,3 +271,23 @@ The QA agent must exercise every criterion and report PASS/FAIL per ID.
   or input field if available)
 - THEN the projection updates to reflect the changed parameter — the
   projected retirement age or success probability changes from its prior value.
+
+---
+
+## Outlook sub-tab
+
+### PLAN-OUTLOOK-END-LABEL
+- GIVEN the base currency projects into billions (e.g. VND) and the Outlook
+  "Your money across your life" chart is showing, not hovered
+- WHEN the typical-path value label at the right end of the line sits at the
+  same height as a y-axis money tick
+- THEN that tick is not drawn, so the end label is the only number on that
+  row (no two figures printed over each other); the other ticks still show,
+  at 390, 1024 and 1440 widths in light and dark.
+
+### PLAN-OUTLOOK-UNITS
+- GIVEN the base currency projects into billions (e.g. VND)
+- WHEN I open the Outlook sub-tab
+- THEN the headline tiles (pot at retirement and its range, FIRE number, left at
+  life expectancy, worst and best case) use the same unit as the chart axis
+  (₫24.95B, ₫1.44T), never thousands of millions like ₫24946.08M.

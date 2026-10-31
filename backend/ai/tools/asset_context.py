@@ -51,6 +51,7 @@ from backend.ai.tools import _bounded as _b
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of
 from backend.core.untrusted import sanitize_untrusted
+from backend.services import thesis_judgment
 
 # Timeline default mirrors monitoring.analyst_prompt's own _PRIOR_NOTES_CONTEXT_CAP (5) — the
 # same "small, bounded window of the subject's own recent notes" the synthesis prompt itself
@@ -315,7 +316,9 @@ class GetAssetContextInput(ToolInput):
         "UNCONFIRMED or SUPERSEDED is not settled fact, say so if you cite it), its Asset "
         "Brief (bull/bear key_issues, facts, peers, freshness grade), configured price alerts "
         "with how close the current price sits to each trigger, and analyst consensus "
-        "(rating + price targets). Call this — not just get_live_prices or get_portfolio "
+        "(rating + price targets), and the user's investment thesis with `thesis_read` (where the "
+        "price sits against its stop, buy zone, fair value and trim, and the stance that follows "
+        "— judge every move against it and cite it). Call this — not just get_live_prices or get_portfolio "
         "alone — before answering a buy/sell/hold/trim/rebalance/concentration question about "
         "a specific ticker. Pass ticker OR instrument_id. Never creates an instrument: an "
         "unrecognized ticker is refused — call resolve_instruments first if it's genuinely "
@@ -412,6 +415,17 @@ async def get_asset_context(input_data: dict):
         # The user's own investment thesis (services.investment_theses): why they own / would buy
         # it, what would break it, role and price levels. Text fields sanitized like every other one.
         "thesis": _thesis_out(detail.get("thesis")),
+        # Where today's price sits against that thesis and what it implies — judge the move
+        # against this, never the move alone (services.thesis_judgment, one read for every surface).
+        "thesis_read": thesis_judgment.compact(
+            thesis_judgment.judge(
+                detail.get("thesis"),
+                current_price,
+                held=position_out is not None,
+                currency=price.get("currency") or inst.get("quote_currency") or "",
+                ticker=inst.get("price_source_id") or inst.get("symbol") or "",
+            )
+        ),
         # Live position numbers + the cached, position-aware narrative Lucius already wrote —
         # composed at read time by services.asset_detail._compose_portfolio_impact (R3 fix,
         # security-review 2026-08-29: this is the exact field built to answer "what should I do

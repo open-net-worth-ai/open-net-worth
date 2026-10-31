@@ -6,7 +6,7 @@ order: 40
 audience: [user, operator]
 status: stable
 related: [lucius/permissions, lucius/confirm-cards, connectors/web-search]
-keywords: [mcp, model context protocol, third-party, stdio, local command, remote server, oauth, api key, playwright, stripe, setup, security]
+keywords: [mcp, model context protocol, third-party, stdio, local command, remote server, oauth, api key, playwright, stripe, setup, security, brokerage, webull, longbridge, tiger brokers, zerodha, kite, upstox, public.com, bybit]
 ---
 
 # External MCP servers
@@ -28,16 +28,42 @@ There are two kinds:
   `npx -y @playwright/mcp@latest`. It runs with the same access to this computer as Open Net
   Worth itself.
 
+## Ask Lucius what you can connect
+
+Ask "what can I connect?", or ask for something that needs an app you haven't connected, and
+Lucius searches the same directory Browse & add shows: broker, exchange, accounting, email, bank
+feed and more, with who publishes it, whether it is **Verified**, and what you will need to have
+ready (a sign-in, an API key, or a runtime such as Node.js). He suggests one connector at a time
+and only when it fits what you asked.
+
+If you want it, Lucius shows a card for that connector: its logo, who publishes it, whether it
+is **Verified**, and one button. For a connector you sign in to (Interactive Brokers,
+Webull, Robinhood and the like), **Connect** goes straight to the provider's own sign-in page; for
+one that needs an API key or runs on this machine, **Set up** opens its form in Connectors with
+its details already filled in. **Lucius never adds a connector, never sees or types your keys, and
+nothing is saved until you finish the sign-in or click Connect yourself.** After you finish he
+re-checks that it is connected rather than assuming it worked. For a connector you already have,
+the card opens its settings instead. Unattended runs (an Automation, for instance) can't open
+anything; Lucius just tells you what to set up.
+
+The directory is a curated list, not everything you can connect. Ask about an app that isn't in
+it and Lucius looks for the vendor's own MCP server on the web first. He calls one official only
+when it's on the vendor's own site or official GitHub, and gives you the link and address. Then
+he offers the **Add custom server** form, or another way in (a statement import, email, or
+recording it by hand) if there's no official server.
+
 ## Add a server from the directory
 
 The directory includes ready-made entries — Playwright (a real web browser), Firecrawl, Stripe,
-QuickBooks Online, Xero, Mercury, Interactive Brokers, Robinhood, moomoo, Alpaca MCP, Coinbase,
-OKX, Kraken, Expensify, Avalara AvaTax, Twelve Data, SEC EDGAR and FRED.
+QuickBooks Online, Xero, Mercury, Interactive Brokers, Robinhood, moomoo, Webull, Longbridge, Tiger
+Brokers, Zerodha Kite, Upstox, Public.com, Alpaca MCP, Coinbase, OKX, Kraken, Bybit, Expensify,
+Avalara AvaTax, Twelve Data, SEC EDGAR and FRED.
 
 Each connector shows coloured tags for what it's for, such as **Brokerage**, **Banking** or
 **Web search**. Searching the Connectors page matches those tags too. In **Browse & add**, click a
-category in the row of small tags under **All · Channels · Data sources · Web · MCP**, or click a
-tag on any card, to see only that kind; click it again (or **All**) to clear it. On a phone the
+category in the row of small tags under the **All · Channels · Data sources · Web · MCP** tabs, or click
+a tag on any card, to see only that kind; click it again to clear it. Each tab and tag shows how many
+connectors it holds. On a phone the
 category tags sit behind the filter icon beside search, which lights up while one is picked. A server you've
 already added shows once, with a settings gear instead of **+**. **Suggested**
 lists up to three connectors you haven't added yet — Email, Telegram, Plaid, Interactive Brokers and
@@ -50,16 +76,21 @@ search or filter; click one to read about it and add it. **Sort** orders the ful
 2. Click a card to read what it does and which tools it offers, then click **Add**. The connection
    form opens with the address or command already filled in.
 3. Fill in what the server needs:
-   - **OAuth** servers (Mercury, Interactive Brokers, Robinhood, moomoo, Expensify, Avalara,
-     Twelve Data): click **Connect** and sign in to the vendor in the window that opens.
+   - **OAuth** servers (Mercury, Interactive Brokers, Robinhood, moomoo, Webull, Longbridge,
+     Tiger Brokers, Upstox, Expensify, Avalara, Twelve Data): click **Connect** and sign in to the
+     vendor in the window that opens.
+   - **Zerodha Kite** needs nothing to connect. Once it's added, ask Lucius to log in to Kite,
+     open the link it gives you, and sign in on Zerodha's own page.
    - **API key** servers (Stripe): paste the key into **API key**. For Stripe, a *restricted*
      key with only the permissions you want is the safer choice.
    - **Local commands** with **Environment variables (optional)** pre-listed (Firecrawl, Xero, SEC
-     EDGAR, FRED, Alpaca MCP, Coinbase, OKX, Kraken): fill in the value after each `=`, for example
+     EDGAR, FRED, Public.com, Alpaca MCP, Coinbase, OKX, Kraken, Bybit): fill in the value after each `=`, for example
      `FRED_API_KEY=abc123`. Get the value from the vendor — the card's **Documentation** or
      **Source repository** link says where. The trading ones start without real money where the
      vendor offers that: Alpaca MCP on paper trading, OKX with `--demo` in its arguments, Kraken
      with only market data, a read-only account and paper trading; the card says how to switch.
+     Public.com has no paper mode, and Bybit trades for real unless you add `BYBIT_TESTNET=true`
+     — for either, an API key with only the permissions you want is the limit.
      A value that is a private key (`-----BEGIN … KEY-----` … `-----END … KEY-----`) can be
      pasted as it is — over several lines, on one line, or with `\n` in place of the line breaks,
      the way a downloaded JSON key file holds it; the app rebuilds it into a key the server can
@@ -68,7 +99,9 @@ search or filter; click one to read about it and add it. **Sort** orders the ful
      [portal.cdp.coinbase.com](https://portal.cdp.coinbase.com/api-keys/secret) with
      **Signature algorithm: ECDSA** (Advanced Trade refuses the default Ed25519 key): its key name
      (`organizations/…/apiKeys/…`) goes in `COINBASE_KEY_ID` and its private key in
-     `COINBASE_KEY_SECRET`. Alpaca MCP needs [uv](https://docs.astral.sh/uv/); Kraken
+     `COINBASE_KEY_SECRET`; keep the pre-filled `COINBASE_ENV=live` line, without which every
+     Coinbase tool fails with "no environment configured". Alpaca MCP and Public.com need [uv](https://docs.astral.sh/uv/);
+     Bybit needs Node.js 20.6 or later; Kraken
      needs the [Kraken CLI](https://github.com/krakenfx/kraken-cli) installed first (macOS or
      Linux).
 4. Click **Connect**. The app starts the server, checks it answers, and lists its tools — *Testing
@@ -83,9 +116,17 @@ connection test succeeds.
 QuickBooks Online has no ready-made settings — follow the links on its card for the vendor's own
 instructions, and enter what they give you in the form (or add it as a custom server, below).
 
+
+Click a server to see what it does before adding it, including the **Tools** it offers. Before you
+add it, that's the full list read from the publisher's own code or documentation, marked **as of**
+the version or date it was read. Where a publisher lists only some of its tools, the row says
+**Example tools**. Once it's connected, the list is the one the server actually gave this app,
+marked **from your connection**. A long list shows its first nine tools; **Show all** opens the rest.
+
 ## Add any other server
 
-1. **Connectors → Browse & add → MCP → Custom MCP server**.
+1. **Connectors → Browse & add → Add custom server** — in the row pinned at the top of the list
+   ("Don't see yours?") or beside **Close** at the bottom. A search that finds nothing offers it too.
 2. If the server's README has a JSON config block (the `"mcpServers": { … }` kind), click **Paste
    from a config snippet** and paste it — the fields below fill themselves in. Otherwise:
 3. Pick a **Transport**:
@@ -102,6 +143,10 @@ instructions, and enter what they give you in the form (or add it as a custom se
      any **Environment variables**, one `NAME=value` per line (a private key may span several lines).
 4. Click **Connect**, review the tools, and click **Add server** — the same as steps 4–5 above.
 
+Not ready to connect yet (real keys still to come, a build still to finish)? Click **Save** instead
+of **Connect**, on the form or on a failed test. The server is kept, switched off and untested;
+turn it on from its settings when you're ready, and it is tested then.
+
 A local command needs its runtime installed on the machine running Open Net Worth — Node.js for
 `npx`, [uv](https://docs.astral.sh/uv/) for `uvx`.
 
@@ -110,6 +155,16 @@ about itself, or else from its website, instead of its bare address. That's what
 about itself, not a check of who runs the server, so the badge still reads **Unknown
 publisher**. A name you typed yourself is never replaced. **⋯ → Refresh tools list** reads the
 name and icon again.
+
+A server's page also shows what it says about itself: its display title as the name (unless you
+typed one), its one-line description under the name, the version it's running (for example
+**v1.0.1**), and, folded, **The server's instructions for AI** — the usage notes it ships for AI
+assistants. Servers that send none of these keep the generic text.
+
+**Updates.** A remote server updates itself — the vendor changes it, and its next answer comes
+from the new version. A local server runs until the app restarts; most directory servers launch with
+`@latest`, so each restart starts the newest release (a little slower to start, and it needs
+the internet to check). A command you typed yourself runs exactly what you wrote.
 
 ## Check that it works
 
@@ -128,7 +183,12 @@ Open the server under **Connectors**:
   The connection is tested again before anything is saved. A saved key is never sent back to your
   browser, so to re-test with it, reveal it with the eye icon or paste it again. The transport
   can't be changed — add the server again instead.
-- **⋯ → Refresh tools list** — pick up tools the server added since you connected it.
+- **⋯ → Refresh tools list** — pick up tools the server added since you connected it. You rarely
+  need it: the app re-reads every server's list when it starts and once a day, and a local server
+  that announces a change is re-read straight away (after the next call to it). If a daily
+  re-read can't reach the server, its tools stay as they were and it's tried again every hour;
+  only after three misses in a row does the card show the error and Lucius stop offering its
+  tools. A server that comes back is picked up within the hour.
 - **Pause** / **Resume** — Lucius loses access to its tools while paused. Resuming a server that
   has never listed its tools connects to it and lists them; if it can't be reached, it shows an
   error instead of Connected.
@@ -138,7 +198,9 @@ Open the server under **Connectors**:
 ## Permissions — start cautious
 
 Every tool from an MCP server starts at **Needs approval**: Lucius shows you exactly what he's
-about to call and waits for you. You can change each tool's level under **Tool permissions**, or
+about to call and waits for you. The approval card is titled by the tool's own name, with the
+server beside it and the arguments listed underneath. Open **Raw call** to see the exact request
+the server will receive. You can change each tool's level under **Tool permissions**, or
 by choosing **Always allow** on an approval card. See [Permissions](../lucius/permissions.md).
 
 Tools are listed under **Read-only tools** or **Write & delete tools**. When the server marks a
@@ -159,9 +221,10 @@ their server at any time.
   data, never as instructions from you, and is cleaned and shortened before Lucius sees it. That
   lowers the risk; it doesn't remove it — which is why approval is the default.
 - **Some servers write to real accounts.** Stripe, QuickBooks, Xero and Mercury tools can create or
-  change records in those services, and Interactive Brokers, Robinhood, moomoo, Alpaca MCP,
-  Coinbase, OKX and Kraken tools can place orders (Robinhood only in a separate agent account it opens
-  for you). The directory card says so when that's the case. For a server you run with an API
+  change records in those services, and Interactive Brokers, Robinhood, moomoo, Longbridge,
+  Public.com, Alpaca MCP, Coinbase, OKX, Kraken and Bybit tools can place orders (Robinhood only in a
+  separate agent account it opens for you; Webull's only as instructions you confirm in the Webull
+  app; Zerodha Kite's only GTT orders). Tiger Brokers and Upstox are read-only. The directory card says so when that's the case. For a server you run with an API
   key, the key's own permissions are the limit — create it with only what you want allowed.
 
 What protects you:

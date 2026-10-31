@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, cleanup, waitFor } from '@testing-library/react'
+import { render, cleanup, waitFor, within } from '@testing-library/react'
 import { fDate } from '../../utils/format'
 import { PositionSubtab } from './PositionSubtab'
 import type { AssetPosition } from '../../types/assetDetail'
@@ -229,9 +229,11 @@ const INCOME_SUMMARY = {
 
 describe('PositionSubtab', () => {
   it('renders the 6-cell summary strip from the position', () => {
-    const { getByText } = render(
+    const { container } = render(
       <PositionSubtab position={POSITION} symbol="AAPL" instrumentId="inst-1" income={null} />,
     )
+    // Scoped: Held at repeats Avg cost / Market value as column headers and 120 as a row.
+    const { getByText } = within(container.querySelector<HTMLElement>('.asd-pos-summary')!)
     for (const label of [
       'Quantity',
       'Avg cost',
@@ -284,11 +286,13 @@ describe('PositionSubtab', () => {
     expect(getByText('Realized P&L')).toBeTruthy()
   })
 
-  it('does not render the per-account table for a single-account holding', () => {
-    const { queryByText } = render(
+  it('names the one account in Held at for a single-account holding', () => {
+    const { getByText } = render(
       <PositionSubtab position={POSITION} symbol="AAPL" instrumentId="inst-1" income={null} />,
     )
-    expect(queryByText('Held at')).toBeNull()
+    expect(getByText('Held at')).toBeTruthy()
+    expect(getByText('Brokerage')).toBeTruthy()
+    expect(getByText('$58,704.00')).toBeTruthy() // 120 × 489.2 total cost basis
   })
 
   it('does not render the Unvested cell when the position has no locked exposure', () => {
@@ -454,5 +458,65 @@ describe('PositionSubtab — unvested exposure', () => {
       <PositionSubtab position={legacy} symbol="AAPL" instrumentId="inst-1" income={null} />,
     )
     expect(queryByText('Vesting schedule')).toBeNull()
+  })
+})
+
+// Regression (2026-10-31): a sub-cent coin's per-share cost rounded to "$0.00" everywhere,
+// and the Held at "Cost basis" column showed that per-share figure instead of the total.
+describe('PositionSubtab — sub-cent crypto cost', () => {
+  const SHIB: AssetPosition = {
+    ...POSITION,
+    cost_basis: 0.0000240736,
+    cost_currency: 'USD',
+    per_account: [
+      {
+        account_id: 'acc-cb',
+        account_name: 'Coinbase',
+        quantity: 30196880,
+        market_value_base: 181.77,
+        cost_basis: 0.0000240736,
+        cost_currency: 'USD',
+        unrealized_pl_base: -747.31,
+      },
+      {
+        account_id: 'acc-gm',
+        account_name: 'Gemini',
+        quantity: 39556138,
+        market_value_base: 238.11,
+        cost_basis: null,
+        cost_currency: 'USD',
+        unrealized_pl_base: null,
+      },
+    ],
+  }
+
+  it('shows the avg cost at its own precision, never rounded to $0.00', () => {
+    const { getAllByText, queryByText } = render(
+      <PositionSubtab
+        position={SHIB}
+        symbol="SHIB"
+        instrumentId="inst-1"
+        income={null}
+        assetClass="crypto"
+      />,
+    )
+    // summary card + the Coinbase Held at row
+    expect(getAllByText('$0.00002407')).toHaveLength(2)
+    expect(queryByText('$0.00')).toBeNull()
+  })
+
+  it('gives Held at both a per-share Avg cost and a total Cost basis per account', () => {
+    const { getByText, getAllByText } = render(
+      <PositionSubtab
+        position={SHIB}
+        symbol="SHIB"
+        instrumentId="inst-1"
+        income={null}
+        assetClass="crypto"
+      />,
+    )
+    expect(getAllByText('Avg cost').length).toBe(2) // summary card + Held at header
+    expect(getByText('Cost basis')).toBeTruthy()
+    expect(getByText('$726.95')).toBeTruthy()
   })
 })

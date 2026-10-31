@@ -7,10 +7,12 @@
 // Spec §9's geometry: header and footer are `flex: none` and only `.rd-modal-body` scrolls, so
 // each view supplies its own body and the footer is composed HERE — never inside a step.
 
-import { useState, type JSX } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react'
 import { BackTitle, Btn, Modal } from './primitives'
 import { DirectoryBrowser } from './DirectoryBrowser'
-import { DirectoryPreview } from './DirectoryPreview'
+import { Icons } from './icons'
+import { DirectoryPreview, PreviewAction } from './DirectoryPreview'
+import { useIsMobile } from '../../../hooks/useIsMobile'
 import { McpAddFlowBody, McpAddFlowFooter, useMcpAddFlow } from './McpAddFlow'
 import { type DirectoryRow, type DirectoryFamilyFilter, type DirectorySort } from './catalog'
 import { resolveDirectory } from './directoryRows'
@@ -25,6 +27,9 @@ export interface DirectoryModalProps {
   onClose: () => void
   /** Live connector state — what makes a catalog entry read as installed. */
   connectors: Connector[]
+  /** True until the connectors read first lands. Until then nothing is known to be installed,
+   *  so the list waits rather than offering what the user already has. */
+  loading?: boolean
   /** Pre-filter, so a section's "+ Add a data source" opens the directory already scoped. */
   family?: DirectoryFamilyFilter
   /** Open a connector's detail page. The directory closes first. `opts` says whether the
@@ -37,6 +42,12 @@ export interface DirectoryModalProps {
    *  first render only (the modal is unmounted while closed, so it re-seeds per open); after
    *  that the modal owns its own view and Back returns to the grid as usual. */
   previewId?: string
+  /** Open straight onto the MCP add form of this NOT-yet-installed entry, preset pre-filled —
+   *  the path its card's `+` takes. Seeds the first render only, like `previewId`. */
+  addId?: string
+  /** With `addId`: start the sign-in at once — the user already clicked Connect on Lucius's
+   *  card, which opened the sign-in window on that click (`preopenSignInWindow`). */
+  autoConnect?: boolean
   toast?: (message: string) => void
 }
 
@@ -44,10 +55,13 @@ export function DirectoryModal({
   open,
   onClose,
   connectors,
+  loading = false,
   family = 'all',
   onFocusConnector,
   onAdded,
   previewId,
+  addId,
+  autoConnect = false,
   toast,
 }: DirectoryModalProps): JSX.Element | null {
   const entries = resolveDirectory(connectors)
@@ -55,6 +69,7 @@ export function DirectoryModal({
   const [directoryFamily, setDirectoryFamily] = useState<DirectoryFamilyFilter>(family)
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<DirectorySort>('popular')
+  const isMobile = useIsMobile()
   const [category, setCategory] = useState<ConnectorCategory | 'all'>('all')
   const [preview, setPreview] = useState<DirectoryRow | null>(
     // `installedId` too: an installed server merged into its catalog card (`mcp-ibkr` for
@@ -64,7 +79,8 @@ export function DirectoryModal({
         ? entries.find((e) => e.id === previewId || e.installedId === previewId)
         : undefined) ?? null,
   )
-  const [mcpOpen, setMcpOpen] = useState(false)
+  const addEntry = addId ? entries.find((e) => e.id === addId && e.mcp && !e.installed) : undefined
+  const [mcpOpen, setMcpOpen] = useState(!!addEntry)
 
   const takenIds = connectors
     .filter((c) => c.id.startsWith(MCP_PREFIX))
@@ -72,11 +88,32 @@ export function DirectoryModal({
 
   const flow = useMcpAddFlow({
     takenIds,
-    onSaved: (name, toolCount) => {
-      toast?.(`${name} added — ${toolCount} tool${toolCount === 1 ? '' : 's'} ready for Lucius`)
+    onSaved: (name, toolCount, opts) => {
+      toast?.(
+        opts?.dormant
+          ? `${name} saved, switched off — turn it on from its settings to test it`
+          : `${name} added — ${toolCount} tool${toolCount === 1 ? '' : 's'} ready for Lucius`,
+      )
       onAdded?.()
       close()
     },
+  })
+
+  // Before paint, so the add form never shows empty for a frame. Runs once: the flow is then the
+  // user's to drive.
+  useLayoutEffect(() => {
+    if (addEntry) flow.start(addEntry)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Lucius's Connect: once the preset has filled the form, run the same Connect the footer's
+  // button runs — for a sign-in server, that is the sign-in. Once, and only for OAuth presets.
+  const autoConnected = useRef(false)
+  useEffect(() => {
+    if (!autoConnect || !addEntry || autoConnected.current) return
+    if (flow.step !== 'form' || flow.form.auth !== 'oauth' || !flow.form.url) return
+    autoConnected.current = true
+    flow.runConnect()
   })
 
   function close() {
@@ -142,6 +179,8 @@ export function DirectoryModal({
 
   if (!open) return null
 
+  const customEntry = entries.find((e) => e.generic)
+
   const live = preview
     ? connectors.find((c) => c.id === (preview.installedId ?? preview.id))
     : undefined
@@ -160,10 +199,22 @@ export function DirectoryModal({
 
   const footer = mcpOpen ? (
     <McpAddFlowFooter flow={flow} onCancel={leaveMcpFlow} />
+  ) : preview && isMobile ? (
+    // The header's ‹ Back and the sheet's ✕ already leave, so on a phone the footer carries
+    // the action instead: always in view, in thumb reach, and steady while the body scrolls.
+    <PreviewAction d={preview} onAdd={add} onConfigure={configure} className="cn-foot-action" />
   ) : preview ? (
     <Btn onClick={() => setPreview(null)}>Back</Btn>
   ) : (
-    <Btn onClick={close}>Close</Btn>
+    <>
+      {/* Always in reach, whatever the list is scrolled to (owner, 2026-10-31). */}
+      {customEntry ? (
+        <Btn variant="primary" onClick={() => add(customEntry)}>
+          <Icons.plus /> Add custom server
+        </Btn>
+      ) : null}
+      <Btn onClick={close}>Close</Btn>
+    </>
   )
 
   const scrollKey = mcpOpen ? 'mcp' : preview ? `preview:${preview.id}` : 'browse'
@@ -178,12 +229,15 @@ export function DirectoryModal({
           statusText={liveEntry?.statusText}
           statusTone={liveEntry?.tone}
           prompts={liveEntry?.prompts}
+          liveTools={live?.tools?.map((t) => t.name)}
           onAdd={add}
           onConfigure={configure}
+          actionInFooter={isMobile}
         />
       ) : (
         <DirectoryBrowser
           entries={entries}
+          loading={loading}
           family={directoryFamily}
           onFamily={(f) => {
             setDirectoryFamily(f)

@@ -46,6 +46,7 @@ from backend.core.pinned_http import (
 )
 from backend.core.redact_error import redact_error
 from backend.core.untrusted import sanitize_untrusted
+from backend.mcp.sse import USER_AGENT
 from backend.models.mcp_client import redact_endpoint
 
 # Kept independent of backend.mcp.client's constants on purpose (see the module docstring on
@@ -255,7 +256,10 @@ def _unguarded_urlopen(
     if scheme not in ("http", "https"):
         raise OAuthSecurityError(f"unsupported scheme: {scheme or 'none'}")
     request = urllib.request.Request(
-        url, data=data, headers=headers or {}, method=method or ("POST" if data else "GET")
+        url,
+        data=data,
+        headers={"User-Agent": USER_AGENT, **(headers or {})},
+        method=method or ("POST" if data else "GET"),
     )
     return _no_redirect_opener().open(request, timeout=_TIMEOUT_SECONDS)  # noqa: S310 — see docstring
 
@@ -345,7 +349,11 @@ def _fetch(
     if _mcp_server_is_public(mcp_url):
         try:
             return pinned_urlopen(
-                url, data=data, headers=headers or {}, method=method, timeout=_TIMEOUT_SECONDS
+                url,
+                data=data,
+                headers={"User-Agent": USER_AGENT, **(headers or {})},
+                method=method,
+                timeout=_TIMEOUT_SECONDS,
             )
         except net_guard.UnsafeUrlError as exc:
             raise OAuthSecurityError("a sign-in URL pointed somewhere we won't follow") from exc

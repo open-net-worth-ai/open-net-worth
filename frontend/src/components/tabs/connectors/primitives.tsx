@@ -46,9 +46,18 @@ export interface BtnProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: 'xs' | 'lg'
 }
 
-export function Btn({ variant = 'secondary', size, children, ...rest }: BtnProps): JSX.Element {
+export function Btn({
+  variant = 'secondary',
+  size,
+  className,
+  children,
+  ...rest
+}: BtnProps): JSX.Element {
   return (
-    <button className={`rd-btn ${variant}${size ? ' ' + size : ''}`} {...rest}>
+    <button
+      className={`rd-btn ${variant}${size ? ' ' + size : ''}${className ? ' ' + className : ''}`}
+      {...rest}
+    >
       {children}
     </button>
   )
@@ -196,7 +205,16 @@ export function Tabs<T extends string>({
           role="tab"
           aria-selected={t.key === value}
           className={'rd-tab' + (t.key === value ? ' on' : '')}
-          onClick={() => onChange(t.key)}
+          onClick={(e) => {
+            // On a phone the row scrolls sideways: a tapped tab half off the edge slides into
+            // full view, revealing its neighbours. After the switch, on the next frame — run
+            // inline, the re-render the switch causes cancelled the smooth scroll mid-way.
+            const tab = e.currentTarget
+            onChange(t.key)
+            requestAnimationFrame(() =>
+              tab.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'center' }),
+            )
+          }}
         >
           {t.label}
           {t.count != null ? <span className="rd-tab-count">{t.count}</span> : null}

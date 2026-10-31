@@ -211,3 +211,10 @@ export function guessServerName(
       : form.command.trim().split(/\s+/).pop() || 'MCP server'
   return raw.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
+
+/** A server's self-reported name as a display name: an all-lowercase slug (`coinbase`) gets a
+ *  capital first letter; anything already mixed-case (`iCloud`, `Kite Connect`) is the
+ *  author's own styling and is left alone. */
+export function displayName(name: string): string {
+  return name && name === name.toLowerCase() ? name[0]!.toUpperCase() + name.slice(1) : name
+}

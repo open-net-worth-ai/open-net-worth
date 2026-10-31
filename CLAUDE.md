@@ -146,6 +146,10 @@ One line each — full reasoning and the scar behind each is in
   A diversified equity/bond fund is not a "name" for single-name concentration (ADR
   `2026-10-14-today-is-the-regular-session-on-every-surface`, whose "today" decision the owner
   reverted: the price shown follows the pre/post print, ADR `2026-09-01-extended-price-consistency`).
+- Advice about a ticker with an investment thesis is judged against it by ONE authority
+  (`services/thesis_judgment`: stance, citation, `THESIS_RULE`) and held to it by ONE guard
+  (`services/thesis_guard`): sell advice survives only past the stop or with a named "thesis
+  broken:"; no thesis ⇒ unchanged (ADR `2026-10-31-advice-on-a-ticker-is-judged-against-its-thesis`).
 
 **Cross-screen facts**
 - Overdue and due-in-30-days are ONE function (`commitments.due_summary`), the runway is ONE
@@ -257,7 +261,7 @@ One line each — full reasoning and the scar behind each is in
 
 **AI harness**
 - Tool results are bounded AT THE TOOL — filter before you cap.
-- Memory keeps only what has no other home — five fixed sections, a topic name per fact, every fact shown in full with its date, ≤280 chars; memory is context, never truth; one routing guide `ai.memory_structure.ROUTING_GUIDE`; one writer `ai.memory_write.apply_memory_change`; a background pass never deletes a fact (it retires), and a user's forget leaves only a hash in `memory_forgotten` that refuses an implicit re-add (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home`, amendment 7).
+- Memory keeps only what has no other home — five fixed sections, a topic name per fact, every fact shown in full with its date, ≤500 chars (prompts aim for 280; an over-long extracted fact is shortened once, not dropped); memory is context, never truth; one routing guide `ai.memory_structure.ROUTING_GUIDE`; one writer `ai.memory_write.apply_memory_change`; a background pass never deletes a fact (it retires), and a user's forget leaves only a hash in `memory_forgotten` that refuses an implicit re-add (ADR `2026-10-25-memory-keeps-only-what-has-no-other-home`, amendments 7 and 12).
 - Codex gets our tools as real (dynamic) tool calls that the HOST captures and runs — Codex never
   executes one; text `<tool_call>` is the fallback (ADR `2026-10-03-codex-tools-are-native-calls-the-host-runs`).
   The Codex turn stays OPEN across tool rounds — the call parks and the next round answers it
@@ -300,6 +304,10 @@ One line each — full reasoning and the scar behind each is in
   `services/connector_catalog.py`; never add a connector list anywhere else. Data access is
   `db/connector_store.ConnectorStore`. Connectors read no environment variables.
   ADR `2026-10-10-connectors-live-in-a-connectors-table-and-secrets-in-connector-secrets`.
+- Lucius discovers connectors with `search_connector_directory`, reading `services/connector_directory.json` —
+  a DERIVED snapshot of the frontend `catalog.ts` (`npm run sync:connector-directory`; a vitest fails on drift).
+  Setup is the human-only screen command `connectors.open_setup`: it opens a form, never writes config or
+  touches a secret. ADR `2026-10-31-lucius-discovers-connectors-from-a-synced-snapshot-and-setup-stays-human`.
 
 ## AI tools
 

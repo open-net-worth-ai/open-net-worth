@@ -18,7 +18,9 @@ import re
 
 from backend.ai import memory_open_items
 from backend.ai.memory_extract_prompt import EXTRACT_SYSTEM, existing_listing, extract_prompt
+from backend.ai.memory_shorten import shorten_long_facts
 from backend.ai.memory_structure import kept_apart, topic_key
+from backend.ai.memory_transcript import readable_block
 from backend.ai.memory_write import apply_memory_change
 from backend.core.user_time import user_today
 from backend.db import MemoryStore
@@ -427,7 +429,8 @@ def _incremental_slice(history: list[dict], last_extracted_len: int) -> list[dic
 
 
 def _conversation_text(history: list[dict]) -> str:
-    """Flatten session history to plain user/assistant text, dropping tool noise."""
+    """Flatten session history to plain user/assistant text, dropping tool noise and the
+    context blocks the app attaches to a user turn (``memory_transcript.readable_block``)."""
     lines: list[str] = []
     for msg in history:
         role = msg.get("role")
@@ -435,18 +438,17 @@ def _conversation_text(history: list[dict]) -> str:
             continue
         content = msg.get("content")
         if isinstance(content, str):
-            text = content.strip()
+            blocks = [content]
         elif isinstance(content, list):
-            parts = [
-                b.get("text", "")
+            blocks = [
+                b.get("text") or ""
                 for b in content
-                if isinstance(b, dict)
-                and b.get("type") == "text"
-                and not (b.get("text") or "").startswith("<turn_context>")
+                if isinstance(b, dict) and b.get("type") == "text"
             ]
-            text = " ".join(p.strip() for p in parts if p.strip())
         else:
-            text = ""
+            blocks = []
+        parts = [readable_block(role, b) for b in blocks]
+        text = " ".join(p.strip() for p in parts if p.strip())
         if text:
             lines.append(f"{role.upper()}: {text}")
     return "\n".join(lines)
@@ -491,6 +493,19 @@ def _profile_instructions() -> str:
 
     notes = read_profile_raw().get("notes")
     return notes if isinstance(notes, str) else ""
+
+
+async def _ask_shorter(prompt: str):
+    reply = await _provider().complete(
+        prompt,
+        system=_EXTRACT_SYSTEM,
+        model=_memory_model(),
+        max_tokens=1024,
+        source="memory_shorten",
+        response_format=_MEMORY_JSON,
+        effort="none",
+    )
+    return _parse_json(reply)
 
 
 def _extraction_ops(parsed: dict) -> dict:
@@ -584,6 +599,7 @@ async def extract_and_merge(
         ),
         {f["id"]: f for f in store.all_facts()},
     )
+    ops = await shorten_long_facts(ops, _ask_shorter)
     await asyncio.to_thread(apply_memory_change, ops, source="implicit", strict=False, today=today)
 
     if session_id:

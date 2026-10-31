@@ -103,7 +103,9 @@ Docker image; new users: the download page) and the post ends with a link to the
 It runs as the `announce` job of the releases repo's `release.yml`, after `publish`, fetching the
 script at the source commit; it is `continue-on-error`, so it never fails a release. It needs the
 secret `DISCORD_RELEASE_WEBHOOK` (Discord channel → Edit Channel → Integrations → Webhooks) and the
-repository VARIABLE `DISCORD_ANNOUNCE=true` — a secret of that name does nothing.
+repository VARIABLE `DISCORD_ANNOUNCE=true` — a secret of that name does nothing. The secret
+`DISCORD_GENERAL_WEBHOOK`, when set, posts the same message to a second channel (#general while
+the community is small); delete it to stop.
 
 To see what a release's notes and post would look like without publishing anything, run the
 releases repo's **Preview release notes** workflow (`notes-preview.yml`):

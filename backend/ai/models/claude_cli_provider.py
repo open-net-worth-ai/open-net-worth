@@ -45,6 +45,7 @@ import os
 import shutil
 import tempfile
 import time
+from itertools import chain
 from typing import AsyncGenerator, List, Optional
 
 from backend.ai.image_payloads import decode_image_payloads
@@ -612,27 +613,32 @@ class ClaudeCliProvider(AIProvider):
                                     if ttft_ms is None:
                                         ttft_ms = (time.monotonic() - t0) * 1000.0
                                     emitted_any_delta = True
-                                    for visible in scanner.feed(delta["text"]):
+                                    # A call goes out before the text the scanner yields after
+                                    # it: one delta can close a call and start the next line,
+                                    # and the chat flushes its held line at each call — text
+                                    # after the call released there sat ABOVE the row, cut off
+                                    # its line (a lone "W", live 2026-10-31).
+                                    for visible in chain(scanner.feed(delta["text"]), ("",)):
+                                        while emitted_call_count < len(scanner.calls):
+                                            call = scanner.calls[emitted_call_count]
+                                            call_id = f"cli_{int(t0 * 1000)}_{emitted_call_count}"
+                                            emitted_anything = True
+                                            yield {
+                                                "type": "tool_use_start",
+                                                "id": call_id,
+                                                "name": call["name"],
+                                            }
+                                            yield {
+                                                "type": "tool_use",
+                                                "id": call_id,
+                                                "name": call["name"],
+                                                "input": call["input"],
+                                            }
+                                            emitted_call_count += 1
+                                            watch.call_parsed()
                                         if visible:
                                             emitted_anything = True
                                             yield {"type": "text_delta", "text": visible}
-                                    while emitted_call_count < len(scanner.calls):
-                                        call = scanner.calls[emitted_call_count]
-                                        call_id = f"cli_{int(t0 * 1000)}_{emitted_call_count}"
-                                        emitted_anything = True
-                                        yield {
-                                            "type": "tool_use_start",
-                                            "id": call_id,
-                                            "name": call["name"],
-                                        }
-                                        yield {
-                                            "type": "tool_use",
-                                            "id": call_id,
-                                            "name": call["name"],
-                                            "input": call["input"],
-                                        }
-                                        emitted_call_count += 1
-                                        watch.call_parsed()
                             elif inner.get("type") == "message_delta":
                                 stop_reason = (inner.get("delta") or {}).get(
                                     "stop_reason"

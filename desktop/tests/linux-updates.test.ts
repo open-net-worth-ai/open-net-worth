@@ -4,7 +4,7 @@ import { chmod, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { APPIMAGE_ASSET, CHECKSUMS_ASSET, LATEST_RELEASE_API, LinuxUpdater, expectedChecksum, fetchLatestVersion, linuxUpdatesSupported, parseRelease, type Fetch } from '../src/main/linux-updates';
+import { APPIMAGE_ASSET, CHECKSUMS_ASSET, LATEST_RELEASE_API, LinuxUpdater, expectedChecksum, fetchLatestVersion, fetchReleaseNotes, linuxUpdatesSupported, parseRelease, type Fetch } from '../src/main/linux-updates';
 import { SIGNATURE_ASSET } from '../src/main/update-signature';
 import { UpdateController, isNewer, parseVersion, type UpdateHooks } from '../src/main/updates';
 import { testSigner } from './minisign-fixture';
@@ -227,4 +227,19 @@ test('the controller asks first, then turns a swapped AppImage into a ready upda
     await rm(swapped.directory, { recursive: true, force: true });
     await rm(parked.directory, { recursive: true, force: true });
   }
+});
+
+test('release notes come from that version\'s own release on GitHub, and nowhere else', async () => {
+  const requested: string[] = [];
+  const answer = (body: unknown, finalUrl: string | null = null): Fetch => async (url) => {
+    requested.push(url);
+    const response = new Response(JSON.stringify({ tag_name: 'v0.2.0', body }));
+    Object.defineProperty(response, 'url', { value: finalUrl ?? url });
+    return response;
+  };
+  assert.equal(await fetchReleaseNotes(answer('## Highlights\n\n- a'), '0.2.0'), '## Highlights\n\n- a');
+  assert.deepEqual(requested, ['https://api.github.com/repos/open-net-worth-ai/open-net-worth-releases/releases/tags/v0.2.0']);
+  assert.equal(await fetchReleaseNotes(answer(null), '0.2.0'), '');
+  await assert.rejects(fetchReleaseNotes(answer('x', 'https://evil.test/notes'), '0.2.0'));
+  await assert.rejects(fetchReleaseNotes(answer('x'), '../../evil'));
 });

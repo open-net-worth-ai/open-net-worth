@@ -390,6 +390,13 @@ export function fAmountNative(n: number, currency?: string): string {
   }
 }
 
+/** A per-unit cost with no symbol: the currency's own decimals, except a sub-unit cost that
+ *  those decimals would round to zero (SHIB at 0.0000241 → "0.00", as if it were free), which
+ *  keeps fPrice's magnitude-adaptive precision. A genuine zero stays "0.00". */
+export function fUnitCostNative(n: number, currency?: string): string {
+  return n > 0 && n < 1 ? fPrice(n) : fAmountNative(n, currency)
+}
+
 /**
  * Format a percentage with EXACTLY 2 decimals — `12.30%`, `0.05%`, `0.00%`.
  *

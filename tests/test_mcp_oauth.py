@@ -127,6 +127,23 @@ def test_discover_www_authenticate_reads_the_401_challenge(monkeypatch):
     )
 
 
+def test_sign_in_requests_name_open_net_worth_not_python_urllib(monkeypatch):
+    """The sign-in discovery hits the same Cloudflare rule as the MCP client (error 1010 on
+    ``Python-urllib``), so it sends the same product User-Agent; a caller's header still wins."""
+    seen: list[dict] = []
+
+    class _Opener:
+        def open(self, request, timeout=None):
+            seen.append({k.lower(): v for k, v in request.header_items()})
+            raise _http_error(401)
+
+    monkeypatch.setattr(oauth, "_no_redirect_opener", lambda: _Opener())
+    with pytest.raises(urllib.error.HTTPError):
+        oauth._unguarded_urlopen("https://mcp.example.test/mcp", headers={"Accept": "x"})
+    assert seen[0]["user-agent"].startswith("OpenNetWorth/")
+    assert seen[0]["accept"] == "x"
+
+
 def test_discover_www_authenticate_raises_when_server_answers_200():
     class _FakeResp:
         def close(self):

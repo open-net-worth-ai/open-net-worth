@@ -164,9 +164,12 @@ def _view(kind: ConnectorKind, row: Row, have: frozenset, ctx: dict, level) -> C
     status = _status(enabled, kind.configured(row, have), error or None)
     short, long, native = copy_for(connector_id, kind)
     if kind.kind == "mcp":
-        # The server's OWN self-description (handshake ``instructions``, already sanitized and
-        # capped at capture time) beats the generic fallback every custom server would share.
-        long = row["state"].get("server_info_instructions") or long
+        # The server's OWN one-line description (handshake ``serverInfo.description``, sanitized
+        # at capture) beats the generic fallback every custom server would share. Its
+        # ``instructions`` are guidance for an AI, not a description — the detail page shows
+        # them on their own, folded (``config.server_info_instructions``).
+        described = row["state"].get("server_info_description")
+        short, long = (described, described) if described else (short, long)
     return ConnectorView(
         id=connector_id,
         kind=kind.kind,

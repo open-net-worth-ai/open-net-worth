@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import type { DesktopClientBridge, DesktopCommand } from './contracts';
+import type { DesktopClientBridge, DesktopCommand, DesktopUpdateState } from './contracts';
 
 const client: DesktopClientBridge = {
   version: 1,
@@ -10,6 +10,15 @@ const client: DesktopClientBridge = {
   openActivitySettings: () => ipcRenderer.invoke('desktop-client:activity-settings'),
   reportProblem: (error?: string) => ipcRenderer.invoke('desktop-report:open', error),
   reportHistory: state => ipcRenderer.send('desktop-client:history', state),
+  getUpdateState: () => ipcRenderer.invoke('desktop-client:update-state'),
+  onUpdateState: listener => {
+    const handler = (_event: Electron.IpcRendererEvent, state: DesktopUpdateState) => listener(state);
+    ipcRenderer.on('desktop-client:update-state', handler);
+    return () => ipcRenderer.removeListener('desktop-client:update-state', handler);
+  },
+  restartToUpdate: () => ipcRenderer.invoke('desktop-client:restart-to-update'),
+  offerUpdate: () => ipcRenderer.invoke('desktop-client:offer-update'),
+  takeWhatsNew: () => ipcRenderer.invoke('desktop-client:whats-new'),
   onCommand: listener => {
     const handler = (_event: Electron.IpcRendererEvent, command: DesktopCommand) => listener(command);
     ipcRenderer.on('desktop-client:command', handler);

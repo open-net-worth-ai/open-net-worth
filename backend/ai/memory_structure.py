@@ -49,7 +49,10 @@ RECENT_MAX_LIVE = 10
 PROFILE_TOPIC = "Profile"
 _RENAMED_YOU_TOPICS = frozenset({"about you"})
 
-FACT_MAX_CHARS = 280
+# A fact is refused past FACT_MAX_CHARS; every prompt asks for FACT_TARGET_CHARS, so most land
+# well under the limit and one that runs a little long is still kept (2026-10-30).
+FACT_MAX_CHARS = 500
+FACT_TARGET_CHARS = 280
 SENSITIVE_TOPICS = (
     "health, religion, political views, sexuality, ethnicity, criminal or legal matters"
 )

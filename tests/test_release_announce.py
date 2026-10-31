@@ -143,3 +143,30 @@ def test_the_post_says_how_each_kind_of_user_gets_it():
     assert "`onw upgrade`" in description and ra.UPGRADE_URL in description
     assert f"[Download]({ra.DOWNLOAD_URL})" in description
     assert description.endswith(f"[Read the full release notes]({RELEASE_URL})")
+
+
+def test_every_webhook_gets_the_post_even_when_one_fails(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", " https://example.test/a, https://example.test/b ")
+    sent = []
+
+    def post(hook, payload):
+        sent.append(hook)
+        if hook.endswith("/a"):
+            raise OSError("HTTP Error 404")
+
+    monkeypatch.setattr(ra, "post", post)
+    args = [str(_write(tmp_path, NOTES)), "--version", "0.1.31", "--release-url", RELEASE_URL]
+    assert ra.main(args) == 1
+    assert sent == ["https://example.test/a", "https://example.test/b"]
+    out = capsys.readouterr().out
+    assert "channel 1 of 2 failed" in out and "in 1 of 2" in out
+    assert "example.test" not in out
+
+
+def test_webhooks_split_on_spaces_and_commas():
+    assert ra.webhooks("") == []
+    assert ra.webhooks("https://x.test/1 https://x.test/2,https://x.test/3\n") == [
+        "https://x.test/1",
+        "https://x.test/2",
+        "https://x.test/3",
+    ]

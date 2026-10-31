@@ -265,7 +265,9 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # transactions, so "which accounts are there?" stops costing a full fetch. ~270 chars each
     # after trimming the description to one sentence; all connector-scoped, so the CORE default
     # offer is unchanged.
-    budget = 468_000
+    # 2026-10-31: 468_000 -> 470_000. search_connector_directory (ai/tools/connectors.py) — Lucius
+    # searches the Browse & add directory; ~1.1K chars after trimming, discoverable not CORE.
+    budget = 470_000
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

@@ -54,7 +54,7 @@ _MAX_FETCH_ROWS = 5000
 # (RFC §A step 4, AC9). Identity fields (external_refs/provider_account_id) are NOT in this
 # list: they are structural keys the ledger dedup floor and the snapshot store key off of,
 # never rendered as prose, and must stay byte-stable across re-fetches of the same row.
-_ROW_TEXT_FIELDS = ("description", "memo", "currency")
+_ROW_TEXT_FIELDS = ("description", "memo", "currency", "category_hint")
 _ACCOUNT_TEXT_FIELDS = ("name", "mask", "currency", "institution")
 _POSITION_TEXT_FIELDS = ("symbol", "currency")
 # Cap on any single string leaf inside a stashed `raw` payload (S-F3) — generous enough for

@@ -31,7 +31,8 @@ Just say it:
 Each fact is filed in a section — **Recent** (what you decided or set in motion over the last two
 weeks; the only facts that ever lapse — see below), **You**, **Money**, **Plans** or **Other** —
 and, except in Recent, under a short topic such
-as *Housing*. In **You** there are two: **Profile**, for what he knows about you that no profile
+as *Housing*. A fact is kept short — usually a sentence or two, never more than 500 characters;
+when one Lucius picks up from a chat runs longer, he shortens it once rather than lose it. In **You** there are two: **Profile**, for what he knows about you that no profile
 field holds (your employer, the languages you speak, who you live with), and **Preferences**, for
 how you like to work. This **Profile** is a memory topic, not your Settings profile — that one
 holds the facts the app has a field for. If you ask him to remember something your profile has a field for, or a standing rule
@@ -115,7 +116,7 @@ that narrows it to the facts (or topics) containing your words.
    asks first and says how many facts go, for example *Forget Housing? Lucius will forget its 4
    facts.* It can't be undone.
 4. **Older memories.** Facts saved before sections existed wait here, a row each, until Lucius files them under a section and topic. They are not lost; you can edit or
-   forget them as usual. Filing never changes a fact's words, with two exceptions: one over 280
+   forget them as usual. Filing never changes a fact's words, with two exceptions: one over 500
    characters is shortened to fit, and one written as "User…", "the advisor…" or "As of …" is
    reworded about you — kept only if every number, date, quote and name in it survives,
    otherwise it keeps its old words. Older facts are never filed under Recent, and the same
@@ -159,7 +160,7 @@ At the top of **Settings → Memory**:
   chat titled *Japan trip budget* that only says "ten days in Japan". The conversations that
   hold the most of the words come back, newest first, each with a short snippet; when a snippet
   isn't enough he opens that conversation and reads what you both said in it. He links the
-  conversation by its title in his reply; click or tap the link to switch to it. It never reads
+  conversation by its title in his reply; click or tap the link to switch to it, and **Back** to return. It never reads
   attachments, the results of his tools, or the context the app adds to a message (the screen you
   were on, items you mentioned), and never conversations that don't appear in your Chats list. The conversation
   you're in is left out. With the switch off he can't use this search, but he can still read past

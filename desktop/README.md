@@ -347,7 +347,20 @@ BACKGROUND find then calls the updater straight away, quietly — it fetches the
 `opennetworth.ai/update/<platform-arch>/<version>`
 (→ `update.electronjs.org/open-net-worth-ai/open-net-worth-releases`) — and on
 `update-downloaded` the menu (and tray) reads **Restart to Update**, which
-installs at once when chosen, plus one notification. Checks keep running while an update is staged: a
+installs at once when chosen, plus one notification. The page sees the same state through the
+client bridge (`getUpdateState`/`onUpdateState`, pushed on every phase change) and shows a
+**Restart** pill (`frontend/src/DesktopUpdateNotices.tsx`) so an update is visible with OS
+notifications off. The page can only OPEN native choices: `restartToUpdate` opens `offerRestart`'s
+Restart Now / Later confirm (the same one the notification opens) and installs only on that answer,
+and after a page-opened dialog closes the page waits 30 s before it may open another — a hostile
+Private Cloud page can neither restart the app nor reopen the dialog in a loop. In phase `available`
+(cannot install in place, a failed download, or Later on a manual check) the pill says "available"
+and **Update** calls `offerUpdate`, the Update Available… dialog. Release notes are capped (64 KB,
+lines over 2,000 characters skipped) before any pattern runs on them. On the first launch after
+an update, `announceUpdate` also starts fetching THAT version's release (`fetchReleaseNotes`) and
+`releaseHighlights` reduces its notes to the Highlights bullets (else New then Fixes, as
+`scripts/release_announce.py` does) as plain text; `takeWhatsNew` hands it to the page once.
+Checks keep running while an update is staged: a
 release newer than the staged one re-runs the updater quietly (phase stays `ready`, so the staged one
 still installs on quit or if the newer download fails), and **Restart to Update** first asks for the
 latest version (bounded at 5 s) and downloads a newer one before installing; nothing installs before a restart or the next

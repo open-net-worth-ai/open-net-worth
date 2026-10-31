@@ -21,7 +21,7 @@ import type { ReactNode } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import * as PD from './planData'
 import { fBaseCompact, getCurrencySymbol } from '../../../utils/format'
-import { fBaseWhole, fSigned } from './planData'
+import { fBaseWhole, fCoarse, fSigned } from './planData'
 import { authFetch } from '../../../api/client'
 import { FanChart, RbdChart } from './charts'
 import { fireReseedAction, fireSeedKey } from './fireReseed'
@@ -292,15 +292,6 @@ function accTone(v: number, kind: 'cf' | 'nw') {
   const a = Math.abs(v),
     b = ACC_BANDS[kind] ?? ACC_BANDS.cf
   return a <= b[0]! ? 'good' : a <= b[1]! ? 'warn' : 'bad'
-}
-// coarse money for guidance figures — no false precision (S$307,800 → "S$310k")
-function fCoarse(n: number) {
-  const a = Math.abs(n),
-    s = n < 0 ? '−' : ''
-  const sym = getCurrencySymbol()
-  if (a >= 1e6) return s + sym + (a / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M'
-  if (a >= 1e3) return s + sym + Math.round(a / 1e4) * 10 + 'k'
-  return s + sym + Math.round(a)
 }
 
 // ── Click-to-type lever (slider + editable value) — ported from the old Projections tab ──

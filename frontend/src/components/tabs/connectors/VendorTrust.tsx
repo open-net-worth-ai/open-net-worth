@@ -193,7 +193,9 @@ const UNKNOWN_NOTE =
 const BADGE: Record<VerificationState, { label: string; tone: BadgeProps['tone'] }> = {
   verified: { label: 'Verified publisher', tone: 'good' },
   unverified: { label: 'Unverified publisher', tone: 'warn' },
-  unknown: { label: 'Unknown publisher', tone: 'warn' },
+  // Same words as `unverified` (owner, 2026-10-31: "Unknown publisher" read oddly). The
+  // sentence under the badge still tells the two apart; only the label is shared.
+  unknown: { label: 'Unverified publisher', tone: 'warn' },
 }
 
 const NOTE: Record<VerificationState, string> = {

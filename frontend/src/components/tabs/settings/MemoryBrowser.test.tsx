@@ -157,6 +157,36 @@ describe('MemoryBrowser', () => {
     expect(toast).not.toHaveBeenCalled()
   })
 
+  it('one change reads as one sentence, with no restated reply or badge', async () => {
+    serve({
+      added: 0,
+      updated: 1,
+      removed: 0,
+      rejected: [],
+      changes: [
+        {
+          change: 'updated',
+          where: 'Plans · Debt reduction',
+          text: 'Pays down debt first, around the bills that cannot be cut',
+          was: 'Puts day-to-day needs first',
+        },
+      ],
+      reply: 'Updated: paying down debt is now your priority.',
+    })
+    await renderBrowser()
+    fireEvent.change(screen.getByLabelText('Tell Lucius what to remember or change'), {
+      target: { value: 'debt first, but some bills stay' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
+    const line = (await screen.findByText('Updated a memory in Debt reduction')).closest(
+      '[role="status"]',
+    )!
+    expect(within(line).getByText(/Pays down debt first/)).toBeTruthy()
+    expect(within(line).getByText('Before: Puts day-to-day needs first')).toBeTruthy()
+    expect(within(line).queryByText(/paying down debt is now your priority/)).toBeNull()
+    expect(line.querySelector('.rd-mem-change-kind')).toBeNull()
+  })
+
   it('the list-level change box sends no topic', async () => {
     await renderBrowser()
     fireEvent.change(screen.getByLabelText('Tell Lucius what to remember or change'), {
@@ -185,8 +215,7 @@ describe('MemoryBrowser', () => {
       target: { value: 'my card number is on file' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
-    const line = await screen.findByRole('status')
-    expect(within(line).getByText('No changes were made.')).toBeTruthy()
+    const line = (await screen.findByText('No changes were made.')).closest('[role="status"]')!
     expect(within(line).queryByText(/Card numbers/)).toBeNull()
     fireEvent.click(within(line).getByRole('button', { name: 'See why' }))
     expect(
@@ -194,6 +223,30 @@ describe('MemoryBrowser', () => {
     ).toBeTruthy()
     expect(within(line).getByText(/never remembered/)).toBeTruthy()
     expect(toast).not.toHaveBeenCalled()
+  })
+
+  it("shows the chat's working line while Lucius works, then the outcome in its place", async () => {
+    let finish: () => void = () => {}
+    authFetch.mockImplementation((url: string) =>
+      url === '/api/memory/instruct'
+        ? new Promise((resolve) => {
+            finish = () =>
+              resolve(
+                json({ added: 0, updated: 0, removed: 0, rejected: [], changes: [], reply: '' }),
+              )
+          })
+        : json({ facts: sampleFacts(), total: 11 }),
+    )
+    await renderBrowser()
+    fireEvent.change(screen.getByLabelText('Tell Lucius what to remember or change'), {
+      target: { value: 'forget the old rent' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Update memory' }))
+    const working = await screen.findByText(/…$/, { selector: '.lx-activity-word' })
+    expect(working.closest('.lx-activity')).toBeTruthy()
+    finish()
+    expect(await screen.findByText('No changes were made.')).toBeTruthy()
+    expect(document.querySelector('.lx-activity')).toBeNull()
   })
 
   it('sends on Enter, and Shift+Enter starts a new line', async () => {

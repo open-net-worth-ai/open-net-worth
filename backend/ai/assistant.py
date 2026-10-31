@@ -1616,21 +1616,24 @@ def _post_execute_events(
 def _maybe_append_screen_command_block(owner_blocks: Optional[list], result_text: str) -> None:
     """Re-derive the parked screen-command chip from a persisted run_screen_command
     tool pair (reload / cross-device). Dispatched (live) commands were ephemeral UI
-    state — they leave no block."""
+    state — they leave no block, EXCEPT a connector setup: its card names the connector
+    and carries Connect, so it shows whether or not Connectors was already open."""
     if owner_blocks is None:
         return
     try:
         parsed = json.loads(result_text or "")
     except Exception:
         return
-    if not isinstance(parsed, dict) or parsed.get("status") != "parked":
+    if not isinstance(parsed, dict):
         return
     cmd = parsed.get("command")
     if not isinstance(cmd, dict) or not cmd.get("name"):
         return
-    owner_blocks.append(
-        {"type": "screen_command", "command": cmd, "open": parsed.get("open") or {}}
-    )
+    setup = cmd.get("name") == "connectors.open_setup"
+    if parsed.get("status") != "parked" and not setup:
+        return
+    open_ = parsed.get("open") or ({"route": "connectors"} if setup else {})
+    owner_blocks.append({"type": "screen_command", "command": cmd, "open": open_})
 
 
 def _maybe_append_mcp_image_attachments(

@@ -71,6 +71,21 @@ describe('Report a problem dialog (browser)', () => {
     expect(screen.getByText('0.1.2')).toBeTruthy()
   })
 
+  it('says why it asks for an email, and links to the Discord community', async () => {
+    stubServer()
+    await openDialog()
+    expect(screen.getByText(/tell you when the fix is out/)).toBeTruthy()
+    const link = screen.getByRole('link', { name: 'Join us on Discord' })
+    expect(link.getAttribute('href')).toBe('https://discord.gg/eCGBd4zg3B')
+    const open = vi.spyOn(window, 'open').mockReturnValue(null)
+    fireEvent.click(link)
+    expect(open).toHaveBeenCalledWith(
+      'https://discord.gg/eCGBd4zg3B',
+      '_blank',
+      'noopener,noreferrer',
+    )
+  })
+
   it('shows the Error field only when the report was opened from an error', async () => {
     stubServer({ draft: { ...DRAFT, error: null } })
     await openDialog()

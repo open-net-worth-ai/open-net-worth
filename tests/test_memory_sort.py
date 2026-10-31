@@ -405,7 +405,7 @@ def test_the_prompt_does_not_ask_for_a_sensitive_flag(isolated, monkeypatch):
 
 
 def test_a_long_fact_is_marked_and_filed_only_with_a_shorter_wording(isolated, monkeypatch):
-    long_text = "Keeps every household receipt in a shoebox and reconciles them monthly. " * 5
+    long_text = "Keeps every household receipt in a shoebox and reconciles them monthly. " * 8
     short = "Keeps every household receipt and reconciles them monthly."
     MemoryStore().bulk_insert([_legacy("long", long_text.strip()), _legacy("tiny", "Likes tea")])
     model = _use(
@@ -425,11 +425,11 @@ def test_a_long_fact_is_marked_and_filed_only_with_a_shorter_wording(isolated, m
     facts = _by_id()
     assert (facts["long"]["state"], facts["long"]["content"]) == ("live", short)
     assert (facts["tiny"]["state"], facts["tiny"]["content"]) == ("live", "Likes tea")
-    assert "long [over 280 characters]:" in model.calls[0]["prompt"]
+    assert "long [over 500 characters]:" in model.calls[0]["prompt"]
 
 
 def test_a_long_fact_without_a_short_enough_wording_stays_unsorted(isolated, monkeypatch):
-    long_text = ("Keeps every household receipt in a shoebox. " * 8).strip()
+    long_text = ("Keeps every household receipt in a shoebox. " * 12).strip()
     MemoryStore().bulk_insert([_legacy("long", long_text)])
     _use(
         monkeypatch,

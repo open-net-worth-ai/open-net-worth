@@ -6,6 +6,7 @@ import type { LuciusChatValue } from '../state/luciusChat'
  *  "already sitting on an empty one" — reuse it instead of minting another. */
 export function startFreshConversation(
   chat: Pick<LuciusChatValue, 'conversations' | 'activeId' | 'createConversation'>,
+  opts?: { replaceHistory?: boolean },
 ): void {
-  if (chat.conversations.some((c) => c.id === chat.activeId)) chat.createConversation()
+  if (chat.conversations.some((c) => c.id === chat.activeId)) chat.createConversation(opts)
 }

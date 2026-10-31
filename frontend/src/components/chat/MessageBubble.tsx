@@ -20,6 +20,7 @@ import { ArtifactCard } from './ArtifactCard'
 import { WriteReceiptChip } from './WriteReceiptChip'
 import { useAnchoredPopover } from './anchoredPopover'
 import { ScreenCommandChip } from './ScreenCommandChip'
+import { CodeBlock } from './CodeBlock'
 import { ChangePreview } from './ChangePreview'
 import { DuplicateReview } from './DuplicateReview'
 import {
@@ -434,6 +435,7 @@ function renderGroupedBlock(
           components={{
             ...SAFE_MARKDOWN_COMPONENTS,
             a: ChatLink,
+            pre: CodeBlock,
             table: ({ children }) => (
               <div className="table-wrap">
                 <table>{children}</table>
@@ -1045,6 +1047,7 @@ export function MessageBubble({
                   components={{
                     ...SAFE_MARKDOWN_COMPONENTS,
                     a: ChatLink,
+                    pre: CodeBlock,
                     table: ({ children }) => (
                       <div className="table-wrap">
                         <table>{children}</table>

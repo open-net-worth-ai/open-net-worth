@@ -269,6 +269,16 @@ describe('MCP provenance — what we confirmed, stated exactly', () => {
     ['mcp-coinbase', 'Coinbase', 'verified'],
     ['mcp-okx', 'OKX', 'verified'],
     ['mcp-kraken', 'Kraken', 'verified'],
+    // Each published on the broker's own domain (docs or support pages, 2026-10-31).
+    ['mcp-webull', 'Webull', 'verified'],
+    ['mcp-longbridge', 'Longbridge', 'verified'],
+    ['mcp-tiger', 'Tiger Brokers', 'verified'],
+    ['mcp-zerodha', 'Zerodha', 'verified'],
+    ['mcp-upstox', 'Upstox', 'verified'],
+    // Local server released from PublicDotCom's own repo via a PyPI trusted publisher.
+    ['mcp-public', 'Public.com', 'verified'],
+    // Bybit's GitHub-verified org; npm maintainers are @bybit.com accounts.
+    ['mcp-bybit', 'Bybit', 'verified'],
     ['mcp-expensify', 'Expensify', 'verified'],
     ['mcp-avalara', 'Avalara', 'verified'],
     ['mcp-twelvedata', 'Twelve Data', 'verified'],
@@ -383,11 +393,18 @@ describe('install presets', () => {
     }
   })
 
+  // The ONLY values a preset may ship: named, non-secret settings a server cannot start
+  // without. Coinbase's CLI refuses every call with "no environment configured" unless one is
+  // named, and in server mode it reads only COINBASE_ENV (its --env flag is ignored there).
+  const NON_SECRET_PRESET_VALUES: Record<string, string> = { COINBASE_ENV: 'live' }
+
   it('pre-seed env KEYS with no values — a preset must never ship a credential', () => {
     for (const [id, preset] of Object.entries(MCP_INSTALL_PRESETS)) {
       if (!preset.env) continue
       for (const line of preset.env.split('\n')) {
-        expect(line, id).toMatch(/^[A-Z][A-Z0-9_]*=$/)
+        const [key, value] = [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]
+        expect(key, id).toMatch(/^[A-Z][A-Z0-9_]*$/)
+        expect(value, `${id} ${key}`).toBe(NON_SECRET_PRESET_VALUES[key] ?? '')
       }
     }
   })

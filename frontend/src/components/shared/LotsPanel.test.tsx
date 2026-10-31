@@ -675,3 +675,39 @@ describe('LotsPanel — a sale shows the lots it used', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true')
   })
 })
+
+// Regression (2026-10-31): the Unit cost column used the currency's 2 decimals, so a
+// sub-cent coin's lot (SHIB at $0.0000241) read "0.00" — as if it had been free.
+describe('LotsPanel — sub-cent unit cost', () => {
+  const SHIB_LOT: Lot = {
+    ...LOT,
+    id: 'lot-shib',
+    original_qty: 30196880,
+    remaining_qty: 30196880,
+    unit_cost: 0.00002393,
+    fees: 4.34,
+    effective_unit_cost: 0.0000240737,
+    remaining_basis: 726.95,
+  }
+
+  it('shows the unit cost at its own precision', () => {
+    const { getByText } = render(
+      <LotsPanel
+        positionId={null}
+        symbol="SHIB"
+        costCcy="USD"
+        base={181.77}
+        costBase={929.08}
+        merged={{ lots: [SHIB_LOT], realized: [], income: [] }}
+      />,
+    )
+    expect(getByText('0.00002407')).toBeTruthy()
+  })
+
+  it('keeps the currency precision for an ordinary unit cost', async () => {
+    const { findByText } = render(
+      <LotsPanel positionId="pos-1" symbol="AAPL" costCcy="USD" base={20000} costBase={18520} />,
+    )
+    expect(await findByText('185.20')).toBeTruthy()
+  })
+})

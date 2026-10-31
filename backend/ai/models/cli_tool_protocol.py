@@ -101,6 +101,13 @@ INVOKE_CLOSE_TAG = "</invoke>"
 SHORT_OPEN_TAG = "<call>"
 SHORT_CLOSE_TAG = "</call>"
 
+# A closing tag with nothing open — the model closes a call twice (`…}</tool_call></tool_call>`).
+# Live 2026-10-30 (chat, claude_cli): handed on as text, its head was flushed above the call's
+# row and its tail streamed below it ("</tool_" / "call>"); the saved reply was clean because
+# strip_tool_syntax drops it. Dropped here so the live stream agrees. `</call>` is already
+# rewritten to CLOSE_TAG by _normalize_short_fence.
+STRAY_CLOSERS = (CLOSE_TAG, ALT_CLOSE_TAG, INVOKE_CLOSE_TAG)
+
 _SENTINELS = (
     OPEN_TAG,
     ALT_OPEN_TAG,
@@ -108,6 +115,8 @@ _SENTINELS = (
     ECHO_OPEN,
     *ID_ECHO_OPENS,
     SHORT_OPEN_TAG,
+    SHORT_CLOSE_TAG,
+    *STRAY_CLOSERS,
 )
 
 # (open, close) pairs the scanner accepts, longest opener first so `<function_calls>` is
@@ -822,6 +831,15 @@ class ToolCallScanner:
             echo, echo_open, echo_close_re = (
                 echoes[0] if echoes else (-1, ECHO_OPEN, _ECHO_CLOSE_RE)
             )
+            stray = min(
+                ((i, c) for c in STRAY_CLOSERS if (i := self._buf.find(c)) >= 0),
+                default=(-1, ""),
+            )
+            if stray[0] >= 0 and all(i < 0 or stray[0] < i for i in (start, echo)):
+                if stray[0]:
+                    yield self._buf[: stray[0]]
+                self._buf = self._buf[stray[0] + len(stray[1]) :]
+                continue
             if echo >= 0 and (start < 0 or echo < start):
                 if echo:
                     yield self._buf[:echo]

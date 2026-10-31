@@ -2,7 +2,7 @@ import { app, BrowserWindow, nativeTheme, screen, session, shell, type IpcMainIn
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { desktopEvent } from './desktop-events';
-import type { DesktopCommand, HistoryState } from '../contracts';
+import type { DesktopCommand, DesktopUpdateState, HistoryState } from '../contracts';
 import { BackendSupervisor } from './backend';
 import { appDocument, clipboardWriteAllowed, credentialHeaders, externalUrl, safeServerCommand, serverHeaders, validCommand, initialNavigationTrusted, serverRecoveryAllowed, trustedFrame } from './security';
 import { artifactFrameAllowed, artifactPolicy, artifactRequest } from './artifact-policy';
@@ -163,6 +163,11 @@ export class DesktopWindow {
     if (focus) this.show();
     if (this.commandsReady) this.deliver(command);
     else if (this.commands.length < 24) this.commands.push(command);
+  }
+
+  sendUpdateState(state: DesktopUpdateState): void {
+    const contents = this.lifetime.current();
+    if (contents && !contents.isDestroyed()) contents.send('desktop-client:update-state', state);
   }
 
   ready(): void {

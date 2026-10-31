@@ -26,11 +26,16 @@ The list is grouped:
 - **On this screen** — things you can see right now, listed first.
 - **Deeper sources** — detailed data behind the current screen (for example the rows of a chart).
 - Then one group per kind — accounts, payees, transactions, categories, envelopes, holdings,
-  documents, Automations, skills and more — with tabs along the top to jump between them. A
-  payee whose name matches as well as a transaction's is listed before it.
+  documents, connectors, Automations, skills and more. A payee whose name matches as well as a
+  transaction's is listed before it.
 
-Type a kind instead of a name to list them: `@accounts`, `@payees`, `@docs` or `@files` for your
-[Documents](documents.md).
+Tabs along the top narrow the list: pick **Connector** (or any kind) to see only those — all of
+them, not just the few that fit in the mixed list — and **All** to see everything again. On a
+computer, ⌘← and ⌘→ step between tabs. Typing more starts again from **All**.
+
+Type a kind instead of a name to list them — any kind works, singular or plural: `@accounts`,
+`@payees`, `@connectors`, `@reports`, and `@docs` or `@files` for your [Documents](documents.md). Put a
+kind before a name to search only that kind: `@payee vietnam airlines`, `@account savings`.
 
 ## `/` — run a skill
 

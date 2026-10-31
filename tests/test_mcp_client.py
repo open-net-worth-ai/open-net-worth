@@ -1189,6 +1189,18 @@ def test_parse_server_info_pure_cases():
     assert parse_server_info({"serverInfo": {"name": {"nested": 1}}}).name is None
 
 
+def test_parse_server_info_keeps_a_short_clean_description():
+    """``serverInfo.description`` is untrusted prose shown as a subtitle: whitespace
+    collapsed, capped, and a non-string is dropped."""
+    from backend.mcp.client import MAX_SERVER_INFO_CHARS, parse_server_info
+
+    info = parse_server_info({"serverInfo": {"description": "  Trades\n crypto  on Gemini "}})
+    assert info.description == "Trades crypto on Gemini"
+    long = parse_server_info({"serverInfo": {"description": "x" * 5000}}).description
+    assert long is not None and len(long) <= MAX_SERVER_INFO_CHARS
+    assert parse_server_info({"serverInfo": {"description": 42}}).description is None
+
+
 # ── provenance / vendor trust (§5) ─────────────────────────────────────────────
 
 
@@ -1991,6 +2003,21 @@ def test_accept_header_offers_both_json_and_event_stream(monkeypatch):
     assert result["protocolVersion"] == "2024-11-05"
     headers = {k.lower(): v for k, v in captured["headers"].items()}
     assert headers["accept"] == "application/json, text/event-stream"
+
+
+def test_every_request_names_open_net_worth_not_python_urllib(monkeypatch):
+    """Cloudflare's error 1010 refuses urllib's default ``Python-urllib/x.y`` — Zerodha's
+    mcp.kite.trade and Upstox's mcp.upstox.com both 403'd the app until it named itself."""
+    from backend.mcp.client import McpClientConnection
+
+    captured: dict = {}
+    monkeypatch.setattr(
+        "backend.mcp.client._urlopen",
+        _make_dual_accept_urlopen(captured, sse=False),
+    )
+    McpClientConnection(McpServerConfig(id="kite", url="https://mcp.kite.trade/mcp")).initialize()
+    headers = {k.lower(): v for k, v in captured["headers"].items()}
+    assert headers["user-agent"].startswith("OpenNetWorth/")
 
 
 def test_accept_header_json_only_would_406_against_a_real_server(monkeypatch):

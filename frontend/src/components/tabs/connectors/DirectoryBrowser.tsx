@@ -14,13 +14,14 @@
 // Both are inline styles because the prototype styles them inline — connectors.css is a verbatim
 // port of the prototype stylesheet and carries no rule for either.
 
-import type { CSSProperties, JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
+import { TabSkeleton } from '../../ui'
 import { DirectoryCard } from './DirectoryCard'
 import { pickSuggestions } from './directoryRows'
-import { Empty } from './primitives'
+import { Btn, Empty, Tabs } from './primitives'
 import { Icons } from './icons'
-import { ArrowUpDown, ListFilter } from '../../../ui/icons'
-import { CATEGORY_HUE, CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
+import { ArrowUpDown, ListFilter, Share2 } from '../../../ui/icons'
+import { CONNECTOR_CATEGORIES, type ConnectorCategory } from './model'
 import {
   DIRECTORY_FAMILY_CHIPS,
   filterDirectory,
@@ -36,11 +37,18 @@ export const MODAL_BODY_MIN_HEIGHT = 480
 /** Scroll a tapped category chip to the middle of its one-line row, so the chips past it
  *  (the ones cut off at the edge) come into view. Optional call: jsdom has no scrollIntoView. */
 function revealChip(chip: HTMLElement): void {
-  chip.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+  // Next frame, after the pick's re-render — run inline, that re-render cancelled the smooth
+  // scroll mid-way (the shared tabs hit the same thing).
+  requestAnimationFrame(() =>
+    chip.scrollIntoView?.({ behavior: 'smooth', block: 'nearest', inline: 'center' }),
+  )
 }
 
 export interface DirectoryBrowserProps {
   entries: DirectoryRow[]
+  /** The connectors read hasn't landed: which entries are installed is unknown. The list waits
+   *  — a guess would show Email as "add" with a +, and suggest what the user already has. */
+  loading?: boolean
   family: DirectoryFamilyFilter
   onFamily: (family: DirectoryFamilyFilter) => void
   query: string
@@ -57,6 +65,7 @@ export interface DirectoryBrowserProps {
 
 export function DirectoryBrowser({
   entries,
+  loading = false,
   family,
   onFamily,
   query,
@@ -80,26 +89,77 @@ export function DirectoryBrowser({
   // connectors already added and, unlike the grid, ignored Sort. A shortcut through the DEFAULT
   // view only — once the user has filtered or searched,
   // it is noise competing with the result they asked for.
+  // A number describes the thing it sits on, never a combination of filters: a tab is a place,
+  // so its count is that kind's total and does not move with a chip or a search; a chip
+  // narrows within the current tab, so it counts there. Search changes no number — it only
+  // narrows the grid (owner review, 2026-10-31: "MCP 26" dropping to 14 on a chip read as
+  // connectors disappearing).
+  const familyCount = (f: DirectoryFamilyFilter) =>
+    filterDirectory(entries, f, '', sort, 'all').filter((d) => !d.generic).length
+  const categoryCount = (c: ConnectorCategory | 'all') =>
+    filterDirectory(entries, family, '', sort, c).filter((d) => !d.generic).length
+  // The build-your-own slot is pinned ABOVE the grid as its own row, not left as one card
+  // among thirty: buried there, people never learned they could add a server we don't list
+  // (owner, 2026-10-31). It shows wherever an MCP server could be what you are looking for —
+  // the All and MCP views before any category narrows them, and every empty search.
+  const custom = entries.find((e) => e.generic)
+  const showCustom =
+    !!custom && (family === 'all' || family === 'mcp') && category === 'all' && !query.trim()
+  const grid = shown.filter((d) => !d.generic)
   const suggested = pickSuggestions(entries, 'all')
   const showSuggested =
     !query.trim() && family === 'all' && category === 'all' && suggested.length > 0
 
+  // A soft shadow under the sticky header once the list has scrolled under it — never at the
+  // top, where it would only be one more line (owner review, 2026-10-31).
+  const headRef = useRef<HTMLDivElement>(null)
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    const body = headRef.current?.closest('.rd-modal-body')
+    if (!body) return
+    const onScroll = () => setScrolled(body.scrollTop > 0)
+    onScroll()
+    body.addEventListener('scroll', onScroll, { passive: true })
+    return () => body.removeEventListener('scroll', onScroll)
+  }, [])
+
   return (
+    // Header to list is 16px, the same step as every gap inside the list — all of it OUTSIDE the
+    // header. Padding inside it is solid sheet colour, which showed as a dark band between the
+    // chips and the fade once the list scrolled (owner, 2026-10-31).
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div
+        ref={headRef}
+        className={'cn-dirhead' + (scrolled ? ' scrolled' : '')}
         style={{
           position: 'sticky',
           top: -18,
           zIndex: 2,
           background: 'var(--modal-bg)',
           margin: '-18px -20px 0',
-          padding: '18px 20px 14px',
+          padding: '18px 20px 0',
           display: 'flex',
           flexDirection: 'column',
           gap: 12,
-          borderBottom: '1px solid var(--line)',
+          // No bottom rule: the tabs' own baseline already separates this block, and a second
+          // line under the search row boxed it in (owner, 2026-10-31). The solid background
+          // still hides cards cleanly as they scroll under it.
         }}
       >
+        <div className="cn-dirfilters">
+          {/* The KIND of connector is a tab, like the Connectors page's own tabs; what it is
+              FOR is a chip below. Two rows of identical pills read as one messy row, with a
+              confusing "All" in each (owner review, 2026-10-31). */}
+          <Tabs
+            tabs={DIRECTORY_FAMILY_CHIPS.map(([k, l]) => ({
+              key: k,
+              label: l,
+              count: familyCount(k),
+            }))}
+            value={family}
+            onChange={onFamily}
+          />
+        </div>
         <div className="cn-dirsearchrow">
           <span className="cn-dirsearch">
             <Icons.search />
@@ -124,10 +184,10 @@ export function DirectoryBrowser({
               onChange={(e) => onCategory(e.target.value as ConnectorCategory | 'all')}
               aria-label="Filter by category"
             >
-              <option value="all">All categories</option>
+              <option value="all">All categories ({categoryCount('all')})</option>
               {categories.map((c) => (
                 <option key={c} value={c}>
-                  {c}
+                  {c} ({categoryCount(c)})
                 </option>
               ))}
             </select>
@@ -143,20 +203,6 @@ export function DirectoryBrowser({
               <option value="az">A–Z</option>
             </select>
           </label>
-        </div>
-        <div className="cn-dirfilters">
-          <div className="cn-chiprow">
-            {DIRECTORY_FAMILY_CHIPS.map(([k, l]) => (
-              <button
-                key={k}
-                className={'cn-chip' + (family === k ? ' on' : '')}
-                aria-pressed={family === k}
-                onClick={() => onFamily(k)}
-              >
-                {l}
-              </button>
-            ))}
-          </div>
           <select
             className="rd-select cn-sortselect"
             style={{ width: 'auto' }}
@@ -170,23 +216,13 @@ export function DirectoryBrowser({
         </div>
         {categories.length > 1 ? (
           <div className="cn-catrow" role="group" aria-label="Filter by category">
-            <button
-              type="button"
-              className={'cn-cat pick' + (category === 'all' ? ' on' : '')}
-              aria-pressed={category === 'all'}
-              onClick={(e) => {
-                revealChip(e.currentTarget)
-                onCategory('all')
-              }}
-            >
-              All
-            </button>
+            {/* No "All" chip of its own: nothing picked IS all, and a picked chip clears
+                when tapped again. The tab above already says "All". */}
             {categories.map((c) => (
               <button
                 key={c}
                 type="button"
                 className={'cn-cat pick' + (category === c ? ' on' : '')}
-                style={{ '--cat-hue': CATEGORY_HUE[c] } as CSSProperties}
                 aria-pressed={category === c}
                 onClick={(e) => {
                   revealChip(e.currentTarget)
@@ -194,6 +230,9 @@ export function DirectoryBrowser({
                 }}
               >
                 {c}
+                <span className="cn-chipcount" aria-hidden>
+                  {categoryCount(c)}
+                </span>
               </button>
             ))}
           </div>
@@ -208,15 +247,39 @@ export function DirectoryBrowser({
           minHeight: MODAL_BODY_MIN_HEIGHT,
         }}
       >
-        {showSuggested && (
-          <div className="cn-suggest" aria-label="Suggested connectors">
-            <div className="cn-suggest-h">Suggested</div>
-            <div className="cn-suggestgrid swipe">
-              {suggested.map((d) => (
+        {loading ? (
+          <TabSkeleton variant="connectors" label="Loading connectors…" header={false} />
+        ) : (
+          <>
+            {showCustom && custom ? <CustomServerRow onAdd={() => onAdd(custom)} /> : null}
+
+            {showSuggested && (
+              <div className="cn-suggest" aria-label="Suggested connectors">
+                <div className="cn-suggest-h">Suggested</div>
+                <div className="cn-suggestgrid swipe">
+                  {suggested.map((d) => (
+                    <DirectoryCard
+                      key={d.id}
+                      d={d}
+                      suggested
+                      onAdd={onAdd}
+                      onPreview={onPreview}
+                      onConfigure={onConfigure}
+                      onCategory={onCategory}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Labels the full, sortable list only when Suggested sits above it — otherwise the
+                grid is the whole view and needs no heading. */}
+            {showSuggested ? <div className="cn-suggest-h">All connectors</div> : null}
+            <div className="cn-dirgrid">
+              {grid.map((d) => (
                 <DirectoryCard
                   key={d.id}
                   d={d}
-                  suggested
                   onAdd={onAdd}
                   onPreview={onPreview}
                   onConfigure={onConfigure}
@@ -224,28 +287,46 @@ export function DirectoryBrowser({
                 />
               ))}
             </div>
-          </div>
+            {grid.length === 0 ? (
+              <Empty
+                title="No matches"
+                body={
+                  custom
+                    ? 'Try a different search or category — or connect it yourself as a custom MCP server.'
+                    : 'Try a different search or category.'
+                }
+              >
+                {custom ? (
+                  <Btn variant="primary" onClick={() => onAdd(custom)}>
+                    <Icons.plus /> Add a custom MCP server
+                  </Btn>
+                ) : null}
+              </Empty>
+            ) : null}
+          </>
         )}
-
-        {/* Labels the full, sortable list only when Suggested sits above it — otherwise the
-            grid is the whole view and needs no heading. */}
-        {showSuggested ? <div className="cn-suggest-h">All connectors</div> : null}
-        <div className="cn-dirgrid">
-          {shown.map((d) => (
-            <DirectoryCard
-              key={d.id}
-              d={d}
-              onAdd={onAdd}
-              onPreview={onPreview}
-              onConfigure={onConfigure}
-              onCategory={onCategory}
-            />
-          ))}
-        </div>
-        {shown.length === 0 ? (
-          <Empty title="No matches" body="Try a different search or category." />
-        ) : null}
       </div>
+    </div>
+  )
+}
+
+/** "Don't see yours?" — the custom MCP server, as a row of its own at the top of the list. */
+function CustomServerRow({ onAdd }: { onAdd: () => void }): JSX.Element {
+  return (
+    <div className="cn-customrow">
+      {/* The Connectors screen's own nav icon — this row IS "add a connector". */}
+      <span className="cn-customrow-ic" aria-hidden>
+        <Share2 size={16} />
+      </span>
+      <div className="cn-customrow-text">
+        <div className="cn-customrow-title">Don’t see yours? Add a custom MCP server</div>
+        <div className="cn-customrow-sub">
+          Connect any MCP server by its URL or a command run on this machine.
+        </div>
+      </div>
+      <Btn variant="primary" onClick={onAdd}>
+        <Icons.plus /> Add custom server
+      </Btn>
     </div>
   )
 }

@@ -40,6 +40,8 @@ import { TurnActivity, turnProgress } from './TurnActivity'
 import { CatchingUp, ChatLoading } from './ChatLoading'
 import { LuciusComposer } from './lucius/Composer'
 import { EffortChoices } from './lucius/ModelEffortRow'
+import { FileDropMask } from './lucius/FileDropMask'
+import { useFileDropZone } from './lucius/useFileDropZone'
 import type { LuciusComposerHandle, ComposerParsed } from './lucius/Composer'
 import { chatSessions } from '../../state/chatSessions'
 import { loadEarlierMessages, restoreSuggestions } from '../../state/chatReducer'
@@ -321,6 +323,8 @@ export function ChatPanel({
 
   const composerRef = useRef<LuciusComposerHandle>(null)
   useReauthDraftSource(composerRef)
+  // The whole panel takes a dropped file, not just the composer at its foot.
+  const fileDrop = useFileDropZone((files) => composerRef.current?.addFiles(files))
   const [widthFrac, setWidthFrac] = useState(savedWidthFrac)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const width = clampWidth(Math.round(widthFrac * viewportWidth))
@@ -1181,6 +1185,7 @@ export function ChatPanel({
           noVisionModel={noVisionLabel(activeModel, modelInfo.models, modelInfo.defaultModel)}
           imageReader={modelInfo.imageReader}
           dismissKeyboardOnSend={dismissKeyboardOnSend}
+          fileDrop={false}
         />
       </div>
     </div>
@@ -1193,7 +1198,9 @@ export function ChatPanel({
       data-dropzone="side"
       aria-hidden={!open}
       style={{ width: open && !fillWidth ? width + 'px' : undefined }}
+      {...fileDrop.handlers}
     >
+      {fileDrop.over && <FileDropMask className="lx-dropmask--side" />}
       {/* Left-edge resizer — meaningless once fillWidth/homeMode own the sizing. */}
       {!homeMode && (
         <div

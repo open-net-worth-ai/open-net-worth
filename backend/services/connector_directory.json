@@ -1,0 +1,808 @@
+{
+  "entries": [
+    {
+      "id": "telegram",
+      "name": "Telegram",
+      "families": [
+        "Channel"
+      ],
+      "categories": [
+        "Messaging"
+      ],
+      "publisher": "Open Net Worth",
+      "verification": "unverified",
+      "popular": true,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "email",
+      "name": "Email",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Email"
+      ],
+      "publisher": "Open Net Worth",
+      "verification": "unverified",
+      "popular": true,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "simplefin",
+      "name": "SimpleFIN",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Banking"
+      ],
+      "publisher": "SimpleFIN",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "plaid",
+      "name": "Plaid",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Banking"
+      ],
+      "publisher": "Plaid Inc.",
+      "verification": "unverified",
+      "popular": true,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "lunch_money",
+      "name": "Lunch Money",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Banking"
+      ],
+      "publisher": "Lunch Money",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "lunch_flow",
+      "name": "Lunch Flow",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Banking"
+      ],
+      "publisher": "Lunch Flow",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "ynab",
+      "name": "YNAB",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Banking"
+      ],
+      "publisher": "YNAB",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "enable_banking",
+      "name": "Enable Banking",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Banking"
+      ],
+      "publisher": "Enable Banking",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "yahoo_finance",
+      "name": "Yahoo Finance",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Market data"
+      ],
+      "publisher": "Yahoo Inc.",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "coingecko",
+      "name": "CoinGecko",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Market data"
+      ],
+      "publisher": "CoinGecko",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "web_search:duckduckgo",
+      "name": "DuckDuckGo",
+      "families": [
+        "Web"
+      ],
+      "categories": [
+        "Web search"
+      ],
+      "publisher": "DuckDuckGo",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "web_search:tavily",
+      "name": "Tavily",
+      "families": [
+        "Web"
+      ],
+      "categories": [
+        "Web search"
+      ],
+      "publisher": "Tavily AI",
+      "verification": "verified",
+      "popular": true,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "web_search:perplexity",
+      "name": "Perplexity (Sonar)",
+      "families": [
+        "Web"
+      ],
+      "categories": [
+        "Web search"
+      ],
+      "publisher": "Perplexity AI",
+      "verification": "verified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "web_search:serper",
+      "name": "Serper",
+      "families": [
+        "Web"
+      ],
+      "categories": [
+        "Web search"
+      ],
+      "publisher": "Serper",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "web_search:google_pse",
+      "name": "Google Programmable Search",
+      "families": [
+        "Web"
+      ],
+      "categories": [
+        "Web search"
+      ],
+      "publisher": "Google",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "web_search:firecrawl",
+      "name": "Firecrawl",
+      "families": [
+        "Web"
+      ],
+      "categories": [
+        "Web search",
+        "Browsing"
+      ],
+      "publisher": "Firecrawl",
+      "verification": "verified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      }
+    },
+    {
+      "id": "mcp-playwright",
+      "name": "Playwright MCP",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Browsing"
+      ],
+      "publisher": "Microsoft",
+      "verification": "verified",
+      "sub": "Real browser rendering for Lucius in chat",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "local_command",
+        "runtime": "Node.js (npx)",
+        "env_names": []
+      },
+      "endpoint": "npx -y @playwright/mcp@latest"
+    },
+    {
+      "id": "mcp-firecrawl",
+      "name": "Firecrawl",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Browsing",
+        "Web search"
+      ],
+      "publisher": "Firecrawl",
+      "verification": "verified",
+      "sub": "Crawl + scrape sites into clean markdown",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "local_command",
+        "runtime": "Node.js (npx)",
+        "env_names": [
+          "FIRECRAWL_API_KEY"
+        ]
+      },
+      "endpoint": "npx -y firecrawl-mcp@latest"
+    },
+    {
+      "id": "mcp-stripe",
+      "name": "Stripe",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Payments"
+      ],
+      "publisher": "Stripe",
+      "verification": "verified",
+      "sub": "Payments, invoices, and balances from your Stripe account",
+      "popular": true,
+      "mcp": true,
+      "connect": {
+        "kind": "api_key"
+      },
+      "endpoint": "https://mcp.stripe.com"
+    },
+    {
+      "id": "mcp-quickbooks",
+      "name": "QuickBooks Online",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Accounting"
+      ],
+      "publisher": "Intuit",
+      "verification": "verified",
+      "sub": "Read and write a QuickBooks Online company",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "manual"
+      }
+    },
+    {
+      "id": "mcp-xero",
+      "name": "Xero",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Accounting"
+      ],
+      "publisher": "Xero",
+      "verification": "verified",
+      "sub": "Read and write a Xero organisation",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "local_command",
+        "runtime": "Node.js (npx)",
+        "env_names": [
+          "XERO_CLIENT_ID",
+          "XERO_CLIENT_SECRET"
+        ]
+      },
+      "endpoint": "npx -y @xeroapi/xero-mcp-server@latest"
+    },
+    {
+      "id": "mcp-mercury",
+      "name": "Mercury",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Banking"
+      ],
+      "publisher": "Mercury",
+      "verification": "verified",
+      "sub": "Read-only access to Mercury business banking",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://mcp.mercury.com/mcp"
+    },
+    {
+      "id": "mcp-ibkr",
+      "name": "Interactive Brokers",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage"
+      ],
+      "publisher": "Interactive Brokers",
+      "verification": "verified",
+      "sub": "Trades stocks, options & futures; live positions and P&L",
+      "popular": true,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://api.ibkr.com/v1/api/mcp-public"
+    },
+    {
+      "id": "mcp-robinhood",
+      "name": "Robinhood",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage"
+      ],
+      "publisher": "Robinhood",
+      "verification": "verified",
+      "sub": "Trades US stocks in an agent account; reads every account",
+      "popular": true,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://agent.robinhood.com/mcp/trading"
+    },
+    {
+      "id": "mcp-moomoo",
+      "name": "moomoo",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage"
+      ],
+      "publisher": "moomoo",
+      "verification": "verified",
+      "sub": "Trades and researches: quotes, options, live positions",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://mcp.moomoo.com/mcp"
+    },
+    {
+      "id": "mcp-alpaca",
+      "name": "Alpaca MCP",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage"
+      ],
+      "publisher": "Alpaca",
+      "verification": "verified",
+      "sub": "Trades stocks, options & crypto; paper trading by default",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "local_command",
+        "runtime": "uv (uvx)",
+        "env_names": [
+          "ALPACA_API_KEY",
+          "ALPACA_SECRET_KEY"
+        ]
+      },
+      "endpoint": "uvx alpaca-mcp-server@latest"
+    },
+    {
+      "id": "mcp-coinbase",
+      "name": "Coinbase",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage",
+        "Crypto"
+      ],
+      "publisher": "Coinbase",
+      "verification": "verified",
+      "sub": "Trades crypto on Coinbase; balances, orders, fills, fees",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "local_command",
+        "runtime": "Node.js (npx)",
+        "env_names": [
+          "COINBASE_ENV",
+          "COINBASE_KEY_ID",
+          "COINBASE_KEY_SECRET"
+        ]
+      },
+      "endpoint": "npx -y @coinbase/coinbase-cli@latest mcp"
+    },
+    {
+      "id": "mcp-okx",
+      "name": "OKX",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage",
+        "Crypto"
+      ],
+      "publisher": "OKX",
+      "verification": "verified",
+      "sub": "Trades spot, perpetuals & options on OKX; demo by default",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "local_command",
+        "runtime": "Node.js (npx)",
+        "env_names": [
+          "OKX_API_KEY",
+          "OKX_SECRET_KEY",
+          "OKX_PASSPHRASE"
+        ]
+      },
+      "endpoint": "npx -y @okx_ai/okx-trade-mcp@latest --demo"
+    },
+    {
+      "id": "mcp-kraken",
+      "name": "Kraken",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage",
+        "Crypto"
+      ],
+      "publisher": "Kraken",
+      "verification": "verified",
+      "sub": "Crypto market data, balances, paper trading; live opt-in",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "local_command",
+        "runtime": "the Kraken CLI",
+        "env_names": [
+          "KRAKEN_API_KEY",
+          "KRAKEN_API_SECRET"
+        ]
+      },
+      "endpoint": "kraken-mcp -s market,account,paper"
+    },
+    {
+      "id": "mcp-webull",
+      "name": "Webull",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage"
+      ],
+      "publisher": "Webull",
+      "verification": "verified",
+      "sub": "Accounts, positions, quotes; orders you confirm in Webull",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://api.webull.com/mcp"
+    },
+    {
+      "id": "mcp-longbridge",
+      "name": "Longbridge",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage"
+      ],
+      "publisher": "Longbridge",
+      "verification": "verified",
+      "sub": "Trades US & HK stocks and options; quotes, positions, alerts",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://mcp.longbridge.com"
+    },
+    {
+      "id": "mcp-tiger",
+      "name": "Tiger Brokers",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage"
+      ],
+      "publisher": "Tiger Brokers",
+      "verification": "verified",
+      "sub": "Reads quotes, positions, assets & orders; no trading yet",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://mcp.tigerfintech.com/mcp"
+    },
+    {
+      "id": "mcp-zerodha",
+      "name": "Zerodha Kite",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage"
+      ],
+      "publisher": "Zerodha",
+      "verification": "verified",
+      "sub": "Indian holdings, positions, margins & quotes; GTT orders",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "none"
+      },
+      "endpoint": "https://mcp.kite.trade/mcp"
+    },
+    {
+      "id": "mcp-upstox",
+      "name": "Upstox",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage"
+      ],
+      "publisher": "Upstox",
+      "verification": "verified",
+      "sub": "Indian holdings, positions, funds, orders & SIPs; read-only",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://mcp.upstox.com/mcp"
+    },
+    {
+      "id": "mcp-public",
+      "name": "Public.com",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage"
+      ],
+      "publisher": "Public.com",
+      "verification": "verified",
+      "sub": "Trades US stocks, options & crypto; live money only",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "local_command",
+        "runtime": "uv (uvx)",
+        "env_names": [
+          "PUBLIC_COM_SECRET"
+        ]
+      },
+      "endpoint": "uvx publicdotcom-mcp-server@latest"
+    },
+    {
+      "id": "mcp-bybit",
+      "name": "Bybit",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Brokerage",
+        "Crypto"
+      ],
+      "publisher": "Bybit",
+      "verification": "verified",
+      "sub": "Trades crypto spot, perps & options; live unless testnet",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "local_command",
+        "runtime": "Node.js (npx)",
+        "env_names": [
+          "BYBIT_API_KEY",
+          "BYBIT_API_SECRET"
+        ]
+      },
+      "endpoint": "npx -y bybit-official-trading-server@latest"
+    },
+    {
+      "id": "mcp-expensify",
+      "name": "Expensify",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Expenses"
+      ],
+      "publisher": "Expensify",
+      "verification": "verified",
+      "sub": "Read-only search over expenses and reports",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://www.expensify.com/mcp/"
+    },
+    {
+      "id": "mcp-avalara",
+      "name": "Avalara AvaTax",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Tax"
+      ],
+      "publisher": "Avalara",
+      "verification": "verified",
+      "sub": "Sales tax calculation and nexus lookups",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://mcp.avalara.com/avatax"
+    },
+    {
+      "id": "mcp-twelvedata",
+      "name": "Twelve Data",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Market data"
+      ],
+      "publisher": "Twelve Data",
+      "verification": "verified",
+      "sub": "Market prices, indicators, and fundamentals",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://mcp.twelvedata.com/mcp"
+    },
+    {
+      "id": "mcp-sec-edgar",
+      "name": "SEC EDGAR",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Research",
+        "Filings"
+      ],
+      "publisher": "Stefano Amorelli",
+      "verification": "unverified",
+      "sub": "Company filings and XBRL financials from SEC EDGAR",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "local_command",
+        "runtime": "uv (uvx)",
+        "env_names": [
+          "SEC_EDGAR_USER_AGENT"
+        ]
+      },
+      "endpoint": "uvx --from git+https://github.com/stefanoamorelli/sec-edgar-mcp.git sec-edgar-mcp"
+    },
+    {
+      "id": "mcp-fred",
+      "name": "FRED",
+      "families": [
+        "MCP"
+      ],
+      "categories": [
+        "Research",
+        "Economic data"
+      ],
+      "publisher": "Stefano Amorelli",
+      "verification": "unverified",
+      "sub": "Federal Reserve economic time series",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "local_command",
+        "runtime": "Node.js (npx)",
+        "env_names": [
+          "FRED_API_KEY"
+        ]
+      },
+      "endpoint": "npx -y fred-mcp-server@latest"
+    }
+  ]
+}

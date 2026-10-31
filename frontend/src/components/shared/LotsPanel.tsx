@@ -6,7 +6,14 @@ import type {
   IncomeEvent,
   IncomeSummary,
 } from '../../types/portfolio'
-import { fAmountNative, fBase, fDate, getBaseCurrency, plClass } from '../../utils/format'
+import {
+  fAmountNative,
+  fBase,
+  fDate,
+  fUnitCostNative,
+  getBaseCurrency,
+  plClass,
+} from '../../utils/format'
 import { authFetch } from '../../api/client'
 import { EntityRow } from '../../lucius/EntityRow'
 import { Button, Loading, Panel } from '../ui'
@@ -420,7 +427,7 @@ function LotsSection({
                     {eff == null ? (
                       <span className="lots-unknown">Unknown</span>
                     ) : (
-                      fAmountNative(eff, l.cost_currency || costCcy)
+                      fUnitCostNative(eff, l.cost_currency || costCcy)
                     )}
                   </td>
                   <td>{l.fees ? fAmountNative(l.fees, l.cost_currency || costCcy) : '—'}</td>
@@ -558,9 +565,9 @@ function RealizedSection({
                     <td className="muted">
                       {buy.price == null
                         ? '—'
-                        : fAmountNative(buy.price, buy.currency ?? ev.proceeds_currency)}
+                        : fUnitCostNative(buy.price, buy.currency ?? ev.proceeds_currency)}
                     </td>
-                    <td>{fAmountNative(ev.proceeds_per_unit, ev.proceeds_currency)}</td>
+                    <td>{fUnitCostNative(ev.proceeds_per_unit, ev.proceeds_currency)}</td>
                     <td>{ev.method === 'specific_id' ? 'Specific' : 'FIFO'}</td>
                     <td>
                       <span className={`term-badge term-${term}`} title={termTitle(term)}>
@@ -764,7 +771,7 @@ function ConsumptionTable({ event }: { event: RealizedEvent }) {
               {c.unit_cost == null ? (
                 <span className="lots-unknown">Unknown</span>
               ) : (
-                fAmountNative(c.unit_cost, c.cost_currency || event.proceeds_currency)
+                fUnitCostNative(c.unit_cost, c.cost_currency || event.proceeds_currency)
               )}
             </td>
             <td>

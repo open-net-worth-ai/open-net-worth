@@ -4948,7 +4948,7 @@
     "additionalProperties": false,
     "properties": {
       "content": {
-        "description": "The fact, one concise self-contained statement of at most 280 characters, in the third person (e.g. 'Rents a flat in Tampines')",
+        "description": "The fact, one concise self-contained statement under 280 characters (never over 500), in the third person (e.g. 'Rents a flat in Tampines')",
         "type": "string"
       },
       "section": {
@@ -10592,6 +10592,21 @@
   "yodlee_list_accounts": {
     "additionalProperties": false,
     "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "search_connector_directory": {
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "type": "string",
+        "description": "Names or keywords. Several in one search is fine, e.g. 'bybit webull' — any word matches, best matches first."
+      },
+      "category": {
+        "type": "string",
+        "description": "One category, e.g. Brokerage, Banking, Crypto, Accounting."
+      }
+    },
     "type": "object",
     "required": []
   }

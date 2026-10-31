@@ -63,7 +63,7 @@ def test_sections_are_fixed_and_ordered():
     assert structure.normalise_section("Open items") == "open_items"
     assert structure.SUGGESTED_TOPICS["you"] == ("Profile", "Preferences")
     assert set(structure.SUGGESTED_TOPICS) == set(structure.SECTIONS)
-    assert structure.FACT_MAX_CHARS == 280
+    assert (structure.FACT_TARGET_CHARS, structure.FACT_MAX_CHARS) == (280, 500)
     assert "unused" in structure.RETIRE_REASONS and "instructions" in structure.RETIRE_REASONS
 
 
@@ -159,21 +159,21 @@ def test_only_open_items_store_an_expiry():
     assert {f["expires_at"] for f in MemoryStore().all_facts()} == {None}
 
 
-def test_280_and_281_with_diacritics():
-    ok = "é" * 280
-    out = _write({"new": [_new(ok), _new("é" * 281)]})
+def test_500_and_501_with_diacritics():
+    ok = "é" * 500
+    out = _write({"new": [_new(ok), _new("é" * 501)]})
     assert out["added"] == 1
     assert [r["reason"] for r in out["rejected"]] == ["too_long"]
     assert MemoryStore().all_facts()[0]["content"] == ok
-    assert structure.FACT_MAX_CHARS == 280
+    assert structure.FACT_MAX_CHARS == 500
 
 
 def test_the_limit_applies_to_the_stripped_text_and_to_updates():
-    _write({"new": [_new("  " + "a" * 280 + "  ")]})
+    _write({"new": [_new("  " + "a" * 500 + "  ")]})
     (fact,) = MemoryStore().all_facts()
-    out = _write({"updates": [{"id": fact["id"], "content": "b" * 281}]})
+    out = _write({"updates": [{"id": fact["id"], "content": "b" * 501}]})
     assert out["rejected"][0]["reason"] == "too_long" and out["updated"] == 0
-    assert MemoryStore().find_by_id(fact["id"])["content"] == "a" * 280
+    assert MemoryStore().find_by_id(fact["id"])["content"] == "a" * 500
 
 
 def test_empty_and_unknown_section_are_rejected():
@@ -506,8 +506,8 @@ def test_an_unknown_retire_reason_becomes_stale():
 
 def test_strict_raises_a_sentence_and_applies_nothing():
     with pytest.raises(ValidationError) as caught:
-        _write({"new": [_new("fine"), _new("x" * 281)]}, strict=True)
-    assert "280" in caught.value.message
+        _write({"new": [_new("fine"), _new("x" * 501)]}, strict=True)
+    assert "500" in caught.value.message
     assert MemoryStore().all_facts() == []
 
 
@@ -565,7 +565,7 @@ def test_add_explicit_is_strict_and_files_the_fact():
     item = memory.add_explicit("Prefers short answers", section="you", topic="Preferences")
     assert item["state"] == "live" and item["section"] == "you" and "tier" not in item
     with pytest.raises(ValidationError):
-        memory.add_explicit("x" * 281, section="other")
+        memory.add_explicit("x" * 501, section="other")
     with pytest.raises(ValidationError):
         memory.add_explicit("anything", section="elsewhere")
     assert len(MemoryStore().all_facts()) == 1
@@ -737,7 +737,7 @@ def test_a_legacy_fact_filed_outside_open_items_drops_its_date():
 
 
 def test_filing_a_long_legacy_fact_needs_a_shorter_wording():
-    long_text = "Keeps a careful record of every household bill. " * 8
+    long_text = "Keeps a careful record of every household bill. " * 12
     _legacy("mem_long", long_text.strip())
 
     out = _file("mem_long", topic="Bookkeeping")

@@ -41,7 +41,16 @@ export function CardHeader({ change }: { change: ProposedChange }) {
       {change.type === 'agent_update' && 'Update agent'}
       {change.type === 'code_run' && 'Run a script'}
       {change.type === 'code_skill_create' && 'Save as script-skill'}
-      {change.type === 'external_mcp_call' && 'Tool permission'}
+      {change.type === 'external_mcp_call' && (
+        <>
+          <span className="change-preview-tool">
+            {String(d.name || change.tool || 'Tool call')}
+          </span>
+          {(d.server || change.server_id) && (
+            <span className="change-preview-label">{String(d.server || change.server_id)}</span>
+          )}
+        </>
+      )}
       {isBudgetChange(change) && budgetOpLabel(change)}
       {isBudgetOperationGrant(change) && budgetOperationHeaderLabel(change)}
       {isTxnChange(change) && txnHeaderLabel(change)}

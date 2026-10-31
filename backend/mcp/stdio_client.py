@@ -131,6 +131,9 @@ def _scrubbed_env(overlay: dict[str, str]) -> dict[str, str]:
     return env
 
 
+_TOOLS_LIST_CHANGED = "notifications/tools/list_changed"
+
+
 class StdioMcpClientConnection:
     """A short-lived stdio JSON-RPC client for one external MCP server.
 
@@ -260,6 +263,14 @@ class StdioMcpClientConnection:
             raise McpCallError(text or "external tool reported an error")
         return text, images
 
+    def take_tools_changed(self) -> bool:
+        """Whether the server announced a new toolset since the last ask; clears the flag."""
+        session = self._session
+        if session is None or not session.tools_changed:
+            return False
+        session.tools_changed = False
+        return True
+
     def _rpc_id(self) -> int:
         self._next_id += 1
         return self._next_id
@@ -288,6 +299,9 @@ class _StdioSession:
         # bytes after the first newline in a chunk are consumed from here on the NEXT read,
         # never dropped.
         self._rxbuf = bytearray()
+        # Set when the server says its toolset changed. A notice sent while idle waits in the
+        # pipe and is read during the NEXT rpc, so it is seen on the next call, not instantly.
+        self.tools_changed = False
 
     def __enter__(self) -> "_StdioSession":
         if get_settings().desktop_mode:
@@ -498,6 +512,9 @@ class _StdioSession:
                 except (ValueError, TypeError):
                     continue  # noise on stdout — skip
                 if not isinstance(parsed, dict):
+                    continue
+                if parsed.get("method") == _TOOLS_LIST_CHANGED and "id" not in parsed:
+                    self.tools_changed = True
                     continue
                 if parsed.get("id") != rid:
                     continue  # a notification or a different request's reply — skip

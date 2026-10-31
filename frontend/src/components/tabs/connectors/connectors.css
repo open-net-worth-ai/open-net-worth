@@ -102,7 +102,10 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  padding: 2px 0 14px;
+  /* No bottom padding: the band (and its blur) ends ON the tabs' baseline, so a scrolled row
+     disappears at the line instead of showing through a frosted strip below it. The breathing
+     room lives in .rd-content's top padding instead. */
+  padding: 2px 0 0;
   position: sticky;
   top: 0;
   background: color-mix(in srgb, var(--bg) 86%, transparent);
@@ -153,10 +156,48 @@
 }
 .cn-page .rd-content {
   width: 100%;
-  padding: 16px 0 80px;
+  padding: 30px 0 80px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+/* Browse & add's scroll shadow (.cn-dirhead::after), on the page's own pinned header. */
+.cn-page .rd-masthead::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 24px;
+  background: linear-gradient(to bottom, var(--bg), transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.cn-page .rd-masthead.scrolled::after {
+  opacity: 1;
+}
+/* Detail page: the server's reported version, and its AI instructions folded (ConnectorDetail). */
+.cn-page .cn-version {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.cn-page .cn-fold > summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--muted);
+  width: fit-content;
+}
+.cn-page .cn-fold > summary:hover {
+  color: var(--ink);
+}
+.cn-page .cn-fold > p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 /* collision neutraliser — tabs/automations.css ships an unlayered, unscoped .rd-masthead of
    its own. Scoping settles the properties both sheets declare; these are the ones only THAT
@@ -194,10 +235,31 @@
 .cn-page .rd-tabs {
   display: flex;
   gap: 2px;
-  border-bottom: 1px solid var(--line);
+  /* The baseline is drawn INSIDE the box (not a border) so the picked tab's bar can sit on it
+     without being clipped by the sideways scroll below. */
+  box-shadow: inset 0 -1px 0 var(--line);
+  /* One line, always: a tab label never wraps ("Data sources" broke in two on a phone) — the
+     row scrolls sideways instead, on every screen that uses it. A scroll box may SHRINK in a
+     column layout (its min-height drops to 0), which squashed the row to half height in the
+     page header — so it never shrinks and never scrolls vertically. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* Narrow to fit its parent (that is what makes it scroll), but never get shorter than its
+     content: `flex: none` stopped the squash and also stopped the narrowing, so the row ran
+     past its parent's edge with nothing to scroll (owner, 2026-10-31). */
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  min-height: max-content;
+  scrollbar-width: none;
+}
+.cn-page .rd-tabs::-webkit-scrollbar {
+  display: none;
 }
 .cn-page .rd-tab {
   appearance: none;
+  flex: none;
+  white-space: nowrap;
   background: none;
   border: none;
   color: var(--muted);
@@ -225,7 +287,7 @@
   position: absolute;
   left: 10px;
   right: 10px;
-  bottom: -1px;
+  bottom: 0;
   height: 2px;
   border-radius: 2px 2px 0 0;
   background: var(--ink);
@@ -513,6 +575,27 @@
   flex: 0 1 220px;
   min-width: 90px;
 }
+/* A button label with a short twin for a phone: one line, search and button side by side. */
+.cn-page .cn-label-narrow {
+  display: none;
+}
+@media (max-width: 560px) {
+  .cn-page .rd-masthead-toolbar {
+    flex-wrap: nowrap;
+  }
+  .cn-page .rd-masthead-toolbar > .rd-search {
+    flex: 1 1 auto;
+  }
+  .cn-page .rd-masthead-toolbar > .rd-btn {
+    flex: none;
+  }
+  .cn-page .cn-label-wide {
+    display: none;
+  }
+  .cn-page .cn-label-narrow {
+    display: inline;
+  }
+}
 .cn-page .rd-search input {
   height: 30px;
   border-radius: var(--radius-lg);
@@ -730,12 +813,6 @@
   transform: translateY(-50%);
   color: var(--faint);
 }
-.cn-page .cn-chiprow {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex-wrap: wrap;
-}
 /* Search, plus (phone only) the Sort icon beside it. */
 .cn-page .cn-dirsearchrow {
   display: flex;
@@ -779,30 +856,20 @@
   gap: 12px;
   flex-wrap: wrap;
 }
-.cn-page .cn-chip {
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
+/* How many cards a filter chip holds — quieter than its label, brighter once picked. */
+.cn-page .cn-chipcount {
+  margin-left: 5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--faint, var(--muted));
+}
+.cn-page .cn-cat.on .cn-chipcount {
   color: var(--muted);
-  background: var(--surface2);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 6px 13px;
-  cursor: pointer;
-}
-@media (hover: hover) {
-  .cn-page .cn-chip:hover {
-    color: var(--ink);
-    border-color: var(--line-strong);
-  }
-}
-.cn-page .cn-chip.on {
-  color: var(--ink);
-  background: var(--selected);
-  border-color: var(--line-strong);
 }
 .cn-page .rd-select.cn-sortselect {
-  height: 30px;
+  height: auto;
+  align-self: stretch;
+  flex: none;
   padding: 0 28px 0 13px;
   font-size: 12px;
   border-radius: var(--radius-lg);
@@ -831,6 +898,86 @@
 /* The one card with no real product behind it (no logo, no publisher, nothing to preview) —
    dashed border marks it as a build-your-own slot rather than a specific item sitting in the
    grid alongside real, named servers (owner review, 2026-08-19). */
+/* Browse & add's family tabs ARE the Connectors page's tabs — same component, same look, no
+   overrides (owner, 2026-10-31: one design system, not a variant per screen). */
+.cn-page .cn-dirfilters > .rd-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* On a phone a tab row runs past the edge; the fade says there are more this way. */
+@media (max-width: 560px) {
+  .cn-page .rd-tabs {
+    mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
+  }
+  /* Room past the last tab as wide as the fade, so scrolled to the end it sits clear of it.
+     A spacer, not padding: Safari drops end padding from a sideways scroll area. */
+  .cn-page .rd-tabs::after {
+    content: '';
+    flex: none;
+    width: 24px;
+  }
+}
+/* Browse & add's sticky header (DirectoryBrowser): once the list scrolls under it, cards fade out
+   beneath the chips instead of being cut at a hard edge — the Documents screen's fade (24px), as
+   a gradient hanging below the header in the sheet's own colour. Never at the top. */
+.cn-page .cn-dirhead::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 24px;
+  background: linear-gradient(to bottom, var(--modal-bg), transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+.cn-page .cn-dirhead.scrolled::after {
+  opacity: 1;
+}
+/* The custom MCP server, pinned above the directory grid as its own row (DirectoryBrowser). */
+.cn-page .cn-customrow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+}
+.cn-page .cn-customrow-ic {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+.cn-page .cn-customrow-text {
+  flex: 1;
+  min-width: 0;
+}
+.cn-page .cn-customrow-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.cn-page .cn-customrow-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+@media (max-width: 560px) {
+  .cn-page .cn-customrow {
+    flex-wrap: wrap;
+  }
+  .cn-page .cn-customrow > .rd-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
 .cn-page .cn-dircard.generic {
   border-style: dashed;
   background: transparent;
@@ -859,7 +1006,8 @@
 .cn-page .cn-cat {
   font: inherit;
   font-size: 10.5px;
-  font-weight: 600;
+  font-weight: 500;
+  letter-spacing: 0.01em;
   line-height: 18px;
   padding: 0 7px;
   border: 0;
@@ -867,8 +1015,9 @@
   white-space: nowrap;
 }
 .cn-page .cn-tag {
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: color-mix(in srgb, var(--accent) 78%, var(--muted));
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .cn-page .cn-verified-tag {
   font-size: 9.5px;
@@ -939,9 +1088,13 @@
   gap: 5px;
   min-width: 0;
 }
+/* Quiet on purpose (owner, 2026-10-31: "more subtle, more premium"): a softened hue, a faint
+   fill and a hairline outline in that hue, at medium weight — the tag labels the card without
+   competing with its name. The hairline is an inset shadow so it adds no size. */
 .cn-page .cn-cat {
-  color: var(--cat-hue, var(--muted));
-  background: color-mix(in srgb, var(--cat-hue, var(--muted)) 14%, transparent);
+  color: color-mix(in srgb, var(--cat-hue, var(--muted)) 78%, var(--muted));
+  background: color-mix(in srgb, var(--cat-hue, var(--muted)) 7%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cat-hue, var(--muted)) 18%, transparent);
 }
 .cn-page .cn-cat.pick {
   cursor: pointer;
@@ -979,29 +1132,14 @@
 .cn-page .cn-catrow > .cn-cat {
   flex: none;
 }
-/* Phone: Sort moves up beside search as an icon (`.cn-sorticon`), and the family chips get the
-   whole line, scrolling sideways like the category row below. Wrapping had put Sort on a line
-   of its own. After the base `.cn-chiprow` / `.cn-sorticon` rules, so it wins. */
+/* Phone: Sort and the category filter become icons beside search (`.cn-sorticon`), so the search
+   row stays one line. After the base `.cn-sorticon` rule, so it wins. */
 @media (max-width: 560px) {
   .cn-page .cn-dirfilters {
     flex-wrap: nowrap;
     gap: 8px;
   }
-  .cn-page .cn-dirfilters > .cn-chiprow {
-    flex: 1 1 auto;
-    min-width: 0;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    scrollbar-width: none;
-    mask-image: linear-gradient(to right, #000 calc(100% - 20px), transparent);
-  }
-  .cn-page .cn-dirfilters > .cn-chiprow::-webkit-scrollbar {
-    display: none;
-  }
-  .cn-page .cn-dirfilters > .cn-chiprow > .cn-chip {
-    flex: none;
-  }
-  .cn-page .cn-dirfilters > .cn-sortselect {
+  .cn-page .cn-dirsearchrow > .cn-sortselect {
     display: none;
   }
   .cn-page .cn-sorticon {
@@ -1016,15 +1154,22 @@
     height: 40px;
   }
 }
-/* In the filter row the hue is only an outline until picked — a full row of tinted fills
-   was too loud (owner review, 2026-10-29). Sized BETWEEN the family chips above (12px, ~30px
-   tall) and the card tags (10.5px, 18px): the card-tag size read as an afterthought there. */
+/* The filter row wears the family chips' neutral look — one hue per category across a whole row
+   read as cheap (owner review, 2026-10-31); the hues stay on the cards' tags. Sized BETWEEN the
+   family chips above (12px, ~30px tall) and the card tags (10.5px, 18px). */
 .cn-page .cn-catrow .cn-cat {
-  background: transparent;
-  border: 1px solid color-mix(in srgb, var(--cat-hue, var(--muted)) 45%, transparent);
+  color: var(--muted);
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  box-shadow: none;
   font-size: 11.5px;
   line-height: 22px;
   padding: 0 10px;
+}
+.cn-page .cn-catrow .cn-cat.pick.on {
+  color: var(--ink);
+  background: var(--selected);
+  border-color: var(--line-strong);
 }
 .cn-page .cn-cat.pick.on {
   color: var(--surface);
@@ -1033,10 +1178,12 @@
 }
 @media (hover: hover) {
   .cn-page .cn-cat.pick:not(.on):hover {
-    background: color-mix(in srgb, var(--cat-hue, var(--muted)) 24%, transparent);
+    background: color-mix(in srgb, var(--cat-hue, var(--muted)) 14%, transparent);
   }
   .cn-page .cn-catrow .cn-cat.pick:not(.on):hover {
-    background: color-mix(in srgb, var(--cat-hue, var(--muted)) 10%, transparent);
+    color: var(--ink);
+    background: var(--surface2);
+    border-color: var(--line-strong);
   }
 }
 .cn-page .cn-cat.pick:focus-visible {
@@ -1142,6 +1289,25 @@
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 4px 11px;
+}
+/* "Show all N" closes a folded tool row: a chip's shape, the accent's colour, so it reads as
+   the row's last item and as something to press. */
+.cn-page .cn-chipmore {
+  cursor: pointer;
+  color: var(--accent);
+  background: transparent;
+  border-style: dashed;
+}
+.cn-page .cn-chipmore:hover {
+  border-style: solid;
+}
+/* Where a tool list came from ("as of v0.0.11"), after the row's count — not shouted. */
+.cn-page .cn-chipnote {
+  margin-left: 8px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--fg-3);
 }
 .cn-page .cn-permlist {
   display: flex;
@@ -1580,6 +1746,12 @@
   flex: none;
 }
 
+/* The preview's action, moved into the footer on a phone (DirectoryModal): the sheet's ONE
+   action, so it spans the footer rather than hanging off its right edge. */
+.cn-page .rd-modal-foot .cn-foot-action {
+  flex: 1;
+}
+
 /* ── misc ─────────────────────────────────────────────────────────────────── */
 .cn-page .rd-hr {
   height: 1px;
@@ -1727,6 +1899,18 @@
     flex: 1 0 100%;
     justify-content: flex-end;
   }
+  /* …except when the only thing left in the header is the ⋮ (ConnectorDetail on a phone, its
+     state action having moved to the footer): that stays inline, top-right beside the name. */
+  .cn-page .cn-idhead-compact {
+    flex-wrap: nowrap;
+  }
+  .cn-page .cn-idhead-compact .cn-idhead-main {
+    flex-basis: auto;
+  }
+  .cn-page .cn-idhead-compact .cn-idhead-actions {
+    flex: none;
+    align-self: flex-start;
+  }
 
   .cn-page .rd-modal-scrim {
     padding: 0;
@@ -1757,6 +1941,19 @@
   /* a lone footer button does not stretch full width — only multi-button footers split evenly */
   .cn-page .rd-modal-foot .rd-btn:not(:only-child) {
     flex: 1;
+  }
+  /* Every footer button on a phone is the large, thumb-sized one — the preview's own action
+     already was, so Close / Add custom server / Cancel / Connect sat shorter beside it
+     (owner, 2026-10-31). One size per place, never per button. */
+  .cn-page .rd-modal-foot .rd-btn {
+    height: 38px;
+    padding: 0 20px;
+    font-size: 13.5px;
+    border-radius: var(--radius-lg);
+  }
+  /* A two-line sub in --faint read as a truncated fragment once the header narrowed. */
+  .cn-page .cn-idhead-sub {
+    color: var(--muted);
   }
 }
 

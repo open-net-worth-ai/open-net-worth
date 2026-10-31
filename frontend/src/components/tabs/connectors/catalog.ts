@@ -704,7 +704,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--ibkr)',
     sub: 'Trades stocks, options & futures; live positions and P&L',
-    desc: 'Connect Interactive Brokers’ own hosted server to let Lucius work with your IBKR account directly. It exposes account balances, positions, trades, orders and performance; quotes, price history, option chains and contract search; screeners, watchlists, price alerts and IBKR’s company research. It can also act: it previews, submits, modifies and cancels orders, and edits watchlists, alerts and saved screeners — every one of those tools asks for your approval before it runs, unless you change that. Useful for reconciling IBKR positions against what is recorded here, checking an allocation or a day’s move, researching a holding, or drafting an order you review before it goes. Sign-in happens on IBKR’s own login screen over OAuth, for one account at a time; you can revoke it in Client Portal under Settings › Manage Third-Party Consents.',
+    desc: 'Connect Interactive Brokers’ own hosted server to let Lucius work with your IBKR account directly. It exposes account balances, positions, trades, orders and performance; quotes, price history, option chains and contract search; screeners, watchlists, price alerts and IBKR’s company research. It can also act: it previews, submits, modifies and cancels orders, and edits watchlists, alerts and saved screeners. Useful for reconciling IBKR positions against what is recorded here, checking an allocation or a day’s move, researching a holding, or drafting an order you review before it goes. Sign-in happens on IBKR’s own login screen over OAuth, for one account at a time; you can revoke it in Client Portal under Settings › Manage Third-Party Consents.',
     publisher: 'Interactive Brokers',
     verification: 'verified',
     // IBKR's own pages publish this exact endpoint for "any MCP client": the AI-integrations
@@ -732,7 +732,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades US stocks in an agent account; reads every account',
-    desc: 'Connect Robinhood’s own hosted Trading server to let Lucius see your Robinhood investing. It can read every Robinhood account you hold — account numbers, positions, balances and order history included — but it can only place trades inside a separate Agentic account that Robinhood opens when you connect, using only the money you move into it. Robinhood describes it as a beta that trades US equities for now. Robinhood sends a push notification for each trade, and every trading tool here asks for your approval before it runs unless you change that. Useful for reconciling Robinhood positions against what is recorded here, reviewing allocation and order history, or trying an idea with a small, ring-fenced balance. Sign-in happens on Robinhood’s own screen over OAuth.',
+    desc: 'Connect Robinhood’s own hosted Trading server to let Lucius see your Robinhood investing. It can read every Robinhood account you hold — account numbers, positions, balances and order history included — but it can only place trades inside a separate Agentic account that Robinhood opens when you connect, using only the money you move into it. Robinhood describes it as a beta that trades US equities for now. Robinhood sends a push notification for each trade. Useful for reconciling Robinhood positions against what is recorded here, reviewing allocation and order history, or trying an idea with a small, ring-fenced balance. Sign-in happens on Robinhood’s own screen over OAuth.',
     publisher: 'Robinhood',
     verification: 'verified',
     // Robinhood's Help Center publishes this endpoint ("Onboarding an external agent"), and its
@@ -752,7 +752,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades and researches: quotes, options, live positions',
-    desc: 'Connect moomoo’s own hosted server to let Lucius work with your moomoo account through moomoo OpenAPI. moomoo describes it as real-time quotes, derivatives screening, fundamentals and technicals, portfolio management and trade execution — so it can act on your account, and every trading tool here asks for your approval before it runs unless you change that. Unlike moomoo’s older API route it needs no OpenD gateway running on this machine. Useful for checking moomoo positions against what is recorded here, researching a holding, or screening options. Sign-in happens on moomoo’s own consent page over OAuth.',
+    desc: 'Connect moomoo’s own hosted server to let Lucius work with your moomoo account through moomoo OpenAPI. moomoo describes it as real-time quotes, derivatives screening, fundamentals and technicals, portfolio management and trade execution, so it can act on your account. Unlike moomoo’s older API route it needs no OpenD gateway running on this machine. Useful for checking moomoo positions against what is recorded here, researching a holding, or screening options. Sign-in happens on moomoo’s own consent page over OAuth.',
     publisher: 'moomoo',
     verification: 'verified',
     // moomoo's OpenAPI docs (open.moomoo.com/mcp-docs) publish this endpoint and its OAuth flow.
@@ -771,7 +771,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades stocks, options & crypto; paper trading by default',
-    desc: 'Connect Alpaca’s own MCP server, run on this machine, to let Lucius trade at Alpaca — unlike the read-only Alpaca data source, which only imports positions. It reads your account, positions, orders and market data, and places, changes and cancels stock, option and crypto orders. It starts on paper trading: add ALPACA_PAPER_TRADE=false to the environment variables for real money. Every trading tool here asks for your approval before it runs unless you change that. Needs uv on this machine, and an Alpaca API key pair pasted into the environment variables.',
+    desc: 'Connect Alpaca’s own MCP server, run on this machine, to let Lucius trade at Alpaca — unlike the read-only Alpaca data source, which only imports positions. It reads your account, positions, orders and market data, and places, changes and cancels stock, option and crypto orders. It starts on paper trading: add ALPACA_PAPER_TRADE=false to the environment variables for real money. Needs uv on this machine, and an Alpaca API key pair pasted into the environment variables.',
     publisher: 'Alpaca',
     verification: 'verified',
     // alpacahq/alpaca-mcp-server is Alpaca's own org; the PyPI package links back to it.
@@ -790,7 +790,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades crypto on Coinbase; balances, orders, fills, fees',
-    desc: 'Connect Coinbase’s own MCP server — part of the Coinbase CLI, run on this machine — to let Lucius trade on Coinbase Advanced Trade. It reads balances, portfolios, orders, fills, fees and market data; previews, places, edits and cancels orders; converts between assets; and moves funds between your own portfolios (never out to an external address). Every write tool here asks for your approval before it runs unless you change that. Coinbase’s hosted server only admits apps it has approved; this local one needs none. Needs Node.js 22 or later, and a Coinbase developer API key whose permissions you choose when you create it — pick ECDSA as its signature algorithm, since Advanced Trade refuses Ed25519 keys.',
+    desc: 'Connect Coinbase’s own MCP server — part of the Coinbase CLI, run on this machine — to let Lucius trade on Coinbase Advanced Trade. It reads balances, portfolios, orders, fills, fees and market data; previews, places, edits and cancels orders; converts between assets; and moves funds between your own portfolios (never out to an external address). Needs Node.js 22 or later, and a Coinbase developer API key whose permissions you choose when you create it — pick ECDSA as its signature algorithm, since Advanced Trade refuses Ed25519 keys.',
     publisher: 'Coinbase',
     verification: 'verified',
     // @coinbase/coinbase-cli is published by Coinbase's own npm accounts. Help-centre and
@@ -808,7 +808,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Trades spot, perpetuals & options on OKX; demo by default',
-    desc: 'Connect OKX’s own Agent Trade Kit server, run on this machine, to let Lucius trade on OKX. It reads balances, positions, orders, fills and bills, and places, amends and cancels spot, perpetual-swap and option orders, including algo orders and grid bots. It starts in OKX’s demo (simulated) trading: remove --demo from the arguments for real money, or add --read-only to allow no orders at all. Every trading tool here asks for your approval before it runs unless you change that. Needs Node.js 18 or later, and an OKX API key, secret and passphrase.',
+    desc: 'Connect OKX’s own Agent Trade Kit server, run on this machine, to let Lucius trade on OKX. It reads balances, positions, orders, fills and bills, and places, amends and cancels spot, perpetual-swap and option orders, including algo orders and grid bots. It starts in OKX’s demo (simulated) trading: remove --demo from the arguments for real money, or add --read-only to allow no orders at all. Needs Node.js 18 or later, and an OKX API key, secret and passphrase.',
     publisher: 'OKX',
     verification: 'verified',
     // okx/agent-trade-kit is OKX's own org; the @okx_ai npm package is maintained from OKG.
@@ -827,7 +827,7 @@ export const CATALOG: CatalogEntry[] = [
     icon: 'investments',
     hue: 'var(--apt)',
     sub: 'Crypto market data, balances, paper trading; live opt-in',
-    desc: 'Connect Kraken’s own MCP server — part of the Kraken CLI, run on this machine — to let Lucius work with your Kraken account. As set up here it reads market data, your balances, orders, trades and ledgers, and paper-trades with no real money. Live spot orders are opt-in: add trade to the -s list in the arguments (futures for futures); keep funding out unless you want deposits and withdrawals offered. Every trading tool here asks for your approval before it runs unless you change that. Install the Kraken CLI first (macOS or Linux), and paste a Kraken API key and secret — create the key with only the permissions you want allowed.',
+    desc: 'Connect Kraken’s own MCP server — part of the Kraken CLI, run on this machine — to let Lucius work with your Kraken account. As set up here it reads market data, your balances, orders, trades and ledgers, and paper-trades with no real money. Live spot orders are opt-in: add trade to the -s list in the arguments (futures for futures); keep funding out unless you want deposits and withdrawals offered. Install the Kraken CLI first (macOS or Linux), and paste a Kraken API key and secret — create the key with only the permissions you want allowed.',
     publisher: 'Kraken',
     verification: 'verified',
     // krakenfx/kraken-cli is Kraken's own org; v0.5.1 moved the server to its own `kraken-mcp`
@@ -839,6 +839,151 @@ export const CATALOG: CatalogEntry[] = [
     mcp: true,
     popular: false,
     tools: ['kraken_balance', 'kraken_paper_buy', 'kraken_trades_history'],
+  },
+  {
+    id: 'mcp-webull',
+    name: 'Webull',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Accounts, positions, quotes; orders you confirm in Webull',
+    desc: 'Connect Webull’s own hosted server (Webull Cloud MCP) to let Lucius work with your Webull account. It reads your accounts, balances, positions, orders and market data, and can stage stock, option, futures and crypto orders — which Webull holds as instructions until you confirm each one in the Webull app. You choose which accounts and which capability groups to grant on Webull’s own consent page, signed in over OAuth with your Webull trading password. Market data needs a Webull subscription.',
+    publisher: 'Webull',
+    verification: 'verified',
+    // developer.webull.com documents this endpoint (AI-friendly Resources → MCP); its 401
+    // carries no WWW-Authenticate, so sign-in rests on the well-known metadata fallback.
+    homepageUrl: 'https://developer.webull.com/apis/docs/AI-friendly-Resources/mcp/',
+    repoUrl: 'https://github.com/webull-inc/webull-openapi-mcp',
+    supportUrl: 'https://github.com/webull-inc/webull-openapi-mcp/issues',
+    privacyUrl: 'https://www.webull.com/privacy',
+    mcp: true,
+    popular: false,
+    tools: [],
+  },
+  {
+    id: 'mcp-longbridge',
+    name: 'Longbridge',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades US & HK stocks and options; quotes, positions, alerts',
+    desc: 'Connect Longbridge’s own hosted server to let Lucius work with your Longbridge account (Singapore, Hong Kong or US). It reads quotes, options, fundamentals, your account and portfolio, and places, changes and cancels orders, plus price alerts and recurring investment plans, so it can act on your account with real money. Sign-in happens on Longbridge’s own consent page over OAuth. Customers in mainland China use https://mcp.longbridge.cn instead.',
+    publisher: 'Longbridge',
+    verification: 'verified',
+    // open.longbridge.com/docs/mcp publishes this endpoint; the server is longbridge/
+    // longbridge-mcp, also in the MCP Registry as com.longbridge/mcp.
+    homepageUrl: 'https://open.longbridge.com/docs/mcp',
+    repoUrl: 'https://github.com/longbridge/longbridge-mcp',
+    supportUrl: 'https://github.com/longbridge/longbridge-mcp/issues',
+    privacyUrl: 'https://longbridge.com/sg/en/support/topics/Other/privacy-policy',
+    mcp: true,
+    popular: false,
+    tools: [],
+  },
+  {
+    id: 'mcp-tiger',
+    name: 'Tiger Brokers',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Reads quotes, positions, assets & orders; no trading yet',
+    desc: 'Connect Tiger Brokers’ own hosted server to let Lucius read your Tiger account — quotes, positions, assets, orders and transactions — for checking holdings against what is recorded here. Tiger lists trading through this server as coming soon, so today it cannot place orders. For individual accounts in the markets Tiger serves (US, Hong Kong, Singapore, Australia, New Zealand, the UK and more). Needs Tiger OpenAPI switched on in Tiger’s Developer Center; quotes are 15 minutes delayed unless you buy real-time quotes for the API. Sign-in happens on Tiger’s own consent page over OAuth.',
+    publisher: 'Tiger Brokers',
+    verification: 'verified',
+    // docs.itigerup.com/docs/remote-mcp publishes this endpoint. Tiger's local `tigermcp`
+    // package is left out: it crashes under mcp 2.x as documented (2026-10-31).
+    homepageUrl: 'https://docs.itigerup.com/docs/remote-mcp',
+    privacyUrl: 'https://www.itiger.com/agreement/sgpolicy',
+    mcp: true,
+    popular: false,
+    tools: [],
+  },
+  {
+    id: 'mcp-zerodha',
+    name: 'Zerodha Kite',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Indian holdings, positions, margins & quotes; GTT orders',
+    desc: 'Connect Zerodha’s own hosted Kite MCP server to let Lucius read your Zerodha account — holdings, positions, margins, orders, mutual funds, live quotes and price history on NSE, BSE and MCX. Zerodha’s hosted server places no regular orders; it does let you set, change and delete GTT (good-till-triggered) orders. It is free. Connecting needs no key: once it is added, ask Lucius to log in to Kite, open the link it gives you, and sign in on Zerodha’s own page with your 2FA.',
+    publisher: 'Zerodha',
+    verification: 'verified',
+    // Zerodha's support article "Connect Zerodha with an AI assistant" publishes this address;
+    // the server is zerodha/kite-mcp-server. No transport auth — login is its `login` tool.
+    homepageUrl:
+      'https://support.zerodha.com/category/trading-and-markets/general-kite/others-kite/articles/connect-zerodha-ai-assistant',
+    repoUrl: 'https://github.com/zerodha/kite-mcp-server',
+    supportUrl: 'https://github.com/zerodha/kite-mcp-server/issues',
+    privacyUrl: 'https://zerodha.com/privacy-policy/',
+    mcp: true,
+    popular: false,
+    tools: ['get_holdings', 'get_positions', 'place_gtt_order'],
+  },
+  {
+    id: 'mcp-upstox',
+    name: 'Upstox',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Indian holdings, positions, funds, orders & SIPs; read-only',
+    desc: 'Connect Upstox’s own hosted server to let Lucius read your Upstox account — profile, funds and margin, holdings, positions, orders and trades, mutual fund holdings and SIPs, and IPO applications. It is read-only by design: it cannot place, change or cancel anything. Sign-in happens on Upstox’s own page over OAuth.',
+    publisher: 'Upstox',
+    verification: 'verified',
+    // upstox.com's developer announcement (plugin marketplace launch, 2026-07-07) publishes
+    // this endpoint; the server is upstox/mcp-server-upstox-api.
+    homepageUrl:
+      'https://upstox.com/developer/api-documentation/announcements/plugin-marketplace-launch/',
+    repoUrl: 'https://github.com/upstox/mcp-server-upstox-api',
+    supportUrl: 'https://github.com/upstox/mcp-server-upstox-api/issues',
+    privacyUrl: 'https://upstox.com/terms-of-use-and-privacy-policy/',
+    mcp: true,
+    popular: false,
+    tools: ['get-holdings', 'get-positions', 'get-funds-margin'],
+  },
+  {
+    id: 'mcp-public',
+    name: 'Public.com',
+    families: ['MCP'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades US stocks, options & crypto; live money only',
+    desc: 'Connect Public.com’s own MCP server, run on this machine, to let Lucius trade at Public.com. It reads your portfolio, quotes and tax lots, estimates an order’s cost before it is sent, and places, replaces and cancels stock, ETF, option (including multi-leg), crypto and event-contract orders. Public.com offers no paper or read-only mode, so every order is real money. Needs uv on this machine, and a Public.com API secret from Settings → API pasted into the environment variables.',
+    publisher: 'Public.com',
+    verification: 'verified',
+    // PyPI publicdotcom-mcp-server is released by PublicDotCom/publicdotcom-mcp-server through a
+    // PyPI trusted publisher. Public's hosted server is left out: CIMD-only sign-in, no DCR.
+    homepageUrl: 'https://public.com/api/docs',
+    repoUrl: 'https://github.com/PublicDotCom/publicdotcom-mcp-server',
+    supportUrl: 'https://github.com/PublicDotCom/publicdotcom-mcp-server/issues',
+    mcp: true,
+    popular: false,
+    tools: ['get_portfolio', 'place_order', 'cancel_order'],
+  },
+  {
+    id: 'mcp-bybit',
+    name: 'Bybit',
+    families: ['MCP'],
+    categories: ['Brokerage', 'Crypto'],
+    icon: 'investments',
+    hue: 'var(--apt)',
+    sub: 'Trades crypto spot, perps & options; live unless testnet',
+    desc: 'Connect Bybit’s own MCP server, run on this machine, to let Lucius work with your Bybit account. It reads market data, balances, positions, orders and history, and places, amends and cancels spot, perpetual and option orders, sets leverage and places Earn orders — close to 400 tools in all. It connects to Bybit’s live exchange unless you add BYBIT_TESTNET=true to the environment variables, and it has no read-only switch of its own: create the API key with only the permissions you want allowed (read-only, if Lucius should not trade). Needs Node.js 20.6 or later, and a Bybit API key and secret.',
+    publisher: 'Bybit',
+    verification: 'verified',
+    // bybit-exchange/trading-mcp is Bybit's GitHub-verified org; the npm package's maintainers
+    // are @bybit.com accounts; announced in Bybit's 2026-04-22 press release.
+    repoUrl: 'https://github.com/bybit-exchange/trading-mcp',
+    supportUrl: 'https://github.com/bybit-exchange/trading-mcp/issues',
+    privacyUrl: 'https://www.bybit.com/en/privacy-policy',
+    mcp: true,
+    popular: false,
+    tools: ['createOrder', 'amendOrder', 'cancelOrder'],
   },
   {
     id: 'mcp-expensify',
@@ -1002,7 +1147,7 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
   'mcp-firecrawl': {
     transport: 'local',
     command: 'npx',
-    args: '-y firecrawl-mcp',
+    args: '-y firecrawl-mcp@latest',
     env: 'FIRECRAWL_API_KEY=',
   },
   // Stripe documents OAuth first but explicitly supports a restricted API key as an
@@ -1030,14 +1175,16 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
   'mcp-alpaca': {
     transport: 'local',
     command: 'uvx',
-    args: 'alpaca-mcp-server',
+    args: 'alpaca-mcp-server@latest',
     env: 'ALPACA_API_KEY=\nALPACA_SECRET_KEY=',
   },
   'mcp-coinbase': {
     transport: 'local',
     command: 'npx',
-    args: '-y @coinbase/coinbase-cli mcp',
-    env: 'COINBASE_KEY_ID=\nCOINBASE_KEY_SECRET=',
+    args: '-y @coinbase/coinbase-cli@latest mcp',
+    // COINBASE_ENV names the built-in `live` environment. Without it every call fails with
+    // "no environment configured" — the keys alone are not enough (verified 2026-10-31).
+    env: 'COINBASE_ENV=live\nCOINBASE_KEY_ID=\nCOINBASE_KEY_SECRET=',
   },
   // Needs the Kraken CLI installed (its own installer or release binary — no npm/PyPI
   // package). No live-order or funding services by default: market, read-only account, paper.
@@ -1047,10 +1194,28 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
     args: '-s market,account,paper',
     env: 'KRAKEN_API_KEY=\nKRAKEN_API_SECRET=',
   },
+  'mcp-webull': { transport: 'remote', url: 'https://api.webull.com/mcp', auth: 'oauth' },
+  'mcp-longbridge': { transport: 'remote', url: 'https://mcp.longbridge.com', auth: 'oauth' },
+  'mcp-tiger': { transport: 'remote', url: 'https://mcp.tigerfintech.com/mcp', auth: 'oauth' },
+  // Answers anonymously; the user logs in to Kite through the server's own `login` tool.
+  'mcp-zerodha': { transport: 'remote', url: 'https://mcp.kite.trade/mcp', auth: 'none' },
+  'mcp-upstox': { transport: 'remote', url: 'https://mcp.upstox.com/mcp', auth: 'oauth' },
+  'mcp-public': {
+    transport: 'local',
+    command: 'uvx',
+    args: 'publicdotcom-mcp-server@latest',
+    env: 'PUBLIC_COM_SECRET=',
+  },
+  'mcp-bybit': {
+    transport: 'local',
+    command: 'npx',
+    args: '-y bybit-official-trading-server@latest',
+    env: 'BYBIT_API_KEY=\nBYBIT_API_SECRET=',
+  },
   'mcp-okx': {
     transport: 'local',
     command: 'npx',
-    args: '-y @okx_ai/okx-trade-mcp --demo',
+    args: '-y @okx_ai/okx-trade-mcp@latest --demo',
     env: 'OKX_API_KEY=\nOKX_SECRET_KEY=\nOKX_PASSPHRASE=',
   },
   // Trailing slash is deliberate: the bare `/mcp` 308-redirects here, and the trailing form is
@@ -1070,7 +1235,7 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
   'mcp-fred': {
     transport: 'local',
     command: 'npx',
-    args: '-y fred-mcp-server',
+    args: '-y fred-mcp-server@latest',
     env: 'FRED_API_KEY=',
   },
 }
@@ -1175,8 +1340,19 @@ export function skipsPreview(entry: DirectoryRow): boolean {
  * and the only part a user cannot rename. A server pointed at a different endpoint therefore
  * inherits nothing, which is the safe direction: it falls back to `unknown`.
  */
+/** How two endpoints are compared: whitespace collapsed and a package's version tag dropped
+ *  (`pkg@latest`, `@scope/pkg@1.2.3` → the bare name), so a server saved before the catalog
+ *  started launching `@latest` still matches its card. Twin: `connector_directory._endpoint_key`. */
+export function endpointKey(endpoint: string | undefined): string {
+  return (endpoint ?? '')
+    .trim()
+    .split(/\s+/)
+    .map((token) => token.replace(/^(@?[^@\s]+)@[^@\s/]+$/, '$1'))
+    .join(' ')
+}
+
 export function catalogProvenanceFor(endpoint: string | undefined): CatalogProvenance | null {
-  const needle = endpoint?.trim()
+  const needle = endpointKey(endpoint)
   if (!needle) return null
   for (const entry of CATALOG) {
     if (!entry.mcp) continue
@@ -1186,7 +1362,7 @@ export function catalogProvenanceFor(endpoint: string | undefined): CatalogProve
       preset.transport === 'remote'
         ? preset.url
         : [preset.command, preset.args].filter(Boolean).join(' ')
-    if (known && known.trim() === needle) {
+    if (known && endpointKey(known) === needle) {
       return {
         publisher: entry.publisher,
         verification: entry.verification,
