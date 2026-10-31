@@ -41,6 +41,7 @@ import { KeyIssuesAccordion } from './KeyIssuesAccordion'
 import { YourPositionCard } from './YourPositionCard'
 import { PositionSubtab } from './PositionSubtab'
 import { YourThesisCard } from './YourThesisCard'
+import { PositionVerdictLine } from './PositionVerdictLine'
 import { ClosedPositionHistory } from './ClosedPositionHistory'
 import { AssetWatchlistMenu } from './AssetWatchlistMenu'
 import { AssetAlertsCard } from './AssetAlertsCard'
@@ -1028,7 +1029,15 @@ export function AssetDetailView({ instrumentId, seedName, seedTicker }: Props) {
                           <Skeleton height={13} width="52%" />
                         </div>
                       ) : (
-                        <p className="asd-pi-body">{portfolio_impact}</p>
+                        <>
+                          {data.position_verdict && (
+                            <PositionVerdictLine
+                              verdict={data.position_verdict}
+                              priceMaxFrac={priceMaxFrac}
+                            />
+                          )}
+                          <p className="asd-pi-body">{portfolio_impact}</p>
+                        </>
                       )}
                     </div>
                   )

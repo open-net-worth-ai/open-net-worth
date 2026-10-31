@@ -193,6 +193,15 @@ looked at before shows **Generating** until they arrive, even if you click **Ref
 meantime. Refresh updates the news, facts and peers. If nothing is being written, you see
 *"No key issues yet"*; click **Refresh now** to try again.
 
+**Lucius's take on your position** starts with one clear call: **Hold**, **Add**, **Trim** or
+**Sell** for a stock you own, **Buy** or **Wait** for one you only watch. One sentence says why and
+what would change the call. Under it are the prices that matter: your **stop** and **trim** level
+(for a stock you watch, the price to **buy at or below**), each with how far today's price is from
+it. A level you set in **Your Thesis** is marked *your thesis* and always wins. Where you haven't
+set one, Lucius suggests a level, marked *Lucius suggests*. A suggestion that would sit on the
+wrong side of the price, or implausibly far from it, isn't shown. The call is written with the
+rest of the take, so it updates when the take does.
+
 ### Your Thesis
 
 Every asset page has a **Your Thesis** card under **Your Position**: why you own the stock (or

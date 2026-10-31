@@ -204,7 +204,7 @@ from backend.monitoring.analyst_prompt import (
     source_dicts,
 )
 from backend.monitoring.text_sanitize import content_tokens, sanitize_untrusted_text, tokenize
-from backend.services import thesis_judgment
+from backend.services import position_verdict, thesis_judgment
 from backend.services.intel_stories import apply_story_change
 from backend.services.watchlist import is_topic, read_watchlist
 
@@ -428,7 +428,7 @@ def _event_framing(row: dict, payload: dict, label: str, ticker: str) -> tuple[s
     return event_line, question, "YOUR POSITION"
 
 
-def _output_skeleton(include_key_issues: bool) -> str:
+def _output_skeleton(include_key_issues: bool, is_held: bool = True) -> str:
     """The exact JSON shape `_build_prompts` asks the model to return — the ONE definition
     shared by the system prompt's worked examples' trailing "Respond with valid JSON" line and
     the user prompt's own copy, so the two can never drift apart. `include_key_issues` (Problem
@@ -460,7 +460,14 @@ def _output_skeleton(include_key_issues: bool) -> str:
             ', "key_issues": [{"question": "<key bull/bear investment question>", "bullish": '
             '"<bull case, one sentence>", "bearish": "<bear case, one sentence>"}], '
             '"portfolio_narrative": "<2-3 sentences of REASONING ONLY on why this matters for '
-            'your position — never a number>"'
+            'your position — never a number>", '
+            + (
+                '"verdict": {"action": "hold|add|trim|sell", "why": "<one plain sentence>", '
+                '"stop": <price or null>, "trim": <price or null>}'
+                if is_held
+                else '"verdict": {"action": "buy|wait", "why": "<one plain sentence>", '
+                '"entry": <price or null>}'
+            )
         )
     return base + "}"
 
@@ -552,7 +559,28 @@ def _key_issues_system_instruction(
     return (
         holding_line + "key_issues: 3-5 key bull/bear investment questions for this asset, "
         "grounded in the news below — each with a one-sentence bullish case and a one-sentence "
-        "bearish case. " + narrative_line + consensus_line + "\n"
+        "bearish case. " + narrative_line + _verdict_instruction(is_held) + consensus_line + "\n"
+    )
+
+
+def _verdict_instruction(is_held: bool) -> str:
+    """The ask for ``verdict`` — the take's one clear call, shown above the narrative as an
+    action line (``services.position_verdict``). The narrative stays numbers-free; the levels
+    live in their own fields, and the user's thesis levels replace them on screen."""
+    if is_held:
+        return (
+            "verdict: your ONE call on this position today — action is exactly one of hold, "
+            "add, trim, sell. why: one plain sentence (20 words max) naming what would change "
+            "the call. stop: the price below which you would sell; trim: the price above which "
+            "you would take some profit — real prices near today's, in the asset's own "
+            "currency, or null if you can't ground one. If YOUR THESIS is given, follow it: "
+            "sell only past its stop or once its breaks_if has happened. "
+        )
+    return (
+        "verdict: your ONE call on this ticker today — action is exactly buy or wait. why: one "
+        "plain sentence (20 words max) naming what would change the call. entry: the price at "
+        "or below which buying makes sense, in the asset's own currency, or null if you can't "
+        "ground one. If YOUR THESIS gives a buy zone, the call is buy only inside it. "
     )
 
 
@@ -568,14 +596,14 @@ def _key_issues_user_instruction(
     if is_held:
         return (
             f"  key_issues / portfolio_narrative: this is a HELD position{consensus_ref} — fill "
-            "3-5 grounded bull/bear key_issues and a numbers-free portfolio_narrative (see the "
-            "system prompt for exactly what each means)\n"
+            "3-5 grounded bull/bear key_issues, a numbers-free portfolio_narrative and a verdict "
+            "(see the system prompt for exactly what each means)\n"
         )
     return (
         f"  key_issues / portfolio_narrative: this ticker is WATCHED but not held{consensus_ref} "
         "— fill 3-5 grounded bull/bear key_issues and a numbers-free portfolio_narrative framed "
-        "around thesis relevance for someone tracking it, not a position you hold (see the "
-        "system prompt for exactly what each means)\n"
+        "around thesis relevance for someone tracking it, not a position you hold, and a "
+        "buy/wait verdict (see the system prompt for exactly what each means)\n"
     )
 
 
@@ -748,7 +776,7 @@ def _build_prompts(
         "every field with REAL content about THIS position — never copy the example or the "
         "angle-bracket descriptions literally. `message` is what the user actually reads (markdown, "
         "phone-brief; a small table ONLY when sizing multiple positions; no header, no URLs): "
-        + _output_skeleton(want_key_issues)
+        + _output_skeleton(want_key_issues, is_held)
     )
 
     event_line, question, context_header = _event_framing(row, payload, label, ticker)
@@ -791,7 +819,7 @@ def _build_prompts(
         "id — leave both empty for an ordinary new/updated development, which is most calls\n"
         + _key_issues_user_instruction(want_key_issues, analyst_consensus_block, is_held)
         + "Respond with valid JSON only. Fill every field with REAL content — never copy the "
-        "angle-bracket descriptions literally: " + _output_skeleton(want_key_issues)
+        "angle-bracket descriptions literally: " + _output_skeleton(want_key_issues, is_held)
     )
 
     return user, system
@@ -1004,6 +1032,13 @@ class _AnalysisOutput(BaseModel):
         "dollar amount — those are composed separately from live data at render time). Leave "
         "EMPTY for every other call.",
     )
+    verdict: dict = Field(
+        default_factory=dict,
+        description="ONLY when explicitly asked (a HELD or WATCHED asset subject): the take's one "
+        'call — held: {"action": "hold|add|trim|sell", "why": str, "stop": number|null, '
+        '"trim": number|null}; watched: {"action": "buy|wait", "why": str, "entry": '
+        "number|null}. Leave EMPTY for every other call.",
+    )
 
     @field_validator("key_issues", mode="before")
     @classmethod
@@ -1038,6 +1073,13 @@ class _AnalysisOutput(BaseModel):
                 }
             )
         return out
+
+    @field_validator("verdict", mode="before")
+    @classmethod
+    def _coerce_verdict(cls, value: object) -> object:
+        """A non-object verdict folds to {} — never fails the whole parse; its contents are
+        checked where it is stored (``position_verdict.normalize``)."""
+        return value if isinstance(value, dict) else {}
 
     @field_validator("portfolio_narrative", "analysis", mode="before")
     @classmethod
@@ -2632,7 +2674,7 @@ async def _fetch_analyst_consensus_block(instrument_id: str) -> str:
 
 
 def _write_asset_brief_synthesis(
-    instrument_id: str, parsed: dict, evidence: list[dict], now: str
+    instrument_id: str, parsed: dict, evidence: list[dict], now: str, *, held: bool
 ) -> None:
     """Write this synthesis call's `key_issues`/`portfolio_narrative` onto the held-or-watched
     instrument's Asset Brief (Problem B point 1, Correction) — the Analyst pipeline's own
@@ -2672,6 +2714,7 @@ def _write_asset_brief_synthesis(
                 parsed.get("portfolio_narrative") or "",
                 source_dicts(evidence),
                 now,
+                verdict=_brief_verdict(instrument_id, parsed, held),
             )
         else:
             asset_brief.stamp_key_issues_checked(instrument_id, now)
@@ -2692,6 +2735,15 @@ def _write_asset_brief_synthesis(
             instrument_id,
             type(exc).__name__,
         )
+
+
+def _brief_verdict(instrument_id: str, parsed: dict, held: bool) -> dict | None:
+    """The synthesis's verdict, checked against the last price on file (no network)."""
+    from backend.db.instrument_store import InstrumentStore
+
+    inst = InstrumentStore().find_by_id(instrument_id) or {}
+    price = thesis_judgment.local_price(inst) if inst else None
+    return position_verdict.normalize(parsed.get("verdict"), held=held, price=price)
 
 
 def _load_all_evidence_rows_cached(cache: dict) -> list[dict]:
@@ -3201,7 +3253,9 @@ async def _process_linked_pair(
     )
 
     if brief_instrument_id:
-        _write_asset_brief_synthesis(brief_instrument_id, parsed, evidence, read_time)
+        _write_asset_brief_synthesis(
+            brief_instrument_id, parsed, evidence, read_time, held=bool(held_instrument_id)
+        )
 
     # A linked pair is, BY CONSTRUCTION, about the same instrument (that's the definition of
     # a pairing) — ONE group_key covers both sides' push-decision calls rather than resolving
@@ -3506,7 +3560,9 @@ async def _process_row(
     )
 
     if brief_instrument_id:
-        _write_asset_brief_synthesis(brief_instrument_id, parsed, evidence, read_time)
+        _write_asset_brief_synthesis(
+            brief_instrument_id, parsed, evidence, read_time, held=bool(held_instrument_id)
+        )
 
     # Owner override of RFC intel-signals-data-model §4's "NO-GO" —
     # docs/adr/2026-08-30-claims-registry-cross-subject-push-dedup.md.

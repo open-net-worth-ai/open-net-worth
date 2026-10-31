@@ -35,7 +35,7 @@ from backend.db.asset_brief_store import AssetBriefStore
 from backend.db.grant_store import GrantStore
 from backend.db.instrument_store import InstrumentStore
 from backend.db.price_history_store import PriceHistoryStore
-from backend.services import investment_theses
+from backend.services import investment_theses, position_verdict
 from backend.services.evidence import read_evidence
 from backend.services.fx_cache import load_fx_cache
 from backend.services.income import income_summary
@@ -1290,6 +1290,7 @@ def read_asset_detail(
     # Serialization backstop: any non-finite float (a flaky live quote, a stale NaN
     # change_pct persisted in an old peer entry) would otherwise 500 the endpoint at
     # json.dumps(allow_nan=False). Degrade it to null (unknown) rather than crash the view.
+    thesis = investment_theses.thesis_for(instrument_id)
     return json_safe(
         {
             "instrument_id": instrument_id,
@@ -1302,7 +1303,7 @@ def read_asset_detail(
             "crypto_facts": crypto_facts,
             "peers": peers,
             "watchlist": wl_block,
-            "thesis": investment_theses.thesis_for(instrument_id),
+            "thesis": thesis,
             "last_refreshed_at": synthesized_at,
             "has_ticker": has_ticker,
             "portfolio_impact": _compose_portfolio_impact(
@@ -1314,6 +1315,13 @@ def read_asset_detail(
             # answer when it's actually just-not-generated-yet; string-sniffing portfolio_impact
             # for this would be fragile, so it's a real boolean instead.
             "has_narrative": bool((brief.get("portfolio_narrative") or "").strip()),
+            "position_verdict": position_verdict.compose(
+                brief.get("position_verdict"),
+                thesis,
+                held=bool(pos_block and pos_block.get("held") and pos_block.get("qty")),
+                price=price_block.get("last"),
+                currency=price_block.get("currency") or "",
+            ),
             "freshness": freshness,
             # Real progress marker for an in-flight refresh ("searching" -> "analysing" ->
             # "ready", written by monitoring.asset_brief._do_refresh as each stage

@@ -1150,6 +1150,7 @@ def apply_analyst_synthesis(
     portfolio_narrative: str,
     sources: list[dict],
     now: str,
+    verdict: dict | None = None,
 ) -> None:
     """Write the Analyst pipeline's own key_issues/portfolio_narrative synthesis onto this
     instrument's Asset Brief (Problem B / ADR 2026-08-28-cross-subject-fan-out-and-asset-brief-
@@ -1171,7 +1172,8 @@ def apply_analyst_synthesis(
     `_sanitize_key_issues_sources` for the same defense-in-depth every other source list in this
     module gets. A no-op when `key_issues` is empty — a genuinely-empty synthesis pass is not a
     "delete the prior brief's take" signal, mirroring `_land_analysis`'s own prior non-regression
-    stance for this exact field."""
+    stance for this exact field. ``verdict`` (``services.position_verdict.normalize``) is the
+    take's action line; a pass without one keeps the prior call, like the narrative."""
     if not key_issues:
         return
     store = AssetBriefStore()
@@ -1200,6 +1202,7 @@ def apply_analyst_synthesis(
             "instrument_id": instrument_id,
             "key_issues": stored_issues,
             "portfolio_narrative": new_narrative or (prior.get("portfolio_narrative") or ""),
+            "position_verdict": verdict or prior.get("position_verdict"),
             "key_issues_synthesized_at": now,
         }
     )

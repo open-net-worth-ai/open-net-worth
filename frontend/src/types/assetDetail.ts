@@ -303,6 +303,22 @@ export type InvestmentThesisFields = Partial<
   >
 >
 
+/** A price on the take's action line: the user's thesis figure, else Lucius's suggestion.
+ *  distance_pct is from today's price, negative = below. */
+export interface VerdictLevel {
+  kind: 'stop' | 'trim' | 'entry'
+  price: number
+  source: 'thesis' | 'lucius'
+  distance_pct: number | null
+}
+
+export interface PositionVerdict {
+  action: 'hold' | 'add' | 'trim' | 'sell' | 'buy' | 'wait'
+  why: string
+  levels: VerdictLevel[]
+  currency: string
+}
+
 export interface AssetDetail {
   instrument_id: string
   asset: AssetInfo
@@ -324,6 +340,8 @@ export interface AssetDetail {
    *  deliberately terse analyzed take. Drives whether the "Lucius's take" card shows a
    *  generating/not-yet-analyzed state instead of the bare numbers. */
   has_narrative: boolean
+  /** The take's one call and the levels that would change it — null until a synthesis gives one. */
+  position_verdict?: PositionVerdict | null
   freshness?: Freshness
   /** Real progress marker for an in-flight backend refresh — null when no refresh is running.
    *  Written by monitoring.asset_brief._do_refresh as each stage actually completes; drives

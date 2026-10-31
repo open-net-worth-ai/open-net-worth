@@ -6234,7 +6234,7 @@ def test_write_asset_brief_synthesis_stamps_clock_even_when_key_issues_empty(db_
     import backend.monitoring.analyst as analyst_mod
 
     now = _iso_now()
-    analyst_mod._write_asset_brief_synthesis("inst-btc", {"key_issues": []}, [], now)
+    analyst_mod._write_asset_brief_synthesis("inst-btc", {"key_issues": []}, [], now, held=True)
 
     brief = abs_mod.AssetBriefStore().get("inst-btc")
     assert brief is not None
@@ -6254,7 +6254,7 @@ def test_write_asset_brief_synthesis_still_writes_key_issues_when_present(db_iso
         "key_issues": [{"question": "Q?", "bullish": "b", "bearish": "r"}],
         "portfolio_narrative": "Matters because X.",
     }
-    analyst_mod._write_asset_brief_synthesis("inst-aapl", parsed, [], now)
+    analyst_mod._write_asset_brief_synthesis("inst-aapl", parsed, [], now, held=True)
 
     brief = abs_mod.AssetBriefStore().get("inst-aapl")
     assert brief["key_issues"][0]["question"] == "Q?"
