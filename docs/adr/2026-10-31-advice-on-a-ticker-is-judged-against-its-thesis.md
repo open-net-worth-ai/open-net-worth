@@ -55,3 +55,28 @@ the daily briefing, the watched-ticker write-ups — plus Lucius's tools in chat
   to survive; the shared rule tells it to.
 - The guard is regex-based: a sell phrased in a way it doesn't recognise passes through. The word
   list lives in `thesis_guard._SELL_RE`; extend it there.
+
+## Amendment 1 — the guard is removed (2026-10-31)
+
+`services/thesis_guard` is deleted, at the owner's decision, after measuring it. The judgment,
+`THESIS_RULE`, the prompt block and the computed citation stay; nothing rewrites the model's
+advice after it is written.
+
+**Evidence.** The Analyst prompt, built by this code from a scratch clone of the owner's book
+(six real holdings, their real news evidence, one real thesis and five synthetic ones), was run
+once each on Haiku and Sonnet (Sonnet is the instance default) across a 15% drop, a price below
+the stop, the latest real news event, and the drop with no thesis: 48 calls.
+
+- With the thesis intact (22 runs) neither model advised selling or trimming once; with no thesis
+  (12 runs) neither did either. Below the stop both framed it as the user's own exit line to
+  honour or consciously override.
+- The guard would have cut 5 sentences, all wrong: four described a "broad tech sell-off" (the
+  stated cause of the drop, once the story's lead sentence) and one a "sell-the-news move".
+
+So the first rejected alternative's premise ("the model still writes 'consider selling' often
+enough") did not hold once the thesis was in the prompt, while the regex could not tell advice
+from reporting and could be passed by quoting `breaks_if` ("your thesis breaks if…").
+
+**Consequence.** A model that ignores the rule is visible, not hidden: its words reach the user
+next to the code-computed thesis line, and a regression is a prompt fix. `_SELL_RE` and its word
+list are gone with the module.

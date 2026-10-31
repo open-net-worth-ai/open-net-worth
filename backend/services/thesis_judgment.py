@@ -9,9 +9,8 @@ never as a sell signal on one surface and a hold on another.
 
 ``judge`` is pure: where the price sits against each level, and the stance that follows. Price is
 the only thing it can check; ``breaks_if`` is a business fact, so a model reads the news against
-it and ``services.thesis_guard`` lets sell advice through only when the price is past the stop or
-the advice itself says the thesis broke. With no thesis every function here is a no-op, so a
-ticker without one behaves exactly as before.
+it under ``THESIS_RULE``. With no thesis every function here is a no-op, so a ticker without one
+behaves exactly as before.
 """
 
 from __future__ import annotations

@@ -204,7 +204,7 @@ from backend.monitoring.analyst_prompt import (
     source_dicts,
 )
 from backend.monitoring.text_sanitize import content_tokens, sanitize_untrusted_text, tokenize
-from backend.services import thesis_guard, thesis_judgment
+from backend.services import thesis_judgment
 from backend.services.intel_stories import apply_story_change
 from backend.services.watchlist import is_topic, read_watchlist
 
@@ -2523,18 +2523,12 @@ def _has_thesis(instrument_id: str) -> bool:
         return False
 
 
-def _judged_against_thesis(parsed: dict, thesis: dict | None) -> dict:
-    """The model's advice held to the user's thesis: an action or a message sentence that says to
-    sell when the thesis does not (price above the stop, no "thesis broken" named) is replaced by
-    the thesis's own advice, and the thesis is cited. Unchanged with no thesis."""
+def _with_thesis_line(parsed: dict, thesis: dict | None) -> dict:
+    """``parsed`` with the thesis cited in a line computed from the price, never the model's
+    words — the alert shows where the price sits even if the advice is wrong. No thesis: as is."""
     if not thesis:
         return parsed
-    return {
-        **parsed,
-        "actions": thesis_guard.guard_actions(parsed.get("actions"), thesis)[:1],
-        "message": thesis_guard.guard_text(parsed.get("message") or "", thesis, cite=False),
-        "thesis_line": thesis_judgment.cite_line(thesis),
-    }
+    return {**parsed, "thesis_line": thesis_judgment.cite_line(thesis)}
 
 
 def _is_held_instrument(instrument_id: str) -> bool:
@@ -3171,7 +3165,7 @@ async def _process_linked_pair(
         pa_store.mark_done(asset_row["id"])
         return 2
 
-    parsed = _judged_against_thesis(result.model_dump(), thesis)
+    parsed = _with_thesis_line(result.model_dump(), thesis)
     if not _analysis_matches_subject(asset_row, parsed):
         logger.warning("analyst: skipped off-subject analysis for %s", asset_subject)
         pa_store.mark_done(topic_row["id"])
@@ -3490,7 +3484,7 @@ async def _process_row(
         _log_phase_timing()
         pa_store.mark_done(row_id)
         return 1
-    parsed = _judged_against_thesis(result.model_dump(), thesis)
+    parsed = _with_thesis_line(result.model_dump(), thesis)
     if not _analysis_matches_subject(row, parsed):
         logger.warning("analyst: skipped off-subject analysis for %s", subject)
         _log_phase_timing()
