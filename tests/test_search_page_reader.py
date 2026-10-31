@@ -230,6 +230,14 @@ def test_a_page_is_excerpted_from_its_head_only_and_the_excerpt_is_capped():
     assert row["page_chars_total"] == len(big)
 
 
+def test_nfkc_expansion_cannot_push_an_excerpt_past_the_cap():
+    # U+FDFA normalises to 18 characters; a page full of them must still fit 2,500.
+    url = "https://a.example/1"
+    page = "Nvidia earnings guidance " + "\ufdfa" * 400 + " was raised for the next quarter."
+    row = _attach(_Provider({url: page}), _rows(url))[0]
+    assert 0 < len(row["excerpt"]) <= 2_500
+
+
 def test_paid_extract_reads_are_accounted_like_intels_and_plain_reads_are_not(monkeypatch):
     recorded: list[dict] = []
     monkeypatch.setattr("backend.ai.cost_tracker.record", lambda **kw: recorded.append(kw))
@@ -250,12 +258,55 @@ def test_paid_extract_reads_are_accounted_like_intels_and_plain_reads_are_not(mo
     assert recorded == []
 
 
-def test_a_read_that_never_ran_costs_nothing(monkeypatch):
+def test_a_paid_read_is_logged_when_sent_even_if_the_extract_call_then_fails(monkeypatch):
     recorded: list[dict] = []
     monkeypatch.setattr("backend.ai.cost_tracker.record", lambda **kw: recorded.append(kw))
     tavily = _Provider({"https://a.example/1": "[fetch failed: HTTP 500]"}, provider_id="tavily")
-    _attach(tavily, _rows("http://169.254.169.254/", "https://a.example/1"))
-    assert recorded == []  # an SSRF-blocked URL and an extract call that failed
+    out = _attach(tavily, _rows("http://169.254.169.254/", "https://a.example/1"))
+    assert [r["model"] for r in recorded] == ["fetch:tavily"]  # the SSRF-blocked URL was never sent
+    assert out[1]["excerpt_unavailable"] == "error"
+
+
+def test_a_cancelled_or_timed_out_paid_read_is_still_logged(monkeypatch):
+    recorded: list[dict] = []
+    monkeypatch.setattr("backend.ai.cost_tracker.record", lambda **kw: recorded.append(kw))
+    slow = "https://slow.example/a"
+    out = _attach(_Provider({slow: 5.0}, provider_id="tavily"), _rows(slow), page_timeout_s=0.05)
+    assert out[0]["excerpt_unavailable"] == "timeout"
+    assert [r["model"] for r in recorded] == ["fetch:tavily"]
+
+    recorded.clear()
+    urls = [f"https://site{i}.example/a" for i in range(3)]
+    out = _attach(
+        _Provider({u: 30.0 for u in urls}, provider_id="firecrawl"),
+        _rows(*urls),
+        page_timeout_s=60.0,
+        deadline_s=0.2,
+    )
+    assert [r["excerpt_unavailable"] for r in out] == ["timeout"] * 3  # cancelled by the batch
+    assert [r["model"] for r in recorded] == ["fetch:firecrawl"] * 3
+
+
+def test_a_paid_read_carries_the_session_and_surface(monkeypatch):
+    from backend.core.chat_session import clear_session_id, set_session_id
+    from backend.core.cost_context import clear_cost_surface, set_cost_surface
+
+    recorded: list[dict] = []
+    monkeypatch.setattr("backend.ai.cost_tracker.record", lambda **kw: recorded.append(kw))
+
+    async def _run():
+        set_session_id("sess-1")
+        set_cost_surface("web")
+        try:
+            return await attach_page_excerpts(
+                _Provider({}, provider_id="tavily"), _rows("https://a.example/1"), _QUERY
+            )
+        finally:
+            clear_session_id()
+            clear_cost_surface()
+
+    asyncio.run(_run())
+    assert [(r["session_id"], r["surface"]) for r in recorded] == [("sess-1", "web")]
 
 
 def test_a_failing_cost_log_does_not_turn_a_good_read_into_an_error(monkeypatch):
@@ -285,32 +336,46 @@ def test_built_providers_know_their_registry_id():
     assert build_provider("tavily", {"api_key": "k"}).provider_id == "tavily"
 
 
-# ── the real plain-GET reader: every fetch goes through the SSRF-guarded, pinned download ────────
+# ── the real plain-GET reader: SSRF-guarded, pinned, and unable to outlive its deadline ──────────
+
+
+class _Resp:
+    """A pinned response: ``chunks`` are returned one per ``read1``; a float sleeps first."""
+
+    headers = type("H", (), {"get_content_charset": staticmethod(lambda: "utf-8")})()
+
+    def __init__(self, chunks):
+        self._chunks = list(chunks)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read1(self, n=-1):
+        if not self._chunks:
+            return b""
+        chunk = self._chunks.pop(0)
+        if isinstance(chunk, float):
+            time.sleep(chunk)
+            return b"x"
+        return chunk
 
 
 def test_a_plain_get_provider_reads_through_the_pinned_fetch_and_never_a_blocked_url(monkeypatch):
-    import io
-
     from backend.ai.search.base import build_provider
 
     opened: list[dict] = []
 
-    class _Resp(io.BytesIO):
-        headers = type("H", (), {"get_content_charset": staticmethod(lambda: "utf-8")})()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
     def _pinned(url, *, headers=None, timeout=10, max_redirects=5, **kw):
         opened.append({"url": url, "timeout": timeout, "max_redirects": max_redirects})
-        return _Resp(b"<html><body>page</body></html>")
+        return _Resp([b"<html><body>page</body></html>"])
 
     monkeypatch.setattr("backend.core.pinned_http.pinned_urlopen", _pinned)
     monkeypatch.setattr(
-        "backend.ai.search.html_extract.extract_main_content", lambda raw, url: _PAGE
+        "backend.ai.search.html_extract.extract_main_content",
+        lambda raw, url, timeout_s=30: _PAGE,
     )
 
     provider = build_provider("duckduckgo", {})
@@ -320,5 +385,90 @@ def test_a_plain_get_provider_reads_through_the_pinned_fetch_and_never_a_blocked
 
     assert [o["url"] for o in opened] == [ok]  # the metadata address never reached the fetch
     assert opened[0]["max_redirects"] == 5  # redirects are followed by hand, each hop re-validated
+    assert opened[0]["timeout"] <= 2.0  # one socket operation, not the 60 s of fetch_page
     assert out[0]["excerpt_unavailable"] == "blocked"
     assert "raised its earnings guidance" in out[1]["excerpt"]
+
+
+def test_a_slow_drip_server_cannot_hold_a_read_past_its_deadline(monkeypatch):
+    from backend.ai.search.bounded_fetch import ReadDeadlineExceeded, fetch_text_until
+
+    # Never EOF, a byte every 50 ms: a per-socket timeout alone would never fire.
+    monkeypatch.setattr(
+        "backend.core.pinned_http.pinned_urlopen",
+        lambda url, **kw: _Resp([0.05] * 1000),
+    )
+    started = time.monotonic()
+    with pytest.raises(ReadDeadlineExceeded):
+        fetch_text_until("https://drip.example/a", started + 0.3)
+    assert time.monotonic() - started < 1.0  # the thread ends at the deadline, not at 60 s
+
+
+def test_extraction_is_skipped_near_the_deadline_and_bounded_by_it_otherwise(monkeypatch):
+    from backend.ai.search.bounded_fetch import ReadDeadlineExceeded, fetch_text_until
+
+    monkeypatch.setattr(
+        "backend.core.pinned_http.pinned_urlopen", lambda url, **kw: _Resp([b"<html>x</html>"])
+    )
+    seen: list[float] = []
+
+    def _extract(raw, url, timeout_s=30):
+        seen.append(timeout_s)
+        return _PAGE
+
+    monkeypatch.setattr("backend.ai.search.html_extract.extract_main_content", _extract)
+
+    with pytest.raises(ReadDeadlineExceeded):
+        fetch_text_until("https://a.example/1", time.monotonic() + 0.2)  # < 0.5 s left
+    assert seen == []  # the extraction child was never spawned
+
+    assert fetch_text_until("https://a.example/1", time.monotonic() + 3.0) == _PAGE.strip()
+    assert 0 < seen[0] <= 3.0  # the child is killed by the read's own deadline
+
+
+def test_page_reads_never_touch_the_default_executor():
+    from concurrent.futures import ThreadPoolExecutor
+
+    class _Refuses(ThreadPoolExecutor):
+        def submit(self, *a, **kw):
+            raise AssertionError("the shared default executor was used")
+
+    async def _run():
+        asyncio.get_running_loop().set_default_executor(_Refuses())
+        return await attach_page_excerpts(_Provider({}), _rows("https://a.example/1"), _QUERY)
+
+    assert "excerpt" in asyncio.run(_run())[0]
+
+
+def test_the_reader_pool_is_bounded_and_a_slot_frees_only_when_its_thread_does():
+    import threading
+
+    from backend.ai.search.bounded_fetch import MAX_READERS, run_bounded
+
+    release = threading.Event()
+    lock = threading.Lock()
+    state = {"running": 0, "peak": 0}
+
+    def _work():
+        with lock:
+            state["running"] += 1
+            state["peak"] = max(state["peak"], state["running"])
+        release.wait(5)
+        with lock:
+            state["running"] -= 1
+
+    async def _run():
+        tasks = [asyncio.create_task(run_bounded(_work)) for _ in range(MAX_READERS * 2)]
+        await asyncio.sleep(0.3)
+        for t in tasks:
+            t.cancel()  # abandon every awaiter, as a timed-out read does
+        await asyncio.sleep(0.2)
+        assert state["running"] == MAX_READERS  # the threads are still going
+        waiting = asyncio.create_task(run_bounded(lambda: "next"))
+        await asyncio.sleep(0.2)
+        assert not waiting.done()  # and the abandoned reads still hold their slots
+        release.set()
+        return await asyncio.wait_for(waiting, 5)
+
+    assert asyncio.run(_run()) == "next"
+    assert state["peak"] <= MAX_READERS

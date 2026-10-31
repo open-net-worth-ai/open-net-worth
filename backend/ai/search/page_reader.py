@@ -5,9 +5,10 @@ Behind the ``search_reads_results`` flag (``ai/search/switch.py`` is the only ca
 A search row is a one-to-two-line snippet, often truncated or stale. Measured on the owner's real
 history (2026-10-11): 93 of 114 chat turns that searched never read a page, and a description
 nudge toward ``fetch_page`` changed nothing — so the read is structural. ``attach_page_excerpts``
-reads the first ``READ_TOP`` result URLs IN PARALLEL through the provider's OWN ``fetch_page``
-(Tavily/Firecrawl extract APIs; the others the SSRF-guarded pinned GET), and attaches a
-query-focused ``excerpt`` (``search/excerpt.py``) to each row it could read.
+reads the first ``READ_TOP`` result URLs IN PARALLEL and attaches a query-focused ``excerpt``
+(``search/excerpt.py``) to each row it could read. Tavily and Firecrawl read through their own
+extract APIs; every other provider through ``bounded_fetch.fetch_text_until`` (the SSRF-guarded,
+DNS-pinned GET with a wall-clock deadline, on its own small thread pool).
 
 A row it could not read keeps its snippet and says why (``excerpt_unavailable``); a row it never
 tried (beyond ``read_top``) carries neither field. A failed read never fails the search. Every URL
@@ -17,8 +18,8 @@ The page text is untrusted third-party text: the excerpt is run through ``saniti
 at the source, before it joins a row, so no consumer can forget to.
 
 Bounds: ``read_top`` <= ``MAX_READ_TOP`` pages x ``EXCERPT_MAX_CHARS`` each; a page is excerpted
-from at most its first ``MAX_PAGE_CHARS``; and the whole batch returns by ``READ_DEADLINE_S``
-however slow the pages are.
+from at most its first ``MAX_PAGE_CHARS``; the whole batch returns by ``READ_DEADLINE_S`` however
+slow the pages are; and no read keeps a thread past its own ``PAGE_TIMEOUT_S`` deadline.
 """
 
 from __future__ import annotations
@@ -28,7 +29,8 @@ import logging
 import time
 
 from backend.ai.search.base import SearchProvider
-from backend.ai.search.excerpt import build_excerpt
+from backend.ai.search.bounded_fetch import fetch_text_until, run_bounded
+from backend.ai.search.excerpt import EXCERPT_MAX_CHARS, build_excerpt
 from backend.core.untrusted import sanitize_untrusted
 
 logger = logging.getLogger(__name__)
@@ -36,10 +38,9 @@ logger = logging.getLogger(__name__)
 # Pages read per search. Not a model-facing knob: the tool schemas are the ones main ships.
 READ_TOP = 3
 MAX_READ_TOP = 5
-# Only the head of a page is scored — an extract API can return a whole book, and scoring runs
-# on the event loop.
+# Only the head of a page is scored — an extract API can return a whole book.
 MAX_PAGE_CHARS = 200_000
-# One page's fetch (after the SSRF check). The deadline bounds the whole batch, DNS included.
+# One page's whole read, SSRF check to excerpt. The deadline bounds the batch, DNS included.
 PAGE_TIMEOUT_S = 4.0
 READ_DEADLINE_S = 5.0
 # cost_log ``source`` for the reads (the ``fetch:<id>`` pseudo-model keeps them out of the
@@ -61,12 +62,15 @@ _SENTINELS = (
 
 
 def _record_paid_read(provider: SearchProvider) -> None:
-    """Log one page read to ``cost_log`` when ``provider`` reads through a paid extract API."""
+    """Log one page read to ``cost_log`` when ``provider`` reads through a paid extract API.
+    Called when the request is SENT: the provider bills it whether or not we wait for the reply."""
     cost = _PAID_READ_COST_USD.get(getattr(provider, "provider_id", ""))
     if cost is None:
         return
     try:
         from backend.ai.cost_tracker import record
+        from backend.core.chat_session import get_session_id
+        from backend.core.cost_context import get_cost_surface
 
         record(
             source=COST_SOURCE,
@@ -74,39 +78,54 @@ def _record_paid_read(provider: SearchProvider) -> None:
             input_tokens=0,
             output_tokens=0,
             cost_usd=cost,
+            session_id=get_session_id() or "",
+            surface=get_cost_surface(),
         )
     except Exception:
         logger.warning("search read: could not log the page-read cost", exc_info=True)
 
 
-async def _read_one(provider: SearchProvider, url: str, query: str, timeout_s: float) -> dict:
-    """The fields to attach to one result row: ``excerpt`` + ``page_chars_total`` on success,
-    else ``excerpt_unavailable`` with the reason. Never raises."""
+async def _fetch(provider: SearchProvider, url: str, deadline: float) -> str:
+    """The page text (or an in-band ``[fetch …`` failure string); never the default executor."""
+    if getattr(provider, "plain_page_fetch", False):
+        return await run_bounded(fetch_text_until, url, deadline)
+    _record_paid_read(provider)
+    return await provider.fetch_page(url)
+
+
+async def _read(provider: SearchProvider, url: str, query: str, deadline: float) -> dict:
     from backend.ai.tools._egress import UnsafeUrlError, assert_safe_outbound_url
 
     try:
-        # Off the loop: the guard ends in a blocking getaddrinfo.
-        await asyncio.to_thread(assert_safe_outbound_url, url)
+        # On the reader pool: the guard ends in a blocking getaddrinfo.
+        await run_bounded(assert_safe_outbound_url, url)
     except UnsafeUrlError:
         return {"excerpt_unavailable": "blocked"}
+    text = await _fetch(provider, url, deadline)
+    for prefix, reason in _SENTINELS:
+        if text.startswith(prefix):
+            return {"excerpt_unavailable": reason}
+    excerpt = await run_bounded(build_excerpt, text[:MAX_PAGE_CHARS], query)
+    if not excerpt:
+        return {"excerpt_unavailable": "no_relevant_text"}
+    # Capped AFTER normalisation: NFKC can expand a character (U+FDFA becomes 18).
+    return {
+        "excerpt": sanitize_untrusted(excerpt, max_len=EXCERPT_MAX_CHARS),
+        "page_chars_total": len(text),
+    }
+
+
+async def _read_one(provider: SearchProvider, url: str, query: str, timeout_s: float) -> dict:
+    """The fields to attach to one result row: ``excerpt`` + ``page_chars_total`` on success,
+    else ``excerpt_unavailable`` with the reason. Never raises."""
+    deadline = time.monotonic() + timeout_s
     try:
-        text = await asyncio.wait_for(provider.fetch_page(url), timeout_s)
-    except asyncio.TimeoutError:
+        return await asyncio.wait_for(_read(provider, url, query, deadline), timeout_s)
+    except TimeoutError:
         return {"excerpt_unavailable": "timeout"}
     except Exception as exc:
         logger.info("search read failed for %s: %s", url, exc)
         return {"excerpt_unavailable": "error"}
-    # The extract API answered, so the read is billable whatever the page held — but not an
-    # in-band "[fetch …" failure, where the call never completed.
-    if not text.startswith("[fetch "):
-        _record_paid_read(provider)
-    for prefix, reason in _SENTINELS:
-        if text.startswith(prefix):
-            return {"excerpt_unavailable": reason}
-    excerpt = build_excerpt(text[:MAX_PAGE_CHARS], query)
-    if not excerpt:
-        return {"excerpt_unavailable": "no_relevant_text"}
-    return {"excerpt": sanitize_untrusted(excerpt), "page_chars_total": len(text)}
 
 
 async def attach_page_excerpts(

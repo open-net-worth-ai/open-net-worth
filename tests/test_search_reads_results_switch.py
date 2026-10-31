@@ -246,3 +246,104 @@ def test_nothing_stored_is_touched_and_on_off_on_is_safe():
         assert "x_search" not in _catalog_names()
     assert on_first == on_again == {"x_search", "web_search"}
     assert stored == _allowed("x_search")
+
+
+# ── every tool is still reachable, and MCP is untouched ──────────────────────────
+
+
+@pytest.mark.flag_both("search_reads_results")
+def test_every_registered_tool_is_in_the_catalog_unless_hidden():
+    from backend.ai.tools import TOOL_SCHEMAS
+    from backend.ai.tools._connector_gate import hidden_connector_tools
+    from backend.ai.tools.catalog import hidden_tools
+    from tests.test_tool_catalog import _catalog_names
+
+    expected = {s["name"] for s in TOOL_SCHEMAS} - hidden_tools() - hidden_connector_tools()
+    assert expected <= set(_catalog_names(build_tool_catalog()))
+    assert ("x_search" in hidden_tools()) is _on()
+
+
+@pytest.mark.flag_both("search_reads_results")
+def test_mcp_inbound_still_lists_x_search():
+    from backend.mcp.adapter import mcp_tool_descriptors
+
+    assert "x_search" in {d["name"] for d in mcp_tool_descriptors()}
+
+
+# ── the flag is read once per turn, and an unreadable flag hides nothing ─────────
+
+
+def test_a_turn_reads_the_flag_once_and_a_restore_unpins_it(monkeypatch):
+    from backend.ai.tools.catalog import hidden_tools
+
+    reads: list[int] = []
+    real = switch.enabled
+    monkeypatch.setattr(switch, "enabled", lambda name: reads.append(1) or real(name))
+
+    with flags(search_reads_results=True):
+        snap = _skill_scope.snapshot_scope()
+        _skill_scope.set_turn_retired(switch.retired_tools())  # what assistant.run does
+        assert len(reads) == 1
+        _skill_scope.set_offer_scope({"web_search", "x_search"})
+        for _ in range(5):
+            assert _skill_scope.offer_tool_names() == {"web_search"}
+            assert "x_search" in hidden_tools()
+            build_tool_catalog()
+            _candidate_schemas()
+        assert len(reads) == 1  # no offer build or dispatch touched the flag again
+
+        with flags(search_reads_results=False):  # flipped mid-turn: the turn keeps its answer
+            assert "x_search" in hidden_tools()
+        _skill_scope.restore_scope(snap)
+
+    assert _skill_scope.turn_retired() is None
+    with flags(search_reads_results=False):
+        assert "x_search" not in hidden_tools()
+
+
+def test_an_unreadable_flag_hides_nothing_and_does_not_widen_find_tools(monkeypatch):
+    from backend.db.app_config_store import AppConfigStore
+
+    def _broken(self):
+        raise RuntimeError("store down")
+
+    monkeypatch.setattr(AppConfigStore, "get_feature_flags", _broken)
+
+    assert switch.reads_results() is False
+    assert switch.retired_tools() == frozenset()
+    assert switch.with_stand_ins({"x_search"}) == {"x_search"}
+
+    names = {s["name"] for s in _candidate_schemas()}  # does not raise
+    assert "x_search" in names  # nothing retired
+    assert "plaid_fetch_transactions" not in names  # connector-gated tools stay gated
+    assert "serper_search" not in names
+    text, _ = asyncio.run(find_tools({"names": ["plaid_fetch_transactions"]}))
+    assert "plaid_fetch_transactions" not in {e["name"] for e in json.loads(text).get("loaded", [])}
+
+    provider = _Provider(_URLS[:2])
+    rows = asyncio.run(switch.search_results(provider, _QUERY, 8))
+    assert provider.fetched == [] and "excerpt" not in rows[0]  # snippets, as when off
+
+
+# ── the stand-in grant never overrides a stored Ask or Block ─────────────────────
+
+
+@pytest.mark.parametrize(
+    "stored,granted",
+    [
+        (None, True),
+        ("always_allow", True),
+        ("needs_approval", False),
+        ("blocked", False),
+    ],
+)
+def test_the_stand_in_is_not_granted_over_a_stored_ask_or_block(stored, granted):
+    from backend.ai.tools._connector_gate import permission_owner
+    from backend.services import tool_permissions
+
+    if stored:
+        tool_permissions.set_tool_permission(permission_owner("web_search"), "web_search", stored)
+    with flags(search_reads_results=True):
+        canonical = _canonical_always_allowed_tools(_allowed("x_search"))
+    assert ("web_search" in canonical) is granted
+    assert "x_search" in canonical  # the entry itself is the owner's, as written

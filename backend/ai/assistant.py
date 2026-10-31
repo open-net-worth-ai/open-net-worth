@@ -3805,6 +3805,11 @@ async def _run_turn(
     # Snapshot the per-turn scope ContextVars (skill/offer/unattended/bundle/depth)
     # the SAME way, for the SAME reason (CONC-H5) — see ``_skill_scope.snapshot_scope``.
     _scope_snapshot = _skill_scope.snapshot_scope()
+    # The tools a feature flag keeps out of every offer this turn: ONE flag read per turn,
+    # restored with the rest of the scope (``restore_scope(_scope_snapshot)`` below).
+    from backend.ai.search.switch import retired_tools
+
+    _skill_scope.set_turn_retired(retired_tools())
 
     # ── Turn checkpoint scaffolding, declared BEFORE the try (finding 5): the try below now
     # starts immediately after the scope snapshot, so an exception raised anywhere in this
