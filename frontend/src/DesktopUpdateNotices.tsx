@@ -206,7 +206,7 @@ function WhatsNewDialog() {
         <p className="whats-new__headline">You’re on {note.version}</p>
         <p className="whats-new__lede">
           {hasHighlights
-            ? 'Here’s what’s new. Your book was not touched.'
+            ? 'Here’s what’s new.'
             : 'The highlights couldn’t load right now. They’re on the release page.'}
         </p>
       </div>
