@@ -122,7 +122,14 @@
   align-items: start;
   margin-top: 16px;
 }
-@media (max-width: 1180px) {
+/* The register's own width decides its columns, not the viewport's: with Lucius open beside it
+   on a wide iPad the viewport stayed past 1180px while the page was ~640px, so the 300px rail
+   kept its column and the cards' 300px minimum spilled under it. 1080px = a 1180px viewport
+   less the 52px nav rail and the 24px gutters, the old breakpoint with no panel open. */
+.as-body-cq {
+  container: as-register / inline-size;
+}
+@container as-register (max-width: 1080px) {
   .as-body {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1537,11 +1544,8 @@ button.as-row-chevron {
 }
 
 /* ── responsive ─────────────────────────────────────────────── */
-/* Tablet: rail drops under the grid as a two-up row. */
-@media (max-width: 1180px) {
-  .as-body {
-    grid-template-columns: minmax(0, 1fr);
-  }
+/* Tablet, or a page narrowed by the Lucius panel: rail drops under the grid as a two-up row. */
+@container as-register (max-width: 1080px) {
   .as-rail {
     position: static;
     display: grid;

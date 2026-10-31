@@ -280,38 +280,40 @@ export function Assets(props: AssetsProps) {
                 <SummaryStrip summary={summary} />
               </div>
               <FilterBar list={assets} cats={categories} cat={cat} setCat={setCat} />
-              <div className="as-body">
-                <div style={{ minWidth: 0 }}>
-                  <CardGrid
-                    list={shown}
-                    classes={shownClasses}
-                    cats={categories}
-                    loans={loans}
-                    cat={cat}
-                    onOpen={setOpenId}
-                    // The "Add more" tiles below already offer every kind not owned yet.
-                    onAdd={
-                      cat === 'all' && moreCats.length > 0 ? undefined : () => setAddOpen(true)
-                    }
-                    onNav={go}
-                    onCat={setCat}
-                  />
-                  {cat === 'all' && moreCats.length > 0 && (
-                    <section className="as-more" aria-label="Add more">
-                      <h3 className="as-more-h">Add more</h3>
-                      <EmptyPreview
-                        cats={moreCats}
-                        accounts={false}
-                        onAddAccount={() => {}}
-                        onAddAsset={(key) => {
-                          setAddCat(key)
-                          setAddOpen(true)
-                        }}
-                      />
-                    </section>
-                  )}
+              <div className="as-body-cq">
+                <div className="as-body">
+                  <div style={{ minWidth: 0 }}>
+                    <CardGrid
+                      list={shown}
+                      classes={shownClasses}
+                      cats={categories}
+                      loans={loans}
+                      cat={cat}
+                      onOpen={setOpenId}
+                      // The "Add more" tiles below already offer every kind not owned yet.
+                      onAdd={
+                        cat === 'all' && moreCats.length > 0 ? undefined : () => setAddOpen(true)
+                      }
+                      onNav={go}
+                      onCat={setCat}
+                    />
+                    {cat === 'all' && moreCats.length > 0 && (
+                      <section className="as-more" aria-label="Add more">
+                        <h3 className="as-more-h">Add more</h3>
+                        <EmptyPreview
+                          cats={moreCats}
+                          accounts={false}
+                          onAddAccount={() => {}}
+                          onAddAsset={(key) => {
+                            setAddCat(key)
+                            setAddOpen(true)
+                          }}
+                        />
+                      </section>
+                    )}
+                  </div>
+                  <Rail cats={categories} classes={classCards} summary={summary} loans={loans} />
                 </div>
-                <Rail cats={categories} classes={classCards} summary={summary} loans={loans} />
               </div>
             </>
           )}
