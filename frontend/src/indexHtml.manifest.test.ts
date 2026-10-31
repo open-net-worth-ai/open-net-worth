@@ -44,3 +44,31 @@ it('the installed app has a fixed top box iOS 27 accepts in place of its blur', 
     /:root\[data-onw-display-mode='standalone'\] #status-bar-sampler \{\s*display: block;/,
   )
 })
+
+// The status bar is native, so a scrim can't dim it, and the box iOS tints it from sits above
+// every scrim: without this the bar stayed the bright theme colour over a dimmed page.
+it('the status-bar box takes each scrim colour while a modal or sheet is open', () => {
+  const html = readFileSync(resolve(__dirname, '../index.html'), 'utf8')
+  const css = readFileSync(resolve(__dirname, 'index.css'), 'utf8')
+  const alpha = (selector: string) =>
+    css.match(
+      new RegExp(`\\n\\s*${selector} \\{[^}]*?rgba\\(6, \\d+, \\d+, (?:calc\\()?([\\d.]+)`),
+    )?.[1]
+  const scrim = (selector: string) =>
+    html.match(
+      new RegExp(`:root:has\\(\\s*${selector}[^{]*\\{\\s*--onw-status-bar-scrim: (\\d+)%`),
+    )?.[1]
+  expect(scrim("\\.modal-overlay\\[data-state='open'\\]\\)")).toBe(
+    String(Number(alpha('\\.modal-overlay')) * 100),
+  )
+  expect(scrim('\\.modal-overlay--workspace')).toBe(
+    String(
+      Number(alpha('\\.modal-overlay--workspace,\\s*\\.modal-overlay\\.acct-review-overlay')) * 100,
+    ),
+  )
+  expect(scrim('\\.mb-sheet-scrim')).toBe(String(Number(alpha('\\.mb-sheet-scrim')) * 100))
+  expect(alpha('\\.kebab-sheet-scrim')).toBe(alpha('\\.mb-sheet-scrim'))
+  expect(html).toMatch(
+    /\.kebab-sheet-scrim\s*\)\s*#status-bar-sampler \{\s*background-color: color-mix\(\s*in srgb,\s*rgb\(6, 9, 16\) var\(--onw-status-bar-scrim\),\s*var\(--onw-prepaint-bg\)/,
+  )
+})

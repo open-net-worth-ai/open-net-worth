@@ -23,13 +23,14 @@
          with the theme-color values in the script below. -->
     <style>
       html {
-        background: #0e1014;
+        --onw-prepaint-bg: #0e1014;
+        background: var(--onw-prepaint-bg);
       }
       html[data-theme='warm'] {
-        background: #edeae3;
+        --onw-prepaint-bg: #edeae3;
       }
       html[data-theme='light'] {
-        background: #ffffff;
+        --onw-prepaint-bg: #ffffff;
       }
       body {
         background: inherit;
@@ -62,6 +63,35 @@
       }
       :root[data-onw-display-mode='standalone'] #status-bar-sampler {
         display: block;
+      }
+      /* The status bar is outside the page, so a modal or sheet scrim can't dim it — and this
+         box sits above every scrim, so iOS keeps tinting the bar the undimmed theme colour (a
+         white band over a grey page). While one is open the box takes the scrim composited over
+         the theme background instead; alphas mirror .modal-overlay (and its workspace /
+         account-review variants), .mb-sheet-scrim and .kebab-sheet-scrim in index.css. */
+      :root:has(.modal-overlay[data-state='open']) {
+        --onw-status-bar-scrim: 66%;
+      }
+      :root:has(
+        .modal-overlay--workspace[data-state='open'],
+        .acct-review-overlay[data-state='open']
+      ) {
+        --onw-status-bar-scrim: 62%;
+      }
+      :root:has(.mb-sheet-scrim[data-state='open'], .kebab-sheet-scrim) {
+        --onw-status-bar-scrim: 60%;
+      }
+      :root:has(
+          .modal-overlay[data-state='open'],
+          .mb-sheet-scrim[data-state='open'],
+          .kebab-sheet-scrim
+        )
+        #status-bar-sampler {
+        background-color: color-mix(
+          in srgb,
+          rgb(6, 9, 16) var(--onw-status-bar-scrim),
+          var(--onw-prepaint-bg)
+        );
       }
     </style>
     <!-- Pre-paint theme stamp: resolve the persisted palette preference
