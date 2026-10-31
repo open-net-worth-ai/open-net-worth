@@ -1,5 +1,6 @@
-import { Plus, Sparkles } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { useChatComposerOptional } from '../../state/chatComposer'
+import { BuildWithLucius } from './BuildWithLucius'
 import { Button, InfoPopover } from '../ui'
 import type { InvestmentThesis } from '../../types/assetDetail'
 import { BREAKS_IF_LABEL, thesisLevels, type ROLES, type ThesisLevel } from './thesisFields'
@@ -101,14 +102,11 @@ export function ThesisStart({
   instrumentId?: string
 }) {
   const composer = useChatComposerOptional()
-  const buildWithLucius = () => {
-    if (!instrumentId) return
-    composer?.addMention({ type: 'instrument', ref: instrumentId, label: sym }, { open: false })
-    composer?.setPendingText(thesisBuildPrompt(sym, held), { keepChips: true })
-    window.dispatchEvent(new Event('lx-dock-open'))
-  }
-  return (
-    <div className="asd-thesis-start">
+  const blurb = held
+    ? `Why you own ${sym}, what would prove you wrong, and the prices that matter.`
+    : `Why you’d buy ${sym}, what would prove the case wrong, and the prices that matter.`
+  if (!composer || !instrumentId) {
+    return (
       <Button
         variant="secondary"
         size="sm"
@@ -117,17 +115,20 @@ export function ThesisStart({
       >
         {held ? `Write down why you own ${sym}` : `Write down why you’d buy ${sym}`}
       </Button>
-      {composer && instrumentId && (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="asd-thesis-lucius"
-          iconLeft={<Sparkles size={13} aria-hidden="true" />}
-          onClick={buildWithLucius}
-        >
-          Build with Lucius
-        </Button>
-      )}
+    )
+  }
+  // Lucius leads; writing it yourself stays one quiet click away.
+  return (
+    <div className="asd-thesis-start">
+      <p className="asd-thesis-start-blurb">{blurb}</p>
+      <BuildWithLucius
+        sym={sym}
+        instrumentId={instrumentId}
+        prompt={thesisBuildPrompt(sym, held)}
+      />
+      <button type="button" className="asd-thesis-write" onClick={onClick}>
+        or write it yourself
+      </button>
     </div>
   )
 }

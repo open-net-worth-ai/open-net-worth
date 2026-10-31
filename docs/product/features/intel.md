@@ -52,7 +52,10 @@ For a story rather than one stock — an IPO, a war, interest rates:
 
 1. Click the bell 🔔 on a ticker's row (or the **›** beside the ticker in the side panel).
 2. Click **New alert** — or, under **Not sure what to set?**, click **Suggest** and Lucius proposes
-   levels based on your position.
+   levels based on your position. With no alerts yet, **Build with Lucius** (also on the stock
+   page's **Price Alerts** card) opens a chat instead: Lucius looks at your position, thesis and
+   its latest take, proposes the few levels that matter with a reason for each, and sets them
+   once you confirm.
 3. Choose **Target price** (**Falls below** / **Rises above** a price) or **% move** (**Falls by** /
    **Rises by** a percentage in a day).
 4. Optional: a **Name**, a **Cooldown** (or **Turn off** after it fires once), **Notifications**

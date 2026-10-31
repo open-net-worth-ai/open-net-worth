@@ -10,6 +10,7 @@ import { NEAR, fmt, foldOp, layoutTickRows, toFire } from './alertModel'
 import type { AlertRecord } from './alertModel'
 import { AlertRow, SuggestionSet, TickerSettings } from './ManageAlertsParts'
 import type { SuggestionView } from './ManageAlertsParts'
+import { BuildWithLucius, alertsBuildPrompt } from '../BuildWithLucius'
 
 export type { SuggestionView } from './ManageAlertsParts'
 
@@ -213,9 +214,12 @@ export function ManageAlerts(p: ManageAlertsProps) {
           title={`No alerts on ${sym} yet`}
           body="Lucius tracks the price either way — it just won't tell you until there's a level worth hearing about."
           action={
-            <Button variant="primary" size="sm" onClick={p.onNew}>
-              New alert
-            </Button>
+            <div className="asd-alerts-start asd-alerts-start--center">
+              <BuildWithLucius sym={sym} prompt={alertsBuildPrompt(sym)} />
+              <Button variant="secondary" size="sm" onClick={p.onNew}>
+                New alert
+              </Button>
+            </div>
           }
         />
       ) : (

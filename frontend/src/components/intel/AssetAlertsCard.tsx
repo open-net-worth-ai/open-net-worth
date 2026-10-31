@@ -4,6 +4,7 @@ import { ArrowRight, Plus } from '../../ui/icons'
 import { fPrice } from '../../utils/format'
 import { PriceAlertsModal } from './PriceAlertsModal'
 import type { PriceAlertCondition } from '../../types/assetDetail'
+import { BuildWithLucius, alertsBuildPrompt } from './BuildWithLucius'
 
 const OP_SYM: Record<string, string> = { '>=': '≥', '<=': '≤', '>': '>', '<': '<' }
 
@@ -117,15 +118,22 @@ export function AssetAlertsCard({
             <Text size="sm" tone="faint">
               Get notified when {displaySymbol || ticker} crosses a price you set.
             </Text>
-            <Button
-              variant="primary"
-              size="sm"
-              iconLeft={<Plus size={14} aria-hidden="true" />}
-              onClick={() => void openEditor()}
-              className="asd-alerts-btn"
-            >
-              Add price alert
-            </Button>
+            <div className="asd-alerts-start">
+              <BuildWithLucius
+                sym={displaySymbol || ticker}
+                instrumentId={instrumentId}
+                prompt={alertsBuildPrompt(displaySymbol || ticker)}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                iconLeft={<Plus size={14} aria-hidden="true" />}
+                onClick={() => void openEditor()}
+                className="asd-alerts-btn"
+              >
+                Add price alert
+              </Button>
+            </div>
           </>
         )}
 

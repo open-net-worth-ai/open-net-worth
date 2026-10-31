@@ -13671,23 +13671,77 @@ body.hide-amounts .money * {
     flex: none;
   }
 
-  /* The empty thesis card's two ways in: write it yourself, or build it with Lucius. */
+  /* The empty thesis card: Lucius leads with a tinted pill, writing it yourself is a quiet link. */
   .asd-thesis-start {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
   }
 
-  /* "Build with Lucius" speaks in Lucius's own colour. */
-  .ui-btn--ghost.asd-thesis-lucius {
+  /* An empty alerts card: Build with Lucius beside the manual add. */
+  .asd-alerts-start {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .asd-alerts-start--center {
+    justify-content: center;
+  }
+
+  /* Both ways in share one shape: pills, like Build with Lucius. */
+  .asd-alerts-start > button {
+    border-radius: var(--radius-pill);
+  }
+
+  .asd-thesis-start-blurb {
+    font-size: var(--text-sm);
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .asd-thesis-lucius {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 6px 14px;
+    border: 1px solid color-mix(in srgb, var(--lucius) 40%, transparent);
+    border-radius: var(--radius-pill);
+    background: color-mix(in srgb, var(--lucius) 16%, transparent);
     color: var(--lucius);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .asd-thesis-write {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: var(--text-xs);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
   }
 
   @media (hover: hover) {
-    .ui-btn--ghost.asd-thesis-lucius:hover:not(:disabled) {
-      color: var(--lucius);
-      background: color-mix(in srgb, var(--lucius) 12%, transparent);
+    .asd-thesis-lucius:hover {
+      background: color-mix(in srgb, var(--lucius) 24%, transparent);
     }
+    .asd-thesis-write:hover {
+      color: var(--ink);
+    }
+  }
+
+  .asd-thesis-lucius:focus-visible,
+  .asd-thesis-write:focus-visible {
+    outline: 2px solid var(--lucius);
+    outline-offset: 2px;
   }
 
   /* Stands in for .asd-pi-body while generating (owner ask 2026-08-30) — shimmering line
