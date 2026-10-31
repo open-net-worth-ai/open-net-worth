@@ -7132,6 +7132,41 @@ def test_trigger_on_demand_brief_refresh_skips_fresh_instrument(monkeypatch, db_
     assert pas_mod.PendingAnalysisStore().query(subject="asset:inst-od2") == []
 
 
+def test_refresh_rewrites_a_fresh_take_once_however_many_times_it_is_clicked(
+    tmp_path, monkeypatch, db_isolated
+):
+    """The page's Refresh passes ``force``: a take written an hour ago is rewritten now (no 12h
+    cooldown), and two overlapping clicks still make exactly one model call."""
+    import backend.db.asset_brief_store as abs_mod
+    import backend.monitoring.analyst as analyst_mod
+
+    _seed_on_demand_instrument(db_isolated, iid="inst-od-force")
+    abs_mod.AssetBriefStore().upsert_brief(
+        {
+            "instrument_id": "inst-od-force",
+            "portfolio_narrative": "Matters because X.",
+            "key_issues_synthesized_at": (
+                datetime.now(timezone.utc) - timedelta(hours=1)
+            ).isoformat(),
+        }
+    )
+    complete_calls, _ = _stub_analyst(monkeypatch, tmp_path, db_isolated)
+    monkeypatch.setattr(analyst_mod, "_is_held_instrument", lambda iid: True)
+    monkeypatch.setattr(analyst_mod, "_is_watched_instrument", lambda iid: False)
+    monkeypatch.setattr(analyst_mod, "_fetch_analyst_consensus_block", _async_return(""))
+
+    assert asyncio.run(analyst_mod.trigger_on_demand_brief_refresh("inst-od-force")) is False
+
+    async def _click_twice():
+        return await asyncio.gather(
+            analyst_mod.trigger_on_demand_brief_refresh("inst-od-force", force=True),
+            analyst_mod.trigger_on_demand_brief_refresh("inst-od-force", force=True),
+        )
+
+    assert sorted(asyncio.run(_click_twice())) == [False, True]
+    assert len(complete_calls) == 1
+
+
 def test_trigger_on_demand_brief_refresh_skips_unknown_instrument(monkeypatch, db_isolated):
     """(d) An instrument_id that doesn't resolve to a real instrument (never seeded here) never
     triggers this — nothing to freshen or price a take against. Owner decision 2026-08-31:

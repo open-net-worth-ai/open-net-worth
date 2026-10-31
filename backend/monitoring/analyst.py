@@ -1999,7 +1999,7 @@ def _enqueue_stale_briefs(pa_store: PendingAnalysisStore) -> int:
     return enqueued
 
 
-async def trigger_on_demand_brief_refresh(instrument_id: str) -> bool:
+async def trigger_on_demand_brief_refresh(instrument_id: str, *, force: bool = False) -> bool:
     """On-demand, RIGHT-NOW top-up for one RESOLVABLE instrument (a real ticker — held, watched,
     or just opened ad-hoc) whose key_issues have gone stale past `_KEY_ISSUES_FORCE_REFRESH_
     HOURS` — called by `api.intel_assets.get_asset_detail` via `asyncio.create_task` (fire-and-
@@ -2074,7 +2074,10 @@ async def trigger_on_demand_brief_refresh(instrument_id: str) -> bool:
         return False
 
     brief = AssetBriefStore().get(iid) or {}
-    if not _key_issues_force_stale(brief):
+    # `force` is the page's Refresh: the user asked for a new take now, so the 12h cooldown is
+    # skipped. The in-flight and failure guards below still hold — a second click mid-run is a
+    # no-op, never a second model call.
+    if not force and not _key_issues_force_stale(brief):
         return False
 
     pa_store = PendingAnalysisStore()

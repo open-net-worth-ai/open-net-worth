@@ -190,7 +190,9 @@ session with no coverage says *"No notable coverage found"* instead of guessing.
 The **Analysis** tab opens with **Key Issues**: the bull and bear case on each big question for
 the stock. Lucius writes these in the background after you open the page, so a ticker you haven't
 looked at before shows **Generating** until they arrive, even if you click **Refresh** in the
-meantime. Refresh updates the news, facts and peers. If nothing is being written, you see
+meantime. **Refresh** updates the news, facts and peers, and has Lucius rewrite its take on
+the stock right away (its call and buttons included); clicking again while it's writing doesn't
+start a second one. If nothing is being written, you see
 *"No key issues yet"*; click **Refresh now** to try again.
 
 **Lucius's take on your position** gives its reasoning, then one clear call under it: **Hold**,

@@ -254,6 +254,10 @@ async def refresh_asset(
     instrument_id: str,
     force: bool = Query(default=False),
 ):
+    from backend.monitoring.analyst import trigger_on_demand_brief_refresh
     from backend.monitoring.asset_brief import refresh_asset_brief
 
+    # Refresh also rewrites Lucius's take (its call and chips) right away, in the background —
+    # the news/facts refresh below is what this response reports on.
+    asyncio.create_task(trigger_on_demand_brief_refresh(instrument_id, force=True))
     return await refresh_asset_brief(instrument_id, force=force)
