@@ -73,7 +73,7 @@ def _external_tool_schemas() -> list[dict]:
     if dispatcher is None:
         return []
     try:
-        schemas = list(dispatcher.schemas())
+        schemas = _permission_engine().external_schemas(dispatcher)
         return sorted(schemas, key=lambda s: s.get("name", ""))
     except Exception:  # noqa: BLE001 — a broken external manager must never break the offer
         logger.exception("external mcp schema fetch failed (non-fatal)")

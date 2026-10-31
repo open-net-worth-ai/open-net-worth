@@ -12,10 +12,11 @@ keywords: [permissions v2, experimental, approval mode, always allow, ask, block
 # Permissions v2 (experimental)
 
 > **This page describes an experimental model.** It is off by default. Turn it on in **Settings →
-> Developer → Experimental → Permissions v2**, and off again the same way; nothing you have set is
-> lost either way. While it is off, Open Net Worth works as [How Lucius's
-> permissions work](permissions.md), [Confirm cards](confirm-cards.md) and
-> [Automations](automations.md) describe, and those pages are the ones to read.
+> Developer → Experimental → Permissions v2**, and off again the same way. While it is off, Open Net
+> Worth works as [How Lucius's permissions work](permissions.md), [Confirm cards](confirm-cards.md)
+> and [Automations](automations.md) describe, and those pages are the ones to read. What switching
+> it off does to what you set while it was on is in [Turning it off and on
+> again](#turning-it-off-and-on-again).
 
 **Every tool Lucius can use has exactly one setting:**
 
@@ -44,7 +45,7 @@ a setting the day it appears:
 - **Lucius's own notes run (Always allow).** Remembering or forgetting a fact about you, saving or
   editing a skill, creating an artifact and marking notifications read change only Lucius's
   workspace, not your book, so they don't stop for a card. Set any of them to **Ask** if you want to
-  see each one.
+  see each one. This is a deliberate choice: skill and memory writes start at Always allow.
 - **Changing your book, or sending something out, asks (Ask).** Logging or editing a transaction,
   moving budget money, creating an account, turning a connector on or off, and sending an email, a
   Telegram message or a webhook.
@@ -84,7 +85,7 @@ Two choices you made before this model existed keep working while it is on:
 |---|---|
 | **Manually approve** | *"Lucius pauses so you can approve each action."* Every tool set to Ask stops on a card. |
 | **Automatically approve** | *"Lucius runs on its own and pauses to ask if anything looks unsafe."* Each call to a tool set to Ask is checked against what you asked for; ordinary ones happen straight away and the reply shows what changed, and anything that goes further stops for you. See [How Automatically approve decides](#how-automatically-approve-decides). |
-| **Skip all approvals** | *"Lucius never pauses, even for unsafe actions."* A tool set to Ask just runs. Use it only for a task you're watching. |
+| **Skip all approvals** | *"Lucius never pauses, even for unsafe actions."* A tool set to Ask just runs, with no card and no check. See [What Skip runs](#what-skip-runs). Use it only for a task you're watching. |
 
 **A new conversation starts in Automatically approve.** Conversations from before this setting
 existed keep behaving as **Manually approve**. The mode belongs to that one conversation — it
@@ -148,6 +149,20 @@ edit, delete or run an Automation, and tools from an external MCP server.
 
 Everything Lucius changes, whether or not he asked first, can be undone: see
 [Undoing a change](#undoing-a-change).
+
+## What Skip runs
+
+In **Skip all approvals** every tool set to **Ask** runs with no card and no judge. Nothing is held
+back, and that includes:
+
+- creating, changing, deleting and running **Automations**, which can themselves be given
+  **Skip** and so run unattended afterwards;
+- the two bulk tools, **delete transactions where** and **apply payee rules**, which act on every row
+  a filter matches. Before this model, Auto mode still stopped on those two names; it no longer has
+  a list of names, and Skip never did.
+
+This is a decision, not an oversight: Skip means skip. If a tool must never run without you, set it
+to **Block**, or leave it at **Ask** and use **Manually approve**.
 
 ## Where to set a tool's setting
 
@@ -223,6 +238,48 @@ the Automation and find **Tool permissions** on the **Setup** tab:
 A tool is on at most one of the two lists. The lists belong to this Automation only; they never
 change a tool anywhere else. They are stored with the Automation even while Permissions v2 is
 off, and ignored until you turn it on again.
+
+## Turning it off and on again
+
+The settings live in the same table the old model uses, so switching the flag does not rewrite
+anything, and everything that has the same meaning in both models keeps it: a tool set to **Always
+allow**, **Ask** or **Block** in **Settings → Permissions** or on a connector's page, an
+Automation's **Always allowed** list, and the card answers recorded for reloaded conversations.
+
+Three things are different while it is off, and come back when you turn it on again:
+
+- **An Automation's Blocked list is ignored.** The model that is running does not know the list
+  exists, so a tool blocked only on an Automation runs there (or asks) under the old rules. The list
+  is kept, untouched, and edits made to the Automation meanwhile do not change it.
+- **Cards are the old cards**, and which answer you gave (Approve, Always allow or Deny) is no
+  longer recorded; answers recorded while it was on are kept and show again when you turn it back on.
+- **The Auto judge is not used.** Auto mode behaves as before.
+
+Search keeps its Blocks across the switch: setting a level on the active search connector's tool, or
+on web search or reading a page, also writes the same level on those two tools' own settings, which
+the old model reads. So a search you blocked stays blocked with the model off. (That copy refreshes
+the next time you set the level; if you change the active search connector afterwards, set the new
+one's level to bring them back in step.)
+
+The one thing that differs from the old model even for a call that would have run the same way: the
+app reads this setting at the start of every tool call, and if it cannot be read the call is
+**refused** (nothing runs) rather than carried on with, so an unreadable setting never lets a call
+through.
+
+## Known wording issues
+
+Some text is fixed when the app starts and cannot follow the switch. With Permissions v2 on, these
+still describe the old model, and stay that way until it is retired:
+
+- The descriptions Lucius reads for some tools say they ask before they run: the skill tools
+  (create, update and delete a skill, save code as a skill) and **Run code** ("the first run in a
+  conversation asks"). Skill writes start at Always allow, and **Run code** asks only while it is set
+  to Ask.
+- The **Run code** message when code execution is off says Lucius will show the script for approval.
+- The Connectors tool descriptions say a search connector's tool "specifically" does the search,
+  though Lucius's general web search uses the active one.
+- The error shown when adding an MCP server cannot write its permission levels says those tools are
+  "still at Needs approval".
 
 ## Undoing a change
 

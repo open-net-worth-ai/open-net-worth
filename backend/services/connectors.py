@@ -45,7 +45,6 @@ from backend.services.connector_catalog import (
     display_name,
     kind_of,
 )
-from backend.services.feature_flags import enabled
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +165,7 @@ def default_levels(connector_id: str) -> tuple[str, dict[str, str]]:
     """``view_default_levels`` by id. Never raises on an unknown id: a connector that does not
     exist has no tools to list (an ``mcp:`` id still reads the cautious default)."""
     try:
-        return view_default_levels(get_connector(connector_id))
+        return view_default_levels(get_connector(connector_id, ladder_v2=True))
     except NotFoundError:
         mcp = connector_id.startswith(MCP_CONNECTOR_PREFIX)
         return (tool_permissions_v2.DEFAULT_LEVEL if mcp else "always_allow"), {}
@@ -240,15 +239,19 @@ def _rows_and_secrets() -> tuple[dict[str, Row], dict[str, frozenset]]:
         return rows, store.secret_field_map(conn=conn)
 
 
-def list_connectors() -> List[ConnectorView]:
+def list_connectors(*, ladder_v2: bool = False) -> List[ConnectorView]:
     """Every connector, built-ins first and MCP servers after. Never raises on an empty table:
-    a fresh instance still lists every built-in as ``not_configured``."""
+    a fresh instance still lists every built-in as ``not_configured``.
+
+    ``ladder_v2`` is the caller's choice of how each tool's level is DISPLAYED (``permissions_v2``
+    shows what a tool is worth with no row, main shows the cautious default); a caller that does
+    not show levels leaves it off. The choice is made by the caller (``ai.permissions.engine()``),
+    never here."""
     rows, secrets = _rows_and_secrets()
     # ONE bulk permission read for the whole list — this sits under ``enabled_connector_ids()``'s
     # sibling hot paths, where a per-connector read would be a per-connector table scan.
     levels = tool_permissions.get_all_permissions()
     yolo = tool_permissions.yolo_enabled()
-    v2 = enabled("permissions_v2")
     ctx: dict = {}
     none: frozenset = frozenset()
     return [
@@ -258,7 +261,7 @@ def list_connectors() -> List[ConnectorView]:
             secrets.get(row["id"], none),
             ctx,
             _level_of_v2(kind, levels.get(row["id"]) or {}, yolo)
-            if v2
+            if ladder_v2
             else _level_of(levels.get(row["id"]) or {}, yolo),
         )
         for kind, row in _entries(rows)
@@ -276,9 +279,9 @@ def enabled_connector_ids() -> frozenset[str]:
     )
 
 
-def get_connector(connector_id: str) -> ConnectorView:
+def get_connector(connector_id: str, *, ladder_v2: bool = False) -> ConnectorView:
     """One connector by id. Raises ``NotFoundError`` (→ HTTP 404) if unknown."""
-    for view in list_connectors():
+    for view in list_connectors(ladder_v2=ladder_v2):
         if view.id == connector_id:
             return view
     raise NotFoundError(f"unknown connector: {connector_id}", connector_id=connector_id)

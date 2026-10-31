@@ -211,12 +211,12 @@ async def get_connector_tools(input_data: dict):
         return json.dumps({"error": "connector_id is required"}, ensure_ascii=False), None
 
     try:
-        view = connectors_service.get_connector(connector_id)
+        view = connectors_service.get_connector(connector_id, ladder_v2=engine().ladder_v2)
     except NotFoundError:
         # The full id list rides along rather than a "call X for the list" pointer: there
         # is no tool that lists connectors, and naming this one would send the model in a
         # circle. The set is bounded by the install's own connectors, so it is cheap.
-        known = [v.id for v in connectors_service.list_connectors()]
+        known = [v.id for v in connectors_service.list_connectors(ladder_v2=engine().ladder_v2)]
         close = did_you_mean(connector_id, known)
         head = f"unknown connector: {connector_id}."
         if close:
@@ -255,6 +255,12 @@ async def get_connector_tools(input_data: dict):
         "has_more": any(b["has_more"] for b in blocks),
     }
     notes: list[str] = []
+    if tool_defaults:
+        notes.append(
+            "Each tool's 'default' is the level it starts at and Reset restores: a read runs, a "
+            "change or a send asks. An undecided tool is at its default, not necessarily "
+            "'needs_approval'."
+        )
     if not total:
         notes.append(
             f"'{view.id}' contributes no tools"

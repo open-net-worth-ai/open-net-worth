@@ -18,13 +18,23 @@ Call ``engine()`` once per decision, not in a loop: it reads the stored flag.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Iterator, Optional
 
 from backend.services.feature_flags import enabled
 
 logger = logging.getLogger(__name__)
 
 FLAG = "permissions_v2"
+
+# The wording ``mcp.client_manager`` appends to a tool set to Ask (it cannot import ``ai``, and
+# ``ai`` cannot import it, so the text is written in both places), and what it reads as under
+# ``permissions_v2`` — where Ask may end in a card, the Auto judge or a straight run.
+_OLD_ASK_HINT = " [Needs the user's approval before it runs — they see a confirm card.]"
+_NEW_ASK_HINT = (
+    " [Set to Ask — depending on the approval mode it may pause for the user's confirmation.]"
+)
 
 
 class _Engine:
@@ -53,6 +63,8 @@ class OldEngine(_Engine):
     automation_blocked_lists = False
     #: Answered cards are not labelled after a reload.
     labels_answered_cards = False
+    #: The connector ladder shows main's displayed defaults.
+    ladder_v2 = False
 
     def automation_ref(self, session_id: Optional[str] = None) -> dict:
         return {}
@@ -77,6 +89,9 @@ class OldEngine(_Engine):
 
     async def judge_step(self, calls: list[tuple[str, str, dict]]) -> None:
         return None
+
+    def external_schemas(self, dispatcher: Any) -> list[dict]:
+        return list(dispatcher.schemas())
 
     async def dispatch_external(self, dispatcher: Any, name: str, args: dict):
         return await dispatcher.call(name, args)
@@ -109,6 +124,7 @@ class NewEngine(_Engine):
     unattended_script_switch = False
     automation_blocked_lists = True
     labels_answered_cards = True
+    ladder_v2 = True
 
     def automation_refusal(self, tool_name: str) -> Optional[tuple[str, None]]:
         """The refusal for a tool on the running Automation's own Blocked list, else ``None``."""
@@ -154,6 +170,15 @@ class NewEngine(_Engine):
 
         await auto_judge_batch.judge_step(calls)
 
+    def external_schemas(self, dispatcher: Any) -> list[dict]:
+        """The external MCP tools to offer, whose Ask hint says a card is only one way it ends."""
+        return [
+            {**s, "description": s["description"][: -len(_OLD_ASK_HINT)] + _NEW_ASK_HINT}
+            if str(s.get("description", "")).endswith(_OLD_ASK_HINT)
+            else s
+            for s in dispatcher.schemas()
+        ]
+
     async def dispatch_external(self, dispatcher: Any, name: str, args: dict):
         """Run one external-MCP call through the SAME permission chain as every registry tool.
 
@@ -173,7 +198,12 @@ class NewEngine(_Engine):
             return mcp_external.fence_external_output(label, text), None, []
         if decision == "allow":
             return await dispatcher.fire_allowed(name, args)
-        return await dispatcher.call(name, args)
+        # The card must say which conversation and Automation it belongs to, so its Always allow
+        # lands on that Automation's own list exactly as a native card's does.
+        from backend.core.chat_session import get_session_id
+
+        extras = {**self._gate.automation_ref(), "session_id": get_session_id() or ""}
+        return await dispatcher.call(name, args, card_extras=extras)
 
     def confirm_call_kwargs(self, token: str) -> dict:
         return {"tool_use_id": token}
@@ -206,10 +236,29 @@ class NewEngine(_Engine):
 _old: Optional[OldEngine] = None
 _new: Optional[NewEngine] = None
 
+# The gate ``registry.dispatch`` chose for the tool call in flight. Everything that runs inside the
+# call — the permission gate, the judge, the handler's own card — asks ``engine()`` and gets THIS
+# one, so a call is decided by one reading of the flag even if the owner flips it mid-call.
+_pinned: ContextVar[Any] = ContextVar("pinned_permission_engine", default=None)
+
+
+@contextmanager
+def pinned(gate: Any) -> Iterator[None]:
+    token = _pinned.set(gate)
+    try:
+        yield
+    finally:
+        _pinned.reset(token)
+
 
 def engine() -> Any:
-    """The permission gate for this call — ``permissions_v2`` on picks the new one."""
+    """The permission gate for this call — ``permissions_v2`` on picks the new one. Inside a
+    dispatched tool call it is the gate the dispatch chose (``pinned``); elsewhere it reads the flag.
+    A flag that cannot be read RAISES: the caller refuses rather than guessing a model."""
     global _old, _new
+    held = _pinned.get()
+    if held is not None:
+        return held
     if enabled(FLAG):
         if _new is None:
             from backend.ai import _confirm_gate_v2 as policy

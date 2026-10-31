@@ -66,6 +66,17 @@ def seed_level(tool_name: str) -> PermissionLevel:
     return DEFAULT_LEVEL if tool_asks_by_default(tool_name) else "always_allow"
 
 
+_STRICTNESS = {"always_allow": 0, "needs_approval": 1, "blocked": 2}
+
+
+def most_restrictive(*levels: Optional[str]) -> Optional[str]:
+    """The strictest of the levels given (Block over Ask over Always allow); ``None`` entries are
+    "no row" and count for nothing, so all-``None`` is ``None``. How a search tool's own row and the
+    ``core`` copy of its generic name combine: neither can lift the other."""
+    known = [level for level in levels if level in _STRICTNESS]
+    return max(known, key=_STRICTNESS.__getitem__) if known else None
+
+
 def stop_asking_switches() -> tuple[bool, bool]:
     """``(yolo, run_code auto-run)`` — the owner's older "stop asking" choices, read once so a
     caller valuing many tools does not read them per tool."""

@@ -916,7 +916,30 @@ async def dispatch(
     After the handler returns, JSON text results are compacted (no unnecessary
     whitespace, non-ASCII kept as-is) to reduce token spend in chat history.
     Non-JSON pass through unchanged.
+
+    The flag ``permissions_v2`` is read ONCE here and the chosen gate (``ai.permissions.engine``)
+    is pinned for the whole call, handler included. A flag that cannot be read refuses the call —
+    nothing ran — which is the one place the off path differs from main: main would have gone on.
     """
+    from backend.ai.permissions import engine, pinned
+
+    try:
+        gate = engine()
+    except Exception:  # noqa: BLE001 — an unreadable flag is a refusal, never a guess
+        logger.warning(
+            "permission gate: could not read the flag for %s; refusing", name, exc_info=True
+        )
+        from backend.ai.tools._confirm_gate_v2 import gate_failed_result
+
+        return gate_failed_result(name)
+    with pinned(gate):
+        return await _dispatch_call(name, input_data, tool_use_id, gate)
+
+
+async def _dispatch_call(
+    name: str, input_data: dict, tool_use_id: Optional[str], gate: Any
+) -> Tuple[Optional[str], Optional[dict]]:
+    """``dispatch`` with the gate already chosen and pinned."""
     # ``invoked`` is kept beside ``name`` for the call log: they are the same string now
     # that names are final, but a tool that absorbed an older one still reads which shape it
     # was asked for.
@@ -928,9 +951,6 @@ async def dispatch(
     from backend.core.tool_use_context import set_tool_use_id
 
     set_tool_use_id(tool_use_id)
-    from backend.ai.permissions import engine
-
-    gate = engine()
     input_data = gate.clean_input(input_data, tool_use_id)
     entry = _REGISTRY.get(name)
     if entry is None:
@@ -956,11 +976,7 @@ async def dispatch(
     # it is awaited here, BEFORE the sync gate and before any handler: the self-staging tools ask
     # ``should_preview_write()`` from inside their handler and need the answer to exist.
     await gate.prepare(name, input_data)
-    in_flight = _dispatch_gate.set(gate)
-    try:
-        gated, input_data = _permission_gate(name, input_data)
-    finally:
-        _dispatch_gate.reset(in_flight)
+    gated, input_data = _permission_gate(name, input_data)
     if gated is not None:
         text, proposed = gated
         # Domains are hardcoded (): nothing ran, so nothing was written. A staged/paused
@@ -1071,10 +1087,6 @@ def _demo_refusal(name: str) -> Optional[Tuple[Optional[str], Optional[dict]]]:
     return text, None
 
 
-# The gate ``dispatch`` picked for the call in flight, so one tool call reads the flag once.
-_dispatch_gate: ContextVar[Any] = ContextVar("dispatch_permission_gate", default=None)
-
-
 def _permission_gate(
     name: str, input_data: dict
 ) -> Tuple[Optional[Tuple[Optional[str], Optional[dict]]], dict]:
@@ -1111,10 +1123,10 @@ def _permission_gate(
        non-card-capable surfaces, a call with no bound ``tool_use_id``, and self-staging
        tools all land here, which is why an agent run and a scheduled task are untouched.
 
-    Fails OPEN (proceed) on any internal error, matching ``should_gate``'s own direction and
-    for the same reason: a gate that cannot determine its context must never silently break
-    a working write path. The FAIL-CLOSED direction lives one level down, in
-    ``granted_scope``, where an unreadable grant table reads as "no grant" (confirm).
+    What an internal error does is the gate's say (``gate_error``): the old gate fails OPEN
+    (proceeds) exactly as before, because a gate that cannot determine its context must never
+    silently break a working write path; the ``permissions_v2`` gate fails CLOSED and refuses the
+    call. The flag itself is read in ``dispatch`` and a failure there refuses the call.
     """
     # Outside the fail-open try below: a demo refusal must never degrade into execution.
     demo_refused = _demo_refusal(name)
@@ -1122,9 +1134,9 @@ def _permission_gate(
         return demo_refused, input_data
     from backend.ai.permissions import engine
 
-    # ``dispatch`` has already read the flag for this call and hands the gate down; a direct caller
-    # (a test, a script) reads it here.
-    _gate = _dispatch_gate.get() or engine()
+    # Inside ``dispatch`` this is the gate it chose for the call; a direct caller (a test, a
+    # script) reads the flag here, and a flag that cannot be read raises.
+    _gate = engine()
     try:
         level = _gate.effective_level(name)
         if level == "blocked":

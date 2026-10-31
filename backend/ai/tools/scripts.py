@@ -138,15 +138,7 @@ async def run_script(input_data: dict):  # noqa: C901 — gate-heavy by design
     from backend.db.app_config_store import script_skills_enabled, script_skills_unattended_enabled
 
     if not script_skills_enabled():
-        return json.dumps(
-            {
-                "error": (
-                    "Script-bundling skills are disabled for this instance "
-                    "(Settings → Developer → Bundled script skills is off). "
-                    "Ask the operator to enable the feature."
-                )
-            }
-        ), None
+        return json.dumps({"error": _SCRIPTS_OFF}), None
 
     # ── Gate 3: unsupervised-execution gate ──────────────────────────────────────
     # Gate 2 above says whether scripts may run AT ALL; this says whether they may run with
