@@ -5,7 +5,7 @@
 // The pure functions (formatters, statusOf, cat, subtotal) and the FIRE defaults are kept and
 // re-exported as named exports. The retirement simulation is NOT here: it runs on the server.
 
-import { getCurrencySymbol, getNumberLocale } from '../../../utils/format'
+import { fBaseCompact, getCurrencySymbol, getNumberLocale } from '../../../utils/format'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
@@ -174,6 +174,33 @@ export function fPct(n: number, frac?: boolean): string {
 }
 export function fSigned(n: number): string {
   return (n >= 0 ? '+' : '−') + getCurrencySymbol() + grp(n, false)
+}
+// From a million up, Outlook's tiles and Cash Flow's figures ARE the chart axis's formatter
+// (fBaseCompact), so they share its unit, decimal separator and suffix in every number format:
+// "₫24.95B" beside a "₫47.09B" tick, "24,95 Mrd. ₫" beside "47,09 Mrd. ₫". A figure that rounds
+// up to a million at its own precision reads as that million, never "1000k" / "1000.00K".
+function compactFrom(a: number, roundsToMillion: number): string | null {
+  return a >= roundsToMillion ? fBaseCompact(Math.max(a, 1e6)) : null
+}
+// Coarse money for Outlook guidance figures — no false precision (S$307,800 → "S$310k").
+export function fCoarse(n: number): string {
+  const a = Math.abs(n),
+    s = n < 0 ? '−' : ''
+  const big = compactFrom(a, 995e3)
+  if (big) return s + big
+  const sym = getCurrencySymbol()
+  if (a >= 1e3) return s + sym + Math.round(a / 1e4) * 10 + 'k'
+  return s + sym + Math.round(a)
+}
+// Cash Flow balances and nets — two decimals in K.
+export function fCF(n: number): string {
+  const a = Math.abs(n),
+    s = n < 0 ? '−' : ''
+  const big = compactFrom(a, 999_995)
+  if (big) return s + big
+  const sym = getCurrencySymbol()
+  if (a >= 1e3) return s + sym + (a / 1e3).toFixed(2) + 'K'
+  return s + sym + a.toFixed(0)
 }
 // Figure cell — ALWAYS two decimals (owner ask, 2026-09-15, matching YNAB's own budget table).
 // This is the budget TABLE's formatter (Assigned / Activity / Available and their subtotals),
