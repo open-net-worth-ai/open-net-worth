@@ -7,14 +7,14 @@ import { PositionVerdictLine } from './PositionVerdictLine'
 import type { PositionVerdict } from '../../types/assetDetail'
 
 const TRIM: PositionVerdict = {
-  alert: true,
   action: 'trim',
   why: 'Up a lot.',
   currency: 'USD',
-  order: { side: 'sell', quantity: 25, limit: 270 },
-  levels: [
-    { kind: 'stop', price: 112, source: 'thesis', distance_pct: -18.2 },
-    { kind: 'trim', price: 160, source: 'lucius', distance_pct: 16.8 },
+  levels: [{ kind: 'stop', price: 112, source: 'thesis', distance_pct: -18.2 }],
+  actions: [
+    { type: 'order', side: 'sell', quantity: 5, limit: 260 },
+    { type: 'order', side: 'sell', quantity: 5, limit: 280 },
+    { type: 'alert', when: 'below', price: 112 },
   ],
 }
 
@@ -44,13 +44,14 @@ function renderWithComposer(verdict: PositionVerdict) {
 describe('PositionVerdictLine', () => {
   afterEach(cleanup)
 
-  it('shows the call and why, with each price only once — in the suggestion that uses it', () => {
+  it('shows the one call, then one button per action Lucius proposed, in its order', () => {
     renderWithComposer(TRIM)
     expect(screen.getByText('Trim')).toBeTruthy()
     expect(screen.getByText(/Up a lot\./)).toBeTruthy()
     expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
-      'Sell 25 at $270.00',
-      'Alert me below $112.00 or above $160.00',
+      'Sell 5 at $260.00',
+      'Sell 5 at $280.00',
+      'Alert me below $112.00',
     ])
   })
 
@@ -59,28 +60,18 @@ describe('PositionVerdictLine', () => {
     const onOpen = (e: Event) => opened.push(e)
     window.addEventListener('lx-dock-open', onOpen)
     const seen = renderWithComposer(TRIM)
-    fireEvent.click(screen.getByRole('button', { name: 'Sell 25 at $270.00' }))
-    expect(seen.pending).toBe('Sell 25 at a $270.00 limit, as you suggested.')
+    fireEvent.click(screen.getByRole('button', { name: 'Sell 5 at $280.00' }))
+    expect(seen.pending).toBe('Sell 5 at a $280.00 limit, as you suggested.')
     expect(seen.mentions).toEqual([{ type: 'instrument', ref: 'inst-acme', label: 'ACME' }])
-    fireEvent.click(screen.getByRole('button', { name: /^Alert me/ }))
-    expect(seen.pending).toBe(
-      'Set price alerts: tell me if it falls to $112.00 or rises to $160.00.',
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Alert me below $112.00' }))
+    expect(seen.pending).toBe('Set a price alert: tell me if it falls to $112.00.')
     expect(opened).toHaveLength(2)
     window.removeEventListener('lx-dock-open', onOpen)
   })
 
-  it('a hold with no levels is the call alone, with nothing to tap', () => {
-    renderWithComposer({ action: 'hold', why: 'Nothing changed.', currency: 'USD', levels: [] })
+  it('a call with no actions — the usual case — has nothing to tap', () => {
+    renderWithComposer({ ...TRIM, action: 'hold', actions: [] })
     expect(screen.getByText('Hold')).toBeTruthy()
-    expect(screen.queryByRole('button')).toBeNull()
-  })
-
-  it('shows only what Lucius decided — no alert unless it asked, no fallback plan button', () => {
-    renderWithComposer({ ...TRIM, alert: undefined })
-    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Sell 25 at $270.00'])
-    cleanup()
-    renderWithComposer({ ...TRIM, alert: undefined, order: null })
     expect(screen.queryByRole('button')).toBeNull()
   })
 })

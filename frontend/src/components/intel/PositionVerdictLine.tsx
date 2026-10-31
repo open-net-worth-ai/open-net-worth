@@ -1,12 +1,12 @@
-import type { PositionVerdict, VerdictOrder } from '../../types/assetDetail'
+import type { PositionVerdict, VerdictAction } from '../../types/assetDetail'
 import { useChatComposerOptional } from '../../state/chatComposer'
 import { fPrice, getCurrencySymbol } from '../../utils/format'
 
 // The take's verdict, under its reasoning: the one call and why, then each thing the user could
 // act on as a suggestion that drops a ready-to-send request into Lucius's composer (the dock on
 // desktop, the Lucius tab on a phone) with the stock attached as a mention — the mention binds the
-// chat to the stock and carries the take and its call, so the request can stay short. The levels
-// appear only there, as one plain alert.
+// chat to the stock and carries the take and its call, so the request can stay short. Every
+// button is an action Lucius itself proposed, with its own prices; usually there are none.
 
 const ACTION_LABEL: Record<PositionVerdict['action'], string> = {
   hold: 'Hold',
@@ -24,41 +24,22 @@ interface Suggestion {
 
 const units = (q: number) => q.toLocaleString(undefined, { maximumFractionDigits: 8 })
 
-/** "Sell 25 at $270" — the order as one short phrase; without a limit, "Sell 25". */
-function orderText(o: VerdictOrder, money: (v: number) => string): string {
-  const verb = o.side === 'sell' ? 'Sell' : 'Buy'
-  return `${verb} ${units(o.quantity)}${o.limit ? ` at ${money(o.limit)}` : ''}`
-}
-
-/** Only what Lucius explicitly decided: the order behind a call that moves money, and an alert
- *  on its levels when it said one would help (`alert: true`). Nothing is the usual answer. */
-function suggestionsFor(verdict: PositionVerdict, money: (v: number) => string): Suggestion[] {
-  const out: Suggestion[] = []
-  const order = verdict.order
-  if (order) {
-    const how = order.limit ? `at a ${money(order.limit)} limit` : 'at market'
-    out.push({
-      label: orderText(order, money),
-      prompt: `${order.side === 'sell' ? 'Sell' : 'Buy'} ${units(order.quantity)} ${how}, as you suggested.`,
-    })
+/** One button per action Lucius proposed — its label, and the request it puts in the chat. */
+function suggestionFor(a: VerdictAction, money: (v: number) => string): Suggestion {
+  if (a.type === 'order') {
+    const verb = a.side === 'sell' ? 'Sell' : 'Buy'
+    const at = a.limit ? ` at ${money(a.limit)}` : ' at market'
+    const how = a.limit ? `at a ${money(a.limit)} limit` : 'at market'
+    return {
+      label: `${verb} ${units(a.quantity)}${at}`,
+      prompt: `${verb} ${units(a.quantity)} ${how}, as you suggested.`,
+    }
   }
-  if (verdict.alert !== true) return out
-  const below = verdict.levels.find((l) => l.kind !== 'trim')
-  const above = verdict.levels.find((l) => l.kind === 'trim')
-  const when = [
-    below && `falls to ${money(below.price)}`,
-    above && `rises to ${money(above.price)}`,
-  ].filter(Boolean)
-  if (when.length) {
-    const label = [below && `below ${money(below.price)}`, above && `above ${money(above.price)}`]
-      .filter(Boolean)
-      .join(' or ')
-    out.push({
-      label: `Alert me ${label}`,
-      prompt: `Set price alerts: tell me if it ${when.join(' or ')}.`,
-    })
+  const way = a.when === 'below' ? 'falls to' : 'rises to'
+  return {
+    label: `Alert me ${a.when} ${money(a.price)}`,
+    prompt: `Set a price alert: tell me if it ${way} ${money(a.price)}.`,
   }
-  return out
 }
 
 export function PositionVerdictLine({
@@ -77,7 +58,7 @@ export function PositionVerdictLine({
   const composer = useChatComposerOptional()
   const sym = verdict.currency ? getCurrencySymbol(verdict.currency) : ''
   const money = (v: number) => `${sym}${fPrice(v, priceMaxFrac)}`
-  const suggestions = composer ? suggestionsFor(verdict, money) : []
+  const suggestions = composer ? verdict.actions.map((a) => suggestionFor(a, money)) : []
   const send = (prompt: string) => {
     composer?.addMention(
       { type: 'instrument', ref: instrumentId, label: ticker || name },

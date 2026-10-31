@@ -202,17 +202,19 @@ keeps its levels unless something has changed, and if the price falls through it
 plainly: it either calls **Sell**, or says why it's holding.
 
 Most of the time the call is to do nothing, and then there's nothing to tap. When Lucius decides
-an action would help, up to two buttons follow, each handing Lucius a request ready to send:
+something would help, it adds a few actions under the call (usually no more than three), each a
+button with prices Lucius chose:
 
-- **The order**, for a call that moves money, e.g. *Sell 7 at $243.41*: how many shares, never
-  more than you hold, and a limit price close to today's. Open Net Worth can't place a trade with
-  your broker itself; Lucius can record the sale once it has filled.
-- **An alert**, only when Lucius judges a new one would help, e.g. *Alert me below $209.67 or above
-  $269.92*. The lower price is the stop, where
-  Lucius would sell to cap the loss (for a stock you watch, the price to buy at); the higher one
-  is where it would take some profit. A level you set in **Your Thesis** always replaces Lucius's.
-  Lucius is told the price alerts you already have on the stock, reuses one when it fits, and
-  doesn't offer this when your alerts already cover its levels.
+- **An order**, e.g. *Sell 5 at $260*. A trim can be staged, *Sell 5 at $260* and *Sell 5 at
+  $280*. Orders always follow the call: a Hold or Wait never carries one, a Trim or Sell only
+  sells, an Add or Buy only buys, and the sells together never come to more than you hold. Open
+  Net Worth can't place a trade with your broker itself; Lucius can record the sale once it has
+  filled.
+- **A price alert**, e.g. *Alert me below $112*, at any price that matters, not only Lucius's stop
+  or trim. Lucius is told the alerts you already have on the stock and doesn't repeat them.
+
+An order whose limit is far from today's price, or an alert on the wrong side of the price, is
+dropped rather than changed. A level you set in **Your Thesis** always replaces Lucius's.
 
 On a computer the request lands in the Lucius box at the bottom of the screen; on a phone you're
 taken to the Lucius tab with it typed in. Nothing happens until you press send.

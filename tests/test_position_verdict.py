@@ -79,8 +79,7 @@ def test_the_thesis_level_wins_and_distances_come_from_todays_price():
         "action": "hold",
         "why": "x",
         "currency": "USD",
-        "order": None,
-        "alert": False,
+        "actions": [],
         "levels": [
             {"kind": "stop", "price": 50.0, "source": "thesis", "distance_pct": -50.0},
             {"kind": "trim", "price": 120.0, "source": "lucius", "distance_pct": 20.0},
@@ -213,40 +212,96 @@ def test_a_watched_ticker_is_told_its_price(monkeypatch, db_isolated, aapl_thesi
     assert analyst_mod._verdict_context("inst-aapl", held=True) == ""
 
 
-# ── a call that moves money carries the order to place ──────────────────────────
+# ── the actions Lucius proposes, each with its own prices ───────────────────────
 
 
-def test_a_trim_carries_its_order_capped_at_the_position():
-    raw = {"action": "trim", "why": "x", "quantity": 25, "limit": 102}
-    v = pv.normalize(raw, held=True, price=100.0, held_qty=100)
-    assert v["order"] == {"side": "sell", "quantity": 25.0, "limit": 102.0}
-    shown = pv.compose(v, None, held=True, price=100.0, currency="USD")
-    assert shown["order"] == {"side": "sell", "quantity": 25.0, "limit": 102.0}
+def test_a_staged_trim_keeps_every_order_lucius_wrote():
+    raw = {
+        "action": "trim",
+        "why": "x",
+        "actions": [
+            {"type": "order", "side": "sell", "quantity": 5, "limit": 104},
+            {"type": "order", "side": "sell", "quantity": 5, "limit": 112},
+            {"type": "alert", "when": "below", "price": 90},
+            {"type": "alert", "when": "above", "price": 130},
+        ],
+    }
+    v = pv.normalize(raw, held=True, price=100.0, held_qty=40)
+    assert v["actions"] == [
+        {"type": "order", "side": "sell", "quantity": 5.0, "limit": 104.0},
+        {"type": "order", "side": "sell", "quantity": 5.0, "limit": 112.0},
+        {"type": "alert", "when": "below", "price": 90.0},
+        {"type": "alert", "when": "above", "price": 130.0},
+    ]  # four kept: the prompt asks for at most three, nothing here drops the fourth
+    assert pv.compose(v, None, held=True, price=100.0, currency="USD")["actions"] == v["actions"]
 
 
 @pytest.mark.parametrize(
-    ("raw", "held_qty", "order"),
+    ("action", "item", "kept"),
     [
-        ({"action": "sell", "quantity": 150}, 100, None),  # more than is held
-        ({"action": "sell", "quantity": 10}, None, None),  # holding unknown
-        ({"action": "add", "quantity": 10, "limit": 300}, 100, {"side": "buy", "quantity": 10.0}),
-        ({"action": "hold", "quantity": 10}, 100, None),
-        ({"action": "trim", "quantity": 0}, 100, None),
+        ("hold", {"type": "order", "side": "sell", "quantity": 5}, False),  # a hold has no orders
+        ("trim", {"type": "order", "side": "buy", "quantity": 5}, False),  # against the call
+        ("trim", {"type": "order", "side": "sell", "quantity": 5, "limit": 150}, False),  # far
+        ("trim", {"type": "order", "side": "sell", "quantity": 0}, False),
+        ("trim", {"type": "order", "side": "sell", "quantity": 5}, True),  # at market
+        ("add", {"type": "order", "side": "buy", "quantity": 5, "limit": 98}, True),
+        ("hold", {"type": "alert", "when": "below", "price": 110}, False),  # wrong side
+        ("hold", {"type": "alert", "when": "above", "price": 400}, False),  # too far
+        ("hold", {"type": "alert", "when": "sideways", "price": 90}, False),
+        ("hold", {"type": "alert", "when": "below", "price": 90}, True),
+        ("hold", {"type": "note", "text": "review"}, False),
     ],
 )
-def test_an_order_that_cannot_be_placed_is_dropped(raw, held_qty, order):
-    v = pv.normalize({"why": "x", **raw}, held=True, price=100.0, held_qty=held_qty)
-    assert v.get("order") == order
-
-
-def test_a_watched_buy_is_an_order_too_and_the_next_take_is_told_it():
+def test_an_action_that_cannot_be_right_is_dropped_never_adjusted(action, item, kept):
     v = pv.normalize(
-        {"action": "buy", "why": "x", "quantity": 5, "limit": 98}, held=False, price=100.0
+        {"action": action, "why": "x", "actions": [item]}, held=True, price=100.0, held_qty=40
     )
-    assert v["order"] == {"side": "buy", "quantity": 5.0, "limit": 98.0}
-    assert "Order you suggested then: buy 5 at USD 98 limit." in pv.prior_block(
+    assert bool(v.get("actions")) is kept
+
+
+def test_staged_sells_never_add_up_to_more_than_the_position():
+    sells = [{"type": "order", "side": "sell", "quantity": q} for q in (20, 15, 10)]
+    v = pv.normalize(
+        {"action": "sell", "why": "x", "actions": sells}, held=True, price=100.0, held_qty=40
+    )
+    assert [a["quantity"] for a in v["actions"]] == [20.0, 15.0]
+    assert "actions" not in pv.normalize(
+        {"action": "sell", "why": "x", "actions": sells}, held=True, price=100.0, held_qty=None
+    )
+
+
+def test_a_watched_buy_carries_buy_orders_only_and_the_next_take_is_told_them():
+    raw = {
+        "action": "buy",
+        "why": "x",
+        "actions": [
+            {"type": "order", "side": "buy", "quantity": 5, "limit": 98},
+            {"type": "order", "side": "sell", "quantity": 5},
+        ],
+    }
+    v = pv.normalize(raw, held=False, price=100.0)
+    assert v["actions"] == [{"type": "order", "side": "buy", "quantity": 5.0, "limit": 98.0}]
+    assert "Actions you suggested then: buy 5 at USD 98 limit." in pv.prior_block(
         v, held=False, currency="USD"
     )
+
+
+def test_a_call_saved_before_actions_were_a_list_still_shows_its_buttons():
+    old = {
+        "action": "trim",
+        "why": "x",
+        "held": True,
+        "stop": 80.0,
+        "trim": 120.0,
+        "order": {"side": "sell", "quantity": 7, "limit": 101},
+        "alert": True,
+    }
+    assert pv.stored_actions(old) == [
+        {"type": "order", "side": "sell", "quantity": 7, "limit": 101},
+        {"type": "alert", "when": "below", "price": 80.0},
+        {"type": "alert", "when": "above", "price": 120.0},
+    ]
+    assert pv.stored_actions({**old, "alert": None, "order": None}) == []
 
 
 # ── a chat bound to the stock carries the call ──────────────────────────────────
@@ -263,15 +318,19 @@ def test_a_chat_about_the_stock_is_told_the_take_and_its_call(db_isolated, aapl_
             "position_verdict": {
                 **_PRIOR,
                 "action": "trim",
-                "order": {"side": "sell", "quantity": 7, "limit": 101},
+                "actions": [
+                    {"type": "order", "side": "sell", "quantity": 7, "limit": 101},
+                    {"type": "alert", "when": "below", "price": 80},
+                ],
             },
         }
     )
     block = session_brief_block("inst-aapl", "Apple")
     assert "lucius_take: Large holding that ran ahead of earnings." in block
     assert (
-        "lucius_call: TRIM — Cloud demand is strong. Order: sell 7 at a USD 101 limit. "
-        "Levels: stop USD 50 (your thesis), trim USD 180 (your thesis). (as of 2026-10-31)"
+        "lucius_call: TRIM — Cloud demand is strong. Suggested: sell 7 at USD 101 limit; "
+        "alert below USD 80. Levels: stop USD 50 (your thesis), trim USD 180 (your thesis). "
+        "(as of 2026-10-31)"
     ) in block
 
 
@@ -301,15 +360,3 @@ def test_the_take_context_carries_the_alerts(monkeypatch, db_isolated, aapl_thes
     )
     ctx = analyst_mod._verdict_context("inst-aapl", held=True)
     assert "YOUR PRICE ALERTS on this ticker: ≤ USD 80 (Floor)." in ctx
-
-
-def test_an_alert_is_offered_only_when_lucius_asks_for_one():
-    """No action is the default: without an explicit ``alert: true`` there is no alert button."""
-    v = pv.normalize(
-        {"action": "hold", "why": "x", "stop": 80, "alert": True}, held=True, price=100.0
-    )
-    assert pv.compose(v, None, held=True, price=100.0, currency="USD")["alert"] is True
-    for raw in ({"alert": False}, {}, {"alert": "yes"}):
-        v = pv.normalize({"action": "hold", "why": "x", "stop": 80, **raw}, held=True, price=100.0)
-        assert "alert" not in v
-        assert pv.compose(v, None, held=True, price=100.0, currency="USD")["alert"] is False

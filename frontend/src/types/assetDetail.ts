@@ -312,20 +312,18 @@ export interface VerdictLevel {
   distance_pct: number | null
 }
 
-/** The order behind a trim / sell / add / buy: how many units, and a limit price when plausible. */
-export interface VerdictOrder {
-  side: 'buy' | 'sell'
-  quantity: number
-  limit?: number
-}
+/** One action Lucius proposed behind its call, with its own prices — an order to place or a
+ *  price alert to set. Already checked server-side (services/position_verdict). */
+export type VerdictAction =
+  | { type: 'order'; side: 'buy' | 'sell'; quantity: number; limit?: number }
+  | { type: 'alert'; when: 'below' | 'above'; price: number }
 
 export interface PositionVerdict {
   action: 'hold' | 'add' | 'trim' | 'sell' | 'buy' | 'wait'
   why: string
   levels: VerdictLevel[]
-  order?: VerdictOrder | null
-  /** True only when Lucius judged a new price alert at these levels would help. */
-  alert?: boolean
+  /** What Lucius proposes doing — usually none. One button each, in Lucius's order. */
+  actions: VerdictAction[]
   currency: string
 }
 

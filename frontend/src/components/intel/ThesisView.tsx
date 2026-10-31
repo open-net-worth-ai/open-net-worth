@@ -69,20 +69,22 @@ function PriceBar({
 export function thesisBuildPrompt(sym: string, held: boolean): string {
   const fields = held
     ? 'why I own it; its role in my portfolio (core, satellite or speculative); how long I plan ' +
-      'to hold it; what would prove me wrong (the business fact that breaks the thesis); the ' +
-      'price below which I would sell (my stop); and the price above which I would take some ' +
-      'profit (my trim level)'
+      'to hold it; what would prove me wrong (for a company, the business fact that breaks the ' +
+      'thesis; for a fund, the market or fund fact); the price below which I would sell (my ' +
+      'stop); and the price above which I would take some profit (my trim level)'
     : 'why I would buy it; what would prove the case wrong; the price range I would buy in (my ' +
       'buy zone); and what I think it is worth (fair value)'
-  const grounding = held
-    ? 'my actual position (cost, weight, gain or loss)'
-    : 'its current price and valuation'
+  const picture = held
+    ? 'this position (cost, weight, gain or loss), how concentrated it makes me and how much it ' +
+      'overlaps my other holdings'
+    : 'how it would fit next to what I already hold, and the cash I have to invest'
   return (
-    `Help me build my investment thesis for ${sym}. Interview me one question at a time, ` +
-    `covering ${fields}. Before each question, suggest a sensible answer from ${grounding}, the ` +
-    'latest news and the analyst view, and keep it short. Push back if my reasoning has gaps. ' +
-    'When we have agreed every part, show me the full thesis and save it as my thesis for ' +
-    `${sym} once I confirm.`
+    `Help me build my investment thesis for ${sym}. First look at my whole picture — ${picture}, ` +
+    'my net worth, and my profile and goals — so the role, horizon and prices fit my portfolio, ' +
+    `not just this asset. Then interview me one question at a time, covering ${fields}. Before ` +
+    'each question, suggest a sensible answer from that picture, the latest news and the analyst ' +
+    'view, and keep it short. Push back if my reasoning has gaps. When we have agreed every part, ' +
+    `show me the full thesis and save it as my thesis for ${sym} once I confirm.`
   )
 }
 

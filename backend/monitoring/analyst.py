@@ -463,12 +463,14 @@ def _output_skeleton(include_key_issues: bool, is_held: bool = True) -> str:
             'your position — never a number>", '
             + (
                 '"verdict": {"action": "hold|add|trim|sell", "why": "<one plain sentence>", '
-                '"stop": <price or null>, "trim": <price or null>, '
-                '"quantity": <shares or null>, "limit": <price or null>, "alert": true|false}'
+                '"stop": <price or null>, "trim": <price or null>, "actions": [<0-3 of '
+                '{"type": "order", "side": "buy|sell", "quantity": <shares>, "limit": <price or '
+                'null>} or {"type": "alert", "when": "below|above", "price": <price>}>]}'
                 if is_held
                 else '"verdict": {"action": "buy|wait", "why": "<one plain sentence>", '
-                '"entry": <price or null>, "quantity": <shares or null>, '
-                '"limit": <price or null>, "alert": true|false}'
+                '"entry": <price or null>, "actions": [<0-3 of {"type": "order", "side": '
+                '"buy", "quantity": <shares>, "limit": <price or null>} or {"type": "alert", '
+                '"when": "below|above", "price": <price>}>]}'
             )
         )
     return base + "}"
@@ -566,9 +568,18 @@ def _key_issues_system_instruction(
 
 
 def _verdict_instruction(is_held: bool) -> str:
-    """The ask for ``verdict`` — the take's one clear call, shown above the narrative as an
-    action line (``services.position_verdict``). The narrative stays numbers-free; the levels
-    live in their own fields, and the user's thesis levels replace them on screen."""
+    """The ask for ``verdict`` — the take's ONE call and the actions behind it, each with its own
+    prices (``services.position_verdict``, which only checks them). The narrative stays
+    numbers-free; numbers live in the verdict's own fields."""
+    actions = (
+        "actions: 0-3 concrete things the user could do now, each with prices YOU choose — an "
+        'order {"type": "order", "side": "buy|sell", "quantity": <shares/units>, "limit": '
+        '<limit price, or null for market>} or a price alert {"type": "alert", "when": '
+        '"below|above", "price": <price>}. A trim can be staged (e.g. sell part at one price '
+        "and more at a higher one); an alert can sit at any price that matters, not only your "
+        "stop or trim. Never propose an alert YOUR PRICE ALERTS already cover. Most of the time "
+        "the right answer is to do nothing: leave actions EMPTY unless one genuinely helps. "
+    )
     if is_held:
         return (
             "verdict: your ONE call on this position today — action is exactly one of hold, "
@@ -576,24 +587,19 @@ def _verdict_instruction(is_held: bool) -> str:
             "the call. stop: the price below which you would sell; trim: the price above which "
             "you would take some profit — real prices in the asset's own currency, or null "
             "if you can't ground one. If YOUR THESIS is given, follow it: "
-            "sell only past its stop or once its breaks_if has happened. For add, trim or sell, "
-            "make it an order someone could place: quantity — how many shares/units to buy or "
-            "sell (a sell is never more than the position quantity above; a trim is part of it); "
-            "limit — the limit price, close to today's. Null both for hold. alert — true ONLY "
-            "when a new price alert at your stop/trim would genuinely help and YOUR PRICE ALERTS "
-            "don't already cover them; otherwise false. Most of the time the right answer is to "
-            "do nothing — no order, no alert. "
+            "sell only past its stop or once its breaks_if has happened. "
+            + actions
+            + "Orders follow the call: sells only for trim or sell, buys only for add, and the "
+            "sells together never exceed the position quantity above. "
         )
     return (
         "verdict: your ONE call on this ticker today — action is exactly buy or wait. why: one "
         "plain sentence (20 words max) naming what would change the call. entry: the price at "
         "or below which buying makes sense, in the asset's own currency, or null if you can't "
-        "ground one. If YOUR THESIS gives a buy zone, the call is buy only inside it. For buy, "
-        "make it an order someone could place: quantity — a starter position sized for this "
-        "investor's portfolio; limit — the limit price, close to today's. Null both for wait. "
-        "alert — true ONLY when a new price alert at your entry would genuinely help and YOUR "
-        "PRICE ALERTS don't already cover it; otherwise false. Most of the time the right answer "
-        "is to do nothing. "
+        "ground one. If YOUR THESIS gives a buy zone, the call is buy only inside it. "
+        + actions
+        + "Orders are buys only, and only for buy: a starter position sized for this investor's "
+        "portfolio. "
     )
 
 
@@ -1049,9 +1055,10 @@ class _AnalysisOutput(BaseModel):
         default_factory=dict,
         description="ONLY when explicitly asked (a HELD or WATCHED asset subject): the take's one "
         'call — held: {"action": "hold|add|trim|sell", "why": str, "stop": number|null, '
-        '"trim": number|null, "quantity": number|null, "limit": number|null, "alert": bool}; '
-        'watched: {"action": "buy|wait", "why": str, "entry": number|null, "quantity": '
-        'number|null, "limit": number|null, "alert": bool}. Leave EMPTY for every other call.',
+        '"trim": number|null, "actions": [...]}; watched: {"action": "buy|wait", "why": str, '
+        '"entry": number|null, "actions": [...]} — each action {"type": "order", "side", '
+        '"quantity", "limit"} or {"type": "alert", "when": "below|above", "price"}, 0-3, usually '
+        "none. Leave EMPTY for every other call.",
     )
 
     @field_validator("key_issues", mode="before")
