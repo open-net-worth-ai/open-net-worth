@@ -17,6 +17,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from backend.api.data_change_transport import compute_only
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.models.retirement import OutlookLevers
 from backend.services import retirement_plan
@@ -44,11 +45,13 @@ def _call(fn, *args, **kwargs) -> Any:
 
 
 @router.post("/api/plan/outlook")
+@compute_only
 def post_outlook(body: OutlookRequest):
     return _call(retirement_plan.outlook, body.levers, quick=body.quick, outcomes=body.outcomes)
 
 
 @router.post("/api/plan/outlook/insights")
+@compute_only
 def post_insights(body: InsightsRequest):
     return _call(retirement_plan.insights, body.levers)
 
