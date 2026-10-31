@@ -43,7 +43,7 @@ closes it too.
 When it's sent you'll see **Thank you. Your report was sent.** and a **Reference** — quote it if
 you write to us about the same problem. We aim to investigate and fix reports within 48 hours.
 
-Prefer to talk it through? The dialog also links to our [Discord](https://discord.gg/eCGBd4zg3B).
+Prefer to talk it through? The dialog also links to our [Discord](https://discord.gg/gRRsQRgwE8).
 
 ## What a report contains
 

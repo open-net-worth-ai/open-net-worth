@@ -76,11 +76,11 @@ describe('Report a problem dialog (browser)', () => {
     await openDialog()
     expect(screen.getByText(/tell you when the fix is out/)).toBeTruthy()
     const link = screen.getByRole('link', { name: 'Join us on Discord' })
-    expect(link.getAttribute('href')).toBe('https://discord.gg/eCGBd4zg3B')
+    expect(link.getAttribute('href')).toBe('https://discord.gg/gRRsQRgwE8')
     const open = vi.spyOn(window, 'open').mockReturnValue(null)
     fireEvent.click(link)
     expect(open).toHaveBeenCalledWith(
-      'https://discord.gg/eCGBd4zg3B',
+      'https://discord.gg/gRRsQRgwE8',
       '_blank',
       'noopener,noreferrer',
     )
