@@ -162,8 +162,10 @@ def _build_core_offer() -> list[dict]:
     """
     from backend.ai.tools._extra_groups_scope import get_extra_names
     from backend.ai.tools._groups import CORE_TOOL_NAMES
+    from backend.ai.tools.catalog import hidden_tools
 
-    loaded: set[str] = set(get_extra_names())
+    # A name a session loaded earlier stays in its persisted set, so the hide is applied here too.
+    loaded: set[str] = set(get_extra_names()) - hidden_tools()
     core = [t for t in TOOL_SCHEMAS if t["name"] in CORE_TOOL_NAMES]
     extra = [t for t in TOOL_SCHEMAS if t["name"] in loaded and t["name"] not in CORE_TOOL_NAMES]
     ext_mcp = [s for s in _external_tool_schemas() if s.get("name") in loaded]

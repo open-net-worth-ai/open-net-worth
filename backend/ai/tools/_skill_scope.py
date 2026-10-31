@@ -201,9 +201,10 @@ def offer_tool_names() -> Optional[frozenset]:
     ``snapshot_scope``/``restore_scope`` round-trip the caller's raw list unchanged; every
     real consumer reads through this getter. Deferred import mirrors
     ``ai/tools/_groups.py``'s ``_candidate_schemas`` (avoids a load-order cycle)."""
-    from backend.ai.tools.catalog import _CATALOG_HIDDEN
+    from backend.ai.tools.catalog import hidden_tools
 
     offer = _offer_scope.get()
-    if offer is None or not _CATALOG_HIDDEN:
+    hidden = hidden_tools() if offer is not None else None
+    if not hidden:
         return offer
-    return offer - _CATALOG_HIDDEN
+    return offer - hidden
