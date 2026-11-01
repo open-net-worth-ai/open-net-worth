@@ -135,7 +135,10 @@ cmd_ship() {
   printf '%s' "${sha}" | remote_env_set ONW_DEMO_TAG
   if remote "test -s ${BOOK}/data/onw.db"; then
     compose up -d app
-    remote "docker image prune -af --filter 'until=168h' >/dev/null" || true
+    # Keep the running image and the newest other one (the rollback target). Each is ~4 GB and
+    # the daily job ships most days, so a 7-day window filled the disk to 74% (2026-11-01).
+    remote "docker images onw-demo --format '{{.Tag}}' | grep -vx '${sha}' | tail -n +2 \
+      | xargs -r -I{} docker rmi -f onw-demo:{} >/dev/null; docker image prune -f >/dev/null" || true
     echo "==> running onw-demo:${sha}"
   else
     echo "==> image loaded; no book yet — next: $0 book --seed"
