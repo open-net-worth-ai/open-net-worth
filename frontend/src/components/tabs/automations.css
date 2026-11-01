@@ -1927,3 +1927,130 @@
   font-size: 11.5px;
   color: var(--faint);
 }
+
+/* ── Data syncs (fixed rules, no AI model) — today the two-way YNAB sync ── */
+/* The Lucius / Data sync tabs close the masthead, under the title on a row of their own: the
+   page's own panels supply the gap below. */
+.a3-masthead--tabs {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+}
+.a3-views {
+  margin-top: var(--space-4);
+  margin-bottom: 0;
+}
+.a3-kind-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: var(--text-xs);
+  color: var(--fg-3);
+}
+.a3-attention {
+  padding: 14px 15px;
+  border-radius: var(--radius-lg);
+  border: 1px solid color-mix(in srgb, var(--warn) 34%, var(--line));
+  background: color-mix(in srgb, var(--warn) 6%, var(--surface));
+}
+.a3-attention .a3-block-h .count {
+  color: var(--warn);
+}
+.a3-schedule-row {
+  max-width: 260px;
+}
+.a3-rules {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-base);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.a3-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-width: 760px;
+}
+.a3-step {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding-bottom: 22px;
+}
+/* The rail joining one step's number to the next. */
+.a3-step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 13px;
+  top: 30px;
+  bottom: 4px;
+  width: 1px;
+  background: var(--line);
+}
+.a3-step-n {
+  flex: none;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: var(--text-sm);
+  font-weight: 700;
+  border: 1px solid var(--line);
+  color: var(--faint);
+  background: var(--surface);
+}
+.a3-step.current .a3-step-n {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+.a3-step.done .a3-step-n {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 40%, var(--line));
+  background: color-mix(in srgb, var(--good) 10%, var(--surface));
+}
+.a3-step-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+.a3-step-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--ink);
+}
+.a3-step.later .a3-step-title {
+  color: var(--faint);
+}
+.a3-step-body p {
+  margin: 0;
+  font-size: var(--text-base);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.a3-step.current .a3-step-body {
+  padding: 14px 16px;
+  margin-top: -4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.a3-last-sync {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  line-height: 1.5;
+}
+.a3-last-sync.bad {
+  color: var(--bad);
+}

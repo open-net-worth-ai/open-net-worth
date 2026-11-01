@@ -1,16 +1,12 @@
 import { useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import { authFetch } from '../../../api/client'
 import { useQueryCache } from '../../../state/queryCache'
 import {
-  Badge,
   Button,
   Cluster,
   ConfirmDialog,
-  EmptyState,
   FormField,
   Meter,
-  Panel,
   Select,
   Stack,
   SummaryBar,
@@ -19,10 +15,9 @@ import {
 } from '../../ui'
 import { detailOf, messageOf, useRun, type Preview, type RunSummary } from './runs'
 
-// The YNAB panels of Imports & sync: the connection (the token itself lives on the YNAB connector
-// card and never reaches this screen) and the import (plan -> preview -> import -> re-check). The
-// work is a server-owned job, so this only starts it and shows the run it created; the run's
-// report opens as a page of its own.
+// The import step of the two-way YNAB sync (plan -> preview -> import -> re-check). The token
+// lives on the YNAB connector and never reaches this screen. The work is a server-owned job, so
+// this only starts it and shows the run it created; the run's report opens as a page of its own.
 
 interface Plan {
   id: string
@@ -47,7 +42,6 @@ export function YnabImport(props: {
   onStarted: () => void
   onOpen: (id: string) => void
 }) {
-  const navigate = useNavigate()
   const status = useQueryCache<YnabStatus>('/api/ynab/status', async () => {
     const r = await authFetch('/api/ynab/status')
     if (!r.ok) throw new Error(await detailOf(r, 'Could not read the YNAB connector.'))
@@ -107,94 +101,50 @@ export function YnabImport(props: {
 
   return (
     <>
-      <Panel
-        title="Connection"
-        actions={
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => void navigate({ to: '/connectors' } as never)}
-          >
-            Open connector
-          </Button>
-        }
-      >
-        <Cluster gap="--space-3">
-          <Badge tone={tokenSaved ? 'pos' : 'warn'}>
-            {tokenSaved ? 'Token saved' : 'No token'}
-          </Badge>
-          {status.data?.budget_name && <Text size="sm">{status.data.budget_name}</Text>}
-          <Text size="sm" tone="faint">
-            Uses the token saved on the YNAB connector.
-          </Text>
-        </Cluster>
-      </Panel>
-
-      <Panel
-        title="Import"
-        subtitle="Accounts, categories, envelopes, every transaction and each month's Assigned, checked against YNAB. Safe to run again: nothing is booked twice."
-      >
-        {status.initialLoading ? (
-          <Text size="sm" tone="faint">
-            Loading…
-          </Text>
-        ) : !tokenSaved ? (
-          <EmptyState
-            title="Save your YNAB access token first"
-            body="The token lives on the YNAB connector. Once it is saved, pick a plan here."
+      {status.initialLoading ? (
+        <Text size="sm" tone="faint">
+          Loading…
+        </Text>
+      ) : !tokenSaved ? (
+        <Text size="sm" tone="faint">
+          Save your YNAB access token on the YNAB connector first.
+        </Text>
+      ) : (
+        <Stack gap="--space-4">
+          <PlanPicker
+            plans={plans}
+            planId={planId}
+            disabled={!!running}
+            onChange={setPlanId}
             action={
-              <Button
-                variant="secondary"
-                onClick={() => void navigate({ to: '/connectors' } as never)}
-              >
-                Open connector
-              </Button>
+              <Cluster gap="--space-2">
+                <Button
+                  variant="secondary"
+                  disabled={!planId || !!running}
+                  loading={busy}
+                  onClick={() => void launch('preview')}
+                >
+                  Preview
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={!preview || preview.currency_blocked || !!running}
+                  onClick={importNow}
+                >
+                  Import
+                </Button>
+              </Cluster>
             }
           />
-        ) : (
-          <Stack gap="--space-4">
-            <PlanPicker
-              plans={plans}
-              planId={planId}
-              disabled={!!running}
-              onChange={setPlanId}
-              action={
-                <Cluster gap="--space-2">
-                  <Button
-                    variant="secondary"
-                    disabled={!planId || !!running}
-                    loading={busy}
-                    onClick={() => void launch('preview')}
-                  >
-                    Preview
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={!preview || preview.currency_blocked || !!running}
-                    onClick={importNow}
-                  >
-                    Import
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={!planId || !!running}
-                    onClick={() => void launch('verify')}
-                  >
-                    Re-check
-                  </Button>
-                </Cluster>
-              }
-            />
-            {startError && (
-              <Text size="sm" tone="bad">
-                {startError}
-              </Text>
-            )}
-            {running && <LiveStrip run={running} onOpen={props.onOpen} />}
-            {!running && preview && <PreviewSummary preview={preview} />}
-          </Stack>
-        )}
-      </Panel>
+          {startError && (
+            <Text size="sm" tone="bad">
+              {startError}
+            </Text>
+          )}
+          {running && <LiveStrip run={running} onOpen={props.onOpen} />}
+          {!running && preview && <PreviewSummary preview={preview} />}
+        </Stack>
+      )}
 
       <ConfirmDialog
         data={confirm}

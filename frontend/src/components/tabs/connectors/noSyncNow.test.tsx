@@ -6,7 +6,7 @@
 //
 // The one deliberate exception (owner decision, 2026-10-20) lives on the Imports & sync page, not
 // on a connector card: YNAB's scheduled two-way sync has its own "Sync now" under
-// /api/ynab/sync (imports/SyncPanel.test.tsx). The YNAB card only READS that status for its
+// /api/ynab/sync (automations/builtin/YnabSyncDetail.test.tsx). The YNAB card only READS that status for its
 // one-line summary, so for YNAB exactly that one GET is allowed, and no button.
 
 import type { JSX } from 'react'

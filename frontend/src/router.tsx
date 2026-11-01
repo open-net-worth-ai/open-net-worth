@@ -164,6 +164,11 @@ const automationsRoute = createRoute({
     // Deep-link from a Connectors provider section's "Automate with a template" — opens the
     // editor prefilled with `sync_<provider>` and is cleared once consumed (Automations.tsx).
     template: typeof search.template === 'string' ? search.template : undefined,
+    // `view=sync` shows the data syncs (fixed rules, no AI); `sync=ynab` opens one, and
+    // `report` one of its runs.
+    view: typeof search.view === 'string' ? search.view : undefined,
+    sync: typeof search.sync === 'string' ? search.sync : undefined,
+    report: typeof search.report === 'string' ? search.report : undefined,
   }),
 })
 const buildRoute = createRoute({
@@ -179,15 +184,6 @@ const connectorsRoute = createRoute({
   // SLUG_ALIASES generates the old /integrations → /connectors redirect (a frozen historical
   // URL, not the tab id — see SLUG_ALIASES's own comment).
   path: '/connectors',
-})
-const importsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: '/imports',
-  // ?provider=ynab&run=<id> — the provider tab, and one run opened as a report.
-  validateSearch: (search: Record<string, unknown>) => ({
-    provider: typeof search.provider === 'string' ? search.provider : undefined,
-    run: typeof search.run === 'string' ? search.run : undefined,
-  }),
 })
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -294,7 +290,6 @@ const routeTree = rootRoute.addChildren([
   buildRoute,
   profileRoute,
   connectorsRoute,
-  importsRoute,
   settingsRoute,
   helpIndexRoute,
   helpDocRoute,

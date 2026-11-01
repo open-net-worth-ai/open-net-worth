@@ -61,7 +61,7 @@ export function RunReport({ runId, onBack }: { runId: string; onBack: () => void
       <Cluster justify="between" gap="--space-3">
         <Cluster gap="--space-3">
           <Button size="sm" variant="ghost" onClick={onBack}>
-            ‹ Runs
+            ‹ Back
           </Button>
           <Text size="lg" weight={600}>
             {runTitle(r)}

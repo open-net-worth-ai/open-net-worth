@@ -197,6 +197,19 @@ finished Automation doesn't sit there for good.
 
 Deleting an Automation also deletes its run history. It can't be undone.
 
+## Data syncs
+
+The switch at the top of **Automations** has two sides. **Lucius** holds the jobs you give Lucius
+(everything on this page). **Data sync** holds syncs that keep this book and another app in step
+by fixed rules instead: no prompt, model or permission mode, no AI involved, nothing to pay. Each
+opens to its own page with its settings and history, and the switch shows how many items wait for
+your review.
+
+Today there is one: [Two-way sync with YNAB](../features/imports-and-sync.md). It imports your
+YNAB plan and then keeps it and this book in step, both directions. The **Sync YNAB** template
+under Lucius is the one-way version: Lucius fetches new YNAB transactions and books them here,
+and doesn't copy categories or Assigned.
+
 ## Logging transactions from your email
 
 **Auto-log transactions from email** is in **Recommended**, and behind the **Automate** button on

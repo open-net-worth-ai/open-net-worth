@@ -34,7 +34,6 @@ import {
   FileCode,
   User,
   Share2,
-  Download,
   Settings as SettingsIcon,
   ChevronLeft,
   ChevronRight,
@@ -176,11 +175,7 @@ const Connectors = lazyChunk(() =>
   })),
 )
 
-const Imports = lazyChunk(() =>
-  import('./components/tabs/imports/ImportsTab').then((m) => ({ default: m.ImportsTab })),
-)
-
-const LAZY_TABS = [Commitments, Assets, Intel, Skills, Automations, Builder, Connectors, Imports]
+const LAZY_TABS = [Commitments, Assets, Intel, Skills, Automations, Builder, Connectors]
 
 /** Warms every lazy tab once the shell is idle, so a first visit skips the chunk wait. */
 function useWarmLazyTabs() {
@@ -212,7 +207,6 @@ const TAB_SKELETON_VARIANTS: Record<TabId, TabSkeletonVariant> = {
   build: 'builder',
   profile: 'workspace',
   connectors: 'connectors',
-  imports: 'workspace',
   settings: 'workspace',
   help: 'help',
 }
@@ -266,7 +260,6 @@ const TAB_ICONS: Record<TabId, ReactElement> = {
   build: <FileCode {...ICON_PROPS} />,
   profile: <User {...ICON_PROPS} />,
   connectors: <Share2 {...ICON_PROPS} />,
-  imports: <Download {...ICON_PROPS} />,
   settings: <SettingsIcon {...ICON_PROPS} />,
   // Same glyph as the topbar's own "Help" button below — one icon for Help everywhere.
   help: <Info {...ICON_PROPS} />,
@@ -1681,7 +1674,6 @@ function RouterShellInner() {
                             )}
                             {tabToRender === 'build' && <Builder />}
                             {tabToRender === 'connectors' && <Connectors />}
-                            {tabToRender === 'imports' && <Imports />}
                           </ErrorBoundary>
                         </Suspense>
                         {/* Outside the tab's Suspense: a lazy chart suspending re-ran the open

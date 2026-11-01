@@ -19937,12 +19937,6 @@ body.hide-amounts .mf-lbl-amt {
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.imp-table__actions {
-  text-align: right;
-}
-.imp-table__row--archived {
-  opacity: 0.6;
-}
 @media (max-width: 639.98px) {
   .imp-table thead {
     display: none;

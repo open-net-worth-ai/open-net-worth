@@ -31,7 +31,7 @@ describe('YnabImportLink', () => {
   it('reads import date, schedule and review count on one line', async () => {
     render(<YnabImportLink />)
     expect(await screen.findByText(/Imported .* · Sync every 1h · 1 to review/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Import & sync/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Two-way sync/ })).toBeTruthy()
   })
 
   it('leaves the sync parts out when it is off and nothing waits', async () => {

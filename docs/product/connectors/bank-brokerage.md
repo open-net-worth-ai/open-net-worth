@@ -248,8 +248,9 @@ move your whole plan across instead, use the migration below.
 ### Move your whole YNAB plan
 
 To move your accounts, categories, envelopes, every transaction and each month's budgeted amounts
-across, and check the result against YNAB, use **Import & sync…** on the YNAB connector page. It
-opens [Imports & sync](../features/imports-and-sync.md), which uses the token you saved here.
+across, and check the result against YNAB, use **Two-way sync…** on the YNAB connector page. It
+opens [Two-way sync with YNAB](../features/imports-and-sync.md) in Automations, which uses the
+token you saved here; the import is its second setup step.
 Take a [backup](../operations/backup-and-restore.md) first if you can; a fresh book is the
 cleanest target (the app also takes one before it writes anything).
 
@@ -265,17 +266,18 @@ once as a labelled balance adjustment. Goals and scheduled transactions are not 
 
 ### Keep the plan in sync both ways
 
-After the migration, the **Sync** panel on [Imports & sync](../features/imports-and-sync.md) keeps this book and that
+After the migration, [Two-way sync with YNAB](../features/imports-and-sync.md) (a data sync in Automations) keeps this book and that
 YNAB plan in step, on a schedule: **transactions** (new, edited, deleted, categorized, memo,
 cleared, splits, transfers) and each **month's Assigned per category**, in both directions. Accounts,
 goals and scheduled transactions are not synced, and a card's payment category is read from YNAB
 only — its Assigned is never sent.
 
-1. Pick the migrated plan, choose a **Schedule** (every 15 or 30 minutes, hourly — the default —
-   every 6 hours, daily, or **Manual only**) and switch **Sync automatically** on. The first run
+1. Click **Turn on** (the last setup step) and, if you like, change the **Schedule** (every 15 or
+   30 minutes, hourly — the default — every 6 hours, daily, or **Manual only**). The first run
    starts within a minute. **Sync now** runs it on demand; only one run happens at a time.
-2. The panel shows the **last run** and what it did ("3 sent to YNAB, 1 pulled, 1 needs review")
-   and the **next run**; the YNAB connector card carries the one-line version. Each run's full
+2. Its page shows the **last sync** and what it did ("3 sent to YNAB, 1 pulled, 1 needs review")
+   and the **next sync**; the YNAB connector card and its Automations card carry the one-line
+   version. Each run's full
    report (every transaction and Assigned figure it moved) is in the
    [run history](../features/imports-and-sync.md#reading-a-report).
 

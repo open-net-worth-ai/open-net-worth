@@ -208,7 +208,7 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
   {
     key: 'sync_ynab',
     name: 'Sync YNAB',
-    description: 'Fetch new YNAB transactions and book them.',
+    description: 'One way: Lucius fetches new YNAB transactions and books them here.',
     instructions:
       'Fetch new YNAB transactions and book them. Use the linked account ' +
       'for each one. If an account isn’t linked, ask me instead of guessing. Pick a category ' +

@@ -1,69 +1,80 @@
 ---
-title: Imports & sync
-description: Bring your history in from another budgeting app, check it against the original, and read the report of every run afterwards.
+title: Two-way sync with YNAB
+description: A data sync that brings your YNAB history in, keeps the two in step both ways, and keeps a report of every run.
 category: features
 order: 170
 audience: [user]
 status: stable
-related: [connectors/bank-brokerage, features/importing, operations/backup-and-restore, concepts/the-ledger]
-keywords: [imports, sync, two-way sync, schedule, ynab, migrate, migration, move, import history, run history, report, verify, preview, archive, re-check, interrupted]
+related: [lucius/automations, connectors/bank-brokerage, features/importing, operations/backup-and-restore, concepts/the-ledger]
+keywords: [imports, sync, data sync, automations, two-way sync, schedule, ynab, migrate, migration, move, import history, run history, report, verify, preview, archive, re-check, interrupted]
 ---
 
-# Imports & sync
+# Two-way sync with YNAB
 
-**Imports** (in the sidebar, under Connectors) is where you bring your history in from another
-budgeting app. Today that is **YNAB**: accounts, categories, envelopes, every transaction and each
-month's Assigned amounts, checked against YNAB's own figures. Every run is saved, so you can come
-back to its report whenever you like, from any device.
+**Two-way sync with YNAB** brings your history in from YNAB and then keeps the two in step: accounts,
+categories, envelopes, every transaction and each month's Assigned amounts, checked against YNAB's
+own figures. It is a **data sync**: open **Automations**, switch to **Data sync** at the top and
+pick it, or click **Two-way sync…** on the YNAB connector. A data sync follows fixed rules rather
+than a Lucius prompt, so no AI is involved and it costs nothing to run. Every run is
+saved, so you can come back to its report whenever you like, from any device.
 
-This is separate from [importing a statement](importing.md), which reads one bank or card file.
+This is separate from [importing a statement](importing.md), which reads one bank or card file, and
+from the one-way **Sync YNAB** template, where Lucius fetches new YNAB transactions on a schedule.
 
-## Connection
+## Set it up
 
-Your YNAB access token stays on the YNAB connector (**Connectors → YNAB**). This page only shows
-whether a token is saved and links there; without one, the import is disabled. To save a token, see
+Until it is set up, its page is three steps, each unlocked by the one before:
+
+1. **Connect YNAB.** Your YNAB access token stays on the YNAB connector (**Connectors → YNAB**);
+   this page never asks for it. **Open the YNAB connector** takes you there. To save a token, see
+   [Bank & brokerage connectors](../connectors/bank-brokerage.md#ynab).
+2. **Bring your YNAB history in.** Choose your plan and click **Preview**. Nothing is written. You
+   see how many accounts, transactions, categories and budget months would come across, any
+   warnings, whether the base currency would change (only in a book with no money data yet), and
+   which unused starter categories would be removed. Then click **Import**. If the book already
+   holds accounts that didn't come from YNAB you are asked to confirm first. The app takes a
+   [backup](../operations/backup-and-restore.md) before it writes anything and names it in the
+   report; if the backup fails, nothing is imported. **View live report** opens the run while it
+   works. You can close the tab: the work continues on the server. Running again is safe: nothing
+   is booked twice.
+3. **Turn on the sync.** From then on it runs every hour by default. You can stop after step 2 if
+   you only want your history.
+
+Once it has been imported it appears under **Automations → Data sync** with its schedule and an
+**N to review** tag when something needs you (the **Data sync** switch shows the same count). Its menu has **Sync now**, **Turn on** /
+**Turn off** and **Open**.
+
+## Once it's running
+
+The page reads like any Automation: the switch turns it on or off (off keeps the plan it is paired
+with), the next sync is next to it, and **Sync now** runs one on demand. Only one run happens at a
+time.
+
+- **Needs your review** comes first when something does: where both sides changed the same thing,
+  with **Keep Open Net Worth's** and **Keep YNAB's**.
+- **Schedule**: every 15 or 30 minutes, hourly, every 6 hours, daily, or manual only, and the last
+  sync and what it did ("3 sent to YNAB, 1 pulled, 1 needs review"), or why it failed.
+- **YNAB plan**: the plan it pairs with and when it was imported.
+- **⋯ → Re-check against YNAB** compares the book with YNAB's current figures, without writing.
+
+How the sync decides, what it sends and its limits are in
 [Bank & brokerage connectors](../connectors/bank-brokerage.md#ynab).
 
-## Import a plan
+## History
 
-1. Choose your plan and click **Preview**. Nothing is written. You see how many accounts,
-   transactions, categories and budget months would come across, any warnings, whether the base
-   currency would change (only in a book with no money data yet), and which unused starter
-   categories would be removed.
-2. Click **Import**. If the book already holds accounts that didn't come from YNAB you are asked to
-   confirm first. The app takes a [backup](../operations/backup-and-restore.md) before it writes
-   anything and names it in the report; if the backup fails, nothing is imported. Progress shows on
-   the page, and **View live report** opens the run while it works. You can close the tab: the work
-   continues on the server.
-3. **Re-check** compares the book with YNAB's current figures at any time, without writing.
-
-Running again is safe: nothing is booked twice.
-
-## Sync
-
-The **Sync** panel keeps this book and your migrated YNAB plan in step on a schedule: transactions
-and each month's Assigned, in both directions. Pick the plan, choose a schedule (every 15 or 30
-minutes, hourly, every 6 hours, daily, or manual only), switch **Sync automatically** on, or click
-**Sync now**. The panel shows the last run, the next run and the last result, and lists what needs
-your review: where both sides changed the same thing, with **Keep Open Net Worth's** and **Keep
-YNAB's**. How the sync decides, what it sends and its limits are in
-[Bank & brokerage connectors](../connectors/bank-brokerage.md#ynab).
-
-## Run history
-
-Every preview, import, re-check and sync is listed with when it started, how long it took, how it ended
-and a one-line outcome. Filter by kind (All, Import, Verify, Preview, Sync), or open one with **Open**. **Archive** (in the row's menu)
-hides a finished run from the list; tick **Show archived** to see them again and **Unarchive** to
-bring one back. Nothing is deleted, and a run in progress can't be archived.
+Every preview, import, re-check and sync is listed newest first with when it started and a one-line
+outcome; **Needs attention** shows only the ones that failed or were interrupted. Click one to open
+its report. **Archive** (on the report) hides a finished run from the list; nothing is deleted, and
+a run in progress can't be archived.
 
 If the server stopped while a run was in progress, the run is kept and marked **Interrupted**. Run
 it again to finish: everything already booked is recognised.
 
 A sync you start with **Sync now** is always a run in the history, and so is a scheduled sync that
 has something to report: a change, a review item, a deferral or a new failure. A scheduled sync that
-finds nothing to do (most hourly runs) is not added; the panel's last-run line shows it ran. The same
-failure repeated every hour is recorded once. Choosing **Keep Open Net Worth's** on a review item
-that sends a change to YNAB is a run too.
+finds nothing to do (most hourly runs) is not added; the **Schedule** section's last-sync line shows
+it ran. The same failure repeated every hour is recorded once. Choosing **Keep Open Net Worth's** on
+a review item that sends a change to YNAB is a run too.
 
 ## Reading a report
 
