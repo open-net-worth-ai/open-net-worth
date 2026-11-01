@@ -27,13 +27,17 @@ class LedgerSnapshot:
     own balance (``ledger.account_with_balance`` with no transactions list), so the page's cost
     grew with the number of accounts."""
 
-    def __init__(self, base: str, *, rates: dict):
+    def __init__(self, base: str, *, rates: dict, book: ledger_service.LedgerBook | None = None):
         self.base = base
         self.rates = rates
-        self.accounts = AccountStore().all()
-        self.txns = ledger_service.transactions.all()
+        if book is None:
+            self.accounts = AccountStore().all()
+            self.txns = ledger_service.transactions.all()
+        else:
+            self.accounts, self.txns = book.accounts, book.txns
         live = [a for a in self.accounts if not a.get("archived")]
-        self._cutoffs = ledger_service.cutoffs_by_account(live, self.txns)
+        cutoffs = ledger_service.cutoffs_by_account(live, self.txns)
+        self._native = ledger_service.balances_by_account(live, self.txns, cutoffs)
         self._balances: dict[str, float] = {}
 
     def of_type(self, type_: str) -> list[dict]:
@@ -46,7 +50,7 @@ class LedgerSnapshot:
         rates."""
         account_id = account["id"]
         if account_id not in self._balances:
-            native = ledger_service.account_balance(account, self.txns, self._cutoffs[account_id])
+            native = self._native[account_id]
             currency = account.get("currency") or self.base
             self._balances[account_id] = to_base(native, currency, self.base, self.rates)
         return self._balances[account_id]

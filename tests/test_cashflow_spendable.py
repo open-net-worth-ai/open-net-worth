@@ -36,7 +36,11 @@ def patched(monkeypatch):
     monkeypatch.setattr(
         cashflow.svc, "cutoffs_by_account", lambda accts, txns: {a["id"]: None for a in accts}
     )
-    monkeypatch.setattr(cashflow.svc, "account_balance", lambda a, txns, cutoff: bal[a["id"]])
+    monkeypatch.setattr(
+        cashflow.svc,
+        "balances_by_account",
+        lambda accts, txns, cutoffs: {a["id"]: bal[a["id"]] for a in accts},
+    )
     monkeypatch.setattr(cashflow.svc, "to_base", lambda v, c, b, rates=None: v)
     monkeypatch.setattr(cashflow, "load_fx_cache", lambda: {})
     monkeypatch.setattr(cashflow, "_positions_runway_base", lambda base: 242279.0)

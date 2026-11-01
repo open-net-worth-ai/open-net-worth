@@ -57,10 +57,10 @@ def _account_total(
         txns = svc.transactions.all()
     cutoffs = svc.cutoffs_by_account(accts, txns)
     rates = load_fx_cache()
+    balances = svc.balances_by_account(accts, txns, cutoffs)
     total = 0.0
     for a in accts:
-        bal = svc.account_balance(a, txns, cutoffs[a["id"]])
-        total += svc.to_base(bal, a.get("currency", base), base, rates=rates)
+        total += svc.to_base(balances[a["id"]], a.get("currency", base), base, rates=rates)
     return round(total, 2)
 
 
@@ -204,12 +204,12 @@ def on_budget_cash_base(base: str, as_of_month: str | None = None) -> float:
         if as_of_month
         else all_txns
     )
+    balances = svc.balances_by_account(accts, txns, cutoffs)
     total = 0.0
     for a in accts:
         if a.get("archived") or not is_cash_account(a):
             continue
-        bal = svc.account_balance(a, txns, cutoffs[a["id"]])
-        total += svc.to_base(bal, a.get("currency", base), base)
+        total += svc.to_base(balances[a["id"]], a.get("currency", base), base)
     return round(total, 2)
 
 
@@ -342,10 +342,12 @@ def runway_from_projection(projection: dict) -> dict:
     }
 
 
-def cash_runway() -> dict:
+def cash_runway(*, book: svc.LedgerBook | None = None) -> dict:
     """The saved-plan cash runway (cash only; the Cash Flow toggles for fixed deposits and
-    investments are what-ifs on that screen, not part of this)."""
-    return runway_from_projection(build_projection(months=1, history_months=0))
+    investments are what-ifs on that screen, not part of this). `book` is the ledger snapshot a
+    caller that already read it shares (`ledger.read_book`)."""
+    all_txns = None if book is None else [t for t in book.txns if not t.get("deleted")]
+    return runway_from_projection(build_projection(months=1, history_months=0, all_txns=all_txns))
 
 
 # ---------------------------------------------------------------------------

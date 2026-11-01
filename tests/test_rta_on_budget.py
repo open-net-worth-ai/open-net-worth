@@ -73,7 +73,9 @@ def patched_cash(monkeypatch):
     monkeypatch.setattr(cashflow.svc.accounts, "all", lambda: _ACCTS)
     monkeypatch.setattr(cashflow.svc.transactions, "all", lambda: [])
     monkeypatch.setattr(
-        cashflow.svc, "account_balance", lambda a, txns, opening_date=None: a["bal"]
+        cashflow.svc,
+        "balances_by_account",
+        lambda accts, txns, cutoffs: {a["id"]: a["bal"] for a in accts},
     )
     monkeypatch.setattr(cashflow.svc, "to_base", lambda amt, frm, base: amt)
 
@@ -90,9 +92,11 @@ def test_on_budget_cash_base_as_of_month_filters_txns(monkeypatch):
     txns = [{"date": "2026-06-15", "amt": 100.0}, {"date": "2026-07-10", "amt": 50.0}]
     monkeypatch.setattr(cashflow.svc.accounts, "all", lambda: accts)
     monkeypatch.setattr(cashflow.svc.transactions, "all", lambda: txns)
-    # account_balance sums the amounts of ONLY the txns it is handed (proves the as-of filter).
+    # The balance fold sums the amounts of ONLY the txns it is handed (proves the as-of filter).
     monkeypatch.setattr(
-        cashflow.svc, "account_balance", lambda a, t, opening_date=None: sum(x["amt"] for x in t)
+        cashflow.svc,
+        "balances_by_account",
+        lambda accts, t, cutoffs: {a["id"]: sum(x["amt"] for x in t) for a in accts},
     )
     monkeypatch.setattr(cashflow.svc, "to_base", lambda amt, frm, base: amt)
     assert cashflow.on_budget_cash_base("SGD", as_of_month="2026-06") == pytest.approx(100.0)

@@ -310,15 +310,13 @@ class TransactionStore:
     # ── Query API (lock-free, mirrors JsonStore's read methods) ─────────────────
 
     def all(self, *, conn: Connection | None = None) -> list[dict]:
+        # Payload column only: the other columns are index copies of what the payload holds,
+        # and decoding them for every row is ~30% of the read.
+        stmt = select(transactions.c.payload).order_by(transactions.c.seq)
         if conn is not None:
-            return [
-                r.payload for r in conn.execute(select(transactions).order_by(transactions.c.seq))
-            ]
+            return [r.payload for r in conn.execute(stmt)]
         with self._eng().connect() as read_conn:
-            return [
-                r.payload
-                for r in read_conn.execute(select(transactions).order_by(transactions.c.seq))
-            ]
+            return [r.payload for r in read_conn.execute(stmt)]
 
     def find_by_id(self, id_val: str, *, conn: Connection | None = None) -> dict | None:
         """``conn`` reads THROUGH the caller's open transaction (same contract as
@@ -360,6 +358,14 @@ class TransactionStore:
         )
         with self._eng().connect() as conn:
             return {pid: (int(n), last or "") for pid, n, last in conn.execute(stmt)}
+
+    def earliest_date(self) -> str | None:
+        """The earliest non-deleted transaction day (``YYYY-MM-DD``), or None when there is none
+        — what ``min(date[:10])`` over ``all()`` gives, from the ``date`` column alone."""
+        day = func.substr(transactions.c.date, 1, 10)
+        stmt = select(func.min(day)).where(transactions.c.deleted == 0, transactions.c.date != "")
+        with self._eng().connect() as conn:
+            return conn.execute(stmt).scalar()
 
     # ── Domain queries ────────────────────────────────────────────────────────
 

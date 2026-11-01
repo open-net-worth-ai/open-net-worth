@@ -461,7 +461,7 @@ def get_accounts(include_archived: bool = False):
     _t3 = _time.perf_counter()
     # account_with_balance adds balance/balance_base + cleared_balance/cleared_balance_base
     # (cleared/reconcile MVP) + the derived opening fields, over the shared txn list.
-    result = [svc.account_with_balance(a, txns, idx=idx) for a in accts]
+    result = svc.accounts_with_balances(accts, txns, idx=idx)
     _t4 = _time.perf_counter()
     _perf_log.info(
         "PERF get_accounts txns_all=%.1fms query_accounts=%.1fms opening_index=%.1fms "

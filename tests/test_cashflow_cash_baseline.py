@@ -40,7 +40,9 @@ def patched(monkeypatch):
     )
     monkeypatch.setattr(cashflow.svc.transactions, "all", lambda: [])
     monkeypatch.setattr(
-        cashflow.svc, "account_balance", lambda a, txns, opening_date=None: a["bal"]
+        cashflow.svc,
+        "balances_by_account",
+        lambda accts, txns, cutoffs: {a["id"]: a["bal"] for a in accts},
     )
     monkeypatch.setattr(cashflow.svc, "to_base", lambda amt, frm, base, rates=None: amt)
 
@@ -68,7 +70,9 @@ def test_retirement_excluded_from_cash_baseline(monkeypatch):
     )
     monkeypatch.setattr(cashflow.svc.transactions, "all", lambda: [])
     monkeypatch.setattr(
-        cashflow.svc, "account_balance", lambda a, txns, opening_date=None: a["bal"]
+        cashflow.svc,
+        "balances_by_account",
+        lambda accts, txns, cutoffs: {a["id"]: a["bal"] for a in accts},
     )
     monkeypatch.setattr(cashflow.svc, "to_base", lambda amt, frm, base, rates=None: amt)
     assert cashflow.cash_balance_base("VND") == pytest.approx(10.0)
@@ -92,7 +96,9 @@ def test_investment_excluded_from_cash_baseline(monkeypatch):
     )
     monkeypatch.setattr(cashflow.svc.transactions, "all", lambda: [])
     monkeypatch.setattr(
-        cashflow.svc, "account_balance", lambda a, txns, opening_date=None: a["bal"]
+        cashflow.svc,
+        "balances_by_account",
+        lambda accts, txns, cutoffs: {a["id"]: a["bal"] for a in accts},
     )
     monkeypatch.setattr(cashflow.svc, "to_base", lambda amt, frm, base, rates=None: amt)
     assert cashflow.cash_balance_base("VND") == pytest.approx(10.0)

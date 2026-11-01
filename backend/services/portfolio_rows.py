@@ -22,7 +22,6 @@ from __future__ import annotations
 import logging
 
 from backend.core.fx import base_currency, to_base
-from backend.db.engine import unit_of_work
 from backend.db.owned_assets_store import OwnedAssetsStore
 from backend.services import ledger as ledger_service
 from backend.services import owned_assets_valuation
@@ -314,7 +313,9 @@ def _display_fields(
     return fields
 
 
-def projected_rows(base: str | None = None, *, live: bool = True) -> dict:
+def projected_rows(
+    base: str | None = None, *, live: bool = True, book: ledger_service.LedgerBook | None = None
+) -> dict:
     """Every portfolio row with server-computed money fields, plus the vested/unvested split.
 
     Returns {base_currency, rows, portfolio_total, unvested_base, is_live, fx}.
@@ -325,6 +326,8 @@ def projected_rows(base: str | None = None, *, live: bool = True) -> dict:
     `live=False` skips the provider round-trip and values everything at last-known prices —
     for a caller that needs the shape cheaply and doesn't want to pay for (or trigger) a
     Yahoo/CoinGecko fetch.
+
+    `book`: the ledger snapshot a caller that already read it shares (see `ledger.read_book`).
     """
     base = (base or base_currency()).upper()
 
@@ -338,19 +341,11 @@ def projected_rows(base: str | None = None, *, live: bool = True) -> dict:
         else disk_rows
     )
 
-    # Read both sides of opening_txn_id from one SQLite snapshot. An account create
-    # commits the account and its opening together, but two separate read connections
-    # could straddle that commit and falsely report a missing opening transaction.
-    with unit_of_work() as conn:
-        # sqlite3's legacy transaction mode does not BEGIN on a SELECT; SQLAlchemy's
-        # transaction wrapper alone therefore does not pin a read snapshot.
-        conn.exec_driver_sql("BEGIN")
-        txns = ledger_service.transactions.all(conn=conn)
-        accts = ledger_service.accounts.query_accounts(conn=conn)
+    book = book if book is not None else ledger_service.read_book()
+    txns, accts = book.txns, book.live_accounts
     cutoffs = ledger_service.cutoffs_by_account(accts, txns)
-    account_rows = [
-        _account_as_row(a, ledger_service.account_balance(a, txns, cutoffs[a["id"]])) for a in accts
-    ]
+    balances = ledger_service.balances_by_account(accts, txns, cutoffs)
+    account_rows = [_account_as_row(a, balances[a["id"]]) for a in accts]
     asset_rows = [
         _asset_as_row(a, base) for a in OwnedAssetsStore().query_assets(include_archived=False)
     ]

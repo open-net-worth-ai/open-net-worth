@@ -108,8 +108,8 @@ def _account_balances() -> list[tuple[dict, float]]:
     txns = TransactionStore().all()
     idx = ledger.opening_index(txns, accounts)
     return [
-        (a, ledger.account_with_balance(a, txns, idx=idx).get("balance_base", 0) or 0)
-        for a in accounts
+        (a, hydrated.get("balance_base", 0) or 0)
+        for a, hydrated in zip(accounts, ledger.accounts_with_balances(accounts, txns, idx=idx))
     ]
 
 

@@ -90,6 +90,19 @@ def test_bulk_append_empty_is_noop(db_isolated):
     assert TransactionStore().bulk_append([]) == []
 
 
+def test_earliest_date_is_the_min_day_of_the_live_rows(db_isolated):
+    store = TransactionStore()
+    assert store.earliest_date() is None
+    store.append(_txn(id="gone", date="2025-01-01", deleted=True))
+    assert store.earliest_date() is None
+    store.append(_txn(id="b", date="2026-03-05T10:00:00"))
+    store.append(_txn(id="a", date="2026-02-01"))
+    live = [t for t in store.all() if not t.get("deleted")]
+    assert store.earliest_date() == min((t["date"] or "")[:10] for t in live) == "2026-02-01"
+    store.soft_delete("a")
+    assert store.earliest_date() == "2026-03-05"
+
+
 def test_all_returns_in_seq_order(db_isolated):
     store = TransactionStore()
     ids = [store.append(_txn(id=f"t{i}"))["id"] for i in range(5)]

@@ -1159,7 +1159,11 @@ def _floor_month(txns: list[dict], floor_override: str | None = None) -> str:
 
 
 def _build_context(
-    month: str, floor_override: str | None = None, zero_month_assignments: bool = False
+    month: str,
+    floor_override: str | None = None,
+    zero_month_assignments: bool = False,
+    *,
+    book: svc.LedgerBook | None = None,
 ) -> dict:
     """Resolve the inputs the recursive walks share once (txns, FX, floor, caches).
 
@@ -1170,11 +1174,14 @@ def _build_context(
     whole table folds as if nothing had been assigned that month — the OTHER half of the same
     preview (a fresh start now clears the month's assignments too). Applied to the in-memory
     snapshot only, before any walk memoizes: nothing is written, and every other month keeps its
-    real assignments so the carry into ``month`` is still the true one."""
+    real assignments so the carry into ``month`` is still the true one.
+
+    ``book`` is the ledger snapshot (``ledger.read_book``) a caller that already read it shares;
+    omitted, the context reads its own."""
     _valid_month(month)
     base = svc.base_currency()
     rates = load_fx_cache()
-    txns = svc.transactions.all()
+    txns = svc.transactions.all() if book is None else book.txns
     floor = _floor_month(txns, floor_override)
     assigned_by_month = assignments_store.all_map()
     if zero_month_assignments:
@@ -1187,7 +1194,7 @@ def _build_context(
     # payment-tracked card is in plan_source_ids but NOT cash_ids (its spending fills a category
     # while its balance leaves the cash sum — ADR 2026-07-09). Per-account tracking-start
     # anchors gate both sides symmetrically.
-    accounts = svc.accounts.all()
+    accounts = svc.accounts.all() if book is None else book.accounts
     cash_ids = frozenset(a["id"] for a in accounts if is_cash_account(a))
     plan_source_ids = frozenset(a["id"] for a in accounts if is_plan_source(a))
     # Every payment-tracked card account (any `type=="credit"` row — is_payment_tracked_card is
@@ -2031,13 +2038,13 @@ def _payment_row_fields(ctx: dict, month: str, account: dict, available: float) 
     return {"owed": owed, "available_for_payment": available, "underfunded": underfunded}
 
 
-def card_payment_coverage(month: str) -> list[dict]:
+def card_payment_coverage(month: str, *, book: svc.LedgerBook | None = None) -> list[dict]:
     """Each payment-tracked card's debt set against what its payment envelope holds, in base
     currency, as the Budget's Credit Card Payments rows show it: ``{account_id, name, owed,
     held, underfunded}``. ``held`` is the envelope's positive available (an overdrawn envelope
     funds nothing). Empty under credit_card_mode "signed", where no card has such an envelope.
     The one read for anything that must say a card is covered, so no caller recomputes it."""
-    ctx = _build_context(month)
+    ctx = _build_context(month, book=book)
     out = []
     for env_id, account in _payment_env_accounts(ctx).items():
         available = _available(ctx, month, env_id)

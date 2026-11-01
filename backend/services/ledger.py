@@ -22,7 +22,7 @@ import math
 from calendar import monthrange
 from contextvars import ContextVar
 from datetime import date, datetime, timezone
-from typing import Callable
+from typing import Callable, NamedTuple
 
 from sqlalchemy import Connection
 from sqlalchemy.exc import IntegrityError
@@ -42,7 +42,7 @@ from backend.core.txn_sources import default_needs_review, ext_ref_pairs, primar
 from backend.core.user_time import user_today
 from backend.db import read_cache
 from backend.db.account_store import AccountStore
-from backend.db.engine import locked_unit_of_work, on_commit
+from backend.db.engine import locked_unit_of_work, on_commit, unit_of_work
 from backend.db.import_batch_store import ImportBatchStore
 from backend.db.merge_journal_store import MergeJournalStore
 from backend.db.statement_store import StatementStore
@@ -445,12 +445,113 @@ def cleared_account_balance(account: dict, txns: list[dict], opening_date: str |
     return round(bal, 2)
 
 
+class LedgerBook(NamedTuple):
+    """Every transaction (deleted rows included) and every account (archived included), read
+    from ONE snapshot. A request that folds the ledger several ways reads this once and hands
+    it down rather than reloading the whole book per fold. Read-only: every holder shares the
+    same dicts."""
+
+    txns: list[dict]
+    accounts: list[dict]
+
+    @property
+    def live_accounts(self) -> list[dict]:
+        return [a for a in self.accounts if not a.get("archived")]
+
+
+def read_book() -> LedgerBook:
+    """The transactions and accounts from one SQLite snapshot. An account create commits the
+    account and its opening together, but two separate read connections could straddle that
+    commit and falsely report a missing opening transaction; sqlite3's legacy transaction mode
+    does not BEGIN on a SELECT, so the explicit BEGIN is what pins the snapshot."""
+    with unit_of_work() as conn:
+        conn.exec_driver_sql("BEGIN")
+        return LedgerBook(transactions.all(conn=conn), accounts.all(conn=conn))
+
+
+def _fold_balances(
+    accts: list[dict],
+    txns: list[dict],
+    cutoffs: dict[str, str | None],
+    *,
+    cleared_only: bool = False,
+    as_of: str | None = None,
+) -> dict[str, float]:
+    """``{account_id: fold}`` in ONE pass over ``txns`` — the per-account ``account_balance`` /
+    ``cleared_account_balance`` / ``account_balance_as_of`` fold run for every account at once.
+
+    Equal to the per-account fold down to the last bit: each account's total accumulates the
+    same legs in the same order (a transaction's from-leg, then its to-leg, in ``txns`` order),
+    and each leg is judged against ITS account's own cutoff. The per-account form is O(accounts
+    × transactions); this is O(transactions)."""
+    totals = {a["id"]: 0.0 for a in accts}
+    for t in txns:
+        if t.get("deleted") or (cleared_only and not t.get("cleared")):
+            continue
+        leg_date = t.get("date")
+        if as_of is not None and leg_date is not None and leg_date > as_of:
+            continue
+        src = t.get("from_account_id")
+        if (
+            src in totals
+            and t.get("from_amount") is not None
+            and not is_before_tracking_start(leg_date, cutoffs[src])
+        ):
+            totals[src] -= float(t["from_amount"])
+        dst = t.get("to_account_id")
+        if (
+            dst in totals
+            and t.get("to_amount") is not None
+            and not is_before_tracking_start(leg_date, cutoffs[dst])
+        ):
+            totals[dst] += float(t["to_amount"])
+    return {acct_id: round(bal, 2) for acct_id, bal in totals.items()}
+
+
+def balances_by_account(
+    accts: list[dict],
+    txns: list[dict],
+    cutoffs: dict[str, str | None],
+    *,
+    as_of: str | None = None,
+) -> dict[str, float]:
+    """``{a["id"]: account_balance(a, txns, cutoffs[a["id"]])}`` for every account in
+    ``accts``, in one pass. The shape every caller that folds MANY accounts uses. With ``as_of``
+    it is ``account_balance_as_of`` instead: legs dated after that day are left out."""
+    return _fold_balances(accts, txns, cutoffs, as_of=as_of)
+
+
+def cleared_balances_by_account(
+    accts: list[dict], txns: list[dict], cutoffs: dict[str, str | None]
+) -> dict[str, float]:
+    """The ``cleared_account_balance`` twin of ``balances_by_account``."""
+    return _fold_balances(accts, txns, cutoffs, cleared_only=True)
+
+
 def balances(include_archived: bool = False) -> dict[str, float]:
     """Map account_id → native-currency balance, computed in one pass over txns."""
     txns = transactions.all()
     accts = accounts.query_accounts(include_archived=include_archived)
-    cutoffs = cutoffs_by_account(accts, txns)
-    return {a["id"]: account_balance(a, txns, cutoffs[a["id"]]) for a in accts}
+    return balances_by_account(accts, txns, cutoffs_by_account(accts, txns))
+
+
+def _hydrate_account(account: dict, row: dict | None, bal: float, cleared: float) -> dict:
+    base = base_currency()
+    cur = account.get("currency") or base
+    external_ids = account.get("external_ids") or []
+    return {
+        **account,
+        "initial_balance": _signed_opening(row),
+        "initial_balance_date": row.get("date") if row else None,
+        "balance": bal,
+        "balance_base": to_base(bal, cur, base),
+        "cleared_balance": cleared,
+        "cleared_balance_base": to_base(cleared, cur, base),
+        # DERIVED, never a stored second fact (RFC connectors-as-data-sources §D) — a linked
+        # account is one with at least one external_ids entry, full stop.
+        "connected": bool(external_ids),
+        "external_ids": _hydrated_external_ids(external_ids),
+    }
 
 
 def account_with_balance(
@@ -467,22 +568,23 @@ def account_with_balance(
     cutoff = row.get("date") if row else None
     bal = account_balance(account, txns, cutoff)
     cleared = cleared_account_balance(account, txns, cutoff)
-    base = base_currency()
-    cur = account.get("currency") or base
-    external_ids = account.get("external_ids") or []
-    return {
-        **account,
-        "initial_balance": _signed_opening(row),
-        "initial_balance_date": cutoff,
-        "balance": bal,
-        "balance_base": to_base(bal, cur, base),
-        "cleared_balance": cleared,
-        "cleared_balance_base": to_base(cleared, cur, base),
-        # DERIVED, never a stored second fact (RFC connectors-as-data-sources §D) — a linked
-        # account is one with at least one external_ids entry, full stop.
-        "connected": bool(external_ids),
-        "external_ids": _hydrated_external_ids(external_ids),
-    }
+    return _hydrate_account(account, row, bal, cleared)
+
+
+def accounts_with_balances(
+    accts: list[dict], txns: list[dict], *, idx: dict[str, dict] | None = None
+) -> list[dict]:
+    """``[account_with_balance(a, txns, idx=idx) for a in accts]`` with both balance folds run
+    ONCE over ``txns`` instead of twice per account."""
+    if idx is None:
+        idx = opening_index(txns, accts)
+    rows = [_opening_row(a, txns, idx=idx) for a in accts]
+    cutoffs = {a["id"]: row.get("date") if row else None for a, row in zip(accts, rows)}
+    bals = balances_by_account(accts, txns, cutoffs)
+    cleared = cleared_balances_by_account(accts, txns, cutoffs)
+    return [
+        _hydrate_account(a, row, bals[a["id"]], cleared[a["id"]]) for a, row in zip(accts, rows)
+    ]
 
 
 def _hydrated_external_ids(ids: list[dict]) -> list[dict]:
@@ -612,8 +714,8 @@ def _unvested_value_base(base: str, rates: dict | None = None) -> float:
     return round(total, 2)
 
 
-@read_cache.cached(lambda base=None: base)
-def net_worth(base: str | None = None) -> dict:
+@read_cache.cached(lambda base=None, book=None: base, when=lambda *a, **kw: kw.get("book") is None)
+def net_worth(base: str | None = None, *, book: LedgerBook | None = None) -> dict:
     """Add-everything fold: Σ account balances (assets + raw-negative liabilities)
     + Σ market values, all normalised to base currency. `unvested_base` (unvested
     equity) is reported alongside but deliberately excluded from `net_worth` itself.
@@ -647,8 +749,10 @@ def net_worth(base: str | None = None) -> dict:
     # profile row per call — profiled 2026-08-12 at 186 fx loads + 192 profile reads in a
     # single /api/net-worth/stats request, almost all from these conversion loops.
     rates = load_fx_cache()
-    txns = transactions.all()
-    accts = accounts.query_accounts()
+    if book is None:
+        txns, accts = transactions.all(), accounts.query_accounts()
+    else:
+        txns, accts = book.txns, book.live_accounts
     cutoffs = cutoffs_by_account(accts, txns)
 
     account_classes: dict[str, float] = {}
@@ -656,10 +760,9 @@ def net_worth(base: str | None = None) -> dict:
     liabilities_rows: list[dict] = []
     liability_total = 0.0  # stored raw-negative; summed as-is
     retirement_base = 0.0
+    native = balances_by_account(accts, txns, cutoffs)
     for a in accts:
-        bal_base = to_base(
-            account_balance(a, txns, cutoffs[a["id"]]), a.get("currency", base), base, rates=rates
-        )
+        bal_base = to_base(native[a["id"]], a.get("currency", base), base, rates=rates)
         kind, band = account_kind_and_band(a)
         if kind == "liability":
             liability_total += bal_base
@@ -711,7 +814,7 @@ def net_worth(base: str | None = None) -> dict:
     }
 
 
-def net_worth_bands(base: str | None = None) -> dict:
+def net_worth_bands(base: str | None = None, *, book: LedgerBook | None = None) -> dict:
     """TODAY's net worth decomposed into asset-class bands — the same
     {classes, liabilities, accounts, net_worth, unvested_base} shape ``net_worth_history``
     emits per month, for the current moment only.
@@ -730,8 +833,12 @@ def net_worth_bands(base: str | None = None) -> dict:
     today_iso = user_today().isoformat()
     store = PriceHistoryStore()
     market_since = store.earliest_date()
-    accts = accounts.query_accounts()
-    txns = [t for t in transactions.all() if not t.get("deleted")]
+    if book is None:
+        accts, all_txns = accounts.query_accounts(), transactions.all()
+    else:
+        accts, all_txns = book.live_accounts, book.txns
+    txns = [t for t in all_txns if not t.get("deleted")]
+    cutoffs = cutoffs_by_account(accts, txns)
     return _breakdown_as_of(
         today_iso,
         store.as_of_maps([today_iso])[today_iso],
@@ -740,7 +847,8 @@ def net_worth_bands(base: str | None = None) -> dict:
         txns,
         base,
         bool(market_since and today_iso >= market_since),
-        cutoffs_by_account(accts, txns),
+        cutoffs,
+        balances=balances_by_account(accts, txns, cutoffs, as_of=today_iso),
         option_mark_base=_compute_options_mark_base(base),
         manual_assets_base=owned_assets_valuation.values_by_band(base),
     )
