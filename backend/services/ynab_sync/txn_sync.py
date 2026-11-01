@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 from collections import Counter
 
-from backend.core.errors import ConflictError, OpenNetWorthError
+from backend.core.errors import OpenNetWorthError
 from backend.services import ledger as ledger_service
 from backend.services.ynab_migration.mapping import SOURCE
 from backend.services.ynab_sync import conflicts, pull, push, recorder, units
@@ -129,9 +129,10 @@ def settle(
 ) -> list[str]:
     """Reconcile every changed transaction; returns the ledger ids whose push is still owed."""
     rows, bases, index, gone = _rows(ctx, base, change, first, scan)
-    all_units = units.build(ctx, rows, bases, index, change.touched, gone)
-    _guard_removals(all_units)
     open_items = conflicts.open_keys()
+    all_units = _hold_removals(
+        ctx, units.build(ctx, rows, bases, index, change.touched, gone), open_items
+    )
     todo: list[Unit] = []
     for u in all_units:
         action = decide(u.base, u.onw, u.ynab)
@@ -158,16 +159,24 @@ def settle(
     return _push_all(ctx, client, base, todo, tally)
 
 
-def _guard_removals(all_units: list[Unit]) -> None:
+def _hold_removals(ctx: Context, all_units: list[Unit], open_items: dict) -> list[Unit]:
+    """A read that would delete many synced rows here at once is held: each deletion waits in
+    the review list, where keeping YNAB's confirms it, and the rest of the run goes ahead."""
     linked = sum(1 for u in all_units if u.refs)
-    removals = sum(
-        1 for u in all_units if u.refs and u.ynab is None and u.onw is not None and u.base == u.onw
+    removals = [
+        u for u in all_units if u.refs and u.ynab is None and u.onw is not None and u.base == u.onw
+    ]
+    if len(removals) <= max(MIN_REMOVAL_GUARD, MAX_REMOVAL_FRACTION * linked):
+        return all_units
+    reason = (
+        f"{len(removals)} of {linked} synced transactions were deleted in YNAB at once; "
+        "confirm each deletion here."
     )
-    if removals > max(MIN_REMOVAL_GUARD, MAX_REMOVAL_FRACTION * linked):
-        raise ConflictError(
-            f"YNAB's answer would delete {removals} of {linked} synced transactions here; "
-            "nothing was changed. Check the plan in YNAB, then run the sync again."
-        )
+    for u in removals:
+        if u.key not in open_items:
+            _file(ctx, u, conflicts.CONFLICT, reason)
+    held = {id(u) for u in removals}
+    return [u for u in all_units if id(u) not in held]
 
 
 def _push_all(

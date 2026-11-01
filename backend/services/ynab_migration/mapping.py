@@ -131,6 +131,29 @@ def plan_categories(groups: list[dict], txns: list[dict], months: list[dict]) ->
     return {"categories": cats, "skipped": skip, "card_categories": cards}
 
 
+def split_line_mirrors(txns: list[dict]) -> dict[str, str]:
+    """YNAB links neither side of a split's transfer line by id: pair each such line with the
+    unlinked row in its other account that points back, on the same date, for the opposite
+    amount. Rows that tie are interchangeable, so pairing them in id order is exact."""
+    rows = sorted((t for t in txns if not t.get("deleted")), key=lambda t: (t["date"], t["id"]))
+    free: dict[tuple, list[str]] = {}
+    for t in rows:
+        if t.get("transfer_account_id") and not t.get("transfer_transaction_id"):
+            if not t.get("subtransactions"):
+                key = (t["account_id"], t["transfer_account_id"], t["date"], t["amount"])
+                free.setdefault(key, []).append(t["id"])
+    pairs: dict[str, str] = {}
+    for t in rows:
+        for s in t.get("subtransactions") or []:
+            other = s.get("transfer_account_id")
+            if s.get("deleted") or not other or s.get("transfer_transaction_id"):
+                continue
+            waiting = free.get((other, t["account_id"], t["date"], -s["amount"]))
+            if waiting:
+                pairs[s["id"]] = waiting.pop(0)
+    return pairs
+
+
 def plan_transactions(txns: list[dict], accounts: list[dict], cat_plan: dict):
     """YNAB transactions -> ONW 'pieces' (one ONW transaction each, keyed by YNAB ids), the
     per-account Starting Balance rows, and counters."""
@@ -139,6 +162,7 @@ def plan_transactions(txns: list[dict], accounts: list[dict], cat_plan: dict):
     rows = sorted((t for t in txns if not t.get("deleted")), key=lambda t: (t["date"], t["id"]))
     by_id = {t["id"]: t for t in rows}
     by_link = {t["transfer_transaction_id"]: t for t in rows if t.get("transfer_transaction_id")}
+    mirrors = split_line_mirrors(rows)
     stats: Counter = Counter()
     openings: dict[str, dict] = {}
     for t in rows:
@@ -220,7 +244,11 @@ def plan_transactions(txns: list[dict], accounts: list[dict], cat_plan: dict):
 
     def partner_of(row, other):
         """The row in the other account that mirrors ``row`` (a transfer line), if it exists."""
-        p = by_id.get(row.get("transfer_transaction_id")) or by_link.get(row["id"])
+        p = (
+            by_id.get(row.get("transfer_transaction_id"))
+            or by_link.get(row["id"])
+            or by_id.get(mirrors.get(row["id"], ""))
+        )
         ok = other and p and p["account_id"] == other and other in live and p["id"] != row["id"]
         return p if ok and sign(p["amount"]) == -sign(row["amount"]) != 0 else None
 

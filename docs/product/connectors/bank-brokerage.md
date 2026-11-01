@@ -304,8 +304,10 @@ back in line) or change it in YNAB yourself; once both agree the item clears.
 
 **Limits.** YNAB allows 200 requests an hour; a run uses at most 40 and carries the rest to the next
 run, so nothing is lost. Turning the sync on replaces the plain YNAB import for that plan (Lucius's
-YNAB fetch refuses it, so nothing is booked twice). A run that would delete more than a quarter of
-your synced transactions is refused. Edits older than the transaction audit log keeps (20,000
+YNAB fetch refuses it, so nothing is booked twice). When a run would delete many synced
+transactions at once (more than 25, and more than a quarter of them), in either direction, none is
+deleted yet: each waits in the review list, where you confirm or undo it, and the rest of the run
+goes ahead. Edits older than the transaction audit log keeps (20,000
 events) can't be told apart from YNAB's on the first run.
 
 ## Alpaca

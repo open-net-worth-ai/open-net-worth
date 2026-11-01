@@ -242,9 +242,9 @@ def build(today: date, negative_assignment: bool = False) -> dict:
         "Transfer : Checking",
         None,
         transfer_account_id=A["chk"],
-        transfer_transaction_id="sub-3",
     )
-    sp["subtransactions"][2]["transfer_transaction_id"] = mirror["id"]
+    # Real YNAB links neither side of a split's transfer line by id (seen on a live plan).
+    assert mirror["transfer_transaction_id"] is None
     T("chk", d(0, 1), 3_000_000, "Employer", "rta")
     T("chk", d(0, 1), -1_200_000, "Landlord", "rent")
     T("chk", d(0, 1), 15_000, "Grocer", "groc", memo="refund")

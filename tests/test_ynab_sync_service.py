@@ -466,19 +466,30 @@ def test_a_ledger_edit_to_a_row_ynab_deleted_is_a_conflict(world):
     assert sync()["summary"] == "Nothing changed"
 
 
-def test_a_read_that_would_delete_most_of_the_ledger_is_refused(world, monkeypatch):
+def test_a_read_that_would_delete_most_of_the_ledger_is_held_for_review(world, monkeypatch):
+    from backend.core.user_time import user_today
     from backend.services.ynab_sync import txn_sync
 
     monkeypatch.setattr(txn_sync, "MIN_REMOVAL_GUARD", 3)
     enable()
     sync()
+    live = lambda: [t for t in ledger_service.transactions.all() if not t.get("deleted")]  # noqa: E731
+    before = len(live())
     for t in list(world.state["txns"]):
         if not t["deleted"]:
             ynab_stub.ynab_delete(world.state, t["id"])
-    runner._locked_run("manual")
-    run = ynab_sync.status()["last_run"]
-    assert not run["ok"] and "would delete" in run["error"]
-    assert len([t for t in ledger_service.transactions.all() if not t.get("deleted")]) > 15
+    ynab_stub.ynab_add(world.state, "chk", user_today().isoformat(), -7_000, "New cafe")
+    run = sync()
+    assert run["ok"] and len(live()) == before + 1  # nothing deleted; the rest still synced
+    items = ynab_sync.status()["conflicts"]
+    assert items and all(
+        i["ynab"] is None and "deleted in YNAB at once" in i["reason"] for i in items
+    )
+    assert len(ynab_sync.status()["conflicts"]) == len(items) and sync()["ok"]  # not re-filed
+    ynab_sync.resolve.resolve(items[0]["id"], "ynab")  # confirm one deletion
+    assert len(live()) == before
+    ynab_sync.resolve.resolve(items[1]["id"], "onw")  # send another one back to YNAB
+    assert len(ynab_sync.status()["conflicts"]) == len(items) - 2
 
 
 def test_every_write_the_sync_makes_carries_its_own_audit_surface(world):
@@ -757,3 +768,20 @@ def test_resolving_with_no_plan_is_a_validation_error(db_isolated):
 
     with pytest.raises(ValidationError):
         ynab_sync.resolve.resolve("c_x", "onw")
+
+
+def test_a_ynab_edit_to_the_far_side_of_a_split_transfer_line_keeps_it_one_transfer(world):
+    enable()
+    sync()
+    move = next(t for t in ledger_service.transactions.all() if t["kind"] == "transfer"
+                and t["from_amount"] == 20)  # fmt: skip
+    mirror = ynab_stub.find(world.state, amount=20_000, transfer_transaction_id=None)
+    ynab_stub.ynab_edit(world.state, mirror["id"], cleared="uncleared")
+    sync()
+    live = [t for t in ledger_service.transactions.all() if not t.get("deleted")]
+    assert [(t["kind"], t["cleared"]) for t in live if t["id"] == move["id"]] == [
+        ("transfer", False)
+    ]
+    assert not [t for t in live if t["kind"] == "income" and t.get("to_amount") == 20]
+    assert ynab_sync.status()["conflicts"] == []
+    assert sync()["summary"] == "Nothing changed"

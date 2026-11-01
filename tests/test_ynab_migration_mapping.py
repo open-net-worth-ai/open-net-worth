@@ -220,6 +220,33 @@ def test_split_with_a_transfer_line_books_the_transfer_separately_whatever_the_r
     assert total == 150_000  # the split's pieces still add up to the YNAB parent
 
 
+def test_split_transfer_lines_ynab_left_unlinked_pair_by_account_date_and_amount():
+    """YNAB leaves transfer_transaction_id empty on both sides of a split's transfer line."""
+
+    def split(pid, date):
+        p = txn(pid, CHK, date, -50_000, "Market")
+        p["subtransactions"] = [
+            {"id": f"{pid}-g", "amount": -30_000, "memo": None, "category_id": GROC,
+             "deleted": False},
+            {"id": f"{pid}-t", "amount": -20_000, "memo": None, "category_id": None,
+             "deleted": False, "transfer_account_id": SAV, "transfer_transaction_id": None},
+        ]  # fmt: skip
+        return p
+
+    def mirror(mid, date, milli=20_000):
+        return txn(mid, SAV, date, milli, "Transfer : Checking", transfer_account_id=CHK)
+
+    rows = [split("p1", "2026-01-12"), split("p2", "2026-01-12"), split("p3", "2026-01-13"),
+            mirror("m1", "2026-01-12"), mirror("m2", "2026-01-12"), mirror("m3", "2026-01-14")]  # fmt: skip
+    plan = plan_for(rows)
+    moves = [p for p in plan["pieces"] if p["kind"] == "transfer"]
+    lines = sorted(sorted(r for r in p["refs"] if r[0] == "m" or r.endswith("-t")) for p in moves)
+    assert lines == [["m1", "p1-t"], ["m2", "p2-t"]]
+    # A mirror on another date is not this line's: both stay one-sided, as before.
+    assert plan["stats"]["transfers_one_sided"] == 1
+    assert {p["kind"] for p in plan["pieces"] if "p3-t" in p["refs"]} == {"expense"}
+
+
 def test_split_line_against_the_total_direction_becomes_its_own_row():
     parent = txn("p", CHK, "2026-01-12", -85_000, "Store")
     parent["subtransactions"] = [
