@@ -130,6 +130,7 @@ from backend.api.feature_flags import router as feature_flags_router
 from backend.api.fire import router as fire_router
 from backend.api.fixed_income import router as fixed_income_router
 from backend.api.forecast_scorecard import router as forecast_scorecard_router
+from backend.api.gocardless_api import router as gocardless_router
 from backend.api.ibkr_api import router as ibkr_router
 from backend.api.import_api import router as import_router
 from backend.api.inbox import router as inbox_router
@@ -1137,6 +1138,7 @@ app.include_router(simplefin_router)
 app.include_router(plaid_router)
 app.include_router(lunch_flow_router)
 app.include_router(enable_banking_router)
+app.include_router(gocardless_router)
 app.include_router(alpaca_router)
 app.include_router(artifacts_router)
 app.include_router(vault_router)

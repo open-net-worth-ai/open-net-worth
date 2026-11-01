@@ -46,7 +46,7 @@ it('renders SVG chevrons instead of text glyphs in both toolbar menus', () => {
 // The gallery leads with "Recommended" (email logging, then the three reports), then "Sync a
 // connector" (CDS-UI-9: one card per offered provider, no Yodlee — disabled server-side, no
 // template), both always shown; "Start from a template" comes last.
-it('shows Recommended first, then the 6 connector syncs, then the rest', () => {
+it('shows Recommended first, then the 7 connector syncs, then the rest', () => {
   renderList()
   const sections = [...document.querySelectorAll('.a3-tpl-section')]
   expect(sections.map((s) => s.querySelector('.a3-sec-label')?.textContent)).toEqual([
@@ -64,7 +64,7 @@ it('shows Recommended first, then the 6 connector syncs, then the rest', () => {
     'Weekly report template',
     'Monthly report template',
   ])
-  expect(CONNECTOR_SYNC_TEMPLATES).toHaveLength(6)
+  expect(CONNECTOR_SYNC_TEMPLATES).toHaveLength(7)
   for (const template of CONNECTOR_SYNC_TEMPLATES) {
     expect(
       within(sections[1] as HTMLElement).getByRole('button', { name: `${template.name} template` }),

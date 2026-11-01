@@ -1,12 +1,12 @@
 ---
 title: Bank & brokerage connectors
-description: Set up SimpleFIN, Plaid, Enable Banking, Lunch Flow, Lunch Money or YNAB so Lucius can fetch and book your transactions.
+description: Set up SimpleFIN, Plaid, Enable Banking, GoCardless, Lunch Flow, Lunch Money or YNAB so Lucius can fetch and book your transactions.
 category: connectors
 order: 60
 audience: [user]
 status: beta
 related: [lucius/automations, lucius/overview, features/importing, getting-started/what-is-open-net-worth]
-keywords: [plaid, simplefin, enable banking, lunch flow, lunch money, ynab, alpaca, interactive brokers, ibkr flex retired, bank sync, brokerage sync, setup, sync template, last fetched]
+keywords: [plaid, simplefin, enable banking, gocardless, nordigen, lunch flow, lunch money, ynab, alpaca, interactive brokers, ibkr flex retired, bank sync, brokerage sync, setup, sync template, last fetched]
 ---
 
 # Bank & brokerage connectors
@@ -28,6 +28,7 @@ place a trade.
 |---|---|---|
 | A US or Canadian bank or card | **SimpleFIN** (easiest) or **Plaid** | SimpleFIN: a paid SimpleFIN Bridge account (about $15/year). Plaid: a Plaid developer account. |
 | A bank in the EU or UK | **Enable Banking** | An Enable Banking application (ID + private key). |
+| A bank in the EU or UK, and an existing GoCardless Bank Account Data account | **GoCardless** | A secret ID and secret key from GoCardless. GoCardless no longer accepts new signups. |
 | Banks in other countries | **Lunch Flow** | A Lunch Flow developer client ID and secret. |
 | Spending already tracked in Lunch Money | **Lunch Money** | A Lunch Money access token. |
 | Spending already tracked in YNAB | **YNAB** | A YNAB personal access token. |
@@ -159,6 +160,36 @@ Banks in the EU and UK, through open-banking (PSD2) consent you give at your own
 Bank consent usually lasts about 90 days. When it runs out, fetches fail with a credentials
 error — repeat steps 5–7 to renew it.
 
+## GoCardless
+
+Banks in the EU and UK through GoCardless Bank Account Data (formerly Nordigen). **This is only
+for people who already have a GoCardless Bank Account Data account.** GoCardless stopped taking new
+signups in 2025, so if you don't have one, use **Enable Banking** instead.
+
+1. Sign in at [GoCardless Bank Account Data](https://bankaccountdata.gocardless.com), open
+   **User secrets** and create a new secret. Copy the **secret ID** and **secret key**. The key
+   is shown only once.
+2. In Open Net Worth: **Connectors → Browse & add → GoCardless → Add connector**.
+3. Paste the **Secret ID** and **Secret key**, then click **Save**.
+4. Reopen the form (**⋯ → Edit configuration**). Type your bank's two-letter country code into
+   **Country** (for example `GB`, `DE`, `FR`), click **List banks**, choose your bank under
+   **Bank**, and click **Link bank**.
+5. Your bank's sign-in page opens in a new tab. Approve access there. Afterwards the bank sends
+   you back to Open Net Worth. You don't need to copy a code.
+6. Back in Open Net Worth, open the GoCardless form again. It checks the link by itself. If it
+   still says to finish at your bank, click **Check link**. Once it says **Linked to …**, link
+   your accounts in the **Accounts** list.
+
+Open Net Worth asks for as much history and as long an access period as your bank allows. For
+many banks that means 90 days of access. When access runs out, the form says it has expired and
+fetches fail with a credentials error. Click **Link a different bank** (you can pick the same
+bank again) to renew it. Linking again replaces the old link at GoCardless.
+
+**Banks limit how often you can fetch.** Many allow only four reads per account per day. The
+**Sync GoCardless** template runs twice a day, which leaves room for one fetch you ask for
+yourself. If you hit the limit, the connector shows **rate limited** with roughly when the limit
+resets. Wait until then; you don't need to link again.
+
 ## Lunch Flow
 
 Banks and investment accounts in 30+ countries, through Lunch Flow's own sign-in page.
@@ -239,6 +270,7 @@ edit; click **Create automation** to switch it on. You'll find the same drafts u
 | Connector | Default schedule |
 |---|---|
 | SimpleFIN, Plaid, Lunch Money, Lunch Flow, YNAB, Enable Banking | Every 6 hours |
+| GoCardless | Every 12 hours (banks limit reads per day) |
 
 The schedule and the wording are yours to change. Each run:
 

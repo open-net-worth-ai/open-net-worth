@@ -29,6 +29,7 @@ import { LunchFlowSection } from './LunchFlowSection'
 import { YnabSection } from './YnabSection'
 import { WebSearchSection } from './WebSearchSection'
 import { EnableBankingSection } from './EnableBankingSection'
+import { GoCardlessSection } from './GoCardlessSection'
 import { YodleeSection } from './YodleeSection'
 import { AlpacaSection } from './AlpacaSection'
 import { IbkrSection } from './IbkrSection'
@@ -52,6 +53,7 @@ const CONFIGURABLE_KINDS = new Set([
   'ynab',
   'web_search',
   'enable_banking',
+  'gocardless',
   'yodlee',
   'alpaca',
   'ibkr',
@@ -106,6 +108,8 @@ function configForm(connector: Connector, initialCountry?: string): JSX.Element 
       return <WebSearchSection providerId={connector.id.replace(WEB_SEARCH_PREFIX, '')} />
     case 'enable_banking':
       return <EnableBankingSection initialCountry={initialCountry} />
+    case 'gocardless':
+      return <GoCardlessSection initialCountry={initialCountry} />
     case 'yodlee':
       return <YodleeSection />
     case 'alpaca':

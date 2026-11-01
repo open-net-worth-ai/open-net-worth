@@ -4,6 +4,7 @@ from .automation_store import AutomationStore
 from .channel_config_store import ChannelConfigStore
 from .email_config_store import EmailConfigStore
 from .enable_banking_config_store import EnableBankingConfigStore
+from .gocardless_config_store import GoCardlessConfigStore
 from .ibkr_config_store import IbkrConfigStore
 from .instrument_store import InstrumentStore
 from .intel_stories_store import IntelStoriesStore
@@ -33,6 +34,7 @@ __all__ = [
     "MemoryStore",
     "EmailConfigStore",
     "EnableBankingConfigStore",
+    "GoCardlessConfigStore",
     "IbkrConfigStore",
     "InstrumentStore",
     "LunchMoneyConfigStore",

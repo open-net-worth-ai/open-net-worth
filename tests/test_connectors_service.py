@@ -51,6 +51,7 @@ def test_empty_state_has_builtin_transports_no_mcp():
         "lunch_flow",
         "ynab",
         "enable_banking",
+        "gocardless",
         "yodlee",
         "alpaca",
         "ibkr",

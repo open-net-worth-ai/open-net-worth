@@ -40,7 +40,7 @@ _ACCOUNT_KEYS = (
 # should say so by being truncated rather than by unrolling down the page.
 MAX_PER_GROUP = 8
 
-# The nine per-provider fetch tools (RFC connectors-as-data-sources) — the direct
+# The per-provider fetch tools (RFC connectors-as-data-sources) — the direct
 # replacement for the retired bulk `connector_sync`, which this module used to watch for
 # instead (S-F10). None of these take a `connector`/`connector_id` input field the way
 # `get_connector_status`/`set_connector_enabled` do — the provider is implicit in the tool
@@ -53,6 +53,7 @@ _FETCH_TOOL_NAMES = frozenset(
         "lunch_flow_fetch_transactions",
         "ynab_fetch_transactions",
         "enable_banking_fetch_transactions",
+        "gocardless_fetch_transactions",
         "yodlee_fetch_transactions",
         "alpaca_fetch_positions",
         "ibkr_fetch_activity",

@@ -367,6 +367,24 @@ export const CATALOG: CatalogEntry[] = [
     tools: ['get_connector_status', 'connector_sync'],
   },
   {
+    id: 'gocardless',
+    name: 'GoCardless',
+    families: ['Data source'],
+    categories: ['Banking'],
+    icon: 'accounts',
+    hue: 'var(--recv)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["gocardless"]`. For an EXISTING Bank
+    // Account Data account only — GoCardless closed new signups in 2025.
+    publisher: 'GoCardless',
+    verification: 'unverified',
+    homepageUrl: 'https://docs.gocardless.com/bank-account-data/overview',
+    supportUrl: 'https://support.gocardless.com',
+    privacyUrl: 'https://gocardless.com/privacy/',
+    mcp: false,
+    popular: false,
+    tools: ['get_connector_status', 'connector_sync'],
+  },
+  {
     id: 'yahoo_finance',
     name: 'Yahoo Finance',
     families: ['Data source'],

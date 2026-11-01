@@ -22,10 +22,12 @@ Guards:
      claim URL with no extra query params appended.
 
 Former guard 2 (GoCardless token endpoint) was removed with that connector (scope-down,
-2026-08-13) and stays removed — GoCardless is not coming back (closed to new signups). The
-SimpleFIN guard above was removed in the same pass and restored alongside the connector
-(ADR ``2026-08-14-restore-simplefin-connector``) — renumbered to 2 since GoCardless's slot
-is gone for good, not left open.
+2026-08-13). GoCardless was rebuilt on 2026-11-02 (ADR
+``2026-11-02-restore-gocardless-for-existing-accounts``); its wire contract — the exact
+``/token/new/`` body, the ``date_from``/``date_to`` window, the booked/pending shape — is pinned
+by the in-memory fake in ``tests/test_gocardless_service.py`` instead. The SimpleFIN guard above
+was removed in the same pass and restored alongside the connector (ADR
+``2026-08-14-restore-simplefin-connector``), renumbered to 2.
 """
 
 from __future__ import annotations

@@ -18,6 +18,7 @@ def test_catalog_lists_every_kind_the_migration_creates():
         "lunch_flow",
         "ynab",
         "enable_banking",
+        "gocardless",
         "yodlee",
         "alpaca",
         "ibkr",
@@ -53,6 +54,7 @@ def test_notify_channels():
         ("plaid", {"secret"}, {"access_token", "item_id", "link_token", "items"}),
         ("lunch_flow", {"client_secret"}, {"access_token", "refresh_token"}),
         ("enable_banking", {"private_key"}, {"session_id"}),
+        ("gocardless", {"secret_key"}, {"access_token", "requisition_id"}),
         ("yodlee", {"secret", "password"}, {"cobrand_session_token", "user_session_token"}),
         ("simplefin", set(), {"access_url"}),
         ("coingecko", {"api_key"}, set()),
@@ -160,6 +162,35 @@ def _row(kind: str, config: dict | None = None, **row) -> dict:
 )
 def test_the_set_up_rule_of_each_kind(kind, config, have, expected):
     assert CATALOG[kind].configured(_row(kind, config), frozenset(have)) is expected
+
+
+@pytest.mark.parametrize(
+    "state, have, expected",
+    [
+        ({"requisition_status": "LN"}, {"secret_key", "requisition_id"}, True),
+        ({"requisition_status": "EX"}, {"secret_key", "requisition_id"}, True),  # stays a row
+        ({"requisition_status": "LN"}, {"secret_key"}, False),  # no bank link started
+    ],
+)
+def test_gocardless_is_set_up_once_a_bank_link_exists(state, have, expected):
+    row = _row("gocardless", {"secret_id": "s"}, state=state)
+    assert CATALOG["gocardless"].configured(row, frozenset(have)) is expected
+
+
+@pytest.mark.parametrize(
+    "state, expected",
+    [
+        ({"requisition_status": "LN"}, None),
+        ({"requisition_status": "LN", "last_error": "GoCardless HTTP 503"}, "GoCardless HTTP 503"),
+        ({"requisition_status": "EX"}, "Bank access expired — link the bank again"),
+        (
+            {"requisition_status": "CR"},
+            "Bank link not finished — open the connector and select Check link",
+        ),
+    ],
+)
+def test_an_unfinished_or_ended_gocardless_link_reads_as_an_error(state, expected):
+    assert CATALOG["gocardless"].error(_row("gocardless", state=state), {}) == expected
 
 
 def test_the_web_search_set_up_rule_follows_whether_the_provider_needs_a_key():

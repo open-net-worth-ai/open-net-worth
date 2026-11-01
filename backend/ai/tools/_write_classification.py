@@ -141,6 +141,7 @@ READ_ONLY_TOOLS = frozenset(
         "lunch_flow_get_status",
         "ynab_get_status",
         "enable_banking_get_status",
+        "gocardless_get_status",
         "yodlee_get_status",
         "alpaca_get_status",
         "ibkr_get_status",
@@ -153,6 +154,7 @@ READ_ONLY_TOOLS = frozenset(
         "lunch_flow_list_accounts",
         "ynab_list_accounts",
         "enable_banking_list_accounts",
+        "gocardless_list_accounts",
         "yodlee_list_accounts",
         # The connector CONFIGURATION reads (ai/tools/connector_config.py). Traced:
         # get_connector_tools folds services.connectors.list_connectors() (pure store
@@ -261,10 +263,9 @@ READ_ONLY_TOOLS = frozenset(
         "preview_automation",
         "save_code_as_skill",
         # Federates providers_for_country() + per-bank list_institutions() (Enable Banking
-        # only, since GoCardless was removed) — pure reads. Used to carry mutates=("config",)
-        # because the GoCardless lookup minted/persisted an OAuth token; that provider is
-        # gone and Enable Banking's list_institutions signs a fresh JWT per call without
-        # writing anything, so the tag was retired with it (scope-down, 2026-08-13).
+        # only — GoCardless, restored 2026-11-02, is deliberately NOT federated: its bank list
+        # caches a token, and new signups are closed) — pure reads. Enable Banking's
+        # list_institutions signs a fresh JWT per call without writing anything.
         "search_institutions",
         "simulate_cashflow",
         "simulate_retirement",

@@ -135,3 +135,9 @@ alone. Every shared-file edit was written by reading the CURRENT file and insert
 row in the position/shape its live siblings (chiefly Plaid, the closest structural match — no
 OAuth/cobrand step) already occupy, confirmed against `git diff f81d0edc^ f81d0edc -- <path>` as
 a reference for what existed, never applied as a literal patch.
+
+## Amendment (2026-11-02)
+
+GoCardless is back, for people who already have a Bank Account Data account (signups are still
+closed). It was rebuilt on the current connector model, not reverted. See ADR
+`2026-11-02-restore-gocardless-for-existing-accounts`. Pluggy stays removed.

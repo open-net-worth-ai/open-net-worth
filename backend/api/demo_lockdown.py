@@ -107,7 +107,7 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/chat-pairing(/.*)?$",
         r"^/api/cost/(budget|log)$",
         r"^/api/intel/(scan|sources)(/.*)?$",
-        r"^/api/(alpaca|ibkr|plaid|enable-banking|lunch-flow|lunch-money|simplefin|yodlee|ynab"
+        r"^/api/(alpaca|ibkr|plaid|enable-banking|gocardless|lunch-flow|lunch-money|simplefin|yodlee|ynab"
         r"|telegram|email|market-data|integrations|account-linking)(/.*)?$",
         r"^/api/setup-status/complete$",
         r"^/api/watchlist/config$",

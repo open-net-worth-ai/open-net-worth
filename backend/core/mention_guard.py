@@ -27,6 +27,7 @@ MENTION_FORBIDDEN_STORES: frozenset[str] = frozenset(
         "SimpleFinConfigStore",
         "PlaidConfigStore",
         "EnableBankingConfigStore",
+        "GoCardlessConfigStore",
         "YodleeConfigStore",
         "IbkrConfigStore",
         "LunchMoneyConfigStore",

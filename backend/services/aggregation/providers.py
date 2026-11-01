@@ -1,8 +1,8 @@
 """The account-aggregation PROVIDER TABLE — one row per external data source.
 
-Nine providers are REGISTERED (seven bank aggregators — SimpleFIN, Plaid, Lunch Money,
-Lunch Flow, YNAB, Enable Banking, Yodlee — plus two brokers; eight OFFERED, Yodlee
-``disabled``). Every offered provider is a READ-ONLY DATA SOURCE (RFC
+Ten providers are REGISTERED (eight bank aggregators — SimpleFIN, Plaid, Lunch Money,
+Lunch Flow, YNAB, Enable Banking, GoCardless, Yodlee — plus two brokers; the ones whose
+catalog kind is ``disabled`` are not offered). Every offered provider is a READ-ONLY DATA SOURCE (RFC
 ``connectors-as-data-sources``): a Lucius turn calls its fetch tool
 (``<provider>_fetch_transactions`` / ``alpaca_fetch_positions`` / ``ibkr_fetch_activity``),
 which reads this table for (a) the provider's own ``fetch_window`` function, (b) its config
@@ -221,6 +221,18 @@ PROVIDERS: dict[str, Provider] = {
             _fetch=("backend.services.aggregation.enable_banking", "fetch_window"),
             _classify=("backend.services.aggregation.enable_banking", "classify_error"),
             _store=("backend.db", "EnableBankingConfigStore"),
+        ),
+        Provider(
+            key="gocardless",
+            label=CATALOG["gocardless"].label,
+            note=(
+                "EU/UK PSD2; existing GoCardless accounts only. Banks may allow 4 reads per "
+                "account per day: on 'rate_limited', wait for the reset it names."
+            ),
+            lookback_days=14,
+            _fetch=("backend.services.aggregation.gocardless", "fetch_window"),
+            _classify=("backend.services.aggregation.gocardless", "classify_error"),
+            _store=("backend.db", "GoCardlessConfigStore"),
         ),
         Provider(
             key="yodlee",

@@ -246,6 +246,22 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             read_only=True,
         ),
     ],
+    "gocardless": [
+        _t(
+            "gocardless_get_status",
+            "Read the GoCardless connector status and sync stats.",
+        ),
+        _t(
+            "gocardless_fetch_transactions",
+            "Fetch new GoCardless transactions for a date window; nothing is booked.",
+            read_only=True,
+        ),
+        _t(
+            "gocardless_list_accounts",
+            "List the GoCardless accounts and which of yours each is linked to; no transactions.",
+            read_only=True,
+        ),
+    ],
     "yodlee": [
         _t("yodlee_get_status", "Read the Yodlee connector status and sync stats."),
         _t(
@@ -352,6 +368,7 @@ SHORT: dict[str, str] = {
     "lunch_flow": "Bank and investment accounts across 30+ countries, via OAuth.",
     "ynab": "Transactions already tracked in your YNAB budget.",
     "enable_banking": "Bank accounts from the EU and UK, under PSD2.",
+    "gocardless": "EU and UK bank accounts, for an existing GoCardless Bank Account Data login.",
     "yodlee": "Bank and card accounts, worldwide.",
     "alpaca": "Read-only: imports your Alpaca positions and cash",
     "ibkr": "Read-only: daily import of IBKR positions, trades, cash",
@@ -446,6 +463,13 @@ LONG: dict[str, str] = {
     "enable_banking": (
         "Pick your bank, authorise access at the bank's own site, and balances and transactions "
         "flow into your ledger. Anything already imported is skipped."
+    ),
+    "gocardless": (
+        "For people who already have a GoCardless Bank Account Data account — GoCardless stopped "
+        "taking new signups in 2025. Paste a secret ID and key from its User secrets page, pick "
+        "your bank and authorise access at the bank's own site. Banks allow only a few reads a "
+        "day per account, so fetch a few times a day, not every hour. Access lasts as long as "
+        "your bank allows (often 90 days); link again when it runs out."
     ),
     "yodlee": (
         "Yodlee covers banks and cards in the US, Canada and many international markets. You "

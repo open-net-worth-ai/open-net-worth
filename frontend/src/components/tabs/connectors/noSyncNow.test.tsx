@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 //
 // CDS-UI-1/2 (docs/qa/acceptance/connectors-data-sources.md): a cross-cutting regression guard
-// over all 8 provider config sections — none of them may render "Sync now" or fire a request
+// over all 9 provider config sections — none of them may render "Sync now" or fire a request
 // to a `*/sync` URL. Sync now the mechanism is gone; fetching is a Lucius turn now.
 
 import type { JSX } from 'react'
@@ -13,6 +13,7 @@ import { LunchMoneySection } from './LunchMoneySection'
 import { LunchFlowSection } from './LunchFlowSection'
 import { YnabSection } from './YnabSection'
 import { EnableBankingSection } from './EnableBankingSection'
+import { GoCardlessSection } from './GoCardlessSection'
 import { AlpacaSection } from './AlpacaSection'
 import { IbkrSection } from './IbkrSection'
 
@@ -104,6 +105,22 @@ const STATUS_BY_PATH: Record<string, unknown> = {
     cash: null,
     buying_power: null,
   },
+  '/api/gocardless/status': {
+    configured: true,
+    enabled: true,
+    has_credentials: true,
+    secret_id: 'x',
+    institution_id: 'ACME_BANK_GB',
+    country: 'GB',
+    has_requisition: true,
+    requisition_status: 'LN',
+    has_link: true,
+    consent_expires_at: null,
+    linked_accounts: 1,
+    last_synced_at: null,
+    last_status: 'ok',
+    last_error: null,
+  },
   '/api/ibkr/status': {
     configured: true,
     has_token: true,
@@ -122,6 +139,7 @@ const SECTIONS: Array<{ name: string; provider: string; Component: () => JSX.Ele
   { name: 'Lunch Flow', provider: 'lunch_flow', Component: LunchFlowSection },
   { name: 'YNAB', provider: 'ynab', Component: YnabSection },
   { name: 'Enable Banking', provider: 'enable_banking', Component: () => <EnableBankingSection /> },
+  { name: 'GoCardless', provider: 'gocardless', Component: () => <GoCardlessSection /> },
   { name: 'Alpaca', provider: 'alpaca', Component: AlpacaSection },
   { name: 'Interactive Brokers', provider: 'ibkr', Component: IbkrSection },
 ]

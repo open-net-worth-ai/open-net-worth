@@ -382,6 +382,35 @@ def discover_mcp_tools_if_unlisted(server_id: str) -> None:
     get_manager().test_connect(server_id)
 
 
+def _gocardless_configured(row: Row, have: Have) -> bool:
+    """Credentials plus a requisition, linked or not: an unfinished or expired link stays a
+    list row that reads as an error (``_gocardless_error``), never drops back into the
+    directory as if it had never been set up."""
+    return bool({"secret_key", "requisition_id"} <= have and _text(row["config"].get("secret_id")))
+
+
+def _gocardless_error(row: Row, ctx: dict) -> Optional[str]:
+    from backend.db.gocardless_config_store import ENDED
+
+    status = row["state"].get("requisition_status") or ""
+    if status in ENDED:
+        return f"Bank access {ENDED[status]} — link the bank again"
+    if status and status != "LN":
+        return "Bank link not finished — open the connector and select Check link"
+    return row["state"].get("last_error")
+
+
+def _remove_gocardless(connector_id: str) -> None:
+    """Delete the requisition at GoCardless BEFORE clearing the local row (revoke-before-delete,
+    like Plaid and Lunch Flow). Best effort: the local credentials are erased either way."""
+    from backend.db.gocardless_config_store import GoCardlessConfigStore
+    from backend.services.aggregation.gocardless import delete_requisition
+
+    store = GoCardlessConfigStore()
+    delete_requisition(store)
+    store.reset()
+
+
 def _remove_mcp(connector_id: str) -> None:
     remove_mcp_server(connector_id[len(MCP_CONNECTOR_PREFIX) :])
 
@@ -488,6 +517,19 @@ _KINDS: tuple[ConnectorKind, ...] = (
         _needs(secrets=("private_key", "session_id"), config=("application_id",)),
         secret_fields=_secrets("private_key", minted=("session_id",)),
         config_keys=("application_id", "aspsp", "country"),
+    ),
+    _kind(
+        "gocardless",
+        "GoCardless",
+        _gocardless_configured,
+        secret_fields=_secrets("secret_key", minted=("access_token", "requisition_id")),
+        config_keys=("secret_id", "institution_id", "country"),
+        private_state=("accounts_meta",),
+        # The moved requisition is still linked at GoCardless; without its status the
+        # receiver would read "not configured" until someone pressed Check link.
+        moved_state=("requisition_status", "consent_expires_at", "accounts_meta"),
+        error=_gocardless_error,
+        remove=_remove_gocardless,
     ),
     _kind(
         "yodlee",

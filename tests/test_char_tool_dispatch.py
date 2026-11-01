@@ -139,7 +139,9 @@ def test_import_transactions_in_registered_set():
 # The fourteen per-provider names are now REAL, offered tools — not aliases (the alias-era
 # behavior these promoted from is pinned historically by
 # tests/test_tools_aggregation.py's "the promoted per-provider tools" section, not here).
-# A provider removed OUTRIGHT (GoCardless/Pluggy) has no successor at all. SimpleFIN was
+# A provider removed OUTRIGHT (Pluggy) has no successor at all; GoCardless was rebuilt on
+# 2026-11-02 with promoted tools from the start (ADR
+# 2026-11-02-restore-gocardless-for-existing-accounts). SimpleFIN was
 # removed in the same pass and later restored (ADR
 # 2026-08-14-restore-simplefin-connector) — it is a first-class promoted pair again, not
 # an alias. Lunch Money is a new, seventh provider (2026-08-16).

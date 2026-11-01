@@ -239,6 +239,25 @@ export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
   },
+  {
+    key: 'sync_gocardless',
+    name: 'Sync GoCardless',
+    description: 'Fetch new GoCardless transactions and book them.',
+    instructions:
+      'Fetch new GoCardless transactions and book them. Use the linked ' +
+      'account for each one. If an account isn’t linked, ask me instead of guessing. Pick a category ' +
+      'from the merchant or the bank’s category hint when it clearly matches one of mine ' +
+      'and the payee has no default category of its own; otherwise leave it empty. If the bank changed something already booked, ' +
+      'bring it in line, but never override something I changed by hand. If the bank ' +
+      'withdrew a transaction it already booked, flag it and tell me. Never delete ' +
+      'anything. Message me only when something was ' +
+      'booked or something went wrong.',
+    // Twice a day, not every 6h: banks may allow only 4 reads per account per day, and an
+    // on-demand fetch must still fit.
+    trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
+    execution: { kind: 'lucius' },
+    permission_mode: 'auto',
+  },
 ]
 
 export const ALL_TEMPLATES: AutomationTemplate[] = [

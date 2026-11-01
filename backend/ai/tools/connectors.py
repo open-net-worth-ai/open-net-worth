@@ -405,6 +405,21 @@ async def enable_banking_get_status(input_data: dict):
 
 
 @tool(
+    "gocardless_get_status",
+    description=(
+        "Check the GoCardless connector: whether it's configured and enabled, whether the "
+        "bank link is live, and when it was last fetched. Never returns secrets. Configured "
+        "and linked by the user in the UI (Connectors → GoCardless), never by you. To pull "
+        f"data, call gocardless_fetch_transactions. {PROVIDERS['gocardless'].note}"
+    ),
+    input_schema=schema_of(_NoArgsInput, tool_name="gocardless_get_status"),
+    connector="gocardless",
+)
+async def gocardless_get_status(input_data: dict):
+    return await _provider_status("gocardless")
+
+
+@tool(
     "yodlee_get_status",
     description=(
         "Check the Yodlee connector: whether it's configured and enabled, and when it was "

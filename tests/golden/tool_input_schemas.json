@@ -1323,6 +1323,54 @@
     "type": "object",
     "required": []
   },
+  "gocardless_fetch_transactions": {
+    "additionalProperties": false,
+    "properties": {
+      "since": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for the provider's own default lookback window (wide enough to see a late-posted row or a bank-side correction)."
+      },
+      "before": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "ISO date (YYYY-MM-DD), inclusive. Omit for today."
+      },
+      "account": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "Limit to one provider account id (from this tool's own 'accounts' list, or a prior call). Omit for every linked account."
+      },
+      "include_booked": {
+        "default": false,
+        "description": "False (default): only rows NOT already booked — 'new' means no live ledger row carries the row's ref, never 'since the last run', so a re-fetch of the same window is safe. True: also return already-booked rows, each carrying its booked_txn_id — use this to list a window's full activity.",
+        "type": "boolean"
+      },
+      "include_pending": {
+        "default": false,
+        "description": "False (default): skip not-yet-posted/pending rows. True: include them too — a pending row that later posts may carry supersedes_ref pointing at the pending row it replaces.",
+        "type": "boolean"
+      },
+      "limit": {
+        "default": 200,
+        "description": "Max transactions to return (hard cap 500). Use offset to page further.",
+        "type": "integer"
+      },
+      "offset": {
+        "default": 0,
+        "description": "Skip this many matching rows before returning.",
+        "type": "integer"
+      }
+    },
+    "type": "object",
+    "required": []
+  },
   "yodlee_fetch_transactions": {
     "additionalProperties": false,
     "properties": {
@@ -2563,6 +2611,12 @@
     "required": []
   },
   "enable_banking_get_status": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "gocardless_get_status": {
     "additionalProperties": false,
     "properties": {},
     "type": "object",
@@ -10588,6 +10642,12 @@
     "required": []
   },
   "enable_banking_list_accounts": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "gocardless_list_accounts": {
     "additionalProperties": false,
     "properties": {},
     "type": "object",

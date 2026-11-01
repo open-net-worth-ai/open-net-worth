@@ -63,6 +63,7 @@ _NEVER_WRITE = frozenset(
         "lunch_flow",
         "ynab",
         "enable_banking",
+        "gocardless",
         "yodlee",
     )
 )
@@ -97,6 +98,7 @@ def test_the_exempt_class_is_the_expected_curated_set_not_a_heuristic():
             "lunch_flow_fetch_transactions",
             "ynab_fetch_transactions",
             "enable_banking_fetch_transactions",
+            "gocardless_fetch_transactions",
             "yodlee_fetch_transactions",
             "alpaca_fetch_positions",
             "ibkr_fetch_activity",

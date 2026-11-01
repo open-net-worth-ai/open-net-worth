@@ -42,6 +42,7 @@ export const LOGO_FILES: Record<string, string> = {
   alpaca: 'alpaca.png',
   ibkr: 'ibkr.png',
   enable_banking: 'enable_banking.png',
+  gocardless: 'gocardless.svg',
   yahoo_finance: 'yahoo_finance.png',
   coingecko: 'coingecko.png',
   'web_search:duckduckgo': 'duckduckgo.svg',

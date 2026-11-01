@@ -42,6 +42,7 @@ const FAMILIES: Record<string, ConnectorFamily[]> = {
   plaid: ['Data source'],
   lunch_flow: ['Data source'],
   enable_banking: ['Data source'],
+  gocardless: ['Data source'],
   yodlee: ['Data source'],
   alpaca: ['Data source'],
   ibkr: ['Data source'],
@@ -60,6 +61,7 @@ const PRESENTATION: Record<string, { icon: string; hue: string }> = {
   plaid: { icon: 'accounts', hue: 'var(--crypto)' },
   lunch_flow: { icon: 'accounts', hue: 'var(--good)' },
   enable_banking: { icon: 'accounts', hue: 'var(--cash-c)' },
+  gocardless: { icon: 'accounts', hue: 'var(--recv)' },
   yodlee: { icon: 'accounts', hue: 'var(--good)' },
   alpaca: { icon: 'investments', hue: 'var(--crypto)' },
   ibkr: { icon: 'investments', hue: 'var(--ibkr)' },
@@ -95,6 +97,10 @@ const DEVELOPERS: Record<string, { name: string; url: string }> = {
   enable_banking: {
     name: 'Enable Banking',
     url: 'https://enablebanking.com/docs/api/reference/',
+  },
+  gocardless: {
+    name: 'GoCardless',
+    url: 'https://docs.gocardless.com/bank-account-data/overview',
   },
   yodlee: { name: 'Yodlee (Envestnet)', url: 'https://www.yodlee.com/' },
   alpaca: {
@@ -137,6 +143,7 @@ const PROMPTS: Record<string, string[]> = {
   plaid: ['Reconnect my bank account', 'Show all accounts linked through Plaid'],
   lunch_flow: ['Sync my Lunch Flow accounts now', 'Show accounts linked through Lunch Flow'],
   enable_banking: ['Sync my EU bank accounts', 'Show accounts linked through Enable Banking'],
+  gocardless: ['Fetch my GoCardless transactions', 'Show accounts linked through GoCardless'],
   yodlee: ['Sync my Yodlee accounts now', 'Show all accounts linked through Yodlee'],
   alpaca: ['Import my Alpaca positions', 'Show my Alpaca cash balance'],
   ibkr: ['Import today’s IBKR trades', 'Show my IBKR cash balance'],

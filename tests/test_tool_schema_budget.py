@@ -267,7 +267,12 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # offer is unchanged.
     # 2026-10-31: 468_000 -> 470_000. search_connector_directory (ai/tools/connectors.py) — Lucius
     # searches the Browse & add directory; ~1.1K chars after trimming, discoverable not CORE.
-    budget = 470_000
+    # 2026-11-02: 470_000 -> 474_000. GoCardless restored (ADR
+    # 2026-11-02-restore-gocardless-for-existing-accounts): its three connector-scoped tools
+    # (get_status / fetch_transactions / list_accounts), ~3.6K chars after trimming its provider
+    # note — the same shape and size as Enable Banking's three. Not CORE, so the default offer
+    # is unchanged.
+    budget = 474_000
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."
