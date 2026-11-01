@@ -57,8 +57,9 @@ attached, written about you ("Splits rent with Priya 60/40") — never "User…"
 
 **Recent** is what makes every Lucius run act like the one you talked to. When a chat settles
 something that will matter over the next two weeks — an agreement about money someone owes you and
-how to book it, a decision whose result is still to come, something you'll do or asked to be
-reminded of — he writes it down ready to act on, for example *When Priya's PayNow for November
+how to book it, a decision whose result is still to come, a step you took and are waiting to hear
+back on (you applied for a loan, disputed a charge, asked for a fee waiver), something you'll do or
+asked to be reminded of — he writes it down ready to act on, for example *When Priya's PayNow for November
 arrives (S$540): book Rent S$500, Utilities S$20, Phone & Internet S$20*. Every run sees Recent
 first — your chats, a Capture of a bank notification, an automation, the daily briefing — and when
 what it handles matches an entry, it does what the entry says rather than guessing from past

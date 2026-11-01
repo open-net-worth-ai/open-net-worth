@@ -182,8 +182,9 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
         "a goal or commitment → Plan / goals / commitments",
     ),
     (
-        "the state of this conversation or a run (what is being waited on, what was offered or "
-        "proposed, what awaits the user's confirmation, what an automation flagged)",
+        "the state of this conversation or a run (what Lucius offered or proposed and the user "
+        "did not take up, what awaits the user's confirmation, what an automation flagged) — "
+        "NOT a step the user took themselves whose outcome is still to come",
         "Nowhere",
         "conversation state → nowhere",
     ),
@@ -209,8 +210,9 @@ _ROUTES: tuple[tuple[str, str, str], ...] = (
     (
         "decided, agreed or asked for in this conversation and still in flight over the next two "
         "weeks, with no screen that shows it — an agreement about a payment someone owes and how "
-        "to book it, a decision whose result is still to come, something the user said they will "
-        "do or asked to be reminded of",
+        "to book it, a decision whose result is still to come, a step the user took themselves "
+        "and is waiting to hear back on (applied, called, asked for a waiver, submitted a form), "
+        "something the user said they will do or asked to be reminded of",
         f"Memory · Recent (no topic; written ready to act on — who, how much, how to book; lapses "
         f"after {OPEN_ITEM_DEFAULT_DAYS} days)",
         f"decided or in flight, the next two weeks → Recent (lapses in {OPEN_ITEM_DEFAULT_DAYS} "

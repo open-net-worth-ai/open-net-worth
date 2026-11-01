@@ -663,3 +663,24 @@ cursor advanced anyway so nothing retried, and the log line carried only the rea
   passing remark that changes a stored figure ("it varies, but just keep $10"). The prompt now
   shows each shape with made-up names, says a passing correction is still an UPDATE, and keeps
   Lucius's explanations out of a fact. A dry run over those chats caught all four.
+
+## Amendment 13 (2026-11-01) — a step you took is a fact, even while you wait to hear back
+
+The extractor's "never store conversation state" rule listed "what is being waited on". On the
+owner's book that dropped "Ok. I applied. Waiting for the results": the person's own act, whose
+outcome was pending, read as waiting state. Amendment 12's example ("ok I applied, waiting for the
+result") rescued that one wording, but the rule still said the opposite, so any other step with a
+pending outcome ("I called the bank to dispute the charge, they'll get back to me") stayed at risk.
+The same chat also left the commitment's "Apply" step pending, so neither home held the fact.
+
+- **Conversation state is Lucius's, not the person's.** What stays out: what Lucius offered and the
+  person did not take up, what Lucius is waiting for them to confirm, what an automation flagged. A
+  step the person took themselves outside the app — applied, called, asked, emailed, signed,
+  submitted, sent — whose outcome is still to come is a Recent entry, in the extractor prompt, the
+  routing guide's conversation-state and Recent rows, and the upgrade sort's open-item rule alike.
+- **One home still wins.** When Lucius says in that chat that he recorded the step on a plan or
+  commitment, the plan holds it and memory adds nothing. The extractor reads chat text only, not
+  tool calls, so it is Lucius's words that tell it.
+- **Pinned by cases, not one example.** E32–E36 (`backend/evals/memory/cases_waiting.py`): a
+  dispute by phone, a fee waiver by email and a submitted claim are each one Recent entry; an offer
+  of Lucius's the person declined, and a step Lucius recorded on a plan, store nothing.

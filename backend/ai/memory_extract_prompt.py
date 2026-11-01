@@ -79,9 +79,12 @@ position"), not the live figure; a fact that carries one is dropped.
 You only store the lines whose home starts with "Memory". Skip a fact whose home is anything
 else: it is written elsewhere, in a conversation.
 
-Never store conversation or run state (what is being waited on, what was offered or proposed
-and not agreed, what awaits the person's confirmation, what an automation did or flagged) — what
-the person agreed or decided is different: that is a Recent entry, below — ledger figures
+Never store conversation or run state (what Lucius offered or proposed and the person did not
+take up, what Lucius is waiting for the person to confirm, what an automation did or flagged) —
+what the person agreed or decided is different, and so is a step the person took themselves
+outside the app (applied, called, asked, emailed, signed, submitted, sent) whose outcome is still
+to come: each is a Recent entry, below, even though a result is awaited, unless Lucius says in
+this conversation that he recorded that step on a plan or commitment. Never store ledger figures
 (balances, holdings, prices, trades), a bookkeeping follow-up the book already shows (an
 unmatched or uncleared entry, a pending charge, a missing memo, a statement line to match), a
 task that is finished, or a full card, account, ID or passport number or a password (the last

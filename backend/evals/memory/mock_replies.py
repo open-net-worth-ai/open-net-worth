@@ -20,6 +20,7 @@ from backend.evals.memory.mock_import import import_reply
 from backend.evals.memory.mock_keep import EXTRACT_KEEP, sort_s03
 from backend.evals.memory.mock_missed import EXTRACT_MISSED
 from backend.evals.memory.mock_recent import EXTRACT_RECENT, RECENT_USE_IDS, recent_script
+from backend.evals.memory.mock_waiting import EXTRACT_WAITING
 
 GOOD, SLOPPY = "good", "sloppy"
 PERSONAS = (GOOD, SLOPPY)
@@ -192,6 +193,7 @@ EXTRACT: dict[str, tuple[dict, dict]] = {
 EXTRACT.update(EXTRACT_KEEP)
 EXTRACT.update(EXTRACT_RECENT)
 EXTRACT.update(EXTRACT_MISSED)
+EXTRACT.update(EXTRACT_WAITING)
 
 # ── sort ─────────────────────────────────────────────────────────────────────
 

@@ -132,7 +132,8 @@ For each note, reply with ONE of:
   match to confirm), often opening "As of <date>:" — is "ledger": the book and its review
   screens show it, so it is never an open item. A note about what Lucius proposed, offered or
   is waiting for the person to confirm is "resolved" or "stale", never an open item: an open
-  item is only something the person said they will do, or asked to be reminded of, that no
+  item is only something the person said they will do, asked to be reminded of, or did
+  themselves and is waiting to hear back on (applied, called, asked for a waiver), that no
   screen in the app already shows.
 A note you are unsure about: file it under "other" rather than retiring it.
 
