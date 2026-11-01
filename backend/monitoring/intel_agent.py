@@ -22,7 +22,7 @@ from backend.core.llm_seam import (
     submit_batch,
 )
 from backend.core.urls import hostname as _hostname
-from backend.core.user_time import user_now
+from backend.core.user_time import user_now, user_today
 from backend.db.evidence_store import EvidenceStore
 from backend.db.instrument_store import InstrumentStore
 from backend.db.intel_stories_store import IntelStoriesStore
@@ -479,10 +479,10 @@ def _existing_stories_block(stories: list[dict]) -> str:
     return "\n".join(lines)
 
 
-def _timeline_event(new_event_data: dict, now: str) -> dict:
+def _timeline_event(new_event_data: dict) -> dict:
     return {
         "id": str(uuid.uuid4()),
-        "date": new_event_data.get("date", now[:10]),
+        "date": new_event_data.get("date", user_today().isoformat()),
         "title": new_event_data.get("title", ""),
         "summary": new_event_data.get("summary", ""),
         "sources": new_event_data.get("sources", []),
@@ -620,7 +620,7 @@ def _persist_story(
                 src["published_at"] = url_to_date.get(src["url"], "")
             if not src.get("domain") and src.get("url"):
                 src["domain"] = _hostname(src["url"])
-    new_entry = _timeline_event(new_event_data, now) if new_event_data else None
+    new_entry = _timeline_event(new_event_data) if new_event_data else None
 
     existing = None
     if s.get("id"):
@@ -693,9 +693,9 @@ def _archive_stale_stories(store: IntelStoriesStore, days: int = STALE_STORY_DAY
             last = datetime.fromisoformat(ts)
         except (ValueError, TypeError):
             continue
-        # Stories written by intel_agent carry naive local timestamps; the Analyst writes
-        # tz-aware UTC ones. Normalize naive → aware local so the comparison below can never
-        # raise on a mixed-timestamp store (see I6).
+        # Stories intel_agent wrote before 2026-11-01 carry naive local timestamps; every
+        # writer now stamps tz-aware UTC. Normalize naive → aware local so the comparison
+        # below can never raise on a mixed-timestamp store (see I6).
         if last.tzinfo is None:
             last = last.astimezone()
         if last < cutoff:
@@ -921,7 +921,7 @@ def apply_intel_batch_results(results: list, handle: str, ledger_row: dict) -> i
         return 0
 
     store = IntelStoriesStore()
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     reviewed = _reviewed_stories(stories_data, url_to_date)
     for s in reviewed:
         _persist_story(store, s, url_to_date, now, default_type=default_type)
@@ -1274,7 +1274,7 @@ async def run_intel_scan(*, raise_on_incomplete: bool = False) -> int:
             raise IntelScanIncomplete("Analysis returned no result")
         return 0
 
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     reviewed = _reviewed_stories(stories_data, url_to_date)
     for s in reviewed:
         affected: list[dict] | None = None
@@ -1395,7 +1395,7 @@ async def run_opportunity_scan() -> int:
     if stories_data is None:
         return 0
 
-    now = datetime.now().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     reviewed = _reviewed_stories(stories_data, url_to_date)
     for s in reviewed:
         _persist_story(store, s, url_to_date, now, default_type="opportunity")

@@ -618,6 +618,9 @@ export function timeAgo(iso: string): string {
     const d = new Date(iso)
     if (isNaN(d.getTime())) return ''
     const s = Math.floor((Date.now() - d.getTime()) / 1000)
+    // Clock skew, or a zoneless timestamp read as this browser's local time, can land in the
+    // future — never print a negative age.
+    if (s < 0) return 'just now'
     if (s < 60) return `${s}s ago`
     const m = Math.floor(s / 60)
     if (m < 60) return `${m}m ago`

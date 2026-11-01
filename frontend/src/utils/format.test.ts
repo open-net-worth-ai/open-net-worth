@@ -16,6 +16,7 @@ import {
   txnMentionSublabel,
   localIso,
   newsTime,
+  timeAgo,
   fDate,
   fMonth,
   fDateTime,
@@ -369,6 +370,27 @@ describe('newsTime — relative under 24h, absolute date beyond that', () => {
   it('returns empty string for an empty or unparseable date', () => {
     expect(newsTime('')).toBe('')
     expect(newsTime('not a date')).toBe('')
+  })
+})
+
+describe('timeAgo — past-relative age, never negative', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('reads a future timestamp as "just now", not a negative age', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-01T12:00:00.000Z'))
+    // ~13h ahead: a zoneless server stamp read in a browser west of the server.
+    expect(timeAgo('2026-11-02T00:59:15.000Z')).toBe('just now')
+    expect(timeAgo('2026-11-01T12:00:01.000Z')).toBe('just now')
+  })
+
+  it('still counts a past timestamp up from seconds', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-11-01T12:00:00.000Z'))
+    expect(timeAgo('2026-11-01T11:59:30.000Z')).toBe('30s ago')
+    expect(timeAgo('2026-11-01T07:00:00.000Z')).toBe('5h ago')
   })
 })
 
