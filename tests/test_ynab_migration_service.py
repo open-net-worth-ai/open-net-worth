@@ -381,10 +381,10 @@ def test_a_blank_category_stays_blank_when_labels_are_given(db_isolated, as_give
                 "category": category}  # fmt: skip
 
     created, _ = ledger_service.bulk_create_transactions(
-        [inflow(1, cat_id)], force=True, labels_as_given=as_given
+        [inflow(1, cat_id)], allow_duplicate=True, labels_as_given=as_given
     )
     created, _ = ledger_service.bulk_create_transactions(
-        [inflow(2, None)], force=True, labels_as_given=as_given
+        [inflow(2, None)], allow_duplicate=True, labels_as_given=as_given
     )
     got = ledger_service.transactions.find_by_id(created[0]["id"]).get("category")
     assert got == (cat_id if expected == "learned" else None)

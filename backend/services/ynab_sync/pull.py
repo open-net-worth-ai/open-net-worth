@@ -43,7 +43,7 @@ def create(rendered: dict, *, resurrect: bool = False) -> dict:
     pairs = {(e["source"], e["ref"]) for e in rendered["external_refs"]} if resurrect else None
     created, skipped = ledger_service.bulk_create_transactions(
         [row],
-        force=True,
+        allow_duplicate=True,
         dedup_by_external_ref=True,
         labels_as_given=True,
         resurrect_refs=pairs,

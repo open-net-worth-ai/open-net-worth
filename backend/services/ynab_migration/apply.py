@@ -182,7 +182,7 @@ def _book_chunk(rows: list[dict], batch_id: str, tally: Counter, problems: list[
         created, skipped = ledger_service.bulk_create_transactions(
             rows,
             batch_id=batch_id,
-            force=True,
+            allow_duplicate=True,
             dedup_by_external_ref=True,
             labels_as_given=True,
         )
