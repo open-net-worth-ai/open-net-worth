@@ -83,12 +83,12 @@ MAX_ERROR_BODY_BYTES = 8192
 # hostile one could answer with megabytes; a name is a label, not a payload.
 MAX_SERVER_INFO_CHARS = 200
 
-# The spec's ``instructions`` field is meant as a paragraph, not a label, so it gets a looser
-# cap than name/version/publisher — but it is still bounded, and unlike those short identity
-# fields it goes through ``sanitize_untrusted`` (see ``parse_server_info``): it is rendered as
-# a connector's description text, and a hostile server's free-text is exactly where a forged
-# fence/confusable-homoglyph attempt would hide.
-MAX_SERVER_INSTRUCTIONS_CHARS = 600
+# The spec's ``instructions`` field is a server's notes to the model calling its tools — several
+# paragraphs, often with its safety rules last — so it is kept whole up to a generous bound. It
+# goes through ``sanitize_untrusted`` (see ``parse_server_info``): it is shown on the server's
+# page and handed to Lucius (``ai.prompts._fmt_mcp_server_instructions``), and a hostile
+# server's free-text is exactly where a forged fence/confusable-homoglyph attempt would hide.
+MAX_SERVER_INSTRUCTIONS_CHARS = 8000
 
 PROTOCOL_VERSION = "2024-11-05"
 CLIENT_INFO = {"name": "open-net-worth-client", "version": "1"}

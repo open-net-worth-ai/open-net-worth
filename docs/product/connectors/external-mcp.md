@@ -165,6 +165,12 @@ the publisher panel and Tool permissions on the same page say the rest. A server
 the directory reads what its directory card reads, unless the server sends a description of its
 own.
 
+Lucius gets those instructions too, in full, for every server that's switched on — the same way
+other AI apps pass them on. They help Lucius use that server's tools the way its publisher
+intended (which tool to call first, what to confirm with you). They apply only to that server's
+tools, never outrank what you ask or the app's own rules, and never change your tool
+permissions. A paused server's instructions are left out.
+
 **Updates.** A remote server updates itself — the vendor changes it, and its next answer comes
 from the new version. A local server runs until the app restarts; most directory servers launch with
 `@latest`, so each restart starts the newest release (a little slower to start, and it needs
@@ -222,7 +228,9 @@ their server at any time.
   the network. It runs for as long as the connector is enabled, not just during a call. Only add
   commands from sources you trust, like any software you install.
 - **A server's answers can try to trick Lucius.** Text from a third-party server is treated as
-  data, never as instructions from you, and is cleaned and shortened before Lucius sees it. That
+  data, never as instructions from you, and is cleaned and shortened before Lucius sees it. A
+  server's own instructions are the one exception Lucius follows — only for that server's tools,
+  and never past your tool permissions. That
   lowers the risk; it doesn't remove it — which is why approval is the default.
 - **Some servers write to real accounts.** Stripe, QuickBooks, Xero and Mercury tools can create or
   change records in those services, and Interactive Brokers, Robinhood, moomoo, Longbridge,
