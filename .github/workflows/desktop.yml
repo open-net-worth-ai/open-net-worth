@@ -340,8 +340,8 @@ jobs:
           xvfb-run -a node qa/close.mjs
           npx playwright install --with-deps chromium
           xvfb-run -a node qa/browser.mjs
-          # qa/server-client.mjs is not run on Linux yet: it already fails on macOS main and closes
-          # the app on Escape in the activity prompt on Linux (follow-up).
+          # qa/server-client.mjs runs on macOS only: on Linux, Escape in the activity prompt closes
+          # the app (follow-up).
       - name: Package AppImage and .deb
         run: cd desktop && npm run make
       - name: Verify the packaged AppImage
