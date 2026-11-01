@@ -82,6 +82,7 @@ at `http://localhost:5175`, then pipe or paste its token into `demo-aws.sh tunne
 | Shell on the VM | `demo-aws.sh ssh` |
 | Roll back | `demo-aws.sh ssh docker images onw-demo`, then set `ONW_DEMO_TAG=<old tag>` in `/srv/onw-demo-stack/.env` and run `docker compose up -d app` there |
 | Fresh book | `demo-aws.sh book --reset` (keeps Lucius's AI settings) |
+| Bigger VM | Lightsail cannot resize in place: `aws lightsail create-instance-snapshot`, then `create-instances-from-snapshot` with the new `--bundle-id` and a new name, re-close the firewall to 22 only (`put-instance-public-ports`), move `onw-demo-ip` with `detach-static-ip` / `attach-static-ip`, stop then delete the old instance. Its tunnel connector comes up with the copy, so visitors see no gap; the scripts find the VM through the static IP, whatever the instance is called |
 | Back up the live book | `demo-aws.sh backup` — saves it to `~/.open-net-worth-demo-backups/` on this machine (newest 14 kept; `ONW_DEMO_BACKUP_DIR` / `ONW_DEMO_BACKUP_KEEP`). `book --reset` and `book DIR` take one first and refuse to replace the book if it fails |
 | Restore a backup | `tar xzf <backup>.tar.gz -C <dir>`, then `demo-aws.sh book <dir>` (Lucius's AI settings on the VM are kept) |
 | Change quotas | edit `DEMO_TOKENS_*` / `DEMO_TURNS_*` / `DEMO_TRUSTED_PROXY_HOPS` in `/srv/onw-demo-stack/.env`, then `docker compose up -d app` |

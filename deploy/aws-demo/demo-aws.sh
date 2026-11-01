@@ -40,9 +40,12 @@ IP=""
 # not depend on an AWS sign-in session that expires.
 need_vm() {
   [[ -n "${ONW_DEMO_HOST:-}" ]] && { IP="${ONW_DEMO_HOST}"; return 0; }
-  IP="$(ls_ get-instance --instance-name "${NAME}" --query 'instance.publicIpAddress' --output text 2>/dev/null)" \
-    && [[ -n "${IP}" && "${IP}" != "None" ]] \
-    || die "no running Lightsail instance '${NAME}' in ${REGION} — run provision first"
+  # The static IP outlives the instance: an upgrade starts a bigger instance from a snapshot
+  # under a new name and moves this IP to it (onw-demo → onw-demo-xl, 2026-11-01).
+  IP="$(ls_ get-static-ip --static-ip-name "${NAME}-ip" --query 'staticIp.ipAddress' --output text 2>/dev/null)" \
+    || IP="$(ls_ get-instance --instance-name "${NAME}" --query 'instance.publicIpAddress' --output text 2>/dev/null)"
+  [[ -n "${IP}" && "${IP}" != "None" ]] \
+    || die "no static IP '${NAME}-ip' or instance '${NAME}' in ${REGION} — run provision first"
 }
 SSH_OPTS=(-i "${SSH_KEY}" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=30)
 remote() { ssh "${SSH_OPTS[@]}" "ubuntu@${IP}" "$@"; }
