@@ -230,7 +230,7 @@ export function ConnectorAccountsList({
     <Stack gap="--space-3">
       <div className="conn-acct-head">
         {!embedded && (
-          <Text size="sm" tone="ink">
+          <Text size="sm" tone="ink" weight={600}>
             Accounts
           </Text>
         )}

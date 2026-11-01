@@ -383,31 +383,41 @@ def discover_mcp_tools_if_unlisted(server_id: str) -> None:
 
 
 def _gocardless_configured(row: Row, have: Have) -> bool:
-    """Credentials plus a requisition, linked or not: an unfinished or expired link stays a
+    """Credentials plus at least one bank, linked or not: an unfinished or expired link stays a
     list row that reads as an error (``_gocardless_error``), never drops back into the
     directory as if it had never been set up."""
-    return bool({"secret_key", "requisition_id"} <= have and _text(row["config"].get("secret_id")))
+    return bool({"secret_key", "requisitions"} <= have and _text(row["config"].get("secret_id")))
 
 
 def _gocardless_error(row: Row, ctx: dict) -> Optional[str]:
-    from backend.db.gocardless_config_store import ENDED
+    """A bank whose access ended needs the user, even while the others still sync — so it is
+    an error naming how many. An unfinished link is one only when no bank is linked yet (the
+    user may be mid-consent for one more)."""
+    from backend.db.gocardless_config_store import ENDED, LINKED
 
-    status = row["state"].get("requisition_status") or ""
-    if status in ENDED:
-        return f"Bank access {ENDED[status]} — link the bank again"
-    if status and status != "LN":
-        return "Bank link not finished — open the connector and select Check link"
+    banks = [b for b in (row["state"].get("banks") or {}).values() if isinstance(b, dict)]
+    ended = [b for b in banks if b.get("status") in ENDED]
+    if ended and len(banks) == 1:
+        return f"Bank access {ENDED[ended[0]['status']]} — link the bank again"
+    if ended:
+        return f"{len(ended)} of {len(banks)} banks need linking again"
+    if banks and not any(b.get("status") == LINKED for b in banks):
+        return "Bank link not finished — open the connector and select Check links"
     return row["state"].get("last_error")
 
 
 def _remove_gocardless(connector_id: str) -> None:
-    """Delete the requisition at GoCardless BEFORE clearing the local row (revoke-before-delete,
-    like Plaid and Lunch Flow). Best effort: the local credentials are erased either way."""
+    """Delete every bank's requisition at GoCardless BEFORE clearing the local row
+    (revoke-before-delete, like Plaid and Lunch Flow). Best effort: the local credentials are
+    erased either way."""
     from backend.db.gocardless_config_store import GoCardlessConfigStore
-    from backend.services.aggregation.gocardless import delete_requisition
+    from backend.services.aggregation.gocardless import remove_all_banks
 
     store = GoCardlessConfigStore()
-    delete_requisition(store)
+    try:
+        remove_all_banks(store)
+    except Exception:
+        logger.warning("gocardless: revoking linked banks on Remove failed", exc_info=True)
     store.reset()
 
 
@@ -522,12 +532,12 @@ _KINDS: tuple[ConnectorKind, ...] = (
         "gocardless",
         "GoCardless",
         _gocardless_configured,
-        secret_fields=_secrets("secret_key", minted=("access_token", "requisition_id")),
-        config_keys=("secret_id", "institution_id", "country"),
-        private_state=("accounts_meta",),
-        # The moved requisition is still linked at GoCardless; without its status the
-        # receiver would read "not configured" until someone pressed Check link.
-        moved_state=("requisition_status", "consent_expires_at", "accounts_meta"),
+        secret_fields=_secrets("secret_key", minted=("access_token", "requisitions")),
+        config_keys=("secret_id",),
+        private_state=("accounts_meta", "banks"),
+        # The moved requisitions are still linked at GoCardless; without each bank's name and
+        # status the receiver would show unnamed, unlinked banks until someone checked them.
+        moved_state=("banks", "accounts_meta"),
         error=_gocardless_error,
         remove=_remove_gocardless,
     ),

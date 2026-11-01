@@ -1,4 +1,5 @@
-"""REST smoke for the GoCardless endpoints — status / config / institutions / link / check-link.
+"""REST smoke for the GoCardless endpoints — status / config / institutions / link / check-link /
+relink / remove.
 
 The service functions that call GoCardless are mocked; the store is real and DB-isolated."""
 
@@ -22,9 +23,21 @@ def client(db_isolated, monkeypatch):
 
     def _start_link(institution_id, country, redirect):
         calls["link"] = (institution_id, country, redirect)
-        return {"link": "https://ob.gocardless.com/x"}
+        return {"link": "https://ob.gocardless.com/x", "key": "k1"}
+
+    def _relink(key, redirect):
+        calls["relink"] = (key, redirect)
+        return {"link": "https://ob.gocardless.com/y", "key": "k2"}
+
+    def _remove(key):
+        if key != "k1":
+            raise ValidationError("That bank is not linked")
+        calls["remove"] = key
+        return {"removed": True, "banks_left": 0}
 
     monkeypatch.setattr(svc, "start_link", _start_link)
+    monkeypatch.setattr(svc, "relink_bank", _relink)
+    monkeypatch.setattr(svc, "remove_bank", _remove)
     app = FastAPI()
     from backend.api.gocardless_api import router
 
@@ -72,7 +85,7 @@ def test_institutions_and_link(client):
         "/api/gocardless/link",
         json={"institution_id": "ACME_BANK_GB", "country": "GB", "redirect": "http://localhost"},
     )
-    assert resp.json() == {"link": "https://ob.gocardless.com/x"}
+    assert resp.json() == {"link": "https://ob.gocardless.com/x", "key": "k1"}
     assert client.calls["link"] == ("ACME_BANK_GB", "GB", "http://localhost")
 
 
@@ -88,6 +101,27 @@ def test_a_service_validation_error_is_a_422(client, monkeypatch):
     assert "2-letter" in resp.json()["detail"]
 
 
-def test_check_link_without_a_requisition_is_refused(client):
+def test_check_link_without_a_bank_is_refused(client):
     resp = client.post("/api/gocardless/check-link")
     assert resp.status_code == 422
+
+
+def test_relink_and_remove_one_bank(client):
+    resp = client.post("/api/gocardless/banks/k1/relink", json={"redirect": "http://localhost"})
+    assert resp.json() == {"link": "https://ob.gocardless.com/y", "key": "k2"}
+    assert client.calls["relink"] == ("k1", "http://localhost")
+    assert client.post("/api/gocardless/banks/k1/remove").json()["removed"] is True
+    assert client.post("/api/gocardless/banks/zz/remove").status_code == 422
+
+
+def test_status_lists_banks_by_name_never_by_requisition(client):
+    _store().add_bank(
+        "REQ-SECRET",
+        institution_id="ACME_BANK_GB",
+        institution_name="ACME Bank",
+        country="GB",
+        consent_expires_at=None,
+    )
+    body = client.get("/api/gocardless/status").json()
+    assert [b["institution_name"] for b in body["banks"]] == ["ACME Bank"]
+    assert "REQ-SECRET" not in repr(body)

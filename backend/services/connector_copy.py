@@ -466,10 +466,10 @@ LONG: dict[str, str] = {
     ),
     "gocardless": (
         "For people who already have a GoCardless Bank Account Data account — GoCardless stopped "
-        "taking new signups in 2025. Paste a secret ID and key from its User secrets page, pick "
-        "your bank and authorise access at the bank's own site. Banks allow only a few reads a "
-        "day per account, so fetch a few times a day, not every hour. Access lasts as long as "
-        "your bank allows (often 90 days); link again when it runs out."
+        "taking new signups in 2025. Paste a secret ID and key from its User secrets page, link "
+        "each of your banks and authorise access at the bank's own site. Banks allow only a few "
+        "reads a day per account, so fetch a few times a day, not every hour. Each bank's access "
+        "lasts as long as that bank allows (often 90 days); link it again when it runs out."
     ),
     "yodlee": (
         "Yodlee covers banks and cards in the US, Canada and many international markets. You "

@@ -176,14 +176,21 @@ signups in 2025, so if you don't have one, use **Enable Banking** instead.
    **Bank**, and click **Link bank**.
 5. Your bank's sign-in page opens in a new tab. Approve access there. Afterwards the bank sends
    you back to Open Net Worth. You don't need to copy a code.
-6. Back in Open Net Worth, open the GoCardless form again. It checks the link by itself. If it
-   still says to finish at your bank, click **Check link**. Once it says **Linked to …**, link
+6. Back in Open Net Worth, open the GoCardless form again. It checks the link by itself. If the
+   bank still says to finish authorising, click **Check links**. Once it says **Linked**, link
    your accounts in the **Accounts** list.
 
+**More than one bank:** one GoCardless connector holds all of them. Repeat steps 4–6 under
+**Add a bank** for each one (the button reads **Link this bank** once a bank is listed). Every
+bank is listed under **Your banks** with its own status and its own **Remove**, which revokes
+that bank's access at GoCardless and leaves the others alone.
+
 Open Net Worth asks for as much history and as long an access period as your bank allows. For
-many banks that means 90 days of access. When access runs out, the form says it has expired and
-fetches fail with a credentials error. Click **Link a different bank** (you can pick the same
-bank again) to renew it. Linking again replaces the old link at GoCardless.
+many banks that means 90 days of access, and each bank's access runs out on its own date. When
+one runs out, that bank says **Access expired** and the connector shows how many banks need
+linking again; the other banks keep fetching. Click **Link again** on that bank to renew it.
+To renew a bank before it expires, click **Renew**: the old access keeps working until you
+finish at the bank, so you lose nothing if you stop halfway.
 
 **Banks limit how often you can fetch.** Many allow only four reads per account per day. The
 **Sync GoCardless** template runs twice a day, which leaves room for one fetch you ask for

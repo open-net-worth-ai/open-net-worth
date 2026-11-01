@@ -5,10 +5,13 @@ Thin router over ``db.GoCardlessConfigStore`` + ``services.aggregation.gocardles
   * ``GET  /api/gocardless/institutions``  — the banks for a country (picker feed).
   * ``PUT  /api/gocardless/config``        — secret_id + write-only secret_key, enable/disable.
     A blank secret_key keeps the saved one.
-  * ``POST /api/gocardless/link``          — create a requisition → the bank ``link`` to open.
-  * ``POST /api/gocardless/check-link``    — re-read the requisition after consent.
+  * ``POST /api/gocardless/link``          — link one more bank → the bank ``link`` to open.
+  * ``POST /api/gocardless/check-link``    — re-read every bank's requisition after consent.
+  * ``POST /api/gocardless/banks/{key}/relink`` — a new consent for one listed bank.
+  * ``POST /api/gocardless/banks/{key}/remove`` — unlink one bank (revoked at GoCardless first).
 
-The secret key, access token and requisition id are never returned. Fetching rows happens only
+A bank is named by its public ``key``. The secret key, access token and requisition ids are
+never returned. Fetching rows happens only
 inside a Lucius turn (``gocardless_fetch_transactions`` + ``add_transactions``), per RFC
 ``connectors-as-data-sources``.
 """
@@ -33,6 +36,11 @@ class GoCardlessConfigUpdate(BaseModel):
     # Write-only — blank/omitted keeps the saved secret_key.
     secret_key: Optional[str] = None
     enabled: Optional[bool] = None
+
+
+class GoCardlessRelinkRequest(BaseModel):
+    # Where the bank sends the user back after consent — this app's own address.
+    redirect: str
 
 
 class GoCardlessLinkRequest(BaseModel):
@@ -78,4 +86,14 @@ async def gocardless_link(body: GoCardlessLinkRequest):
 
 @router.post("/api/gocardless/check-link")
 async def gocardless_check_link():
-    return await _call(gocardless_service.check_link)
+    return await _call(gocardless_service.check_links)
+
+
+@router.post("/api/gocardless/banks/{key}/relink")
+async def gocardless_relink_bank(key: str, body: GoCardlessRelinkRequest):
+    return await _call(gocardless_service.relink_bank, key, body.redirect)
+
+
+@router.post("/api/gocardless/banks/{key}/remove")
+async def gocardless_remove_bank(key: str):
+    return await _call(gocardless_service.remove_bank, key)

@@ -9188,7 +9188,8 @@ body.hide-amounts .money * {
     flex-wrap: wrap;
   }
 
-  /* Plaid's linked banks (connectors/PlaidBanksStep) — one row per bank with its own Remove. */
+  /* Linked banks (connectors/PlaidBanksStep, GoCardlessBanks) — one row per bank with its own
+     Remove. */
   .plaid-banks {
     margin: 0;
     padding: 0;
@@ -9222,6 +9223,21 @@ body.hide-amounts .money * {
   }
   .plaid-bank-sub--warn {
     color: var(--warn);
+  }
+  /* GoCardless's bank sections (Your banks / Add a bank) sit a step further from the fields above
+     than their own rows sit from each other, so each reads as one group. */
+  .gc-section {
+    margin-top: var(--space-3);
+  }
+  /* A small button beside a field keeps the form's one button size and sits on the field's
+     centre line: (40px field − ~32px button) / 2. */
+  .gc-pick-row .ui-btn {
+    margin-bottom: 4px;
+  }
+  /* GoCardless's bank picker takes the row's width beside its Link button. */
+  .gc-bank-pick {
+    flex: 1;
+    min-width: 12rem;
   }
 
   /* Connector setup steps (connectors/SetupStep) — ① keys → ② link a bank → ③ choose accounts.

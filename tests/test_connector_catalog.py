@@ -54,7 +54,7 @@ def test_notify_channels():
         ("plaid", {"secret"}, {"access_token", "item_id", "link_token", "items"}),
         ("lunch_flow", {"client_secret"}, {"access_token", "refresh_token"}),
         ("enable_banking", {"private_key"}, {"session_id"}),
-        ("gocardless", {"secret_key"}, {"access_token", "requisition_id"}),
+        ("gocardless", {"secret_key"}, {"access_token", "requisitions"}),
         ("yodlee", {"secret", "password"}, {"cobrand_session_token", "user_session_token"}),
         ("simplefin", set(), {"access_url"}),
         ("coingecko", {"api_key"}, set()),
@@ -164,28 +164,34 @@ def test_the_set_up_rule_of_each_kind(kind, config, have, expected):
     assert CATALOG[kind].configured(_row(kind, config), frozenset(have)) is expected
 
 
+def _banks(*statuses):
+    return {"banks": {f"k{i}": {"status": st} for i, st in enumerate(statuses)}}
+
+
 @pytest.mark.parametrize(
-    "state, have, expected",
+    "have, expected",
     [
-        ({"requisition_status": "LN"}, {"secret_key", "requisition_id"}, True),
-        ({"requisition_status": "EX"}, {"secret_key", "requisition_id"}, True),  # stays a row
-        ({"requisition_status": "LN"}, {"secret_key"}, False),  # no bank link started
+        ({"secret_key", "requisitions"}, True),  # linked, expired or unfinished: stays a row
+        ({"secret_key"}, False),  # no bank link started
     ],
 )
-def test_gocardless_is_set_up_once_a_bank_link_exists(state, have, expected):
-    row = _row("gocardless", {"secret_id": "s"}, state=state)
+def test_gocardless_is_set_up_once_a_bank_link_exists(have, expected):
+    row = _row("gocardless", {"secret_id": "s"}, state=_banks("EX"))
     assert CATALOG["gocardless"].configured(row, frozenset(have)) is expected
 
 
 @pytest.mark.parametrize(
     "state, expected",
     [
-        ({"requisition_status": "LN"}, None),
-        ({"requisition_status": "LN", "last_error": "GoCardless HTTP 503"}, "GoCardless HTTP 503"),
-        ({"requisition_status": "EX"}, "Bank access expired — link the bank again"),
+        (_banks("LN"), None),
+        ({**_banks("LN"), "last_error": "GoCardless HTTP 503"}, "GoCardless HTTP 503"),
+        (_banks("EX"), "Bank access expired — link the bank again"),
+        (_banks("LN", "EX", "LN"), "1 of 3 banks need linking again"),
+        (_banks("RJ", "EX"), "2 of 2 banks need linking again"),
+        (_banks("LN", "CR"), None),  # mid-consent for one more bank
         (
-            {"requisition_status": "CR"},
-            "Bank link not finished — open the connector and select Check link",
+            _banks("CR"),
+            "Bank link not finished — open the connector and select Check links",
         ),
     ],
 )

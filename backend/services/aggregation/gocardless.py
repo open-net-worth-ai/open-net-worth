@@ -14,6 +14,8 @@ Protocol (``https://bankaccountdata.gocardless.com/api/v2``, checked against its
   * ``POST /requisitions/`` ``{institution_id, redirect, agreement}`` → a ``link`` the user
     opens; ``GET /requisitions/{id}/`` → ``status`` (``LN`` = linked) + ``accounts[]``. There
     is no code to exchange: the app re-reads the requisition when the user comes back.
+  * One requisition per linked bank; a renewal is a new requisition that takes over from the
+    old one once it is linked, so an abandoned renewal never costs a working bank.
   * ``GET /accounts/{id}/details/`` (cached in ``accounts_meta``) and
     ``GET /accounts/{id}/transactions/?date_from&date_to`` → ``{booked: [], pending: []}``.
 
@@ -199,26 +201,38 @@ def _int(value) -> Optional[int]:
         return None
 
 
-def _agreement(store: GoCardlessConfigStore, institution_id: str) -> tuple[Optional[str], int]:
-    """Ask for as much history and access as the bank allows. Best effort: any failure falls
-    back to GoCardless's default agreement (90 days of each). Returns ``(agreement_id,
-    access_days)``."""
+def _institution(store: GoCardlessConfigStore, institution_id: str) -> dict:
+    """``GET /institutions/{id}/`` — its name and limits. Best effort: ``{}`` on failure."""
     try:
-        inst = _json(_authed(store, "GET", f"/institutions/{institution_id}/")) or {}
-        history = min(730, _int(inst.get("transaction_total_days")) or _DEFAULT_HISTORY_DAYS)
-        access = min(730, _int(inst.get("max_access_valid_for_days")) or _DEFAULT_ACCESS_DAYS)
-        body = {
-            "institution_id": institution_id,
-            "max_historical_days": history,
-            "access_valid_for_days": access,
-            "access_scope": ["balances", "details", "transactions"],
-        }
+        return _json(_authed(store, "GET", f"/institutions/{institution_id}/")) or {}
+    except (ExternalServiceError, ValidationError) as exc:
+        logger.info("gocardless: institution details unavailable (%s)", exc)
+        return {}
+
+
+def _agreement(
+    store: GoCardlessConfigStore, institution_id: str, inst: dict
+) -> tuple[Optional[str], int]:
+    """Ask for as much history and access as the bank allows (``inst`` is its
+    ``/institutions/{id}/``). Best effort: any failure falls back to GoCardless's default
+    agreement (90 days of each). Returns ``(agreement_id, access_days)``."""
+    if not inst:
+        return None, _DEFAULT_ACCESS_DAYS
+    history = min(730, _int(inst.get("transaction_total_days")) or _DEFAULT_HISTORY_DAYS)
+    access = min(730, _int(inst.get("max_access_valid_for_days")) or _DEFAULT_ACCESS_DAYS)
+    body = {
+        "institution_id": institution_id,
+        "max_historical_days": history,
+        "access_valid_for_days": access,
+        "access_scope": ["balances", "details", "transactions"],
+    }
+    try:
         agreement = _json(_authed(store, "POST", "/agreements/enduser/", json=body)) or {}
-        agreement_id = str(agreement.get("id") or "").strip()
-        return (agreement_id or None), (access if agreement_id else _DEFAULT_ACCESS_DAYS)
     except (ExternalServiceError, ValidationError) as exc:
         logger.info("gocardless: default agreement used (%s)", exc)
         return None, _DEFAULT_ACCESS_DAYS
+    agreement_id = str(agreement.get("id") or "").strip()
+    return (agreement_id or None), (access if agreement_id else _DEFAULT_ACCESS_DAYS)
 
 
 def _redirect(redirect: str) -> str:
@@ -229,17 +243,30 @@ def _redirect(redirect: str) -> str:
     return url
 
 
-def start_link(institution_id: str, country: str, redirect: str) -> dict:
-    """Create a requisition for ``institution_id`` → ``{link}``, the bank page the user opens.
-    Once the new one exists, the previous requisition is deleted at GoCardless, so re-linking
-    never leaves a stale grant behind and a failed attempt never loses a working link."""
+def _institution_id(institution_id: str) -> str:
     inst = (institution_id or "").strip()
     if not _INSTITUTION_ID.match(inst):
         raise ValidationError("institution_id must be a GoCardless bank id (e.g. ACME_BANK_GB)")
-    code = _country(country)
-    redirect_url = _redirect(redirect)
-    store = GoCardlessConfigStore()
-    agreement_id, access_days = _agreement(store, inst)
+    return inst
+
+
+def _new_bank(
+    store: GoCardlessConfigStore,
+    institution_id: str,
+    country: str,
+    redirect: str,
+    *,
+    replaces: Optional[str] = None,
+) -> dict:
+    """Create a requisition and list it as a bank → ``{link, key}``. Nothing is stored unless
+    GoCardless returned a usable link."""
+    inst, code, redirect_url = (
+        _institution_id(institution_id),
+        _country(country),
+        _redirect(redirect),
+    )
+    details = _institution(store, inst)
+    agreement_id, access_days = _agreement(store, inst, details)
     body = {"institution_id": inst, "redirect": redirect_url, "user_language": "EN"}
     if agreement_id:
         body["agreement"] = agreement_id
@@ -248,76 +275,181 @@ def start_link(institution_id: str, country: str, redirect: str) -> dict:
     link = str(data.get("link") or "").strip()
     if not requisition_id or not link.startswith("https://"):
         raise ExternalServiceError("GoCardless did not return a bank link")
-    delete_requisition(store)
-    store.start_link(inst, code, requisition_id, _iso(_now() + timedelta(days=access_days)))
-    return {"link": link}
+    key = store.add_bank(
+        requisition_id,
+        institution_id=inst,
+        institution_name=str(details.get("name") or "").strip()[:120] or inst,
+        country=code,
+        consent_expires_at=_iso(_now() + timedelta(days=access_days)),
+        replaces=replaces,
+    )
+    return {"link": link, "key": key}
 
 
-def check_link() -> dict:
-    """Re-read the requisition after the user comes back from the bank. Returns the store's
-    public view. It never touches ``enabled``: a connector the user paused stays paused."""
+def start_link(institution_id: str, country: str, redirect: str) -> dict:
+    """Link one more bank → ``{link, key}``: the bank page the user opens and the new bank's
+    public key. The banks already linked are untouched."""
+    return _new_bank(GoCardlessConfigStore(), institution_id, country, redirect)
+
+
+def relink_bank(key: str, redirect: str) -> dict:
+    """Start a new consent for a listed bank → ``{link, key}``. An old link that reads nothing
+    any more (expired, refused, unfinished) is revoked and replaced at once; a still-working
+    one keeps fetching until the new consent is linked and is revoked then (``_refresh``), so
+    a renewal the user abandons never costs a working bank."""
     store = GoCardlessConfigStore()
-    if not store.requisition_id():
-        raise ValidationError("No bank link started — choose a bank and select Link bank first")
-    _requisition(store)
+    old = store.bank(key)
+    if old is None:
+        raise ValidationError("That bank is not linked")
+    working = old["status"] == LINKED
+    result = _new_bank(
+        store,
+        old["institution_id"] or "",
+        old["country"] or "",
+        redirect,
+        replaces=old["requisition_id"] if working else None,
+    )
+    if not working:
+        _revoke(store, old)
+        store.drop_bank(key)
+    return result
+
+
+def check_links() -> dict:
+    """Re-read every bank's requisition after the user comes back from a bank. Returns the
+    store's public view. It never touches ``enabled``: a connector the user paused stays
+    paused."""
+    store = GoCardlessConfigStore()
+    if not store.banks():
+        raise ValidationError("No bank linked yet — choose a bank and select Link bank first")
+    _refresh(store)
     return store.public()
 
 
-def delete_requisition(store: GoCardlessConfigStore) -> None:
-    """Revoke the current requisition at GoCardless. Never raises: the Remove and re-link paths
-    clear the local handle either way."""
-    requisition_id = store.requisition_id()
-    if not requisition_id or not store.has_credentials():
-        return
+def _revoke(store: GoCardlessConfigStore, bank: dict) -> bool:
+    """Delete one requisition at GoCardless. True once it is gone there (a 404 counts)."""
     try:
-        _authed(store, "DELETE", f"/requisitions/{requisition_id}/")
-    except Exception:  # noqa: BLE001 — best effort, logged without the id
-        logger.warning("gocardless: could not delete the previous requisition at GoCardless")
+        _authed(store, "DELETE", f"/requisitions/{bank['requisition_id']}/")
+    except ExternalServiceError as exc:
+        if "HTTP 404" in str(exc):
+            return True
+        logger.warning("gocardless: could not delete a requisition at GoCardless (%s)", exc)
+        return False
+    except ValidationError as exc:
+        logger.warning("gocardless: could not delete a requisition at GoCardless (%s)", exc)
+        return False
+    return True
 
 
-def _requisition(store: GoCardlessConfigStore) -> list[str]:
-    """``GET /requisitions/{id}/`` → its account ids, recording the status it reports."""
-    data = _json(_authed(store, "GET", f"/requisitions/{store.requisition_id()}/")) or {}
+def remove_bank(key: str) -> dict:
+    """Unlink ONE bank: delete its requisition at GoCardless, then drop it here. Only a
+    confirmed delete removes the local entry — otherwise the grant would stay live at
+    GoCardless with no way back to it — so a failure raises and nothing changes."""
+    store = GoCardlessConfigStore()
+    bank = store.bank(key)
+    if bank is None:
+        raise ValidationError("That bank is not linked")
+    if not _revoke(store, bank):
+        raise ValidationError(
+            "Couldn't reach GoCardless to remove that bank — nothing changed. Try again in a moment."
+        )
+    store.drop_bank(key)
+    return {"removed": True, "banks_left": len(store.banks())}
+
+
+def remove_all_banks(store: GoCardlessConfigStore) -> None:
+    """Revoke every bank at GoCardless — the connector's Remove hook, before the row and its
+    secrets are erased. Best effort per bank: one failure never blocks the rest."""
+    if not store.has_credentials():
+        return
+    for bank in store.banks():
+        _revoke(store, bank)
+
+
+def _read_requisition(store: GoCardlessConfigStore, bank: dict) -> None:
+    """``GET /requisitions/{id}/`` → record its status and, once linked, its account ids."""
+    data = _json(_authed(store, "GET", f"/requisitions/{bank['requisition_id']}/")) or {}
     status = str(data.get("status") or "").strip().upper()
-    store.record_requisition_status(status)
-    return [str(a) for a in (data.get("accounts") or []) if a] if status == LINKED else []
+    fields: dict = {"status": status}
+    if status == LINKED:
+        fields["account_ids"] = [str(a) for a in (data.get("accounts") or []) if a]
+        fields["linked_at"] = bank["linked_at"] or _iso(_now())
+    bank.update(fields)
+    store.update_bank(bank["key"], **fields)
+
+
+def _bank_name(bank: dict) -> str:
+    return bank.get("institution_name") or bank.get("institution_id") or "A GoCardless bank"
+
+
+def _refresh(store: GoCardlessConfigStore) -> list[str]:
+    """Re-read every requisition, then let each linked renewal take over from the bank it
+    replaces. Returns a warning per bank GoCardless could not be asked about. Rejected
+    credentials raise — they stop every bank alike."""
+    warnings: list[str] = []
+    banks = store.banks()
+    for bank in banks:
+        try:
+            _read_requisition(store, bank)
+        except ExternalServiceError as exc:
+            warnings.append(f"{_bank_name(bank)}: {exc}")
+    by_requisition = {b["requisition_id"]: b for b in banks}
+    for bank in banks:
+        old = by_requisition.get(bank["replaces"] or "")
+        if bank["status"] == LINKED and old is not None:
+            _revoke(store, old)
+            store.drop_bank(old["key"])
+            store.update_bank(bank["key"], replaces=None)
+    return warnings
+
+
+def _unusable(bank: dict) -> str:
+    status = bank.get("status") or ""
+    if status in ENDED:
+        return f"{_bank_name(bank)}: bank access {ENDED[status]} — link it again in Connectors → GoCardless"
+    return (
+        f"{_bank_name(bank)}: the bank link is not finished (GoCardless status "
+        f"{status or 'unknown'}) — finish it at the bank, then select Check links in "
+        "Connectors → GoCardless"
+    )
+
+
+def _linked_banks(store: GoCardlessConfigStore) -> tuple[list[dict], list[str]]:
+    """The banks that can be read now, plus a warning for each one that can't (a renewal
+    still in progress is not one: the bank it renews is still read). Raises
+    ``ValidationError`` when none can — the status then says why instead of reading ``ok``."""
+    if not store.banks():
+        raise ValidationError("No bank linked — link one in Connectors → GoCardless")
+    warnings = _refresh(store)
+    banks = store.banks()
+    usable = [b for b in banks if b["status"] == LINKED]
+    warnings += [_unusable(b) for b in banks if b["status"] != LINKED and not b["replaces"]]
+    if not usable:
+        raise ValidationError("; ".join(warnings) or "No bank is linked yet")
+    return usable, warnings
 
 
 # ── accounts + transactions ──────────────────────────────────────────────────────────
 
 
-def _linked_account_ids(store: GoCardlessConfigStore) -> list[str]:
-    ids = _requisition(store)
-    status = store.get().get("requisition_status") or ""
-    if status == LINKED:
-        return ids
-    if status in ENDED:
-        raise ValidationError(
-            f"The bank consent is {ENDED[status]} — link the bank again in Connectors → GoCardless"
-        )
-    raise ValidationError(
-        f"The bank link is not finished (GoCardless status {status or 'unknown'}) — finish it "
-        "at the bank, then select Check link in Connectors → GoCardless"
-    )
-
-
-def _account_meta(store: GoCardlessConfigStore, account_id: str, cache: dict) -> dict:
+def _account_meta(store: GoCardlessConfigStore, account_id: str, bank: dict, cache: dict) -> dict:
     """Name/currency/type for one account — cached, because ``/details/`` is rate-limited."""
     if account_id in cache:
         return cache[account_id]
+    fallback = f"{_bank_name(bank)} account {account_id[-4:]}"
     try:
         details = (_json(_authed(store, "GET", f"/accounts/{account_id}/details/")) or {}).get(
             "account"
         ) or {}
     except ExternalServiceError as exc:
         logger.warning("gocardless: account details unavailable (%s)", exc)
-        return {"name": f"GoCardless account {account_id[-4:]}", "currency": None, "mask": None}
+        return {"name": fallback, "currency": None, "mask": None}
     iban = str(details.get("iban") or details.get("bban") or details.get("maskedPan") or "")
     meta = {
         "name": str(
             details.get("name") or details.get("displayName") or details.get("product") or ""
         ).strip()
-        or f"GoCardless account {account_id[-4:]}",
+        or fallback,
         "currency": (str(details.get("currency") or "").upper() or None),
         "mask": iban[-4:] or None,
         "account_type": _ACCOUNT_TYPES.get(str(details.get("cashAccountType") or "").upper()),
@@ -426,30 +558,31 @@ def fetch_window(
     *,
     accounts_only: bool = False,
 ) -> FetchWindow:
-    """The consented accounts (+ their transactions in ``[since, before]``). One account's
-    failure is isolated and marks the fetch incomplete; if EVERY account fails, the last
-    error is raised so the status says why (a 429 reads ``rate_limited``, not ``ok``)."""
-    account_ids = _linked_account_ids(store)
-    if account:
-        account_ids = [a for a in account_ids if a == account]
+    """Every linked bank's accounts (+ their transactions in ``[since, before]``). A bank that
+    can't be read, or one account's failure, is isolated: it becomes a warning naming the bank
+    and marks the fetch incomplete, so the vanished-row check never reads its missing rows as
+    deleted. If EVERY account fails, the last error is raised so the status says why (a 429
+    reads ``rate_limited``, not ``ok``)."""
+    banks, warnings = _linked_banks(store)
+    owned = [(b, a) for b in banks for a in b["account_ids"] if not account or a == account]
     cache = store.accounts_meta()
-    metas = {a: _account_meta(store, a, cache) for a in account_ids}
-    accounts = [_account_to_common(a, metas[a]) for a in account_ids]
+    metas = {a: _account_meta(store, a, b, cache) for b, a in owned}
+    accounts = [_account_to_common(a, metas[a]) for _, a in owned]
     if accounts_only:
-        return FetchWindow(accounts=accounts, rows=[], complete=True)
+        return FetchWindow(accounts=accounts, rows=[], complete=not warnings, warnings=warnings)
 
     rows: list[dict] = []
     failures: list[ExternalServiceError] = []
-    for account_id in account_ids:
+    for bank, account_id in owned:
         currency = metas[account_id].get("currency") or ledger_service.base_currency()
         try:
             rows.extend(_account_rows(store, account_id, currency, since, before))
         except ExternalServiceError as exc:
-            logger.warning("gocardless: transactions unavailable for one account (%s)", exc)
             failures.append(exc)
-    if account_ids and len(failures) == len(account_ids):
+            warnings.append(f"{metas[account_id].get('name')} ({_bank_name(bank)}): {exc}")
+    if owned and len(failures) == len(owned):
         raise failures[-1]
-    return FetchWindow(accounts=accounts, rows=rows, complete=not failures)
+    return FetchWindow(accounts=accounts, rows=rows, complete=not warnings, warnings=warnings)
 
 
 def classify_error(exc: Exception) -> str:

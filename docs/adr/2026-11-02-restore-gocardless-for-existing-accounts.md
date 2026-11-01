@@ -82,3 +82,32 @@ throughout as being for existing Bank Account Data accounts:
   would also book rows without a Lucius turn, which every other connector stopped doing.
 - **Put it behind a feature flag.** Not needed. A connector does nothing until the user enters
   credentials, so being unconfigured already gates it, and the flag would add no protection.
+
+## Amendment (2026-11-02): several banks per connector
+
+The "one linked bank per connector" consequence above is reversed the same day, before any
+release. A GoCardless requisition covers exactly one bank, EU/UK users commonly have two or
+three, and there is one connector row per kind, so one bank per connector meant GoCardless
+could only ever see part of someone's money. The design now follows Plaid's multi-bank shape:
+
+- `requisitions` (a minted, read-only secret) lists every bank's requisition; `banks` (state)
+  holds each one's name, status, consent expiry and account ids, keyed by a public `bank_key`
+  (a hash of the requisition id) so the client can name a bank without seeing the id. The
+  single-bank `requisition_id` / `institution_id` / `country` / `requisition_status` fields are
+  gone. No legacy read: the single-bank version was never released.
+- Link a bank **adds** one. Each bank has its own **Remove**, which drops the local entry only
+  once GoCardless confirms the delete (or says it is already gone), so a grant is never left
+  live with no way back to it. The connector's Remove revokes every bank, best effort.
+- **Renew** on a bank that still works creates a new requisition marked `replaces`. The old one
+  keeps fetching until the new one reads `LN`; then it is revoked and dropped. A renewal the
+  user abandons at the bank costs nothing. An expired or unfinished bank is replaced at once.
+- `fetch_window` reads every linked bank. A bank that is expired, unfinished or that GoCardless
+  can't be asked about becomes a warning naming the bank (`last_caution`) and marks the window
+  incomplete, so the vanished-row check never reads that bank's missing rows as deleted. It
+  raises only when no bank can be read, or every account failed.
+- The catalog error names how many banks need linking again ("1 of 3 banks need linking
+  again") even while the others sync: a bank silently dropping out of sync is the failure that
+  matters. An unfinished link is an error only when no bank is linked yet.
+
+Enable Banking still holds one bank per connector; the same change there is a separate
+follow-up.
