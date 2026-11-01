@@ -16,6 +16,7 @@ export const TABS = [
   'build',
   'profile',
   'connectors',
+  'imports',
   'settings',
   'help',
 ] as const
@@ -64,7 +65,7 @@ export const PRIMARY_TABS: TabId[] = [
 //
 // This array also drives the mobile "More" sheet's Manage group (MobileTabBar.tsx maps
 // over CONFIG_TABS generically), so removing it here covers both surfaces at once.
-export const CONFIG_TABS: TabId[] = ['automations', 'skills', 'connectors', 'settings']
+export const CONFIG_TABS: TabId[] = ['automations', 'skills', 'connectors', 'imports', 'settings']
 
 export const TAB_LABELS: Record<TabId, string> = {
   lucius: 'Lucius',
@@ -81,6 +82,7 @@ export const TAB_LABELS: Record<TabId, string> = {
   build: 'Build',
   profile: 'Profile',
   connectors: 'Connectors',
+  imports: 'Imports',
   settings: 'Settings',
   help: 'Help',
 }
@@ -88,11 +90,18 @@ export const TAB_LABELS: Record<TabId, string> = {
 export const TAB_DISPLAY_NAMES: Record<TabId, string> = {
   ...TAB_LABELS,
   intel: 'Intelligence',
+  imports: 'Imports & sync',
 }
 
 // List pages that read as a centred column (`.app-layout--narrow`), like a settings page —
 // not the data tabs, whose tables and charts are built to use the width.
-export const NARROW_TABS = new Set<TabId>(['automations', 'skills', 'inbox', 'connectors'])
+export const NARROW_TABS = new Set<TabId>([
+  'automations',
+  'skills',
+  'inbox',
+  'connectors',
+  'imports',
+])
 
 export const SELF_HEADER_TABS = new Set<TabId>([
   'lucius',
@@ -127,6 +136,7 @@ export const TAB_SUBTITLES: Record<TabId, string> = {
   build: 'Customize Open Net Worth with a local coding engine',
   profile: 'Personal details, income, and FIRE settings',
   connectors: 'Channels, data sources, and tools this instance connects to',
+  imports: 'Bring your history in from another budgeting app, and keep the two in step',
   settings: 'AI model, appearance, security, and your data — instance-level settings',
   help: 'Guides, concepts, and answers for running Open Net Worth',
 }

@@ -79,6 +79,18 @@ const STATUS: Record<string, unknown> = {
     ...SYNC_BASE,
     has_access_token: false,
   },
+  '/api/ynab/sync': {
+    token_saved: false,
+    enabled: false,
+    interval: '1h',
+    intervals: ['15m', '30m', '1h', '6h', 'daily', 'manual'],
+    plan_id: null,
+    plan_name: null,
+    running: false,
+    last_run: null,
+    next_run_at: null,
+    conflicts: [],
+  },
   '/api/ynab/status': {
     ...SYNC_BASE,
     has_access_token: false,
