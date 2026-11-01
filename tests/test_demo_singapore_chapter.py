@@ -394,21 +394,20 @@ def test_three_outlook_scenarios_are_saved():
     }
 
 
-def test_the_rehearsal_automations_skill_and_watchlist_are_seeded_paused():
+def test_the_research_watchlist_is_seeded_without_rehearsal_automations():
+    """The chapter's three paused rehearsal Automations and their skill were removed from the
+    demo (owner, 2026-11-01); the research watchlist stays."""
     from backend.db.automation_store import AutomationStore
     from backend.db.skill_store import SkillStore
     from backend.db.watchlist_store import WatchlistStore
 
-    autos = {a["name"]: a for a in AutomationStore().all()}
-    for name in (
+    names = {a["name"] for a in AutomationStore().all()}
+    assert not names & {
         "Founder weekly wealth review",
         "Asia watchlist thesis check",
         "Offline bank-email rehearsal",
-    ):
-        assert autos[name]["status"] == "paused" and autos[name]["permission_mode"] == "manual"
-        assert autos[name]["next_run_at"] is None
-    assert "mail-receipt-rehearsal" in autos["Offline bank-email rehearsal"]["instructions"]
-    assert any(s["name"] == "mail-receipt-rehearsal" for s in SkillStore().all())
+    }
+    assert not any(s["name"] == "mail-receipt-rehearsal" for s in SkillStore().all())
 
     store = WatchlistStore()
     research = next(w for w in store.list_watchlists() if w["name"] == "Asia & global research")

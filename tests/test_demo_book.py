@@ -448,8 +448,9 @@ def test_the_assistant_surfaces_are_not_empty(demo_book):
     kinds = {(a.get("trigger") or {}).get("kind") for a in autos}
     assert {"event", "schedule"} <= kinds, "both trigger kinds must be represented"
 
-    statuses = {a.get("status") for a in autos}
-    assert {"active", "paused"} <= statuses, "a board where everything is green shows one state"
+    # A paused one used to be required too; the owner deleted every paused demo automation
+    # (2026-11-01), preferring a tab of routines that actually run.
+    assert any(a.get("status") == "active" for a in autos), "no active automation"
 
     # An ACTIVE scheduled automation must actually be scheduled — a next_run_at of None
     # means it will never fire, which looks identical to "active" on the screen.
@@ -736,3 +737,18 @@ def test_demo_automations_run_at_a_sensible_cadence(demo_book):
     assert not too_often, f"active demo automations running more than daily: {too_often}"
     vests = [a["name"] for a in active if "vest" in a["name"].lower()]
     assert len(vests) == 1, f"one active vest automation expected, got {vests}"
+
+
+def test_automations_the_owner_removed_stay_removed(demo_book):
+    """Deleted from the demo by the owner (2026-11-01). The vest one is provisioned by the app
+    itself when the grant is recorded, so the seed deletes it after the fact."""
+    from backend.db.automation_store import AutomationStore
+
+    removed = {
+        "Rideshare & transit → Transport",
+        "Utilities → Home & Utilities",
+        "Uncategorised sweep",
+        "Subscription creep",
+        "Vest calendar reminder",
+    }
+    assert not {a["name"] for a in AutomationStore().all()} & removed

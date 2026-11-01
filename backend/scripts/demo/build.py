@@ -9,7 +9,8 @@ because the one after it cannot run first:
 * trades before the ledger — the cash legs that settle them are ordinary transactions;
 * the ledger before envelopes — the envelope seed mints one per category with activity;
 * the card payments last among the transactions — they are computed FROM the charges;
-* the Singapore chapter after the plan — it budgets cash that is already in the book.
+* the Singapore chapter after the plan — it budgets cash that is already in the book;
+* the theses after the Singapore chapter — they level each holding off its recorded close.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from backend.scripts.demo import (
     planning,
     rows,
     singapore,
+    theses,
 )
 from backend.scripts.demo import ledger_spending as spend
 from backend.scripts.demo._timeline import Timeline, on_business_day
@@ -312,4 +314,6 @@ def build(today: date | None = None, *, offline: bool = False) -> dict:
         instruments, {sym: rows[-1]["price"] for sym, rows in series.items() if rows}
     )
     report["memory"] = assistant.seed_memory()
+    # After the Singapore chapter: its two ETFs are among the holdings that carry a thesis.
+    report["theses"] = theses.seed(tl)
     return report

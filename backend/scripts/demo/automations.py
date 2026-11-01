@@ -87,19 +87,12 @@ def AUTOMATIONS(categories: dict) -> list[dict]:
     return [
         # ── Event rules: the ledger keeping itself tidy ───────────────────────
         _rule("Coffee shops → Food & Dining", r"coffee|espresso|roasters", categories["food"]),
-        _rule("Rideshare & transit → Transport", r"hopp rides|cityline", categories["transport"]),
         _rule(
             "Streaming & apps → Subscriptions",
             r"nimbus|auralis|cloudshelf|forge ide",
             categories["subscriptions"],
         ),
         _rule("Vet & pet supplies → Pet Care", r"paws & claws|kibble", categories["pets"]),
-        _rule(
-            "Utilities → Home & Utilities",
-            r"lumen energy|cascade water|fiberline",
-            categories["home"],
-            status="paused",
-        ),
         # ── Scheduled routines: the app reaching out ──────────────────────────
         _routine(
             "Morning briefing",
@@ -162,49 +155,26 @@ def AUTOMATIONS(categories: dict) -> list[dict]:
             "in base currency.",
             _weekly("wed", "09:00"),
         ),
-        _routine(
-            "Subscription creep",
-            "Catches price rises on recurring charges.",
-            "Compare each recurring subscription charge to what it cost three months ago. "
-            "Report any that went up, with the old and new amounts. Say nothing if none did.",
-            {"kind": "schedule", "type": "monthly", "day": 1, "time": "10:00"},
-            status="paused",
-        ),
-        _routine(
-            "Uncategorised sweep",
-            "Keeps the Uncategorized pile from growing.",
-            "Find transactions with no category from the last 7 days. For each, suggest a "
-            "category based on its payee and similar past rows, and apply it where you are "
-            "confident. List anything you were not confident about rather than guessing.",
-            _daily("22:00"),
-            status="paused",
-            effort="low",
-        ),
     ]
 
 
-def _pause_system_vest_reminder() -> None:
+def _delete_system_vest_reminder() -> None:
     """Recording the grant provisions the app's own "Vest calendar reminder" (system_key
-    ``vest_reminder``), a second vest check beside the seeded "Vest reminder". Paused, as a
-    user tidying the tab would; a later boot re-seed patches only the fields it sets, never
-    ``status``."""
+    ``vest_reminder``), a second vest check beside the seeded "Vest reminder". Deleted, as the
+    owner tidied the demo's tab (2026-11-01); only recording ANOTHER grant provisions it again."""
     from backend.db.automation_store import AutomationStore
     from backend.services.automations.service import apply_automation_change
 
     for row in AutomationStore().all():
-        if (row.get("provenance") or {}).get("system_key") == "vest_reminder" and row.get(
-            "status"
-        ) == "active":
-            apply_automation_change(
-                {"op": "update", "id": row["id"], "changes": {"status": "paused"}}
-            )
+        if (row.get("provenance") or {}).get("system_key") == "vest_reminder":
+            apply_automation_change({"op": "delete", "id": row["id"]})
 
 
 def seed_automations(categories: dict) -> dict:
     """Create every automation. Returns counts by status."""
     from backend.services.automations.service import apply_automation_change
 
-    _pause_system_vest_reminder()
+    _delete_system_vest_reminder()
 
     created = {"active": 0, "paused": 0, "failed": 0}
     for spec in AUTOMATIONS(categories):

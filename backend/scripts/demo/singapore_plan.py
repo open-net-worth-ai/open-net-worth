@@ -1,11 +1,9 @@
-"""The Singapore chapter's plan and assistant side: envelopes, goals, Outlook scenarios, a
-research watchlist, one skill and three paused Automations.
+"""The Singapore chapter's plan: envelopes, goals, Outlook scenarios and a research watchlist.
 
 Split from ``singapore.py`` (the money) because none of it moves any: the envelopes budget cash
-that is already in the book, the goals only EARMARK it ("never add them to net worth again",
-as the household plan puts it), and the Automations are paused rehearsals a visitor runs by
-hand. Run after the ledger and the generic Plan seed, because the last step re-balances Ready
-to Assign over the finished book.
+that is already in the book, and the goals only EARMARK it ("never add them to net worth again",
+as the household plan puts it). Run after the ledger and the generic Plan seed, because the last
+step re-balances Ready to Assign over the finished book.
 """
 
 from __future__ import annotations
@@ -62,55 +60,6 @@ RESEARCH_ITEMS = [
     ("VWRA.L", "Vanguard FTSE All-World UCITS ETF"),
 ]
 WATCH_ONLY = "Watch only. No purchase recommendation or auto-trading authority."
-
-SKILL = {
-    "name": "mail-receipt-rehearsal",
-    "description": "Practice bank-email transaction logging from a synthetic file.",
-    "body": (
-        "This is an OFFLINE EMAIL REHEARSAL. Read the attached bank-notification.txt; never "
-        "claim an inbox was contacted. Resolve the account and category and check duplicate "
-        "identities. Show a proposal for the SGD 27.90 payment, then request approval through "
-        "normal gated tools. Use the stable Message-ID and emitter if booking. Report the "
-        "actual write result. An existing SGD 12.80 transaction is different. Do not infer "
-        "success from a proposal."
-    ),
-}
-
-_WEEKLY_SUNDAY = {"kind": "schedule", "type": "weekly", "day": "sun", "time": "18:00"}
-AUTOMATIONS: list[dict] = [
-    {
-        "name": "Founder weekly wealth review",
-        "instructions": (
-            "Read get_net_worth, get_budget_month for the current month, get_portfolio_xray "
-            "and get_goals. Return at most 140 words. Lead with ONE practical check supported "
-            "by the current book. Then give four short bullets: total net worth and "
-            "owned/unvested distinction; cash on hand and Ready to Assign; the next goal's "
-            "funding gap; largest reported holding concentration. Read debt from liability "
-            "accounts, not the optional profile list. Use tool-provided amounts and "
-            "percentages, state the reporting currency, and cite the relevant account, "
-            "envelope or goal. Distinguish manually confirmed historical installments from "
-            "ledger-verified payments. If a figure is unavailable, say so. No trades, tax "
-            "strategy, money writes, external messages or extended reconciliation."
-        ),
-    },
-    {
-        "name": "Asia watchlist thesis check",
-        "instructions": (
-            "Review Asia & global research watchlist. State which thesis changed and show "
-            "current evidence. Distinguish illustrative manual marks from live quotes. If no "
-            "new evidence is available, say so. Never invent news or trade."
-        ),
-    },
-    {
-        "name": "Offline bank-email rehearsal",
-        "instructions": (
-            "Run mail-receipt-rehearsal using bank-notification.txt from Documents. This is a "
-            "paused recording fixture, not a live mailbox. Preview the SGD 27.90 Kopi Lane "
-            "debit with duplicates checked. Require normal write approval. Never say IMAP "
-            "succeeded or seed fake automation history."
-        ),
-    },
-]
 
 
 def _seed_envelopes(C: dict) -> tuple[list[dict], str]:
@@ -208,39 +157,6 @@ def _seed_watchlist() -> int:
     return len(RESEARCH_ITEMS)
 
 
-def _seed_skill() -> int:
-    from backend.db.skill_store import SkillStore
-    from backend.services import skills as skills_service
-
-    problems = skills_service.validate(SKILL, require_standard_fields=True)
-    if problems:
-        raise ValueError("; ".join(problems))
-    SkillStore().create({**SKILL, "author": "user"})
-    return 1
-
-
-def _seed_automations() -> int:
-    from backend.services.automations.service import apply_automation_change
-
-    for spec in AUTOMATIONS:
-        apply_automation_change(
-            {
-                "op": "create",
-                "automation": {
-                    **spec,
-                    "description": "Synthetic demo routine; run manually for rehearsal.",
-                    "status": "paused",
-                    "trigger": dict(_WEEKLY_SUNDAY),
-                    "execution": {"kind": "lucius"},
-                    "permission_mode": "manual",
-                    "effort": "low",
-                    "provenance": {"source": "demo-seed", "synthetic": True},
-                },
-            }
-        )
-    return len(AUTOMATIONS)
-
-
 def seed(tl: Timeline, C: dict, first_month: date) -> dict:
     """Everything but the money. ``first_month`` is the chapter's opening month. Returns counts
     for the build report."""
@@ -249,6 +165,4 @@ def seed(tl: Timeline, C: dict, first_month: date) -> dict:
         "goals": _seed_goals(tl),
         "scenarios": _seed_scenarios(),
         "watchlist": _seed_watchlist(),
-        "skills": _seed_skill(),
-        "automations": _seed_automations(),
     }
