@@ -19,6 +19,11 @@ nor send data anywhere. What each non-obvious directive is for:
   request by the gateway) is allowed.
 * ``frame-ancestors 'none'`` — the app is never framed (clickjacking); the desktop window loads
   it as a top-level document.
+* ``connect-src`` + the voice server — a voice call's browser connects to the owner's own
+  LiveKit server (signalling over wss, region lookup over https). Only when voice calls are on
+  and set up, and only that server: ``*.livekit.cloud`` for LiveKit Cloud (it hands the browser
+  a regional host), the exact host otherwise. Without it the browser refused the connection
+  before the call could even ask for the microphone (live test, 2026-11-03).
 """
 
 from __future__ import annotations
@@ -39,9 +44,28 @@ _BASE = (
 )
 
 
-def spa_csp(portal_url: str | None = None) -> str:
+def voice_connect_sources(livekit_url: str | None) -> tuple[str, ...]:
+    """The ``connect-src`` sources a voice call to ``livekit_url`` needs (none if unset)."""
+    if not livekit_url:
+        return ()
+    parts = urlsplit(livekit_url)
+    host = (parts.hostname or "").lower()
+    if parts.scheme not in ("wss", "ws") or not host:
+        return ()
+    if host == "livekit.cloud" or host.endswith(".livekit.cloud"):
+        return ("https://*.livekit.cloud", "wss://*.livekit.cloud")
+    secure = parts.scheme == "wss"
+    hostport = parts.netloc.rsplit("@", 1)[-1]
+    return (f"{'https' if secure else 'http'}://{hostport}", f"{parts.scheme}://{hostport}")
+
+
+def spa_csp(portal_url: str | None = None, voice_url: str | None = None) -> str:
     form_action = "form-action 'self'"
     if portal_url:
         parts = urlsplit(portal_url)
         form_action += f" {parts.scheme}://{parts.netloc}"
-    return "; ".join((*_BASE, form_action))
+    extra = voice_connect_sources(voice_url)
+    base = tuple(
+        f"{d} {' '.join(extra)}" if extra and d == "connect-src 'self'" else d for d in _BASE
+    )
+    return "; ".join((*base, form_action))

@@ -78,11 +78,19 @@ def _status(enabled: bool, configured: bool, last_error: str | None = None) -> s
 # ── building the list ────────────────────────────────────────────────────────────────────
 
 
+def _voice_calls_on() -> bool:
+    from backend.services.feature_flags import enabled
+
+    return enabled("voice_calls")
+
+
 def _entries(rows: dict[str, Row]) -> Iterator[tuple[ConnectorKind, Row]]:
     """Every connector in display order: the catalog's built-in instances (their row, or the
     defaults when never saved), then the open-ended rows (MCP servers) oldest first."""
     seen: set[str] = set()
     for builtin in builtins():
+        if builtin.id == "voice" and not _voice_calls_on():
+            continue  # behind the `voice_calls` flag: off, the hub is exactly the old one
         kind = kind_of(builtin.id)
         row = rows.get(builtin.id) or _default_row(builtin, kind)
         seen.add(builtin.id)

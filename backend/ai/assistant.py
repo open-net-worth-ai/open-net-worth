@@ -2273,6 +2273,19 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                                 )
                 elif btype == "text":
                     t = b.get("text", "")
+                    if is_harness_note(t) and any(
+                        isinstance(o, dict)
+                        and o.get("type") == "text"
+                        and o is not b
+                        and o.get("text")
+                        and not is_harness_note(o.get("text", ""))
+                        for o in content
+                    ):
+                        # A harness note BESIDE the owner's own words (a voice call's
+                        # message: what they said + the note telling Lucius it came by
+                        # voice). The note is for the model; their words are their bubble.
+                        # A message that is ONLY a note stays hidden by the check below.
+                        continue
                     if is_model_context_block(t):
                         # A persisted <turn_context> snapshot, the resolved-mention block and
                         # the screen snapshot are appended onto the user turn by

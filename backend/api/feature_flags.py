@@ -34,8 +34,19 @@ def list_feature_flags():
 
 
 @router.put("/api/feature-flags/{name}")
-def put_feature_flag(name: str, body: FeatureFlagPatch):
+async def put_feature_flag(name: str, body: FeatureFlagPatch):
     try:
-        return feature_flags.set_flag(name, body.enabled)
+        row = feature_flags.set_flag(name, body.enabled)
     except OpenNetWorthError as exc:
         _raise_http(exc)
+    await _apply(name)
+    return row
+
+
+async def _apply(name: str) -> None:
+    """A flag that owns a background process takes effect NOW, not at the next restart: off
+    stops it, on starts it (owner, 2026-11-03: "not just the UI — the worker too")."""
+    from backend.connectors.voice import service as voice_service
+
+    if name == voice_service.FLAG:
+        await voice_service.reload()

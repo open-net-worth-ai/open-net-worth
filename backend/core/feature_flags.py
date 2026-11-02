@@ -121,6 +121,17 @@ FLAGS: tuple[Flag, ...] = (
         added=date(2026, 11, 2),
         remove_by=date(2027, 2, 1),
     ),
+    Flag(
+        name="voice_calls",
+        description=(
+            "Talk to Lucius out loud: a Call button in the chat starts a voice call with your "
+            "microphone. Set it up in Connectors → Voice calls."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 3),
+        remove_by=date(2027, 3, 1),
+    ),
 )
 
 

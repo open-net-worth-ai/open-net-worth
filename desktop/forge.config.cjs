@@ -21,6 +21,8 @@ module.exports = {
     // extendInfo, so on macOS the binary must carry the product name.
     ...(process.platform === 'darwin' ? {} : { executableName: 'open-net-worth' }),
     appBundleId: 'app.opennetworth.desktop',
+    // Voice calls with Lucius use the microphone; macOS shows this sentence in its prompt.
+    extendInfo: { NSMicrophoneUsageDescription: 'Open Net Worth uses the microphone only while you are on a voice call with Lucius.' },
     protocols: [{ name: 'Open Net Worth sign-in', schemes: ['onw'] }],
     ...(process.platform === 'darwin' ? { icon: path.resolve(__dirname, 'resources', 'icon.icns') } : {}),
     ...(process.platform === 'win32' ? { icon: windowsIcon, ...(windowsSign ? { windowsSign } : {}) } : {}),

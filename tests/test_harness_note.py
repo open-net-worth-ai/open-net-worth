@@ -81,6 +81,31 @@ def test_a_harness_note_is_not_drawn_as_the_owners_message(content, monkeypatch,
     assert not any("harness_note" in (m.get("text") or "") for m in rendered)
 
 
+def test_a_note_beside_the_owners_words_hides_only_the_note(monkeypatch, db_isolated):
+    """A voice call's message is what the owner said + a note for Lucius; the chat lost the
+    owner's whole side of the call by hiding the message for its note (live call, 2026-11-03)."""
+    sid = "test-harness-note-beside"
+    assistant._store().upsert_meta(sid, {"id": sid})
+    monkeypatch.setattr(assistant, "_rehydrated_turn_usage", lambda *a, **k: {})
+    said = [
+        {"type": "text", "text": "how are you doing"},
+        {"type": "text", "text": harness_note("This message came by voice.")},
+    ]
+    monkeypatch.setattr(
+        assistant,
+        "_load_session",
+        lambda _s: [
+            {"role": "user", "content": said},
+            {"role": "assistant", "content": [{"type": "text", "text": "Doing great."}]},
+        ],
+    )
+    rendered = assistant.rehydrate_messages(sid) or []
+    assert [(m["role"], m["text"]) for m in rendered] == [
+        ("user", "how are you doing"),
+        ("assistant", "Doing great."),
+    ]
+
+
 # ── the live path ─────────────────────────────────────────────────────────────
 
 

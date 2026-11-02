@@ -485,6 +485,23 @@ _KINDS: tuple[ConnectorKind, ...] = (
         notify_channel="telegram",
     ),
     _kind(
+        # Voice calls with Lucius (ADR 2026-11-03-voice-calls-are-a-fast-front-voice-over-lucius).
+        # The LiveKit project's key and secret are the credentials; everything else is a
+        # plain setting (which models, which voice) and carries none.
+        "voice",
+        "Voice calls",
+        _needs(secrets=("api_key", "api_secret"), config=("livekit_url",)),
+        secret_fields=_secrets("api_key", "api_secret"),
+        config_keys=(
+            "livekit_url",
+            "front_model",
+            "stt_model",
+            "tts_model",
+            "tts_voice",
+            "lucius_model",
+        ),
+    ),
+    _kind(
         "simplefin",
         "SimpleFIN",
         _needs(secrets=("access_url",)),

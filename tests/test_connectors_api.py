@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def client(db_isolated, monkeypatch):
     # PATCH/DELETE now best-effort hot-reload the live Telegram bot for connector_id ==
-    # "telegram" (see connectors_api._reload_telegram_if_needed) — a non-primary boot
+    # "telegram" (see connectors_api._reload_live_connector) — a non-primary boot
     # never runs the poller, which is exactly what a test process is. Without this a
     # telegram-enabling test here would spawn a real background connect-with-retry
     # supervisor against api.telegram.org with a fake token (test_telegram_bot_lifecycle.py
@@ -297,7 +297,7 @@ def test_delete_mcp_connector_via_generic_route_delegates_to_remove_mcp_server(c
 
 # ── the Telegram bot reload (PATCH enable/disable + DELETE) ──────────────────────
 #
-# `_reload_telegram_if_needed` is exercised here with `reload_best_effort` MOCKED — the
+# `_reload_live_connector` is exercised here with `reload_best_effort` MOCKED — the
 # real one is covered by test_telegram_bot_lifecycle.py, with `bot._connect` mocked
 # instead, so nothing in this suite ever opens a real socket to api.telegram.org.
 

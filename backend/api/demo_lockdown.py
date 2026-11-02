@@ -109,7 +109,7 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/cost/(budget|log)$",
         r"^/api/intel/(scan|sources)(/.*)?$",
         r"^/api/(alpaca|ibkr|plaid|enable-banking|gocardless|lunch-flow|lunch-money|simplefin|yodlee|ynab"
-        r"|telegram|email|market-data|integrations|account-linking)(/.*)?$",
+        r"|telegram|email|market-data|integrations|account-linking|voice)(/.*)?$",
         r"^/api/setup-status/complete$",
         r"^/api/watchlist/config$",
         r"^/api/matches/config$",

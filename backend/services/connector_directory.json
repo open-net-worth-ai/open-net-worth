@@ -18,6 +18,24 @@
       }
     },
     {
+      "id": "voice",
+      "name": "Voice calls",
+      "families": [
+        "Channel"
+      ],
+      "categories": [
+        "Voice"
+      ],
+      "publisher": "Open Net Worth",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      },
+      "flag": "voice_calls"
+    },
+    {
       "id": "email",
       "name": "Email",
       "families": [

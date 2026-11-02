@@ -106,7 +106,8 @@ interface BaseProps {
   annotate?: (m: ModelOption) => string | undefined
   /** Rows this site cannot honour (e.g. a disabled provider). Never selectable. */
   isUnavailable?: (m: ModelOption) => boolean
-  size?: 'sm' | 'md'
+  /** `field`: a form field the size of a `Select` beside it (connector settings). */
+  size?: 'sm' | 'md' | 'field'
   /** Native tooltip on the trigger — the chat surfaces explain what the turn will run on. */
   title?: string
   className?: string
@@ -593,7 +594,11 @@ export function ModelPicker(props: ModelPickerProps) {
     ))
 
   return (
-    <span className={'mp-wrap' + (className ? ` ${className}` : '')}>
+    <span
+      className={
+        'mp-wrap' + (size === 'field' ? ' mp-wrap--field' : '') + (className ? ` ${className}` : '')
+      }
+    >
       {multiple && (
         <span className="mp-chips">
           {(props.value as string[]).length === 0 && (props as MultiProps).emptyHint}
@@ -620,7 +625,10 @@ export function ModelPicker(props: ModelPickerProps) {
         ref={triggerRef}
         id={id}
         type="button"
-        className={'mp-trigger' + (size === 'sm' ? ' mp-trigger--sm' : '')}
+        className={
+          'mp-trigger' +
+          (size === 'sm' ? ' mp-trigger--sm' : size === 'field' ? ' mp-trigger--field' : '')
+        }
         aria-label={label}
         title={title}
         aria-haspopup="listbox"

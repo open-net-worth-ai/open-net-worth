@@ -367,6 +367,7 @@ SHORT: dict[str, str] = {
     "web_search:google_pse": "Google Custom Search",
     "web_search:firecrawl": "Search + full-page scraping, JS-rendered pages included",
     "telegram": "Chat with Lucius and get alerts on Telegram.",
+    "voice": "Talk to Lucius out loud from the chat.",
     "webhook": "Send notifications to any URL.",
     "simplefin": "Bank and card accounts from the US and Canada, via a setup token.",
     "plaid": "Bank and card accounts from the US and Canada.",
@@ -425,6 +426,12 @@ LONG: dict[str, str] = {
     "web_search:firecrawl": (
         "Search plus full page scraping, including JS-rendered pages a plain fetch can't read "
         "— the provider to pick if page reads are coming back thin or blocked."
+    ),
+    "voice": (
+        "Press Call in Lucius's chat and talk instead of typing. A fast voice keeps the "
+        "conversation going while Lucius does the real work with the same tools, permissions "
+        "and approval cards as the chat; his answers are read out word for word. Runs on your "
+        "LiveKit project."
     ),
     "telegram": (
         "Message your own bot to ask questions, send photos, and approve changes, with the same "

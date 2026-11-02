@@ -23,6 +23,16 @@ export function clipboardWriteAllowed(origin: string | null, ownedContentsId: nu
   return Boolean(origin && permission === 'clipboard-sanitized-write' && requestContentsId === ownedContentsId && details.isMainFrame && appDocument(origin, details.requestingUrl ?? ''));
 }
 
+// Voice calls (the app's `voice_calls` flag) need the microphone — and only that: audio, from the
+// app's own document in the window this host owns. Camera, screen and every other permission stay
+// refused, and the app page itself still decides whether a call starts.
+export function microphoneAllowed(origin: string | null, ownedContentsId: number, requestContentsId: number | undefined, permission: string, details: { isMainFrame?: boolean; requestingUrl?: string; securityOrigin?: string; mediaTypes?: string[]; mediaType?: string }): boolean {
+  if (!origin || permission !== 'media' || requestContentsId !== ownedContentsId) return false;
+  const types = details.mediaTypes ?? (details.mediaType ? [details.mediaType] : []);
+  if (types.length === 0 || types.some((t) => t !== 'audio')) return false;
+  return details.isMainFrame !== false && appDocument(origin, details.requestingUrl ?? details.securityOrigin ?? '');
+}
+
 function urlOrigin(value: string): string | null {
   try { return new URL(value).origin; } catch { return null; }
 }

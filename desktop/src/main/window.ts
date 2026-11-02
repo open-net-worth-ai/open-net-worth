@@ -1,10 +1,10 @@
-import { app, BrowserWindow, nativeTheme, screen, session, shell, type IpcMainInvokeEvent, type Session, type WebContents } from 'electron';
+import { app, BrowserWindow, nativeTheme, screen, session, shell, systemPreferences, type IpcMainInvokeEvent, type Session, type WebContents } from 'electron';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { desktopEvent } from './desktop-events';
 import type { DesktopCommand, DesktopUpdateState, HistoryState } from '../contracts';
 import { BackendSupervisor } from './backend';
-import { appDocument, clipboardWriteAllowed, credentialHeaders, externalUrl, safeServerCommand, serverHeaders, validCommand, initialNavigationTrusted, serverRecoveryAllowed, trustedFrame } from './security';
+import { appDocument, clipboardWriteAllowed, microphoneAllowed, credentialHeaders, externalUrl, safeServerCommand, serverHeaders, validCommand, initialNavigationTrusted, serverRecoveryAllowed, trustedFrame } from './security';
 import { artifactFrameAllowed, artifactPolicy, artifactRequest } from './artifact-policy';
 import { prepareArtifactSrcDoc } from '../artifact-document';
 import { ArtifactProtocolOwner } from './artifact-protocol';
@@ -384,11 +384,20 @@ export class DesktopWindow {
   private installSessionPolicy(isolated: Session): void {
     isolated.setPermissionRequestHandler((contents, permission, callback, details) => {
       const owned = this.lifetime.current();
-      callback(Boolean(owned && contents && !contents.isDestroyed() && clipboardWriteAllowed(this.serverOrigin ?? this.backend.origin, owned.id, contents.id, permission, details)));
+      const live = Boolean(owned && contents && !contents.isDestroyed());
+      const origin = this.serverOrigin ?? this.backend.origin;
+      if (live && owned && microphoneAllowed(origin, owned.id, contents.id, permission, details)) {
+        // macOS asks once, in its own dialog, and remembers; refused there, the call says why.
+        void askForMicrophone().then(callback, () => callback(false));
+        return;
+      }
+      callback(Boolean(live && owned && clipboardWriteAllowed(origin, owned.id, contents.id, permission, details)));
     });
     isolated.setPermissionCheckHandler((contents, permission, _origin, details) => {
       const owned = this.lifetime.current();
-      return Boolean(owned && contents && !contents.isDestroyed() && clipboardWriteAllowed(this.serverOrigin ?? this.backend.origin, owned.id, contents.id, permission, details));
+      if (!owned || !contents || contents.isDestroyed()) return false;
+      const origin = this.serverOrigin ?? this.backend.origin;
+      return clipboardWriteAllowed(origin, owned.id, contents.id, permission, details) || microphoneAllowed(origin, owned.id, contents.id, permission, details);
     });
     isolated.webRequest.onBeforeRequest((details, callback) => {
       const contents = this.lifetime.current();
@@ -493,4 +502,11 @@ export class DesktopWindow {
       return { action: 'deny' };
     });
   }
+}
+
+/** macOS keeps its own microphone switch per app; ask it (once — it remembers) before granting. */
+async function askForMicrophone(): Promise<boolean> {
+  if (process.platform !== 'darwin') return true;
+  if (systemPreferences.getMediaAccessStatus('microphone') === 'granted') return true;
+  return systemPreferences.askForMediaAccess('microphone');
 }

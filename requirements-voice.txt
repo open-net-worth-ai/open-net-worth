@@ -1,0 +1,5 @@
+# Optional: voice calls with Lucius (the voice_calls flag). Install with
+#   pip install -r requirements-voice.txt
+# Without these the app runs exactly as before; Connectors → Voice calls says what is missing.
+livekit-agents[silero]==1.8.10
+livekit-api==1.2.2

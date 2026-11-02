@@ -8,12 +8,18 @@ import {
   completeUnfinishedTail,
   loadMessages,
   reconcileWithRemote,
+  repairCutReplies,
   withRestoreMarks,
 } from '../utils/chatStore'
 import { fetchRevision, forgetRevision, syncedRevision } from '../utils/chatRevision'
 import { blockCount, contentCount } from '../utils/chatBubbles'
 import { authFetch } from '../api/client'
-import { emitDataChanged, onLiveSessions } from '../lucius/bus'
+import {
+  emitDataChanged,
+  onConversationChanged,
+  onLiveSessions,
+  setLiveSessions,
+} from '../lucius/bus'
 import { useChatMultiTurnEnabled } from './useChatSuggestionsEnabled'
 import { chatSessions } from '../state/chatSessions'
 import {
@@ -94,7 +100,10 @@ function isRicher(fresher: Message[], prev: Message[]): boolean {
  *  completed with the reply we never saw finish, or ours carrying the server's restore marks. */
 function pickFresher(fresher: Message[], prev: Message[]): Message[] {
   if (isRicher(fresher, prev)) return fresher
-  return completeUnfinishedTail(prev, fresher) ?? withRestoreMarks(prev, fresher)
+  return (
+    completeUnfinishedTail(prev, fresher) ??
+    repairCutReplies(withRestoreMarks(prev, fresher), fresher)
+  )
 }
 
 /** Adopt the transcript re-read that ends an attach, unless a fresher attach owns the view. */
@@ -254,6 +263,32 @@ export function useChat(
   // either way.
   const [liveSessions, setLiveSessionIds] = useState<string[]>([])
   useEffect(() => onLiveSessions(setLiveSessionIds), [])
+  // Told this conversation may have changed (a voice call, every 1.5s: its small talk is
+  // recorded in a few ms, gone before the 4s live poll looks). A turn RUNNING there is joined
+  // live, through the live set; only a finished one is re-read. Re-reading mid-turn fetched a
+  // half-written answer, and the live replay then skipped that many characters as "already
+  // shown" — the answer lost its first words (live call, 2026-11-03).
+  useEffect(
+    () =>
+      onConversationChanged((id) => {
+        if (id !== conversationId) return
+        void (async () => {
+          try {
+            const res = await authFetch('/api/sessions/live')
+            if (!res.ok) return
+            const data = await res.json()
+            const live: string[] = Array.isArray(data.session_ids) ? data.session_ids : []
+            setLiveSessions(live)
+            if (!live.includes(id) && chatSessions.getSlice(id).status !== 'streaming') {
+              await resyncIfChanged(id)
+            }
+          } catch {
+            // The next tick, or the regular live poll, catches up.
+          }
+        })()
+      }),
+    [conversationId],
+  )
   const shouldAttach = hydrated && (streaming || liveSessions.includes(conversationId))
   // Exposed as `following` — kept to its ORIGINAL, narrower meaning ("watching a turn this
   // browser did not start") for every existing consumer of the hook's return value; it is

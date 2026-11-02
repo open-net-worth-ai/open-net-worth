@@ -130,3 +130,30 @@ export function _resetBusForTests(): void {
   liveSubs.clear()
   liveSessions = []
 }
+
+// ── Conversation changed ──────────────────────────────────────────────────────
+// A turn this browser did not send can start AND finish between two live polls — a voice
+// call's small talk is recorded in milliseconds — so the open chat never saw it. Whoever
+// knows a conversation may have changed (a voice call, while it is on) says so here, and the
+// chat showing it catches up: joins a running turn live, or re-reads a finished one.
+
+type ConversationChangedCb = (sessionId: string) => void
+
+const conversationSubs = new Set<ConversationChangedCb>()
+
+export function emitConversationChanged(sessionId: string): void {
+  for (const cb of [...conversationSubs]) {
+    try {
+      cb(sessionId)
+    } catch {
+      /* a subscriber error must never break the bus */
+    }
+  }
+}
+
+export function onConversationChanged(cb: ConversationChangedCb): () => void {
+  conversationSubs.add(cb)
+  return () => {
+    conversationSubs.delete(cb)
+  }
+}
