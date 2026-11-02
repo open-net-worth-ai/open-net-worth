@@ -290,6 +290,7 @@ function actionItemFor(block: MessageBlock): ActionItem | null {
     result: block.result,
     resultElided: block.resultElided,
     inputElided: block.inputElided,
+    ...(block.autoApproval ? { autoApproval: block.autoApproval } : {}),
   }
 }
 

@@ -689,6 +689,64 @@
   .msg-toolact__head--static {
     cursor: default;
   }
+  /* A row the Auto judge let through: the head shrinks to its content so the "i" sits right
+     after the sentence instead of at the far edge of the rail. */
+  .msg-toolact__line {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+  }
+  .msg-toolact__line > .msg-toolact__head {
+    flex: 0 1 auto;
+    width: auto;
+  }
+  /* Scoped under the line so it outranks `.info-pop-trigger`'s reset, whichever sheet loads last. */
+  .msg-toolact__line .msg-toolact__hint {
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--faint);
+    font: inherit;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.7;
+    position: relative;
+  }
+  /* A 14px circle is too small to tap; the hit area is not. */
+  .msg-toolact__hint::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+  }
+  .msg-toolact__line .msg-toolact__hint:hover,
+  .msg-toolact__line .msg-toolact__hint:focus-visible,
+  .msg-toolact__line .msg-toolact__hint[aria-expanded='true'] {
+    opacity: 1;
+    color: var(--muted);
+  }
+  .msg-toolact__hint:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .msg-toolact__hint-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .msg-toolact__hint-title {
+    color: var(--muted);
+    font-weight: 600;
+  }
   .msg-toolact__icon {
     flex: 0 0 auto;
     width: 16px;

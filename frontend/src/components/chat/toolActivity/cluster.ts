@@ -15,7 +15,7 @@
 // the client knows what is adjacent on screen and what is still streaming, and only the
 // server knows what a tool is called.
 
-import type { ToolDisplay, ToolStatus } from '../../../types/chat'
+import type { AutoApproval, ToolDisplay, ToolStatus } from '../../../types/chat'
 import { stripExternalMcpFence } from '../../../utils/untrusted'
 import { pluralize } from '../../../utils/pluralize'
 
@@ -29,6 +29,7 @@ export interface ToolItem {
   result?: string
   resultElided?: number
   inputElided?: number
+  autoApproval?: AutoApproval
 }
 
 export interface FetchItem {

@@ -986,6 +986,7 @@ export async function consumeEventStream(
             ...b,
             status: 'done' as const,
             result: event.result,
+            ...(event.autoApproval ? { autoApproval: event.autoApproval } : {}),
           }))
           // Lucius asked the app to light up one of its guides (show_guide). Each guide shows
           // once per person, so a replayed result asking again changes nothing on screen.

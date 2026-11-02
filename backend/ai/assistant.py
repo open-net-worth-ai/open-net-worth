@@ -2503,6 +2503,7 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
 
     if _permission_engine().labels_answered_cards:
         _rebuild_answered_cards(session_id, messages)
+        _attach_auto_approvals(session_id, messages)
     _append_last_turn_error(session_id, messages)
     return messages
 
@@ -2543,6 +2544,23 @@ def _rebuild_answered_cards(session_id: str, messages: list[dict]) -> None:
             message.setdefault("proposedChanges", []).append(change)
             rebuilt.append({"type": "change", "change": change})
         message["blocks"] = rebuilt
+
+
+def _attach_auto_approvals(session_id: str, messages: list[dict]) -> None:
+    """Give each call the Auto judge let through its stored reason (``autoApproval``), so the
+    row keeps its "i" after a reload (``permissions_v2``, ``services.auto_approvals``)."""
+    from backend.services import auto_approvals
+
+    approvals = auto_approvals.for_session(session_id)
+    if not approvals:
+        return
+    for message in messages:
+        if message.get("role") != "assistant":
+            continue
+        for block in message.get("blocks") or []:
+            approval = approvals.get(block.get("id") or "")
+            if block.get("type") == "tool" and approval is not None:
+                block["autoApproval"] = approval
 
 
 # Statuses whose stored message is worth showing. "awaiting_approval"/"ok"/"running" are
