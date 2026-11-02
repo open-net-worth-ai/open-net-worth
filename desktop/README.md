@@ -27,6 +27,20 @@ make desktop-package
 with `scripts/build_desktop_runtime.py --output desktop/runtime-next`, stop the app, and
 replace the previous generated runtime. No user book is included in the runtime.
 
+The runtime has about half the files of a plain install, because the installer (Squirrel.Mac's
+ShipIt) verifies and moves every file of the bundle and took minutes on a busy Mac. The pure-Python
+packages in `ZIPPED_PACKAGES` (`scripts/build_desktop_runtime.py`: `openai`, `anthropic`, `pydantic`,
+`fastapi`, `tzdata` ...) ship as ONE archive, `site-packages/onw-packages.zip`, put on `sys.path` by
+`onw-packages.pth`; each module is stored with an unchecked-hash `.pyc` (the signed app is read-only to
+Python). Everything compiled, and everything that opens a file beside its own `__file__` (`backend` with
+its bundled frontend, docs and Alembic scripts, `babel`, `pytz`, `dateutil`, `certifi`), stays plain
+files. A new dependency stays plain files until it is added to the list; `scripts/runtime_zip.py` refuses
+a listed package that holds a compiled module, and the build's import smoke fails if a listed package
+does not import from the archive. To read a zipped package's source, unzip the archive. Wheel build
+files (`.pyi`, headers, Cython sources), `python/include`, `python/bin` console scripts and
+`dist-info` install records are pruned. Reasoning and numbers: ADR
+`2026-11-02-desktop-runtime-ships-pure-python-packages-as-one-archive`.
+
 Forge emits the `.app`, `.dmg` and ZIP under `desktop/out`. The runtime manifest version must
 match `desktop/package.json` and `pyproject.toml`; bump all release versions together. Runtime
 dependencies resolve from `requirements.txt` into `desktop/runtime-requirements.lock` and
@@ -372,6 +386,14 @@ installer whose `ShipItState.plist` targets THIS bundle means the launch only no
 Open Net Worth X…** (the staged bundle's version), spawns a detached shell that waits for that pid
 (bounded at 2 min) and reopens the bundle with `--onw-update-handoff`, and exits. A window is never
 shown for it, since a running process is exactly what cancels the install; the flag stops a second handoff.
+The install itself can take minutes on a busy machine (ShipIt verifies every file of the bundle), and the
+"Installing…" progress window dies with the process. So on macOS, once the book is closed and just before
+the process exits (Restart to Update AND a plain quit with an update staged), `announceInstall` posts the
+same **Installing Open Net Worth X…** notification ("Your book is closed safely"; wording in
+`installNotice`) and waits, bounded at 1 s, for the system's `show` event so the exit cannot drop it.
+It honours the Notifications preference, `Notification.isSupported()` and QA-inactive mode like every
+other notification. Windows (Squirrel.Windows relaunches directly) and Linux (an AppImage relaunches
+itself) have no such gap, so they post nothing.
 A MANUAL **Check for Updates…** still asks (**Download and Install** / **Skip This Version** /
 **Later**), confirms the download started, relabels the menu **Downloading Update…** and ends in
 the Restart Now / Later dialog. Skip is stored as `skippedUpdateVersion` in the app-global desktop
