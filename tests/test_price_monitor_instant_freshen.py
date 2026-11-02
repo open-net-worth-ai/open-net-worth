@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 import time
 
+import pytest
+
 
 def test_instant_freshen_calls_gather_rss_with_resolved_feeds(monkeypatch):
     import backend.monitoring.price_monitor as pm
@@ -137,6 +139,9 @@ def test_alert_fire_triggers_instant_freshen(monkeypatch):
     assert freshen_calls == ["AAPL"]
 
 
+# Asserts the sender's own push, so it pins the flag off; the flag-on path is in
+# tests/test_delivery_seam.py.
+@pytest.mark.flags(intel_delivery_decider=False)
 def test_freshen_task_does_not_delay_push_or_alert_ordering(monkeypatch):
     """BLOCKER regression (code review): a SLOW _instant_news_freshen must not delay
     _push_external_alert's own ordering or run_price_check()'s return. Before the fix,

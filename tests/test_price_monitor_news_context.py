@@ -14,6 +14,8 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 import backend.monitoring.price_monitor as pm
 
 
@@ -325,6 +327,9 @@ def test_run_alert_lane_passes_news_context_through_to_ai_signal(monkeypatch):
     assert "Uber offered €41/share." in captured["news_context"]
 
 
+# Asserts the sender's own push, so it pins the flag off; the flag-on path is in
+# tests/test_delivery_seam.py.
+@pytest.mark.flags(intel_delivery_decider=False)
 def test_run_alert_lane_fires_and_pushes_even_when_news_context_helper_raises(monkeypatch):
     """Review finding #3: the news-context helper is best-effort and already swallows its own
     failures internally, but _run_alert_lane ALSO guards the call site (defense-in-depth) — a

@@ -15,6 +15,7 @@ market-gated price fetch:
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import operator
@@ -499,6 +500,18 @@ async def _push_external_alert(signal: dict, channels: list[str]) -> None:
         logger.warning("price_monitor: notify push failed: %s", exc)
 
 
+async def _deliver_alert(signal: dict, channels: list[str], *, crash_watch: bool = False) -> None:
+    """The call site for a fired alert's external push: ``delivery.route`` runs
+    ``_push_external_alert`` unchanged with the ``intel_delivery_decider`` flag off, and hands
+    Lucius the candidate with it on (the alert's own channels stay with it)."""
+    from backend.monitoring import delivery
+
+    candidate = delivery.signal_candidate(
+        signal, channels, crash_watch=crash_watch, legacy_message=_format_alert(signal)
+    )
+    await delivery.route(candidate, functools.partial(_push_external_alert, signal, channels))
+
+
 def _collect_crash_items(
     all_rows: list[dict], crash_thresholds: dict | None = None
 ) -> dict[str, dict]:
@@ -731,7 +744,7 @@ async def _fire_alert_condition(
     logger.info("price_monitor: alert fired — %s %s %s %g", ticker, op_str, currency, target)
     channels = list(condition.get("channels") or [])
     if channels:
-        await _push_external_alert(signal, channels)
+        await _deliver_alert(signal, channels)
     # Zero-latency tripwire (news-ingestion-latency.md Phase 2 addendum, owner directive
     # "receive it ~5 min after release"): the market reacts before any feed indexes, so don't
     # wait for the next poll tick — freshen THIS ticker's own feeds right now. FIRE-AND-FORGET
@@ -907,7 +920,7 @@ async def _run_crash_lane(
         fired += 1
         logger.info("price_monitor: crash-watch fired — %s %.1f%%", ticker, mv)
         if alert_channels:
-            await _push_external_alert(signal, alert_channels)
+            await _deliver_alert(signal, alert_channels, crash_watch=True)
         if iid:
             try:
                 from backend.db.pending_analysis_store import PendingAnalysisStore

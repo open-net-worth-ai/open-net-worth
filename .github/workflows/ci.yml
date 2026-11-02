@@ -153,6 +153,16 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
       - name: pytest (not integration)
         run: python3 -m pytest -q -m "not integration"
+      # docs/FEATURE_FLAGS.md rule 3: the unchanged run above proves the flag-off path; the
+      # suites the Intel delivery decider touches run again with it on. Remove with the flag.
+      - name: pytest (intel_delivery_decider on)
+        run: >
+          python3 -m pytest -q -m "not integration" --flag intel_delivery_decider=on
+          tests/test_analyst_sweep.py tests/test_push_retry.py tests/test_watch_analyst.py
+          tests/test_alert_lane_decouple.py tests/test_crash_watch.py
+          tests/test_price_monitor_instant_freshen.py tests/test_price_monitor_news_context.py
+          tests/test_news_delivery.py tests/test_delivery_seam.py tests/test_delivery_decider.py
+          tests/test_delivery_surfaces.py
 
   # --- test-windows: the backend imports and the Windows-ported areas pass on windows-latest.
   # The focused list is every area with platform-specific code (locks, process trees, anchored

@@ -20,6 +20,7 @@ skipped silently. Only an explained, sourced alert is PUSHED (ADR
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import uuid
 from datetime import datetime
@@ -232,6 +233,19 @@ async def _push(ticker: str, explained: dict) -> None:
         logger.warning("watch_analyst: push failed for %s", ticker, exc_info=True)
 
 
+async def _deliver(ticker: str, story: dict) -> None:
+    """The call site for an explained alert's external push: ``delivery.route`` runs ``_push``
+    unchanged with the ``intel_delivery_decider`` flag off, and hands Lucius the candidate with
+    it on."""
+    from backend.monitoring import delivery
+
+    explained = story["explained"]
+    candidate = delivery.watch_candidate(
+        ticker, story, explained, legacy_message=push_message(ticker, explained)
+    )
+    await delivery.route(candidate, functools.partial(_push, ticker, explained))
+
+
 def _candidates(ctx: dict, store) -> list[dict]:
     """Sync (run in a worker thread): every ticker with a material trigger whose story is live
     and hasn't been explained for this trigger + session yet — each with its first trigger."""
@@ -301,7 +315,7 @@ async def explain_material(ctx: dict, *, store=None) -> int:
             _persist, c["story"], c["trigger"], c["trigger_key"], result, why, now_iso, level
         )
         written += 1
-        await _push(c["key"], updated["explained"])
+        await _deliver(c["key"], updated)
     if written:
         logger.info("watch_analyst: %d explained alert(s)", written)
     return written
