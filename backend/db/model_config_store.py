@@ -133,6 +133,10 @@ VALID_TASKS: frozenset[str] = frozenset(
         # (`ai/session_titles.py`). A ~200-token call, so the instance default is fine
         # unpinned; pin a fast model if the default is a slow CLI transport.
         "title",
+        # "approval": the Auto-approval judge (`ai/auto_judge.py`) — decides per call whether
+        # Auto mode must ask the user. Unpinned = the conversation's own model, not the
+        # instance default (resolved by the judge, not here).
+        "approval",
     }
 )
 

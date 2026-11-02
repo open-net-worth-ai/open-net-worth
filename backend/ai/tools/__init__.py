@@ -122,6 +122,9 @@ TOOL_SCHEMAS = build_tool_schemas()
 # Register the registered-tool-names provider on the core seam so services/ (which
 # must not import ai/ — import-linter Contract 3) can validate a skill's
 # allowed_tools against the live registry. Mirrors core.io's write-hook inversion.
+from backend.core.tool_registry_seam import (
+    register_tool_asks_by_default_provider as _register_tool_asks_by_default_provider,
+)
 from backend.core.tool_registry_seam import (  # noqa: E402
     register_tool_name_provider as _register_tool_name_provider,
 )
@@ -134,6 +137,11 @@ _register_tool_name_provider(registered_tool_names)
 # can tell a read from a write without importing ai/ (used by self_harness to keep an
 # auto-SUGGESTED playbook read-only). A factual classification, not a permission tier.
 _register_tool_writes_provider(lambda name: bool(_registry_mutated_domains(name)))
+# ...and the seed rule, so services/ can say what a tool starts at under ``permissions_v2`` without
+# importing ai/. A seed, not a permission: the stored row is the value.
+from backend.ai.tools import _confirm_gate_v2 as _confirm_gate_v2_module  # noqa: E402
+
+_register_tool_asks_by_default_provider(lambda name: _confirm_gate_v2_module.is_gated_tool(name))
 
 # Register the LLM provider on the core seam so services/ (which must not import ai/ —
 # import-linter Contract 1) can run a single-shot completion + parse its JSON without an
