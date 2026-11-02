@@ -239,7 +239,7 @@ export function GoCardlessSection({ initialCountry }: { initialCountry?: string 
     .join('; ')
 
   return (
-    <Stack gap="--space-4">
+    <Stack gap="--space-4" className="gc-form">
       <Text size="sm" tone="faint">
         For an existing{' '}
         <a href="https://bankaccountdata.gocardless.com" target="_blank" rel="noreferrer">

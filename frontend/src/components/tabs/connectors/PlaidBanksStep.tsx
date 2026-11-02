@@ -109,6 +109,7 @@ export function PlaidBanksStep({
                 <Button
                   size="sm"
                   variant="ghost"
+                  className="plaid-bank-remove"
                   aria-label={`Remove ${b.institution_name || 'this bank'}`}
                   onClick={() => setRemoving(b)}
                 >
