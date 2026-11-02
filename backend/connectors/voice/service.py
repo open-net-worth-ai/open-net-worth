@@ -80,6 +80,14 @@ def calls_allowed() -> bool:
     return flag_enabled(FLAG) and is_ready(VoiceConfigStore().get())
 
 
+def voice_server_url() -> Optional[str]:
+    """The LiveKit URL the browser must be allowed to reach, while calls are on and set up."""
+    if not flag_enabled(FLAG):
+        return None
+    config = VoiceConfigStore().get()
+    return config["livekit_url"] if is_ready(config) else None
+
+
 def libraries_installed() -> bool:
     try:
         return all(importlib.util.find_spec(name) is not None for name in _REQUIRED_MODULES)

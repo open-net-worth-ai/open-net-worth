@@ -1013,6 +1013,19 @@ async def log_validation_error(request: Request, exc: RequestValidationError):
 from backend.core.config import get_settings
 from backend.core.shipped_assets import DOCS_SITE_DIST_DIR, FRONTEND_DIST_DIR
 from backend.core.spa_csp import spa_csp
+
+
+def _voice_csp_url() -> str | None:
+    """The owner's LiveKit server, for the page's ``connect-src`` — only while voice calls are on
+    and set up (``core.spa_csp``). Never fails the page: unreadable means no extra source."""
+    try:
+        from backend.connectors.voice import service as voice_service
+
+        return voice_service.voice_server_url()
+    except Exception:  # noqa: BLE001
+        return None
+
+
 from backend.core.version import AGENT_CONTRACTS, APP_VERSION
 from backend.services.mentions.entity_types import entity_types
 
@@ -1335,7 +1348,7 @@ class _SPAStaticFiles(StaticFiles):
         if response.headers.get("content-type", "").startswith("text/html"):
             _purge_stale_cache_once(response, scope)
             portal = (scope.get("state") or {}).get("gateway_portal_url")
-            response.headers["Content-Security-Policy"] = spa_csp(portal)
+            response.headers["Content-Security-Policy"] = spa_csp(portal, _voice_csp_url())
         return response
 
 

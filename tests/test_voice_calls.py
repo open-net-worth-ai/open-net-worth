@@ -372,3 +372,20 @@ def test_a_worker_that_cannot_load_says_why(db_isolated, monkeypatch):
     asyncio.run(service.start())
     status = service.status()
     assert status["running"] is False and "failed to load" in status["error"]
+
+
+def test_the_page_may_reach_only_the_owners_voice_server():
+    """Without this the browser refused the LiveKit connection before the call could even ask
+    for the microphone (live test, 2026-11-03). Nothing extra while voice is off or unset."""
+    from backend.core.spa_csp import spa_csp
+
+    def connect_src(csp: str) -> str:
+        return next(d for d in csp.split("; ") if d.startswith("connect-src"))
+
+    assert connect_src(spa_csp()) == "connect-src 'self'"
+    assert connect_src(spa_csp(voice_url=None)) == "connect-src 'self'"
+    cloud = connect_src(spa_csp(voice_url="wss://acme-x1.livekit.cloud"))
+    assert cloud == "connect-src 'self' https://*.livekit.cloud wss://*.livekit.cloud"
+    own = connect_src(spa_csp(voice_url="wss://voice.acme.test:7443"))
+    assert own == "connect-src 'self' https://voice.acme.test:7443 wss://voice.acme.test:7443"
+    assert connect_src(spa_csp(voice_url="https://not-a-voice-url.test")) == "connect-src 'self'"
