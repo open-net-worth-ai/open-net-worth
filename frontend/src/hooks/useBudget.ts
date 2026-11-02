@@ -109,10 +109,15 @@ export interface BudgetMonth {
   /** Cash on hand: Σ balances of `cash` accounts as of this month's end, base ccy — cards are
    *  never in it (a card's debt lives entirely in its own payment envelope). The cash side of
    *  the identity (ADR 2026-09-09 + 2026-09-10): ready_to_assign = on_budget_cash
-   *  − pre_budget_baseline − held_in_envelopes − held_outside_envelopes
+   *  + card_credit − pre_budget_baseline − held_in_envelopes − held_outside_envelopes
    *  − card_spend_not_covered − assigned_in_future_months (clamped). It is
    *  NOT an upper bound on Ready to Assign: held overspending can put the headline above it. */
   on_budget_cash?: number
+  /** Every card's balance ABOVE ZERO as of this month's end, base ccy — an overpaid or refunded
+   *  card holds the user's own money, which is budget money beside `on_budget_cash` (ADR
+   *  2026-11-02-a-card-in-credit-is-budget-money). Added to it in the identity; a card that
+   *  owes money adds nothing. Optional so an older payload reads as 0. */
+  card_credit?: number
   /** Read-only flag: do any on-budget cash accounts hold a foreign currency? When true the RTA
    *  breakdown notes that Ready-to-Assign can shift as exchange rates move (foreign cash floats
    *  at the current rate). A plain note, not a computed amount (ADR 2026-07-09). */

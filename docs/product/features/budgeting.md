@@ -59,7 +59,9 @@ You can skip targets, but they're what makes **Underfunded** and **Auto-assign**
 
 ### 2. Assign your money
 
-**Ready to Assign** at the top is cash in your Cash accounts that no envelope holds yet.
+**Ready to Assign** at the top is money in your budget that no envelope holds yet: cash in your
+Cash accounts, plus any credit sitting on a card (see **Credit cards** under
+[Day to day with Zero-Based](#day-to-day-with-zero-based)).
 
 1. Click an envelope's **Assigned** amount and type how much to put in it.
 2. Repeat until Ready to Assign reaches zero — or use **Auto-assign** → **Underfunded** to fill
@@ -129,6 +131,15 @@ Each Credit account gets its own payment envelope, named after the card, in the
 - Card spending never changes Ready to Assign by itself — card debt isn't cash you've spent yet.
 - Paying the card (a transfer from a Cash account) uses the payment envelope. Paying more than
   it holds turns it red, like any overspent envelope.
+- **A card in credit holds your money.** If you pay a card more than it owes, or a refund arrives
+  after you've paid the bill, the card's balance goes above zero. That credit stays in your
+  budget: Ready to Assign counts it, and the breakdown shows it as **Credit on your cards**.
+  The month you overpay, the red payment envelope lifts Ready to Assign by the same amount until
+  the month ends, then the two cancel.
+- **Spending on a card in credit uses the credit first.** The envelope you spend from goes down,
+  the payment envelope doesn't move, and Ready to Assign stays put. Only the part beyond the
+  credit becomes debt and moves into the payment envelope. A refund to a card in credit adds to
+  the credit.
 
 ## Start fresh
 

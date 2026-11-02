@@ -29,7 +29,7 @@ export interface BudgetConfig {
  *  the dialog promises is the figure the month payload reports once confirmed. It is the SAME
  *  identity the RTA popover renders (ADR
  *  2026-09-09-ready-to-assign-follows-ynab-envelopes-are-the-category) — no residual term,
- *  ever: `cash_now − baseline − held_in_envelopes − held_outside_envelopes −
+ *  ever: `cash_now + card_credit − baseline − held_in_envelopes − held_outside_envelopes −
  *  card_spend_not_covered − assigned_in_future` (see `freshStartLedger`). */
 export interface FreshStartPreview {
   month: string
@@ -37,6 +37,9 @@ export interface FreshStartPreview {
   /** On-budget cash as of the END of the month itself — the identity is measured at the cash,
    *  this month's own activity included, never the previous month's opening frame. */
   cash_now: number
+  /** Every card's balance above zero at the end of the month — budget money beside `cash_now`
+   *  (ADR 2026-11-02). Optional so an older server reads as 0. */
+  card_credit?: number
   /** The SIGNED Σ of every envelope's Available at the hypothetical floor — normally 0
    *  (assigned is zeroed and nothing carries), but NOT always: a same-month refund into an
    *  envelope, or a same-month covered card swipe, leaves a POSITIVE row even so, and a
@@ -178,6 +181,7 @@ export function resumeHistoryLabel(ym: string): string {
 export function freshStartLedger(p: FreshStartPreview): RtaLine[] {
   return buildRtaLines({
     onBudgetCash: p.cash_now,
+    cardCredit: p.card_credit ?? 0,
     heldInEnvelopes: p.held_in_envelopes,
     heldOutsideEnvelopes: p.held_outside_envelopes,
     cardSpendNotCovered: p.card_spend_not_covered,

@@ -22,6 +22,19 @@ The full list of versions and their downloads is on the
 which version you have: in the desktop app, **Open Net Worth → About Open Net Worth** on a Mac or
 **Help → Check for Updates…** on Windows and Linux; on a server, run `onw version`.
 
+## 2026-11-02 — Credit on a card now counts in Ready to Assign
+
+If you paid a card more than it owed, or a refund landed after you'd paid the bill, the extra
+used to disappear from Ready to Assign at the end of the month, even though it was still sitting
+on the card. It now stays in your budget, the way YNAB keeps it:
+
+- **Ready to Assign** goes up by the credit on your cards. The breakdown (click the figure) shows
+  it as **Credit on your cards**.
+- **Spending on a card in credit** comes out of the credit first: your envelope goes down, but the
+  card's payment envelope doesn't, since nothing new is owed.
+- Cards that owe money work exactly as before. **Cash on hand** on the Dashboard still means your
+  Cash accounts only.
+
 ## 2026-10-07 — Shares waiting to be released now count in your history and returns
 
 If you have stock that vested but is still waiting to be released to your brokerage, those

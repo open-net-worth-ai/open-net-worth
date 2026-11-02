@@ -3,8 +3,13 @@
 // (`freshStart.ts` → `FreshStartDialog.tsx`). ADR
 // 2026-09-09-ready-to-assign-follows-ynab-envelopes-are-the-category:
 //
-//   Ready to Assign = cash on hand − baseline − held in envelopes − held outside envelopes
-//                     − card spending not covered this month − assigned in future months
+//   Ready to Assign = cash on hand + credit on your cards − baseline − held in envelopes
+//                     − held outside envelopes − card spending not covered this month
+//                     − assigned in future months
+//
+// "Credit on your cards" (ADR 2026-11-02-a-card-in-credit-is-budget-money) is every card's
+// balance above zero — an overpaid or refunded card holds your own money, which stays in the
+// budget. A card that owes money adds nothing here.
 //
 // "Held in envelopes" is the SIGNED sum of every envelope's Available, so it can be NEGATIVE:
 // an envelope HOLDS its own overspend until month-end, lending that room back until the roll
@@ -42,6 +47,8 @@ export interface RtaLine {
 /** The identity's terms, in the currency the whole tab reports in. */
 export interface RtaTerms {
   onBudgetCash: number
+  /** Σ of every card's balance above zero — budget money beside cash. Absent/0 on most books. */
+  cardCredit?: number
   /** SIGNED Σ of every envelope's Available — POSITIVE when money is reserved, NEGATIVE when
    *  envelopes are net overspent this month and are holding those holes until the roll. */
   heldInEnvelopes: number
@@ -93,6 +100,15 @@ export function buildRtaLines(t: RtaTerms): RtaLine[] {
     },
     { key: 'held', label: 'Held in envelopes', value: held, op: glyph(held, '−') },
   ]
+  const cardCredit = t.cardCredit ?? 0
+  if (Math.abs(cardCredit) >= 0.005) {
+    lines.splice(1, 0, {
+      key: 'cardcredit',
+      label: 'Credit on your cards',
+      value: r2(cardCredit),
+      op: '+',
+    })
+  }
   const hideable: Array<[key: string, label: string, value: number, tone?: 'warn']> = [
     ['heldoutside', 'Held outside envelopes', t.heldOutsideEnvelopes],
     ['cardspend', 'Card spending not covered this month', t.cardSpendNotCovered, 'warn'],
@@ -108,7 +124,8 @@ export function buildRtaLines(t: RtaTerms): RtaLine[] {
   }
   const residual = r2(
     t.rta -
-      (t.onBudgetCash -
+      (t.onBudgetCash +
+        cardCredit -
         t.heldInEnvelopes -
         t.heldOutsideEnvelopes -
         t.cardSpendNotCovered -
