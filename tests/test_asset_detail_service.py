@@ -221,7 +221,12 @@ def test_common_word_ticker_offtopic_news_dropped_through_the_real_caller(isolat
     unconditionally silently re-added the ticker to the case-insensitive match path the whole
     split exists to close. This is the end-to-end proof through the REAL caller construction,
     not a hand-built split, so a future regression here fails a test again."""
+    from datetime import datetime, timedelta, timezone
+
     from backend.services.evidence import record_evidence
+
+    # News is kept 90 days from its publish date, so a fixed date ages out of the read.
+    now = datetime.now(timezone.utc)
 
     inst = _inst(
         isolated["tmp_path"],
@@ -240,14 +245,14 @@ def test_common_word_ticker_offtopic_news_dropped_through_the_real_caller(isolat
                 "url": "https://marketwatch.com/retire",
                 "source": "MarketWatch",
                 "via": "rss:marketwatch",
-                "published_date": "2026-08-29T12:00:00+00:00",
+                "published_date": (now - timedelta(days=4)).isoformat(),
             },
             {
                 "title": "NOW Stock Surges 7% After-Hours As ServiceNow Beats Q2 Estimates",
                 "url": "https://cnbc.com/now-earnings",
                 "source": "CNBC",
                 "via": "rss:cnbc",
-                "published_date": "2026-08-30T12:00:00+00:00",
+                "published_date": (now - timedelta(days=3)).isoformat(),
             },
         ],
         subjects=["asset:inst-1"],

@@ -1,0 +1,46 @@
+name: Test order
+
+# The PR gate runs the suite in one fixed order (pytest-randomly is not a dependency; the
+# `-p no:randomly` flags in ci.yml are guards for the day it is). A test that only passes
+# because of what ran before it is invisible there, so this shuffles the order nightly and
+# prints the seed in the header. It never blocks a merge: a red run is a test-isolation bug to
+# fix, and `python -m pytest -m "not integration" --randomly-seed=<seed>` (with
+# pytest-randomly installed) replays it locally, or run this workflow with that seed.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      seed:
+        description: "Replay a seed (blank = a fresh one)"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-order
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  shuffled:
+    name: pytest (shuffled order)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt pytest-randomly==4.1.0
+      - name: pytest (not integration, shuffled)
+        env:
+          SEED: ${{ inputs.seed }}
+        run: python3 -m pytest -m "not integration" -rfE ${SEED:+--randomly-seed=$SEED}

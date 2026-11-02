@@ -187,8 +187,10 @@ def test_freshen_task_does_not_delay_push_or_alert_ordering(monkeypatch):
 
     events: list = []
 
+    # Far slower than the check itself, so "faster than half of it" proves the check never
+    # waited, even on a loaded runner (a 0.2s sleep against a 0.15s bound flaked under xdist).
     async def _slow_freshen(ticker, row, label):
-        await asyncio.sleep(0.2)
+        await asyncio.sleep(5.0)
         events.append("freshen_done")
 
     async def _fake_push(signal, channels):
@@ -202,5 +204,5 @@ def test_freshen_task_does_not_delay_push_or_alert_ordering(monkeypatch):
     elapsed = time.monotonic() - start
 
     assert fired == 1
-    assert elapsed < 0.15  # must NOT have waited on the freshen's 0.2s sleep
+    assert elapsed < 2.5  # must NOT have waited on the freshen's 5s sleep
     assert events == ["push"]  # the push landed; the slow freshen's own completion is unobserved

@@ -753,6 +753,49 @@ def _no_background_price_backfill(request, monkeypatch):
     yield
 
 
+@pytest.fixture
+def quiet_app_boot(monkeypatch):
+    """For a test that enters ``with TestClient(backend.main.app)``, i.e. runs the real lifespan.
+
+    Unless QA mode is on, the lifespan starts daemon threads that fetch live benchmark and
+    held-instrument prices and write them into the current database, schedules memory model
+    calls and probes the configured CLI. It also points the ``backend`` logger at uvicorn's
+    handlers with ``propagate=False``, which silently empties every later test's ``caplog``.
+    This turns QA mode on for the boot (``get_settings()`` is a cached singleton, so the env var
+    alone is not enough) and puts the logger back afterwards.
+    """
+    import logging
+
+    import backend.core.config as _config
+
+    monkeypatch.setenv("ONW_QA_MODE", "1")
+    _config._settings = None
+    logger = logging.getLogger("backend")
+    handlers, level, propagate = list(logger.handlers), logger.level, logger.propagate
+    yield
+    logger.handlers, logger.propagate = handlers, propagate
+    logger.setLevel(level)
+    _config._settings = None
+
+
+@pytest.fixture(autouse=True)
+def _no_tool_call_flusher_thread(monkeypatch):
+    """Keep the tool-call telemetry flusher thread out of the suite, and each test's rows its own.
+
+    The first tool dispatch starts ``ai.tools.call_log``'s daemon flusher, which then wakes
+    every 2s for the rest of the session and writes the shared buffer through whatever engine
+    is current: one test's rows land in another test's database, and once it rebuilt the
+    engine singleton mid-``db_isolated`` setup (``no such table: connectors``, main CI
+    2026-11-02). Tests that assert on telemetry call ``call_log.flush_now()`` themselves.
+    """
+    from backend.ai.tools import call_log as _call_log
+
+    monkeypatch.setattr(_call_log, "_ensure_flusher", lambda: None)
+    _call_log._drain()
+    yield
+    _call_log._drain()
+
+
 @pytest.fixture(autouse=True)
 def _no_site_identity_lookup(request, monkeypatch):
     """Stop every MCP discovery from fetching a REAL website for its display name/icon.
@@ -788,3 +831,61 @@ def _no_background_session_title(request, monkeypatch):
 
     monkeypatch.setattr(_session_titles, "schedule_title", lambda *_a, **_k: False)
     yield
+
+
+# ── Stray threads ─────────────────────────────────────────────────────────────
+# A thread a test starts and leaves running keeps acting on whatever the NEXT test set up:
+# the telemetry flusher wrote one test's rows into another's database and rebuilt the engine
+# mid-setup; the backfill threads wrote live prices into a later book. So a test that leaves a
+# new thread running fails, by name, at the test that started it — after its fixtures have
+# finalized and a short grace for one that is finishing on its own. Threads that live for the
+# process by design (pools, the app's loop watcher, asyncio's child watchers, an MCP stdio
+# connection's stderr pump) are allowed; a test that means to leave one marks itself
+# ``allow_stray_threads``.
+import re as _re  # noqa: E402
+import threading as _threading  # noqa: E402
+import time as _time  # noqa: E402
+
+_PROCESS_LIFETIME_THREADS = _re.compile(
+    r"(ThreadPoolExecutor-\d+_\d+|stmt-parse_\d+|search-read_\d+|ynab-sync_\d+"
+    r"|ynab-migration_\d+|asyncio_\d+|AnyIO worker thread|loop_watch_sampler"
+    r"|asyncio-waitpid-\d+|mcp-stdio-stderr)"
+)
+_THREADS_BEFORE = pytest.StashKey[set]()
+_STRAY_GRACE_S = 2.0
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_setup(item):
+    item.stash[_THREADS_BEFORE] = {t.ident for t in _threading.enumerate()}
+    return (yield)
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_teardown(item, nextitem):
+    result = yield
+    before = item.stash.get(_THREADS_BEFORE, None)
+    if before is None or item.get_closest_marker("allow_stray_threads"):
+        return result
+
+    def stray() -> list[_threading.Thread]:
+        return [
+            t
+            for t in _threading.enumerate()
+            if t.ident not in before
+            and t.is_alive()
+            and not _PROCESS_LIFETIME_THREADS.fullmatch(t.name)
+        ]
+
+    deadline = _time.monotonic() + _STRAY_GRACE_S
+    left = stray()
+    while left and _time.monotonic() < deadline:
+        left[0].join(timeout=deadline - _time.monotonic())
+        left = stray()
+    if left:
+        raise AssertionError(
+            f"{item.nodeid} left thread(s) running after teardown: "
+            f"{sorted(t.name for t in left)}. Stop them in the test (or stub what starts them in "
+            "tests/conftest.py); mark the test allow_stray_threads only if it means to."
+        )
+    return result

@@ -112,10 +112,10 @@ def test_input_rows_are_not_mutated():
 
 def test_pages_are_read_in_parallel():
     urls = [f"https://site{i}.example/a" for i in range(3)]
-    provider = _Provider({u: 0.3 for u in urls})
+    provider = _Provider({u: 1.0 for u in urls})
     started = time.monotonic()
-    out = _attach(provider, _rows(*urls), page_timeout_s=2.0)
-    assert time.monotonic() - started < 0.8  # three 0.3s reads, not 0.9s in series
+    out = _attach(provider, _rows(*urls), page_timeout_s=5.0)
+    assert time.monotonic() - started < 2.5  # three 1s reads, not 3s in series
     assert all("excerpt" in r for r in out)
 
 

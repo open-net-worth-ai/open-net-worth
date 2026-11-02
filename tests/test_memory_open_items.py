@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import timedelta
 
 import pytest
 
 from backend.ai import memory
 from backend.ai.memory_open_items import guard, user_words
+from backend.core.user_time import user_today
 from backend.db import MemoryStore
 from backend.db.memory_settings_store import MemorySettingsStore
 
@@ -239,7 +241,10 @@ def _live_fact(fid: str, content: str, section: str, age_minutes: int = 0) -> di
         "topic": None if section == "open_items" else "Housing",
         "state": "live",
         "source": "implicit",
-        "expires_at": "2026-11-11" if section == "open_items" else None,
+        # Relative, not a calendar date: a fixed one expires these live items on that day.
+        "expires_at": (user_today() + timedelta(days=14)).isoformat()
+        if section == "open_items"
+        else None,
         "created_at": stamp,
         "updated_at": stamp,
     }

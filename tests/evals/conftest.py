@@ -129,6 +129,31 @@ def _is_sqlite_db_file(entry: Path) -> bool:
     return entry.name == DB_FILE.name or entry.name.startswith(DB_FILE.name + "-")
 
 
+def _restore_pristine_env(env_before: dict[str, str | None]) -> None:
+    import backend.core.config as _config
+
+    for key, value in env_before.items():
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
+    _config._settings = None
+
+
+def pytest_collection_finish(session):
+    """Undo the collection-time ``_isolate()`` before ANY test runs, not only around eval tests.
+
+    The fixture below restores the environment when an eval test finishes, which covers the
+    rest of a serial run only because ``tests/evals/`` sorts before ``tests/test_*.py``. Under
+    pytest-xdist a worker can reach ``test_price_backfill.py`` or an auth-gate test before it
+    has run a single eval test, with ``ONW_QA_MODE`` and ``AUTH_DISABLED`` still set from
+    collection (leaks 1 and 2 above). Each eval test re-enters isolation itself.
+    """
+    from tests.conftest import PRISTINE_ENV
+
+    _restore_pristine_env({key: PRISTINE_ENV.get(key) for key in _EVAL_ENV_KEYS})
+
+
 @pytest.fixture(autouse=True)
 def _contain_eval_harness_globals():
     """Snapshot/restore the process globals the tool-surface harness mutates."""
@@ -171,12 +196,7 @@ def _contain_eval_harness_globals():
     # to None (rather than restoring a saved reference) is the unconditionally correct
     # move here: the saved reference may ITSELF have been latched at collection time, when
     # os.environ was already dirty.
-    for key, value in env_before.items():
-        if value is None:
-            os.environ.pop(key, None)
-        else:
-            os.environ[key] = value
-    _config._settings = None
+    _restore_pristine_env(env_before)
 
     # 3+4. Drop the seeded book and the seeded fx_cache.json. DATA_DIR/CACHE_DIR are read
     # from the RESTORED env above, so this always targets the suite's throwaway root even

@@ -111,7 +111,9 @@ def test_launch_authentication_readiness_persistence_and_graceful_stop(tmp_path,
                 child.terminate()
             expected_exit = -15 if stop == "signal" and os.name != "nt" else 0
             try:
-                assert child.wait(timeout=5) == expected_exit, log.read_text()
+                # Above uvicorn's own timeout_graceful_shutdown=15 (backend/cli/desktop.py): a
+                # loaded runner can take longer than 5s to drain the open event stream.
+                assert child.wait(timeout=20) == expected_exit, log.read_text()
             finally:
                 events.close()
             assert "Application shutdown complete." in log.read_text()

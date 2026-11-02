@@ -535,8 +535,10 @@ def test_ahead_of_code_revision_is_refused_before_the_lock_wait(tmp_path, monkey
 
         lock_folder = tmp_path / "lockfolder"
         monkeypatch.setattr(_migrate, "DATA_DIR", lock_folder / "data")
-        monkeypatch.setattr(_migrate, "_LIVE_LOCK_POLL_TIMEOUT_S", 5.0)
-        monkeypatch.setattr(_migrate, "_LIVE_LOCK_POLL_INTERVAL_S", 1.0)
+        # Entering the poll loop sleeps a whole interval first, so "faster than one interval"
+        # proves it never ran; a wide one keeps a loaded CI runner from looking like a wait.
+        monkeypatch.setattr(_migrate, "_LIVE_LOCK_POLL_TIMEOUT_S", 30.0)
+        monkeypatch.setattr(_migrate, "_LIVE_LOCK_POLL_INTERVAL_S", 10.0)
 
         from backend.core.instance_lock import LOCK_NAME
 
