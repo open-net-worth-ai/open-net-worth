@@ -57,7 +57,7 @@ const FAMILIES: Record<string, ConnectorFamily[]> = {
  *  that instead — see `logos.ts` and D25; these stay as the answer for everything else. */
 const PRESENTATION: Record<string, { icon: string; hue: string }> = {
   telegram: { icon: 'chat', hue: 'var(--accent)' },
-  voice: { icon: 'chat', hue: 'var(--accent)' },
+  voice: { icon: 'phone', hue: 'var(--accent)' },
   webhook: { icon: 'link', hue: 'var(--cash-c)' },
   email: { icon: 'mail', hue: 'var(--recv)' },
   plaid: { icon: 'accounts', hue: 'var(--crypto)' },

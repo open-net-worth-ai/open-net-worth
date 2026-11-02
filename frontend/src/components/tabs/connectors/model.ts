@@ -144,6 +144,7 @@ export const CONNECTOR_CATEGORIES = [
   'Payments',
   'Research',
   'Tax',
+  'Voice',
   'Web search',
 ] as const
 
@@ -166,6 +167,7 @@ export const CATEGORY_HUE: Record<ConnectorCategory, string> = {
   Payments: 'var(--recv)',
   Research: 'var(--violet)',
   Tax: 'var(--tax)',
+  Voice: 'var(--accent)',
   'Web search': 'var(--contingent)',
 }
 
