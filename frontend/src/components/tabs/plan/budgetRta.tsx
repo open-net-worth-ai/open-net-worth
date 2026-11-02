@@ -103,6 +103,7 @@ export function RtaHero({
   rta,
   monthLabel,
   onBudgetCash,
+  cardCredit = 0,
   heldInEnvelopes,
   heldOutsideEnvelopes,
   cardSpendNotCovered,
@@ -118,6 +119,8 @@ export function RtaHero({
   rta: number
   monthLabel: string
   onBudgetCash: number | null
+  /** Every card's balance above zero — budget money beside cash (ADR 2026-11-02). */
+  cardCredit?: number
   heldInEnvelopes: number
   heldOutsideEnvelopes: number
   cardSpendNotCovered: number
@@ -237,6 +240,7 @@ export function RtaHero({
 
   const stockLines = buildRtaLines({
     onBudgetCash,
+    cardCredit,
     heldInEnvelopes,
     heldOutsideEnvelopes,
     cardSpendNotCovered,

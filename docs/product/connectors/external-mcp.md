@@ -70,7 +70,7 @@ lists up to three connectors you haven't added yet — Email, Telegram, Plaid, I
 Coinbase first — once at the bottom of **All**, or under the section on a single tab such as
 **MCP** — and on a tab with nothing set up yet, inside its empty view, under **Browse & add** — and at the top of **Browse & add** before you
 search or filter; click one to read about it and add it. **Sort** orders the full list below it:
-**Popular** puts the connectors you've added first, then popular ones, then the rest A–Z.
+**Popular** puts popular connectors first, then the rest, each A–Z.
 
 1. Open **Connectors** in the sidebar, click **Browse & add**, and choose **MCP**.
 2. Click a card to read what it does and which tools it offers, then click **Add**. The connection

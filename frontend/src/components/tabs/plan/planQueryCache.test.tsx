@@ -58,6 +58,7 @@ const budget = (month: string): BudgetMonth => ({
   month,
   base_currency: 'USD',
   ready_to_assign: 0,
+  card_credit: 0,
   held_in_envelopes: 0,
   held_outside_envelopes: 0,
   card_spend_not_covered: 0,

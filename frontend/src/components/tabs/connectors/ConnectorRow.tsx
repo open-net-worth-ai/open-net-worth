@@ -74,7 +74,7 @@ export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps):
       <div className="cn-meta">
         {entry.tone === 'good' ? (
           <span className="cn-statusgood" title={entry.statusText}>
-            <Icons.checkcircle /> {entry.statusText}
+            <Icons.checkcircle /> <span className="cn-statusgood-label">{entry.statusText}</span>
           </span>
         ) : entry.tone === 'bad' ? (
           <span className="cn-statusbad" title={entry.statusText}>

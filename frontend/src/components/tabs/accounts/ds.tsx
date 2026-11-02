@@ -988,6 +988,9 @@ export interface PMSelectProps {
   className?: string
   searchable?: boolean
   compact?: boolean
+  /** The trigger's accessible name, when no visible label names it. */
+  ariaLabel?: string
+  disabled?: boolean
 }
 
 export function PMSelect({
@@ -998,6 +1001,8 @@ export function PMSelect({
   className,
   searchable,
   compact,
+  ariaLabel,
+  disabled,
 }: PMSelectProps) {
   const [open, setOpen] = useState(false),
     [pos, setPos] = useState<React.CSSProperties | null>(null)
@@ -1015,9 +1020,12 @@ export function PMSelect({
     let left = Math.round(r.left)
     if (left + width > window.innerWidth - 8) left = window.innerWidth - 8 - width
     const base: React.CSSProperties = { position: 'fixed', left, width, zIndex: 600 }
+    // Opening upward must clear the stylesheet's `top` too, or top and bottom both apply and
+    // the list stretches from the top of the screen down to the button.
     if (below < 260)
       setPos({
         ...base,
+        top: 'auto',
         bottom: Math.round(window.innerHeight - r.top) + 4,
         maxHeight: Math.round(r.top - 12),
       })
@@ -1098,6 +1106,10 @@ export function PMSelect({
         type="button"
         className={'acct-acctsel-btn' + (open ? ' open' : '')}
         title={compact ? 'Sort' : undefined}
+        aria-label={ariaLabel}
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => {
           if (open) setOpen(false)
           else openMenu()
@@ -1156,6 +1168,8 @@ export function PMSelect({
             <button
               type="button"
               key={o.value}
+              role="option"
+              aria-selected={o.value === value}
               className={
                 'acct-acctsel-item' + (o.value === value ? ' sel' : '') + (i === hi ? ' hi' : '')
               }

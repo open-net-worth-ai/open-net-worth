@@ -78,8 +78,9 @@ APPROVAL_TASK = "approval"
 @dataclass(frozen=True)
 class JudgeVerdict:
     verdict: Literal["allow", "ask"]
-    # Never shown to the owner and never logged: a card is the ordinary card whatever the
-    # verdict. Kept because the reply format is {"verdict","reason"} and the eval runner reports it.
+    # Never logged. An ``allow`` reason is shown to the owner as the "i" on the row of the call it
+    # let through (``services.auto_approvals``); an ``ask`` reason is not shown — that call gets
+    # the ordinary card.
     reason: str
     model: str = ""  # the ref that answered ("" = instance default) — for the audit log only
 
@@ -433,4 +434,17 @@ def gate_verdict_for(tool_name: str) -> str:
     """``"allow"`` or ``"gate"`` for the in-flight call. No verdict, a verdict for another
     call or another tool, or ``ask`` all mean ``gate``."""
     verdict = _held_for(tool_name)
-    return "allow" if verdict is not None and verdict.allows else "gate"
+    if verdict is None or not verdict.allows:
+        return "gate"
+    _remember_allow(verdict)
+    return "allow"
+
+
+def _remember_allow(verdict: JudgeVerdict) -> None:
+    from backend.core.chat_session import get_session_id
+    from backend.core.tool_use_context import get_tool_use_id
+    from backend.services import auto_approvals
+
+    auto_approvals.record(
+        get_session_id() or "", get_tool_use_id() or "", verdict.reason, verdict.model
+    )

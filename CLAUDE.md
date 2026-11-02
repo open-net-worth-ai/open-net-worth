@@ -205,12 +205,16 @@ One line each — full reasoning and the scar behind each is in
   Ready to Assign, dollar for dollar up to the hole's size — the genuine YNAB mechanic, opposite
   of what shipped for one day. `RTA ≤ cash − baseline` is RETIRED; the identity instead closes
   exactly (`RTA + Σ available(signed) + held_outside_envelopes + card_spend_not_covered +
-  baseline == cash_as_of`).
+  baseline == cash_as_of + card_credit`).
   `cover_overspending` never proposes a card's payment envelope (coverage funds that row; an
   assignment double-funds it) and `_auto_cover_overspending` is capped at displayed RTA.
   `_op_auto_assign` re-derives each step from the live book for the COUPLED modes only
   (`_COUPLED_AUTO_ASSIGN_MODES` — a read/write-set proof about `month`, not a guess), so
   preview == end state.
+- A card IN CREDIT is budget money: `card_credit` (Σ cards' balance above zero) sits beside cash,
+  never in "cash on hand"; spend on it uses the credit first and a refund drains the payment
+  envelope only by the debt it shrinks, so coverage walks each card in date order (ADR
+  `2026-11-02-a-card-in-credit-is-budget-money`; rules in `docs/INVARIANTS.md`).
 - Deleting a category with `reassign=True` and an envelope-backed `reassign_to` CARRIES its
   assigned money there (`categories._carry_assigned_to_target` → `planning.add_to_assigned`,
   the `assign` choke): THIS month's figure lands on the target's envelope instead of releasing
@@ -310,6 +314,10 @@ One line each — full reasoning and the scar behind each is in
   a DERIVED snapshot of the frontend `catalog.ts` (`npm run sync:connector-directory`; a vitest fails on drift).
   Setup is the human-only screen command `connectors.open_setup`: it opens a form, never writes config or
   touches a secret. ADR `2026-10-31-lucius-discovers-connectors-from-a-synced-snapshot-and-setup-stays-human`.
+- The YNAB two-way sync (`services/ynab_sync/`) writes only through the chokes above, always under
+  the audit surface `ynab_sync` (that is how its own writes are skipped on the next scan); its YNAB
+  traffic is `aggregation.ynab._safe_send` and nothing else. ADR
+  `2026-10-20-ynab-two-way-sync-reconciles-against-per-entity-baselines`.
 
 ## AI tools
 

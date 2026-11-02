@@ -693,9 +693,12 @@ def test_pay_unbudgeted_drives_payment_envelope_negative(env):
     paid-off case in `useBudgetModel.rtaDelta.test.ts`.
 
     Ready to Assign, by hand: the payment envelope HOLDS its own −150 in-month (restored ADR
-    2026-09-09), so cash 850 − baseline 0 − held (−150) − uncovered 0 = 1000 — unmoved from the
-    opening 1000. The charge lands at the ROLL, once, when the clamped carry resets the row:
-    see ``test_overpaid_payment_envelope_resets_next_month_instead_of_accumulating``."""
+    2026-09-09), and the 150 now sits on the card as credit, which is budget money (ADR
+    2026-11-02-a-card-in-credit-is-budget-money): cash 850 + card credit 150 − baseline 0 − held
+    (−150) − uncovered 0 = 1150. The −150 is charged at the ROLL, once, and the credit offsets it,
+    so the opening 1000 is what remains — as YNAB shows it (its August on the 2026-11-02 test plan
+    read +450 above the same identity for a 450 overpayment): see
+    ``test_overpaid_payment_envelope_resets_next_month_instead_of_accumulating``."""
     env.set_profile(credit_card_mode="payment_envelope")
     card_env_id = _sync_and_card_env_id()
     env.set_txns([_transfer("2026-06-20", "bank", "amex", 150)])
@@ -707,9 +710,10 @@ def test_pay_unbudgeted_drives_payment_envelope_negative(env):
     assert card_row["owed"] == 0.0  # prepaid — the balance is +150, not a debt
     assert card_row["underfunded"] == 0.0  # an overdrawn envelope funds nothing, owes nothing
     assert table["on_budget_cash"] == 850.0
+    assert table["card_credit"] == 150.0
     assert table["held_in_envelopes"] == -150.0
     assert table["card_spend_not_covered"] == 0.0
-    assert table["ready_to_assign"] == 1000.0  # held in-month, charged at the roll
+    assert table["ready_to_assign"] == 1150.0  # held in-month, charged at the roll
 
 
 def test_overpaid_payment_envelope_resets_next_month_instead_of_accumulating(env):
@@ -721,13 +725,18 @@ def test_overpaid_payment_envelope_resets_next_month_instead_of_accumulating(env
     Restored: ``available(m) = max(0, available(m-1)) + assigned(m) + activity(m)``. A payment
     envelope driven negative is bounded by THAT MONTH's own overpayment and nothing more.
 
-    Derivation. Bank opens 1000, Amex 0, floor 2026-06, nothing ever assigned:
-      June  pay 150:  available = max(0, 0)    + 0 − 150 = −150   cash 850   held −150  RTA 1000
-      July  pay 200:  available = max(0, −150) + 0 − 200 = −200   cash 650   held −200  RTA  850
-                      (NOT −350 — the June hole reset; June's charge landed here, once)
-      Aug   pay   0:  available = max(0, −200) + 0 +   0 =    0   cash 650   held    0  RTA  650
-                      (July's charge lands here, once; the row is back to 0, not −350)
-    Under 2026-09-08 the same book read −150 / −350 / −350 and climbed with every payment."""
+    Derivation. Bank opens 1000, Amex 0, floor 2026-06, nothing ever assigned. Every payment
+    lands on a card that owes nothing, so it becomes card credit — budget money (ADR
+    2026-11-02-a-card-in-credit-is-budget-money):
+      June  pay 150:  available = max(0, 0)    + 0 − 150 = −150   cash 850 credit 150  held −150
+                      RTA 1150 (the −150 held in-month)
+      July  pay 200:  available = max(0, −150) + 0 − 200 = −200   cash 650 credit 350  held −200
+                      RTA 1200 (NOT −350 — the June hole reset; June's charge landed here, once)
+      Aug   pay   0:  available = max(0, −200) + 0 +   0 =    0   cash 650 credit 350  held    0
+                      RTA 1000 (July's charge lands here, once; the row is back to 0)
+    Before card credit counted, the same book read RTA 1000 / 850 / 650: each charge landed, but
+    the money it paid for vanished with it. Under 2026-09-08 the row read −150 / −350 / −350 and
+    climbed with every payment."""
     env.set_profile(credit_card_mode="payment_envelope")
     card_env_id = _sync_and_card_env_id()
     env.set_txns(
@@ -740,7 +749,7 @@ def test_overpaid_payment_envelope_resets_next_month_instead_of_accumulating(env
     june = planning.budget_month("2026-06")
     assert _row_by_env(june, card_env_id)["available_for_payment"] == -150.0
     assert june["on_budget_cash"] == 850.0
-    assert june["ready_to_assign"] == 1000.0
+    assert june["ready_to_assign"] == 1150.0
 
     july = planning.budget_month("2026-07")
     july_row = _row_by_env(july, card_env_id)
@@ -748,12 +757,13 @@ def test_overpaid_payment_envelope_resets_next_month_instead_of_accumulating(env
     assert july_row["available"] == -200.0  # NOT −350: the June hole reset at the roll
     assert july["on_budget_cash"] == 650.0
     assert july["held_in_envelopes"] == -200.0
-    assert july["ready_to_assign"] == 850.0  # June's hole charged exactly once, here
+    assert july["card_credit"] == 350.0
+    assert july["ready_to_assign"] == 1200.0  # June's hole charged exactly once, here
 
     august = planning.budget_month("2026-08")
     assert _row_by_env(august, card_env_id)["available"] == 0.0  # fully reset, never carried
     assert august["held_in_envelopes"] == 0.0
-    assert august["ready_to_assign"] == 650.0
+    assert august["ready_to_assign"] == 1000.0  # the overpaid 350 is still yours, as credit
 
 
 def test_starting_debt_does_not_push_payment_envelope_negative(env):

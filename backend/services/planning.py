@@ -20,8 +20,11 @@ Actual Budget, and to leave no room for paying a credit card off over time):
       cash side already dropped for a cash overspend; the carry stops offsetting it). An
       overspend is HELD in-month — see ``ready_to_assign`` below — never charged twice.
       ``rollover_start`` (ctx["floor"]) still bounds the walk below.
-  ready_to_assign(m) = cash(m) − pre_budget_baseline − held_in_envelopes(m)
+  ready_to_assign(m) = cash(m) + card_credit(m) − pre_budget_baseline − held_in_envelopes(m)
                        − held_outside_envelopes(m) − card_spend_not_covered(m)
+      card_credit(m)            = Σ every card's balance ABOVE ZERO at month end — a card in
+                                   credit holds budget money (ADR 2026-11-02-a-card-in-credit-is-
+                                   budget-money); a card that owes money adds nothing
       held_in_envelopes(m)      = Σ over envelope ROWS  available(m, env)   — SIGNED, current
                                    month's own overspend counts NEGATIVE (the max(0,·) clamp
                                    lives only in the month-to-month CARRY above, never here)
@@ -61,7 +64,7 @@ Actual Budget, and to leave no room for paying a credit card off over time):
       RTA is NOT bounded above by cash − baseline (that 2026-09-08 invariant is retired) — a
       held overspend can put RTA above cash on hand until the roll resolves it. The identity
       instead CLOSES EXACTLY: RTA + held_in_envelopes + held_outside_envelopes +
-      card_spend_not_covered + baseline == cash, always
+      card_spend_not_covered + baseline == cash + card_credit, always
       (tests/test_rta_identity_property.py pins the closed form on 200 books).
 
       CREDIT-CARD TREATMENT (ADR 2026-07-09-ynab-engine-credit-card-payment-envelopes.md,
@@ -104,6 +107,14 @@ Actual Budget, and to leave no room for paying a credit card off over time):
           on the card under a linked spending category drains the payment envelope by the same
           amount (the debt shrank) while crediting the category — RTA-neutral, as in YNAB
           (ADR 2026-07-09 amendment, 2026-09-28).
+
+          A CARD IN CREDIT (ADR 2026-11-02-a-card-in-credit-is-budget-money, every rule a YNAB
+          probe): its balance above zero joins the money side (``card_credit``); a spend on it is
+          paid from the credit first and only the rest is debt the auto-move above covers; a
+          refund drains the payment envelope only by the debt it shrinks, the rest is credit;
+          an overpayment still drives the payment envelope negative and is charged at the roll,
+          and the credit it created cancels that charge. ``_capped_card_credits`` walks each card
+          in date order to do this.
   activity(m, cat)  = Σ income-refund(base) − Σ expense(base) for that (month, category),
       ALWAYS via ``ledger.txn_base_amount`` (recomputed from the native leg), so a base
       change re-values prior months with no stale ``base_amount`` leak. Only legs on a
@@ -132,6 +143,7 @@ See docs/prd/ynab-planning.md.
 from __future__ import annotations
 
 import logging
+import math
 import re
 from datetime import date, datetime, timezone
 
@@ -518,7 +530,12 @@ def _iter_category_contributions(
     # _capped_card_credits, which then treats the whole amount as uncovered without touching the
     # pool. Two different cards spending against the SAME spending envelope share ONE headroom
     # pool — always distinct ids, never conflated.
-    card_spend_candidates: list[tuple[str | None, str | None, float, dict, dict | None]] = []
+    card_spend_candidates: list[tuple] = []  # see _capped_card_credits for the shape
+    # Refund lines landing on a card, and payments into one: how much of a refund shrinks debt
+    # (and so drains the payment envelope) depends on the card's balance at that moment, so both
+    # are resolved in date order with the spends (ADR 2026-11-02-a-card-in-credit-is-budget-money).
+    card_refunds: list[tuple[str, str | None, float, dict, dict | None, str]] = []
+    card_payments: list[tuple[str, str, float, dict]] = []
     cash_activity_by_key: dict[str, float] = {}  # the coverage cap's pool — see the docstring
     cash_ids = ctx["cash_ids"] if ctx else frozenset()
     card_ids = ctx["card_ids"] if ctx else frozenset()
@@ -586,7 +603,9 @@ def _iter_category_contributions(
                         # _capped_card_credits): the uncovered remainder still needs tracking so
                         # it can offset the drain above and keep the RTA identity exact.
                         spend_env_id = linked.get(cat or "")
-                        card_spend_candidates.append((spend_env_id, card_env_id, amt, t, s))
+                        card_spend_candidates.append(
+                            (spend_env_id, card_env_id, amt, t, s, from_acct, cat or "")
+                        )
                         # ...and the HOLD is decided by `cash_ids`, never by the FK — see
                         # fold_no_bucket_only (a no-op unless this really is a cash account).
                         fold_no_bucket_only(cat, -amt, from_acct)
@@ -598,7 +617,9 @@ def _iter_category_contributions(
                 yield cat, -amt, t, None  # full drain always happens, capped or not
                 if is_card_spend:
                     spend_env_id = linked.get(cat)
-                    card_spend_candidates.append((spend_env_id, card_env_id, amt, t, None))
+                    card_spend_candidates.append(
+                        (spend_env_id, card_env_id, amt, t, None, from_acct, cat)
+                    )
                     fold_no_bucket_only(cat, -amt, from_acct)
                 else:
                     fold(cat, -amt, from_acct)
@@ -612,11 +633,16 @@ def _iter_category_contributions(
             # definition, and netting it into the Uncategorized bucket would wipe that bucket's hold
             # for anyone whose salary lands uncategorized.
             # A refund landing on a payment-tracked card also DRAINS that card's payment
-            # envelope by the same amount — you now owe less, so less is set aside (YNAB parity,
-            # 2026-09-28: a card refund was held twice, pushing RTA low by its amount). The refund still
-            # widens the category's coverage headroom via `fold`, so a same-month spend+refund
-            # nets exactly like YNAB's net card spend.
+            # envelope by the part that shrinks its debt — you now owe less, so less is set aside
+            # (YNAB parity, 2026-09-28: a card refund was held twice, pushing RTA low by its
+            # amount). The part landing past zero becomes card credit and drains nothing (ADR
+            # 2026-11-02). Both depend on the card's balance at that moment, so the line is
+            # resolved in date order by `_capped_card_credits`. The refund still widens the
+            # category's coverage headroom via `fold`, so a same-month spend+refund nets exactly
+            # like YNAB's net card spend.
             refund_env = _card_payment_env_id(t, "to_account_id", card_pay_env_of, cutoff_by_id)
+            to_acct = t.get("to_account_id")
+            on_card = to_acct in card_ids
             if splits:
                 for s in splits:
                     sc = s.get("category") or ""
@@ -626,10 +652,12 @@ def _iter_category_contributions(
                     if sc in linked:
                         fold(sc, delta, t.get("to_account_id"))
                         yield sc, delta, t, s
-                        if refund_env:
-                            yield refund_env, -delta, t, s
                     else:
                         fold_no_bucket_only(sc, delta, t.get("to_account_id"))
+                    if on_card:
+                        card_refunds.append(
+                            (to_acct, refund_env if sc in linked else None, delta, t, s, sc)
+                        )
             else:
                 cat = t.get("category") or ""
                 if cat in _INFLOW_CATEGORIES:
@@ -638,10 +666,12 @@ def _iter_category_contributions(
                 if cat in linked:
                     fold(cat, delta, t.get("to_account_id"))
                     yield cat, delta, t, None
-                    if refund_env:
-                        yield refund_env, -delta, t, None
                 else:
                     fold_no_bucket_only(cat, delta, t.get("to_account_id"))
+                if on_card:
+                    card_refunds.append(
+                        (to_acct, refund_env if cat in linked else None, delta, t, None, cat)
+                    )
         elif kind == "investment":
             cat = t.get("category") or ""
             if not cat:
@@ -657,7 +687,9 @@ def _iter_category_contributions(
                         # pre-fix code never checked card membership here at all.
                         card_env_id = card_pay_env_of.get(from_acct)
                         spend_env_id = linked.get(cat)
-                        card_spend_candidates.append((spend_env_id, card_env_id, amt, t, None))
+                        card_spend_candidates.append(
+                            (spend_env_id, card_env_id, amt, t, None, from_acct, cat)
+                        )
                         fold_no_bucket_only(cat, delta, from_acct)
                     else:
                         fold(cat, delta, from_acct)
@@ -666,6 +698,9 @@ def _iter_category_contributions(
                     delta = svc.txn_base_amount(t, base, rates)
                     fold(cat, delta, t.get("to_account_id"))
                     yield cat, delta, t, None
+                    if t.get("to_account_id") in card_ids:  # settles onto a card: like a refund,
+                        # only the part landing as credit is money (ADR 2026-11-02)
+                        card_refunds.append((t["to_account_id"], None, delta, t, None, cat))
         elif kind == "transfer":
             card_env_id = _card_payment_env_id(t, "to_account_id", card_pay_env_of, cutoff_by_id)
             if card_env_id:  # paying down a payment-tracked card — always the Payment envelope,
@@ -677,6 +712,7 @@ def _iter_category_contributions(
                     rates=rates,
                 )
                 yield (card_env_id, -paid, t, None)
+                card_payments.append((t["to_account_id"], card_env_id, paid, t))
                 continue  # this transfer's own `category` (if any) is inert — see docstring
             cat = t.get("category") or ""
             if not cat:
@@ -727,39 +763,56 @@ def _iter_category_contributions(
                 # here — the moving leg is the FROM leg), mirroring the expense branch's `amt`.
                 card_env_id = card_pay_env_of.get(moving_acct)
                 spend_env_id = linked.get(cat)
-                card_spend_candidates.append((spend_env_id, card_env_id, -delta, t, None))
+                card_spend_candidates.append(
+                    (spend_env_id, card_env_id, -delta, t, None, moving_acct, cat)
+                )
                 fold_no_bucket_only(cat, delta, moving_acct)
             else:
                 fold(cat, delta, moving_acct, cash_delta=moved_now)
+                if leg == "to" and moving_acct in card_ids:
+                    # Arriving at a card (one with no live payment envelope — a live one took the
+                    # payment branch above): like a refund, only the part landing as credit is
+                    # money, so only that part may cancel this label's hold (ADR 2026-11-02).
+                    card_refunds.append((moving_acct, None, moved_now, t, None, cat))
             yield (cat, delta, t, None)
 
-    if card_spend_candidates:
-        yield from _capped_card_credits(card_spend_candidates, cash_activity_by_key, month, ctx)
+    if card_spend_candidates or card_refunds:
+        yield from _capped_card_credits(
+            card_spend_candidates,
+            card_refunds,
+            card_payments,
+            cash_activity_by_key,
+            month,
+            ctx,
+            cash_out,
+        )
 
 
 def _capped_card_credits(
-    candidates: list[tuple[str | None, str | None, float, dict, dict | None]],
+    candidates: list[tuple],
+    refunds: list[tuple[str, str | None, float, dict, dict | None, str]],
+    payments: list[tuple[str, str, float, dict]],
     cash_activity_by_key: dict[str, float],
     month: str,
     ctx: dict | None,
+    cash_out: dict[str, float] | None = None,
 ):
     """Resolve the v2 COVERAGE-CAPPED auto-move credit for every card-spend candidate collected
-    by ``_iter_category_contributions``'s main pass. The cap pool is the RESOLVED SPENDING
+    by ``_iter_category_contributions``'s main pass, and the payment-envelope drain of every
+    refund landing on a card. A candidate is ``(spend_env_id, card_env_id, amt, txn, split,
+    card_id, category)``. The cap pool is the RESOLVED SPENDING
     ENVELOPE (never the raw category — envelope⊥category, RFC
     envelope-category-full-split.md: a merged N>1 envelope shares ONE Available pool, so every
     member category's card spend draws from the SAME headroom, not its own); the CREDIT lands on
     each spend's OWN card's payment envelope — two different cards spending against the same
     spending envelope in the same month share ONE headroom pool but credit DIFFERENT payment
-    envelopes (whichever card each transaction is actually on), so candidates are grouped by
-    ``spend_env_id`` for the cap computation but yielded keyed by their own ``card_env_id``. A
-    candidate whose category has NO linked envelope carries ``spend_env_id=None`` — it is grouped
-    on its own with headroom forced to 0 (no pool, no coverage possible).
+    envelopes (whichever card each transaction is actually on). A candidate whose category has
+    NO linked envelope carries ``spend_env_id=None`` — headroom 0 (no pool, no coverage).
 
-    Per spending envelope: ``moved = min(Σ card spend this month, max(0, headroom))`` where
-    ``headroom = max(0, available(prev_month)) + assigned(month) + cash-only activity(month)`` —
-    the envelope's Available *before* any of this month's card spending against it, on the
-    CLAMPED prior carry (ADR 2026-09-09: a hole resets at the roll, so last month's deficit
-    never eats this month's coverage). "Cash-only"
+    Per spending envelope the pool starts at ``headroom = max(0, available(prev_month)) +
+    assigned(month) + cash-only activity(month)`` — the envelope's Available *before* any of this
+    month's card spending against it, on the CLAMPED prior carry (ADR 2026-09-09: a hole resets
+    at the roll, so last month's deficit never eats this month's coverage). "Cash-only"
     is every OTHER contribution already folded for this envelope's member categories during the
     SAME pass (income refunds, non-card expenses, transfers, investment lines —
     ``cash_activity_by_key``, accumulated by the caller; card-spend DRAIN lines are deliberately
@@ -767,105 +820,216 @@ def _capped_card_credits(
     means "everything except a payment-tracked card's OWN outflow" and NOT "``type == cash``":
     a card's expense, transfer-out or investment buy is EXCLUDED from ``cash_activity_by_key``
     whether that card is LIVE or ARCHIVED (ADR 2026-09-28-iterative-available-walk-and-uniform-
-    card-coverage — before it, an archived card's spend fell through to the plain fold and DID
-    shrink this headroom, silently stealing coverage capacity from a live card sharing the same
-    spending envelope with nothing to show for it, since nothing credited the archived card back
-    either). An archived/uncreditable candidate still arrives here (``card_env_id is None`` below
-    resolves it as 100% uncovered without touching ``headroom`` at all — see the loop), so it can
-    never consume coverage meant for a card that actually has somewhere to receive it. That is a
+    card-coverage). An archived/uncreditable candidate (``card_env_id is None``) has nowhere to
+    move coverage to, so it never draws coverage from the pool a live card could use. That is a
     DIFFERENT predicate from the no-bucket hold's, which asks whether real cash moved
     (``cash_out`` — see ``_iter_category_contributions``); the two accumulators are deliberately
     separate.
 
-    MONTH-AGGREGATE, not per-transaction-chronological, and this is PROVABLY equivalent for the
-    identity + every spec'd test case: for spends s1..sn summing to S against one envelope with
-    headroom A, sequential coverage (each txn draws down the SAME running headroom) yields a
-    TOTAL moved of ``min(S, max(0,A))`` regardless of processing order — coverage is monotonic,
-    so reordering the spends can only change WHICH single line (and, when two different cards
-    share the pool, which CARD) absorbs a partial-coverage remainder, never the total moved. The
-    total is therefore order-invariant; only the per-transaction breakdown
-    (``activity_transactions``) needs a deterministic order, so candidates are still walked in
-    (date, created_at, id) order to keep that detail view stable and reproducible.
+    A CARD IN CREDIT SPENDS ITS CREDIT FIRST (ADR 2026-11-02-a-card-in-credit-is-budget-money,
+    each rule observed on a YNAB test plan). Every card's balance and payment-envelope Available
+    are followed through the month in (date, created_at, id) order. For a spend of ``amt``:
+
+        free        = max(0, balance + min(0, payment_available))   (linked spend)
+                    = max(0, balance)                               (no envelope)
+        from_credit = min(amt, free)          — paid with money already in the budget
+        debt        = amt − from_credit       — the part that becomes debt
+        covered     = min(debt, headroom)     — moved into the payment envelope, as before
+
+    For a linked spend, ``free`` leaves out credit a NEGATIVE payment envelope is already holding
+    up this month (an overpayment not yet charged), so the spending envelope's money fills that
+    hole first: YNAB, with credit 1,375 and the payment category at −100, moved 125 of a 1,400
+    spend, leaving the category at exactly the 25 owed. With no envelope there is nothing to move,
+    so the whole credit is free and the credit-paid part holds until the roll. ``from_credit`` behaves
+    like a cash spend — it draws the envelope's headroom down and is not cancelled, because card
+    credit is on the money side of the identity (``_card_credit_as_of``) and it fell by that much;
+    with no linked envelope it HOLDS in the no-bucket bucket, exactly like uncategorized cash
+    spend (``cash_out``). Only ``debt`` is ever covered or uncovered. A card that owes money has
+    ``free = 0``, so every spend on it works exactly as before. A refund line drains the payment
+    envelope only by the debt it shrinks — ``min(refund, owed)`` — and the rest is new credit
+    (``cash_out`` takes it, so it can cancel its own key's hold like a cash refund). Following the
+    month in order makes the split per-transaction-chronological; the old order-invariance proof
+    of the TOTAL moved no longer applies once credit is spent first, so the order is part of the
+    rule, not just of the detail view.
 
     WHAT HAPPENS TO THE UNCOVERED REMAINDER (why this function ALSO yields
     ``_CARD_UNCOVERED_KEY``, not just the capped credit — ADR 2026-09-09, restoring 2026-07-09):
     the spending category's own drain is yielded unconditionally by the caller, in FULL, before
     this function runs — required, so an overspent row shows its real negative Available, and
-    that drain fully participates in ``_ready_to_assign``'s subtracted sum. But a card is
-    EXCLUDED from cash entirely, so unlike a cash overspend (where the cash leg and the
-    envelope's drain move together and net to zero) a card spend's cash side never moves at all.
-    Left unmatched, the spending row's negative would make RTA *increase* by the uncovered
-    amount — an unfunded charge manufacturing assignable money out of nothing. So exactly
-    ``amt − covered`` is yielded as a POSITIVE delta under ``_CARD_UNCOVERED_KEY`` — a dedicated,
-    non-row, ``_ready_to_assign``-only term cancelling the spending row's drain for the part no
-    envelope reserved — but ONLY when ``spend_env_id is not None``, i.e. only when there IS a
-    spending row with a drain to cancel.
+    that drain fully participates in ``_ready_to_assign``'s subtracted sum. The debt part of a
+    card spend never moves the money side of the identity, so unlike a cash overspend (where the
+    cash leg and the envelope's drain move together and net to zero) left unmatched the spending
+    row's negative would make RTA *increase* by the uncovered amount — an unfunded charge
+    manufacturing assignable money out of nothing. So exactly ``debt − covered`` is yielded as a
+    POSITIVE delta under ``_CARD_UNCOVERED_KEY`` — a dedicated, non-row, ``_ready_to_assign``-only
+    term cancelling the spending row's drain for the part no envelope reserved — but ONLY when
+    ``spend_env_id is not None``, i.e. only when there IS a spending row with a drain to cancel.
 
     For ``spend_env_id is None`` (no linked envelope at all — an unlinked category, or
-    blank/Uncategorized) NOTHING is yielded and nothing in the identity reflects the spend:
-    ``_ready_to_assign`` sums ``held_in_envelopes`` over envelope ROWS only, and there is no row,
-    so there was never a drain to offset. That is exactly as RTA-neutral as the
+    blank/Uncategorized) NOTHING is yielded for the debt part and nothing in the identity reflects
+    it: ``_ready_to_assign`` sums ``held_in_envelopes`` over envelope ROWS only, and there is no
+    row, so there was never a drain to offset. That is exactly as RTA-neutral as the
     linked-but-unfunded case — by ABSENCE rather than by cancellation. Yielding the term
     unconditionally (the bug fixed 2026-09-09, found by that day's security review) made an
     unlinked card spend a BARE, uncancelled subtraction: RTA dropped by the whole swipe and then
-    silently un-dropped at the next month's roll, since the term is per-month and never carried —
-    a drain with nothing to show for either half. Net effect either way: an uncovered card spend
-    is RTA-NEUTRAL, this month and every month after — a card never had cash to lose, so its debt
-    is never RTA's business, linked or not. It surfaces through the payment row's own
+    silently un-dropped at the next month's roll, since the term is per-month and never carried.
+    Net effect either way: uncovered card DEBT is RTA-NEUTRAL, this month and every month after —
+    its debt is never RTA's business, linked or not. It surfaces through the payment row's own
     ``underfunded`` figure (``_payment_row_fields``), and touches RTA only by actually being
     funded (an assignment into the payment envelope).
 
-    ``ctx`` is required to resolve ``available(prev_month, envelope_id)`` — every real call site
-    (``_activity_map``, ``activity_transactions``) supplies it. A caller with card spend
-    candidates but no ``ctx`` (a direct unit-test call bypassing the normal ``_build_context``
-    path) is a caller error — this raises loudly rather than silently under/over-crediting."""
+    ``ctx`` is required to resolve ``available(prev_month, envelope_id)`` and each card's opening
+    balance — every real call site (``_activity_map``, ``activity_transactions``) supplies it. A
+    caller with card candidates but no ``ctx`` (a direct unit-test call bypassing the normal
+    ``_build_context`` path) is a caller error — this raises loudly rather than silently
+    under/over-crediting."""
     if ctx is None:
         raise ValidationError(
             "_iter_category_contributions: ctx is required to resolve the coverage cap "
             "for a payment-tracked card spend"
         )
-    by_spend_env: dict[str | None, list[tuple[str | None, float, dict, dict | None]]] = {}
-    for spend_env_id, card_env_id, amt, t, s in candidates:
-        by_spend_env.setdefault(spend_env_id, []).append((card_env_id, amt, t, s))
+    month_walk = _CardMonth(ctx, month, cash_activity_by_key, cash_out)
+    involved = {c[5] for c in candidates} | {r[0] for r in refunds}
+    month_walk.open_cards(involved)
+    events: dict[str, list[tuple[str, tuple]]] = {}
+    for c in candidates:
+        events.setdefault(c[3]["id"], []).append(("spend", c))
+    for r in refunds:
+        events.setdefault(r[3]["id"], []).append(("refund", r))
+    for p in payments:
+        if p[0] in involved:
+            events.setdefault(p[3]["id"], []).append(("payment", p))
+    for t in _card_timeline(ctx, month, events, involved):
+        running = dict.fromkeys(involved & {t.get("from_account_id"), t.get("to_account_id")})
+        for what, ev in events.get(t["id"], []):
+            if what == "spend":
+                yield from month_walk.spend(ev, t, running)
+            elif what == "refund":
+                yield from month_walk.refund(ev, t, running)
+            else:
+                month_walk.pay(ev)
+        month_walk.settle(t, running)
 
-    for spend_env_id, items in by_spend_env.items():
-        if spend_env_id is None:
-            headroom = 0.0  # no linked envelope → no pool → no coverage possible
-        else:
-            members = ctx["_row_of_cat"].get(spend_env_id, [spend_env_id])
-            cash_activity = round(sum(cash_activity_by_key.get(m, 0.0) for m in members), 2)
-            assigned = _ctx_assigned(ctx, month, spend_env_id)
-            if month <= ctx["floor"]:
-                prev_carry = 0.0
-            else:
-                prev_carry = max(0.0, _available(ctx, _prev_month(month), spend_env_id))
-            headroom = max(0.0, round(prev_carry + assigned + cash_activity, 2))
-        items.sort(
-            key=lambda item: (
-                item[2].get("date") or "",
-                item[2].get("created_at") or "",
-                item[2].get("id") or "",
-                (item[3] or {}).get("category") or "",
+
+def _card_timeline(ctx: dict, month: str, events: dict, involved: set[str]) -> list[dict]:
+    """This month's transactions that touch a card being walked, in (date, created_at, id)
+    order — every leg moves the card's running balance, not only the ones with an event."""
+    timeline = [
+        t
+        for t in ctx["txns"]
+        if not t.get("deleted")
+        and (t.get("date") or "").startswith(month)
+        and (t["id"] in events or {t.get("from_account_id"), t.get("to_account_id")} & involved)
+    ]
+    timeline.sort(key=lambda t: (t.get("date") or "", t.get("created_at") or "", t["id"]))
+    return timeline
+
+
+class _CardMonth:
+    """One month of card coverage, followed in date order (``_capped_card_credits``): each
+    card's running balance, each payment envelope's running Available and each spending
+    envelope's remaining coverage headroom."""
+
+    def __init__(self, ctx: dict, month: str, cash_activity_by_key: dict, cash_out: dict | None):
+        self.ctx, self.month, self.cash_out = ctx, month, cash_out
+        self.prev = _prev_month(month)
+        self.at_floor = month <= ctx["floor"]
+        self.cash_activity_by_key = cash_activity_by_key
+        self.balance: dict[str, float] = {}
+        self.headroom: dict[str, float] = {}
+        self.pay_available: dict[str, float] = {}
+
+    def open_cards(self, card_ids: set[str]) -> None:
+        cards = {a["id"]: a for a in self.ctx["accounts"] if a["id"] in card_ids}
+        for cid in card_ids:
+            self.balance[cid] = _account_balance_base_as_of(self.ctx, self.prev, cards[cid])
+
+    def _carry(self, envelope_id: str) -> float:
+        return 0.0 if self.at_floor else max(0.0, _available(self.ctx, self.prev, envelope_id))
+
+    def room(self, spend_env_id: str) -> float:
+        if spend_env_id not in self.headroom:
+            members = self.ctx["_row_of_cat"].get(spend_env_id, [spend_env_id])
+            cash = round(sum(self.cash_activity_by_key.get(m, 0.0) for m in members), 2)
+            assigned = _ctx_assigned(self.ctx, self.month, spend_env_id)
+            self.headroom[spend_env_id] = max(
+                0.0, round(self._carry(spend_env_id) + assigned + cash, 2)
             )
-        )
-        for card_env_id, amt, t, s in items:
+        return self.headroom[spend_env_id]
+
+    def paid_in(self, card_env_id: str | None) -> float:
+        if card_env_id is None:
+            return 0.0
+        if card_env_id not in self.pay_available:
+            assigned = _ctx_assigned(self.ctx, self.month, card_env_id)
+            self.pay_available[card_env_id] = round(self._carry(card_env_id) + assigned, 2)
+        return self.pay_available[card_env_id]
+
+    def _hold(self, cat: str, amount: float) -> None:
+        if amount and self.cash_out is not None:
+            self.cash_out[cat] = self.cash_out.get(cat, 0.0) + amount
+
+    def spend(self, ev: tuple, t: dict, running: dict):
+        spend_env_id, card_env_id, amt, _t, s, cid, cat = ev
+        bal = self.balance[cid] if running.get(cid) is None else running[cid]
+        # A negative payment envelope only matters where a spending envelope's money can fill
+        # it; with no envelope to move from, all the credit is free.
+        held_up = min(0.0, self.paid_in(card_env_id)) if spend_env_id is not None else 0.0
+        from_credit = round(min(amt, max(0.0, bal + held_up)), 2)
+        debt = round(amt - from_credit, 2)
+        covered = 0.0
+        if spend_env_id is not None:
+            left = round(max(0.0, self.room(spend_env_id) - from_credit), 2)
             if card_env_id is not None:
-                covered = round(min(amt, headroom), 2)
-                headroom = round(headroom - covered, 2)
-            else:
-                # No LIVE payment envelope to move money into (archived / just dropped out) —
-                # 100% uncovered by construction, and deliberately NOT drawn from `headroom`: an
-                # uncreditable card must never consume coverage capacity a live card sharing the
-                # same spending envelope could actually use (ADR 2026-09-28).
-                covered = 0.0
-            if covered > 0:
-                yield (card_env_id, covered, t, s)
-            uncovered = round(amt - covered, 2)
-            # ONLY when there is a spending ROW whose drain needs cancelling — a
-            # `spend_env_id is None` candidate never landed one, so yielding here would be a
-            # bare subtraction that evaporates at the next roll. See the docstring above.
-            if uncovered > 0 and spend_env_id is not None:
-                yield (_CARD_UNCOVERED_KEY, uncovered, t, s)
+                covered = round(min(debt, left), 2)
+            self.headroom[spend_env_id] = round(left - covered, 2)
+        if covered > 0:
+            self.pay_available[card_env_id] = round(self.paid_in(card_env_id) + covered, 2)
+            yield (card_env_id, covered, t, s)
+        uncovered = round(debt - covered, 2)
+        # ONLY when there is a spending ROW whose drain needs cancelling — see
+        # `_capped_card_credits`.
+        if uncovered > 0 and spend_env_id is not None:
+            yield (_CARD_UNCOVERED_KEY, uncovered, t, s)
+        self._hold(cat, -from_credit)
+        running[cid] = round(bal - amt, 2)
+
+    def refund(self, ev: tuple, t: dict, running: dict):
+        cid, refund_env, delta, _t, s, cat = ev
+        bal = self.balance[cid] if running.get(cid) is None else running[cid]
+        shrinks = round(min(delta, max(0.0, -bal)), 2)
+        if refund_env and shrinks > 0:
+            self.pay_available[refund_env] = round(self.paid_in(refund_env) - shrinks, 2)
+            yield (refund_env, -shrinks, t, s)
+        self._hold(cat, round(delta - shrinks, 2))
+        running[cid] = round(bal + delta, 2)
+
+    def pay(self, ev: tuple) -> None:
+        _cid, card_env_id, paid, _t = ev
+        self.pay_available[card_env_id] = round(self.paid_in(card_env_id) - paid, 2)
+
+    def settle(self, t: dict, running: dict) -> None:
+        """Move each card the transaction touched by its real leg, at the current rate."""
+        for cid in running:
+            if svc.is_before_tracking_start(t.get("date"), self.ctx["cutoff_by_id"].get(cid)):
+                continue
+            self.balance[cid] = round(self.balance[cid] + _card_leg_delta(self.ctx, t, cid), 2)
+
+
+def _card_leg_delta(ctx: dict, t: dict, card_id: str) -> float:
+    """What ``t`` does to ``card_id``'s balance, base ccy at the current rate — the arithmetic
+    ``_account_balance_base_as_of`` does over a whole month, one transaction at a time."""
+    base, rates = ctx["base"], ctx["rates"]
+    delta = 0.0
+    if t.get("to_account_id") == card_id:
+        delta += svc.to_base(
+            float(t.get("to_amount") or 0), t.get("to_currency") or base, base, rates=rates
+        )
+    if t.get("from_account_id") == card_id:
+        delta -= svc.to_base(
+            float(t.get("from_amount") or 0), t.get("from_currency") or base, base, rates=rates
+        )
+    return delta
 
 
 def _activity_by_category(
@@ -1253,6 +1417,7 @@ def _build_context(
         "_available": {},  # (month, envelope_id) → available
         "_rta": {},  # month → ready_to_assign
         "_cash": {},  # month → cash (base, CURRENT rate) as of month end
+        "_credit": {},  # month → Σ cards' credit (balance above zero) as of month end
         "_txns_le": {},  # month → the dated-in-or-before-month txn slice both balance folds share
         "_acct_bal": {},  # (month, account_id) → that account's signed base balance at month end
         # Every assignment row, loaded ONCE per context: month → {envelope_id: amount}.
@@ -1503,6 +1668,32 @@ def _cash_as_of(ctx: dict, month: str) -> float:
     return cache[month]
 
 
+def _card_credit_as_of(ctx: dict, month: str) -> float:
+    """Σ over every payment-tracked card of its balance ABOVE ZERO (base ccy, current rate) as of
+    the end of ``month`` — the identity's second money term, beside ``_cash_as_of`` (ADR
+    2026-11-02-a-card-in-credit-is-budget-money). A card that owes money contributes nothing: its
+    debt is set aside in its payment envelope, never netted here. A card in credit (overpaid, or
+    refunded past zero) holds the user's own money, which YNAB keeps in the budget; leaving it out
+    made an overpayment vanish at the roll. Dashboard "cash on hand" is not this — it stays
+    ``cash`` accounts only. Memoized."""
+    cache = ctx["_credit"]
+    if month not in cache:
+        cache[month] = round(
+            sum(
+                max(0.0, _account_balance_base_as_of(ctx, month, a))
+                for a in ctx["accounts"]
+                if a["id"] in ctx["card_ids"]
+            ),
+            2,
+        )
+    return cache[month]
+
+
+def _budget_money_as_of(ctx: dict, month: str) -> float:
+    """The money side of the Ready to Assign identity: cash plus card credit."""
+    return round(_cash_as_of(ctx, month) + _card_credit_as_of(ctx, month), 2)
+
+
 def _account_balance_base_as_of(ctx: dict, month: str, account: dict) -> float:
     """One account's SIGNED balance (base ccy) as of month-end — the single-account version of
     ``_cash_as_of``'s per-account fold, used by the payment-envelope row's ``underfunded``
@@ -1597,9 +1788,12 @@ def _available(ctx: dict, month: str, envelope_id: str) -> float:
 def _ready_to_assign(ctx: dict, month: str) -> float:
     """Ready to Assign follows YNAB (ADR 2026-09-09, restoring ADR 2026-07-02 + 2026-07-09):
 
-        ready_to_assign(m) = cash_as_of(m) − pre_budget_baseline − Σ_env available(m, env)
-                                                                   − held_outside_envelopes(m)
-                                                                   − card_uncovered(m)
+        ready_to_assign(m) = cash_as_of(m) + card_credit(m) − pre_budget_baseline
+                             − Σ_env available(m, env) − held_outside_envelopes(m)
+                             − card_uncovered(m)
+
+    ``card_credit(m)`` (``_card_credit_as_of``) is every card's balance above zero — a card in
+    credit holds budget money (ADR 2026-11-02-a-card-in-credit-is-budget-money).
 
     ``Σ_env available`` is the TRUE per-envelope value for ``m`` — SIGNED, so a current-month
     overspend counts NEGATIVE (the ``max(0, ·)`` clamp lives only in the month-to-month CARRY, in
@@ -1666,7 +1860,7 @@ def _ready_to_assign(ctx: dict, month: str) -> float:
     reserved = sum(_available(ctx, month, spec["envelope_id"]) for spec in ctx["_rows"])
     reserved += _activity_map(ctx, month).get(_CARD_UNCOVERED_KEY, 0.0)
     reserved += _held_outside_envelopes(ctx, month)
-    val = round(_cash_as_of(ctx, month) - ctx["baseline"] - round(reserved, 2), 2)
+    val = round(_budget_money_as_of(ctx, month) - ctx["baseline"] - round(reserved, 2), 2)
     cache[month] = val
     return val
 
@@ -1695,7 +1889,8 @@ def _flow_terms(ctx: dict, month: str) -> dict:
 
     ``carried_in`` is last month's Ready to Assign BEFORE its own future-assigned clamp — the
     same quantity `_ready_to_assign` always returns. ``inflow`` is net cash movement this month
-    that no bucket absorbed: on-budget cash's own change, minus this month's envelope activity,
+    that no bucket absorbed: the change in on-budget cash plus card credit, minus this month's
+    envelope activity,
     minus this month's no-bucket hold, minus this month's uncovered card spend. It is computed
     from its OWN four inputs and must NEVER be back-solved from `rta − everything_else` — that
     would make every check built on top of this function vacuous.
@@ -1723,7 +1918,7 @@ def _flow_terms(ctx: dict, month: str) -> dict:
     card_uncovered = _activity_map(ctx, month).get(_CARD_UNCOVERED_KEY, 0.0)
     prev = _prev_month(month)
     if month <= ctx["floor"]:
-        cash_now = _cash_as_of(ctx, month)
+        cash_now = _budget_money_as_of(ctx, month)
         inflow = round(
             cash_now - ctx["baseline"] - row_activity_total - held_outside - card_uncovered, 2
         )
@@ -1734,7 +1929,7 @@ def _flow_terms(ctx: dict, month: str) -> dict:
             "cash_overspending_prev": 0.0,
         }
     carried_in = _ready_to_assign(ctx, prev)
-    delta_cash = round(_cash_as_of(ctx, month) - _cash_as_of(ctx, prev), 2)
+    delta_cash = round(_budget_money_as_of(ctx, month) - _budget_money_as_of(ctx, prev), 2)
     inflow = round(delta_cash - row_activity_total - held_outside - card_uncovered, 2)
     return {
         "prev_month": prev,
@@ -2248,6 +2443,7 @@ def budget_month(month: str) -> dict:
         0.0 if pre_floor else round(_activity_map(ctx, month).get(_CARD_UNCOVERED_KEY, 0.0), 2)
     )
     on_budget_cash = 0.0 if pre_floor else _cash_as_of(ctx, month)
+    card_credit = 0.0 if pre_floor else _card_credit_as_of(ctx, month)
     baseline_out = 0.0 if pre_floor else ctx["baseline"]
     flow = None if pre_floor else _flow_terms(ctx, month)
     cash_overspending = 0.0 if pre_floor else _cash_overspending(ctx, month)
@@ -2269,7 +2465,7 @@ def budget_month(month: str) -> dict:
         "month": month,
         "base_currency": base,
         "ready_to_assign": rta,
-        # Balance-identity transparency: RTA = on_budget_cash − pre_budget_baseline
+        # Balance-identity transparency: RTA = on_budget_cash + card_credit − pre_budget_baseline
         # − held_in_envelopes − held_outside_envelopes − card_spend_not_covered
         # − assigned_in_future_months. The last term
         # is the CLAMPED deduction (_display_rta), so this identity holds exactly on every
@@ -2279,6 +2475,10 @@ def budget_month(month: str) -> dict:
         # (ADR 2026-09-09): `held_in_envelopes` is SIGNED, so a month whose envelopes are net
         # overspent publishes an RTA ABOVE its own cash until the hole resets at the roll.
         "on_budget_cash": on_budget_cash,
+        # Every card's balance above zero — budget money beside cash (ADR
+        # 2026-11-02-a-card-in-credit-is-budget-money). Added to `on_budget_cash` in the
+        # identity; never part of it, so "cash on hand" keeps meaning cash accounts.
+        "card_credit": card_credit,
         # Display-only flag: do any on-budget cash accounts hold a foreign currency? If so the
         # budget notes that RTA can shift as exchange rates move (foreign cash floats at the
         # current rate). A plain note, not a computed amount. ADR 2026-07-09.
@@ -2521,8 +2721,11 @@ def fresh_start_preview(month: str) -> dict:
     Under the restored YNAB identity (ADR 2026-09-09) the ledger is the SAME identity the RTA
     popover renders, exactly — no residual term, ever:
 
-        after = cash_now − baseline − held_in_envelopes − held_outside_envelopes
+        after = cash_now + card_credit − baseline − held_in_envelopes − held_outside_envelopes
                 − card_spend_not_covered − assigned_in_future
+
+    ``card_credit`` is every card's balance above zero at the end of ``month`` (ADR
+    2026-11-02-a-card-in-credit-is-budget-money) — budget money beside ``cash_now``.
 
     ``cash_now`` is on-budget cash as of the END of ``month`` ITSELF (``_cash_as_of`` — the same
     fold ``budget_month`` reports as ``on_budget_cash``), not the previous month's cash: the
@@ -2558,6 +2761,7 @@ def fresh_start_preview(month: str) -> dict:
     budgets_service._validate_anchor_month("rollover_start", month)
     after = _build_context(month, floor_override=month, zero_month_assignments=True)
     cash_now = _cash_as_of(after, month)
+    card_credit = _card_credit_as_of(after, month)
     baseline = after["baseline"]
     held_in_envelopes = round(
         sum(_available(after, month, spec["envelope_id"]) for spec in after["_rows"]), 2
@@ -2569,6 +2773,7 @@ def fresh_start_preview(month: str) -> dict:
         "month": month,
         "ready_to_assign_after": rta_after,
         "cash_now": cash_now,
+        "card_credit": card_credit,
         "held_in_envelopes": held_in_envelopes,
         "held_outside_envelopes": held_outside_envelopes,
         "card_spend_not_covered": card_spend_not_covered,
@@ -2642,8 +2847,9 @@ def undo_fresh_start(token: str) -> None:
     (or a stale token from another tab) raises ``ConflictError`` rather than re-writing stale
     amounts over whatever the user has done since.
 
-    ``allow_negative`` is passed here and NOWHERE else, and only over values this function read
-    back out of ``plan_state`` — amounts the server itself wrote at ``fresh_start``. A negative
+    ``allow_negative`` is passed here — only over values this function read back out of
+    ``plan_state``, amounts the server itself wrote at ``fresh_start`` — and by the YNAB
+    migration (``ynab_migration.apply.apply_budget``), over YNAB's own month figures. A negative
     assigned slot is a real state (``move_money`` out of a row produces one), so a byte-identical
     restore needs it; what it must never be is a door a caller can push its own numbers through.
 
@@ -3978,14 +4184,16 @@ def _op_assign(
     out of a row legitimately drives assigned negative (its docstring), so a negative slot is a
     real state a book can be in. ``undo_fresh_start`` therefore needs it to put a snapshot back
     byte-identically. Keyword-only and never set from a wire payload — but the guarantee is the
-    SOURCE of the values, not the kwarg's un-nameability: its only caller is ``undo_fresh_start``,
-    replaying a before-image the server itself wrote."""
+    SOURCE of the values, not the kwarg's un-nameability: its callers are ``undo_fresh_start``,
+    replaying a before-image the server itself wrote, and the YNAB migration, writing YNAB's figures."""
     month = _valid_month(change.get("month"))
     env_id = _require_envelope_id(change.get("envelope_id"))
     try:
         amount = round(float(change.get("amount")), 2)
     except (TypeError, ValueError):
         raise ValidationError("amount must be a number")
+    if not math.isfinite(amount):
+        raise ValidationError("amount must be a finite number")
     if amount < 0 and not allow_negative:
         raise ValidationError("assigned amount cannot be negative (use move_money to pull back)")
     _set_assigned_amt(month, env_id, amount, conn=conn)

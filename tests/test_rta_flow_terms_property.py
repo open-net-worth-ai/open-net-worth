@@ -15,6 +15,7 @@ from tests.test_rta_balance_identity import _BASE_ACCOUNTS
 from tests.test_rta_identity_property import (
     _ARCHIVED_CARD,
     _BOOKS,
+    _CARD_IDS,
     _CASH_IDS,
     _CATS,
     _MONTHS,
@@ -46,6 +47,21 @@ def _delta_cash_from_the_raw_book(txns: list[dict], month: str) -> float:
         if t.get("from_account_id") in _CASH_IDS:
             total -= _to_base(*_leg(t, "from"))
     return round(total, 2)
+
+
+def _card_credit_from_the_raw_book(txns: list[dict], month: str) -> float:
+    """Σ over the cards of their balance above zero at the end of `month`, off the raw rows —
+    the second money term (ADR 2026-11-02-a-card-in-credit-is-budget-money), sharing no code with
+    `_card_credit_as_of`."""
+    balance = dict.fromkeys(_CARD_IDS, 0.0)
+    for t in txns:
+        if (t.get("date") or "")[:7] > month:
+            continue
+        if t.get("to_account_id") in _CARD_IDS:
+            balance[t["to_account_id"]] += _to_base(*_leg(t, "to"))
+        if t.get("from_account_id") in _CARD_IDS:
+            balance[t["from_account_id"]] -= _to_base(*_leg(t, "from"))
+    return round(sum(max(0.0, round(b, 2)) for b in balance.values()), 2)
 
 
 def test_flow_terms_close_and_agree_with_the_raw_book(env):
@@ -96,6 +112,7 @@ def test_flow_terms_close_and_agree_with_the_raw_book(env):
             #    on the exact same number, not a second, drifted derivation of it).
             stock = round(
                 table["on_budget_cash"]
+                + table["card_credit"]
                 - table["pre_budget_baseline"]
                 - table["held_in_envelopes"]
                 - table["held_outside_envelopes"]
@@ -124,6 +141,8 @@ def test_flow_terms_close_and_agree_with_the_raw_book(env):
             #    reusing them here (rather than re-deriving them a third time) is what isolates
             #    THIS assertion to the one genuinely new quantity, `inflow`'s Δcash half.
             raw_delta = _delta_cash_from_the_raw_book(txns, month)
+            raw_delta += _card_credit_from_the_raw_book(txns, month)
+            raw_delta -= _card_credit_from_the_raw_book(txns, flow["prev_month"])
             expected_inflow = round(
                 raw_delta
                 - table["totals"]["activity"]
@@ -208,7 +227,10 @@ def test_flow_terms_close_and_agree_with_the_raw_book(env):
     # `_BOOKS // 10` bar either (best: 10/400 on seed=1). Rather than mutate the generator this
     # file only imports (test_rta_identity_property.py owns it and already exercises it
     # thoroughly), this one counter gets a bar sized to what the shape actually reaches.
-    _MIN_HITS = {"negative_inflow": _BOOKS // 50}
+    # `negative_carried_in` too, since card credit became budget money (ADR 2026-11-02): the
+    # generator's random card payments overpay often, and that money no longer leaves Ready to
+    # Assign at the roll, so fewer months carry a negative figure in (17/200 on this seed).
+    _MIN_HITS = {"negative_inflow": _BOOKS // 50, "negative_carried_in": _BOOKS // 20}
     for name, count in counters.items():
         floor = _MIN_HITS.get(name, _BOOKS // 10)
         assert count > floor, f"coverage gap: {name} only hit {count} times ({counters})"

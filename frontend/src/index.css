@@ -19936,3 +19936,158 @@ body.hide-amounts .mf-lbl-amt {
   font-weight: 600;
   user-select: text;
 }
+
+/* YNAB import review: the plan in three tabs over a pane of fixed height, so switching tabs or
+   the read finishing never resizes the window. Its header row stays put while the rows scroll. */
+.ynr-meta {
+  font-variant-numeric: tabular-nums;
+}
+.ynr-notes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.ynr-note {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--warn);
+}
+.ynr-note--bad {
+  color: var(--ink);
+  border-left-color: var(--bad);
+}
+.ynr-pane {
+  height: min(400px, 44vh);
+  overflow: auto;
+}
+.ynr-footer {
+  width: 100%;
+}
+.pm-select.ynr-sync {
+  width: auto;
+  min-width: 210px;
+}
+.ynr-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--modal-bg);
+  color: var(--faint);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  border-bottom: 1px solid var(--line);
+}
+.ynr-table td {
+  border-bottom: 1px solid var(--line);
+}
+.ynr-table .ynr-group th {
+  position: static;
+  padding-top: var(--space-4);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.ynr-table tfoot td {
+  border-bottom: 0;
+}
+.ynr-dim {
+  color: var(--faint);
+}
+.ynr-nowrap {
+  white-space: nowrap;
+}
+.ynr-empty {
+  margin: 0;
+  padding: var(--space-6) var(--space-4);
+  color: var(--faint);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+.ynr-placeholder {
+  padding: var(--space-5) var(--space-4);
+}
+.pm-select.ynr-dest {
+  width: auto;
+  min-width: 180px;
+  max-width: 100%;
+}
+/* A linked account's line under its row: what it matches and adds, and the pairs to check. */
+.ynr-table .ynr-link td {
+  padding-top: 0;
+  font-size: var(--text-sm);
+}
+.ynr-table tbody tr:has(+ .ynr-link) td {
+  border-bottom: 0;
+}
+.ynr-pairs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* Imports & sync: the run history and report tables. A row is a <tr>; on a phone it stacks into
+   labelled lines (each cell carries its column name in data-label). */
+.imp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.imp-table th,
+.imp-table td {
+  text-align: left;
+  white-space: normal;
+  vertical-align: top;
+  padding: var(--space-3) var(--space-4);
+}
+.imp-table th {
+  cursor: default;
+}
+.imp-table .imp-table__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.imp-table__wrap {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 639.98px) {
+  .imp-table thead {
+    display: none;
+  }
+  .imp-table,
+  .imp-table tbody,
+  .imp-table tr,
+  .imp-table td {
+    display: block;
+    width: 100%;
+  }
+  .imp-table tr {
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .imp-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-1) 0;
+    border: 0;
+    text-align: right;
+  }
+  .imp-table td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    color: var(--faint);
+    font-size: var(--text-xs);
+    text-align: left;
+  }
+  .imp-table .imp-table__num {
+    text-align: right;
+  }
+}

@@ -103,6 +103,17 @@ class _TxnStore:
         self._rows[row["id"]] = row
         return row
 
+    def transfer_routes(self):
+        return frozenset(
+            frozenset((t["from_account_id"], t["to_account_id"]))
+            for t in self.all()
+            if t.get("kind") == "transfer"
+            and not t.get("deleted")
+            and not t.get("merged_into")
+            and t.get("from_account_id")
+            and t.get("to_account_id")
+        )
+
     def all(self):
         return list(self._rows.values())
 

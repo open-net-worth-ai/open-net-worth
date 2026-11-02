@@ -280,7 +280,7 @@ def get_fresh_start_preview(ym: Optional[str] = None):
     halves of the write); the rest is the ledger the confirm dialog renders under it, which sums
     exactly — the SAME identity the RTA popover renders, no residual term:
 
-        ready_to_assign_after = cash_now − baseline − held_in_envelopes
+        ready_to_assign_after = cash_now + card_credit − baseline − held_in_envelopes
                                  − held_outside_envelopes − card_spend_not_covered
                                  − assigned_in_future
 
@@ -296,6 +296,7 @@ def get_fresh_start_preview(ym: Optional[str] = None):
         "month",
         "ready_to_assign_after",
         "cash_now",
+        "card_credit",
         "held_in_envelopes",
         "held_outside_envelopes",
         "card_spend_not_covered",

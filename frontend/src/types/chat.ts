@@ -412,6 +412,13 @@ export interface SearchCall {
 
 export type ToolStatus = 'streaming' | 'executing' | 'done'
 
+/** The Auto judge's verdict on a call it let through (`services/auto_approvals.py`). The reason
+ *  is model-written from the call's arguments: plain text only, never markup. */
+export interface AutoApproval {
+  reason: string
+  model?: string
+}
+
 /**
  * What a tool call SAYS, resolved by the server (`backend/ai/tools/display.py`).
  *
@@ -561,6 +568,8 @@ export type MessageBlock =
        *  result that never existed (a pending approval). */
       resultElided?: number
       inputElided?: number
+      /** permissions_v2: the Auto judge let this call run without a card. */
+      autoApproval?: AutoApproval
     }
   | { type: 'search'; query: string; results: SearchResult[]; loading: boolean }
   | { type: 'fetch'; url: string }

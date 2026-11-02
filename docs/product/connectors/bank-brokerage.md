@@ -231,18 +231,102 @@ categories are left for you or an Automation to set.
 
 ## YNAB
 
-If you already budget in YNAB, its transactions can flow in from here.
+If you already budget in YNAB, Lucius can read it from here.
 
 1. In YNAB, go to **Account Settings → Developer Settings → New Token**. Copy the token — YNAB
    shows it only once.
 2. In Open Net Worth: **Connectors → Browse & add → YNAB → Add connector**.
 3. Paste it into **Access token** and click **Save**.
-4. If your YNAB login has more than one budget, reopen the form (**⋯ → Edit configuration**) and
-   choose one under **Budget** (click **Refresh** if the list is empty), then **Save**. With only
-   one budget, it's picked for you.
-5. Link the accounts in the **Accounts** list.
 
-Categories are not copied from YNAB — they're left for you or an Automation to set.
+That token is all the connector holds. If your YNAB login has several plans, you don't pick one
+here: ask Lucius about any of them ("what's left in Groceries in my SGD plan?"). It lists your
+plans, then reads the one you mean — its accounts and balances, a month's Ready to Assign and each
+category's assigned, activity and available, or its transactions to book here. Reading YNAB never
+changes anything in it.
+
+Categories are not copied by this connector — they're left for you or an Automation to set. To
+move your whole plan across instead, use the migration below.
+
+### Move your whole YNAB plan
+
+To move your accounts, categories, envelopes, every transaction and each month's budgeted amounts
+across, and check the result against YNAB, open **Automations →
+Data sync → YNAB**: the [YNAB data sync](../features/imports-and-sync.md) uses the token you saved
+here, and the import is its second setup step. It is experimental and off by default: the **Data
+sync** tab appears once you turn it on in
+[Settings → Developer → Experimental](../features/settings.md#experimental-features).
+Take a [backup](../operations/backup-and-restore.md) first if you can; a fresh book is the
+cleanest target (the app also takes one before it writes anything). If this book already holds
+some of the plan's accounts, the review lets you import each YNAB account into one of yours instead
+of a new one; the transactions both hold are matched rather than booked twice
+([how](../features/imports-and-sync.md#set-it-up)).
+
+It is safe to run again: nothing is booked twice. Accounts and transactions keep their YNAB ids,
+so the connector attaches to them afterwards. A transfer between two accounts is one transfer; a
+split with a transfer line becomes a split plus a separate transfer; a closed YNAB account is
+created and then archived; Ready to Assign inflows become uncategorized income. Categories are
+copied exactly as YNAB has them: payee defaults and Automations don't relabel imported rows. Each
+month's assigned amounts come across (including negative ones and what you assigned to a card's
+payment category), and the budget is set to zero-based. Where YNAB's balance for an account isn't
+the sum of its transactions (typically loan interest YNAB calculates), the difference is booked
+once as a labelled balance adjustment. Goals and scheduled transactions are not migrated.
+
+### Keep the plan in sync both ways
+
+After the migration, the [YNAB data sync](../features/imports-and-sync.md) (in Automations) keeps this book and that
+YNAB plan in step, on a schedule: **transactions** (new, edited, deleted, categorized, memo,
+cleared, splits, transfers) and each **month's Assigned per category**, from YNAB, to YNAB or both
+ways. Accounts,
+goals and scheduled transactions are not synced, and a card's payment category is read from YNAB
+only — its Assigned is never sent.
+
+1. Click **Turn on** (the last setup step) and, if you like, change the **Schedule** (every 15 or
+   30 minutes, hourly — the default — every 6 hours, daily, or **Manual only**). The first run
+   starts within a minute. **Sync now** runs it on demand; only one run happens at a time.
+2. Its page shows the **last sync** and what it did ("3 sent to YNAB, 1 pulled, 1 needs review")
+   and the **next sync**; the YNAB connector card and its Automations card carry the one-line
+   version. Each run's full
+   report (every transaction and Assigned figure it moved) is in the
+   [run history](../features/imports-and-sync.md#reading-a-report).
+
+**What a run does.** It reads only what changed in YNAB since the last run (one request), compares
+it with what changed here, and applies each side's changes to the other. Your first run also picks
+up the edits you made here since the migration: a transaction you changed here and YNAB did not is
+sent; one YNAB changed and you did not is pulled; one both sides changed is held for review. For
+Assigned, nothing is overwritten on the first run: every month and category where the two
+differ is listed for your review (YNAB may have changed since the migration); after that, changes
+are sent and pulled automatically. The Starting Balance rows
+are never sent.
+
+**In YNAB.** Every transaction the sync creates or changes is flagged **red**, so you can see what
+came from here (clear the flag whenever you like; it does not come back unless the row changes
+again). Every Assigned figure it sets adds a line to that category's note, such as
+`ONW 2026-10: assigned 120.00 (was 100.00)`; the last ten such lines are kept and the rest of the
+note is left as you wrote it.
+
+**Needs your review.** If the same transaction (or the same month and category's Assigned)
+changed on both sides and they now disagree, nothing is overwritten: both versions appear side by
+side with **Keep Open Net Worth's** and **Keep YNAB's**, and your choice is applied to both sides.
+Things YNAB's API cannot take are listed there too, with the reason — for example a split's date,
+amount or lines (it ignores them), a transaction dated in the future, a category YNAB does not
+have, or a currency other than the plan's. For those you can keep YNAB's version (this book is put
+back in line) or change it in YNAB yourself; once both agree the item clears.
+
+**Transactions dated before a Starting Balance.** A synced transaction dated before an account's
+Starting Balance (one you back-date in YNAB, or here) is booked like any other. Here it counts as
+history already inside the Starting Balance, so the balance doesn't move; YNAB adds it to the
+balance. The sync never moves a Starting Balance on its own: the account waits in the review list
+with both balances. **Move the Starting Balance to** the earliest such date keeps its amount and
+counts those transactions, as YNAB does. **Keep as history** changes nothing, leaves the account
+that much apart from YNAB, and isn't asked again for those transactions.
+
+**Limits.** YNAB allows 200 requests an hour; a run uses at most 40 and carries the rest to the next
+run, so nothing is lost. Turning the sync on replaces the plain YNAB import for that plan (Lucius's
+YNAB fetch refuses it, so nothing is booked twice). When a run would delete many synced
+transactions at once (more than 25, and more than a quarter of them), in either direction, none is
+deleted yet: each waits in the review list, where you confirm or undo it, and the rest of the run
+goes ahead. Edits older than the transaction audit log keeps (20,000
+events) can't be told apart from YNAB's on the first run.
 
 ## Alpaca
 

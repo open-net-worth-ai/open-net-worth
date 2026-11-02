@@ -166,6 +166,8 @@ GATE_EXEMPT_READ_SHAPED: frozenset[str] = frozenset(
         "lunch_money_list_accounts",
         "lunch_flow_list_accounts",
         "ynab_list_accounts",
+        "ynab_list_plans",
+        "ynab_get_plan",
         "enable_banking_list_accounts",
         "gocardless_list_accounts",
         "yodlee_list_accounts",

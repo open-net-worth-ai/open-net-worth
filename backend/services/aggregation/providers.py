@@ -140,13 +140,16 @@ class Provider:
         before: str,
         account: Optional[str],
         accounts_only: bool = False,
+        plan_id: Optional[str] = None,
     ) -> FetchWindow:
         """Call this provider's own ``fetch_window(store, since, before, account, *,
         accounts_only)`` — the ONE place ``connector_fetch.fetch()``/``provider_accounts()``
         reach into provider-specific code. Raises on a transport/auth failure — the caller
         classifies it via ``classify_error``."""
+        # ``plan_id`` is YNAB's alone (which plan to read); no other provider takes it.
+        extra = {"plan_id": plan_id} if plan_id else {}
         return self._resolve(self._fetch)(
-            self.store(), since, before, account, accounts_only=accounts_only
+            self.store(), since, before, account, accounts_only=accounts_only, **extra
         )
 
     def classify_error(self, exc: Exception) -> str:
@@ -207,7 +210,7 @@ PROVIDERS: dict[str, Provider] = {
         Provider(
             key="ynab",
             label=CATALOG["ynab"].label,
-            note="A personal token; may see multiple budgets — pick one in Connectors → YNAB.",
+            note="A personal token; it may see several plans — name one with plan_id (ynab_list_plans).",
             lookback_days=14,
             _fetch=("backend.services.aggregation.ynab", "fetch_window"),
             _classify=("backend.services.aggregation.ynab", "classify_error"),

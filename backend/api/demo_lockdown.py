@@ -73,6 +73,7 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/auth/settings$",
         r"^/api/shortcuts/prepare$",
         r"^/api/(connectors|tool-permissions)(/.*)?$",
+        r"^/api/imports(/.*)?$",
         r"^/api/search/config(/.*)?$",
         r"^/api/config(/.*)?$",
         r"^/api/feature-flags(/.*)?$",
