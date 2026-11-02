@@ -353,12 +353,11 @@ def bare_desk(agent, said: list | None = None):
     desk_._recent = {}
     desk_._checked_in = desk_._approving = False
     desk_._hold_until, desk_._hold_timer = 0.0, None
-    desk_._lucius_lines = set()
+    desk_._answers, desk_._turn_said = set(), ""
     desk_.hung_up = False
     desk_.rearmed = 0
     if said is not None:
         desk_._say = lambda text, **_: said.append(text)
-        desk_._check_in = lambda text: said.append(text)
         desk_.hang_up_after_speech = lambda: setattr(desk_, "hung_up", True)
 
         class _Session:
@@ -475,3 +474,43 @@ def test_only_the_owners_current_turn_is_sent():
     desk_.submit("What did the owner spend yesterday?")
     said, _ = desk_._queue.get_nowait()
     assert said == "So what was my spending yesterday?"
+
+
+def test_every_line_spoken_on_the_call_reaches_the_chat_once():
+    """Owner, 2026-11-03: whatever is said on the call belongs in the transcript — by one rule,
+    not per kind of line. Lucius's answers are already there (his turn wrote them); lines said
+    while he works are left out (they would land after his answer; the chat shows his steps)."""
+    import asyncio
+    import types
+
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    async def run():
+        recorded: list[tuple[str, str]] = []
+
+        async def call(method, **args):
+            recorded.append((args["said"], args["reply"]))
+
+        desk_ = bare_desk(agent)
+        desk_._session_id, desk_._rt = (
+            "s1",
+            types.SimpleNamespace(app=types.SimpleNamespace(call=call)),
+        )
+        desk_._session = types.SimpleNamespace(say=lambda text, **_: None)
+        desk_.item_added("assistant", "Hi, it's Lucius.")  # the greeting
+        desk_.item_added("user", "how are you")
+        desk_.item_added("assistant", "Doing well!")  # small talk
+        desk_._say("Are you still there?")  # a line of our own…
+        desk_.item_added("assistant", "Are you still there?")  # …arrives here like any other
+        desk_._say("You spent 40 dollars.", answer=True)
+        desk_.item_added("assistant", "You spent 40 dollars.")  # his turn already has it
+        desk_._current = "what did I spend"
+        desk_.item_added("assistant", "Still working on it.")  # said mid-turn: left out
+        await asyncio.sleep(0)
+        assert recorded == [
+            ("", "Hi, it's Lucius."),
+            ("how are you", "Doing well!"),
+            ("", "Are you still there?"),
+        ]
+
+    asyncio.run(run())

@@ -157,12 +157,14 @@ class LuciusDesk:
         self._spoken_since_heard = False
         self._sent_at: list[float] = []
         self._recent: dict[str, float] = {}  # normalised request → when it was sent
-        # For putting the front voice's OWN exchanges into the chat (owner, 2026-11-03): what
-        # the owner said this turn, whether it went to Lucius, and Lucius's spoken answers
-        # (already in the chat through his own turn, so never recorded twice).
+        # ONE rule for the chat (owner, 2026-11-03): every line spoken on the call is in it,
+        # each recorded in ``item_added`` with the owner's words it answers — greeting, small
+        # talk, check-ins, goodbyes, error lines alike. Except: Lucius's answers, which his own
+        # turn already wrote (``_answers``), and lines spoken while he is working (the "one
+        # sec", "still working on it"): his turn is open then, so they would be saved AFTER
+        # his answer — and the chat already shows those steps live.
         self._turn_said = ""
-        self._turn_asked = False
-        self._lucius_lines: set[str] = set()
+        self._answers: set[str] = set()
         self._current: str | None = None
         self._checked_in = False  # asked "still there?" since the owner last spoke
         self._approving = False  # a change is waiting on the owner's approval on screen
@@ -216,42 +218,41 @@ class LuciusDesk:
             return
         if not self._checked_in:
             self._checked_in = True
-            self._check_in("Are you still there?")
+            self._say("Are you still there?")
             # LiveKit flags "away" once per silence and keeps the owner away through our own
             # line, so the next silence never counted and the call stayed open (live call,
             # 2026-11-03): mark them listening again, so the timer restarts once we've spoken.
             self._session.reset_away_timer()
             return
-        self._check_in("I'll hang up for now. Call me back any time.")
+        self._say("I'll hang up for now. Call me back any time.")
         self.hang_up_after_speech()
 
-    def _check_in(self, text: str) -> None:
-        """Say a line of our own (a check-in, a goodbye) and put it in the chat — it is not a
-        reply to anything, so the reply path never records it."""
-        self._say(text, add_to_chat_ctx=True)
-        asyncio.ensure_future(
-            self._rt.app.call("record_exchange", session_id=self._session_id, said="", reply=text)
-        )
-
-    def _say(self, text: str, *, add_to_chat_ctx: bool = False) -> None:
-        """Speak on the call — unless it has already ended (the owner hung up while Lucius
-        was still working); the answer is in the chat either way."""
-        if add_to_chat_ctx:
-            self._lucius_lines.add(text)
+    def _say(self, text: str, *, answer: bool = False) -> None:
+        """Speak a line of our own on the call — unless it has already ended (the owner hung
+        up while Lucius was still working); his answer is in the chat either way. Every line
+        joins the front voice's context (it knows what was said) and so reaches ``item_added``;
+        ``answer`` marks Lucius's own, already in the chat."""
+        if answer:
+            self._answers.add(text)
         try:
-            self._session.say(text, add_to_chat_ctx=add_to_chat_ctx)
+            self._session.say(text, add_to_chat_ctx=True)
         except RuntimeError:
             log.info("voice: the call ended before Lucius's answer was ready; it is in the chat")
 
     def item_added(self, role: str, text: str) -> None:
-        """A line joined the call's conversation: record the front voice's own answers."""
+        """A line joined the call's conversation: put it in the chat (see ``_answers``)."""
         text = (text or "").strip()
         if not text:
             return
         if role == "user":
-            self._turn_said, self._turn_asked = text, False
+            self._turn_said = text
             return
-        if role != "assistant" or text in self._lucius_lines or self._turn_asked:
+        if role != "assistant":
+            return
+        if text in self._answers:
+            self._answers.discard(text)
+            return
+        if self._current is not None or not self._queue.empty() or self._approving:
             return
         said, self._turn_said = self._turn_said, ""
         asyncio.ensure_future(
@@ -276,7 +277,7 @@ class LuciusDesk:
             return "You already have exactly this request (answered or in progress); nothing was started again. If the owner wants it repeated, repeat the answer."
         self._recent[key] = now
         self._heard.clear()
-        self._turn_asked = True
+        self._turn_said = ""  # the owner's words travel with the request instead
         self._sent_at.append(now)
         log.info("voice: front handed Lucius a request (%d chars)", len(request))
         busy = self._current is not None
@@ -312,6 +313,7 @@ class LuciusDesk:
                 await self._answer(said, request)
             except Exception:  # noqa: BLE001 — a failed request must not end the call
                 log.exception("voice: Lucius request failed")
+                self._current = None  # no longer working: this line belongs in the chat
                 self._say("Sorry, I hit a problem with that one. Want me to try again?")
             finally:
                 self._current, self._doing = None, ""
@@ -327,7 +329,7 @@ class LuciusDesk:
         )
         text, approval = await self._collect(events)
         if text.strip():
-            self._say(text.strip(), add_to_chat_ctx=True)
+            self._say(text.strip(), answer=True)
         if approval:
             self._approving = True
             asyncio.create_task(self._after_approval())
@@ -370,7 +372,7 @@ class LuciusDesk:
         finally:
             self._approving = False
         if text.strip():
-            self._say(text.strip(), add_to_chat_ctx=True)
+            self._say(text.strip(), answer=True)
 
 
 async def _with_ticks(events, every: float):
