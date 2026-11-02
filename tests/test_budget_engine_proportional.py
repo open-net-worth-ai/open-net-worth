@@ -648,6 +648,30 @@ def test_envelope_history_by_day_clips_when_a_clipped_map_is_given():
     assert hist["last_by_day"] == 300.0
 
 
+def test_envelope_history_medians_ignore_a_one_off_month():
+    """One trip in three months is not the usual month: the mean forecast it again, the
+    median doesn't."""
+    by_month = {
+        "2026-10": {_CAT_RENT: 0.0},
+        "2026-09": {_CAT_RENT: 3900.0},
+        "2026-08": {_CAT_RENT: 100.0},
+    }
+    by_month_clipped = {"2026-10": {}, "2026-09": {_CAT_RENT: 0.0}, "2026-08": {_CAT_RENT: 40.0}}
+    window = ["2026-10", "2026-09", "2026-08"]
+    hist = fold_.envelope_history([_CAT_RENT], by_month, by_month_clipped, window, set(window))
+    assert hist["avg3"] == pytest.approx(1333.33)
+    assert hist["median3"] == 100.0
+    assert hist["rest_median3"] == 60.0  # median(0, 3900, 60)
+
+
+def test_envelope_history_has_no_rest_to_add_outside_the_running_month():
+    by_month = {"2026-08": {_CAT_RENT: 500.0}, "2026-07": {_CAT_RENT: 700.0}}
+    window = ["2026-08", "2026-07"]
+    hist = fold_.envelope_history([_CAT_RENT], by_month, None, window, set(window))
+    assert hist["median3"] == 600.0  # two months: their mean
+    assert hist["rest_median3"] == 0.0
+
+
 # ── compute_month(): the shared computation, GROUP-based ────────────────────────────
 
 

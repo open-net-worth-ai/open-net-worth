@@ -35,6 +35,7 @@ from __future__ import annotations
 
 from calendar import monthrange
 from datetime import date
+from statistics import median
 
 from backend.core.user_time import user_today
 from backend.services import ledger as ledger_service
@@ -275,7 +276,7 @@ def envelope_history(
     prior_months: list[str],
     months_with_data: set[str],
 ) -> dict:
-    """``{last, avg3, last_by_day, avg3_by_day}`` for one envelope. ``last`` is the single
+    """``{last, avg3, last_by_day, avg3_by_day, median3, rest_median3}`` for one envelope. ``last`` is the single
     month immediately before the viewed period; ``avg3`` is the mean over the SAME trailing
     3-month window ``last`` is the newest entry of, skipping a window month the book has NO
     transactions for AT ALL (a month before the book existed) — an envelope's own $0 in a
@@ -283,7 +284,13 @@ def envelope_history(
     book data at all does not. ``by_day`` variants repeat the same math against
     ``by_month_clipped`` (only built by the caller when viewing the CURRENT month); when
     ``None`` (a past or future period), they simply equal the full-month figures — no
-    partial-month concept applies to a closed or not-yet-started month."""
+    partial-month concept applies to a closed or not-yet-started month.
+
+    ``median3``/``rest_median3`` feed the running month's projection only: the MEDIAN month,
+    and the median of what each month added after the viewed day. A mean let one trip or
+    one tax bill become "usual" and forecast it again (owner, 2026-11-02: "it's just the new
+    month and it says I am heading to 22%"); with three months, one outlier never sets the
+    median. ``rest_median3`` is 0 for a closed or future month — no rest of it to add."""
 
     def total(monthmap: dict[str, float]) -> float:
         return round(sum(monthmap.get(c, 0.0) for c in category_ids), 2)
@@ -291,22 +298,32 @@ def envelope_history(
     last_month = prior_months[0]
     last = total(by_month.get(last_month, {}))
     counted = [m for m in prior_months if m in months_with_data]
-    avg3 = (
-        round(sum(total(by_month.get(m, {})) for m in counted) / len(counted), 2)
-        if counted
-        else 0.0
-    )
+    fulls = [total(by_month.get(m, {})) for m in counted]
+    avg3 = round(sum(fulls) / len(fulls), 2) if fulls else 0.0
+    median3 = round(median(fulls), 2) if fulls else 0.0
 
     if by_month_clipped is None:
-        return {"last": last, "avg3": avg3, "last_by_day": last, "avg3_by_day": avg3}
+        return {
+            "last": last,
+            "avg3": avg3,
+            "last_by_day": last,
+            "avg3_by_day": avg3,
+            "median3": median3,
+            "rest_median3": 0.0,
+        }
 
+    clipped = [total(by_month_clipped.get(m, {})) for m in counted]
     last_by_day = total(by_month_clipped.get(last_month, {}))
-    avg3_by_day = (
-        round(sum(total(by_month_clipped.get(m, {})) for m in counted) / len(counted), 2)
-        if counted
-        else 0.0
-    )
-    return {"last": last, "avg3": avg3, "last_by_day": last_by_day, "avg3_by_day": avg3_by_day}
+    avg3_by_day = round(sum(clipped) / len(clipped), 2) if clipped else 0.0
+    rests = [f - c for f, c in zip(fulls, clipped)]
+    return {
+        "last": last,
+        "avg3": avg3,
+        "last_by_day": last_by_day,
+        "avg3_by_day": avg3_by_day,
+        "median3": median3,
+        "rest_median3": round(median(rests), 2) if rests else 0.0,
+    }
 
 
 # ── The shared computation ───────────────────────────────────────────────────────────
