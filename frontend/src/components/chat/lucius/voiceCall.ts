@@ -25,6 +25,8 @@ export interface CallState {
   /** Length of the call that just ended, for the brief "Call ended · 2:14". */
   endedSeconds: number | null
   problem: CallProblem | null
+  /** The Voice calls setup dialog is open (over whatever screen the owner is on). */
+  setupOpen: boolean
 }
 
 const IDLE: CallState = {
@@ -34,6 +36,7 @@ const IDLE: CallState = {
   connectedAt: null,
   endedSeconds: null,
   problem: null,
+  setupOpen: false,
 }
 
 let state: CallState = IDLE
@@ -93,6 +96,33 @@ function startRingback(): () => void {
   }
 }
 
+/** Calls `onVoice` once, the moment `track` carries sound above silence (polled every 30 ms). */
+function watchFirstWord(track: MediaStreamTrack, onVoice: () => void): void {
+  const Ctx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  if (!Ctx) return
+  const ctx = new Ctx()
+  const analyser = ctx.createAnalyser()
+  analyser.fftSize = 512
+  ctx.createMediaStreamSource(new MediaStream([track])).connect(analyser)
+  const samples = new Float32Array(analyser.fftSize)
+  const timer = window.setInterval(() => {
+    if (!room) return stop()
+    analyser.getFloatTimeDomainData(samples)
+    let peak = 0
+    for (const v of samples) peak = Math.max(peak, Math.abs(v))
+    if (peak > 0.02) {
+      stop()
+      onVoice()
+    }
+  }, 30)
+  function stop() {
+    window.clearInterval(timer)
+    void ctx.close()
+  }
+}
+
 function classify(e: unknown): CallProblem {
   const name = e instanceof Error ? e.name : ''
   const message = e instanceof Error ? e.message : String(e)
@@ -121,10 +151,15 @@ function finish(problem: CallProblem | null) {
   const seconds = state.connectedAt ? Math.round((Date.now() - state.connectedAt) / 1000) : null
   teardown()
   if (problem) {
-    set({ ...IDLE, problem })
+    set({ ...IDLE, problem, setupOpen: state.setupOpen })
     return
   }
-  set({ ...IDLE, phase: seconds !== null ? 'ended' : 'idle', endedSeconds: seconds })
+  set({
+    ...IDLE,
+    phase: seconds !== null ? 'ended' : 'idle',
+    endedSeconds: seconds,
+    setupOpen: state.setupOpen,
+  })
   window.clearTimeout(endedTimer)
   if (seconds !== null) endedTimer = window.setTimeout(() => set({ phase: 'idle' }), 3000)
 }
@@ -160,24 +195,26 @@ export async function startCall(sessionId: string): Promise<void> {
     const grant = (await r.json()) as { url: string; token: string; session_id: string }
     const next = new Room({ adaptiveStream: true })
     room = next
+    // Lucius "picks up" when he first speaks: stop the ring and start the clock then. The level
+    // is read straight off his audio — LiveKit's active-speaker report lags a few hundred ms, so
+    // the ring played over his "Hi" (live call, 2026-11-03); that report stays as a fallback.
+    const pickedUp = () => {
+      if (state.phase !== 'ringing' && state.phase !== 'connecting') return
+      stopRing()
+      stopRing = () => {}
+      set({ phase: 'live', connectedAt: Date.now() })
+    }
     next.on(RoomEvent.TrackSubscribed, (track) => {
       if (track.kind === Track.Kind.Audio) {
         const el = track.attach()
         el.className = 'lx-call-audio'
         document.body.appendChild(el)
         audioEls.push(el)
+        if (track.mediaStreamTrack) watchFirstWord(track.mediaStreamTrack, pickedUp)
       }
     })
-    // Lucius "picks up" when he first speaks: stop the ring and start the clock then.
     next.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-      if (
-        state.phase === 'ringing' &&
-        speakers.some((p) => p.identity !== next.localParticipant.identity)
-      ) {
-        stopRing()
-        stopRing = () => {}
-        set({ phase: 'live', connectedAt: Date.now() })
-      }
+      if (speakers.some((p) => p.identity !== next.localParticipant.identity)) pickedUp()
     })
     next.on(RoomEvent.Reconnecting, () => set({ phase: 'reconnecting' }))
     next.on(RoomEvent.Reconnected, () => set({ phase: state.connectedAt ? 'live' : 'ringing' }))
@@ -212,6 +249,25 @@ export async function toggleMute(): Promise<void> {
 
 export function dismissProblem(): void {
   set({ problem: null })
+}
+
+export function openVoiceSetup(): void {
+  set({ setupOpen: true, problem: null })
+}
+
+export function closeVoiceSetup(): void {
+  set({ setupOpen: false })
+}
+
+// One setup dialog for the app, whichever chat surfaces are mounted (panel and dock can both be):
+// the first host to mount renders it.
+let setupHost: symbol | null = null
+export function claimSetupHost(token: symbol): boolean {
+  if (setupHost === null) setupHost = token
+  return setupHost === token
+}
+export function releaseSetupHost(token: symbol): void {
+  if (setupHost === token) setupHost = null
 }
 
 /** Tests only: put the store back to its starting state. */

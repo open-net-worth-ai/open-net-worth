@@ -62,13 +62,21 @@ describe('VoiceCallButton', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('opens Voice calls setup, not an error, while voice calls are not set up', async () => {
+  it('opens Voice calls setup over the current screen, not an error, while not set up', async () => {
     restore = overrideFlagsForTests({ voice_calls: true })
     respond(UNSET)
-    render(<VoiceCallButton sessionId="s1" />)
+    function Probe() {
+      return <span data-testid="setup">{String(useVoiceCall().setupOpen)}</span>
+    }
+    render(
+      <>
+        <Probe />
+        <VoiceCallButton sessionId="s1" />
+      </>,
+    )
     fireEvent.click(await screen.findByRole('button', { name: 'Set up voice calls' }))
-    expect(dispatch).toHaveBeenCalledWith({ name: 'connectors.open_setup', args: { id: 'voice' } })
-    expect(navigate).toHaveBeenCalledWith({ to: '/connectors' })
+    expect(screen.getByTestId('setup').textContent).toBe('true')
+    expect(navigate).not.toHaveBeenCalled()
     expect(authFetch).not.toHaveBeenCalledWith('/api/voice/call', expect.anything())
   })
 

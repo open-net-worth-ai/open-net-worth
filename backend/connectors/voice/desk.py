@@ -18,7 +18,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Optional
 
-from backend.ai import conversation, live_sessions, turns
+from backend.ai import assistant, conversation, live_sessions, turns
 from backend.ai.tool_text import harness_note
 
 log = logging.getLogger(__name__)
@@ -29,6 +29,9 @@ VOICE_NOTE = (
     "links or emoji; round amounts the way a person says them. A voice assistant in front "
     "of you has already told the owner you're on it, so don't announce lookups. If you "
     "propose a change, the owner approves it on screen in the app; say so briefly."
+)
+SMALL_TALK_NOTE = (
+    "Said on a voice call and answered by the voice assistant directly, without a lookup."
 )
 # How long a request waits for a turn the owner started some other way (typing) to finish.
 _BUSY_WAIT_S = 120.0
@@ -140,6 +143,52 @@ async def ask(
     )
     async for event in _follow(session_id, handle.turn_id):
         yield event
+
+
+async def record_exchange(session_id: str, said: str, reply: str) -> None:
+    """Put a voice exchange the front voice handled itself (small talk, "are you there?") into
+    the conversation, so the chat shows the whole call (owner, 2026-11-03) and Lucius sees it
+    on his next turn. It is a tiny turn of its own — the panel follows it live like any other —
+    that appends the two messages; it never calls a model. ``said`` may be empty (the greeting).
+    """
+    if not await _wait_until_idle(session_id):
+        return
+
+    def make_events(turn_id: str):
+        async def events():
+            _sid, history = assistant.get_or_create_session(session_id)
+            if said:
+                history.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": said},
+                            {"type": "text", "text": harness_note(SMALL_TALK_NOTE)},
+                        ],
+                    }
+                )
+            history.append({"role": "assistant", "content": [{"type": "text", "text": reply}]})
+            assistant._save_session(session_id, history)
+            yield {"type": "text_delta", "text": reply, "turn_id": turn_id}
+            yield {"type": "done", "turn_id": turn_id}
+
+        return events()
+
+    handle = turns.spawn(
+        session_id, "chat", make_events, error_event=_error_event, cost_surface="web"
+    )
+    if said:
+        live_sessions.publish(
+            session_id,
+            {
+                "type": "user_message",
+                "session_id": session_id,
+                "turn_id": handle.turn_id,
+                "message_id": f"voice_{uuid.uuid4().hex[:12]}",
+                "text": said,
+                "attachments": [],
+            },
+        )
 
 
 async def follow_next_turn(session_id: str, *, timeout: float = 300.0) -> AsyncIterator[DeskEvent]:

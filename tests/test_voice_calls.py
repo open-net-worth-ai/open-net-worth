@@ -373,7 +373,7 @@ def test_a_worker_that_cannot_load_says_why(db_isolated, monkeypatch):
     monkeypatch.setattr(service.importlib, "import_module", boom)
     asyncio.run(service.start())
     status = service.status()
-    assert status["running"] is False and "failed to load" in status["error"]
+    assert status["running"] is False and "couldn't start" in status["error"]
 
 
 def test_the_page_may_reach_only_the_owners_voice_server():

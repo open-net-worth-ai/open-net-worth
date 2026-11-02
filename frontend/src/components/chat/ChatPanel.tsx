@@ -1101,8 +1101,8 @@ export function ChatPanel({
   // activity list goes below it"), or in its usual pinned-bottom spot everywhere else.
   const composerFooter = (
     <div className="lx-side-foot" ref={footRef}>
-      <VoiceCallNotice sessionId={activeId} />
       <div className="lx-inputblock">
+        <VoiceCallNotice sessionId={activeId} />
         <VoiceCallSlot busy={streaming || sending}>
           <LuciusComposer
             /* Approvals govern the CONVERSATION, so it rides in the LEFT tool group beside

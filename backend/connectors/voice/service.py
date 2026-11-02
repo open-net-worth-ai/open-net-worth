@@ -38,6 +38,7 @@ class _Worker:
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self.server = None
         self.error: str = ""
+        self.restarts = 0
 
 
 _worker = _Worker()
@@ -113,7 +114,12 @@ def _owner_name() -> str:
         profile = read_profile()
     except Exception:  # noqa: BLE001 — a missing name only changes the greeting
         return ""
-    name = str(profile.get("nickname") or profile.get("name") or "").strip()
+    # The nickname is how the owner asked to be addressed ("Mr. Acme") — whole, never its first
+    # word ("Hi Mr., it's Lucius", live call 2026-11-03). Without one, the first name.
+    nickname = str(profile.get("nickname") or "").strip()
+    if nickname:
+        return nickname
+    name = str(profile.get("name") or "").strip()
     return name.split()[0] if name else ""
 
 
@@ -135,8 +141,8 @@ async def start() -> None:
         # thread, and the worker runs in a thread of its own — so they load HERE, on the app's
         # main thread, before it starts (live test, 2026-11-03: the thread died on import).
         importlib.import_module("backend.connectors.voice.agent")
-    except Exception as exc:  # noqa: BLE001 — reported on the settings page, never fatal
-        _worker.error = f"The voice libraries failed to load ({type(exc).__name__})."
+    except Exception:  # noqa: BLE001 — reported on the settings page, never fatal
+        _worker.error = "Voice calls couldn't start on this computer. The app log has the details."
         log.exception("voice libraries failed to load")
         return
     app_loop = asyncio.get_running_loop()
@@ -160,13 +166,33 @@ def _run_worker(
         _worker.server = server
         ready.set()
         loop.run_until_complete(server.run())
-    except Exception as exc:  # noqa: BLE001 — reported on the settings page, never fatal
-        _worker.error = f"The voice worker stopped ({type(exc).__name__}). Check the app log."
+    except Exception:  # noqa: BLE001 — reported on the settings page, never fatal
         log.exception("voice worker stopped")
+        _worker.error = "Voice calls stopped unexpectedly and are restarting."
+        _schedule_restart(app_loop)
     finally:
         ready.set()
         loop.close()
         _worker.loop = _worker.server = None
+
+
+_RESTART_DELAYS = (3.0, 10.0, 30.0)
+
+
+def _schedule_restart(app_loop: asyncio.AbstractEventLoop) -> None:
+    """A worker that dies restarts itself, a few times, before the page shows it as stopped."""
+    attempt = _worker.restarts
+    if attempt >= len(_RESTART_DELAYS):
+        _worker.error = "Voice calls stopped and couldn't restart. Restart the app to try again."
+        return
+    _worker.restarts += 1
+
+    async def later() -> None:
+        await asyncio.sleep(_RESTART_DELAYS[attempt])
+        _worker.thread = None
+        await start()
+
+    asyncio.run_coroutine_threadsafe(later(), app_loop)
 
 
 def _build_server(app_loop: asyncio.AbstractEventLoop, config: dict, owner: str):
@@ -186,6 +212,11 @@ def _build_server(app_loop: asyncio.AbstractEventLoop, config: dict, owner: str)
         initialize_process_timeout=60.0,
         # One owner never needs load shedding; a busy laptop tripped the 0.7 default.
         load_threshold=1.0,
+        # Its health-check server took a fixed :8081, still held by the previous process for a
+        # moment on restart, so the worker failed to start (live, 2026-11-03). We never read it:
+        # any free loopback port.
+        host="127.0.0.1",
+        port=0,
         setup_fnc=agent.prewarm,
     )
     server.rtc_session(agent.entrypoint, agent_name=AGENT_NAME, on_request=agent.on_request)
@@ -210,5 +241,6 @@ async def stop() -> None:
 
 async def reload() -> None:
     """Apply changed settings: the worker reads its config once, at start."""
+    _worker.restarts = 0
     await stop()
     await start()

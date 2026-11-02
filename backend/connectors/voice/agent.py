@@ -130,6 +130,12 @@ class LuciusDesk:
         self._spoken_since_heard = False
         self._sent_at: list[float] = []
         self._recent: dict[str, float] = {}  # normalised request → when it was sent
+        # For putting the front voice's OWN exchanges into the chat (owner, 2026-11-03): what
+        # the owner said this turn, whether it went to Lucius, and Lucius's spoken answers
+        # (already in the chat through his own turn, so never recorded twice).
+        self._turn_said = ""
+        self._turn_asked = False
+        self._lucius_lines: set[str] = set()
         self._current: str | None = None
         self._started = 0.0
         self._doing = ""
@@ -148,12 +154,29 @@ class LuciusDesk:
         self._heard.append(text)
 
     def _say(self, text: str, *, add_to_chat_ctx: bool = False) -> None:
+        if add_to_chat_ctx:
+            self._lucius_lines.add(text)
         """Speak on the call — unless it has already ended (the owner hung up while Lucius
         was still working); the answer is in the chat either way."""
         try:
             self._session.say(text, add_to_chat_ctx=add_to_chat_ctx)
         except RuntimeError:
             log.info("voice: the call ended before Lucius's answer was ready; it is in the chat")
+
+    def item_added(self, role: str, text: str) -> None:
+        """A line joined the call's conversation: record the front voice's own answers."""
+        text = (text or "").strip()
+        if not text:
+            return
+        if role == "user":
+            self._turn_said, self._turn_asked = text, False
+            return
+        if role != "assistant" or text in self._lucius_lines or self._turn_asked:
+            return
+        said, self._turn_said = self._turn_said, ""
+        asyncio.ensure_future(
+            bridge.call(self._rt.app_loop, desk.record_exchange(self._session_id, said, text))
+        )
 
     def spoke(self) -> None:
         """The voice said something: the owner's next words start a new turn."""
@@ -173,6 +196,7 @@ class LuciusDesk:
             return "Lucius already has exactly this request (answered or on it); nothing was sent again. Don't ask him twice — if the owner wants it repeated, repeat his answer."
         self._recent[key] = now
         self._heard.clear()
+        self._turn_asked = True
         self._sent_at.append(now)
         log.info("voice: front handed Lucius a request (%d chars)", len(request))
         busy = self._current is not None
@@ -333,6 +357,13 @@ async def entrypoint(ctx: JobContext) -> None:
     def _heard(ev) -> None:
         if ev.is_final:
             lucius.heard(ev.transcript)
+
+    @session.on("conversation_item_added")
+    def _item(ev) -> None:
+        item = ev.item
+        role = getattr(item, "role", None)
+        if role in ("user", "assistant"):
+            lucius.item_added(role, getattr(item, "text_content", "") or "")
 
     @session.on("agent_state_changed")
     def _spoke(ev) -> None:

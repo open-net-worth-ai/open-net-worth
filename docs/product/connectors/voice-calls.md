@@ -27,6 +27,10 @@ A call has two voices working together:
 | **The front voice** | A fast model that keeps the conversation natural: it greets you, answers "are you still there?", lets you interrupt, and says goodbye. It answers in about a second. It **never sees your data** and **never states a number or claims something is done**. |
 | **Lucius** | Does every real thing — balances, spending, budgets, investments, changes — with the same tools, permissions and approval cards as the chat. His answers are **read out word for word**, so an amount is never re-phrased. |
 
+**The whole call is in the chat** — the greeting, small talk the front voice answers itself, and
+every request with Lucius's answer — so you can scroll back through it later, and Lucius knows
+what was said on the call next time you talk.
+
 When you ask for something real, the front voice hands it to Lucius and says something short
 ("Sure, one sec"). Lucius's question and answer appear in the chat. If a lookup is genuinely slow,
 you hear *"the live prices lookup is taking longer than usual"* — once, and only when it's true.
@@ -61,8 +65,9 @@ account to create. Its free plan includes a monthly allowance.
 
 During a call the message box becomes a **call bar**: *Ringing…*, then *Connected · 0:42* (or
 *Lucius is working…* while he looks something up), with **Mute** and **End call**. Your draft is
-kept and comes back when you hang up. If a call can't start or drops, a note above the box says
-why, with a button to try again or to open Voice calls setup.
+kept and comes back when you hang up. If a call can't start or drops, a note at the top of the box
+says why, with a button to try again, open Voice calls settings or view the app's logs; dismiss it
+with **×**.
 
 **In the Open Net Worth desktop app**, the first call asks macOS for the microphone (once — it
 remembers). The desktop app allows the microphone for the app's own page only, and only audio;
@@ -97,7 +102,7 @@ readable back only by you through the eye on the field. Pausing the connector st
 Experimental**. It also gives way to **Send** as soon as you type.
 
 **The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it opens
-the setup form.
+the Voice calls settings right where you are.
 
 **"Set up Voice calls in Connectors first."** The connector has no LiveKit URL, key or secret yet,
 or it is paused.
