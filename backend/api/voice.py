@@ -15,7 +15,13 @@ from pydantic import BaseModel
 from backend.ai import assistant
 from backend.connectors.voice import service as voice_service
 from backend.connectors.voice.tokens import TTL_S, mint_call_token, new_room_name
-from backend.db.voice_config_store import VoiceConfigStore, is_ready, public
+from backend.db.voice_config_store import (
+    ENGLISH_ONLY_STT,
+    LANGUAGES,
+    VoiceConfigStore,
+    is_ready,
+    public,
+)
 
 router = APIRouter()
 
@@ -49,6 +55,7 @@ class VoiceConfigPatch(BaseModel):
     tts_model: Optional[str] = None
     tts_voice: Optional[str] = None
     lucius_model: Optional[str] = None
+    language: Optional[str] = None
 
 
 class StartCallRequest(BaseModel):
@@ -65,6 +72,22 @@ def _automation_owned(session_id: str) -> bool:
 
 def _view(config: dict) -> dict:
     return {**public(config), "ready": is_ready(config), "worker": voice_service.status()}
+
+
+def _check_language(saved: dict, body: VoiceConfigPatch) -> None:
+    """A call in a language its speech-to-text can't hear would just mishear every word."""
+    language = body.language if body.language is not None else saved.get("language") or "en"
+    stt = body.stt_model if body.stt_model is not None else saved.get("stt_model") or ""
+    if language not in LANGUAGES:
+        raise HTTPException(status_code=422, detail="That language isn't available for calls.")
+    if language != "en" and stt in ENGLISH_ONLY_STT:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"That speech-to-text model hears English only. Pick Automatic for "
+                f"{LANGUAGES[language]}."
+            ),
+        )
 
 
 @router.get("/api/voice/config")
@@ -84,7 +107,9 @@ async def update_voice_config(body: VoiceConfigPatch):
             status_code=422,
             detail="The LiveKit URL starts with wss:// (ws:// only for a server on this machine).",
         )
-    config = VoiceConfigStore().update(body.model_dump(exclude_none=True))
+    store = VoiceConfigStore()
+    _check_language(store.get(), body)
+    config = store.update(body.model_dump(exclude_none=True))
     await voice_service.reload()
     return _view(config)
 

@@ -47,7 +47,12 @@ def main() -> int:
 
     link = AppLink(rx, link_out, on_stop=on_stop)
     config = init["config"]
-    agent.RUNTIME = agent.Runtime(app=link, config=config, owner_name=str(init.get("owner") or ""))
+    agent.RUNTIME = agent.Runtime(
+        app=link,
+        config=config,
+        owner_name=str(init.get("owner") or ""),
+        language_name=str(init.get("language_name") or "English"),
+    )
     server = _build_server(config)
     link.send({"op": "ready"})
     loop.run_until_complete(server.run())

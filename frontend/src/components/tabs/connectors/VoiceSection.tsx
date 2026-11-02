@@ -36,6 +36,7 @@ interface VoiceConfig {
   tts_model: string
   tts_voice: string
   lucius_model: string
+  language: string
   has_api_key: boolean
   has_api_secret: boolean
   worker: WorkerStatus
@@ -50,6 +51,7 @@ interface VoiceForm {
   tts_model: string
   tts_voice: string
   lucius_model: string
+  language: string
 }
 
 // LiveKit Cloud's built-in models — no extra key. The front voice must answer in about a
@@ -61,7 +63,24 @@ const FRONT_OPTIONS = [
   { value: 'openai/gpt-4.1-mini', label: 'GPT-4.1 mini' },
   { value: 'openai/gpt-4.1-nano', label: 'GPT-4.1 nano' },
 ]
+// Codes as LiveKit Inference takes them; mirrors backend LANGUAGES (db/voice_config_store.py).
+const LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English' },
+  { value: 'vi', label: 'Vietnamese' },
+  { value: 'zh', label: 'Chinese' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ko', label: 'Korean' },
+  { value: 'hi', label: 'Hindi' },
+  { value: 'id', label: 'Indonesian' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'fr', label: 'French' },
+  { value: 'de', label: 'German' },
+  { value: 'pt', label: 'Portuguese' },
+]
+/** Hears English only — refused beside any other language (backend ENGLISH_ONLY_STT). */
+const ENGLISH_ONLY_STT = new Set(['assemblyai/universal-streaming'])
 const STT_OPTIONS = [
+  { value: 'auto', label: 'Automatic (the best model for your language)' },
   { value: 'assemblyai/universal-streaming', label: 'AssemblyAI Universal (English)' },
   {
     value: 'assemblyai/universal-streaming-multilingual',
@@ -71,7 +90,7 @@ const STT_OPTIONS = [
 ]
 const TTS_OPTIONS = [
   { value: 'cartesia/sonic-3', label: 'Cartesia Sonic 3' },
-  { value: 'cartesia/sonic-turbo', label: 'Cartesia Sonic Turbo' },
+  { value: 'cartesia/sonic-3.6', label: 'Cartesia Sonic 3.6' },
   { value: 'elevenlabs/eleven_flash_v2_5', label: 'ElevenLabs Flash 2.5' },
 ]
 
@@ -85,6 +104,7 @@ function formOf(c: VoiceConfig): VoiceForm {
     tts_model: c.tts_model,
     tts_voice: c.tts_voice || '',
     lucius_model: c.lucius_model || '',
+    language: c.language || 'en',
   }
 }
 
@@ -136,6 +156,7 @@ export function VoiceSection() {
         tts_model: form.tts_model,
         tts_voice: form.tts_voice.trim(),
         lucius_model: form.lucius_model,
+        language: form.language,
       }
       if (form.api_key.trim()) body.api_key = form.api_key.trim()
       if (form.api_secret.trim()) body.api_secret = form.api_secret.trim()
@@ -211,6 +232,17 @@ export function VoiceSection() {
 
   const set = <K extends keyof VoiceForm>(k: K, v: VoiceForm[K]) =>
     setForm((f) => f && { ...f, [k]: v })
+  // Another language beside a model that hears only English would mishear every word:
+  // move to Automatic with it (the owner can still pick another model that hears it).
+  const pickLanguage = (language: string) =>
+    setForm(
+      (f) =>
+        f && {
+          ...f,
+          language,
+          stt_model: language !== 'en' && ENGLISH_ONLY_STT.has(f.stt_model) ? 'auto' : f.stt_model,
+        },
+    )
   const status = workerLine(cfg)
 
   return (
@@ -303,7 +335,27 @@ export function VoiceSection() {
           onChange={(next) => set('lucius_model', next)}
         />
       </FormField>
-      <FormField label="Speech to text" htmlFor="conn-voice-stt">
+      <FormField
+        label="Language"
+        htmlFor="conn-voice-language"
+        help="What you'll speak on calls. Lucius hears it, answers in it, and his voice speaks it."
+      >
+        <Select
+          id="conn-voice-language"
+          value={form.language}
+          options={LANGUAGE_OPTIONS}
+          onChange={(e) => pickLanguage(e.target.value)}
+        />
+      </FormField>
+      <FormField
+        label="Speech to text"
+        htmlFor="conn-voice-stt"
+        error={
+          form.language !== 'en' && ENGLISH_ONLY_STT.has(form.stt_model)
+            ? 'This model hears English only. Pick Automatic.'
+            : undefined
+        }
+      >
         <Select
           id="conn-voice-stt"
           value={form.stt_model}

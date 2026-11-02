@@ -89,7 +89,8 @@ works; from another device the app must be reachable over HTTPS (see
 |---|---|
 | **Front voice** | The model that holds the conversation. *Gemini 2.5 Flash-Lite* is the default: it was the fastest in testing and the only one that asked "go ahead with what?" instead of guessing. |
 | **Lucius on calls** | The model Lucius answers with during a call. Unset, he uses the conversation's own model. A faster one keeps the waits short. |
-| **Speech to text** | Which service turns your voice into text. |
+| **Language** | What you speak on calls: English, Vietnamese, Chinese, Japanese, Korean, Hindi, Indonesian, Spanish, French, German or Portuguese. Lucius hears it, his greeting and check-ins are in it, and his voice speaks it. |
+| **Speech to text** | Which service turns your voice into text. *Automatic* lets LiveKit pick the best one for your language; *AssemblyAI Universal (English)* hears English only, so another language moves you to Automatic. |
 | **Voice** and **Voice id** | Which service speaks, and which of its voices (blank = its default). |
 
 The LiveKit key and secret are stored like every connector credential: never shown to Lucius,

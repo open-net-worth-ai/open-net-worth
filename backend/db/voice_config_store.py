@@ -30,7 +30,26 @@ CONFIG_DEFAULTS: dict = {
     "tts_model": "cartesia/sonic-3",
     "tts_voice": "",
     "lucius_model": "",
+    "language": "en",
 }
+
+# The languages a call can be held in: speech-to-text listens for it, the voice speaks it, the
+# front voice words its own lines in it. Codes are what LiveKit Inference takes.
+LANGUAGES: dict[str, str] = {
+    "en": "English",
+    "vi": "Vietnamese",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "hi": "Hindi",
+    "id": "Indonesian",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "pt": "Portuguese",
+}
+# Speech-to-text models that hear English only (LiveKit's model table, 2026-11-03).
+ENGLISH_ONLY_STT = frozenset({"assemblyai/universal-streaming"})
 
 
 def _merged(row: dict | None, secrets: dict) -> dict:

@@ -17,7 +17,7 @@ import threading
 import time
 from typing import Optional
 
-from backend.db.voice_config_store import VoiceConfigStore, is_ready
+from backend.db.voice_config_store import LANGUAGES, VoiceConfigStore, is_ready
 from backend.services.feature_flags import enabled as flag_enabled
 
 log = logging.getLogger(__name__)
@@ -138,7 +138,12 @@ async def start() -> None:
     process = WorkerProcess(app_loop, lambda _code: _crashed(app_loop))
     _worker.process = process
     try:
-        started = await asyncio.to_thread(process.start, {"config": config, "owner": _owner_name()})
+        init = {
+            "config": config,
+            "owner": _owner_name(),
+            "language_name": LANGUAGES.get(config.get("language") or "en", "English"),
+        }
+        started = await asyncio.to_thread(process.start, init)
     except Exception:  # noqa: BLE001 — reported on the settings page, never fatal
         log.exception("voice worker failed to start")
         started = False

@@ -358,6 +358,7 @@ def bare_desk(agent, said: list | None = None):
     desk_.rearmed = 0
     if said is not None:
         desk_._say = lambda text, **_: said.append(text)
+        desk_._line = lambda intent: said.append(intent)
         desk_.hang_up_after_speech = lambda: setattr(desk_, "hung_up", True)
 
         class _Session:
@@ -375,13 +376,13 @@ def test_a_silent_line_is_checked_on_once_then_hung_up():
     said: list[str] = []
     desk_ = bare_desk(agent, said)
     desk_.away()
-    assert said == ["Are you still there?"] and not desk_.hung_up
+    assert said == [agent.CHECK_IN] and not desk_.hung_up
     assert desk_.rearmed == 1  # the next silence must count too (it never did, live call)
     desk_.heard("yes, sorry")
     desk_.away()
-    assert said[-1] == "Are you still there?" and not desk_.hung_up
+    assert said[-1] == agent.CHECK_IN and not desk_.hung_up
     desk_.away()
-    assert "hang up" in said[-1] and desk_.hung_up
+    assert said[-1] == agent.HANG_UP and desk_.hung_up
 
 
 def test_no_check_in_while_lucius_works_or_a_change_awaits_approval():
@@ -411,7 +412,7 @@ def test_asked_to_wait_it_waits_then_checks_in():
         desk_.away()
         assert said == []  # on hold: nothing yet
         await asyncio.sleep(0.15)
-        assert said == ["Are you still there?"]
+        assert said == [agent.CHECK_IN]
         desk_.hold(120)
         desk_.heard("okay I'm back")
         assert desk_._hold_until == 0.0 and desk_._hold_timer is None
@@ -500,8 +501,7 @@ def test_every_line_spoken_on_the_call_reaches_the_chat_once():
         desk_.item_added("assistant", "Hi, it's Lucius.")  # the greeting
         desk_.item_added("user", "how are you")
         desk_.item_added("assistant", "Doing well!")  # small talk
-        desk_._say("Are you still there?")  # a line of our own…
-        desk_.item_added("assistant", "Are you still there?")  # …arrives here like any other
+        desk_.item_added("assistant", "Are you still there?")  # a line of our own, like any other
         desk_._say("You spent 40 dollars.", answer=True)
         desk_.item_added("assistant", "You spent 40 dollars.")  # his turn already has it
         desk_._current = "what did I spend"
@@ -514,3 +514,17 @@ def test_every_line_spoken_on_the_call_reaches_the_chat_once():
         ]
 
     asyncio.run(run())
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_a_call_can_be_held_in_vietnamese_but_never_with_an_english_only_ear(client):
+    """Owner, 2026-11-03: a call in Vietnamese went unheard — the speech-to-text was pinned to
+    English. The language is a setting now, refused beside a model that hears English only."""
+    refused = client.put("/api/voice/config", json={"language": "vi"})  # default STT: English-only
+    assert refused.status_code == 422 and "English only" in refused.json()["detail"]
+    ok = client.put("/api/voice/config", json={"language": "vi", "stt_model": "auto"})
+    assert ok.status_code == 200 and ok.json()["language"] == "vi"
+    assert client.put("/api/voice/config", json={"language": "xx"}).status_code == 422
+    # Switching back to an English-only model is refused while the call is in Vietnamese.
+    back = client.put("/api/voice/config", json={"stt_model": "assemblyai/universal-streaming"})
+    assert back.status_code == 422

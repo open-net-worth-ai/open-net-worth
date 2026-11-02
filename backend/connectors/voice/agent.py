@@ -43,6 +43,7 @@ log = logging.getLogger(__name__)
 
 FRONT_INSTRUCTIONS = """\
 You are Lucius, {owner}'s personal finance assistant, on a live voice call with {owner}.
+The call is in {language}: always speak {language}.
 To {owner} there is only you: speak as yourself, in the first person. Never mention another
 assistant, a colleague, "the real Lucius", a back office, a handoff, or "asking" anyone — when
 you look something up, YOU are looking it up ("Let me check.", "One sec.").
@@ -81,6 +82,22 @@ Speak like a person on the phone: short sentences, no lists, no markdown.
 """
 
 
+# Lines of our own, worded by the front voice in the call's language (see ``LuciusDesk._line``).
+LINE_INSTRUCTION = (
+    "Say this now, in one short sentence, in your own words, in the call's language — and "
+    "nothing else: {intent}"
+)
+GREETING = (
+    'Pick up the call: greet {owner}, addressing them exactly as "{owner}", say it\'s Lucius, '
+    "and ask what you can do for them. One or two short sentences, in the call's language."
+)
+CHECK_IN = "ask whether they're still there"
+HANG_UP = "say you'll hang up for now and they can call back any time"
+FAILED = "say you hit a problem with that request and ask if they want you to try again"
+SLOW_LOOKUP = "say the {noun} lookup is taking longer than usual and to hang on"
+STILL_WORKING = "say you're still working on it"
+
+
 @dataclass
 class Runtime:
     """What the worker needs: its line to the app and its settings, set by ``worker.main``."""
@@ -88,14 +105,17 @@ class Runtime:
     app: "AppLink"
     config: dict
     owner_name: str = ""
+    language_name: str = "English"
 
 
 RUNTIME: Runtime | None = None
 
 
 class FrontAgent(Agent):
-    def __init__(self, owner: str, lucius: "LuciusDesk") -> None:
-        super().__init__(instructions=FRONT_INSTRUCTIONS.format(owner=owner or "the owner"))
+    def __init__(self, owner: str, language: str, lucius: "LuciusDesk") -> None:
+        super().__init__(
+            instructions=FRONT_INSTRUCTIONS.format(owner=owner or "the owner", language=language)
+        )
         self._lucius = lucius
 
     @function_tool
@@ -218,13 +238,13 @@ class LuciusDesk:
             return
         if not self._checked_in:
             self._checked_in = True
-            self._say("Are you still there?")
+            self._line(CHECK_IN)
             # LiveKit flags "away" once per silence and keeps the owner away through our own
             # line, so the next silence never counted and the call stayed open (live call,
             # 2026-11-03): mark them listening again, so the timer restarts once we've spoken.
             self._session.reset_away_timer()
             return
-        self._say("I'll hang up for now. Call me back any time.")
+        self._line(HANG_UP)
         self.hang_up_after_speech()
 
     def _say(self, text: str, *, answer: bool = False) -> None:
@@ -238,6 +258,17 @@ class LuciusDesk:
             self._session.say(text, add_to_chat_ctx=True)
         except RuntimeError:
             log.info("voice: the call ended before Lucius's answer was ready; it is in the chat")
+
+    def _line(self, intent: str) -> None:
+        """Say a line of our own — a check-in, a goodbye, a progress note — in the front
+        voice's own words, so it comes out in the call's language and manner (fixed English
+        strings didn't, on a call held in Vietnamese). ``intent`` is what to get across."""
+        try:
+            self._session.generate_reply(
+                instructions=LINE_INSTRUCTION.format(intent=intent), tool_choice="none"
+            )
+        except RuntimeError:
+            log.info("voice: the call ended before a line could be said")
 
     def item_added(self, role: str, text: str) -> None:
         """A line joined the call's conversation: put it in the chat (see ``_answers``)."""
@@ -314,7 +345,7 @@ class LuciusDesk:
             except Exception:  # noqa: BLE001 — a failed request must not end the call
                 log.exception("voice: Lucius request failed")
                 self._current = None  # no longer working: this line belongs in the chat
-                self._say("Sorry, I hit a problem with that one. Want me to try again?")
+                self._line(FAILED)
             finally:
                 self._current, self._doing = None, ""
 
@@ -359,10 +390,10 @@ class LuciusDesk:
             for ref, (noun, started) in running.items():
                 if ref not in told and now - started >= self.SLOW_S:
                     told.add(ref)
-                    self._say(f"The {noun} lookup is taking longer than usual, hang on.")
+                    self._line(SLOW_LOOKUP.format(noun=noun))
             if not running and "think" not in told and now - last_news >= 2 * self.SLOW_S:
                 told.add("think")
-                self._say("Still working on it.")
+                self._line(STILL_WORKING)
         return text, approval
 
     async def _after_approval(self) -> None:
@@ -438,10 +469,14 @@ async def entrypoint(ctx: JobContext) -> None:
         else {}
     )
     tts_kwargs = {"voice": cfg["tts_voice"]} if cfg.get("tts_voice") else {}
+    language = cfg.get("language") or "en"
     session = AgentSession(
-        stt=inference.STT(cfg["stt_model"], language="en", **stt_kwargs),
+        # The call's language, for hearing and for speaking ("auto" lets LiveKit pick the
+        # speech-to-text model that hears it). It was pinned to English: Vietnamese went
+        # unheard (owner, 2026-11-03).
+        stt=inference.STT(cfg["stt_model"], language=language, **stt_kwargs),
         llm=inference.LLM(cfg["front_model"]),
-        tts=inference.TTS(cfg["tts_model"], **tts_kwargs),
+        tts=inference.TTS(cfg["tts_model"], language=language, **tts_kwargs),
         vad=ctx.proc.userdata.get("vad") or silero.VAD.load(),
         turn_detection="stt",
         # Off: preemptive replies run the front model on a PARTIAL sentence, and its tool call
@@ -476,7 +511,7 @@ async def entrypoint(ctx: JobContext) -> None:
 
     owner = runtime.owner_name
     await session.start(
-        agent=FrontAgent(owner, lucius),
+        agent=FrontAgent(owner, runtime.language_name, lucius),
         room=ctx.room,
         # Only the owner's browser (the identity its token names) is listened to, and only by
         # voice: no typed text into the room.
@@ -486,11 +521,7 @@ async def entrypoint(ctx: JobContext) -> None:
     )
     await _wait_for_caller(ctx.room)
     await asyncio.sleep(1.5)  # one ring before "picking up"; an instant greeting cut the ring off
-    session.say(
-        f"Hi {owner}, it's Lucius. What can I do for you?"
-        if owner
-        else "Hi, it's Lucius. What can I do for you?"
-    )
+    session.generate_reply(instructions=GREETING.format(owner=owner or "them"), tool_choice="none")
 
 
 async def _wait_for_caller(room: rtc.Room) -> None:
