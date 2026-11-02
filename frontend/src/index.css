@@ -18664,7 +18664,8 @@ body.hide-amounts .money * {
 }
 .mp-trigger--field {
   width: 100%;
-  padding: var(--space-3) var(--space-5);
+  /* 1px less than the select's padding: the chevron's box makes this button 2px taller. */
+  padding: calc(var(--space-3) - 1px) var(--space-5);
   font-size: var(--text-md);
 }
 .mp-trigger-text {
