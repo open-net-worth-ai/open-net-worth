@@ -12,7 +12,7 @@ import { NativeNotifications } from './notifications';
 import { Preferences, settingsPatch, type SettingsPatch } from './preferences';
 import { setKeepAwake } from './keep-awake';
 import { handOverToInstaller, showUpdateProgress } from './update-progress';
-import { UPDATE_HANDOFF_FLAG, macBundlePath, notificationsOn, pendingMacInstall, reopenAfterInstall } from './update-handoff';
+import { UPDATE_HANDOFF_FLAG, installNotice, macBundlePath, notificationsOn, pendingMacInstall, reopenAfterInstall } from './update-handoff';
 import { bundledRuntime, type RuntimeConfig } from './runtime';
 import { externalUrl } from './security';
 import { DesktopWindow } from './window';
@@ -128,7 +128,10 @@ if (squirrelStartup || !app.requestSingleInstanceLock()) {
     // Squirrel.Mac installs a downloaded update as the app quits, so the quit says so instead of vanishing.
     if (process.platform === 'darwin' && updates?.phase === 'ready') showUpdateProgress(updates.readyVersion, false);
     // Every wait inside shutdown() is bounded, but quitting must not depend on that staying true.
-    void Promise.race([shutdown(), new Promise<void>(done => setTimeout(done, QUIT_DEADLINE_MS).unref())]).finally(() => app.exit(0));
+    const installing = process.platform === 'darwin' && updates?.phase === 'ready' ? updates.readyVersion : undefined;
+    void Promise.race([shutdown(), new Promise<void>(done => setTimeout(done, QUIT_DEADLINE_MS).unref())])
+      .then(() => installing !== undefined && preferences?.current.notifications ? announceInstall(installing, true) : undefined)
+      .finally(() => app.exit(0));
   });
   process.on('SIGTERM', () => app.quit());
   process.on('SIGINT', () => app.quit());
@@ -165,12 +168,18 @@ async function handOffToUpdateInstall(): Promise<boolean> {
   desktopEvent({ event: 'desktop.update_install_handoff', version: pending.version });
   reopenAfterInstall(pending.pid, bundle);
   const settings = await readFile(join(app.getPath('userData'), 'desktop-settings.json'), 'utf8').catch(() => '');
-  if (notificationsOn(settings) && Notification.isSupported()) {
-    const notification = new Notification({ title: pending.version ? `Installing Open Net Worth ${pending.version}…` : 'Installing update…', body: 'Open Net Worth opens again when it is done. Your book is not affected.' });
-    await new Promise<void>(done => { notification.once('show', () => done()); setTimeout(done, 1_000).unref(); notification.show(); });
-  }
+  if (notificationsOn(settings)) await announceInstall(pending.version, false);
   app.exit(0);
   return true;
+}
+
+// ShipIt keeps working after this process is gone, on a busy machine for minutes, with no window of
+// ours left to say so. Resolves once the system has the notification (bounded), so exiting right
+// after cannot drop it. The caller decides whether notifications are wanted.
+async function announceInstall(version: string | null, closed: boolean): Promise<void> {
+  if (!Notification.isSupported() || qaInactiveMode(app.isPackaged, process.env)) return;
+  const notification = new Notification(installNotice(version, closed));
+  await new Promise<void>(done => { notification.once('show', () => done()); setTimeout(done, 1_000).unref(); notification.show(); });
 }
 
 // The window's close handler hides rather than closes, so Squirrel's own window teardown would
@@ -179,7 +188,8 @@ function installUpdate(): void {
   if (quitting) return;
   installingUpdate = true;
   const progress = showUpdateProgress(updates?.readyVersion ?? null, true);
-  void shutdown().finally(() => {
+  const version = updates?.readyVersion ?? null;
+  void shutdown().then(() => process.platform === 'darwin' && preferences?.current.notifications ? announceInstall(version, true) : undefined).finally(() => {
     autoUpdater.once('error', () => app.exit(0));
     setTimeout(() => app.exit(0), 30_000).unref();
     try { handOverToInstaller(progress, () => autoUpdater.quitAndInstall()); } catch { app.exit(0); }

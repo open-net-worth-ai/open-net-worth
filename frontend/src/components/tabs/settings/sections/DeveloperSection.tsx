@@ -342,12 +342,12 @@ function ScriptSkills({ toast }: SectionProps) {
 export function DeveloperSection({ toast }: SectionProps) {
   return (
     <>
+      <ExperimentalPanel toast={toast} />
       <LogViewer toast={toast} />
       <CodeExecution toast={toast} />
       <SqlAccessPanel toast={toast} />
       <Extensions toast={toast} />
       <ScriptSkills toast={toast} />
-      <ExperimentalPanel toast={toast} />
     </>
   )
 }
