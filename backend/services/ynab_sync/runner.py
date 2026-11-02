@@ -213,12 +213,24 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
         tally["deferred"] += len(st["pending"])
         recorder.phase("reconciling Assigned")
         _assigned_phase(ctx, client, base, change, tally, first, st, fresh)
+        _compared(base, fresh)
         starts.review(ctx, st)
     finally:
         base.flush()
         delta.save_changes(mirror_store, loaded, mirror, change.touched, change.full)
         sync_state.save_meta(meta)
     st.update(server_knowledge=change.knowledge, audit_cursor=upto, bootstrapped=True)
+
+
+def _compared(base: Baselines, fresh: set[str]) -> None:
+    """The Assigned step has compared these categories' figures afresh: from now on what it
+    recorded is the agreed baseline. Cleared only here, so a run that failed before this point
+    compares them again next time."""
+    for ycid in fresh:
+        p = base.cats.get(ycid)
+        if p is not None and p.get("resume"):
+            p["resume"] = False
+            base.set_cat(p)
 
 
 def _worth_storing(trigger: str, error: str | None, previous: dict | None, rec) -> bool:

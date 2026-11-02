@@ -1054,3 +1054,66 @@ def test_a_paired_category_put_in_an_envelope_later_does_not_overwrite_ynabs_old
     assert months_sent(world) == [] and ynab_assigned(world, "gifts") == {0: 300_000}
     (item,) = conflict_items()
     assert item["entity"] == "assigned" and item["ynab"] == {"amount": 300.0}
+
+
+def test_a_run_that_fails_after_an_envelope_change_still_compares_afresh_next_time(
+    world,  # noqa: F811
+    monkeypatch,
+):
+    """The baselines are dropped when the envelope changes; if the run then fails before the
+    Assigned step, the next run must compare again, not find no baseline and push over YNAB."""
+    from backend.core.errors import ExternalServiceError
+    from backend.services.ynab_sync import txn_sync
+
+    enable()
+    sync()
+    before = ynab_assigned(world, "fun")
+    other = change(type="envelope_create", name="Other", group_id=group("Wants")["id"])["envelope"]
+    for offset, amount in {-2: 10.0, -1: 20.0, 0: 30.0}.items():
+        change(type="assign", month=month_of(world, offset), envelope_id=other["id"], amount=amount)
+    change(
+        type="envelope_split_category",
+        envelope_id=env("Fun Money")["id"],
+        category_id=cat("Fun Money")["id"],
+    )
+    change(
+        type="envelope_add_category", envelope_id=other["id"], category_id=cat("Fun Money")["id"]
+    )
+    settle = txn_sync.settle
+
+    def outage(*a, **k):
+        raise ExternalServiceError("YNAB is down")
+
+    from backend.services.ynab_sync import runner
+
+    monkeypatch.setattr(txn_sync, "settle", outage)
+    runner._locked_run("manual")
+    assert ynab_sync.status()["last_run"]["ok"] is False
+    monkeypatch.setattr(txn_sync, "settle", settle)
+    sync()
+    assert months_sent(world) == [] and ynab_assigned(world, "fun") == before
+    items = conflict_items()
+    assert len(items) == 3 and {i["entity"] for i in items} == {"assigned"}
+
+
+def test_give_it_one_after_the_category_joined_an_envelope_is_moot_not_an_error(world):  # noqa: F811
+    enable()
+    sync()
+    change(
+        type="envelope_split_category",
+        envelope_id=env("Fun Money")["id"],
+        category_id=cat("Fun Money")["id"],
+    )
+    sync()
+    ynab_stub.ynab_budget(world.state, 0, "fun", 120_000)
+    sync()
+    (item,) = conflict_items()
+    change(
+        type="envelope_add_category",
+        envelope_id=env("Groceries")["id"],
+        category_id=cat("Fun Money")["id"],
+    )
+    ynab_sync.resolve.resolve(item["id"], "ynab")  # quietly nothing to give, no raw-id error
+    assert env("Groceries")["category_ids"].count(cat("Fun Money")["id"]) == 1
+    sync()
+    assert not [i for i in conflict_items() if "Give it one" in i["reason"]]

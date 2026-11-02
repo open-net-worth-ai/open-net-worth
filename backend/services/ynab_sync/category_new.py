@@ -300,7 +300,10 @@ class News(Pairs):
             self.base.set_cat(p)
             return {}
         self.base.drop_assigned_of(ycid)
-        p["env"], p["had_env"], p["resume"] = now, True, False
+        # ``resume`` stays set until the Assigned step has compared the figures (the runner
+        # clears it): a run that fails in between redoes the comparison next time, instead of
+        # finding no baseline and pushing this book's figures over YNAB's.
+        p["env"], p["had_env"], p["resume"] = now, True, True
         self.fresh.add(ycid)
         self.base.set_cat(p)
         return figures
@@ -374,6 +377,7 @@ class News(Pairs):
                     or p.get("gone")
                     or bool(p["env"])
                     or p["category"] not in self.book.rows
+                    or p["category"] in self.book.env_of  # it has joined an envelope since
                 )
             else:
                 continue

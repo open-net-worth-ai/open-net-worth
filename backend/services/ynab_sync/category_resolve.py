@@ -151,6 +151,8 @@ def _budget(sync: News, item: dict, keep: str) -> None:
     cat = sync.book.rows.get(p["category"]) if p else None
     if p is None or cat is None or p.get("gone") or p["env"]:
         return
+    if sync.book.env_of.get(cat["id"]) is not None:
+        return  # it has joined an envelope since the question was asked: nothing to give
     if not sync.can_pull:
         raise ConflictError("In To YNAB mode this book isn't changed. Switch to Both ways first.")
     env = sync.give_envelope_now(ycid, p, cat)
