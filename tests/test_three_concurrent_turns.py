@@ -84,7 +84,11 @@ async def test_three_turns_on_three_sessions_run_concurrently_and_all_complete()
 
         # All three reached their parked point — proves they were scheduled concurrently,
         # not one after another (a serialized dispatcher would have only the FIRST reached).
-        await asyncio.wait_for(asyncio.gather(*(reached[sid].wait() for sid in reached)), timeout=1)
+        # Each turn parks until released, so a serialized one never gets all three here however
+        # long we wait; the slack is for the first provider build's cold SDK import (>1s).
+        await asyncio.wait_for(
+            asyncio.gather(*(reached[sid].wait() for sid in reached)), timeout=10
+        )
 
         # The turn registry holds all three live entries SIMULTANEOUSLY — no cap, nothing
         # queuing on count.

@@ -198,7 +198,7 @@ def test_it_is_a_ledger_write_that_asks_by_default_and_is_not_always_offered():
 async def test_rows_carry_needs_review_so_the_agent_can_find_what_to_approve():
     row = _flagged("Findable")
 
-    out, _ = await execute_tool("get_transactions", {})
+    out, _ = await execute_tool("get_transactions", {"date_from": "2026-10-01"})
     listed = {t["id"]: t for t in json.loads(out)["transactions"]}
 
     assert listed[row["id"]]["needs_review"] is True
