@@ -15,6 +15,13 @@
     { "glob": "backend/ai/tools/_confirm_gate*", "docs": ["docs/product/lucius/permissions.md", "docs/product/lucius/permissions-v2.md", "docs/product/lucius/confirm-cards.md"] },
     { "glob": "backend/services/tool_permissions*", "docs": ["docs/product/lucius/permissions.md", "docs/product/lucius/permissions-v2.md"] },
     { "glob": "backend/ai/tools/**", "docs": ["docs/product/lucius", "docs/ai"] },
+    {
+      "glob": "backend/ai/search/**",
+      "docs": [
+        "docs/product/connectors/web-search.md",
+        "docs/product/connectors/web-search-reads-results.md"
+      ]
+    },
     { "glob": "backend/ai/**", "docs": ["docs/product/lucius"] },
     { "glob": "frontend/src/components/tabs/lucius/**", "docs": ["docs/product/lucius"] },
     { "glob": "frontend/src/components/chat/**", "docs": ["docs/product/lucius"] },

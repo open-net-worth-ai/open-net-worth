@@ -6,6 +6,7 @@ from scripts.build_desktop_runtime import (
     prune_runtime,
     python_executable,
     runtime_manifest,
+    site_packages_dir,
     validate_runtime,
 )
 
@@ -100,3 +101,23 @@ def test_prune_still_removes_tcl_tk_from_the_posix_lib_folder(tmp_path):
     assert not (lib / "tcl8.6").exists() and not (lib / "thread2.8.9").exists()
     assert not (lib / "libtk8.6.dylib").exists()
     assert (lib / "python3.12" / "threading.py").exists()
+
+
+def test_site_packages_follows_the_host_layout_on_a_native_windows_build(tmp_path):
+    windows = tmp_path / "python" / "Lib" / "site-packages"
+    windows.mkdir(parents=True)
+    assert site_packages_dir(tmp_path, host="win32") == windows
+
+
+def test_site_packages_follows_the_posix_layout_elsewhere(tmp_path):
+    posix = tmp_path / "python" / "lib" / "python3.12" / "site-packages"
+    posix.mkdir(parents=True)
+    assert site_packages_dir(tmp_path, host="darwin") == posix
+    assert site_packages_dir(tmp_path, host="linux") == posix
+
+
+def test_a_missing_site_packages_names_where_it_looked(tmp_path):
+    with pytest.raises(RuntimeError, match="site-packages"):
+        site_packages_dir(tmp_path, host="win32")
+    with pytest.raises(RuntimeError, match="found 0"):
+        site_packages_dir(tmp_path, host="linux")

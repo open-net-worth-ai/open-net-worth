@@ -1057,6 +1057,7 @@ def _canonical_tool_names(names: list[str], *, keep_external: bool = False) -> f
 
 
 def _canonical_always_allowed_tools(always_allowed: list[dict]) -> frozenset[str]:
+    from backend.ai.search.switch import with_stand_ins
     from backend.ai.tools.registry import registered_tool_names
 
     live = set(registered_tool_names())
@@ -1075,7 +1076,7 @@ def _canonical_always_allowed_tools(always_allowed: list[dict]) -> frozenset[str
             canonical = name.strip()
             if canonical in live:
                 result.add(canonical)
-    return frozenset(result)
+    return frozenset(with_stand_ins(result))
 
 
 def _progress_patch(

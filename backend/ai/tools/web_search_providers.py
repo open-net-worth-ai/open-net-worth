@@ -61,6 +61,7 @@ from backend.ai.search.base import (
     build_provider,
     fetch_result_payload,
 )
+from backend.ai.search.switch import search_results
 from backend.ai.tools.misc import (
     ACTIVE_PROVIDER_VERBS,
     FetchPageInput,
@@ -106,7 +107,7 @@ async def _search_via(spec: ProviderSpec, input_data: dict) -> tuple[str, None]:
     provider = build_provider(spec.id, cfg)
     logger.info("%s_search: %s", spec.id, query)
     try:
-        results = await provider.search(query, max_results)
+        results = await search_results(provider, query, max_results)
     except Exception as exc:
         logger.error("%s_search failed: %s", spec.id, exc)
         raise

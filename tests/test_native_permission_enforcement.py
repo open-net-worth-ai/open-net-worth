@@ -317,6 +317,11 @@ def test_every_dispatch_site_consults_the_permission_store():
         # effective_level` itself (the dependency rule). Reads to DISPLAY, same shape as
         # `api/tool_permissions.py` above, never to decide whether a call fires.
         "services/connectors.py",
+        # `with_stand_ins`: while `search_reads_results` is on, an Automation's `x_search` entry
+        # counts as one for `web_search` unless the owner stored Ask/Block on `web_search`. It
+        # reads that level to REFUSE an inherited grant over a restriction; the call itself is
+        # still decided by `_confirm_gate.effective_level` at dispatch.
+        "ai/search/switch.py",
     }
     callers: dict[str, set[str]] = {}
     for path in backend.rglob("*.py"):
