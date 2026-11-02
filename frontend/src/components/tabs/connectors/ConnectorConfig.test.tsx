@@ -13,11 +13,20 @@ import { ConnectorDetail } from './ConnectorDetail'
 import { ConnectorConfig, hasConfigForm } from './ConnectorConfig'
 import { toEntry } from './adapter'
 import type { Connector } from './types'
+import { overrideFlagsForTests } from '../../../hooks/useFlag'
 
 const authFetch = vi.hoisted(() => vi.fn())
 vi.mock('../../../api/client', () => ({ authFetch }))
 
-afterEach(cleanup)
+// The YNAB card's Two-way sync link is behind this flag; on, so the card is complete.
+let restoreFlags: () => void = () => {}
+beforeEach(() => {
+  restoreFlags = overrideFlagsForTests({ ynab_import_and_sync: true })
+})
+afterEach(() => {
+  restoreFlags()
+  cleanup()
+})
 
 // ── wire fixtures ───────────────────────────────────────────────────────────
 

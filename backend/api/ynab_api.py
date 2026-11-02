@@ -147,7 +147,7 @@ def _migration(kind: str, body: MigrationRequest) -> dict:
 @router.get("/api/ynab/migration")
 def ynab_migration_status():
     """The newest migration run and whether a token is saved. Never the token."""
-    return ynab_migration.status()
+    return _sync(ynab_migration.status)
 
 
 @router.post("/api/ynab/migration/preview", status_code=202)
@@ -190,7 +190,7 @@ def _sync(call, *args):
 @router.get("/api/ynab/sync")
 def ynab_sync_status():
     """Schedule, last and next run, what the last run did, and the review list. Never the token."""
-    return ynab_sync.status()
+    return _sync(ynab_sync.status)
 
 
 @router.put("/api/ynab/sync/settings")
@@ -206,4 +206,4 @@ def ynab_sync_run():
 
 @router.post("/api/ynab/sync/conflicts/{conflict_id}/resolve")
 def ynab_sync_resolve(conflict_id: str, body: SyncResolution):
-    return _sync(ynab_sync.resolve.resolve, conflict_id, body.keep)
+    return _sync(ynab_sync.resolve_item, conflict_id, body.keep)

@@ -15,6 +15,7 @@ import type { Automation, AutomationDraft, AutomationRun } from '../../api/autom
 import { AUTOMATIONS_REVIEW_DRAFT_SPEC } from '../../lucius/screenCommands'
 import { useRegisterScreenCommands } from '../../lucius/useScreenContract'
 import { useDataVersion } from '../../hooks/useDataVersion'
+import { useFlag } from '../../hooks/useFlag'
 import { useViewScroll } from '../../hooks/useViewScroll'
 import { Button, ErrorState, Modal, PageHeader, PageTabs, TabSkeleton } from '../ui'
 import { AutomationDetail } from './automations/AutomationDetail'
@@ -24,7 +25,7 @@ import { useKeepAwakeSettled } from './automations/KeepAwakeBanner'
 import { ALL_TEMPLATES } from './automations/automationTemplates'
 import { DataSyncView } from './automations/datasync/DataSyncView'
 import { YnabSyncDetail } from './automations/datasync/YnabSyncDetail'
-import { YNAB_SYNC_KEY, useYnabSync } from './automations/datasync/ynabSync'
+import { YNAB_FLAG, YNAB_SYNC_KEY, useYnabSync } from './automations/datasync/ynabSync'
 import {
   EMPTY_AUTOMATION_OPTIONS,
   missingTriggerFields,
@@ -33,6 +34,10 @@ import {
 import './automations.css'
 
 type AutomationsView = 'lucius' | 'sync'
+
+// The masthead while the ynab_import_and_sync flag is off: one list, no Data sync tab.
+const LUCIUS_ONLY_SUBTITLE =
+  'Run on a schedule or when something happens. Every run is a conversation you can pick back up.'
 
 const VIEW_SUBTITLES: Record<AutomationsView, string> = {
   lucius:
@@ -60,11 +65,13 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
   const selectedRunId = typeof search.run === 'string' ? search.run : null
   const templateKey = typeof search.template === 'string' ? search.template : null
   // Two views: Lucius's Automations, and data syncs (fixed rules, no AI) — today only the
-  // two-way YNAB sync, whose page `?sync=ynab` opens (`report` = one of its runs).
-  const syncKey = search.sync === YNAB_SYNC_KEY ? search.sync : null
-  const view: AutomationsView = syncKey || search.view === 'sync' ? 'sync' : 'lucius'
+  // two-way YNAB sync, whose page `?sync=ynab` opens (`report` = one of its runs). Behind the
+  // ynab_import_and_sync flag: off (or still loading), only the Lucius list, as before.
+  const syncOn = useFlag(YNAB_FLAG) === true
+  const syncKey = syncOn && search.sync === YNAB_SYNC_KEY ? search.sync : null
+  const view: AutomationsView = syncOn && (syncKey || search.view === 'sync') ? 'sync' : 'lucius'
   const reportId = syncKey && typeof search.report === 'string' ? search.report : null
-  const ynabSync = useYnabSync()
+  const ynabSync = useYnabSync(false, syncOn)
   const [automations, setAutomations] = useState<Automation[]>([])
   const automationsRef = useRef(automations)
   useEffect(() => {
@@ -495,22 +502,27 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           the tab bar) is the way back, so repeating "Automations" here is redundancy. */}
       {/* Up while the list loads too — only the data is a skeleton; the title never pops in. */}
       {!selectedAutomationId && !syncKey && (
-        <div className="rd-masthead a3-masthead--tabs" data-od-id="automations-masthead">
+        <div
+          className={syncOn ? 'rd-masthead a3-masthead--tabs' : 'rd-masthead'}
+          data-od-id="automations-masthead"
+        >
           <PageHeader
             className="a3-masthead-head"
             title="Automations"
-            subtitle={VIEW_SUBTITLES[view]}
+            subtitle={syncOn ? VIEW_SUBTITLES[view] : LUCIUS_ONLY_SUBTITLE}
           />
-          <PageTabs
-            className="a3-views"
-            ariaLabel="Kind of automation"
-            value={view}
-            onChange={setView}
-            tabs={[
-              { key: 'lucius', label: 'Lucius' },
-              { key: 'sync', label: 'Data sync', badge: ynabSync.toReview || undefined },
-            ]}
-          />
+          {syncOn && (
+            <PageTabs
+              className="a3-views"
+              ariaLabel="Kind of automation"
+              value={view}
+              onChange={setView}
+              tabs={[
+                { key: 'lucius', label: 'Lucius' },
+                { key: 'sync', label: 'Data sync', badge: ynabSync.toReview || undefined },
+              ]}
+            />
+          )}
         </div>
       )}
       {actionError && (

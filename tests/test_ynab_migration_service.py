@@ -18,6 +18,9 @@ from backend.services.aggregation import ynab as ynab_service
 from backend.services.ynab_migration import job as job_module
 from tests import ynab_stub
 
+# Behind the ynab_import_and_sync flag; tests/test_ynab_import_and_sync_flag.py proves it off.
+pytestmark = pytest.mark.flags(ynab_import_and_sync=True)
+
 
 @pytest.fixture
 def ynab(db_isolated, monkeypatch):

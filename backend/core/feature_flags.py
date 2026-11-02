@@ -61,9 +61,21 @@ class Flag:
 
 
 # THE REGISTRY. Declare a flag here and nowhere else; retire it by deleting its entry in the
-# same PR that deletes its old code path. Empty on purpose: the mechanism ships before any
-# feature needs it (the test suite declares its own example flag).
-FLAGS: tuple[Flag, ...] = ()
+# same PR that deletes its old code path.
+FLAGS: tuple[Flag, ...] = (
+    Flag(
+        name="ynab_import_and_sync",
+        description=(
+            "Import a whole YNAB plan, then keep it and this book in step both ways on a "
+            "schedule. Adds the Data sync tab in Automations and the Two-way sync button on "
+            "the YNAB connector."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 2),
+        remove_by=date(2027, 2, 1),
+    ),
+)
 
 
 def build_registry(flags: tuple[Flag, ...]) -> dict[str, Flag]:

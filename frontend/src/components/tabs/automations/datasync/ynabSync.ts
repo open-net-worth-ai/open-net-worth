@@ -6,6 +6,8 @@ import { INTERVAL_LABELS, useSyncStatus, type SyncStatus } from '../../imports/s
 // /api/imports/runs, and this reads them into the shape the Automations list and detail need.
 
 export const YNAB_SYNC_KEY = 'ynab'
+/** The feature flag the plan import and the two-way sync ship behind (core/feature_flags.py). */
+export const YNAB_FLAG = 'ynab_import_and_sync'
 export const YNAB_SYNC_NAME = 'Two-way sync with YNAB'
 export const YNAB_SYNC_BLURB =
   'Keeps your YNAB plan and this book in step, both directions: transactions and each month’s Assigned.'
@@ -29,12 +31,15 @@ export interface YnabSyncSummary {
   loading: boolean
 }
 
-export function useYnabSync(includeArchived = false): YnabSyncSummary & {
+export function useYnabSync(
+  includeArchived = false,
+  enabled = true,
+): YnabSyncSummary & {
   refresh: () => void
   error: unknown
 } {
-  const sync = useSyncStatus()
-  const runs = useRuns('ynab', includeArchived)
+  const sync = useSyncStatus(enabled)
+  const runs = useRuns('ynab', includeArchived, enabled)
   const status = sync.data
   const lastImport =
     runs.data?.find((r) => r.kind === 'import' && r.status === 'done' && !r.archived_at) ?? null

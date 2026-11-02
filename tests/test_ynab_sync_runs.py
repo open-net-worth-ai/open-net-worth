@@ -13,6 +13,9 @@ from backend.services.ynab_sync import recorder, runner
 from tests import ynab_stub
 from tests.test_ynab_sync_service import assign, edit_onw, enable, row, sync, world  # noqa: F401
 
+# Behind the ynab_import_and_sync flag; tests/test_ynab_import_and_sync_flag.py proves it off.
+pytestmark = pytest.mark.flags(ynab_import_and_sync=True)
+
 
 @pytest.fixture
 def stub(world):  # noqa: F811

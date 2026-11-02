@@ -1,4 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
+import { useFlag } from '../../../hooks/useFlag'
+import { YNAB_FLAG } from '../automations/datasync/ynabSync'
 import { Badge, Button, Cluster, Text } from '../../ui'
 import { fDate } from '../../../utils/format'
 import { useRuns } from '../imports/runs'
@@ -6,8 +8,12 @@ import { useSyncStatus } from '../imports/sync'
 
 // The YNAB card's way into the two-way sync: a one-line status (import, schedule, review count)
 // and the button that opens it. The sync is a data sync in Automations, so its import, history
-// and reports live on its page there.
+// and reports live on its page there. Not there while the ynab_import_and_sync flag is off.
 export function YnabImportLink() {
+  return useFlag(YNAB_FLAG) ? <TwoWaySyncLink /> : null
+}
+
+function TwoWaySyncLink() {
   const navigate = useNavigate()
   const runs = useRuns('ynab', false)
   const running = runs.data?.find((r) => r.status === 'running')

@@ -250,7 +250,9 @@ move your whole plan across instead, use the migration below.
 To move your accounts, categories, envelopes, every transaction and each month's budgeted amounts
 across, and check the result against YNAB, use **Two-way sync…** on the YNAB connector page. It
 opens [Two-way sync with YNAB](../features/imports-and-sync.md) in Automations, which uses the
-token you saved here; the import is its second setup step.
+token you saved here; the import is its second setup step. It is experimental and off by
+default: the button appears once you turn it on in
+[Settings → Developer → Experimental](../features/settings.md#experimental-features).
 Take a [backup](../operations/backup-and-restore.md) first if you can; a fresh book is the
 cleanest target (the app also takes one before it writes anything).
 

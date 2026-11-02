@@ -10,7 +10,7 @@
 // one-line summary, so for YNAB exactly that one GET is allowed, and no button.
 
 import type { JSX } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { PlaidSection } from './PlaidSection'
 import { SimpleFinSection } from './SimpleFinSection'
@@ -24,9 +24,18 @@ import { IbkrSection } from './IbkrSection'
 
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
 import { authFetch } from '../../../api/client'
+import { overrideFlagsForTests } from '../../../hooks/useFlag'
 const mockAuthFetch = authFetch as ReturnType<typeof vi.fn>
 
-afterEach(cleanup)
+// On: the YNAB card then reads the sync's status, the one `/sync` GET this guard allows.
+let restoreFlags: () => void = () => {}
+beforeEach(() => {
+  restoreFlags = overrideFlagsForTests({ ynab_import_and_sync: true })
+})
+afterEach(() => {
+  restoreFlags()
+  cleanup()
+})
 
 function okJson(body: unknown): Response {
   return { ok: true, json: async () => body } as Response

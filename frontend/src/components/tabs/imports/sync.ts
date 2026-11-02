@@ -66,7 +66,7 @@ export const INTERVAL_LABELS: Record<string, string> = {
   manual: 'Manual only',
 }
 
-export function useSyncStatus() {
+export function useSyncStatus(enabled = true) {
   const [polling, setPolling] = useState(false)
   const status = useQueryCache<SyncStatus>(
     SYNC_ENDPOINT,
@@ -75,7 +75,7 @@ export function useSyncStatus() {
       if (!r.ok) throw new Error(await detailOf(r, 'Could not read the sync status.'))
       return (await r.json()) as SyncStatus
     },
-    { refetchInterval: polling ? 1500 : undefined },
+    { enabled, refetchInterval: enabled && polling ? 1500 : undefined },
   )
   const running = !!status.data?.running
   if (running !== polling) setPolling(running)

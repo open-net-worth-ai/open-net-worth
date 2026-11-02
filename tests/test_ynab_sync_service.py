@@ -15,6 +15,9 @@ from backend.services.ynab_sync import runner
 from tests import ynab_stub
 from tests.test_ynab_migration_service import run as migrate
 
+# Behind the ynab_import_and_sync flag; tests/test_ynab_import_and_sync_flag.py proves it off.
+pytestmark = pytest.mark.flags(ynab_import_and_sync=True)
+
 
 @pytest.fixture
 def world(db_isolated, monkeypatch):
