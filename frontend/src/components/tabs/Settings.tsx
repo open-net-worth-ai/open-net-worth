@@ -62,9 +62,9 @@ const loadMemorySection = () => import('./settings/sections/MemorySection')
 const MemorySection = lazyChunk(() =>
   loadMemorySection().then((m) => ({ default: m.MemorySection })),
 )
-const loadPermissionsSection = () => import('./settings/sections/PermissionsSection')
+const loadPermissionsSection = () => import('./settings/sections/PermissionsSectionSwitch')
 const PermissionsSection = lazyChunk(() =>
-  loadPermissionsSection().then((m) => ({ default: m.PermissionsSection })),
+  loadPermissionsSection().then((m) => ({ default: m.PermissionsSectionSwitch })),
 )
 const loadDedupSection = () => import('./settings/sections/DedupSection')
 const DedupSection = lazyChunk(() => loadDedupSection().then((m) => ({ default: m.DedupSection })))
@@ -100,9 +100,9 @@ const ShortcutsSection = lazyChunk(() =>
 )
 const loadMcpSection = () => import('./settings/sections/McpSection')
 const McpSection = lazyChunk(() => loadMcpSection().then((m) => ({ default: m.McpSection })))
-const loadDeveloperSection = () => import('./settings/sections/DeveloperSection')
+const loadDeveloperSection = () => import('./settings/sections/DeveloperSectionSwitch')
 const DeveloperSection = lazyChunk(() =>
-  loadDeveloperSection().then((m) => ({ default: m.DeveloperSection })),
+  loadDeveloperSection().then((m) => ({ default: m.DeveloperSectionSwitch })),
 )
 import './settings/settings.css'
 

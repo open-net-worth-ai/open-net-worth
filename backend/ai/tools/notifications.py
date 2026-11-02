@@ -92,6 +92,7 @@ async def _send_to_channel(channel: str, input_data: dict) -> tuple[str, None]:
     ),
     input_schema=schema_of(TelegramMessageInput, tool_name="telegram_send_message"),
     mutates=("notification_log",),
+    external_effect=True,
     connector="telegram",
 )
 async def telegram_send_message(input_data: dict):
@@ -107,6 +108,7 @@ async def telegram_send_message(input_data: dict):
     ),
     input_schema=schema_of(ChannelMessageInput, tool_name="webhook_send_message"),
     mutates=("notification_log",),
+    external_effect=True,
     connector="webhook",
 )
 async def webhook_send_message(input_data: dict):

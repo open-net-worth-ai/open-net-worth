@@ -153,6 +153,27 @@ jobs:
           pip install -r requirements.txt -r requirements-dev.txt
       - name: pytest (not integration)
         run: python3 -m pytest -q -m "not integration"
+      # docs/FEATURE_FLAGS.md: the run above proves the flag-off path (every old test, unchanged);
+      # this one runs the permission / confirm / judge / MCP / Automation suites with
+      # permissions_v2 on. Old files whose assertions are the OLD behaviour are not in the list;
+      # their *_v2 twins are. Drop this step with the flag.
+      - name: pytest (permissions_v2 on)
+        run: python3 -m pytest -q -m "not integration" --flag permissions_v2=on $(cat tests/permissions_v2_on_files.txt)
+      # The flag lives until its remove_by date (docs/FEATURE_FLAGS.md): the unchanged search and
+      # tool-offer suites again with it ON. The two deselected tests assert main's off-path shape
+      # (a snippet-only row; x_search in the catalog) and are covered both ways by
+      # tests/test_search_reads_results_switch.py. Delete this step when the flag is retired.
+      - name: pytest (search_reads_results on)
+        run: >
+          python3 -m pytest -q -p no:randomly --flag search_reads_results=on
+          tests/test_search_*.py tests/test_web_search_providers.py tests/test_x_search_tool.py
+          tests/test_misc_tool_sanitize.py tests/test_tool_catalog.py tests/test_find_tools.py
+          tests/test_find_tools_security.py tests/test_agent_offer.py tests/test_discovery_gate.py
+          tests/test_connector_tool_discovery_gating.py tests/test_automation_approvals.py
+          tests/test_tool_offer_size.py tests/test_r3_tool_scoping.py tests/test_tool_schema_budget.py
+          tests/test_cost_service.py tests/test_asset_brief_full_text.py
+          --deselect tests/test_misc_tool_sanitize.py::test_web_search_json_is_valid_and_hostile_payload_cannot_break_out
+          --deselect tests/test_tool_catalog.py::test_completeness_every_schema_in_catalog
       # docs/FEATURE_FLAGS.md rule 3: the unchanged run above proves the flag-off path; the
       # suites the Intel delivery decider touches run again with it on. Remove with the flag.
       - name: pytest (intel_delivery_decider on)

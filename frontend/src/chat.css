@@ -3543,3 +3543,18 @@
   color: var(--muted);
   font-size: var(--text-xs);
 }
+
+/* ── permissions_v2 approval card ────────────────────────────────────────────────────────
+   Deny on the left as a real outlined button; the allow scopes grouped at the right end
+   (owner, 2026-10-12: a borderless faint Deny didn't read as a button). */
+.change-grant-btn--deny-v2 {
+  padding: 6px 14px;
+  border-radius: 8px;
+  color: var(--ink);
+}
+.change-grant-allow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}

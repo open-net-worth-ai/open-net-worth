@@ -12,6 +12,7 @@ from typing import List, Literal, Optional
 
 from pydantic import Field
 
+from backend.ai.permissions import engine
 from backend.ai.tools import _bounded as _b
 from backend.ai.tools import _confirm_gate as _gate
 from backend.ai.tools import _txn_schema
@@ -400,7 +401,7 @@ async def _add_one(input_data: dict, *, gated: bool = False, promised: dict | No
         except (ValueError, OpenNetWorthError) as e:
             return _gate.preview_failed_result(str(e))
         if gated:
-            return _gate.stage("add_transactions", input_data, change)
+            return engine().stage("add_transactions", input_data, change)
         # Confirming: the args are the staged ones, but they are re-RESOLVED here, so verify
         # they still resolve to what the card promised before committing.
         if _gate.outcome_of(change) != promised:
@@ -1372,7 +1373,7 @@ async def _update_one(input_data: dict, *, gated: bool = False, promised: dict |
         if change.get("error"):
             return _gate.preview_failed_result(change["error"])
         if gated:
-            return _gate.stage("update_transactions", input_data, change)
+            return engine().stage("update_transactions", input_data, change)
         if _gate.outcome_of(change) != promised:
             return _gate.outcome_mismatch_result("update_transactions")
 
@@ -1460,7 +1461,7 @@ async def _update_legacy_bulk(
         if change.get("errors"):
             return _bulk_update_preview_error_result(change)
         if gated:
-            return _gate.stage("update_transactions", input_data, change)
+            return engine().stage("update_transactions", input_data, change)
         if _gate.outcome_of(change) != promised:
             return _gate.outcome_mismatch_result("update_transactions")
 
@@ -1526,7 +1527,7 @@ async def update_transactions(input_data: dict):
         input_data = _gate.staged_args(entry)
         promised = entry.get("outcome") or {}
     else:
-        gated = _gate.should_gate("update_transactions")
+        gated = engine().should_gate("update_transactions")
 
     legacy_ids = input_data.get("transaction_ids")
     if isinstance(legacy_ids, list) and legacy_ids:
@@ -1561,7 +1562,7 @@ async def update_transactions(input_data: dict):
         if promised is not None and _gate.outcome_of(change) != promised:
             return _gate.outcome_mismatch_result("update_transactions")
         if gated and change.get("count", 0) > 0:
-            return _gate.stage("update_transactions", input_data, change)
+            return engine().stage("update_transactions", input_data, change)
 
     results: list[dict] = []
     updated_count = 0
@@ -1948,7 +1949,7 @@ async def add_transactions(input_data: dict):
         input_data = _gate.staged_args(entry)
         promised = entry.get("outcome") or {}
     else:
-        gated = _gate.should_gate("add_transactions")
+        gated = engine().should_gate("add_transactions")
 
     today_iso = user_today().isoformat()
     # Shape leniency, mirroring the handler-leniency convention: a legacy `add_transaction`
@@ -2066,7 +2067,7 @@ async def add_transactions(input_data: dict):
         except (ValueError, OpenNetWorthError) as e:
             return _gate.preview_failed_result(str(e))
         if gated:
-            return _gate.stage("add_transactions", input_data, change)
+            return engine().stage("add_transactions", input_data, change)
         if _gate.outcome_of(change) != promised:
             return _gate.outcome_mismatch_result("add_transactions")
 

@@ -43,6 +43,9 @@ export interface Automation {
   execution: Record<string, unknown>
   permission_mode?: 'manual' | 'auto' | 'skip'
   always_allowed?: AutomationPermission[]
+  /** permissions_v2 only: tools refused in this Automation whatever their global value (plain
+   *  tool names). */
+  blocked?: string[]
   model: string
   effort: string
   max_runs?: number | null
@@ -184,6 +187,7 @@ export interface AutomationDraft {
   execution?: Record<string, unknown>
   permission_mode?: 'manual' | 'auto' | 'skip'
   always_allowed?: AutomationPermission[]
+  blocked?: string[]
   model?: string
   effort?: string
   status?: 'active' | 'paused'

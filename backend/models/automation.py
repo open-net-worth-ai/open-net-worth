@@ -51,6 +51,9 @@ class Automation(ONBaseModel):
     # other construction path (AI-tool creation, a stored row missing the field).
     permission_mode: str = "manual"
     always_allowed: list[AutomationPermission] = Field(default_factory=list)
+    # Tools refused in this Automation whatever their global value. Plain tool names; a tool is
+    # never in both lists.
+    blocked: list[str] = Field(default_factory=list)
     model: str = ""
     effort: str = "medium"
     max_runs: Optional[int] = None
