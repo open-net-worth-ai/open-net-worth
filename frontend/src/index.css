@@ -19967,10 +19967,9 @@ body.hide-amounts .mf-lbl-amt {
 .ynr-footer {
   width: 100%;
 }
-/* Sized to its text, so the arrow sits beside it rather than at the far edge. */
-.ui-select.ynr-sync {
+.pm-select.ynr-sync {
   width: auto;
-  field-sizing: content;
+  min-width: 210px;
 }
 .ynr-table th {
   position: sticky;
@@ -20011,8 +20010,9 @@ body.hide-amounts .mf-lbl-amt {
 .ynr-placeholder {
   padding: var(--space-5) var(--space-4);
 }
-.ui-select.ynr-dest {
+.pm-select.ynr-dest {
   width: auto;
+  min-width: 180px;
   max-width: 100%;
 }
 /* A linked account's line under its row: what it matches and adds, and the pairs to check. */

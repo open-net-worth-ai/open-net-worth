@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { fAmountNative, fDate } from '../../../utils/format'
-import { Button, Checkbox, Cluster, Modal, PageTabs, Select, Skeleton, Stack, Text } from '../../ui'
+import { Button, Checkbox, Cluster, Modal, PageTabs, Skeleton, Stack, Text } from '../../ui'
+import { PMSelect } from '../accounts/ds'
 import {
   messageOf,
   useRun,
@@ -138,18 +139,19 @@ export function YnabReview({
       subtitle={reading ? 'Reading it from YNAB…' : p ? <Meta preview={p} /> : undefined}
       footer={
         <Cluster justify="between" gap="--space-3" className="ynr-footer">
-          <Select
+          <PMSelect
             className="ynr-sync"
-            aria-label="After import"
+            ariaLabel="After import"
             value={sync}
             options={SYNC_OPTIONS}
-            onChange={(e) => setSync(e.target.value as SyncChoice)}
+            onChange={(v) => setSync(v as SyncChoice)}
           />
           <Cluster gap="--space-2">
-            <Button variant="ghost" onClick={onClose}>
+            <Button size="sm" variant="ghost" onClick={onClose}>
               Cancel
             </Button>
             <Button
+              size="sm"
               variant="primary"
               disabled={!p || p.currency_blocked || checking}
               loading={busy}
@@ -240,7 +242,7 @@ function Notes({ preview: p }: { preview: Preview }) {
     })
   if (p.book_state === 'foreign' && !p.currency_blocked)
     lines.push({
-      text: 'This book already has accounts that didn’t come from YNAB. They stay as they are, and the plan is added next to them.',
+      text: 'This book already has accounts of its own. They stay as they are, and each YNAB account is added as a new account beside them; nothing is merged.',
     })
   if (p.book_state === 'rerun')
     lines.push({ text: 'This plan was imported before; importing again adds only what is new.' })
@@ -349,16 +351,16 @@ function Destination({
   if (a.link && !a.chosen) return <span className="ynr-dim">{a.link.name} (linked)</span>
   if (!a.id || !a.candidates?.length) return <span className="ynr-dim">New account</span>
   return (
-    <Select
+    <PMSelect
       className="ynr-dest"
-      aria-label={`Where ${a.name} goes`}
+      ariaLabel={`Where ${a.name} goes`}
       value={links[a.id] ?? ''}
       disabled={checking}
       options={[
         { value: '', label: 'New account' },
         ...a.candidates.map((c) => ({ value: c.id, label: `Use ${c.name}` })),
       ]}
-      onChange={(e) => onLink(a.id!, e.target.value)}
+      onChange={(v) => onLink(a.id!, v)}
     />
   )
 }

@@ -227,7 +227,8 @@ describe('YnabSyncDetail setup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
     const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
     expect(await w.findByText(/They stay as they are/)).toBeTruthy()
-    fireEvent.change(w.getByLabelText('After import'), { target: { value: 'off' } })
+    fireEvent.click(w.getByRole('button', { name: 'After import' }))
+    fireEvent.mouseDown(screen.getByRole('option', { name: /Don’t sync, import once/ }))
     fireEvent.click(w.getByRole('button', { name: 'Import' }))
     await waitFor(() =>
       expect(requests.at(-1)).toMatchObject({
@@ -279,9 +280,12 @@ describe('YnabSyncDetail setup', () => {
     fireEvent.change(select, { target: { value: 'p1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
     const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
-    const where = (await w.findByLabelText('Where Checking goes')) as HTMLSelectElement
-    expect([...where.options].map((o) => o.text)).toEqual(['New account', 'Use Everyday'])
-    fireEvent.change(where, { target: { value: 'a1' } })
+    fireEvent.click(await w.findByRole('button', { name: 'Where Checking goes' }))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'New account',
+      'Use Everyday',
+    ])
+    fireEvent.mouseDown(screen.getByRole('option', { name: 'Use Everyday' }))
     expect(
       await w.findByText('2 transactions already in Everyday, matched · 1 added · 1 to check.'),
     ).toBeTruthy()
