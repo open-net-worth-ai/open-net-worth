@@ -138,9 +138,13 @@ jobs:
         run: npm run typecheck
 
   # --- test: fast pytest gate (integration suite excluded) ---
+  # One process per runner core (pytest-xdist): the serial run took ~28 min. Each worker gets its
+  # own throwaway DATA_DIR (tests/conftest.py) and per-test databases; a test that only passes in
+  # one fixed order is a bug, which the nightly shuffled run (test-order.yml) is there to catch.
   test:
     name: test (pytest)
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -152,20 +156,36 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
       - name: pytest (not integration)
-        run: python3 -m pytest -q -m "not integration"
-      # docs/FEATURE_FLAGS.md: the run above proves the flag-off path (every old test, unchanged);
+        run: python3 -m pytest -q -m "not integration" -n auto --durations=15
+
+  # --- test-flags: the flag-on reruns, beside the main gate instead of after it ---
+  test-flags:
+    name: test (flags on)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      # docs/FEATURE_FLAGS.md: the `test` job proves the flag-off path (every old test, unchanged);
       # this one runs the permission / confirm / judge / MCP / Automation suites with
       # permissions_v2 on. Old files whose assertions are the OLD behaviour are not in the list;
       # their *_v2 twins are. Drop this step with the flag.
       - name: pytest (permissions_v2 on)
-        run: python3 -m pytest -q -m "not integration" --flag permissions_v2=on $(cat tests/permissions_v2_on_files.txt)
+        run: python3 -m pytest -q -m "not integration" -n auto --flag permissions_v2=on $(cat tests/permissions_v2_on_files.txt)
       # The flag lives until its remove_by date (docs/FEATURE_FLAGS.md): the unchanged search and
       # tool-offer suites again with it ON. The two deselected tests assert main's off-path shape
       # (a snippet-only row; x_search in the catalog) and are covered both ways by
       # tests/test_search_reads_results_switch.py. Delete this step when the flag is retired.
       - name: pytest (search_reads_results on)
         run: >
-          python3 -m pytest -q -p no:randomly --flag search_reads_results=on
+          python3 -m pytest -q -p no:randomly -n auto --flag search_reads_results=on
           tests/test_search_*.py tests/test_web_search_providers.py tests/test_x_search_tool.py
           tests/test_misc_tool_sanitize.py tests/test_tool_catalog.py tests/test_find_tools.py
           tests/test_find_tools_security.py tests/test_agent_offer.py tests/test_discovery_gate.py
@@ -174,11 +194,11 @@ jobs:
           tests/test_cost_service.py tests/test_asset_brief_full_text.py
           --deselect tests/test_misc_tool_sanitize.py::test_web_search_json_is_valid_and_hostile_payload_cannot_break_out
           --deselect tests/test_tool_catalog.py::test_completeness_every_schema_in_catalog
-      # docs/FEATURE_FLAGS.md rule 3: the unchanged run above proves the flag-off path; the
+      # docs/FEATURE_FLAGS.md rule 3: the `test` job proves the flag-off path; the
       # suites the Intel delivery decider touches run again with it on. Remove with the flag.
       - name: pytest (intel_delivery_decider on)
         run: >
-          python3 -m pytest -q -m "not integration" --flag intel_delivery_decider=on
+          python3 -m pytest -q -m "not integration" -n auto --flag intel_delivery_decider=on
           tests/test_analyst_sweep.py tests/test_push_retry.py tests/test_watch_analyst.py
           tests/test_alert_lane_decouple.py tests/test_crash_watch.py
           tests/test_price_monitor_instant_freshen.py tests/test_price_monitor_news_context.py
@@ -262,6 +282,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
+      # Serial on purpose: every test drops and recreates the ONE server database's schema.
       - name: DB suite and market-data locking on Postgres
         run: python -m pytest tests/db tests/test_market_data_stores.py -q -p no:randomly
 
