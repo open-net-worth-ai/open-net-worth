@@ -64,6 +64,10 @@ During a call the message box becomes a **call bar**: *Ringing…*, then *Connec
 kept and comes back when you hang up. If a call can't start or drops, a note above the box says
 why, with a button to try again or to open Voice calls setup.
 
+**In the Open Net Worth desktop app**, the first call asks macOS for the microphone (once — it
+remembers). The desktop app allows the microphone for the app's own page only, and only audio;
+this needs desktop version with voice-call support or later.
+
 The browser only allows the microphone on a secure address: `localhost` on your own computer
 works; from another device the app must be reachable over HTTPS (see
 [Exposing beyond localhost](../operations/exposing-beyond-localhost.md)).
