@@ -8,6 +8,7 @@ import {
   completeUnfinishedTail,
   loadMessages,
   reconcileWithRemote,
+  repairCutReplies,
   withRestoreMarks,
 } from '../utils/chatStore'
 import { fetchRevision, forgetRevision, syncedRevision } from '../utils/chatRevision'
@@ -99,7 +100,10 @@ function isRicher(fresher: Message[], prev: Message[]): boolean {
  *  completed with the reply we never saw finish, or ours carrying the server's restore marks. */
 function pickFresher(fresher: Message[], prev: Message[]): Message[] {
   if (isRicher(fresher, prev)) return fresher
-  return completeUnfinishedTail(prev, fresher) ?? withRestoreMarks(prev, fresher)
+  return (
+    completeUnfinishedTail(prev, fresher) ??
+    repairCutReplies(withRestoreMarks(prev, fresher), fresher)
+  )
 }
 
 /** Adopt the transcript re-read that ends an attach, unless a fresher attach owns the view. */

@@ -313,7 +313,7 @@ export async function reconcileWithRemote(
     }
     // The cache stays — but whether a message is restored is the SERVER's fact, never this
     // browser's: a restore (or its Undo) made in another tab or device must show here too.
-    const marked = local ? withRestoreMarks(local, remote) : local
+    const marked = local ? repairCutReplies(withRestoreMarks(local, remote), remote) : local
     if (!marked || marked === local) return null
     void saveMessages(convId, marked)
     return marked
@@ -321,6 +321,30 @@ export async function reconcileWithRemote(
   void saveMessages(convId, remote)
   return remote
 }
+
+/** A finished reply this browser drew with its START missing — the server's copy of it is
+ *  longer and ENDS with exactly what is on screen (a replay skip once ate an answer's first
+ *  words: live call, 2026-11-03). The cache kept the cut copy forever, since both sides held
+ *  the same messages. Replaced by the server's reply, keeping this bubble's id. Returns
+ *  `target` itself when nothing is cut. */
+export function repairCutReplies(target: Message[], source: Message[]): Message[] {
+  const full = source.filter((m) => m.role === 'assistant' && !m.error && m.text?.trim())
+  if (!full.length) return target
+  let changed = false
+  const out = target.map((m) => {
+    const mine = m.text?.trim() ?? ''
+    if (m.role !== 'assistant' || m.streaming || mine.length < MIN_CUT_MATCH) return m
+    const whole = full.find(
+      (f) => f.text.trim().length > mine.length && f.text.trim().endsWith(mine),
+    )
+    if (!whole) return m
+    changed = true
+    return { ...whole, id: m.id, usage: m.usage ?? whole.usage }
+  })
+  return changed ? out : target
+}
+
+const MIN_CUT_MATCH = 40
 
 /** Copy the server's restore state for each checkpointed message — "Restored to before this
  *  message · Undo" (`restored` / `undoCheckpointId`) and "a later restore rewound past this
