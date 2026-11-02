@@ -17,7 +17,7 @@ import { useRegisterScreenCommands } from '../../lucius/useScreenContract'
 import { useDataVersion } from '../../hooks/useDataVersion'
 import { useViewScroll } from '../../hooks/useViewScroll'
 import { Button, ErrorState, Modal, PageHeader, TabSkeleton } from '../ui'
-import { AutomationDetail } from './automations/AutomationDetail'
+import { AutomationDetailSwitch } from './automations/AutomationDetailSwitch'
 import { AutomationEditorModal } from './automations/AutomationEditorModal'
 import { AutomationList, type AutomationSort } from './automations/AutomationList'
 import { useKeepAwakeSettled } from './automations/KeepAwakeBanner'
@@ -495,7 +495,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           />
         </div>
       ) : selected ? (
-        <AutomationDetail
+        <AutomationDetailSwitch
           automation={selected}
           runs={runs}
           options={options}
@@ -529,6 +529,18 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
               setAutomations((rows) => rows.map((row) => (row.id === saved.id ? saved : row)))
             } catch (error) {
               setActionError(messageOf(error, 'Permission could not be revoked.'))
+            } finally {
+              setBusyId(null)
+            }
+          }}
+          onSaveToolLists={async (lists) => {
+            setBusyId(selected.id)
+            setActionError(null)
+            try {
+              const saved = await updateAutomation(selected.id, lists)
+              setAutomations((rows) => rows.map((row) => (row.id === saved.id ? saved : row)))
+            } catch (error) {
+              setActionError(messageOf(error, 'Tool permissions could not be saved.'))
             } finally {
               setBusyId(null)
             }

@@ -136,7 +136,7 @@ async def automation_runner(
             run_id=request.run_id,
             session_id=request.session_id,
             mode=request.permission_mode,
-            always_allowed_tools=_canonical_always_allowed_tools(request.always_allowed),
+            **_approval_tool_lists(request),
         )
     )
     skill_scope_snapshot = _skill_scope.snapshot_scope()
@@ -734,7 +734,7 @@ async def _stream_continuation(
                 run_id=request.run_id,
                 session_id=request.session_id,
                 mode=request.permission_mode,
-                always_allowed_tools=_canonical_always_allowed_tools(request.always_allowed),
+                **_approval_tool_lists(request),
             )
         )
         audit_token = set_audit_scope(
@@ -1004,7 +1004,60 @@ class _EventProjection:
         )
 
 
+def _approval_tool_lists(request: AutomationRunnerRequest) -> dict[str, frozenset[str]]:
+    """The Automation's tool lists for its approval context. Under ``permissions_v2`` the
+    Always allowed list may also name external MCP tools and the Automation has a Blocked list;
+    otherwise only the registry's tools in Always allowed count."""
+    from backend.ai.permissions import engine
+
+    if not engine().automation_blocked_lists:
+        return {"always_allowed_tools": _canonical_always_allowed_tools(request.always_allowed)}
+    names: list = []
+    for descriptor in request.always_allowed or []:
+        if not isinstance(descriptor, dict):
+            continue
+        candidates = descriptor.get("tools")
+        names.extend(candidates if isinstance(candidates, list) else [])
+        capability = descriptor.get("capability")
+        if isinstance(capability, str):
+            names.append(capability)
+    return {
+        "always_allowed_tools": _canonical_tool_names(names),
+        "blocked_tools": _canonical_tool_names(request.blocked, keep_external=True),
+    }
+
+
+def _canonical_tool_names(names: list[str], *, keep_external: bool = False) -> frozenset[str]:
+    """The live tool names among ``names`` — a registry tool, or an external MCP tool
+    (``mcp__<server>__<tool>``) its enabled server currently advertises. An entry that names no
+    live tool grants and blocks nothing.
+
+    ``keep_external`` is for the BLOCKED list: a Block must outlive a server that is disabled or
+    has not advertised the tool at the moment the run starts, so every well-formed external name
+    is kept (an unknown one matches nothing). Dropping it would let a re-enabled server's tool
+    run past the Automation's own Block."""
+    from backend.ai.tools.registry import registered_tool_names
+    from backend.core import mcp_external
+
+    live = set(registered_tool_names())
+    dispatcher = mcp_external.get_external_dispatcher()
+
+    def is_live(name: str) -> bool:
+        if name in live:
+            return True
+        if not mcp_external.is_external(name):
+            return False
+        if keep_external and mcp_external.split_external(name) is not None:
+            return True
+        return dispatcher is not None and dispatcher.discovered_tool(name) is not None
+
+    return frozenset(
+        name.strip() for name in names or [] if isinstance(name, str) and is_live(name.strip())
+    )
+
+
 def _canonical_always_allowed_tools(always_allowed: list[dict]) -> frozenset[str]:
+    from backend.ai.search.switch import with_stand_ins
     from backend.ai.tools.registry import registered_tool_names
 
     live = set(registered_tool_names())
@@ -1023,7 +1076,7 @@ def _canonical_always_allowed_tools(always_allowed: list[dict]) -> frozenset[str
             canonical = name.strip()
             if canonical in live:
                 result.add(canonical)
-    return frozenset(result)
+    return frozenset(with_stand_ins(result))
 
 
 def _progress_patch(

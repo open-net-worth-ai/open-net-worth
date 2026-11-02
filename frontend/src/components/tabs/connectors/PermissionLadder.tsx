@@ -31,6 +31,8 @@ export interface PermissionLadderProps {
   /** Stamp every tool in the group — deliberately lossy (spec §4). Never called for
    *  `custom`, which is inert: it exists in the menu for legibility only. */
   onSetGroup: (tools: string[], level: PermissionLevel) => void
+  /** How each level is named and drawn. */
+  levels?: typeof LEVELS
 }
 
 export function PermissionLadder({
@@ -38,6 +40,7 @@ export function PermissionLadder({
   perms,
   onSetTool,
   onSetGroup,
+  levels = LEVELS,
 }: PermissionLadderProps): JSX.Element {
   // Every group starts EXPANDED (2026-08-18, owner request — spec §4's collapse-past-6-tools
   // default read as hiding real tool names behind an extra click). A later refresh that
@@ -65,7 +68,7 @@ export function PermissionLadder({
     <div ref={root} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {groups.map((g) => {
         const level = deriveGroupLevel(g.tools, perms)
-        const GroupIcon = icon(LEVELS[level].icon)
+        const GroupIcon = icon(levels[level].icon)
         return (
           <div key={g.name}>
             <div
@@ -108,15 +111,15 @@ export function PermissionLadder({
                   onClick={() => setGroupMenu(groupMenu === g.name ? null : g.name)}
                   style={{ fontSize: 12.5 }}
                 >
-                  <GroupIcon /> {LEVELS[level].label}{' '}
+                  <GroupIcon /> {levels[level].label}{' '}
                   <span style={{ display: 'inline-flex', width: 12, height: 12 }}>
                     <Icons.chev />
                   </span>
                 </Btn>
                 {groupMenu === g.name && (
                   <span className="rd-kebab-pop">
-                    {(Object.keys(LEVELS) as (keyof typeof LEVELS)[]).map((lv) => {
-                      const ItemIcon = icon(LEVELS[lv].icon)
+                    {(Object.keys(levels) as (keyof typeof levels)[]).map((lv) => {
+                      const ItemIcon = icon(levels[lv].icon)
                       return (
                         <button
                           key={lv}
@@ -127,7 +130,7 @@ export function PermissionLadder({
                             setGroupMenu(null)
                           }}
                         >
-                          <ItemIcon /> {LEVELS[lv].label}
+                          <ItemIcon /> {levels[lv].label}
                         </button>
                       )
                     })}
@@ -144,14 +147,14 @@ export function PermissionLadder({
                     </span>
                     <span className="cn-permseg">
                       {TOOL_LEVELS.map((lv) => {
-                        const LevelIcon = icon(LEVELS[lv].icon)
+                        const LevelIcon = icon(levels[lv].icon)
                         const on = toolPermission(perms, t) === lv
                         return (
                           <button
                             key={lv}
-                            className={'cn-permbtn' + (on ? ` on ${LEVELS[lv].tone}` : '')}
-                            title={LEVELS[lv].label}
-                            aria-label={`${t}: ${LEVELS[lv].label}`}
+                            className={'cn-permbtn' + (on ? ` on ${levels[lv].tone}` : '')}
+                            title={levels[lv].label}
+                            aria-label={`${t}: ${levels[lv].label}`}
                             aria-pressed={on}
                             onClick={() => onSetTool(t, lv)}
                           >

@@ -66,7 +66,7 @@ sys.stdout.write(json.dumps({"text": text}))
 """
 
 
-def extract_main_content(html: str, url: str) -> str | None:
+def extract_main_content(html: str, url: str, timeout_s: float = _EXTRACT_TIMEOUT_S) -> str | None:
     """Strip nav/ads/boilerplate down to the main content, in a child process.
 
     Returns the extracted markdown, or ``None`` for every failure — an unextractable page, a
@@ -80,10 +80,10 @@ def extract_main_content(html: str, url: str) -> str | None:
             input=json.dumps({"html": html, "url": url}),
             capture_output=True,
             text=True,
-            timeout=_EXTRACT_TIMEOUT_S,
+            timeout=timeout_s,
         )
     except subprocess.TimeoutExpired:
-        _log.warning("html extraction timed out after %ss (url=%s)", _EXTRACT_TIMEOUT_S, url)
+        _log.warning("html extraction timed out after %ss (url=%s)", timeout_s, url)
         return None
     except Exception:  # noqa: BLE001 — spawning must never break the fetch either
         _log.warning("could not spawn the html extraction child (url=%s)", url, exc_info=True)
