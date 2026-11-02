@@ -77,12 +77,29 @@ if (typeof (globalThis as { jsdom?: unknown }).jsdom !== 'undefined') {
 //
 // This is the frontend twin of the backend conftest.py autouse fixtures: isolation is
 // structural here rather than something each test file has to remember.
-import { beforeEach } from 'vitest'
+import { afterEach, beforeEach } from 'vitest'
 import { clearQueryCache } from './state/queryCache'
 
 beforeEach(() => {
   clearQueryCache()
 })
+
+// ── Feature flags (docs/FEATURE_FLAGS.md) ─────────────────────────────────────
+//
+// `permissions_v2`'s switch points render a placeholder until the flag list has loaded, and a
+// test has no server to load it from. Every test therefore starts on the flag's declared
+// default (off = the old code, which is what the pre-existing tests prove); a test of the new
+// path overrides it with `overrideFlagsForTests`, usually inside `describe.each([false, true])`.
+//
+// Imported inside the hook, not at the top: a static import here would load `useFlag` (and the
+// `api/client` it pulls in) before a test file's `vi.mock('../api/client')` is registered, and
+// `useFlag` would keep the real client for the whole file.
+let restoreDefaultFlags: () => void
+beforeEach(async () => {
+  const { overrideFlagsForTests } = await import('./hooks/useFlag')
+  restoreDefaultFlags = overrideFlagsForTests({ permissions_v2: false })
+})
+afterEach(() => restoreDefaultFlags())
 
 // ── Entity-type registry seed ─────────────────────────────────────────────────
 //

@@ -21,9 +21,9 @@ from backend.core.feature_flags import Flag, override
 
 flags = override
 
-# A test-only declaration, merged into the shipped registry (``core.feature_flags.FLAGS``) for
-# the test session only. Its far ``remove_by`` is deliberate: it never ships, so the remove_by
-# lint (which checks ``FLAGS``) does not apply to it.
+# A test-only declaration, merged into the registry for the test session only — it is not in the
+# shipped registry (``core.feature_flags.FLAGS``). Its far ``remove_by`` is deliberate: it
+# never ships, so the remove_by lint (which checks ``FLAGS``) does not apply to it.
 EXAMPLE_FLAG = Flag(
     name="example_flag",
     description="Test-only example: shows the mechanism end to end. Never shipped.",

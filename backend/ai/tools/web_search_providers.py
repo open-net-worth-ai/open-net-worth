@@ -61,7 +61,13 @@ from backend.ai.search.base import (
     build_provider,
     fetch_result_payload,
 )
-from backend.ai.tools.misc import FetchPageInput, WebSearchInput, sanitize_search_results
+from backend.ai.search.switch import search_results
+from backend.ai.tools.misc import (
+    ACTIVE_PROVIDER_VERBS,
+    FetchPageInput,
+    WebSearchInput,
+    sanitize_search_results,
+)
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import schema_of
 
@@ -101,7 +107,7 @@ async def _search_via(spec: ProviderSpec, input_data: dict) -> tuple[str, None]:
     provider = build_provider(spec.id, cfg)
     logger.info("%s_search: %s", spec.id, query)
     try:
-        results = await provider.search(query, max_results)
+        results = await search_results(provider, query, max_results)
     except Exception as exc:
         logger.error("%s_search failed: %s", spec.id, exc)
         raise
@@ -134,6 +140,38 @@ async def _fetch_via(spec: ProviderSpec, input_data: dict) -> tuple[str, None]:
     provider = build_provider(spec.id, cfg)
     content = await provider.fetch_page(url)
     return json.dumps(fetch_result_payload(url, content), ensure_ascii=False), None
+
+
+# (provider id, "search" | "fetch") -> the tool name minted for it by ``_register`` below — the
+# one place those names are built, so the gate never re-spells them.
+_PROVIDER_TOOLS: dict[tuple[str, str], str] = {}
+
+
+def active_provider_tool(generic: str) -> str | None:
+    """The tool name of the ACTIVE provider that ``generic`` (``web_search`` or ``fetch_page``)
+    runs, or ``None`` for any other tool or when no provider is active.
+
+    Under ``permissions_v2`` these two belong to the search connector: their permission IS the
+    provider's own tool's (``_connector_gate.permission_key``), so the connector's page is their
+    one control and a ``Blocked`` or ``Ask`` on ``tavily_search`` cannot be bypassed by calling
+    ``web_search``.
+    """
+    verb = ACTIVE_PROVIDER_VERBS.get(generic)
+    if verb is None:
+        return None
+    from backend.db.search_config_store import SearchConfigStore
+
+    provider_id = SearchConfigStore().default_provider()
+    return _PROVIDER_TOOLS.get((provider_id, verb)) if provider_id else None
+
+
+def generic_of_active_tool(tool_name: str) -> str | None:
+    """The generic tool (``web_search`` or ``fetch_page``) whose permission ``tool_name`` carries
+    right now, i.e. ``tool_name`` is the ACTIVE provider's own search / fetch tool; else ``None``."""
+    for generic in ACTIVE_PROVIDER_VERBS:
+        if active_provider_tool(generic) == tool_name:
+            return generic
+    return None
 
 
 def _register(spec: ProviderSpec) -> None:
@@ -178,6 +216,9 @@ def _register(spec: ProviderSpec) -> None:
     )
     async def _fetch(input_data: dict):
         return await _fetch_via(spec, input_data)
+
+    _PROVIDER_TOOLS[(spec.id, "search")] = search_name
+    _PROVIDER_TOOLS[(spec.id, "fetch")] = fetch_name
 
 
 for _spec in PROVIDER_REGISTRY:
