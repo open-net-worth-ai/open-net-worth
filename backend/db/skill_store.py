@@ -1233,6 +1233,8 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             "3f3def0712e78b029e6c7b81cbecb2ff76bb366f2cca010fd3fb40e88cd84518",
             # 2026-10-11: before the Gotchas section led the body.
             "528520ce70242fc9b4a5bc5fac3c52869c468a187652911f14981052aad8f372",
+            # 2026-11-02: before the "on what you watch" paragraph (get_untold_news).
+            "a3ea85de528f72da449398bf5648c12683cc2dff4dafa55078c949c2c21d66cf",
         }
     ),
 }

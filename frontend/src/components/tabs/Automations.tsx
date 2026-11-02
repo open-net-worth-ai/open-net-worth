@@ -15,19 +15,35 @@ import type { Automation, AutomationDraft, AutomationRun } from '../../api/autom
 import { AUTOMATIONS_REVIEW_DRAFT_SPEC } from '../../lucius/screenCommands'
 import { useRegisterScreenCommands } from '../../lucius/useScreenContract'
 import { useDataVersion } from '../../hooks/useDataVersion'
+import { useFlag } from '../../hooks/useFlag'
 import { useViewScroll } from '../../hooks/useViewScroll'
-import { Button, ErrorState, Modal, PageHeader, TabSkeleton } from '../ui'
+import { Button, ErrorState, Modal, PageHeader, PageTabs, TabSkeleton } from '../ui'
 import { AutomationDetailSwitch } from './automations/AutomationDetailSwitch'
 import { AutomationEditorModal } from './automations/AutomationEditorModal'
 import { AutomationList, type AutomationSort } from './automations/AutomationList'
 import { useKeepAwakeSettled } from './automations/KeepAwakeBanner'
 import { ALL_TEMPLATES } from './automations/automationTemplates'
+import { DataSyncView } from './automations/datasync/DataSyncView'
+import { YnabSyncDetail } from './automations/datasync/YnabSyncDetail'
+import { YNAB_FLAG, YNAB_SYNC_KEY, useYnabSync } from './automations/datasync/ynabSync'
 import {
   EMPTY_AUTOMATION_OPTIONS,
   missingTriggerFields,
   type AutomationOptions,
 } from './automations/AutomationTriggerSummary'
 import './automations.css'
+
+type AutomationsView = 'lucius' | 'sync'
+
+// The masthead while the ynab_import_and_sync flag is off: one list, no Data sync tab.
+const LUCIUS_ONLY_SUBTITLE =
+  'Run on a schedule or when something happens. Every run is a conversation you can pick back up.'
+
+const VIEW_SUBTITLES: Record<AutomationsView, string> = {
+  lucius:
+    'Lucius runs these on a schedule or when something happens. Every run is a conversation you can pick back up.',
+  sync: 'Keep this book and your other apps in step, by fixed rules. No AI involved and nothing to pay.',
+}
 
 interface AutomationsProps {
   onOpenChat?: (prefill: string) => void
@@ -37,10 +53,25 @@ interface AutomationsProps {
 export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps) {
   const navigate = useNavigate()
   const location = useLocation()
-  const search = location.search as { automation?: string; run?: string; template?: string }
+  const search = location.search as {
+    automation?: string
+    run?: string
+    template?: string
+    view?: string
+    sync?: string
+    report?: string
+  }
   const selectedAutomationId = typeof search.automation === 'string' ? search.automation : null
   const selectedRunId = typeof search.run === 'string' ? search.run : null
   const templateKey = typeof search.template === 'string' ? search.template : null
+  // Two views: Lucius's Automations, and data syncs (fixed rules, no AI) — today only the
+  // two-way YNAB sync, whose page `?sync=ynab` opens (`report` = one of its runs). Behind the
+  // ynab_import_and_sync flag: off (or still loading), only the Lucius list, as before.
+  const syncOn = useFlag(YNAB_FLAG) === true
+  const syncKey = syncOn && search.sync === YNAB_SYNC_KEY ? search.sync : null
+  const view: AutomationsView = syncOn && (syncKey || search.view === 'sync') ? 'sync' : 'lucius'
+  const reportId = syncKey && typeof search.report === 'string' ? search.report : null
+  const ynabSync = useYnabSync(false, syncOn)
   const [automations, setAutomations] = useState<Automation[]>([])
   const automationsRef = useRef(automations)
   useEffect(() => {
@@ -315,6 +346,36 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
     } as never)
   }
 
+  const openSync = (key: string | null, report: string | null = null) => {
+    void navigate({
+      to: '/automations',
+      search: ((previous: Record<string, unknown>) => ({
+        ...previous,
+        automation: undefined,
+        run: undefined,
+        view: 'sync',
+        sync: key || undefined,
+        report: key && report ? report : undefined,
+      })) as never,
+      replace: key === null,
+    } as never)
+  }
+
+  const setView = (next: AutomationsView) => {
+    void navigate({
+      to: '/automations',
+      search: ((previous: Record<string, unknown>) => ({
+        ...previous,
+        automation: undefined,
+        run: undefined,
+        sync: undefined,
+        report: undefined,
+        view: next === 'sync' ? 'sync' : undefined,
+      })) as never,
+      replace: true,
+    } as never)
+  }
+
   const save = async (draft: AutomationDraft) => {
     if (editor?.automation) {
       const saved = await updateAutomation(editor.automation.id, draft)
@@ -440,13 +501,28 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           title, and the detail's breadcrumb (desktop only — a phone backs out by swipe or
           the tab bar) is the way back, so repeating "Automations" here is redundancy. */}
       {/* Up while the list loads too — only the data is a skeleton; the title never pops in. */}
-      {!selectedAutomationId && (
-        <div className="rd-masthead" data-od-id="automations-masthead">
+      {!selectedAutomationId && !syncKey && (
+        <div
+          className={syncOn ? 'rd-masthead a3-masthead--tabs' : 'rd-masthead'}
+          data-od-id="automations-masthead"
+        >
           <PageHeader
             className="a3-masthead-head"
             title="Automations"
-            subtitle="Run on a schedule or when something happens. Every run is a conversation you can pick back up."
+            subtitle={syncOn ? VIEW_SUBTITLES[view] : LUCIUS_ONLY_SUBTITLE}
           />
+          {syncOn && (
+            <PageTabs
+              className="a3-views"
+              ariaLabel="Kind of automation"
+              value={view}
+              onChange={setView}
+              tabs={[
+                { key: 'lucius', label: 'Lucius' },
+                { key: 'sync', label: 'Data sync', badge: ynabSync.toReview || undefined },
+              ]}
+            />
+          )}
         </div>
       )}
       {actionError && (
@@ -454,7 +530,21 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           {actionError}
         </div>
       )}
-      {loading || !keepAwakeSettled ? (
+      {syncKey ? (
+        <YnabSyncDetail
+          reportId={reportId}
+          onBack={() => openSync(null)}
+          onOpenReport={(id) => openSync(syncKey, id)}
+        />
+      ) : view === 'sync' ? (
+        <DataSyncView
+          sync={ynabSync}
+          onOpen={() => {
+            rememberScroll()
+            openSync(YNAB_SYNC_KEY)
+          }}
+        />
+      ) : loading || !keepAwakeSettled ? (
         <div className="a3-wrap">
           <TabSkeleton variant="automations" label="Loading automations…" header={false} />
         </div>

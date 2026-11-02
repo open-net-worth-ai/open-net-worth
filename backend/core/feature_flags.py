@@ -98,6 +98,30 @@ FLAGS: tuple[Flag, ...] = (
         remove_by=date(2027, 1, 31),
         kind="release",
     ),
+    Flag(
+        name="intel_delivery_decider",
+        description=(
+            "Lucius decides which Intel news reaches you now, which waits for a roundup, "
+            "and which stays in the Intel tab."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 2),
+        remove_by=date(2027, 1, 31),
+        kind="release",
+    ),
+    Flag(
+        name="ynab_import_and_sync",
+        description=(
+            "Import a whole YNAB plan, then keep it and this book in step both ways on a "
+            "schedule. Adds the Data sync tab in Automations and the Two-way sync button on "
+            "the YNAB connector."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 2),
+        remove_by=date(2027, 2, 1),
+    ),
 )
 
 

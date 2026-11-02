@@ -423,6 +423,7 @@ from backend.db.tables import (
     evidence_subjects,
     grants,
     import_batches,
+    import_runs,
     income_events,
     institutions,
     instruments,
@@ -435,6 +436,7 @@ from backend.db.tables import (
     memory_forgotten,
     memory_topic_summaries,
     merge_journal,
+    news_deliveries,
     news_sources,
     notification_log,
     option_contracts,
@@ -465,6 +467,10 @@ from backend.db.tables import (
     txn_audit,
     vest_events,
     watchlists,
+    ynab_sync_baselines,
+    ynab_sync_conflicts,
+    ynab_sync_mirror,
+    ynab_sync_state,
 )
 
 
@@ -1236,6 +1242,13 @@ def _wipe_claims(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, claims, "id")
 
 
+# news_deliveries (flag intel_delivery_decider, revision 202611021200) — wipe-only: the decider's
+# record of what Intel told the person is runtime state about their instruments, not a book fact,
+# so it has no BRIDGED key; `/api/reset` clears it with the rest.
+def _wipe_news_deliveries(conn: Connection) -> list[Path]:
+    return _capture_then_delete(conn, news_deliveries, "id")
+
+
 def _wipe_statement_formats(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, statement_formats, "id")
 
@@ -1261,6 +1274,15 @@ def _wipe_notification_log(conn: Connection) -> list[Path]:
 # membership is what makes the capture a no-op.
 def _wipe_tool_permissions(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, tool_permissions, "id")
+
+
+def _wipe_ynab_sync(conn: Connection) -> list[Path]:
+    """A reset forgets the sync with the book it described: its baselines and mirror would
+    otherwise be reconciled against a ledger that no longer holds the rows they describe."""
+    paths: list[Path] = []
+    for table in (ynab_sync_conflicts, ynab_sync_baselines, ynab_sync_mirror, ynab_sync_state):
+        paths.extend(_capture_then_delete(conn, table, "id"))
+    return paths
 
 
 def _wipe_settings_namespace(conn: Connection, namespace: str) -> list[Path]:
@@ -1320,6 +1342,10 @@ def _wipe_connector_snapshots(conn: Connection) -> list[Path]:
 
 def _wipe_pending_pushes(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, pending_pushes, "id")
+
+
+def _wipe_import_runs(conn: Connection) -> list[Path]:
+    return _capture_then_delete(conn, import_runs, "id")
 
 
 # Checkpoints (plan 4e task 2) — wipe-only, like pending_pushes above; reuses
@@ -1422,6 +1448,7 @@ _WIPE_FNS: dict[str, Callable[[Connection], list[Path]]] = {
     # push-dedup fact, not a book fact). Reached explicitly by wipe_all below. Security-
     # review fix (2026-08-30) — see _wipe_claims' own docstring for why this entry exists.
     "claims.json": _wipe_claims,
+    "news_deliveries.json": _wipe_news_deliveries,
     # wipe-only — deliberately NOT BRIDGED keys (config/cache, not user-authored financial
     # fact; module docstring, PLAN 4D TASK 6 section, point 2). Reached explicitly by
     # wipe_all below, not via the `for filename in BRIDGED` loop — mirrors asset_briefs.
@@ -1440,6 +1467,7 @@ _WIPE_FNS: dict[str, Callable[[Connection], list[Path]]] = {
     # absorbed `tool_grants.json` key is GONE with its table (revision 0040) — a reset that
     # still named it would be reaching for a table that no longer exists.
     "tool_permissions.json": _wipe_tool_permissions,
+    "ynab_sync.json": _wipe_ynab_sync,
     "memory_settings.json": _wipe_memory_settings,
     "preferred_models.json": _wipe_preferred_models,
     # Misc stores (plan 4e task 1) — the three BRIDGED misc stores, reached via the
@@ -1466,6 +1494,8 @@ _WIPE_FNS: dict[str, Callable[[Connection], list[Path]]] = {
     # `for filename in BRIDGED` loop — mirrors pending_pushes.json's own wipe-only
     # precedent.
     "checkpoints.json": _wipe_checkpoints,
+    # wipe-only — an import report describes the book Reset just emptied; not portable.
+    "import_runs.json": _wipe_import_runs,
     # Wave 5C (JSON->DB) — the two BRIDGED runtime-state stores, reached via the ordinary
     # `for filename in BRIDGED` loop below like every other non-money entry.
     "skills_state.json": _wipe_skills_state,
@@ -1579,12 +1609,15 @@ def wipe_all(conn: Connection) -> list[Path]:
         "statement_formats.json",
         "signals.json",
         "tool_permissions.json",
+        "ynab_sync.json",
     ):
         paths_to_unlink.extend(wipe(conn, filename))
     paths_to_unlink.extend(wipe(conn, "pending_pushes.json"))
     paths_to_unlink.extend(wipe(conn, "checkpoints.json"))
+    paths_to_unlink.extend(wipe(conn, "import_runs.json"))
     paths_to_unlink.extend(wipe(conn, "daily_digests.json"))
     paths_to_unlink.extend(wipe(conn, "claims.json"))
+    paths_to_unlink.extend(wipe(conn, "news_deliveries.json"))
     for filename in _MONEY_WIPE_ORDER:
         paths_to_unlink.extend(wipe(conn, filename))
     return paths_to_unlink

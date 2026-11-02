@@ -14,6 +14,7 @@ import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
 import { ConnectorStatusLine } from './ConnectorStatusLine'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
+import { YnabImportLink } from './YnabImportLink'
 
 // YNAB connector config over /api/ynab/* (per-provider plane), mirroring LunchMoneySection's
 // secret-reveal pattern: the access token is something the operator TYPED into YNAB's own
@@ -277,6 +278,8 @@ export function YnabSection() {
       )}
 
       <ConnectorAccountsList provider="ynab" providerLabel="YNAB" />
+
+      <YnabImportLink />
     </Stack>
   )
 }

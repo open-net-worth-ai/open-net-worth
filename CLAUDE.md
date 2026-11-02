@@ -69,6 +69,7 @@ current base; otherwise recompute via `txn_base_amount()`.
 | Owned assets | `owned_assets_service.apply_owned_asset_change` |
 | Intel stories / timeline | `intel_stories_service.apply_story_change` |
 | Intel claims (cross-subject push dedup) | `claims_service.apply_claim_push` |
+| Intel delivery (now / later / skip, flag `intel_delivery_decider`) | `news_delivery.apply_delivery_change` |
 | Memory | `memory_write.apply_memory_change` |
 
 - `ledger.resolve_transaction_row(...)` is the resolution half, NO store write — previews render
@@ -313,6 +314,10 @@ One line each — full reasoning and the scar behind each is in
   a DERIVED snapshot of the frontend `catalog.ts` (`npm run sync:connector-directory`; a vitest fails on drift).
   Setup is the human-only screen command `connectors.open_setup`: it opens a form, never writes config or
   touches a secret. ADR `2026-10-31-lucius-discovers-connectors-from-a-synced-snapshot-and-setup-stays-human`.
+- The YNAB two-way sync (`services/ynab_sync/`) writes only through the chokes above, always under
+  the audit surface `ynab_sync` (that is how its own writes are skipped on the next scan); its YNAB
+  traffic is `aggregation.ynab._safe_send` and nothing else. ADR
+  `2026-10-20-ynab-two-way-sync-reconciles-against-per-entity-baselines`.
 
 ## AI tools
 

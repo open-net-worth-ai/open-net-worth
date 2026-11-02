@@ -9,6 +9,7 @@ from __future__ import annotations
 from backend.core.errors import ValidationError
 from backend.core.holdings_change import register_holdings_changed_hook
 from backend.core.ids import new_id
+from backend.core.untrusted import sanitize_untrusted
 from backend.db.engine import _lock_for_table
 
 # PLAN 4B TASK 3: re-seated off the raw watchlist.json file onto WatchlistStore's DB row.
@@ -52,6 +53,9 @@ _DEFAULT_CONFIG = {
     "ai_opinion_level": "information",  # information | lean | suggest
     "holdings_brief_verbosity": 3,  # 1 headline … 4 detailed, 5 written by Lucius
     "watchlist_brief_verbosity": 3,
+    # The user's own words on what Intel should tell them (the delivery decider's standing
+    # instructions, flag intel_delivery_decider). Sanitized and capped by validate_ai_settings.
+    "delivery_instructions": "",
     "last_scan_at": None,
     "last_price_check_at": None,
 }
@@ -72,6 +76,7 @@ CRASH_MOVE_PCT = {
 
 AI_OPINION_LEVELS = ("information", "lean", "suggest")
 WATCH_READS_MAX_PER_DAY = 50
+DELIVERY_INSTRUCTIONS_MAX_CHARS = 1000
 BRIEF_VERBOSITY_LEVELS = (1, 2, 3, 4, 5)
 
 
@@ -91,6 +96,10 @@ def validate_ai_settings(changes: dict) -> dict:
     for key in ("explained_alerts_enabled", "watch_reads_enabled"):
         if key in out:
             out[key] = bool(out[key])
+    if "delivery_instructions" in out:
+        out["delivery_instructions"] = sanitize_untrusted(
+            str(out["delivery_instructions"] or "").strip(), DELIVERY_INSTRUCTIONS_MAX_CHARS
+        )
     return out
 
 
