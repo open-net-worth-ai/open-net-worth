@@ -5,9 +5,13 @@ The RTA identity, as a PROPERTY over randomly generated books (ADR
 The identity must CLOSE EXACTLY on EVERY month of EVERY book, whatever the mix of assignments,
 overspends, uncategorized spending, off-budget transfers, card spending and card payments:
 
-    ready_to_assign == on_budget_cash − pre_budget_baseline − held_in_envelopes
-                                                            − held_outside_envelopes
-                                                            − card_spend_not_covered
+    ready_to_assign == on_budget_cash + card_credit − pre_budget_baseline − held_in_envelopes
+                                                    − held_outside_envelopes
+                                                    − card_spend_not_covered
+
+`card_credit` (ADR 2026-11-02-a-card-in-credit-is-budget-money) is every card's balance above
+zero: a card in credit holds budget money, so a spend paid from that credit holds in its bucket
+like cash spend, and a refund landing past zero is new money like a cash refund.
 
 `held_in_envelopes` is SIGNED (Σ available over the envelope rows, a current-month overspend
 counted negative), so `RTA ≤ cash − baseline` is deliberately NOT asserted here: ADR 2026-09-09
@@ -92,6 +96,7 @@ from __future__ import annotations
 import random
 
 from backend.services import envelopes as envelopes_service
+from backend.services import ledger as svc
 from backend.services import planning
 from tests.test_rta_balance_identity import _BASE_ACCOUNTS, _FX, _expense, _income, _transfer
 from tests.test_rta_balance_identity import env as _isolated_env
@@ -134,6 +139,7 @@ _ARCHIVED_CARD = {
 # The account universe, split the way the ENGINE splits it — restated here as literals so the
 # re-derivation below shares nothing with `_build_context`.
 _CASH_IDS = frozenset({"bank", "bank_usd"})
+_CARD_IDS = frozenset({"cc", "cc_old"})
 _ON_BUDGET_IDS = frozenset({"bank", "bank_usd", "cc", "cc_old"})
 
 
@@ -380,12 +386,16 @@ def _to_base(amount, currency) -> float:
 def _no_bucket_holds_from_the_raw_book(txns, month, linked):
     """`held_outside_envelopes(month)`, re-derived from the RAW transaction rows.
 
-    A deliberately independent second implementation: it walks the generated book, decides
-    "is this cash?" from the account id alone (`_CASH_IDS` — literally `type == "cash"`, the
-    same set `_cash_as_of` sums), clamps each key at ≤ 0, and sums. It calls nothing in
-    `planning`, so it cannot agree with the engine by construction — which is the whole point,
-    since the identity closure asserts a formula against its own inputs and would pass on every
-    misclassification.
+    A deliberately independent second implementation: it walks the stored book, decides
+    "is this money?" from the account id alone (`_CASH_IDS` — literally `type == "cash"`, the
+    same set `_cash_as_of` sums — and, for a card, only the part of a leg that moves its balance
+    above zero), clamps each key at ≤ 0, and sums. It calls nothing in `planning`, so it cannot
+    agree with the engine by construction — which is the whole point, since the identity closure
+    asserts a formula against its own inputs and would pass on every misclassification.
+
+    `txns` are the STORED rows (ids and `created_at` included): a card's balance is followed in
+    the engine's own (date, created_at, id) order, since how much of a card leg is credit depends
+    on what came before it.
 
     Returns `(held, accounts_touched)`. Three shapes reach a no-bucket key:
 
@@ -401,6 +411,11 @@ def _no_bucket_holds_from_the_raw_book(txns, month, linked):
         2026-09-10) — a second implementation only proves something when it is written from the
         rule rather than from the code.
 
+    On a CARD (ADR 2026-11-02-a-card-in-credit-is-budget-money) only money counts: a spend holds
+    the part paid from credit, `min(amount, max(0, balance))`, and a refund cancels the part that
+    lands past zero, `amount − min(amount, owed)`. The rest is debt, which is never RTA's. Money
+    arriving at a card by a categorized TRANSFER counts the same way as a refund.
+
     Nothing else can: income on a BLANK category is inflow-to-assign proper (`""` is in the
     engine's `_INFLOW_CATEGORIES`, alongside `"ready_to_assign"`) and folds nowhere at all —
     netting salary into the Uncategorized bucket would wipe that bucket's hold for every book that
@@ -409,40 +424,50 @@ def _no_bucket_holds_from_the_raw_book(txns, month, linked):
     provably not in play for this walk."""
     by_key: dict[str, float] = {}
     touched: set[str] = set()
-    for t in txns:
-        if not (t.get("date") or "").startswith(month):
-            continue
+    card_balance = dict.fromkeys(_CARD_IDS, 0.0)
+    rows = sorted(
+        (t for t in txns if not t.get("deleted") and (t.get("date") or "")[:7] <= month),
+        key=lambda t: (t.get("date") or "", t.get("created_at") or "", t.get("id") or ""),
+    )
+    for t in rows:
+        frm, to = t.get("from_account_id"), t.get("to_account_id")
+        in_month = (t.get("date") or "").startswith(month)
         cat = t.get("category") or ""
-        if cat in linked:
-            continue  # an envelope row holds it, not a no-bucket bucket
-        if t.get("kind") == "expense":
-            moving, delta = (
-                t.get("from_account_id"),
-                -_to_base(t.get("from_amount"), t.get("from_currency")),
-            )
-        elif t.get("kind") == "income" and cat:
-            moving, delta = (
-                t.get("to_account_id"),
-                _to_base(t.get("to_amount"), t.get("to_currency")),
-            )
-        elif t.get("kind") == "transfer" and cat:
-            frm, to = t.get("from_account_id"), t.get("to_account_id")
-            from_ok, to_ok = frm in _ON_BUDGET_IDS, to in _ON_BUDGET_IDS
-            if from_ok == to_ok:
-                continue
-            moving = frm if from_ok else to
-            delta = (
-                -_to_base(t.get("from_amount"), t.get("from_currency"))
-                if from_ok
-                else _to_base(t.get("to_amount"), t.get("to_currency"))
-            )
-        else:
-            continue
-        if moving not in _CASH_IDS:
-            continue  # a card never had cash to lose — nothing to hold, nothing to charge
-        touched.add(moving)
-        by_key[cat] = by_key.get(cat, 0.0) + delta
+        if in_month and cat not in linked:
+            for moving, delta in _no_bucket_legs(t, cat):
+                if moving in _CASH_IDS:
+                    pass
+                elif moving in _CARD_IDS and delta < 0:
+                    delta = -min(-delta, max(0.0, card_balance[moving]))
+                elif moving in _CARD_IDS:  # money arriving: only what lands as credit counts
+                    delta = delta - min(delta, max(0.0, -card_balance[moving]))
+                else:
+                    continue  # an off-budget account — not plan money
+                if abs(delta) > 0.005:
+                    touched.add(moving)
+                by_key[cat] = by_key.get(cat, 0.0) + delta
+        if to in _CARD_IDS:
+            card_balance[to] += _to_base(*_leg(t, "to"))
+        if frm in _CARD_IDS:
+            card_balance[frm] -= _to_base(*_leg(t, "from"))
     return round(sum(min(0.0, round(v, 2)) for v in by_key.values()), 2), touched
+
+
+def _no_bucket_legs(t, cat):
+    """``[(moving_account, signed_base_amount)]`` for one row that can reach a no-bucket key."""
+    if t.get("kind") == "expense":
+        return [(t.get("from_account_id"), -_to_base(t.get("from_amount"), t.get("from_currency")))]
+    if t.get("kind") == "income" and cat:
+        return [(t.get("to_account_id"), _to_base(t.get("to_amount"), t.get("to_currency")))]
+    if t.get("kind") == "transfer" and cat:
+        frm, to = t.get("from_account_id"), t.get("to_account_id")
+        from_ok, to_ok = frm in _ON_BUDGET_IDS, to in _ON_BUDGET_IDS
+        if from_ok == to_ok:
+            return []
+        if from_ok:
+            return [(frm, -_to_base(t.get("from_amount"), t.get("from_currency")))]
+        return [(to, _to_base(t.get("to_amount"), t.get("to_currency")))]
+    return []
 
 
 def test_the_identity_closes_exactly_on_every_generated_book(env):
@@ -512,6 +537,7 @@ def test_the_identity_closes_exactly_on_every_generated_book(env):
         env.set_profile(budget_config={"pre_budget_baseline": baseline})
         env.set_assignments(assigns)
         env.set_txns(txns)
+        stored = svc.transactions.all()
 
         prev_rows: dict[str, dict] | None = None
         prev_month: str | None = None
@@ -550,7 +576,7 @@ def test_the_identity_closes_exactly_on_every_generated_book(env):
                     carry["reset_from_red"] += before["available"] < -0.005
                     carry["carried_positive"] += before["available"] > 0.005
             prev_rows, prev_month = rows, month
-            cash = table["on_budget_cash"]
+            cash = table["on_budget_cash"] + table["card_credit"]
             held = table["held_in_envelopes"]
             held_outside = table["held_outside_envelopes"]
             card_uncovered = table["card_spend_not_covered"]
@@ -585,7 +611,7 @@ def test_the_identity_closes_exactly_on_every_generated_book(env):
             #    bucket to land in. Independent of the engine (see the helper), so unlike the
             #    closure above this one actually fails when a credit-account leg sneaks in.
             assert not ctx["cutoff_by_id"], f"{where}: the raw walk assumes no tracking anchors"
-            raw, touched = _no_bucket_holds_from_the_raw_book(txns, month, linked_cats)
+            raw, touched = _no_bucket_holds_from_the_raw_book(stored, month, linked_cats)
             if (
                 abs(planning._activity_map(ctx, month).get(_UNLINKED, 0.0))
                 < 0.005
@@ -596,8 +622,10 @@ def test_the_identity_closes_exactly_on_every_generated_book(env):
                 f"{where}: held_outside={held_outside} but the raw book says {raw}"
             )
             # The two sides of the identity must draw from ONE account universe: every account
-            # the hold reserved against is an account `_cash_as_of` summed.
-            assert touched <= ctx["cash_ids"], f"{where}: reserved against non-cash {touched}"
+            # the hold reserved against is an account the money side summed — cash, or a card's
+            # credit (`_card_credit_as_of`).
+            money_ids = ctx["cash_ids"] | ctx["card_ids"]
+            assert touched <= money_ids, f"{where}: reserved against non-money {touched}"
             # The MOVEMENT reconciles too, month over month — implied by the per-month equality
             # above, asserted separately because the term's job is to appear when cash leaves
             # with no home and to disappear at the roll.

@@ -70,6 +70,7 @@ describe('freshStartLedger', () => {
     month: '2026-09',
     ready_to_assign_after: 44776.13,
     cash_now: 44776.13,
+    card_credit: 0,
     held_in_envelopes: 0,
     held_outside_envelopes: 0,
     card_spend_not_covered: 0,

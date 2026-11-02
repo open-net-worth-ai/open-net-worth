@@ -136,9 +136,22 @@
   continuous netting had no room for). **`RTA ≤ cash − baseline` is RETIRED as an invariant** —
   RTA can read above cash on hand in-month (a held overspend, resolved at the month-end sweep,
   not an instantaneous clamp). It is replaced by a closed-identity property: `RTA + Σ_env
-  available(signed) + held_outside_envelopes + card_spend_not_covered + baseline == cash_as_of`,
-  exactly, on every generated book (`tests/test_rta_identity_property.py`, which also pins
-  `held_outside_envelopes ≤ 0`).
+  available(signed) + held_outside_envelopes + card_spend_not_covered + baseline == cash_as_of +
+  card_credit`, exactly, on every generated book (`tests/test_rta_identity_property.py`, which
+  also pins `held_outside_envelopes ≤ 0`).
+- **A card in credit is budget money** (ADR `2026-11-02-a-card-in-credit-is-budget-money`).
+  `card_credit(m)` = Σ over every payment-tracked card of `max(0, balance at month end)` sits
+  beside `cash_as_of` on the money side; Dashboard cash on hand stays `cash` accounts only, and a
+  card that owes money adds nothing. A spend on a card in credit pays from the credit first —
+  `free = max(0, balance + min(0, payment_available))` when a linked envelope's money can fill a
+  negative payment envelope, `max(0, balance)` otherwise — and only the rest is debt, covered or
+  uncovered exactly as before; the credit-paid part behaves like cash spend (draws the envelope,
+  holds in the no-bucket bucket when there is no envelope). A refund drains the payment envelope
+  only by `min(refund, owed)`. Each card is walked in (date, created_at, id) order, so coverage
+  is no longer order-invariant. The scar: paying a card more than it owed drove its payment
+  envelope negative, the roll charged it to Ready to Assign, and the money — still sitting on the
+  card — never came back; a YNAB import of a test plan was 1,375 short with every envelope
+  matching. Every rule above is a YNAB probe recorded in the ADR.
   The scar, and why it flipped twice in two days: on 2026-09-08 the owner's live book read RTA
   S$44,115 against S$37,665 of cash, because the pre-2026-09-08 engine treated one event three
   different ways depending on where it landed — held if it fell in an overspent envelope, wrongly

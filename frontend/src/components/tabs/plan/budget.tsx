@@ -97,6 +97,8 @@ export interface SummaryBudget {
   ageOfMoney: number | null
   ageForecastable: boolean
   onBudgetCash: number | null
+  /** Every card's balance above zero — budget money beside cash (ADR 2026-11-02). */
+  cardCredit?: number
   /** SIGNED Σ of every envelope's Available — negative when envelopes are net overspent and
    *  holding those holes until the roll (ADR 2026-09-09). */
   heldInEnvelopes: number
@@ -241,6 +243,7 @@ function Summary({
             rta={rta}
             monthLabel={month}
             onBudgetCash={b.onBudgetCash}
+            cardCredit={b.cardCredit}
             heldInEnvelopes={b.heldInEnvelopes}
             heldOutsideEnvelopes={b.heldOutsideEnvelopes}
             cardSpendNotCovered={b.cardSpendNotCovered}
@@ -2169,6 +2172,7 @@ export function BudgetTab({
   const liveB: SummaryBudget = {
     readyToAssign: m.rta,
     onBudgetCash: m.data?.on_budget_cash ?? null,
+    cardCredit: m.data?.card_credit ?? 0,
     heldInEnvelopes,
     heldOutsideEnvelopes,
     cardSpendNotCovered,

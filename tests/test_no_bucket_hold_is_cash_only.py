@@ -51,6 +51,11 @@ and never into the card coverage cap's pool. An INFLOW category (blank / "ready_
 still folds nowhere: it is inflow-to-assign by definition, and netting it into the Uncategorized
 bucket would wipe that bucket's hold for anyone whose salary lands uncategorized.
 
+THE CARD OWES S$500 throughout (ADR 2026-11-02-a-card-in-credit-is-budget-money). A card's
+balance ABOVE ZERO is budget money now, so money landing on a card that owes nothing really is
+money, and does cancel a same-label hold — section (f) pins that. Every guard above is about a
+credit-side leg that brought NO money in, which on a card in debt is still exactly the case.
+
 Reuses tests/test_rta_balance_identity.py's isolated `env` fixture and row helpers.
 """
 
@@ -92,7 +97,8 @@ _ACCOUNTS = [
         "kind": "liability",
         "type": "credit",
         "currency": "SGD",
-        "initial_balance": 0.0,
+        "initial_balance": -500.0,  # owes money: a leg landing here shrinks debt, brings no money
+        "initial_balance_date": "2026-06-01",
     },
     {
         "id": "brokerage",
@@ -126,6 +132,7 @@ def _table(month=_MONTH):
     table = planning.budget_month(month)
     assert table["ready_to_assign"] == pytest.approx(
         table["on_budget_cash"]
+        + table["card_credit"]
         - table["pre_budget_baseline"]
         - table["held_in_envelopes"]
         - table["held_outside_envelopes"]
@@ -602,3 +609,57 @@ def test_a_stamp_written_under_a_previous_base_currency_is_recomputed_not_read_r
     assert table["on_budget_cash"] == pytest.approx(666.67, abs=0.005)  # 900 SGD ÷ 1.35
     assert table["held_outside_envelopes"] == pytest.approx(-74.07, abs=0.005)  # NOT −100
     assert table["ready_to_assign"] == pytest.approx(740.74, abs=0.01)  # NOT 766.67
+
+
+# ── (f) the same inflows on a card IN CREDIT are money ──────────────────────────────────────
+#
+# ADR 2026-11-02-a-card-in-credit-is-budget-money: a card's balance above zero is budget money.
+# Money landing on a card that owes nothing is new credit, so it cancels its label's hold like a
+# cash refund would — and Ready to Assign moves by exactly zero, never by a fabricated amount.
+
+
+def _card_in_credit(book, credit=200.0):
+    book.set_accounts(
+        [a if a["id"] != "cc" else {**a, "initial_balance": credit} for a in _ACCOUNTS]
+    )
+
+
+def test_a_refund_to_a_card_in_credit_is_money_and_cancels_the_hold(book):
+    _card_in_credit(book)
+    book.set_txns([_cash_spend()])
+    before = _table()["ready_to_assign"]
+    assert before == 1200.0  # 1,000 cash + 200 credit; the 100 spend is held
+
+    book.set_txns([_cash_spend(), _refund("2026-06-20", 100.0, to="cc")])
+    table = _table()
+    assert table["card_credit"] == 300.0
+    assert table["held_outside_envelopes"] == 0.0
+    assert table["ready_to_assign"] == before
+
+
+def test_a_transfer_into_a_card_in_credit_is_money_and_cancels_the_hold(book):
+    _card_in_credit(book)
+    _archive_the_card()
+    book.set_txns([_cash_spend()])
+    before = _table()["ready_to_assign"]
+
+    offset = _transfer("2026-06-20", 100.0, "brokerage", "cc")
+    offset["category"] = _SUBSCRIPTIONS
+    book.set_txns([_cash_spend(), offset])
+    table = _table()
+    assert table["card_credit"] == 300.0
+    assert table["held_outside_envelopes"] == 0.0
+    assert table["ready_to_assign"] == before
+
+
+def test_an_inflow_partly_paying_debt_cancels_only_the_part_that_lands_as_credit(book):
+    """The card owes 500; a 550 refund pays the debt and leaves 50 of credit. Only that 50 is
+    money, so the 100 hold shrinks to −50 and Ready to Assign moves by nothing."""
+    book.set_txns([_cash_spend()])
+    before = _table()["ready_to_assign"]
+
+    book.set_txns([_cash_spend(), _refund("2026-06-20", 550.0, to="cc")])
+    table = _table()
+    assert table["card_credit"] == 50.0
+    assert table["held_outside_envelopes"] == -50.0
+    assert table["ready_to_assign"] == before

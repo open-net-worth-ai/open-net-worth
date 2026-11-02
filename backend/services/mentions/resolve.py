@@ -538,10 +538,11 @@ def _resolve_budget_month(ref: str) -> dict:
         "month": table.get("month"),
         "ready_to_assign": table.get("ready_to_assign"),
         "on_budget_cash": table.get("on_budget_cash"),
-        # EVERY term Ready to Assign is MADE of (ADR 2026-09-09 + 2026-09-10) — cash − baseline
-        # − held in envelopes − held outside envelopes − uncovered card spend − the
-        # future-assigned clamp — so a reader of this projection can close the identity without
-        # a second fetch. The baseline and the clamp were missing from the first cut, which left
+        "card_credit": table.get("card_credit"),
+        # EVERY term Ready to Assign is MADE of (ADR 2026-09-09 + 2026-09-10 + 2026-11-02) — cash
+        # + card credit − baseline − held in envelopes − held outside envelopes − uncovered card
+        # spend − the future-assigned clamp — so a reader of this projection can close the
+        # identity without a second fetch. The baseline and the clamp were missing from the first cut, which left
         # the arithmetic short on any book carrying either.
         "pre_budget_baseline": table.get("pre_budget_baseline"),
         "held_in_envelopes": table.get("held_in_envelopes"),

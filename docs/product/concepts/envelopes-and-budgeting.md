@@ -125,6 +125,10 @@ Card spending never changes Ready to Assign. Spending in a category without a fu
 or debt you already had before you started, isn't covered automatically — the card's row shows
 **"$X more needed for this bill"** so you can assign money to its payment envelope.
 
+A card can also hold **credit**: you paid it more than it owed, or a refund arrived after the
+bill was paid. That credit is your money, so it counts toward Ready to Assign, and spending on the
+card uses it up before any new debt is set aside — the same way YNAB treats it.
+
 ## Commitments
 
 A [commitment](../features/commitments.md) — a purchase plan, an installment schedule, a loan
