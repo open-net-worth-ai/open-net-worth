@@ -61,9 +61,20 @@ class Flag:
 
 
 # THE REGISTRY. Declare a flag here and nowhere else; retire it by deleting its entry in the
-# same PR that deletes its old code path. Empty on purpose: the mechanism ships before any
-# feature needs it (the test suite declares its own example flag).
-FLAGS: tuple[Flag, ...] = ()
+# same PR that deletes its old code path (the test suite declares its own example flag).
+FLAGS: tuple[Flag, ...] = (
+    Flag(
+        name="intel_delivery_decider",
+        description=(
+            "Lucius decides which Intel news reaches you now, which waits for a roundup, "
+            "and which stays in the Intel tab."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 2),
+        remove_by=date(2027, 1, 31),
+    ),
+)
 
 
 def build_registry(flags: tuple[Flag, ...]) -> dict[str, Flag]:

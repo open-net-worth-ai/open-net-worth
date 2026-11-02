@@ -196,6 +196,7 @@ _EXCLUDED_TABLES = frozenset(
         # receipts got a strictly more conservative treatment than everything else for a
         # risk row-level tracking already contains. Now undoable via /rewind like every
         # other Lucius write choke.
+        "news_deliveries",  # Intel delivery decider ledger (flag intel_delivery_decider) — runtime scheduler state; a /rewind that turned a told item back into an unsent one would re-send it (store fires no write hook either)
         "pending_pushes",  # zero-delivery push retry queue (INT6) — runtime scheduler state (drain/fill cycle), never snapshotted (mirrors the retired PENDING_PUSHES_JSON exclusion above)
         # PLAN 4E TASK 2 — the checkpoint index itself. checkpointed=False at the store
         # (CheckpointIndexStore) already makes the capture a structural no-op — this entry
