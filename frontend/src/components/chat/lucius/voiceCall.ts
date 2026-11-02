@@ -140,7 +140,11 @@ function classify(e: unknown): CallProblem {
   return { kind: 'other', message: message || 'The call could not start.' }
 }
 
+const FOLLOW_MS = 1500
+let followTimer: number | undefined
+
 function teardown() {
+  window.clearInterval(followTimer)
   stopRing()
   stopRing = () => {}
   audioEls.forEach((el) => el.remove())
@@ -220,11 +224,6 @@ export async function startCall(sessionId: string): Promise<void> {
     next.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       if (speakers.some((p) => p.identity !== next.localParticipant.identity)) pickedUp()
     })
-    // Lucius's worker says when the call's conversation changed — small talk recorded, or a
-    // turn of his starting or ending — so the open chat shows the call as it happens.
-    next.on(RoomEvent.DataReceived, (_payload, _from, _kind, topic) => {
-      if (topic === CHAT_CHANGED_TOPIC) emitConversationChanged(grant.session_id)
-    })
     next.on(RoomEvent.Reconnecting, () => set({ phase: 'reconnecting' }))
     next.on(RoomEvent.Reconnected, () => set({ phase: state.connectedAt ? 'live' : 'ringing' }))
     next.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
@@ -235,6 +234,11 @@ export async function startCall(sessionId: string): Promise<void> {
     })
     await next.connect(grant.url, grant.token)
     set({ sessionId: grant.session_id, phase: 'ringing' })
+    // The call's small talk is recorded in a few ms — gone before the 4s live poll looks — so
+    // while a call is on, the open chat checks its conversation's revision (a few bytes when
+    // nothing changed) and the live poll looks, every 1.5s. Polled from here, not pushed over
+    // the room: a data message from the in-app worker crashed LiveKit's native layer (2026-11-03).
+    followTimer = window.setInterval(() => emitConversationChanged(grant.session_id), FOLLOW_MS)
     await next.localParticipant.setMicrophoneEnabled(true)
   } catch (e) {
     localHangUp = true
@@ -242,9 +246,6 @@ export async function startCall(sessionId: string): Promise<void> {
     finish(classify(e))
   }
 }
-
-/** Must match `CHAT_CHANGED_TOPIC` in backend/connectors/voice/agent.py. */
-const CHAT_CHANGED_TOPIC = 'lucius.chat_changed'
 
 export async function hangUp(): Promise<void> {
   localHangUp = true
