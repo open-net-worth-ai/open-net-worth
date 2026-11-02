@@ -189,7 +189,7 @@ def test_assign_bad_category_422(client):
 
 
 def test_get_fresh_start_preview_names_assigned_in_future_when_the_clamp_is_live(client):
-    """`GET /api/planning/fresh-start-preview` is a seven-key wire shape normally; an EIGHTH,
+    """`GET /api/planning/fresh-start-preview` is an eight-key wire shape normally; a NINTH,
     `assigned_in_future`, appears only when a LATER month's own assignment clamps this month's
     displayed figure (`_display_rta`) — needs positive cash for the clamp to bite (an empty book
     has nothing to deduct FROM)."""
@@ -229,6 +229,7 @@ def test_get_fresh_start_preview_names_assigned_in_future_when_the_clamp_is_live
         "month",
         "ready_to_assign_after",
         "cash_now",
+        "card_credit",
         "held_in_envelopes",
         "held_outside_envelopes",
         "card_spend_not_covered",
@@ -246,6 +247,60 @@ def test_get_fresh_start_preview_names_assigned_in_future_when_the_clamp_is_live
     assert body["card_spend_not_covered"] == 0.0
     assert body["assigned_in_future"] == 100.0
     assert body["ready_to_assign_after"] == 900.0  # 1000 − 0 − 0 − 0 − 100
+
+
+def test_fresh_start_preview_carries_card_credit_and_closes_on_the_wire(client):
+    """A card in credit is budget money (ADR 2026-11-02-a-card-in-credit-is-budget-money), so the
+    wire preview must carry `card_credit` — without it the dialog's ledger is short by the credit
+    and renders an "Unexplained" line. June: 1,000 in the bank, 150 paid to a card that owes
+    nothing → cash 850, credit 150, the payment envelope holding −150 in-month."""
+    from backend.db.account_store import AccountStore
+    from backend.db.transaction_store import TransactionStore
+
+    for acct in (
+        {"id": "bank", "name": "Bank", "kind": "asset", "type": "cash", "currency": "SGD"},
+        {"id": "visa", "name": "Visa", "kind": "liability", "type": "credit", "currency": "SGD"},
+    ):
+        AccountStore().insert({**acct, "initial_balance": 0.0})
+    planning.sync_card_payment_envelopes()
+    TransactionStore().insert(
+        {
+            "id": "t-income",
+            "kind": "income",
+            "date": "2026-06-01",
+            "category": "",
+            "to_account_id": "bank",
+            "to_amount": 1000.0,
+            "to_currency": "SGD",
+        }
+    )
+    TransactionStore().insert(
+        {
+            "id": "t-pay",
+            "kind": "transfer",
+            "date": "2026-06-20",
+            "from_account_id": "bank",
+            "from_amount": 150.0,
+            "from_currency": "SGD",
+            "to_account_id": "visa",
+            "to_amount": 150.0,
+            "to_currency": "SGD",
+        }
+    )
+
+    body = client.get("/api/planning/fresh-start-preview", params={"ym": "2026-06"}).json()
+    assert body["cash_now"] == 850.0
+    assert body["card_credit"] == 150.0
+    closes = (
+        body["cash_now"]
+        + body["card_credit"]
+        - body["baseline"]
+        - body["held_in_envelopes"]
+        - body["held_outside_envelopes"]
+        - body["card_spend_not_covered"]
+        - body.get("assigned_in_future", 0.0)
+    )
+    assert round(body["ready_to_assign_after"] - closes, 2) == 0
 
 
 def test_fresh_start_preview_refuses_a_future_month_exactly_like_the_write(client):

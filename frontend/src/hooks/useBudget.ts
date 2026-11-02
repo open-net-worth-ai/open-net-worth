@@ -116,8 +116,8 @@ export interface BudgetMonth {
   /** Every card's balance ABOVE ZERO as of this month's end, base ccy — an overpaid or refunded
    *  card holds the user's own money, which is budget money beside `on_budget_cash` (ADR
    *  2026-11-02-a-card-in-credit-is-budget-money). Added to it in the identity; a card that
-   *  owes money adds nothing. Optional so an older payload reads as 0. */
-  card_credit?: number
+   *  owes money adds nothing. */
+  card_credit: number
   /** Read-only flag: do any on-budget cash accounts hold a foreign currency? When true the RTA
    *  breakdown notes that Ready-to-Assign can shift as exchange rates move (foreign cash floats
    *  at the current rate). A plain note, not a computed amount (ADR 2026-07-09). */

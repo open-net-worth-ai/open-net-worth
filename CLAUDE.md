@@ -210,13 +210,10 @@ One line each — full reasoning and the scar behind each is in
   `_op_auto_assign` re-derives each step from the live book for the COUPLED modes only
   (`_COUPLED_AUTO_ASSIGN_MODES` — a read/write-set proof about `month`, not a guess), so
   preview == end state.
-- A card IN CREDIT is budget money (ADR `2026-11-02-a-card-in-credit-is-budget-money`, from YNAB
-  probes): `card_credit` = Σ every card's balance above zero, beside `cash_as_of` — never in
-  "cash on hand", and 0 for a card that owes. Spending on it pays from credit FIRST
-  (`free = max(0, balance + min(0, payment_available))` for a linked spend, `max(0, balance)`
-  with no envelope) and only the rest becomes coverable debt; a refund drains the payment
-  envelope only by the debt it shrinks. So `_capped_card_credits` walks each card in date order —
-  the coverage total is no longer order-invariant.
+- A card IN CREDIT is budget money: `card_credit` (Σ cards' balance above zero) sits beside cash,
+  never in "cash on hand"; spend on it uses the credit first and a refund drains the payment
+  envelope only by the debt it shrinks, so coverage walks each card in date order (ADR
+  `2026-11-02-a-card-in-credit-is-budget-money`; rules in `docs/INVARIANTS.md`).
 - Deleting a category with `reassign=True` and an envelope-backed `reassign_to` CARRIES its
   assigned money there (`categories._carry_assigned_to_target` → `planning.add_to_assigned`,
   the `assign` choke): THIS month's figure lands on the target's envelope instead of releasing

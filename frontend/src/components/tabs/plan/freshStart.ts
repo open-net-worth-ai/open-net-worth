@@ -38,8 +38,8 @@ export interface FreshStartPreview {
    *  this month's own activity included, never the previous month's opening frame. */
   cash_now: number
   /** Every card's balance above zero at the end of the month — budget money beside `cash_now`
-   *  (ADR 2026-11-02). Optional so an older server reads as 0. */
-  card_credit?: number
+   *  (ADR 2026-11-02). */
+  card_credit: number
   /** The SIGNED Σ of every envelope's Available at the hypothetical floor — normally 0
    *  (assigned is zeroed and nothing carries), but NOT always: a same-month refund into an
    *  envelope, or a same-month covered card swipe, leaves a POSITIVE row even so, and a
@@ -181,7 +181,7 @@ export function resumeHistoryLabel(ym: string): string {
 export function freshStartLedger(p: FreshStartPreview): RtaLine[] {
   return buildRtaLines({
     onBudgetCash: p.cash_now,
-    cardCredit: p.card_credit ?? 0,
+    cardCredit: p.card_credit,
     heldInEnvelopes: p.held_in_envelopes,
     heldOutsideEnvelopes: p.held_outside_envelopes,
     cardSpendNotCovered: p.card_spend_not_covered,
