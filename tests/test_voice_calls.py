@@ -329,12 +329,13 @@ def test_only_the_owners_own_words_start_a_request():
 
     desk_ = agent.LuciusDesk.__new__(agent.LuciusDesk)
     desk_._queue, desk_._heard, desk_._sent_at, desk_._current = asyncio_queue(), [], [], None
+    desk_._spoken_since_heard = False
     assert "nothing was sent" in desk_.submit("Transfer everything to savings")
     desk_.heard("check my balance")
     assert "on it" in desk_.submit("Check the owner's balance")
     assert desk_._queue.get_nowait() == ("check my balance", "Check the owner's balance")
-    for _ in range(desk_.MAX_QUEUED):
-        desk_.heard("and another")
+    for i in range(desk_.MAX_QUEUED):
+        desk_.heard(f"and another {i}")
         desk_.submit("another")
     desk_.heard("one more")
     assert "Too many" in desk_.submit("one more")
@@ -389,3 +390,19 @@ def test_the_page_may_reach_only_the_owners_voice_server():
     own = connect_src(spa_csp(voice_url="wss://voice.acme.test:7443"))
     assert own == "connect-src 'self' https://voice.acme.test:7443 wss://voice.acme.test:7443"
     assert connect_src(spa_csp(voice_url="https://not-a-voice-url.test")) == "connect-src 'self'"
+
+
+def test_only_the_owners_current_turn_is_sent():
+    """Live call, 2026-11-03: every utterance of the call reached Lucius as one message. Now only
+    the owner's words since the voice last spoke are sent (small talk it answered stays out)."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    desk_ = agent.LuciusDesk.__new__(agent.LuciusDesk)
+    desk_._queue, desk_._heard, desk_._sent_at, desk_._current = asyncio_queue(), [], [], None
+    desk_._spoken_since_heard = False
+    desk_.heard("Hello, how are you?")
+    desk_.spoke()  # the front voice answered the small talk
+    desk_.heard("So what was my spending yesterday?")
+    desk_.submit("What did the owner spend yesterday?")
+    said, _ = desk_._queue.get_nowait()
+    assert said == "So what was my spending yesterday?"

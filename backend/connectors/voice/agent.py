@@ -124,7 +124,10 @@ class LuciusDesk:
     ) -> None:
         self._session, self._ctx, self._rt, self._session_id = session, ctx, runtime, session_id
         self._queue: asyncio.Queue[tuple[str, str]] = asyncio.Queue()
-        self._heard: list[str] = []  # the owner's final transcripts since the last request
+        # The owner's final transcripts in their CURRENT turn: a turn starts fresh once anyone
+        # has spoken since, so small talk the front voice already answered never rides along.
+        self._heard: list[str] = []
+        self._spoken_since_heard = False
         self._sent_at: list[float] = []
         self._current: str | None = None
         self._started = 0.0
@@ -135,8 +138,25 @@ class LuciusDesk:
         self._runner.cancel()
 
     def heard(self, transcript: str) -> None:
-        if transcript.strip():
-            self._heard.append(transcript.strip())
+        text = transcript.strip()
+        if not text:
+            return
+        if self._spoken_since_heard:
+            self._heard.clear()
+            self._spoken_since_heard = False
+        self._heard.append(text)
+
+    def _say(self, text: str, *, add_to_chat_ctx: bool = False) -> None:
+        """Speak on the call — unless it has already ended (the owner hung up while Lucius
+        was still working); the answer is in the chat either way."""
+        try:
+            self._session.say(text, add_to_chat_ctx=add_to_chat_ctx)
+        except RuntimeError:
+            log.info("voice: the call ended before Lucius's answer was ready; it is in the chat")
+
+    def spoke(self) -> None:
+        """The voice said something: the owner's next words start a new turn."""
+        self._spoken_since_heard = True
 
     def submit(self, request: str) -> str:
         said = " ".join(self._heard).strip()
@@ -182,9 +202,7 @@ class LuciusDesk:
                 await self._answer(said, request)
             except Exception:  # noqa: BLE001 — a failed request must not end the call
                 log.exception("voice: Lucius request failed")
-                self._session.say(
-                    "Sorry, Lucius hit a problem with that one. Want me to try again?"
-                )
+                self._say("Sorry, Lucius hit a problem with that one. Want me to try again?")
             finally:
                 self._current, self._doing = None, ""
 
@@ -196,7 +214,7 @@ class LuciusDesk:
         )
         text, approval = await self._collect(events)
         if text.strip():
-            self._session.say(text.strip(), add_to_chat_ctx=True)
+            self._say(text.strip(), add_to_chat_ctx=True)
         if approval:
             asyncio.create_task(self._after_approval())
 
@@ -225,17 +243,17 @@ class LuciusDesk:
             for ref, (noun, started) in running.items():
                 if ref not in told and now - started >= self.SLOW_S:
                     told.add(ref)
-                    self._session.say(f"The {noun} lookup is taking longer than usual, hang on.")
+                    self._say(f"The {noun} lookup is taking longer than usual, hang on.")
             if not running and "think" not in told and now - last_news >= 2 * self.SLOW_S:
                 told.add("think")
-                self._session.say("Still working on it.")
+                self._say("Still working on it.")
         return text, approval
 
     async def _after_approval(self) -> None:
         events = bridge.stream(self._rt.app_loop, lambda: desk.follow_next_turn(self._session_id))
         text, _ = await self._collect(events)
         if text.strip():
-            self._session.say(text.strip(), add_to_chat_ctx=True)
+            self._say(text.strip(), add_to_chat_ctx=True)
 
 
 async def _with_ticks(events, every: float):
@@ -283,8 +301,11 @@ async def entrypoint(ctx: JobContext) -> None:
         return
     await ctx.connect()
     cfg = runtime.config
+    # format_turns=True: ONE punctuated final transcript per turn. Off (also the default), the
+    # gateway sends each sentence as a final AND the whole turn again unpunctuated, so every
+    # sentence reached Lucius twice (measured against the live service, 2026-11-03).
     stt_kwargs = (
-        {"extra_kwargs": {"format_turns": False}}
+        {"extra_kwargs": {"format_turns": True}}
         if cfg["stt_model"].startswith("assemblyai/")
         else {}
     )
@@ -304,6 +325,11 @@ async def entrypoint(ctx: JobContext) -> None:
     def _heard(ev) -> None:
         if ev.is_final:
             lucius.heard(ev.transcript)
+
+    @session.on("agent_state_changed")
+    def _spoke(ev) -> None:
+        if ev.new_state == "speaking":
+            lucius.spoke()
 
     owner = runtime.owner_name
     await session.start(
