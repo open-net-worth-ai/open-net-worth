@@ -16,6 +16,7 @@ pytest==8.4.2
 pytest-asyncio==1.2.0
 # Coverage measurement (`pytest --cov=backend`); drives the 90%+ coverage goal.
 pytest-cov==7.1.0
+pytest-timeout==2.4.0
 # TestClient (fastapi.testclient) needs httpx; pinned to the installed version
 httpx==0.28.1
 

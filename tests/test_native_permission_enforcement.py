@@ -365,7 +365,7 @@ def test_the_reserved_core_bucket_can_never_collide_with_a_real_connector(db_iso
 
 
 @pytest.mark.asyncio
-async def test_a_level_set_through_the_connector_route_gates_a_native_tool(armed):
+async def test_a_level_set_through_the_connector_route_gates_a_native_tool(armed, quiet_app_boot):
     """The whole claim, driven through the surface a user actually touches.
 
     ``PUT /api/connectors/{id}/permissions/{tool}`` is what the Connectors tab's ladder
@@ -404,7 +404,7 @@ async def test_a_level_set_through_the_connector_route_gates_a_native_tool(armed
 
 
 @pytest.mark.asyncio
-async def test_a_level_set_through_the_app_wide_route_gates_an_untagged_tool(armed):
+async def test_a_level_set_through_the_app_wide_route_gates_an_untagged_tool(armed, quiet_app_boot):
     """The other surface — Settings › Permissions — writing the SAME store. The owner is
     resolved server-side, so a client that knows only the tool name still lands the row
     where the gate will look for it."""
@@ -512,7 +512,9 @@ async def test_an_auto_automation_passes_a_connector_read_as_it_does_a_connector
 
 
 @pytest.mark.asyncio
-async def test_the_yolo_row_is_settable_and_revocable_through_the_ordinary_route(armed):
+async def test_the_yolo_row_is_settable_and_revocable_through_the_ordinary_route(
+    armed, quiet_app_boot
+):
     """The blanket permission must be reachable by the SAME surface as every other one —
     that is what makes "one revoke surface" true rather than aspirational, and turning yolo
     off is the single most important revoke here.

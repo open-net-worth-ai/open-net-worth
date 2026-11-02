@@ -104,7 +104,7 @@ def test_lucius_can_set_and_clear_the_instructions(db_isolated):
     assert out["config"]["delivery_instructions"] == ""
 
 
-def test_the_instructions_patch_over_rest(db_isolated):
+def test_the_instructions_patch_over_rest(db_isolated, quiet_app_boot):
     from fastapi.testclient import TestClient
 
     from backend.main import app

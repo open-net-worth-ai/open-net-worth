@@ -33,7 +33,7 @@ _RATES = {"SGD": 1.0, "USD": 1.35}
 
 
 @pytest.fixture
-def env(monkeypatch, db_isolated):
+def env(monkeypatch, db_isolated, fx_rates):
     monkeypatch.setattr(svc, "base_currency", lambda: "SGD")
     import backend.api.ledger as api_ledger_mod
 

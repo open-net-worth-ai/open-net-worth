@@ -1012,7 +1012,7 @@ def test_get_asset_detail_response_time_unaffected_by_background_refresh_trigger
     monkeypatch.setattr(analyst_mod, "_is_watched_instrument", lambda i: False)
 
     async def _slow_process_row(row, pa_store, evidence_cache=None):
-        await asyncio.sleep(2.0)
+        await asyncio.sleep(10.0)
         return 1
 
     monkeypatch.setattr(analyst_mod, "_process_row", _slow_process_row)
@@ -1022,7 +1022,8 @@ def test_get_asset_detail_response_time_unaffected_by_background_refresh_trigger
     elapsed = time.monotonic() - start
 
     assert resp.status_code == 200
-    assert elapsed < 1.0, (
+    # Half the stub's sleep: a loaded runner's slow GET is not a GET that waited on the refresh.
+    assert elapsed < 5.0, (
         f"GET took {elapsed:.2f}s — the background refresh must never block the read path"
     )
 
