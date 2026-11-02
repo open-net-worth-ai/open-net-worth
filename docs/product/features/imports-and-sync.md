@@ -1,26 +1,27 @@
 ---
-title: Two-way sync with YNAB
-description: A data sync that brings your YNAB history in, keeps the two in step both ways, and keeps a report of every run.
+title: YNAB data sync
+description: A data sync that brings your YNAB history in, keeps the two in step from YNAB, to YNAB or both ways, and keeps a report of every run.
 category: features
 order: 170
 audience: [user]
 status: stable
 related: [lucius/automations, connectors/bank-brokerage, features/importing, operations/backup-and-restore, concepts/the-ledger]
-keywords: [imports, sync, data sync, automations, two-way sync, schedule, ynab, migrate, migration, move, import history, run history, report, verify, preview, archive, re-check, interrupted]
+keywords: [imports, sync, data sync, automations, two-way sync, one-way sync, direction, schedule, ynab, migrate, migration, move, import history, run history, report, verify, preview, archive, re-check, interrupted]
 ---
 
-# Two-way sync with YNAB
+# YNAB data sync
 
-**Two-way sync with YNAB** brings your history in from YNAB and then keeps the two in step: accounts,
+The **YNAB** data sync brings your history in from YNAB and then keeps the two in step: accounts,
 categories, envelopes, every transaction and each month's Assigned amounts, checked against YNAB's
-own figures. It is a **data sync**: open **Automations**, switch to **Data sync** at the top and
-pick it, or click **Two-way sync…** on the YNAB connector. A data sync follows fixed rules rather
+own figures. Changes can flow **Both ways**, only **From YNAB**, or only **To YNAB**. It is a
+**data sync**: open **Automations**, switch to **Data sync** at the top and pick **YNAB**. A data
+sync follows fixed rules rather
 than a Lucius prompt, so no AI is involved and it costs nothing to run. Every run is
 saved, so you can come back to its report whenever you like, from any device.
 
 > **Experimental, off by default.** Turn it on in [Settings → Developer → Experimental](settings.md#experimental-features)
-> (the **Ynab import and sync** switch). Until then there is no **Data sync** tab and no **Two-way sync…**
-> button. Turning it off again stops the sync and hides both, but keeps its settings, review list
+> (the **Ynab import and sync** switch). Until then there is no **Data sync** tab. Turning it off
+> again stops the sync and hides the tab, but keeps its settings, review list
 > and history, so turning it back on carries on where it left off. The YNAB connector itself works
 > the same either way.
 
@@ -31,10 +32,10 @@ from the one-way **Sync YNAB** template, where Lucius fetches new YNAB transacti
 
 Until it is set up, its page is three steps, each unlocked by the one before:
 
-1. **Connect YNAB.** Click **Connect YNAB…** and paste your YNAB access token in the dialog that
-   opens over this page, then **Save**. The token is kept on the YNAB connector (**Connectors →
-   YNAB**), so you can change it from either place; **More on the Connectors page** in the
-   dialog opens the full connector, for pausing or removing it. Where to find a token:
+1. **Connect YNAB.** Click **Connect YNAB…**: the YNAB connector opens right over this page, the
+   same panel as **Connectors → YNAB**. Paste your access token and **Save**. Once a token is
+   saved, **Change** beside "Token saved" opens it again — use it if step 2 says YNAB refused the
+   token. Where to find a token:
    [Bank & brokerage connectors](../connectors/bank-brokerage.md#ynab).
 2. **Bring your YNAB history in.** Choose your plan and click **Preview**. Nothing is written. You
    see how many accounts, transactions, categories and budget months would come across, any
@@ -45,8 +46,9 @@ Until it is set up, its page is three steps, each unlocked by the one before:
    report; if the backup fails, nothing is imported. **View live report** opens the run while it
    works. You can close the tab: the work continues on the server. Running again is safe: nothing
    is booked twice.
-3. **Turn on the sync.** From then on it runs every hour by default. You can stop after step 2 if
-   you only want your history.
+3. **Turn on the sync.** Pick a direction (**Both ways**, **From YNAB** or **To YNAB**), then
+   **Turn on**. It runs every hour by default. You can stop after step 2 if you only want your
+   history.
 
 Once it has been imported it appears under **Automations → Data sync** with its schedule and an
 **N to review** tag when something needs you (the **Data sync** switch shows the same count). Its menu has **Sync now**, **Turn on** /
@@ -62,8 +64,14 @@ time.
   with **Keep Open Net Worth's** and **Keep YNAB's**; and an account with a synced transaction
   dated before its Starting Balance, which moves only if you confirm **Move the Starting Balance**
   (or choose **Keep as history**).
-- **Schedule**: every 15 or 30 minutes, hourly, every 6 hours, daily, or manual only, and the last
-  sync and what it did ("3 sent to YNAB, 1 pulled, 1 needs review"), or why it failed.
+- **Settings**: the direction, and how often: every 15 or 30 minutes, hourly, every 6 hours, daily,
+  or manual only. Below them, the last sync and what it did ("3 sent to YNAB, 1 pulled, 1 needs
+  review"), or why it failed.
+- **Direction.** **From YNAB** brings YNAB's changes in and never writes to YNAB; **To YNAB** sends
+  this book's changes and never changes the book from YNAB. Either way, a transaction or a month's
+  Assigned changed on *both* sides still goes to **Needs your review**, and keeping the side the
+  direction protects leaves the other one untouched. What one way held back is not lost: switch
+  back to **Both ways** and the next sync sends or pulls it.
 - **YNAB plan**: the plan it pairs with and when it was imported.
 - **⋯ → Re-check against YNAB** compares the book with YNAB's current figures, without writing.
 

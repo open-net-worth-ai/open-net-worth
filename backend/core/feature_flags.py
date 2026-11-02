@@ -113,9 +113,8 @@ FLAGS: tuple[Flag, ...] = (
     Flag(
         name="ynab_import_and_sync",
         description=(
-            "Import a whole YNAB plan, then keep it and this book in step both ways on a "
-            "schedule. Adds the Data sync tab in Automations and the Two-way sync button on "
-            "the YNAB connector."
+            "Import a whole YNAB plan, then keep it and this book in step on a schedule: from "
+            "YNAB, to YNAB or both ways. Adds the Data sync tab in Automations."
         ),
         default=False,
         owner="owner",

@@ -3,7 +3,7 @@ import { authFetch } from '../../../api/client'
 import { invalidateQueryCache, useQueryCache } from '../../../state/queryCache'
 import { detailOf } from './runs'
 
-// The scheduled two-way sync with the migrated YNAB plan (/api/ynab/sync). The server owns the
+// The scheduled data sync with the migrated YNAB plan (one way or both) (/api/ynab/sync). The server owns the
 // schedule and the run; this is its status (shared by the Sync panel, a sync report and the
 // connector card's status line) and the one call that settles a review item.
 
@@ -47,6 +47,8 @@ export interface SyncStatus {
   enabled: boolean
   interval: string
   intervals: string[]
+  direction: SyncDirection
+  directions: SyncDirection[]
   plan_id: string | null
   plan_name: string | null
   running: boolean
@@ -54,6 +56,13 @@ export interface SyncStatus {
   last_run: LastRun | null
   next_run_at: string | null
   conflicts: ReviewItem[]
+}
+
+export type SyncDirection = 'both' | 'from_ynab' | 'to_ynab'
+export const DIRECTION_LABELS: Record<SyncDirection, string> = {
+  both: 'Both ways',
+  from_ynab: 'From YNAB',
+  to_ynab: 'To YNAB',
 }
 
 export const SYNC_ENDPOINT = '/api/ynab/sync'

@@ -85,3 +85,22 @@ and amount on update, takes no future dates, and allows 200 requests an hour per
   YNAB reports as changed.
 - A crash between creating a transaction in YNAB and linking its id in the ledger can duplicate it
   once; the window is one local write.
+
+## Amendment 2026-11-02: a direction
+
+The owner asked for the sync to be one data sync with YNAB that runs either way or both, not a
+two-way-only feature. The state gains `direction` (`both` — the default and the behaviour above —
+`from_ynab`, `to_ynab`), set with the schedule.
+
+- **One way only gates the action** `units.decide` already returns: `from_ynab` skips `push`,
+  `to_ynab` skips `pull`, for transactions and for each month's Assigned. `conflict` is unchanged:
+  a change on BOTH sides goes to the review list in every direction (owner decision — not "the
+  source wins").
+- **Resolving never writes the protected side.** Keeping the side a direction protects (this book's
+  under `from_ynab`, YNAB's under `to_ynab`) records the other side's current state as the agreed
+  one and writes nothing (`resolve._accept`), so a later change on both sides is asked about again.
+- **Nothing held back is lost.** A held ledger edit to a baselined row is re-found every run by the
+  existing baseline comparison; the rest is kept in the state — `held` (ledger ids never sent),
+  `held_ynab` (YNAB ids never pulled; YNAB's delta reports a change only once) and `held_assigned`
+  (YNAB's Assigned figures never pulled) — and fed back into each run, so switching back to `both`
+  sends or pulls it on the next run.

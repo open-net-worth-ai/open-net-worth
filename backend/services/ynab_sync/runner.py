@@ -57,9 +57,16 @@ def _summary(tally: Counter, open_items: int) -> str:
     return ", ".join(parts) or "Nothing changed"
 
 
-def _assigned_phase(ctx, client, base: Baselines, change, tally: Counter, first: bool) -> None:
+def _assigned_phase(
+    ctx, client, base: Baselines, change, tally: Counter, first: bool, st: dict
+) -> None:
     if first:
         base.seed_assigned({k: v for k, v in change.assigned.items() if v})
+    direction = st["direction"]
+    # YNAB's figures a To-YNAB run did not pull arrive only once, so they are kept and replayed.
+    for month, cid, milli in st["held_assigned"]:
+        change.assigned.setdefault((month, cid), milli)
+    st["held_assigned"] = []
     items = assigned.evaluate(
         ctx, base.assigned, change.assigned, planning.assignments_store.all_map(), first
     )
@@ -71,7 +78,11 @@ def _assigned_phase(ctx, client, base: Baselines, change, tally: Counter, first:
             if it.action != "adopt":
                 continue
             conflicts.close(it.key)
-        if it.action == "pull":
+        if it.action == "pull" and direction == "to_ynab":
+            st["held_assigned"].append([it.month, it.cid, it.ynab])
+        elif it.action == "push" and direction == "from_ynab":
+            continue  # re-found on every run from the ledger's own figures
+        elif it.action == "pull":
             try:
                 assigned.pull(it)
             except OpenNetWorthError as exc:
@@ -151,13 +162,18 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
         base.seed_assigned({k: v for k, v in change.assigned.items() if v})
     ctx = context.build(st, meta, mirror, base.assigned)
     recorder.phase("reconciling transactions")
-    scan = units.audit_touched(st["audit_cursor"], upto) | set(st["pending"])
+    scan = units.audit_touched(st["audit_cursor"], upto) | set(st["pending"]) | set(st["held"])
     scan |= {c["onw_txn_id"] for c in conflicts.listing() if c.get("onw_txn_id")}
+    change.touched |= set(st["held_ynab"])
+    held: dict[str, set[str]] = {"onw": set(), "ynab": set()}
     try:
-        st["pending"] = txn_sync.settle(ctx, client, base, change, first, scan, tally)
+        st["pending"] = txn_sync.settle(
+            ctx, client, base, change, first, scan, tally, st["direction"], held
+        )
+        st["held"], st["held_ynab"] = sorted(held["onw"]), sorted(held["ynab"])
         tally["deferred"] += len(st["pending"])
         recorder.phase("reconciling Assigned")
-        _assigned_phase(ctx, client, base, change, tally, first)
+        _assigned_phase(ctx, client, base, change, tally, first, st)
         starts.review(ctx, st)
     finally:
         base.flush()
@@ -346,6 +362,8 @@ def status() -> dict:
         "enabled": st["enabled"],
         "interval": st["interval"],
         "intervals": list(sync_state.INTERVALS),
+        "direction": st["direction"],
+        "directions": list(sync_state.DIRECTIONS),
         "plan_id": st["plan_id"],
         "plan_name": st["plan_name"],
         "running": _lock.locked(),
@@ -380,7 +398,12 @@ def _adopt_plan(plan_id: str) -> dict:
     }
 
 
-def update_settings(enabled: bool | None, interval: str | None, plan_id: str | None) -> dict:
+def update_settings(
+    enabled: bool | None,
+    interval: str | None,
+    plan_id: str | None,
+    direction: str | None = None,
+) -> dict:
     if not _lock.acquire(blocking=False):
         raise ConflictError("A YNAB sync is running; change the settings when it finishes.")
     try:
@@ -389,6 +412,8 @@ def update_settings(enabled: bool | None, interval: str | None, plan_id: str | N
             st = _adopt_plan(plan_id.strip())
         if interval is not None:
             st["interval"] = sync_state.validate_interval(interval)
+        if direction is not None:
+            st["direction"] = sync_state.validate_direction(direction)
         if enabled:
             _require_ready(st)
         if enabled is not None:

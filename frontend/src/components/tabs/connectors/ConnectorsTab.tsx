@@ -31,6 +31,7 @@ import { McpEditModal } from './McpEditModal'
 import { deleteMcpServer } from './mcpApi'
 import { signInWithOAuth } from './oauthSignIn'
 import { savePermissions } from './permissions'
+import { removeNativeConnector, setConnectorEnabled } from './connectorActions'
 import { mcpAuthType, toEntry, toMcpEditTarget } from './adapter'
 import { CONNECTORS_KEY, useConnectors } from './useConnectors'
 import {
@@ -224,28 +225,13 @@ export function ConnectorsTab(): JSX.Element {
   }
 
   async function patchEnabled(entry: ConnectorDetailEntry, enabled: boolean) {
-    const res = await authFetch(`/api/connectors/${encodeURIComponent(entry.id)}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ enabled }),
-    })
-    if (!res.ok) {
-      toast(`Couldn't ${enabled ? 'connect' : 'disconnect'} ${entry.name}`)
+    const result = await setConnectorEnabled(entry, enabled)
+    if (!result.ok) {
+      toast(result.error)
       return
     }
-    // Telegram only: whether the live bot actually picked up the change (best-effort —
-    // never a hard failure, see `reload_best_effort`). Every other connector's response
-    // carries no `reloaded` field at all, so this is a no-op for them.
-    const body = (await res.json().catch(() => null)) as { reloaded?: boolean } | null
     await reload()
-    if (body?.reloaded === false) {
-      toast(
-        `${entry.name} ${enabled ? 'connected' : 'disconnected'} in settings, but the live ` +
-          `bot didn't confirm the change — it may still be running the old configuration. ` +
-          `Try again, or restart the app.`,
-      )
-      return
-    }
-    toast(`${entry.name} ${enabled ? 'connected' : 'disconnected'}`)
+    toast(result.message)
   }
 
   /** An OAuth MCP server reconnects with a fresh sign-in (RFC `2026-08-14-mcp-oauth` §4.7's
@@ -309,29 +295,6 @@ export function ConnectorsTab(): JSX.Element {
     }
     toast(result.error)
     return false
-  }
-
-  /** `DELETE /api/connectors/{id}` — the native-connector half of removal. Mirrors
-   *  `deleteMcpServer`'s result shape so `removeConnector` below can treat both paths
-   *  identically. For Telegram, the backend REFUSES (502) rather than clearing
-   *  credentials if it couldn't confirm the live bot actually stopped first — surfacing
-   *  that real detail here (not a generic "Couldn't remove") is the point: a silent
-   *  generic failure would hide exactly the fail-open risk the backend ordering fix
-   *  exists to prevent. */
-  async function removeNativeConnector(
-    entry: ConnectorDetailEntry,
-  ): Promise<{ ok: true } | { ok: false; error: string }> {
-    const res = await authFetch(`/api/connectors/${encodeURIComponent(entry.id)}`, {
-      method: 'DELETE',
-    })
-    if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { detail?: unknown } | null
-      const detail = body?.detail
-      const message =
-        typeof detail === 'string' && detail ? detail : `Couldn't remove ${entry.name}`
-      return { ok: false, error: message }
-    }
-    return { ok: true }
   }
 
   /** Remove a connector for real (spec §3's kebab, now offered — with a confirmation —

@@ -12,6 +12,9 @@ from backend.db.ynab_sync_store import YnabSyncStateStore
 SURFACE = "ynab_sync"  # the audit surface of every write the sync makes (echo suppression)
 INTERVALS = {"15m": 900, "30m": 1800, "1h": 3600, "6h": 21600, "daily": 86400, "manual": None}
 DEFAULT_INTERVAL = "1h"
+# Which way changes flow. One way skips the other way's sends or pulls; a change on both sides
+# still goes to the review list (ADR 2026-10-20 amendment, 2026-11-02).
+DIRECTIONS = ("both", "from_ynab", "to_ynab")
 REQUEST_CAP = 40  # per run; YNAB allows 200 an hour per token
 
 _store = YnabSyncStateStore()
@@ -30,6 +33,7 @@ def blank() -> dict:
         "id": "state",
         "enabled": False,
         "interval": DEFAULT_INTERVAL,
+        "direction": "both",
         "plan_id": None,
         "plan_name": None,
         "currency": None,
@@ -37,6 +41,12 @@ def blank() -> dict:
         "server_knowledge": None,
         "audit_cursor": -1,
         "pending": [],  # ledger transactions with a change not yet sent (rate cap / failure)
+        # What one way held back, so switching back to Both ways still sends or pulls it: ledger
+        # transaction ids not sent, YNAB transaction ids not pulled, and YNAB's Assigned figures
+        # ([month, category, milliunits]) not pulled.
+        "held": [],
+        "held_ynab": [],
+        "held_assigned": [],
         "last_run": None,
         "next_run_at": None,
     }
@@ -80,6 +90,12 @@ def reset() -> None:
         YnabConflictStore(),
     ):
         store.replace_all([])
+
+
+def validate_direction(direction: str) -> str:
+    if direction not in DIRECTIONS:
+        raise ValidationError(f"direction must be one of {', '.join(DIRECTIONS)}")
+    return direction
 
 
 def validate_interval(interval: str) -> str:

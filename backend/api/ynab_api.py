@@ -172,6 +172,7 @@ def ynab_migration_verify(body: MigrationRequest):
 class SyncSettings(BaseModel):
     enabled: Optional[bool] = None
     interval: Optional[str] = None
+    direction: Optional[str] = None  # "both" | "from_ynab" | "to_ynab"
     # The migrated plan to keep in sync; changing it forgets the previous plan's sync state.
     plan_id: Optional[str] = None
 
@@ -195,7 +196,9 @@ def ynab_sync_status():
 
 @router.put("/api/ynab/sync/settings")
 def ynab_sync_settings(body: SyncSettings):
-    return _sync(ynab_sync.update_settings, body.enabled, body.interval, body.plan_id)
+    return _sync(
+        ynab_sync.update_settings, body.enabled, body.interval, body.plan_id, body.direction
+    )
 
 
 @router.post("/api/ynab/sync/run", status_code=202)

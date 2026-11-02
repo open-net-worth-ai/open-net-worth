@@ -1,11 +1,12 @@
-import { ArrowLeftRight, Clock3 } from 'lucide-react'
+import { Clock3 } from 'lucide-react'
 import { ErrorState, TabSkeleton } from '../../../ui'
 import { KeepAwakeBanner } from '../KeepAwakeBanner'
 import { DataSyncCard } from './DataSyncCard'
-import { YNAB_SYNC_NAME, type YnabSyncSummary } from './ynabSync'
+import { YNAB_SYNC_BLURB, YNAB_SYNC_NAME, type YnabSyncSummary } from './ynabSync'
+import { YnabMark } from './YnabMark'
 
 // The Data sync view of Automations: syncs that keep this book and another app in step by fixed
-// rules, with no AI involved. Today only the two-way YNAB sync; the ones not set up yet are
+// rules, with no AI involved. Today only the YNAB sync; the ones not set up yet are
 // offered below the ones that are.
 export function DataSyncView({
   sync,
@@ -57,16 +58,12 @@ export function DataSyncView({
               aria-label={`Set up ${YNAB_SYNC_NAME}`}
               onClick={onOpen}
             >
-              <span className="a3-tpl-ic">
-                <ArrowLeftRight size={15} strokeWidth={1.7} aria-hidden="true" />
-              </span>
+              <YnabMark />
               <span className="a3-tpl-body">
                 <span className="a3-tpl-title">{YNAB_SYNC_NAME}</span>
-                <span className="a3-tpl-blurb">
-                  Import your YNAB plan, then keep both in step, both directions.
-                </span>
+                <span className="a3-tpl-blurb">{YNAB_SYNC_BLURB}</span>
                 <span className="a3-tpl-when">
-                  <Clock3 size={11} aria-hidden="true" /> Every hour, after setup
+                  <Clock3 size={11} aria-hidden="true" /> Every hour
                 </span>
               </span>
             </button>

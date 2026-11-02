@@ -24,6 +24,20 @@ const navigate = vi.hoisted(() => vi.fn())
 vi.mock('../../../../api/client', () => ({ authFetch }))
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
 
+// The YNAB connector's wire row: the sync page opens the connector's OWN panel.
+const YNAB_CONNECTOR = {
+  id: 'ynab',
+  name: 'YNAB',
+  kind: 'ynab',
+  enabled: false,
+  config: {},
+  secrets_public: {},
+  status: 'not_configured',
+  pausable: true,
+  short_description: 'Transactions already tracked in your YNAB budget.',
+  tools: [],
+}
+
 let runs: RunRecord[]
 type Sync = Omit<ReturnType<typeof syncStatus>, 'run_id'> & { run_id: string | null }
 let sync: Sync
@@ -66,7 +80,18 @@ beforeEach(() => {
       runs.push(started)
       return ok(started, 202)
     }
-    if (path === '/api/ynab/status') return ok({ has_access_token: sync.token_saved })
+    if (path === '/api/connectors') return ok({ connectors: [YNAB_CONNECTOR] })
+    if (path === '/api/accounts') return ok([])
+    if (path === '/api/connectors/ynab/accounts')
+      return ok({ status: 'not_configured', provider_label: 'YNAB', accounts: [] })
+    if (path === '/api/ynab/status')
+      return ok({
+        configured: sync.token_saved,
+        enabled: sync.token_saved,
+        has_access_token: sync.token_saved,
+        budget_id: null,
+        last_status: 'never_run',
+      })
     if (path === '/api/ynab/budgets') return ok(PLANS)
     if (path === '/api/ynab/sync') return ok(sync)
     if (path === '/api/imports/runs') return ok({ runs: [...runs].reverse() })
@@ -115,16 +140,17 @@ describe('YnabSyncDetail setup', () => {
         body: expect.objectContaining({ access_token: 'tok-123' }),
       }),
     )
-    await waitFor(() => expect(screen.queryByLabelText(/access token/i)).toBeNull())
     expect(navigate).not.toHaveBeenCalled()
   })
 
-  it('still reaches the full connector page from the dialog', async () => {
-    sync = notSetUp({ token_saved: false })
+  it('once a token is saved, step 1 can still change it in place', async () => {
+    sync = notSetUp()
     page()
-    fireEvent.click(await screen.findByRole('button', { name: 'Connect YNAB…' }))
-    fireEvent.click(await screen.findByRole('button', { name: 'More on the Connectors page' }))
-    expect(navigate).toHaveBeenCalledWith({ to: '/connectors', search: { connector: 'ynab' } })
+    expect(await screen.findByText(/Token saved/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }))
+    const panel = await screen.findByRole('dialog')
+    expect(panel.textContent).toContain('YNAB')
+    expect(navigate).not.toHaveBeenCalled()
   })
 
   it('imports as step 2: a plan, a preview, then the import', async () => {
@@ -168,15 +194,23 @@ describe('YnabSyncDetail setup', () => {
     )
   })
 
-  it('after the import, turns the sync on for the imported plan', async () => {
+  it('after the import, picks a direction and turns the sync on for the imported plan', async () => {
     sync = notSetUp()
     runs = [importRun()]
     page()
     expect(await screen.findByText('Turn on the sync')).toBeTruthy()
-    expect(screen.getByText(/runs every hour/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Turn on' }))
+    expect(screen.getByText(/Runs every hour/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'From YNAB' }))
     await waitFor(() =>
       expect(requests[0]).toEqual({
+        url: '/api/ynab/sync/settings',
+        method: 'PUT',
+        body: { direction: 'from_ynab' },
+      }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Turn on' }))
+    await waitFor(() =>
+      expect(requests[1]).toEqual({
         url: '/api/ynab/sync/settings',
         method: 'PUT',
         body: { enabled: true, plan_id: runs[0]?.plan_id },
@@ -189,7 +223,7 @@ describe('YnabSyncDetail once set up', () => {
   it('says it is a data sync and shows the next sync and the last result', async () => {
     page()
     expect(await screen.findByText('Data sync')).toBeTruthy()
-    expect(screen.getByText(/No AI involved/)).toBeTruthy()
+    expect(screen.getByText('Fixed rules, no AI.')).toBeTruthy()
     expect(screen.getByText(/Next sync:/)).toBeTruthy()
     expect(screen.getByText(/3 sent to YNAB, 1 pulled, 1 needs review/)).toBeTruthy()
     expect((screen.getByRole('switch') as HTMLInputElement).checked).toBe(true)
@@ -308,7 +342,7 @@ describe('YnabSyncDetail once set up', () => {
     page(runs[0]?.id ?? null)
     expect(await screen.findByText('Verification')).toBeTruthy()
     expect(screen.getByText('Run report')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Two-way sync with YNAB' }))
+    fireEvent.click(screen.getByRole('button', { name: 'YNAB' }))
     expect(onOpenReport).toHaveBeenCalledWith(null)
     fireEvent.click(screen.getByRole('button', { name: 'Automations' }))
     expect(onBack).toHaveBeenCalled()

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Clock3 } from 'lucide-react'
-import { sendSync } from '../../imports/sync'
+import { DIRECTION_LABELS, sendSync } from '../../imports/sync'
 import { AutomationMenu } from '../AutomationMenu'
 import {
   YNAB_SYNC_BLURB,
@@ -52,7 +52,11 @@ export function DataSyncCard({
         </span>
         <span className={`a3-when${on ? '' : ' off'}`}>
           <Clock3 size={13} strokeWidth={1.7} aria-hidden="true" />
-          {sync.running ? 'Syncing now…' : scheduleLabel(sync.status)}
+          {sync.running
+            ? 'Syncing now…'
+            : [sync.status && DIRECTION_LABELS[sync.status.direction], scheduleLabel(sync.status)]
+                .filter(Boolean)
+                .join(' · ')}
         </span>
       </span>
       <span className="a3-row-right" onClick={(event) => event.stopPropagation()}>

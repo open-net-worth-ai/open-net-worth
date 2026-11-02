@@ -14,7 +14,6 @@ import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
 import { ConnectorStatusLine } from './ConnectorStatusLine'
 import { ConnectorAccountsList } from './ConnectorAccountsList'
-import { YnabImportLink } from './YnabImportLink'
 
 // YNAB connector config over /api/ynab/* (per-provider plane), mirroring LunchMoneySection's
 // secret-reveal pattern: the access token is something the operator TYPED into YNAB's own
@@ -64,10 +63,7 @@ function ynabFormOf(c: YnabStatus): YnabForm {
   }
 }
 
-/** ``onSyncPage``: the same form opened from the two-way sync's own page (YnabConnectDialog),
- *  which leaves out what only belongs on the Connectors page — the template hint, the account
- *  list and the link back to the sync page itself. */
-export function YnabSection({ onSyncPage = false }: { onSyncPage?: boolean } = {}) {
+export function YnabSection() {
   const [cfg, setCfg] = useState<YnabStatus | null>(null)
   const [form, setForm] = useState<YnabForm | null>(null)
   const [error, setError] = useState(false)
@@ -209,8 +205,7 @@ export function YnabSection({ onSyncPage = false }: { onSyncPage?: boolean } = {
           YNAB
         </a>
         , paste a personal access token from its Account Settings → Developer Settings page.
-        {!onSyncPage &&
-          " Fetching and booking transactions is Lucius's job — automate it with a template below."}
+        Fetching and booking transactions is Lucius's job — automate it with a template below.
       </Text>
 
       {cfg.configured && !cfg.enabled && (
@@ -281,12 +276,13 @@ export function YnabSection({ onSyncPage = false }: { onSyncPage?: boolean } = {
         </Text>
       )}
 
-      {!onSyncPage && (
-        <>
-          <ConnectorAccountsList provider="ynab" providerLabel="YNAB" />
-          <YnabImportLink />
-        </>
-      )}
+      {/* Keyed on what was saved: the list fetches once, and must look again after a token or
+          plan is saved here, or it keeps saying "not set up". */}
+      <ConnectorAccountsList
+        key={`${cfg.has_access_token}:${cfg.budget_id ?? ''}`}
+        provider="ynab"
+        providerLabel="YNAB"
+      />
     </Stack>
   )
 }

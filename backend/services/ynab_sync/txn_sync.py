@@ -126,8 +126,15 @@ def settle(
     first: bool,
     scan: set[str],
     tally: Counter,
+    direction: str = "both",
+    held: dict[str, set[str]] | None = None,
 ) -> list[str]:
-    """Reconcile every changed transaction; returns the ledger ids whose push is still owed."""
+    """Reconcile every changed transaction; returns the ledger ids whose push is still owed.
+
+    ``direction`` "from_ynab" skips sends and "to_ynab" skips pulls; a change on both sides is
+    filed for review either way. What was skipped lands in ``held`` (``onw``: ledger ids,
+    ``ynab``: YNAB ids) so the run can remember it for a later switch back to both ways."""
+    held = held if held is not None else {"onw": set(), "ynab": set()}
     rows, bases, index, gone = _rows(ctx, base, change, first, scan)
     open_items = conflicts.open_keys()
     all_units = _hold_removals(
@@ -150,8 +157,13 @@ def settle(
                 conflicts.CONFLICT,
                 "Changed in both Open Net Worth and YNAB since the last sync.",
             )
+        elif action == "pull" and direction == "to_ynab":
+            held["ynab"].update(u.refs)
         elif action == "pull":
             _apply_pull(ctx, u, base, tally)
+        elif action == "push" and direction == "from_ynab":
+            if u.onw_id:
+                held["onw"].add(u.onw_id)
         elif action == "push":
             todo.append(u)
         else:

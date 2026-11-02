@@ -8,12 +8,12 @@ import { ReviewCard } from '../../imports/ReviewItem'
 import { RunReport } from '../../imports/RunReport'
 import { YnabImport } from '../../imports/YnabImport'
 import { KIND_LABEL, detailOf, type RunSummary } from '../../imports/runs'
-import { INTERVAL_LABELS, sendSync } from '../../imports/sync'
+import { DIRECTION_LABELS, INTERVAL_LABELS, sendSync, type SyncDirection } from '../../imports/sync'
 import { AutomationMenu } from '../AutomationMenu'
-import { YnabConnectDialog } from './YnabConnectDialog'
+import { ConnectorPanel } from '../../connectors/ConnectorPanel'
 import { YNAB_SYNC_BLURB, YNAB_SYNC_NAME, useYnabSync, type YnabSyncStage } from './ynabSync'
 
-// The two-way YNAB sync's page in Automations. Until it is set up the page is the three setup
+// The YNAB data sync's page in Automations. Until it is set up the page is the three setup
 // steps (connect, import, turn on); after that it reads like any Automation: on/off and the next
 // run on top, what needs you first, then the schedule and the run history.
 
@@ -61,8 +61,8 @@ export function YnabSyncDetail({
     }
   }
 
-  // The connection form opens here, over the page, rather than on Connectors: setting up or
-  // changing the token should not cost the user the step they are on.
+  // The YNAB connector's own panel opens here, over the page, rather than on Connectors:
+  // setting up or changing the token should not cost the user the step they are on.
   const openConnector = () => setConnectOpen(true)
 
   const crumb = (
@@ -120,7 +120,7 @@ export function YnabSyncDetail({
   const setUp = sync.stage === 'on' || sync.stage === 'off'
   const on = sync.stage === 'on'
   const next = !on
-    ? 'Off. Turn it on to keep the two in step.'
+    ? 'Off'
     : status.running
       ? 'Syncing now…'
       : status.interval === 'manual'
@@ -132,18 +132,23 @@ export function YnabSyncDetail({
   return (
     <div className="a3-wrap" data-od-id="ynab-sync-detail">
       {crumb}
-      <YnabConnectDialog
-        open={connectOpen}
-        onClose={() => setConnectOpen(false)}
-        onSaved={sync.refresh}
-      />
+      {connectOpen && (
+        <ConnectorPanel
+          connectorId="ynab"
+          configureOnOpen={!status.token_saved}
+          onClose={() => {
+            setConnectOpen(false)
+            sync.refresh()
+          }}
+        />
+      )}
       <div className="a3-detail-head">
         <div className="a3-detail-title">
           <h1>{YNAB_SYNC_NAME}</h1>
           <div className="a3-detail-sub">{YNAB_SYNC_BLURB}</div>
           <div className="a3-kind-line">
             <span className="a3-tag">Data sync</span>
-            <span>No AI involved: it follows fixed rules and costs nothing to run.</span>
+            <span>Fixed rules, no AI.</span>
           </div>
         </div>
         {setUp && (
@@ -231,7 +236,12 @@ export function YnabSyncDetail({
               </section>
             )}
             <section className="a3-block" data-od-id="ynab-sync-schedule">
-              <div className="a3-block-h">Schedule</div>
+              <div className="a3-block-h">Settings</div>
+              <DirectionPicker
+                value={status.direction}
+                disabled={!!busy || status.running}
+                onChange={(direction) => void send('settings', '/settings', 'PUT', { direction })}
+              />
               <div className="a3-schedule-row">
                 <Select
                   id="ynab-sync-interval"
@@ -267,9 +277,6 @@ export function YnabSyncDetail({
                   )}
                 </div>
               )}
-              <div className="a3-block-note">
-                A sync uses at most 40 of the 200 requests an hour YNAB allows your token.
-              </div>
             </section>
             <section className="a3-block" data-od-id="ynab-sync-plan">
               <div className="a3-block-h">YNAB plan</div>
@@ -287,12 +294,9 @@ export function YnabSyncDetail({
             <section className="a3-block" data-od-id="ynab-sync-rules">
               <div className="a3-block-h">How it decides</div>
               <ul className="a3-rules">
-                <li>A change on one side is copied to the other.</li>
-                <li>A change on both sides waits for you. Nothing is overwritten.</li>
-                <li>
-                  What it sends to YNAB is flagged red there. A changed Assigned adds a dated line
-                  to the category’s note.
-                </li>
+                <li>{FLOW[status.direction]}</li>
+                <li>A change on both sides waits for you.</li>
+                {status.direction !== 'from_ynab' && <li>What it sends is flagged red in YNAB.</li>}
               </ul>
             </section>
           </div>
@@ -305,6 +309,8 @@ export function YnabSyncDetail({
           busy={busy}
           planId={sync.planId}
           interval={status.interval}
+          direction={status.direction}
+          onDirection={(direction) => void send('settings', '/settings', 'PUT', { direction })}
           onConnect={openConnector}
           onOpenReport={(id) => onOpenReport(id)}
           onImported={sync.refresh}
@@ -317,12 +323,45 @@ export function YnabSyncDetail({
   )
 }
 
+const FLOW: Record<SyncDirection, string> = {
+  both: 'Changes on either side are copied to the other.',
+  from_ynab: 'YNAB’s changes come here. Nothing is written to YNAB.',
+  to_ynab: 'This book’s changes go to YNAB. Nothing comes back.',
+}
+
+/** Which way changes flow. A change on both sides is asked about in every direction. */
+function DirectionPicker({
+  value,
+  disabled,
+  onChange,
+}: {
+  value: SyncDirection
+  disabled: boolean
+  onChange: (direction: SyncDirection) => void
+}) {
+  return (
+    <SegmentedControl
+      ariaLabel="Sync direction"
+      options={(Object.keys(DIRECTION_LABELS) as SyncDirection[]).map((d) => ({
+        value: d,
+        label: DIRECTION_LABELS[d],
+      }))}
+      value={value}
+      onChange={(d) => {
+        if (!disabled && d !== value) onChange(d)
+      }}
+    />
+  )
+}
+
 function SetupSteps({
   stage,
   runs,
   busy,
   planId,
   interval,
+  direction,
+  onDirection,
   onConnect,
   onOpenReport,
   onImported,
@@ -333,6 +372,8 @@ function SetupSteps({
   busy: string | null
   planId: string | null
   interval: string
+  direction: SyncDirection
+  onDirection: (direction: SyncDirection) => void
   onConnect: () => void
   onOpenReport: (id: string) => void
   onImported: () => void
@@ -344,9 +385,7 @@ function SetupSteps({
       <Step n={1} reached={reached} title="Connect YNAB">
         {reached === 1 ? (
           <>
-            <p>
-              Save a YNAB personal access token. It stays on this machine, on the YNAB connector.
-            </p>
+            <p>Add your YNAB personal access token.</p>
             <div>
               <Button size="sm" variant="primary" onClick={onConnect}>
                 Connect YNAB…
@@ -354,17 +393,19 @@ function SetupSteps({
             </div>
           </>
         ) : (
-          <p>Token saved.</p>
+          // A wrong or revoked token shows up as an error in step 2; fix it from here.
+          <p>
+            Token saved ·{' '}
+            <button type="button" className="a3-linkbtn" onClick={onConnect}>
+              Change
+            </button>
+          </p>
         )}
       </Step>
       <Step n={2} reached={reached} title="Bring your YNAB history in">
         {reached === 2 ? (
           <>
-            <p>
-              The sync pairs with what it imported, so this comes first: accounts, categories, every
-              transaction and each month’s Assigned, checked against YNAB afterwards. Safe to run
-              again; nothing is booked twice.
-            </p>
+            <p>Accounts, categories, transactions and Assigned. Safe to run again.</p>
             <YnabImport runs={runs} onStarted={onImported} onOpen={onOpenReport} />
           </>
         ) : reached > 2 ? (
@@ -376,10 +417,8 @@ function SetupSteps({
       <Step n={3} reached={reached} title="Turn on the sync">
         {reached === 3 ? (
           <>
-            <p>
-              From then on it runs {(INTERVAL_LABELS[interval] ?? interval).toLowerCase()}: a change
-              on either side is copied to the other. You can change how often later.
-            </p>
+            <p>Runs {(INTERVAL_LABELS[interval] ?? interval).toLowerCase()}. Change it later.</p>
+            <DirectionPicker value={direction} disabled={!!busy} onChange={onDirection} />
             <div>
               <Button
                 size="sm"
@@ -393,7 +432,7 @@ function SetupSteps({
             </div>
           </>
         ) : (
-          <p>After the import. Or stop after step 2 if you only want your history.</p>
+          <p>After the import.</p>
         )}
       </Step>
     </ol>

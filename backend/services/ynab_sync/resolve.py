@@ -57,10 +57,12 @@ def resolve(conflict_id: str, keep: str) -> dict:
         base = Baselines()
         ctx = context.build(st, meta, mirror, base.assigned)
         client = YnabClient(st["plan_id"], Budget(RESOLVE_REQUESTS))
-        if item["entity"] == "assigned":
-            _assigned(item, keep, client, base, meta)
-        elif item["entity"] == "start":
+        if item["entity"] == "start":
             starts.resolve(item, keep)
+        elif _held_side(st["direction"], keep):
+            _accept(ctx, item, keep, base)
+        elif item["entity"] == "assigned":
+            _assigned(item, keep, client, base, meta)
         else:
             _transaction(ctx, item, keep, client, base)
         base.flush()
@@ -77,6 +79,32 @@ def resolve(conflict_id: str, keep: str) -> dict:
         )
     data_events.publish(["*"])
     return runner.status()
+
+
+def _held_side(direction: str, keep: str) -> bool:
+    """Keeping a side means writing the other one — unless the direction protects it."""
+    return (direction, keep) in (("from_ynab", "onw"), ("to_ynab", "ynab"))
+
+
+def _accept(ctx, item: dict, keep: str, base: Baselines) -> None:
+    """Keep ``keep``'s version WITHOUT writing the side the one-way direction protects: the other
+    side's current state becomes the agreed one, so nothing moves now and a later change on both
+    sides is asked about again."""
+    if item["entity"] == "assigned":
+        env = item["env"]
+        onw = round(planning.assignments_store.month_map(item["month"]).get(env, 0.0) * 1000)
+        base.set_assigned(
+            item["month"], item["category"], item["ynab_milli"] if keep == "onw" else onw
+        )
+        return
+    unit = _unit(ctx, item, base)
+    if unit.onw_id is None:
+        return
+    other = unit.ynab if keep == "onw" else unit.onw
+    if other is None:
+        base.drop_txn(unit.onw_id)
+    else:
+        base.set_txn(unit.onw_id, unit.refs, other)
 
 
 def _assigned(item: dict, keep: str, client: YnabClient, base: Baselines, meta: dict) -> None:

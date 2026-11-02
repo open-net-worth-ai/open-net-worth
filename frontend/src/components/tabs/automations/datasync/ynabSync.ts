@@ -1,16 +1,16 @@
 import { useRuns, type RunSummary } from '../../imports/runs'
 import { INTERVAL_LABELS, useSyncStatus, type SyncStatus } from '../../imports/sync'
 
-// The two-way YNAB sync, seen as an Automation. It is a data sync (fixed rules, no AI model), so
+// The YNAB data sync, seen as an Automation. It is a data sync (fixed rules, no AI model), so
 // it has no row in the Automations table: its schedule and runs live on /api/ynab/sync and
 // /api/imports/runs, and this reads them into the shape the Automations list and detail need.
 
 export const YNAB_SYNC_KEY = 'ynab'
-/** The feature flag the plan import and the two-way sync ship behind (core/feature_flags.py). */
+/** The feature flag the plan import and the sync ship behind (core/feature_flags.py). */
 export const YNAB_FLAG = 'ynab_import_and_sync'
-export const YNAB_SYNC_NAME = 'Two-way sync with YNAB'
+export const YNAB_SYNC_NAME = 'YNAB'
 export const YNAB_SYNC_BLURB =
-  'Keeps your YNAB plan and this book in step, both directions: transactions and each month’s Assigned.'
+  'Transactions and each month’s Assigned, in step with your YNAB plan.'
 
 /** Where setup stands: each step needs the one before it. `enable` is imported but never turned
  * on (no plan chosen yet); `off` is turned off after that, so it keeps its plan. */

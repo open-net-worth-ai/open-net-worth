@@ -248,10 +248,10 @@ move your whole plan across instead, use the migration below.
 ### Move your whole YNAB plan
 
 To move your accounts, categories, envelopes, every transaction and each month's budgeted amounts
-across, and check the result against YNAB, use **Two-way sync…** on the YNAB connector page. It
-opens [Two-way sync with YNAB](../features/imports-and-sync.md) in Automations, which uses the
-token you saved here; the import is its second setup step. It is experimental and off by
-default: the button appears once you turn it on in
+across, and check the result against YNAB, open **Automations →
+Data sync → YNAB**: the [YNAB data sync](../features/imports-and-sync.md) uses the token you saved
+here, and the import is its second setup step. It is experimental and off by default: the **Data
+sync** tab appears once you turn it on in
 [Settings → Developer → Experimental](../features/settings.md#experimental-features).
 Take a [backup](../operations/backup-and-restore.md) first if you can; a fresh book is the
 cleanest target (the app also takes one before it writes anything).
@@ -268,9 +268,10 @@ once as a labelled balance adjustment. Goals and scheduled transactions are not 
 
 ### Keep the plan in sync both ways
 
-After the migration, [Two-way sync with YNAB](../features/imports-and-sync.md) (a data sync in Automations) keeps this book and that
+After the migration, the [YNAB data sync](../features/imports-and-sync.md) (in Automations) keeps this book and that
 YNAB plan in step, on a schedule: **transactions** (new, edited, deleted, categorized, memo,
-cleared, splits, transfers) and each **month's Assigned per category**, in both directions. Accounts,
+cleared, splits, transfers) and each **month's Assigned per category**, from YNAB, to YNAB or both
+ways. Accounts,
 goals and scheduled transactions are not synced, and a card's payment category is read from YNAB
 only — its Assigned is never sent.
 

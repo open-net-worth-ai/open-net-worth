@@ -209,8 +209,8 @@ The switch appears once a data sync is turned on in
 [Settings → Developer → Experimental](../features/settings.md#experimental-features); until then
 **Automations** is the Lucius list alone.
 
-Today there is one: [Two-way sync with YNAB](../features/imports-and-sync.md). It imports your
-YNAB plan and then keeps it and this book in step, both directions. The **Sync YNAB** template
+Today there is one: [YNAB](../features/imports-and-sync.md). It imports your YNAB plan and then
+keeps it and this book in step: from YNAB, to YNAB, or both ways. The **Sync YNAB** template
 under Lucius is the one-way version: Lucius fetches new YNAB transactions and books them here,
 and doesn't copy categories or Assigned.
 

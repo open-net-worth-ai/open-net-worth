@@ -125,6 +125,8 @@ export function syncStatus(over: Record<string, unknown> = {}) {
     enabled: true,
     interval: '1h',
     intervals: ['15m', '30m', '1h', '6h', 'daily', 'manual'],
+    direction: 'both',
+    directions: ['both', 'from_ynab', 'to_ynab'],
     plan_id: 'p1',
     plan_name: 'Household',
     running: false,
