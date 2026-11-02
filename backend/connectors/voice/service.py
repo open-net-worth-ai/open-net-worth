@@ -122,6 +122,15 @@ async def start() -> None:
         _worker.error = "Voice libraries are not installed (pip install -r requirements-voice.txt)."
         log.info("voice calls configured but the voice libraries are not installed")
         return
+    try:
+        # LiveKit's plugins (Silero, the inference models) refuse to register off the main
+        # thread, and the worker runs in a thread of its own — so they load HERE, on the app's
+        # main thread, before it starts (live test, 2026-11-03: the thread died on import).
+        importlib.import_module("backend.connectors.voice.agent")
+    except Exception as exc:  # noqa: BLE001 — reported on the settings page, never fatal
+        _worker.error = f"The voice libraries failed to load ({type(exc).__name__})."
+        log.exception("voice libraries failed to load")
+        return
     app_loop = asyncio.get_running_loop()
     owner = _owner_name()
     ready = threading.Event()
@@ -135,15 +144,30 @@ async def start() -> None:
 def _run_worker(
     app_loop: asyncio.AbstractEventLoop, config: dict, owner: str, ready: threading.Event
 ) -> None:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    _worker.loop = loop
+    try:
+        server = _build_server(app_loop, config, owner)
+        _worker.server = server
+        ready.set()
+        loop.run_until_complete(server.run())
+    except Exception as exc:  # noqa: BLE001 — reported on the settings page, never fatal
+        _worker.error = f"The voice worker stopped ({type(exc).__name__}). Check the app log."
+        log.exception("voice worker stopped")
+    finally:
+        ready.set()
+        loop.close()
+        _worker.loop = _worker.server = None
+
+
+def _build_server(app_loop: asyncio.AbstractEventLoop, config: dict, owner: str):
     from livekit.agents import AgentServer
     from livekit.agents.job import JobExecutorType
 
     from backend.connectors.voice import agent
     from backend.connectors.voice.tokens import AGENT_NAME
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    _worker.loop = loop
     agent.RUNTIME = agent.Runtime(app_loop=app_loop, config=config, owner_name=owner)
     server = AgentServer(
         ws_url=config["livekit_url"],
@@ -157,16 +181,7 @@ def _run_worker(
         setup_fnc=agent.prewarm,
     )
     server.rtc_session(agent.entrypoint, agent_name=AGENT_NAME, on_request=agent.on_request)
-    _worker.server = server
-    ready.set()
-    try:
-        loop.run_until_complete(server.run())
-    except Exception as exc:  # noqa: BLE001 — reported on the settings page, never fatal
-        _worker.error = f"Voice worker stopped: {type(exc).__name__}"
-        log.exception("voice worker stopped")
-    finally:
-        loop.close()
-        _worker.loop = _worker.server = None
+    return server
 
 
 async def stop() -> None:

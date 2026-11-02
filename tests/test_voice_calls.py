@@ -344,3 +344,31 @@ def asyncio_queue():
     import asyncio
 
     return asyncio.Queue()
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_a_worker_that_cannot_load_says_why(db_isolated, monkeypatch):
+    """The voice libraries load on the app's main thread before the worker thread starts
+    (LiveKit plugins refuse to register anywhere else), and a failure there is reported on
+    the settings page rather than dying silently in a thread (live test, 2026-11-03)."""
+    import asyncio
+
+    from backend.db.voice_config_store import VoiceConfigStore
+
+    VoiceConfigStore().update(
+        {
+            "enabled": True,
+            "livekit_url": "wss://acme.livekit.cloud",
+            "api_key": "APIx",
+            "api_secret": SECRET,
+        }
+    )
+    monkeypatch.setattr(service, "libraries_installed", lambda: True)
+
+    def boom(name):
+        raise RuntimeError("Plugins must be registered on the main thread")
+
+    monkeypatch.setattr(service.importlib, "import_module", boom)
+    asyncio.run(service.start())
+    status = service.status()
+    assert status["running"] is False and "failed to load" in status["error"]

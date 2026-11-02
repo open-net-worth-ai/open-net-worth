@@ -728,18 +728,31 @@
   /* Voice call (the `voice_calls` flag): the Call button turns red while a call is open, and
      a call that could not start says why beside it rather than in a tooltip alone. */
   .lx-call-slot {
+    position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
   }
   .lx-tool--call-live {
     background: var(--bad);
     color: var(--bg);
   }
+  /* Above the toolbar, never inside it: inline, the message squeezed the model picker (owner
+     screenshot, 2026-11-03). */
   .lx-call-problem {
-    font-size: var(--text-xs);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 0;
+    z-index: 5;
+    width: max-content;
+    max-width: 260px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--surface);
     color: var(--bad);
-    max-width: 220px;
+    font-size: var(--text-xs);
+    line-height: 1.35;
+    box-shadow: 0 4px 14px rgb(0 0 0 / 0.18);
   }
   .lx-call-audio {
     display: none;

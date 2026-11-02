@@ -70,6 +70,12 @@ export function VoiceCallButton({ sessionId }: { sessionId: string }) {
   }
 
   useEffect(() => () => void roomRef.current?.disconnect(), [])
+  // The bubble above the button says why a call didn't start, then gets out of the way.
+  useEffect(() => {
+    if (!problem) return
+    const timer = window.setTimeout(() => setProblem(null), 8000)
+    return () => window.clearTimeout(timer)
+  }, [problem])
 
   if (on !== true) return null
 
