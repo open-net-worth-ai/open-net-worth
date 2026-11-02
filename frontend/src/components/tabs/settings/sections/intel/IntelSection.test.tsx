@@ -33,6 +33,7 @@ const CONFIG = {
 
 let patches: Record<string, unknown>[] = []
 let failPatch = false
+let deliveryOn = false
 
 function respond(url: string, init?: { method?: string; body?: string }) {
   if (init?.method === 'PATCH') {
@@ -43,6 +44,14 @@ function respond(url: string, init?: { method?: string; body?: string }) {
       json: async () => ({ ...CONFIG, ...body }),
     })
   }
+  if (url === '/api/feature-flags')
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({
+        flags: [{ name: 'intel_delivery_decider', enabled: deliveryOn }],
+        locked: false,
+      }),
+    })
   if (url === '/api/alert-channels')
     return Promise.resolve({
       ok: true,
@@ -65,6 +74,7 @@ beforeEach(() => {
   clearQueryCache()
   patches = []
   failPatch = false
+  deliveryOn = false
   toast.mockReset()
   mockAuthFetch.mockImplementation(respond)
 })
@@ -189,5 +199,24 @@ describe('Settings › Intelligence', () => {
     await waitFor(() =>
       expect(patches).toEqual([{ crash_thresholds: { equity: 99, commodity: 15, crypto: 25 } }]),
     )
+  })
+
+  it('hides what Intel should tell me while the delivery experiment is off', async () => {
+    await mount()
+    await screen.findByText('AI analysis on watched tickers')
+    expect(screen.queryByLabelText('What Intel should tell me')).toBeNull()
+  })
+
+  it("saves what Intel should tell me, in the user's own words, when the experiment is on", async () => {
+    deliveryOn = true
+    await mount()
+    const box = await screen.findByLabelText('What Intel should tell me')
+    fireEvent.change(box, { target: { value: '  No analyst upgrades.  ' } })
+    fireEvent.blur(box)
+    await waitFor(() =>
+      expect(patches).toEqual([{ delivery_instructions: 'No analyst upgrades.' }]),
+    )
+    fireEvent.blur(box)
+    expect(patches).toHaveLength(1)
   })
 })

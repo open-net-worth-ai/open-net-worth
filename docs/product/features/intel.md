@@ -309,12 +309,44 @@ monitors):
 - **Pulse summaries** — how much the **Holdings brief** and **Watchlist briefs** say, from 1
   (a headline) to 5 (a short narrative Lucius writes). Levels 1–4 cost nothing; 5 uses your AI
   provider.
+- **What Intel should tell me** — your own words for the experiment above. Shown only while it is on.
 - **Advanced** — crash thresholds for equities, commodities and crypto, and news-spike tuning.
   Only change these if the defaults are too noisy or too quiet.
+
+## Let Lucius decide what reaches your phone (experimental)
+
+By default every alert that passes Intel's checks goes to your phone as it happens. If that is too
+many, turn on **Settings → Developer → Experimental → Lucius decides which Intel news reaches
+you**. Lucius then looks at each alert before it is sent, knowing what you hold and watch, what it
+already told you in the last 48 hours and what time it is where you are, and chooses:
+
+- **Now** — it changes how you see something you hold or watch: a deal agreed or collapsing, a
+  ruling, a CEO or CFO leaving, a dividend cut, a takeover bid, a level you set being crossed.
+  It is sent as a short message that opens with your name, says what happened, why it matters to
+  you and what to do (often "nothing to do"), with its sources on the last line.
+- **Later** — worth knowing, not worth an interruption. These wait and arrive together in a
+  **roundup** (at most one every three hours; at night Lucius picks a time in the morning).
+  Anything still waiting after a week is dropped. Your daily briefing can add a short paragraph
+  on what is waiting.
+- **Skip** — analyst target changes, "moved 3%" with no new cause, anything you told it to
+  ignore, anything you were already told. It stays in the Intel tab.
+
+Everything is still in the Intel tab either way. A price alert or crash-watch you set yourself is
+never held back if Lucius cannot be reached: it is sent as written.
+
+With the experiment on, **Settings → Intelligence → What Intel should tell me** takes your own
+words, for example *"Don't tell me about analyst upgrades. Not at night unless it's serious."*
+Lucius reads it every time it decides. You can also ask Lucius in chat to set it.
 
 ## Troubleshooting
 
 **No alerts on my phone** — check that the channel is set up and enabled in **Connectors**, and
+ticked for that alert kind in **Settings → Intelligence → Alerts**. Remember only explained alerts
+are pushed for watch signals; the rest stay in the app. If you turned on the experiment above,
+Lucius may have held the alert for a roundup or skipped it; the Intel tab has it either way.
+
+**An alert I expected did not come right away** — with the experiment on, a normal alert waits
+about a minute so Lucius can see related alerts together. — check that the channel is set up and enabled in **Connectors**, and
 ticked for that alert kind in **Settings → Intelligence → Alerts**. Remember only explained alerts
 are pushed for watch signals; the rest stay in the app.
 

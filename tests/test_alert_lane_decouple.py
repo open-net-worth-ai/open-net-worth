@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 
 def _stub(
     monkeypatch, *, alerts_map, items, cache, price=150.0, prev_price=None, alert_channels=None
@@ -400,6 +402,9 @@ def test_notify_in_app_never_pushes_external(monkeypatch):
     assert push_calls == []
 
 
+# Asserts the sender's own push, so it pins the flag off; the flag-on path is in
+# tests/test_delivery_seam.py.
+@pytest.mark.flags(intel_delivery_decider=False)
 def test_alert_pushes_to_its_own_channels_not_the_settings_default(monkeypatch):
     """An alert's saved channels are the whole story: the price-alert default in Settings
     (telegram here) is only where a NEW alert starts, never read when one fires."""
