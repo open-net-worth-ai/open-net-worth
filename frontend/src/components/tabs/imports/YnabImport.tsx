@@ -30,6 +30,12 @@ interface YnabStatus {
 }
 
 type Launch = 'preview' | 'start' | 'verify'
+// Literal paths, so the route-consistency test can match each one to its backend route.
+const LAUNCH_URL: Record<Launch, string> = {
+  preview: '/api/ynab/migration/preview',
+  start: '/api/ynab/migration/start',
+  verify: '/api/ynab/migration/verify',
+}
 
 const NONEMPTY_DIALOG: ConfirmDialogData = {
   title: 'Import alongside your existing accounts?',
@@ -76,7 +82,7 @@ export function YnabImport(props: {
     setBusy(true)
     setStartError(null)
     try {
-      const r = await authFetch(`/api/ynab/migration/${action}`, {
+      const r = await authFetch(LAUNCH_URL[action], {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan_id: planId, confirm_nonempty: confirmed }),
