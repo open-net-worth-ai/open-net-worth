@@ -11,6 +11,13 @@
     { "glob": "backend/*/mcp_connect*", "docs": ["docs/product/operations/connect-ai-apps.md"] },
     { "glob": "backend/cli/**", "docs": ["docs/product/getting-started/installation.md", "docs/product/operations"] },
     { "glob": "backend/ai/tools/**", "docs": ["docs/product/lucius", "docs/ai"] },
+    {
+      "glob": "backend/ai/search/**",
+      "docs": [
+        "docs/product/connectors/web-search.md",
+        "docs/product/connectors/web-search-reads-results.md"
+      ]
+    },
     { "glob": "backend/ai/**", "docs": ["docs/product/lucius"] },
     { "glob": "frontend/src/components/tabs/lucius/**", "docs": ["docs/product/lucius"] },
     { "glob": "frontend/src/components/chat/**", "docs": ["docs/product/lucius"] },
