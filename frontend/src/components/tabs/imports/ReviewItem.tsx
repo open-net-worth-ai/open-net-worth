@@ -74,6 +74,9 @@ function Differences({ onw, ynab }: { onw: Version | null; ynab: Version | null 
   )
 }
 
+const badgeOf = (item: Item) =>
+  item.kind === 'conflict' && item.fresh ? 'Differs' : KIND_LABEL[item.kind]
+
 const KIND_LABEL: Record<Item['kind'], string> = {
   conflict: 'Changed in both',
   unsupported: "YNAB can't take it",
@@ -96,7 +99,7 @@ function NameCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
         <Text size="sm" weight={600}>
           {item.title}
         </Text>
-        <Badge tone={item.kind === 'failed' ? 'neg' : 'warn'}>{KIND_LABEL[item.kind]}</Badge>
+        <Badge tone={item.kind === 'failed' ? 'neg' : 'warn'}>{badgeOf(item)}</Badge>
       </Cluster>
       <Text size="sm" tone={item.kind === 'failed' ? 'bad' : 'faint'}>
         {item.reason}
@@ -217,7 +220,7 @@ export function ReviewCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
         <Text size="sm" weight={600}>
           {item.title}
         </Text>
-        <Badge tone={item.kind === 'conflict' ? 'warn' : 'neg'}>{KIND_LABEL[item.kind]}</Badge>
+        <Badge tone={item.kind === 'conflict' ? 'warn' : 'neg'}>{badgeOf(item)}</Badge>
       </Cluster>
       <Text
         size="sm"

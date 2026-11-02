@@ -20,6 +20,8 @@ export interface ReviewItem {
   id: string
   kind: 'conflict' | 'unsupported' | 'failed' | 'before_start' | 'choose'
   entity?: 'txn' | 'assigned' | 'start' | 'category' | 'group' | 'new_category' | 'budget'
+  /** A first comparison (new pairing, changed envelope): the sides differ, nobody changed both. */
+  fresh?: boolean
   title: string
   reason: string
   onw: Version | null

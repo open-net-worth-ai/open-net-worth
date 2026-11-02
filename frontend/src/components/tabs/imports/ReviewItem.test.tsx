@@ -102,3 +102,29 @@ describe('a category or group', () => {
     expect(screen.queryByRole('button', { name: 'Add as a new category' })).toBeNull()
   })
 })
+
+describe('an Assigned compared for the first time', () => {
+  const item: ReviewItem = {
+    id: 'c_9',
+    kind: 'conflict',
+    entity: 'assigned',
+    title: 'Plants · November 2026',
+    reason:
+      'The Assigned of Plants for November 2026 differs between Open Net Worth and YNAB. Pick the one to keep.',
+    onw: { amount: 100 },
+    ynab: { amount: 300 },
+    month: '2026-11',
+    fresh: true,
+  }
+
+  it('says the figures differ, not that both sides changed them', () => {
+    render(<ReviewCard item={item} busy={false} onKeep={vi.fn()} />)
+    expect(screen.getByText('Differs')).toBeTruthy()
+    expect(screen.queryByText('Changed in both')).toBeNull()
+  })
+
+  it('a real clash still says both sides changed it', () => {
+    render(<ReviewCard item={{ ...item, fresh: false }} busy={false} onKeep={vi.fn()} />)
+    expect(screen.getByText('Changed in both')).toBeTruthy()
+  })
+})

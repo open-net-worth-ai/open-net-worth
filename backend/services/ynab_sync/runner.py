@@ -98,8 +98,13 @@ def _assigned_phase(
             try:
                 assigned.pull(it)
             except OpenNetWorthError as exc:
+                logger.info("YNAB Assigned pull refused for %s %s: %s", it.cid, it.month, exc)
                 _file_assigned(
-                    it, names, conflicts.FAILED, f"The ledger refused YNAB's figure: {exc.message}"
+                    it,
+                    names,
+                    conflicts.FAILED,
+                    f"This book couldn't take YNAB's Assigned for {names.get(it.cid, 'this category')} "
+                    f"in {month_name(it.month)}. Keep Open Net Worth's to send this book's instead.",
                 )
                 continue
             base.set_assigned(it.month, it.cid, it.ynab)
@@ -120,6 +125,7 @@ def _assigned_phase(
                     if it.cid in fresh
                     else "Changed in both Open Net Worth and YNAB since the last sync."
                 ),
+                fresh=it.cid in fresh,
             )
         else:
             pushes.append(it)
@@ -138,7 +144,9 @@ def _assigned_phase(
     tally["deferred"] += len(deferred)
 
 
-def _file_assigned(it, names: dict, kind: str, reason: str) -> None:
+def _file_assigned(it, names: dict, kind: str, reason: str, fresh: bool = False) -> None:
+    """``fresh``: the two sides were compared for the first time (a new pairing or a changed
+    envelope), so nobody changed both; the review says the figures differ."""
     conflicts.file(
         kind,
         it.key,
@@ -152,6 +160,7 @@ def _file_assigned(it, names: dict, kind: str, reason: str) -> None:
         onw_milli=it.onw,
         ynab_milli=it.ynab,
         env=it.env,
+        fresh=fresh,
     )
 
 
