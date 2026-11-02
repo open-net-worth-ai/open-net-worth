@@ -45,6 +45,14 @@ _current: str | None = None  # the record of the manual run in progress
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ynab-sync")
 
 
+def month_name(month: str) -> str:
+    """ "2026-11" -> "November 2026", as people read it; anything else is left as it is."""
+    try:
+        return datetime.strptime(month, "%Y-%m").strftime("%B %Y")
+    except ValueError:
+        return month
+
+
 def _summary(tally: Counter, open_items: int) -> str:
     parts = []
     if tally["sent"]:
@@ -107,7 +115,7 @@ def _assigned_phase(
                 names,
                 conflicts.CONFLICT,
                 (
-                    f"The Assigned of {names.get(it.cid, 'this category')} for {it.month} differs "
+                    f"The Assigned of {names.get(it.cid, 'this category')} for {month_name(it.month)} differs "
                     "between Open Net Worth and YNAB. Pick the one to keep."
                     if it.cid in fresh
                     else "Changed in both Open Net Worth and YNAB since the last sync."
@@ -122,7 +130,7 @@ def _assigned_phase(
         base.set_assigned(it.month, it.cid, it.onw)
         recorder.assigned_change("sent", names.get(it.cid, "Category"), it.month, it.ynab, it.onw)
     for it in deferred:
-        label = f"{names.get(it.cid, 'Category')} · {it.month}"
+        label = f"{names.get(it.cid, 'Category')} · {month_name(it.month)}"
         recorder.deferred(label, "Waiting for the next run (YNAB request limit).")
     for it, why in rejected:
         _file_assigned(it, names, conflicts.FAILED, f"YNAB did not accept it: {why}")
@@ -134,7 +142,7 @@ def _file_assigned(it, names: dict, kind: str, reason: str) -> None:
     conflicts.file(
         kind,
         it.key,
-        f"{names.get(it.cid, 'Category')} · {it.month}",
+        f"{names.get(it.cid, 'Category')} · {month_name(it.month)}",
         reason,
         {"amount": it.onw / 1000},
         {"amount": it.ynab / 1000},
