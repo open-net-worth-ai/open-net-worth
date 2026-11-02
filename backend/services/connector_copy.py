@@ -229,6 +229,12 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             "List the YNAB accounts and which of yours each is linked to; no transactions.",
             read_only=True,
         ),
+        _t("ynab_list_plans", "List the YNAB plans the token can see.", read_only=True),
+        _t(
+            "ynab_get_plan",
+            "Read a YNAB plan's accounts and one month's budget.",
+            read_only=True,
+        ),
     ],
     "enable_banking": [
         _t(

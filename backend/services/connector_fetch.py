@@ -316,8 +316,10 @@ def fetch(
     include_pending: bool = False,
     limit: int = _DEFAULT_LIMIT,
     offset: int = 0,
+    plan_id: Optional[str] = None,
 ) -> dict:
-    """Fetch + normalize + stash + link + filter one provider's window (RFC §A). NEVER
+    """Fetch + normalize + stash + link + filter one provider's window (RFC §A). ``plan_id``
+    is YNAB's only: which plan to read (omitted = the saved or only one). NEVER
     raises for a provider-side failure — a dormant connector, an auth/rate/connect error,
     and a genuine transport exception all come back as ``status`` inside the result, exactly
     like the retired ingestion orchestrator's contract. Raises ``UnknownProvider`` only for a
@@ -344,7 +346,11 @@ def fetch(
     if account:
         try:
             accounts_probe = provider.fetch_window(
-                since=since_resolved, before=before_resolved, account=None, accounts_only=True
+                since=since_resolved,
+                before=before_resolved,
+                account=None,
+                accounts_only=True,
+                plan_id=plan_id,
             )
         except Exception as exc:  # noqa: BLE001 — classified below, never propagated
             status = provider.classify_error(exc)
@@ -365,7 +371,7 @@ def fetch(
     # ── step 2: fetch ────────────────────────────────────────────────────────────────────
     try:
         window: FetchWindow = provider.fetch_window(
-            since=since_resolved, before=before_resolved, account=resolved_account
+            since=since_resolved, before=before_resolved, account=resolved_account, plan_id=plan_id
         )
     except Exception as exc:  # noqa: BLE001 — classified below, never propagated
         status = provider.classify_error(exc)
@@ -496,7 +502,7 @@ def fetch(
     return result
 
 
-def provider_accounts(provider_key: str) -> dict:
+def provider_accounts(provider_key: str, plan_id: Optional[str] = None) -> dict:
     """The account list ONLY, no transaction fetch — ``GET /api/connectors/{id}/accounts``
     (``api/connectors_api.py``, L1) calls this directly. Returns ``{status, provider_label,
     accounts: [{provider_account_id, name, mask, currency, balance, account_type,
@@ -540,7 +546,9 @@ def provider_accounts(provider_key: str) -> dict:
 
     today = user_today().isoformat()
     try:
-        window = provider.fetch_window(since=today, before=today, account=None, accounts_only=True)
+        window = provider.fetch_window(
+            since=today, before=today, account=None, accounts_only=True, plan_id=plan_id
+        )
     except Exception as exc:  # noqa: BLE001 — classified, never propagated
         status = provider.classify_error(exc)
         error_text = sanitize_untrusted(str(exc), max_len=300)

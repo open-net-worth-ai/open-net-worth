@@ -1,19 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { authFetch } from '../../../api/client'
-import {
-  Stack,
-  Cluster,
-  Text,
-  Button,
-  FormField,
-  PasswordField,
-  Select,
-  useSecretReveal,
-} from '../../ui'
+import { Stack, Text, FormField, PasswordField, useSecretReveal } from '../../ui'
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
 import { ConnectorStatusLine } from './ConnectorStatusLine'
-import { ConnectorAccountsList } from './ConnectorAccountsList'
 
 // YNAB connector config over /api/ynab/* (per-provider plane), mirroring LunchMoneySection's
 // secret-reveal pattern: the access token is something the operator TYPED into YNAB's own
@@ -21,28 +11,15 @@ import { ConnectorAccountsList } from './ConnectorAccountsList'
 // shared eye (GET /api/connectors/ynab/secret/access_token). The GET only ever echoes
 // has_access_token; a blank token field on save leaves the saved one unchanged.
 //
-// The ONE thing SimpleFIN/Lunch Money don't have: a token can see MULTIPLE budgets, so this
-// form also owns a budget picker (fetched from GET /api/ynab/budgets once a token is saved).
-// With exactly one budget the fetch tool auto-picks it — the picker still shows it so the
-// operator can see which one; with several, picking one here is required before a fetch can do
-// anything useful (see docs/adr/2026-08-17-ynab-multiple-budgets-selection.md). This form owns
-// the config fields (token / budget / enable); fetching transactions is now Lucius's job via a
-// template (see the connector page's Automate button) — the unified /api/connectors PATCH owns the
-// card-header enable toggle. Save lives in the modal footer — see ./formSave.
-
-interface YnabBudget {
-  id: string
-  name: string
-  currency: string | null
-}
+// The token is ALL this form holds. A token can see several YNAB plans, but which one to read is
+// decided where it is used, never here: Lucius names a plan per call (ynab_list_plans →
+// plan_id), and the YNAB data sync (Automations) picks its own. Save lives in the modal
+// footer — see ./formSave; the card-header enable toggle is the unified /api/connectors PATCH.
 
 interface YnabStatus {
   configured: boolean
   enabled: boolean
   has_access_token: boolean
-  budget_id: string | null
-  budget_name: string | null
-  budget_currency: string | null
   last_synced_at: string | null
   last_status: string
   last_error: string | null
@@ -50,18 +27,12 @@ interface YnabStatus {
 
 interface YnabForm {
   access_token: string
-  budget_id: string
 }
 
-/** The server's values as a form — the seed for `load()` AND the baseline the footer's
- *  Save compares against. `access_token` never round-trips (write-only), so the baseline
- *  always reads it as blank — mirrors Lunch Money. */
-function ynabFormOf(c: YnabStatus): YnabForm {
-  return {
-    access_token: '',
-    budget_id: c.budget_id || '',
-  }
-}
+/** The seed for `load()` AND the baseline the footer's Save compares against.
+ *  `access_token` never round-trips (write-only), so it always reads blank — mirrors Lunch
+ *  Money. */
+const BLANK_FORM: YnabForm = { access_token: '' }
 
 export function YnabSection() {
   const [cfg, setCfg] = useState<YnabStatus | null>(null)
@@ -70,37 +41,13 @@ export function YnabSection() {
   const [saving, setSaving] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
 
-  const [budgets, setBudgets] = useState<YnabBudget[] | null>(null)
-  const [loadingBudgets, setLoadingBudgets] = useState(false)
-  const [budgetsErr, setBudgetsErr] = useState<string | null>(null)
-
-  async function loadBudgets() {
-    setLoadingBudgets(true)
-    setBudgetsErr(null)
-    try {
-      const r = await authFetch('/api/ynab/budgets')
-      if (!r.ok) {
-        const d = await r.json().catch(() => ({}))
-        setBudgetsErr(d.detail || 'Could not list budgets for this token.')
-        return
-      }
-      const data = (await r.json()) as { budgets: YnabBudget[] }
-      setBudgets(data.budgets || [])
-    } catch {
-      setBudgetsErr('Could not reach the server.')
-    } finally {
-      setLoadingBudgets(false)
-    }
-  }
-
   function load() {
     setError(false)
     authFetch('/api/ynab/status')
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((c: YnabStatus) => {
         setCfg(c)
-        setForm(ynabFormOf(c))
-        if (c.configured) loadBudgets()
+        setForm(BLANK_FORM)
       })
       .catch(() => setError(true))
   }
@@ -112,10 +59,7 @@ export function YnabSection() {
     setSaving(true)
     setSaveErr(null)
     try {
-      const body: Record<string, unknown> = {
-        enabled: cfg.configured ? cfg.enabled : true,
-        budget_id: form.budget_id,
-      }
+      const body: Record<string, unknown> = { enabled: cfg.configured ? cfg.enabled : true }
       if (form.access_token.trim()) body.access_token = form.access_token.trim()
       const r = await authFetch('/api/ynab/config', {
         method: 'PUT',
@@ -146,17 +90,15 @@ export function YnabSection() {
     reveal: useCallback(() => revealConnectorSecret('ynab', 'access_token'), []),
   })
 
-  // The one credential the connector needs to talk to YNAB at all (mirrors
-  // `YnabConfigStore.is_configured` — deliberately NOT gated on `budget_id`, which is a
-  // runtime auto-detect-if-one decision, not a config requirement). Typed fresh OR
-  // already-saved both count as valid, same as Email's password.
+  // The one credential the connector needs (mirrors `YnabConfigStore.is_configured`). Typed
+  // fresh OR already-saved both count as valid, same as Email's password.
   const tokenValid = !form || !!form.access_token.trim() || !!cfg?.has_access_token
   const tokenTouched = useTouched()
 
   useConnectorSave({
     ready: !!form && !!cfg && tokenValid,
     values: form && { ...form, access_token: unrevealed(form.access_token, token) },
-    baseline: cfg ? ynabFormOf(cfg) : form,
+    baseline: cfg ? BLANK_FORM : form,
     saving,
     error: saveErr,
     save,
@@ -180,23 +122,6 @@ export function YnabSection() {
   const set = <K extends keyof YnabForm>(k: K, v: YnabForm[K]) =>
     setForm((f) => f && { ...f, [k]: v })
 
-  const budgetOptions = (
-    budgets && budgets.length > 0
-      ? budgets
-      : cfg.budget_id
-        ? [
-            {
-              id: cfg.budget_id,
-              name: cfg.budget_name || cfg.budget_id,
-              currency: cfg.budget_currency,
-            },
-          ]
-        : []
-  ).map((b) => ({
-    value: b.id,
-    label: b.currency ? `${b.name} (${b.currency})` : b.name,
-  }))
-
   return (
     <Stack gap="--space-4">
       <Text size="sm" tone="faint">
@@ -204,8 +129,8 @@ export function YnabSection() {
         <a href="https://www.ynab.com" target="_blank" rel="noreferrer">
           YNAB
         </a>
-        , paste a personal access token from its Account Settings → Developer Settings page.
-        Fetching and booking transactions is Lucius's job — automate it with a template below.
+        , paste a personal access token from its Account Settings → Developer Settings page. Lucius
+        can then read any of your plans.
       </Text>
 
       {cfg.configured && !cfg.enabled && (
@@ -245,44 +170,11 @@ export function YnabSection() {
         />
       </FormField>
 
-      {cfg.configured && (
-        <FormField
-          label="Budget"
-          htmlFor="conn-ynab-budget"
-          help={
-            budgetsErr ||
-            'A token that can see more than one budget needs one picked here; with only one, it is used automatically.'
-          }
-        >
-          <Cluster gap="--space-2" align="center" wrap>
-            <Select
-              id="conn-ynab-budget"
-              value={form.budget_id}
-              placeholder={loadingBudgets ? 'Loading budgets…' : 'Select a budget…'}
-              options={budgetOptions}
-              disabled={loadingBudgets}
-              onChange={(e) => set('budget_id', e.target.value)}
-            />
-            <Button size="sm" variant="secondary" loading={loadingBudgets} onClick={loadBudgets}>
-              Refresh
-            </Button>
-          </Cluster>
-        </FormField>
-      )}
-
       {saveErr && (
         <Text size="xs" tone="bad">
           {saveErr}
         </Text>
       )}
-
-      {/* Keyed on what was saved: the list fetches once, and must look again after a token or
-          plan is saved here, or it keeps saying "not set up". */}
-      <ConnectorAccountsList
-        key={`${cfg.has_access_token}:${cfg.budget_id ?? ''}`}
-        provider="ynab"
-        providerLabel="YNAB"
-      />
     </Stack>
   )
 }

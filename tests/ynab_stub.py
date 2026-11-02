@@ -616,6 +616,8 @@ def _handler(state: dict, calls: list, writes: list):
                 return self._send({"data": {"months": months, "server_knowledge": 1}})
             if path.startswith(base + "/months/"):
                 wanted = path.rsplit("/", 1)[1][:7]
+                if wanted == "current":  # YNAB's own alias for this month
+                    return self._send({"data": {"month": month_detail(0)}})
                 for o in (-2, -1, 0, 1):
                     if month_detail(o)["month"][:7] == wanted:
                         return self._send({"data": {"month": month_detail(o)}})

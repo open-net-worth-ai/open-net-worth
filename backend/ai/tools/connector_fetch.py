@@ -92,7 +92,19 @@ class FetchTransactionsInput(ToolInput):
     offset: int = Field(default=0, description="Skip this many matching rows before returning.")
 
 
-def _register_fetch_tool(provider_key: str, tool_name: str) -> None:
+class YnabFetchTransactionsInput(FetchTransactionsInput):
+    """``ynab_fetch_transactions``: the shared fetch schema plus which YNAB plan to read."""
+
+    plan_id: Optional[str] = Field(
+        default=None,
+        json_schema_extra=explicit_null("string"),
+        description="The YNAB plan's id from ynab_list_plans. Omit when the token sees one plan.",
+    )
+
+
+def _register_fetch_tool(
+    provider_key: str, tool_name: str, input_model: type[ToolInput] = FetchTransactionsInput
+) -> None:
     """Register one ``<provider>_fetch_transactions`` tool. ``connector=provider_key`` gates
     discovery + owns the permission decision (``registry.tool``'s own docstring); the handler
     itself does the SAME work regardless of provider — ``services.connector_fetch.fetch``
@@ -128,13 +140,14 @@ def _register_fetch_tool(provider_key: str, tool_name: str) -> None:
             include_pending=bool(input_data.get("include_pending") or False),
             limit=input_data.get("limit") or 200,
             offset=input_data.get("offset") or 0,
+            plan_id=input_data.get("plan_id"),
         )
         return json.dumps(result, ensure_ascii=False), None
 
     tool(
         tool_name,
         description=description,
-        input_schema=schema_of(FetchTransactionsInput, tool_name=tool_name),
+        input_schema=schema_of(input_model, tool_name=tool_name),
         # Read-SHAPED but writes: stashes a raw-evidence snapshot per row + the connector's
         # own last_synced_at/last_status/last_error — the email_search_messages precedent.
         mutates=("config",),
@@ -146,7 +159,19 @@ class ListAccountsInput(ToolInput):
     """No arguments — the provider is the tool's identity."""
 
 
-def _register_list_accounts_tool(provider_key: str, tool_name: str) -> None:
+class YnabListAccountsInput(ToolInput):
+    """``ynab_list_accounts``: which YNAB plan's accounts to list."""
+
+    plan_id: Optional[str] = Field(
+        default=None,
+        json_schema_extra=explicit_null("string"),
+        description="The YNAB plan's id from ynab_list_plans. Omit when the token sees one plan.",
+    )
+
+
+def _register_list_accounts_tool(
+    provider_key: str, tool_name: str, input_model: type[ToolInput] = ListAccountsInput
+) -> None:
     """Register one ``<provider>_list_accounts`` tool — the provider's accounts, no rows."""
     provider = PROVIDERS[provider_key]
     description = (
@@ -158,13 +183,15 @@ def _register_list_accounts_tool(provider_key: str, tool_name: str) -> None:
     async def handler(input_data: dict):
         from backend.services import connector_fetch as connector_fetch_service
 
-        result = await asyncio.to_thread(connector_fetch_service.provider_accounts, provider_key)
+        result = await asyncio.to_thread(
+            connector_fetch_service.provider_accounts, provider_key, input_data.get("plan_id")
+        )
         return json.dumps(result, ensure_ascii=False), None
 
     tool(
         tool_name,
         description=description,
-        input_schema=schema_of(ListAccountsInput, tool_name=tool_name),
+        input_schema=schema_of(input_model, tool_name=tool_name),
         connector=provider_key,
     )(handler)
 
@@ -173,7 +200,7 @@ _register_fetch_tool("simplefin", "simplefin_fetch_transactions")
 _register_fetch_tool("plaid", "plaid_fetch_transactions")
 _register_fetch_tool("lunch_money", "lunch_money_fetch_transactions")
 _register_fetch_tool("lunch_flow", "lunch_flow_fetch_transactions")
-_register_fetch_tool("ynab", "ynab_fetch_transactions")
+_register_fetch_tool("ynab", "ynab_fetch_transactions", YnabFetchTransactionsInput)
 _register_fetch_tool("enable_banking", "enable_banking_fetch_transactions")
 _register_fetch_tool("gocardless", "gocardless_fetch_transactions")
 _register_fetch_tool("yodlee", "yodlee_fetch_transactions")
@@ -182,7 +209,7 @@ _register_list_accounts_tool("simplefin", "simplefin_list_accounts")
 _register_list_accounts_tool("plaid", "plaid_list_accounts")
 _register_list_accounts_tool("lunch_money", "lunch_money_list_accounts")
 _register_list_accounts_tool("lunch_flow", "lunch_flow_list_accounts")
-_register_list_accounts_tool("ynab", "ynab_list_accounts")
+_register_list_accounts_tool("ynab", "ynab_list_accounts", YnabListAccountsInput)
 _register_list_accounts_tool("enable_banking", "enable_banking_list_accounts")
 _register_list_accounts_tool("gocardless", "gocardless_list_accounts")
 _register_list_accounts_tool("yodlee", "yodlee_list_accounts")

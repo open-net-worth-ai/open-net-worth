@@ -255,22 +255,32 @@ def test_fetch_window_applies_before_client_side(monkeypatch):
     assert dates == {"2026-08-01", "2026-08-02"}
 
 
-def test_fetch_window_accounts_only_skips_rows_and_uses_a_single_day_window(monkeypatch):
+def test_fetch_window_accounts_only_lists_the_plans_accounts_without_fetching_rows(monkeypatch):
+    """The accounts endpoint, not today's transactions: an account with nothing dated today
+    used to be missing, so most plans listed none. Closed accounts are left out."""
+    from backend.services.aggregation import ynab_plan
+
     store = _configured_store()
-    captured = {}
 
-    def _fetch(s, bid, *, since_date):
-        captured["since_date"] = since_date
-        return list(_TXNS)
+    def _no_fetch(*_a, **_k):
+        raise AssertionError("accounts_only must not fetch transactions")
 
-    monkeypatch.setattr(svc, "fetch_transactions", _fetch)
+    monkeypatch.setattr(svc, "fetch_transactions", _no_fetch)
+    monkeypatch.setattr(
+        ynab_plan,
+        "accounts",
+        lambda s, bid: [
+            {"id": "acct-checking", "name": "Checking", "closed": False, "balance": 12.5},
+            {"id": "acct-savings", "name": "Savings", "closed": False, "balance": 0.0},
+            {"id": "acct-old", "name": "Old", "closed": True, "balance": 0.0},
+        ],
+    )
     window = svc.fetch_window(store, "2026-08-01", "2026-08-31", None, accounts_only=True)
 
     assert window.rows == []
-    assert captured["since_date"] == "2026-08-31"  # since_date=before minimizes the fetch
-    assert {a["provider_account_id"] for a in window.accounts} == {
-        "acct-checking",
-        "acct-savings",
+    assert {a["provider_account_id"]: a["balance"] for a in window.accounts} == {
+        "acct-checking": 12.5,
+        "acct-savings": 0.0,
     }
 
 

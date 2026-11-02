@@ -86,6 +86,7 @@ from backend.ai.tools import (  # noqa: E402  (after the re-exports above)
     watchlist,
     web_search_providers,
     xray,
+    ynab,
 )
 from backend.ai.tools import (
     automations as automations,
@@ -293,4 +294,5 @@ __all__ = [
     "watchlist",
     "web_search_providers",
     "xray",
+    "ynab",
 ]

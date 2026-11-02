@@ -412,15 +412,23 @@ def fetch_window(
     account: Optional[str],
     *,
     accounts_only: bool = False,
+    plan_id: Optional[str] = None,
 ) -> FetchWindow:
     """YNAB's provider-side windowed fetch (RFC §B) — ``since_date`` is a server-side param;
     ``before`` has no matching upper-bound param, so it is applied client-side. ``account``
     filters client-side (the transactions endpoint has no per-account request filter).
     Raises ``YnabBudgetSelectionRequired`` (via ``_resolve_single_budget``) when the token
     sees zero or several budgets with none chosen — never guesses. Always ``complete=True``:
-    YNAB's transactions endpoint is not paginated."""
+    YNAB's transactions endpoint is not paginated.
+
+    ``plan_id`` reads that plan instead of the saved one (Lucius names it per call; the token
+    is all the connector holds). ``accounts_only`` lists the plan's real accounts, with YNAB's
+    balances, rather than only those with a transaction today."""
+    from backend.services.aggregation import ynab_plan
+
     cfg = store.get()
-    budget_id = cfg.get("budget_id") or _resolve_single_budget(store)
+    named = ynab_plan.plan(store, plan_id) if plan_id else None
+    budget_id = named["id"] if named else cfg.get("budget_id") or _resolve_single_budget(store)
     from backend.services import ynab_sync
 
     if ynab_sync.plan_in_sync(budget_id):
@@ -428,14 +436,18 @@ def fetch_window(
             "The two-way YNAB sync is on for this plan and already brings its transactions in "
             "(and sends yours back); fetching them again would book each one twice."
         )
-    currency = (store.get().get("budget_currency") or ledger_service.base_currency()).upper()
+    saved_currency = None if named else store.get().get("budget_currency")
+    currency = ((named or {}).get("currency") or saved_currency or "").upper()
+    currency = currency or ledger_service.base_currency().upper()
 
     if accounts_only:
-        # since_date=before (a single-day window) minimizes the transaction rows an
-        # accounts-only caller pays for.
-        txns = fetch_transactions(store, budget_id, since_date=before)
-    else:
-        txns = fetch_transactions(store, budget_id, since_date=since)
+        listed = [
+            {**_account_to_common(a["id"], a["name"], currency), "balance": a["balance"]}
+            for a in ynab_plan.accounts(store, budget_id)
+            if not a["closed"] and (not account or a["id"] == account)
+        ]
+        return FetchWindow(accounts=listed, rows=[], complete=True)
+    txns = fetch_transactions(store, budget_id, since_date=since)
 
     account_names: dict[str, str] = {}
     rows: list[dict] = []
@@ -445,8 +457,6 @@ def fetch_window(
             continue
         account_names.setdefault(account_key, _account_name(account_key, ynab_txn))
         if account and account_key != account:
-            continue
-        if accounts_only:
             continue
         row = _txn_to_row(ynab_txn, account_key, currency)
         if row is not None and row["date"] <= before:

@@ -1059,7 +1059,13 @@ def test_native_views_carry_descriptions_and_known_tool_names():
             "lunch_flow_fetch_transactions",
             "lunch_flow_list_accounts",
         ],
-        "ynab": ["ynab_get_status", "ynab_fetch_transactions", "ynab_list_accounts"],
+        "ynab": [
+            "ynab_get_status",
+            "ynab_fetch_transactions",
+            "ynab_list_accounts",
+            "ynab_list_plans",
+            "ynab_get_plan",
+        ],
         "enable_banking": [
             "enable_banking_get_status",
             "enable_banking_fetch_transactions",

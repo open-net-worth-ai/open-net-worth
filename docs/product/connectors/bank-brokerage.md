@@ -231,16 +231,18 @@ categories are left for you or an Automation to set.
 
 ## YNAB
 
-If you already budget in YNAB, its transactions can flow in from here.
+If you already budget in YNAB, Lucius can read it from here.
 
 1. In YNAB, go to **Account Settings → Developer Settings → New Token**. Copy the token — YNAB
    shows it only once.
 2. In Open Net Worth: **Connectors → Browse & add → YNAB → Add connector**.
 3. Paste it into **Access token** and click **Save**.
-4. If your YNAB login has more than one budget, reopen the form (**⋯ → Edit configuration**) and
-   choose one under **Budget** (click **Refresh** if the list is empty), then **Save**. With only
-   one budget, it's picked for you.
-5. Link the accounts in the **Accounts** list.
+
+That token is all the connector holds. If your YNAB login has several plans, you don't pick one
+here: ask Lucius about any of them ("what's left in Groceries in my SGD plan?"). It lists your
+plans, then reads the one you mean — its accounts and balances, a month's Ready to Assign and each
+category's assigned, activity and available, or its transactions to book here. Reading YNAB never
+changes anything in it.
 
 Categories are not copied by this connector — they're left for you or an Automation to set. To
 move your whole plan across instead, use the migration below.
