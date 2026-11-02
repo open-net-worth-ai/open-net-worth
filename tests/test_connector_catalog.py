@@ -12,6 +12,7 @@ def test_catalog_lists_every_kind_the_migration_creates():
         "email",
         "webhook",
         "telegram",
+        "voice",
         "simplefin",
         "plaid",
         "lunch_money",

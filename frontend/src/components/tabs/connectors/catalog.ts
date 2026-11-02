@@ -58,6 +58,12 @@ export interface CatalogEntry extends Omit<
    */
   sub?: string
   desc?: string
+  /**
+   * A feature flag this NATIVE connector ships behind (`core/feature_flags.py`). The backend is
+   * the one seam that reads it: off, `list_connectors()` omits the connector, so the directory
+   * lists the card only when its live counterpart exists, and Lucius's directory search skips it.
+   */
+  flag?: string
   /** The vendor. `null` for a server the user points us at themselves. */
   publisher: string | null
   verification: VerificationState
@@ -243,6 +249,25 @@ export const CATALOG: CatalogEntry[] = [
     // problem to telegram.org/support would be the wrong desk.
     mcp: false,
     popular: true,
+    tools: [],
+  },
+  {
+    // Voice calls with Lucius — listed only while the `voice_calls` flag is on.
+    id: 'voice',
+    flag: 'voice_calls',
+    name: 'Voice calls',
+    families: ['Channel'],
+    categories: ['Messaging'],
+    icon: 'chat',
+    hue: 'var(--accent)',
+    // sub/desc: read live from `services/connector_copy.py` SHORT/LONG["voice"].
+    publisher: 'Open Net Worth',
+    verification: 'unverified',
+    homepageUrl: 'https://opennetworth.ai',
+    // The call's audio and the front voice's side of the conversation cross LiveKit.
+    privacyUrl: 'https://livekit.io/legal/privacy-policy',
+    mcp: false,
+    popular: false,
     tools: [],
   },
 

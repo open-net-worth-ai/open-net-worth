@@ -45,11 +45,17 @@ from backend.services import connectors as connectors_service
 router = APIRouter()
 
 
-async def _reload_telegram_if_needed(connector_id: str) -> bool:
+async def _reload_live_connector(connector_id: str) -> bool:
     """Best-effort live-bot reload after a write that touched Telegram — enable or disable
     (``PATCH``) land here. Returns whether the reload actually completed; ``True`` (a
     trivial "nothing needed reloading") for every other connector, so a caller can thread
     the result into the response uniformly without a second branch."""
+    if connector_id == "voice":
+        # Voice calls read their settings once, at start: pausing or resuming restarts them.
+        from backend.connectors.voice import service as voice_service
+
+        await voice_service.reload()
+        return True
     if connector_id != connectors_service.TELEGRAM_ID:
         return True
     from backend.connectors.telegram import bot as telegram_bot
@@ -124,8 +130,8 @@ async def patch_connector(connector_id: str, body: ConnectorPatch):
     except OpenNetWorthError as exc:
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
     result = view.model_dump()
-    if connector_id == connectors_service.TELEGRAM_ID:
-        result["reloaded"] = await _reload_telegram_if_needed(connector_id)
+    if connector_id in (connectors_service.TELEGRAM_ID, "voice"):
+        result["reloaded"] = await _reload_live_connector(connector_id)
     return result
 
 
@@ -158,6 +164,11 @@ async def remove_connector(connector_id: str):
                 "allowlist while it keeps running. Try again, or restart the app to force "
                 "a clean stop.",
             )
+    if connector_id == "voice":
+        # Stop the worker before its LiveKit credentials are removed out from under it.
+        from backend.connectors.voice import service as voice_service
+
+        await voice_service.stop()
     try:
         await run_in_threadpool(connectors_service.remove_connector, connector_id)
     except OpenNetWorthError as exc:

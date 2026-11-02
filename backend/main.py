@@ -199,6 +199,7 @@ from backend.api.terminal import router as terminal_router
 from backend.api.tool_permissions import router as tool_permissions_router
 from backend.api.upload import router as upload_router
 from backend.api.vault import router as vault_router
+from backend.api.voice import router as voice_router
 from backend.api.watchlist import router as watchlist_router
 from backend.api.ynab_api import router as ynab_router
 from backend.api.yodlee_api import router as yodlee_router
@@ -807,6 +808,9 @@ async def lifespan(app: FastAPI):
         _log.exception("benchmark instrument seeding failed (non-fatal)")
 
     await _start_connector("telegram", telegram_bot.start)
+    from backend.connectors.voice import service as voice_service
+
+    await _start_connector("voice", voice_service.start)
     # Register the Telegram notification channel on the core.channels seam (only when
     # the connector boots) so the Notifier can fan out to Telegram (P2-SK2 §B.5). The
     # channel's notify() no-ops until the bot is actually connected, so it is safe to
@@ -882,6 +886,9 @@ async def lifespan(app: FastAPI):
     await cancel_memory_extractions()
     unregister_automation_adapters()
     await telegram_bot.stop()
+    from backend.connectors.voice import service as voice_service
+
+    await voice_service.stop()
     _keep_awake.release()
     # Release the working-folder claim last, so the folder stays owned for the whole of a
     # graceful shutdown rather than freeing up while turns are still being journalled.
@@ -1157,6 +1164,7 @@ app.include_router(ynab_router)
 app.include_router(import_runs_router)
 app.include_router(account_linking_router)
 app.include_router(integrations_router)
+app.include_router(voice_router)
 app.include_router(setup_router)
 app.include_router(networth_history_router)
 app.include_router(daily_total_value_router)

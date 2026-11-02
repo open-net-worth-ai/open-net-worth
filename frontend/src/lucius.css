@@ -725,6 +725,25 @@
     width: 16px;
     height: 16px;
   }
+  /* Voice call (the `voice_calls` flag): the Call button turns red while a call is open, and
+     a call that could not start says why beside it rather than in a tooltip alone. */
+  .lx-call-slot {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .lx-tool--call-live {
+    background: var(--bad);
+    color: var(--bg);
+  }
+  .lx-call-problem {
+    font-size: var(--text-xs);
+    color: var(--bad);
+    max-width: 220px;
+  }
+  .lx-call-audio {
+    display: none;
+  }
   /* Hover now sits ON the --surface2 editrow, so --surface2 here would be invisible. The step has
    to follow the theme, not a fixed direction: dark mode steps UP (--line is lighter than
    --surface2), light mode steps DOWN (--surface is darker than --surface2). */

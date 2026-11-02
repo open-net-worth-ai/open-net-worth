@@ -23,6 +23,7 @@ import { useScreenSnapshot } from '../../../state/screenSnapshot'
 import { LuciusComposer } from './Composer'
 import { ModelEffortCluster } from './ModelEffortRow'
 import { ConversationApprovalPicker } from '../ConversationApprovalPicker'
+import { VoiceCallButton } from './VoiceCallButton'
 import type { LuciusComposerHandle, ComposerParsed } from './Composer'
 import { MessageBubble } from '../MessageBubble'
 import { CompactingActivity } from '../CompactingActivity'
@@ -508,7 +509,12 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
                 onEffortChange={setEffort}
               />
             }
-            leadingControls={<ConversationApprovalPicker sessionId={activeId} />}
+            leadingControls={
+              <>
+                <ConversationApprovalPicker sessionId={activeId} />
+                <VoiceCallButton sessionId={activeId} />
+              </>
+            }
             ref={composerRef}
             busy={(streaming && !following) || sending}
             sendBlocked={((streaming && !following) || sending) && !multiTurnEnabled}

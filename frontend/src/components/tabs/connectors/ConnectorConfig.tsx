@@ -22,6 +22,7 @@ import { Text } from '../../ui'
 import { EmailUnifiedSection } from './EmailUnifiedSection'
 import { WebhookSection } from './ChannelSection'
 import { TelegramSection } from './TelegramSection'
+import { VoiceSection } from './VoiceSection'
 import { SimpleFinSection } from './SimpleFinSection'
 import { PlaidSection } from './PlaidSection'
 import { LunchMoneySection } from './LunchMoneySection'
@@ -46,6 +47,7 @@ const CONFIGURABLE_KINDS = new Set([
   'email',
   'webhook',
   'telegram',
+  'voice',
   'simplefin',
   'plaid',
   'lunch_money',
@@ -94,6 +96,8 @@ function configForm(connector: Connector, initialCountry?: string): JSX.Element 
       return <WebhookSection />
     case 'telegram':
       return <TelegramSection />
+    case 'voice':
+      return <VoiceSection />
     case 'simplefin':
       return <SimpleFinSection />
     case 'plaid':

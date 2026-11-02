@@ -27,6 +27,9 @@ function mcpConnector(id: string, cfg: Record<string, unknown>): Connector {
   }
 }
 
+// A flagged native entry (Voice calls) is listed only when its live connector exists.
+const UNFLAGGED = CATALOG.filter((e) => !e.flag).length
+
 describe('catalogProvenanceFor — matched by endpoint, never by name', () => {
   it('attributes a server launched with the catalog command', () => {
     const preset = MCP_INSTALL_PRESETS['mcp-playwright']!
@@ -116,12 +119,29 @@ describe('resolveDirectory', () => {
     ])
     const telegram = rows.find((r) => r.id === 'telegram')!
     expect(telegram.installed).toBe(true)
-    expect(rows.length).toBe(CATALOG.length)
+    expect(rows.length).toBe(UNFLAGGED)
+  })
+
+  it('lists a flagged native entry only while the backend returns it (its flag is on)', () => {
+    expect(resolveDirectory([]).some((r) => r.id === 'voice')).toBe(false)
+    const rows = resolveDirectory([
+      {
+        id: 'voice',
+        kind: 'voice',
+        name: 'Voice calls',
+        enabled: false,
+        config: {},
+        secrets_public: {},
+        status: 'not_configured',
+        pausable: true,
+      } as Parameters<typeof resolveDirectory>[0][number],
+    ])
+    expect(rows.some((r) => r.id === 'voice')).toBe(true)
   })
 
   it('appends an installed MCP server the catalog has never heard of', () => {
     const rows = resolveDirectory([mcpConnector('mine', { url: 'https://mcp.mine.test' })])
-    expect(rows.length).toBe(CATALOG.length + 1)
+    expect(rows.length).toBe(UNFLAGGED + 1)
     expect(rows.find((r) => r.id === 'mcp:mine')?.installed).toBe(true)
   })
 

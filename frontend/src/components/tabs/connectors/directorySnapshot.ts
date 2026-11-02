@@ -36,6 +36,7 @@ export interface SnapshotEntry {
   mcp: boolean
   connect: SnapshotConnect
   endpoint?: string
+  flag?: string
 }
 
 export interface DirectorySnapshot {
@@ -116,6 +117,7 @@ export function buildDirectorySnapshot(
       mcp: entry.mcp,
       connect: connectOf(entry, preset),
       ...(endpoint ? { endpoint } : {}),
+      ...(entry.flag ? { flag: entry.flag } : {}),
     })
   }
   return { entries }

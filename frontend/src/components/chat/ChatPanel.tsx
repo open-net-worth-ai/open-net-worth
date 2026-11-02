@@ -60,6 +60,7 @@ import { isBackgroundConversation, type ConversationMeta } from '../../hooks/use
 import { Brain, ChevronRight, FolderLock, Menu, SquarePen } from '../../ui/icons'
 import { ModelPicker, Skeleton } from '../ui'
 import { ConversationApprovalPicker } from './ConversationApprovalPicker'
+import { VoiceCallButton } from './lucius/VoiceCallButton'
 import { computeHomeEmpty } from './homeEmpty'
 import { useProfile } from '../../hooks/serverState'
 import { ActivityPanel } from '../tabs/lucius/ActivityPanel'
@@ -1103,9 +1104,12 @@ export function ChatPanel({
           /* Approvals govern the CONVERSATION, so it rides in the LEFT tool group beside
              attach/@//— not in `controls`, which is the model/effort/cost cluster. */
           leadingControls={
-            <span data-tour="lucius-approval">
-              <ConversationApprovalPicker sessionId={activeId} />
-            </span>
+            <>
+              <span data-tour="lucius-approval">
+                <ConversationApprovalPicker sessionId={activeId} />
+              </span>
+              <VoiceCallButton sessionId={activeId} />
+            </>
           }
           /* Model / effort / cost ride in the composer's toolbar row, right-aligned against
              Send — not as a strip above the field. */

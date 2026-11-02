@@ -56,7 +56,9 @@ export function resolveDirectory(
   }
   const merged = new Set<string>()
 
-  const rows: DirectoryRow[] = catalog.map((entry) => {
+  // A flagged native entry exists only when the backend returns it (its flag is on).
+  const visible = catalog.filter((entry) => !entry.flag || liveById.has(entry.id))
+  const rows: DirectoryRow[] = visible.map((entry) => {
     const preset = entry.mcp ? MCP_INSTALL_PRESETS[entry.id] : undefined
     const endpoint =
       preset?.transport === 'remote'

@@ -40,8 +40,15 @@ _SETUP_TEXT = {
 
 
 @lru_cache(maxsize=1)
-def entries() -> tuple[dict, ...]:
+def _all_entries() -> tuple[dict, ...]:
     return tuple(json.loads(_SNAPSHOT.read_text(encoding="utf-8"))["entries"])
+
+
+def entries() -> tuple[dict, ...]:
+    """Every listed connector, minus one whose feature flag is off (``flag`` in the snapshot)."""
+    from backend.services.feature_flags import enabled
+
+    return tuple(e for e in _all_entries() if not e.get("flag") or enabled(e["flag"]))
 
 
 # The id that opens the Add custom server form: any MCP server the directory doesn't list.

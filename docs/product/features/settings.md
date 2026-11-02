@@ -83,7 +83,8 @@ app worked before. Each one is temporary: once it is finished it becomes part of
 removed) and disappears from this list. When the list is empty there is nothing to try right now.
 
 Right now the list holds **Permissions v2**, a new way of deciding when Lucius asks you before
-using a tool; see [Permissions v2](../lucius/permissions-v2.md).
+using a tool; see [Permissions v2](../lucius/permissions-v2.md). It also holds **Voice calls**: talk to Lucius out loud
+from the chat; see [Voice calls](../connectors/voice-calls.md).
 
 A switch is read-only when the server sets it from its environment (the row names the variable),
 and on the public demo, which always runs the defaults. Lucius cannot change these switches.
