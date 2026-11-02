@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { DisconnectReason, Room, RoomEvent, Track } from 'livekit-client'
 import { authFetch } from '../../../api/client'
+import { emitConversationChanged } from '../../../lucius/bus'
 
 // One voice call for the whole app (`voice_calls` flag), held OUTSIDE React. The first build kept
 // the LiveKit room inside the Call button, so a chat that re-laid its composer (the landing screen
@@ -149,6 +150,9 @@ function teardown() {
 
 function finish(problem: CallProblem | null) {
   const seconds = state.connectedAt ? Math.round((Date.now() - state.connectedAt) / 1000) : null
+  // The goodbye is recorded as the room closes — no signal left to carry it, so look once more.
+  const ended = state.sessionId
+  if (ended) window.setTimeout(() => emitConversationChanged(ended), 1000)
   teardown()
   if (problem) {
     set({ ...IDLE, problem, setupOpen: state.setupOpen })
@@ -216,6 +220,11 @@ export async function startCall(sessionId: string): Promise<void> {
     next.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       if (speakers.some((p) => p.identity !== next.localParticipant.identity)) pickedUp()
     })
+    // Lucius's worker says when the call's conversation changed — small talk recorded, or a
+    // turn of his starting or ending — so the open chat shows the call as it happens.
+    next.on(RoomEvent.DataReceived, (_payload, _from, _kind, topic) => {
+      if (topic === CHAT_CHANGED_TOPIC) emitConversationChanged(grant.session_id)
+    })
     next.on(RoomEvent.Reconnecting, () => set({ phase: 'reconnecting' }))
     next.on(RoomEvent.Reconnected, () => set({ phase: state.connectedAt ? 'live' : 'ringing' }))
     next.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
@@ -233,6 +242,9 @@ export async function startCall(sessionId: string): Promise<void> {
     finish(classify(e))
   }
 }
+
+/** Must match `CHAT_CHANGED_TOPIC` in backend/connectors/voice/agent.py. */
+const CHAT_CHANGED_TOPIC = 'lucius.chat_changed'
 
 export async function hangUp(): Promise<void> {
   localHangUp = true

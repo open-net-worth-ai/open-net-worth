@@ -35,6 +35,10 @@ from livekit.plugins import silero
 from backend.connectors.voice import bridge, desk, service
 from backend.connectors.voice.tokens import OWNER_IDENTITY
 
+# Told to the caller's browser whenever the call's conversation changes, so the open chat
+# re-reads it at once: small talk is recorded in a few ms, gone before any live poll looks.
+CHAT_CHANGED_TOPIC = "lucius.chat_changed"
+
 log = logging.getLogger(__name__)
 
 FRONT_INSTRUCTIONS = """\
@@ -174,9 +178,19 @@ class LuciusDesk:
         if role != "assistant" or text in self._lucius_lines or self._turn_asked:
             return
         said, self._turn_said = self._turn_said, ""
-        asyncio.ensure_future(
-            bridge.call(self._rt.app_loop, desk.record_exchange(self._session_id, said, text))
-        )
+        asyncio.ensure_future(self._record(said, text))
+
+    async def _record(self, said: str, reply: str) -> None:
+        await bridge.call(self._rt.app_loop, desk.record_exchange(self._session_id, said, reply))
+        await self._chat_changed()
+
+    async def _chat_changed(self) -> None:
+        try:
+            await self._ctx.room.local_participant.publish_data(
+                b"{}", topic=CHAT_CHANGED_TOPIC, destination_identities=[OWNER_IDENTITY]
+            )
+        except Exception:  # noqa: BLE001 — the chat catches up on its own poll; never fail the call
+            log.debug("voice: couldn't tell the browser the chat changed", exc_info=True)
 
     def spoke(self) -> None:
         """The voice said something: the owner's next words start a new turn."""
@@ -251,11 +265,14 @@ class LuciusDesk:
     async def _collect(self, events) -> tuple[str, bool]:
         """Gather Lucius's reply, speaking a progress line only on a REAL delay, once each:
         a lookup past ``SLOW_S``, or a long think after the last result."""
-        text, approval, told = "", False, set()
+        text, approval, told, started = "", False, set(), False
         running: dict[str, tuple[str, float]] = {}
         last_news = time.monotonic()
         async for event in _with_ticks(events, 1.0):
             now = time.monotonic()
+            if event is not None and not started:
+                started = True
+                await self._chat_changed()  # his turn is live: the chat follows it as it streams
             if event is not None:
                 last_news = now if event.kind in ("tool", "tool_done") else last_news
                 if event.kind == "text":
@@ -277,6 +294,7 @@ class LuciusDesk:
             if not running and "think" not in told and now - last_news >= 2 * self.SLOW_S:
                 told.add("think")
                 self._say("Still working on it.")
+        await self._chat_changed()
         return text, approval
 
     async def _after_approval(self) -> None:

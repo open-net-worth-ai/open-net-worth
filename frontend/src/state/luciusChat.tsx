@@ -21,7 +21,7 @@ import { useConversations } from '../hooks/useConversations'
 import type { ConversationMeta } from '../hooks/useConversations'
 import { chatSessions } from './chatSessions'
 import type { ConvSlice, TurnStatus } from './chatSessions'
-import { onLiveSessions, setLiveSessions } from '../lucius/bus'
+import { onConversationChanged, onLiveSessions, setLiveSessions } from '../lucius/bus'
 import { authFetch } from '../api/client'
 import { isAfterIso, laterIso } from '../utils/isoTime'
 import {
@@ -484,9 +484,12 @@ export function LuciusChatProvider({ children }: ProviderProps) {
     }
     void poll()
     const timer = window.setInterval(() => void poll(), LIVE_POLL_MS)
+    // A conversation just changed (a voice call's turn started): look now, not in 4s.
+    const offChanged = onConversationChanged(() => void poll())
     return () => {
       cancelled = true
       window.clearInterval(timer)
+      offChanged()
     }
   }, [refreshConversations])
 

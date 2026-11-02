@@ -13,7 +13,7 @@ import {
 import { fetchRevision, forgetRevision, syncedRevision } from '../utils/chatRevision'
 import { blockCount, contentCount } from '../utils/chatBubbles'
 import { authFetch } from '../api/client'
-import { emitDataChanged, onLiveSessions } from '../lucius/bus'
+import { emitDataChanged, onConversationChanged, onLiveSessions } from '../lucius/bus'
 import { useChatMultiTurnEnabled } from './useChatSuggestionsEnabled'
 import { chatSessions } from '../state/chatSessions'
 import {
@@ -254,6 +254,17 @@ export function useChat(
   // either way.
   const [liveSessions, setLiveSessionIds] = useState<string[]>([])
   useEffect(() => onLiveSessions(setLiveSessionIds), [])
+  // Told this conversation changed (a voice call's exchange, recorded in a few ms — gone
+  // before any live poll sees it): re-read it, unless a stream is already showing it.
+  useEffect(
+    () =>
+      onConversationChanged((id) => {
+        if (id === conversationId && chatSessions.getSlice(id).status !== 'streaming') {
+          void resyncIfChanged(id)
+        }
+      }),
+    [conversationId],
+  )
   const shouldAttach = hydrated && (streaming || liveSessions.includes(conversationId))
   // Exposed as `following` — kept to its ORIGINAL, narrower meaning ("watching a turn this
   // browser did not start") for every existing consumer of the hook's return value; it is
