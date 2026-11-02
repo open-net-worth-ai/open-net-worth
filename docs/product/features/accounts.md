@@ -40,7 +40,7 @@ beside its amount, in case the **Source** column is out of view.
 3. **Account type** — click the type box to change it (it starts as **Cash**). Pick from the
    list, or type in the search box: "401k", "CPF", "mortgage", "fixed deposit" all find the
    right type. See [Which type to pick](#which-type-to-pick).
-4. **Currency** — the currency the bank shows this account in.
+4. **Currency** — the currency the bank shows this account in. It starts on your base currency.
 5. **Current balance** (or **Amount currently owed** for a card or loan) — what it holds or
    owes today. Type `0` if it's empty or you'd rather import its history. Enter what you owe
    as a positive number; the app knows a card or loan is a debt.
