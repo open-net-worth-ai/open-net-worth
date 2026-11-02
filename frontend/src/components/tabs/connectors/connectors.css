@@ -750,6 +750,18 @@
   width: 14px;
   height: 14px;
 }
+/* On a phone the tick alone says "connected"; the word squeezed the name into an ellipsis.
+   Kept for screen readers, not removed. */
+@media (max-width: 560px) {
+  .cn-page .cn-statusgood-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}
 .cn-page .cn-statusbad {
   display: inline-flex;
   align-items: center;
