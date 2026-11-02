@@ -2500,18 +2500,21 @@ async def _deliver_analysis(
 ) -> None:
     """The single call site for a push-worthy analysis: ``delivery.route`` runs ``_push_analysis``
     unchanged with the ``intel_delivery_decider`` flag off, and hands Lucius the candidate with it on."""
-    candidate = delivery.analysis_candidate(
-        label,
-        ticker,
-        parsed,
-        sources=source_dicts(evidence or []),
-        story_id=story_id,
-        subject=subject,
-        materiality=materiality,
-        legacy_message=_format_analysis(
-            label, ticker, parsed, sources=_source_links(evidence or [])
-        ),
-    )
+
+    def candidate() -> dict:
+        return delivery.analysis_candidate(
+            label,
+            ticker,
+            parsed,
+            sources=source_dicts(evidence or []),
+            story_id=story_id,
+            subject=subject,
+            materiality=materiality,
+            legacy_message=_format_analysis(
+                label, ticker, parsed, sources=_source_links(evidence or [])
+            ),
+        )
+
     legacy = functools.partial(_push_analysis, label, ticker, parsed, evidence, story_id=story_id)
     await delivery.route(candidate, legacy)
 

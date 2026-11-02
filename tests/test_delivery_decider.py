@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from backend.monitoring import delivery_context
+from backend.monitoring import delivery_context, delivery_send, push_retry
 from backend.monitoring import delivery_decider as dd
 from backend.monitoring.delivery_prompt import (
     DeliveryDecision,
@@ -109,6 +109,33 @@ def test_the_prompt_is_bounded():
     many = [item(f"dlv_{n}") for n in range(40)]
     user, _ = build_prompt(many, many, CONTEXT)
     assert user.count("id=") <= 12 + 30
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "[x](tg://resolve?domain=evil)",
+        "[x](javascript:alert(1))",
+        "[x](//evil.com)",
+        "HTTPS://EVIL.COM/x",
+        "www.evil.com/x",
+        "[x]( https://evil.example/x )",
+    ],
+)
+def test_no_link_form_the_model_was_not_given_gets_through(bad):
+    cleaned = strip_unknown_links(f"Sam, news {bad} and [Wire]({LINK}).", {LINK})
+    assert "evil" not in cleaned.lower() and "tg:" not in cleaned and "javascript" not in cleaned
+    assert f"[Wire]({LINK})" in cleaned
+
+
+def test_a_given_link_survives_in_any_case_of_punctuation():
+    assert strip_unknown_links(f"See {LINK}.", {LINK}) == f"See {LINK}."
+
+
+def test_the_told_block_sits_inside_an_untrusted_fence():
+    user, _ = build_prompt([item()], [], CONTEXT)
+    told = user.index("Sun 01 Nov 09:00")
+    assert user.index("BEGIN UNTRUSTED TOLD ITEMS") < told < user.index("END UNTRUSTED TOLD ITEMS")
 
 
 def test_links_the_model_was_not_given_are_removed():
@@ -261,15 +288,15 @@ def tick(db_isolated, model, monkeypatch):
         sent.append({"message": message, "channels": channels})
         return box.result
 
-    async def fake_handle(delivered, message, channels, label, ticker=""):
-        if not any((r or {}).get("sent") for r in delivered.values()):
+    async def fake_handle(delivered, message, channels, label, ticker="", *, retry=True):
+        if retry and not any((r or {}).get("sent") for r in delivered.values()):
             box.retry.append(message)
 
     import backend.services.notify as notify_mod
 
     monkeypatch.setattr(notify_mod, "notify", fake_notify)
-    monkeypatch.setattr(dd.push_retry, "handle_push_result", fake_handle)
-    monkeypatch.setattr(dd, "_record_banner", lambda row: None)
+    monkeypatch.setattr(push_retry, "handle_push_result", fake_handle)
+    monkeypatch.setattr(delivery_send, "record_banner", lambda row: None)
     box.model = model
     return box
 
@@ -284,11 +311,16 @@ def tick_on() -> None:
         asyncio.run(dd.run_tick())
 
 
-def test_the_tick_does_nothing_with_the_flag_off(tick):
-    submit()
+def tick_off() -> None:
     with flags(intel_delivery_decider=False):
         asyncio.run(dd.run_tick())
-    assert tick.model.calls == [] and len(nd.pending()) == 1
+
+
+def test_the_tick_never_calls_the_model_with_the_flag_off(tick):
+    submit()
+    tick_off()
+    assert tick.model.calls == [] and tick.sent == []
+    assert nd.pending() == []
 
 
 def test_the_tick_does_nothing_without_work(tick):
@@ -450,7 +482,9 @@ def test_a_superseded_candidate_is_never_sent(tick):
 
 def test_the_banner_is_recorded_for_a_told_analysis(tick, monkeypatch):
     recorded: list[str] = []
-    monkeypatch.setattr(dd, "_record_banner", lambda row: recorded.append(row["story_id"]))
+    monkeypatch.setattr(
+        delivery_send, "record_banner", lambda row: recorded.append(row["story_id"])
+    )
     row = submit()
     tick.model.reply = out({"id": row["id"], "decision": "now", "message": "Sam, deal."})
     tick_on()
@@ -469,3 +503,132 @@ def test_the_context_reads_cleanly_from_an_empty_book(db_isolated):
         "last_roundup_at",
     }
     assert context["holdings"] == [] and context["recently_told"] == []
+
+
+# ── review fixes ─────────────────────────────────────────────────────────────────────
+
+
+def _two_waiting(tick):
+    a, b = submit(story_id="a"), submit(story_id="b")
+    tick.model.reply = out(
+        {"id": a["id"], "decision": "later"},
+        {"id": b["id"], "decision": "later"},
+        roundup={"send": True, "item_ids": [a["id"], b["id"]], "message": "Sam, a roundup."},
+    )
+    return a, b
+
+
+def test_a_roundup_that_reaches_no_channel_is_not_queued_for_retry_and_rolls_up_again(tick):
+    a, b = _two_waiting(tick)
+    tick.result = {"telegram": {"sent": 0, "error": "down"}}
+    tick_on()
+    assert tick.retry == []
+    assert {r["id"] for r in nd.waiting()} == {a["id"], b["id"]}
+    assert "last_roundup_at" not in nd.roundup_state()
+    tick.result = {"telegram": {"sent": 1}}
+    change(
+        "set_roundup_state",
+        revisit_at=(datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+    )
+    tick.model.reply = out(
+        roundup={"send": True, "item_ids": [a["id"], b["id"]], "message": "Sam, a roundup."}
+    )
+    tick_on()
+    assert {r["id"] for r in nd.recently_told()} == {a["id"], b["id"]}
+    assert len(tick.sent) == 2
+
+
+def test_an_item_superseded_during_the_model_call_is_left_out_of_the_roundup(tick, monkeypatch):
+    a, b = submit(story_id="a"), submit(story_id="b")
+    fresh: list[dict] = []
+
+    async def fake(prompt, response_model, **kw):
+        fresh.append(submit(story_id="a"))
+        return out(
+            {"id": a["id"], "decision": "later"},
+            {"id": b["id"], "decision": "later"},
+            roundup={"send": True, "item_ids": [a["id"], b["id"]], "message": "Sam, a roundup."},
+        )
+
+    monkeypatch.setattr(dd, "complete_model", fake)
+    tick_on()
+    assert [r["id"] for r in nd.recently_told()] == [b["id"]]
+    assert [r["id"] for r in nd.pending()] == [fresh[0]["id"]]
+
+
+def test_a_roundup_whose_every_item_went_stale_sends_nothing(tick, monkeypatch):
+    a = submit(story_id="a")
+
+    async def fake(prompt, response_model, **kw):
+        submit(story_id="a")
+        return out(
+            {"id": a["id"], "decision": "later"},
+            roundup={"send": True, "item_ids": [a["id"]], "message": "Sam, a roundup."},
+        )
+
+    monkeypatch.setattr(dd, "complete_model", fake)
+    tick_on()
+    assert tick.sent == []
+
+
+def test_an_alert_the_flag_left_stale_is_expired_not_sent_when_it_comes_back_on(tick, monkeypatch):
+    stop = submit(story_id="stop", user_set=True, source="price_alert")
+    real = nd._now
+    monkeypatch.setattr(nd, "_now", lambda: real() + timedelta(hours=3))
+    tick.model.reply = out({"id": stop["id"], "decision": "now", "message": "Sam, level."})
+    tick_on()
+    assert tick.sent == [] and tick.model.calls == []
+    assert nd.pending() == []
+
+
+def test_turning_the_flag_off_sends_a_fresh_user_set_alert_once_and_retires_the_rest(tick):
+    stop = submit(story_id="stop", user_set=True, source="price_alert")
+    news = submit(story_id="news")
+    waiting = submit(story_id="w")
+    change("decide", delivery_id=waiting["id"], decision="later")
+    tick_off()
+    assert [s["message"] for s in tick.sent] == [item()["legacy_message"]]
+    assert [r["id"] for r in nd.recently_told()] == [stop["id"]]
+    assert nd.pending() == [] and nd.waiting() == []
+    tick_off()
+    tick_on()
+    assert len(tick.sent) == 1 and tick.model.calls == []
+    assert news["id"] not in {r["id"] for r in nd.recently_told()}
+
+
+def test_turning_the_flag_off_does_not_send_a_stale_user_set_alert(tick, monkeypatch):
+    submit(story_id="stop", user_set=True, source="price_alert")
+    monkeypatch.setattr(nd, "USER_SET_FRESH_FOR", timedelta(seconds=-1))
+    tick_off()
+    assert tick.sent == [] and nd.pending() == []
+
+
+def test_the_flag_off_tick_does_no_work_when_the_ledger_is_empty(tick, monkeypatch):
+    monkeypatch.setattr(nd, "pending", lambda: (_ for _ in ()).throw(AssertionError("read")))
+    tick_off()
+
+
+def test_a_failure_before_the_model_call_still_sends_user_set_alerts_and_leaves_the_rest(
+    tick, monkeypatch
+):
+    stop = submit(story_id="stop", user_set=True, source="price_alert")
+    news = submit(story_id="news")
+
+    def boom(state):
+        raise RuntimeError("context broke")
+
+    monkeypatch.setattr(delivery_context, "gather", boom)
+    tick_on()
+    assert [s["message"] for s in tick.sent] == [item()["legacy_message"]]
+    assert [r["id"] for r in nd.recently_told()] == [stop["id"]]
+    assert [r["id"] for r in nd.pending()] == [news["id"]]
+    assert nd.pending()[0]["decision"] is None
+
+
+def test_a_failure_building_the_prompt_is_a_model_failure(model, monkeypatch):
+    def boom(*a):
+        raise RuntimeError("prompt broke")
+
+    monkeypatch.setattr(dd, "build_prompt", boom)
+    result = run(dd.decide([item("dlv_1", user_set=True), item("dlv_2")], [], CONTEXT, now=NOW))
+    assert [d["decision"] for d in result["decisions"]] == ["now", "later"]

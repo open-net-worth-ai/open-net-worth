@@ -29,7 +29,7 @@ from typing import Any
 
 from backend.ai.structured import complete_model
 from backend.core.user_time import user_now
-from backend.monitoring import delivery_context, push_retry
+from backend.monitoring import delivery_context, delivery_send
 from backend.monitoring.delivery import delivery_active
 from backend.monitoring.delivery_prompt import (
     MAX_CANDIDATES,
@@ -38,7 +38,6 @@ from backend.monitoring.delivery_prompt import (
     build_prompt,
     strip_unknown_links,
 )
-from backend.services import notify_routes
 from backend.services.news_delivery import apply_delivery_change
 
 logger = logging.getLogger(__name__)
@@ -171,9 +170,9 @@ async def decide(
     message, revisit_at}}``. Reads nothing from the database: everything it needs is in the
     arguments (``context`` is described in ``delivery_prompt``; ``last_roundup_at`` there arms the
     three-hour roundup gap). ``ok`` is False when the model gave nothing usable."""
-    user_prompt, system_prompt = build_prompt(candidates, waiting, context)
     output: DeliveryOutput | None = None
     try:
+        user_prompt, system_prompt = build_prompt(candidates, waiting, context)
         output = await complete_model(
             user_prompt,
             DeliveryOutput,
@@ -183,87 +182,8 @@ async def decide(
             source="delivery",
         )
     except Exception as exc:
-        logger.warning("delivery: model call failed: %s", type(exc).__name__)
+        logger.warning("delivery: could not get a decision: %s", type(exc).__name__)
     return apply_rails(output, candidates, waiting, context, now or datetime.now(timezone.utc))
-
-
-# ── Sending ────────────────────────────────────────────────────────────────────
-
-
-async def _notify(message: str, channels: list[str], label: str, ticker: str) -> bool:
-    """Send like every Intel push does: a send that reached no channel goes to ``push_retry``."""
-    from backend.services.notify import notify
-
-    try:
-        delivered = await notify(message, channels=channels)
-    except Exception as exc:
-        logger.warning("delivery: notify failed for %s: %s", ticker or label, type(exc).__name__)
-        delivered = {}
-    logger.info("delivery: pushed via Notifier to %s — %s", channels, delivered)
-    await push_retry.handle_push_result(delivered, message, channels, label, ticker)
-    return push_retry.delivered_ok(delivered)
-
-
-def _record_banner(row: dict) -> None:
-    """An analysis the person was told shows on the desktop feed, as a pushed analysis does today."""
-    if row.get("source") != "analysis" or not row.get("story_id"):
-        return
-    try:
-        from backend.services import alert_feed
-
-        headline = row.get("headline") or ""
-        label = row.get("label") or ""
-        alert_feed.record_analysis_push(
-            row["story_id"],
-            title=f"{label}: {headline}" if headline else f"Analysis — {label}",
-            summary=row.get("why") or "",
-        )
-    except Exception as exc:
-        logger.warning("delivery: desktop alert record failed: %s", type(exc).__name__)
-
-
-async def _mark_told(row: dict, told_via: str, message_sent: str) -> None:
-    told = await asyncio.to_thread(
-        apply_delivery_change,
-        "mark_told",
-        delivery_id=row["id"],
-        told_via=told_via,
-        message_sent=message_sent,
-    )
-    if told:
-        await asyncio.to_thread(_record_banner, row)
-
-
-def _channels_for(row: dict) -> list[str]:
-    return list(row.get("channels") or []) or notify_routes.channels_for(row["route_key"])
-
-
-async def _send_now(row: dict, message: str) -> None:
-    channels = await asyncio.to_thread(_channels_for, row)
-    if not channels:
-        logger.warning("delivery: %s has no channel to go to", row["id"])
-        return
-    if await _notify(message, channels, row.get("label") or "", row.get("ticker") or ""):
-        await _mark_told(row, "now", message)
-
-
-def _roundup_channels(rows: list[dict]) -> list[str]:
-    """The news route; when it has none, the routes the waiting items were meant for."""
-    news = notify_routes.channels_for(notify_routes.NEWS)
-    return news or list(dict.fromkeys(c for r in rows for c in _channels_for(r)))
-
-
-async def _send_roundup(rows: list[dict], message: str) -> bool:
-    channels = await asyncio.to_thread(_roundup_channels, rows)
-    if not channels:
-        logger.warning("delivery: roundup has no channel to go to")
-        return False
-    if not await _notify(message, channels, "Roundup", ""):
-        return False
-    for row in rows:
-        summary = (row.get("headline") or row.get("why") or "")[:200]
-        await _mark_told(row, "roundup", f"(roundup) {summary}")
-    return True
 
 
 # ── The tick ─────────────────────────────────────────────────────────────────────
@@ -319,20 +239,30 @@ async def _apply_decisions(result: dict, by_id: dict[str, dict]) -> list[dict]:
         if row is None:
             continue
         if d["decision"] == "now":
-            await _send_now(row, d["message"])
+            await delivery_send.send_now(row, d["message"])
         elif d["decision"] == "later":
             later.append(row)
     return later
 
 
+def _still_waiting(ids: list[str]) -> set[str]:
+    from backend.services import news_delivery
+
+    wanted = set(ids)
+    return {r["id"] for r in news_delivery.waiting() if r["id"] in wanted}
+
+
 async def _apply_roundup(result: dict, waiting: list[dict], later: list[dict]) -> bool:
+    """Send the roundup for the chosen items that are STILL waiting: one superseded or expired
+    while the model was thinking is left out, and with none left nothing is sent."""
     roundup = result["roundup"]
     if not roundup["send"]:
         return False
+    live = await asyncio.to_thread(_still_waiting, roundup["item_ids"])
     pool = {r["id"]: r for r in [*waiting, *later]}
-    rows = [pool[i] for i in roundup["item_ids"] if i in pool]
+    rows = [pool[i] for i in roundup["item_ids"] if i in pool and i in live]
     logger.info("delivery: roundup of %d item(s)", len(rows))
-    return bool(rows) and await _send_roundup(rows, roundup["message"])
+    return bool(rows) and await delivery_send.send_roundup(rows, roundup["message"])
 
 
 def _schedule_revisit(result: dict, state: dict, due: bool, sent: bool, now: datetime) -> None:
@@ -357,26 +287,62 @@ def _analysis_model() -> str | None:
     return ModelConfigStore().task_model_override("analysis")
 
 
+async def _decide_tick(candidates: list[dict], waiting: list[dict], state: dict) -> dict:
+    """The tick's decision. If anything before the model call fails, the candidates a user set
+    still go out as written and the rest are left undecided for the next tick."""
+    try:
+        context = {
+            **await asyncio.to_thread(delivery_context.gather, state),
+            "last_roundup_at": state.get("last_roundup_at"),
+        }
+        model = await asyncio.to_thread(_analysis_model)
+        return await decide(candidates, waiting, context, model=model)
+    except Exception as exc:
+        logger.warning("delivery: tick failed before deciding: %s", type(exc).__name__)
+        user_set = [c for c in candidates if c.get("user_set")]
+        return apply_rails(None, user_set, [], {}, datetime.now(timezone.utc))
+
+
+async def _wind_down() -> None:
+    """The flag is off: a user-set alert still young goes out once as written, and everything
+    else the decider held is retired, so turning the flag off strands nothing and turning it on
+    again never replays a stale row. A single cheap count when there is nothing to do."""
+    from backend.services import news_delivery
+
+    if not await asyncio.to_thread(news_delivery.has_unfinished):
+        return
+    fresh = datetime.now(timezone.utc) - news_delivery.USER_SET_FRESH_FOR
+    for row in await asyncio.to_thread(news_delivery.pending):
+        if row.get("user_set") and not row.get("decision") and _is_after(row["created_at"], fresh):
+            await delivery_send.send_now(row, _legacy_text(row))
+    expired = await asyncio.to_thread(apply_delivery_change, "expire", everything=True)
+    if expired:
+        logger.info("delivery: flag is off — retired %d unfinished item(s)", len(expired))
+
+
+def _is_after(iso: str, moment: datetime) -> bool:
+    parsed = _parse_time(iso)
+    return parsed is not None and parsed >= moment
+
+
 async def run_tick() -> None:
-    """One pass of the decider; a no-op unless the flag is on and there is work."""
-    if not await asyncio.to_thread(delivery_active):
+    """One pass of the decider; with the flag on and work to do it decides, with the flag off it
+    only winds down what an earlier run left."""
+    try:
+        active = await asyncio.to_thread(delivery_active)
+    except Exception as exc:
+        logger.warning("delivery: flag unreadable, skipping the tick: %s", type(exc).__name__)
         return
     async with _tick_lock:
+        if not active:
+            await _wind_down()
+            return
         await asyncio.to_thread(apply_delivery_change, "expire")
         work = await asyncio.to_thread(_gather)
         if work is None:
             return
         candidates, waiting, state, due = work
-        context = {
-            **await asyncio.to_thread(delivery_context.gather, state),
-            "last_roundup_at": state.get("last_roundup_at"),
-        }
-        result = await decide(
-            candidates,
-            waiting,
-            context,
-            model=await asyncio.to_thread(_analysis_model),
-        )
+        result = await _decide_tick(candidates, waiting, state)
         by_id = {c["id"]: c for c in candidates}
         later = await _apply_decisions(result, by_id)
         sent = await _apply_roundup(result, waiting, later)

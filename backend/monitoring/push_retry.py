@@ -82,17 +82,25 @@ async def report_undelivered(channels: list[str], label: str, *, gave_up: bool) 
 
 
 async def handle_push_result(
-    delivered: dict, message: str, channels: list[str], label: str, ticker: str = ""
+    delivered: dict,
+    message: str,
+    channels: list[str],
+    label: str,
+    ticker: str = "",
+    *,
+    retry: bool = True,
 ) -> None:
     """The one zero-delivery policy for both producers: delivered → nothing; every channel
-    off or removed → tell the user now; otherwise queue a bounded retry."""
+    off or removed → tell the user now; otherwise queue a bounded retry (``retry=False`` for a
+    caller that re-sends the content itself and would otherwise deliver it twice)."""
     if delivered_ok(delivered):
         return
     if _all_channels_off(delivered):
         logger.warning("push_retry: every channel is off for %s — %s", ticker or label, channels)
         await report_undelivered(channels, label, gave_up=False)
         return
-    enqueue_push_retry(message, channels, label, ticker)
+    if retry:
+        enqueue_push_retry(message, channels, label, ticker)
 
 
 def enqueue_push_retry(message: str, channels: list[str], label: str, ticker: str = "") -> None:

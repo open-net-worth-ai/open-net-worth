@@ -192,7 +192,9 @@ def build_prompt(candidates: list[dict], waiting: list[dict], context: dict) -> 
     waiting_items = "\n".join(_item_lines(w, new=False) for w in waiting[:MAX_WAITING])
     user = (
         f"THE PERSON\n{_person_block(context)}\n\n"
-        f"ALREADY TOLD TO THEM IN THE LAST 48 HOURS (oldest first)\n{_told_block(context)}\n\n"
+        "--- BEGIN UNTRUSTED TOLD ITEMS (what they were told in the last 48 hours, oldest first) ---\n"
+        f"{_told_block(context)}\n"
+        "--- END UNTRUSTED TOLD ITEMS ---\n\n"
         "--- BEGIN UNTRUSTED WAITING ITEMS ---\n"
         f"{waiting_items or '(none)'}\n"
         "--- END UNTRUSTED WAITING ITEMS ---\n\n"
@@ -205,19 +207,20 @@ def build_prompt(candidates: list[dict], waiting: list[dict], context: dict) -> 
     return user, SYSTEM_PROMPT
 
 
-_LINK_RE = re.compile(r"\[[^\]]*\]\((https?://[^)\s]+)\)|https?://[^\s)\]]+")
+_LINK_RE = re.compile(
+    r"\[([^\]]*)\]\(([^)]*)\)|(?:[a-z][a-z0-9+.-]*://|www\.)[^\s)\]]+", re.IGNORECASE
+)
 
 
 def strip_unknown_links(message: str, allowed_urls: set[str]) -> str:
-    """The message with every link that was not given to the model removed: a markdown link keeps
-    its text, a bare URL goes. Links from the items' own server-built sources survive."""
+    """The message with every link that was not given to the model removed: a markdown link of
+    ANY scheme (``tg://``, ``javascript:``, protocol-relative …) keeps its text, a bare URL
+    (``scheme://`` or ``www.``) goes. Links from the items' own server-built sources survive."""
 
     def _keep(match: re.Match) -> str:
-        url = match.group(1) or match.group(0)
-        if url in allowed_urls:
-            return match.group(0)
-        if match.group(1):
-            return re.sub(r"^\[|\]\(.*$", "", match.group(0))
-        return ""
+        if match.group(2) is not None:
+            return match.group(0) if match.group(2).strip() in allowed_urls else match.group(1)
+        bare = match.group(0)
+        return bare if bare.rstrip(".,;:!?") in allowed_urls else ""
 
     return _LINK_RE.sub(_keep, message).strip()

@@ -51,7 +51,7 @@ def _analysis():
 def test_off_runs_the_legacy_push_and_records_nothing(db_isolated, routes):
     calls, legacy = _legacy_recorder()
     with flags(intel_delivery_decider=False):
-        asyncio.run(delivery.route(_analysis(), legacy))
+        asyncio.run(delivery.route(_analysis, legacy))
     assert calls == ["legacy"]
     assert news_delivery.pending() == []
 
@@ -59,7 +59,7 @@ def test_off_runs_the_legacy_push_and_records_nothing(db_isolated, routes):
 def test_on_records_the_candidate_and_does_not_push(db_isolated, routes):
     calls, legacy = _legacy_recorder()
     with flags(intel_delivery_decider=True):
-        asyncio.run(delivery.route(_analysis(), legacy))
+        asyncio.run(delivery.route(_analysis, legacy))
     assert calls == []
     (row,) = news_delivery.pending()
     assert row["source"] == "analysis" and row["story_id"] == "story_1"
@@ -70,7 +70,7 @@ def test_on_with_no_channel_falls_back_to_the_legacy_path(db_isolated, monkeypat
     monkeypatch.setattr(notify_routes, "channels_for", lambda kind: [])
     calls, legacy = _legacy_recorder()
     with flags(intel_delivery_decider=True):
-        asyncio.run(delivery.route(_analysis(), legacy))
+        asyncio.run(delivery.route(_analysis, legacy))
     assert calls == ["legacy"]
     assert news_delivery.pending() == []
 
@@ -84,7 +84,7 @@ def test_on_falls_back_to_the_legacy_push_when_the_row_cannot_be_written(
     monkeypatch.setattr("backend.services.news_delivery.apply_delivery_change", boom)
     calls, legacy = _legacy_recorder()
     with flags(intel_delivery_decider=True):
-        asyncio.run(delivery.route(_analysis(), legacy))
+        asyncio.run(delivery.route(_analysis, legacy))
     assert calls == ["legacy"]
 
 
@@ -198,3 +198,25 @@ def test_a_sweep_with_the_flag_on_hands_the_push_to_the_decider(tmp_path, monkey
     (row,) = news_delivery.pending()
     assert row["source"] == "analysis" and row["decision"] is None
     assert row["story_id"] and "AAPL" in row["legacy_message"] + row["ticker"]
+
+
+def test_off_never_builds_the_candidate(db_isolated, routes):
+    calls, legacy = _legacy_recorder()
+
+    def factory() -> dict:
+        raise AssertionError("built with the flag off")
+
+    with flags(intel_delivery_decider=False):
+        asyncio.run(delivery.route(factory, legacy))
+    assert calls == ["legacy"]
+
+
+def test_on_falls_back_to_the_legacy_push_when_the_candidate_cannot_be_built(db_isolated, routes):
+    calls, legacy = _legacy_recorder()
+
+    def factory() -> dict:
+        raise RuntimeError("formatting broke")
+
+    with flags(intel_delivery_decider=True):
+        asyncio.run(delivery.route(factory, legacy))
+    assert calls == ["legacy"] and news_delivery.pending() == []

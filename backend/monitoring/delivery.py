@@ -2,7 +2,7 @@
 
 The three Intel senders (the analyst's news push, price alerts / crash-watch, the watch
 analyst's explained alert) each reach the point where today they would push. They call
-``route(candidate, legacy)`` there instead:
+``route(candidate_factory, legacy)`` there instead:
 
 * flag off — ``legacy()`` runs, the sender's own push function, byte for byte as before;
 * flag on — the candidate becomes a ``news_deliveries`` row and Lucius decides now / later /
@@ -39,7 +39,11 @@ def delivery_active() -> bool:
     return enabled("intel_delivery_decider")
 
 
-async def route(candidate: dict, legacy: Callable[[], Awaitable[None]]) -> None:
+async def route(
+    candidate_factory: Callable[[], dict], legacy: Callable[[], Awaitable[None]]
+) -> None:
+    """``candidate_factory`` builds the candidate and runs only with the flag on, so with it off
+    nothing but ``legacy()`` executes; an error building it falls through to ``legacy()`` too."""
     try:
         active = await asyncio.to_thread(delivery_active)
     except Exception as exc:
@@ -48,9 +52,15 @@ async def route(candidate: dict, legacy: Callable[[], Awaitable[None]]) -> None:
     if not active:
         await legacy()
         return
-    channels = candidate.get("channels") or await asyncio.to_thread(
-        notify_routes.channels_for, candidate["route_key"]
-    )
+    try:
+        candidate = candidate_factory()
+        channels = candidate.get("channels") or await asyncio.to_thread(
+            notify_routes.channels_for, candidate["route_key"]
+        )
+    except Exception as exc:
+        logger.warning("delivery: could not build candidate, sending as before: %s", exc)
+        await legacy()
+        return
     if not channels:
         await legacy()
         return

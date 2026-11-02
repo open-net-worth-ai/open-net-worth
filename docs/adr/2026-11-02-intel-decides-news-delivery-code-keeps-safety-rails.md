@@ -35,7 +35,7 @@ cross-subject claim) stop repeats but cannot say whether *this person* needs *th
 - **A ledger, not memory.** `news_deliveries` (revision `202611021200`), written only through
   `services/news_delivery.apply_delivery_change` (`submit`, `decide`, `mark_told`, `expire`,
   `set_roundup_state`), holds the status machine `pending → waiting|told|skipped`, `superseded`
-  (a newer candidate for the same story replaces an unsent one) and `expired` (a week). Exact
+  (a newer candidate for the same story and source replaces an unsent one) and `expired` (a week). Exact
   transitions and exhaustive reads ("everything told in 48 hours", "everything waiting") are what a
   fuzzy memory fact cannot give. Runtime scheduler state: checkpoint-excluded (a /rewind must not
   turn a told item back into an unsent one), wiped on reset.
@@ -44,7 +44,14 @@ cross-subject claim) stop repeats but cannot say whether *this person* needs *th
   user set (price alert, crash-watch) as written and holds everything else; an item is told at most
   once, and only after a send that reached one channel (otherwise it goes to `push_retry`); a
   message never carries a link the model was not given; a roundup goes out at most every three
-  hours; waiting items expire after seven days; every decision is logged with its reason.
+  hours (a roundup that reached no channel is not queued for retry: its items stay waiting and are
+  rolled up again, so it cannot be delivered twice); waiting items expire after seven days; a
+  user-set alert still undecided after half an hour expires instead of going out late; every
+  decision is logged with its reason.
+- **Turning the flag off strands nothing.** With the flag off the tick only winds down: a young
+  user-set alert in the ledger is sent once as written, every other unfinished row is retired, and
+  the check costs one count when the ledger is empty. Turning it on again never replays a stale row
+  (on, off, on is safe for the additive table).
   `decide()` (one model call, no database reads) and `build_prompt()` are public so an evaluation
   harness runs the same prompt through other models.
 - **One tick, one call.** The analysis sweep (every minute) calls `run_tick`: candidates settle for

@@ -103,7 +103,9 @@ class NewsDeliveryStore:
 
     def add(self, row: dict) -> tuple[dict, list[str]]:
         """Insert a new row, superseding any pending or waiting row of the same non-empty
-        ``story_id`` in the same transaction. Returns (row, superseded ids)."""
+        ``story_id`` AND ``source`` in the same transaction (a crash-watch alert and the analysis
+        that follows it share a story id and must not replace each other). Returns (row,
+        superseded ids)."""
         story_id = row.get("story_id") or ""
         superseded: list[str] = []
         with self._write() as conn:
@@ -111,6 +113,7 @@ class NewsDeliveryStore:
                 stale = conn.execute(
                     select(news_deliveries).where(
                         news_deliveries.c.story_id == story_id,
+                        news_deliveries.c.source == row["source"],
                         news_deliveries.c.status.in_(("pending", "waiting")),
                     )
                 ).all()
@@ -129,16 +132,23 @@ class NewsDeliveryStore:
         return row, superseded
 
     def transition(
-        self, delivery_id: str, *, from_statuses: Iterable[str], changes: dict
+        self,
+        delivery_id: str,
+        *,
+        from_statuses: Iterable[str],
+        changes: dict,
+        undecided_only: bool = False,
     ) -> dict | None:
-        """Apply ``changes`` to the row only while its status is in ``from_statuses`` — None
-        when the row is missing or already past them (a second call to tell the same item
-        lands here, and does nothing)."""
+        """Apply ``changes`` to the row only while its status is in ``from_statuses`` (and, with
+        ``undecided_only``, while it has no decision) — None when the row is missing or already
+        past them (a second call to tell or decide the same item lands here, and does nothing)."""
         with self._write() as conn:
             current = conn.execute(
                 select(news_deliveries).where(news_deliveries.c.id == delivery_id)
             ).first()
             if current is None or current.status not in set(from_statuses):
+                return None
+            if undecided_only and current.decision is not None:
                 return None
             merged = {**current.payload, **changes}
             values = _columns(current.seq, merged)
@@ -150,17 +160,40 @@ class NewsDeliveryStore:
             )
             return merged
 
-    def expire_unfinished_before(self, cutoff_iso: str, now_iso: str) -> list[str]:
-        """Pending or waiting rows created before ``cutoff_iso`` become ``expired``."""
+    def count_unfinished(self) -> int:
+        with self._eng().connect() as conn:
+            return conn.execute(
+                select(func.count())
+                .select_from(news_deliveries)
+                .where(news_deliveries.c.status.in_(("pending", "waiting")))
+            ).scalar_one()
+
+    def expire(
+        self,
+        now_iso: str,
+        *,
+        created_before: str | None = None,
+        user_set_undecided_before: str | None = None,
+        everything: bool = False,
+    ) -> list[str]:
+        """Pending or waiting rows become ``expired``: all of them with ``everything``, those
+        created before ``created_before``, and user-set rows still undecided past
+        ``user_set_undecided_before`` (a stale alert is never sent as if it were fresh)."""
         expired: list[str] = []
         with self._write() as conn:
-            stale = conn.execute(
-                select(news_deliveries).where(
-                    news_deliveries.c.status.in_(("pending", "waiting")),
-                    news_deliveries.c.created_at < cutoff_iso,
-                )
+            unfinished = conn.execute(
+                select(news_deliveries).where(news_deliveries.c.status.in_(("pending", "waiting")))
             ).all()
-            for row in stale:
+            for row in unfinished:
+                stale_user_set = (
+                    user_set_undecided_before is not None
+                    and row.user_set
+                    and row.decision is None
+                    and row.created_at < user_set_undecided_before
+                )
+                old = created_before is not None and row.created_at < created_before
+                if not (everything or old or stale_user_set):
+                    continue
                 payload = {**row.payload, "status": "expired", "expired_at": now_iso}
                 conn.execute(
                     sa_update(news_deliveries)

@@ -240,10 +240,12 @@ async def _deliver(ticker: str, story: dict) -> None:
     from backend.monitoring import delivery
 
     explained = story["explained"]
-    candidate = delivery.watch_candidate(
-        ticker, story, explained, legacy_message=push_message(ticker, explained)
+    await delivery.route(
+        lambda: delivery.watch_candidate(
+            ticker, story, explained, legacy_message=push_message(ticker, explained)
+        ),
+        functools.partial(_push, ticker, explained),
     )
-    await delivery.route(candidate, functools.partial(_push, ticker, explained))
 
 
 def _candidates(ctx: dict, store) -> list[dict]:

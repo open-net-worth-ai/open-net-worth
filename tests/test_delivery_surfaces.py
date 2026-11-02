@@ -40,6 +40,7 @@ def test_get_untold_news_is_empty_when_nothing_was_held_back(db_isolated):
     assert call("get_untold_news") == {"items": []}
 
 
+@pytest.mark.flags(intel_delivery_decider=True)
 def test_get_untold_news_lists_waiting_items_and_flags_what_was_already_told(db_isolated):
     waiting = submit(story_id="w")
     change("decide", delivery_id=waiting["id"], decision="later")
@@ -56,6 +57,7 @@ def test_get_untold_news_lists_waiting_items_and_flags_what_was_already_told(db_
     assert items[1]["told_at"] and "told_at" not in items[0]
 
 
+@pytest.mark.flags(intel_delivery_decider=True)
 def test_get_untold_news_is_bounded_and_sanitized(db_isolated):
     for n in range(20):
         row = submit(story_id=f"s{n}", why="a«b»\x07c")
@@ -63,6 +65,13 @@ def test_get_untold_news_is_bounded_and_sanitized(db_isolated):
     items = call("get_untold_news")["items"]
     assert len(items) == 15
     assert items[0]["why"] == "abc"
+
+
+@pytest.mark.flags(intel_delivery_decider=False)
+def test_get_untold_news_is_empty_while_the_flag_is_off(db_isolated):
+    row = submit()
+    change("decide", delivery_id=row["id"], decision="later")
+    assert call("get_untold_news") == {"items": []}
 
 
 def test_get_untold_news_never_mutates():
@@ -126,3 +135,9 @@ def test_the_ledger_is_checkpoint_excluded(table):
     from backend.ai.checkpoint._policy import _EXCLUDED_TABLES
 
     assert table in _EXCLUDED_TABLES
+
+
+def test_update_monitoring_config_waits_for_the_users_approval():
+    from backend.ai.tools._confirm_gate import is_gated_tool
+
+    assert is_gated_tool("update_monitoring_config")

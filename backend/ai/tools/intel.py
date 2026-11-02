@@ -272,7 +272,11 @@ def _untold_item(row: dict, *, already_told: bool) -> dict:
 async def get_untold_news(input_data: dict):
     import asyncio
 
+    from backend.monitoring.delivery import delivery_active
     from backend.services import news_delivery
+
+    if not await asyncio.to_thread(delivery_active):
+        return json.dumps({"items": []}), None
 
     def _read() -> tuple[list[dict], list[dict]]:
         return news_delivery.waiting(), news_delivery.recently_told(24)

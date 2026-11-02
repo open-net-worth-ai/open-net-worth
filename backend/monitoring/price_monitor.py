@@ -506,10 +506,12 @@ async def _deliver_alert(signal: dict, channels: list[str], *, crash_watch: bool
     Lucius the candidate with it on (the alert's own channels stay with it)."""
     from backend.monitoring import delivery
 
-    candidate = delivery.signal_candidate(
-        signal, channels, crash_watch=crash_watch, legacy_message=_format_alert(signal)
+    await delivery.route(
+        lambda: delivery.signal_candidate(
+            signal, channels, crash_watch=crash_watch, legacy_message=_format_alert(signal)
+        ),
+        functools.partial(_push_external_alert, signal, channels),
     )
-    await delivery.route(candidate, functools.partial(_push_external_alert, signal, channels))
 
 
 def _collect_crash_items(

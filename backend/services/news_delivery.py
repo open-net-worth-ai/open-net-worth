@@ -7,8 +7,8 @@ status machine, so no caller can tell an item twice or move it backwards:
     pending ──decide(now)──▶ pending (in flight; ``mark_told`` after a delivered send)
     pending ──decide(later)─▶ waiting ──mark_told (roundup)──▶ told
     pending ──decide(skip)──▶ skipped
-    pending|waiting ──submit (same story)──▶ superseded
-    pending|waiting ──older than 7 days──▶ expired
+    pending|waiting ──submit (same story and source)──▶ superseded
+    pending|waiting ──older than 7 days (a user-set alert: 30 minutes undecided)──▶ expired
 
 Reads are exhaustive (the briefing and the decider's "what we already told" context read these,
 never memory). ADR ``2026-11-02-intel-decides-news-delivery-code-keeps-safety-rails``.
@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 SOURCES = ("analysis", "price_alert", "crash_watch", "watch_alert")
 DECISIONS = ("now", "later", "skip")
 WAIT_DAYS = 7
+USER_SET_FRESH_FOR = timedelta(minutes=30)
 TOLD_VIA = ("now", "roundup")
 
 _TEXT_CAPS = {
@@ -121,6 +122,7 @@ def _decide(delivery_id: str, decision: str, reason: str = "", message: str = ""
     return NewsDeliveryStore().transition(
         delivery_id,
         from_statuses=("pending",),
+        undecided_only=True,
         changes={
             "status": status,
             "decision": decision,
@@ -149,10 +151,16 @@ def _mark_told(delivery_id: str, told_via: str, message_sent: str = "") -> dict 
     )
 
 
-def _expire() -> list[str]:
+def _expire(everything: bool = False) -> list[str]:
+    """Retire rows nobody will tell: those past a week, and a user-set alert still undecided
+    after half an hour (it would read as news if it went out now). ``everything`` retires every
+    pending and waiting row — what turning the flag off does."""
     now = _now()
-    return NewsDeliveryStore().expire_unfinished_before(
-        _iso(now - timedelta(days=WAIT_DAYS)), _iso(now)
+    return NewsDeliveryStore().expire(
+        _iso(now),
+        created_before=_iso(now - timedelta(days=WAIT_DAYS)),
+        user_set_undecided_before=_iso(now - USER_SET_FRESH_FOR),
+        everything=everything,
     )
 
 
@@ -181,7 +189,8 @@ def apply_delivery_change(op: str, **kwargs: Any) -> Any:
     """The write choke. ``submit(candidate=)`` supersedes any pending or waiting row of the same
     story; ``decide(delivery_id=, decision=, reason=, message=)`` moves a pending row;
     ``mark_told(delivery_id=, told_via=, message_sent=)`` only after a send that reached at
-    least one channel; ``expire()`` retires rows older than a week;
+    least one channel; ``expire(everything=)`` retires rows older than a week and user-set alerts left undecided for
+    half an hour (``everything``: every unfinished row);
     ``set_roundup_state(last_roundup_at=, revisit_at=)`` keeps the roundup clock."""
     handler = _OPS.get(op)
     if handler is None:
@@ -206,6 +215,11 @@ def waiting() -> list[dict]:
 def recently_told(hours: float = 48) -> list[dict]:
     """Rows told within the last ``hours``, oldest first."""
     return NewsDeliveryStore().told_since(_iso(_now() - timedelta(hours=hours)))
+
+
+def has_unfinished() -> bool:
+    """Whether any row is still pending or waiting (one cheap count)."""
+    return NewsDeliveryStore().count_unfinished() > 0
 
 
 def last_told_at() -> str | None:

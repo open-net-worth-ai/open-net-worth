@@ -172,3 +172,29 @@ def test_roundup_state_merges_and_clears(db_isolated):
 def test_an_unknown_op_is_refused(db_isolated):
     with pytest.raises(ValidationError):
         change("delete_everything")
+
+
+def test_decide_is_idempotent_even_for_a_pending_now(db_isolated):
+    row = change("submit", candidate=candidate())
+    assert change("decide", delivery_id=row["id"], decision="now", message="a")
+    assert change("decide", delivery_id=row["id"], decision="skip") is None
+    assert nd.pending()[0]["decision"] == "now"
+
+
+def test_an_analysis_never_supersedes_the_crash_watch_that_shares_its_story_id(db_isolated):
+    crash = change(
+        "submit", candidate=candidate(source="crash_watch", user_set=True, story_id="crash-1")
+    )
+    analysis = change("submit", candidate=candidate(story_id="crash-1"))
+    assert [r["id"] for r in nd.pending()] == [crash["id"], analysis["id"]]
+    again = change("submit", candidate=candidate(story_id="crash-1"))
+    assert [r["id"] for r in nd.pending()] == [crash["id"], again["id"]]
+
+
+def test_expire_everything_retires_every_unfinished_row(db_isolated):
+    a = change("submit", candidate=candidate(story_id="a"))
+    b = change("submit", candidate=candidate(story_id="b"))
+    change("decide", delivery_id=b["id"], decision="later")
+    assert nd.has_unfinished()
+    assert set(change("expire", everything=True)) == {a["id"], b["id"]}
+    assert not nd.has_unfinished()
