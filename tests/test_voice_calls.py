@@ -355,9 +355,17 @@ def bare_desk(agent, said: list | None = None):
     desk_._hold_until, desk_._hold_timer = 0.0, None
     desk_._lucius_lines = set()
     desk_.hung_up = False
+    desk_.rearmed = 0
     if said is not None:
         desk_._say = lambda text, **_: said.append(text)
+        desk_._check_in = lambda text: said.append(text)
         desk_.hang_up_after_speech = lambda: setattr(desk_, "hung_up", True)
+
+        class _Session:
+            def reset_away_timer(self):
+                desk_.rearmed += 1
+
+        desk_._session = _Session()
     return desk_
 
 
@@ -369,6 +377,7 @@ def test_a_silent_line_is_checked_on_once_then_hung_up():
     desk_ = bare_desk(agent, said)
     desk_.away()
     assert said == ["Are you still there?"] and not desk_.hung_up
+    assert desk_.rearmed == 1  # the next silence must count too (it never did, live call)
     desk_.heard("yes, sorry")
     desk_.away()
     assert said[-1] == "Are you still there?" and not desk_.hung_up

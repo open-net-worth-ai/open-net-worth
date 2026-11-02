@@ -216,10 +216,22 @@ class LuciusDesk:
             return
         if not self._checked_in:
             self._checked_in = True
-            self._say("Are you still there?")
+            self._check_in("Are you still there?")
+            # LiveKit flags "away" once per silence and keeps the owner away through our own
+            # line, so the next silence never counted and the call stayed open (live call,
+            # 2026-11-03): mark them listening again, so the timer restarts once we've spoken.
+            self._session.reset_away_timer()
             return
-        self._say("I'll hang up for now. Call me back any time.")
+        self._check_in("I'll hang up for now. Call me back any time.")
         self.hang_up_after_speech()
+
+    def _check_in(self, text: str) -> None:
+        """Say a line of our own (a check-in, a goodbye) and put it in the chat — it is not a
+        reply to anything, so the reply path never records it."""
+        self._say(text, add_to_chat_ctx=True)
+        asyncio.ensure_future(
+            self._rt.app.call("record_exchange", session_id=self._session_id, said="", reply=text)
+        )
 
     def _say(self, text: str, *, add_to_chat_ctx: bool = False) -> None:
         """Speak on the call — unless it has already ended (the owner hung up while Lucius
