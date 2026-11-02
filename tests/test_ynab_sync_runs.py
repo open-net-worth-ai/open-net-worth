@@ -145,8 +145,10 @@ def test_sync_now_opens_a_running_record_and_closes_it(stub):
     status = ynab_sync.start_now()
     run_id = status["run_id"]
     assert run_id and import_runs.get(run_id)["kind"] == "sync"
+    # Wait on the sync, not the record: the record closes a moment before the sync saves its
+    # last run and releases the lock, and ``running`` is what a caller polls.
     deadline = time.time() + 30
-    while import_runs.get(run_id)["status"] == "running" and time.time() < deadline:
+    while ynab_sync.status()["running"] and time.time() < deadline:
         time.sleep(0.05)
     done = import_runs.get(run_id)
     assert done["status"] == "done" and done["outcome"] == "Nothing changed"
