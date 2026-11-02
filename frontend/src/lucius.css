@@ -735,8 +735,9 @@
     padding: 0;
     border-radius: 50%;
     border: none;
-    background: var(--surface2);
-    color: var(--ink);
+    /* The same circle as Send — it is the same slot, so the same look (owner, 2026-11-03). */
+    background: var(--cta);
+    color: var(--ink-on-cta);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -746,13 +747,8 @@
   .lx-call-btn svg {
     display: block;
   }
-  @media (hover: hover) {
-    .lx-call-btn:hover:not(:disabled) {
-      background: var(--line);
-    }
-  }
   .lx-call-btn--setup {
-    color: var(--muted);
+    opacity: 0.55;
   }
   @media (pointer: coarse) {
     .lx-call-btn {
