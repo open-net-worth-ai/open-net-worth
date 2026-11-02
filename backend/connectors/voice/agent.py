@@ -280,8 +280,10 @@ class LuciusDesk:
             return
         if role != "assistant":
             return
-        if text in self._answers:
-            self._answers.discard(text)
+        # An answer the owner cut off is stored as just its spoken part: still his answer.
+        answer = next((a for a in self._answers if a.startswith(text)), None)
+        if answer is not None:
+            self._answers.discard(answer)
             return
         if self._current is not None or not self._queue.empty() or self._approving:
             return
@@ -350,13 +352,8 @@ class LuciusDesk:
                 self._current, self._doing = None, ""
 
     async def _answer(self, said: str, understood: str) -> None:
-        model_ref = self._rt.config.get("lucius_model") or ""
         events = self._rt.app.stream(
-            "ask",
-            session_id=self._session_id,
-            said=said,
-            understood=understood,
-            model_ref=model_ref,
+            "ask", session_id=self._session_id, said=said, understood=understood
         )
         text, approval = await self._collect(events)
         if text.strip():
@@ -486,6 +483,11 @@ async def entrypoint(ctx: JobContext) -> None:
     )
     lucius = LuciusDesk(session, ctx, runtime, session_id)
     ctx.add_shutdown_callback(lucius.aclose)
+
+    async def _call_ended() -> None:  # the app stops answering for this conversation
+        await runtime.app.call("end_call", session_id=session_id)
+
+    ctx.add_shutdown_callback(_call_ended)
 
     @session.on("user_input_transcribed")
     def _heard(ev) -> None:

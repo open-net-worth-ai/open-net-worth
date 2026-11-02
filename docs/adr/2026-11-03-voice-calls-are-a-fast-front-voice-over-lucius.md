@@ -46,7 +46,13 @@ We will build voice calls as **two layers** inside the app, behind the `voice_ca
    stdin/stdout (JSON lines): only an allow-listed six operations, and Lucius's side only on a
    conversation the app itself handed that worker for a call. The worker's settings arrive over
    that pipe, never argv or the environment, and its environment is the `core.child_env`
-   allowlist. It connects out to the owner's LiveKit project, so the app opens no port. Credentials live in the `voice`
+   allowlist; it starts from the app's own folder in safe-path mode, so nothing in the folder the
+   app was launched from can be imported into it. The worker is the part assumed compromised
+   (it parses remote media), so the APP holds the limits again on its side: 10 requests a minute
+   per call, voice calls re-checked on every request, Lucius's model read from the owner's
+   setting, a call's conversation forgotten when the call ends or after two hours, and a
+   malformed or over-long line from the worker ignored or fatal to that worker only. It
+   connects out to the owner's LiveKit project, so the app opens no port. Credentials live in the `voice`
    connector's secrets; the browser gets a 15-minute token for one fresh room, minted with stdlib
    HMAC so the API path needs no voice library.
 4. **A call is only one the app started** (security review, 2026-11-03). The LiveKit project secret

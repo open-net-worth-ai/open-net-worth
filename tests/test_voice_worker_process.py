@@ -42,12 +42,18 @@ def linked(monkeypatch):
     gone = threading.Event()
     link = AppLink(to_worker_r, to_app_w, on_stop=lambda: None, on_app_gone=gone.set)
     monkeypatch.setattr(service, "claim_call", lambda room: "sess-call" if room == "r1" else None)
+    allowed = {"on": True}
+    monkeypatch.setattr(service, "calls_allowed", lambda: allowed["on"])
+    monkeypatch.setattr(host, "_lucius_model", lambda: "owner-pick")
+    models: list[str] = []
 
     async def ask(session_id, said, *, understood="", model_ref=""):
+        models.append(model_ref)
         yield DeskEvent("text", f"answer to {said}")
         yield DeskEvent("end")
 
     monkeypatch.setattr(desk, "ask", ask)
+    link.allowed, link.models = allowed, models
     yield link
     # Close both pipes so each reader sees the end and returns: no thread outlives the test.
     to_app_w.close()
@@ -73,6 +79,42 @@ def test_the_worker_reaches_lucius_only_on_a_conversation_the_app_handed_it(link
             await linked.call("delete_account", account="x")
 
     asyncio.run(run())
+
+
+def test_the_app_holds_the_limits_itself_not_the_worker(linked, monkeypatch):
+    """Security review, 2026-11-03: the worker is the part assumed compromised, so the APP
+    caps requests, re-checks that calls are on, picks Lucius's model and forgets a call."""
+
+    async def ask():
+        return [e async for e in linked.stream("ask", session_id="sess-call", said="hi")]
+
+    async def run():
+        assert await linked.call("claim_call", room="r1") == "sess-call"
+        await ask()
+        assert linked.models == ["owner-pick"]  # the owner's setting, never the worker's
+        for _ in range(host.MAX_ASKS_PER_MINUTE - 1):
+            await ask()
+        with pytest.raises(AppError):  # past the per-minute cap
+            await ask()
+        linked.allowed["on"] = False
+        with pytest.raises(AppError):  # voice calls switched off mid-call
+            [e async for e in linked.stream("follow_next_turn", session_id="sess-call")]
+        linked.allowed["on"] = True
+        await linked.call("end_call", session_id="sess-call")
+        with pytest.raises(AppError):  # the call is over: its conversation is out of reach
+            await linked.call("record_exchange", session_id="sess-call", said="", reply="x")
+
+    asyncio.run(run())
+
+
+def test_a_malformed_line_from_the_worker_is_ignored_not_fatal():
+    """One bad line ended the reader, so the worker blocked and was never restarted."""
+    handled: list = []
+    worker = host.WorkerProcess(asyncio.new_event_loop(), lambda _c: None)
+    fake = type("H", (), {"handle": lambda self, m: handled.append(m)})()
+    for msg in ([1, 2], 7, {"id": [1], "op": "call"}, {"op": "ready"}, {"id": 3, "op": "call"}):
+        worker._take(fake, msg)
+    assert handled == [{"id": 3, "op": "call"}] and worker._ready.is_set()
 
 
 def _worker(app_loop, code: str, exits: list):

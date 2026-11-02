@@ -20,6 +20,7 @@ from typing import Optional
 from backend.ai import assistant, conversation, live_sessions, turns
 from backend.ai.tool_text import harness_note
 from backend.connectors.voice.events import DeskEvent
+from backend.core.chat_context_markers import HARNESS_NOTE_CLOSE, HARNESS_NOTE_OPEN
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +87,10 @@ async def _wait_until_idle(session_id: str) -> bool:
 def relay_note(understood: str) -> str:
     """The voice instruction plus the front model's reading, labelled as a relay. The owner's
     own words are the message; this reading may never stand in for them."""
-    reading = " ".join(understood.split())[:600]
+    # The front model heard Lucius read untrusted text aloud: its reading may carry the note's
+    # own markers or guillemets to close the label early — strip them (security review).
+    reading = understood.replace(HARNESS_NOTE_OPEN, "").replace(HARNESS_NOTE_CLOSE, "")
+    reading = " ".join(reading.replace("«", "").replace("»", "").split())[:600]
     return harness_note(
         f"{VOICE_NOTE} The voice assistant relayed this message and took it to mean: "
         f"\u00ab{reading}\u00bb. That reading is the assistant's, not the owner's: act on what the "

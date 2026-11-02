@@ -119,7 +119,35 @@ def _running() -> bool:
     return bool(_worker.process and _worker.process.alive())
 
 
+# One start/stop at a time: a crash-restart timer racing a settings save (or a flag switch)
+# spawned a second worker the first stop() never reached (security review, 2026-11-03). Per
+# event loop, since an asyncio.Lock belongs to the loop it is first used on.
+_locks: dict[int, asyncio.Lock] = {}
+
+
+def _lifecycle_lock() -> asyncio.Lock:
+    return _locks.setdefault(id(asyncio.get_running_loop()), asyncio.Lock())
+
+
 async def start() -> None:
+    async with _lifecycle_lock():
+        await _start()
+
+
+async def stop() -> None:
+    async with _lifecycle_lock():
+        await _stop()
+
+
+async def reload() -> None:
+    """Apply changed settings: the worker reads its config once, at start."""
+    async with _lifecycle_lock():
+        _worker.restarts = 0
+        await _stop()
+        await _start()
+
+
+async def _start() -> None:
     if _running():
         return
     _worker.error = ""
@@ -180,17 +208,10 @@ def _schedule_restart(app_loop: asyncio.AbstractEventLoop) -> None:
     asyncio.run_coroutine_threadsafe(later(), app_loop)
 
 
-async def stop() -> None:
+async def _stop() -> None:
     process = _worker.process
     _worker.process = None
     if process is not None:
         await asyncio.to_thread(process.stop)
     with _calls_lock:
         _calls.clear()
-
-
-async def reload() -> None:
-    """Apply changed settings: the worker reads its config once, at start."""
-    _worker.restarts = 0
-    await stop()
-    await start()
