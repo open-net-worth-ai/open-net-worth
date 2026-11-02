@@ -11,13 +11,13 @@ from typing import Callable, TypeVar
 from backend.core.errors import NotFoundError
 from backend.services.feature_flags import enabled
 
-FLAG = "ynab_import_and_sync"
+YNAB_FLAG = "ynab_import_and_sync"
 
 F = TypeVar("F", bound=Callable)
 
 
 def on() -> bool:
-    return enabled(FLAG)
+    return enabled(YNAB_FLAG)
 
 
 def gated(fn: F) -> F:
