@@ -46,6 +46,15 @@ export function notificationsOn(settingsText: string): boolean {
   try { return (JSON.parse(settingsText) as { notifications?: unknown }).notifications !== false; } catch { return true; }
 }
 
+// What the person sees while ShipIt installs after the app is gone: `closed` is the quit that
+// started the install (the book was just closed), otherwise it is a reopen that found it still running.
+export function installNotice(version: string | null, closed: boolean): { title: string; body: string } {
+  return {
+    title: version ? `Installing Open Net Worth ${version}…` : 'Installing update…',
+    body: `Open Net Worth opens again when it is done. Your book is ${closed ? 'closed safely' : 'not affected'}.`,
+  };
+}
+
 const launchctlList = (): Promise<string> => new Promise(done => {
   execFile('/bin/launchctl', ['list', SHIPIT_LABEL], { timeout: 2_000 }, (error, stdout) => done(error ? '' : stdout));
 });

@@ -372,6 +372,14 @@ installer whose `ShipItState.plist` targets THIS bundle means the launch only no
 Open Net Worth X…** (the staged bundle's version), spawns a detached shell that waits for that pid
 (bounded at 2 min) and reopens the bundle with `--onw-update-handoff`, and exits. A window is never
 shown for it, since a running process is exactly what cancels the install; the flag stops a second handoff.
+The install itself can take minutes on a busy machine (ShipIt verifies every file of the bundle), and the
+"Installing…" progress window dies with the process. So on macOS, once the book is closed and just before
+the process exits (Restart to Update AND a plain quit with an update staged), `announceInstall` posts the
+same **Installing Open Net Worth X…** notification ("Your book is closed safely"; wording in
+`installNotice`) and waits, bounded at 1 s, for the system's `show` event so the exit cannot drop it.
+It honours the Notifications preference, `Notification.isSupported()` and QA-inactive mode like every
+other notification. Windows (Squirrel.Windows relaunches directly) and Linux (an AppImage relaunches
+itself) have no such gap, so they post nothing.
 A MANUAL **Check for Updates…** still asks (**Download and Install** / **Skip This Version** /
 **Later**), confirms the download started, relabels the menu **Downloading Update…** and ends in
 the Restart Now / Later dialog. Skip is stored as `skippedUpdateVersion` in the app-global desktop
