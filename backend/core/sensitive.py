@@ -184,6 +184,9 @@ NON_RESTORABLE_TABLES: frozenset[str] = (
         {
             "desktop_access_grants",
             "desktop_ingest_jobs",
+            # The report of what an import booked and what verification found — a restore of the
+            # backup the import itself took must not erase the record of that import.
+            "import_runs",
             # Forensic record — mirrors TXN_AUDIT_JSON above. A data restore must never erase how
             # the data got here.
             "txn_audit",
