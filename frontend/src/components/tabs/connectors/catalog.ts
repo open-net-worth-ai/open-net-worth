@@ -1313,11 +1313,10 @@ export function filterDirectory(
 
 const byName = (a: DirectoryRow, b: DirectoryRow) => a.name.localeCompare(b.name)
 
-/** "Popular": what you already have first, then the popular picks, then everything else —
- *  each group A–Z. Before, only the popular flag counted and the rest kept the catalog's
- *  hand-written order, so the list read as unsorted (owner review, 2026-10-29). */
+/** "Popular": the popular picks, then everything else — each group A–Z. Whether you have it
+ *  already does not count (owner, 2026-11-02): a sort by popularity sorts by popularity. */
 function byPopular(a: DirectoryRow, b: DirectoryRow): number {
-  const rank = (d: DirectoryRow) => (d.installed ? 0 : d.popular ? 1 : 2)
+  const rank = (d: DirectoryRow) => (d.popular ? 0 : 1)
   return rank(a) - rank(b) || byName(a, b)
 }
 

@@ -541,7 +541,8 @@ describe('retired entries', () => {
 })
 
 describe('Sort: Popular', () => {
-  it('lists what you have first, then the popular picks, then the rest — each A–Z', () => {
+  // Owner, 2026-11-02: what you already have no longer jumps the queue.
+  it('lists the popular picks, then the rest — each A–Z, installed or not', () => {
     const plaid = {
       id: 'plaid',
       kind: 'plaid',
@@ -554,13 +555,11 @@ describe('Sort: Popular', () => {
       tools: [],
     }
     const rows = filterDirectory(resolveDirectory([plaid]), 'data', '', 'popular')
-    const names = rows.map((r) => r.name)
-    expect(names[0]).toBe('Plaid')
-    const rest = rows.slice(1)
-    const rank = (r: (typeof rows)[number]) => (r.installed ? 0 : r.popular ? 1 : 2)
-    for (let i = 1; i < rest.length; i++) {
-      const a = rest[i - 1]
-      const b = rest[i]
+    expect(rows.some((r) => r.installed)).toBe(true)
+    const rank = (r: (typeof rows)[number]) => (r.popular ? 0 : 1)
+    for (let i = 1; i < rows.length; i++) {
+      const a = rows[i - 1]
+      const b = rows[i]
       if (!a || !b) throw new Error(`no directory row at ${i}`)
       expect(rank(a) < rank(b) || (rank(a) === rank(b) && a.name.localeCompare(b.name) <= 0)).toBe(
         true,
