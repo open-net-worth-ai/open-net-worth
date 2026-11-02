@@ -414,8 +414,7 @@ def _no_bucket_holds_from_the_raw_book(txns, month, linked):
     On a CARD (ADR 2026-11-02-a-card-in-credit-is-budget-money) only money counts: a spend holds
     the part paid from credit, `min(amount, max(0, balance))`, and a refund cancels the part that
     lands past zero, `amount − min(amount, owed)`. The rest is debt, which is never RTA's. Money
-    arriving at a card by a categorized TRANSFER holds nothing (the engine treats it as Activity,
-    not as a refund).
+    arriving at a card by a categorized TRANSFER counts the same way as a refund.
 
     Nothing else can: income on a BLANK category is inflow-to-assign proper (`""` is in the
     engine's `_INFLOW_CATEGORIES`, alongside `"ready_to_assign"`) and folds nowhere at all —
@@ -440,10 +439,10 @@ def _no_bucket_holds_from_the_raw_book(txns, month, linked):
                     pass
                 elif moving in _CARD_IDS and delta < 0:
                     delta = -min(-delta, max(0.0, card_balance[moving]))
-                elif moving in _CARD_IDS and t.get("kind") == "income":
+                elif moving in _CARD_IDS:  # money arriving: only what lands as credit counts
                     delta = delta - min(delta, max(0.0, -card_balance[moving]))
                 else:
-                    continue  # debt, or a transfer into a card — nothing to hold
+                    continue  # an off-budget account — not plan money
                 if abs(delta) > 0.005:
                     touched.add(moving)
                 by_key[cat] = by_key.get(cat, 0.0) + delta

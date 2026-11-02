@@ -697,6 +697,9 @@ def _iter_category_contributions(
                     delta = svc.txn_base_amount(t, base, rates)
                     fold(cat, delta, t.get("to_account_id"))
                     yield cat, delta, t, None
+                    if t.get("to_account_id") in card_ids:  # settles onto a card: like a refund,
+                        # only the part landing as credit is money (ADR 2026-11-02)
+                        card_refunds.append((t["to_account_id"], None, delta, t, None, cat))
         elif kind == "transfer":
             card_env_id = _card_payment_env_id(t, "to_account_id", card_pay_env_of, cutoff_by_id)
             if card_env_id:  # paying down a payment-tracked card — always the Payment envelope,
@@ -765,6 +768,11 @@ def _iter_category_contributions(
                 fold_no_bucket_only(cat, delta, moving_acct)
             else:
                 fold(cat, delta, moving_acct, cash_delta=moved_now)
+                if leg == "to" and moving_acct in card_ids:
+                    # Arriving at a card (one with no live payment envelope — a live one took the
+                    # payment branch above): like a refund, only the part landing as credit is
+                    # money, so only that part may cancel this label's hold (ADR 2026-11-02).
+                    card_refunds.append((moving_acct, None, moved_now, t, None, cat))
             yield (cat, delta, t, None)
 
     if card_spend_candidates or card_refunds:

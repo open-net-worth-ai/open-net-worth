@@ -60,7 +60,8 @@ that month's 450 overpayment, i.e. the negative payment category held in-month l
    the roll like uncategorized cash spend.
 3. **A refund to a card drains its payment envelope only by the debt it shrinks**,
    `min(refund, owed)`. The rest is new credit, and cancels its own category's hold like a cash
-   refund.
+   refund. Money arriving at a card by a categorized transfer or an investment sale counts the
+   same way: only the part landing as credit is money (neither drains the payment envelope).
 4. **Paying a card is unchanged.** It still drains the payment envelope uncapped and may push it
    negative; the credit an overpayment creates now counts under 1, so the charge at the roll and
    the credit cancel.
@@ -77,6 +78,7 @@ that month's 450 overpayment, i.e. the negative payment category held in-month l
 - The identity property test re-derives the no-bucket hold from the raw rows with its own running
   card balance, and the flow-terms property test re-derives Δ card credit the same way, so neither
   check agrees with the engine by construction.
-- Not covered: money arriving at a card by a categorized transfer still folds as Activity without
-  touching the payment envelope, and a Ready-to-Assign inflow landing on a card that owes money
-  still leaves Ready to Assign unchanged. Neither was observed in YNAB here.
+- Not covered: a Ready-to-Assign inflow landing on a card that owes money still leaves Ready to
+  Assign unchanged, and a categorized transfer or investment sale arriving at a card that owes
+  money shrinks the debt without draining its payment envelope (as before). Neither was observed
+  in YNAB here.
