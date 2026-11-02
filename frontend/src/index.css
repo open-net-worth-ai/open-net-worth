@@ -18657,6 +18657,16 @@ body.hide-amounts .money * {
   padding: 3px var(--space-2);
   font-size: var(--text-xs);
 }
+/* A form field: the size of the .ui-select beside it (Voice calls settings, 2026-11-03). */
+.mp-wrap--field {
+  display: flex;
+  width: 100%;
+}
+.mp-trigger--field {
+  width: 100%;
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--text-md);
+}
 .mp-trigger-text {
   overflow: hidden;
   flex: 1 1 auto;

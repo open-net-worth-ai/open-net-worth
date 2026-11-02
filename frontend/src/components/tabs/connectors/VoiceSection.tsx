@@ -284,7 +284,6 @@ export function VoiceSection() {
         help="Holds the conversation and answers in about a second. It never sees your data and never states a number: Lucius's answers are read out word for word."
       >
         <Select
-          dense
           id="conn-voice-front"
           value={form.front_model}
           options={FRONT_OPTIONS}
@@ -296,6 +295,7 @@ export function VoiceSection() {
         help="The model Lucius answers with during a call. A faster one keeps the waits short."
       >
         <ModelPicker
+          size="field"
           label="Lucius on calls"
           models={models}
           value={form.lucius_model}
@@ -305,7 +305,6 @@ export function VoiceSection() {
       </FormField>
       <FormField label="Speech to text" htmlFor="conn-voice-stt">
         <Select
-          dense
           id="conn-voice-stt"
           value={form.stt_model}
           options={STT_OPTIONS}
@@ -314,7 +313,6 @@ export function VoiceSection() {
       </FormField>
       <FormField label="Voice" htmlFor="conn-voice-tts">
         <Select
-          dense
           id="conn-voice-tts"
           value={form.tts_model}
           options={TTS_OPTIONS}
