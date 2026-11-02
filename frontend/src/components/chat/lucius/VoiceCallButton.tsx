@@ -52,7 +52,7 @@ export function VoiceCallButton({ sessionId }: { sessionId: string }) {
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => (needsSetup ? openSetup() : void startCall(sessionId))}
     >
-      <Phone size={13} fill="currentColor" strokeWidth={1.5} />
+      <Phone size={16} fill="currentColor" strokeWidth={1.5} />
     </button>
   )
 }

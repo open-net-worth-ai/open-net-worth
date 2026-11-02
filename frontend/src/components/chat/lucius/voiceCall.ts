@@ -1,5 +1,12 @@
 import { useSyncExternalStore } from 'react'
-import { DisconnectReason, Room, RoomEvent, Track } from 'livekit-client'
+import {
+  DisconnectReason,
+  Room,
+  RoomEvent,
+  Track,
+  createLocalAudioTrack,
+  type LocalAudioTrack,
+} from 'livekit-client'
 import { authFetch } from '../../../api/client'
 import { emitConversationChanged } from '../../../lucius/bus'
 
@@ -64,6 +71,8 @@ export function useVoiceCall(): CallState {
 }
 
 /** The double ring a caller expects while Lucius "picks up" — WebAudio, no file to ship. */
+const RING_CYCLES = 40 // two minutes of ringing, far past any pickup
+
 function startRingback(): () => void {
   const Ctx =
     window.AudioContext ||
@@ -85,16 +94,14 @@ function startRingback(): () => void {
       osc.stop(at + 0.4)
     }
   }
-  const cycle = () => {
-    burst(ctx.currentTime)
-    burst(ctx.currentTime + 0.6)
+  // Every ring is scheduled up front on the AUDIO clock: timed by a page timer, a ring due
+  // while the page was busy (the call connecting) came late and broken (owner, 2026-11-03).
+  const start = ctx.currentTime
+  for (let k = 0; k < RING_CYCLES; k++) {
+    burst(start + k * 3)
+    burst(start + k * 3 + 0.6)
   }
-  cycle()
-  const timer = window.setInterval(cycle, 3000)
-  return () => {
-    window.clearInterval(timer)
-    void ctx.close()
-  }
+  return () => void ctx.close()
 }
 
 /** Calls `onVoice` once, the moment `track` carries sound above silence (polled every 30 ms). */
@@ -143,8 +150,13 @@ function classify(e: unknown): CallProblem {
 const FOLLOW_MS = 1500
 let followTimer: number | undefined
 
+// The call's microphone, opened BEFORE the ringing starts and published once connected.
+let mic: LocalAudioTrack | null = null
+
 function teardown() {
   window.clearInterval(followTimer)
+  mic?.stop()
+  mic = null
   stopRing()
   stopRing = () => {}
   audioEls.forEach((el) => el.remove())
@@ -187,8 +199,17 @@ export async function startCall(sessionId: string): Promise<void> {
   }
   localHangUp = false
   set({ ...IDLE, phase: 'connecting', sessionId })
-  stopRing = startRingback()
   try {
+    // The microphone first, THEN the ring: opening it reconfigures the audio device (a
+    // Bluetooth headset switches to its call mode), which broke whichever ring was playing —
+    // the second one, every time it opened mid-ring (owner, 2026-11-03).
+    const opened = await createLocalAudioTrack()
+    if (state.phase !== 'connecting') {
+      opened.stop() // hung up while the microphone was opening
+      return
+    }
+    mic = opened
+    stopRing = startRingback()
     const r = await authFetch('/api/voice/call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -196,7 +217,7 @@ export async function startCall(sessionId: string): Promise<void> {
     })
     if (!r.ok) {
       const d = await r.json().catch(() => ({}))
-      stopRing()
+      teardown()
       set({ ...IDLE, problem: { kind: 'setup', message: d.detail || 'The call could not start.' } })
       return
     }
@@ -239,7 +260,7 @@ export async function startCall(sessionId: string): Promise<void> {
     // nothing changed) and the live poll looks, every 1.5s. Polled from here, not pushed over
     // the room: a data message from the in-app worker crashed LiveKit's native layer (2026-11-03).
     followTimer = window.setInterval(() => emitConversationChanged(grant.session_id), FOLLOW_MS)
-    await next.localParticipant.setMicrophoneEnabled(true)
+    await next.localParticipant.publishTrack(mic)
   } catch (e) {
     localHangUp = true
     await room?.disconnect()
@@ -256,7 +277,8 @@ export async function hangUp(): Promise<void> {
 export async function toggleMute(): Promise<void> {
   if (!room) return
   const muted = !state.muted
-  await room.localParticipant.setMicrophoneEnabled(!muted)
+  // The call's own track: "enable the microphone" could open a SECOND one beside it.
+  if (mic) await (muted ? mic.mute() : mic.unmute())
   set({ muted })
 }
 

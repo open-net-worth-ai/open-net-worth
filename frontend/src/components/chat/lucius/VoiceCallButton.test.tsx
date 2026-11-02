@@ -15,6 +15,7 @@ vi.mock('livekit-client', () => ({
   RoomEvent: {},
   Track: { Kind: { Audio: 'audio' } },
   DisconnectReason: { ROOM_DELETED: 5 },
+  createLocalAudioTrack: vi.fn(async () => ({ stop: vi.fn() })),
 }))
 
 import { VoiceCallButton } from './VoiceCallButton'
