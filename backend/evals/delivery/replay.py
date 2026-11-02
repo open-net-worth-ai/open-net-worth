@@ -142,7 +142,12 @@ async def replay(
             now, batch = _at(batches[i][-1]) + TICK_WINDOW, batches[i]
             i += 1
         _expire(state, now)
-        ctx = {**context_at(now), "recently_told": state.told_context(now)}
+        ctx = {
+            **context_at(now),
+            "recently_told": state.told_context(now),
+            "last_roundup_at": state.last_roundup.isoformat() if state.last_roundup else None,
+            "now": now,
+        }
         result = await decide(batch, list(state.waiting), ctx)
         _apply(state, batch, result, now)
     return {"log": state.log, "roundups": state.roundups, "waiting_at_end": len(state.waiting)}

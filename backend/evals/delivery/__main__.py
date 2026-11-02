@@ -57,7 +57,10 @@ def _decider(model: str, mock: bool):
     from backend.monitoring.delivery_decider import decide
 
     async def run(candidates, waiting, context):
-        return await decide(candidates, waiting, context, model=model)
+        # The replayed moment, not today — the roundup gap and revisit times are measured from it.
+        now = context.get("now")
+        clean = {k: v for k, v in context.items() if k != "now"}
+        return await decide(candidates, waiting, clean, model=model, now=now)
 
     return run
 
