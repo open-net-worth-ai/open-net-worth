@@ -104,3 +104,14 @@ two-way-only feature. The state gains `direction` (`both` — the default and th
   `held_ynab` (YNAB ids never pulled; YNAB's delta reports a change only once) and `held_assigned`
   (YNAB's Assigned figures never pulled) — and fed back into each run, so switching back to `both`
   sends or pulls it on the next run.
+
+## Amendment 2026-11-03: the import turns the sync on
+
+The setup is two steps, not three: the plan is reviewed in one window (its accounts, every
+category under its group, the newest 500 transactions as they would be booked — read from the
+mapped plan, `ynab_migration.preview`, never a second reading of YNAB) and imported from there with
+a direction. `POST /api/ynab/migration/start` takes an optional `sync_direction`; the import job
+itself turns the sync on with it (`runner.update_settings`) once the import succeeds, so closing
+the page mid-import loses nothing. A sync that cannot turn on never fails the import: the run's log
+says why and the Data sync page offers **Turn on**. No direction (`Don't sync`) leaves it off, as
+before.

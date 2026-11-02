@@ -131,11 +131,16 @@ class MigrationRequest(BaseModel):
     plan_id: str
     # The book already holds accounts that did not come from a YNAB migration.
     confirm_nonempty: bool = False
+    # An import only: turn the two-way sync on in this direction once it succeeds.
+    sync_direction: Optional[str] = None
 
 
 def _migration(kind: str, body: MigrationRequest) -> dict:
     try:
-        return ynab_migration.start(kind, body.plan_id, body.confirm_nonempty)
+        sync = body.sync_direction if kind == "import" else None
+        return ynab_migration.start(
+            kind, body.plan_id, body.confirm_nonempty, sync_direction=sync or None
+        )
     except ynab_migration.ConfirmationRequired as exc:
         raise HTTPException(
             409, detail={"error": "confirm_nonempty", "message": exc.message}

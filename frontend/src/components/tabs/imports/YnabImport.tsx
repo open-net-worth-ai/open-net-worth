@@ -1,23 +1,15 @@
 import { useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { useQueryCache } from '../../../state/queryCache'
-import {
-  Button,
-  Cluster,
-  ConfirmDialog,
-  FormField,
-  Meter,
-  Select,
-  Stack,
-  SummaryBar,
-  Text,
-  type ConfirmDialogData,
-} from '../../ui'
-import { detailOf, messageOf, useRun, type Preview, type RunSummary } from './runs'
+import { Button, Cluster, FormField, Meter, Select, Stack, Text } from '../../ui'
+import { detailOf, messageOf, type RunSummary } from './runs'
+import { YnabReview } from './YnabReview'
 
-// The import step of the two-way YNAB sync (plan -> preview -> import -> re-check). The token
-// lives on the YNAB connector and never reaches this screen. The work is a server-owned job, so
-// this only starts it and shows the run it created; the run's report opens as a page of its own.
+// The import step of the YNAB data sync: pick a plan, then Review. Review reads the plan afresh
+// (a preview run, which writes nothing) and opens it in one window — accounts, categories,
+// transactions, what changes in this book and how to sync — where the import starts. The token
+// lives on the YNAB connector and never reaches this screen; an import is a server-owned job, so
+// this only shows its progress.
 
 interface Plan {
   id: string
@@ -27,20 +19,6 @@ interface Plan {
 interface YnabStatus {
   has_access_token: boolean
   budget_name: string | null
-}
-
-type Launch = 'preview' | 'start' | 'verify'
-// Literal paths, so the route-consistency test can match each one to its backend route.
-const LAUNCH_URL: Record<Launch, string> = {
-  preview: '/api/ynab/migration/preview',
-  start: '/api/ynab/migration/start',
-  verify: '/api/ynab/migration/verify',
-}
-
-const NONEMPTY_DIALOG: ConfirmDialogData = {
-  title: 'Import alongside your existing accounts?',
-  body: "This book already has accounts that didn't come from YNAB. They stay as they are and the plan is added next to them. A fresh book is the cleaner route.",
-  confirmLabel: 'Import anyway',
 }
 
 export function YnabImport(props: {
@@ -67,45 +45,35 @@ export function YnabImport(props: {
   const [planId, setPlanId] = useState('')
   const [busy, setBusy] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
-  const [confirm, setConfirm] = useState<ConfirmDialogData | null>(null)
+  const [reviewId, setReviewId] = useState<string | null>(null)
 
-  const running = props.runs?.find((r) => r.status === 'running') ?? null
-  // Pick the plan a run is already about, so a reopened page shows its progress; failing that,
-  // the only plan the token can see, so its latest preview shows without choosing it again.
+  // An import (or a re-check) in flight owns the step; a preview runs inside the review window.
+  const running = props.runs?.find((r) => r.status === 'running' && r.kind !== 'preview') ?? null
   if (!planId && running) setPlanId(running.plan_id)
   else if (!planId && plans.data?.length === 1) setPlanId(plans.data[0]!.id)
-  // The newest finished preview of this plan holds the book state and warnings to act on.
-  const latest = props.runs?.find(
-    (r) => r.plan_id === planId && r.kind === 'preview' && r.status === 'done' && !r.archived_at,
-  )
-  const preview = useRun(latest?.id).data?.preview ?? null
 
-  async function launch(action: Launch, confirmed = false) {
+  async function review() {
     setBusy(true)
     setStartError(null)
     try {
-      const r = await authFetch(LAUNCH_URL[action], {
+      const r = await authFetch('/api/ynab/migration/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan_id: planId, confirm_nonempty: confirmed }),
+        body: JSON.stringify({ plan_id: planId }),
       })
-      if (r.ok) {
-        props.onStarted()
+      const body = await r.json().catch(() => null)
+      if (!r.ok) {
+        setStartError(messageOf(body, 'Could not read the plan.'))
         return
       }
-      const body = await r.json().catch(() => null)
-      if (r.status === 409 && body?.detail?.error === 'confirm_nonempty')
-        setConfirm(NONEMPTY_DIALOG)
-      else setStartError(messageOf(body, 'Could not start.'))
+      props.onStarted()
+      setReviewId((body as { id: string }).id)
     } catch {
       setStartError('Could not reach the server.')
     } finally {
       setBusy(false)
     }
   }
-
-  const importNow = () =>
-    preview?.book_state === 'foreign' ? setConfirm(NONEMPTY_DIALOG) : void launch('start')
 
   return (
     <>
@@ -122,29 +90,6 @@ export function YnabImport(props: {
           <PlanPicker plans={plans} planId={planId} disabled={!!running} onChange={setPlanId} />
           {running ? (
             <LiveStrip run={running} onOpen={props.onOpen} />
-          ) : preview ? (
-            // One step at a time: the preview's result, then the import it describes.
-            <>
-              <PreviewSummary preview={preview} />
-              <Cluster gap="--space-2">
-                <Button
-                  size="sm"
-                  variant="primary"
-                  disabled={preview.currency_blocked}
-                  onClick={importNow}
-                >
-                  Import
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  loading={busy}
-                  onClick={() => void launch('preview')}
-                >
-                  Preview again
-                </Button>
-              </Cluster>
-            </>
           ) : (
             <div>
               <Button
@@ -152,9 +97,9 @@ export function YnabImport(props: {
                 variant="primary"
                 disabled={!planId}
                 loading={busy}
-                onClick={() => void launch('preview')}
+                onClick={() => void review()}
               >
-                Preview
+                Review…
               </Button>
             </div>
           )}
@@ -165,18 +110,20 @@ export function YnabImport(props: {
           )}
         </Stack>
       )}
-
-      <ConfirmDialog
-        data={confirm}
-        onCancel={() => setConfirm(null)}
-        onConfirm={() => {
-          setConfirm(null)
-          void launch('start', true)
-        }}
-      />
+      {reviewId && (
+        <YnabReview
+          runId={reviewId}
+          planLabel={planLabel(plans.data?.find((x) => x.id === planId))}
+          onClose={() => setReviewId(null)}
+          onStarted={props.onStarted}
+        />
+      )}
     </>
   )
 }
+
+const planLabel = (p: Plan | undefined) =>
+  !p ? 'your YNAB plan' : p.currency ? `${p.name} (${p.currency})` : p.name
 
 function PlanPicker(props: {
   plans: ReturnType<typeof useQueryCache<Plan[]>>
@@ -206,7 +153,7 @@ function PlanPicker(props: {
   }
   const options = (plans.data ?? []).map((p) => ({
     value: p.id,
-    label: p.currency ? `${p.name} (${p.currency})` : p.name,
+    label: planLabel(p),
   }))
   if (options.length === 0) {
     return (
@@ -255,57 +202,6 @@ function LiveStrip({ run, onOpen }: { run: RunSummary; onOpen: (id: string) => v
           valueText={`${done} of ${total}`}
         />
       )}
-    </Stack>
-  )
-}
-
-function PreviewSummary({ preview: p }: { preview: Preview }) {
-  return (
-    <Stack gap="--space-3">
-      <Text size="sm" weight={600}>
-        Preview of {p.plan_name} ({p.currency}). Nothing is written until you import.
-      </Text>
-      <SummaryBar
-        cards={[
-          { label: 'Accounts', value: String(p.accounts.length) },
-          {
-            label: 'Transactions',
-            value: String(p.transactions),
-            caption: `${p.transfers} transfers, ${p.splits} splits`,
-          },
-          { label: 'Categories', value: String(p.categories), caption: `${p.groups} groups` },
-          { label: 'Budget months', value: String(p.budget_months) },
-        ]}
-      />
-      {p.book_state === 'rerun' && (
-        <Text size="xs" tone="faint">
-          This book already holds an earlier import of this plan; running again adds only what is
-          new.
-        </Text>
-      )}
-      {p.currency_change && (
-        <Text size="xs" tone="warn">
-          The book&apos;s base currency will change from {p.base_currency} to {p.currency}.
-        </Text>
-      )}
-      {p.currency_blocked && (
-        <Text size="xs" tone="bad">
-          Can&apos;t import: this book is in {p.base_currency} and already has data, and the plan is
-          in {p.currency}. Import into an empty book, or one in {p.currency}.
-        </Text>
-      )}
-      {(p.prune.categories.length > 0 || p.prune.groups.length > 0) && (
-        <Text size="xs" tone="faint">
-          Unused starter items that will be removed:{' '}
-          {[...p.prune.categories, ...p.prune.groups].join(', ')}. Anything you created, funded or
-          renamed is kept.
-        </Text>
-      )}
-      {p.warnings.map((w) => (
-        <Text key={w} size="xs" tone="warn">
-          {w}
-        </Text>
-      ))}
     </Stack>
   )
 }

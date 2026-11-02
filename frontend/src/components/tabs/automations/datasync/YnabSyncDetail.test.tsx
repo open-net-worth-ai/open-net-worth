@@ -153,53 +153,104 @@ describe('YnabSyncDetail setup', () => {
     expect(navigate).not.toHaveBeenCalled()
   })
 
-  it('imports as step 2: a plan, a preview, then the import', async () => {
+  it('reviews the plan in one window, then imports it and turns the sync on', async () => {
     sync = notSetUp()
     page()
     const select = (await screen.findByLabelText(/YNAB plan/)) as HTMLSelectElement
     await waitFor(() => expect(select.options.length).toBeGreaterThan(1))
-    expect(screen.queryByRole('button', { name: 'Import' })).toBeNull() // only after a preview
+    expect(screen.queryByText('Turn on the sync')).toBeNull() // one step, not two
     fireEvent.change(select, { target: { value: 'p1' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
-    expect(await screen.findByText(/Preview of Household \(USD\)/)).toBeTruthy()
-    const importBtn = (await screen.findByRole('button', { name: 'Import' })) as HTMLButtonElement
-    expect(importBtn.disabled).toBe(false)
-    fireEvent.click(importBtn)
+    fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
+    const review = await screen.findByRole('dialog', { name: /Import Household/ })
+    const w = within(review)
+    expect(await w.findByText(/USD · 1 account · 4 transactions · 3 categories/)).toBeTruthy()
+    // Three tabs over one pane: accounts first, then each category under its group, then rows.
+    expect(w.getByRole('cell', { name: 'Checking' })).toBeTruthy()
+    fireEvent.click(w.getByRole('tab', { name: /Categories/ }))
+    expect(w.getByRole('rowheader', { name: /Bills/ })).toBeTruthy()
+    expect(w.getByRole('cell', { name: 'Utilities' })).toBeTruthy()
+    fireEvent.click(w.getByRole('tab', { name: /Transactions/ }))
+    expect(w.getByRole('cell', { name: 'Landlord' })).toBeTruthy()
+    expect(w.getByRole('cell', { name: 'Ready to Assign' })).toBeTruthy() // a blank inflow
+    expect(requests).toEqual([
+      { url: '/api/ynab/migration/preview', method: 'POST', body: { plan_id: 'p1' } },
+    ])
+    fireEvent.click(w.getByRole('button', { name: 'Import' }))
     await waitFor(() =>
-      expect(requests.at(-1)).toMatchObject({
+      expect(requests.at(-1)).toEqual({
         url: '/api/ynab/migration/start',
-        body: { plan_id: 'p1', confirm_nonempty: false },
+        method: 'POST',
+        body: { plan_id: 'p1', confirm_nonempty: false, sync_direction: 'both' },
       }),
     )
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
     fireEvent.click(await screen.findByText('View live report'))
     expect(onOpenReport).toHaveBeenCalledWith(runs.at(-1)?.id)
   })
 
-  it('confirms before importing into a book that holds other accounts', async () => {
+  it('opens at its final shape while the plan is read, with nothing to import yet', async () => {
+    // The step used to fall back to a bare "Preview" between a run finishing and its details
+    // arriving, so it looked reset and was clicked again. The window now waits on its own run.
     sync = notSetUp()
-    preview = { ...PREVIEW, book_state: 'foreign' }
-    runs = [run({ preview })]
     page()
     const select = (await screen.findByLabelText(/YNAB plan/)) as HTMLSelectElement
     await waitFor(() => expect(select.options.length).toBeGreaterThan(1))
     fireEvent.change(select, { target: { value: 'p1' } })
-    const importBtn = (await screen.findByRole('button', { name: 'Import' })) as HTMLButtonElement
-    await waitFor(() => expect(importBtn.disabled).toBe(false))
-    fireEvent.click(importBtn)
-    expect(await screen.findByText('Import alongside your existing accounts?')).toBeTruthy()
-    expect(requests).toEqual([])
-    fireEvent.click(screen.getByText('Import anyway'))
+    const base = authFetch.getMockImplementation()!
+    authFetch.mockImplementation((url: string, init?: RequestInit) =>
+      /\/api\/imports\/runs\/\w+$/.test(url.split('?')[0] ?? '')
+        ? ok({ ...runs.at(-1), status: 'running', phase: 'reading YNAB', preview: null })
+        : base(url, init),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
+    const w = within(await screen.findByRole('dialog', { name: /Import Household \(USD\)/ }))
+    expect(w.getByText('Reading it from YNAB…')).toBeTruthy()
+    expect(w.getAllByRole('tab').map((t) => t.textContent)).toEqual([
+      'Accounts',
+      'Categories',
+      'Transactions',
+    ])
+    expect((w.getByRole('button', { name: 'Import' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('says a book with other accounts keeps them, and importing then confirms it', async () => {
+    sync = notSetUp()
+    preview = { ...PREVIEW, book_state: 'foreign' }
+    page()
+    const select = (await screen.findByLabelText(/YNAB plan/)) as HTMLSelectElement
+    await waitFor(() => expect(select.options.length).toBeGreaterThan(1))
+    fireEvent.change(select, { target: { value: 'p1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
+    const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
+    expect(await w.findByText(/They stay as they are/)).toBeTruthy()
+    fireEvent.change(w.getByLabelText('After import'), { target: { value: 'off' } })
+    fireEvent.click(w.getByRole('button', { name: 'Import' }))
     await waitFor(() =>
-      expect(requests[0]).toMatchObject({ body: { plan_id: 'p1', confirm_nonempty: true } }),
+      expect(requests.at(-1)).toMatchObject({
+        url: '/api/ynab/migration/start',
+        body: { plan_id: 'p1', confirm_nonempty: true, sync_direction: null },
+      }),
     )
   })
 
-  it('after the import, picks a direction and turns the sync on for the imported plan', async () => {
+  it('a plan in another currency than a book with data cannot be imported, and says why', async () => {
+    sync = notSetUp()
+    preview = { ...PREVIEW, currency_blocked: true, currency_change: false }
+    page()
+    const select = (await screen.findByLabelText(/YNAB plan/)) as HTMLSelectElement
+    await waitFor(() => expect(select.options.length).toBeGreaterThan(1))
+    fireEvent.change(select, { target: { value: 'p1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
+    const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
+    expect(await w.findByText(/Can’t import: this book is in SGD/)).toBeTruthy()
+    expect((w.getByRole('button', { name: 'Import' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('an import that left the sync off offers it in the same step', async () => {
     sync = notSetUp()
     runs = [importRun()]
     page()
-    expect(await screen.findByText('Turn on the sync')).toBeTruthy()
-    expect(screen.getByText(/Runs every hour/)).toBeTruthy()
+    expect(await screen.findByText(/Imported\. Turn on the sync/)).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: 'From YNAB' }))
     await waitFor(() =>
       expect(requests[0]).toEqual({

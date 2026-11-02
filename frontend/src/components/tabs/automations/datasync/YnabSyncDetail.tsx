@@ -362,7 +362,9 @@ function SetupSteps({
   onImported: () => void
   onTurnOn: () => void
 }) {
-  const reached = { connect: 1, import: 2, enable: 3, off: 3, on: 3 }[stage]
+  // Two steps: the import is reviewed, then booked with the sync turned on, in one window. An
+  // import that left the sync off (chosen, or it could not turn on) offers it here.
+  const reached = { connect: 1, import: 2, enable: 2, off: 3, on: 3 }[stage]
   return (
     <ol className="a3-steps" data-od-id="ynab-sync-setup">
       <Step n={1} reached={reached} title="Connect YNAB">
@@ -385,22 +387,15 @@ function SetupSteps({
           </p>
         )}
       </Step>
-      <Step n={2} reached={reached} title="Bring your YNAB history in">
-        {reached === 2 ? (
+      <Step n={2} reached={reached} title="Bring your plan in and keep it in sync">
+        {stage === 'import' ? (
           <>
-            <p>Accounts, categories, transactions and Assigned. Safe to run again.</p>
+            <p>Review what your plan holds, then import it. Safe to run again.</p>
             <YnabImport runs={runs} onStarted={onImported} onOpen={onOpenReport} />
           </>
-        ) : reached > 2 ? (
-          <p>Imported.</p>
-        ) : (
-          <p>After you connect YNAB.</p>
-        )}
-      </Step>
-      <Step n={3} reached={reached} title="Turn on the sync">
-        {reached === 3 ? (
+        ) : stage === 'enable' ? (
           <>
-            <p>Runs {(INTERVAL_LABELS[interval] ?? interval).toLowerCase()}. Change it later.</p>
+            <p>Imported. Turn on the sync to keep the two in step.</p>
             <DirectionPicker value={direction} disabled={!!busy} onChange={onDirection} />
             <div>
               <Button
@@ -414,8 +409,10 @@ function SetupSteps({
               </Button>
             </div>
           </>
+        ) : reached > 2 ? (
+          <p>Imported and syncing.</p>
         ) : (
-          <p>After the import.</p>
+          <p>After you connect YNAB.</p>
         )}
       </Step>
     </ol>

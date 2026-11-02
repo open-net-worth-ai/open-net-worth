@@ -59,9 +59,20 @@ export interface PreviewAccount {
   name: string
   ynab_type: string
   type: string
+  on_budget?: boolean
   closed: boolean
   opening_balance: number
   transactions: number
+}
+export interface PreviewTxn {
+  date: string
+  kind: 'expense' | 'income' | 'transfer'
+  account: string | null
+  to_account: string | null
+  payee: string | null
+  category: string | null
+  amount: number
+  memo: string | null
 }
 export interface Preview {
   plan_name: string
@@ -80,6 +91,9 @@ export interface Preview {
   currency_blocked: boolean
   money_data: string[]
   prune: { categories: string[]; groups: string[] }
+  /** Absent on a preview recorded before the review listed them. */
+  category_groups?: { name: string; categories: string[] }[]
+  transaction_list?: PreviewTxn[]
 }
 export interface FieldChange {
   name: string

@@ -30,25 +30,34 @@ from the one-way **Sync YNAB** template, where Lucius fetches new YNAB transacti
 
 ## Set it up
 
-Until it is set up, its page is three steps, each unlocked by the one before:
+Until it is set up, its page is two steps, the second unlocked by the first:
 
 1. **Connect YNAB.** Click **Connect YNAB…**: the YNAB connector opens right over this page, the
    same panel as **Connectors → YNAB**. Paste your access token and **Save**. Once a token is
    saved, **Change** beside "Token saved" opens it again — use it if step 2 says YNAB refused the
    token. Where to find a token:
    [Bank & brokerage connectors](../connectors/bank-brokerage.md#ynab).
-2. **Bring your YNAB history in.** Choose your plan and click **Preview**. Nothing is written. You
-   see how many accounts, transactions, categories and budget months would come across, any
-   warnings, whether the base currency would change (only in a book with no money data yet), and
-   which unused starter categories would be removed. Then click **Import**. If the book already
-   holds accounts that didn't come from YNAB you are asked to confirm first. The app takes a
+2. **Bring your plan in and keep it in sync.** Choose your plan and click **Review…**. It reads
+   the plan afresh and opens it in one window; nothing is written. Under the title, one line says
+   what the plan holds (currency, accounts, transactions, categories, budget months), then a note
+   for anything the import would change in this book: a base-currency change (only in a book with
+   no money data yet), unused starter categories it would remove, accounts here that didn't come
+   from YNAB (they stay as they are and the plan is added beside them), and any warnings. A plan
+   in another currency than a book that already holds data can't be imported, and the note says
+   so. Three tabs show the plan itself:
+   - **Accounts**: each account with its type, how many transactions it has and its opening
+     balance;
+   - **Categories**: each group with its categories;
+   - **Transactions**: newest first (date, account, payee, category, amount; a long history shows
+     its newest 500, and the import brings them all).
+
+   **After import** sets the sync (**Keep in sync both ways**, **Sync from YNAB only**, **Sync to
+   YNAB only**, or **Don't sync, import once**); then **Import**. The app takes a
    [backup](../operations/backup-and-restore.md) before it writes anything and names it in the
    report; if the backup fails, nothing is imported. **View live report** opens the run while it
-   works. You can close the tab: the work continues on the server. Running again is safe: nothing
-   is booked twice.
-3. **Turn on the sync.** Pick a direction (**Both ways**, **From YNAB** or **To YNAB**), then
-   **Turn on**. It runs every hour by default. You can stop after step 2 if you only want your
-   history.
+   works. You can close the tab: the work continues on the server, and the sync turns on by
+   itself when the import succeeds (every hour by default). If it can't turn on, the report says
+   why and step 2 offers **Turn on**. Running again is safe: nothing is booked twice.
 
 Once it has been imported it appears under **Automations → Data sync** with its schedule and an
 **N to review** tag when something needs you (the **Data sync** switch shows the same count). Its menu has **Sync now**, **Turn on** /

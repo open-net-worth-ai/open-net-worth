@@ -24,7 +24,15 @@ from backend.core.errors import ConflictError, OpenNetWorthError, ValidationErro
 from backend.db.ynab_config_store import YnabConfigStore
 from backend.services import import_runs
 from backend.services.budget_engines import service as budget_engines_service
-from backend.services.ynab_migration import apply, guards, mapping, report, source, verify
+from backend.services.ynab_migration import (
+    apply,
+    guards,
+    mapping,
+    preview,
+    report,
+    source,
+    verify,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +80,19 @@ def _foreign_accounts_exist() -> bool:
     )
 
 
-def start(kind: str, plan_id: str, confirm_nonempty: bool = False) -> dict:
+def start(
+    kind: str, plan_id: str, confirm_nonempty: bool = False, sync_direction: str | None = None
+) -> dict:
+    """``sync_direction`` (an import only): turn the two-way sync on in that direction once the
+    import succeeds — the worker does it, so closing the page mid-import does not lose it."""
     if kind not in KINDS:
         raise ValidationError(f"kind must be one of {', '.join(KINDS)}")
+    if sync_direction is not None:
+        from backend.services.ynab_sync import state as sync_state
+
+        if kind != "import":
+            raise ValidationError("only an import can turn the sync on")
+        sync_direction = sync_state.validate_direction(sync_direction)
     if not (plan_id or "").strip():
         raise ValidationError("pick the YNAB plan to migrate")
     if not YnabConfigStore().is_configured():
@@ -90,7 +108,7 @@ def start(kind: str, plan_id: str, confirm_nonempty: bool = False) -> dict:
         raise ConflictError("A YNAB sync is running; start the import when it finishes.")
     run = import_runs.start(PROVIDER, kind, plan_id.strip())
     try:
-        _POOL.submit(_run, run["id"], kind, plan_id.strip(), confirm_nonempty)
+        _POOL.submit(_run, run["id"], kind, plan_id.strip(), confirm_nonempty, sync_direction)
     except Exception:
         logger.exception("YNAB migration run %s could not be queued", run["id"])
         _settle(run["id"], "failed", error="The run could not be started.", outcome="Failed")
@@ -117,10 +135,12 @@ def _outcome(kind: str, run_id: str) -> str:
         return ""
 
 
-def _run(run_id: str, kind: str, plan_id: str, confirm: bool) -> None:
+def _run(run_id: str, kind: str, plan_id: str, confirm: bool, sync: str | None = None) -> None:
     run = _Run(run_id)
     try:
         _execute(run, kind, plan_id, confirm)
+        if sync:
+            _turn_on_sync(run, plan_id, sync)
     except OpenNetWorthError as exc:
         _settle(run_id, "failed", error=exc.message or str(exc), outcome="Failed")
     except Exception as exc:
@@ -133,6 +153,20 @@ def _run(run_id: str, kind: str, plan_id: str, confirm: bool) -> None:
         )
     else:
         _settle(run_id, "done", phase="done", outcome=_outcome(kind, run_id))
+
+
+def _turn_on_sync(run: _Run, plan_id: str, direction: str) -> None:
+    """The import is done and stays done: a sync that cannot turn on is said in the log, and
+    the Data sync page offers to turn it on."""
+    from backend.services.ynab_sync import runner
+
+    try:
+        runner.update_settings(enabled=True, interval=None, plan_id=plan_id, direction=direction)
+    except OpenNetWorthError as exc:
+        run.log(f"The sync was not turned on: {exc.message or exc}. Turn it on from Data sync.")
+        return
+    label = {"both": "both ways", "from_ynab": "from YNAB", "to_ynab": "to YNAB"}
+    run.log(f"Sync turned on: {label.get(direction, direction)}.")
 
 
 def _load_plan(run: _Run, store: YnabConfigStore, plan_id: str) -> dict:
@@ -189,6 +223,7 @@ def _execute(run: _Run, kind: str, plan_id: str, confirm: bool) -> None:
         book_state=state,
         preview={
             **mapping.preview_summary(plan),
+            **preview.details(plan),
             "book_state": state,
             **_book_changes(plan, state),
         },

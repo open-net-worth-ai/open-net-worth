@@ -30,6 +30,32 @@ export const PREVIEW: Preview = {
   currency_blocked: false,
   money_data: [],
   prune: { categories: ['Vacation'], groups: [] },
+  category_groups: [
+    { name: 'Bills', categories: ['Rent', 'Utilities'] },
+    { name: 'Needs', categories: ['Groceries'] },
+  ],
+  transaction_list: [
+    {
+      date: '2026-10-02',
+      kind: 'expense',
+      account: 'Checking',
+      to_account: null,
+      payee: 'Landlord',
+      category: 'Rent',
+      amount: -1200,
+      memo: null,
+    },
+    {
+      date: '2026-10-01',
+      kind: 'income',
+      account: 'Checking',
+      to_account: null,
+      payee: 'Employer',
+      category: null,
+      amount: 3000,
+      memo: null,
+    },
+  ],
 }
 
 let n = 0
