@@ -5,7 +5,7 @@
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react'
-import { RunReport } from './RunReport'
+import { RunReportModal } from './RunReport'
 import { clearQueryCache } from '../../../state/queryCache'
 import { importRun, run } from './importsFixtures'
 import type { RunRecord } from './runs'
@@ -31,7 +31,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-const open = () => render(<RunReport runId={current.id} onBack={() => {}} />)
+const open = () => render(<RunReportModal runId={current.id} onClose={() => {}} />)
 
 describe('RunReport', () => {
   it('lists the mismatches first and folds the checks that match', async () => {

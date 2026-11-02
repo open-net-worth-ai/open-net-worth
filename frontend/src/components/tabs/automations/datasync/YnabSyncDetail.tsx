@@ -5,12 +5,13 @@ import { invalidateQueryCache } from '../../../../state/queryCache'
 import { fDate, fDateTime, fScheduleWhen, timeAgo } from '../../../../utils/format'
 import { Button, ErrorState, SegmentedControl, Select, Switch, TabSkeleton } from '../../../ui'
 import { ReviewCard } from '../../imports/ReviewItem'
-import { RunReport } from '../../imports/RunReport'
+import { RunReportModal } from '../../imports/RunReport'
 import { YnabImport } from '../../imports/YnabImport'
 import { KIND_LABEL, detailOf, type RunSummary } from '../../imports/runs'
 import { DIRECTION_LABELS, INTERVAL_LABELS, sendSync, type SyncDirection } from '../../imports/sync'
 import { AutomationMenu } from '../AutomationMenu'
 import { ConnectorPanel } from '../../connectors/ConnectorPanel'
+import { useConnectors } from '../../connectors/useConnectors'
 import { YNAB_SYNC_BLURB, YNAB_SYNC_NAME, useYnabSync, type YnabSyncStage } from './ynabSync'
 
 // The YNAB data sync's page in Automations. Until it is set up the page is the three setup
@@ -29,6 +30,7 @@ export function YnabSyncDetail({
   onOpenReport: (runId: string | null) => void
 }) {
   const sync = useYnabSync()
+  useConnectors() // warm the connector list, so the YNAB panel opens at once
   const [connectOpen, setConnectOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -71,32 +73,12 @@ export function YnabSyncDetail({
         Automations
       </button>
       <span aria-hidden="true">/</span>
-      {reportId ? (
-        <>
-          <button type="button" onClick={() => onOpenReport(null)}>
-            {YNAB_SYNC_NAME}
-          </button>
-          <span aria-hidden="true">/</span>
-          <span className="cur" aria-current="page">
-            Run report
-          </span>
-        </>
-      ) : (
-        <span className="cur" aria-current="page">
-          {YNAB_SYNC_NAME}
-        </span>
-      )}
+      <span className="cur" aria-current="page">
+        {YNAB_SYNC_NAME}
+      </span>
     </nav>
   )
 
-  if (reportId) {
-    return (
-      <div className="a3-wrap" data-od-id="ynab-sync-report">
-        {crumb}
-        <RunReport runId={reportId} onBack={() => onOpenReport(null)} />
-      </div>
-    )
-  }
   if (sync.loading) {
     return (
       <div className="a3-wrap">
@@ -132,10 +114,11 @@ export function YnabSyncDetail({
   return (
     <div className="a3-wrap" data-od-id="ynab-sync-detail">
       {crumb}
+      {reportId && <RunReportModal runId={reportId} onClose={() => onOpenReport(null)} />}
       {connectOpen && (
         <ConnectorPanel
           connectorId="ynab"
-          configureOnOpen={!status.token_saved}
+          configureOnOpen
           onClose={() => {
             setConnectOpen(false)
             sync.refresh()

@@ -158,12 +158,12 @@ describe('YnabSyncDetail setup', () => {
     page()
     const select = (await screen.findByLabelText(/YNAB plan/)) as HTMLSelectElement
     await waitFor(() => expect(select.options.length).toBeGreaterThan(1))
-    const importBtn = screen.getByRole('button', { name: 'Import' }) as HTMLButtonElement
-    expect(importBtn.disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Import' })).toBeNull() // only after a preview
     fireEvent.change(select, { target: { value: 'p1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
-    expect(await screen.findByText(/Household \(USD\) will bring across/)).toBeTruthy()
-    await waitFor(() => expect(importBtn.disabled).toBe(false))
+    expect(await screen.findByText(/Preview of Household \(USD\)/)).toBeTruthy()
+    const importBtn = (await screen.findByRole('button', { name: 'Import' })) as HTMLButtonElement
+    expect(importBtn.disabled).toBe(false)
     fireEvent.click(importBtn)
     await waitFor(() =>
       expect(requests.at(-1)).toMatchObject({
@@ -183,7 +183,7 @@ describe('YnabSyncDetail setup', () => {
     const select = (await screen.findByLabelText(/YNAB plan/)) as HTMLSelectElement
     await waitFor(() => expect(select.options.length).toBeGreaterThan(1))
     fireEvent.change(select, { target: { value: 'p1' } })
-    const importBtn = screen.getByRole('button', { name: 'Import' }) as HTMLButtonElement
+    const importBtn = (await screen.findByRole('button', { name: 'Import' })) as HTMLButtonElement
     await waitFor(() => expect(importBtn.disabled).toBe(false))
     fireEvent.click(importBtn)
     expect(await screen.findByText('Import alongside your existing accounts?')).toBeTruthy()
@@ -337,14 +337,13 @@ describe('YnabSyncDetail once set up', () => {
     )
   })
 
-  it('opens a run as a report under its own breadcrumb', async () => {
+  it('opens a run as a modal over the page, and closing it returns to the page', async () => {
     runs = [importRun()]
     page(runs[0]?.id ?? null)
     expect(await screen.findByText('Verification')).toBeTruthy()
-    expect(screen.getByText('Run report')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'YNAB' }))
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    expect(screen.getByText('Settings')).toBeTruthy() // the page is still underneath
+    fireEvent.click(screen.getByRole('button', { name: /close/i }))
     expect(onOpenReport).toHaveBeenCalledWith(null)
-    fireEvent.click(screen.getByRole('button', { name: 'Automations' }))
-    expect(onBack).toHaveBeenCalled()
   })
 })

@@ -5,7 +5,7 @@
 
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-library/react'
-import { RunReport } from './RunReport'
+import { RunReportModal } from './RunReport'
 import { clearQueryCache } from '../../../state/queryCache'
 import { syncRun, syncStatus } from './importsFixtures'
 import type { RunRecord, TxnChange } from './runs'
@@ -34,7 +34,7 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-const open = () => render(<RunReport runId={current.id} onBack={() => {}} />)
+const open = () => render(<RunReportModal runId={current.id} onClose={() => {}} />)
 
 describe('Sync run report', () => {
   it('shows the counts and the sent transactions with each field before and after', async () => {

@@ -6,6 +6,7 @@ import {
   Cluster,
   ErrorState,
   Meter,
+  Modal,
   Panel,
   Skeleton,
   Stack,
@@ -36,52 +37,10 @@ const BOOK_STATE_LABEL = {
 
 // One run, opened as a page. A running run polls and fills in as it goes; a failed or
 // interrupted one shows everything it captured before it stopped.
-export function RunReport({ runId, onBack }: { runId: string; onBack: () => void }) {
-  const run = useRun(runId)
-  const [actionError, setActionError] = useState<string | null>(null)
-  const r = run.data
-
-  if (run.error) {
-    return (
-      <ErrorState
-        message={run.error instanceof Error ? run.error.message : 'Could not load that run.'}
-        onRetry={() => void run.refresh()}
-      />
-    )
-  }
-  if (!r) return <Skeleton height={160} />
-
-  async function toggleArchive(rec: RunRecord) {
-    setActionError(await setArchived(rec.id, !rec.archived_at))
-    void run.refresh()
-  }
-
+/** Everything under a run's header: its facts, outcome, problems, sections and log. */
+function RunReportBody({ r }: { r: RunRecord }) {
   return (
-    <Stack gap="--space-6">
-      <Cluster justify="between" gap="--space-3">
-        <Cluster gap="--space-3">
-          <Button size="sm" variant="ghost" onClick={onBack}>
-            ‹ Back
-          </Button>
-          <Text size="lg" weight={600}>
-            {runTitle(r)}
-          </Text>
-          <Badge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
-        </Cluster>
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={r.status === 'running'}
-          onClick={() => void toggleArchive(r)}
-        >
-          {r.archived_at ? 'Unarchive' : 'Archive'}
-        </Button>
-      </Cluster>
-      {actionError && (
-        <Text size="sm" tone="bad">
-          {actionError}
-        </Text>
-      )}
+    <>
       <SummaryBar
         cards={[
           { label: 'Kind', value: KIND_LABEL[r.kind] },
@@ -104,7 +63,68 @@ export function RunReport({ runId, onBack }: { runId: string; onBack: () => void
       {r.status === 'running' && <Progress run={r} />}
       <Sections run={r} />
       <Log run={r} />
-    </Stack>
+    </>
+  )
+}
+
+/** One run's report, as a modal over the page it was opened from (the YNAB data sync), so
+ *  closing it returns to the step the user was on. The caller keeps it in the URL. */
+export function RunReportModal({ runId, onClose }: { runId: string; onClose: () => void }) {
+  const run = useRun(runId)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const r = run.data
+
+  async function toggleArchive(rec: RunRecord) {
+    setActionError(await setArchived(rec.id, !rec.archived_at))
+    void run.refresh()
+  }
+
+  return (
+    <Modal
+      open
+      size="xl"
+      onClose={onClose}
+      title={
+        r ? (
+          <Cluster gap="--space-3">
+            {runTitle(r)}
+            <Badge tone={STATUS_TONE[r.status]}>{STATUS_LABEL[r.status]}</Badge>
+          </Cluster>
+        ) : (
+          'Run report'
+        )
+      }
+      headerActions={
+        r ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={r.status === 'running'}
+            onClick={() => void toggleArchive(r)}
+          >
+            {r.archived_at ? 'Unarchive' : 'Archive'}
+          </Button>
+        ) : undefined
+      }
+    >
+      {run.error ? (
+        <ErrorState
+          message={run.error instanceof Error ? run.error.message : 'Could not load that run.'}
+          onRetry={() => void run.refresh()}
+        />
+      ) : !r ? (
+        <Skeleton height={160} />
+      ) : (
+        <Stack gap="--space-6">
+          {actionError && (
+            <Text size="sm" tone="bad">
+              {actionError}
+            </Text>
+          )}
+          <RunReportBody r={r} />
+        </Stack>
+      )}
+    </Modal>
   )
 }
 

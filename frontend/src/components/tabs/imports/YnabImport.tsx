@@ -70,8 +70,10 @@ export function YnabImport(props: {
   const [confirm, setConfirm] = useState<ConfirmDialogData | null>(null)
 
   const running = props.runs?.find((r) => r.status === 'running') ?? null
-  // Pick the plan a run is already about, so a reopened page shows its progress.
+  // Pick the plan a run is already about, so a reopened page shows its progress; failing that,
+  // the only plan the token can see, so its latest preview shows without choosing it again.
   if (!planId && running) setPlanId(running.plan_id)
+  else if (!planId && plans.data?.length === 1) setPlanId(plans.data[0]!.id)
   // The newest finished preview of this plan holds the book state and warnings to act on.
   const latest = props.runs?.find(
     (r) => r.plan_id === planId && r.kind === 'preview' && r.status === 'done' && !r.archived_at,
@@ -117,38 +119,50 @@ export function YnabImport(props: {
         </Text>
       ) : (
         <Stack gap="--space-4">
-          <PlanPicker
-            plans={plans}
-            planId={planId}
-            disabled={!!running}
-            onChange={setPlanId}
-            action={
+          <PlanPicker plans={plans} planId={planId} disabled={!!running} onChange={setPlanId} />
+          {running ? (
+            <LiveStrip run={running} onOpen={props.onOpen} />
+          ) : preview ? (
+            // One step at a time: the preview's result, then the import it describes.
+            <>
+              <PreviewSummary preview={preview} />
               <Cluster gap="--space-2">
                 <Button
-                  variant="secondary"
-                  disabled={!planId || !!running}
-                  loading={busy}
-                  onClick={() => void launch('preview')}
-                >
-                  Preview
-                </Button>
-                <Button
+                  size="sm"
                   variant="primary"
-                  disabled={!preview || preview.currency_blocked || !!running}
+                  disabled={preview.currency_blocked}
                   onClick={importNow}
                 >
                   Import
                 </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  loading={busy}
+                  onClick={() => void launch('preview')}
+                >
+                  Preview again
+                </Button>
               </Cluster>
-            }
-          />
+            </>
+          ) : (
+            <div>
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={!planId}
+                loading={busy}
+                onClick={() => void launch('preview')}
+              >
+                Preview
+              </Button>
+            </div>
+          )}
           {startError && (
             <Text size="sm" tone="bad">
               {startError}
             </Text>
           )}
-          {running && <LiveStrip run={running} onOpen={props.onOpen} />}
-          {!running && preview && <PreviewSummary preview={preview} />}
         </Stack>
       )}
 
@@ -169,7 +183,6 @@ function PlanPicker(props: {
   planId: string
   disabled: boolean
   onChange: (id: string) => void
-  action: React.ReactNode
 }) {
   const { plans } = props
   if (plans.error) {
@@ -204,17 +217,14 @@ function PlanPicker(props: {
   }
   return (
     <FormField label="YNAB plan" htmlFor="imports-ynab-plan" required>
-      <Cluster gap="--space-2">
-        <Select
-          id="imports-ynab-plan"
-          value={props.planId}
-          placeholder="Choose a plan…"
-          options={options}
-          disabled={props.disabled}
-          onChange={(e) => props.onChange(e.target.value)}
-        />
-        {props.action}
-      </Cluster>
+      <Select
+        id="imports-ynab-plan"
+        value={props.planId}
+        placeholder="Choose a plan…"
+        options={options}
+        disabled={props.disabled}
+        onChange={(e) => props.onChange(e.target.value)}
+      />
     </FormField>
   )
 }
@@ -253,7 +263,7 @@ function PreviewSummary({ preview: p }: { preview: Preview }) {
   return (
     <Stack gap="--space-3">
       <Text size="sm" weight={600}>
-        {p.plan_name} ({p.currency}) will bring across
+        Preview of {p.plan_name} ({p.currency}). Nothing is written until you import.
       </Text>
       <SummaryBar
         cards={[
@@ -280,9 +290,8 @@ function PreviewSummary({ preview: p }: { preview: Preview }) {
       )}
       {p.currency_blocked && (
         <Text size="xs" tone="bad">
-          This book&apos;s base currency is {p.base_currency} but the plan is {p.currency}, and the
-          book already holds {p.money_data.join(', ')}. Change the base currency in Settings first,
-          or import into an empty book.
+          Can&apos;t import: this book is in {p.base_currency} and already has data, and the plan is
+          in {p.currency}. Import into an empty book, or one in {p.currency}.
         </Text>
       )}
       {(p.prune.categories.length > 0 || p.prune.groups.length > 0) && (
