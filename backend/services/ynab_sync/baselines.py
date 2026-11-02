@@ -50,6 +50,15 @@ class Baselines:
         self.declined.add(key)
         self._dirty.add(f"x:{key}")
 
+    def told(self, env_id: str) -> bool:
+        """Whether the person was already told this envelope's categories share their Assigned
+        (by the import's log, or an earlier run)."""
+        return f"n:{env_id}" in self.declined
+
+    def tell(self, env_id: str) -> None:
+        if not self.told(env_id):
+            self.decline(f"n:{env_id}")
+
     def drop_assigned_of(self, cid: str) -> None:
         """Forget the Assigned both sides held for one YNAB category (it stopped, then resumed,
         syncing with an envelope): the next comparison starts from what each side holds now."""

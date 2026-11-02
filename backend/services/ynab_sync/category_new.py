@@ -10,7 +10,6 @@ from backend.services.ynab_migration.category_match import env_ref, propose
 from backend.services.ynab_migration.mapping import clean
 from backend.services.ynab_pairs import norm
 from backend.services.ynab_sync import conflicts
-from backend.services.ynab_sync.category_base import shared_line
 from backend.services.ynab_sync.category_pairs import Pairs
 from backend.services.ynab_sync.client import RateCapReached
 
@@ -175,7 +174,7 @@ class News(Pairs):
         )  # fmt: skip
         self.base.set_cat(doc)
         if held is not None and solo is None:
-            self.note_once(held["id"], held["name"], shared_line(held["name"]))
+            self.note_shared(held)
         self.count("pulled", text)
 
     def ask(self, c: dict, m) -> None:
@@ -258,7 +257,7 @@ class News(Pairs):
             )
         )  # fmt: skip
         if held is not None and solo is None:
-            self.note_once(held["id"], held["name"], shared_line(held["name"]))
+            self.note_shared(held)
         self.count("sent", f"Added {cat['label']} to YNAB.")
 
     # ── the budget link ──
@@ -302,7 +301,7 @@ class News(Pairs):
     def say_paused(self, cat: dict) -> None:
         held = self.book.env_of.get(cat["id"])
         if held is not None:
-            self.note_once(held["id"], held["name"], shared_line(held["name"]))
+            self.note_shared(held)
             return
         line = (
             f"{cat['label']} is no longer in an envelope, so its Assigned isn't synced with YNAB."

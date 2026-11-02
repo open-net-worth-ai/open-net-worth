@@ -135,7 +135,9 @@ time.
   later assigns money to it, it gets an envelope here. Categories in those two groups are never
   followed into a group here. A group renamed on one side is renamed on
   the other. Income categories are not sent: their transactions go to YNAB as Ready to Assign
-  inflows.
+  inflows. When a YNAB category is matched with one of yours, whether at import or later, both
+  are taken as they stand: it is never moved or renamed on the first sync, only when someone
+  changes something afterwards.
 - **Assigned only for one-category envelopes.** A category's Assigned syncs with its envelope only
   while the envelope holds just that category. If you put another category in, the run says so
   once ("Food holds several categories, so its Assigned isn't synced with YNAB."); take it out

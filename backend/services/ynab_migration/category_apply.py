@@ -48,14 +48,18 @@ def _category_for(c: dict, d: dict, book: Book, groups: Groups, made: Counter) -
     return cat
 
 
-def _pair(plan_id: str, c: dict, cat: dict, env: dict | None, old: dict | None) -> dict:
+def _pair(
+    plan_id: str, c: dict, cat: dict, env: dict | None, held: dict | None, old: dict | None
+) -> dict:
     env_id = env["id"] if env else None
     if old is not None and not old.get("gone") and old["category"] == cat["id"]:
         return {**old, "env": env_id}
+    # The book side as the sync reads it (``category_base.ostate``): the group of whichever
+    # envelope holds the category, shared or not. Both sides are recorded as they stand.
     onw = {
         "name": cat["label"],
         "hidden": bool(cat.get("hidden")),
-        "group": env["group_id"] if env else None,
+        "group": held["group_id"] if held else None,
     }
     ynab = {"name": c["name"], "hidden": c["hidden"], "group": c["group_id"]}
     return ynab_pairs.cat_doc(plan_id, c["id"], cat["id"], env_id, onw, ynab)
@@ -84,8 +88,11 @@ def apply(plan: dict, decisions: dict[str, dict], plan_id: str, book: Book):
             made["envelopes"] += 1
         elif env is None and held is not None:
             notes[held["id"]] = shared_note(held["name"])
-        ynab_pairs.save([_pair(plan_id, c, book.rows[cat["id"]], env, old_cats.get(c["id"]))])
+        held = book.env_of.get(cat["id"])
+        ynab_pairs.save([_pair(plan_id, c, book.rows[cat["id"]], env, held, old_cats.get(c["id"]))])
         out[c["id"]] = {"category": cat["id"], "envelope": env["id"] if env else None}
+    # What the log says now is not said again by the first sync.
+    ynab_pairs.save([ynab_pairs.decline_doc(plan_id, f"n:{env_id}") for env_id in notes])
     return out, made, list(notes.values()), {v["category"] for v in out.values()}
 
 

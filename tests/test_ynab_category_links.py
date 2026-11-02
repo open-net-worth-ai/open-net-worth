@@ -226,3 +226,60 @@ def test_verification_does_not_blame_an_assigned_that_is_not_synced(ynab):
     assert ready["difference"] and ready["note"] == (
         "Can differ, as the Assigned of Fun Money isn't synced."
     )
+
+
+def category_patches(ynab):
+    return [w for w in ynab.writes if w[0] == "PATCH" and "/categories/" in w[1]]
+
+
+def test_a_shared_envelope_in_another_group_than_its_ynab_category_is_not_moved_by_the_first_syncs(
+    ynab,
+):
+    from tests.test_ynab_sync_service import sync
+
+    dining = env("Dining out")  # a starter envelope, in Wants; YNAB has Dining out under Needs
+    coffee = change(type="category_create", label="Coffee", kind="expense")
+    change(type="envelope_add_category", envelope_id=dining["id"], category_id=coffee["id"])
+    assert dining["group_id"] == group("Wants")["id"]
+    job = run(sync_direction="both")
+    assert job["status"] == "done", job["error"]
+    pair = pair_of(ynab, "dine")
+    assert pair["category"] == cat("Dining out")["id"] and pair["env"] is None
+    assert pair["onw"]["group"] == group("Wants")["id"]  # as the sync reads it
+    for _ in range(2):
+        sync()
+    assert category_patches(ynab) == []
+    assert env("Dining out")["group_id"] == group("Wants")["id"]
+    dine = ynab.state["C"]["dine"]
+    home = next(
+        g["name"] for g in ynab.state["groups"] if any(c["id"] == dine for c in g["categories"])
+    )
+    assert home == "Needs"
+
+
+def test_a_one_category_envelope_in_another_group_than_its_ynab_category_is_not_moved_either(
+    ynab,
+):
+    from tests.test_ynab_sync_service import sync
+
+    change(type="move_category", category=env("Groceries")["id"], group_id=group("Wants")["id"])
+    assert run(sync_direction="both")["status"] == "done"
+    for _ in range(2):
+        sync()
+    assert category_patches(ynab) == []
+    assert env("Groceries")["group_id"] == group("Wants")["id"]
+
+
+def test_the_note_about_a_shared_envelope_is_said_by_the_import_and_not_again_by_the_sync(ynab):
+    from backend.services import import_runs
+    from tests.test_ynab_sync_service import sync
+
+    util = env("Utilities")
+    extra = change(type="category_create", label="Water", kind="expense")
+    change(type="envelope_add_category", envelope_id=util["id"], category_id=extra["id"])
+    job = run(sync_direction="both")
+    said = "Utilities holds several categories, so its Assigned isn't synced with YNAB."
+    assert [e["line"] for e in job["log"]].count(said) == 1
+    run_after = sync()  # Water is new here: it goes to YNAB, and Utilities' note is not repeated
+    notes = import_runs.get(run_after["run_id"]).get("notes") or []
+    assert said not in [n["reason"] for n in notes]

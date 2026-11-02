@@ -154,6 +154,12 @@ class Base:
         self.tally["categories"] += 1
         recorder.category_change(direction, text)
 
+    def note_shared(self, env: dict) -> None:
+        """Said once, ever: the import (or an earlier run) may have said it already."""
+        if not self.base.told(env["id"]):
+            self.base.tell(env["id"])
+            self.note_once(env["id"], env["name"], shared_line(env["name"]))
+
     def note_once(self, key: str, item: str, line: str) -> None:
         if key not in self.noted:
             self.noted.add(key)
