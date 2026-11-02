@@ -26,6 +26,9 @@ class AutomationApprovalContext:
     # approval list as an offer and you widen what is reachable; read an offer as an
     # approval list and you silently approve everything the playbook can touch.
     always_allowed_tools: frozenset[str] = frozenset()
+    # Tools this Automation's owner BLOCKED for it — refused at dispatch whatever the tool's
+    # global value, checked before ``always_allowed_tools``.
+    blocked_tools: frozenset[str] = frozenset()
 
 
 _approval_context: ContextVar[AutomationApprovalContext | None] = ContextVar(
@@ -59,6 +62,7 @@ class AutomationRunnerRequest:
     payload: dict = field(default_factory=dict)
     permission_mode: str = "manual"
     always_allowed: list[dict] = field(default_factory=list)
+    blocked: list[str] = field(default_factory=list)
     # The rule that woke the run (stored trigger + names of what it points at) and the last
     # run that completed — the instructions carry no timing, so the run learns both here.
     configured_trigger: dict = field(default_factory=dict)

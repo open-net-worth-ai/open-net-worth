@@ -7,7 +7,7 @@ import anthropic
 
 from backend.core.cost_context import get_cost_surface
 
-from .base import AIProvider
+from .base import AIProvider, log_text_cap
 from .pricing import cost_usd_anthropic
 
 log = logging.getLogger(__name__)
@@ -400,7 +400,7 @@ class AnthropicProvider(AIProvider):
             for b in msg.content
             if getattr(b, "type", "") == "thinking"
         )
-        _LOG_TEXT_CAP = 8000
+        _LOG_TEXT_CAP = log_text_cap(source)
         log.info(
             "complete_done  source=%s  model=%s  input=%d  cache_write=%d  cache_read=%d  output=%d  "
             "cost_usd=%.5f  content_chars=%d  thinking_chars=%d\n"

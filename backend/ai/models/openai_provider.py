@@ -64,7 +64,7 @@ import json
 import logging
 from typing import AsyncGenerator, List, Optional
 
-from .base import AIProvider
+from .base import AIProvider, log_text_cap
 from .pricing import cost_usd_openai
 
 log = logging.getLogger(__name__)
@@ -902,7 +902,7 @@ class OpenAIProvider(AIProvider):
         message_reasoning = (
             getattr(choice.message, "reasoning", None) if choice and choice.message else None
         ) or ""
-        _LOG_TEXT_CAP = 8000
+        _LOG_TEXT_CAP = log_text_cap(source)
         log.info(
             "complete_done  provider=openai_compatible  source=%s  model=%s  "
             "input=%d  cached=%d  output=%d  cost_usd=%.5f  "
