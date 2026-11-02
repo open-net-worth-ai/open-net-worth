@@ -25,7 +25,8 @@ def linked(monkeypatch):
     """Both ends of the link in this process: the app's ``Host`` on a loop of its own, and the
     worker's ``AppLink``, joined by two pipes."""
     app_loop = asyncio.new_event_loop()
-    threading.Thread(target=app_loop.run_forever, daemon=True).start()
+    loop_thread = threading.Thread(target=app_loop.run_forever, daemon=True)
+    loop_thread.start()
     to_app_r, to_app_w = (os.fdopen(fd, mode) for fd, mode in zip(os.pipe(), ("rb", "wb")))
     to_worker_r, to_worker_w = (os.fdopen(fd, mode) for fd, mode in zip(os.pipe(), ("rb", "wb")))
     app = host.Host(to_worker_w, app_loop)
@@ -36,8 +37,10 @@ def linked(monkeypatch):
         for line in to_app_r:
             app.handle(json.loads(line))
 
-    threading.Thread(target=serve, daemon=True).start()
-    link = AppLink(to_worker_r, to_app_w, on_stop=lambda: None, on_app_gone=lambda: None)
+    server = threading.Thread(target=serve, daemon=True)
+    server.start()
+    gone = threading.Event()
+    link = AppLink(to_worker_r, to_app_w, on_stop=lambda: None, on_app_gone=gone.set)
     monkeypatch.setattr(service, "claim_call", lambda room: "sess-call" if room == "r1" else None)
 
     async def ask(session_id, said, *, understood="", model_ref=""):
@@ -46,7 +49,14 @@ def linked(monkeypatch):
 
     monkeypatch.setattr(desk, "ask", ask)
     yield link
+    # Close both pipes so each reader sees the end and returns: no thread outlives the test.
+    to_app_w.close()
+    to_worker_w.close()
+    server.join(5)
+    assert gone.wait(5)
     app_loop.call_soon_threadsafe(app_loop.stop)
+    loop_thread.join(5)
+    app_loop.close()
 
 
 def test_the_worker_reaches_lucius_only_on_a_conversation_the_app_handed_it(linked):

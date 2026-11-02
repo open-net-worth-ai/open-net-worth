@@ -528,3 +528,51 @@ def test_a_call_can_be_held_in_vietnamese_but_never_with_an_english_only_ear(cli
     # Switching back to an English-only model is refused while the call is in Vietnamese.
     back = client.put("/api/voice/config", json={"stt_model": "assemblyai/universal-streaming"})
     assert back.status_code == 422
+
+
+def _ready_config():
+    from backend.db.voice_config_store import VoiceConfigStore
+
+    VoiceConfigStore().update(
+        {
+            "enabled": True,
+            "livekit_url": "wss://acme.livekit.cloud",
+            "api_key": "APIx",
+            "api_secret": SECRET,
+        }
+    )
+
+
+def test_with_the_flag_off_no_worker_starts_and_no_call_is_taken(db_isolated, monkeypatch):
+    """Owner, 2026-11-03: off must mean off — not just no Call button. Set up or not, no
+    worker process is started, and a worker already running refuses every call."""
+    import asyncio
+
+    from backend.connectors.voice import host
+
+    _ready_config()
+    monkeypatch.setattr(service, "libraries_installed", lambda: True)
+    spawned: list = []
+    monkeypatch.setattr(host, "WorkerProcess", lambda *a, **k: spawned.append(a))
+    asyncio.run(service.start())
+    assert spawned == [] and service.status()["running"] is False
+    assert service.calls_allowed() is False
+
+
+def test_flipping_the_flag_starts_or_stops_the_worker_at_once(db_isolated, monkeypatch):
+    """The worker followed the flag only at the next restart: turned off in Settings, it kept
+    taking calls until then. The flag's own switch now applies it."""
+    from backend.api.feature_flags import router
+
+    reloads: list[str] = []
+
+    async def reload():
+        reloads.append("reload")
+
+    monkeypatch.setattr(service, "reload", reload)
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    assert client.put("/api/feature-flags/voice_calls", json={"enabled": True}).status_code == 200
+    assert client.put("/api/feature-flags/voice_calls", json={"enabled": False}).status_code == 200
+    assert reloads == ["reload", "reload"]
