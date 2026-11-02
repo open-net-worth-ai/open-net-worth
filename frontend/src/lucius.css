@@ -746,6 +746,9 @@
   }
   .lx-call-btn svg {
     display: block;
+    /* Optical centring: the filled handset's weight sits 1.2 units left of and 1.1 below its
+       box's centre (of 24 — measured), so a box-centred glyph read off-centre (owner). */
+    transform: translate(0.7px, -0.6px);
   }
   .lx-call-btn--setup {
     opacity: 0.55;
