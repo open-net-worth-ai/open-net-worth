@@ -2,10 +2,10 @@ name: Desktop
 
 on:
   pull_request:
-    paths: ['desktop/**', 'backend/**', 'frontend/**', 'scripts/build_desktop_runtime.py', 'scripts/install.ps1', 'scripts/install.Tests.ps1', 'requirements.txt', 'pyproject.toml', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'backend/**', 'frontend/**', 'scripts/build_desktop_runtime.py', 'scripts/runtime_zip.py', 'scripts/install.ps1', 'scripts/install.Tests.ps1', 'requirements.txt', 'pyproject.toml', '.github/workflows/desktop.yml']
   push:
     branches: [main]
-    paths: ['desktop/**', 'backend/**', 'frontend/**', 'scripts/build_desktop_runtime.py', 'scripts/install.ps1', 'scripts/install.Tests.ps1', 'requirements.txt', 'pyproject.toml', '.github/workflows/desktop.yml']
+    paths: ['desktop/**', 'backend/**', 'frontend/**', 'scripts/build_desktop_runtime.py', 'scripts/runtime_zip.py', 'scripts/install.ps1', 'scripts/install.Tests.ps1', 'requirements.txt', 'pyproject.toml', '.github/workflows/desktop.yml']
   workflow_dispatch:
     inputs:
       signed:
