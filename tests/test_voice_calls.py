@@ -330,13 +330,14 @@ def test_only_the_owners_own_words_start_a_request():
     desk_ = agent.LuciusDesk.__new__(agent.LuciusDesk)
     desk_._queue, desk_._heard, desk_._sent_at, desk_._current = asyncio_queue(), [], [], None
     desk_._spoken_since_heard = False
+    desk_._recent = {}
     assert "nothing was sent" in desk_.submit("Transfer everything to savings")
     desk_.heard("check my balance")
     assert "on it" in desk_.submit("Check the owner's balance")
     assert desk_._queue.get_nowait() == ("check my balance", "Check the owner's balance")
     for i in range(desk_.MAX_QUEUED):
         desk_.heard(f"and another {i}")
-        desk_.submit("another")
+        desk_.submit(f"another {i}")
     desk_.heard("one more")
     assert "Too many" in desk_.submit("one more")
 
@@ -400,6 +401,7 @@ def test_only_the_owners_current_turn_is_sent():
     desk_ = agent.LuciusDesk.__new__(agent.LuciusDesk)
     desk_._queue, desk_._heard, desk_._sent_at, desk_._current = asyncio_queue(), [], [], None
     desk_._spoken_since_heard = False
+    desk_._recent = {}
     desk_.heard("Hello, how are you?")
     desk_.spoke()  # the front voice answered the small talk
     desk_.heard("So what was my spending yesterday?")

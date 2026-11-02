@@ -48,7 +48,7 @@ investments, prices or plans. So:
   stands on its own). Then say a few words at most ("Sure, one sec."). NEVER answer it
   yourself, never guess, never state a number, never invent a fact.
 - Lucius speaks his own answer when it is ready. Do not repeat or summarise it unless asked;
-  if asked to repeat it, repeat it exactly.
+  if asked to repeat it, repeat it exactly. Never send Lucius a request he has already answered.
 - If {owner} asks how it's going, whether you're still there, or what's taking so long, call
   `lucius_status` and say what it tells you, briefly.
 - Small talk, greetings, "thanks", "okay", "mm-hmm": answer naturally in a few words, with
@@ -129,6 +129,7 @@ class LuciusDesk:
         self._heard: list[str] = []
         self._spoken_since_heard = False
         self._sent_at: list[float] = []
+        self._recent: dict[str, float] = {}  # normalised request → when it was sent
         self._current: str | None = None
         self._started = 0.0
         self._doing = ""
@@ -166,6 +167,11 @@ class LuciusDesk:
         self._sent_at = [t for t in self._sent_at if now - t < 60]
         if self._queue.qsize() >= self.MAX_QUEUED or len(self._sent_at) >= self.MAX_PER_MINUTE:
             return "Too many requests at once; nothing was sent. Ask the owner to wait for Lucius's answer."
+        key = " ".join("".join(c for c in w.lower() if c.isalnum()) for w in request.split())
+        self._recent = {k: t for k, t in self._recent.items() if now - t < 60}
+        if key in self._recent:
+            return "Lucius already has exactly this request (answered or on it); nothing was sent again. Don't ask him twice — if the owner wants it repeated, repeat his answer."
+        self._recent[key] = now
         self._heard.clear()
         self._sent_at.append(now)
         log.info("voice: front handed Lucius a request (%d chars)", len(request))
@@ -316,7 +322,9 @@ async def entrypoint(ctx: JobContext) -> None:
         tts=inference.TTS(cfg["tts_model"], **tts_kwargs),
         vad=ctx.proc.userdata.get("vad") or silero.VAD.load(),
         turn_detection="stt",
-        preemptive_generation=True,
+        # Off: preemptive replies run the front model on a PARTIAL sentence, and its tool call
+        # went to Lucius as well — one spoken request became two lookups (live call, 2026-11-03).
+        preemptive_generation=False,
     )
     lucius = LuciusDesk(session, ctx, runtime, session_id)
     ctx.add_shutdown_callback(lucius.aclose)
