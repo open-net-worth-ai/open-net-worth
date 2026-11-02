@@ -38,6 +38,8 @@ export interface MonitoringConfig {
   ai_opinion_level?: OpinionLevel
   holdings_brief_verbosity?: BriefVerbosity
   watchlist_brief_verbosity?: BriefVerbosity
+  // The user's own words on what Intel should tell them (experiment: intel_delivery_decider)
+  delivery_instructions?: string
 }
 
 export interface AlertChannel {

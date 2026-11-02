@@ -69,6 +69,7 @@ current base; otherwise recompute via `txn_base_amount()`.
 | Owned assets | `owned_assets_service.apply_owned_asset_change` |
 | Intel stories / timeline | `intel_stories_service.apply_story_change` |
 | Intel claims (cross-subject push dedup) | `claims_service.apply_claim_push` |
+| Intel delivery (now / later / skip, flag `intel_delivery_decider`) | `news_delivery.apply_delivery_change` |
 | Memory | `memory_write.apply_memory_change` |
 
 - `ledger.resolve_transaction_row(...)` is the resolution half, NO store write — previews render

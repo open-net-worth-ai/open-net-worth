@@ -1531,3 +1531,43 @@ claims = Table(
     Index("ix_claims_seq", "seq", unique=True),
     Index("ix_claims_group_key", "group_key"),
 )
+
+# ── `news_deliveries` — the Intel delivery decider's record (flag `intel_delivery_decider`, ADR
+# 2026-11-02-intel-decides-news-delivery-code-keeps-safety-rails). One row per candidate
+# notification the three Intel senders (analysis, price alert / crash-watch, watch alert) would
+# have pushed: `pending` until Lucius decides, then `waiting` (a roundup will carry it), `told`,
+# `skipped` (stays in the Intel tab), `superseded` (a newer candidate for the same story
+# replaced it) or `expired` (waited past 7 days). Promoted columns carry the status machine and
+# the reads (`status`, `story_id`); `payload` is the verbatim row. Runtime scheduler state, like
+# `pending_pushes`: checkpoint-EXCLUDED (a /rewind must never turn a told item back into an
+# unsent one), no FK to `intel_stories` (`story_id` is an opaque id, as in `claims`), and
+# additive — with the flag off nothing reads or writes it.
+news_deliveries = Table(
+    "news_deliveries",
+    metadata,
+    Column("id", Text, primary_key=True),
+    Column("seq", Integer, nullable=False),
+    Column("status", Text, nullable=False, server_default=text("'pending'")),
+    Column("decision", Text, nullable=True),
+    Column("source", Text, nullable=False),
+    Column("story_id", Text, nullable=False, server_default=text("''")),
+    Column("subject", Text, nullable=False, server_default=text("''")),
+    Column("user_set", Integer, nullable=False, server_default=text("0")),
+    Column("created_at", Text, nullable=False),
+    Column("decided_at", Text, nullable=True),
+    Column("told_at", Text, nullable=True),
+    Column("expires_at", Text, nullable=False),
+    Column("payload", JSON, nullable=False),  # verbatim row (round-trip source of truth)
+    CheckConstraint(
+        "status IN ('pending','waiting','told','skipped','superseded','expired')",
+        name=conv("ck_news_deliveries_status"),
+    ),
+    CheckConstraint(
+        "decision IS NULL OR decision IN ('now','later','skip')",
+        name=conv("ck_news_deliveries_decision"),
+    ),
+    CheckConstraint("user_set IN (0,1)", name=conv("ck_news_deliveries_user_set_bool")),
+    Index("ix_news_deliveries_seq", "seq", unique=True),
+    Index("ix_news_deliveries_status", "status"),
+    Index("ix_news_deliveries_story_id", "story_id"),
+)

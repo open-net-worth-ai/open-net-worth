@@ -177,6 +177,7 @@ Design constraints:
 from __future__ import annotations
 
 import asyncio
+import functools
 import logging
 import time
 from datetime import datetime, timedelta, timezone
@@ -191,7 +192,7 @@ from backend.ai.structured import complete_model
 from backend.core.urls import registrable_domain
 from backend.db.intel_stories_store import IntelStoriesStore
 from backend.db.pending_analysis_store import PendingAnalysisStore
-from backend.monitoring import push_retry, topic_analyst
+from backend.monitoring import delivery, delivery_decider, push_retry, topic_analyst
 from backend.monitoring.analyst_prompt import (
     clamped_recency_hours,
     collapse_to_distinct_stories,
@@ -1627,6 +1628,11 @@ async def run_analysis_sweep() -> int:
     except Exception as exc:
         logger.warning("analyst: pending-push drain failed: %s", type(exc).__name__)
 
+    try:
+        await delivery_decider.run_tick()
+    except Exception as exc:
+        logger.warning("analyst: delivery decider tick failed: %s", type(exc).__name__)
+
     pa_store = PendingAnalysisStore()
     try:
         await asyncio.to_thread(_reclaim_stale_claims, pa_store)
@@ -2480,6 +2486,37 @@ async def _push_analysis(
         await push_retry.handle_push_result(delivered, message, channels, label, ticker)
     except Exception as exc:
         logger.warning("analyst: push failed for %s: %s", ticker, type(exc).__name__)
+
+
+async def _deliver_analysis(
+    label: str,
+    ticker: str,
+    parsed: dict,
+    evidence: list[dict] | None = None,
+    *,
+    story_id: str = "",
+    subject: str = "",
+    materiality: str = "",
+) -> None:
+    """The single call site for a push-worthy analysis: ``delivery.route`` runs ``_push_analysis``
+    unchanged with the ``intel_delivery_decider`` flag off, and hands Lucius the candidate with it on."""
+
+    def candidate() -> dict:
+        return delivery.analysis_candidate(
+            label,
+            ticker,
+            parsed,
+            sources=source_dicts(evidence or []),
+            story_id=story_id,
+            subject=subject,
+            materiality=materiality,
+            legacy_message=_format_analysis(
+                label, ticker, parsed, sources=_source_links(evidence or [])
+            ),
+        )
+
+    legacy = functools.partial(_push_analysis, label, ticker, parsed, evidence, story_id=story_id)
+    await delivery.route(candidate, legacy)
 
 
 def _create_news_spike_signal(
@@ -3372,8 +3409,14 @@ async def _process_linked_pair(
     )
 
     if asset_push:
-        await _push_analysis(
-            asset_label, asset_ticker, parsed, evidence, story_id=_asset_updated.get("id") or ""
+        await _deliver_analysis(
+            asset_label,
+            asset_ticker,
+            parsed,
+            evidence,
+            story_id=_asset_updated.get("id") or "",
+            subject=asset_subject,
+            materiality=materiality,
         )
         if pair_group_key:
             _claims_svc.apply_claim_push(
@@ -3391,8 +3434,14 @@ async def _process_linked_pair(
             topic_subject,
         )
     elif topic_push:
-        await _push_analysis(
-            topic_label, "", parsed, evidence, story_id=_topic_updated.get("id") or ""
+        await _deliver_analysis(
+            topic_label,
+            "",
+            parsed,
+            evidence,
+            story_id=_topic_updated.get("id") or "",
+            subject=topic_subject,
+            materiality=materiality,
         )
         if pair_group_key:
             _claims_svc.apply_claim_push(
@@ -3671,8 +3720,14 @@ async def _process_row(
         row, materiality, decision_relevant, entry_meta, group_key=group_key, evidence=evidence
     )
     if should_push:
-        await _push_analysis(
-            label, ticker, parsed, evidence, story_id=_updated_signal.get("id") or ""
+        await _deliver_analysis(
+            label,
+            ticker,
+            parsed,
+            evidence,
+            story_id=_updated_signal.get("id") or "",
+            subject=subject,
+            materiality=materiality,
         )
         if group_key:
             _claims_svc.apply_claim_push(

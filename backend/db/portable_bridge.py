@@ -436,6 +436,7 @@ from backend.db.tables import (
     memory_forgotten,
     memory_topic_summaries,
     merge_journal,
+    news_deliveries,
     news_sources,
     notification_log,
     option_contracts,
@@ -1241,6 +1242,13 @@ def _wipe_claims(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, claims, "id")
 
 
+# news_deliveries (flag intel_delivery_decider, revision 202611021200) — wipe-only: the decider's
+# record of what Intel told the person is runtime state about their instruments, not a book fact,
+# so it has no BRIDGED key; `/api/reset` clears it with the rest.
+def _wipe_news_deliveries(conn: Connection) -> list[Path]:
+    return _capture_then_delete(conn, news_deliveries, "id")
+
+
 def _wipe_statement_formats(conn: Connection) -> list[Path]:
     return _capture_then_delete(conn, statement_formats, "id")
 
@@ -1440,6 +1448,7 @@ _WIPE_FNS: dict[str, Callable[[Connection], list[Path]]] = {
     # push-dedup fact, not a book fact). Reached explicitly by wipe_all below. Security-
     # review fix (2026-08-30) — see _wipe_claims' own docstring for why this entry exists.
     "claims.json": _wipe_claims,
+    "news_deliveries.json": _wipe_news_deliveries,
     # wipe-only — deliberately NOT BRIDGED keys (config/cache, not user-authored financial
     # fact; module docstring, PLAN 4D TASK 6 section, point 2). Reached explicitly by
     # wipe_all below, not via the `for filename in BRIDGED` loop — mirrors asset_briefs.
@@ -1608,6 +1617,7 @@ def wipe_all(conn: Connection) -> list[Path]:
     paths_to_unlink.extend(wipe(conn, "import_runs.json"))
     paths_to_unlink.extend(wipe(conn, "daily_digests.json"))
     paths_to_unlink.extend(wipe(conn, "claims.json"))
+    paths_to_unlink.extend(wipe(conn, "news_deliveries.json"))
     for filename in _MONEY_WIPE_ORDER:
         paths_to_unlink.extend(wipe(conn, filename))
     return paths_to_unlink
