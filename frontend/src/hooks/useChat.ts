@@ -13,7 +13,12 @@ import {
 import { fetchRevision, forgetRevision, syncedRevision } from '../utils/chatRevision'
 import { blockCount, contentCount } from '../utils/chatBubbles'
 import { authFetch } from '../api/client'
-import { emitDataChanged, onConversationChanged, onLiveSessions } from '../lucius/bus'
+import {
+  emitDataChanged,
+  onConversationChanged,
+  onLiveSessions,
+  setLiveSessions,
+} from '../lucius/bus'
 import { useChatMultiTurnEnabled } from './useChatSuggestionsEnabled'
 import { chatSessions } from '../state/chatSessions'
 import {
@@ -254,14 +259,29 @@ export function useChat(
   // either way.
   const [liveSessions, setLiveSessionIds] = useState<string[]>([])
   useEffect(() => onLiveSessions(setLiveSessionIds), [])
-  // Told this conversation changed (a voice call's exchange, recorded in a few ms — gone
-  // before any live poll sees it): re-read it, unless a stream is already showing it.
+  // Told this conversation may have changed (a voice call, every 1.5s: its small talk is
+  // recorded in a few ms, gone before the 4s live poll looks). A turn RUNNING there is joined
+  // live, through the live set; only a finished one is re-read. Re-reading mid-turn fetched a
+  // half-written answer, and the live replay then skipped that many characters as "already
+  // shown" — the answer lost its first words (live call, 2026-11-03).
   useEffect(
     () =>
       onConversationChanged((id) => {
-        if (id === conversationId && chatSessions.getSlice(id).status !== 'streaming') {
-          void resyncIfChanged(id)
-        }
+        if (id !== conversationId) return
+        void (async () => {
+          try {
+            const res = await authFetch('/api/sessions/live')
+            if (!res.ok) return
+            const data = await res.json()
+            const live: string[] = Array.isArray(data.session_ids) ? data.session_ids : []
+            setLiveSessions(live)
+            if (!live.includes(id) && chatSessions.getSlice(id).status !== 'streaming') {
+              await resyncIfChanged(id)
+            }
+          } catch {
+            // The next tick, or the regular live poll, catches up.
+          }
+        })()
       }),
     [conversationId],
   )

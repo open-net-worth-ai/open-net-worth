@@ -134,8 +134,8 @@ export function _resetBusForTests(): void {
 // ── Conversation changed ──────────────────────────────────────────────────────
 // A turn this browser did not send can start AND finish between two live polls — a voice
 // call's small talk is recorded in milliseconds — so the open chat never saw it. Whoever
-// hears that a conversation changed (the voice call, from its room) says so here: the chat
-// showing it re-reads the transcript, and the live poll looks again now instead of in 4s.
+// knows a conversation may have changed (a voice call, while it is on) says so here, and the
+// chat showing it catches up: joins a running turn live, or re-reads a finished one.
 
 type ConversationChangedCb = (sessionId: string) => void
 
