@@ -176,7 +176,8 @@ function Conflicts({ run }: { run: RunRecord }) {
   const [error, setError] = useState<string | null>(null)
   const filed = run.conflicts ?? []
   if (filed.length === 0) return null
-  const open = new Set((live?.conflicts ?? []).map((c) => c.id))
+  // An open item is shown as it stands now, so it keeps its own kind and buttons.
+  const open = new Map((live?.conflicts ?? []).map((c) => [c.id, c]))
 
   async function keep(id: string, side: 'onw' | 'ynab') {
     setBusy(id)
@@ -196,14 +197,16 @@ function Conflicts({ run }: { run: RunRecord }) {
           open.has(c.id) ? (
             <ReviewCard
               key={c.id}
-              item={{
-                id: c.id,
-                kind: 'conflict',
-                title: c.description,
-                reason: c.reason,
-                onw: c.onw_value,
-                ynab: c.ynab_value,
-              }}
+              item={
+                open.get(c.id) ?? {
+                  id: c.id,
+                  kind: 'conflict',
+                  title: c.description,
+                  reason: c.reason,
+                  onw: c.onw_value,
+                  ynab: c.ynab_value,
+                }
+              }
               busy={busy === c.id || !!live?.running}
               onKeep={(side) => void keep(c.id, side)}
             />

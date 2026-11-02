@@ -209,8 +209,8 @@ export function YnabSyncDetail({
                   <span className="count">{status.conflicts.length}</span>
                 </div>
                 <div className="a3-block-note">
-                  Both sides changed these, so the sync left them alone. Pick the version to keep;
-                  it is written to both.
+                  The sync left these alone for you to decide. Each one says what its choice
+                  changes, here and in YNAB.
                 </div>
                 {status.conflicts.map((item) => (
                   <ReviewCard

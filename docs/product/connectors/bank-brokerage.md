@@ -304,6 +304,14 @@ amount or lines (it ignores them), a transaction dated in the future, a category
 have, or a currency other than the plan's. For those you can keep YNAB's version (this book is put
 back in line) or change it in YNAB yourself; once both agree the item clears.
 
+**Transactions dated before a Starting Balance.** A synced transaction dated before an account's
+Starting Balance (one you back-date in YNAB, or here) is booked like any other. Here it counts as
+history already inside the Starting Balance, so the balance doesn't move; YNAB adds it to the
+balance. The sync never moves a Starting Balance on its own: the account waits in the review list
+with both balances. **Move the Starting Balance to** the earliest such date keeps its amount and
+counts those transactions, as YNAB does. **Keep as history** changes nothing, leaves the account
+that much apart from YNAB, and isn't asked again for those transactions.
+
 **Limits.** YNAB allows 200 requests an hour; a run uses at most 40 and carries the rest to the next
 run, so nothing is lost. Turning the sync on replaces the plain YNAB import for that plan (Lucius's
 YNAB fetch refuses it, so nothing is booked twice). When a run would delete many synced

@@ -164,9 +164,9 @@ def assigned_change(
 
 @_safe
 def conflict(rec: Recorder, item: dict) -> None:
-    """A review item just filed: a disagreement is a conflict; anything YNAB or the ledger
-    refused, or YNAB's API cannot take, is an error of this run."""
-    if item["kind"] == "conflict":
+    """A review item just filed: a disagreement, or a Starting Balance waiting on the person, is
+    a conflict; anything YNAB or the ledger refused, or YNAB's API cannot take, is an error."""
+    if item["kind"] in ("conflict", "before_start"):
         rec.add(
             "conflicts",
             {

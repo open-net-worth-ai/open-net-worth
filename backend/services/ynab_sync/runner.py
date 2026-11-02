@@ -29,6 +29,7 @@ from backend.services.ynab_sync import (
     context,
     delta,
     recorder,
+    starts,
     txn_sync,
     units,
 )
@@ -157,6 +158,7 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
         tally["deferred"] += len(st["pending"])
         recorder.phase("reconciling Assigned")
         _assigned_phase(ctx, client, base, change, tally, first)
+        starts.review(ctx, st)
     finally:
         base.flush()
         delta.save_changes(mirror_store, loaded, mirror, change.touched, change.full)

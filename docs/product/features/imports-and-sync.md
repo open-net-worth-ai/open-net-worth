@@ -51,7 +51,9 @@ with), the next sync is next to it, and **Sync now** runs one on demand. Only on
 time.
 
 - **Needs your review** comes first when something does: where both sides changed the same thing,
-  with **Keep Open Net Worth's** and **Keep YNAB's**.
+  with **Keep Open Net Worth's** and **Keep YNAB's**; and an account with a synced transaction
+  dated before its Starting Balance, which moves only if you confirm **Move the Starting Balance**
+  (or choose **Keep as history**).
 - **Schedule**: every 15 or 30 minutes, hourly, every 6 hours, daily, or manual only, and the last
   sync and what it did ("3 sent to YNAB, 1 pulled, 1 needs review"), or why it failed.
 - **YNAB plan**: the plan it pairs with and when it was imported.

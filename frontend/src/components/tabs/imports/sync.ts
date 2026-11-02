@@ -18,12 +18,19 @@ export interface Version {
 }
 export interface ReviewItem {
   id: string
-  kind: 'conflict' | 'unsupported' | 'failed'
-  entity?: 'txn' | 'assigned'
+  kind: 'conflict' | 'unsupported' | 'failed' | 'before_start'
+  entity?: 'txn' | 'assigned' | 'start'
   title: string
   reason: string
   onw: Version | null
   ynab: Version | null
+  // entity 'start': synced rows dated before the account's Starting Balance
+  start?: string
+  earliest?: string
+  count?: number
+  balance_now?: number
+  balance_counted?: number
+  currency?: string
 }
 export interface LastRun {
   trigger: 'scheduled' | 'manual'

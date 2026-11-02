@@ -785,3 +785,96 @@ def test_a_ynab_edit_to_the_far_side_of_a_split_transfer_line_keeps_it_one_trans
     assert not [t for t in live if t["kind"] == "income" and t.get("to_amount") == 20]
     assert ynab_sync.status()["conflicts"] == []
     assert sync()["summary"] == "Nothing changed"
+
+
+def before_start(world, days=20):
+    """A date ``days`` before Checking's Starting Balance."""
+    from datetime import date, timedelta
+
+    start = ledger_service.opening_date(account("Checking"))
+    return start, (date.fromisoformat(start) - timedelta(days=days)).isoformat()
+
+
+def checking_balance():
+    acct = account("Checking")
+    txns = ledger_service.transactions.all()
+    return ledger_service.account_balance(acct, txns, ledger_service.opening_date(acct, txns))
+
+
+def start_items():
+    return [c for c in ynab_sync.status()["conflicts"] if c.get("entity") == "start"]
+
+
+def test_a_ynab_row_dated_before_the_starting_balance_asks_before_moving_it(world):
+    enable()
+    sync()
+    start, early = before_start(world)
+    balance = checking_balance()
+    ynab_stub.ynab_add(world.state, "chk", early, 400_000, "Back pay", "rta")
+    sync()
+    assert row("Back pay")["date"] == early
+    (item,) = start_items()
+    assert item["title"] == "Checking" and item["kind"] == "before_start"
+    assert item["start"] == start and item["earliest"] == early
+    assert item["balance_now"] == balance and item["balance_counted"] == balance + 400
+    # Nothing moved on its own, and a second run does not file it again.
+    assert ledger_service.opening_date(account("Checking")) == start
+    assert checking_balance() == balance
+    sync()
+    assert len(start_items()) == 1
+    # An ordinary new row on the account refreshes the figures the item states.
+    from backend.core.user_time import user_today
+
+    ynab_stub.ynab_add(world.state, "chk", user_today().isoformat(), -10_000, "Kiosk", "groc")
+    sync()
+    (item,) = start_items()
+    assert item["balance_now"] == balance - 10 and f"{balance - 10:,.2f}" in item["reason"]
+    balance -= 10
+    amount = ledger_service.opening_amount(account("Checking"))
+    ynab_sync.resolve.resolve(item["id"], "ynab")
+    assert ledger_service.opening_date(account("Checking")) == early
+    assert ledger_service.opening_amount(account("Checking")) == amount
+    assert checking_balance() == balance + 400
+    world.writes.clear()
+    assert sync()["summary"] == "Nothing changed" and world.writes == []
+    assert start_items() == []
+
+
+def test_keeping_a_back_dated_row_as_history_is_remembered(world):
+    enable()
+    sync()
+    start, early = before_start(world)
+    balance = checking_balance()
+    ynab_stub.ynab_add(world.state, "chk", early, 400_000, "Back pay", "rta")
+    sync()
+    (item,) = start_items()
+    ynab_sync.resolve.resolve(item["id"], "onw")
+    assert ledger_service.opening_date(account("Checking")) == start
+    assert checking_balance() == balance
+    sync()
+    assert start_items() == []
+    # A new back-dated row asks again.
+    _, earlier = before_start(world, days=30)
+    ynab_stub.ynab_add(world.state, "chk", earlier, -10_000, "Old fee", "groc")
+    sync()
+    (again,) = start_items()
+    assert again["earliest"] == earlier and again["count"] == 2
+
+
+def test_a_back_dated_ledger_row_sent_to_ynab_asks_too(world):
+    enable()
+    sync()
+    start, early = before_start(world)
+    create_onw(
+        date=early,
+        kind="expense",
+        description="Forgotten bill",
+        from_account_id=account("Checking")["id"],
+        from_amount=25.0,
+        from_currency="USD",
+        category=categories_service.resolve_category_ref("Groceries"),
+    )
+    sync()
+    assert ynab_stub.find(world.state, payee_name="Forgotten bill")["date"] == early
+    (item,) = start_items()
+    assert item["earliest"] == early and item["balance_counted"] == item["balance_now"] - 25

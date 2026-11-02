@@ -78,6 +78,51 @@ const KIND_LABEL: Record<Item['kind'], string> = {
   conflict: 'Changed in both',
   unsupported: "YNAB can't take it",
   failed: 'Refused',
+  before_start: 'Before the Starting Balance',
+}
+
+// Moving a Starting Balance is never automatic: the card states both outcomes and the button
+// names the move it makes.
+function StartCard(props: { item: Item; busy: boolean; onKeep: (keep: 'onw' | 'ynab') => void }) {
+  const { item } = props
+  const cur = item.currency ? ` ${item.currency}` : ''
+  return (
+    <Stack gap="--space-2">
+      <Cluster gap="--space-2" align="center">
+        <Text size="sm" weight={600}>
+          {item.title}
+        </Text>
+        <Badge tone="warn">{KIND_LABEL.before_start}</Badge>
+      </Cluster>
+      <Text size="sm" tone="faint">
+        {item.reason}
+      </Text>
+      <Grid min={200} gap="--space-3">
+        <Text size="sm">
+          <Text size="xs" tone="faint">
+            Starting Balance date:{' '}
+          </Text>
+          {item.start} → {item.earliest}
+        </Text>
+        <Text size="sm">
+          <Text size="xs" tone="faint">
+            Balance:{' '}
+          </Text>
+          {money(item.balance_now)}
+          {cur} → {money(item.balance_counted)}
+          {cur}
+        </Text>
+      </Grid>
+      <Cluster gap="--space-2">
+        <Button size="sm" disabled={props.busy} onClick={() => props.onKeep('ynab')}>
+          Move the Starting Balance to {item.earliest}
+        </Button>
+        <Button size="sm" disabled={props.busy} onClick={() => props.onKeep('onw')}>
+          Keep as history
+        </Button>
+      </Cluster>
+    </Stack>
+  )
 }
 
 export function ReviewCard(props: {
@@ -86,6 +131,7 @@ export function ReviewCard(props: {
   onKeep: (keep: 'onw' | 'ynab') => void
 }) {
   const { item } = props
+  if (item.entity === 'start') return <StartCard {...props} />
   return (
     <Stack gap="--space-2">
       <Cluster gap="--space-2" align="center">

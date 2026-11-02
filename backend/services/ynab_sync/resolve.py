@@ -20,6 +20,7 @@ from backend.services.ynab_sync import (
     push,
     recorder,
     runner,
+    starts,
     units,
 )
 from backend.services.ynab_sync import state as sync_state
@@ -58,6 +59,8 @@ def resolve(conflict_id: str, keep: str) -> dict:
         client = YnabClient(st["plan_id"], Budget(RESOLVE_REQUESTS))
         if item["entity"] == "assigned":
             _assigned(item, keep, client, base, meta)
+        elif item["entity"] == "start":
+            starts.resolve(item, keep)
         else:
             _transaction(ctx, item, keep, client, base)
         base.flush()
