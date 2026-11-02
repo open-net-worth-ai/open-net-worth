@@ -63,6 +63,9 @@ class SearchProvider(ABC):
         """Fetch and return the readable text content of a URL."""
         ...
 
+    # The registry id this instance was built for ("tavily", …); stamped by ``build_provider``.
+    provider_id: str = ""
+
     # True for a provider whose ``fetch_page`` is the plain GET (``plain_get_fetch``): the
     # page's og:image then comes from the SAME download. A provider with its own extract API
     # (Tavily, Firecrawl) leaves this False and reports no image — never a second fetch.
@@ -317,4 +320,6 @@ def build_provider(provider_id: str, cfg: dict) -> SearchProvider:
     spec = PROVIDER_BY_ID.get(provider_id)
     if spec is None:
         raise ValueError(f"Unknown search provider: {provider_id!r}")
-    return spec.factory(cfg)
+    provider = spec.factory(cfg)
+    provider.provider_id = provider_id
+    return provider

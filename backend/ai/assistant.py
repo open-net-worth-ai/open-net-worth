@@ -162,8 +162,10 @@ def _build_core_offer() -> list[dict]:
     """
     from backend.ai.tools._extra_groups_scope import get_extra_names
     from backend.ai.tools._groups import CORE_TOOL_NAMES
+    from backend.ai.tools.catalog import hidden_tools
 
-    loaded: set[str] = set(get_extra_names())
+    # A name a session loaded earlier stays in its persisted set, so the hide is applied here too.
+    loaded: set[str] = set(get_extra_names()) - hidden_tools()
     core = [t for t in TOOL_SCHEMAS if t["name"] in CORE_TOOL_NAMES]
     extra = [t for t in TOOL_SCHEMAS if t["name"] in loaded and t["name"] not in CORE_TOOL_NAMES]
     ext_mcp = [s for s in _external_tool_schemas() if s.get("name") in loaded]
@@ -3803,6 +3805,11 @@ async def _run_turn(
     # Snapshot the per-turn scope ContextVars (skill/offer/unattended/bundle/depth)
     # the SAME way, for the SAME reason (CONC-H5) — see ``_skill_scope.snapshot_scope``.
     _scope_snapshot = _skill_scope.snapshot_scope()
+    # The tools a feature flag keeps out of every offer this turn: ONE flag read per turn,
+    # restored with the rest of the scope (``restore_scope(_scope_snapshot)`` below).
+    from backend.ai.search.switch import retired_tools
+
+    _skill_scope.set_turn_retired(retired_tools())
 
     # ── Turn checkpoint scaffolding, declared BEFORE the try (finding 5): the try below now
     # starts immediately after the scope snapshot, so an exception raised anywhere in this

@@ -30,6 +30,22 @@ from typing import Iterable, Optional
 # seam for the next one.
 _CATALOG_HIDDEN: frozenset[str] = frozenset()
 
+
+def hidden_tools() -> frozenset[str]:
+    """Every tool kept out of what the model is offered: the permanent hides above plus any tool a
+    feature flag has retired (``ai/search/switch.retired_tools``, empty while its flag is off).
+    The flag is read once per turn (``assistant.run`` pins it in ``_skill_scope``); a caller
+    outside a turn resolves it here."""
+    from backend.ai.tools._skill_scope import turn_retired
+
+    retired = turn_retired()
+    if retired is None:
+        from backend.ai.search.switch import retired_tools
+
+        retired = retired_tools()
+    return _CATALOG_HIDDEN | retired
+
+
 # Summaries survive ONLY on the external-MCP path (see the module docstring): an
 # external tool name is opaque and ungrouped, so a small server still gets one line each.
 _MAX_SUMMARY_CHARS = 90
@@ -93,7 +109,7 @@ def _internal_names() -> list[str]:
     from backend.ai.tools._connector_gate import hidden_connector_tools
     from backend.ai.tools.registry import iter_registered_tools
 
-    hidden = _CATALOG_HIDDEN | hidden_connector_tools()
+    hidden = hidden_tools() | hidden_connector_tools()
     return sorted(
         name for name, _description, _module in iter_registered_tools() if name not in hidden
     )
