@@ -149,10 +149,26 @@ def test_cli_uses_private_pipe_and_bounded_header_then_bytes(selection):
         process.wait(timeout=5)
 
 
-def test_cli_exits_when_host_pipe_closes_without_emitting_file(selection):
-    _, _, request = selection
+# The host ends the helper's stdin only once it has stopped waiting, so the watcher's job is that
+# the helper never outlives its host. Which thread sees the closed pipe first is the scheduler's
+# call (main CI, 2026-11-02, the reader won), so each ordering is forced instead of raced.
+_READ_NEVER_RETURNS = (
+    "import sys, threading\n"
+    "from backend.cli import desktop_file as helper\n"
+    "helper.read_watched_file = lambda request: threading.Event().wait()\n"
+    "sys.exit(helper.main())\n"
+)
+_WATCHER_NEVER_RUNS = (
+    "import sys, threading\n"
+    "from backend.cli import desktop_file as helper\n"
+    "helper._exit_when_host_closes = lambda: threading.Event().wait()\n"
+    "sys.exit(helper.main())\n"
+)
+
+
+def _run_after_host_leaves(code: str, request: dict) -> tuple[int, bytes]:
     process = subprocess.Popen(
-        [sys.executable, "-m", "backend.cli.desktop_file"],
+        [sys.executable, "-c", code],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -160,11 +176,22 @@ def test_cli_exits_when_host_pipe_closes_without_emitting_file(selection):
     try:
         process.stdin.write(json.dumps(request).encode() + b"\n")
         process.stdin.close()
-        assert process.wait(timeout=5) == 1
-        assert process.stdout.read() == b""
+        return process.wait(timeout=10), process.stdout.read()
     finally:
         process.kill() if process.poll() is None else None
         process.wait(timeout=5)
+
+
+def test_cli_exits_when_host_pipe_closes_without_emitting_file(selection):
+    _, _, request = selection
+    assert _run_after_host_leaves(_READ_NEVER_RETURNS, request) == (1, b"")
+
+
+def test_a_read_that_beats_the_watcher_emits_the_whole_file_and_exits(selection):
+    _, _, request = selection
+    code, output = _run_after_host_leaves(_WATCHER_NEVER_RUNS, request)
+    header = json.dumps({"type": "file", "size": len(INSIDE), "name": "statement.csv"})
+    assert (code, output) == (0, header.encode() + b"\n" + INSIDE)
 
 
 @pytest.mark.parametrize("size", [0, desktop_file.MAX_FILE_BYTES + 1])
