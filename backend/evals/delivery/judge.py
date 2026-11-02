@@ -47,6 +47,7 @@ def _day_prompt(day: str, items: list[dict], context: dict) -> str:
             f"{h['ticker']} {h['label']} {h.get('weight_pct', '?')}%"
             for h in context.get("holdings") or []
         ),
+        "Watching (tickers and topics): " + ("; ".join(context.get("watching") or []) or "(none)"),
         f"Client's own instructions: {context.get('instructions') or '(none)'}",
         "",
         "Items, in order (local time · id · source · story · headline — detail):",

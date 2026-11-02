@@ -25,6 +25,7 @@ def _args() -> argparse.Namespace:
     p.add_argument("--judge", default="claude_cli:opus", help="model that grades history items")
     p.add_argument("--out", metavar="DIR", help="write report.json/report.md here (not the repo)")
     p.add_argument("--min-accuracy", type=float, default=80.0)
+    p.add_argument("--judge-only", action="store_true", help="grade the history and stop")
     return p.parse_args()
 
 
@@ -81,29 +82,42 @@ def _history_context_fn():
     """Who the user is, read through the app's own code from the clone."""
     from backend.api.portfolio import read_rows
     from backend.core.user_time import user_zone
+    from backend.services import ledger
     from backend.services.profile import read_profile
     from backend.services.watchlist import read_watchlist
 
     profile = read_profile() or {}
-    rows = [r for r in read_rows() if float(r.get("value_base") or 0) > 0]
-    total = sum(float(r["value_base"]) for r in rows) or 1.0
+    base_ccy = (profile.get("base_currency") or "USD").upper()
+    valued = []
+    for r in read_rows():
+        if r.get("vesting_state") == "unvested":
+            continue
+        value = float(ledger.row_base_value(r, base_ccy) or 0)
+        if value > 0:
+            valued.append((r, value))
+    total = sum(v for _, v in valued) or 1.0
     holdings = sorted(
         (
             {
-                "ticker": r.get("ticker") or "",
-                "label": r.get("name") or r.get("ticker") or "",
-                "weight_pct": round(100 * float(r["value_base"]) / total, 1),
+                "ticker": r.get("ticker") or r.get("symbol") or "",
+                "label": r.get("label") or r.get("ticker") or "",
+                "weight_pct": round(100 * v / total, 1),
             }
-            for r in rows
+            for r, v in valued
         ),
         key=lambda h: -h["weight_pct"],
     )[:15]
-    instructions = (read_watchlist().get("config") or {}).get("delivery_instructions") or ""
+    watchlist = read_watchlist()
+    instructions = (watchlist.get("config") or {}).get("delivery_instructions") or ""
+    watching = [
+        f"{i.get('value')} ({i.get('type', 'ticker')})" for i in watchlist.get("items") or []
+    ][:40]
     zone = user_zone()
     base = {
         "nickname": profile.get("nickname") or "",
         "instructions": instructions,
         "holdings": holdings,
+        "watching": watching,
     }
 
     def at(now: datetime) -> dict:
@@ -111,6 +125,22 @@ def _history_context_fn():
         return {**base, "local_time": local.isoformat()}
 
     return at, (str(zone) if zone else "UTC"), base
+
+
+async def _cached_gold(args, stream, base, tz, gold_labels) -> dict:
+    """The reference labels, reused from ``--out``/gold.json when the stream is unchanged —
+    grading is the costly part, and it doesn't depend on the decider being evaluated."""
+    cache = Path(args.out).resolve() / "gold.json" if args.out else None
+    ids = sorted(c["id"] for c in stream)
+    if cache and cache.is_file():
+        saved = json.loads(cache.read_text())
+        if saved.get("ids") == ids and saved.get("judge") == args.judge:
+            return saved["gold"]
+    gold = await gold_labels(stream, base, tz, model=args.judge)
+    if cache:
+        _write(args.out, None)
+        cache.write_text(json.dumps({"ids": ids, "judge": args.judge, "gold": gold}))
+    return gold
 
 
 async def _history(args, models: list[str]) -> dict:
@@ -122,7 +152,7 @@ async def _history(args, models: list[str]) -> dict:
 
     stream = pushed_stream(Path(paths.DB_FILE), days=args.days)
     context_at, tz, base = _history_context_fn()
-    gold = {} if args.mock else await gold_labels(stream, base, tz, model=args.judge)
+    gold = {} if args.mock else await _cached_gold(args, stream, base, tz, gold_labels)
     out = {
         "before": report.volume_before(stream, tz),
         "items": len(stream),
@@ -142,14 +172,26 @@ async def _history(args, models: list[str]) -> dict:
     return out
 
 
-def _write(out_dir: str | None, payload: dict) -> None:
+async def _judge_only(args) -> None:
+    from backend.core import paths
+    from backend.evals.delivery.history import pushed_stream
+    from backend.evals.delivery.judge import gold_labels
+
+    stream = pushed_stream(Path(paths.DB_FILE), days=args.days)
+    _, tz, base = _history_context_fn()
+    gold = await _cached_gold(args, stream, base, tz, gold_labels)
+    print(f"[judge] graded {len(gold)} of {len(stream)} past pushes with {args.judge}")
+
+
+def _write(out_dir: str | None, payload: dict | None) -> None:
     if not out_dir:
         return
     dest = Path(out_dir).resolve()
     if dest == _REPO or _REPO in dest.parents:
         raise SystemExit("REFUSING to write eval output inside the repo — it may hold real data.")
     dest.mkdir(parents=True, exist_ok=True)
-    (dest / "report.json").write_text(json.dumps(payload, indent=1, default=str))
+    if payload is not None:
+        (dest / "report.json").write_text(json.dumps(payload, indent=1, default=str))
 
 
 def main() -> int:
@@ -159,6 +201,9 @@ def main() -> int:
 
     assert_isolated(data)
     ensure_migrated()
+    if args.history and args.judge_only:
+        asyncio.run(_judge_only(args))
+        return 0
     models = ["mock"] if args.mock else [m.strip() for m in args.models.split(",") if m.strip()]
     payload: dict = {"started": datetime.now(timezone.utc).isoformat(), "synthetic": {}}
     gate_ok = True

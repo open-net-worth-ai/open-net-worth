@@ -40,9 +40,10 @@ def isolate(history_dir: str | None) -> Path:
         if _LIVE_MARKER in str(data) or not (data / "onw.db").is_file():
             raise SystemExit(f"REFUSING to run: {data} is not a QA clone (needs onw.db, not live)")
         scratch = Path(tempfile.mkdtemp(prefix="onw-delivery-eval-")).resolve()
-        os.environ.update(
-            DATA_DIR=str(data), CACHE_DIR=str(scratch / "cache"), LOGS_DIR=str(scratch / "logs")
-        )
+        # A `cache/` next to the clone is used when present — e.g. with a copied fx_cache.json,
+        # so holdings in other currencies can be valued; else a throwaway one.
+        cache = data.parent / "cache" if (data.parent / "cache").is_dir() else scratch / "cache"
+        os.environ.update(DATA_DIR=str(data), CACHE_DIR=str(cache), LOGS_DIR=str(scratch / "logs"))
         return data
     root = Path(tempfile.mkdtemp(prefix="onw-delivery-eval-")).resolve()
     os.environ["ONW_ROOT"] = str(root)
