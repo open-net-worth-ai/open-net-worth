@@ -1,47 +1,122 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { overrideFlagsForTests } from '../../../hooks/useFlag'
 
 const authFetch = vi.fn()
 vi.mock('../../../api/client', () => ({ authFetch: (...args: unknown[]) => authFetch(...args) }))
-// No real room in jsdom: a call that got a token would connect through livekit-client.
+const navigate = vi.fn()
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
+const dispatch = vi.fn()
+vi.mock('../../../lucius/bus', () => ({ dispatchScreenCommand: (c: unknown) => dispatch(c) }))
+// No real room in jsdom.
 vi.mock('livekit-client', () => ({
   Room: vi.fn(),
   RoomEvent: {},
   Track: { Kind: { Audio: 'audio' } },
+  DisconnectReason: { ROOM_DELETED: 5 },
 }))
 
 import { VoiceCallButton } from './VoiceCallButton'
+import { VoiceCallNotice } from './VoiceCallNotice'
+import { VoiceCallSlot } from './VoiceCallSlot'
+import { resetVoiceCallForTests, startCall, useVoiceCall } from './voiceCall'
+
+const READY = {
+  ready: true,
+  worker: { flag_on: true, libraries_installed: true, running: true, error: '' },
+}
+const UNSET = {
+  ready: false,
+  worker: { flag_on: true, libraries_installed: true, running: false, error: '' },
+}
+
+function respond(config: unknown, call?: { ok: boolean; body: unknown }) {
+  authFetch.mockImplementation(async (url: string) =>
+    url === '/api/voice/config'
+      ? { ok: true, json: async () => config }
+      : { ok: call?.ok ?? false, json: async () => call?.body ?? {} },
+  )
+}
 
 let restore: () => void = () => {}
+beforeEach(() => {
+  Object.defineProperty(navigator, 'mediaDevices', {
+    value: { getUserMedia: vi.fn() },
+    configurable: true,
+  })
+})
 afterEach(() => {
   restore()
   cleanup()
   authFetch.mockReset()
+  navigate.mockReset()
+  dispatch.mockReset()
+  resetVoiceCallForTests()
 })
 
 describe('VoiceCallButton', () => {
   it('is not there while the voice_calls flag is off', () => {
     restore = overrideFlagsForTests({ voice_calls: false })
     render(<VoiceCallButton sessionId="s1" />)
-    expect(screen.queryByRole('button', { name: /call lucius/i })).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('asks for a call INTO the open conversation and says why one could not start', async () => {
+  it('opens Voice calls setup, not an error, while voice calls are not set up', async () => {
     restore = overrideFlagsForTests({ voice_calls: true })
-    authFetch.mockResolvedValue({
-      ok: false,
-      json: async () => ({ detail: 'Set up Voice calls in Connectors first.' }),
-    })
+    respond(UNSET)
     render(<VoiceCallButton sessionId="s1" />)
-    fireEvent.click(screen.getByRole('button', { name: /call lucius/i }))
-    await waitFor(() =>
-      expect(screen.getByRole('status').textContent).toContain('Set up Voice calls'),
+    fireEvent.click(await screen.findByRole('button', { name: 'Set up voice calls' }))
+    expect(dispatch).toHaveBeenCalledWith({ name: 'connectors.open_setup', args: { id: 'voice' } })
+    expect(navigate).toHaveBeenCalledWith({ to: '/connectors' })
+    expect(authFetch).not.toHaveBeenCalledWith('/api/voice/call', expect.anything())
+  })
+
+  it('calls INTO the open conversation; a refusal lands in the notice, not the toolbar', async () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    respond(READY, { ok: false, body: { detail: "The voice worker isn't running." } })
+    render(
+      <>
+        <VoiceCallNotice sessionId="s1" />
+        <VoiceCallButton sessionId="s1" />
+      </>,
     )
-    const [url, init] = authFetch.mock.calls[0]
-    expect(url).toBe('/api/voice/call')
+    fireEvent.click(await screen.findByRole('button', { name: 'Call Lucius' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain("The voice worker isn't running.")
+    const [, init] = authFetch.mock.calls.find(([url]) => url === '/api/voice/call')!
     expect(JSON.parse(init.body)).toEqual({ session_id: 's1' })
-    expect(screen.getByRole('button', { name: /call lucius/i })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
+describe('the call outlives the composer', () => {
+  it('keeps going when the chat re-lays its composer (landing → conversation)', async () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    // A call that is still connecting: the API has not answered yet.
+    authFetch.mockImplementation(() => new Promise(() => {}))
+    function Probe() {
+      return <span data-testid="phase">{useVoiceCall().phase}</span>
+    }
+    const { unmount } = render(
+      <VoiceCallSlot busy={false}>
+        <textarea aria-label="draft" />
+      </VoiceCallSlot>,
+    )
+    await act(async () => void startCall('s1'))
+    unmount() // the composer moves: the old footer goes away …
+    render(
+      <>
+        <Probe />
+        <VoiceCallSlot busy={false}>
+          <textarea aria-label="draft" />
+        </VoiceCallSlot>
+      </>,
+    )
+    // … and the call is still on, with the call bar shown and the composer kept but hidden.
+    await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('connecting'))
+    expect(screen.getByRole('group', { name: 'Voice call' })).toBeTruthy()
+    expect(screen.getByLabelText('draft').closest('[hidden]')).not.toBeNull()
   })
 })

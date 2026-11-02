@@ -37,6 +37,7 @@ const ERROR_STATUSES = new Set(['error', 'connect_error', 'auth_error', 'failed'
  *  the DIRECTORY that never offers it as an addable card. */
 const FAMILIES: Record<string, ConnectorFamily[]> = {
   telegram: ['Channel'],
+  voice: ['Channel'],
   webhook: ['Channel'],
   email: ['Data source'],
   plaid: ['Data source'],
@@ -56,6 +57,7 @@ const FAMILIES: Record<string, ConnectorFamily[]> = {
  *  that instead — see `logos.ts` and D25; these stay as the answer for everything else. */
 const PRESENTATION: Record<string, { icon: string; hue: string }> = {
   telegram: { icon: 'chat', hue: 'var(--accent)' },
+  voice: { icon: 'chat', hue: 'var(--accent)' },
   webhook: { icon: 'link', hue: 'var(--cash-c)' },
   email: { icon: 'mail', hue: 'var(--recv)' },
   plaid: { icon: 'accounts', hue: 'var(--crypto)' },
@@ -87,6 +89,7 @@ const PRESENTATION: Record<string, { icon: string; hue: string }> = {
  *  any of them once installed. */
 const DEVELOPERS: Record<string, { name: string; url: string }> = {
   telegram: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
+  voice: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   webhook: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   email: { name: 'Open Net Worth', url: 'https://opennetworth.ai' },
   simplefin: { name: 'SimpleFIN', url: 'https://www.simplefin.org/' },

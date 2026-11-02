@@ -61,6 +61,8 @@ import { Brain, ChevronRight, FolderLock, Menu, SquarePen } from '../../ui/icons
 import { ModelPicker, Skeleton } from '../ui'
 import { ConversationApprovalPicker } from './ConversationApprovalPicker'
 import { VoiceCallButton } from './lucius/VoiceCallButton'
+import { VoiceCallNotice } from './lucius/VoiceCallNotice'
+import { VoiceCallSlot } from './lucius/VoiceCallSlot'
 import { computeHomeEmpty } from './homeEmpty'
 import { useProfile } from '../../hooks/serverState'
 import { ActivityPanel } from '../tabs/lucius/ActivityPanel'
@@ -1099,98 +1101,99 @@ export function ChatPanel({
   // activity list goes below it"), or in its usual pinned-bottom spot everywhere else.
   const composerFooter = (
     <div className="lx-side-foot" ref={footRef}>
+      <VoiceCallNotice sessionId={activeId} />
       <div className="lx-inputblock">
-        <LuciusComposer
-          /* Approvals govern the CONVERSATION, so it rides in the LEFT tool group beside
+        <VoiceCallSlot busy={streaming || sending}>
+          <LuciusComposer
+            /* Approvals govern the CONVERSATION, so it rides in the LEFT tool group beside
              attach/@//— not in `controls`, which is the model/effort/cost cluster. */
-          leadingControls={
-            <>
+            leadingControls={
               <span data-tour="lucius-approval">
                 <ConversationApprovalPicker sessionId={activeId} />
               </span>
-              <VoiceCallButton sessionId={activeId} />
-            </>
-          }
-          /* Model / effort / cost ride in the composer's toolbar row, right-aligned against
+            }
+            /* Model / effort / cost ride in the composer's toolbar row, right-aligned against
              Send — not as a strip above the field. */
-          controls={
-            <>
-              {/* No session-cost figure on a real phone — less room, less reason to see it at
+            controls={
+              <>
+                {/* No session-cost figure on a real phone — less room, less reason to see it at
                   a glance (owner). Desktop keeps it. */}
-              {density.showCost && !isMobile && sessionCost > 0 && (
-                <span className="chat-session-cost" title={`Session cost: ${fUsd(sessionCost)}`}>
-                  {fUsd(sessionCost)}
-                </span>
-              )}
-              {/* ONE control: the tier rides in the trigger, and the panel opens on a root
+                {density.showCost && !isMobile && sessionCost > 0 && (
+                  <span className="chat-session-cost" title={`Session cost: ${fUsd(sessionCost)}`}>
+                    {fUsd(sessionCost)}
+                  </span>
+                )}
+                {/* ONE control: the tier rides in the trigger, and the panel opens on a root
                   menu (Model › / Effort ›) — see EffortChoices for why it is not a peer
                   <select>, and ModelPicker's `panes` for why the two lists never share a
                   panel. Hidden on the narrowest panels — the trigger's own label had no
                   room left and clipped mid-word. */}
-              {density.showModel && (
-                <ModelPicker
-                  className="chat-model-picker"
-                  label="Chat model"
-                  size="sm"
-                  models={modelInfo.models}
-                  value={activeModel}
-                  defaultLabel="Default"
-                  defaultModelId={modelInfo.defaultModel}
-                  onChange={(next) => setConversationModel(activeId, next)}
-                  // The trigger shows just the model name on a phone — no effort trailing
-                  // label; the tier stays reachable one tap in, via `panes` below (unchanged).
-                  trailing={
-                    !isMobile && density.showEffortLabel && showEffort
-                      ? effortChoiceLabel(clampEffortChoice(effort, effortChoices))
-                      : null
-                  }
-                  panes={
-                    showEffort
-                      ? [
-                          {
-                            key: 'effort',
-                            label: 'Effort',
-                            value: effortChoiceLabel(clampEffortChoice(effort, effortChoices)),
-                            content: (close) => (
-                              <EffortChoices
-                                value={clampEffortChoice(effort, effortChoices)}
-                                choices={effortChoices}
-                                onChange={(lvl) => {
-                                  setEffort(lvl)
-                                  close()
-                                }}
-                              />
-                            ),
-                          },
-                        ]
-                      : undefined
-                  }
-                />
-              )}
-            </>
-          }
-          ref={composerRef}
-          busy={streaming || sending}
-          sendBlocked={(streaming || sending) && !multiTurnEnabled}
-          onStop={stopStreaming}
-          onSend={handleSend}
-          placeholder="Ask Lucius anything — @ to mention, / for skills…"
-          autoFocus={open && shouldAutoFocusComposer}
-          visibleIds={visibleIds}
-          screenId="lucius-side"
-          active={open}
-          /* Only true while the composer is actually rendered in its TOP/landing position
+                {density.showModel && (
+                  <ModelPicker
+                    className="chat-model-picker"
+                    label="Chat model"
+                    size="sm"
+                    models={modelInfo.models}
+                    value={activeModel}
+                    defaultLabel="Default"
+                    defaultModelId={modelInfo.defaultModel}
+                    onChange={(next) => setConversationModel(activeId, next)}
+                    // The trigger shows just the model name on a phone — no effort trailing
+                    // label; the tier stays reachable one tap in, via `panes` below (unchanged).
+                    trailing={
+                      !isMobile && density.showEffortLabel && showEffort
+                        ? effortChoiceLabel(clampEffortChoice(effort, effortChoices))
+                        : null
+                    }
+                    panes={
+                      showEffort
+                        ? [
+                            {
+                              key: 'effort',
+                              label: 'Effort',
+                              value: effortChoiceLabel(clampEffortChoice(effort, effortChoices)),
+                              content: (close) => (
+                                <EffortChoices
+                                  value={clampEffortChoice(effort, effortChoices)}
+                                  choices={effortChoices}
+                                  onChange={(lvl) => {
+                                    setEffort(lvl)
+                                    close()
+                                  }}
+                                />
+                              ),
+                            },
+                          ]
+                        : undefined
+                    }
+                  />
+                )}
+              </>
+            }
+            callAction={<VoiceCallButton sessionId={activeId} />}
+            ref={composerRef}
+            busy={streaming || sending}
+            sendBlocked={(streaming || sending) && !multiTurnEnabled}
+            onStop={stopStreaming}
+            onSend={handleSend}
+            placeholder="Ask Lucius anything — @ to mention, / for skills…"
+            autoFocus={open && shouldAutoFocusComposer}
+            visibleIds={visibleIds}
+            screenId="lucius-side"
+            active={open}
+            /* Only true while the composer is actually rendered in its TOP/landing position
              (isHomeEmpty) — once a real conversation starts on this tab, `composerFooter`
              relocates to the normal pinned-bottom spot (see its two render sites above/below),
              where the popup opening downward would run off the viewport instead of avoiding
              it. `homeMode` alone would stay true for that pinned-bottom case too. */
-          homeMode={homeMode && isHomeEmpty}
-          screenAwarenessDisabled={screenAwarenessDisabled}
-          noVisionModel={noVisionLabel(activeModel, modelInfo.models, modelInfo.defaultModel)}
-          imageReader={modelInfo.imageReader}
-          dismissKeyboardOnSend={dismissKeyboardOnSend}
-          fileDrop={false}
-        />
+            homeMode={homeMode && isHomeEmpty}
+            screenAwarenessDisabled={screenAwarenessDisabled}
+            noVisionModel={noVisionLabel(activeModel, modelInfo.models, modelInfo.defaultModel)}
+            imageReader={modelInfo.imageReader}
+            dismissKeyboardOnSend={dismissKeyboardOnSend}
+            fileDrop={false}
+          />
+        </VoiceCallSlot>
       </div>
     </div>
   )

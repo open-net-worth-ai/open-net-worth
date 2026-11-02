@@ -24,6 +24,8 @@ import { LuciusComposer } from './Composer'
 import { ModelEffortCluster } from './ModelEffortRow'
 import { ConversationApprovalPicker } from '../ConversationApprovalPicker'
 import { VoiceCallButton } from './VoiceCallButton'
+import { VoiceCallNotice } from './VoiceCallNotice'
+import { VoiceCallSlot } from './VoiceCallSlot'
 import type { LuciusComposerHandle, ComposerParsed } from './Composer'
 import { MessageBubble } from '../MessageBubble'
 import { CompactingActivity } from '../CompactingActivity'
@@ -497,41 +499,40 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
         )}
 
         {/* Screen bar + composer + its toolbar are ONE input field — see .lx-inputblock. */}
+        <VoiceCallNotice sessionId={activeId} />
         <div className="lx-inputblock">
           {/* Shared composer — model/effort/cost ride in ITS toolbar row, next to Send. */}
-          <LuciusComposer
-            controls={
-              <ModelEffortCluster
-                storedModel={conversationModel}
-                onModelChange={(v) => setConversationModel(activeId, v)}
-                messages={messages}
-                effort={effort}
-                onEffortChange={setEffort}
-              />
-            }
-            leadingControls={
-              <>
-                <ConversationApprovalPicker sessionId={activeId} />
-                <VoiceCallButton sessionId={activeId} />
-              </>
-            }
-            ref={composerRef}
-            busy={(streaming && !following) || sending}
-            sendBlocked={((streaming && !following) || sending) && !multiTurnEnabled}
-            onStop={stopStreaming}
-            onSend={handleSend}
-            placeholder="Ask Lucius — type @ to mention, / for skills…"
-            visibleIds={visibleIds}
-            screenBar="compact"
-            screenId="lucius-dock"
-            active={open}
-            noVisionModel={noVisionLabel(
-              conversationModel,
-              dockModels.models,
-              dockModels.defaultModel,
-            )}
-            imageReader={dockModels.imageReader}
-          />
+          <VoiceCallSlot busy={(streaming && !following) || sending}>
+            <LuciusComposer
+              controls={
+                <ModelEffortCluster
+                  storedModel={conversationModel}
+                  onModelChange={(v) => setConversationModel(activeId, v)}
+                  messages={messages}
+                  effort={effort}
+                  onEffortChange={setEffort}
+                />
+              }
+              leadingControls={<ConversationApprovalPicker sessionId={activeId} />}
+              callAction={<VoiceCallButton sessionId={activeId} />}
+              ref={composerRef}
+              busy={(streaming && !following) || sending}
+              sendBlocked={((streaming && !following) || sending) && !multiTurnEnabled}
+              onStop={stopStreaming}
+              onSend={handleSend}
+              placeholder="Ask Lucius — type @ to mention, / for skills…"
+              visibleIds={visibleIds}
+              screenBar="compact"
+              screenId="lucius-dock"
+              active={open}
+              noVisionModel={noVisionLabel(
+                conversationModel,
+                dockModels.models,
+                dockModels.defaultModel,
+              )}
+              imageReader={dockModels.imageReader}
+            />
+          </VoiceCallSlot>
         </div>
       </div>
     </div>

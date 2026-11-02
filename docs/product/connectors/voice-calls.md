@@ -55,8 +55,14 @@ account to create. Its free plan includes a monthly allowance.
    **Settings → Keys**, create an API key. Keep the **URL** (`wss://…livekit.cloud`), the **API
    key** and the **API secret**.
 3. In Open Net Worth, open **Connectors → Voice calls** and paste the three values. Save.
-4. When the page says **Ready for calls**, press the **phone** button in Lucius's chat. Your
-   browser asks for the microphone the first time.
+4. When the page says **Ready for calls**, press the **phone** button in Lucius's chat — it sits
+   where **Send** is while the message box is empty. Your browser asks for the microphone the
+   first time.
+
+During a call the message box becomes a **call bar**: *Ringing…*, then *Connected · 0:42* (or
+*Lucius is working…* while he looks something up), with **Mute** and **End call**. Your draft is
+kept and comes back when you hang up. If a call can't start or drops, a note above the box says
+why, with a button to try again or to open Voice calls setup.
 
 The browser only allows the microphone on a secure address: `localhost` on your own computer
 works; from another device the app must be reachable over HTTPS (see
@@ -84,7 +90,10 @@ readable back only by you through the eye on the field. Pausing the connector st
 ## Troubleshooting
 
 **The Call button isn't there.** Voice calls are off: turn them on in **Settings → Developer →
-Experimental**.
+Experimental**. It also gives way to **Send** as soon as you type.
+
+**The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it opens
+the setup form.
 
 **"Set up Voice calls in Connectors first."** The connector has no LiveKit URL, key or secret yet,
 or it is paused.

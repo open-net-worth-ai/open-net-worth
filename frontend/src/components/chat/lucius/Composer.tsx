@@ -108,6 +108,9 @@ export interface LuciusComposerProps {
   /** Rendered in the LEFT tool group, after attach/@//. For per-conversation
    *  settings that are not about the model. */
   leadingControls?: ReactNode
+  /** Shown in the Send slot while the box is empty and no turn is running — the voice-call
+   *  button (`voice_calls` flag): typing and calling are alternative ways in, so they share it. */
+  callAction?: ReactNode
   /** The Lucius home tab's landing layout puts the composer near the TOP of the page (an
    *  Active/Scheduled panel sits below it) rather than pinned at the bottom like the dock —
    *  so the @/skill Autocomplete popup should open DOWNWARD here instead of its usual upward
@@ -174,6 +177,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
       imageReader = '',
       controls = null,
       leadingControls = null,
+      callAction = null,
       homeMode = false,
       dismissKeyboardOnSend = false,
       fileDrop = true,
@@ -864,6 +868,8 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
               >
                 <span className="lx-stop-sq" />
               </button>
+            ) : callAction && !busy && isEmpty && attachments.length === 0 ? (
+              callAction
             ) : (
               <button
                 className="lx-send"
