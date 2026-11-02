@@ -27,6 +27,20 @@ make desktop-package
 with `scripts/build_desktop_runtime.py --output desktop/runtime-next`, stop the app, and
 replace the previous generated runtime. No user book is included in the runtime.
 
+The runtime has about half the files of a plain install, because the installer (Squirrel.Mac's
+ShipIt) verifies and moves every file of the bundle and took minutes on a busy Mac. The pure-Python
+packages in `ZIPPED_PACKAGES` (`scripts/build_desktop_runtime.py`: `openai`, `anthropic`, `pydantic`,
+`fastapi`, `tzdata` ...) ship as ONE archive, `site-packages/onw-packages.zip`, put on `sys.path` by
+`onw-packages.pth`; each module is stored with an unchecked-hash `.pyc` (the signed app is read-only to
+Python). Everything compiled, and everything that opens a file beside its own `__file__` (`backend` with
+its bundled frontend, docs and Alembic scripts, `babel`, `pytz`, `dateutil`, `certifi`), stays plain
+files. A new dependency stays plain files until it is added to the list; `scripts/runtime_zip.py` refuses
+a listed package that holds a compiled module, and the build's import smoke fails if a listed package
+does not import from the archive. To read a zipped package's source, unzip the archive. Wheel build
+files (`.pyi`, headers, Cython sources), `python/include`, `python/bin` console scripts and
+`dist-info` install records are pruned. Reasoning and numbers: ADR
+`2026-11-02-desktop-runtime-ships-pure-python-packages-as-one-archive`.
+
 Forge emits the `.app`, `.dmg` and ZIP under `desktop/out`. The runtime manifest version must
 match `desktop/package.json` and `pyproject.toml`; bump all release versions together. Runtime
 dependencies resolve from `requirements.txt` into `desktop/runtime-requirements.lock` and
