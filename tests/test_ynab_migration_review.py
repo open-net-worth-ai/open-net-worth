@@ -46,8 +46,7 @@ def test_preview_names_each_category_under_its_group(ynab):
     assert [(g["name"], [c["label"] for c in g["categories"]]) for g in groups] == [
         ("Bills", ["Rent", "Utilities"]),
         ("Needs", ["Groceries", "Dining out"]),
-        ("Wants", ["Fun Money"]),
-        ("Hidden Categories", ["Old Cat"]),
+        ("Wants", ["Fun Money", "Old Cat"]),  # a hidden category sits in its home group
     ]
 
 

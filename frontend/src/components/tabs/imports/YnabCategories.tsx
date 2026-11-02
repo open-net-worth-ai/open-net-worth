@@ -10,6 +10,9 @@ import type { CategoryChoices, Preview, PreviewCategory } from './runs'
 // The choice shown for a category that matches several of the book's: no answer yet.
 export const ASK = 'ask'
 
+// A list longer than this is searched, not scrolled.
+const SEARCH_FROM = 8
+
 export interface CategoryProps {
   catLinks: Record<string, string>
   proposals: Record<string, string>
@@ -20,7 +23,7 @@ export interface CategoryProps {
 export function Categories({ preview: p, ...pick }: { preview: Preview } & CategoryProps) {
   const groups = p.category_groups
   if (!groups || !p.category_choices)
-    return <Empty>Review again to see the categories by name.</Empty>
+    return <p className="ynr-empty">Review again to see the categories by name.</p>
   if (groups.length === 0)
     return <p className="ynr-empty">This plan has no categories of its own.</p>
   const choices = p.category_choices
@@ -33,14 +36,14 @@ export function Categories({ preview: p, ...pick }: { preview: Preview } & Categ
         </tr>
       </thead>
       {groups.map((g) => (
-        <tbody key={g.name}>
+        <tbody key={g.id}>
           <tr className="ynr-group">
             <th scope="rowgroup" colSpan={2}>
               {g.name}
               <span className="ynr-dim">
                 {' '}
                 · {g.categories.length}
-                {g.group ? ` · your group ${g.group.name}` : ''}
+                {g.group ? ` · matches your group ${g.group.name}` : ' · a new group here'}
               </span>
             </th>
           </tr>
@@ -58,6 +61,10 @@ export function Categories({ preview: p, ...pick }: { preview: Preview } & Categ
   )
 }
 
+// A category hidden in YNAB comes in hidden; the line under it says so.
+const noteOf = (c: PreviewCategory) =>
+  c.hidden ? `${c.note}. Hidden in YNAB, so hidden here too` : c.note
+
 // The options for one category: what it matches (when the plan proposed it), a new category, the
 // other categories and envelopes of the book that no other YNAB category has taken.
 function optionsFor(
@@ -74,12 +81,17 @@ function optionsFor(
   const out: { value: string; label: string }[] = []
   if (c.ask) out.push({ value: ASK, label: 'Choose one…' })
   if (proposed && free(proposed))
-    out.push({ value: proposed, label: `Matches your ${name(proposed)}` })
+    out.push({
+      value: proposed,
+      label: proposed.startsWith('env:')
+        ? `Into your envelope ${name(proposed)}`
+        : `Matches your ${name(proposed)}`,
+    })
   out.push({ value: '', label: 'New category' })
   const ambiguous = new Set(c.options.map((o) => o.ref))
   const rest = [
-    ...choices.categories.map((x) => ({ ref: x.ref, label: `Use ${x.name}` })),
-    ...choices.envelopes.map((x) => ({ ref: x.ref, label: `Into envelope ${x.name}` })),
+    ...choices.categories.map((x) => ({ ref: x.ref, label: `Use your ${x.name}` })),
+    ...choices.envelopes.map((x) => ({ ref: x.ref, label: `Into your envelope ${x.name}` })),
   ]
   const shown = rest.filter((x) => x.ref !== proposed && free(x.ref))
   shown.sort((a, b) => Number(ambiguous.has(b.ref)) - Number(ambiguous.has(a.ref)))
@@ -100,7 +112,7 @@ function CategoryDestination({
     return (
       <div className="ynr-cat">
         <span className="ynr-dim">{c.link.name} (linked)</span>
-        <span className="ynr-dim ynr-catnote">{c.note}</span>
+        <span className="ynr-dim ynr-catnote">{noteOf(c)}</span>
       </div>
     )
   // Another category's explicit choice is not offered here again.
@@ -111,6 +123,12 @@ function CategoryDestination({
       .map((x) => x.link!.ref),
   )
   const value = c.ask ? ASK : (c.link?.ref ?? '')
+  const options = optionsFor(
+    c,
+    choices,
+    taken,
+    proposals[c.id] === ASK ? '' : (proposals[c.id] ?? ''),
+  )
   return (
     <div className="ynr-cat">
       <PMSelect
@@ -118,15 +136,13 @@ function CategoryDestination({
         ariaLabel={`Where ${c.name} goes`}
         value={catLinks[c.id] ?? value}
         disabled={checking}
-        options={optionsFor(
-          c,
-          choices,
-          taken,
-          proposals[c.id] === ASK ? '' : (proposals[c.id] ?? ''),
-        )}
+        searchable={options.length > SEARCH_FROM}
+        searchPlaceholder="Search categories…"
+        emptyText="No category matches."
+        options={options}
         onChange={(v) => v !== ASK && onChoose(c.id, v)}
       />
-      <span className="ynr-dim ynr-catnote">{c.note}</span>
+      <span className="ynr-dim ynr-catnote">{noteOf(c)}</span>
     </div>
   )
 }

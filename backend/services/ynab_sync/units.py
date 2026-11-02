@@ -99,14 +99,14 @@ def _render(ctx: Context, piece: dict) -> tuple[dict | None, str | None]:
 
 
 def _income_view(ctx: Context, rendered: dict | None, ref: Canon) -> dict | None:
-    """YNAB books an inflow without a category as Ready to Assign, so it cannot say which income
-    category the ledger row has: the ledger's own stands, and is not read as a change."""
+    """YNAB books an inflow without a category as Ready to Assign, and a row in a category that
+    is not in YNAB goes there uncategorized, so it cannot say which category the ledger row has:
+    the ledger's own stands, and is not read as a change."""
+    mine = ref.get("category") if ref else None
     if (
         rendered
-        and ref
-        and rendered.get("kind") == "income"
         and not rendered.get("category")
-        and ref.get("category") in ctx.income
+        and ((rendered.get("kind") == "income" and mine in ctx.income) or mine in ctx.unsent)
     ):
         return {**rendered, "category": ref["category"]}
     return rendered

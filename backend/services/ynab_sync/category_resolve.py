@@ -31,10 +31,16 @@ def _category(sync: News, item: dict, keep: str) -> None:
     p = sync.base.cats.get(ycid)
     cat = sync.book.rows.get(p["category"]) if p else None
     ycat = sync.yc.get(ycid)
+    if p is not None and cat is None and item["kind"] == conflicts.FAILED:
+        p["gone"] = True  # YNAB would not take the move; leaving it where it is is the answer
+        sync.base.set_cat(p)
+        return
     if cat is None or ycat is None:
         raise ConflictError("Neither side of this item exists any more.")
     y, o = sync.ystate(ycat), sync.ostate(cat)
-    fields = [f for f, a in sync.actions(p, y, o).items() if a == "conflict"]
+    # A refused change has no second version to pick between: whatever still differs is settled.
+    wanted = ("conflict", "pull", "push") if item["kind"] == conflicts.FAILED else ("conflict",)
+    fields = [f for f, a in sync.actions(p, y, o).items() if a in wanted]
     if _protected(sync, keep):
         for f in fields:  # the other side's current state becomes the agreed one
             side, now = ("ynab", y) if keep == "onw" else ("onw", o)
@@ -82,28 +88,44 @@ def _plan_category(sync: News, ycid: str) -> dict:
 
 
 def _choose(sync: News, item: dict, keep: str, choice: str | None) -> None:
-    if item["kind"] == conflicts.FAILED and keep == "onw":
-        return  # YNAB's category could not be added here; leaving it out is all that is asked
-    c = _plan_category(sync, item["ynab_id"])
-    if keep == "onw" and choice not in [o["ref"] for o in item["options"]]:
-        raise ConflictError("Pick which of your categories to use.")
-    if (keep == "ynab" or choice.startswith("env:")) and not sync.can_pull:
-        raise ConflictError("In To YNAB mode this book isn't changed. Switch to Both ways first.")
+    ycid = item["ynab_id"]
+    if item["kind"] == conflicts.FAILED and keep == "onw":  # leave it out, and keep it out
+        sync.base.decline(f"y:{ycid}")
+        return
+    if ycid in sync.base.cats:
+        raise ConflictError("That YNAB category is already matched. Sync again to see it.")
+    c = _plan_category(sync, ycid)
     paired = {p["category"] for p in sync.base.cats.values()}
+    adding = keep == "ynab" or (choice or "").startswith("env:")
+    if adding and not sync.can_pull:
+        raise ConflictError("In To YNAB mode this book isn't changed. Switch to Both ways first.")
     if keep == "ynab":
         cat = sync.create_here(c)
-        sync.pair_new(c, sync.book.rows[cat["id"]], "")
-    elif choice.startswith("cat:"):
-        sync.pair_existing(c, sync.book.rows[choice[4:]], paired)
-    else:
-        env = next(e for e in sync.book.envelopes if e["id"] == choice[4:])
-        cat = make.make_category_in(sync.book, env, c["label"], c["hidden"])
-        sync.pair_new(c, sync.book.rows[cat["id"]], "")
+        text = f"Added {cat['label']} here, as it is new in YNAB."
+        return sync.pair_new(c, sync.book.rows[cat["id"]], text)
+    if choice not in [o["ref"] for o in item["options"]]:
+        raise ConflictError("Pick which of your categories to use.")
+    if choice.startswith("cat:"):
+        cat = sync.book.rows.get(choice[4:])
+        if cat is None:
+            raise ConflictError("That category is no longer in this book. Pick another.")
+        if cat["id"] in paired:
+            raise ConflictError(
+                "That category is already matched with another YNAB category. Pick another."
+            )
+        return sync.pair_existing(c, cat, paired)
+    env = next((e for e in sync.book.envelopes if e["id"] == choice[4:]), None)
+    if env is None:
+        raise ConflictError("That envelope is no longer in this book. Pick another.")
+    cat = make.make_category_in(sync.book, env, c["label"], c["hidden"])
+    text = f"Added {cat['label']} to your envelope {env['name']}, as it is new in YNAB."
+    sync.pair_new(c, sync.book.rows[cat["id"]], text)
 
 
 def _new_here(sync: News, item: dict, keep: str) -> None:
-    if keep == "ynab":
-        return  # leave it out of YNAB: nothing to change
+    if keep == "ynab":  # leave it out of YNAB, and keep it out
+        sync.base.decline(f"o:{item['category']}")
+        return
     cat = sync.book.rows.get(item["category"])
     if cat is None:
         raise ConflictError("That category no longer exists here.")

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { fAmountNative, fDate } from '../../../utils/format'
 import { Button, Checkbox, Cluster, Modal, PageTabs, Skeleton, Stack, Text } from '../../ui'
+import { TYPE_LABELS, type AccountType } from '../accounts/categories'
 import { PMSelect } from '../accounts/ds'
 import { ASK, Categories } from './YnabCategories'
 import {
@@ -288,7 +289,7 @@ function Notes({ preview: p, asking }: { preview: Preview; asking: PreviewCatego
     })
   if (p.book_state === 'foreign' && !p.currency_blocked)
     lines.push({
-      text: 'This book already has accounts of its own. They stay as they are, and each YNAB account is added as a new account beside them; nothing is merged.',
+      text: 'This book already has accounts of its own. Each YNAB account comes in as a new one unless you pick one of yours under In this book.',
     })
   if (p.book_state === 'rerun')
     lines.push({ text: 'This plan was imported before; importing again adds only what is new.' })
@@ -357,7 +358,7 @@ function Accounts({ preview: p, ...link }: { preview: Preview } & LinkProps) {
               {a.closed && <span className="ynr-dim"> · closed</span>}
             </td>
             <td data-label="Type" className="ynr-dim">
-              {a.type}
+              {TYPE_LABELS[a.type as AccountType] ?? a.type}
               {a.on_budget === false ? ' · tracking' : ''}
             </td>
             <td data-label="In this book">

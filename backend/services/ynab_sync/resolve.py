@@ -56,7 +56,7 @@ def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
         mirror = mirror_store.by_id()
         loaded = dict(mirror)
         base = Baselines(st["plan_id"])
-        ctx = context.build(st, meta, mirror, base.assigned, base.cats)
+        ctx = context.build(st, meta, mirror, base.assigned, base.cats, base.declined)
         client = YnabClient(st["plan_id"], Budget(RESOLVE_REQUESTS))
         if item["entity"] == "start":
             starts.resolve(item, keep)

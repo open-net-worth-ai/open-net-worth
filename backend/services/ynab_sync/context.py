@@ -28,6 +28,10 @@ class Context:
     env_of: dict[str, str]  # YNAB category id -> the envelope holding only that category
     card_env: dict[str, str]  # YNAB card-payment category id -> payment envelope id
     names: dict
+    # Ledger categories that will not be in YNAB (hidden, or left out by the person): their rows
+    # go to YNAB uncategorized, and the report says so once per category.
+    unsent: frozenset[str] = frozenset()
+    said: set[str] = field(default_factory=set)
     sub_parent: dict[str, str] = field(default_factory=dict)
     link_of: dict[str, str] = field(
         default_factory=dict
@@ -64,9 +68,15 @@ def category_plan(meta: dict, mirror: dict[str, dict], assigned: dict) -> dict:
 
 
 def build(
-    state: dict, meta: dict, mirror: dict[str, dict], assigned: dict, pairs: dict[str, dict]
+    state: dict,
+    meta: dict,
+    mirror: dict[str, dict],
+    assigned: dict,
+    pairs: dict[str, dict],
+    declined: frozenset[str] | set[str] = frozenset(),
 ) -> Context:
-    """``pairs``: YNAB category id -> its pair document (``ynab_pairs``)."""
+    """``pairs``: YNAB category id -> its pair document (``ynab_pairs``); ``declined``: what the
+    person chose to leave out (``ynab_pairs.declined``)."""
     cat_plan = category_plan(meta, mirror, assigned)
     card = apply.card_envelopes(cat_plan)
     rows = categories_service.all_category_rows()
@@ -95,6 +105,13 @@ def build(
         cat_ids={y: p["category"] for y, p in paired.items()},
         ynab_cat={p["category"]: y for y, p in paired.items()},
         income=frozenset(c["id"] for c in rows if c.get("kind") == "income"),
+        unsent=frozenset(
+            c["id"]
+            for c in rows
+            if c.get("kind", "expense") == "expense"
+            and c["id"] not in {p["category"] for p in paired.values()}
+            and (c.get("hidden") or f"o:{c['id']}" in declined)
+        ),
         env_of={y: p["env"] for y, p in paired.items() if p.get("env")},
         card_env={cid: v["envelope"] for cid, v in card.items()},
         names={

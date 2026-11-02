@@ -338,7 +338,7 @@ def _import(
     tally, problems = apply.send_transactions(plan, acct_ids, cat_ids, run.progress, matches)
     counts["transactions"] = report.transaction_counts(tally)
     run.update(counts=counts, problems=[report.problem(p) for p in problems[:100]])
-    run.log(f"Transactions: {dict(tally)}.")
+    run.log(report.transactions_line(tally))
     if matches:
         run.log(
             f"Linked accounts: {tally['matched']} YNAB transaction(s) matched to ones already "
@@ -364,7 +364,7 @@ def _categories(run: _Run, plan: dict, plan_id: str, decisions: dict, counts: di
     total = len(plan["categories"])
     for item in ("categories", "envelopes"):
         counts[item] = report.count(created=made[item], existing=max(total - made[item], 0))
-    run.log(f"Categories and envelopes: {dict(made) or 'all already there'}.")
+    run.log(report.categories_line(made))
     for line in notes:
         run.log(line)
     return env_ids, frozenset(kept)
@@ -382,7 +382,7 @@ def _budget(
         paired = {g["group"] for g in ynab_pairs.load(plan_id)[1].values()}
         left = [g for g in guards.starter_groups_left_empty(prune, names) if g["id"] not in paired]
         removed = apply.prune_starter(prune, left)
-        run.log(f"Removed unused starter budget items: {dict(removed) or 'none'}.")
+        run.log(report.starter_line(removed))
     budget_envs = {**env_ids, **apply.card_envelopes(plan)}
     tally, problems = apply.apply_budget(plan, budget_envs, run.progress)
     counts["assigned"] = report.count(

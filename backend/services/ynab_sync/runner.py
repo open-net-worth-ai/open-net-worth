@@ -176,7 +176,7 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
         base.flush()
         sync_state.save_meta(meta)
         raise
-    ctx = context.build(st, meta, mirror, base.assigned, base.cats)
+    ctx = context.build(st, meta, mirror, base.assigned, base.cats, base.declined)
     recorder.phase("reconciling transactions")
     scan = units.audit_touched(st["audit_cursor"], upto) | set(st["pending"]) | set(st["held"])
     scan |= {c["onw_txn_id"] for c in conflicts.listing() if c.get("onw_txn_id")}

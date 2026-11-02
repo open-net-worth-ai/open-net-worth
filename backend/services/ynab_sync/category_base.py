@@ -17,6 +17,11 @@ from backend.services.ynab_sync.client import RateCapReached, YnabClient
 
 CATEGORY_REQUESTS = 20  # of a run's requests; transactions and Assigned keep the rest
 NOT_BUDGETED = "Not budgeted"  # the YNAB group for a category that sits in no envelope here
+# YNAB's API cannot hide a category, so one hidden, deleted or merged here is moved into this group
+# (made once, for the person to hide in YNAB if they like). Neither it, "Not budgeted" nor YNAB's
+# own "Hidden Categories" is ever a group the book follows a category into.
+HIDDEN_HERE = "Hidden in Open Net Worth"
+PARKING = (norm(NOT_BUDGETED), norm(HIDDEN_HERE), "hidden categories")
 FIELDS = ("name", "hidden", "group")
 
 
@@ -73,11 +78,13 @@ class Base:
         }
 
     def ostate(self, cat: dict) -> dict:
-        solo = self.book.solo_envelope(cat["id"])
+        """The group is that of whichever envelope holds the category, alone or with others; a
+        category in no envelope has none, and lives in YNAB's "Not budgeted"."""
+        held = self.book.env_of.get(cat["id"])
         return {
             "name": cat["label"],
             "hidden": bool(cat.get("hidden")),
-            "group": solo["group_id"] if solo else None,
+            "group": held["group_id"] if held else None,
         }
 
     def ygroup_name(self, ygid: str | None) -> str:
@@ -93,10 +100,30 @@ class Base:
     def put_group(self, saved: dict) -> None:
         self.yg[saved["id"]] = {**self.yg.get(saved["id"], {}), **saved}
 
+    def parking(self, ygid: str | None) -> bool:
+        """A YNAB group that only holds categories the book has no group for."""
+        return norm((self.yg.get(ygid) or {}).get("name", "")) in PARKING
+
+    def parking_group(self, name: str) -> str:
+        """The YNAB group of this name, made on first use."""
+        found = next(
+            (g for g in self.yg.values() if not g.get("deleted") and norm(g["name"]) == norm(name)),
+            None,
+        )
+        if found:
+            return found["id"]
+        saved = self.send(self.client.create_group, name)
+        self.put_group(saved)
+        self.count("sent", f"Added the group {name} to YNAB.")
+        return saved["id"]
+
+    def not_budgeted_group(self) -> str:
+        return self.parking_group(NOT_BUDGETED)
+
     def mirrorable_group(self, g: dict) -> bool:
         """A YNAB group a book group can pair with: not deleted, not the one YNAB keeps for card
-        payments, not ours for unbudgeted categories, not an internal one."""
-        if g.get("deleted") or norm(g["name"]) in ("credit card payments", norm(NOT_BUDGETED)):
+        payments, not a parking group, not an internal one."""
+        if g.get("deleted") or norm(g["name"]) in ("credit card payments", *PARKING):
             return False
         members = [c for c in self.yc.values() if c.get("category_group_id") == g["id"]]
         return not (members and all(c.get("internal") for c in members))
@@ -109,9 +136,18 @@ class Base:
         return call(*args)
 
     def refused(self, exc: ExternalServiceError) -> bool:
+        """True when YNAB refused this request's content; anything else (auth, outage) stops the run."""
         if not ynab_client.rejected(exc):
             raise exc
         return True
+
+    def confirmed(self, saved: dict, body: dict) -> bool:
+        """YNAB's answer says what we asked for, so a state is only recorded as agreed when it is."""
+        return saved.get("name", body.get("name")) == body.get(
+            "name", saved.get("name")
+        ) and saved.get("category_group_id", body.get("category_group_id")) == body.get(
+            "category_group_id", saved.get("category_group_id")
+        )
 
     # ── telling the person ──
     def count(self, direction: str, text: str) -> None:

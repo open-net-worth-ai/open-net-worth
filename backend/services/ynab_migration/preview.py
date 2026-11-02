@@ -19,6 +19,7 @@ def category_groups(plan: dict, rows: dict[str, dict], matches: dict) -> list[di
         group = groups.setdefault(
             c["group_id"],
             {
+                "id": c["group_id"],
                 "name": c["group"],
                 "group": None if match is None else {"id": match["id"], "name": match["name"]},
                 "categories": [],

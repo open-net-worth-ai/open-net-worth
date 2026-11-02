@@ -10,7 +10,7 @@ from backend.services.ynab_migration.category_match import env_ref, propose
 from backend.services.ynab_migration.mapping import clean
 from backend.services.ynab_pairs import norm
 from backend.services.ynab_sync import conflicts
-from backend.services.ynab_sync.category_base import NOT_BUDGETED, shared_line, trim
+from backend.services.ynab_sync.category_base import shared_line
 from backend.services.ynab_sync.category_pairs import Pairs
 from backend.services.ynab_sync.client import RateCapReached
 
@@ -63,8 +63,11 @@ class News(Pairs):
             planning.apply_budget_change(
                 {"type": "group_rename", "group_id": gp["group"], "name": make.our_group_name(y)}
             )
-        except OpenNetWorthError as exc:
-            reason = f"The group {o} could not be renamed to {y} here ({trim(exc.message or str(exc))}). Keep Open Net Worth's name to send it to YNAB instead."
+        except OpenNetWorthError:
+            reason = (
+                f"YNAB renamed the group {o} to {y}, but this book could not take the change. "
+                "Keep Open Net Worth's name to send it to YNAB instead."
+            )
             fields = [{"label": "Name", "onw": o, "ynab": y}]
             return self.file(
                 conflicts.FAILED, f"group:{gp['id'][2:]}", o, reason, entity="group", fields=fields
@@ -91,8 +94,8 @@ class News(Pairs):
         self.count("sent", f"Renamed the group {y} to {o} in YNAB.")
 
     def ynab_group_for(self, group_id: str | None) -> str | None:
-        """The YNAB group paired with one of ours: the paired one, else the one of the same name,
-        else a new one."""
+        """The YNAB group paired with one of ours: the paired one, else the one of the same name
+        (also one whose old pair was dropped), else a new one."""
         if group_id is None:
             return None
         if (found := self.groups.ynab_id(group_id)) is not None:
@@ -100,9 +103,10 @@ class News(Pairs):
         ours = next((g for g in self.book.groups if g["id"] == group_id), None)
         if ours is None:
             return None
+        taken = {k for k, d in self.base.groups.items() if not d.get("gone")}
         same = [
             g for g in self.yg.values()
-            if g["id"] not in self.base.groups and self.mirrorable_group(g) and norm(g["name"]) == norm(ours["name"])
+            if g["id"] not in taken and self.mirrorable_group(g) and norm(g["name"]) == norm(ours["name"])
         ]  # fmt: skip
         if len(same) == 1:
             self.groups.pair(same[0]["id"], clean(same[0]["name"], 120), ours)
@@ -113,39 +117,23 @@ class News(Pairs):
         self.count("sent", f"Added the group {ours['name']} to YNAB.")
         return saved["id"]
 
-    def not_budgeted_group(self) -> str:
-        found = next(
-            (g for g in self.yg.values() if not g.get("deleted") and norm(g["name"]) == norm(NOT_BUDGETED)),
-            None,
-        )  # fmt: skip
-        if found:
-            return found["id"]
-        saved = self.send(self.client.create_group, NOT_BUDGETED)
-        self.put_group(saved)
-        self.count(
-            "sent",
-            f"Added the group {NOT_BUDGETED} to YNAB, for categories that have no envelope here.",
-        )
-        return saved["id"]
-
     # ── a category that is new in YNAB ──
     def pull_new(self, plan_cats: list[dict]) -> None:
         paired = {p["category"] for p in self.base.cats.values()}
         for c in plan_cats:
-            if c["id"] not in self.base.cats:
-                try:
-                    self.new_from_ynab(c, paired)
-                except OpenNetWorthError as exc:
-                    reason = f"YNAB's {c['name']} could not be added here ({trim(exc.message or str(exc))}). Rename it in YNAB or here, then sync again."
-                    self.file(
-                        conflicts.FAILED,
-                        f"new:{c['id']}",
-                        c["name"],
-                        reason,
-                        entity="new_category",
-                        options=[],
-                        ynab_id=c["id"],
-                    )
+            if c["id"] in self.base.cats or f"y:{c['id']}" in self.base.declined:
+                continue
+            try:
+                self.new_from_ynab(c, paired)
+            except OpenNetWorthError:
+                reason = (
+                    f"YNAB's {c['name']} could not be added here. "
+                    "Rename it in YNAB or here, then try again, or leave it out."
+                )
+                self.file(
+                    conflicts.FAILED, f"new:{c['id']}", c["name"], reason,
+                    entity="new_category", options=[], ynab_id=c["id"],
+                )  # fmt: skip
         for key in [k for k in self.open if k.startswith("new:") and k[4:] in self.base.cats]:
             conflicts.close(key)
 
@@ -169,8 +157,7 @@ class News(Pairs):
         )
 
     def create_here(self, c: dict) -> dict:
-        group = self.yg.get(c["group_id"]) or {}
-        if norm(group.get("name", "")) == norm(NOT_BUDGETED):
+        if self.parking(c["group_id"]):
             return make.make_category(self.book, c["label"], None, c["hidden"], budgeted=False)[0]
         gid = self.groups.ensure(self.book, c["group_id"], c["group_name"])
         return make.make_category(self.book, c["label"], gid, c["hidden"])[0]
@@ -216,7 +203,8 @@ class News(Pairs):
             return
         paired = {p["category"] for p in self.base.cats.values()}
         for cat in self.book.matchable:
-            if cat["id"] in paired or cat.get("hidden") or norm(cat["label"]) in self.held_names:
+            skip = cat["id"] in paired or cat.get("hidden") or norm(cat["label"]) in self.held_names
+            if skip or f"o:{cat['id']}" in self.base.declined:
                 continue
             if f"newhere:{cat['id']}" in self.open:
                 continue
@@ -226,25 +214,42 @@ class News(Pairs):
                 self.deferred += 1
                 return
 
+    def same_named_in_ynab(self, label: str) -> list[dict]:
+        """YNAB's categories of this name that no category here is paired with — hidden ones
+        included, which is why this reads all of YNAB's, not only the ones the plan mirrors."""
+        key = norm(label)
+        return [
+            c for c in self.yc.values()
+            if not c.get("deleted") and not c.get("internal") and c["id"] not in self.base.cats
+            and norm(clean(c["name"], 120)) == key
+            and norm((self.yg.get(c.get("category_group_id")) or {}).get("name", "")) != "credit card payments"
+        ]  # fmt: skip
+
     def create_in_ynab(self, cat: dict) -> None:
+        key = f"newhere:{cat['id']}"
+        same = self.same_named_in_ynab(cat["label"])
+        if len(same) == 1:
+            text = f"Matched YNAB's {clean(same[0]['name'], 120)} with your {cat['label']}."
+            return self.pair_new({"id": same[0]["id"]}, cat, text)
+        if same:
+            reason = (
+                f"YNAB has several categories called {cat['label']}. "
+                "Rename or remove the extras in YNAB, then try again."
+            )
+            return self.file(conflicts.FAILED, key, cat["label"], reason, entity="new_category", options=[], category=cat["id"])  # fmt: skip
         solo, held = self.book.solo_envelope(cat["id"]), self.book.env_of.get(cat["id"])
-        gid = self.ynab_group_for(solo["group_id"]) if solo else None
         try:
+            gid = self.ynab_group_for(held["group_id"]) if held else None
             saved = self.send(
                 self.client.create_category, gid or self.not_budgeted_group(), cat["label"][:50]
             )
         except ExternalServiceError as exc:
             self.refused(exc)
-            reason = f"YNAB did not accept the category {cat['label']}. Rename it here and sync again, or keep YNAB's side to leave it out of YNAB."
-            return self.file(
-                conflicts.FAILED,
-                f"newhere:{cat['id']}",
-                cat["label"],
-                reason,
-                entity="new_category",
-                options=[],
-                category=cat["id"],
+            reason = (
+                f"YNAB did not accept the category {cat['label']} or its group. "
+                "Rename them here and sync again, or leave it out of YNAB."
             )
+            return self.file(conflicts.FAILED, key, cat["label"], reason, entity="new_category", options=[], category=cat["id"])  # fmt: skip
         self.put_cat(saved)
         self.base.set_cat(
             ynab_pairs.cat_doc(
@@ -322,11 +327,12 @@ class News(Pairs):
             return
         yg = self.yg.get(self.yc.get(ycid, {}).get("category_group_id")) or {}
         gid = None
-        if yg and norm(yg.get("name", "")) != norm(NOT_BUDGETED):
+        if yg and not self.parking(yg["id"]):
             gid = self.groups.ensure(self.book, yg["id"], clean(yg["name"], 120))
         env = make.give_envelope(self.book, cat, gid)
         p["env"] = env["id"]
-        p["onw"]["group"] = env["group_id"]
+        # The agreed group is left as it was, so the next comparison sees the move here and
+        # takes the YNAB category out of "Not budgeted" into the group paired with this one.
         self.base.set_cat(p)
         self.count(
             "pulled", f"Added an envelope for {cat['label']}, as YNAB has money assigned to it."

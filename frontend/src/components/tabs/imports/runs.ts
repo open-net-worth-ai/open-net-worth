@@ -104,6 +104,8 @@ export interface PreviewCategory {
   note: string
 }
 export interface PreviewGroup {
+  /** The YNAB category group's id. */
+  id: string
   name: string
   /** The group here it matches, if any. */
   group: { id: string; name: string } | null

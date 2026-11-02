@@ -15,7 +15,9 @@ class Baselines:
     def __init__(self, plan_id: str | None = None) -> None:
         self._store = YnabBaselineStore()
         self.txns, self.assigned = self._store.split()
+        self.plan_id = plan_id
         self.cats, self.groups = ynab_pairs.load(plan_id)
+        self.declined = ynab_pairs.declined(plan_id)
         self._dirty: set[str] = set()
         self._gone: set[str] = set()
 
@@ -43,6 +45,11 @@ class Baselines:
         self.groups[doc["id"][2:]] = doc
         self._dirty.add(doc["id"])
 
+    def decline(self, key: str) -> None:
+        """Leave a category out of the other side for good (``y:<ynab id>`` / ``o:<id>``)."""
+        self.declined.add(key)
+        self._dirty.add(f"x:{key}")
+
     def drop_assigned_of(self, cid: str) -> None:
         """Forget the Assigned both sides held for one YNAB category (it stopped, then resumed,
         syncing with an envelope): the next comparison starts from what each side holds now."""
@@ -64,6 +71,8 @@ class Baselines:
             return self.cats.get(doc_id[2:])
         if doc_id.startswith("g:"):
             return self.groups.get(doc_id[2:])
+        if doc_id.startswith("x:"):
+            return ynab_pairs.decline_doc(self.plan_id, doc_id[2:])
         _, month, cid = doc_id.split(":", 2)
         milli = self.assigned.get((month, cid))
         return {"id": doc_id, "month": month, "category": cid, "milli": milli} if milli else None
@@ -74,6 +83,8 @@ class Baselines:
             docs = [d for i in self.txns if (d := self._doc(f"t:{i}"))]
             docs += [d for m, c in self.assigned if (d := self._doc(f"a:{m}:{c}"))]
             docs += [*self.cats.values(), *self.groups.values()]
+            docs += [ynab_pairs.decline_doc(self.plan_id, k) for k in self.declined]
+            docs += self._store.of_other_plans(self.plan_id)
             self._store.replace_all(docs)
         else:
             for doc_id in changes:

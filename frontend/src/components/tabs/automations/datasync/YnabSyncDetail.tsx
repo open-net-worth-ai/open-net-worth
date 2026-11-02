@@ -294,7 +294,6 @@ export function YnabSyncDetail({
           runs={sync.runs}
           busy={busy}
           planId={sync.planId}
-          interval={status.interval}
           direction={status.direction}
           onDirection={(direction) => void send('settings', '/settings', 'PUT', { direction })}
           onConnect={openConnector}
@@ -310,9 +309,9 @@ export function YnabSyncDetail({
 }
 
 const FLOW: Record<SyncDirection, string> = {
-  both: 'Changes on either side are copied to the other.',
-  from_ynab: 'YNAB’s changes come here. Nothing is written to YNAB.',
-  to_ynab: 'This book’s changes go to YNAB. Nothing comes back.',
+  both: 'Transactions, categories and Assigned changed on either side are copied to the other.',
+  from_ynab: 'YNAB’s transactions, categories and Assigned come here. Nothing is written to YNAB.',
+  to_ynab: 'This book’s transactions, categories and Assigned go to YNAB. Nothing comes back.',
 }
 
 /** Which way changes flow. A change on both sides is asked about in every direction. */
@@ -345,7 +344,6 @@ function SetupSteps({
   runs,
   busy,
   planId,
-  interval,
   direction,
   onDirection,
   onConnect,
@@ -357,7 +355,6 @@ function SetupSteps({
   runs: RunSummary[] | undefined
   busy: string | null
   planId: string | null
-  interval: string
   direction: SyncDirection
   onDirection: (direction: SyncDirection) => void
   onConnect: () => void

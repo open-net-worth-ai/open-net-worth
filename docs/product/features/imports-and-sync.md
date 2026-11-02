@@ -78,15 +78,16 @@ Until it is set up, its page is two steps, the second unlocked by the first:
      **Budget syncs with envelope X**; if the envelope holds other categories too, **its Assigned
      won't sync** (the labels still do); in no envelope, **Not budgeted here** (it gets an envelope
      of its own if YNAB has money assigned to it).
-   - **Into envelope…** when an envelope of that name exists. An empty one is pre-selected and the
+   - **Into your envelope…** when an envelope of that name exists. An empty one is pre-selected and the
      category is created inside it; one that already holds categories is offered but not
      pre-selected, because adding to it makes it a shared envelope.
    - **New category**: a new category with an envelope of its own, in your group of the same name
      (or a new group).
-   - **Use…** any other category of yours that no YNAB category has taken.
+   - **Use your…** any other category of yours that no YNAB category has taken.
 
-   If a YNAB category matches more than one of yours, nothing is guessed: it asks you to pick, and
-   **Import** waits. A YNAB group goes with the group of yours that reads the same, else a new one.
+   The list is searchable when it is long. A category hidden in YNAB comes in hidden, and under
+   the group it came from. If a YNAB category matches more than one of yours, nothing is guessed:
+   it asks you to pick, and **Import** waits. A YNAB group goes with the group of yours that reads the same, else a new one.
 
    **After import** sets the sync (**Keep in sync both ways**, **Sync from YNAB only**, **Sync to
    YNAB only**, or **Don't sync, import once**); then **Import**. The app takes a
@@ -126,10 +127,13 @@ time.
   of its own, in the group paired with its YNAB group; a new category here is created in YNAB, in
   the group paired with its envelope's group). A **rename**, a **move** to another group (for a
   category alone in its envelope) and **hiding** reach the other side. Nothing is ever deleted by
-  the sync: a category hidden or deleted in YNAB is **hidden** here, and one deleted or merged here
-  is **hidden** in YNAB (its API cannot delete), with its transactions relabelled as usual. A
+  the sync: a category hidden or deleted in YNAB is **hidden** here. YNAB's API can neither delete
+  nor hide a category, so one hidden, deleted or merged here is **moved into a YNAB group called
+  "Hidden in Open Net Worth"** (made once; hide it in YNAB yourself if you like, and showing it
+  again here moves it back), with its transactions relabelled as usual. A
   category that sits in no envelope is created in a YNAB group called **Not budgeted**; if YNAB
-  later assigns money to it, it gets an envelope here. A group renamed on one side is renamed on
+  later assigns money to it, it gets an envelope here. Categories in those two groups are never
+  followed into a group here. A group renamed on one side is renamed on
   the other. Income categories are not sent: their transactions go to YNAB as Ready to Assign
   inflows.
 - **Assigned only for one-category envelopes.** A category's Assigned syncs with its envelope only

@@ -6,6 +6,7 @@ edit split lines, and takes no future dates."""
 from __future__ import annotations
 
 from backend.core.user_time import user_today
+from backend.services.ynab_sync import recorder
 from backend.services.ynab_sync.canon import changed_fields
 from backend.services.ynab_sync.context import Context, top_of
 
@@ -32,6 +33,14 @@ def _category_id(ctx: Context, onw_category: str | None) -> str | None:
     if onw_category in ctx.ynab_cat:
         return ctx.ynab_cat[onw_category]
     label = ctx.names["categories"].get(onw_category, onw_category)
+    if onw_category in ctx.unsent:
+        if onw_category not in ctx.said:
+            ctx.said.add(onw_category)
+            recorder.note(
+                label,
+                f"Transactions in {label} go to YNAB uncategorized, as {label} isn't in YNAB.",
+            )
+        return None
     raise NotYet(f"The category {label} isn't in YNAB yet.")
 
 

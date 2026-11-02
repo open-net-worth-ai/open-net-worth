@@ -9,9 +9,8 @@ from backend.core.errors import ExternalServiceError, OpenNetWorthError
 from backend.services import planning
 from backend.services.ynab_migration import category_make as make
 from backend.services.ynab_migration.mapping import clean
-from backend.services.ynab_pairs import norm
 from backend.services.ynab_sync import conflicts
-from backend.services.ynab_sync.category_base import FIELDS, NOT_BUDGETED, Base, trim
+from backend.services.ynab_sync.category_base import FIELDS, HIDDEN_HERE, Base
 from backend.services.ynab_sync.client import RateCapReached
 
 LABELS = {"name": "Name", "hidden": "Visibility", "group": "Group"}
@@ -77,7 +76,12 @@ class Pairs(Base):
         acts = self.actions(p, y, o)
         key = f"cat:{ycid}"
         if "conflict" in acts.values():
-            reason = f"{o['name']} was changed in both Open Net Worth and YNAB. Pick the version to keep."
+            clashing = {f for f, a in acts.items() if a == "conflict"}
+            reason = (
+                "Renamed here and in YNAB. Pick the name to keep."
+                if clashing == {"name"}
+                else "Changed here and in YNAB. Pick the version to keep."
+            )
             return self.file(
                 conflicts.CONFLICT, key, o["name"], reason, entity="category",
                 fields=self.fields({f: a for f, a in acts.items() if a == "conflict"}, y, o),
@@ -117,10 +121,15 @@ class Pairs(Base):
                 else:
                     o["group"] = self.pull_group(cat, y, o)
                 p["ynab"][f], p["onw"][f] = y[f], o[f]
-        except OpenNetWorthError as exc:
-            reason = f"The change to {old} in YNAB could not be made here ({trim(exc.message or str(exc))}). Keep Open Net Worth's version to send it to YNAB instead."
-            self.file(conflicts.FAILED, f"cat:{ycid}", old, reason, entity="category",
-                      fields=self.fields({f: "pull" for f in fields}, y, o))  # fmt: skip
+        except OpenNetWorthError:
+            reason = (
+                f"YNAB changed {old}, but this book could not take the change. "
+                "Keep Open Net Worth's version to send it to YNAB instead."
+            )
+            self.file(
+                conflicts.FAILED, f"cat:{ycid}", old, reason, entity="category",
+                fields=self.fields({f: "pull" for f in fields}, y, o),
+            )  # fmt: skip
 
     def pull_name(self, cat: dict, name: str) -> str:
         result = planning.apply_budget_change(
@@ -133,7 +142,7 @@ class Pairs(Base):
         """Move the envelope that holds only this category into the group YNAB moved it to."""
         solo = self.book.solo_envelope(cat["id"])
         ygroup = self.yg.get(y["group"])
-        if solo is None or ygroup is None or norm(ygroup["name"]) == norm(NOT_BUDGETED):
+        if solo is None or ygroup is None or self.parking(ygroup["id"]):
             return o["group"]
         gid = self.groups.ensure(self.book, ygroup["id"], clean(ygroup["name"], 120))
         if solo["group_id"] != gid:
@@ -147,64 +156,102 @@ class Pairs(Base):
         return gid
 
     # ── here -> YNAB ──
+    def target_group(self, ycid: str, p: dict, o: dict, moved: bool) -> str | None:
+        """The YNAB group this category belongs in: "Hidden in Open Net Worth" while it is hidden
+        here; when shown again, the group it was taken from (unless its envelope moved since:
+        then the group paired with the envelope's), else where it is, else "Not budgeted"."""
+        current = (self.yc.get(ycid) or {}).get("category_group_id")
+        if o["hidden"]:
+            if not self.parking(current):
+                p["home"] = current
+            return self.parking_group(HIDDEN_HERE)
+        home = p.get("home")
+        if home in self.yg and not self.yg[home].get("deleted") and not self.parking(home):
+            if not moved and self.parking(current):
+                return home
+        if o["group"] and (moved or self.parking(current)):
+            return self.ynab_group_for(o["group"])
+        if not self.parking(current):
+            return current
+        return self.not_budgeted_group()
+
     def push(self, ycid: str, p: dict, cat: dict, y: dict, o: dict, fields: list[str]) -> None:
-        body: dict = {}
-        if "name" in fields:
-            body["name"] = o["name"][:50]
-        if "hidden" in fields:
-            body["hidden"] = o["hidden"]
-        if "group" in fields and (gid := self.ynab_group_for(o["group"])) is not None:
-            body["category_group_id"] = gid
-        if not body:
-            return
         try:
-            saved = self.send(self.client.update_category, ycid, body)
+            body: dict = {}
+            if "name" in fields:
+                body["name"] = o["name"][:50]
+            if {"hidden", "group"} & set(fields):
+                gid = self.target_group(ycid, p, o, "group" in fields)
+                if gid and gid != (self.yc.get(ycid) or {}).get("category_group_id"):
+                    body["category_group_id"] = gid
+            saved = self.send(self.client.update_category, ycid, body) if body else self.yc[ycid]
         except RateCapReached:
             self.deferred += 1
             return
         except ExternalServiceError as exc:
             self.refused(exc)
-            reason = f"YNAB did not accept the change to {o['name']}. Keep YNAB's version, or change it there and sync again."
-            self.file(conflicts.FAILED, f"cat:{ycid}", o["name"], reason, entity="category",
-                      fields=self.fields({f: "push" for f in fields}, y, o))  # fmt: skip
-            return
+            return self.refuse(ycid, o["name"], fields, y, o)
+        if not self.confirmed(saved, body):
+            return self.refuse(ycid, o["name"], fields, y, o)
         self.put_cat(saved)
+        if not o["hidden"]:
+            p.pop("parked", None)
         now = self.ystate(saved)
         for f in fields:
             p["ynab"][f], p["onw"][f] = now[f], o[f]
-        self.say_pushed(y, o, fields)
+        self.say_pushed(y, o, fields, body)
 
-    def say_pushed(self, y: dict, o: dict, fields: list[str]) -> None:
+    def refuse(self, ycid: str, name: str, fields: list[str], y: dict, o: dict) -> None:
+        reason = (
+            f"YNAB did not accept the change to {name}. Keep YNAB's version, "
+            "or change it there and sync again."
+        )
+        self.file(
+            conflicts.FAILED, f"cat:{ycid}", name, reason, entity="category",
+            fields=self.fields({f: "push" for f in fields}, y, o),
+        )  # fmt: skip
+
+    def say_pushed(self, y: dict, o: dict, fields: list[str], body: dict) -> None:
         name = o["name"]
-        if "name" in fields:
+        if "name" in body:
             self.count("sent", f"Renamed {y['name']} to {name} in YNAB.")
-        if "hidden" in fields:
-            verb = "Hid" if o["hidden"] else "Showed"
-            self.count(
-                "sent",
-                f"{verb} {name} in YNAB, as it is {'hidden' if o['hidden'] else 'shown'} here.",
-            )
-        if "group" in fields:
-            self.count("sent", f"Moved {name} to {self.ogroup_name(o['group'])} in YNAB.")
+        if "category_group_id" in body:
+            where = HIDDEN_HERE if o["hidden"] else self.ygroup_name(body["category_group_id"])
+            if o["hidden"]:
+                line = f"Moved {name} to {where} in YNAB, as it is hidden here. You can hide it in YNAB yourself."
+            elif "hidden" in fields:
+                line = f"Moved {name} back to {where} in YNAB, as it is shown here."
+            else:
+                line = f"Moved {name} to {where} in YNAB."
+            self.count("sent", line)
 
     def ours_gone(self, ycid: str, p: dict, ycat: dict | None) -> None:
-        """Deleted here (or merged into another category): YNAB cannot delete a category, so it is
-        hidden there. Its transactions were relabelled here, and follow."""
+        """Deleted here (or merged into another category): YNAB's API can neither delete nor hide
+        a category, so it is moved into "Hidden in Open Net Worth" and the pair is kept. Its
+        transactions were relabelled here, and follow."""
         name = p["onw"]["name"]
-        if ycat is None or self.ystate(ycat)["hidden"]:
+        if ycat is None or ycat.get("deleted") or self.ystate(ycat)["hidden"]:
             p["gone"] = True
-        elif self.can_push:
+        elif p.get("parked") or not self.can_push:
+            return
+        else:
             try:
-                saved = self.send(self.client.update_category, ycid, {"hidden": True})
+                gid = self.parking_group(HIDDEN_HERE)
+                body = {"category_group_id": gid}
+                saved = self.send(self.client.update_category, ycid, body)
             except RateCapReached:
                 self.deferred += 1
                 return
             except ExternalServiceError as exc:
-                self.refused(exc)  # YNAB no longer has it either: nothing is left to pair
-                p["gone"] = True
-            else:
-                self.put_cat(saved)
-                p["gone"] = True
-                p["ynab"]["hidden"] = p["onw"]["hidden"] = True
-                self.count("sent", f"Hid {name} in YNAB, as it was deleted here.")
+                self.refused(exc)
+                reason = f"YNAB would not move {name} to {HIDDEN_HERE}. Move it there or hide it in YNAB yourself."
+                return self.file(conflicts.FAILED, f"cat:{ycid}", name, reason, entity="category")
+            if not self.confirmed(saved, body):
+                return
+            p["home"] = ycat.get("category_group_id")
+            self.put_cat(saved)
+            p["parked"] = True
+            p["ynab"]["group"], p["onw"]["hidden"] = gid, True
+            line = f"Moved {name} to {HIDDEN_HERE} in YNAB, as it was removed here. You can hide it in YNAB yourself."
+            self.count("sent", line)
         self.base.set_cat(p)

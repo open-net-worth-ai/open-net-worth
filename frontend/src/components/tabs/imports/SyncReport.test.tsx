@@ -81,7 +81,15 @@ describe('Sync run report', () => {
   it('says Nothing changed for a run with nothing in it and hides the empty sections', async () => {
     current = syncRun({
       outcome: 'Nothing changed',
-      totals: { sent: 0, pulled: 0, assigned: 0, conflicts: 0, deferred: 0, errors: 0 },
+      totals: {
+        sent: 0,
+        pulled: 0,
+        assigned: 0,
+        categories: 0,
+        conflicts: 0,
+        deferred: 0,
+        errors: 0,
+      },
       txn_changes: [],
       assigned_changes: [],
       conflicts: [],
@@ -109,7 +117,15 @@ describe('Sync run report', () => {
     }))
     current = syncRun({
       txn_changes: many,
-      totals: { sent: 0, pulled: 130, assigned: 0, conflicts: 0, deferred: 0, errors: 0 },
+      totals: {
+        sent: 0,
+        pulled: 130,
+        assigned: 0,
+        categories: 0,
+        conflicts: 0,
+        deferred: 0,
+        errors: 0,
+      },
       not_stored: { txn_changes: 10 },
       assigned_changes: [],
       conflicts: [],

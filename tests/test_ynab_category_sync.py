@@ -56,7 +56,7 @@ def sent(world, method, suffix):  # noqa: F811
 
 def test_the_import_leaves_every_category_and_group_paired(world):  # noqa: F811
     cats, groups = ynab_pairs.load(ynab_stub.PLAN)
-    assert len(cats) == 6 and len(groups) == 4
+    assert len(cats) == 6 and len(groups) == 3
     assert cats[world.state["C"]["groc"]]["category"] == cat("Groceries")["id"]
     enable()
     assert sync()["summary"] == "Nothing changed" and world.writes == []
@@ -140,34 +140,68 @@ def test_a_new_category_here_is_created_in_ynab_in_the_group_paired_with_its_env
     assert sync()["summary"] == "Nothing changed" and len(sent(world, "POST", "/categories")) == 1
 
 
-def test_rename_move_and_hide_here_reach_ynab(world):  # noqa: F811
+def test_rename_move_and_hide_here_reach_ynab_and_hiding_parks_the_category(world):  # noqa: F811
     enable()
     sync()
     change(type="category_rename", key=cat("Groceries")["id"], new_label="Food")
     change(type="move_category", category=env("Food")["id"], group_id=group("Wants")["id"])
     categories_service.set_category_hidden(cat("Dining out")["id"], True)
-    assert sync()["summary"] == "3 category changes"
+    run = sync()
+    assert run["summary"] == "4 category changes"  # incl. the group made for hidden ones
     assert ynab_group_of(world, "Food") == "Wants"
-    assert ynab_stub.category_named(world.state, "Dining out")["hidden"]
-    categories_service.set_category_hidden(cat("Dining out")["id"], False)
-    sync()
+    # YNAB's API cannot hide a category: it is moved to a group made for it, once.
+    assert ynab_group_of(world, "Dining out") == "Hidden in Open Net Worth"
     assert not ynab_stub.category_named(world.state, "Dining out")["hidden"]
+    assert not any("hidden" in str(w[2]) for w in world.writes)
+    lines = [c["text"] for c in record(run)["category_changes"]]
+    assert (
+        "Moved Dining out to Hidden in Open Net Worth in YNAB, as it is hidden here. "
+        "You can hide it in YNAB yourself."
+    ) in lines
+    assert sync()["summary"] == "Nothing changed"
+    categories_service.set_category_hidden(cat("Dining out")["id"], False)
+    run = sync()
+    assert ynab_group_of(world, "Dining out") == "Needs"  # back where it belongs
+    assert [c["text"] for c in record(run)["category_changes"]] == [
+        "Moved Dining out back to Needs in YNAB, as it is shown here."
+    ]
 
 
-def test_a_category_deleted_or_merged_here_is_hidden_in_ynab(world):  # noqa: F811
+def test_a_category_deleted_or_merged_here_is_parked_in_ynab_not_hidden(world):  # noqa: F811
     enable()
     sync()
-    change(type="category_delete", key=cat("Fun Money")["id"], reassign=True)
+    change(type="category_delete", key=cat("Utilities")["id"], reassign=True)
     change(type="category_rename", key=cat("Dining out")["id"], merge_into=cat("Groceries")["id"])
     run = sync()
-    assert record(run)["totals"]["categories"] == 2
-    assert ynab_stub.category_named(world.state, "Fun Money")["hidden"]
-    assert ynab_stub.category_named(world.state, "Dining out")["hidden"]
-    assert not ynab_stub.category_named(world.state, "Groceries")["hidden"]
+    assert record(run)["totals"]["categories"] == 3  # two moved, and the group made once
+    for name in ("Utilities", "Dining out"):
+        assert ynab_group_of(world, name) == "Hidden in Open Net Worth"
+    assert ynab_group_of(world, "Groceries") == "Needs"
+    assert sum(1 for g in world.state["groups"] if g["name"] == "Hidden in Open Net Worth") == 1
+    assert (
+        "Moved Dining out to Hidden in Open Net Worth in YNAB, as it was removed here. "
+        "You can hide it in YNAB yourself."
+    ) in [c["text"] for c in record(run)["category_changes"]]
+    pair = ynab_pairs.load(ynab_stub.PLAN)[0][world.state["C"]["dine"]]
+    assert not pair["gone"]  # the pair is kept while it sits there
     assert row("Pizza")["category"] == cat("Groceries")["id"]  # relabelled, and still synced
     assert (
         ynab_stub.find(world.state, payee_name="Pizza")["category_id"] == world.state["C"]["groc"]
     )
+    assert sync()["summary"] == "Nothing changed"
+
+
+def test_a_category_in_a_parking_group_is_never_a_move_the_book_follows(world):  # noqa: F811
+    enable()
+    sync()
+    categories_service.set_category_hidden(cat("Dining out")["id"], True)
+    sync()
+    before = env("Dining out")["group_id"]
+    ynab_stub.ynab_hide_category(world.state, "groc")  # hidden in YNAB's own app: hides here
+    sync()
+    assert cat("Groceries")["hidden"] and env("Groceries")["group_id"] == group("Needs")["id"]
+    assert env("Dining out")["group_id"] == before
+    assert not ynab_sync.status()["conflicts"]
 
 
 def test_a_new_group_here_is_created_in_ynab_with_its_first_envelope(world):  # noqa: F811
@@ -308,7 +342,7 @@ def test_the_same_rename_on_both_sides_goes_to_review_and_either_side_can_win(wo
     (item,) = ynab_sync.status()["conflicts"]
     assert item["entity"] == "category" and item["kind"] == "conflict"
     assert item["fields"] == [{"label": "Name", "onw": "Food", "ynab": "Meals"}]
-    assert "changed in both" in item["reason"]
+    assert item["reason"] == "Renamed here and in YNAB. Pick the name to keep."
     ynab_sync.resolve.resolve(item["id"], "onw")
     assert ynab_stub.category_named(world.state, "Food")["id"] == world.state["C"]["groc"]
     assert ynab_sync.status()["conflicts"] == [] and sync()["summary"] == "Nothing changed"
@@ -466,8 +500,8 @@ def test_a_category_ynab_refuses_is_reported_in_plain_words_and_not_retried(worl
     assert run["summary"] == "1 needs review"
     (item,) = ynab_sync.status()["conflicts"]
     assert item["reason"] == (
-        "YNAB did not accept the category Pets. Rename it here and sync again, "
-        "or keep YNAB's side to leave it out of YNAB."
+        "YNAB did not accept the category Pets or its group. "
+        "Rename them here and sync again, or leave it out of YNAB."
     )
     world.state.pop("reject_writes")
     before = len(world.writes)
@@ -475,3 +509,298 @@ def test_a_category_ynab_refuses_is_reported_in_plain_words_and_not_retried(worl
     assert len(world.writes) == before  # it waits for the person
     ynab_sync.resolve.resolve(item["id"], "onw")  # try again
     assert ynab_group_of(world, "Pets") == "Needs"
+
+
+# ── fix round: refusals, decisions, parking, hidden categories ──
+
+
+def conflict_items():
+    return ynab_sync.status()["conflicts"]
+
+
+def test_a_refused_group_is_a_review_item_and_the_run_carries_on(world):  # noqa: F811
+    enable()
+    sync()
+    change(type="group_create", name="Treats")
+    make("Cake", "Treats")
+    world.state["reject_group_writes"] = True
+    ynab_stub.ynab_budget(world.state, 0, "fun", 60_000)
+    run = sync()
+    assert run["ok"] and run["summary"].startswith("1 pulled")  # Assigned still synced
+    (item,) = conflict_items()
+    assert item["reason"] == (
+        "YNAB did not accept the category Cake or its group. "
+        "Rename them here and sync again, or leave it out of YNAB."
+    )
+    assert "HTTP" not in item["reason"]
+
+
+def test_a_same_named_ynab_group_whose_pair_was_dropped_is_paired_again_not_duplicated(
+    world,  # noqa: F811
+):
+    enable()
+    sync()
+    change(type="group_delete", group_id=group("Needs")["id"])
+    sync()
+    change(type="group_create", name="Needs")
+    make("Gifts", "Needs")
+    sync()
+    assert sum(1 for g in world.state["groups"] if g["name"] == "Needs") == 1
+    assert ynab_group_of(world, "Gifts") == "Needs"
+
+
+def refuse_next_category(world):  # noqa: F811
+    world.state["reject_writes"] = "no"
+    sync()
+    world.state.pop("reject_writes")
+
+
+def test_leaving_a_refused_category_out_of_ynab_keeps_it_out(world):  # noqa: F811
+    enable()
+    sync()
+    make("Pets")
+    refuse_next_category(world)
+    (item,) = conflict_items()
+    ynab_sync.resolve.resolve(item["id"], "ynab")  # leave it out of YNAB
+    tried = len(world.writes)
+    for _ in range(2):
+        run = sync()
+        assert run["summary"] == "Nothing changed" and not conflict_items()
+    assert len(world.writes) == tried  # not tried again
+
+
+def test_leaving_out_a_ynab_category_this_book_cannot_add_keeps_it_out(world, monkeypatch):  # noqa: F811
+    from backend.core.errors import ValidationError
+    from backend.services.ynab_migration import category_make
+
+    enable()
+    sync()
+
+    def refuse(*a, **k):
+        raise ValidationError("no")
+
+    ynab_stub.ynab_add_category(world.state, "needs", "Gifts", key="gifts")
+    with monkeypatch.context() as patched:
+        patched.setattr(category_make, "make_category", refuse)
+        sync()
+    (item,) = conflict_items()
+    assert item["reason"] == (
+        "YNAB's Gifts could not be added here. "
+        "Rename it in YNAB or here, then try again, or leave it out."
+    )
+    ynab_sync.resolve.resolve(item["id"], "onw")  # leave it out
+    for _ in range(2):
+        assert sync()["summary"] == "Nothing changed"
+    assert not any(c["label"] == "Gifts" for c in categories_service.all_category_rows())
+
+
+def test_a_failed_category_change_can_be_settled_either_way(world):  # noqa: F811
+    enable()
+    sync()
+    change(type="category_rename", key=cat("Groceries")["id"], new_label="Food")
+    world.state["reject_writes"] = "no"
+    sync()
+    (item,) = conflict_items()
+    assert item["kind"] == "failed" and item["entity"] == "category"
+    world.state.pop("reject_writes")
+    ynab_sync.resolve.resolve(item["id"], "ynab")  # YNAB's name wins: here goes back
+    assert cat("Groceries") and not any(
+        c["label"] == "Food" for c in categories_service.all_category_rows()
+    )
+    change(type="category_rename", key=cat("Groceries")["id"], new_label="Meals")
+    world.state["reject_writes"] = "no"
+    sync()
+    (item,) = conflict_items()
+    world.state.pop("reject_writes")
+    ynab_sync.resolve.resolve(item["id"], "onw")  # ours is sent
+    assert ynab_stub.category_named(world.state, "Meals")["id"] == world.state["C"]["groc"]
+    assert not conflict_items() and sync()["summary"] == "Nothing changed"
+
+
+def test_a_failed_group_rename_can_be_settled_either_way(world):  # noqa: F811
+    enable()
+    sync()
+    change(type="group_rename", group_id=group("Needs")["id"], name="Essentials")
+    world.state["reject_group_writes"] = True
+    sync()
+    (item,) = conflict_items()
+    assert item["kind"] == "failed" and item["entity"] == "group"
+    world.state.pop("reject_group_writes")
+    ynab_sync.resolve.resolve(item["id"], "onw")
+    assert any(g["name"] == "Essentials" for g in world.state["groups"])
+    change(type="group_rename", group_id=group("Essentials")["id"], name="Basics")
+    world.state["reject_group_writes"] = True
+    sync()
+    (item,) = conflict_items()
+    world.state.pop("reject_group_writes")
+    ynab_sync.resolve.resolve(item["id"], "ynab")
+    assert group("Essentials") and not any(g["name"] == "Basics" for g in world.state["groups"])
+
+
+def test_a_hidden_used_category_imports_and_the_first_sync_moves_nothing(world):  # noqa: F811
+    """Old Cat is hidden in YNAB, so it sits in YNAB's "Hidden Categories" group; its home group
+    is the one the import used."""
+    assert env("Old Cat")["group_id"] == group("Wants")["id"]
+    pair = ynab_pairs.load(ynab_stub.PLAN)[0][world.state["C"]["oldcat"]]
+    assert pair["ynab"]["group"] == world.state["G"]["wants"] and pair["ynab"]["hidden"]
+    enable()
+    run = sync()
+    assert run["summary"] == "Nothing changed" and world.writes == []
+    assert env("Old Cat")["group_id"] == group("Wants")["id"]
+
+
+def test_a_hidden_unused_ynab_category_is_matched_not_duplicated(world):  # noqa: F811
+    enable()
+    sync()
+    ynab_stub.ynab_add_category(world.state, "needs", "Dusty", key="dusty")
+    ynab_stub.ynab_hide_category(world.state, "dusty")
+    sync()  # unused and hidden: not brought in
+    assert not any(c["label"] == "Dusty" for c in categories_service.all_category_rows())
+    mine = make("Dusty")
+    sync()
+    assert not sent(world, "POST", "/categories")
+    assert ynab_pairs.load(ynab_stub.PLAN)[0][world.state["C"]["dusty"]]["category"] == mine["id"]
+
+
+def test_a_change_ynab_took_but_did_not_make_is_not_recorded_as_agreed(world):  # noqa: F811
+    enable()
+    sync()
+    world.state["ignore_fields"] = {"name"}
+    change(type="category_rename", key=cat("Groceries")["id"], new_label="Food")
+    sync()
+    (item,) = conflict_items()
+    assert item["kind"] == "failed"
+    pair = ynab_pairs.load(ynab_stub.PLAN)[0][world.state["C"]["groc"]]
+    assert pair["onw"]["name"] == "Groceries" and pair["ynab"]["name"] == "Groceries"
+
+
+def test_a_category_that_gets_in_ynab_late_is_paired_per_category_and_flush_keeps_other_plans(
+    world,  # noqa: F811
+    monkeypatch,
+):
+    from backend.services.ynab_sync import baselines
+
+    enable()
+    sync()
+    ynab_pairs.save([ynab_pairs.cat_doc("another-plan", "y9", "cat_x", None, {}, {})])
+    monkeypatch.setattr(baselines, "FLUSH_BULK", 0)
+    make("Pets")
+    sync()
+    assert "y9" in ynab_pairs.load("another-plan")[0]
+    assert ynab_pairs.load(ynab_stub.PLAN)[0]
+
+
+def test_a_stale_pick_is_a_plain_error_not_a_crash(world):  # noqa: F811
+    from backend.core.errors import ConflictError
+
+    enable()
+    sync()
+    a, b = make("Gifts", envelope=False), make("🎁 Gifts", envelope=False)
+    ynab_stub.ynab_add_category(world.state, "needs", "gifts", key="gifts3")
+    ynab_stub.ynab_add_category(world.state, "needs", "Gifts!", key="gifts4")
+    sync()
+    items = {i["title"]: i for i in conflict_items()}
+    first, second = items["gifts"], items["Gifts!"]
+    ynab_sync.resolve.resolve(first["id"], "onw", f"cat:{a['id']}")
+    with pytest.raises(ConflictError) as taken:
+        ynab_sync.resolve.resolve(second["id"], "onw", f"cat:{a['id']}")
+    assert str(taken.value.message) == (
+        "That category is already matched with another YNAB category. Pick another."
+    )
+    change(type="category_delete", key=b["id"])
+    with pytest.raises(ConflictError) as gone:
+        ynab_sync.resolve.resolve(second["id"], "onw", f"cat:{b['id']}")
+    assert "no longer in this book" in gone.value.message
+
+
+def test_a_pull_this_book_refuses_says_so_without_technical_words(world):  # noqa: F811
+    enable()
+    sync()
+    make("Meals", envelope=False)
+    ynab_stub.ynab_rename_category(world.state, "groc", "Meals")
+    sync()
+    (item,) = conflict_items()
+    assert item["reason"] == (
+        "YNAB changed Groceries, but this book could not take the change. "
+        "Keep Open Net Worth's version to send it to YNAB instead."
+    )
+
+
+def test_picking_a_category_reports_a_real_sentence(world, monkeypatch):  # noqa: F811
+    from backend.services.ynab_sync import recorder
+
+    lines = []
+    monkeypatch.setattr(recorder, "category_change", lambda d, t: lines.append(t))
+    enable()
+    sync()
+    a = make("Gifts", envelope=False)
+    make("🎁 Gifts", envelope=False)
+    ynab_stub.ynab_add_category(world.state, "needs", "gifts", key="gifts3")
+    sync()
+    (item,) = conflict_items()
+    ynab_sync.resolve.resolve(item["id"], "onw", f"cat:{a['id']}")
+    assert lines[-1] == "Matched YNAB's gifts with your Gifts."
+    assert all(line.strip() for line in lines)
+
+
+def test_rows_in_a_category_that_is_not_in_ynab_go_there_uncategorized_and_it_is_said_once(
+    world,  # noqa: F811
+):
+    from backend.services import ledger as ledger_service
+
+    enable()
+    sync()
+    hush = make("Hush")
+    categories_service.set_category_hidden(hush["id"], True)  # hidden and unpaired: not sent
+    chk = next(a for a in ledger_service.accounts.query_accounts() if a["name"] == "Checking")
+    ledger_service.create_transaction(
+        {
+            "kind": "expense", "date": world.state["d"](0, 1), "description": "Quiet buy",
+            "from_account_id": chk["id"], "from_amount": 12, "from_currency": "USD",
+            "category": hush["id"],
+        }
+    )  # fmt: skip
+    run = sync()
+    assert run["summary"] == "1 sent to YNAB"
+    assert ynab_stub.find(world.state, payee_name="Quiet buy")["category_id"] is None
+    assert [n["reason"] for n in record(run)["notes"]] == [
+        "Transactions in Hush go to YNAB uncategorized, as Hush isn't in YNAB."
+    ]
+    assert row("Quiet buy")["category"] == hush["id"]  # this book keeps its own category
+    assert sync()["summary"] == "Nothing changed"
+
+
+def test_rows_in_a_category_left_out_of_ynab_follow_the_same_rule(world):  # noqa: F811
+    enable()
+    sync()
+    make("Pets")
+    refuse_next_category(world)
+    (item,) = conflict_items()
+    ynab_sync.resolve.resolve(item["id"], "ynab")
+    from backend.services import ledger as ledger_service
+
+    chk = next(a for a in ledger_service.accounts.query_accounts() if a["name"] == "Checking")
+    ledger_service.create_transaction(
+        {
+            "kind": "expense", "date": world.state["d"](0, 1), "description": "Vet",
+            "from_account_id": chk["id"], "from_amount": 30, "from_currency": "USD",
+            "category": cat("Pets")["id"],
+        }
+    )  # fmt: skip
+    run = sync()
+    assert run["summary"] == "1 sent to YNAB" and not run["deferred"]
+    assert row("Vet")["category"] == cat("Pets")["id"]
+
+
+def test_moving_a_category_into_one_of_our_parking_groups_in_ynab_moves_nothing_here(world):  # noqa: F811
+    enable()
+    sync()
+    make("Loose", envelope=False)
+    categories_service.set_category_hidden(cat("Dining out")["id"], True)
+    sync()
+    for name in ("Not budgeted", "Hidden in Open Net Worth"):
+        gid = next(g["id"] for g in world.state["groups"] if g["name"] == name)
+        ynab_stub.ynab_move_category(world.state, "groc", gid)
+        before = env("Groceries")["group_id"]
+        sync()
+        assert env("Groceries")["group_id"] == before and not conflict_items()

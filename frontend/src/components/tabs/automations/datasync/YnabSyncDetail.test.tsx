@@ -178,6 +178,7 @@ describe('YnabSyncDetail setup', () => {
     expect(await w.findByText(/USD · 1 account · 4 transactions · 3 categories/)).toBeTruthy()
     // Three tabs over one pane: accounts first, then each category under its group, then rows.
     expect(w.getByRole('cell', { name: 'Checking' })).toBeTruthy()
+    expect(w.getByRole('cell', { name: 'Cash' })).toBeTruthy() // the app's own type label
     fireEvent.click(w.getByRole('tab', { name: /Categories/ }))
     expect(w.getByRole('rowheader', { name: /Bills/ })).toBeTruthy()
     expect(w.getByRole('cell', { name: 'Utilities' })).toBeTruthy()
@@ -234,7 +235,9 @@ describe('YnabSyncDetail setup', () => {
     fireEvent.change(select, { target: { value: 'p1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
     const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
-    expect(await w.findByText(/They stay as they are/)).toBeTruthy()
+    expect(
+      await w.findByText(/Each YNAB account comes in as a new one unless you pick/),
+    ).toBeTruthy()
     fireEvent.click(w.getByRole('button', { name: 'After import' }))
     fireEvent.mouseDown(screen.getByRole('option', { name: /Don’t sync, import once/ }))
     fireEvent.click(w.getByRole('button', { name: 'Import' }))
@@ -349,7 +352,9 @@ describe('YnabSyncDetail setup', () => {
       ],
       note: 'Matches more than one of your categories. Pick one.',
     })
-    const groups = (rows: PreviewCategory[]) => [{ name: 'Bills', group: null, categories: rows }]
+    const groups = (rows: PreviewCategory[]) => [
+      { id: 'yg1', name: 'Bills', group: null, categories: rows },
+    ]
     preview = { ...PREVIEW, category_groups: groups([row('c1', 'Rent'), matched, ask]) }
     categorized = {
       ...preview,
@@ -388,8 +393,8 @@ describe('YnabSyncDetail setup', () => {
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
       'Matches your Utilities',
       'New category',
-      'Use Food shop',
-      'Into envelope Gifts',
+      'Use your Food shop',
+      'Into your envelope Gifts',
     ])
     fireEvent.mouseDown(screen.getByRole('option', { name: 'New category' }))
     await waitFor(() =>
@@ -409,6 +414,53 @@ describe('YnabSyncDetail setup', () => {
         body: { category_links: { c2: '' } },
       }),
     )
+  })
+
+  it('searches a long list of categories, and says a category hidden in YNAB comes in hidden', async () => {
+    sync = notSetUp()
+    const many = Array.from({ length: 12 }, (_, i) => ({ ref: `cat:k${i}`, name: `Shop ${i}` }))
+    preview = {
+      ...PREVIEW,
+      category_choices: { categories: many, envelopes: [] },
+      category_groups: [
+        {
+          id: 'yg1',
+          name: 'Bills',
+          group: null,
+          categories: [
+            {
+              id: 'c1',
+              label: 'Old Cat',
+              name: 'Old Cat',
+              hidden: true,
+              link: null,
+              chosen: false,
+              ask: false,
+              options: [],
+              note: 'Budget syncs with a new envelope of its own',
+            },
+          ],
+        },
+      ],
+    }
+    page()
+    const select = (await screen.findByLabelText(/YNAB plan/)) as HTMLSelectElement
+    await waitFor(() => expect(select.options.length).toBeGreaterThan(1))
+    fireEvent.change(select, { target: { value: 'p1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
+    const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
+    fireEvent.click(await w.findByRole('tab', { name: /Categories/ }))
+    expect(
+      w.getByText(
+        'Budget syncs with a new envelope of its own. Hidden in YNAB, so hidden here too',
+      ),
+    ).toBeTruthy()
+    fireEvent.click(w.getByRole('button', { name: 'Where Old Cat goes' }))
+    const box = screen.getByPlaceholderText('Search categories…')
+    fireEvent.change(box, { target: { value: 'shop 11' } })
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Use your Shop 11'])
+    fireEvent.change(box, { target: { value: 'zzz' } })
+    expect(screen.getByText('No category matches.')).toBeTruthy()
   })
 
   it('a plan in another currency than a book with data cannot be imported, and says why', async () => {
@@ -456,6 +508,13 @@ describe('YnabSyncDetail once set up', () => {
     expect(screen.getByText(/Next sync:/)).toBeTruthy()
     expect(screen.getByText(/3 sent to YNAB, 1 pulled, 1 needs review/)).toBeTruthy()
     expect((screen.getByRole('switch') as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('says in one line per direction that categories travel too', async () => {
+    page()
+    expect(
+      await screen.findByText(/Transactions, categories and Assigned changed on either side/),
+    ).toBeTruthy()
   })
 
   it('puts the review list first and applies the chosen side to both', async () => {

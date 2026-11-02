@@ -60,7 +60,18 @@ def save(docs: list[dict]) -> None:
         store.upsert(doc)
 
 
+def declined(plan_id: str | None) -> set[str]:
+    """What the person chose to leave out: ``y:<ynab category id>`` (not added here) and
+    ``o:<category id>`` (not added to YNAB)."""
+    return YnabBaselineStore().declined(plan_id)
+
+
+def decline_doc(plan_id: str | None, key: str) -> dict:
+    return {"id": f"x:{key}", "plan": plan_id}
+
+
 def keep_for(plan_id: str | None) -> list[dict]:
-    """The pair documents of one plan, to carry across a reset of the sync's other state."""
+    """The pair and decision documents of one plan, to carry across a reset of the sync's other
+    state."""
     cats, groups = load(plan_id)
-    return [*cats.values(), *groups.values()]
+    return [*cats.values(), *groups.values(), *(decline_doc(plan_id, k) for k in declined(plan_id))]

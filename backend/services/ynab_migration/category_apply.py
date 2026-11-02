@@ -66,8 +66,9 @@ def apply(plan: dict, decisions: dict[str, dict], plan_id: str, book: Book):
     log, the ids of every category the plan uses)``. ``envelope`` is the one holding only that
     category — the one whose Assigned the plan fills — else ``None``."""
     old_cats, old_groups = ynab_pairs.load(plan_id)
-    docs: list[dict] = []
-    groups = Groups(plan_id, old_groups, docs.append)
+    # Each pair is saved as soon as it exists, so a run that stops half way leaves nothing created
+    # and unpaired for the next one to create again.
+    groups = Groups(plan_id, old_groups, lambda doc: ynab_pairs.save([doc]))
     for c in plan["categories"]:
         groups.match(book, c["group_id"], c["group_name"])
     out: dict[str, dict] = {}
@@ -83,9 +84,8 @@ def apply(plan: dict, decisions: dict[str, dict], plan_id: str, book: Book):
             made["envelopes"] += 1
         elif env is None and held is not None:
             notes[held["id"]] = shared_note(held["name"])
-        docs.append(_pair(plan_id, c, book.rows[cat["id"]], env, old_cats.get(c["id"])))
+        ynab_pairs.save([_pair(plan_id, c, book.rows[cat["id"]], env, old_cats.get(c["id"]))])
         out[c["id"]] = {"category": cat["id"], "envelope": env["id"] if env else None}
-    ynab_pairs.save(docs)
     return out, made, list(notes.values()), {v["category"] for v in out.values()}
 
 

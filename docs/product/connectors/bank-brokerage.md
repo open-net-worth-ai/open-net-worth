@@ -279,10 +279,11 @@ once as a labelled balance adjustment. Goals and scheduled transactions are not 
 After the migration, the [YNAB data sync](../features/imports-and-sync.md) (in Automations) keeps this book and that
 YNAB plan in step, on a schedule: **transactions** (new, edited, deleted, categorized, memo,
 cleared, splits, transfers), **categories and category groups** (new, renamed, moved to another
-group, hidden) and each **month's Assigned** for an envelope that holds just one category, from
-YNAB, to YNAB or both ways. A category deleted on either side is hidden on the other, never
-deleted (YNAB's API cannot delete one); a category with no envelope here lives in a YNAB group
-called **Not budgeted**. Accounts, goals and scheduled transactions are not synced, and a card's
+group) and each **month's Assigned** for an envelope that holds just one category, from
+YNAB, to YNAB or both ways. Nothing is ever deleted: a category hidden or deleted in YNAB is hidden
+here, and one hidden, deleted or merged here is moved into a YNAB group called **Hidden in Open Net
+Worth** (YNAB's API can neither delete nor hide a category); a category with no envelope here lives
+in a YNAB group called **Not budgeted**. Accounts, goals and scheduled transactions are not synced, and a card's
 payment category is read from YNAB only — its Assigned is never sent.
 
 1. Click **Turn on** (the last setup step) and, if you like, change the **Schedule** (every 15 or

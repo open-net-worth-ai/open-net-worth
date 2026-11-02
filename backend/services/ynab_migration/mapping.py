@@ -99,6 +99,7 @@ def plan_categories(groups: list[dict], txns: list[dict], months: list[dict]) ->
     skip: dict[str, str] = {}
     cards: dict[str, str] = {}  # card payment category id -> its card account's name
     chosen: list[tuple[str, str, str, bool, str]] = []
+    by_id = {g["id"]: g for g in groups if not g.get("deleted")}
     for g in groups:
         if g.get("deleted"):
             continue
@@ -117,8 +118,16 @@ def plan_categories(groups: list[dict], txns: list[dict], months: list[dict]) ->
             elif hidden and c["id"] not in used:
                 skip[c["id"]] = "hidden_unused"
             else:
+                # A category hidden in YNAB's own app sits in its "Hidden Categories" group; it
+                # belongs to the group it came from.
+                home = (
+                    by_id.get(c.get("original_category_group_id") or "")
+                    if c.get("hidden")
+                    else None
+                )
+                home = home or g
                 chosen.append(
-                    (c["id"], clean(c["name"], 120), clean(g["name"], 120), hidden, g["id"])
+                    (c["id"], clean(c["name"], 120), clean(home["name"], 120), hidden, home["id"])
                 )
     labels = unique_labels([(i, n, g) for i, n, g, _, _ in chosen])
     cats = [

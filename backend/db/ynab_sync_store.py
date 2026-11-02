@@ -58,6 +58,18 @@ class YnabBaselineStore(BookPayloadTableStore):
                 assigned[(row["month"], row["category"])] = row["milli"]
         return txns, assigned
 
+    def declined(self, plan_id: str | None) -> set[str]:
+        """``y:<ynab category id>`` / ``o:<category id>`` the person chose to leave out."""
+        return {
+            r["id"][2:] for r in self.all() if r["id"].startswith("x:") and r.get("plan") == plan_id
+        }
+
+    def of_other_plans(self, plan_id: str | None) -> list[dict]:
+        """Pair and decision documents that are not this plan's (a rewrite keeps them)."""
+        return [
+            r for r in self.all() if r["id"][:2] in ("c:", "g:", "x:") and r.get("plan") != plan_id
+        ]
+
     def pairs(self, plan_id: str | None) -> tuple[dict[str, dict], dict[str, dict]]:
         """The category and group pairs of one YNAB plan, by YNAB id."""
         cats, groups = {}, {}

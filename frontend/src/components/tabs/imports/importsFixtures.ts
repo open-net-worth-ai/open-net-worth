@@ -51,6 +51,7 @@ export const PREVIEW: Preview = {
   prune: { categories: ['Vacation'], groups: [] },
   category_groups: [
     {
+      id: 'yg1',
       name: 'Bills',
       group: { id: 'g1', name: 'Bills' },
       categories: [
@@ -63,6 +64,7 @@ export const PREVIEW: Preview = {
       ],
     },
     {
+      id: 'yg2',
       name: 'Needs',
       group: null,
       categories: [category('c3', 'Groceries', 'Budget syncs with a new envelope of its own')],

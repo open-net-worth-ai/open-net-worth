@@ -201,9 +201,25 @@ category both **labels a transaction and holds the budget**; here a **category**
   difference goes to review. A category in no envelope has Assigned 0 (our held-outside-envelopes
   rule matches YNAB's zero-assigned behaviour): it lives in a YNAB group "Not budgeted" the sync
   creates once, and money YNAB later assigns to it gives it an envelope here.
-- **Deletes hide.** YNAB's API cannot delete a category and the sync never deletes ours: hidden or
-  deleted in YNAB hides ours (the real "hide" is the category flag); deleted or merged here hides
-  YNAB's. Money is never released or moved.
+- **Deletes hide, and parking replaces hiding in YNAB.** YNAB's API can neither delete NOR hide a
+  category (SaveCategory takes a name, a note, a group and goals; SaveCategoryGroup a name), and
+  the sync never deletes ours: hidden or deleted in YNAB hides ours (the real "hide" is the
+  category flag); hidden, deleted or merged here MOVES the YNAB category into a YNAB group named
+  "Hidden in Open Net Worth", made once like "Not budgeted" and never paired with a book group.
+  The pair is kept while it sits there (`pair.parked`, `pair.home` = the group it came from);
+  showing it again moves it back to `home`, or to the group paired with its envelope's if that
+  moved meanwhile. A category in either parking group, or in YNAB's own "Hidden Categories", is
+  never a move the book follows; a category hidden in YNAB's app reports its
+  `original_category_group_id`, which both the import and the sync use as its group. Money is
+  never released or moved.
+- **A decision is remembered.** "Leave it out" on a category either side would not take writes a
+  `x:y:<ynab id>` / `x:o:<category id>` baseline document that both `pull_new` and `push_new`
+  honour. Rows in a category that will not be in YNAB (hidden unpaired, or left out) go to YNAB
+  uncategorized with one report line per category, and this book's category stands
+  (`units._income_view`).
+- **A refusal is never recorded as agreed.** A pushed change is recorded only when YNAB's answer
+  shows it (`Base.confirmed`); a refused or ignored one is a review item in plain words. A refused
+  group or category create no longer stops the run.
 - **Transactions** map through the pairing in both directions, so a category inside a shared
   envelope round-trips without being relabelled. A transaction whose category is not in YNAB yet
   waits for a later run (`payloads.NotYet`) instead of being filed as unsupported. Income-kind

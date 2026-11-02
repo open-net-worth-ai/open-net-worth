@@ -140,7 +140,12 @@ def build(today: date, negative_assignment: bool = False) -> dict:
             hidden=False,
             internal=False,
             deleted=False,
-            categories=[cat("oldcat", "Old Cat", "hid", hidden=True)],
+            categories=[
+                dict(
+                    cat("oldcat", "Old Cat", "hid", hidden=True),
+                    original_category_group_id=G["wants"],
+                )
+            ],
         ),
     ]
 
@@ -525,8 +530,12 @@ def _new_category(state: dict, group_id: str, name: str, key: str | None = None)
 
 
 def _save_category(state: dict, c: dict, fields: dict) -> dict:
-    """YNAB's PATCH: rename, move to another group, hide or show, change the note."""
-    for k in ("name", "note", "hidden"):
+    """YNAB's PATCH, as its public API takes it: a name, a note, another group. It cannot hide a
+    category (that is YNAB's own app: ``ynab_hide_category``); a ``hidden`` field is ignored. A
+    test can make it ignore more (``state["ignore_fields"]``) as a server that took the request
+    and changed nothing."""
+    fields = {k: v for k, v in fields.items() if k not in state.get("ignore_fields", ())}
+    for k in ("name", "note"):
         if k in fields:
             c[k] = fields[k]
     if fields.get("category_group_id") not in (None, c["category_group_id"]):
@@ -549,7 +558,18 @@ def ynab_rename_category(state: dict, ref: str, name: str) -> None:
 
 
 def ynab_hide_category(state: dict, ref: str, hidden: bool = True) -> None:
-    _save_category(state, _category(state, ref)[1], {"hidden": hidden})
+    """The person hiding (or showing) a category in YNAB's own app: it moves into YNAB's "Hidden
+    Categories" group and remembers the group it came from."""
+    group, c = _category(state, ref)
+    if hidden == bool(c["hidden"]):
+        return
+    if hidden:
+        c["original_category_group_id"] = group["id"]
+        _save_category(state, c, {"category_group_id": state["G"]["hid"]})
+    else:
+        _save_category(state, c, {"category_group_id": c.pop("original_category_group_id")})
+    c["hidden"] = hidden
+    _bump(state, c)
 
 
 def ynab_delete_category(state: dict, ref: str) -> None:
@@ -820,11 +840,15 @@ def _handler(state: dict, calls: list, writes: list):
                 _save_category(state, c, body["category"])
                 return self._send({"data": {"category": c, "server_knowledge": state["knowledge"]}})
             if path == base + "/category_groups" and method == "POST":
+                if state.get("reject_group_writes"):
+                    return self._send({"error": {"id": "400", "detail": "group refused"}}, 400)
                 key = f"made{len(state['groups'])}"
                 g = ynab_add_group(state, key, body["category_group"]["name"])
                 made = {k: v for k, v in _group(state, g).items() if k != "categories"}
                 return self._send({"data": {"category_group": made}}, 201)
             if path.startswith(base + "/category_groups/") and method == "PATCH":
+                if state.get("reject_group_writes"):
+                    return self._send({"error": {"id": "400", "detail": "group refused"}}, 400)
                 g = _group(state, path.rsplit("/", 1)[1])
                 g["name"] = body["category_group"]["name"]
                 _bump(state, g)

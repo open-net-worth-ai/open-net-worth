@@ -174,3 +174,55 @@ def test_importing_again_keeps_the_pairing(ynab):
     before = ynab_pairs.load(ynab_stub.PLAN)
     again = run()
     assert again["status"] == "done" and ynab_pairs.load(ynab_stub.PLAN) == before
+
+
+def test_the_import_log_is_plain_sentences_not_python_dicts(ynab):
+    job = run()
+    lines = [e["line"] for e in job["log"]]
+    assert "19 transactions added." in lines
+    assert any(line.startswith("Added ") and "categories" in line for line in lines)
+    assert not any("{" in line or "}" in line for line in lines)
+
+
+def test_a_run_that_stops_half_way_leaves_what_it_made_paired_not_made_again(ynab, monkeypatch):
+    from backend.services.ynab_migration import category_apply
+
+    real, calls = category_apply.make_category, []
+
+    def flaky(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 3:
+            raise RuntimeError("stopped")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(category_apply, "make_category", flaky)
+    assert run()["status"] == "failed"
+    assert len(ynab_pairs.load(ynab_stub.PLAN)[0]) >= 2  # saved as each one was made
+    monkeypatch.setattr(category_apply, "make_category", real)
+    assert run()["status"] == "done"
+    assert not any("(YNAB" in c["label"] for c in categories_service.all_category_rows())
+
+
+def test_a_hidden_category_comes_in_under_the_group_it_came_from(ynab):
+    job = run("preview")
+    wants = next(g for g in job["preview"]["category_groups"] if g["name"] == "Wants")
+    assert [c["name"] for c in wants["categories"]] == ["Fun Money", "Old Cat"]
+    assert wants["id"] == ynab.state["G"]["wants"]
+    assert run()["status"] == "done"
+    assert env("Old Cat")["group_id"] == group("Wants")["id"]
+
+
+def test_verification_does_not_blame_an_assigned_that_is_not_synced(ynab):
+    e = change(type="envelope_create", name="Fun Money", group_id=group("Wants")["id"])["envelope"]
+    other = change(type="category_create", label="Games", kind="expense")
+    change(type="envelope_add_category", envelope_id=e["id"], category_id=other["id"])
+    job = run(category_links={ynab_id(ynab, "fun"): f"env:{e['id']}"})
+    assert job["status"] == "done", job["error"]
+    checks = {
+        c["check"]: c for c in job["verification"]["mismatches"] + job["verification"]["matches"]
+    }
+    assert not [c for c in checks if "Fun Money" in c and "assigned" in c.lower()]
+    ready = next(c for name, c in checks.items() if name.startswith("Ready to Assign"))
+    assert ready["difference"] and ready["note"] == (
+        "Can differ, as the Assigned of Fun Money isn't synced."
+    )
