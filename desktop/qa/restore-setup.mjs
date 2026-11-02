@@ -221,7 +221,8 @@ try {
   await activity.screenshot({ path: 'qa/artifacts/activity-server.png' });
   await activity.getByRole('switch', { name: /Keep running/ }).check();
   closedActivity = activity.waitForEvent('close');
-  await activity.keyboard.press('Escape');
+  // Escape's keydown destroys the window, so the trailing keyup can find the page already gone.
+  await activity.keyboard.press('Escape').catch(error => { if (!/has been closed/.test(error?.message ?? '')) throw error; });
   await closedActivity;
   assert.equal(JSON.parse(await readFile(path.join(profile, 'desktop-settings.json'))).background, false);
   check('server activity: native prompt explains independent server work; Escape declines drafts; hosted JS has no device write capability');

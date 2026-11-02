@@ -88,8 +88,15 @@ async function dismissActivityOffer() {
       .find((w) => !w.isClosed() && w.url().startsWith("data:text/html"));
     return Boolean(offer);
   });
-  await offer.keyboard.press("Escape");
+  await closesItsWindow(() => offer.keyboard.press("Escape"));
   await poll(async () => offer.isClosed());
+}
+// A dialog's Escape or Cancel destroys its window while handling the keydown/mousedown, so
+// Playwright's trailing keyup/mouseup can find the page already gone: the outcome, not a failure.
+async function closesItsWindow(action) {
+  await action().catch((error) => {
+    if (!/has been closed/.test(error?.message ?? "")) throw error;
+  });
 }
 async function menu(label) {
   await app.evaluate(({ Menu }, label) => {
@@ -228,15 +235,17 @@ try {
     serverA.origin,
   );
   assert.equal((await api(page, "/api/auth/status")).authenticated, true);
-  await form
-    .getByRole("button", { name: /Back|Cancel/, exact: true })
-    .first()
-    .click();
+  await closesItsWindow(() =>
+    form
+      .getByRole("button", { name: /Back|Cancel/, exact: true })
+      .first()
+      .click(),
+  );
   const afterBack = await active();
   if (afterBack !== page)
-    await afterBack
-      .getByRole("button", { name: "Cancel", exact: true })
-      .click();
+    await closesItsWindow(() =>
+      afterBack.getByRole("button", { name: "Cancel", exact: true }).click(),
+    );
   assert.equal((await api(page, "/api/auth/status")).authenticated, true);
   check(
     "Settings offers server switching; failed candidate and cancel preserve the active connection",
