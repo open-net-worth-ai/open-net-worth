@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -92,7 +92,13 @@ def test_a_flag_appearing_makes_the_activity_fingerprint_change(book, monkeypatc
 # ── the debounce ──────────────────────────────────────────────────────────────
 
 
-def test_a_changed_activity_regenerates_only_once_the_note_is_a_couple_of_minutes_old(cache_file):
+def test_a_changed_activity_regenerates_only_once_the_note_is_a_couple_of_minutes_old(
+    cache_file, monkeypatch
+):
+    # Mid-day-part: aged three minutes from a real clock at 22:01 it crossed into "night" and the
+    # day-part rule, not the debounce, threw the note away.
+    now = datetime(2026, 10, 31, 14, 30, tzinfo=timezone.utc)
+    monkeypatch.setattr(brf, "user_now", lambda: now)
     note = {"note": "Welcome", "actions": [], "chat_suggestion": ""}
     brf._save_cache(note, "structure", "activity-before")
 

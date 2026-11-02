@@ -457,24 +457,30 @@ def test_fix5_only_the_engine_reads_the_flag_below_the_api():
         rel = str(path.relative_to(backend))
         if rel.startswith(("core/feature_flags", "services/feature_flags")):
             continue
-        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
-            if (
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        # A module's own ``FLAG`` constant names ITS flag (ai/search/switch.py reads
+        # search_reads_results through one), so ``enabled(FLAG)`` counts only when it is ours.
+        constants = {
+            target.id: node.value.value
+            for node in tree.body
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant)
+            for target in node.targets
+            if isinstance(target, ast.Name)
+        }
+        for node in ast.walk(tree):
+            if not (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Name)
                 and node.func.id == "enabled"
                 and node.args
-                and isinstance(node.args[0], ast.Constant)
-                and node.args[0].value in ("permissions_v2",)
             ):
-                readers.add(rel)
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id == "enabled"
-                and node.args
-                and isinstance(node.args[0], ast.Name)
-                and node.args[0].id == "FLAG"
-            ):
+                continue
+            arg = node.args[0]
+            if isinstance(arg, ast.Name):
+                flag = constants.get(arg.id, "permissions_v2")
+            else:
+                flag = arg.value if isinstance(arg, ast.Constant) else None
+            if flag == "permissions_v2":
                 readers.add(rel)
     assert readers == {"ai/permissions.py"}
 
