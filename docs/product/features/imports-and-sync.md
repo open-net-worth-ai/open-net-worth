@@ -31,8 +31,10 @@ from the one-way **Sync YNAB** template, where Lucius fetches new YNAB transacti
 
 Until it is set up, its page is three steps, each unlocked by the one before:
 
-1. **Connect YNAB.** Your YNAB access token stays on the YNAB connector (**Connectors → YNAB**);
-   this page never asks for it. **Open the YNAB connector** takes you there. To save a token, see
+1. **Connect YNAB.** Click **Connect YNAB…** and paste your YNAB access token in the dialog that
+   opens over this page, then **Save**. The token is kept on the YNAB connector (**Connectors →
+   YNAB**), so you can change it from either place; **More on the Connectors page** in the
+   dialog opens the full connector, for pausing or removing it. Where to find a token:
    [Bank & brokerage connectors](../connectors/bank-brokerage.md#ynab).
 2. **Bring your YNAB history in.** Choose your plan and click **Preview**. Nothing is written. You
    see how many accounts, transactions, categories and budget months would come across, any

@@ -64,7 +64,10 @@ function ynabFormOf(c: YnabStatus): YnabForm {
   }
 }
 
-export function YnabSection() {
+/** ``onSyncPage``: the same form opened from the two-way sync's own page (YnabConnectDialog),
+ *  which leaves out what only belongs on the Connectors page — the template hint, the account
+ *  list and the link back to the sync page itself. */
+export function YnabSection({ onSyncPage = false }: { onSyncPage?: boolean } = {}) {
   const [cfg, setCfg] = useState<YnabStatus | null>(null)
   const [form, setForm] = useState<YnabForm | null>(null)
   const [error, setError] = useState(false)
@@ -206,7 +209,8 @@ export function YnabSection() {
           YNAB
         </a>
         , paste a personal access token from its Account Settings → Developer Settings page.
-        Fetching and booking transactions is Lucius's job — automate it with a template below.
+        {!onSyncPage &&
+          " Fetching and booking transactions is Lucius's job — automate it with a template below."}
       </Text>
 
       {cfg.configured && !cfg.enabled && (
@@ -277,9 +281,12 @@ export function YnabSection() {
         </Text>
       )}
 
-      <ConnectorAccountsList provider="ynab" providerLabel="YNAB" />
-
-      <YnabImportLink />
+      {!onSyncPage && (
+        <>
+          <ConnectorAccountsList provider="ynab" providerLabel="YNAB" />
+          <YnabImportLink />
+        </>
+      )}
     </Stack>
   )
 }

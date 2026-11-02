@@ -96,13 +96,34 @@ const notSetUp = (over: Record<string, unknown> = {}) =>
   })
 
 describe('YnabSyncDetail setup', () => {
-  it('starts at connecting YNAB, and never asks for the token itself', async () => {
+  it('starts at connecting YNAB, and connects right here without leaving the page', async () => {
     sync = notSetUp({ token_saved: false })
     page()
     expect(await screen.findByText('Connect YNAB')).toBeTruthy()
     expect(screen.queryByLabelText(/access token/i)).toBeNull()
     expect(screen.queryByRole('switch')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Open the YNAB connector' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Connect YNAB…' }))
+    const token = await screen.findByLabelText(/access token/i)
+    fireEvent.change(token, { target: { value: 'tok-123' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(requests).toContainEqual({
+        url: '/api/ynab/config',
+        method: 'PUT',
+        body: expect.objectContaining({ access_token: 'tok-123' }),
+      }),
+    )
+    await waitFor(() => expect(screen.queryByLabelText(/access token/i)).toBeNull())
+    expect(navigate).not.toHaveBeenCalled()
+  })
+
+  it('still reaches the full connector page from the dialog', async () => {
+    sync = notSetUp({ token_saved: false })
+    page()
+    fireEvent.click(await screen.findByRole('button', { name: 'Connect YNAB…' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'More on the Connectors page' }))
     expect(navigate).toHaveBeenCalledWith({ to: '/connectors', search: { connector: 'ynab' } })
   })
 

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from '@tanstack/react-router'
 import { Check, ChevronRight, Link2, Play, ShieldCheck } from 'lucide-react'
 import { authFetch } from '../../../../api/client'
 import { invalidateQueryCache } from '../../../../state/queryCache'
@@ -11,6 +10,7 @@ import { YnabImport } from '../../imports/YnabImport'
 import { KIND_LABEL, detailOf, type RunSummary } from '../../imports/runs'
 import { INTERVAL_LABELS, sendSync } from '../../imports/sync'
 import { AutomationMenu } from '../AutomationMenu'
+import { YnabConnectDialog } from './YnabConnectDialog'
 import { YNAB_SYNC_BLURB, YNAB_SYNC_NAME, useYnabSync, type YnabSyncStage } from './ynabSync'
 
 // The two-way YNAB sync's page in Automations. Until it is set up the page is the three setup
@@ -28,8 +28,8 @@ export function YnabSyncDetail({
   onBack: () => void
   onOpenReport: (runId: string | null) => void
 }) {
-  const navigate = useNavigate()
   const sync = useYnabSync()
+  const [connectOpen, setConnectOpen] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const status = sync.status
@@ -61,8 +61,9 @@ export function YnabSyncDetail({
     }
   }
 
-  const openConnector = () =>
-    void navigate({ to: '/connectors', search: { connector: 'ynab' } } as never)
+  // The connection form opens here, over the page, rather than on Connectors: setting up or
+  // changing the token should not cost the user the step they are on.
+  const openConnector = () => setConnectOpen(true)
 
   const crumb = (
     <nav className="a3-crumb" aria-label="Breadcrumb">
@@ -131,6 +132,11 @@ export function YnabSyncDetail({
   return (
     <div className="a3-wrap" data-od-id="ynab-sync-detail">
       {crumb}
+      <YnabConnectDialog
+        open={connectOpen}
+        onClose={() => setConnectOpen(false)}
+        onSaved={sync.refresh}
+      />
       <div className="a3-detail-head">
         <div className="a3-detail-title">
           <h1>{YNAB_SYNC_NAME}</h1>
@@ -179,7 +185,7 @@ export function YnabSyncDetail({
                     onSelect: () => void recheck(),
                   },
                   {
-                    label: 'Open the YNAB connector',
+                    label: 'YNAB connection…',
                     icon: (
                       <span className="a3-menu-ic">
                         <Link2 size={14} aria-hidden="true" />
@@ -339,11 +345,11 @@ function SetupSteps({
         {reached === 1 ? (
           <>
             <p>
-              Save a YNAB personal access token on the YNAB connector. It stays on this machine.
+              Save a YNAB personal access token. It stays on this machine, on the YNAB connector.
             </p>
             <div>
               <Button size="sm" variant="primary" onClick={onConnect}>
-                Open the YNAB connector
+                Connect YNAB…
               </Button>
             </div>
           </>
