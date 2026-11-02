@@ -647,6 +647,7 @@
 
 /* ── connector list rows (compact list, replaces card grid) ────────────────── */
 .cn-page .cn-list {
+  container: cn-list / inline-size;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line);
@@ -731,6 +732,8 @@
   align-items: center;
   gap: 7px;
   min-width: 0;
+  /* Chips that cannot shrink are clipped here, never painted under the status beside them. */
+  overflow: hidden;
 }
 .cn-page .cn-name > b {
   font-weight: 700;
@@ -750,9 +753,10 @@
   width: 14px;
   height: 14px;
 }
-/* On a phone the tick alone says "connected"; the word squeezed the name into an ellipsis.
-   Kept for screen readers, not removed. */
-@media (max-width: 560px) {
+/* In a narrow list the tick alone says "connected"; the word squeezed the name into an
+   ellipsis. Measured on the LIST, not the window — the Lucius panel narrows it on a wide
+   screen too. Kept for screen readers, not removed. */
+@container cn-list (max-width: 520px) {
   .cn-page .cn-statusgood-label {
     position: absolute;
     width: 1px;
@@ -760,6 +764,17 @@
     overflow: hidden;
     clip: rect(0 0 0 0);
     white-space: nowrap;
+  }
+  /* The name keeps the whole line; its tag and category chips drop to one line under it. */
+  .cn-page .cn-name {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+  .cn-page .cn-name > b {
+    flex: 1 0 100%;
+  }
+  .cn-page .cn-name .cn-cats {
+    flex-wrap: nowrap;
   }
 }
 .cn-page .cn-statusbad {
@@ -1205,6 +1220,7 @@
   outline-offset: 1px;
 }
 .cn-page .cn-suggest {
+  container: cn-suggest / inline-size;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1246,6 +1262,13 @@
   .cn-page .cn-suggestgrid.swipe > .cn-dircard {
     flex: 0 0 80%;
     scroll-snap-align: start;
+  }
+}
+/* The landing's suggestions stack once THEIR space is narrow — the Lucius panel narrows it on
+   a wide window, where the 560px rule above never fires and three cards crushed to slivers. */
+@container cn-suggest (max-width: 560px) {
+  .cn-page .cn-suggestgrid:not(.swipe) {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 .cn-page .cn-dircard.suggested {
