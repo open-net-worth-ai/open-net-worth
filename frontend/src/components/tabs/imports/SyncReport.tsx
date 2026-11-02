@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Badge, Button, Cluster, Panel, SegmentedControl, Stack, SummaryBar, Text } from '../../ui'
 import { ReviewCard } from './ReviewItem'
 import { sendSync, useSyncStatus } from './sync'
-import type { AssignedChange, Note, RunRecord, TxnChange } from './runs'
+import type { AssignedChange, CategoryChange, Note, RunRecord, TxnChange } from './runs'
 
 // The report of a sync run: what went to YNAB, what came in, which Assigned figures moved, what
 // was filed for review, deferred or refused. Empty sections are left out; a run that changed
@@ -145,6 +145,18 @@ function AssignedTable({ changes }: { changes: AssignedChange[] }) {
   )
 }
 
+function CategoryLines({ changes }: { changes: CategoryChange[] }) {
+  return (
+    <Stack gap="--space-2">
+      {changes.map((c, i) => (
+        <Text key={`${c.text}-${i}`} size="sm">
+          {c.text}
+        </Text>
+      ))}
+    </Stack>
+  )
+}
+
 function Notes({ title, notes, hidden }: { title: string; notes: Note[]; hidden?: number }) {
   if (notes.length === 0) return null
   return (
@@ -179,9 +191,9 @@ function Conflicts({ run }: { run: RunRecord }) {
   // An open item is shown as it stands now, so it keeps its own kind and buttons.
   const open = new Map((live?.conflicts ?? []).map((c) => [c.id, c]))
 
-  async function keep(id: string, side: 'onw' | 'ynab') {
+  async function keep(id: string, side: 'onw' | 'ynab', choice?: string) {
     setBusy(id)
-    setError(await sendSync(`/conflicts/${id}/resolve`, 'POST', { keep: side }))
+    setError(await sendSync(`/conflicts/${id}/resolve`, 'POST', { keep: side, choice }))
     setBusy(null)
   }
 
@@ -208,7 +220,7 @@ function Conflicts({ run }: { run: RunRecord }) {
                 }
               }
               busy={busy === c.id || !!live?.running}
-              onKeep={(side) => void keep(c.id, side)}
+              onKeep={(side, choice) => void keep(c.id, side, choice)}
             />
           ) : (
             <Cluster key={c.id} gap="--space-2">
@@ -230,6 +242,7 @@ function Conflicts({ run }: { run: RunRecord }) {
 export function SyncSections({ run }: { run: RunRecord }) {
   const t = run.totals
   const assigned = run.assigned_changes ?? []
+  const categories = run.category_changes ?? []
   const quiet = !!t && !Object.values(t).some(Boolean)
   if (!t) return null
   return (
@@ -244,6 +257,7 @@ export function SyncSections({ run }: { run: RunRecord }) {
             { label: 'Sent', value: String(t.sent) },
             { label: 'Pulled', value: String(t.pulled) },
             { label: 'Assigned changes', value: String(t.assigned) },
+            { label: 'Categories', value: String(t.categories ?? 0) },
             {
               label: 'Conflicts filed',
               value: String(t.conflicts),
@@ -264,6 +278,16 @@ export function SyncSections({ run }: { run: RunRecord }) {
           />
         </Panel>
       )}
+      {categories.length > 0 && (
+        <Panel title="Categories" badge={categories.length}>
+          <Paged
+            items={categories}
+            hidden={run.not_stored?.category_changes}
+            render={(page) => <CategoryLines changes={page} />}
+          />
+        </Panel>
+      )}
+      <Notes title="Worth knowing" notes={run.notes ?? []} hidden={run.not_stored?.notes} />
       <Conflicts run={run} />
       <Notes title="Deferred" notes={run.deferred ?? []} hidden={run.not_stored?.deferred} />
       <Notes title="Errors" notes={run.errors ?? []} hidden={run.not_stored?.errors} />

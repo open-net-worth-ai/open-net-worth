@@ -13,6 +13,7 @@ from backend.services import import_runs, planning
 from backend.services import ledger as ledger_service
 from backend.services.ynab_sync import (
     assigned,
+    category_resolve,
     conflicts,
     context,
     delta,
@@ -32,7 +33,7 @@ from backend.services.ynab_sync.units import Unit
 RESOLVE_REQUESTS = 6  # one resolution never needs more than a PATCH, its note and a DELETE
 
 
-def resolve(conflict_id: str, keep: str) -> dict:
+def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
     if keep not in ("onw", "ynab"):
         raise ValidationError("keep must be 'onw' or 'ynab'")
     if not sync_state.load()["plan_id"]:
@@ -54,11 +55,13 @@ def resolve(conflict_id: str, keep: str) -> dict:
         meta, mirror_store = sync_state.load_meta(), YnabMirrorStore()
         mirror = mirror_store.by_id()
         loaded = dict(mirror)
-        base = Baselines()
-        ctx = context.build(st, meta, mirror, base.assigned)
+        base = Baselines(st["plan_id"])
+        ctx = context.build(st, meta, mirror, base.assigned, base.cats, base.declined)
         client = YnabClient(st["plan_id"], Budget(RESOLVE_REQUESTS))
         if item["entity"] == "start":
             starts.resolve(item, keep)
+        elif item["entity"] in ("category", "group", "new_category", "budget"):
+            category_resolve.apply(item, keep, choice, st, meta, base, client)
         elif _held_side(st["direction"], keep):
             _accept(ctx, item, keep, base)
         elif item["entity"] == "assigned":

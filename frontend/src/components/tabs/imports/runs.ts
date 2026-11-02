@@ -88,6 +88,33 @@ export interface PreviewAccount {
   candidates?: { id: string; name: string; type: string }[]
   match?: LinkMatch | null
 }
+/** Where a YNAB category goes in this book, as the server decided it for the review. */
+export interface PreviewCategory {
+  id: string
+  label: string
+  name: string
+  hidden: boolean
+  /** One of the book's categories (cat:…), an envelope to add it to (env:…), or none: a new one. */
+  link: { ref: string; name: string; kind: 'linked' | 'category' | 'envelope' } | null
+  chosen: boolean
+  /** Matches more than one of the book's categories: the person has to pick. */
+  ask: boolean
+  options: { ref: string; name: string }[]
+  /** One line on what its budget does. */
+  note: string
+}
+export interface PreviewGroup {
+  /** The YNAB category group's id. */
+  id: string
+  name: string
+  /** The group here it matches, if any. */
+  group: { id: string; name: string } | null
+  categories: PreviewCategory[]
+}
+export interface CategoryChoices {
+  categories: { ref: string; name: string }[]
+  envelopes: { ref: string; name: string; holds: number }[]
+}
 export interface PreviewTxn {
   date: string
   kind: 'expense' | 'income' | 'transfer'
@@ -116,7 +143,8 @@ export interface Preview {
   money_data: string[]
   prune: { categories: string[]; groups: string[] }
   /** Absent on a preview recorded before the review listed them. */
-  category_groups?: { name: string; categories: string[] }[]
+  category_groups?: PreviewGroup[]
+  category_choices?: CategoryChoices
   transaction_list?: PreviewTxn[]
 }
 export interface FieldChange {
@@ -142,6 +170,10 @@ export interface AssignedChange {
   before: number
   after: number
 }
+export interface CategoryChange {
+  direction: 'sent' | 'pulled'
+  text: string
+}
 export interface SyncConflict {
   id: string
   description: string
@@ -158,6 +190,7 @@ export interface SyncTotals {
   sent: number
   pulled: number
   assigned: number
+  categories: number
   conflicts: number
   deferred: number
   errors: number
@@ -168,6 +201,8 @@ export interface RunRecord extends RunSummary {
   totals?: SyncTotals
   txn_changes?: TxnChange[]
   assigned_changes?: AssignedChange[]
+  category_changes?: CategoryChange[]
+  notes?: Note[]
   conflicts?: SyncConflict[]
   deferred?: Note[]
   errors?: Note[]

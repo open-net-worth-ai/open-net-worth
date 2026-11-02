@@ -987,6 +987,9 @@ export interface PMSelectProps {
   placeholder?: string
   className?: string
   searchable?: boolean
+  /** The search box's placeholder and the line shown when nothing matches (payee wording by default). */
+  searchPlaceholder?: string
+  emptyText?: string
   compact?: boolean
   /** The trigger's accessible name, when no visible label names it. */
   ariaLabel?: string
@@ -1000,6 +1003,8 @@ export function PMSelect({
   placeholder,
   className,
   searchable,
+  searchPlaceholder = 'Search payees…',
+  emptyText = 'No payees match.',
   compact,
   ariaLabel,
   disabled,
@@ -1154,7 +1159,7 @@ export function PMSelect({
             <input
               ref={searchRef}
               className="pm-select-search"
-              placeholder="Search payees…"
+              placeholder={searchPlaceholder}
               value={q}
               onChange={(e) => {
                 setQ(e.target.value)
@@ -1187,7 +1192,7 @@ export function PMSelect({
             </button>
           ))}
           {searchable && shown.filter((o) => o.value !== '').length === 0 && (
-            <div className="pm-select-noresult">No payees match.</div>
+            <div className="pm-select-noresult">{emptyText}</div>
           )}
         </div>
       )}

@@ -10,11 +10,31 @@ from backend.services.ynab_migration.mapping import amt
 LIST_CAP = 500
 
 
-def category_groups(plan: dict) -> list[dict]:
-    groups: dict[str, list[str]] = {}
+def category_groups(plan: dict, rows: dict[str, dict], matches: dict) -> list[dict]:
+    """Each YNAB group with the group here it matches (if any) and its categories, each with
+    where it goes (``category_links.rows``)."""
+    groups: dict[str, dict] = {}
     for c in plan["categories"]:
-        groups.setdefault(c["group"], []).append(c["label"])
-    return [{"name": g, "categories": names} for g, names in groups.items()]
+        match = matches.get(c["group_id"])
+        group = groups.setdefault(
+            c["group_id"],
+            {
+                "id": c["group_id"],
+                "name": c["group"],
+                "group": None if match is None else {"id": match["id"], "name": match["name"]},
+                "categories": [],
+            },
+        )
+        group["categories"].append(
+            {
+                "id": c["id"],
+                "label": c["label"],
+                "name": c["name"],
+                "hidden": c["hidden"],
+                **rows[c["id"]],
+            }
+        )
+    return list(groups.values())
 
 
 def _row(p: dict, accounts: dict[str, str], labels: dict[str, str]) -> dict:
@@ -49,4 +69,4 @@ def transaction_list(plan: dict) -> list[dict]:
 
 
 def details(plan: dict) -> dict:
-    return {"category_groups": category_groups(plan), "transaction_list": transaction_list(plan)}
+    return {"transaction_list": transaction_list(plan)}

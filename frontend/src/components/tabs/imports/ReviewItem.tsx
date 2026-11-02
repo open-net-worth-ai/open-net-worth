@@ -74,16 +74,100 @@ function Differences({ onw, ynab }: { onw: Version | null; ynab: Version | null 
   )
 }
 
+const badgeOf = (item: Item) =>
+  item.kind === 'conflict' && item.fresh ? 'Differs' : KIND_LABEL[item.kind]
+
 const KIND_LABEL: Record<Item['kind'], string> = {
   conflict: 'Changed in both',
   unsupported: "YNAB can't take it",
   failed: 'Refused',
   before_start: 'Before the Starting Balance',
+  choose: 'Needs your choice',
+}
+
+type Keep = (keep: 'onw' | 'ynab', choice?: string) => void
+
+// A category or a group: what differs is a few words, and a category YNAB has that could go
+// with several things here asks which. Each button says what it does.
+function NameCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
+  const { item, busy, onKeep } = props
+  const asking = item.kind === 'choose' && item.entity === 'new_category'
+  const ours = item.category !== undefined // a category here YNAB would not take
+  return (
+    <Stack gap="--space-2">
+      <Cluster gap="--space-2" align="center">
+        <Text size="sm" weight={600}>
+          {item.title}
+        </Text>
+        <Badge tone={item.kind === 'failed' ? 'neg' : 'warn'}>{badgeOf(item)}</Badge>
+      </Cluster>
+      <Text size="sm" tone={item.kind === 'failed' ? 'bad' : 'faint'}>
+        {item.reason}
+      </Text>
+      {(item.fields ?? []).map((f) => (
+        <Grid key={f.label} min={200} gap="--space-3">
+          <Text size="sm">
+            <Text size="xs" tone="faint">
+              Open Net Worth {f.label.toLowerCase()}:{' '}
+            </Text>
+            {f.onw}
+          </Text>
+          <Text size="sm">
+            <Text size="xs" tone="faint">
+              YNAB {f.label.toLowerCase()}:{' '}
+            </Text>
+            {f.ynab}
+          </Text>
+        </Grid>
+      ))}
+      <Cluster gap="--space-2">
+        {asking ? (
+          <>
+            {(item.options ?? []).map((o) => (
+              <Button key={o.ref} size="sm" disabled={busy} onClick={() => onKeep('onw', o.ref)}>
+                {o.ref.startsWith('env:') ? `Add it to ${o.name}` : `Use ${o.name}`}
+              </Button>
+            ))}
+            <Button size="sm" disabled={busy} onClick={() => onKeep('ynab')}>
+              Add as a new category
+            </Button>
+          </>
+        ) : item.entity === 'budget' ? (
+          <>
+            <Button size="sm" disabled={busy} onClick={() => onKeep('ynab')}>
+              Give it an envelope
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => onKeep('onw')}>
+              Leave it without one
+            </Button>
+          </>
+        ) : item.entity === 'new_category' ? (
+          <>
+            <Button size="sm" disabled={busy} onClick={() => onKeep(ours ? 'onw' : 'ynab')}>
+              Try again
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => onKeep(ours ? 'ynab' : 'onw')}>
+              {ours ? 'Leave it out of YNAB' : 'Leave it out'}
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button size="sm" disabled={busy} onClick={() => onKeep('onw')}>
+              Keep Open Net Worth&apos;s
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => onKeep('ynab')}>
+              Keep YNAB&apos;s
+            </Button>
+          </>
+        )}
+      </Cluster>
+    </Stack>
+  )
 }
 
 // Moving a Starting Balance is never automatic: the card states both outcomes and the button
 // names the move it makes.
-function StartCard(props: { item: Item; busy: boolean; onKeep: (keep: 'onw' | 'ynab') => void }) {
+function StartCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
   const { item } = props
   const cur = item.currency ? ` ${item.currency}` : ''
   return (
@@ -125,20 +209,18 @@ function StartCard(props: { item: Item; busy: boolean; onKeep: (keep: 'onw' | 'y
   )
 }
 
-export function ReviewCard(props: {
-  item: Item
-  busy: boolean
-  onKeep: (keep: 'onw' | 'ynab') => void
-}) {
+export function ReviewCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
   const { item } = props
   if (item.entity === 'start') return <StartCard {...props} />
+  if (['category', 'group', 'new_category', 'budget'].includes(item.entity ?? ''))
+    return <NameCard {...props} />
   return (
     <Stack gap="--space-2">
       <Cluster gap="--space-2" align="center">
         <Text size="sm" weight={600}>
           {item.title}
         </Text>
-        <Badge tone={item.kind === 'conflict' ? 'warn' : 'neg'}>{KIND_LABEL[item.kind]}</Badge>
+        <Badge tone={item.kind === 'conflict' ? 'warn' : 'neg'}>{badgeOf(item)}</Badge>
       </Cluster>
       <Text
         size="sm"

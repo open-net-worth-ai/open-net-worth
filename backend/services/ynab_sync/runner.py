@@ -25,6 +25,7 @@ from backend.services.ynab_migration import source
 from backend.services.ynab_migration.mapping import SOURCE
 from backend.services.ynab_sync import (
     assigned,
+    category_sync,
     conflicts,
     context,
     delta,
@@ -44,12 +45,23 @@ _current: str | None = None  # the record of the manual run in progress
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ynab-sync")
 
 
+def month_name(month: str) -> str:
+    """ "2026-11" -> "November 2026", as people read it; anything else is left as it is."""
+    try:
+        return datetime.strptime(month, "%Y-%m").strftime("%B %Y")
+    except ValueError:
+        return month
+
+
 def _summary(tally: Counter, open_items: int) -> str:
     parts = []
     if tally["sent"]:
         parts.append(f"{tally['sent']} sent to YNAB")
     if tally["pulled"]:
         parts.append(f"{tally['pulled']} pulled")
+    if tally["categories"]:
+        n = tally["categories"]
+        parts.append(f"{n} category change{'' if n == 1 else 's'}")
     if open_items:
         parts.append(f"{open_items} need{'s' if open_items == 1 else ''} review")
     if tally["deferred"]:
@@ -58,7 +70,7 @@ def _summary(tally: Counter, open_items: int) -> str:
 
 
 def _assigned_phase(
-    ctx, client, base: Baselines, change, tally: Counter, first: bool, st: dict
+    ctx, client, base: Baselines, change, tally: Counter, first: bool, st: dict, fresh=frozenset()
 ) -> None:
     if first:
         base.seed_assigned({k: v for k, v in change.assigned.items() if v})
@@ -68,7 +80,7 @@ def _assigned_phase(
         change.assigned.setdefault((month, cid), milli)
     st["held_assigned"] = []
     items = assigned.evaluate(
-        ctx, base.assigned, change.assigned, planning.assignments_store.all_map(), first
+        ctx, base.assigned, change.assigned, planning.assignments_store.all_map(), first, fresh
     )
     open_items = conflicts.open_keys()
     names = {c["id"]: c["name"] for c in ctx.meta["categories"]}
@@ -86,8 +98,13 @@ def _assigned_phase(
             try:
                 assigned.pull(it)
             except OpenNetWorthError as exc:
+                logger.info("YNAB Assigned pull refused for %s %s: %s", it.cid, it.month, exc)
                 _file_assigned(
-                    it, names, conflicts.FAILED, f"The ledger refused YNAB's figure: {exc.message}"
+                    it,
+                    names,
+                    conflicts.FAILED,
+                    f"This book couldn't take YNAB's Assigned for {names.get(it.cid, 'this category')} "
+                    f"in {month_name(it.month)}. Keep Open Net Worth's to send this book's instead.",
                 )
                 continue
             base.set_assigned(it.month, it.cid, it.ynab)
@@ -102,7 +119,13 @@ def _assigned_phase(
                 it,
                 names,
                 conflicts.CONFLICT,
-                "Changed in both Open Net Worth and YNAB since the last sync.",
+                (
+                    f"The Assigned of {names.get(it.cid, 'this category')} for {month_name(it.month)} differs "
+                    "between Open Net Worth and YNAB. Pick the one to keep."
+                    if it.cid in fresh
+                    else "Changed in both Open Net Worth and YNAB since the last sync."
+                ),
+                fresh=it.cid in fresh,
             )
         else:
             pushes.append(it)
@@ -113,7 +136,7 @@ def _assigned_phase(
         base.set_assigned(it.month, it.cid, it.onw)
         recorder.assigned_change("sent", names.get(it.cid, "Category"), it.month, it.ynab, it.onw)
     for it in deferred:
-        label = f"{names.get(it.cid, 'Category')} · {it.month}"
+        label = f"{names.get(it.cid, 'Category')} · {month_name(it.month)}"
         recorder.deferred(label, "Waiting for the next run (YNAB request limit).")
     for it, why in rejected:
         _file_assigned(it, names, conflicts.FAILED, f"YNAB did not accept it: {why}")
@@ -121,11 +144,13 @@ def _assigned_phase(
     tally["deferred"] += len(deferred)
 
 
-def _file_assigned(it, names: dict, kind: str, reason: str) -> None:
+def _file_assigned(it, names: dict, kind: str, reason: str, fresh: bool = False) -> None:
+    """``fresh``: the two sides were compared for the first time (a new pairing or a changed
+    envelope), so nobody changed both; the review says the figures differ."""
     conflicts.file(
         kind,
         it.key,
-        f"{names.get(it.cid, 'Category')} · {it.month}",
+        f"{names.get(it.cid, 'Category')} · {month_name(it.month)}",
         reason,
         {"amount": it.onw / 1000},
         {"amount": it.ynab / 1000},
@@ -135,6 +160,7 @@ def _file_assigned(it, names: dict, kind: str, reason: str) -> None:
         onw_milli=it.onw,
         ynab_milli=it.ynab,
         env=it.env,
+        fresh=fresh,
     )
 
 
@@ -157,10 +183,23 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
     change = delta.apply_read(
         client.read_plan(None if first else st["server_knowledge"]), mirror, meta, first
     )
-    base = Baselines()
+    base = Baselines(st["plan_id"])
     if first:
         base.seed_assigned({k: v for k, v in change.assigned.items() if v})
-    ctx = context.build(st, meta, mirror, base.assigned)
+    recorder.phase("reconciling categories")
+    cat_plan = context.category_plan(meta, mirror, base.assigned)
+    try:
+        resumed = category_sync.reconcile(
+            client, base, st, meta, tally, change.assigned, cat_plan["categories"], change.full
+        )
+        for key, milli in resumed.figures.items():
+            change.assigned.setdefault(key, milli)  # a figure this very read brought is newer
+        fresh = resumed.cids
+    except BaseException:
+        base.flush()
+        sync_state.save_meta(meta)
+        raise
+    ctx = context.build(st, meta, mirror, base.assigned, base.cats, base.declined)
     recorder.phase("reconciling transactions")
     scan = units.audit_touched(st["audit_cursor"], upto) | set(st["pending"]) | set(st["held"])
     scan |= {c["onw_txn_id"] for c in conflicts.listing() if c.get("onw_txn_id")}
@@ -173,13 +212,25 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
         st["held"], st["held_ynab"] = sorted(held["onw"]), sorted(held["ynab"])
         tally["deferred"] += len(st["pending"])
         recorder.phase("reconciling Assigned")
-        _assigned_phase(ctx, client, base, change, tally, first, st)
+        _assigned_phase(ctx, client, base, change, tally, first, st, fresh)
+        _compared(base, fresh)
         starts.review(ctx, st)
     finally:
         base.flush()
         delta.save_changes(mirror_store, loaded, mirror, change.touched, change.full)
         sync_state.save_meta(meta)
     st.update(server_knowledge=change.knowledge, audit_cursor=upto, bootstrapped=True)
+
+
+def _compared(base: Baselines, fresh: set[str]) -> None:
+    """The Assigned step has compared these categories' figures afresh: from now on what it
+    recorded is the agreed baseline. Cleared only here, so a run that failed before this point
+    compares them again next time."""
+    for ycid in fresh:
+        p = base.cats.get(ycid)
+        if p is not None and p.get("resume"):
+            p["resume"] = False
+            base.set_cat(p)
 
 
 def _worth_storing(trigger: str, error: str | None, previous: dict | None, rec) -> bool:

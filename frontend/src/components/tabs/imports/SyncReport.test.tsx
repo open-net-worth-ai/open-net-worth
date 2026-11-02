@@ -81,7 +81,15 @@ describe('Sync run report', () => {
   it('says Nothing changed for a run with nothing in it and hides the empty sections', async () => {
     current = syncRun({
       outcome: 'Nothing changed',
-      totals: { sent: 0, pulled: 0, assigned: 0, conflicts: 0, deferred: 0, errors: 0 },
+      totals: {
+        sent: 0,
+        pulled: 0,
+        assigned: 0,
+        categories: 0,
+        conflicts: 0,
+        deferred: 0,
+        errors: 0,
+      },
       txn_changes: [],
       assigned_changes: [],
       conflicts: [],
@@ -109,7 +117,15 @@ describe('Sync run report', () => {
     }))
     current = syncRun({
       txn_changes: many,
-      totals: { sent: 0, pulled: 130, assigned: 0, conflicts: 0, deferred: 0, errors: 0 },
+      totals: {
+        sent: 0,
+        pulled: 130,
+        assigned: 0,
+        categories: 0,
+        conflicts: 0,
+        deferred: 0,
+        errors: 0,
+      },
       not_stored: { txn_changes: 10 },
       assigned_changes: [],
       conflicts: [],
@@ -132,5 +148,28 @@ describe('Sync run report', () => {
     open()
     expect(await screen.findByText('YNAB HTTP 401')).toBeTruthy()
     expect(screen.getByText('This run failed')).toBeTruthy()
+  })
+
+  it('lists the category changes and what is worth knowing, in plain sentences', async () => {
+    current = syncRun({
+      totals: { ...syncRun().totals!, categories: 2 },
+      category_changes: [
+        { direction: 'pulled', text: 'Renamed Groceries to Food here, as in YNAB.' },
+        { direction: 'sent', text: 'Added Pets to YNAB.' },
+      ],
+      notes: [
+        {
+          item: 'Food',
+          reason: 'Food holds several categories, so its Assigned isn’t synced with YNAB.',
+        },
+      ],
+    })
+    open()
+    expect(await screen.findByText('Renamed Groceries to Food here, as in YNAB.')).toBeTruthy()
+    expect(screen.getByText('Added Pets to YNAB.')).toBeTruthy()
+    expect(screen.getByText('Worth knowing')).toBeTruthy()
+    expect(
+      screen.getByText('Food holds several categories, so its Assigned isn’t synced with YNAB.'),
+    ).toBeTruthy()
   })
 })

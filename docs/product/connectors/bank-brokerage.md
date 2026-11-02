@@ -255,6 +255,9 @@ Data sync → YNAB**: the [YNAB data sync](../features/imports-and-sync.md) uses
 here, and the import is its second setup step. It is experimental and off by default: the **Data
 sync** tab appears once you turn it on in
 [Settings → Developer → Experimental](../features/settings.md#experimental-features).
+A YNAB category can go with a category you already have (matched by name, ignoring emoji and
+capitals), into one of your envelopes, or become a new one; nothing of yours is renamed or moved
+([how](../features/imports-and-sync.md#set-it-up)).
 Take a [backup](../operations/backup-and-restore.md) first if you can; a fresh book is the
 cleanest target (the app also takes one before it writes anything). If this book already holds
 some of the plan's accounts, the review lets you import each YNAB account into one of yours instead
@@ -275,10 +278,13 @@ once as a labelled balance adjustment. Goals and scheduled transactions are not 
 
 After the migration, the [YNAB data sync](../features/imports-and-sync.md) (in Automations) keeps this book and that
 YNAB plan in step, on a schedule: **transactions** (new, edited, deleted, categorized, memo,
-cleared, splits, transfers) and each **month's Assigned per category**, from YNAB, to YNAB or both
-ways. Accounts,
-goals and scheduled transactions are not synced, and a card's payment category is read from YNAB
-only — its Assigned is never sent.
+cleared, splits, transfers), **categories and category groups** (new, renamed, moved to another
+group) and each **month's Assigned** for an envelope that holds just one category, from
+YNAB, to YNAB or both ways. Nothing is ever deleted: a category hidden or deleted in YNAB is hidden
+here, and one hidden, deleted or merged here is moved into a YNAB group called **Hidden in Open Net
+Worth** (YNAB's API can neither delete nor hide a category); a category with no envelope here lives
+in a YNAB group called **Not budgeted**. Accounts, goals and scheduled transactions are not synced, and a card's
+payment category is read from YNAB only — its Assigned is never sent.
 
 1. Click **Turn on** (the last setup step) and, if you like, change the **Schedule** (every 15 or
    30 minutes, hourly — the default — every 6 hours, daily, or **Manual only**). The first run
@@ -308,8 +314,10 @@ note is left as you wrote it.
 changed on both sides and they now disagree, nothing is overwritten: both versions appear side by
 side with **Keep Open Net Worth's** and **Keep YNAB's**, and your choice is applied to both sides.
 Things YNAB's API cannot take are listed there too, with the reason — for example a split's date,
-amount or lines (it ignores them), a transaction dated in the future, a category YNAB does not
-have, or a currency other than the plan's. For those you can keep YNAB's version (this book is put
+amount or lines (it ignores them), a transaction dated in the future, or a currency other than the
+plan's. A category YNAB does not have yet is added to YNAB first and the transaction follows on a
+later run. A YNAB category that could go with several of your categories, or with an envelope that
+already holds others, asks you to pick. For those you can keep YNAB's version (this book is put
 back in line) or change it in YNAB yourself; once both agree the item clears.
 
 **Transactions dated before a Starting Balance.** A synced transaction dated before an account's

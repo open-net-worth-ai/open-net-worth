@@ -1,8 +1,27 @@
 // Synthetic runs for the Imports & sync tests: never a real plan, name or figure.
 
-import type { Preview, RunRecord } from './runs'
+import type { Preview, PreviewCategory, RunRecord } from './runs'
 
 export const PLANS = { budgets: [{ id: 'p1', name: 'Household', currency: 'USD' }] }
+
+function category(
+  id: string,
+  name: string,
+  note: string,
+  link: PreviewCategory['link'] = null,
+): PreviewCategory {
+  return {
+    id,
+    label: name,
+    name,
+    hidden: false,
+    link,
+    chosen: false,
+    ask: false,
+    options: [],
+    note,
+  }
+}
 
 export const PREVIEW: Preview = {
   plan_name: 'Household',
@@ -31,9 +50,33 @@ export const PREVIEW: Preview = {
   money_data: [],
   prune: { categories: ['Vacation'], groups: [] },
   category_groups: [
-    { name: 'Bills', categories: ['Rent', 'Utilities'] },
-    { name: 'Needs', categories: ['Groceries'] },
+    {
+      id: 'yg1',
+      name: 'Bills',
+      group: { id: 'g1', name: 'Bills' },
+      categories: [
+        category('c1', 'Rent', 'Budget syncs with a new envelope of its own'),
+        category('c2', 'Utilities', 'Budget syncs with envelope Utilities', {
+          ref: 'cat:u1',
+          name: 'Utilities',
+          kind: 'category',
+        }),
+      ],
+    },
+    {
+      id: 'yg2',
+      name: 'Needs',
+      group: null,
+      categories: [category('c3', 'Groceries', 'Budget syncs with a new envelope of its own')],
+    },
   ],
+  category_choices: {
+    categories: [
+      { ref: 'cat:u1', name: 'Utilities' },
+      { ref: 'cat:g9', name: 'Food shop' },
+    ],
+    envelopes: [{ ref: 'env:e1', name: 'Gifts', holds: 2 }],
+  },
   transaction_list: [
     {
       date: '2026-10-02',
@@ -173,7 +216,15 @@ export function syncStatus(over: Record<string, unknown> = {}) {
   }
 }
 
-const TOTALS = { sent: 2, pulled: 1, assigned: 1, conflicts: 1, deferred: 1, errors: 1 }
+const TOTALS = {
+  sent: 2,
+  pulled: 1,
+  assigned: 1,
+  categories: 0,
+  conflicts: 1,
+  deferred: 1,
+  errors: 1,
+}
 
 export function syncRun(over: Partial<RunRecord> = {}): RunRecord {
   return run({

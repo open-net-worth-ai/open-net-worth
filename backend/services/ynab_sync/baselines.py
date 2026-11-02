@@ -1,18 +1,23 @@
 """The last-agreed state, held in memory for a run and written back once: per ledger transaction
-its YNAB ids and canonical form, per month + category the Assigned both sides held."""
+its YNAB ids and canonical form, per month + category the Assigned both sides held, and how each
+YNAB category and category group pairs with ours (``ynab_pairs``) with the state both last held."""
 
 from __future__ import annotations
 
 from backend.db.ynab_sync_store import YnabBaselineStore
+from backend.services import ynab_pairs
 from backend.services.ynab_sync.canon import Canon
 
 FLUSH_BULK = 200  # past this many changes, rewrite the table in one transaction
 
 
 class Baselines:
-    def __init__(self) -> None:
+    def __init__(self, plan_id: str | None = None) -> None:
         self._store = YnabBaselineStore()
         self.txns, self.assigned = self._store.split()
+        self.plan_id = plan_id
+        self.cats, self.groups = ynab_pairs.load(plan_id)
+        self.declined = ynab_pairs.declined(plan_id)
         self._dirty: set[str] = set()
         self._gone: set[str] = set()
 
@@ -32,6 +37,34 @@ class Baselines:
             return
         self._dirty.add(f"a:{month}:{cid}")
 
+    def set_cat(self, doc: dict) -> None:
+        self.cats[doc["id"][2:]] = doc
+        self._dirty.add(doc["id"])
+
+    def set_group(self, doc: dict) -> None:
+        self.groups[doc["id"][2:]] = doc
+        self._dirty.add(doc["id"])
+
+    def decline(self, key: str) -> None:
+        """Leave a category out of the other side for good (``y:<ynab id>`` / ``o:<id>``)."""
+        self.declined.add(key)
+        self._dirty.add(f"x:{key}")
+
+    def told(self, env_id: str) -> bool:
+        """Whether the person was already told this envelope's categories share their Assigned
+        (by the import's log, or an earlier run)."""
+        return f"n:{env_id}" in self.declined
+
+    def tell(self, env_id: str) -> None:
+        if not self.told(env_id):
+            self.decline(f"n:{env_id}")
+
+    def drop_assigned_of(self, cid: str) -> None:
+        """Forget the Assigned both sides held for one YNAB category (it stopped, then resumed,
+        syncing with an envelope): the next comparison starts from what each side holds now."""
+        for month, c in [k for k in self.assigned if k[1] == cid]:
+            self.set_assigned(month, c, 0)
+
     def seed_assigned(self, values: dict[tuple[str, str], int]) -> None:
         """First run: YNAB's figures are the agreed starting point; the ledger's differences
         then read as the person's own changes and flow out through the normal rule."""
@@ -43,6 +76,12 @@ class Baselines:
     def _doc(self, doc_id: str) -> dict | None:
         if doc_id.startswith("t:"):
             return self.txns.get(doc_id[2:])
+        if doc_id.startswith("c:"):
+            return self.cats.get(doc_id[2:])
+        if doc_id.startswith("g:"):
+            return self.groups.get(doc_id[2:])
+        if doc_id.startswith("x:"):
+            return ynab_pairs.decline_doc(self.plan_id, doc_id[2:])
         _, month, cid = doc_id.split(":", 2)
         milli = self.assigned.get((month, cid))
         return {"id": doc_id, "month": month, "category": cid, "milli": milli} if milli else None
@@ -52,6 +91,9 @@ class Baselines:
         if len(changes) > FLUSH_BULK:
             docs = [d for i in self.txns if (d := self._doc(f"t:{i}"))]
             docs += [d for m, c in self.assigned if (d := self._doc(f"a:{m}:{c}"))]
+            docs += [*self.cats.values(), *self.groups.values()]
+            docs += [ynab_pairs.decline_doc(self.plan_id, k) for k in self.declined]
+            docs += self._store.of_other_plans(self.plan_id)
             self._store.replace_all(docs)
         else:
             for doc_id in changes:

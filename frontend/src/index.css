@@ -20023,6 +20023,16 @@ body.hide-amounts .mf-lbl-amt {
 .ynr-table tbody tr:has(+ .ynr-link) td {
   border-bottom: 0;
 }
+/* A category's choice and the line under it saying what its budget does. */
+.ynr-cat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  align-items: flex-start;
+}
+.ynr-catnote {
+  font-size: var(--text-xs);
+}
 .ynr-pairs {
   list-style: none;
   margin: 0;

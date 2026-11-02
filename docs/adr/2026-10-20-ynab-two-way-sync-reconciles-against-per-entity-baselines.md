@@ -167,3 +167,82 @@ default) or an existing account; `POST /api/ynab/migration/{preview,start}` take
   as a local change). The account's own rows YNAB does not hold are unlinked creatable rows in a
   YNAB-known account, so a sync that sends (`both`, `to_ynab`) creates them in YNAB — the review
   says how many.
+
+## Amendment 2026-11-03: categories and groups are paired by id and synced both ways
+
+The sync used to re-resolve YNAB categories **by name** on every run, so a rename in YNAB broke the
+pairing, a category new in YNAB held its transactions ("no counterpart in this book"), and
+categories and groups were never synced. The import also matched by exact label ("🛒 Groceries"
+never met "Groceries") and moved a matched envelope into the YNAB group. The owner's model: a YNAB
+category both **labels a transaction and holds the budget**; here a **category** labels and an
+**envelope** (holding 0..n categories) holds the budget, and envelope groups group envelopes.
+
+- **Pairing.** A YNAB category pairs with one of OUR CATEGORIES, by id, for good; a YNAB category
+  group with one of our envelope groups. The documents live in the sync's own `ynab_sync_baselines`
+  table (`c:<ynab id>`, `g:<ynab id>`; no migration), written by the import and read and kept by the
+  sync through `services/ynab_pairs.py`, a leaf both packages import. `state.reset(keep_plan=...)`
+  carries a plan's pairing across `runner._adopt_plan`, so turning the sync on after the import
+  finds it. Each pair holds a baseline PER SIDE (name, hidden, group): a matched pair legitimately
+  differs ("🛒 Groceries" there, "Groceries" here), so "did it change?" is asked of each side
+  against its own last-seen state, and a field changed on both goes to review when the results
+  differ (`category_sync`, same `decide` shape as transactions, per field).
+- **Matching** (`ynab_migration.category_match`, shared by the import review and the sync), names
+  compared without emoji/symbols/case/extra spaces, first hit wins: (1) one of our categories not
+  yet paired: pair with it; (2) an unpaired envelope of that name: empty, the category is created
+  inside it; holding categories, only offered — not pre-selected at import, and a review item in
+  the sync (it would make the envelope shared); (3) nothing: a new category with an envelope of
+  its own in the group paired with its YNAB group. Two equal candidates are never guessed between
+  (ambiguous: the review asks, the sync files a `choose` item), nothing existing is renamed or
+  moved, nothing is paired twice. The import's `category_links` (YNAB category id -> `cat:<id>` |
+  `env:<id>` | `""`) mirrors `account_links`.
+- **The budget follows the envelope.** A category's Assigned syncs only while its envelope holds
+  that category alone (`pair.env`, re-derived each run). Leaving that state is reported once;
+  while paused YNAB's figures are noted, and on resuming the baselines are cleared so any
+  difference goes to review. A category in no envelope has Assigned 0 (our held-outside-envelopes
+  rule matches YNAB's zero-assigned behaviour): it lives in a YNAB group "Not budgeted" the sync
+  creates once, and money YNAB later assigns to it gives it an envelope here.
+- **Deletes hide, and parking replaces hiding in YNAB.** YNAB's API can neither delete NOR hide a
+  category (SaveCategory takes a name, a note, a group and goals; SaveCategoryGroup a name), and
+  the sync never deletes ours: hidden or deleted in YNAB hides ours (the real "hide" is the
+  category flag); hidden, deleted or merged here MOVES the YNAB category into a YNAB group named
+  "Hidden in Open Net Worth", made once like "Not budgeted" and never paired with a book group.
+  The pair is kept while it sits there (`pair.parked`, `pair.home` = the group it came from);
+  showing it again moves it back to `home`, or to the group paired with its envelope's if that
+  moved meanwhile. A category in either parking group, or in YNAB's own "Hidden Categories", is
+  never a move the book follows; a category hidden in YNAB's app reports its
+  `original_category_group_id`, which both the import and the sync use as its group. Money is
+  never released or moved.
+- **A decision is remembered.** "Leave it out" on a category either side would not take writes a
+  `x:y:<ynab id>` / `x:o:<category id>` baseline document that both `pull_new` and `push_new`
+  honour. Rows in a category that will not be in YNAB (hidden unpaired, or left out) go to YNAB
+  uncategorized with one report line per category, and this book's category stands
+  (`units._income_view`).
+- **A refusal is never recorded as agreed.** A pushed change is recorded only when YNAB's answer
+  shows it (`Base.confirmed`); a refused or ignored one is a review item in plain words. A refused
+  group or category create no longer stops the run.
+- **Transactions** map through the pairing in both directions, so a category inside a shared
+  envelope round-trips without being relabelled. A transaction whose category is not in YNAB yet
+  waits for a later run (`payloads.NotYet`) instead of being filed as unsupported. Income-kind
+  categories are never sent; their rows go as Ready to Assign inflows and the ledger's own
+  category stands (`units._income_view`).
+- **Allowance and direction.** Category and group writes take at most 20 of a run's 40 requests;
+  the rest is found again next run (state is re-derived, nothing is queued). One way skips the other
+  way's writes exactly as for transactions, and keeping the protected side accepts instead of
+  writing (`category_resolve`).
+- **Not done:** a YNAB category hidden BY YNAB's own app moves to its "Hidden Categories" group;
+  the sync reads `original_category_group_id` so that is not read as a move, but it has only been
+  exercised against the stub.
+- **Money rule: no Assigned moves without an agreed baseline or the person's choice.** Whenever a
+  category's envelope changes (none to one, one to another) or it is paired with a YNAB category
+  that already existed, `pair.resume` / the envelope change makes the category *fresh*: its
+  baselines are dropped, YNAB's figures are read in full (this run's read when it was a full one,
+  else one more request: `Base.ynab_figures`), and `assigned.evaluate(..., fresh=)` turns any
+  push or pull for it into a review item. A category with money in YNAB and no envelope gets one
+  automatically only if it never had one (`pair.had_env`); otherwise the review asks (`env:`
+  item; "Give it one?" takes YNAB's figures, "Leave it without one" is remembered as `x:e:`).
+  Only a category made just now from the other side's has nothing to lose and is not fresh.
+- **Parking.** A move INTO a parking group is not a YNAB-side change; every push carrying a group
+  records the confirmed group; showing a parked category returns it to `pair.home` only while its
+  envelope has not moved since (`pair.home_for`), else to the group paired with the envelope's.
+  The import never makes a book group from a parking group (`ynab_pairs.PARKING`). Pairs and
+  remembered decisions of every plan survive a reset.

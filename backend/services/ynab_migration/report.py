@@ -30,6 +30,59 @@ def transaction_counts(tally: Counter) -> dict:
     )
 
 
+def _n(n: int, one: str, many: str | None = None) -> str:
+    return f"{n:,} {one if n == 1 else many or one + 's'}"
+
+
+def transactions_line(tally: Counter) -> str:
+    """What booking the transactions did, as one sentence for the run's log."""
+    here = tally["already_present"] + tally["matched"]
+    parts = [f"{_n(tally['created'], 'transaction')} added"]
+    if here:
+        parts.append(f"{here:,} {'was' if here == 1 else 'were'} already here")
+    if refused := tally["refused_duplicate"] + tally["previously_deleted"]:
+        parts.append(f"{refused:,} {'was' if refused == 1 else 'were'} left out (see the problems)")
+    if tally["failed"]:
+        parts.append(f"{_n(tally['failed'], 'transaction')} could not be added")
+    return "; ".join(parts) + "."
+
+
+def categories_line(made: Counter) -> str:
+    added = [
+        _n(made[k], one, many)
+        for k, one, many in (
+            ("categories", "category", "categories"),
+            ("envelopes", "envelope", None),
+            ("groups", "group", None),
+        )
+        if made[k]
+    ]
+    if not added:
+        return "All the categories and envelopes were already here."
+    return f"Added {_join(added)}; the rest were already here."
+
+
+def _join(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def starter_line(removed: Counter) -> str:
+    gone = [
+        _n(removed[k], one, many)
+        for k, one, many in (
+            ("categories", "category", "categories"),
+            ("envelopes", "envelope", None),
+            ("groups", "group", None),
+        )
+        if removed[k]
+    ]
+    return (
+        f"Removed unused starter items: {_join(gone)}."
+        if gone
+        else "No unused starter items to remove."
+    )
+
+
 def problem(raw: dict) -> dict:
     """``raw`` is what ``apply`` collected: ``{ref, reason, kind}``."""
     return {

@@ -42,7 +42,9 @@ class YnabMirrorStore(BookPayloadTableStore):
 
 class YnabBaselineStore(BookPayloadTableStore):
     """The last-agreed state: ``t:<ledger txn id>`` -> its canonical form and YNAB refs,
-    ``a:<month>:<ynab category id>`` -> the Assigned milliunits both sides held."""
+    ``a:<month>:<ynab category id>`` -> the Assigned milliunits both sides held, and the pairing
+    of YNAB's categories (``c:<ynab category id>``) and category groups (``g:<ynab group id>``)
+    with ours, each with the name/group/hidden state both sides last agreed on."""
 
     def __init__(self, engine=None):
         super().__init__(ynab_sync_baselines, engine=engine, checkpointed=False)
@@ -52,9 +54,36 @@ class YnabBaselineStore(BookPayloadTableStore):
         for row in self.all():
             if row["id"].startswith("t:"):
                 txns[row["id"][2:]] = row
-            else:
+            elif row["id"].startswith("a:"):
                 assigned[(row["month"], row["category"])] = row["milli"]
         return txns, assigned
+
+    def declined(self, plan_id: str | None) -> set[str]:
+        """``y:<ynab category id>`` / ``o:<category id>`` the person chose to leave out."""
+        return {
+            r["id"][2:] for r in self.all() if r["id"].startswith("x:") and r.get("plan") == plan_id
+        }
+
+    def pair_documents(self) -> list[dict]:
+        return [r for r in self.all() if r["id"][:2] in ("c:", "g:", "x:")]
+
+    def of_other_plans(self, plan_id: str | None) -> list[dict]:
+        """Pair and decision documents that are not this plan's (a rewrite keeps them)."""
+        return [
+            r for r in self.all() if r["id"][:2] in ("c:", "g:", "x:") and r.get("plan") != plan_id
+        ]
+
+    def pairs(self, plan_id: str | None) -> tuple[dict[str, dict], dict[str, dict]]:
+        """The category and group pairs of one YNAB plan, by YNAB id."""
+        cats, groups = {}, {}
+        for row in self.all():
+            if row.get("plan") != plan_id:
+                continue
+            if row["id"].startswith("c:"):
+                cats[row["id"][2:]] = row
+            elif row["id"].startswith("g:"):
+                groups[row["id"][2:]] = row
+        return cats, groups
 
 
 class YnabConflictStore(BookPayloadTableStore):

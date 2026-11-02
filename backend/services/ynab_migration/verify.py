@@ -104,10 +104,16 @@ def verify_budget(store, plan_id: str, plan: dict, env_ids: dict[str, dict]) -> 
     ymonth = source.fetch_month(store, plan_id, month)
     table, rows = apply.month_rows(month)
     ycats = {c["id"]: c for c in ymonth["categories"]}
-    out = []
+    out, unsynced = [], []
     for cat in plan["categories"]:
-        ycat, env = ycats.get(cat["id"]), env_ids.get(cat["id"], {}).get("envelope")
+        pair = env_ids.get(cat["id"], {})
+        ycat, env = ycats.get(cat["id"]), pair.get("envelope")
         if ycat is None:
+            continue
+        if env is None and pair.get("category"):
+            # Paired, but in a shared envelope or none: its Assigned is not synced by design.
+            if ycat.get("budgeted"):
+                unsynced.append(cat["label"])
             continue
         if env is None or env not in rows:
             out.append(_row("envelope", f"{cat['label']}: envelope", "present", "missing"))
@@ -135,13 +141,26 @@ def verify_budget(store, plan_id: str, plan: dict, env_ids: dict[str, dict]) -> 
             f"Ready to Assign {month}",
             amt(ymonth["to_be_budgeted"]),
             float(table["ready_to_assign"]),
-            "YNAB month: "
-            + ", ".join(
-                f"{k} {amt(ymonth.get(k) or 0):,.2f}" for k in ("income", "budgeted", "activity")
-            ),
+            _ready_note(unsynced),
         )
     )
     return out
+
+
+def _ready_note(unsynced: list[str]) -> str:
+    """Why Ready to Assign can rightly differ: money YNAB doesn't hold here, or Assigned that
+    isn't synced. Empty when neither applies."""
+    reasons = []
+    if any(
+        not a.get("archived")
+        and not any(e.get("source") == SOURCE for e in a.get("external_ids") or [])
+        for a in ledger_service.accounts.query_accounts(include_archived=False)
+    ):
+        reasons.append("this book also has accounts YNAB doesn't")
+    if unsynced:
+        names = ", ".join(unsynced[:3]) + (" and others" if len(unsynced) > 3 else "")
+        reasons.append(f"the Assigned of {names} isn't synced")
+    return f"Can differ, as {' and '.join(reasons)}." if reasons else ""
 
 
 def _line_diff(plan: dict, month: str, cid: str, cat_id: str | None) -> str:

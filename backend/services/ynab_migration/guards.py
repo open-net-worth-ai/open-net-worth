@@ -51,9 +51,10 @@ def _referenced_categories() -> set[str]:
     return used
 
 
-def starter_prune_plan(wanted_labels: set[str]) -> dict:
+def starter_prune_plan(wanted_labels: set[str], kept_ids: frozenset[str] = frozenset()) -> dict:
     """The untouched starter categories/envelopes/groups the plan does not reuse. ``wanted_labels``
-    are the plan's category labels, lowercased. A starter item is listed only if it still looks
+    are the plan's category labels, lowercased; ``kept_ids`` the ids of the book's categories the
+    plan is paired with (they are the plan's, whatever they are called). A starter item is listed only if it still looks
     exactly as seeded (label, 1:1 envelope in its starter group) and nothing was ever funded,
     targeted, linked to a commitment or spent against it."""
     seeded = {c["id"]: c for c in STARTER_CATEGORIES if c["id"] != "split"}
@@ -70,6 +71,8 @@ def starter_prune_plan(wanted_labels: set[str]) -> dict:
     for cid, seed in seeded.items():
         row = rows.get(cid)
         if not row or row["label"] != seed["label"] or row["label"].lower() in wanted_labels:
+            continue
+        if cid in kept_ids:
             continue
         if cid in spent:
             continue

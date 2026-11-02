@@ -30,7 +30,15 @@ _LABELS = {
     "amount": "Amount",
     "cleared": "Cleared",
 }
-_KINDS = ("txn_changes", "assigned_changes", "conflicts", "deferred", "errors")
+_KINDS = (
+    "txn_changes",
+    "assigned_changes",
+    "category_changes",
+    "conflicts",
+    "deferred",
+    "errors",
+    "notes",
+)
 
 
 def _show(key: str, value) -> str:
@@ -70,7 +78,9 @@ class Recorder:
         return any(self.totals.values())
 
     def sent_to_ynab(self) -> bool:
-        return bool(self.totals["sent"] or self.totals["assigned_sent"])
+        return bool(
+            self.totals["sent"] or self.totals["assigned_sent"] or self.totals["categories_sent"]
+        )
 
     def snapshot(self) -> dict:
         return {
@@ -79,6 +89,7 @@ class Recorder:
                 "sent": self.totals["sent"],
                 "pulled": self.totals["pulled"],
                 "assigned": self.totals["assigned_sent"] + self.totals["assigned_pulled"],
+                "categories": self.totals["categories"],
                 "conflicts": self.totals["conflicts"],
                 "deferred": self.totals["deferred"],
                 "errors": self.totals["errors"],
@@ -166,7 +177,7 @@ def assigned_change(
 def conflict(rec: Recorder, item: dict) -> None:
     """A review item just filed: a disagreement, or a Starting Balance waiting on the person, is
     a conflict; anything YNAB or the ledger refused, or YNAB's API cannot take, is an error."""
-    if item["kind"] in ("conflict", "before_start"):
+    if item["kind"] in ("conflict", "before_start", "choose"):
         rec.add(
             "conflicts",
             {
@@ -180,6 +191,21 @@ def conflict(rec: Recorder, item: dict) -> None:
         )
     else:
         rec.add("errors", {"item": item["title"], "reason": item["reason"]})
+
+
+@_safe
+def category_change(rec: Recorder, direction: str, text: str) -> None:
+    """One category or group change, as a plain sentence: ``direction`` is ``sent`` (YNAB was
+    changed) or ``pulled`` (this book was)."""
+    rec.add("category_changes", {"direction": direction, "text": text}, total="categories")
+    if direction == "sent":
+        rec.totals["categories_sent"] += 1
+
+
+@_safe
+def note(rec: Recorder, item: str, reason: str) -> None:
+    """Something worth knowing that is not a change or a problem (an Assigned that is not synced)."""
+    rec.add("notes", {"item": item, "reason": reason})
 
 
 @_safe

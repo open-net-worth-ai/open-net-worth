@@ -17,7 +17,7 @@ import {
   syncRun,
   syncStatus,
 } from '../../imports/importsFixtures'
-import type { Preview, RunRecord } from '../../imports/runs'
+import type { Preview, PreviewCategory, RunRecord } from '../../imports/runs'
 
 const authFetch = vi.hoisted(() => vi.fn())
 const navigate = vi.hoisted(() => vi.fn())
@@ -44,6 +44,8 @@ let sync: Sync
 let preview = PREVIEW
 // What a preview answers once the review links an account (null: the same as unlinked).
 let linked: Preview | null
+// What a preview answers once the review changes where a category goes (null: unchanged).
+let categorized: Preview | null
 let requests: { url: string; method: string; body: unknown }[]
 const onBack = vi.fn()
 const onOpenReport = vi.fn()
@@ -56,6 +58,7 @@ beforeEach(() => {
   sync = syncStatus()
   preview = PREVIEW
   linked = null
+  categorized = null
   requests = []
   authFetch.mockImplementation((url: string, init?: RequestInit) => {
     const path = url.split('?')[0] ?? ''
@@ -76,7 +79,12 @@ beforeEach(() => {
         : url.endsWith('/verify')
           ? 'verify'
           : 'preview'
-      const shown = linked && Object.keys(body.account_links ?? {}).length ? linked : preview
+      const shown =
+        categorized && Object.keys(body.category_links ?? {}).length
+          ? categorized
+          : linked && Object.keys(body.account_links ?? {}).length
+            ? linked
+            : preview
       const started =
         kind === 'preview'
           ? run({ preview: shown })
@@ -170,6 +178,7 @@ describe('YnabSyncDetail setup', () => {
     expect(await w.findByText(/USD · 1 account · 4 transactions · 3 categories/)).toBeTruthy()
     // Three tabs over one pane: accounts first, then each category under its group, then rows.
     expect(w.getByRole('cell', { name: 'Checking' })).toBeTruthy()
+    expect(w.getByRole('cell', { name: 'Cash' })).toBeTruthy() // the app's own type label
     fireEvent.click(w.getByRole('tab', { name: /Categories/ }))
     expect(w.getByRole('rowheader', { name: /Bills/ })).toBeTruthy()
     expect(w.getByRole('cell', { name: 'Utilities' })).toBeTruthy()
@@ -226,7 +235,9 @@ describe('YnabSyncDetail setup', () => {
     fireEvent.change(select, { target: { value: 'p1' } })
     fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
     const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
-    expect(await w.findByText(/They stay as they are/)).toBeTruthy()
+    expect(
+      await w.findByText(/Each YNAB account comes in as a new one unless you pick/),
+    ).toBeTruthy()
     fireEvent.click(w.getByRole('button', { name: 'After import' }))
     fireEvent.mouseDown(screen.getByRole('option', { name: /Don’t sync, import once/ }))
     fireEvent.click(w.getByRole('button', { name: 'Import' }))
@@ -311,6 +322,160 @@ describe('YnabSyncDetail setup', () => {
     )
   })
 
+  it('says where each YNAB category goes, lets it be changed, and holds the import for a pick', async () => {
+    sync = notSetUp()
+    const row = (
+      id: string,
+      name: string,
+      over: Partial<PreviewCategory> = {},
+    ): PreviewCategory => ({
+      id,
+      label: name,
+      name,
+      hidden: false,
+      link: null,
+      chosen: false,
+      ask: false,
+      options: [],
+      note: 'Budget syncs with a new envelope of its own',
+      ...over,
+    })
+    const matched = row('c2', 'Utilities', {
+      link: { ref: 'cat:u1', name: 'Utilities', kind: 'category' },
+      note: 'Budget syncs with envelope Utilities',
+    })
+    const ask = row('c3', 'Dining out', {
+      ask: true,
+      options: [
+        { ref: 'cat:g9', name: 'Food shop' },
+        { ref: 'cat:u1', name: 'Utilities' },
+      ],
+      note: 'Matches more than one of your categories. Pick one.',
+    })
+    const groups = (rows: PreviewCategory[]) => [
+      { id: 'yg1', name: 'Bills', group: null, categories: rows },
+    ]
+    preview = { ...PREVIEW, category_groups: groups([row('c1', 'Rent'), matched, ask]) }
+    categorized = {
+      ...preview,
+      category_groups: groups([
+        row('c1', 'Rent', {
+          chosen: true,
+          link: { ref: 'cat:g9', name: 'Food shop', kind: 'category' },
+          note: 'Not budgeted here',
+        }),
+        {
+          ...matched,
+          link: null,
+          note: 'Budget syncs with a new envelope of its own',
+          chosen: true,
+        },
+        {
+          ...ask,
+          ask: false,
+          chosen: true,
+          link: { ref: 'env:e1', name: 'Gifts', kind: 'envelope' },
+          note: "Envelope Gifts holds other categories too — its Assigned won't sync",
+        },
+      ]),
+    }
+    page()
+    const select = (await screen.findByLabelText(/YNAB plan/)) as HTMLSelectElement
+    await waitFor(() => expect(select.options.length).toBeGreaterThan(1))
+    fireEvent.change(select, { target: { value: 'p1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
+    const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
+    fireEvent.click(await w.findByRole('tab', { name: /Categories/ }))
+    expect(w.getByText('Budget syncs with envelope Utilities')).toBeTruthy()
+    expect(w.getByText('Matches more than one of your categories. Pick one.')).toBeTruthy()
+    expect((w.getByRole('button', { name: 'Import' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(w.getByRole('button', { name: 'Where Utilities goes' }))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Matches your Utilities',
+      'New category',
+      'Use your Food shop',
+      'Into your envelope Gifts',
+    ])
+    fireEvent.mouseDown(screen.getByRole('option', { name: 'New category' }))
+    await waitFor(() =>
+      expect(requests.at(-1)).toMatchObject({
+        url: '/api/ynab/migration/preview',
+        body: { plan_id: 'p1', category_links: { c2: '' }, recheck_of: runs[0]!.id },
+      }),
+    )
+    expect(
+      await w.findByText("Envelope Gifts holds other categories too — its Assigned won't sync"),
+    ).toBeTruthy()
+    expect(w.getByText('Not budgeted here')).toBeTruthy()
+    fireEvent.click(w.getByRole('button', { name: 'Import' }))
+    await waitFor(() =>
+      expect(requests.at(-1)).toMatchObject({
+        url: '/api/ynab/migration/start',
+        body: { category_links: { c2: '' } },
+      }),
+    )
+  })
+
+  it('searches a long list of categories, and says a category hidden in YNAB comes in hidden', async () => {
+    sync = notSetUp()
+    const many = Array.from({ length: 12 }, (_, i) => ({ ref: `cat:k${i}`, name: `Shop ${i}` }))
+    preview = {
+      ...PREVIEW,
+      category_choices: { categories: many, envelopes: [] },
+      category_groups: [
+        {
+          id: 'yg1',
+          name: 'Bills',
+          group: null,
+          categories: [
+            {
+              id: 'c1',
+              label: 'Old Cat',
+              name: 'Old Cat',
+              hidden: true,
+              link: null,
+              chosen: false,
+              ask: false,
+              options: [],
+              note: 'Budget syncs with a new envelope of its own.',
+            },
+            {
+              id: 'c2',
+              label: 'Cold Cat',
+              name: 'Cold Cat',
+              hidden: true,
+              link: { ref: 'cat:k1', name: 'Shop 1', kind: 'category' },
+              chosen: false,
+              ask: false,
+              options: [],
+              note: 'Budget syncs with envelope Shop 1',
+            },
+          ],
+        },
+      ],
+    }
+    page()
+    const select = (await screen.findByLabelText(/YNAB plan/)) as HTMLSelectElement
+    await waitFor(() => expect(select.options.length).toBeGreaterThan(1))
+    fireEvent.change(select, { target: { value: 'p1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
+    const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
+    fireEvent.click(await w.findByRole('tab', { name: /Categories/ }))
+    expect(
+      w.getByText(
+        'Budget syncs with a new envelope of its own. Hidden in YNAB, so hidden here too',
+      ),
+    ).toBeTruthy()
+    // matched with one of yours, the import leaves it as it is: it is not said to be hidden
+    expect(w.getByText('Budget syncs with envelope Shop 1')).toBeTruthy()
+    fireEvent.click(w.getByRole('button', { name: 'Where Old Cat goes' }))
+    const box = screen.getByPlaceholderText('Search categories…')
+    fireEvent.change(box, { target: { value: 'shop 11' } })
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Use your Shop 11'])
+    fireEvent.change(box, { target: { value: 'zzz' } })
+    expect(screen.getByText('No category matches.')).toBeTruthy()
+  })
+
   it('a plan in another currency than a book with data cannot be imported, and says why', async () => {
     sync = notSetUp()
     preview = { ...PREVIEW, currency_blocked: true, currency_change: false }
@@ -356,6 +521,13 @@ describe('YnabSyncDetail once set up', () => {
     expect(screen.getByText(/Next sync:/)).toBeTruthy()
     expect(screen.getByText(/3 sent to YNAB, 1 pulled, 1 needs review/)).toBeTruthy()
     expect((screen.getByRole('switch') as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('says in one line per direction that categories travel too', async () => {
+    page()
+    expect(
+      await screen.findByText(/Transactions, categories and Assigned changed on either side/),
+    ).toBeTruthy()
   })
 
   it('puts the review list first and applies the chosen side to both', async () => {

@@ -137,6 +137,9 @@ class MigrationRequest(BaseModel):
     # and YNAB transaction id -> the row here the person confirmed is the same transaction.
     account_links: Optional[dict[str, str]] = None
     same_as: Optional[dict[str, str]] = None
+    # A preview or an import: YNAB category id -> "cat:<id>" (one of the book's categories),
+    # "env:<id>" (a new category inside one of its envelopes) or "" (a new category).
+    category_links: Optional[dict[str, str]] = None
     # A preview only: the preview this one refines (the review re-checking a changed link).
     recheck_of: Optional[str] = None
 
@@ -151,6 +154,7 @@ def _migration(kind: str, body: MigrationRequest) -> dict:
             sync_direction=sync or None,
             account_links=body.account_links,
             same_as=body.same_as,
+            category_links=body.category_links,
             recheck_of=body.recheck_of if kind == "preview" else None,
         )
     except ynab_migration.ConfirmationRequired as exc:
@@ -196,6 +200,8 @@ class SyncSettings(BaseModel):
 
 class SyncResolution(BaseModel):
     keep: str  # "onw" | "ynab"
+    # A category YNAB has that matches several things here: which one to use ("cat:<id>"/"env:<id>").
+    choice: Optional[str] = None
 
 
 def _sync(call, *args):
@@ -226,4 +232,4 @@ def ynab_sync_run():
 
 @router.post("/api/ynab/sync/conflicts/{conflict_id}/resolve")
 def ynab_sync_resolve(conflict_id: str, body: SyncResolution):
-    return _sync(ynab_sync.resolve_item, conflict_id, body.keep)
+    return _sync(ynab_sync.resolve_item, conflict_id, body.keep, body.choice)

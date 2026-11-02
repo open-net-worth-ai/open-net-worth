@@ -45,6 +45,8 @@ DETAIL = (
     "totals",
     "txn_changes",
     "assigned_changes",
+    "category_changes",
+    "notes",
     "conflicts",
     "deferred",
     "errors",

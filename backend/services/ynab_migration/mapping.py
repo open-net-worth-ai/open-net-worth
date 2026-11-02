@@ -98,7 +98,8 @@ def plan_categories(groups: list[dict], txns: list[dict], months: list[dict]) ->
         used |= {c["id"] for c in m.get("categories", []) if c.get("budgeted")}
     skip: dict[str, str] = {}
     cards: dict[str, str] = {}  # card payment category id -> its card account's name
-    chosen: list[tuple[str, str, str, bool]] = []
+    chosen: list[tuple[str, str, str, bool, str]] = []
+    by_id = {g["id"]: g for g in groups if not g.get("deleted")}
     for g in groups:
         if g.get("deleted"):
             continue
@@ -117,16 +118,29 @@ def plan_categories(groups: list[dict], txns: list[dict], months: list[dict]) ->
             elif hidden and c["id"] not in used:
                 skip[c["id"]] = "hidden_unused"
             else:
-                chosen.append((c["id"], clean(c["name"], 120), clean(g["name"], 120), hidden))
-    labels = unique_labels([(i, n, g) for i, n, g, _ in chosen])
+                # A category hidden in YNAB's own app sits in its "Hidden Categories" group; it
+                # belongs to the group it came from.
+                home = (
+                    by_id.get(c.get("original_category_group_id") or "")
+                    if c.get("hidden")
+                    else None
+                )
+                home = home or g
+                chosen.append(
+                    (c["id"], clean(c["name"], 120), clean(home["name"], 120), hidden, home["id"])
+                )
+    labels = unique_labels([(i, n, g) for i, n, g, _, _ in chosen])
     cats = [
         {
             "id": i,
             "label": labels[i],
+            "name": n,
             "group": f"{g} (YNAB)" if g.strip().lower() in RESERVED_GROUPS else g,
+            "group_id": gid,
+            "group_name": g,
             "hidden": h,
         }
-        for i, _, g, h in chosen
+        for i, n, g, h, gid in chosen
     ]
     return {"categories": cats, "skipped": skip, "card_categories": cards}
 

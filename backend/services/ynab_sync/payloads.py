@@ -6,6 +6,7 @@ edit split lines, and takes no future dates."""
 from __future__ import annotations
 
 from backend.core.user_time import user_today
+from backend.services.ynab_sync import recorder
 from backend.services.ynab_sync.canon import changed_fields
 from backend.services.ynab_sync.context import Context, top_of
 
@@ -16,18 +17,31 @@ class Unsupported(Exception):
     """A change YNAB's API cannot take; ``str(exc)`` is the reason for the person."""
 
 
+class NotYet(Unsupported):
+    """A change YNAB can take once its category exists there: it waits for a later run."""
+
+
 def _milli(cents: int, outflow: bool) -> int:
     return -cents * 10 if outflow else cents * 10
 
 
 def _category_id(ctx: Context, onw_category: str | None) -> str | None:
-    if not onw_category:
+    """The YNAB category paired with ours. An income category has none, as YNAB has no income
+    categories: its rows go in as inflows, which YNAB books as Ready to Assign."""
+    if not onw_category or onw_category in ctx.income:
         return None
-    for cid, mine in ctx.cat_ids.items():
-        if mine == onw_category:
-            return cid
+    if onw_category in ctx.ynab_cat:
+        return ctx.ynab_cat[onw_category]
     label = ctx.names["categories"].get(onw_category, onw_category)
-    raise Unsupported(f"the category '{label}' has no counterpart in YNAB")
+    if onw_category in ctx.unsent:
+        if onw_category not in ctx.said:
+            ctx.said.add(onw_category)
+            recorder.note(
+                label,
+                f"Transactions in {label} go to YNAB uncategorized, as {label} isn't in YNAB.",
+            )
+        return None
+    raise NotYet(f"The category {label} isn't in YNAB yet.")
 
 
 def _signed(n: dict) -> tuple[list, bool]:
