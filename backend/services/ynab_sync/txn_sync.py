@@ -147,7 +147,12 @@ def settle(
             _file(ctx, u, conflicts.UNSUPPORTED, u.blocked)
             continue
         if u.key in open_items:
-            if action != "adopt":
+            waiting_on_a_category = (
+                open_items[u.key]["kind"] == conflicts.UNSUPPORTED
+                and u.onw_id is None
+                and not u.blocked
+            )
+            if action != "adopt" and not waiting_on_a_category:
                 continue
             conflicts.close(u.key)
         if action == "conflict":

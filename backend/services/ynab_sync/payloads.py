@@ -16,18 +16,23 @@ class Unsupported(Exception):
     """A change YNAB's API cannot take; ``str(exc)`` is the reason for the person."""
 
 
+class NotYet(Unsupported):
+    """A change YNAB can take once its category exists there: it waits for a later run."""
+
+
 def _milli(cents: int, outflow: bool) -> int:
     return -cents * 10 if outflow else cents * 10
 
 
 def _category_id(ctx: Context, onw_category: str | None) -> str | None:
-    if not onw_category:
+    """The YNAB category paired with ours. An income category has none, as YNAB has no income
+    categories: its rows go in as inflows, which YNAB books as Ready to Assign."""
+    if not onw_category or onw_category in ctx.income:
         return None
-    for cid, mine in ctx.cat_ids.items():
-        if mine == onw_category:
-            return cid
+    if onw_category in ctx.ynab_cat:
+        return ctx.ynab_cat[onw_category]
     label = ctx.names["categories"].get(onw_category, onw_category)
-    raise Unsupported(f"the category '{label}' has no counterpart in YNAB")
+    raise NotYet(f"The category {label} isn't in YNAB yet.")
 
 
 def _signed(n: dict) -> tuple[list, bool]:

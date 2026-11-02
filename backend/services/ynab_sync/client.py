@@ -85,6 +85,28 @@ class YnabClient:
             body={"category": {"budgeted": milli}},
         )
 
+    def create_category(self, group_id: str, name: str) -> dict:
+        body = {"category": {"name": name, "category_group_id": _checked(group_id)}}
+        return self._call("POST", "/categories", body=body)["category"]
+
+    def update_category(self, category_id: str, fields: dict) -> dict:
+        """Rename, move to another group or hide/show: ``name``, ``category_group_id``, ``hidden``."""
+        return self._call(
+            "PATCH", f"/categories/{_checked(category_id)}", body={"category": fields}
+        )["category"]
+
+    def create_group(self, name: str) -> dict:
+        return self._call("POST", "/category_groups", body={"category_group": {"name": name}})[
+            "category_group"
+        ]
+
+    def update_group(self, group_id: str, name: str) -> dict:
+        return self._call(
+            "PATCH",
+            f"/category_groups/{_checked(group_id)}",
+            body={"category_group": {"name": name}},
+        )["category_group"]
+
     def set_note(self, category_id: str, note: str) -> dict:
         return self._call(
             "PATCH", f"/categories/{_checked(category_id)}", body={"category": {"note": note}}

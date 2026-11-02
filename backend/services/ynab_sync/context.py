@@ -1,7 +1,9 @@
 """Everything the reconcile needs to translate between the two sides, built once per run: how
-YNAB accounts and categories map to ledger accounts, categories and envelopes (the migration's
-own resolution, never creating anything), and YNAB's transactions turned into the ledger rows
-the migration would have booked (``mapping.plan_transactions`` + ``render_piece``)."""
+YNAB accounts and categories map to ledger accounts and categories (accounts by their YNAB link,
+categories by the pairing the import and ``category_sync`` keep — never by name, so a rename on
+either side does not break it, and never creating anything), and YNAB's transactions turned into
+the ledger rows the migration would have booked (``mapping.plan_transactions`` +
+``render_piece``)."""
 
 from __future__ import annotations
 
@@ -21,7 +23,9 @@ class Context:
     acct_ids: dict[str, str]  # YNAB account id -> ledger account id
     ynab_acct: dict[str, str]  # ledger account id -> YNAB account id
     cat_ids: dict[str, str | None]  # YNAB category id -> ledger category id
-    env_of: dict[str, str]  # YNAB category id -> envelope id (plain categories)
+    ynab_cat: dict[str, str]  # ledger category id -> YNAB category id
+    income: frozenset[str]  # ledger income categories: YNAB sees their rows as Ready to Assign
+    env_of: dict[str, str]  # YNAB category id -> the envelope holding only that category
     card_env: dict[str, str]  # YNAB card-payment category id -> payment envelope id
     names: dict
     sub_parent: dict[str, str] = field(default_factory=dict)
@@ -53,11 +57,21 @@ def _openings(mirror: dict[str, dict]) -> dict[str, str]:
     return found
 
 
-def build(state: dict, meta: dict, mirror: dict[str, dict], assigned: dict) -> Context:
+def category_plan(meta: dict, mirror: dict[str, dict], assigned: dict) -> dict:
+    """The YNAB categories worth mirroring (the migration's own rule), and why the rest are not."""
     used_months = [{"categories": [{"id": cid, "budgeted": 1} for (_, cid) in assigned]}]
-    cat_plan = mapping.plan_categories(_groups(meta), list(mirror.values()), used_months)
-    envs, _ = apply.resolve_envelopes({"categories": cat_plan["categories"]}, create=False)
+    return mapping.plan_categories(_groups(meta), list(mirror.values()), used_months)
+
+
+def build(
+    state: dict, meta: dict, mirror: dict[str, dict], assigned: dict, pairs: dict[str, dict]
+) -> Context:
+    """``pairs``: YNAB category id -> its pair document (``ynab_pairs``)."""
+    cat_plan = category_plan(meta, mirror, assigned)
     card = apply.card_envelopes(cat_plan)
+    rows = categories_service.all_category_rows()
+    live = {c["id"] for c in rows}
+    paired = {y: p for y, p in pairs.items() if not p.get("gone") and p["category"] in live}
     accounts = ledger_service.accounts.query_accounts(include_archived=True)
     acct_ids = {
         e["ref"]: a["id"]
@@ -78,12 +92,14 @@ def build(state: dict, meta: dict, mirror: dict[str, dict], assigned: dict) -> C
         cat_plan=cat_plan,
         acct_ids=acct_ids,
         ynab_acct={v: k for k, v in acct_ids.items()},
-        cat_ids={cid: v["category"] for cid, v in envs.items()},
-        env_of={cid: v["envelope"] for cid, v in envs.items() if v["envelope"]},
+        cat_ids={y: p["category"] for y, p in paired.items()},
+        ynab_cat={p["category"]: y for y, p in paired.items()},
+        income=frozenset(c["id"] for c in rows if c.get("kind") == "income"),
+        env_of={y: p["env"] for y, p in paired.items() if p.get("env")},
         card_env={cid: v["envelope"] for cid, v in card.items()},
         names={
             "accounts": {a["id"]: a["name"] for a in accounts},
-            "categories": {c["id"]: c["label"] for c in categories_service.all_category_rows()},
+            "categories": {c["id"]: c["label"] for c in rows},
         },
         sub_parent=sub_parent,
         link_of=link_of,

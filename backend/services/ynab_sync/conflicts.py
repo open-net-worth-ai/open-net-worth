@@ -12,6 +12,7 @@ from backend.services.ynab_sync import recorder
 
 CONFLICT = "conflict"  # both sides changed it and they disagree
 UNSUPPORTED = "unsupported"  # one side changed it in a way the other side's API cannot take
+CHOOSE = "choose"  # a YNAB category matches several things here; the person picks
 FAILED = "failed"  # the other side refused the change; the reason is YNAB's or the ledger's own
 
 _store = YnabConflictStore()

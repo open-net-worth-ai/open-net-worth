@@ -167,3 +167,52 @@ default) or an existing account; `POST /api/ynab/migration/{preview,start}` take
   as a local change). The account's own rows YNAB does not hold are unlinked creatable rows in a
   YNAB-known account, so a sync that sends (`both`, `to_ynab`) creates them in YNAB — the review
   says how many.
+
+## Amendment 2026-11-03: categories and groups are paired by id and synced both ways
+
+The sync used to re-resolve YNAB categories **by name** on every run, so a rename in YNAB broke the
+pairing, a category new in YNAB held its transactions ("no counterpart in this book"), and
+categories and groups were never synced. The import also matched by exact label ("🛒 Groceries"
+never met "Groceries") and moved a matched envelope into the YNAB group. The owner's model: a YNAB
+category both **labels a transaction and holds the budget**; here a **category** labels and an
+**envelope** (holding 0..n categories) holds the budget, and envelope groups group envelopes.
+
+- **Pairing.** A YNAB category pairs with one of OUR CATEGORIES, by id, for good; a YNAB category
+  group with one of our envelope groups. The documents live in the sync's own `ynab_sync_baselines`
+  table (`c:<ynab id>`, `g:<ynab id>`; no migration), written by the import and read and kept by the
+  sync through `services/ynab_pairs.py`, a leaf both packages import. `state.reset(keep_plan=...)`
+  carries a plan's pairing across `runner._adopt_plan`, so turning the sync on after the import
+  finds it. Each pair holds a baseline PER SIDE (name, hidden, group): a matched pair legitimately
+  differs ("🛒 Groceries" there, "Groceries" here), so "did it change?" is asked of each side
+  against its own last-seen state, and a field changed on both goes to review when the results
+  differ (`category_sync`, same `decide` shape as transactions, per field).
+- **Matching** (`ynab_migration.category_match`, shared by the import review and the sync), names
+  compared without emoji/symbols/case/extra spaces, first hit wins: (1) one of our categories not
+  yet paired: pair with it; (2) an unpaired envelope of that name: empty, the category is created
+  inside it; holding categories, only offered — not pre-selected at import, and a review item in
+  the sync (it would make the envelope shared); (3) nothing: a new category with an envelope of
+  its own in the group paired with its YNAB group. Two equal candidates are never guessed between
+  (ambiguous: the review asks, the sync files a `choose` item), nothing existing is renamed or
+  moved, nothing is paired twice. The import's `category_links` (YNAB category id -> `cat:<id>` |
+  `env:<id>` | `""`) mirrors `account_links`.
+- **The budget follows the envelope.** A category's Assigned syncs only while its envelope holds
+  that category alone (`pair.env`, re-derived each run). Leaving that state is reported once;
+  while paused YNAB's figures are noted, and on resuming the baselines are cleared so any
+  difference goes to review. A category in no envelope has Assigned 0 (our held-outside-envelopes
+  rule matches YNAB's zero-assigned behaviour): it lives in a YNAB group "Not budgeted" the sync
+  creates once, and money YNAB later assigns to it gives it an envelope here.
+- **Deletes hide.** YNAB's API cannot delete a category and the sync never deletes ours: hidden or
+  deleted in YNAB hides ours (the real "hide" is the category flag); deleted or merged here hides
+  YNAB's. Money is never released or moved.
+- **Transactions** map through the pairing in both directions, so a category inside a shared
+  envelope round-trips without being relabelled. A transaction whose category is not in YNAB yet
+  waits for a later run (`payloads.NotYet`) instead of being filed as unsupported. Income-kind
+  categories are never sent; their rows go as Ready to Assign inflows and the ledger's own
+  category stands (`units._income_view`).
+- **Allowance and direction.** Category and group writes take at most 20 of a run's 40 requests;
+  the rest is found again next run (state is re-derived, nothing is queued). One way skips the other
+  way's writes exactly as for transactions, and keeping the protected side accepts instead of
+  writing (`category_resolve`).
+- **Not done:** a YNAB category hidden BY YNAB's own app moves to its "Hidden Categories" group;
+  the sync reads `original_category_group_id` so that is not read as a move, but it has only been
+  exercised against the stub.

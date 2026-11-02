@@ -3,12 +3,14 @@ import { authFetch } from '../../../api/client'
 import { fAmountNative, fDate } from '../../../utils/format'
 import { Button, Checkbox, Cluster, Modal, PageTabs, Skeleton, Stack, Text } from '../../ui'
 import { PMSelect } from '../accounts/ds'
+import { ASK, Categories } from './YnabCategories'
 import {
   messageOf,
   useRun,
   type LinkMatch,
   type Preview,
   type PreviewAccount,
+  type PreviewCategory,
   type PreviewTxn,
 } from './runs'
 import type { SyncDirection } from './sync'
@@ -23,6 +25,12 @@ import type { SyncDirection } from './sync'
 // re-checks the preview with that link (the server reuses the plan it just read), so what each
 // account would match and add is the server's answer, never a guess made here. The window keeps
 // the last answer on screen until the new one arrives.
+//
+// A YNAB category goes with one of the book's categories (pre-selected when one reads the same),
+// into one of its envelopes, or becomes a new category. The choice and the line under it (what
+// the category's budget will do) are the server's answer for the choice made, so a change is
+// re-checked like an account's. A category that matches several of the book's must be picked
+// before the import can start.
 
 type SyncChoice = SyncDirection | 'off'
 type Pane = 'accounts' | 'categories' | 'transactions'
@@ -53,12 +61,14 @@ export function YnabReview({
   const [checkId, setCheckId] = useState<string | null>(null)
   const run = useRun(shownId).data
   const check = useRun(checkId ?? undefined).data
+  const first = useRun(runId).data?.preview
   const p = run?.status === 'done' ? run.preview : null
   const reading = !run || run.status === 'running'
   const [pane, setPane] = useState<Pane>('accounts')
   const [sync, setSync] = useState<SyncChoice>('both')
   const [links, setLinks] = useState<Record<string, string>>({})
   const [sameAs, setSameAs] = useState<Record<string, string>>({})
+  const [catLinks, setCatLinks] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -66,27 +76,35 @@ export function YnabReview({
     setShownId(checkId)
     setCheckId(null)
   } else if (checkId && check && check.status !== 'running') {
-    setError(check.error || 'Could not check that account.')
+    setError(check.error || 'Could not check that choice.')
     setCheckId(null)
   }
   const checking = checkId !== null
+  // What the first answer proposed for each category: the choice the person did not make.
+  const proposals = Object.fromEntries(
+    (first?.category_groups ?? [])
+      .flatMap((g) => g.categories)
+      .map((c) => [c.id, c.ask ? ASK : c.link && c.link.kind !== 'linked' ? c.link.ref : '']),
+  )
+  const asking = (p?.category_groups ?? []).flatMap((g) => g.categories).filter((c) => c.ask)
 
-  async function relink(ynabId: string, accountId: string) {
+  async function recheck(accounts: Record<string, string>, categories: Record<string, string>) {
     if (!run) return
-    const next = { ...links }
-    if (accountId) next[ynabId] = accountId
-    else delete next[ynabId]
-    setLinks(next)
     setError(null)
     try {
       const r = await authFetch('/api/ynab/migration/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plan_id: run.plan_id, account_links: next, recheck_of: shownId }),
+        body: JSON.stringify({
+          plan_id: run.plan_id,
+          account_links: accounts,
+          ...(Object.keys(categories).length > 0 && { category_links: categories }),
+          recheck_of: shownId,
+        }),
       })
       const body = await r.json().catch(() => null)
       if (!r.ok) {
-        setError(messageOf(body, 'Could not check that account.'))
+        setError(messageOf(body, 'Could not check that choice.'))
         return
       }
       setCheckId((body as { id: string }).id)
@@ -95,8 +113,24 @@ export function YnabReview({
     }
   }
 
+  function relink(ynabId: string, accountId: string) {
+    const next = { ...links }
+    if (accountId) next[ynabId] = accountId
+    else delete next[ynabId]
+    setLinks(next)
+    void recheck(next, catLinks)
+  }
+
+  function recategorize(ynabId: string, ref: string) {
+    const next = { ...catLinks }
+    if (ref === proposals[ynabId]) delete next[ynabId]
+    else next[ynabId] = ref
+    setCatLinks(next)
+    void recheck(links, next)
+  }
+
   async function importNow() {
-    if (!run || !p || p.currency_blocked || checking) return
+    if (!run || !p || p.currency_blocked || checking || asking.length > 0) return
     // Only an answer about a pair the shown preview still lists counts.
     const listed = new Set(p.accounts.flatMap((a) => a.match?.pairs ?? []).map((x) => x.ref))
     const same = Object.fromEntries(Object.entries(sameAs).filter(([ref]) => listed.has(ref)))
@@ -114,6 +148,7 @@ export function YnabReview({
           sync_direction: sync === 'off' ? null : sync,
           ...(Object.keys(links).length > 0 && { account_links: links }),
           ...(Object.keys(same).length > 0 && { same_as: same }),
+          ...(Object.keys(catLinks).length > 0 && { category_links: catLinks }),
         }),
       })
       if (!r.ok) {
@@ -153,7 +188,7 @@ export function YnabReview({
             <Button
               size="sm"
               variant="primary"
-              disabled={!p || p.currency_blocked || checking}
+              disabled={!p || p.currency_blocked || checking || asking.length > 0}
               loading={busy}
               onClick={importNow}
             >
@@ -169,7 +204,7 @@ export function YnabReview({
             {run?.error || 'The plan could not be read.'}
           </Text>
         ) : (
-          p && <Notes preview={p} />
+          p && <Notes preview={p} asking={asking} />
         )}
         {error && (
           <Text size="sm" tone="bad">
@@ -201,12 +236,18 @@ export function YnabReview({
                   preview={p}
                   links={links}
                   checking={checking}
-                  onLink={(id, to) => void relink(id, to)}
+                  onLink={relink}
                   sameAs={sameAs}
                   onSameAs={setSameAs}
                 />
               ) : pane === 'categories' ? (
-                <Categories preview={p} />
+                <Categories
+                  preview={p}
+                  catLinks={catLinks}
+                  proposals={proposals}
+                  checking={checking}
+                  onChoose={recategorize}
+                />
               ) : (
                 <Transactions preview={p} />
               )}
@@ -233,8 +274,13 @@ function Meta({ preview: p }: { preview: Preview }) {
 }
 
 // What the import does to this book beyond adding the plan — each one sentence, only when true.
-function Notes({ preview: p }: { preview: Preview }) {
+function Notes({ preview: p, asking }: { preview: Preview; asking: PreviewCategory[] }) {
   const lines: { text: string; bad?: boolean }[] = []
+  for (const c of asking)
+    lines.push({
+      bad: true,
+      text: `YNAB’s ${c.name} matches more than one of your categories. Pick one in Categories.`,
+    })
   if (p.currency_blocked)
     lines.push({
       bad: true,
@@ -417,36 +463,6 @@ function LinkSummary({
         </>
       )}
     </Stack>
-  )
-}
-
-function Categories({ preview: p }: { preview: Preview }) {
-  const groups = p.category_groups
-  if (!groups) return <Empty>Review again to see the categories by name.</Empty>
-  if (groups.length === 0) return <Empty>This plan has no categories of its own.</Empty>
-  return (
-    <table className="imp-table ynr-table">
-      <thead>
-        <tr>
-          <th>Category</th>
-        </tr>
-      </thead>
-      {groups.map((g) => (
-        <tbody key={g.name}>
-          <tr className="ynr-group">
-            <th scope="rowgroup">
-              {g.name}
-              <span className="ynr-dim"> · {g.categories.length}</span>
-            </th>
-          </tr>
-          {g.categories.map((c) => (
-            <tr key={c}>
-              <td data-label="Category">{c}</td>
-            </tr>
-          ))}
-        </tbody>
-      ))}
-    </table>
   )
 }
 

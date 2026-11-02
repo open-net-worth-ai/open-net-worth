@@ -211,8 +211,11 @@ export function YnabSyncDetail({
                     key={item.id}
                     item={item}
                     busy={busy === item.id || status.running}
-                    onKeep={(keep) =>
-                      void send(item.id, `/conflicts/${item.id}/resolve`, 'POST', { keep })
+                    onKeep={(keep, choice) =>
+                      void send(item.id, `/conflicts/${item.id}/resolve`, 'POST', {
+                        keep,
+                        ...(choice && { choice }),
+                      })
                     }
                   />
                 ))}

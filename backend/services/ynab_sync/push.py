@@ -13,6 +13,7 @@ from backend.services.ynab_sync import client as ynab_client
 from backend.services.ynab_sync.client import RateCapReached, YnabClient
 from backend.services.ynab_sync.context import Context
 from backend.services.ynab_sync.payloads import (
+    NotYet,
     Unsupported,
     classify,
     create_payload,
@@ -93,6 +94,8 @@ def _prepare(ctx: Context, units: list[Unit], out: Outcome, build) -> list[tuple
     for unit in units:
         try:
             jobs.append((unit, build(unit)))
+        except NotYet:
+            out.deferred.append(unit)
         except Unsupported as exc:
             out.unsupported.append((unit, str(exc)))
     return jobs

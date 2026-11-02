@@ -316,7 +316,9 @@ One line each — full reasoning and the scar behind each is in
   touches a secret. ADR `2026-10-31-lucius-discovers-connectors-from-a-synced-snapshot-and-setup-stays-human`.
 - The YNAB two-way sync (`services/ynab_sync/`) writes only through the chokes above, always under
   the audit surface `ynab_sync` (that is how its own writes are skipped on the next scan); its YNAB
-  traffic is `aggregation.ynab._safe_send` and nothing else. ADR
+  traffic is `aggregation.ynab._safe_send` and nothing else. A YNAB category pairs with one of OUR
+  CATEGORIES by id (`services/ynab_pairs`, never by name once imported); its Assigned syncs only
+  with an envelope holding just that category. ADR
   `2026-10-20-ynab-two-way-sync-reconciles-against-per-entity-baselines`.
 
 ## AI tools

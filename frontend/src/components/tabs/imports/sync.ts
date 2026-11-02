@@ -18,12 +18,18 @@ export interface Version {
 }
 export interface ReviewItem {
   id: string
-  kind: 'conflict' | 'unsupported' | 'failed' | 'before_start'
-  entity?: 'txn' | 'assigned' | 'start'
+  kind: 'conflict' | 'unsupported' | 'failed' | 'before_start' | 'choose'
+  entity?: 'txn' | 'assigned' | 'start' | 'category' | 'group' | 'new_category'
   title: string
   reason: string
   onw: Version | null
   ynab: Version | null
+  // entity 'category' / 'group': what differs, in words
+  fields?: { label: string; onw: string; ynab: string }[]
+  // entity 'new_category': what YNAB's category could go with (a 'choose' item) ...
+  options?: { ref: string; name: string }[]
+  // ... or a category here YNAB would not take (a 'failed' item has no YNAB side)
+  category?: string
   // entity 'start': synced rows dated before the account's Starting Balance
   start?: string
   earliest?: string

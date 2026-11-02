@@ -43,11 +43,11 @@ def run(mode="import", **kw):
 
 def test_preview_names_each_category_under_its_group(ynab):
     groups = run("preview")["preview"]["category_groups"]
-    assert groups == [
-        {"name": "Bills", "categories": ["Rent", "Utilities"]},
-        {"name": "Needs", "categories": ["Groceries", "Dining out"]},
-        {"name": "Wants", "categories": ["Fun Money"]},
-        {"name": "Hidden Categories", "categories": ["Old Cat"]},
+    assert [(g["name"], [c["label"] for c in g["categories"]]) for g in groups] == [
+        ("Bills", ["Rent", "Utilities"]),
+        ("Needs", ["Groceries", "Dining out"]),
+        ("Wants", ["Fun Money"]),
+        ("Hidden Categories", ["Old Cat"]),
     ]
 
 

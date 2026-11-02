@@ -4,8 +4,9 @@ never a store directly, so it is validated and audited like a hand edit. It is N
 turn, so there is no turn checkpoint: ``take_backup`` is the undo, and the job takes it first.
 
 Idempotent by construction: accounts are found by their YNAB ``external_ids`` link, transactions
-skip any YNAB ref already in the ledger (the importer's own scheme), envelopes are found by name,
-assignments are only written where they differ. A YNAB account the person linked to an account
+skip any YNAB ref already in the ledger (the importer's own scheme), categories are paired by id (``ynab_pairs``),
+assignments are only written where they differ. A YNAB category goes where ``category_links``
+decided (``category_apply``). A YNAB account the person linked to an account
 already here takes that account instead of a new one, and its rows are matched first (``links``).
 """
 
@@ -21,7 +22,6 @@ from backend.core.errors import ConflictError, OpenNetWorthError
 from backend.core.txn_sources import canonical_writer
 from backend.services import accounts as accounts_service
 from backend.services import backup as backup_service
-from backend.services import categories as categories_service
 from backend.services import envelopes as envelopes_service
 from backend.services import ledger as ledger_service
 from backend.services import match_review, planning
@@ -126,45 +126,6 @@ def archive_closed(plan: dict, rows: dict[str, dict]) -> int:
             accounts_service.update_account(row["id"], {"archived": True})
             done += 1
     return done
-
-
-def resolve_envelopes(plan: dict, create: bool) -> tuple[dict[str, dict], Counter]:
-    """YNAB category id -> {category, envelope}; creates (or reuses by name) when ``create``."""
-    cats = {
-        c["label"].lower(): c for c in categories_service.all_category_rows() if c["id"] != "split"
-    }
-    envs = [e for e in envelopes_service.all_envelopes() if not e.get("archived")]
-    env_of = {cid: e for e in envs for cid in e.get("category_ids") or []}
-    env_named = {e["name"].lower(): e for e in envs}
-    groups = {g["name"].lower(): g for g in planning.list_groups()}
-    out: dict[str, dict] = {}
-    made: Counter = Counter()
-    for c in plan["categories"]:
-        cat = cats.get(c["label"].lower())
-        if cat is None and create:
-            cat = _change(type="category_create", label=c["label"], kind="expense")
-            made["categories"] += 1
-        group = groups.get(c["group"].lower())
-        if group is None and create:
-            group = _change(type="group_create", name=c["group"])["group"]
-            groups[c["group"].lower()] = group
-            made["groups"] += 1
-        env = env_of.get(cat["id"]) if cat else None
-        if cat and env is None and create:
-            env = env_named.get(c["label"].lower())
-            if env is None or env.get("category_ids"):
-                env = _change(type="envelope_create", name=c["label"], group_id=group["id"])[
-                    "envelope"
-                ]
-                made["envelopes"] += 1
-            _change(type="envelope_add_category", envelope_id=env["id"], category_id=cat["id"])
-            env_of[cat["id"]] = env
-        if env and group and create and env.get("group_id") != group["id"]:
-            _change(type="move_category", category=env["id"], group_id=group["id"])
-        if cat and create and c["hidden"] and not cat.get("hidden"):
-            categories_service.set_category_hidden(cat["id"], True)
-        out[c["id"]] = {"category": cat and cat["id"], "envelope": env and env["id"]}
-    return out, made
 
 
 def prune_starter(prune: dict, groups: list[dict]) -> Counter:

@@ -339,6 +339,7 @@ def build(today: date, negative_assignment: bool = False) -> dict:
         C=C,
         A=A,
         cat_ids=cat_ids,
+        G=G,
         budget_sk={},  # (month offset, category key) -> knowledge of its last change
         next_id=[0],
         today=today,
@@ -483,6 +484,112 @@ def ynab_add(
 def ynab_budget(state: dict, offset: int, category: str, milli: int) -> None:
     state["budget"].setdefault(offset, {})[category] = milli
     state["budget_sk"][(offset, category)] = _bump(state)
+
+
+# --- categories and category groups: YNAB's own app, and what its API accepts ---
+
+
+def _find_category(state: dict, category_id: str) -> tuple[dict, dict]:
+    for g in state["groups"]:
+        for c in g["categories"]:
+            if c["id"] == category_id:
+                return g, c
+    raise KeyError(category_id)
+
+
+def _group(state: dict, ref: str) -> dict:
+    """A group by its fixture key ("needs") or its YNAB id."""
+    wanted = state["G"].get(ref, ref)
+    return next(g for g in state["groups"] if g["id"] == wanted)
+
+
+def _category(state: dict, ref: str) -> tuple[dict, dict]:
+    return _find_category(state, state["C"].get(ref, ref))
+
+
+def _new_category(state: dict, group_id: str, name: str, key: str | None = None) -> dict:
+    state["next_id"][0] += 1
+    c = dict(
+        id=f"ynab-cat-{state['next_id'][0]:03d}",
+        name=name,
+        category_group_id=group_id,
+        hidden=False,
+        internal=False,
+        deleted=False,
+    )
+    next(g for g in state["groups"] if g["id"] == group_id)["categories"].append(c)
+    state["C"][key or c["id"]] = c["id"]
+    state["cat_ids"][c["id"]] = key or c["id"]
+    _bump(state, c)
+    return c
+
+
+def _save_category(state: dict, c: dict, fields: dict) -> dict:
+    """YNAB's PATCH: rename, move to another group, hide or show, change the note."""
+    for k in ("name", "note", "hidden"):
+        if k in fields:
+            c[k] = fields[k]
+    if fields.get("category_group_id") not in (None, c["category_group_id"]):
+        old, _ = _find_category(state, c["id"])
+        old["categories"].remove(c)
+        new = _group(state, fields["category_group_id"])
+        new["categories"].append(c)
+        c["category_group_id"] = new["id"]
+    _bump(state, c)
+    return c
+
+
+def ynab_add_category(state: dict, group: str, name: str, key: str | None = None) -> str:
+    """The person adding a category in YNAB; ``key`` lets a test budget it (``ynab_budget``)."""
+    return _new_category(state, _group(state, group)["id"], name, key)["id"]
+
+
+def ynab_rename_category(state: dict, ref: str, name: str) -> None:
+    _save_category(state, _category(state, ref)[1], {"name": name})
+
+
+def ynab_hide_category(state: dict, ref: str, hidden: bool = True) -> None:
+    _save_category(state, _category(state, ref)[1], {"hidden": hidden})
+
+
+def ynab_delete_category(state: dict, ref: str) -> None:
+    c = _category(state, ref)[1]
+    c["deleted"] = True
+    _bump(state, c)
+
+
+def ynab_move_category(state: dict, ref: str, group: str) -> None:
+    _save_category(
+        state, _category(state, ref)[1], {"category_group_id": _group(state, group)["id"]}
+    )
+
+
+def ynab_rename_group(state: dict, group: str, name: str) -> None:
+    g = _group(state, group)
+    g["name"] = name
+    _bump(state, g)
+
+
+def ynab_add_group(state: dict, key: str, name: str) -> str:
+    g = dict(
+        id=f"ynab-grp-{key}", name=name, hidden=False, internal=False, deleted=False, categories=[]
+    )
+    state["groups"].append(g)
+    state["G"][key] = g["id"]
+    _bump(state, g)
+    return g["id"]
+
+
+def category_named(state: dict, name: str) -> dict:
+    """The one live YNAB category of this name."""
+    found = [
+        c
+        for g in state["groups"]
+        for c in g["categories"]
+        if c["name"] == name and not c["deleted"]
+    ]
+    assert len(found) == 1, (name, len(found))
+    return found[0]
 
 
 def find(state: dict, **match) -> dict:
@@ -696,16 +803,33 @@ def _handler(state: dict, calls: list, writes: list):
                         return self._send(
                             {"data": {"category": cat, "server_knowledge": state["knowledge"]}}
                         )
+            if path == base + "/categories" and method == "POST":
+                made = _new_category(
+                    state, body["category"]["category_group_id"], body["category"]["name"]
+                )
+                return self._send(
+                    {"data": {"category": made, "server_knowledge": state["knowledge"]}}, 201
+                )
             if path.startswith(base + "/categories/") and method == "PATCH":
-                cid = path.rsplit("/", 1)[1]
-                for g in state["groups"]:
-                    for c in g["categories"]:
-                        if c["id"] == cid:
-                            c["note"] = body["category"].get("note")
-                            _bump(state, c)
-                            return self._send(
-                                {"data": {"category": c, "server_knowledge": state["knowledge"]}}
-                            )
+                try:
+                    _, c = _find_category(state, path.rsplit("/", 1)[1])
+                except KeyError:
+                    return self._send({"error": {"id": "404"}}, 404)
+                if c["deleted"]:
+                    return self._send({"error": {"id": "404"}}, 404)
+                _save_category(state, c, body["category"])
+                return self._send({"data": {"category": c, "server_knowledge": state["knowledge"]}})
+            if path == base + "/category_groups" and method == "POST":
+                key = f"made{len(state['groups'])}"
+                g = ynab_add_group(state, key, body["category_group"]["name"])
+                made = {k: v for k, v in _group(state, g).items() if k != "categories"}
+                return self._send({"data": {"category_group": made}}, 201)
+            if path.startswith(base + "/category_groups/") and method == "PATCH":
+                g = _group(state, path.rsplit("/", 1)[1])
+                g["name"] = body["category_group"]["name"]
+                _bump(state, g)
+                made = {k: v for k, v in g.items() if k != "categories"}
+                return self._send({"data": {"category_group": made}})
             self._send({"error": {"id": "404"}}, 404)
 
         def do_POST(self):

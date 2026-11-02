@@ -25,6 +25,7 @@ from backend.services.ynab_migration import source
 from backend.services.ynab_migration.mapping import SOURCE
 from backend.services.ynab_sync import (
     assigned,
+    category_sync,
     conflicts,
     context,
     delta,
@@ -50,6 +51,9 @@ def _summary(tally: Counter, open_items: int) -> str:
         parts.append(f"{tally['sent']} sent to YNAB")
     if tally["pulled"]:
         parts.append(f"{tally['pulled']} pulled")
+    if tally["categories"]:
+        n = tally["categories"]
+        parts.append(f"{n} category change{'' if n == 1 else 's'}")
     if open_items:
         parts.append(f"{open_items} need{'s' if open_items == 1 else ''} review")
     if tally["deferred"]:
@@ -157,10 +161,22 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
     change = delta.apply_read(
         client.read_plan(None if first else st["server_knowledge"]), mirror, meta, first
     )
-    base = Baselines()
+    base = Baselines(st["plan_id"])
     if first:
         base.seed_assigned({k: v for k, v in change.assigned.items() if v})
-    ctx = context.build(st, meta, mirror, base.assigned)
+    recorder.phase("reconciling categories")
+    cat_plan = context.category_plan(meta, mirror, base.assigned)
+    try:
+        change.assigned.update(
+            category_sync.reconcile(
+                client, base, st, meta, tally, change.assigned, cat_plan["categories"]
+            )
+        )
+    except BaseException:
+        base.flush()
+        sync_state.save_meta(meta)
+        raise
+    ctx = context.build(st, meta, mirror, base.assigned, base.cats)
     recorder.phase("reconciling transactions")
     scan = units.audit_touched(st["audit_cursor"], upto) | set(st["pending"]) | set(st["held"])
     scan |= {c["onw_txn_id"] for c in conflicts.listing() if c.get("onw_txn_id")}
@@ -389,7 +405,7 @@ def _adopt_plan(plan_id: str) -> dict:
     currency = (plan.get("currency") or "").upper()
     if len(currency) != 3:
         raise ValidationError("That YNAB plan has no currency set; open it in YNAB once first.")
-    sync_state.reset()
+    sync_state.reset(keep_plan=plan_id)
     return {
         **sync_state.blank(),
         "plan_id": plan_id,

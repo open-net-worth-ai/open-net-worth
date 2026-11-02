@@ -46,6 +46,7 @@ def test_a_manual_run_is_a_record_with_its_sent_change_itemized(stub):
         "sent": 1,
         "pulled": 0,
         "assigned": 0,
+        "categories": 0,
         "conflicts": 0,
         "deferred": 0,
         "errors": 0,

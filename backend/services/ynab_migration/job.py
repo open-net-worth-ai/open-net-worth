@@ -10,8 +10,10 @@ again finishes the work. Kinds: ``preview`` (read + map, writes nothing), ``impo
 verify), ``verify`` (re-check an earlier import against YNAB's current figures).
 
 A preview and an import may carry ``account_links`` (YNAB account id -> an account already in
-the book) and ``same_as`` (a possible match the person confirmed); see ``links``. The review
-re-runs the preview when the person changes a link (``recheck_of``: the preview it refines), and
+the book), ``same_as`` (a possible match the person confirmed) and ``category_links`` (YNAB
+category id -> one of the book's categories, an envelope to add it to, or a new category); see
+``links`` and ``category_links``. The review re-runs the preview when the person changes a link
+(``recheck_of``: the preview it refines), and
 that re-check reuses the plan its preview read moments ago (``_CACHE_SECONDS``) instead of
 reading YNAB again. Every other run reads it afresh.
 
@@ -29,15 +31,20 @@ from datetime import datetime, timezone
 from backend.core import data_events
 from backend.core.errors import ConflictError, OpenNetWorthError, ValidationError
 from backend.db.ynab_config_store import YnabConfigStore
-from backend.services import import_runs
+from backend.services import categories as categories_service
+from backend.services import import_runs, ynab_pairs
 from backend.services.budget_engines import service as budget_engines_service
 from backend.services.ynab_migration import (
     apply,
+    category_apply,
+    category_links,
+    category_match,
     guards,
     links,
     mapping,
     preview,
     report,
+    review,
     source,
     verify,
 )
@@ -99,14 +106,16 @@ def start(
     account_links: dict[str, str] | None = None,
     same_as: dict[str, str] | None = None,
     recheck_of: str | None = None,
+    category_links: dict[str, str] | None = None,
 ) -> dict:
     """``sync_direction`` (an import only): turn the two-way sync on in that direction once the
     import succeeds — the worker does it, so closing the page mid-import does not lose it.
-    ``account_links`` / ``same_as`` (a preview or an import): see the module docstring."""
+    ``account_links`` / ``same_as`` / ``category_links`` (a preview or an import): see the module
+    docstring."""
     if kind not in KINDS:
         raise ValidationError(f"kind must be one of {', '.join(KINDS)}")
-    if (account_links or same_as) and kind == "verify":
-        raise ValidationError("only a preview or an import links accounts")
+    if (account_links or same_as or category_links) and kind == "verify":
+        raise ValidationError("only a preview or an import links accounts and categories")
     if recheck_of and kind != "preview":
         raise ValidationError("only a preview re-checks another")
     if sync_direction is not None:
@@ -133,6 +142,7 @@ def start(
         choice = {
             "account_links": dict(account_links or {}),
             "same_as": dict(same_as or {}),
+            "category_links": dict(category_links or {}),
             "recheck_of": recheck_of,
         }
         _POOL.submit(
@@ -243,85 +253,30 @@ def _load_plan(
     )
 
 
-def _book_changes(plan: dict, state: str) -> dict:
-    """What an import would do to the book beyond adding the plan: a currency change and the
-    removal of untouched starter budget items. Shown in the preview and used by the import."""
-    money = guards.money_data()
-    base = apply.ledger_service.base_currency().upper()
-    changes = {
-        "base_currency": base,
-        "currency_change": base != plan["currency"] and not money,
-        "currency_blocked": base != plan["currency"] and bool(money),
-        "money_data": money,
-        "prune": {"categories": [], "groups": []},
-    }
-    if state == "fresh":
-        wanted = {c["label"].lower() for c in plan["categories"]}
-        prune = guards.starter_prune_plan(wanted)
-        kept = {c["group"].lower() for c in plan["categories"]}
-        changes["prune"] = {
-            "categories": [c["label"] for c in prune["categories"]],
-            "groups": [g["name"] for g in guards.starter_groups_left_empty(prune, kept)],
-        }
-    return changes
-
-
-def _match_scope(plan: dict, existing: list[dict], chosen: dict[str, dict]) -> tuple:
-    """(YNAB account id -> account id to match with, YNAB account id -> account row for each
-    account whose rows are matched): every account linked before this run or chosen now. One
-    the import is about to create has nothing to match, so a placeholder stands in for it."""
-    mine = {pa["id"] for pa in plan["accounts"]}
-    rows = {links.ynab_ref(a): a for a in existing if links.ynab_ref(a) in mine} | chosen
-    ids = {
-        pa["id"]: rows[pa["id"]]["id"] if pa["id"] in rows else f"new:{pa['id']}"
-        for pa in plan["accounts"]
-    }
-    return ids, rows
-
-
-def _preview_accounts(plan: dict, existing: list[dict], chosen: dict, same_as: dict) -> list:
-    """The summary's accounts, each with what the import would do with it."""
-    ids, rows = _match_scope(plan, existing, chosen)
-    decisions = links.match(plan, ids, set(rows), same_as)
-    matched = links.summary(plan, rows, decisions)
-    options = links.candidates(plan, existing)
-    out = []
-    for pa, shown in zip(plan["accounts"], mapping.preview_summary(plan)["accounts"]):
-        row = rows.get(pa["id"])
-        out.append(
-            {
-                **shown,
-                "id": pa["id"],
-                "link": None if row is None else {"id": row["id"], "name": row["name"]},
-                "chosen": pa["id"] in chosen,
-                "candidates": options[pa["id"]],
-                "match": matched.get(pa["id"]),
-            }
-        )
-    return out
-
-
 def _execute(run: _Run, kind: str, plan_id: str, confirm: bool, choice: dict) -> None:
     store = YnabConfigStore()
     plan = _load_plan(run, store, plan_id, choice.get("recheck_of"))
     state, existing = apply.book_state(plan)
     chosen = links.resolve(plan, choice.get("account_links"), existing)
     same_as = choice.get("same_as") or {}
+    book, decisions, groups = review.category_scope(plan, plan_id, choice)
+    shown = review.preview_categories(plan, book, decisions, groups)
     run.update(
         plan_name=plan["name"],
         book_state=state,
         preview={
             **mapping.preview_summary(plan),
             **preview.details(plan),
-            "accounts": _preview_accounts(plan, existing, chosen, same_as),
+            "accounts": review.preview_accounts(plan, existing, chosen, same_as),
             "book_state": state,
-            **_book_changes(plan, state),
+            **review.book_changes(plan, state, shown.pop("kept"), shown.pop("kept_groups")),
+            **shown,
         },
     )
     if kind == "preview":
         return
     if kind == "verify":
-        env_ids, _ = apply.resolve_envelopes(plan, create=False)
+        env_ids = category_apply.lookup(plan, plan_id, book)
         run.progress("verifying")
         env_ids |= apply.card_envelopes(plan)
         run.update(
@@ -330,7 +285,12 @@ def _execute(run: _Run, kind: str, plan_id: str, confirm: bool, choice: dict) ->
         return
     if state == "foreign" and not confirm:
         raise ConfirmationRequired("This book has accounts that did not come from YNAB.")
-    _import(run, store, plan_id, plan, state, existing, chosen, same_as)
+    if names := category_links.unresolved(plan, decisions):
+        raise ValidationError(
+            f"YNAB's {names[0]} matches more than one of your categories. Pick one."
+        )
+    picks = {"accounts": chosen, "same_as": same_as, "categories": decisions}
+    _import(run, store, plan_id, plan, state, existing, picks)
 
 
 def _import(
@@ -340,9 +300,11 @@ def _import(
     plan: dict,
     state: str,
     existing: list[dict],
-    chosen: dict[str, dict],
-    same_as: dict[str, str],
+    picks: dict,
 ) -> None:
+    """``picks``: what the person chose in the review — ``accounts`` (YNAB account id -> account
+    here), ``same_as`` and ``categories`` (YNAB category id -> its decision)."""
+    chosen, same_as = picks["accounts"], picks["same_as"]
     money = guards.money_data()
     if apply.ledger_service.base_currency().upper() != plan["currency"] and money:
         apply.ensure_base_currency(plan["currency"], money)  # refuses, before anything is written
@@ -351,7 +313,7 @@ def _import(
     run.update(backup_name=backup)
     run.log(f"Backup taken: {backup}. Restore it from Settings → Data → Backup & restore.")
 
-    apply.categories_service.ensure_builtins_seeded()  # split rows need the 'split' sentinel
+    categories_service.ensure_builtins_seeded()  # split rows need the 'split' sentinel
     note = apply.ensure_base_currency(plan["currency"], money)
     if note:
         run.log(note)
@@ -365,23 +327,19 @@ def _import(
     )
     data_events.publish(["*"])
     run.progress("matching transactions in linked accounts")
-    _, scope = _match_scope(plan, existing, chosen)
+    _, scope = review.match_scope(plan, existing, chosen)
     acct_ids = {k: v["id"] for k, v in rows.items()}
-    decisions = links.match(plan, acct_ids, set(scope), same_as)
+    matches = links.match(plan, acct_ids, set(scope), same_as)
 
     run.progress("creating categories and envelopes")
-    env_ids, made = apply.resolve_envelopes(plan, create=True)
-    total = len(plan["categories"])
-    for item in ("categories", "envelopes"):
-        counts[item] = report.count(created=made[item], existing=total - made[item])
-    run.log(f"Categories and envelopes: {dict(made) or 'all already there'}.")
+    env_ids, kept = _categories(run, plan, plan_id, picks["categories"], counts)
     cat_ids = {k: v["category"] for k, v in env_ids.items()}
 
-    tally, problems = apply.send_transactions(plan, acct_ids, cat_ids, run.progress, decisions)
+    tally, problems = apply.send_transactions(plan, acct_ids, cat_ids, run.progress, matches)
     counts["transactions"] = report.transaction_counts(tally)
     run.update(counts=counts, problems=[report.problem(p) for p in problems[:100]])
     run.log(f"Transactions: {dict(tally)}.")
-    if decisions:
+    if matches:
         run.log(
             f"Linked accounts: {tally['matched']} YNAB transaction(s) matched to ones already "
             f"here; {tally['possible_match']} possible match(es) were added as new."
@@ -391,20 +349,39 @@ def _import(
     archived = apply.archive_closed(plan, rows)
     if archived:
         run.log(f"Archived {archived} closed account(s).")
-    budget_envs = _budget(run, plan, state, env_ids, counts)
+    budget_envs = _budget(run, plan, plan_id, state, env_ids, counts, kept)
     run.progress("verifying")
     verified = verify.verify(store, plan_id, plan, budget_envs, True)
     run.update(verification=report.verification(verified))
 
 
-def _budget(run: _Run, plan: dict, state: str, env_ids: dict, counts: dict) -> dict:
+def _categories(run: _Run, plan: dict, plan_id: str, decisions: dict, counts: dict) -> tuple:
+    """Pair and create the plan's categories; returns (YNAB category id -> its category and
+    envelope, the book's categories the plan uses)."""
+    env_ids, made, notes, kept = category_apply.apply(
+        plan, decisions, plan_id, category_match.Book()
+    )
+    total = len(plan["categories"])
+    for item in ("categories", "envelopes"):
+        counts[item] = report.count(created=made[item], existing=max(total - made[item], 0))
+    run.log(f"Categories and envelopes: {dict(made) or 'all already there'}.")
+    for line in notes:
+        run.log(line)
+    return env_ids, frozenset(kept)
+
+
+def _budget(
+    run: _Run, plan: dict, plan_id: str, state: str, env_ids: dict, counts: dict, kept
+) -> dict:
     """The budget half of an import; returns the envelopes verification compares."""
     if state == "fresh":
         budget_engines_service.set_home_engine("zero_based")  # YNAB is zero-based budgeting
         run.log("Budget method set to zero-based, as in YNAB.")
-        prune = guards.starter_prune_plan({c["label"].lower() for c in plan["categories"]})
-        kept = {c["group"].lower() for c in plan["categories"]}
-        removed = apply.prune_starter(prune, guards.starter_groups_left_empty(prune, kept))
+        prune = guards.starter_prune_plan({c["label"].lower() for c in plan["categories"]}, kept)
+        names = {c["group"].lower() for c in plan["categories"]}
+        paired = {g["group"] for g in ynab_pairs.load(plan_id)[1].values()}
+        left = [g for g in guards.starter_groups_left_empty(prune, names) if g["id"] not in paired]
+        removed = apply.prune_starter(prune, left)
         run.log(f"Removed unused starter budget items: {dict(removed) or 'none'}.")
     budget_envs = {**env_ids, **apply.card_envelopes(plan)}
     tally, problems = apply.apply_budget(plan, budget_envs, run.progress)

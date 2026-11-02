@@ -85,6 +85,32 @@ def test_a_review_item_is_listed_and_resolved_over_the_api(client, world):  # no
     )
 
 
+def test_a_choice_for_a_ynab_category_travels_with_the_resolution(client, world):  # noqa: F811
+    from backend.services import planning
+    from tests.test_ynab_category_sync import env, group
+
+    enable()
+    sync()
+    busy = planning.apply_budget_change(
+        {"type": "envelope_create", "name": "Gifts", "group_id": group("Needs")["id"]}
+    )["envelope"]
+    other = planning.apply_budget_change({"type": "category_create", "label": "Cards"})
+    planning.apply_budget_change(
+        {"type": "envelope_add_category", "envelope_id": busy["id"], "category_id": other["id"]}
+    )
+    ynab_stub.ynab_add_category(world.state, "needs", "Gifts", key="gifts")
+    sync()
+    (item,) = client.get("/api/ynab/sync").json()["conflicts"]
+    assert item["kind"] == "choose" and item["options"][0]["name"] == "Gifts"
+    nothing = client.post(f"/api/ynab/sync/conflicts/{item['id']}/resolve", json={"keep": "onw"})
+    assert nothing.status_code == 409  # a pick is needed
+    done = client.post(
+        f"/api/ynab/sync/conflicts/{item['id']}/resolve",
+        json={"keep": "onw", "choice": item["options"][0]["ref"]},
+    )
+    assert done.status_code == 200 and len(env("Gifts")["category_ids"]) == 2
+
+
 def test_the_sync_routes_are_locked_in_the_public_demo():
     for method, path in (
         ("PUT", "/api/ynab/sync/settings"),

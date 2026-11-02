@@ -94,8 +94,22 @@ def _render(ctx: Context, piece: dict) -> tuple[dict | None, str | None]:
     for cid in wanted:
         if not ctx.cat_ids.get(cid):
             name = next((c["name"] for c in ctx.meta["categories"] if c["id"] == cid), cid)
-            return None, f"the YNAB category '{name}' has no counterpart in this book"
+            return None, f"The YNAB category {name} isn't in this book yet."
     return rendered, None
+
+
+def _income_view(ctx: Context, rendered: dict | None, ref: Canon) -> dict | None:
+    """YNAB books an inflow without a category as Ready to Assign, so it cannot say which income
+    category the ledger row has: the ledger's own stands, and is not read as a change."""
+    if (
+        rendered
+        and ref
+        and rendered.get("kind") == "income"
+        and not rendered.get("category")
+        and ref.get("category") in ctx.income
+    ):
+        return {**rendered, "category": ref["category"]}
+    return rendered
 
 
 def _with_lines(ctx: Context, ids: set[str]) -> set[str]:
@@ -138,6 +152,7 @@ def build(
         base = bases.get(onw_id)
         if onw_id in claimed:
             rendered, blocked = claimed[onw_id]
+            rendered = _income_view(ctx, rendered, onw or base)
             ynab = canon(rendered) if rendered else base
             units.append(Unit(onw_id, row, refs, base, onw, ynab, rendered, blocked))
         elif refs and any(r in removed_ok for r in refs):
