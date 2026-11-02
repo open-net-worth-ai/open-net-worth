@@ -10,6 +10,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import tomllib
 from pathlib import Path
@@ -239,12 +240,22 @@ def prune_runtime(runtime: Path) -> None:
                 path.unlink()
 
 
-def site_packages_dir(runtime: Path, target: str | None = None) -> Path:
+def site_packages_dir(runtime: Path, target: str | None = None, host: str = sys.platform) -> Path:
     cross = CROSS_TARGETS.get(target or "")
     if cross:
         return runtime / cross["site_packages"]
-    (site,) = runtime.glob("python/lib/python3*/site-packages")
-    return site
+    # Decided by the host OS, never by probing: macOS's case-insensitive disk finds "Lib" as "lib".
+    if host == "win32":
+        site = runtime / CROSS_TARGETS["windows-x64"]["site_packages"]
+        if site.is_dir():
+            return site
+        raise RuntimeError(f"no site-packages at {site}")
+    found = list(runtime.glob("python/lib/python3*/site-packages"))
+    if len(found) != 1:
+        raise RuntimeError(
+            f"expected one python/lib/python3*/site-packages in {runtime}, found {len(found)}"
+        )
+    return found[0]
 
 
 def zip_runtime_packages(runtime: Path, target: str | None = None) -> None:
