@@ -757,6 +757,13 @@ export async function consumeEventStream(
             deliverQueuedMessage(ownerId, id)
             if (!chatSessions.getSlice(ownerId).messages.some((m) => m.id === id)) {
               closeOpenAssistant(ownerId)
+              // A NEW user message starts a new exchange, so the bubble before it was never
+              // this turn's: nothing of it is being replayed. Armed off that bubble (a voice
+              // call's small-talk reply carries no usage, so it looked interrupted), the skip
+              // ate the start of Lucius's next answer — exactly that reply's length (live
+              // call, 2026-11-03: "se twenty billion…").
+              skipTextChars = 0
+              skipThinkingChars = 0
               addUserMessage(ownerId, {
                 id,
                 role: 'user',
