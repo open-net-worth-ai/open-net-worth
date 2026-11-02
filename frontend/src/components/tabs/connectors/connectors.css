@@ -212,6 +212,14 @@
      34px single line, which would amputate two of these three rows on a phone
    box-sizing — same value as the app's @layer reset, restated only because an unlayered
      declaration outranks a layered one */
+/* Narrow layouts follow the SPACE a block has, not the window: the Lucius panel makes a wide
+   window's page and Browse & add phone-narrow. The masthead's pinned bar (search, Add, tabs)
+   and Browse & add are both `cn-space`; each rule below reads its nearest one. The pinned bar,
+   not the masthead: on a phone the masthead is `display: contents` and has no width to read. */
+.cn-page .rd-masthead-pinned,
+.cn-page .cn-browser {
+  container: cn-space / inline-size;
+}
 .cn-page .rd-masthead {
   align-items: stretch;
   border-bottom: none;
@@ -581,7 +589,7 @@
 .cn-page .cn-label-narrow {
   display: none;
 }
-@media (max-width: 560px) {
+@container cn-space (max-width: 520px) {
   .cn-page .rd-masthead-toolbar {
     flex-wrap: nowrap;
   }
@@ -765,16 +773,17 @@
     clip: rect(0 0 0 0);
     white-space: nowrap;
   }
-  /* The name keeps the whole line; its tag and category chips drop to one line under it. */
-  .cn-page .cn-name {
-    flex-wrap: wrap;
-    row-gap: 4px;
+  /* An installed row needs only its name here: the category chips go (its section already
+     says what it is), and a long name wraps to a second line rather than an ellipsis. */
+  .cn-page .cn-row .cn-cats {
+    display: none;
   }
-  .cn-page .cn-name > b {
-    flex: 1 0 100%;
-  }
-  .cn-page .cn-name .cn-cats {
-    flex-wrap: nowrap;
+  .cn-page .cn-row .cn-name > b {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow-wrap: anywhere;
   }
 }
 .cn-page .cn-statusbad {
@@ -934,7 +943,7 @@
   min-width: 0;
 }
 /* On a phone a tab row runs past the edge; the fade says there are more this way. */
-@media (max-width: 560px) {
+@container cn-space (max-width: 520px) {
   .cn-page .rd-tabs {
     mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
   }
@@ -998,7 +1007,7 @@
   color: var(--muted);
   margin-top: 2px;
 }
-@media (max-width: 560px) {
+@container cn-space (max-width: 520px) {
   .cn-page .cn-customrow {
     flex-wrap: wrap;
   }
@@ -1083,15 +1092,9 @@
   flex: none;
   align-self: center;
 }
-@media (max-width: 560px) {
+@container cn-space (max-width: 520px) {
   .cn-page .cn-dirgrid {
     grid-template-columns: 1fr;
-  }
-  /* A phone row has no room for name + tags + status on one line: the tags drop under the
-     name rather than squeezing it to "Yahoo Fina…". */
-  .cn-page .cn-row .cn-name {
-    flex-wrap: wrap;
-    row-gap: 4px;
   }
 }
 
@@ -1163,7 +1166,7 @@
 }
 /* Phone: Sort and the category filter become icons beside search (`.cn-sorticon`), so the search
    row stays one line. After the base `.cn-sorticon` rule, so it wins. */
-@media (max-width: 560px) {
+@container cn-space (max-width: 520px) {
   .cn-page .cn-dirfilters {
     flex-wrap: nowrap;
     gap: 8px;
@@ -1243,7 +1246,7 @@
    instead ONE row that scrolls sideways, snapping card by card, each card ~80% wide so the next
    one peeks in — the owner's call for the directory, where stacking pushed the list a screen
    down. It bleeds to the sheet's edges so the peek isn't clipped by the body's padding. */
-@media (max-width: 560px) {
+@container cn-space (max-width: 520px) {
   .cn-page .cn-suggestgrid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1671,7 +1674,10 @@
   flex: 0 1 calc((100% - 20px) / 3);
   min-width: 0;
 }
-@media (max-width: 560px) {
+.cn-page .cn-emptypicks {
+  container: cn-picks / inline-size;
+}
+@container cn-picks (max-width: 520px) {
   .cn-page .cn-emptypicks > .cn-dircard {
     flex-basis: 100%;
   }
