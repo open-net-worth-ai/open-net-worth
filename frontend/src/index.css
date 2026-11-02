@@ -9224,15 +9224,40 @@ body.hide-amounts .money * {
   .plaid-bank-sub--warn {
     color: var(--warn);
   }
+  /* A bank row's Remove is destructive, so it never looks like the row's other action: red
+     text at rest, a red tint on hover (the ghost default would turn it ink). */
+  .plaid-bank-remove.ui-btn--ghost {
+    color: var(--bad);
+  }
+  @media (hover: hover) {
+    .plaid-bank-remove.ui-btn--ghost:hover:not(:disabled) {
+      color: var(--bad);
+      background: color-mix(in srgb, var(--bad) 12%, transparent);
+    }
+  }
   /* GoCardless's bank sections (Your banks / Add a bank) sit a step further from the fields above
      than their own rows sit from each other, so each reads as one group. */
   .gc-section {
     margin-top: var(--space-3);
   }
-  /* A small button beside a field keeps the form's one button size and sits on the field's
-     centre line: (40px field − ~32px button) / 2. */
-  .gc-pick-row .ui-btn {
-    margin-bottom: 4px;
+  /* GoCardless form: every small button takes the modal footer's Save size (30px / 12.5px —
+     the same values .ui-page-header__actions uses), instead of .ui-btn--sm's 31–33px, so no
+     button in the form is bigger than Save and none differ from each other. */
+  .gc-form .ui-btn--sm {
+    height: 30px;
+    box-sizing: border-box;
+    padding: 0 13px;
+    font-size: 12.5px;
+  }
+  /* A field paired with a button in one row takes the button's height, so the pair is one
+     line. */
+  .gc-pick-row .ui-input,
+  .gc-pick-row .ui-select {
+    height: 30px;
+    box-sizing: border-box;
+    padding-top: 0;
+    padding-bottom: 0;
+    font-size: var(--text-sm);
   }
   /* GoCardless's bank picker takes the row's width beside its Link button. */
   .gc-bank-pick {

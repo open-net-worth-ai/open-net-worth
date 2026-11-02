@@ -39,8 +39,13 @@ export function GoCardlessBanks({
   async function post(bank: GoCardlessBank, action: 'relink' | 'remove') {
     setBusy(bank.key)
     setError(null)
+    const key = encodeURIComponent(bank.key)
+    const url =
+      action === 'relink'
+        ? `/api/gocardless/banks/${key}/relink`
+        : `/api/gocardless/banks/${key}/remove`
     try {
-      const r = await authFetch(`/api/gocardless/banks/${encodeURIComponent(bank.key)}/${action}`, {
+      const r = await authFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body:
@@ -88,7 +93,7 @@ export function GoCardlessBanks({
               {!b.renewing && (
                 <Button
                   size="sm"
-                  variant={ended ? 'primary' : 'ghost'}
+                  variant={ended ? 'primary' : 'secondary'}
                   loading={busy === b.key}
                   disabled={busy !== null}
                   aria-label={`${b.status === 'LN' ? 'Renew access to' : 'Link again'} ${name(b)}`}
@@ -100,6 +105,7 @@ export function GoCardlessBanks({
               <Button
                 size="sm"
                 variant="ghost"
+                className="plaid-bank-remove"
                 disabled={busy !== null}
                 aria-label={`Remove ${name(b)}`}
                 onClick={() => setRemoving(b)}
