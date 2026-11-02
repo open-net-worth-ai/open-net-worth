@@ -149,6 +149,7 @@ class ConfigPatch(BaseModel):
     ai_opinion_level: Optional[Literal["information", "lean", "suggest"]] = None
     holdings_brief_verbosity: Optional[int] = None
     watchlist_brief_verbosity: Optional[int] = None
+    delivery_instructions: Optional[str] = None
 
     @field_validator("crash_thresholds")
     @classmethod

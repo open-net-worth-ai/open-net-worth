@@ -1314,6 +1314,10 @@ class UpdateMonitoringConfigInput(ToolInput):
         default=None,
         description="Detail of each watchlist tab's brief, same 1–5 scale. Default 3.",
     )
+    delivery_instructions: Optional[str] = Field(
+        default=None,
+        description="The user's words on what Intel should tell them (max 1000 chars; '' clears).",
+    )
 
 
 # Deliberately left singular: there is exactly ONE monitoring config for this install — a
@@ -1398,6 +1402,7 @@ async def update_monitoring_config(input_data: dict):
         "ai_opinion_level",
         "holdings_brief_verbosity",
         "watchlist_brief_verbosity",
+        "delivery_instructions",
     )
     try:
         changes.update(

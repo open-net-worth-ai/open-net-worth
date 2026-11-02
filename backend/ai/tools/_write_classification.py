@@ -214,6 +214,7 @@ READ_ONLY_TOOLS = frozenset(
         "get_statement",
         "get_transactions",
         "get_uncategorized_summary",
+        "get_untold_news",
         "get_upcoming_vests",
         "get_uploads",
         "list_accounts",

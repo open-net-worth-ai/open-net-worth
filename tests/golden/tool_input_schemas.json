@@ -9668,6 +9668,10 @@
       "watchlist_brief_verbosity": {
         "type": "integer",
         "description": "Detail of each watchlist tab's brief, same 1–5 scale. Default 3."
+      },
+      "delivery_instructions": {
+        "type": "string",
+        "description": "The user's words on what Intel should tell them (max 1000 chars; '' clears)."
       }
     },
     "type": "object",
@@ -10671,6 +10675,12 @@
         "description": "One category, e.g. Brokerage, Banking, Crypto, Accounting."
       }
     },
+    "type": "object",
+    "required": []
+  },
+  "get_untold_news": {
+    "additionalProperties": false,
+    "properties": {},
     "type": "object",
     "required": []
   }

@@ -238,6 +238,51 @@ async def get_news_latency(input_data: dict):
     return json.dumps({"days": days, "sources": stats}, ensure_ascii=False), None
 
 
+class GetUntoldNewsInput(ToolInput):
+    """Schema-of-record for ``get_untold_news`` (see ``schema_from_model``)."""
+
+
+_UNTOLD_LIMIT = 15
+
+
+def _untold_item(row: dict, *, already_told: bool) -> dict:
+    from backend.core.untrusted import sanitize_untrusted
+
+    item = {
+        "subject": sanitize_untrusted(row.get("label") or row.get("subject") or "", 200),
+        "headline": sanitize_untrusted(row.get("headline") or "", 240),
+        "why": sanitize_untrusted(row.get("why") or "", 400),
+        "created_at": row.get("created_at"),
+        "already_told": already_told,
+    }
+    if already_told:
+        item["told_at"] = row.get("told_at")
+    return item
+
+
+# Deliberately left singular: one bounded read of the whole queue, nothing to pluralize.
+@tool(
+    "get_untold_news",
+    description=(
+        "Intel news held back for a roundup, plus what was sent in the last 24h "
+        "(`already_told`). Empty unless the delivery experiment is on."
+    ),
+    input_schema=schema_of(GetUntoldNewsInput, tool_name="get_untold_news"),
+)
+async def get_untold_news(input_data: dict):
+    import asyncio
+
+    from backend.services import news_delivery
+
+    def _read() -> tuple[list[dict], list[dict]]:
+        return news_delivery.waiting(), news_delivery.recently_told(24)
+
+    waiting, told = await asyncio.to_thread(_read)
+    items = [_untold_item(r, already_told=False) for r in waiting[-_UNTOLD_LIMIT:]]
+    items += [_untold_item(r, already_told=True) for r in told[-_UNTOLD_LIMIT:]]
+    return json.dumps({"items": items}, ensure_ascii=False), None
+
+
 class GetNewsSourcesInput(ToolInput):
     """Schema-of-record for ``get_news_sources`` (see ``schema_from_model``)."""
 
