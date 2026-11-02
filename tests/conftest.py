@@ -847,8 +847,9 @@ import threading as _threading  # noqa: E402
 import time as _time  # noqa: E402
 
 _PROCESS_LIFETIME_THREADS = _re.compile(
-    r"(ThreadPoolExecutor-\d+_\d+|stmt-parse_\d+|search-read_\d+|asyncio_\d+"
-    r"|AnyIO worker thread|loop_watch_sampler|asyncio-waitpid-\d+|mcp-stdio-stderr)"
+    r"(ThreadPoolExecutor-\d+_\d+|stmt-parse_\d+|search-read_\d+|ynab-sync_\d+"
+    r"|ynab-migration_\d+|asyncio_\d+|AnyIO worker thread|loop_watch_sampler"
+    r"|asyncio-waitpid-\d+|mcp-stdio-stderr)"
 )
 _THREADS_BEFORE = pytest.StashKey[set]()
 _STRAY_GRACE_S = 2.0
