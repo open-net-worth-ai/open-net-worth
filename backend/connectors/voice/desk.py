@@ -1,6 +1,6 @@
 """Lucius's side of a voice call: run one request as a normal chat turn and report it.
 
-Runs on the APP's event loop (the worker hops here, see ``bridge``). A request becomes a turn
+Runs in the APP, on its event loop (the worker process asks for it, see ``host``). A request becomes a turn
 on the conversation the owner has open — exactly what ``POST /api/chat`` spawns, with
 ``cost_surface="web"`` — so the chat panel follows it live, approval cards render there, and
 every permission and write choke applies unchanged. The only differences from a typed message:
@@ -15,11 +15,11 @@ import logging
 import re
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
 from typing import Optional
 
 from backend.ai import assistant, conversation, live_sessions, turns
 from backend.ai.tool_text import harness_note
+from backend.connectors.voice.events import DeskEvent
 
 log = logging.getLogger(__name__)
 
@@ -42,14 +42,6 @@ _LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
 
 def speakable(text: str) -> str:
     return _MARKDOWN.sub("", _LINK.sub(r"\1", text))
-
-
-@dataclass
-class DeskEvent:
-    kind: str  # "text" | "tool" | "tool_done" | "approval" | "error" | "end"
-    text: str = ""
-    ref: str = ""
-    noun: str = ""
 
 
 def translate(raw: dict) -> Optional[DeskEvent]:

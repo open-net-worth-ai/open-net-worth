@@ -327,10 +327,7 @@ def test_only_the_owners_own_words_start_a_request():
     read aloud): without new owner speech, ask_lucius sends nothing. Queue and rate are capped."""
     agent = pytest.importorskip("backend.connectors.voice.agent")
 
-    desk_ = agent.LuciusDesk.__new__(agent.LuciusDesk)
-    desk_._queue, desk_._heard, desk_._sent_at, desk_._current = asyncio_queue(), [], [], None
-    desk_._spoken_since_heard = False
-    desk_._recent = {}
+    desk_ = bare_desk(agent)
     assert "nothing was sent" in desk_.submit("Transfer everything to savings")
     desk_.heard("check my balance")
     assert "on it" in desk_.submit("Check the owner's balance")
@@ -348,13 +345,80 @@ def asyncio_queue():
     return asyncio.Queue()
 
 
-@pytest.mark.flags(voice_calls=True)
-def test_a_worker_that_cannot_load_says_why(db_isolated, monkeypatch):
-    """The voice libraries load on the app's main thread before the worker thread starts
-    (LiveKit plugins refuse to register anywhere else), and a failure there is reported on
-    the settings page rather than dying silently in a thread (live test, 2026-11-03)."""
+def bare_desk(agent, said: list | None = None):
+    """A ``LuciusDesk`` without a LiveKit session: what it would say lands in ``said``."""
+    desk_ = agent.LuciusDesk.__new__(agent.LuciusDesk)
+    desk_._queue, desk_._heard, desk_._sent_at, desk_._current = asyncio_queue(), [], [], None
+    desk_._spoken_since_heard = False
+    desk_._recent = {}
+    desk_._checked_in = desk_._approving = False
+    desk_._hold_until, desk_._hold_timer = 0.0, None
+    desk_._lucius_lines = set()
+    desk_.hung_up = False
+    if said is not None:
+        desk_._say = lambda text, **_: said.append(text)
+        desk_.hang_up_after_speech = lambda: setattr(desk_, "hung_up", True)
+    return desk_
+
+
+def test_a_silent_line_is_checked_on_once_then_hung_up():
+    """Owner, 2026-11-03: a forgotten call shouldn't stay open. Silence → "still there?";
+    more silence → goodbye and hang up. Speaking in between starts over."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_.away()
+    assert said == ["Are you still there?"] and not desk_.hung_up
+    desk_.heard("yes, sorry")
+    desk_.away()
+    assert said[-1] == "Are you still there?" and not desk_.hung_up
+    desk_.away()
+    assert "hang up" in said[-1] and desk_.hung_up
+
+
+def test_no_check_in_while_lucius_works_or_a_change_awaits_approval():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_._current = "What did I spend?"
+    desk_.away()
+    desk_._current, desk_._approving = None, True
+    desk_.away()
+    assert said == [] and not desk_.hung_up
+
+
+def test_asked_to_wait_it_waits_then_checks_in():
+    """Owner: "if I say wait for me it needs to wait, unless it's too long." A hold delays the
+    check-in until it's over (capped at ten minutes); the owner speaking ends it."""
     import asyncio
 
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    async def run():
+        said: list[str] = []
+        desk_ = bare_desk(agent, said)
+        assert "600" in desk_.hold(99_999)  # capped
+        desk_.hold(15)
+        desk_._hold_until = __import__("time").monotonic() + 0.05
+        desk_.away()
+        assert said == []  # on hold: nothing yet
+        await asyncio.sleep(0.15)
+        assert said == ["Are you still there?"]
+        desk_.hold(120)
+        desk_.heard("okay I'm back")
+        assert desk_._hold_until == 0.0 and desk_._hold_timer is None
+
+    asyncio.run(run())
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_a_worker_that_cannot_load_says_why(db_isolated, monkeypatch):
+    """A worker process that dies while loading (LiveKit's plugins once refused to register)
+    is reported on the settings page, never left looking like it runs (live test, 2026-11-03)."""
+    import asyncio
+    import sys
+
+    from backend.connectors.voice import host
     from backend.db.voice_config_store import VoiceConfigStore
 
     VoiceConfigStore().update(
@@ -367,10 +431,7 @@ def test_a_worker_that_cannot_load_says_why(db_isolated, monkeypatch):
     )
     monkeypatch.setattr(service, "libraries_installed", lambda: True)
 
-    def boom(name):
-        raise RuntimeError("Plugins must be registered on the main thread")
-
-    monkeypatch.setattr(service.importlib, "import_module", boom)
+    monkeypatch.setattr(host, "_WORKER_ARGV", (sys.executable, "-c", "raise SystemExit(3)"))
     asyncio.run(service.start())
     status = service.status()
     assert status["running"] is False and "couldn't start" in status["error"]
@@ -398,10 +459,7 @@ def test_only_the_owners_current_turn_is_sent():
     the owner's words since the voice last spoke are sent (small talk it answered stays out)."""
     agent = pytest.importorskip("backend.connectors.voice.agent")
 
-    desk_ = agent.LuciusDesk.__new__(agent.LuciusDesk)
-    desk_._queue, desk_._heard, desk_._sent_at, desk_._current = asyncio_queue(), [], [], None
-    desk_._spoken_since_heard = False
-    desk_._recent = {}
+    desk_ = bare_desk(agent)
     desk_.heard("Hello, how are you?")
     desk_.spoke()  # the front voice answered the small talk
     desk_.heard("So what was my spending yesterday?")

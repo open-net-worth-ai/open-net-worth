@@ -1,16 +1,11 @@
-"""Start, stop and report the in-app voice worker (behind the ``voice_calls`` flag).
+"""Start, stop and report the voice worker (behind the ``voice_calls`` flag).
 
 The worker connects OUT to the owner's LiveKit project and waits for calls, the way the
-Telegram connector polls, so the app opens no port. It runs on its own event loop in a daemon
-thread (LiveKit's jobs in threads of their own) and hops to the app loop for Lucius's turns.
+Telegram connector polls, so the app opens no port. It is a process of its own (``host``): a
+crash in LiveKit's native layer ends the calls, never the app, and the worker restarts.
 
 The voice libraries are optional (``requirements-voice.txt``): without them the app runs
 exactly as before and the settings page says what to install.
-
-Note for reviewers: LiveKit's worker writes ``LIVEKIT_URL`` / ``LIVEKIT_API_KEY`` /
-``LIVEKIT_API_SECRET`` into this process's environment. Every child the app spawns for a
-model or for user code builds its own allow-listed environment (``core.child_env``, the code
-sandbox, the MCP stdio client), so the secret does not reach them; see the ADR.
 """
 
 from __future__ import annotations
@@ -18,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import logging
-import os
 import threading
 import time
 from typing import Optional
@@ -34,11 +28,10 @@ _REQUIRED_MODULES = ("livekit.agents", "livekit.plugins.silero")
 
 class _Worker:
     def __init__(self) -> None:
-        self.thread: Optional[threading.Thread] = None
-        self.loop: Optional[asyncio.AbstractEventLoop] = None
-        self.server = None
+        self.process = None  # host.WorkerProcess
         self.error: str = ""
         self.restarts = 0
+        self.started_at = 0.0
 
 
 _worker = _Worker()
@@ -46,10 +39,9 @@ _worker = _Worker()
 # Rooms THIS app minted a call token for, room → (conversation id, expiry). The worker joins
 # only these, and takes the conversation from here — never from the dispatch metadata — so a
 # leaked LiveKit project secret cannot dispatch Lucius into a room of its own choosing
-# (security review, 2026-11-03). Read from the worker thread, so it is lock-guarded.
+# (security review, 2026-11-03). The worker asks for it through ``host``.
 _calls: dict[str, tuple[str, float]] = {}
 _calls_lock = threading.Lock()
-_LIVEKIT_ENV = ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET")
 
 
 def register_call(room: str, session_id: str, ttl_s: float) -> None:
@@ -98,7 +90,7 @@ def libraries_installed() -> bool:
 
 def status() -> dict:
     """What the settings page shows: is the worker up, and if not, why."""
-    running = bool(_worker.thread and _worker.thread.is_alive())
+    running = _running()
     return {
         "flag_on": flag_enabled(FLAG),
         "libraries_installed": libraries_installed(),
@@ -123,8 +115,12 @@ def _owner_name() -> str:
     return name.split()[0] if name else ""
 
 
+def _running() -> bool:
+    return bool(_worker.process and _worker.process.alive())
+
+
 async def start() -> None:
-    if _worker.thread and _worker.thread.is_alive():
+    if _running():
         return
     _worker.error = ""
     if not flag_enabled(FLAG):
@@ -136,47 +132,32 @@ async def start() -> None:
         _worker.error = "Voice libraries are not installed (pip install -r requirements-voice.txt)."
         log.info("voice calls configured but the voice libraries are not installed")
         return
-    try:
-        # LiveKit's plugins (Silero, the inference models) refuse to register off the main
-        # thread, and the worker runs in a thread of its own — so they load HERE, on the app's
-        # main thread, before it starts (live test, 2026-11-03: the thread died on import).
-        importlib.import_module("backend.connectors.voice.agent")
-    except Exception:  # noqa: BLE001 — reported on the settings page, never fatal
-        _worker.error = "Voice calls couldn't start on this computer. The app log has the details."
-        log.exception("voice libraries failed to load")
-        return
+    from backend.connectors.voice.host import WorkerProcess
+
     app_loop = asyncio.get_running_loop()
-    owner = _owner_name()
-    ready = threading.Event()
-    _worker.thread = threading.Thread(
-        target=_run_worker, args=(app_loop, config, owner, ready), name="voice-worker", daemon=True
-    )
-    _worker.thread.start()
-    await asyncio.to_thread(ready.wait, 30)
-
-
-def _run_worker(
-    app_loop: asyncio.AbstractEventLoop, config: dict, owner: str, ready: threading.Event
-) -> None:
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    _worker.loop = loop
+    process = WorkerProcess(app_loop, lambda _code: _crashed(app_loop))
+    _worker.process = process
     try:
-        server = _build_server(app_loop, config, owner)
-        _worker.server = server
-        ready.set()
-        loop.run_until_complete(server.run())
+        started = await asyncio.to_thread(process.start, {"config": config, "owner": _owner_name()})
     except Exception:  # noqa: BLE001 — reported on the settings page, never fatal
-        log.exception("voice worker stopped")
-        _worker.error = "Voice calls stopped unexpectedly and are restarting."
-        _schedule_restart(app_loop)
-    finally:
-        ready.set()
-        loop.close()
-        _worker.loop = _worker.server = None
+        log.exception("voice worker failed to start")
+        started = False
+    _worker.started_at = time.monotonic()
+    if not started:
+        await asyncio.to_thread(process.stop)
+        _worker.error = "Voice calls couldn't start on this computer. The app log has the details."
+
+
+def _crashed(app_loop: asyncio.AbstractEventLoop) -> None:
+    """The worker process died on its own (on its reader thread): say so and restart it."""
+    _worker.error = "Voice calls stopped unexpectedly and are restarting."
+    if time.monotonic() - _worker.started_at > _STABLE_S:
+        _worker.restarts = 0  # it ran fine for a while: this is a fresh failure, not a loop
+    _schedule_restart(app_loop)
 
 
 _RESTART_DELAYS = (3.0, 10.0, 30.0)
+_STABLE_S = 300.0
 
 
 def _schedule_restart(app_loop: asyncio.AbstractEventLoop) -> None:
@@ -189,54 +170,18 @@ def _schedule_restart(app_loop: asyncio.AbstractEventLoop) -> None:
 
     async def later() -> None:
         await asyncio.sleep(_RESTART_DELAYS[attempt])
-        _worker.thread = None
         await start()
 
     asyncio.run_coroutine_threadsafe(later(), app_loop)
 
 
-def _build_server(app_loop: asyncio.AbstractEventLoop, config: dict, owner: str):
-    from livekit.agents import AgentServer
-    from livekit.agents.job import JobExecutorType
-
-    from backend.connectors.voice import agent
-    from backend.connectors.voice.tokens import AGENT_NAME
-
-    agent.RUNTIME = agent.Runtime(app_loop=app_loop, config=config, owner_name=owner)
-    server = AgentServer(
-        ws_url=config["livekit_url"],
-        api_key=config["api_key"],
-        api_secret=config["api_secret"],
-        job_executor_type=JobExecutorType.THREAD,
-        num_idle_processes=1,
-        initialize_process_timeout=60.0,
-        # One owner never needs load shedding; a busy laptop tripped the 0.7 default.
-        load_threshold=1.0,
-        # Its health-check server took a fixed :8081, still held by the previous process for a
-        # moment on restart, so the worker failed to start (live, 2026-11-03). We never read it:
-        # any free loopback port.
-        host="127.0.0.1",
-        port=0,
-        setup_fnc=agent.prewarm,
-    )
-    server.rtc_session(agent.entrypoint, agent_name=AGENT_NAME, on_request=agent.on_request)
-    return server
-
-
 async def stop() -> None:
-    thread, loop, server = _worker.thread, _worker.loop, _worker.server
-    if not thread or not thread.is_alive():
-        return
-    if loop is not None and server is not None:
-        asyncio.run_coroutine_threadsafe(server.aclose(), loop)
-    await asyncio.to_thread(thread.join, 10)
-    _worker.thread = None
+    process = _worker.process
+    _worker.process = None
+    if process is not None:
+        await asyncio.to_thread(process.stop)
     with _calls_lock:
         _calls.clear()
-    # LiveKit's worker copied its credentials into this process's environment at start;
-    # take them back out so a paused or removed connector leaves nothing behind.
-    for name in _LIVEKIT_ENV:
-        os.environ.pop(name, None)
 
 
 async def reload() -> None:

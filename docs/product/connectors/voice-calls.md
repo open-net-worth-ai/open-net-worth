@@ -40,8 +40,14 @@ Ask *"what are you doing?"* and the front voice tells you what Lucius is working
 appears in the chat on your screen. Tap **Approve** and he tells you on the call when it's done.
 Your [permission settings](../lucius/permissions.md) apply exactly as they do in the chat.
 
+You only ever talk to Lucius: the front voice speaks as him, so you'll hear *"let me check"*,
+never *"let me ask Lucius"*.
+
 Say *"bye"* or *"that's all"* and Lucius says goodbye and hangs up. Closing the tab ends the call
-too.
+too. If the line goes quiet for about 20 seconds he asks *"are you still there?"*, and after
+another 20 he says goodbye and hangs up — never while he's still working on something for you or
+a change is waiting for your approval. Need a moment? Say *"hold on"* or *"give me two minutes"*
+and he waits quietly for as long as you asked (up to 10 minutes) before checking in.
 
 ## Set it up
 
@@ -109,6 +115,10 @@ or it is paused.
 
 **"The voice worker isn't running."** Open **Connectors → Voice calls**: it says why — usually the
 voice libraries aren't installed yet (step 1 above), or the LiveKit details are wrong.
+
+**A call dropped, then voice calls came back on their own.** The voice side of the app runs
+separately from the rest of it, so a crash there ends the call but never the app; it restarts
+itself within a few seconds. Call again.
 
 **Lucius takes a while to answer.** The front voice answers at once; Lucius's own answer takes as
 long as a chat reply. Pick a faster model under **Lucius on calls**, and close heavy programs —
