@@ -133,13 +133,25 @@ class MigrationRequest(BaseModel):
     confirm_nonempty: bool = False
     # An import only: turn the two-way sync on in this direction once it succeeds.
     sync_direction: Optional[str] = None
+    # A preview or an import: YNAB account id -> an account already here to import it into,
+    # and YNAB transaction id -> the row here the person confirmed is the same transaction.
+    account_links: Optional[dict[str, str]] = None
+    same_as: Optional[dict[str, str]] = None
+    # A preview only: the preview this one refines (the review re-checking a changed link).
+    recheck_of: Optional[str] = None
 
 
 def _migration(kind: str, body: MigrationRequest) -> dict:
     try:
         sync = body.sync_direction if kind == "import" else None
         return ynab_migration.start(
-            kind, body.plan_id, body.confirm_nonempty, sync_direction=sync or None
+            kind,
+            body.plan_id,
+            body.confirm_nonempty,
+            sync_direction=sync or None,
+            account_links=body.account_links,
+            same_as=body.same_as,
+            recheck_of=body.recheck_of if kind == "preview" else None,
         )
     except ynab_migration.ConfirmationRequired as exc:
         raise HTTPException(

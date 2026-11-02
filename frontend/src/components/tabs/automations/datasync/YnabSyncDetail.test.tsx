@@ -17,7 +17,7 @@ import {
   syncRun,
   syncStatus,
 } from '../../imports/importsFixtures'
-import type { RunRecord } from '../../imports/runs'
+import type { Preview, RunRecord } from '../../imports/runs'
 
 const authFetch = vi.hoisted(() => vi.fn())
 const navigate = vi.hoisted(() => vi.fn())
@@ -42,6 +42,8 @@ let runs: RunRecord[]
 type Sync = Omit<ReturnType<typeof syncStatus>, 'run_id'> & { run_id: string | null }
 let sync: Sync
 let preview = PREVIEW
+// What a preview answers once the review links an account (null: the same as unlinked).
+let linked: Preview | null
 let requests: { url: string; method: string; body: unknown }[]
 const onBack = vi.fn()
 const onOpenReport = vi.fn()
@@ -53,6 +55,7 @@ beforeEach(() => {
   runs = []
   sync = syncStatus()
   preview = PREVIEW
+  linked = null
   requests = []
   authFetch.mockImplementation((url: string, init?: RequestInit) => {
     const path = url.split('?')[0] ?? ''
@@ -73,9 +76,10 @@ beforeEach(() => {
         : url.endsWith('/verify')
           ? 'verify'
           : 'preview'
+      const shown = linked && Object.keys(body.account_links ?? {}).length ? linked : preview
       const started =
         kind === 'preview'
-          ? run({ preview })
+          ? run({ preview: shown })
           : run({ kind, preview, status: 'running', finished_at: null, phase: 'booking' })
       runs.push(started)
       return ok(started, 202)
@@ -229,6 +233,76 @@ describe('YnabSyncDetail setup', () => {
       expect(requests.at(-1)).toMatchObject({
         url: '/api/ynab/migration/start',
         body: { plan_id: 'p1', confirm_nonempty: true, sync_direction: null },
+      }),
+    )
+  })
+
+  it('imports a YNAB account into one already here, matching the rows both hold', async () => {
+    sync = notSetUp()
+    const checking = {
+      ...PREVIEW.accounts[0]!,
+      id: 'y1',
+      link: null,
+      chosen: false,
+      candidates: [{ id: 'a1', name: 'Everyday', type: 'cash' }],
+      match: null,
+    }
+    preview = { ...PREVIEW, book_state: 'foreign', accounts: [checking] }
+    linked = {
+      ...preview,
+      accounts: [
+        {
+          ...checking,
+          link: { id: 'a1', name: 'Everyday' },
+          chosen: true,
+          match: {
+            matched: 2,
+            to_check: 1,
+            added: 1,
+            own_only: 1,
+            pairs: [
+              {
+                ref: 't9',
+                date: '2026-10-02',
+                payee: 'Landlord',
+                amount: -1200,
+                existing: { id: 'x1', date: '2026-10-02', payee: 'Rent payment', amount: -1200 },
+              },
+            ],
+          },
+        },
+      ],
+    }
+    page()
+    const select = (await screen.findByLabelText(/YNAB plan/)) as HTMLSelectElement
+    await waitFor(() => expect(select.options.length).toBeGreaterThan(1))
+    fireEvent.change(select, { target: { value: 'p1' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
+    const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
+    const where = (await w.findByLabelText('Where Checking goes')) as HTMLSelectElement
+    expect([...where.options].map((o) => o.text)).toEqual(['New account', 'Use Everyday'])
+    fireEvent.change(where, { target: { value: 'a1' } })
+    expect(
+      await w.findByText('2 transactions already in Everyday, matched · 1 added · 1 to check.'),
+    ).toBeTruthy()
+    expect(w.getByText(/1 transaction of Everyday’s own isn’t in YNAB/)).toBeTruthy()
+    expect(requests.at(-1)).toMatchObject({
+      url: '/api/ynab/migration/preview',
+      body: { plan_id: 'p1', account_links: { y1: 'a1' }, recheck_of: runs[0]!.id },
+    })
+    fireEvent.click(w.getByLabelText(/Same as Rent payment/))
+    fireEvent.click(w.getByRole('button', { name: 'Import' }))
+    await waitFor(() =>
+      expect(requests.at(-1)).toEqual({
+        url: '/api/ynab/migration/start',
+        method: 'POST',
+        body: {
+          plan_id: 'p1',
+          confirm_nonempty: true,
+          sync_direction: 'both',
+          account_links: { y1: 'a1' },
+          same_as: { t9: 'x1' },
+        },
       }),
     )
   })

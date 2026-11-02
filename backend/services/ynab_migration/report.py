@@ -21,9 +21,10 @@ def count(created: int = 0, existing: int = 0, refused: int = 0, failed: int = 0
 
 
 def transaction_counts(tally: Counter) -> dict:
+    """A row matched to one already in a linked account is already there, like a re-run's."""
     return count(
         created=tally["created"],
-        existing=tally["already_present"],
+        existing=tally["already_present"] + tally["matched"],
         refused=tally["refused_duplicate"] + tally["previously_deleted"],
         failed=tally["failed"],
     )

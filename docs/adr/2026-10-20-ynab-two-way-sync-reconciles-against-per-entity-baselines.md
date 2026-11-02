@@ -115,3 +115,55 @@ itself turns the sync on with it (`runner.update_settings`) once the import succ
 the page mid-import loses nothing. A sync that cannot turn on never fails the import: the run's log
 says why and the Data sync page offers **Turn on**. No direction (`Don't sync`) leaves it off, as
 before.
+
+## Amendment 2026-11-03: a YNAB account can be linked to an account already here
+
+The owner asked whether someone who already has accounts can choose which YNAB account goes into
+which of them. The review's Accounts tab now offers, per YNAB account, **New account** (the
+default) or an existing account; `POST /api/ynab/migration/{preview,start}` take
+`account_links` (YNAB account id -> account id). `ynab_migration.links` owns it.
+
+- **A link is the account's YNAB id, nothing else.** The import appends `{source: "ynab", ref}`
+  to the existing account's `external_ids` (`accounts.update_account`) and creates no account —
+  exactly what an account the import created carries, so `book_state`, a re-run and the sync's
+  `ctx.ynab_acct` pair with it unchanged. The account keeps its own opening; YNAB's Starting
+  Balance is not booked there. Rows dated before that opening are booked as history, and the
+  sync's existing `before_start` item explains them (`ynab_sync.starts`).
+- **Which accounts fit.** Open, in the plan's currency, not linked to another YNAB account, and of
+  a type the budget treats the same way: a budget account only an account of its own type (`cash`
+  or `credit` — anything else would change Ready to Assign or card coverage), a tracking loan a
+  `loan`, a tracking asset any off-budget asset (`fixed_deposit`, `investment`, `retirement`,
+  `receivable`). A closed YNAB account is never linked. The same rules validate the request
+  server-side (`links.resolve`); a link that breaks one fails the run, writing nothing.
+- **Matching uses the ledger's engine, never a new one.** Each YNAB row on a linked account not
+  yet in the ledger is rendered as the row the import would book and run through
+  `match_preflight.check_proposed_rows` (the backend of `check_duplicates`: `match_batch` with its
+  1:1 assignment, L0 included), in chunks of its 500-row cap, one account's rows together in date
+  order. Only a `DUPLICATE_CLASSES` candidate that is a ledger row, not a Starting Balance and not
+  already holding a YNAB ref counts, and each existing row is claimed once. A strong-band
+  candidate on the same accounts is a **match**: that row takes the YNAB ids
+  (`ledger.attach_external_refs`) and nothing is booked; the merge choke's adopt-if-blank rule
+  (`match_review.adopt_if_blank`) then fills only what the row leaves blank — the person's
+  payee, category and memo are never replaced. A review-band candidate, or a strong one on other
+  accounts (a single-leg row here vs YNAB's transfer), is a **possible match**: listed in the
+  review beside the row here, and booked as a new row unless the person ticked it (`same_as`:
+  YNAB transaction id -> ledger id, honoured only for exactly that pair). Categories play no part
+  in a match, so the preview — which has no categories yet — decides what the import does.
+- **Why a possible match is asked, not queued.** Booking it and filing a match review was the
+  obvious reuse, but by our reading of `txn_sync` and `units.build` a review accepted after the
+  sync has baselined the booked row merges that YNAB-linked row INTO the existing one; the
+  tombstone keeps the baseline, so the next run would read it as deleted here and send the delete
+  to YNAB. Deciding in the review, before anything is written or baselined, avoids that; the
+  merge interaction stays a known limit of the sync (not exercised by a test).
+- **The review re-checks on each change.** Choosing an account starts a new preview with the
+  links and `recheck_of` (the preview it refines); that re-check reuses its preview's YNAB read
+  for ten minutes (`job._read_cache`, one entry) instead of reading YNAB again. Every other run
+  reads it afresh.
+- **Verification** keeps comparing the balance with YNAB's. A linked account that also holds rows
+  YNAB does not has its count check read as "YNAB transactions" (rows carrying a YNAB ref vs
+  YNAB's), with the account's own rows named in the note.
+- **The sync.** Matched rows carry YNAB ids, so the first run pairs them like any migrated row
+  (its `first_run_bases` reconstruction included: an edit the person made before the import reads
+  as a local change). The account's own rows YNAB does not hold are unlinked creatable rows in a
+  YNAB-known account, so a sync that sends (`both`, `to_ynab`) creates them in YNAB — the review
+  says how many.

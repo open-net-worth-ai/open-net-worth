@@ -33,6 +33,7 @@ def verify_accounts(plan: dict, ynab_accounts: list[dict]) -> list[dict]:
         for e in a.get("external_ids") or []:
             if e.get("source") == SOURCE:
                 onw[e["ref"]] = ledger_service.account_with_balance(a, txns)
+    openings = ledger_service.opening_txn_ids()
     out = []
     for pa in plan["accounts"]:
         name, row = pa["payload"]["name"], onw.get(pa["id"])
@@ -69,18 +70,28 @@ def verify_accounts(plan: dict, ynab_accounts: list[dict]) -> list[dict]:
                 note,
             )
         )
-        count = sum(1 for t in txns if _touches(t, row["id"]))
-        out.append(
-            _row(
-                "account",
-                f"{name}: transactions",
-                pa["expected_rows"],
-                count,
-                f"YNAB has {pa['ynab_rows']}",
-                unit="count",
-            )
-        )
+        out.append(_count_row(name, pa, row["id"], txns, openings))
     return out
+
+
+def _count_row(name: str, pa: dict, account_id: str, txns: list[dict], openings) -> dict:
+    """An account linked to one already here also holds rows of its own, which YNAB does not:
+    there the check is that every YNAB row is here, and the note says how many are not YNAB's."""
+    mine = [t for t in txns if _touches(t, account_id)]
+    ynabs = [
+        t for t in mine if any(e.get("source") == SOURCE for e in t.get("external_refs") or [])
+    ]
+    synced = {t["id"] for t in ynabs}
+    own = [t for t in mine if t["id"] not in openings and t["id"] not in synced]
+    note = f"YNAB has {pa['ynab_rows']}"
+    if not own:
+        return _row(
+            "account", f"{name}: transactions", pa["expected_rows"], len(mine), note, "count"
+        )
+    note += f"; {len(own)} more here are this account's own, not in YNAB"
+    return _row(
+        "account", f"{name}: YNAB transactions", pa["expected_rows"] - 1, len(ynabs), note, "count"
+    )
 
 
 def _touches(txn: dict, account_id: str) -> bool:

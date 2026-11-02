@@ -55,7 +55,26 @@ export interface Verification {
   mismatches: Check[]
   matches: Check[]
 }
+export interface MatchPair {
+  /** The YNAB transaction's id: the key of a "same as" answer. */
+  ref: string
+  date: string
+  payee: string | null
+  amount: number
+  existing: { id: string; date: string; payee: string | null; amount: number }
+}
+/** What importing into a linked account does with its rows. */
+export interface LinkMatch {
+  matched: number
+  to_check: number
+  added: number
+  /** The account's own rows YNAB does not hold. */
+  own_only: number
+  pairs: MatchPair[]
+}
 export interface PreviewAccount {
+  /** The YNAB account id. Absent on a preview recorded before accounts could be linked. */
+  id?: string
   name: string
   ynab_type: string
   type: string
@@ -63,6 +82,11 @@ export interface PreviewAccount {
   closed: boolean
   opening_balance: number
   transactions: number
+  /** The account here it goes into: chosen in this review, or linked by an earlier import. */
+  link?: { id: string; name: string } | null
+  chosen?: boolean
+  candidates?: { id: string; name: string; type: string }[]
+  match?: LinkMatch | null
 }
 export interface PreviewTxn {
   date: string

@@ -45,11 +45,26 @@ Until it is set up, its page is two steps, the second unlocked by the first:
    from YNAB (they stay as they are and the plan is added beside them), and any warnings. A plan
    in another currency than a book that already holds data can't be imported, and the note says
    so. Three tabs show the plan itself:
-   - **Accounts**: each account with its type, how many transactions it has and its opening
-     balance;
+   - **Accounts**: each account with its type, where it goes in this book, how many
+     transactions it has and its opening balance;
    - **Categories**: each group with its categories;
    - **Transactions**: newest first (date, account, payee, category, amount; a long history shows
      its newest 500, and the import brings them all).
+
+   **Already have some of these accounts here?** In the Accounts tab, **In this book** says
+   where each YNAB account goes: **New account** (the default), or **Use** one of your accounts
+   that fits it — open, in the plan's currency, and of a matching type (a budget account goes into
+   an account of its own type: cash into cash, a card into a card; a tracking account into any
+   off-budget asset account, a tracking loan into a loan). A closed YNAB account always gets a new
+   one. Choosing an account checks which of its transactions YNAB also has, and the line under
+   it says how many are **already there** (matched, so they are not booked twice), how many are
+   **added**, and how many **to check**. A matched transaction keeps your payee, category and
+   memo; YNAB only fills the ones you left blank. The account keeps its name, opening balance and
+   history. Transactions to check are ones that may be the same but the app isn't sure (the same
+   amount on the same day, worded differently, say): each is listed beside your one and is added
+   as a new transaction unless you tick **Same as…**. The line also says how many of the
+   account's own transactions YNAB doesn't have; a sync to YNAB sends those there. An account a
+   previous import linked shows as linked and stays so.
 
    **After import** sets the sync (**Keep in sync both ways**, **Sync from YNAB only**, **Sync to
    YNAB only**, or **Don't sync, import once**); then **Import**. The app takes a

@@ -5,7 +5,8 @@ turn, so there is no turn checkpoint: ``take_backup`` is the undo, and the job t
 
 Idempotent by construction: accounts are found by their YNAB ``external_ids`` link, transactions
 skip any YNAB ref already in the ledger (the importer's own scheme), envelopes are found by name,
-assignments are only written where they differ.
+assignments are only written where they differ. A YNAB account the person linked to an account
+already here takes that account instead of a new one, and its rows are matched first (``links``).
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from backend.services import backup as backup_service
 from backend.services import categories as categories_service
 from backend.services import envelopes as envelopes_service
 from backend.services import ledger as ledger_service
-from backend.services import planning
+from backend.services import match_review, planning
 from backend.services import profile as profile_service
 from backend.services.ynab_migration.mapping import SOURCE, render_piece
 
@@ -86,21 +87,35 @@ def ensure_base_currency(currency: str, money: list[str]) -> str | None:
     return f"Base currency set from {base} to {currency}."
 
 
-def sync_accounts(plan: dict, existing: list[dict]) -> tuple[dict[str, dict], int]:
+def sync_accounts(
+    plan: dict, existing: list[dict], links: dict[str, dict] | None = None
+) -> tuple[dict[str, dict], int, int]:
+    """YNAB account id -> its account here: found by its YNAB link, linked to the account the
+    person chose (``links``, already validated by ``links.resolve``), or created. Returns the
+    rows and how many were created and newly linked."""
     linked = {
         e["ref"]: a
         for a in existing
         for e in a.get("external_ids") or []
         if e.get("source") == SOURCE
     }
-    rows, created = {}, 0
+    rows, created, joined = {}, 0, 0
     for pa in plan["accounts"]:
         row = linked.get(pa["id"])
-        if row is None:
+        if row is None and pa["id"] in (links or {}):
+            row = _link(links[pa["id"]], pa["payload"]["external_ids"][0])
+            joined += 1
+        elif row is None:
             row = accounts_service.create_account(dict(pa["payload"]))
             created += 1
         rows[pa["id"]] = row
-    return rows, created
+    return rows, created, joined
+
+
+def _link(account: dict, entry: dict) -> dict:
+    """The account keeps its name, type, opening and history; it only takes the YNAB id."""
+    ids = [*(account.get("external_ids") or []), entry]
+    return accounts_service.update_account(account["id"], {"external_ids": ids}) or account
 
 
 def archive_closed(plan: dict, rows: dict[str, dict]) -> int:
@@ -175,6 +190,29 @@ def prune_starter(prune: dict, groups: list[dict]) -> Counter:
     return removed
 
 
+def _attach(row: dict, txn: dict, tally: Counter, problems: list[dict]) -> None:
+    """A YNAB row the match engine paired with a row already here: that row takes its ids, and
+    what it leaves blank YNAB fills — the ledger's own merge rule, so a category or memo the
+    person set is never replaced."""
+    try:
+        ledger_service.attach_external_refs(
+            txn["id"],
+            row["external_refs"],
+            reason="YNAB import: the same transaction as one already in the linked account",
+        )
+        patch = match_review.adopt_if_blank(txn, row)
+        if patch:
+            ledger_service.update_transaction(txn["id"], patch)
+    except OpenNetWorthError as exc:
+        logger.warning("ynab migration match not linked: %s", exc.message)
+        tally["failed"] += 1
+        problems.append(
+            {"ref": row["external_refs"][0]["ref"], "reason": exc.message, "kind": "failed"}
+        )
+        return
+    tally["matched"] += 1
+
+
 def _book_chunk(rows: list[dict], batch_id: str, tally: Counter, problems: list[dict]) -> None:
     try:
         # Every row carries its own YNAB id, so the ref floor is the dedup; the fuzzy matcher
@@ -222,17 +260,28 @@ def send_transactions(
     acct_ids: dict[str, str],
     cat_ids: dict[str, str],
     progress: Progress,
+    decisions: dict[int, dict] | None = None,
 ) -> tuple[Counter, list[dict]]:
-    """Render and book one chunk at a time, so only a chunk of payloads is ever in memory."""
+    """Render and book one chunk at a time, so only a chunk of payloads is ever in memory. A
+    piece ``decisions`` (``links.match``) marks ``link`` is attached to its existing row
+    instead; every other one is booked, a possible match included."""
     source = canonical_writer(SOURCE) or SOURCE
     pieces = plan["pieces"]
+    decisions = decisions or {}
     batch_id, tally, problems = str(uuid.uuid4()), Counter(), []
     for i in range(0, len(pieces), CHUNK):
-        rows = [
-            {**render_piece(p, acct_ids, cat_ids, plan["currency"]), "source": source}
-            for p in pieces[i : i + CHUNK]
-        ]
-        _book_chunk(rows, batch_id, tally, problems)
+        rows = []
+        for n, p in enumerate(pieces[i : i + CHUNK], i):
+            row = {**render_piece(p, acct_ids, cat_ids, plan["currency"]), "source": source}
+            d = decisions.get(n)
+            if d and d["action"] == "link":
+                _attach(row, d["existing"], tally, problems)
+                continue
+            if d and d["action"] == "check":
+                tally["possible_match"] += 1
+            rows.append(row)
+        if rows:
+            _book_chunk(rows, batch_id, tally, problems)
         progress("booking transactions", min(i + CHUNK, len(pieces)), len(pieces))
     return tally, problems
 

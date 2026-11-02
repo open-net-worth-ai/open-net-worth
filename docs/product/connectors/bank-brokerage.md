@@ -256,7 +256,10 @@ here, and the import is its second setup step. It is experimental and off by def
 sync** tab appears once you turn it on in
 [Settings → Developer → Experimental](../features/settings.md#experimental-features).
 Take a [backup](../operations/backup-and-restore.md) first if you can; a fresh book is the
-cleanest target (the app also takes one before it writes anything).
+cleanest target (the app also takes one before it writes anything). If this book already holds
+some of the plan's accounts, the review lets you import each YNAB account into one of yours instead
+of a new one; the transactions both hold are matched rather than booked twice
+([how](../features/imports-and-sync.md#set-it-up)).
 
 It is safe to run again: nothing is booked twice. Accounts and transactions keep their YNAB ids,
 so the connector attaches to them afterwards. A transfer between two accounts is one transfer; a

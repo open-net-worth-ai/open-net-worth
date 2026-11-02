@@ -1,15 +1,27 @@
 import { useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { fAmountNative, fDate } from '../../../utils/format'
-import { Button, Cluster, Modal, PageTabs, Select, Skeleton, Stack, Text } from '../../ui'
-import { messageOf, useRun, type Preview, type PreviewTxn } from './runs'
+import { Button, Checkbox, Cluster, Modal, PageTabs, Select, Skeleton, Stack, Text } from '../../ui'
+import {
+  messageOf,
+  useRun,
+  type LinkMatch,
+  type Preview,
+  type PreviewAccount,
+  type PreviewTxn,
+} from './runs'
 import type { SyncDirection } from './sync'
 
 // The review before a YNAB import, in one window: a line saying what the plan holds, what it
 // changes in this book, then the plan itself in three tabs (accounts, categories, transactions)
 // over a pane of fixed height, so neither switching tabs nor the read finishing resizes it. It
-// is bound to ONE preview run; the import it starts turns the sync on itself when it succeeds
+// shows ONE preview run at a time; the import it starts turns the sync on itself when it succeeds
 // (the server does it, so closing the page mid-import loses nothing).
+//
+// A YNAB account can go into an account already in the book instead of a new one. Choosing one
+// re-checks the preview with that link (the server reuses the plan it just read), so what each
+// account would match and add is the server's answer, never a guess made here. The window keeps
+// the last answer on screen until the new one arrives.
 
 type SyncChoice = SyncDirection | 'off'
 type Pane = 'accounts' | 'categories' | 'transactions'
@@ -36,16 +48,57 @@ export function YnabReview({
   onClose: () => void
   onStarted: () => void
 }) {
-  const run = useRun(runId).data
+  const [shownId, setShownId] = useState(runId)
+  const [checkId, setCheckId] = useState<string | null>(null)
+  const run = useRun(shownId).data
+  const check = useRun(checkId ?? undefined).data
   const p = run?.status === 'done' ? run.preview : null
   const reading = !run || run.status === 'running'
   const [pane, setPane] = useState<Pane>('accounts')
   const [sync, setSync] = useState<SyncChoice>('both')
+  const [links, setLinks] = useState<Record<string, string>>({})
+  const [sameAs, setSameAs] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  if (checkId && check?.status === 'done') {
+    setShownId(checkId)
+    setCheckId(null)
+  } else if (checkId && check && check.status !== 'running') {
+    setError(check.error || 'Could not check that account.')
+    setCheckId(null)
+  }
+  const checking = checkId !== null
+
+  async function relink(ynabId: string, accountId: string) {
+    if (!run) return
+    const next = { ...links }
+    if (accountId) next[ynabId] = accountId
+    else delete next[ynabId]
+    setLinks(next)
+    setError(null)
+    try {
+      const r = await authFetch('/api/ynab/migration/preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan_id: run.plan_id, account_links: next, recheck_of: shownId }),
+      })
+      const body = await r.json().catch(() => null)
+      if (!r.ok) {
+        setError(messageOf(body, 'Could not check that account.'))
+        return
+      }
+      setCheckId((body as { id: string }).id)
+    } catch {
+      setError('Could not reach the server.')
+    }
+  }
+
   async function importNow() {
-    if (!run || !p || p.currency_blocked) return
+    if (!run || !p || p.currency_blocked || checking) return
+    // Only an answer about a pair the shown preview still lists counts.
+    const listed = new Set(p.accounts.flatMap((a) => a.match?.pairs ?? []).map((x) => x.ref))
+    const same = Object.fromEntries(Object.entries(sameAs).filter(([ref]) => listed.has(ref)))
     setBusy(true)
     setError(null)
     try {
@@ -58,6 +111,8 @@ export function YnabReview({
           plan_id: run.plan_id,
           confirm_nonempty: p.book_state === 'foreign',
           sync_direction: sync === 'off' ? null : sync,
+          ...(Object.keys(links).length > 0 && { account_links: links }),
+          ...(Object.keys(same).length > 0 && { same_as: same }),
         }),
       })
       if (!r.ok) {
@@ -96,7 +151,7 @@ export function YnabReview({
             </Button>
             <Button
               variant="primary"
-              disabled={!p || p.currency_blocked}
+              disabled={!p || p.currency_blocked || checking}
               loading={busy}
               onClick={importNow}
             >
@@ -140,7 +195,14 @@ export function YnabReview({
               {!p ? (
                 <Placeholder />
               ) : pane === 'accounts' ? (
-                <Accounts preview={p} />
+                <Accounts
+                  preview={p}
+                  links={links}
+                  checking={checking}
+                  onLink={(id, to) => void relink(id, to)}
+                  sameAs={sameAs}
+                  onSameAs={setSameAs}
+                />
               ) : pane === 'categories' ? (
                 <Categories preview={p} />
               ) : (
@@ -218,7 +280,15 @@ function Empty({ children }: { children: string }) {
   return <p className="ynr-empty">{children}</p>
 }
 
-function Accounts({ preview: p }: { preview: Preview }) {
+interface LinkProps {
+  links: Record<string, string>
+  checking: boolean
+  onLink: (ynabId: string, accountId: string) => void
+  sameAs: Record<string, string>
+  onSameAs: (next: Record<string, string>) => void
+}
+
+function Accounts({ preview: p, ...link }: { preview: Preview } & LinkProps) {
   if (p.accounts.length === 0) return <Empty>This plan has no accounts.</Empty>
   return (
     <table className="imp-table ynr-table">
@@ -226,13 +296,14 @@ function Accounts({ preview: p }: { preview: Preview }) {
         <tr>
           <th>Account</th>
           <th>Type</th>
+          <th>In this book</th>
           <th className="imp-table__num">Transactions</th>
           <th className="imp-table__num">Opening balance</th>
         </tr>
       </thead>
-      <tbody>
-        {p.accounts.map((a) => (
-          <tr key={a.name}>
+      {p.accounts.map((a) => (
+        <tbody key={a.id ?? a.name}>
+          <tr>
             <td data-label="Account">
               {a.name}
               {a.closed && <span className="ynr-dim"> · closed</span>}
@@ -241,16 +312,109 @@ function Accounts({ preview: p }: { preview: Preview }) {
               {a.type}
               {a.on_budget === false ? ' · tracking' : ''}
             </td>
+            <td data-label="In this book">
+              <Destination account={a} {...link} />
+            </td>
             <td data-label="Transactions" className="imp-table__num">
               {a.transactions}
             </td>
             <td data-label="Opening balance" className="imp-table__num">
-              {fAmountNative(a.opening_balance, p.currency)}
+              {a.link ? (
+                <span className="ynr-dim">Its own</span>
+              ) : (
+                fAmountNative(a.opening_balance, p.currency)
+              )}
             </td>
           </tr>
-        ))}
-      </tbody>
+          {a.match && a.chosen && (
+            <tr className="ynr-link">
+              <td colSpan={5}>
+                <LinkSummary account={a} match={a.match} currency={p.currency} {...link} />
+              </td>
+            </tr>
+          )}
+        </tbody>
+      ))}
     </table>
+  )
+}
+
+// A new account, or one already here of a type and currency the plan's account fits.
+function Destination({
+  account: a,
+  links,
+  checking,
+  onLink,
+}: { account: PreviewAccount } & LinkProps) {
+  if (a.link && !a.chosen) return <span className="ynr-dim">{a.link.name} (linked)</span>
+  if (!a.id || !a.candidates?.length) return <span className="ynr-dim">New account</span>
+  return (
+    <Select
+      className="ynr-dest"
+      aria-label={`Where ${a.name} goes`}
+      value={links[a.id] ?? ''}
+      disabled={checking}
+      options={[
+        { value: '', label: 'New account' },
+        ...a.candidates.map((c) => ({ value: c.id, label: `Use ${c.name}` })),
+      ]}
+      onChange={(e) => onLink(a.id!, e.target.value)}
+    />
+  )
+}
+
+function LinkSummary({
+  account: a,
+  match: m,
+  currency,
+  checking,
+  sameAs,
+  onSameAs,
+}: { account: PreviewAccount; match: LinkMatch; currency: string } & LinkProps) {
+  if (checking)
+    return <span className="ynr-dim">Checking which transactions are already there…</span>
+  const here = a.link?.name ?? 'the account'
+  const parts = [
+    `${plural(m.matched, 'transaction')} already in ${here}, matched`,
+    `${m.added.toLocaleString()} added`,
+  ]
+  if (m.to_check > 0) parts.push(`${m.to_check.toLocaleString()} to check`)
+  const money = (n: number) => fAmountNative(n, currency)
+  return (
+    <Stack gap="--space-2">
+      <span>{parts.join(' · ')}.</span>
+      {m.own_only > 0 && (
+        <span className="ynr-dim">
+          {plural(m.own_only, 'transaction')} of {here}’s own{' '}
+          {m.own_only === 1 ? 'isn’t' : 'aren’t'} in YNAB; a sync to YNAB sends{' '}
+          {m.own_only === 1 ? 'it' : 'them'} there.
+        </span>
+      )}
+      {m.pairs.length > 0 && (
+        <>
+          <span className="ynr-dim">
+            These may be the same transaction. Each is added as a new one unless you tick it.
+          </span>
+          <ul className="ynr-pairs">
+            {m.pairs.map((x) => (
+              <li key={x.ref}>
+                <Checkbox
+                  checked={sameAs[x.ref] === x.existing.id}
+                  onChange={(e) => {
+                    const next = { ...sameAs }
+                    if (e.target.checked) next[x.ref] = x.existing.id
+                    else delete next[x.ref]
+                    onSameAs(next)
+                  }}
+                  label={`Same as ${x.existing.payee ?? '(no payee)'}, ${fDate(x.existing.date)}, ${money(x.existing.amount)}`}
+                  description={`YNAB: ${x.payee ?? '(no payee)'}, ${fDate(x.date)}, ${money(x.amount)}`}
+                />
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Stack>
   )
 }
 
