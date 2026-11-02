@@ -19,7 +19,7 @@ from backend.services.ynab_migration.category_match import (
     env_ref,
     propose,
 )
-from backend.services.ynab_pairs import norm
+from backend.services.ynab_pairs import is_parking_name, norm
 
 
 def _state(kind: str, *, category=None, envelope=None, options=None, chosen=False, offer=None):
@@ -76,8 +76,10 @@ def decide(
     category of this plan or not available any more."""
     links = links or {}
     known = {c["id"] for c in plan["categories"]}
-    if stray := next((k for k in links if k not in known), None):
-        raise ValidationError(f"The YNAB category {stray} is not in the plan; review it again.")
+    if any(k not in known for k in links):
+        raise ValidationError(
+            "One of the categories you picked is no longer in the plan. Review it again."
+        )
     taken_c: set[str] = set()
     taken_e: set[str] = set()
     out: dict[str, dict] = {}
@@ -182,6 +184,8 @@ def group_matches(plan: dict, book: Book, paired: dict[str, dict]) -> dict[str, 
             for g in book.groups
             if g["id"] not in taken and norm(g["name"]) == norm(c["group_name"])
         ]
+        if is_parking_name(c["group_name"]):
+            same = []
         out[gid] = same[0] if len(same) == 1 else None
         if out[gid]:
             taken.add(out[gid]["id"])

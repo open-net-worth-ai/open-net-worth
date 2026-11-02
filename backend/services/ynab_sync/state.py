@@ -79,14 +79,14 @@ def save_meta(meta: dict) -> None:
     _store.save({**meta, "id": "meta"})
 
 
-def reset(keep_plan: str | None = None) -> None:
+def reset() -> None:
     """Forget everything about one plan (the plan was changed or the sync was re-pointed). How
-    ``keep_plan``'s categories and groups pair with ours is kept: the import wrote it, and
-    turning the sync on for that plan must find it."""
+    YNAB's categories and groups pair with ours is kept, for every plan: the import wrote it, and
+    turning the sync on (for this plan or one used before) must find it."""
     from backend.db.ynab_sync_store import YnabBaselineStore, YnabConflictStore, YnabMirrorStore
     from backend.services import ynab_pairs
 
-    kept = ynab_pairs.keep_for(keep_plan) if keep_plan else []
+    kept = ynab_pairs.keep_for()
     for store in (
         YnabSyncStateStore(),
         YnabMirrorStore(),

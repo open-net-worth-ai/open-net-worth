@@ -9,8 +9,9 @@ from backend.core.errors import ExternalServiceError, OpenNetWorthError
 from backend.services import planning
 from backend.services.ynab_migration import category_make as make
 from backend.services.ynab_migration.mapping import clean
+from backend.services.ynab_pairs import HIDDEN_HERE
 from backend.services.ynab_sync import conflicts
-from backend.services.ynab_sync.category_base import FIELDS, HIDDEN_HERE, Base
+from backend.services.ynab_sync.category_base import FIELDS, Base
 from backend.services.ynab_sync.client import RateCapReached
 
 LABELS = {"name": "Name", "hidden": "Visibility", "group": "Group"}
@@ -30,7 +31,9 @@ class Pairs(Base):
         for f in FIELDS:
             y_changed, o_changed = y[f] != p["ynab"][f], o[f] != p["onw"][f]
             if f == "group" and o[f] is None:
-                o_changed = False  # in no envelope, or sharing one: there is no group to move
+                o_changed = False  # in no envelope: there is no group to move
+            if f == "group" and y_changed and self.parking(y[f]):
+                y_changed = False  # a move into a parking group is not one the book follows
             if y_changed and o_changed:
                 out[f] = "adopt" if self.same(f, y[f], o[f]) else "conflict"
             elif y_changed or o_changed:
@@ -158,22 +161,22 @@ class Pairs(Base):
     # ── here -> YNAB ──
     def target_group(self, ycid: str, p: dict, o: dict, moved: bool) -> str | None:
         """The YNAB group this category belongs in: "Hidden in Open Net Worth" while it is hidden
-        here; when shown again, the group it was taken from (unless its envelope moved since:
-        then the group paired with the envelope's), else where it is, else "Not budgeted"."""
+        here. When shown again: the group it was taken from, unless its envelope has moved since
+        (then the group paired with the envelope's), else where it is, else "Not budgeted"."""
         current = (self.yc.get(ycid) or {}).get("category_group_id")
         if o["hidden"]:
             if not self.parking(current):
-                p["home"] = current
+                p["home"], p["home_for"] = current, o["group"]
             return self.parking_group(HIDDEN_HERE)
         home = p.get("home")
-        if home in self.yg and not self.yg[home].get("deleted") and not self.parking(home):
-            if not moved and self.parking(current):
-                return home
+        home_ok = home in self.yg and not self.yg[home].get("deleted") and not self.parking(home)
+        if home_ok and self.parking(current) and p.get("home_for") == o["group"]:
+            return home
         if o["group"] and (moved or self.parking(current)):
             return self.ynab_group_for(o["group"])
         if not self.parking(current):
             return current
-        return self.not_budgeted_group()
+        return home if home_ok else self.not_budgeted_group()
 
     def push(self, ycid: str, p: dict, cat: dict, y: dict, o: dict, fields: list[str]) -> None:
         try:
@@ -199,6 +202,8 @@ class Pairs(Base):
         now = self.ystate(saved)
         for f in fields:
             p["ynab"][f], p["onw"][f] = now[f], o[f]
+        if "category_group_id" in body:  # a move to or from a parking group has been made
+            p["ynab"]["group"] = now["group"]
         self.say_pushed(y, o, fields, body)
 
     def refuse(self, ycid: str, name: str, fields: list[str], y: dict, o: dict) -> None:
@@ -232,7 +237,7 @@ class Pairs(Base):
         name = p["onw"]["name"]
         if ycat is None or ycat.get("deleted") or self.ystate(ycat)["hidden"]:
             p["gone"] = True
-        elif p.get("parked") or not self.can_push:
+        elif p.get("parked") or not self.can_push or f"cat:{ycid}" in self.open:
             return
         else:
             try:
@@ -248,7 +253,7 @@ class Pairs(Base):
                 return self.file(conflicts.FAILED, f"cat:{ycid}", name, reason, entity="category")
             if not self.confirmed(saved, body):
                 return
-            p["home"] = ycat.get("category_group_id")
+            p["home"], p["home_for"] = ycat.get("category_group_id"), p["onw"]["group"]
             self.put_cat(saved)
             p["parked"] = True
             p["ynab"]["group"], p["onw"]["hidden"] = gid, True

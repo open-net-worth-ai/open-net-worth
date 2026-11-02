@@ -64,6 +64,9 @@ class YnabBaselineStore(BookPayloadTableStore):
             r["id"][2:] for r in self.all() if r["id"].startswith("x:") and r.get("plan") == plan_id
         }
 
+    def pair_documents(self) -> list[dict]:
+        return [r for r in self.all() if r["id"][:2] in ("c:", "g:", "x:")]
+
     def of_other_plans(self, plan_id: str | None) -> list[dict]:
         """Pair and decision documents that are not this plan's (a rewrite keeps them)."""
         return [

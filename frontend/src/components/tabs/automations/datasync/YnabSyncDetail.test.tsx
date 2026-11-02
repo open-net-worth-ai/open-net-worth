@@ -437,7 +437,18 @@ describe('YnabSyncDetail setup', () => {
               chosen: false,
               ask: false,
               options: [],
-              note: 'Budget syncs with a new envelope of its own',
+              note: 'Budget syncs with a new envelope of its own.',
+            },
+            {
+              id: 'c2',
+              label: 'Cold Cat',
+              name: 'Cold Cat',
+              hidden: true,
+              link: { ref: 'cat:k1', name: 'Shop 1', kind: 'category' },
+              chosen: false,
+              ask: false,
+              options: [],
+              note: 'Budget syncs with envelope Shop 1',
             },
           ],
         },
@@ -455,6 +466,8 @@ describe('YnabSyncDetail setup', () => {
         'Budget syncs with a new envelope of its own. Hidden in YNAB, so hidden here too',
       ),
     ).toBeTruthy()
+    // matched with one of yours, the import leaves it as it is: it is not said to be hidden
+    expect(w.getByText('Budget syncs with envelope Shop 1')).toBeTruthy()
     fireEvent.click(w.getByRole('button', { name: 'Where Old Cat goes' }))
     const box = screen.getByPlaceholderText('Search categories…')
     fireEvent.change(box, { target: { value: 'shop 11' } })

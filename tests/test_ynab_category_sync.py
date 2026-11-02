@@ -804,3 +804,253 @@ def test_moving_a_category_into_one_of_our_parking_groups_in_ynab_moves_nothing_
         before = env("Groceries")["group_id"]
         sync()
         assert env("Groceries")["group_id"] == before and not conflict_items()
+
+
+# ── fix round 3: Assigned is never changed without an agreed baseline or the person's choice ──
+
+
+def months_sent(world):  # noqa: F811
+    return [w for w in world.writes if "/months/" in w[1]]
+
+
+def ynab_assigned(world, key):  # noqa: F811
+    return {o: v.get(key) for o, v in sorted(world.state["budget"].items()) if key in v}
+
+
+def month_of(world, offset):  # noqa: F811
+    return world.state["d"](offset, 1)[:7]
+
+
+def assigned_of(world, name, offset):  # noqa: F811
+    return planning.assignments_store.month_map(month_of(world, offset)).get(env(name)["id"])
+
+
+def test_a_category_taken_out_of_its_envelope_then_funded_in_ynab_is_asked_about_not_overwritten(
+    world,  # noqa: F811
+):
+    enable()
+    sync()
+    before = ynab_assigned(world, "fun")
+    fun = env("Fun Money")
+    change(
+        type="envelope_split_category", envelope_id=fun["id"], category_id=cat("Fun Money")["id"]
+    )
+    sync()  # paused: it is in no envelope now
+    ynab_stub.ynab_budget(world.state, 0, "fun", 120_000)
+    sync()
+    assert months_sent(world) == []  # nothing pushed over YNAB's older months
+    assert ynab_assigned(world, "fun") == {**before, 0: 120_000}
+    (item,) = conflict_items()  # no envelope is made behind the person's back
+    assert item["reason"] == (
+        "YNAB has money assigned to Fun Money, which has no envelope here. Give it one?"
+    )
+    assert sync()["summary"].endswith("1 needs review") and len(conflict_items()) == 1
+    ynab_sync.resolve.resolve(item["id"], "ynab")  # give it one, with YNAB's figures
+    given = env("Fun Money (YNAB)")
+    assert given["category_ids"] == [cat("Fun Money")["id"]]
+    for offset, milli in {-2: 50_000, -1: 50_000, 0: 120_000}.items():
+        month = month_of(world, offset)
+        assert planning.assignments_store.month_map(month)[given["id"]] == milli / 1000
+    assert months_sent(world) == [] and not conflict_items()
+    assert sync()["summary"] in ("Nothing changed", "1 category change")
+    assert months_sent(world) == []
+
+
+def test_saying_no_to_an_envelope_for_ynabs_money_is_remembered(world):  # noqa: F811
+    enable()
+    sync()
+    fun = env("Fun Money")
+    change(
+        type="envelope_split_category", envelope_id=fun["id"], category_id=cat("Fun Money")["id"]
+    )
+    sync()
+    ynab_stub.ynab_budget(world.state, 0, "fun", 120_000)
+    sync()
+    (item,) = conflict_items()
+    ynab_sync.resolve.resolve(item["id"], "onw")
+    ynab_stub.ynab_budget(world.state, 0, "fun", 130_000)
+    sync()
+    assert not conflict_items() and months_sent(world) == []
+
+
+def test_a_category_that_never_had_an_envelope_gets_one_when_ynab_funds_it(world):  # noqa: F811
+    enable()
+    sync()
+    make("Loose change", envelope=False)
+    sync()
+    key = ynab_stub.category_named(world.state, "Loose change")["id"]
+    ynab_stub.ynab_budget(world.state, 0, key, 25_000)
+    sync()
+    assert env("Loose change") and assigned_of(world, "Loose change", 0) == 25.0
+    assert months_sent(world) == [] and not conflict_items()
+
+
+def test_moving_a_category_to_another_envelope_compares_afresh_instead_of_pushing(world):  # noqa: F811
+    enable()
+    sync()
+    before = ynab_assigned(world, "fun")
+    other = change(type="envelope_create", name="Other", group_id=group("Wants")["id"])["envelope"]
+    for offset, amount in {-2: 10.0, -1: 20.0, 0: 30.0}.items():
+        change(type="assign", month=month_of(world, offset), envelope_id=other["id"], amount=amount)
+    change(
+        type="envelope_split_category",
+        envelope_id=env("Fun Money")["id"],
+        category_id=cat("Fun Money")["id"],
+    )
+    change(
+        type="envelope_add_category", envelope_id=other["id"], category_id=cat("Fun Money")["id"]
+    )
+    sync()
+    assert months_sent(world) == [] and ynab_assigned(world, "fun") == before
+    items = conflict_items()
+    assert len(items) == 3 and {i["entity"] for i in items} == {"assigned"}
+    assert "differs between Open Net Worth and YNAB" in items[0]["reason"]
+
+
+def test_a_newly_paired_existing_ynab_category_is_not_overwritten_by_ours(world):  # noqa: F811
+    enable()
+    sync()
+    mine = make("Gifts")
+    change(type="assign", month=month_of(world, 0), envelope_id=env("Gifts")["id"], amount=100.0)
+    ynab_stub.ynab_add_category(world.state, "needs", "🎁 Gifts", key="gifts")
+    ynab_stub.ynab_budget(world.state, 0, "gifts", 300_000)
+    sync()
+    assert ynab_pairs.load(ynab_stub.PLAN)[0][world.state["C"]["gifts"]]["category"] == mine["id"]
+    assert months_sent(world) == [] and ynab_assigned(world, "gifts") == {0: 300_000}
+    (item,) = conflict_items()
+    assert item["entity"] == "assigned" and item["onw"] == {"amount": 100.0}
+    assert item["ynab"] == {"amount": 300.0}
+    ynab_sync.resolve.resolve(item["id"], "ynab")
+    assert assigned_of(world, "Gifts", 0) == 300.0
+
+
+def test_a_category_made_from_ynabs_has_nothing_to_lose_and_takes_its_figures(world):  # noqa: F811
+    enable()
+    sync()
+    ynab_stub.ynab_add_category(world.state, "needs", "Gifts", key="gifts")
+    ynab_stub.ynab_budget(world.state, 0, "gifts", 300_000)
+    sync()
+    assert assigned_of(world, "Gifts", 0) == 300.0 and not conflict_items()
+    assert months_sent(world) == []
+
+
+# ── fix round 3: parked categories, stale items, nits ──
+
+
+def test_moving_the_envelope_of_a_parked_category_is_not_a_conflict_in_to_ynab(world):  # noqa: F811
+    ynab_sync.update_settings(True, "1h", ynab_stub.PLAN, "to_ynab")
+    sync()
+    categories_service.set_category_hidden(cat("Groceries")["id"], True)
+    sync()
+    assert ynab_group_of(world, "Groceries") == "Hidden in Open Net Worth"
+    change(type="move_category", category=env("Groceries")["id"], group_id=group("Wants")["id"])
+    run = sync()
+    assert run["ok"] and not conflict_items()
+    assert ynab_group_of(world, "Groceries") == "Hidden in Open Net Worth"
+
+
+def test_showing_a_parked_category_after_its_envelope_moved_keeps_the_persons_move(world):  # noqa: F811
+    enable()
+    sync()
+    categories_service.set_category_hidden(cat("Groceries")["id"], True)
+    sync()
+    change(type="move_category", category=env("Groceries")["id"], group_id=group("Wants")["id"])
+    sync()
+    categories_service.set_category_hidden(cat("Groceries")["id"], False)
+    sync()
+    assert ynab_group_of(world, "Groceries") == "Wants"
+    assert sync()["summary"] == "Nothing changed"
+    assert env("Groceries")["group_id"] == group("Wants")["id"]
+
+
+def test_a_review_item_whose_category_is_deleted_here_closes_itself(world):  # noqa: F811
+    enable()
+    sync()
+    change(type="category_rename", key=cat("Utilities")["id"], new_label="Food")
+    ynab_stub.ynab_rename_category(world.state, "util", "Meals")
+    sync()
+    assert len(conflict_items()) == 1
+    change(type="category_delete", key=cat("Food")["id"], reassign=True)
+    sync()
+    assert not conflict_items()
+
+
+def test_either_button_dismisses_an_item_whose_category_has_gone(world):  # noqa: F811
+    enable()
+    sync()
+    change(type="category_rename", key=cat("Utilities")["id"], new_label="Food")
+    ynab_stub.ynab_rename_category(world.state, "util", "Meals")
+    sync()
+    (item,) = conflict_items()
+    change(type="category_delete", key=cat("Food")["id"], reassign=True)  # no sync in between
+    ynab_sync.resolve.resolve(item["id"], "ynab")
+    assert not conflict_items()
+
+
+def test_a_choose_item_for_a_category_deleted_in_ynab_closes_itself(world):  # noqa: F811
+    enable()
+    sync()
+    make("Gifts", envelope=False)
+    make("🎁 Gifts", envelope=False)
+    ynab_stub.ynab_add_category(world.state, "needs", "gifts", key="gifts3")
+    sync()
+    assert len(conflict_items()) == 1
+    ynab_stub.ynab_delete_category(world.state, "gifts3")
+    sync()
+    assert not conflict_items()
+
+
+def test_resolving_a_category_item_in_ynab_leaves_a_run_record(world):  # noqa: F811
+    enable()
+    sync()
+    change(type="category_rename", key=cat("Groceries")["id"], new_label="Food")
+    ynab_stub.ynab_rename_category(world.state, "groc", "Meals")
+    sync()
+    (item,) = conflict_items()
+    before = len(import_runs.list_runs("ynab", include_archived=True))
+    ynab_sync.resolve.resolve(item["id"], "onw")  # sends this book's name to YNAB
+    runs = import_runs.list_runs("ynab", include_archived=True)
+    assert len(runs) == before + 1 and runs[0]["outcome"] == "Resolved a review item"
+
+
+def test_a_refused_park_is_not_sent_again_while_its_item_is_open(world):  # noqa: F811
+    enable()
+    sync()
+    world.state["reject_writes"] = "no"
+    change(type="category_delete", key=cat("Utilities")["id"])
+    sync()
+    (item,) = conflict_items()
+    assert item["reason"] == (
+        "YNAB would not move Utilities to Hidden in Open Net Worth. "
+        "Move it there or hide it in YNAB yourself."
+    )
+    tried = len(world.writes)
+    sync()
+    sync()
+    assert len(world.writes) == tried
+
+
+def test_the_pairs_of_other_plans_survive_pointing_the_sync_at_a_plan(world):  # noqa: F811
+    ynab_pairs.save([ynab_pairs.cat_doc("another-plan", "y9", "cat_x", None, {}, {})])
+    enable()
+    sync()
+    assert "y9" in ynab_pairs.load("another-plan")[0]
+
+
+def test_a_paired_category_put_in_an_envelope_later_does_not_overwrite_ynabs_older_figures(
+    world,  # noqa: F811
+):
+    ynab_sync.update_settings(True, "1h", ynab_stub.PLAN, "to_ynab")  # YNAB's money is not pulled
+    sync()
+    mine = make("Gifts", envelope=False)
+    ynab_stub.ynab_add_category(world.state, "needs", "🎁 Gifts", key="gifts")
+    ynab_stub.ynab_budget(world.state, 0, "gifts", 300_000)
+    sync()  # paired; not budgeted here, so nothing about Assigned yet
+    assert ynab_pairs.load(ynab_stub.PLAN)[0][world.state["C"]["gifts"]]["category"] == mine["id"]
+    e = change(type="envelope_create", name="Gift money", group_id=group("Needs")["id"])["envelope"]
+    change(type="envelope_add_category", envelope_id=e["id"], category_id=mine["id"])
+    change(type="assign", month=month_of(world, 0), envelope_id=e["id"], amount=100.0)
+    sync()  # YNAB's figure did not change in this read: it is read afresh
+    assert months_sent(world) == [] and ynab_assigned(world, "gifts") == {0: 300_000}
+    (item,) = conflict_items()
+    assert item["entity"] == "assigned" and item["ynab"] == {"amount": 300.0}

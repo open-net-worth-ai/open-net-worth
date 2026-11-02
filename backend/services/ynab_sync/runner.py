@@ -62,7 +62,7 @@ def _summary(tally: Counter, open_items: int) -> str:
 
 
 def _assigned_phase(
-    ctx, client, base: Baselines, change, tally: Counter, first: bool, st: dict
+    ctx, client, base: Baselines, change, tally: Counter, first: bool, st: dict, fresh=frozenset()
 ) -> None:
     if first:
         base.seed_assigned({k: v for k, v in change.assigned.items() if v})
@@ -72,7 +72,7 @@ def _assigned_phase(
         change.assigned.setdefault((month, cid), milli)
     st["held_assigned"] = []
     items = assigned.evaluate(
-        ctx, base.assigned, change.assigned, planning.assignments_store.all_map(), first
+        ctx, base.assigned, change.assigned, planning.assignments_store.all_map(), first, fresh
     )
     open_items = conflicts.open_keys()
     names = {c["id"]: c["name"] for c in ctx.meta["categories"]}
@@ -106,7 +106,12 @@ def _assigned_phase(
                 it,
                 names,
                 conflicts.CONFLICT,
-                "Changed in both Open Net Worth and YNAB since the last sync.",
+                (
+                    f"The Assigned of {names.get(it.cid, 'this category')} for {it.month} differs "
+                    "between Open Net Worth and YNAB. Pick the one to keep."
+                    if it.cid in fresh
+                    else "Changed in both Open Net Worth and YNAB since the last sync."
+                ),
             )
         else:
             pushes.append(it)
@@ -167,11 +172,12 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
     recorder.phase("reconciling categories")
     cat_plan = context.category_plan(meta, mirror, base.assigned)
     try:
-        change.assigned.update(
-            category_sync.reconcile(
-                client, base, st, meta, tally, change.assigned, cat_plan["categories"]
-            )
+        resumed = category_sync.reconcile(
+            client, base, st, meta, tally, change.assigned, cat_plan["categories"], change.full
         )
+        for key, milli in resumed.figures.items():
+            change.assigned.setdefault(key, milli)  # a figure this very read brought is newer
+        fresh = resumed.cids
     except BaseException:
         base.flush()
         sync_state.save_meta(meta)
@@ -189,7 +195,7 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
         st["held"], st["held_ynab"] = sorted(held["onw"]), sorted(held["ynab"])
         tally["deferred"] += len(st["pending"])
         recorder.phase("reconciling Assigned")
-        _assigned_phase(ctx, client, base, change, tally, first, st)
+        _assigned_phase(ctx, client, base, change, tally, first, st, fresh)
         starts.review(ctx, st)
     finally:
         base.flush()
@@ -405,7 +411,7 @@ def _adopt_plan(plan_id: str) -> dict:
     currency = (plan.get("currency") or "").upper()
     if len(currency) != 3:
         raise ValidationError("That YNAB plan has no currency set; open it in YNAB once first.")
-    sync_state.reset(keep_plan=plan_id)
+    sync_state.reset()
     return {
         **sync_state.blank(),
         "plan_id": plan_id,

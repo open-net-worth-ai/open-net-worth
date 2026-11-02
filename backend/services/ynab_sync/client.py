@@ -90,7 +90,8 @@ class YnabClient:
         return self._call("POST", "/categories", body=body)["category"]
 
     def update_category(self, category_id: str, fields: dict) -> dict:
-        """Rename, move to another group or hide/show: ``name``, ``category_group_id``, ``hidden``."""
+        """Rename or move to another group: ``name``, ``category_group_id`` (YNAB's API takes no
+        ``hidden``: a category cannot be hidden through it)."""
         return self._call(
             "PATCH", f"/categories/{_checked(category_id)}", body={"category": fields}
         )["category"]

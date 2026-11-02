@@ -4,25 +4,33 @@ to YNAB within the run's request allowance, and filing a review item. See ``cate
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import dataclass, field
 
 from backend.core.errors import ExternalServiceError
 from backend.services.ynab_migration import category_make as make
 from backend.services.ynab_migration.category_match import Book
 from backend.services.ynab_migration.mapping import clean
-from backend.services.ynab_pairs import norm
+from backend.services.ynab_pairs import NOT_BUDGETED, PARKING, norm
 from backend.services.ynab_sync import client as ynab_client
-from backend.services.ynab_sync import conflicts, recorder
+from backend.services.ynab_sync import conflicts, delta, recorder
 from backend.services.ynab_sync.baselines import Baselines
 from backend.services.ynab_sync.client import RateCapReached, YnabClient
 
 CATEGORY_REQUESTS = 20  # of a run's requests; transactions and Assigned keep the rest
-NOT_BUDGETED = "Not budgeted"  # the YNAB group for a category that sits in no envelope here
-# YNAB's API cannot hide a category, so one hidden, deleted or merged here is moved into this group
-# (made once, for the person to hide in YNAB if they like). Neither it, "Not budgeted" nor YNAB's
-# own "Hidden Categories" is ever a group the book follows a category into.
-HIDDEN_HERE = "Hidden in Open Net Worth"
-PARKING = (norm(NOT_BUDGETED), norm(HIDDEN_HERE), "hidden categories")
+# YNAB's API cannot hide a category, so one hidden, deleted or merged here is moved into the group
+# HIDDEN_HERE (made once, for the person to hide in YNAB if they like). Neither it, "Not budgeted"
+# nor YNAB's own "Hidden Categories" (``ynab_pairs.PARKING``) is ever a group the book follows a
+# category into.
 FIELDS = ("name", "hidden", "group")
+
+
+@dataclass
+class Resumed:
+    """The categories whose Assigned must be compared afresh this run (``cids``: they have no
+    agreed baseline, so every difference goes to review) and YNAB's figures for them."""
+
+    figures: dict[tuple[str, str], int] = field(default_factory=dict)
+    cids: set[str] = field(default_factory=set)
 
 
 def trim(text: str) -> str:
@@ -42,6 +50,7 @@ class Base:
         meta: dict,
         tally: Counter,
         assigned_seen: dict,
+        full: bool = False,
     ) -> None:
         self.client, self.base, self.meta, self.tally = client, base, meta, tally
         self.direction, self.plan_id = st["direction"], st["plan_id"]
@@ -55,7 +64,9 @@ class Base:
         self.deferred = 0
         self.quiet = False  # resolving one item: a refusal is the caller's error, not a new item
         self.errors: list[str] = []
-        self.assigned_seen = assigned_seen
+        self.assigned_seen, self.full = assigned_seen, full
+        self.fresh: set[str] = set()
+        self._figures: dict[tuple[str, str], int] | None = None
         self.ynab_assigned = {cid for (_, cid), milli in assigned_seen.items() if milli}
 
     @property
@@ -148,6 +159,18 @@ class Base:
         ) and saved.get("category_group_id", body.get("category_group_id")) == body.get(
             "category_group_id", saved.get("category_group_id")
         )
+
+    def ynab_figures(self) -> dict[tuple[str, str], int]:
+        """YNAB's Assigned for every category and month: this run's read when it was a full one,
+        else one more request for the whole plan."""
+        if self._figures is None:
+            if self.full:
+                self._figures = dict(self.assigned_seen)
+            else:
+                data = self.send(self.client.read_plan, None)
+                plan = data.get("plan") or data.get("budget") or {}
+                self._figures = delta.assigned_of(plan)
+        return self._figures
 
     # ── telling the person ──
     def count(self, direction: str, text: str) -> None:

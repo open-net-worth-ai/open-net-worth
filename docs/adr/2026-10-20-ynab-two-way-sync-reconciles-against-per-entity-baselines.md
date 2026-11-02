@@ -232,3 +232,17 @@ category both **labels a transaction and holds the budget**; here a **category**
 - **Not done:** a YNAB category hidden BY YNAB's own app moves to its "Hidden Categories" group;
   the sync reads `original_category_group_id` so that is not read as a move, but it has only been
   exercised against the stub.
+- **Money rule: no Assigned moves without an agreed baseline or the person's choice.** Whenever a
+  category's envelope changes (none to one, one to another) or it is paired with a YNAB category
+  that already existed, `pair.resume` / the envelope change makes the category *fresh*: its
+  baselines are dropped, YNAB's figures are read in full (this run's read when it was a full one,
+  else one more request: `Base.ynab_figures`), and `assigned.evaluate(..., fresh=)` turns any
+  push or pull for it into a review item. A category with money in YNAB and no envelope gets one
+  automatically only if it never had one (`pair.had_env`); otherwise the review asks (`env:`
+  item; "Give it one?" takes YNAB's figures, "Leave it without one" is remembered as `x:e:`).
+  Only a category made just now from the other side's has nothing to lose and is not fresh.
+- **Parking.** A move INTO a parking group is not a YNAB-side change; every push carrying a group
+  records the confirmed group; showing a parked category returns it to `pair.home` only while its
+  envelope has not moved since (`pair.home_for`), else to the group paired with the envelope's.
+  The import never makes a book group from a parking group (`ynab_pairs.PARKING`). Pairs and
+  remembered decisions of every plan survive a reset.

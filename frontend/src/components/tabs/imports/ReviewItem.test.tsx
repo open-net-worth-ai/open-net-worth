@@ -84,4 +84,21 @@ describe('a category or group', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add as a new category' }))
     expect(onKeep).toHaveBeenLastCalledWith('ynab')
   })
+
+  it('asks whether to give a category YNAB funds an envelope', () => {
+    const onKeep = vi.fn()
+    const item: ReviewItem = {
+      ...base,
+      kind: 'choose',
+      entity: 'budget',
+      reason: 'YNAB has money assigned to Fun Money, which has no envelope here. Give it one?',
+      fields: undefined,
+    }
+    render(<ReviewCard item={item} busy={false} onKeep={onKeep} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Give it an envelope' }))
+    expect(onKeep).toHaveBeenLastCalledWith('ynab')
+    fireEvent.click(screen.getByRole('button', { name: 'Leave it without one' }))
+    expect(onKeep).toHaveBeenLastCalledWith('onw')
+    expect(screen.queryByRole('button', { name: 'Add as a new category' })).toBeNull()
+  })
 })

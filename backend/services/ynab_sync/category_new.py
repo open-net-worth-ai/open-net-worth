@@ -10,6 +10,7 @@ from backend.services.ynab_migration.category_match import env_ref, propose
 from backend.services.ynab_migration.mapping import clean
 from backend.services.ynab_pairs import norm
 from backend.services.ynab_sync import conflicts
+from backend.services.ynab_sync.category_base import Resumed
 from backend.services.ynab_sync.category_pairs import Pairs
 from backend.services.ynab_sync.client import RateCapReached
 
@@ -151,9 +152,8 @@ class News(Pairs):
         else:
             cat = self.create_here(c)
         paired.add(cat["id"])
-        self.pair_new(
-            c, self.book.rows[cat["id"]], f"Added {cat['label']} here, as it is new in YNAB."
-        )
+        text = f"Added {cat['label']} here, as it is new in YNAB."
+        self.pair_new(c, self.book.rows[cat["id"]], text, fresh=m.kind == "envelope")
 
     def create_here(self, c: dict) -> dict:
         if self.parking(c["group_id"]):
@@ -166,11 +166,15 @@ class News(Pairs):
         text = f"Matched YNAB's {c['name']} with your {cat['label']}."
         self.pair_new(c, cat, text)
 
-    def pair_new(self, c: dict, cat: dict, text: str) -> None:
+    def pair_new(self, c: dict, cat: dict, text: str, fresh: bool = True) -> None:
+        """Pair a YNAB category with a category here, both recorded as they stand. ``fresh``
+        (the default): one of the two already existed, so their Assigned has no agreed baseline
+        and the first comparison goes to review; only a category just made from the other
+        side's has nothing to lose."""
         solo, held = self.book.solo_envelope(cat["id"]), self.book.env_of.get(cat["id"])
         doc = ynab_pairs.cat_doc(
             self.plan_id, c["id"], cat["id"], solo["id"] if solo else None,
-            self.ostate(cat), self.ystate(self.yc[c["id"]]),
+            self.ostate(cat), self.ystate(self.yc[c["id"]]), resume=fresh,
         )  # fmt: skip
         self.base.set_cat(doc)
         if held is not None and solo is None:
@@ -261,42 +265,45 @@ class News(Pairs):
         self.count("sent", f"Added {cat['label']} to YNAB.")
 
     # ── the budget link ──
-    def budgets(self) -> dict[tuple[str, str], int]:
-        """A category's Assigned syncs only while it is alone in its envelope. Leaving that state
-        is said once, and YNAB's figures are noted meanwhile; coming back compares them with
-        this book's, and returns them for the Assigned step to read as YNAB's figures."""
-        resumed: dict[tuple[str, str], int] = {}
+    def budgets(self) -> Resumed:
+        """A category's Assigned syncs only while it is alone in its envelope. Whenever that
+        envelope changes (it left one, entered one, or moved to another) there is nothing both
+        sides agreed on any more: the baselines are dropped and YNAB's figures are compared with
+        this book's afresh, so every difference goes to review and nothing is overwritten."""
+        resumed = Resumed()
         for ycid, p in self.base.cats.items():
             cat = self.book.rows.get(p["category"])
             if p["gone"] or cat is None:
                 continue
-            if p.get("paused"):
-                self.note_theirs(ycid, p)
             solo = self.book.solo_envelope(cat["id"])
             now = solo["id"] if solo else None
-            if now != p["env"]:
-                resumed |= self.move_budget(ycid, p, cat, now)
+            if now != p["env"] or (now and p.get("resume")):
+                resumed.figures |= self.move_budget(ycid, p, cat, now)
             if p["env"] is None and self.book.env_of.get(cat["id"]) is None:
-                self.give_envelope_for_money(ycid, p, cat)
+                self.envelope_for_money(ycid, p, cat)
+        resumed.cids = set(self.fresh)
         return resumed
-
-    def note_theirs(self, ycid: str, p: dict) -> None:
-        theirs = p.setdefault("theirs", {})
-        theirs.update({m: milli for (m, c), milli in self.assigned_seen.items() if c == ycid})
-        self.base.set_cat(p)
 
     def move_budget(self, ycid: str, p: dict, cat: dict, now: str | None) -> dict:
         before = p["env"]
-        p["env"] = now
-        resumed: dict[tuple[str, str], int] = {}
-        if now is not None:
-            if before is None and p.get("paused"):
-                resumed = self.resume_figures(ycid, p)
-        else:
-            p["paused"], p["theirs"] = True, {}
-            self.say_paused(cat)
+        if now is None:
+            p["env"], p["resume"] = None, True
+            if before is not None:
+                self.say_paused(cat)
+            self.base.set_cat(p)
+            return {}
+        try:
+            figures = {k: v for k, v in self.ynab_figures().items() if k[1] == ycid}
+        except RateCapReached:  # stays paused until YNAB's figures can be read
+            p["env"], p["resume"] = None, True
+            self.deferred += 1
+            self.base.set_cat(p)
+            return {}
+        self.base.drop_assigned_of(ycid)
+        p["env"], p["had_env"], p["resume"] = now, True, False
+        self.fresh.add(ycid)
         self.base.set_cat(p)
-        return resumed
+        return figures
 
     def say_paused(self, cat: dict) -> None:
         held = self.book.env_of.get(cat["id"])
@@ -308,31 +315,68 @@ class News(Pairs):
         )
         self.note_once(f"{cat['id']}:out", cat["label"], line)
 
-    def resume_figures(self, ycid: str, p: dict) -> dict[tuple[str, str], int]:
-        """YNAB's figure for every month either side holds: what it changed meanwhile, else what
-        both agreed before. The baselines are cleared so any difference is asked about."""
-        months = {m for (m, c) in self.base.assigned if c == ycid} | set(p.get("theirs") or {})
-        figures = {
-            (m, ycid): (p.get("theirs") or {}).get(m, self.base.assigned.get((m, ycid), 0))
-            for m in months
-        }
-        self.base.drop_assigned_of(ycid)
-        p["paused"], p["theirs"] = False, {}
-        return figures
-
-    def give_envelope_for_money(self, ycid: str, p: dict, cat: dict) -> None:
-        """YNAB assigned money to a category that has no envelope here: it gets one of its own."""
+    def envelope_for_money(self, ycid: str, p: dict, cat: dict) -> None:
+        """YNAB assigned money to a category that has no envelope here. One that never had an
+        envelope gets one of its own; one the person took out of its envelope is asked about."""
         if ycid not in self.ynab_assigned or not self.can_pull:
             return
+        if f"e:{ycid}" in self.base.declined:
+            return
+        if not p.get("had_env"):
+            self.give_envelope_now(ycid, p, cat)
+            return
+        reason = (
+            f"YNAB has money assigned to {cat['label']}, which has no envelope here. Give it one?"
+        )
+        self.file(
+            conflicts.CHOOSE, f"env:{ycid}", cat["label"], reason,
+            entity="budget", ynab_id=ycid, category=cat["id"],
+        )  # fmt: skip
+
+    def give_envelope_now(self, ycid: str, p: dict, cat: dict) -> dict:
         yg = self.yg.get(self.yc.get(ycid, {}).get("category_group_id")) or {}
         gid = None
         if yg and not self.parking(yg["id"]):
             gid = self.groups.ensure(self.book, yg["id"], clean(yg["name"], 120))
         env = make.give_envelope(self.book, cat, gid)
-        p["env"] = env["id"]
+        p["env"], p["had_env"] = env["id"], True
         # The agreed group is left as it was, so the next comparison sees the move here and
         # takes the YNAB category out of "Not budgeted" into the group paired with this one.
         self.base.set_cat(p)
         self.count(
             "pulled", f"Added an envelope for {cat['label']}, as YNAB has money assigned to it."
         )
+        return env
+
+    # ── review items whose subject has gone ──
+    def close_stale(self) -> None:
+        """An open item about something that no longer exists is closed, not left to be
+        dismissed by hand."""
+        for key in list(self.open):
+            kind, _, ident = key.partition(":")
+            p, ycat = self.base.cats.get(ident), self.yc.get(ident)
+            ycat_gone = ycat is None or ycat.get("deleted")
+            if kind == "cat":
+                moot = p is not None and p["category"] not in self.book.rows
+                moot = moot and self.open[key].get("kind") == conflicts.CONFLICT
+                stale = p is None or p.get("gone") or ycat_gone or moot
+            elif kind == "group":
+                gp = self.base.groups.get(ident)
+                stale = gp is None or gp.get("gone")
+            elif kind == "new":
+                stale = p is not None or ycat_gone
+            elif kind == "newhere":
+                paired = {q["category"] for q in self.base.cats.values()}
+                stale = ident not in self.book.rows or ident in paired
+            elif kind == "env":
+                stale = (
+                    p is None
+                    or p.get("gone")
+                    or bool(p["env"])
+                    or p["category"] not in self.book.rows
+                )
+            else:
+                continue
+            if stale:
+                conflicts.close(key)
+                self.open.pop(key, None)

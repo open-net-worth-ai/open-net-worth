@@ -23,16 +23,38 @@ def norm(name) -> str:
     return " ".join(kept.split())
 
 
+# YNAB groups that only park categories the book has no group for; none of them ever pairs with
+# (or is made into) a book group, and no category is followed into one.
+NOT_BUDGETED = "Not budgeted"
+HIDDEN_HERE = "Hidden in Open Net Worth"
+PARKING = ("not budgeted", "hidden in open net worth", "hidden categories")
+
+
+def is_parking_name(name) -> bool:
+    return norm(name) in PARKING
+
+
 def cat_doc(
-    plan_id: str, ynab_id: str, category_id: str, env_id: str | None, onw: dict, ynab: dict
+    plan_id: str,
+    ynab_id: str,
+    category_id: str,
+    env_id: str | None,
+    onw: dict,
+    ynab: dict,
+    resume: bool = False,
 ) -> dict:
     """``env``: the envelope holding ONLY this category — the one whose Assigned syncs with YNAB —
-    or ``None`` (in no envelope, or in one that holds other categories too)."""
+    or ``None`` (in no envelope, or in one that holds other categories too). ``had_env``: it has
+    been in one since it was paired. ``resume``: its Assigned has no agreed baseline yet (it was
+    paired with a YNAB category that already existed), so the next comparison starts afresh and
+    every difference goes to review."""
     return {
         "id": f"c:{ynab_id}",
         "plan": plan_id,
         "category": category_id,
         "env": env_id,
+        "had_env": env_id is not None,
+        "resume": resume,
         "gone": False,
         "onw": onw,
         "ynab": ynab,
@@ -70,8 +92,8 @@ def decline_doc(plan_id: str | None, key: str) -> dict:
     return {"id": f"x:{key}", "plan": plan_id}
 
 
-def keep_for(plan_id: str | None) -> list[dict]:
-    """The pair and decision documents of one plan, to carry across a reset of the sync's other
-    state."""
-    cats, groups = load(plan_id)
-    return [*cats.values(), *groups.values(), *(decline_doc(plan_id, k) for k in declined(plan_id))]
+def keep_for() -> list[dict]:
+    """Every plan's pair and decision documents, to carry across a reset of the sync's other
+    state: how a YNAB category pairs with a category here is knowledge about the book, so
+    pointing the sync at another plan and back (or importing again) does not lose it."""
+    return YnabBaselineStore().pair_documents()

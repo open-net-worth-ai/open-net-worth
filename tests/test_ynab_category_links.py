@@ -166,7 +166,7 @@ def test_a_choice_that_is_not_available_is_refused(ynab):
     both = {ynab_id(ynab, "groc"): f"cat:{mine}", ynab_id(ynab, "dine"): f"cat:{mine}"}
     assert run(category_links=both)["status"] == "failed"
     stray = run("preview", category_links={"nope": ""})
-    assert stray["status"] == "failed" and "not in the plan" in stray["error"]
+    assert stray["status"] == "failed" and "no longer in the plan" in stray["error"]
 
 
 def test_importing_again_keeps_the_pairing(ynab):
@@ -283,3 +283,26 @@ def test_the_note_about_a_shared_envelope_is_said_by_the_import_and_not_again_by
     run_after = sync()  # Water is new here: it goes to YNAB, and Utilities' note is not repeated
     notes = import_runs.get(run_after["run_id"]).get("notes") or []
     assert said not in [n["reason"] for n in notes]
+
+
+def test_a_category_in_one_of_ynabs_parking_groups_never_makes_a_book_group(ynab):
+    for name, key in (("Not budgeted", "nb"), ("Hidden in Open Net Worth", "park")):
+        ynab_stub.ynab_add_group(ynab.state, key, name)
+        ynab_stub.ynab_add_category(ynab.state, key, f"Odd {key}", key=f"odd{key}")
+        ynab_stub.ynab_budget(ynab.state, 0, f"odd{key}", 5_000)
+    preview = run("preview")["preview"]
+    parked = [g for g in preview["category_groups"] if g["name"] in ("Not budgeted",)]
+    assert parked and parked[0]["group"] is None
+    assert run()["status"] == "done"
+    names = {g["name"] for g in planning.list_groups()}
+    assert "Not budgeted" not in names and "Hidden in Open Net Worth" not in names
+    assert cat("Odd nb") and cat("Odd park")
+    assert (
+        ynab_pairs.load(ynab_stub.PLAN)[1]
+        .keys()
+        .isdisjoint({ynab.state["G"]["nb"], ynab.state["G"]["park"]})
+    )
+    again = run()  # a re-import makes no book group either
+    assert again["status"] == "done" and "Not budgeted" not in {
+        g["name"] for g in planning.list_groups()
+    }

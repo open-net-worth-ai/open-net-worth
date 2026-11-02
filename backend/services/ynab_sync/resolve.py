@@ -60,7 +60,7 @@ def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
         client = YnabClient(st["plan_id"], Budget(RESOLVE_REQUESTS))
         if item["entity"] == "start":
             starts.resolve(item, keep)
-        elif item["entity"] in ("category", "group", "new_category"):
+        elif item["entity"] in ("category", "group", "new_category", "budget"):
             category_resolve.apply(item, keep, choice, st, meta, base, client)
         elif _held_side(st["direction"], keep):
             _accept(ctx, item, keep, base)

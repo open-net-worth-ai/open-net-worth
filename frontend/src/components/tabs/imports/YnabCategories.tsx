@@ -61,9 +61,12 @@ export function Categories({ preview: p, ...pick }: { preview: Preview } & Categ
   )
 }
 
-// A category hidden in YNAB comes in hidden; the line under it says so.
+// A category made new from one hidden in YNAB comes in hidden, and the line under it says so. One
+// matched with a category of yours is left as it is.
 const noteOf = (c: PreviewCategory) =>
-  c.hidden ? `${c.note}. Hidden in YNAB, so hidden here too` : c.note
+  c.hidden && (c.link === null || c.link.kind === 'envelope')
+    ? `${c.note.replace(/\.$/, '')}. Hidden in YNAB, so hidden here too`
+    : c.note
 
 // The options for one category: what it matches (when the plan proposed it), a new category, the
 // other categories and envelopes of the book that no other YNAB category has taken.

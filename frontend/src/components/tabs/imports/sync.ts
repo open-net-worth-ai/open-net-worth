@@ -19,7 +19,7 @@ export interface Version {
 export interface ReviewItem {
   id: string
   kind: 'conflict' | 'unsupported' | 'failed' | 'before_start' | 'choose'
-  entity?: 'txn' | 'assigned' | 'start' | 'category' | 'group' | 'new_category'
+  entity?: 'txn' | 'assigned' | 'start' | 'category' | 'group' | 'new_category' | 'budget'
   title: string
   reason: string
   onw: Version | null

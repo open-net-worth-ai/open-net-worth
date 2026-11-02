@@ -78,7 +78,9 @@ class Recorder:
         return any(self.totals.values())
 
     def sent_to_ynab(self) -> bool:
-        return bool(self.totals["sent"] or self.totals["assigned_sent"])
+        return bool(
+            self.totals["sent"] or self.totals["assigned_sent"] or self.totals["categories_sent"]
+        )
 
     def snapshot(self) -> dict:
         return {
@@ -196,6 +198,8 @@ def category_change(rec: Recorder, direction: str, text: str) -> None:
     """One category or group change, as a plain sentence: ``direction`` is ``sent`` (YNAB was
     changed) or ``pulled`` (this book was)."""
     rec.add("category_changes", {"direction": direction, "text": text}, total="categories")
+    if direction == "sent":
+        rec.totals["categories_sent"] += 1
 
 
 @_safe

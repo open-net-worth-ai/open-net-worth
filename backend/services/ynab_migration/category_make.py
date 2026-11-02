@@ -10,7 +10,7 @@ from backend.services import categories as categories_service
 from backend.services import planning, ynab_pairs
 from backend.services.ynab_migration.category_match import Book
 from backend.services.ynab_migration.mapping import RESERVED_GROUPS
-from backend.services.ynab_pairs import norm
+from backend.services.ynab_pairs import is_parking_name, norm
 
 
 def _change(**change) -> dict:
@@ -89,7 +89,10 @@ class Groups:
         return group["id"]
 
     def match(self, book: Book, ynab_id: str, ynab_name: str) -> str | None:
-        """The paired group, or the one group of the same name not paired yet (now paired)."""
+        """The paired group, or the one group of the same name not paired yet (now paired). A
+        YNAB parking group is never paired with a book group."""
+        if is_parking_name(ynab_name):
+            return None
         if (found := self.our_id(ynab_id)) is not None:
             return found
         taken = {d["group"] for d in self.docs.values() if not d.get("gone")}

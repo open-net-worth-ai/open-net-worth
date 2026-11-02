@@ -88,7 +88,7 @@ type Keep = (keep: 'onw' | 'ynab', choice?: string) => void
 // with several things here asks which. Each button says what it does.
 function NameCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
   const { item, busy, onKeep } = props
-  const asking = item.kind === 'choose'
+  const asking = item.kind === 'choose' && item.entity === 'new_category'
   const ours = item.category !== undefined // a category here YNAB would not take
   return (
     <Stack gap="--space-2">
@@ -127,6 +127,15 @@ function NameCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
             ))}
             <Button size="sm" disabled={busy} onClick={() => onKeep('ynab')}>
               Add as a new category
+            </Button>
+          </>
+        ) : item.entity === 'budget' ? (
+          <>
+            <Button size="sm" disabled={busy} onClick={() => onKeep('ynab')}>
+              Give it an envelope
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => onKeep('onw')}>
+              Leave it without one
             </Button>
           </>
         ) : item.entity === 'new_category' ? (
@@ -200,7 +209,7 @@ function StartCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
 export function ReviewCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
   const { item } = props
   if (item.entity === 'start') return <StartCard {...props} />
-  if (item.entity === 'category' || item.entity === 'group' || item.entity === 'new_category')
+  if (['category', 'group', 'new_category', 'budget'].includes(item.entity ?? ''))
     return <NameCard {...props} />
   return (
     <Stack gap="--space-2">

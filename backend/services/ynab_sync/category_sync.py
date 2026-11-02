@@ -25,6 +25,7 @@ from __future__ import annotations
 from collections import Counter
 
 from backend.services.ynab_sync.baselines import Baselines
+from backend.services.ynab_sync.category_base import Resumed
 from backend.services.ynab_sync.category_new import News
 from backend.services.ynab_sync.client import YnabClient
 
@@ -37,12 +38,15 @@ def reconcile(
     tally: Counter,
     assigned_seen: dict,
     plan_cats: list[dict],
-) -> dict[tuple[str, str], int]:
-    """``plan_cats``: the YNAB categories worth mirroring (``mapping.plan_categories``). Returns
-    the YNAB Assigned figures (month, YNAB category) -> milliunits of categories whose Assigned
-    syncs again, for the Assigned step to compare with this book's."""
-    run = News(client, base, st, meta, tally, assigned_seen)
+    full: bool = False,
+) -> Resumed:
+    """``plan_cats``: the YNAB categories worth mirroring (``mapping.plan_categories``); ``full``:
+    ``assigned_seen`` is the whole plan's Assigned. Returns the categories whose Assigned has no
+    agreed baseline (their envelope changed) with YNAB's figures, for the Assigned step to
+    compare with this book's and send every difference to review."""
+    run = News(client, base, st, meta, tally, assigned_seen, full)
     try:
+        run.close_stale()
         run.sync_groups()
         run.sync_pairs()
         run.pull_new(plan_cats)

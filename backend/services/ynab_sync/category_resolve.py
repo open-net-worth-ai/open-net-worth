@@ -10,8 +10,9 @@ from collections import Counter
 from backend.core.errors import ConflictError
 from backend.services.ynab_migration import category_make as make
 from backend.services.ynab_migration.mapping import clean
-from backend.services.ynab_sync import conflicts
+from backend.services.ynab_sync import assigned, conflicts
 from backend.services.ynab_sync.category_new import News
+from backend.services.ynab_sync.client import RateCapReached
 
 
 def _check(sync: News) -> None:
@@ -31,12 +32,11 @@ def _category(sync: News, item: dict, keep: str) -> None:
     p = sync.base.cats.get(ycid)
     cat = sync.book.rows.get(p["category"]) if p else None
     ycat = sync.yc.get(ycid)
-    if p is not None and cat is None and item["kind"] == conflicts.FAILED:
-        p["gone"] = True  # YNAB would not take the move; leaving it where it is is the answer
-        sync.base.set_cat(p)
+    if cat is None or ycat is None or ycat.get("deleted"):
+        if p is not None:  # a side is gone, so there is nothing left to settle: let it go
+            p["gone"] = True
+            sync.base.set_cat(p)
         return
-    if cat is None or ycat is None:
-        raise ConflictError("Neither side of this item exists any more.")
     y, o = sync.ystate(ycat), sync.ostate(cat)
     # A refused change has no second version to pick between: whatever still differs is settled.
     wanted = ("conflict", "pull", "push") if item["kind"] == conflicts.FAILED else ("conflict",)
@@ -58,8 +58,11 @@ def _group(sync: News, item: dict, keep: str) -> None:
     gp = sync.base.groups.get(ygid)
     yg = sync.yg.get(ygid)
     og = next((g for g in sync.book.groups if gp and g["id"] == gp["group"]), None)
-    if gp is None or yg is None or og is None:
-        raise ConflictError("Neither side of this item exists any more.")
+    if gp is None or yg is None or yg.get("deleted") or og is None:
+        if gp is not None:
+            gp["gone"] = True
+            sync.base.set_group(gp)
+        return
     y, o = clean(yg["name"], 120), og["name"]
     if _protected(sync, keep):
         side, now = ("ynab", y) if keep == "onw" else ("onw", o)
@@ -74,8 +77,6 @@ def _group(sync: News, item: dict, keep: str) -> None:
 
 def _plan_category(sync: News, ycid: str) -> dict:
     ycat = sync.yc.get(ycid)
-    if ycat is None or ycat.get("deleted"):
-        raise ConflictError("This category is no longer in YNAB.")
     name = clean(ycat["name"], 120)
     return {
         "id": ycid,
@@ -92,8 +93,12 @@ def _choose(sync: News, item: dict, keep: str, choice: str | None) -> None:
     if item["kind"] == conflicts.FAILED and keep == "onw":  # leave it out, and keep it out
         sync.base.decline(f"y:{ycid}")
         return
+    ycat = sync.yc.get(ycid)
     if ycid in sync.base.cats:
-        raise ConflictError("That YNAB category is already matched. Sync again to see it.")
+        return  # matched meanwhile
+    if ycat is None or ycat.get("deleted"):  # gone from YNAB: leave it out
+        sync.base.decline(f"y:{ycid}")
+        return
     c = _plan_category(sync, ycid)
     paired = {p["category"] for p in sync.base.cats.values()}
     adding = keep == "ynab" or (choice or "").startswith("env:")
@@ -102,7 +107,7 @@ def _choose(sync: News, item: dict, keep: str, choice: str | None) -> None:
     if keep == "ynab":
         cat = sync.create_here(c)
         text = f"Added {cat['label']} here, as it is new in YNAB."
-        return sync.pair_new(c, sync.book.rows[cat["id"]], text)
+        return sync.pair_new(c, sync.book.rows[cat["id"]], text, fresh=False)
     if choice not in [o["ref"] for o in item["options"]]:
         raise ConflictError("Pick which of your categories to use.")
     if choice.startswith("cat:"):
@@ -128,11 +133,32 @@ def _new_here(sync: News, item: dict, keep: str) -> None:
         return
     cat = sync.book.rows.get(item["category"])
     if cat is None:
-        raise ConflictError("That category no longer exists here.")
+        return  # gone from this book: nothing to add to YNAB
     if not sync.can_push:
         raise ConflictError("In From YNAB mode YNAB isn't changed. Switch to Both ways first.")
     sync.create_in_ynab(cat)
     _check(sync)
+
+
+def _budget(sync: News, item: dict, keep: str) -> None:
+    """YNAB has money assigned to a category the person took out of its envelope: give it one
+    (and take YNAB's figures, as it was asked for), or leave it without."""
+    ycid = item["ynab_id"]
+    if keep == "onw":
+        sync.base.decline(f"e:{ycid}")
+        return
+    p = sync.base.cats.get(ycid)
+    cat = sync.book.rows.get(p["category"]) if p else None
+    if p is None or cat is None or p.get("gone") or p["env"]:
+        return
+    if not sync.can_pull:
+        raise ConflictError("In To YNAB mode this book isn't changed. Switch to Both ways first.")
+    env = sync.give_envelope_now(ycid, p, cat)
+    figures = {k: v for k, v in sync.ynab_figures().items() if k[1] == ycid and v}
+    sync.base.drop_assigned_of(ycid)
+    for (month, cid), milli in figures.items():
+        assigned.pull(assigned.Item(month, cid, env["id"], 0, 0, milli, "pull", False))
+        sync.base.set_assigned(month, cid, milli)
 
 
 def apply(item: dict, keep: str, choice: str | None, st: dict, meta: dict, base, client) -> None:
@@ -143,9 +169,15 @@ def apply(item: dict, keep: str, choice: str | None, st: dict, meta: dict, base,
             _category(sync, item, keep)
         elif item["entity"] == "group":
             _group(sync, item, keep)
+        elif item["entity"] == "budget":
+            _budget(sync, item, keep)
         elif "ynab_id" in item:
             _choose(sync, item, keep, choice)
         else:
             _new_here(sync, item, keep)
+    except RateCapReached:
+        raise ConflictError(
+            "YNAB can't take any more requests for now. Try again shortly."
+        ) from None
     finally:
         sync.finish()

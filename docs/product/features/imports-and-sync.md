@@ -141,7 +141,12 @@ time.
 - **Assigned only for one-category envelopes.** A category's Assigned syncs with its envelope only
   while the envelope holds just that category. If you put another category in, the run says so
   once ("Food holds several categories, so its Assigned isn't synced with YNAB."); take it out
-  again and the Assigned syncs again, with any difference listed for your review.
+  again and the Assigned syncs again, with any difference listed for your review. The same
+  holds whenever a category moves to another envelope, or is matched with a YNAB category that
+  already existed: the two sides' figures are compared afresh, and the sync never sends or takes
+  a month's Assigned over the other side's without your choice. If YNAB assigns money to a
+  category you took out of its envelope, the review asks **Give it one?** rather than making an
+  envelope for you.
 - **YNAB plan**: the plan it pairs with and when it was imported.
 - **⋯ → Re-check against YNAB** compares the book with YNAB's current figures, without writing.
 

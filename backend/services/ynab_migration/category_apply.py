@@ -22,6 +22,7 @@ from backend.services.ynab_migration.category_make import (
     make_category_in,
 )
 from backend.services.ynab_migration.category_match import Book
+from backend.services.ynab_pairs import is_parking_name
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,10 @@ def _category_for(c: dict, d: dict, book: Book, groups: Groups, made: Counter) -
     if kind == "envelope":
         made["categories"] += 1
         return make_category_in(book, d["envelope"], c["label"], c["hidden"])
+    if is_parking_name(c["group_name"]):  # YNAB's parking groups hold no budget
+        cat, _ = make_category(book, c["label"], None, c["hidden"], budgeted=False)
+        made["categories"] += 1
+        return cat
     group_id = groups.ensure(book, c["group_id"], c["group_name"])
     cat, _ = make_category(book, c["label"], group_id, c["hidden"])
     made["categories"] += 1
@@ -83,7 +88,8 @@ def apply(plan: dict, decisions: dict[str, dict], plan_id: str, book: Book):
         cat = book.rows[cat["id"]]
         env, held = book.solo_envelope(cat["id"]), book.env_of.get(cat["id"])
         if held is None and category_links.has_assigned(plan, c["id"]):
-            group_id = groups.ensure(book, c["group_id"], c["group_name"])
+            parked = is_parking_name(c["group_name"])
+            group_id = None if parked else groups.ensure(book, c["group_id"], c["group_name"])
             env = give_envelope(book, cat, group_id)
             made["envelopes"] += 1
         elif env is None and held is not None:

@@ -74,9 +74,12 @@ def evaluate(
     seen: dict,
     onw_all: dict[str, dict[str, float]],
     first: bool = False,
+    fresh: set[str] | frozenset[str] = frozenset(),
 ) -> list[Item]:
     """The Assigned entries that need acting on this run. On the first run nothing is pushed: YNAB
-    may have changed since the migration, so every difference is for the person to settle."""
+    may have changed since the migration, so every difference is for the person to settle. The
+    same holds for a category in ``fresh`` (its envelope changed, so no baseline is agreed): a
+    difference between the two sides is never sent or pulled, only asked about."""
     plain, card = _unique_envelopes(ctx), ctx.card_env
     by_env = {env: cid for cid, env in {**plain, **card}.items()}
     keys = set(baseline) | set(seen)
@@ -93,7 +96,7 @@ def evaluate(
         action = decide(_cents(b), _cents(b) if is_card else _cents(o), _cents(y))
         if action == "push" and not _in_window(month, ctx.meta["months"]):
             continue
-        if action == "push" and first:
+        if (first and action == "push") or (cid in fresh and action in ("push", "pull")):
             action = "conflict"
         if action != "noop":
             items.append(Item(month, cid, env, b, o, y, action, is_card))
