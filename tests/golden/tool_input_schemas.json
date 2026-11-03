@@ -10730,5 +10730,19 @@
     },
     "type": "object",
     "required": []
+  },
+  "plaid_reconnect_bank": {
+    "additionalProperties": false,
+    "properties": {
+      "bank": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The linked bank's name as plaid_get_status lists it. Omit when only one bank needs reconnecting."
+      }
+    },
+    "type": "object",
+    "required": []
   }
 }
