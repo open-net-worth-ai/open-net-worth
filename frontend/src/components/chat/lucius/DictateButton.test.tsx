@@ -12,7 +12,9 @@ vi.mock('livekit-client', () => ({
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
 let desktop = false
 // The desktop app's window bridge, in either mode; `startDictation` only on a Mac.
-let client: { startDictation?: () => Promise<void> } | undefined
+let client:
+  | { startDictation?: () => Promise<void>; stopDictation?: () => Promise<void> }
+  | undefined
 vi.mock('../../../platform/desktop', () => ({
   desktopBridge: () => (desktop ? {} : undefined),
   desktopClientBridge: () => client,
@@ -172,6 +174,7 @@ describe('DictateButton', () => {
     expect(focusBox).toHaveBeenCalledBefore(startDictation)
     expect(startDictation).toHaveBeenCalledTimes(1)
     expect(FakeRecognition.last).toBe(before) // no browser recogniser was made
+    fireEvent.click(screen.getByRole('button', { name: 'Stop dictating' }))
     // A refusal says how to turn it on.
     startDictation.mockImplementationOnce(() => Promise.reject(new Error('off')))
     await act(async () => {
@@ -183,6 +186,33 @@ describe('DictateButton', () => {
   it('is hidden in the desktop app off a Mac, even connected to a server', () => {
     client = {} // a Windows or Linux window: no system dictation to start
     render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it('ends macOS dictation on a second press, when a call starts, and when the message is sent', async () => {
+    const startDictation = vi.fn(() => Promise.resolve())
+    const stopDictation = vi.fn(() => Promise.resolve())
+    client = { startDictation, stopDictation }
+    const focusBox = vi.fn()
+    const props = { focusBox, onText: vi.fn() }
+    const { rerender } = render(<DictateButton {...props} empty />)
+    // A second press stops it: starting again would not.
+    fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
+    expect(screen.getByRole('button', { name: 'Stop dictating' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop dictating' }))
+    expect(startDictation).toHaveBeenCalledTimes(1)
+    expect(stopDictation).toHaveBeenCalledTimes(1)
+    expect(focusBox).toHaveBeenCalledTimes(1) // the caret stays: nothing takes it out
+    // Sending what it typed stops it.
+    fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
+    rerender(<DictateButton {...props} empty={false} />)
+    rerender(<DictateButton {...props} empty />)
+    expect(stopDictation).toHaveBeenCalledTimes(2)
+    // A call starting stops it: the call hears you itself.
+    rerender(<DictateButton {...props} empty={false} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
+    act(() => setVoiceCallForTests({ phase: 'live', sessionId: 's1' }))
+    expect(stopDictation).toHaveBeenCalledTimes(3)
     expect(screen.queryByRole('button')).toBeNull()
   })
 })

@@ -60,12 +60,15 @@ export interface Dictation {
 }
 
 /** `onText(text, final)`: everything this dictation has heard, revised until `final`.
- *  `focusBox`: put the caret in the message box — the system's dictation types where it is. */
+ *  `focusBox`: the caret into the message box — the system's dictation types where it is. */
 export function useDictation(
   onText: (text: string, final: boolean) => void,
   focusBox: () => void,
 ): Dictation {
   const [listening, setListening] = useState(false)
+  // The Mac's own dictation, started from here and not yet ended. macOS says nothing when it
+  // stops on its own, so this also follows what ends it there: the caret leaving the box, or Esc.
+  const [systemOn, setSystemOn] = useState(false)
   const [problem, setProblem] = useState<DictationProblem>(null)
   const [noticed, setNoticed] = useState(false)
   const noticeTimer = useRef<number | undefined>(undefined)
@@ -76,9 +79,18 @@ export function useDictation(
   }, [onText])
   const Ctor = recognitionCtor()
 
-  const stop = useCallback(() => rec.current?.stop(), [])
   const dropped = useRef(false)
+  const systemRef = useRef(false)
+  useEffect(() => {
+    systemRef.current = systemOn
+  }, [systemOn])
+  const stopSystem = useRef<() => void>(() => undefined)
+  const stop = useCallback(() => {
+    if (systemRef.current) stopSystem.current()
+    rec.current?.stop()
+  }, [])
   const cancel = useCallback(() => {
+    if (systemRef.current) stopSystem.current()
     if (!rec.current) return
     dropped.current = true
     rec.current.abort()
@@ -119,11 +131,42 @@ export function useDictation(
   }, [noticed, settle])
 
   const system = desktopClientBridge()?.startDictation ?? null
+  // The desktop app ends it (its window resigns for a moment); the caret stays in the box.
+  const endSystem = useCallback(() => {
+    setSystemOn(false)
+    void desktopClientBridge()
+      ?.stopDictation?.()
+      .catch(() => undefined)
+  }, [])
+  useEffect(() => {
+    stopSystem.current = endSystem
+  }, [endSystem])
+  useEffect(() => {
+    if (!systemOn) return
+    const box = document.activeElement
+    const off = () => endSystem()
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setSystemOn(false)
+    box?.addEventListener('blur', off)
+    document.addEventListener('keydown', esc, true)
+    return () => {
+      box?.removeEventListener('blur', off)
+      document.removeEventListener('keydown', esc, true)
+    }
+  }, [systemOn, endSystem])
   const toggle = useCallback(() => {
     if (system) {
-      // macOS shows its own listening mark and stops on its own (or on the same mic again).
+      // Pressing again ends it: starting macOS's dictation a second time does not (owner,
+      // 2026-11-03).
+      if (systemOn) {
+        endSystem()
+        return
+      }
       focusBox()
-      system().catch(() => notice('system'))
+      setSystemOn(true)
+      system().catch(() => {
+        setSystemOn(false)
+        notice('system')
+      })
       return
     }
     if (rec.current) {
@@ -165,11 +208,11 @@ export function useDictation(
     setNoticed(false)
     setListening(true)
     r.start()
-  }, [Ctor, notice, system, focusBox])
+  }, [Ctor, notice, system, systemOn, focusBox, endSystem])
 
   return {
     supported: system !== null || Ctor !== null,
-    listening,
+    listening: listening || systemOn,
     problem,
     noticed,
     toggle,

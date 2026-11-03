@@ -59,8 +59,10 @@ you say them, and nothing is sent until you press send.
 
 - **In the Mac desktop app** it starts macOS's own dictation in the message box, the same as
   **Edit → Start Dictation…**: it runs on your Mac, in the language macOS is set to, and macOS
-  shows its own listening mark. The first time, macOS asks to turn Dictation on. Press the
-  microphone again, or stop talking, to finish.
+  shows its own listening mark, and the microphone shows as pressed while it listens. The first
+  time, macOS asks to turn Dictation on. Press the microphone again to finish; sending the
+  message or starting a voice call finishes it too, so it never types what you say on a call.
+  (Esc or the Globe key also stop it, the macOS way.)
 - **In a browser** it uses the browser's own speech recognition, so your speech is handled by the
   browser's provider (Google in Chrome and Edge, Apple in Safari), not by Open Net Worth. Press it
   again to stop.

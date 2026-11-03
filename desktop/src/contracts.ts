@@ -24,6 +24,8 @@ export interface DesktopClientBridge {
   takeWhatsNew?(): Promise<DesktopWhatsNew | null>;
   // macOS only: start the system's own dictation in the focused field (Edit → Start Dictation…).
   startDictation?(): Promise<void>;
+  // …and end it (Start Dictation… again does not: owner, 2026-11-03).
+  stopDictation?(): Promise<void>;
   // macOS only: open System Settings at Privacy & Security → Microphone, where a refusal is undone.
   openMicrophoneSettings?(): Promise<void>;
   onCommand(listener: (command: DesktopCommand) => void): () => void;

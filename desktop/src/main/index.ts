@@ -1,10 +1,11 @@
-import { app, autoUpdater, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, Notification, powerMonitor, protocol, safeStorage, shell, Tray } from 'electron';
+import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, Notification, powerMonitor, protocol, safeStorage, shell, Tray } from 'electron';
 import { existsSync } from 'node:fs';
 import { release } from 'node:os';
 import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { DesktopCommand, DesktopConnection, DesktopSettings, DesktopUpdateState, DesktopWhatsNew } from '../contracts';
 import { BackendSupervisor } from './backend';
+import { microphoneSettingsUrl } from './microphone-settings';
 import { chooseImportFiles, saveExport } from './dialogs';
 import { readSelectedFiles, supportedFile } from './files';
 import { FolderWatcher } from './folders';
@@ -575,11 +576,23 @@ function registerIpc(): void {
     if (process.platform !== 'darwin') throw new Error('Dictation is a macOS feature.');
     Menu.sendActionToFirstResponder('startDictation:');
   });
+  // Its counterpart. macOS has no stop request that works from here — Start Dictation… again,
+  // AppKit's stopDictation: and moving focus within the page all left it listening; dictation
+  // ends when its window stops being the active one (measured by its listening mark, 2026-11-03).
+  // So the window resigns for a moment and comes straight back, the caret where it was.
+  ipcMain.handle('desktop-client:stop-dictation', async event => {
+    main!.authorizeClient(event);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || process.platform !== 'darwin') return;
+    win.blur();
+    await new Promise(resolve => setTimeout(resolve, 250));
+    if (!win.isDestroyed()) win.focus();
+  });
   // macOS asks for the microphone once and remembers a refusal; this page is the only way back.
   ipcMain.handle('desktop-client:microphone-settings', event => {
     main!.authorizeClient(event);
     if (process.platform !== 'darwin') throw new Error('This is a macOS setting.');
-    return shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone');
+    return shell.openExternal(microphoneSettingsUrl(release()));
   });
   ipcMain.handle('desktop-client:open-browser', event => { main!.authorizeClient(event); return books!.exclusive(async () => { main!.authorizeClient(event); await openBrowser(); }); });
   ipcMain.handle('desktop-connection:retry', event => { main!.authorizeServerRetry(event); return books!.exclusive(async () => { main!.authorizeServerRetry(event); await connectionLoader!.retry(); }); });

@@ -39,6 +39,11 @@ export function DictateButton({
     if (listening && empty && !wasEmpty.current) cancel()
     wasEmpty.current = empty
   }, [empty, listening, cancel])
+  // A call takes the microphone and hears you itself: dictation still running would type what
+  // you say to Lucius into the box (owner, 2026-11-03).
+  useEffect(() => {
+    if (inCall && listening) cancel()
+  }, [inCall, listening, cancel])
   if (!dictation.supported || inCall) return null
   const label = dictation.listening ? LABEL.listening : LABEL[dictation.problem ?? 'idle']
   return (

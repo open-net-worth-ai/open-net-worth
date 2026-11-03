@@ -47,6 +47,7 @@ const client: DesktopClientBridge = {
   // Only where there is a system dictation to start: the page offers its mic by this being present.
   ...(process.platform === 'darwin' ? {
     startDictation: () => ipcRenderer.invoke('desktop-client:start-dictation'),
+    stopDictation: () => ipcRenderer.invoke('desktop-client:stop-dictation'),
     openMicrophoneSettings: () => ipcRenderer.invoke('desktop-client:microphone-settings'),
   } : {}),
   onCommand: listener => {
