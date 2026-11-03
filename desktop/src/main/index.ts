@@ -5,6 +5,7 @@ import { mkdir, readFile, realpath } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { DesktopCommand, DesktopConnection, DesktopSettings, DesktopUpdateState, DesktopWhatsNew } from '../contracts';
 import { BackendSupervisor } from './backend';
+import { startDictation, stopDictation } from './dictation';
 import { microphoneSettingsUrl } from './microphone-settings';
 import { chooseImportFiles, saveExport } from './dialogs';
 import { readSelectedFiles, supportedFile } from './files';
@@ -569,24 +570,18 @@ function registerIpc(): void {
     if (!main!.hosted || starting || quitting) throw new Error('Wait for the current operation to finish.');
     return hosted!.signInFresh(safeReturnPath(returnPath));
   });
-  // The page's mic (owner, 2026-11-03): the system's own dictation, typing into the focused field.
-  // It is the Edit menu's Start Dictation…, so it can do nothing a person could not by menu.
+  // The page's mic: the system's own dictation, typing into the focused field — the Edit menu's
+  // Start Dictation…, so it can do nothing a person could not by menu (owner, 2026-11-03).
   ipcMain.handle('desktop-client:start-dictation', event => {
     main!.authorizeClient(event);
-    if (process.platform !== 'darwin') throw new Error('Dictation is a macOS feature.');
-    Menu.sendActionToFirstResponder('startDictation:');
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win || process.platform !== 'darwin') throw new Error('Dictation is a macOS feature.');
+    startDictation(win);
   });
-  // Its counterpart. macOS has no stop request that works from here — Start Dictation… again,
-  // AppKit's stopDictation: and moving focus within the page all left it listening; dictation
-  // ends when its window stops being the active one (measured by its listening mark, 2026-11-03).
-  // So the window resigns for a moment and comes straight back, the caret where it was.
   ipcMain.handle('desktop-client:stop-dictation', async event => {
     main!.authorizeClient(event);
     const win = BrowserWindow.fromWebContents(event.sender);
-    if (!win || process.platform !== 'darwin') return;
-    win.blur();
-    await new Promise(resolve => setTimeout(resolve, 250));
-    if (!win.isDestroyed()) win.focus();
+    if (win && process.platform === 'darwin') await stopDictation(win);
   });
   // macOS asks for the microphone once and remembers a refusal; this page is the only way back.
   ipcMain.handle('desktop-client:microphone-settings', event => {

@@ -34,7 +34,7 @@ export function DictateButton({
   const dictation = useDictation(onText, focusBox)
   const inCall = useVoiceCall().phase !== 'idle'
   const wasEmpty = useRef(empty)
-  const { listening, cancel } = dictation
+  const { listening, cancel, stop } = dictation
   useEffect(() => {
     if (listening && empty && !wasEmpty.current) cancel()
     wasEmpty.current = empty
@@ -42,8 +42,8 @@ export function DictateButton({
   // A call takes the microphone and hears you itself: dictation still running would type what
   // you say to Lucius into the box (owner, 2026-11-03).
   useEffect(() => {
-    if (inCall && listening) cancel()
-  }, [inCall, listening, cancel])
+    if (inCall && listening) stop()
+  }, [inCall, listening, stop])
   if (!dictation.supported || inCall) return null
   const label = dictation.listening ? LABEL.listening : LABEL[dictation.problem ?? 'idle']
   return (

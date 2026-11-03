@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { desktopBridge, desktopClientBridge } from '../../../platform/desktop'
 
 // Dictation into the message box (owner, 2026-11-03), with whatever this computer has:
@@ -44,6 +44,37 @@ function recognitionCtor(): RecognitionCtor | null {
 }
 
 const NOTICE_MS = 6000
+// The Mac's own dictation, started from here and not yet ended by us (or Esc), kept OUTSIDE any
+// one message box: the first message moves the chat into a conversation, which brings a new box,
+// and the red mic went with the old one while macOS went on typing (owner, 2026-11-04). Every box
+// shows it; only the box that started it pulls the caret back. macOS may stop on its own after
+// a silence without saying so; the next tap then only ends what is already over.
+let systemListening = false
+let systemOwner: symbol | null = null
+const systemListeners = new Set<() => void>()
+
+function setSystemListening(on: boolean, owner: symbol | null = null): void {
+  systemOwner = on ? owner : null
+  if (systemListening === on) return
+  systemListening = on
+  systemListeners.forEach((listener) => listener())
+}
+
+function useSystemListening(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      systemListeners.add(listener)
+      return () => systemListeners.delete(listener)
+    },
+    () => systemListening,
+    () => false,
+  )
+}
+
+export function resetDictationForTests(): void {
+  setSystemListening(false)
+}
+
 export type DictationProblem = 'blocked' | 'no-service' | 'no-mic' | 'system' | null
 
 export interface Dictation {
@@ -55,7 +86,8 @@ export interface Dictation {
   noticed: boolean
   toggle(): void
   stop(): void
-  /** End it and drop what it hasn't written yet — the message it was writing has been sent. */
+  /** The message it was writing was sent: the browser's dictation ends, dropping what it hasn't
+   *  written yet; the Mac's keeps listening (the mic stays red). */
   cancel(): void
 }
 
@@ -66,9 +98,8 @@ export function useDictation(
   focusBox: () => void,
 ): Dictation {
   const [listening, setListening] = useState(false)
-  // The Mac's own dictation, started from here and not yet ended. macOS says nothing when it
-  // stops on its own, so this also follows what ends it there: the caret leaving the box, or Esc.
-  const [systemOn, setSystemOn] = useState(false)
+  const systemOn = useSystemListening()
+  const [me] = useState(() => Symbol('dictation'))
   const [problem, setProblem] = useState<DictationProblem>(null)
   const [noticed, setNoticed] = useState(false)
   const noticeTimer = useRef<number | undefined>(undefined)
@@ -89,8 +120,10 @@ export function useDictation(
     if (systemRef.current) stopSystem.current()
     rec.current?.stop()
   }, [])
+  // The message it was writing was sent. The browser's dictation ends with it; the Mac's goes on
+  // listening, the mic staying red until you tap it — its stop is not reliable at the moment of
+  // sending, and dictating message after message is fine (owner, 2026-11-03).
   const cancel = useCallback(() => {
-    if (systemRef.current) stopSystem.current()
     if (!rec.current) return
     dropped.current = true
     rec.current.abort()
@@ -133,7 +166,7 @@ export function useDictation(
   const system = desktopClientBridge()?.startDictation ?? null
   // The desktop app ends it (its window resigns for a moment); the caret stays in the box.
   const endSystem = useCallback(() => {
-    setSystemOn(false)
+    setSystemListening(false)
     void desktopClientBridge()
       ?.stopDictation?.()
       .catch(() => undefined)
@@ -141,30 +174,34 @@ export function useDictation(
   useEffect(() => {
     stopSystem.current = endSystem
   }, [endSystem])
+  // Esc is macOS's own stop: the mic follows it. Nothing else is watched — macOS says nowhere
+  // whether it is listening, and the caret leaving the box is also what the desktop app's own
+  // start and stop do for a moment (owner, 2026-11-03).
   useEffect(() => {
     if (!systemOn) return
-    const box = document.activeElement
-    const off = () => endSystem()
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setSystemOn(false)
-    box?.addEventListener('blur', off)
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setSystemListening(false)
+    // The window coming back — macOS's "enable Dictation?" dialog approved, or a return from
+    // another app — puts the caret back in the box, where dictation types: after the dialog it
+    // listened with nowhere to write (owner, 2026-11-04).
+    const back = () => systemOwner === me && focusBox()
     document.addEventListener('keydown', esc, true)
+    window.addEventListener('focus', back)
     return () => {
-      box?.removeEventListener('blur', off)
       document.removeEventListener('keydown', esc, true)
+      window.removeEventListener('focus', back)
     }
-  }, [systemOn, endSystem])
+  }, [systemOn, focusBox, me])
   const toggle = useCallback(() => {
     if (system) {
-      // Pressing again ends it: starting macOS's dictation a second time does not (owner,
-      // 2026-11-03).
+      // A pressed mic stops it; a plain one starts it (owner, 2026-11-03).
       if (systemOn) {
         endSystem()
         return
       }
       focusBox()
-      setSystemOn(true)
+      setSystemListening(true, me)
       system().catch(() => {
-        setSystemOn(false)
+        setSystemListening(false)
         notice('system')
       })
       return
@@ -208,7 +245,7 @@ export function useDictation(
     setNoticed(false)
     setListening(true)
     r.start()
-  }, [Ctor, notice, system, systemOn, focusBox, endSystem])
+  }, [Ctor, notice, system, systemOn, focusBox, endSystem, me])
 
   return {
     supported: system !== null || Ctor !== null,
