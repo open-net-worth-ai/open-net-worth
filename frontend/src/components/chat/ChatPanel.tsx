@@ -1030,7 +1030,9 @@ export function ChatPanel({
   // "already sitting on an empty/unpersisted conversation" — reusing that instead of minting
   // another one means clicking New twice in a row doesn't leave an orphaned pending draft.
   function handleNewConversation() {
-    const alreadyOnAnEmptyOne = !conversations.some((c) => c.id === activeId)
+    // Messages on screen mean it isn't empty, listed or not (a call from the fresh screen).
+    const alreadyOnAnEmptyOne =
+      !conversations.some((c) => c.id === activeId) && messages.length === 0
     if (alreadyOnAnEmptyOne) return
     createConversation()
   }
