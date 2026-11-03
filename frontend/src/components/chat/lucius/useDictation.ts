@@ -36,12 +36,17 @@ function recognitionCtor(): RecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null
 }
 
+const NOTICE_MS = 6000
+
 export type DictationProblem = 'blocked' | 'unavailable' | null
 
 export interface Dictation {
   supported: boolean
   listening: boolean
   problem: DictationProblem
+  /** The problem is news — it just happened — and is said beside the mic, not only in its
+   *  tooltip: a mic that only turned yellow read as "dictation does nothing" (owner, 2026-11-03). */
+  noticed: boolean
   toggle(): void
   stop(): void
   /** End it and drop what it hasn't written yet — the message it was writing has been sent. */
@@ -52,6 +57,8 @@ export interface Dictation {
 export function useDictation(onText: (text: string, final: boolean) => void): Dictation {
   const [listening, setListening] = useState(false)
   const [problem, setProblem] = useState<DictationProblem>(null)
+  const [noticed, setNoticed] = useState(false)
+  const noticeTimer = useRef<number | undefined>(undefined)
   const rec = useRef<Recognition | null>(null)
   const sink = useRef(onText)
   useEffect(() => {
@@ -66,7 +73,19 @@ export function useDictation(onText: (text: string, final: boolean) => void): Di
     dropped.current = true
     rec.current.abort()
   }, [])
-  useEffect(() => () => rec.current?.abort(), [])
+  useEffect(
+    () => () => {
+      rec.current?.abort()
+      window.clearTimeout(noticeTimer.current)
+    },
+    [],
+  )
+  const notice = useCallback((next: DictationProblem) => {
+    setProblem(next)
+    setNoticed(true)
+    window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = window.setTimeout(() => setNoticed(false), NOTICE_MS)
+  }, [])
 
   const toggle = useCallback(() => {
     if (rec.current) {
@@ -92,8 +111,8 @@ export function useDictation(onText: (text: string, final: boolean) => void): Di
       sink.current(heard, false)
     }
     r.onerror = (e) => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') setProblem('blocked')
-      else if (e.error === 'network' || e.error === 'audio-capture') setProblem('unavailable')
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') notice('blocked')
+      else if (e.error === 'network' || e.error === 'audio-capture') notice('unavailable')
     }
     r.onend = () => {
       if (!dropped.current) sink.current(heard, true)
@@ -102,9 +121,10 @@ export function useDictation(onText: (text: string, final: boolean) => void): Di
     }
     rec.current = r
     setProblem(null)
+    setNoticed(false)
     setListening(true)
     r.start()
-  }, [Ctor])
+  }, [Ctor, notice])
 
-  return { supported: Ctor !== null, listening, problem, toggle, stop, cancel }
+  return { supported: Ctor !== null, listening, problem, noticed, toggle, stop, cancel }
 }

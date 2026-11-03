@@ -99,6 +99,24 @@ describe('DictateButton', () => {
     expect(screen.getByRole('button', { name: /can't use the microphone/ })).toBeTruthy()
   })
 
+  it('says why it failed beside the mic, then lets the tooltip keep it', () => {
+    vi.useFakeTimers()
+    try {
+      render(<DictateButton onText={vi.fn()} empty />)
+      fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
+      act(() => {
+        FakeRecognition.last.onerror?.({ error: 'not-allowed' })
+        FakeRecognition.last.onend?.()
+      })
+      expect(screen.getByRole('status').textContent).toMatch(/Chrome or Safari/)
+      act(() => vi.advanceTimersByTime(6000))
+      expect(screen.queryByRole('status')).toBeNull()
+      expect(screen.getByRole('button', { name: /can't use the microphone/ })).toBeTruthy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('is not offered where it cannot work, nor during a voice call', () => {
     delete (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition
     const { unmount } = render(<DictateButton onText={vi.fn()} empty />)

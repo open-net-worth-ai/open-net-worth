@@ -1702,6 +1702,29 @@
     width: 100%;
   }
   /* Dictation, left of Send: Send's own circle, quiet until it listens. */
+  .lx-dictate-wrap {
+    position: relative;
+    display: flex;
+    flex: none;
+  }
+  /* Why dictation just failed, said beside the mic for a few seconds. */
+  .lx-dictate-tip {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + var(--space-2));
+    z-index: 5;
+    width: max-content;
+    max-width: min(16rem, 70vw);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md, 8px);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 11px;
+    line-height: 1.4;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+    pointer-events: none;
+  }
   .lx-dictate {
     width: 28px;
     height: 28px;

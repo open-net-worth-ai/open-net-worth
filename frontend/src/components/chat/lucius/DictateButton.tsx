@@ -10,7 +10,8 @@ import { useVoiceCall } from './voiceCall'
 const LABEL = {
   idle: 'Dictate',
   listening: 'Stop dictating',
-  blocked: "Dictation can't use the microphone. Allow it for this site, then try again.",
+  blocked:
+    "Dictation can't use the microphone in this browser. Allow it for this site, or open the app in Chrome or Safari.",
   unavailable: "Dictation isn't available right now. Try again, or type instead.",
 } as const
 
@@ -34,17 +35,24 @@ export function DictateButton({
   if (!dictation.supported || inCall) return null
   const label = dictation.listening ? LABEL.listening : LABEL[dictation.problem ?? 'idle']
   return (
-    <button
-      type="button"
-      className="lx-dictate"
-      aria-label={label}
-      title={label}
-      aria-pressed={dictation.listening}
-      data-problem={dictation.problem || undefined}
-      onMouseDown={(e) => e.preventDefault()}
-      onClick={dictation.toggle}
-    >
-      <Mic size={16} />
-    </button>
+    <span className="lx-dictate-wrap">
+      {dictation.noticed && dictation.problem && (
+        <span className="lx-dictate-tip" role="status">
+          {LABEL[dictation.problem]}
+        </span>
+      )}
+      <button
+        type="button"
+        className="lx-dictate"
+        aria-label={label}
+        title={label}
+        aria-pressed={dictation.listening}
+        data-problem={dictation.problem || undefined}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={dictation.toggle}
+      >
+        <Mic size={16} />
+      </button>
+    </span>
   )
 }
