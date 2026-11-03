@@ -1005,10 +1005,10 @@ _PLATFORMS = [
     # sys.platform, machine, release, supported
     ("darwin", "arm64", "24.2.0", True),  # macOS 15
     ("darwin", "arm64", "23.0.0", True),  # macOS 14
-    ("darwin", "arm64", "22.6.0", False),  # macOS 13: onnxruntime ships macOS 14+
+    ("darwin", "arm64", "22.6.0", False),  # macOS 13: installs, but calls aren't offered
     ("darwin", "x86_64", "24.2.0", False),  # Intel Mac: no onnxruntime build
-    ("linux", "x86_64", "6.8.0", True),
-    ("linux", "aarch64", "6.8.0", True),
+    ("linux", "x86_64", "6.12.5-linuxkit", True),  # Docker Desktop's kernel name
+    ("linux", "aarch64", "7.0.0-1017-azure", True),
     ("linux", "armv7l", "6.8.0", False),
     ("win32", "AMD64", "10", True),
     ("win32", "ARM64", "10", False),  # no LiveKit WebRTC build
@@ -1031,8 +1031,14 @@ def test_requirements_marker_and_platform_check_agree(system, machine, release, 
     ]
     assert {r.name for r in voice} == {"livekit-agents", "livekit-api"}
     env = {"sys_platform": system, "platform_machine": machine, "platform_release": release}
+    # The install condition never reads platform_release: pip checks every clause on every OS,
+    # and a Linux kernel name ("6.12.5-linuxkit") failed to parse as a version and broke every
+    # Linux install, the 0.1.36 image (2026-11-04). So macOS 13 installs them; the app's own
+    # check is what says calls aren't available there.
+    installs = supported or (system == "darwin" and machine == "arm64")
     for req in voice:
-        assert req.marker is not None and req.marker.evaluate(env) is supported, req.name
+        assert req.marker is not None and "platform_release" not in str(req.marker), req.name
+        assert req.marker.evaluate(env) is installs, req.name
     assert service.platform_supported(system, machine, release) is supported
 
 
