@@ -69,7 +69,9 @@ you say them, and nothing is sent until you press send.
   again to stop.
 
 The button only shows where dictation can work: not in Firefox, not in the desktop app on Windows
-or Linux, and not during a [voice call](../connectors/voice-calls.md), which already hears you.
+or Linux, not on an iPhone or iPad (Safari there gives a page one dictation, then hears nothing;
+the microphone key on the iPhone's keyboard dictates into the box instead), and not during a
+[voice call](../connectors/voice-calls.md), which already hears you.
 If dictation can't work, the button turns amber and says why above it, until you type or click,
 or for a few seconds; then it's back to normal. The reason is a blocked microphone (allow it for
 this site and press it again), no microphone, or a browser that has the button but no speech

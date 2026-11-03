@@ -15,6 +15,9 @@ const LABEL = {
     "Dictation can't use the microphone in this browser. Allow it for this site, or open the app in Chrome or Safari.",
   'no-service': "This browser can't turn speech into text. Dictate in Chrome, Edge or Safari.",
   'no-mic': 'Dictation found no microphone. Connect one, then try again.',
+  'no-speech': "Dictation didn't hear anything. Tap the mic and speak again.",
+  'no-start': "Dictation didn't start. Tap the mic again.",
+  other: 'Dictation stopped. Tap the mic to try again.',
   system:
     "macOS dictation didn't start. Turn on Dictation in System Settings → Keyboard, then try again.",
 } as const
@@ -45,12 +48,20 @@ export function DictateButton({
     if (inCall && listening) stop()
   }, [inCall, listening, stop])
   if (!dictation.supported || inCall) return null
-  const label = dictation.listening ? LABEL.listening : LABEL[dictation.problem ?? 'idle']
+  const problemText = (problem: NonNullable<typeof dictation.problem>) =>
+    problem === 'other' && dictation.problemCode
+      ? `Dictation stopped (${dictation.problemCode}). Tap the mic to try again.`
+      : LABEL[problem]
+  const label = dictation.listening
+    ? LABEL.listening
+    : dictation.problem
+      ? problemText(dictation.problem)
+      : LABEL.idle
   return (
     <span className="lx-dictate-wrap">
       {dictation.noticed && dictation.problem && (
         <span className="lx-dictate-tip" role="status">
-          {LABEL[dictation.problem]}
+          {problemText(dictation.problem)}
         </span>
       )}
       <button

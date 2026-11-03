@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { desktopBridge, desktopClientBridge } from '../../../platform/desktop'
+import { phonePlatform } from '../../tabs/settings/sections/phoneShortcuts'
 
 // Dictation into the message box (owner, 2026-11-03), with whatever this computer has:
 // - the Mac desktop app: macOS's own dictation, which types into the focused box itself — live,
@@ -34,8 +35,11 @@ function inDesktopApp(): boolean {
   return Boolean(desktopBridge() || desktopClientBridge())
 }
 
+// Not on an iPhone or iPad either: Safari there gives a page speech recognition ONCE — every later
+// dictation got no sound (its own log, 2026-11-04) — and the keyboard's own microphone key
+// dictates into the box anyway (owner).
 function recognitionCtor(): RecognitionCtor | null {
-  if (typeof window === 'undefined' || inDesktopApp()) return null
+  if (typeof window === 'undefined' || inDesktopApp() || phonePlatform() === 'ios') return null
   const w = window as unknown as {
     SpeechRecognition?: RecognitionCtor
     webkitSpeechRecognition?: RecognitionCtor
@@ -75,12 +79,26 @@ export function resetDictationForTests(): void {
   setSystemListening(false)
 }
 
-export type DictationProblem = 'blocked' | 'no-service' | 'no-mic' | 'system' | null
+export type DictationProblem =
+  | 'blocked'
+  | 'no-service'
+  | 'no-mic'
+  | 'no-speech'
+  | 'no-start'
+  | 'system'
+  | 'other'
+  | null
+
+// A start that ends this soon, having heard nothing and said nothing, never really started: Safari
+// on an iPhone does that now and then, and the mic just went back to normal (owner, 2026-11-04).
+const QUIET_END_MS = 1500
 
 export interface Dictation {
   supported: boolean
   listening: boolean
   problem: DictationProblem
+  /** The browser's own error code, when `problem` is `other`. */
+  problemCode: string
   /** The problem is news — it just happened — and is said beside the mic, not only in its
    *  tooltip: a mic that only turned yellow read as "dictation does nothing" (owner, 2026-11-03). */
   noticed: boolean
@@ -102,6 +120,8 @@ export function useDictation(
   const [me] = useState(() => Symbol('dictation'))
   const [problem, setProblem] = useState<DictationProblem>(null)
   const [noticed, setNoticed] = useState(false)
+  // The browser's own word for an error we have no plain words for (`other`).
+  const [problemCode, setProblemCode] = useState('')
   const noticeTimer = useRef<number | undefined>(undefined)
   const rec = useRef<Recognition | null>(null)
   const sink = useRef(onText)
@@ -123,14 +143,18 @@ export function useDictation(
   // The message it was writing was sent. The browser's dictation ends with it; the Mac's goes on
   // listening, the mic staying red until you tap it — its stop is not reliable at the moment of
   // sending, and dictating message after message is fine (owner, 2026-11-03).
+  // Ended with stop() and its last words ignored — never abort(): on an iPhone an aborted
+  // dictation left every later one on the page with the microphone on and no words (owner,
+  // 2026-11-04: red, the phone listening, nothing typed after the first message).
   const cancel = useCallback(() => {
     if (!rec.current) return
     dropped.current = true
-    rec.current.abort()
+    rec.current.stop()
   }, [])
   useEffect(
     () => () => {
-      rec.current?.abort()
+      dropped.current = true
+      rec.current?.stop()
       window.clearTimeout(noticeTimer.current)
     },
     [],
@@ -144,8 +168,9 @@ export function useDictation(
     setProblem(null)
   }, [])
   const notice = useCallback(
-    (next: DictationProblem) => {
+    (next: DictationProblem, code = '') => {
       setProblem(next)
+      setProblemCode(code)
       setNoticed(true)
       window.clearTimeout(noticeTimer.current)
       noticeTimer.current = window.setTimeout(settle, NOTICE_MS)
@@ -211,46 +236,75 @@ export function useDictation(
       return
     }
     if (!Ctor) return
-    const r = new Ctor()
-    r.lang = navigator.language || 'en-US'
-    r.continuous = true
-    r.interimResults = true
     // The WHOLE dictation, rebuilt from every result each time: browsers differ in how they
     // split it (Chrome adds a result per phrase, Safari grows one), and applying only the newest
     // left the box blank after the first message (owner, 2026-11-03).
     let heard = ''
+    let said = false // a result or an error came: it did start
+    const startedAt = Date.now()
     dropped.current = false
-    r.onresult = (e) => {
-      if (dropped.current) return
-      heard = Array.from(e.results, (result) => result[0].transcript)
-        .join(' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-      sink.current(heard, false)
+    const make = (): Recognition => {
+      const r = new Ctor()
+      r.lang = navigator.language || 'en-US'
+      r.continuous = true
+      r.interimResults = true
+      r.onresult = (e) => {
+        said = true
+        const next = Array.from(e.results, (result) => result[0].transcript)
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+        if (dropped.current) return
+        heard = next
+        sink.current(heard, false)
+      }
+      r.onerror = (e) => {
+        said = true
+        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') notice('blocked')
+        // `network` is a browser with the API but no speech service behind it (Arc, Brave, the
+        // Claude app's pane): trying again never helps there (owner, 2026-11-03).
+        else if (e.error === 'network') notice('no-service')
+        else if (e.error === 'audio-capture') notice('no-mic')
+        else if (e.error === 'no-speech') notice('no-speech')
+        // Ours: a sent message, a call. Anything else is said with the browser's own word for it.
+        else if (e.error !== 'aborted') notice('other', e.error)
+      }
+      r.onend = () => {
+        if (!dropped.current) sink.current(heard, true)
+        if (rec.current === r) rec.current = null
+        setListening(false)
+        if (!said && !dropped.current && Date.now() - startedAt < QUIET_END_MS) notice('no-start')
+      }
+      return r
     }
-    r.onerror = (e) => {
-      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') notice('blocked')
-      // `network` is a browser with the API but no speech service behind it (Arc, Brave, the
-      // Claude app's pane): trying again never helps there (owner, 2026-11-03).
-      else if (e.error === 'network') notice('no-service')
-      else if (e.error === 'audio-capture') notice('no-mic')
-    }
-    r.onend = () => {
-      if (!dropped.current) sink.current(heard, true)
-      rec.current = null
-      setListening(false)
-    }
-    rec.current = r
     setProblem(null)
     setNoticed(false)
-    setListening(true)
-    r.start()
+    // start() can throw — a previous one not quite closed (Safari, now and then): close it, and
+    // try once more while this is still the tap that asked.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const r = make()
+      rec.current = r
+      try {
+        r.start()
+        setListening(true)
+        return
+      } catch {
+        rec.current = null
+        try {
+          r.stop()
+        } catch {
+          // already closed
+        }
+      }
+    }
+    notice('no-start')
   }, [Ctor, notice, system, systemOn, focusBox, endSystem, me])
 
   return {
     supported: system !== null || Ctor !== null,
     listening: listening || systemOn,
     problem,
+    problemCode,
     noticed,
     toggle,
     stop,

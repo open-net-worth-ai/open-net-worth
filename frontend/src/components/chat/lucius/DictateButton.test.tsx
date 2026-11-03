@@ -100,7 +100,10 @@ describe('DictateButton', () => {
     const rec = FakeRecognition.last
     act(() => rec.onresult?.({ resultIndex: 0, results: [result('send this', false)] }))
     rerender(<DictateButton focusBox={vi.fn()} onText={onText} empty />) // sent: the box emptied
-    expect(rec.abort).toHaveBeenCalled()
+    // Stopped, never aborted: an aborted one left the next dictation on an iPhone hearing
+    // nothing.
+    expect(rec.stop).toHaveBeenCalled()
+    expect(rec.abort).not.toHaveBeenCalled()
     act(() => {
       rec.onresult?.({ resultIndex: 0, results: [result('send this now', true)] })
       rec.onend?.()
@@ -157,6 +160,61 @@ describe('DictateButton', () => {
     // Nothing is remembered: a later visit offers it again.
     render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
     expect(screen.getByRole('button', { name: 'Dictate' })).toBeTruthy()
+  })
+
+  it('says when a start never really started, instead of going quiet', () => {
+    render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
+    fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
+    act(() => FakeRecognition.last.onend?.()) // ended at once, nothing heard, no error
+    expect(screen.getByRole('status').textContent).toMatch(/didn't start/)
+  })
+
+  it('tries once more when start() throws, and names an unknown error', () => {
+    let throws = 1
+    const w = window as unknown as { webkitSpeechRecognition?: unknown }
+    const original = w.webkitSpeechRecognition
+    class Flaky extends FakeRecognition {
+      constructor() {
+        super()
+        if (throws-- > 0)
+          this.start = vi.fn(() => {
+            throw new Error('InvalidStateError')
+          })
+      }
+    }
+    w.webkitSpeechRecognition = Flaky
+    try {
+      render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
+      fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
+      expect(screen.getByRole('button', { name: 'Stop dictating' })).toBeTruthy()
+      act(() => {
+        FakeRecognition.last.onerror?.({ error: 'language-not-supported' })
+        FakeRecognition.last.onend?.()
+      })
+      expect(screen.getByRole('status').textContent).toMatch(/language-not-supported/)
+    } finally {
+      w.webkitSpeechRecognition = original
+    }
+  })
+
+  it('is not offered on an iPhone or iPad, where Safari gives a page one dictation', () => {
+    const ua = vi.spyOn(navigator, 'userAgent', 'get')
+    try {
+      ua.mockReturnValue(
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15',
+      )
+      const phone = render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
+      expect(screen.queryByRole('button')).toBeNull()
+      phone.unmount()
+      // An iPad says it is a Mac, with a touch screen.
+      ua.mockReturnValue('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15')
+      Object.defineProperty(navigator, 'maxTouchPoints', { value: 5, configurable: true })
+      render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
+      expect(screen.queryByRole('button')).toBeNull()
+      Reflect.deleteProperty(navigator, 'maxTouchPoints')
+    } finally {
+      ua.mockRestore()
+    }
   })
 
   it('is not offered where it cannot work, nor during a voice call', () => {
