@@ -24,7 +24,12 @@ def test_rename_institution_updates_its_shared_name(db_isolated):
 
     renamed = service.rename_institution(institution["id"], "DBS Bank")
 
-    assert renamed == {"id": institution["id"], "name": "DBS Bank", "account_count": 1}
+    assert renamed == {
+        "id": institution["id"],
+        "name": "DBS Bank",
+        "account_count": 1,
+        "account_names": ["acc_one"],
+    }
     assert InstitutionStore().find_by_normalized_name("dbs bank")["id"] == institution["id"]
 
 
@@ -53,3 +58,15 @@ def test_delete_institution_unlinks_accounts_without_deleting_them(db_isolated):
         None,
         None,
     ]
+
+
+def test_list_names_each_institutions_accounts_sorted(db_isolated):
+    chase = InstitutionStore().resolve_or_create("Chase")
+    AccountStore().insert({**_account("acc_b", chase["id"]), "name": "savings"})
+    AccountStore().insert({**_account("acc_a", chase["id"]), "name": "Checking"})
+    AccountStore().insert(_account("acc_none"))
+
+    (listed,) = service.list_institutions()
+
+    assert listed["account_count"] == 2
+    assert listed["account_names"] == ["Checking", "savings"]

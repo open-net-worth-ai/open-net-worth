@@ -421,6 +421,9 @@ export function AccountsTab({
                   name: institution.name,
                   accountCount:
                     typeof institution.account_count === 'number' ? institution.account_count : 0,
+                  accountNames: Array.isArray(institution.account_names)
+                    ? institution.account_names.filter((n): n is string => typeof n === 'string')
+                    : undefined,
                 },
               ]
             : []
@@ -441,8 +444,18 @@ export function AccountsTab({
         body: JSON.stringify({ name }),
       })
       if (!response?.ok) throw new Error('Could not rename institution')
-      const body = (await response.json()) as { id: string; name: string; account_count: number }
-      const renamed = { id: body.id, name: body.name, accountCount: body.account_count }
+      const body = (await response.json()) as {
+        id: string
+        name: string
+        account_count: number
+        account_names?: string[]
+      }
+      const renamed = {
+        id: body.id,
+        name: body.name,
+        accountCount: body.account_count,
+        accountNames: body.account_names,
+      }
       setInstitutions((current) => current.map((item) => (item.id === id ? renamed : item)))
       await refreshAccounts()
       return renamed

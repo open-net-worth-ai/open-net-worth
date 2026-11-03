@@ -10,18 +10,30 @@ from backend.db.tables import accounts as accounts_table
 from backend.db.tables import institutions as institutions_table
 
 
-def list_institutions() -> list[dict]:
-    accounts = AccountStore().all()
-    counts: dict[str, int] = {}
+def _names_by_institution(accounts: list[dict]) -> dict[str, list[str]]:
+    """Each institution's account names, sorted — so the manager shows WHICH accounts a rename
+    or delete touches, not just how many."""
+    names: dict[str, list[str]] = {}
     for account in accounts:
         if institution_id := account.get("institution_id"):
-            counts[institution_id] = counts.get(institution_id, 0) + 1
+            names.setdefault(institution_id, []).append(str(account.get("name") or "Unnamed"))
+    return {key: sorted(value, key=str.casefold) for key, value in names.items()}
+
+
+def _shape(institution: dict, names: dict[str, list[str]]) -> dict:
+    own = names.get(institution["id"], [])
+    return {
+        "id": institution["id"],
+        "name": institution["name"],
+        "account_count": len(own),
+        "account_names": own,
+    }
+
+
+def list_institutions() -> list[dict]:
+    names = _names_by_institution(AccountStore().all())
     return [
-        {
-            "id": institution["id"],
-            "name": institution["name"],
-            "account_count": counts.get(institution["id"], 0),
-        }
+        _shape(institution, names)
         for institution in sorted(InstitutionStore().all(), key=lambda row: row["name"].casefold())
     ]
 
@@ -39,11 +51,8 @@ def rename_institution(institution_id: str, name: object) -> dict:
         if duplicate is not None and duplicate["id"] != institution_id:
             raise ConflictError(f"Institution {duplicate['name']!r} already exists")
         renamed = institutions.update_by_id(institution_id, {"name": display_name}, conn=conn)
-        count = sum(
-            account.get("institution_id") == institution_id
-            for account in AccountStore().all(conn=conn)
-        )
-    return {"id": renamed["id"], "name": renamed["name"], "account_count": count}
+        names = _names_by_institution(AccountStore().all(conn=conn))
+    return _shape(renamed, names)
 
 
 def delete_institution(institution_id: str) -> dict:

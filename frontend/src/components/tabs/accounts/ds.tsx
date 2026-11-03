@@ -284,6 +284,8 @@ export interface InstitutionOption {
   id: string
   name: string
   accountCount: number
+  /** The accounts filed under it, sorted — shown in Manage institutions. */
+  accountNames?: string[]
 }
 export function InstitutionPicker({
   id,

@@ -36,4 +36,21 @@ describe('InstitutionManager', () => {
       expect(onRenamed).toHaveBeenCalledWith(institution, { ...institution, name: 'DBS Bank' }),
     )
   })
+
+  it('names the accounts under each institution, falling back to the count', () => {
+    render(
+      <InstitutionManager
+        open
+        institutions={[
+          { ...institution, accountNames: ['Checking', 'Savings'] },
+          { id: 'inst_x', name: 'Empty', accountCount: 0, accountNames: [] },
+        ]}
+        onClose={() => {}}
+        onRename={async () => institution}
+        onDelete={async () => ({ id: '', unlinked_account_count: 0, unlinked_account_ids: [] })}
+      />,
+    )
+    expect(screen.getByText('Checking, Savings')).toBeTruthy()
+    expect(screen.getByText('0 accounts')).toBeTruthy()
+  })
 })

@@ -5713,7 +5713,13 @@ select.acct-addin {
 }
 .acct-inst-manager-list {
   display: grid;
-  gap: 4px;
+  /* The list scrolls on its own, so the explanation above it stays put however many
+     institutions there are, and the dialog never grows past the window. */
+  max-height: min(52vh, 440px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 .acct-inst-manager-row {
   display: flex;
@@ -5721,6 +5727,18 @@ select.acct-addin {
   justify-content: space-between;
   gap: 12px;
   padding: 10px 0;
+}
+.acct-inst-manager-row + .acct-inst-manager-row {
+  border-top: 1px solid var(--line);
+}
+.acct-inst-manager-main {
+  min-width: 0;
+  flex: 1;
+}
+.acct-inst-manager-main .acct-inst-manager-count {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .acct-inst-manager-name {
   color: var(--ink);

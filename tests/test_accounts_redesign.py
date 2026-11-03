@@ -75,8 +75,8 @@ def test_institution_registry_lists_unused_institutions_for_account_picker(clien
     assert response.status_code == 200
     assert response.json() == {
         "institutions": [
-            {"id": apex["id"], "name": "Apex Securities", "account_count": 0},
-            {"id": dbs["id"], "name": "DBS", "account_count": 0},
+            {"id": apex["id"], "name": "Apex Securities", "account_count": 0, "account_names": []},
+            {"id": dbs["id"], "name": "DBS", "account_count": 0, "account_names": []},
         ]
     }
 
@@ -97,7 +97,12 @@ def test_institution_endpoints_rename_and_unlink_on_delete(client, iso):
     deleted = client.delete(f"/api/institutions/{institution['id']}")
 
     assert renamed.status_code == 200
-    assert renamed.json() == {"id": institution["id"], "name": "DBS Bank", "account_count": 1}
+    assert renamed.json() == {
+        "id": institution["id"],
+        "name": "DBS Bank",
+        "account_count": 1,
+        "account_names": ["DBS account"],
+    }
     assert deleted.status_code == 200
     assert deleted.json() == {
         "id": institution["id"],

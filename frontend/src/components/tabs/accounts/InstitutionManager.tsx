@@ -18,6 +18,14 @@ interface InstitutionManagerProps {
   onDeleted?: (result: InstitutionDeleteResult) => void
 }
 
+// "Checking, Savings" — WHICH accounts a rename or delete touches; the count alone when the
+// names aren't known (an older server) or there are none.
+function accountsLine(institution: InstitutionOption): string {
+  const names = institution.accountNames
+  if (names && names.length > 0) return names.join(', ')
+  return institution.accountCount === 1 ? '1 account' : `${institution.accountCount} accounts`
+}
+
 export function InstitutionManager({
   open,
   institutions,
@@ -111,12 +119,13 @@ export function InstitutionManager({
                     </div>
                   ) : (
                     <>
-                      <div>
+                      <div className="acct-inst-manager-main">
                         <div className="acct-inst-manager-name">{institution.name}</div>
-                        <div className="acct-inst-manager-count">
-                          {institution.accountCount === 1
-                            ? '1 account'
-                            : `${institution.accountCount} accounts`}
+                        <div
+                          className="acct-inst-manager-count"
+                          title={institution.accountNames?.join(', ') || undefined}
+                        >
+                          {accountsLine(institution)}
                         </div>
                       </div>
                       <div className="acct-inst-manager-actions">
