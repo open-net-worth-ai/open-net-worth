@@ -98,6 +98,11 @@ GREETING = (
 CHECK_IN = "ask whether they're still there"
 HANG_UP = "say you'll hang up for now and they can call back any time"
 FAILED = "say you hit a problem with that request and ask if they want you to try again"
+# Lucius stopped at an approval card with nothing written for the owner yet (his notes are his
+# thinking, never spoken): the call said nothing and the card waited unseen (owner, 2026-11-04).
+APPROVAL_WAITING = (
+    "say it's ready for them to approve on the screen, and that you'll carry on once they do"
+)
 SLOW_LOOKUP = "say the {noun} lookup is taking longer than usual and to hang on"
 STILL_WORKING = "say you're still working on it"
 # After the first progress line, a short reminder now and then on long work — a phone line
@@ -117,12 +122,15 @@ STILL_ON_IT_RULE = " — a few words, no promise of how long it takes"
 # "let me check that" too, never an "okay" or "sure" (owner, 2026-11-04). It names a kind
 # only, never writes the line, so the line still can't carry anything about the answer.
 ACKS_BY_KIND = {
+    # Most questions come as asks ("check my ACME performance"), and a person answers those with
+    # an "okay" or a "sure" first — the plain "let me check" alone sounded curt (owner).
     "question": (
+        "say okay, you'll check",
+        "say sure, you'll take a look",
+        "say yep, you're pulling it up",
+        "say alright, you'll look into it",
+        "say sure thing, you're checking now",
         "say you'll check",
-        "say you're pulling it up",
-        "say you'll take a look",
-        "say you'll look into that",
-        "say you're checking now",
     ),
     "task": (
         "say sure, you'll do that",
@@ -149,6 +157,12 @@ QUEUED = "say you'll get to that right after the one you're on, in a few words"
 TIME_NEARLY_UP = "say we're nearly out of time on this call, so there's time for one quick thing"
 TIME_UP = "say that's all the time this call has, thank them, and say goodbye"
 TIME_WARNING_S = 30
+
+
+def _mentions_approval(text: str) -> bool:
+    """His answer already tells them to approve it — no second line saying the same."""
+    lowered = text.lower()
+    return any(word in lowered for word in ("approv", "confirm", "on screen", "on your screen"))
 
 
 @dataclass
@@ -446,7 +460,7 @@ class LuciusDesk:
         self._heard.clear()
         self._turn_said = ""  # the owner's words travel with the request instead
         self._sent_at.append(now)
-        log.info("voice: front handed Lucius a request (%d chars)", len(request))
+        log.info("voice: front handed Lucius a %s request (%d chars)", kind, len(request))
         busy = self._current is not None
         self._queue.put_nowait((said, request, shown))
         self._holding(QUEUED if busy else self._ack(kind))
@@ -496,10 +510,17 @@ class LuciusDesk:
             "ask", session_id=self._session_id, said=said, understood=understood, shown=shown
         )
         text, approval = await self._collect(events)
-        if text.strip():
-            self._answer_now(text.strip())
+        self._speak(text, approval)
         if approval:
             self._approving = True  # its continuation is read out by ``_follow_others``
+
+    def _speak(self, text: str, approval: bool) -> None:
+        """Lucius's answer; and when he stopped at an approval card, word that it waits on screen
+        — said by us unless his answer already said so."""
+        if text.strip():
+            self._answer_now(text.strip())
+        if approval and not _mentions_approval(text):
+            self._line(APPROVAL_WAITING)
 
     async def _collect(self, events) -> tuple[str, bool]:
         """Gather Lucius's reply, speaking a progress line only on a REAL delay, at most once
@@ -583,8 +604,7 @@ class LuciusDesk:
             finally:
                 self._following = False
             self._approving = approval
-            if text.strip():
-                self._answer_now(text.strip())
+            self._speak(text, approval)
 
 
 async def _prepend(first, rest):

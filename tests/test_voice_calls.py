@@ -861,7 +861,8 @@ def test_a_typed_turn_is_read_aloud_and_counts_as_busy():
             await desk_._follow_others()
 
     asyncio.run(run())
-    assert said == ["You spent 40 dollars on coffee."]
+    # …and, its answer not mentioning the approval card it stopped at, that it waits on screen.
+    assert said == ["You spent 40 dollars on coffee.", agent.APPROVAL_WAITING]
     assert seen_busy == [True] and desk_._following is False
     assert desk_._approving is True  # its approval's continuation is the next turn followed
 
@@ -1071,3 +1072,20 @@ def test_missing_voice_libraries_say_why(monkeypatch):
     monkeypatch.setattr(service, "platform_supported", lambda *a: True)
     assert "Reinstall Open Net Worth" in service.libraries_problem()
     assert "pip install" not in service.libraries_problem()
+
+
+def test_an_approval_card_is_said_out_loud_when_lucius_wrote_nothing_about_it():
+    """Owner, 2026-11-04: Lucius stopped at an order's approval card having written nothing for
+    the owner (his notes are thinking), so the call stayed silent and the card waited unseen."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_._speak("", True)
+    assert said == [agent.APPROVAL_WAITING]
+    said.clear()
+    desk_._speak("I've set up the order. Approve it on screen and I'll place it.", True)
+    assert agent.APPROVAL_WAITING not in said  # his answer already says so: once is enough
+    said.clear()
+    desk_._speak("Your balance is up this week.", False)
+    assert agent.APPROVAL_WAITING not in said
