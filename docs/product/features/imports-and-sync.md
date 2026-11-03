@@ -20,10 +20,10 @@ sync follows fixed rules rather
 than a Lucius prompt, so no AI is involved and it costs nothing to run. Every run is
 saved, so you can come back to its report whenever you like, from any device.
 
-> **Experimental, off by default.** Turn it on in [Settings → Developer → Experimental](settings.md#experimental-features)
-> (the **Ynab import and sync** switch). Until then there is no **Data sync** tab. Turning it off
-> again stops the sync and hides the tab, but keeps its settings, review list
-> and history, so turning it back on carries on where it left off. The YNAB connector itself works
+> **Experimental, on by default.** It has a switch in [Settings → Developer → Experimental](settings.md#experimental-features)
+> (**Ynab import and sync**). Turning it off stops the sync and hides the **Data sync** tab, but
+> keeps its settings, review list and history, so turning it back on carries on where it left
+> off. The YNAB connector itself works
 > the same either way.
 
 This is separate from [importing a statement](importing.md), which reads one bank or card file, and

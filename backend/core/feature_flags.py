@@ -118,7 +118,7 @@ FLAGS: tuple[Flag, ...] = (
             "Import a whole YNAB plan, then keep it and this book in step on a schedule: from "
             "YNAB, to YNAB or both ways. Adds the Data sync tab in Automations."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 11, 2),
         remove_by=date(2027, 2, 1),

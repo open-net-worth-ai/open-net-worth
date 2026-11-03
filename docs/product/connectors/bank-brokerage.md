@@ -270,9 +270,9 @@ move your whole plan across instead, use the migration below.
 To move your accounts, categories, envelopes, every transaction and each month's budgeted amounts
 across, and check the result against YNAB, open **Automations →
 Data sync → YNAB**: the [YNAB data sync](../features/imports-and-sync.md) uses the token you saved
-here, and the import is its second setup step. It is experimental and off by default: the **Data
-sync** tab appears once you turn it on in
-[Settings → Developer → Experimental](../features/settings.md#experimental-features).
+here, and the import is its second setup step. It is on by default; turning it off in
+[Settings → Developer → Experimental](../features/settings.md#experimental-features) hides the
+**Data sync** tab.
 A YNAB category can go with a category you already have (matched by name, ignoring emoji and
 capitals), into one of your envelopes, or become a new one; nothing of yours is renamed or moved
 ([how](../features/imports-and-sync.md#set-it-up)).

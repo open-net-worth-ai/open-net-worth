@@ -33,9 +33,9 @@ GATED = [
 ]
 
 
-def test_the_flag_ships_off():
+def test_the_flag_ships_on():
     flag = feature_flags.get("ynab_import_and_sync")
-    assert flag.default is False and flag.kind == "release"
+    assert flag.default is True and flag.kind == "release"
 
 
 def test_off_the_import_and_sync_routes_are_not_found_and_the_connector_stays(world):  # noqa: F811
