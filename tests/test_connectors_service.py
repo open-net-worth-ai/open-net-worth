@@ -1048,7 +1048,12 @@ def test_native_views_carry_descriptions_and_known_tool_names():
             "simplefin_fetch_transactions",
             "simplefin_list_accounts",
         ],
-        "plaid": ["plaid_get_status", "plaid_fetch_transactions", "plaid_list_accounts"],
+        "plaid": [
+            "plaid_get_status",
+            "plaid_fetch_transactions",
+            "plaid_list_accounts",
+            "plaid_reconnect_bank",
+        ],
         "lunch_money": [
             "lunch_money_get_status",
             "lunch_money_fetch_transactions",

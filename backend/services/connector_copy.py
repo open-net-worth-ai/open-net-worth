@@ -190,6 +190,10 @@ TOOLS: dict[str, list[ConnectorTool]] = {
             "List the Plaid accounts and which of yours each is linked to; no transactions.",
             read_only=True,
         ),
+        _t(
+            "plaid_reconnect_bank",
+            "Send you a sign-in link to reconnect a bank whose login expired; you sign in.",
+        ),
     ],
     "lunch_money": [
         _t("lunch_money_get_status", "Read the Lunch Money connector status and sync stats."),

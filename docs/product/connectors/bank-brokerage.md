@@ -143,6 +143,13 @@ expire), that bank shows **Sign-in expired** in step ② and nothing syncs from 
 link you made to them stay exactly as they were. Opened a new account at a bank you already
 linked? Click **Add accounts** on that bank to pick it; existing links are untouched.
 
+You can also ask Lucius — "reconnect my Chase account" — from the app or a chat channel such as
+Telegram. He asks your approval, then sends you a **Sign in to Chase again** link to Plaid's own
+page. You sign in there yourself: Lucius never sees your bank password or a security code. Tell
+him when you're done and he checks that the bank answers again. The link expires after a while,
+so ask for a fresh one if you come back later. Linking a **new** bank is always done here, in
+step ②.
+
 ## Enable Banking
 
 Banks in the EU and UK, through open-banking (PSD2) consent you give at your own bank.
