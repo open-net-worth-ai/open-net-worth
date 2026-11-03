@@ -9483,6 +9483,35 @@ body.hide-amounts .money * {
     align-items: center;
     gap: var(--space-1);
   }
+  /* A prompt suggestion chip DOES something (hands the prompt to Lucius) — the arrow and hover
+     set it apart from tool/category chips, which are labels. */
+  .cn-promptchip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition:
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+  .cn-promptchip-arrow {
+    flex: none;
+    color: var(--faint);
+    transition:
+      transform 120ms ease,
+      color 120ms ease;
+  }
+  .cn-promptchip:hover,
+  .cn-promptchip:focus-visible {
+    border-color: color-mix(in srgb, var(--accent) 50%, var(--line));
+    color: var(--ink);
+  }
+  .cn-promptchip:hover .cn-promptchip-arrow,
+  .cn-promptchip:focus-visible .cn-promptchip-arrow {
+    color: var(--accent);
+    transform: translateX(2px);
+  }
+
   .conn-file-fix {
     display: flex;
     flex-direction: column;

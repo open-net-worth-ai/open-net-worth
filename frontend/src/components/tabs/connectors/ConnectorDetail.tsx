@@ -34,6 +34,7 @@
 
 import { useEffect, useState, type JSX, type ReactNode } from 'react'
 import { useNavigate } from '@tanstack/react-router'
+import { ArrowRight } from '../../../ui/icons'
 import { templateKeyForConnector } from '../automations/automationTemplates'
 import { BackTitle, Badge, Btn, Kebab, Modal, Mono, type KebabItem } from './primitives'
 import { useConnectorSaveHost } from './formSave'
@@ -535,11 +536,12 @@ export function ConnectorDetail({
                 {entry.prompts.map((p) => (
                   <button
                     key={p}
-                    className="cn-tagchip"
-                    style={{ cursor: 'pointer' }}
+                    type="button"
+                    className="cn-tagchip cn-promptchip"
                     onClick={() => onUsePrompt(p)}
                   >
                     {p}
+                    <ArrowRight size={12} aria-hidden="true" className="cn-promptchip-arrow" />
                   </button>
                 ))}
               </div>

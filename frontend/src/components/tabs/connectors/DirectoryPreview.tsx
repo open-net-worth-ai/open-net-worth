@@ -34,6 +34,8 @@ import { ExternalLink, FIRST_PARTY_PUBLISHER, PublisherLine } from './VendorTrus
 import { MODAL_BODY_MIN_HEIGHT } from './DirectoryBrowser'
 import { previewEndpoint, type DirectoryRow } from './catalog'
 import { resolveToolList } from './toolList'
+import { useChatComposerOptional } from '../../../state/chatComposer'
+import { ArrowRight } from '../../../ui/icons'
 
 export interface DirectoryPreviewProps {
   d: DirectoryRow
@@ -84,6 +86,8 @@ function publisherHref(d: DirectoryRow): string | undefined {
 interface Chip {
   key: string
   label: string
+  /** A chip that DOES something (a prompt suggestion) renders as a button; the rest are labels. */
+  onClick?: () => void
 }
 
 const plainChip = (value: string): Chip => ({ key: value, label: value })
@@ -115,11 +119,23 @@ function ChipRow({
         {note ? <span className="cn-chipnote">{note}</span> : null}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-        {shown.map((c) => (
-          <span key={c.key} className="cn-tagchip">
-            {c.label}
-          </span>
-        ))}
+        {shown.map((c) =>
+          c.onClick ? (
+            <button
+              key={c.key}
+              type="button"
+              className="cn-tagchip cn-promptchip"
+              onClick={c.onClick}
+            >
+              {c.label}
+              <ArrowRight size={12} aria-hidden="true" className="cn-promptchip-arrow" />
+            </button>
+          ) : (
+            <span key={c.key} className="cn-tagchip">
+              {c.label}
+            </span>
+          ),
+        )}
         {fold && items.length > CHIP_FOLD ? (
           <button
             type="button"
@@ -279,6 +295,7 @@ export function DirectoryPreview({
   actionInFooter = false,
   liveTools,
 }: DirectoryPreviewProps): JSX.Element {
+  const composer = useChatComposerOptional()
   const toolList = resolveToolList(d, liveTools)
   return (
     <div
@@ -312,7 +329,19 @@ export function DirectoryPreview({
         note={toolList.note}
         fold
       />
-      <ChipRow label="Prompt suggestions" items={(prompts ?? []).map(plainChip)} />
+      <ChipRow
+        label="Prompt suggestions"
+        items={(prompts ?? []).map((p) => ({
+          ...plainChip(p),
+          // Same as on a connector's own page: the prompt lands in Lucius's composer, unsent.
+          onClick: composer
+            ? () => {
+                composer.setPendingText(p)
+                composer.requestOpen()
+              }
+            : undefined,
+        }))}
+      />
       {/* The connector's TOPICS, never its family. The family is the lane the reader is
           already browsing — printing it back as the sole "category" (Stripe → `MCP`) said
           nothing. `families` keeps its real job: the list sections and the directory filter. */}

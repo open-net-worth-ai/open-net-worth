@@ -18,6 +18,10 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import { DirectoryPreview } from './DirectoryPreview'
+
+// A prompt suggestion hands its text to Lucius's composer — stand the composer in.
+const composer = { setPendingText: vi.fn(), requestOpen: vi.fn() }
+vi.mock('../../../state/chatComposer', () => ({ useChatComposerOptional: () => composer }))
 import type { DirectoryRow } from './catalog'
 
 afterEach(cleanup)
@@ -455,5 +459,21 @@ describe('which tool list the preview shows', () => {
   it('never folds a short list', () => {
     preview({ installed: true }, { liveTools: many.slice(0, 9) })
     expect(screen.queryByRole('button', { name: /Show all/ })).toBeNull()
+  })
+})
+
+describe('a prompt suggestion is a button that hands the prompt to Lucius', () => {
+  it('fills the composer and opens Lucius — the same as on a connector’s own page', () => {
+    preview({}, { prompts: ['Show all accounts linked through Plaid'] })
+    const chip = screen.getByRole('button', { name: 'Show all accounts linked through Plaid' })
+    fireEvent.click(chip)
+    expect(composer.setPendingText).toHaveBeenCalledWith('Show all accounts linked through Plaid')
+    expect(composer.requestOpen).toHaveBeenCalled()
+  })
+
+  it('tool and category chips stay plain labels', () => {
+    preview({}, { prompts: ['Scrape this page'] })
+    expect(screen.queryByRole('button', { name: 'Scrape this page' })).toBeTruthy()
+    for (const c of document.querySelectorAll('span.cn-tagchip')) expect(c.tagName).toBe('SPAN')
   })
 })
