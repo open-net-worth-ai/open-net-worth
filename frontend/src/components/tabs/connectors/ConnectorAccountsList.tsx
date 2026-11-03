@@ -14,7 +14,8 @@ import { fromApiAccount } from '../accounts/data'
 import AccountModal from '../accounts/AccountModal'
 import { ConnectorAccountRow } from './ConnectorAccountRow'
 import { ConnectorNextStep } from './ConnectorNextStep'
-import { groupRows, prefillFor, type ProviderAccountRow } from './accountRows'
+import { FileUnderBankFix } from './FileUnderBankFix'
+import { bankInstitution, groupRows, prefillFor, type ProviderAccountRow } from './accountRows'
 import type {
   Account,
   ApiAccount,
@@ -92,7 +93,15 @@ export function ConnectorAccountsList({
 
   async function putExternalIds(
     accountId: string,
-    externalIds: Array<{ source: string; ref: string; name: string; mask: string }>,
+    // `institution` is read once, server-side, to fill an EMPTY account institution at link
+    // time (services.accounts._link_fill) — never stored on the link, never overwriting.
+    externalIds: Array<{
+      source: string
+      ref: string
+      name: string
+      mask: string
+      institution?: string
+    }>,
   ) {
     const res = await authFetch(`/api/accounts/${accountId}`, {
       method: 'PUT',
@@ -121,6 +130,10 @@ export function ConnectorAccountsList({
     )
   }
 
+  // The institution a new or newly linked account at this row's bank should go under.
+  const institutionFor = (row: ProviderAccountRow) =>
+    bankInstitution(row, data?.accounts ?? [], appAccounts, providerLabel) || row.institution || ''
+
   async function link(row: ProviderAccountRow, accountId: string) {
     const acct = appAccounts.find((a) => a.id === accountId)
     if (!acct) return
@@ -129,7 +142,13 @@ export function ConnectorAccountsList({
     try {
       await putExternalIds(accountId, [
         ...(acct.external_ids ?? []),
-        { source: provider, ref: row.provider_account_id, name: row.name, mask: row.mask },
+        {
+          source: provider,
+          ref: row.provider_account_id,
+          name: row.name,
+          mask: row.mask,
+          ...(institutionFor(row) ? { institution: institutionFor(row) } : {}),
+        },
       ])
       showLinked(row.provider_account_id, accountId)
       load()
@@ -335,6 +354,17 @@ export function ConnectorAccountsList({
           ))}
         </div>
       )}
+      {live && data && (
+        <FileUnderBankFix
+          rows={data.accounts}
+          accounts={appAccounts}
+          providerLabel={providerLabel}
+          onFixed={() => {
+            load()
+            void refreshAppAccounts()
+          }}
+        />
+      )}
       {live && !embedded && (
         <ConnectorNextStep
           provider={provider}
@@ -354,7 +384,7 @@ export function ConnectorAccountsList({
         institutions={
           [...new Set(appAccounts.map((a) => a.institution).filter(Boolean))].sort() as string[]
         }
-        prefill={creatingFor ? prefillFor(creatingFor, providerLabel) : undefined}
+        prefill={creatingFor ? prefillFor(creatingFor, institutionFor(creatingFor)) : undefined}
         onClose={() => setCreatingFor(null)}
         onSave={createAndLink}
       />

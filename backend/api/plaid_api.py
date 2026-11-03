@@ -112,6 +112,20 @@ async def plaid_link_complete():
         raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
 
 
+class PlaidBankRename(BaseModel):
+    # Blank → back to Plaid's own name for the bank.
+    name: str = ""
+
+
+@router.post("/api/plaid/banks/{key}/rename")
+async def plaid_rename_bank(key: str, body: PlaidBankRename):
+    """Give one linked bank your own name. Unknown key / too long → 422."""
+    try:
+        return await asyncio.to_thread(plaid_service.rename_bank, key, body.name)
+    except OpenNetWorthError as exc:
+        raise HTTPException(to_http_status(exc), exc.message or str(exc)) from exc
+
+
 @router.post("/api/plaid/banks/{key}/remove")
 async def plaid_remove_bank(key: str):
     """Unlink one bank: Plaid is told to drop it (best effort) and it leaves the list. Unknown

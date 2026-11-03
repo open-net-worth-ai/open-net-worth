@@ -390,3 +390,116 @@ def test_an_expired_sign_in_is_classified_as_reconnect_needed_not_a_network_erro
         "Plaid /transactions/get failed: HTTP 500", plaid_error_code="INTERNAL_SERVER_ERROR"
     )
     assert svc.classify_error(other) == "connect_error"
+
+
+# ── an unnamed bank gets its real name; a bank can be renamed ───────────────────────────
+
+
+def test_an_unnamed_bank_is_named_from_plaid_on_the_next_fetch(store, monkeypatch):
+    store.add_item(_item("i1", "", ""))  # linked before names were recorded
+
+    def fake_post(url, json=None, timeout=None):
+        path = url.split(".plaid.com", 1)[1]
+        if path == "/transactions/get":
+            acct = {"account_id": "a1", "name": "Checking", "balances": {"current": 1}}
+            return _Resp(
+                {
+                    "accounts": [acct],
+                    "transactions": [],
+                    "total_transactions": 0,
+                    "item": {"institution_id": "ins_3"},
+                }
+            )
+        if path == "/institutions/get_by_id":
+            assert json["institution_id"] == "ins_3"
+            return _Resp({"institution": {"name": "Chase"}})
+        return _Resp({})
+
+    monkeypatch.setattr(svc.httpx, "post", fake_post)
+    window = svc.fetch_window(store, "2026-10-01", "2026-10-29", None)
+    assert [a["institution"] for a in window.accounts] == ["Chase"]  # the rows show the bank
+    assert store.public()["banks"][0]["institution_name"] == "Chase"  # no more "Linked bank"
+    assert store.items()[0]["institution_id"] == "ins_3"
+
+
+def test_a_fresh_link_without_a_bank_name_is_named_straight_away(store, monkeypatch):
+    replies = {
+        "/item/public_token/exchange": {"access_token": "access-i1", "item_id": "i1"},
+        "/item/get": {"item": {"institution_id": "ins_3", "institution_name": "Chase"}},
+    }
+    monkeypatch.setattr(
+        svc.httpx, "post", lambda url, **k: _Resp(replies.get(url.split(".plaid.com", 1)[1], {}))
+    )
+    out = svc.exchange_public_token("pub", institution={})
+    assert out["institution_name"] == "Chase"
+    assert store.public()["banks"][0]["institution_name"] == "Chase"
+
+
+def test_naming_a_bank_never_fails_a_fetch(store, monkeypatch):
+    store.add_item(_item("i1", "", ""))
+
+    def fake_post(url, json=None, timeout=None):
+        path = url.split(".plaid.com", 1)[1]
+        if path == "/institutions/get_by_id":
+            return _Resp({"error_code": "INTERNAL_SERVER_ERROR"}, 500)
+        return _Resp(
+            {
+                "accounts": [],
+                "transactions": [],
+                "total_transactions": 0,
+                "item": {"institution_id": "ins_3"},
+            }
+        )
+
+    monkeypatch.setattr(svc.httpx, "post", fake_post)
+    window = svc.fetch_window(store, "2026-10-01", "2026-10-29", None)
+    assert window.complete
+    assert store.public()["banks"][0]["institution_name"] == ""
+
+
+def test_a_bank_can_be_renamed_and_renamed_back(store):
+    store.add_item(_item("i1", "ins_3", "Chase"))
+    out = svc.rename_bank(bank_key("i1"), "  Joint Chase ")
+    assert out == {"key": bank_key("i1"), "name": "Joint Chase", "renamed": True}
+    bank = store.public()["banks"][0]
+    assert bank["institution_name"] == "Joint Chase" and bank["provider_name"] == "Chase"
+    assert bank["renamed"] is True
+    assert store.items()[0]["access_token"] == "access-i1"  # the credential is untouched
+    svc.rename_bank(bank_key("i1"), "")
+    assert store.public()["banks"][0]["institution_name"] == "Chase"
+
+
+def test_renaming_validates_the_bank_and_the_length(store):
+    store.add_item(_item("i1", "ins_3", "Chase"))
+    with pytest.raises(ValidationError):
+        svc.rename_bank("nope", "x")
+    with pytest.raises(ValidationError):
+        svc.rename_bank(bank_key("i1"), "x" * 81)
+
+
+def test_update_item_can_never_change_a_banks_token_or_id(store):
+    store.add_item(_item("i1", "ins_3", "Chase"))
+    store.update_item("i1", {"access_token": "stolen", "item_id": "other", "custom_name": "A"})
+    [item] = store.items()
+    assert item["access_token"] == "access-i1" and item["item_id"] == "i1"
+    assert item["custom_name"] == "A"
+
+
+def test_a_renamed_bank_still_files_its_accounts_under_plaids_name_so_they_group(
+    store, monkeypatch
+):
+    store.add_item(_item("i1", "ins_1", "Wells Fargo"))
+    svc.rename_bank(bank_key("i1"), "Our joint bank")
+    monkeypatch.setattr(svc.httpx, "post", _per_bank())
+    window = svc.fetch_window(store, "2026-10-01", "2026-10-29", None)
+    assert [a["institution"] for a in window.accounts] == ["Wells Fargo"]
+    assert store.public()["banks"][0]["institution_name"] == "Our joint bank"
+
+
+def test_a_bank_plaid_never_named_files_its_accounts_under_the_users_name(store, monkeypatch):
+    store.add_item(_item("i1", "", ""))
+    svc.rename_bank(bank_key("i1"), "Credit union")
+    monkeypatch.setattr(svc.httpx, "post", _per_bank())
+    monkeypatch.setattr(svc, "_institution_name", lambda *_: "")
+    window = svc.fetch_window(store, "2026-10-01", "2026-10-29", None)
+    assert [a["institution"] for a in window.accounts] == ["Credit union"]

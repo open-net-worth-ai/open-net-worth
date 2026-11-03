@@ -130,7 +130,14 @@ US banks and cards, through your own Plaid developer account.
    to have Lucius add new transactions to your linked accounts on a schedule, or ask him for a
    one-off fetch. Unlinked accounts are skipped.
 
-To change your keys later, click **Edit keys** on step ①, then **Save**. **If a bank's sign-in expires** (a new password, a security check, or a consent your bank set to
+To change your keys later, click **Edit keys** on step ①, then **Save**. **Bank names.** Each bank is listed by the name Plaid gives it; click **Rename** to call it
+something else (for example *Joint Chase*) — clearing the name goes back to Plaid's. Accounts you
+add are filed under the bank's real name either way, so the Accounts sidebar groups them
+together. If accounts from an earlier version ended up under **Plaid** instead of their bank,
+step ③ offers **File them under** *bank* to move them in one click; an institution you chose
+yourself is never changed.
+
+**If a bank's sign-in expires** (a new password, a security check, or a consent your bank set to
 expire), that bank shows **Sign-in expired** in step ② and nothing syncs from it. Click
 **Reconnect** and sign in again — it renews the same connection, so the bank's accounts and every
 link you made to them stay exactly as they were. Opened a new account at a bank you already

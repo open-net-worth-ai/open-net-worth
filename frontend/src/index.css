@@ -9237,6 +9237,24 @@ body.hide-amounts .money * {
     font-size: var(--text-sm);
     font-weight: 500;
   }
+  .plaid-bank-rename {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .plaid-bank-rename .ui-input,
+  .plaid-bank-rename input {
+    min-width: 0;
+    max-width: 260px;
+  }
+  .plaid-bank-rename-btn {
+    margin-left: var(--space-1);
+    opacity: 0.7;
+  }
+  .plaid-bank-rename-btn:hover,
+  .plaid-bank-rename-btn:focus-visible {
+    opacity: 1;
+  }
   .plaid-bank-sub {
     color: var(--faint);
     font-size: var(--text-xs);
@@ -9464,6 +9482,21 @@ body.hide-amounts .money * {
     display: flex;
     align-items: center;
     gap: var(--space-1);
+  }
+  .conn-file-fix {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+  }
+  .conn-file-fix-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
   }
   .conn-next {
     display: flex;

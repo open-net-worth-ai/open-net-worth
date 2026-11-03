@@ -5,14 +5,18 @@
 import { useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { emitDataChanged } from '../../../lucius/bus'
-import { Button, Cluster, ConfirmDialog, Stack, Text } from '../../ui'
+import { Button, Cluster, ConfirmDialog, Stack, Text, TextField } from '../../ui'
 import { fDate } from '../../../utils/format'
 import { SetupStep, type SetupStepState } from './SetupStep'
 import type { PlaidLink } from './usePlaidLink'
 
 export interface PlaidBank {
   key: string
+  /** The name shown: the user's own if they renamed it, else Plaid's. */
   institution_name: string
+  /** Plaid's own name for the bank — shown beside a name the user chose. */
+  provider_name?: string
+  renamed?: boolean
   linked_at: string | null
   /** Plaid says this bank's sign-in must be renewed — offer Reconnect (update mode). */
   needs_reconnect?: boolean
@@ -43,9 +47,32 @@ export function PlaidBanksStep({
   const renew = (b: PlaidBank, addAccounts: boolean) =>
     void link.start({ bank: b.key, addAccounts })
   const [removing, setRemoving] = useState<PlaidBank | null>(null)
+  const [renaming, setRenaming] = useState<{ key: string; draft: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const any = banks.length > 0
+
+  async function saveName(bank: PlaidBank, name: string) {
+    setBusy(true)
+    setError(null)
+    try {
+      const r = await authFetch(`/api/plaid/banks/${encodeURIComponent(bank.key)}/rename`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      })
+      if (!r.ok) {
+        const d = await r.json().catch(() => ({}))
+        setError(d.detail || 'Could not rename that bank.')
+        return
+      }
+      setRenaming(null)
+      onChanged()
+      emitDataChanged(['config'])
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function remove(bank: PlaidBank) {
     setBusy(true)
@@ -75,7 +102,53 @@ export function PlaidBanksStep({
             {banks.map((b) => (
               <li key={b.key} className="plaid-bank">
                 <div className="plaid-bank-main">
-                  <span className="plaid-bank-name">{b.institution_name || 'Linked bank'}</span>
+                  {renaming?.key === b.key ? (
+                    <form
+                      className="plaid-bank-rename"
+                      onSubmit={(e) => {
+                        e.preventDefault()
+                        void saveName(b, renaming.draft)
+                      }}
+                    >
+                      <TextField
+                        aria-label={`Name for ${b.provider_name || b.institution_name || 'this bank'}`}
+                        value={renaming.draft}
+                        placeholder={b.provider_name || 'Bank name'}
+                        autoFocus
+                        maxLength={80}
+                        onChange={(e) => setRenaming({ key: b.key, draft: e.target.value })}
+                        onKeyDown={(e) => e.key === 'Escape' && setRenaming(null)}
+                      />
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        type="submit"
+                        loading={busy}
+                        aria-label="Save name"
+                      >
+                        Save
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setRenaming(null)}>
+                        Cancel
+                      </Button>
+                    </form>
+                  ) : (
+                    <span className="plaid-bank-name">
+                      {b.institution_name || 'Unnamed bank'}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="plaid-bank-rename-btn"
+                        aria-label={`Rename ${b.institution_name || 'this bank'}`}
+                        onClick={() => setRenaming({ key: b.key, draft: b.institution_name || '' })}
+                      >
+                        Rename
+                      </Button>
+                    </span>
+                  )}
+                  {b.renamed && b.provider_name && renaming?.key !== b.key && (
+                    <span className="plaid-bank-sub">Plaid calls it {b.provider_name}</span>
+                  )}
                   {b.needs_reconnect ? (
                     <span className="plaid-bank-sub plaid-bank-sub--warn">
                       Sign-in expired — nothing syncs until you reconnect

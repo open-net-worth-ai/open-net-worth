@@ -56,7 +56,8 @@ DEFAULTS: dict = {
     "access_token": "",
     "item_id": "",
     # Every linked bank (a Plaid Item), write-only: ``[{item_id, access_token, institution_id,
-    # institution_name, linked_at}]``. Set only through ``add_item``/``remove_item``.
+    # institution_name, custom_name, linked_at}]``. ``custom_name`` is the user's own name for
+    # the bank (wins over Plaid's). Set only through ``add_item``/``update_item``/``remove_item``.
     "items": [],
     # The Hosted Link session in flight (write-only): Hosted Link never shows the user a public
     # token, so the app reads it back from ``/link/token/get`` with this token.
@@ -72,6 +73,11 @@ DEFAULTS: dict = {
     # The bank an in-flight update-mode link is for (``bank_key``), or None for a new bank.
     "pending_link_bank": None,
 }
+
+
+def bank_name(item: dict) -> str:
+    """The name a linked bank goes by — the user's own, else the one Plaid reported."""
+    return str(item.get("custom_name") or item.get("institution_name") or "").strip()
 
 
 def _items_of(cfg: dict) -> list[dict]:
@@ -162,6 +168,19 @@ class PlaidConfigStore(AggregatorConfigStore):
             kept = [i for i in self.items(conn=c) if i.get("item_id") != item.get("item_id")]
             return self._write_items(c, [*kept, entry])
 
+    def update_item(self, item_id: str, fields: dict) -> dict | None:
+        """Change fields of ONE linked bank (its name, say), in one locked unit. A legacy
+        single-bank pair is rewritten as the list on the way. Returns the entry, or None."""
+        with self._unit(None) as c:
+            items = self.items(conn=c)
+            hit = next((i for i in items if i.get("item_id") == item_id), None)
+            if hit is None:
+                return None
+            # A bank's identity and credential are never changed through here.
+            hit.update({k: v for k, v in fields.items() if k not in ("item_id", "access_token")})
+            self._write_items(c, items)
+            return hit
+
     def remove_item(self, item_id: str) -> list[dict]:
         """Unlink one bank (by its Plaid ``item_id``), in one locked unit. Returns the new list."""
         with self._unit(None) as c:
@@ -245,7 +264,10 @@ class PlaidConfigStore(AggregatorConfigStore):
             "banks": [
                 {
                     "key": bank_key(i.get("item_id") or ""),
-                    "institution_name": i.get("institution_name") or "",
+                    "institution_name": bank_name(i),
+                    # What Plaid calls it — shown beside a name the user chose themselves.
+                    "provider_name": i.get("institution_name") or "",
+                    "renamed": bool(i.get("custom_name")),
                     "linked_at": i.get("linked_at"),
                     "needs_reconnect": bank_key(i.get("item_id") or "")
                     in set(cfg.get("reconnect_needed") or []),

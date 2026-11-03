@@ -135,3 +135,56 @@ it('after a reconnect, says the accounts and links are unchanged', () => {
     screen.getByText('Wells Fargo reconnected — its accounts and links are unchanged.'),
   ).toBeTruthy()
 })
+
+it('renames a bank in place and shows what Plaid calls it', async () => {
+  mockAuthFetch.mockResolvedValue({ ok: true, json: async () => ({ renamed: true }) } as Response)
+  const onChanged = vi.fn()
+  render(
+    <PlaidBanksStep
+      banks={[
+        {
+          key: 'k1',
+          institution_name: 'Joint Chase',
+          provider_name: 'Chase',
+          renamed: true,
+          linked_at: null,
+        },
+      ]}
+      state="done"
+      link={idle}
+      keysEntered
+      saving={false}
+      onLink={() => {}}
+      onChanged={onChanged}
+    />,
+  )
+  expect(screen.getByText('Plaid calls it Chase')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: 'Rename Joint Chase' }))
+  const field = screen.getByRole('textbox', { name: 'Name for Chase' })
+  fireEvent.change(field, { target: { value: 'Our Chase' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Save name' }))
+  await waitFor(() =>
+    expect(mockAuthFetch).toHaveBeenCalledWith('/api/plaid/banks/k1/rename', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Our Chase' }),
+    }),
+  )
+  await waitFor(() => expect(onChanged).toHaveBeenCalled())
+})
+
+it('an unnamed bank reads "Unnamed bank", never a fake name, and can be named', () => {
+  render(
+    <PlaidBanksStep
+      banks={[{ key: 'k1', institution_name: '', linked_at: null }]}
+      state="done"
+      link={idle}
+      keysEntered
+      saving={false}
+      onLink={() => {}}
+      onChanged={() => {}}
+    />,
+  )
+  expect(screen.getByText('Unnamed bank')).toBeTruthy()
+  expect(screen.getByRole('button', { name: 'Rename this bank' })).toBeTruthy()
+})

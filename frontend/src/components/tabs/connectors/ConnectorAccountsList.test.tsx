@@ -343,9 +343,10 @@ describe('ConnectorAccountsList — create account (CDS-UI-6)', () => {
     expect(postBody).toMatchObject({
       name: 'New Savings',
       currency: 'USD',
-      institution: 'Plaid',
       last_four: '4242',
     })
+    // No bank known for this row: the institution is left blank — never the connector "Plaid".
+    expect((postBody as { institution?: string }).institution ?? '').toBe('')
     expect(putBody).toEqual({
       external_ids: [{ source: 'plaid', ref: 'p1', name: 'New Savings', mask: '4242' }],
     })

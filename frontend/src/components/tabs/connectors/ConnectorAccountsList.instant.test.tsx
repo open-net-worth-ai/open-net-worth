@@ -70,3 +70,134 @@ it('Link shows the linked account without waiting for the provider re-fetch', as
   fireEvent.mouseDown(within(picker).getByRole('button', { name: 'Everyday Checking' }))
   expect(await screen.findByText('Linked to “Everyday Checking”')).toBeTruthy()
 })
+
+it("Link… sends the account's bank, so an account with no institution is filed under it", async () => {
+  const puts: unknown[] = []
+  mockAuthFetch.mockImplementation((url: string, init?: RequestInit) => {
+    if (url === '/api/connectors/plaid/accounts')
+      return Promise.resolve(
+        ok({
+          status: 'ok',
+          provider_label: 'Plaid',
+          accounts: [
+            {
+              provider_account_id: 'p1',
+              name: 'Gold Checking',
+              mask: '0000',
+              currency: 'USD',
+              balance: 110,
+              account_type: 'cash',
+              institution: 'Chase',
+              linked_account_id: null,
+            },
+          ],
+        }),
+      )
+    if (init?.method === 'PUT') {
+      puts.push(JSON.parse(init.body as string))
+      return Promise.resolve(ok({}))
+    }
+    return Promise.resolve(
+      ok([{ id: 'acc_1', name: 'Everyday Checking', type: 'cash', external_ids: [] }]),
+    )
+  })
+  render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Link Gold Checking to an existing account' }),
+  )
+  const picker = await screen.findByRole('group', { name: 'Link Gold Checking to an account' })
+  await waitFor(() => within(picker).getByRole('button', { name: 'Everyday Checking' }))
+  fireEvent.mouseDown(within(picker).getByRole('button', { name: 'Everyday Checking' }))
+  await waitFor(() => expect(puts).toHaveLength(1))
+  expect(puts[0]).toEqual({
+    external_ids: [
+      { source: 'plaid', ref: 'p1', name: 'Gold Checking', mask: '0000', institution: 'Chase' },
+    ],
+  })
+})
+
+it('Link… files the account under the bank’s existing (renamed) institution', async () => {
+  const puts: unknown[] = []
+  const prow = (id: string, linked: string | null) => ({
+    provider_account_id: id,
+    name: id === 'p1' ? 'Old Checking' : 'Gold Savings',
+    mask: '0000',
+    currency: 'USD',
+    balance: 1,
+    account_type: 'cash',
+    institution: 'Chase',
+    linked_account_id: linked,
+  })
+  mockAuthFetch.mockImplementation((url: string, init?: RequestInit) => {
+    if (url === '/api/connectors/plaid/accounts')
+      return Promise.resolve(
+        ok({
+          status: 'ok',
+          provider_label: 'Plaid',
+          accounts: [prow('p1', 'acc_1'), prow('p2', null)],
+        }),
+      )
+    if (init?.method === 'PUT') {
+      puts.push(JSON.parse(init.body as string))
+      return Promise.resolve(ok({}))
+    }
+    return Promise.resolve(
+      ok([
+        {
+          id: 'acc_1',
+          name: 'Checking',
+          type: 'cash',
+          institution: 'Joint Chase',
+          external_ids: [],
+        },
+        { id: 'acc_2', name: 'Savings', type: 'cash', institution: '', external_ids: [] },
+      ]),
+    )
+  })
+  render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
+  fireEvent.click(
+    await screen.findByRole('button', { name: 'Link Gold Savings to an existing account' }),
+  )
+  const picker = await screen.findByRole('group', { name: 'Link Gold Savings to an account' })
+  await waitFor(() => within(picker).getByRole('button', { name: 'Savings' }))
+  fireEvent.mouseDown(within(picker).getByRole('button', { name: 'Savings' }))
+  await waitFor(() => expect(puts).toHaveLength(1))
+  expect((puts[0] as { external_ids: { institution: string }[] }).external_ids[0].institution).toBe(
+    'Joint Chase',
+  )
+})
+
+it('Add files the new account under the row’s bank', async () => {
+  let postBody: Record<string, unknown> = {}
+  mockAuthFetch.mockImplementation((url: string, init?: RequestInit) => {
+    if (url === '/api/connectors/plaid/accounts')
+      return Promise.resolve(
+        ok({
+          status: 'ok',
+          provider_label: 'Plaid',
+          accounts: [
+            {
+              provider_account_id: 'p1',
+              name: 'Gold Checking',
+              mask: '0000',
+              currency: 'USD',
+              balance: 110,
+              account_type: 'cash',
+              institution: 'Chase',
+              linked_account_id: null,
+            },
+          ],
+        }),
+      )
+    if (url === '/api/accounts' && init?.method === 'POST') {
+      postBody = JSON.parse(init.body as string)
+      return Promise.resolve(ok({ id: 'acc_new', name: 'Gold Checking', type: 'cash' }))
+    }
+    if (init?.method === 'PUT') return Promise.resolve(ok({}))
+    return Promise.resolve(ok([]))
+  })
+  render(<ConnectorAccountsList provider="plaid" providerLabel="Plaid" />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Add' }))
+  fireEvent.click(await screen.findByRole('button', { name: 'Add account' }))
+  await waitFor(() => expect(postBody.institution).toBe('Chase'))
+})

@@ -98,7 +98,7 @@ def _route(responses: dict, calls: list):
     def fake_post(url, json=None, timeout=None):
         path = url.split(".plaid.com", 1)[1]
         calls.append((path, json))
-        return _Resp(responses[path])
+        return _Resp(responses.get(path, {}))
 
     return fake_post
 

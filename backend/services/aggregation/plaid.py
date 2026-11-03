@@ -44,7 +44,7 @@ from typing import Optional
 import httpx
 
 from backend.core.errors import ValidationError
-from backend.db.plaid_config_store import PlaidConfigStore, bank_key
+from backend.db.plaid_config_store import PlaidConfigStore, bank_key, bank_name
 from backend.models.account import AccountType
 from backend.services import ledger as ledger_service
 from backend.services.aggregation.providers import FetchWindow, derived_ref
@@ -239,14 +239,17 @@ def exchange_public_token(public_token: str, *, institution: Optional[dict] = No
     inst = institution or {}
     name = str(inst.get("name") or "").strip()
     inst_id = str(inst.get("institution_id") or "").strip()
-    store.add_item(
-        {
-            "item_id": item_id,
-            "access_token": access_token,
-            "institution_id": inst_id,
-            "institution_name": name,
-        }
-    )
+    entry = {
+        "item_id": item_id,
+        "access_token": access_token,
+        "institution_id": inst_id,
+        "institution_name": name,
+    }
+    store.add_item(entry)
+    if not name:
+        named = name_bank(store, entry, _item_info(store, access_token))
+        name = named.get("institution_name") or ""
+        inst_id = named.get("institution_id") or inst_id
     # Linking a bank that is already linked is a re-link (a fresh sign-in): retire the older
     # Item — revoked at Plaid FIRST, dropped here only once Plaid has let it go, so a token is
     # never thrown away while its Item could still be live there.
@@ -279,6 +282,63 @@ def _retire_item(store: PlaidConfigStore, item: dict) -> bool:
             return False
     store.remove_item(item.get("item_id") or "")
     return True
+
+
+def _item_info(store: PlaidConfigStore, access_token: str) -> dict:
+    """``/item/get``'s ``item`` — its ``institution_id`` (and, on current API versions, its
+    ``institution_name``). ``{}`` on failure: naming a bank never fails a link."""
+    try:
+        return dict(_post(store, "/item/get", {"access_token": access_token}).get("item") or {})
+    except ValidationError as exc:
+        logger.info("plaid: /item/get failed while naming a bank: %s", exc)
+        return {}
+
+
+def _institution_name(store: PlaidConfigStore, institution_id: str) -> str:
+    """A bank's name from Plaid's institution directory; ``""`` when it can't be looked up."""
+    if not institution_id:
+        return ""
+    try:
+        data = _post(
+            store,
+            "/institutions/get_by_id",
+            {"institution_id": institution_id, "country_codes": ["US", "CA"]},
+        )
+    except ValidationError as exc:
+        logger.info("plaid: institution lookup failed for %s: %s", institution_id, exc)
+        return ""
+    return str((data.get("institution") or {}).get("name") or "").strip()
+
+
+def name_bank(store: PlaidConfigStore, item: dict, item_info: dict) -> dict:
+    """Record which bank an unnamed Item is. A bank linked before names were kept — or whose
+    Hosted Link result carried none — listed as "Linked bank", its accounts showed no bank, and
+    an account created from one was filed under "Plaid". Plaid names the Item's institution on
+    ``/transactions/get`` and ``/item/get`` (``item_info``); an id alone is looked up. Best
+    effort: no name found leaves the bank as it was. Returns the (possibly) named item."""
+    if item.get("institution_name"):
+        return item
+    inst_id = str(item_info.get("institution_id") or item.get("institution_id") or "").strip()
+    name = str(item_info.get("institution_name") or "").strip() or _institution_name(store, inst_id)
+    if not name:
+        return item
+    fields = {"institution_id": inst_id, "institution_name": name}
+    store.update_item(item.get("item_id") or "", fields)
+    return {**item, **fields}
+
+
+def rename_bank(key: str, name: str) -> dict:
+    """Give one linked bank your own name ("Joint Chase"); blank goes back to Plaid's. Only the
+    label changes — the connection, its accounts and their links are untouched."""
+    store = PlaidConfigStore()
+    item = store.item_by_key(key)
+    if item is None:
+        raise ValidationError("That bank is not linked")
+    label = (name or "").strip()
+    if len(label) > 80:
+        raise ValidationError("Keep the bank's name under 80 characters")
+    updated = store.update_item(item.get("item_id") or "", {"custom_name": label or None})
+    return {"key": key, "name": bank_name(updated or item), "renamed": bool(label)}
 
 
 def remove_bank(key: str) -> dict:
@@ -320,6 +380,7 @@ def _fetch_item(
     accounts: dict[str, dict] = {}
     offset = 0
     truncated = True
+    item_info: dict = {}
     for _ in range(_MAX_FETCH_PAGES):
         payload = {
             "access_token": access_token,
@@ -328,6 +389,7 @@ def _fetch_item(
             "options": {"count": _PAGE_SIZE, "offset": offset},
         }
         data = _post(store, "/transactions/get", payload)
+        item_info = item_info or dict(data.get("item") or {})
         page = data.get("transactions") or []
         transactions.extend(page)
         for acct in data.get("accounts") or []:
@@ -339,7 +401,12 @@ def _fetch_item(
         if not page or (isinstance(total, int) and offset >= total):
             truncated = False
             break
-    return {"transactions": transactions, "accounts": accounts, "truncated": truncated}
+    return {
+        "transactions": transactions,
+        "accounts": accounts,
+        "truncated": truncated,
+        "item": item_info,
+    }
 
 
 def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date: str) -> dict:
@@ -373,9 +440,16 @@ def fetch_transactions_get(store: PlaidConfigStore, *, start_date: str, end_date
             complete = False
             continue
         answered.add(key)
+        item = name_bank(store, item, got.get("item") or {})
         transactions.extend(got["transactions"])
         for acct_id, acct in got["accounts"].items():
-            accounts[acct_id] = {**acct, "_institution": item.get("institution_name") or ""}
+            # Accounts carry Plaid's OWN name for the bank — stable, so every account at it
+            # groups together however the user labels the bank in the Plaid list. A label is
+            # used only when Plaid never named the bank.
+            accounts[acct_id] = {
+                **acct,
+                "_institution": item.get("institution_name") or bank_name(item),
+            }
         complete = complete and not got["truncated"]
     store.mark_reconnect(needed=needed, ok=answered)
     if first_error is not None and len(warnings) == len(items):
