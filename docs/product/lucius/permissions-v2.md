@@ -296,8 +296,12 @@ Undo can only reach back so far: once enough newer changes have been made that t
 restores from is cleared, the message still reads *Restored to before this message* but no
 longer offers **Undo**.
 
-Restoring to before an earlier message hides **Restore** on the later messages of that
-conversation while the restore stands. **Undo** brings them back.
+Restoring to before an earlier message also undoes everything the later messages of that
+conversation changed, and hides their **Restore** while the restore stands. **Undo** brings back
+both the changes and the buttons. Changes made in your other conversations are not undone.
+
+A change you approve on a card belongs to the message that asked for it: restoring that message
+undoes it too.
 
 The first time Lucius changes your data, a one-time tip points at that message's **Restore**.
 

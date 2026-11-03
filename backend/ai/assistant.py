@@ -4273,8 +4273,15 @@ async def _run_turn(
         # ── Turn checkpoint: capture pre-write state of any data file this turn edits, so
         #    the whole turn can be rolled back. anchor = history length before this turn's
         #    messages (conversation rewind truncates back to here).
+        #    A turn resumed after an approval belongs to the message that proposed the card,
+        #    so its checkpoint anchors THERE — the same message its approved write's
+        #    checkpoint sits on (`_run_approved_tool_use`), the one the client puts it on.
         _ckpt_ctx, _ckpt_token = ckpt.begin_turn(
-            session_id, history_snapshot_len, _extract_user_preview(new_messages)
+            session_id,
+            _provider_turn_start,
+            _extract_user_preview(
+                new_messages or history[_provider_turn_start : _provider_turn_start + 1]
+            ),
         )
 
         # Accumulate token usage across all model turns in this conversation turn
@@ -5401,6 +5408,43 @@ async def _run_turn(
         _wr.close_receipt(_receipt_token)
 
 
+def _begin_approval_checkpoint(session_id: str, history: list[dict], turn_start: int):
+    """Open a checkpoint for an approved card's call, anchored on the message that proposed
+    it. The call runs here, AFTER that turn paused and finalised its own checkpoint and
+    BEFORE the resumed turn opens one — with no checkpoint open, the write was recorded
+    nowhere and "Restore to before this message" left it in place (owner, 2026-11-03)."""
+    from backend.ai import checkpoint as ckpt
+
+    return ckpt.begin_turn(
+        session_id, turn_start, _extract_user_preview(history[turn_start : turn_start + 1])
+    )
+
+
+def _end_approval_checkpoint(ctx, token) -> dict | None:
+    from backend.ai import checkpoint as ckpt
+
+    return ckpt.end_turn(ctx, token)
+
+
+async def _run_approved_tool_use(
+    session_id: str, history: list[dict], turn_start: int, tool_name: str, tool_use_id: str
+) -> tuple[str, dict | None, dict | None]:
+    """Redeem an approved internal tool call inside its own checkpoint. Returns the tool's
+    result, its proposed change, and the checkpoint entry (None when it wrote nothing)."""
+    from backend.ai.tools import execute_tool
+    from backend.ai.tools._confirm_gate import CONFIRM_TOKEN_KEY
+
+    ctx, token = _begin_approval_checkpoint(session_id, history, turn_start)
+    entry: dict | None = None
+    try:
+        text_result, proposed = await execute_tool(
+            tool_name, {CONFIRM_TOKEN_KEY: tool_use_id}, tool_use_id=tool_use_id
+        )
+    finally:
+        entry = _end_approval_checkpoint(ctx, token)
+    return text_result, proposed, entry
+
+
 async def resolve_pending_tool_use(
     session_id: str,
     tool_use_id: str,
@@ -5523,6 +5567,7 @@ async def _resolve_pending_tool_use_body(
         tool_name = entry.get("tool") or ""
         resume_turn_start = _semantic_turn_start_for_tool_use(history, tool_use_id)
         _mcp_image_ids: list[str] = []
+        _approved_cp: dict | None = None
         if decision == "approve":
             from backend.ai.tools._confirm_gate import (
                 preview_mismatch_result,
@@ -5562,15 +5607,18 @@ async def _resolve_pending_tool_use_body(
                             None,
                         )
                     else:
-                        text_result, _proposed, _mcp_image_ids = await _ext.apply_confirmed(
-                            tool_name, staged_args(redeemed)
+                        _ctx, _token = _begin_approval_checkpoint(
+                            session_id, history, resume_turn_start
                         )
+                        try:
+                            text_result, _proposed, _mcp_image_ids = await _ext.apply_confirmed(
+                                tool_name, staged_args(redeemed)
+                            )
+                        finally:
+                            _approved_cp = _end_approval_checkpoint(_ctx, _token)
             else:
-                from backend.ai.tools import execute_tool
-                from backend.ai.tools._confirm_gate import CONFIRM_TOKEN_KEY
-
-                text_result, _proposed = await execute_tool(
-                    tool_name, {CONFIRM_TOKEN_KEY: tool_use_id}, tool_use_id=tool_use_id
+                text_result, _proposed, _approved_cp = await _run_approved_tool_use(
+                    session_id, history, resume_turn_start, tool_name, tool_use_id
                 )
         elif decision == "deny":
             text_result, _ = _permission_engine().declined_result(tool_name)
@@ -5622,6 +5670,8 @@ async def _resolve_pending_tool_use_body(
         )
         _save_session(session_id, history)
         yield {"type": "tool_done", "id": tool_use_id, "result": text_result}
+        if _approved_cp:
+            yield {"type": "checkpoint_created", "checkpoint": _approved_cp}
 
         _mutated: set = set()
         if decision == "approve" and not is_err:

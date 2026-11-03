@@ -126,13 +126,16 @@ def turn_anchors(session_id: str) -> dict[int, str]:
     """Map anchor_history_len -> checkpoint id for this session's active "turn"
     checkpoints. Used to re-attach Restore anchors when a conversation is rebuilt
     from its transcript (assistant.rehydrate_messages); anchor_history_len is the
-    raw transcript index of the user message that opened the turn."""
+    raw transcript index of the user message that opened the turn. One message can hold
+    several (an approved card's write and the turn it resumed); any of them restores the
+    whole message. A message rewound out of the chat no longer owns its index."""
     out: dict[int, str] = {}
     for e in _read_index():
         if (
             e.get("session_id") == session_id
             and e.get("kind", "turn") == "turn"
             and e.get("status", "active") == "active"
+            and not e.get("rewound")
         ):
             anchor = e.get("anchor_history_len")
             if isinstance(anchor, int):
@@ -160,6 +163,7 @@ def turn_receipts(session_id: str) -> dict[int, dict]:
             e.get("session_id") == session_id
             and e.get("kind", "turn") == "turn"
             and e.get("status", "active") == "active"
+            and not e.get("rewound")
         ):
             anchor = e.get("anchor_history_len")
             receipt = e.get("receipt")
@@ -194,6 +198,25 @@ def _mark_restored(checkpoint_id: str, undo_checkpoint_id: str | None) -> None:
     """Record on a turn checkpoint that its data was restored, and which checkpoint undoes it."""
     with _index_lock:
         _store.update_by_id(checkpoint_id, {"restored": {"undo_checkpoint_id": undo_checkpoint_id}})
+
+
+def _mark_rewound(session_id: str, anchor_len: int) -> None:
+    """The chat was rewound to ``anchor_len``: every turn of this session anchored at or after
+    it lost its message, and the next message reuses that index. Flag them so no Restore
+    button, receipt or same-message restore chain (`_restore._restore_chain`) mistakes them
+    for the new message's turns — they keep their status, so the data they still hold stays
+    reachable by restoring an earlier message."""
+    with _index_lock:
+        _store.bulk_patch(
+            {
+                e["id"]: {"rewound": True}
+                for e in _read_index()
+                if e.get("session_id") == session_id
+                and e.get("kind", "turn") == "turn"
+                and isinstance(e.get("anchor_history_len"), int)
+                and e["anchor_history_len"] >= anchor_len
+            }
+        )
 
 
 def _clear_restores_undone_by(undo_checkpoint_id: str) -> None:
@@ -340,7 +363,7 @@ def turn_superseded(session_id: str) -> dict[int, str]:
     revivable = _revivable_ids(index, {e["id"] for e in index})
     out: dict[int, str] = {}
     for e in index:
-        if e["id"] in revivable and e.get("session_id") == session_id:
+        if e["id"] in revivable and e.get("session_id") == session_id and not e.get("rewound"):
             anchor = e.get("anchor_history_len")
             if isinstance(anchor, int):
                 out[anchor] = e["id"]
