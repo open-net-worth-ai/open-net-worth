@@ -78,7 +78,7 @@ export function InstitutionManager({
 
   return (
     <>
-      <Modal open={open} onClose={onClose} title="Manage institutions" size="sm">
+      <Modal open={open} onClose={onClose} title="Manage institutions" size="md">
         <div className="acct-inst-manager">
           <p className="acct-inst-manager-copy">
             Rename a shared institution, or remove it from the saved list. Deleting only unlinks
@@ -132,7 +132,12 @@ export function InstitutionManager({
                         <Button size="sm" variant="ghost" onClick={() => startRename(institution)}>
                           Rename
                         </Button>
-                        <Button size="sm" variant="danger" onClick={() => setDeleting(institution)}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="acct-inst-manager-delete"
+                          onClick={() => setDeleting(institution)}
+                        >
                           Delete
                         </Button>
                       </div>

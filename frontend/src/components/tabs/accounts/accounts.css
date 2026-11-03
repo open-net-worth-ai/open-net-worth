@@ -5695,10 +5695,9 @@ select.acct-addin {
   display: grid;
   gap: 14px;
 }
-/* The shared modal body owns the scrollbar. Keep the manager's right-aligned actions clear of
-   that track when a long registry makes the body scroll. */
+/* The list scrolls, not the body — so the body reserves no empty scrollbar lane of its own. */
 .ui-modal-card:has(.acct-inst-manager) .ui-modal__body {
-  padding-right: var(--space-4);
+  scrollbar-gutter: auto;
 }
 .acct-inst-manager-copy,
 .acct-inst-manager-empty,
@@ -5714,33 +5713,42 @@ select.acct-addin {
   font-size: 12.5px;
 }
 .acct-inst-manager-list {
+  /* The list scrolls on its own (never sideways) so the explanation above stays put and the
+     dialog never grows past the window. minmax(0, 1fr): a long account-name line wraps
+     instead of widening the row and pushing Rename/Delete out of view. */
   display: grid;
-  /* The list scrolls on its own, so the explanation above it stays put however many
-     institutions there are, and the dialog never grows past the window. */
+  grid-template-columns: minmax(0, 1fr);
   max-height: min(52vh, 440px);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  /* A clear lane on the right so the scrollbar never touches the buttons. */
+  padding-right: var(--space-3);
+  scrollbar-gutter: stable;
 }
 .acct-inst-manager-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
   padding: 10px 0;
-}
-.acct-inst-manager-row + .acct-inst-manager-row {
-  border-top: 1px solid var(--line);
 }
 .acct-inst-manager-main {
   min-width: 0;
-  flex: 1;
 }
 .acct-inst-manager-main .acct-inst-manager-count {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  margin-top: 2px;
+  font-size: 12px;
+}
+.acct-inst-manager-actions .acct-inst-manager-delete {
+  color: var(--muted);
+}
+.acct-inst-manager-actions .acct-inst-manager-delete:hover {
+  color: var(--bad);
 }
 .acct-inst-manager-name {
   color: var(--ink);
