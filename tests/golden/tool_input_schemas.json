@@ -1270,6 +1270,13 @@
         "default": 0,
         "description": "Skip this many matching rows before returning.",
         "type": "integer"
+      },
+      "plan_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The YNAB plan's id from ynab_list_plans. Omit when the token sees one plan."
       }
     },
     "type": "object",
@@ -10641,7 +10648,15 @@
   },
   "ynab_list_accounts": {
     "additionalProperties": false,
-    "properties": {},
+    "properties": {
+      "plan_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The YNAB plan's id from ynab_list_plans. Omit when the token sees one plan."
+      }
+    },
     "type": "object",
     "required": []
   },
@@ -10681,6 +10696,38 @@
   "get_untold_news": {
     "additionalProperties": false,
     "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "ynab_list_plans": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
+  },
+  "ynab_get_plan": {
+    "additionalProperties": false,
+    "properties": {
+      "plan_id": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "The plan's id from ynab_list_plans. Omit when the token sees one plan."
+      },
+      "month": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "description": "YYYY-MM. Omit for YNAB's current month."
+      },
+      "include_hidden": {
+        "default": false,
+        "description": "Also list hidden categories.",
+        "type": "boolean"
+      }
+    },
     "type": "object",
     "required": []
   }
