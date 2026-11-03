@@ -55,9 +55,12 @@ class Host:
         self._tx, self._loop = tx, app_loop
         self._send_lock = threading.Lock()
         self._tasks: dict[int, Any] = {}
-        # Conversations the app handed this worker for a call (``claim_call``) → when: Lucius's
-        # side runs only on these, until the call ends (``end_call``) or ``CALL_TTL_S`` passes.
-        self._sessions: dict[str, float] = {}
+        # Conversations the app handed this worker for a call (``claim_call``) → each call's room
+        # → when: Lucius's side runs only on these, until EACH of its calls ends (``end_call``)
+        # or ``CALL_TTL_S`` passes. Per call, not per conversation: the end of a call a
+        # conversation had a moment ago shut the next call in it out, so it went silent on
+        # every request (owner, 2026-11-04).
+        self._sessions: dict[str, dict[str, float]] = {}
         # Rooms whose call this worker took → their conversation (a public demo meters calls by
         # room: ``services.demo_calls``).
         self._rooms: dict[str, str] = {}
@@ -126,8 +129,12 @@ class Host:
             return demo_calls.remaining(self._room_of(self._owned(args), args))
         if method == "end_call":
             session_id = str(args.get("session_id") or "")
-            self._sessions.pop(session_id, None)
             ended = [str(args.get("room") or "")] if args.get("room") else list(self._rooms)
+            calls = self._sessions.get(session_id, {})
+            for room in ended if args.get("room") else list(calls):
+                calls.pop(room, None)
+            if not calls:
+                self._sessions.pop(session_id, None)
             for room in [r for r in ended if self._rooms.get(r) == session_id]:
                 del self._rooms[room]
                 demo_calls.end(room)
@@ -160,7 +167,7 @@ class Host:
             # ended — would otherwise stay open on the demo's project with nobody closing it.
             service.close_refused(room)
             return None
-        self._sessions[session_id] = time.monotonic()
+        self._sessions.setdefault(session_id, {})[room] = time.monotonic()
         self._rooms[room] = session_id
         if limit is not None:
             service.close_when_over(room, limit)
@@ -196,10 +203,14 @@ class Host:
         from backend.connectors.voice import service
 
         session_id = str(args.get("session_id") or "")
-        claimed = self._sessions.get(session_id)
-        if claimed is None or time.monotonic() - claimed > CALL_TTL_S:
+        now = time.monotonic()
+        calls = {
+            r: t for r, t in self._sessions.get(session_id, {}).items() if now - t <= CALL_TTL_S
+        }
+        if not calls:
             self._sessions.pop(session_id, None)
             raise PermissionError("not the conversation of a call this app started")
+        self._sessions[session_id] = calls
         if not service.calls_allowed():
             raise PermissionError("voice calls are off")
         if self._time_up(session_id):

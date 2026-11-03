@@ -652,6 +652,24 @@ def test_the_acknowledgement_varies_and_never_promises_a_time():
     assert all("no promise of how long" in p for p in picks)
 
 
+def test_the_acknowledgement_fits_the_kind_of_request_and_never_claims_it_done():
+    """Owner, 2026-11-04: asked to DO something, it still said "let me check that". The front
+    model names only the kind; the line is still ours, so it can't hint at an answer."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    desk_ = bare_desk(agent, said=[])
+    for kind, lines in agent.ACKS_BY_KIND.items():
+        picks = {desk_._ack(kind).removesuffix(agent.ACK_RULE) for _ in range(30)}
+        assert picks <= set(lines) and len(picks) > 1, kind
+    assert desk_._ack("made up").removesuffix(agent.ACK_RULE) in agent.ACKS_BY_KIND["question"]
+    assert "never that it's done" in agent.ACK_RULE
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_.heard("add a coffee for five dollars")
+    assert desk_.submit("Add a 5 USD coffee expense today", "task") is None
+    assert said[0].removesuffix(agent.ACK_RULE) in agent.ACKS_BY_KIND["task"]
+
+
 def test_parallel_slow_lookups_ask_to_hang_on_once():
     """Live call, 2026-11-03: five lookups running side by side each said "hang on"."""
     agent = pytest.importorskip("backend.connectors.voice.agent")

@@ -113,15 +113,36 @@ STILL_ON_IT_RULE = " — a few words, no promise of how long it takes"
 # Said when a request is handed over, picked at random and never twice in a row, so it doesn't
 # answer every request with the same "one sec" — and never promises how long it takes, since
 # not everything is quick (owner, 2026-11-03). Never a word about what the answer might be.
-ACKS = (
-    "say you'll check",
-    "say you're pulling it up",
-    "say you'll take a look",
-    "say you're on it",
-    "say you'll look into that",
-    "say you're checking now",
+# One set per KIND of request, which the front model names when it hands it over: a task got
+# "let me check that" too, never an "okay" or "sure" (owner, 2026-11-04). It names a kind
+# only, never writes the line, so the line still can't carry anything about the answer.
+ACKS_BY_KIND = {
+    "question": (
+        "say you'll check",
+        "say you're pulling it up",
+        "say you'll take a look",
+        "say you'll look into that",
+        "say you're checking now",
+    ),
+    "task": (
+        "say sure, you'll do that",
+        "say okay, you're on it",
+        "say you'll take care of it",
+        "say sure thing, you're doing it now",
+        "say okay, you'll sort that out",
+    ),
+    "follow_up": (
+        "say got it",
+        "say right, one moment",
+        "say okay, one moment",
+        "say sure, give you a second",
+    ),
+}
+ACKS = tuple(line for lines in ACKS_BY_KIND.values() for line in lines)
+ACK_RULE = (
+    " — a few words, no promise of how long it takes, nothing about what the answer might be,"
+    " and never that it's done"
 )
-ACK_RULE = " — a few words, no promise of how long it takes, nothing about what the answer might be"
 QUEUED = "say you'll get to that right after the one you're on, in a few words"
 # A call with a time limit (the public demo's, ``services.demo_calls``): a heads-up before it,
 # then a goodbye and the hang-up at it.
@@ -151,15 +172,20 @@ class FrontAgent(Agent):
         self._lucius = lucius
 
     @function_tool
-    async def work_on_request(self, context: RunContext, request: str) -> str | None:
+    async def work_on_request(
+        self, context: RunContext, request: str, kind: str = "question"
+    ) -> str | None:
         """Look up a finance question or carry out a request, with the owner's real data and
         tools. Returns at once; a short acknowledgement is spoken for you, then the answer
         when it is ready — say nothing yourself.
 
         Args:
             request: The owner's request, written out so it stands on its own.
+            kind: "question" when they want to know something, "task" when they want something
+                done or changed, "follow_up" for a short reply to what was just said ("yes",
+                "the second one", "go ahead").
         """
-        return self._lucius.submit(request)
+        return self._lucius.submit(request, kind)
 
     @function_tool
     async def check_progress(self, context: RunContext) -> str:
@@ -399,7 +425,7 @@ class LuciusDesk:
             self._rt.app.call("record_said", session_id=self._session_id, said=said)
         )
 
-    def submit(self, request: str) -> str | None:
+    def submit(self, request: str, kind: str = "question") -> str | None:
         """Queue the owner's request. ``None`` once it is queued: the tool then asks for no
         reply, because the reply the front model wrote after this tool once made up a whole
         answer and spoke it before Lucius's (live call, 2026-11-03) — so we say the "one
@@ -423,12 +449,13 @@ class LuciusDesk:
         log.info("voice: front handed Lucius a request (%d chars)", len(request))
         busy = self._current is not None
         self._queue.put_nowait((said, request, shown))
-        self._holding(QUEUED if busy else self._ack())
+        self._holding(QUEUED if busy else self._ack(kind))
         return None
 
-    def _ack(self) -> str:
+    def _ack(self, kind: str = "question") -> str:
+        lines = ACKS_BY_KIND.get(kind, ACKS_BY_KIND["question"])
         last = getattr(self, "_last_ack", None)
-        pick = random.choice([a for a in ACKS if a != last])
+        pick = random.choice([a for a in lines if a != last])
         self._last_ack = pick
         return pick + ACK_RULE
 

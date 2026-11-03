@@ -41,7 +41,9 @@ def linked(monkeypatch):
     server.start()
     gone = threading.Event()
     link = AppLink(to_worker_r, to_app_w, on_stop=lambda: None, on_app_gone=gone.set)
-    monkeypatch.setattr(service, "claim_call", lambda room: "sess-call" if room == "r1" else None)
+    monkeypatch.setattr(
+        service, "claim_call", lambda room: "sess-call" if room in ("r1", "r2") else None
+    )
     allowed = {"on": True}
     monkeypatch.setattr(service, "calls_allowed", lambda: allowed["on"])
     monkeypatch.setattr(host, "_lucius_model", lambda: "owner-pick")
@@ -103,6 +105,25 @@ def test_the_app_holds_the_limits_itself_not_the_worker(linked, monkeypatch):
         await linked.call("end_call", session_id="sess-call")
         with pytest.raises(AppError):  # the call is over: its conversation is out of reach
             await linked.call("record_exchange", session_id="sess-call", said="", reply="x")
+
+    asyncio.run(run())
+
+
+def test_one_call_ending_never_shuts_out_the_next_call_in_the_same_conversation(linked):
+    """Owner, 2026-11-04: a second call in a conversation went silent on every request, because
+    the first call's late end_call forgot the conversation the second one was using."""
+
+    async def ask():
+        return [e async for e in linked.stream("ask", session_id="sess-call", said="hi")]
+
+    async def run():
+        assert await linked.call("claim_call", room="r1") == "sess-call"
+        assert await linked.call("claim_call", room="r2") == "sess-call"
+        await linked.call("end_call", session_id="sess-call", room="r1")
+        assert [e.kind for e in await ask()] == ["text", "end"]  # r2 is still on
+        await linked.call("end_call", session_id="sess-call", room="r2")
+        with pytest.raises(AppError):  # every call over: out of reach again
+            await ask()
 
     asyncio.run(run())
 
