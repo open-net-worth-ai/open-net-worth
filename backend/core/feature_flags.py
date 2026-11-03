@@ -14,8 +14,10 @@ choice from its caller — the seam always sits above it.
 Resolution, first match wins:
 
 1. a test override (``override()``, used by the pytest helpers) — tests only;
-2. the public demo (``DEMO_MODE``) — always the declared default, nothing below is read;
-3. the environment, ``ONW_FLAG_<NAME>`` = ``1``/``0``/``true``/``false`` — dev, CI and QA;
+2. the environment, ``ONW_FLAG_<NAME>`` = ``1``/``0``/``true``/``false`` — set when the app
+   starts, by whoever runs it: dev, CI, QA and the public demo's deploy;
+3. the public demo (``DEMO_MODE``) — the declared default; a stored choice is never read there,
+   since every demo visitor is the operator;
 4. the owner's stored choice (Settings → Developer → Experimental);
 5. the declared default.
 
@@ -207,11 +209,11 @@ def resolve(
     flag = get(name)
     if name in _test_overrides:
         return Resolution(_test_overrides[name], "test")
-    if demo:
-        return Resolution(flag.default, "demo")
     from_env = env_value(name, environ)
     if from_env is not None:
         return Resolution(from_env, "env")
+    if demo:
+        return Resolution(flag.default, "demo")
     if stored is not None:
         return Resolution(bool(stored), "stored")
     return Resolution(flag.default, "default")

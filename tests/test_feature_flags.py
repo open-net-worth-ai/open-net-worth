@@ -119,9 +119,8 @@ def test_on_off_on_round_trips(book):
         assert svc.enabled(NAME) is value
 
 
-def test_demo_runs_the_default_whatever_is_stored_or_set(book, monkeypatch):
+def test_demo_runs_the_default_whatever_is_stored(book):
     svc.set_flag(NAME, True)
-    monkeypatch.setenv("ONW_FLAG_EXAMPLE_FLAG", "1")
     settings = config.Settings()
     object.__setattr__(settings, "demo_mode", True)
     config._settings = settings
@@ -132,6 +131,20 @@ def test_demo_runs_the_default_whatever_is_stored_or_set(book, monkeypatch):
     assert listing["locked"] is True
     row = next(r for r in listing["flags"] if r["name"] == NAME)
     assert (row["enabled"], row["source"], row["stored"]) == (False, "demo", None)
+
+
+def test_demo_takes_a_flag_from_the_environment_it_was_started_with(book, monkeypatch):
+    """Whoever deploys the demo switches a flag on at start; a stored choice still never counts."""
+    svc.set_flag(NAME, False)
+    monkeypatch.setenv("ONW_FLAG_EXAMPLE_FLAG", "1")
+    settings = config.Settings()
+    object.__setattr__(settings, "demo_mode", True)
+    config._settings = settings
+    assert svc.resolve(NAME) == ff.Resolution(True, "env")
+    row = next(r for r in svc.list_flags()["flags"] if r["name"] == NAME)
+    assert (row["enabled"], row["source"], row["stored"]) == (True, "env", None)
+    with pytest.raises(FeatureFlagLockedError):
+        svc.set_flag(NAME, False)
 
 
 def test_a_test_override_beats_every_source(demo):

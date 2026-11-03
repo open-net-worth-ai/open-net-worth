@@ -87,7 +87,8 @@ using a tool; see [Permissions v2](../lucius/permissions-v2.md). It also holds *
 from the chat; see [Voice calls](../connectors/voice-calls.md).
 
 A switch is read-only when the server sets it from its environment (the row names the variable),
-and on the public demo, which always runs the defaults. Lucius cannot change these switches.
+and on the public demo, which runs the defaults unless its server was started with one switched on
+or off. Lucius cannot change these switches.
 
 ## Things to know
 

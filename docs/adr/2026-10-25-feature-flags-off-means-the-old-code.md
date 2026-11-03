@@ -50,7 +50,8 @@ We will build a small in-code flag system and hold every flag to five rules.
   (`release` | `kill_switch`) — and holds the pure resolution order.
 - `backend/services/feature_flags.enabled(name)` is the one read (named after OpenFeature's
   boolean evaluation, so a later swap stays cheap). Resolution, first match wins: a test override →
-  the public demo (always the declared default) → `ONW_FLAG_<NAME>` (dev, CI, QA) → the owner's
+  `ONW_FLAG_<NAME>` (dev, CI, QA, the demo's deploy) → the public demo (the declared default; see
+  the 2026-11-03 amendment) → the owner's
   stored choice in `app_config` (one `feature_flags` dict) → the declared default. An unknown
   name raises `UnknownFeatureFlagError`; it never reads as `False`. A malformed `ONW_FLAG_*`
   value is logged and ignored, so one bad environment line cannot take every flag down.
@@ -105,6 +106,16 @@ We will build a small in-code flag system and hold every flag to five rules.
   rejected: a caller that runs before registration would silently ignore the owner's choice.
 - **Ship one harmless example flag** — rejected: a switch that does nothing in the owner's
   Settings is noise; the test-only example covers the mechanism end to end.
+
+## Amendment 2026-11-03 — the demo reads the environment it was started with
+
+The demo first ignored everything below the declared default, the environment included, so there
+was no way to run a flag on the public demo short of a demo-only default per flag. Only the stored
+choice needs ignoring there — every demo visitor is the operator, and the PUT is locked anyway —
+while `ONW_FLAG_<NAME>` is set by whoever deploys the instance and no visitor can reach it. So the
+environment now resolves BEFORE the demo rule: test override → environment → demo (declared
+default) → stored → default. A demo-only default on each flag was rejected: a second default per
+flag is a second thing to keep right, for a choice that belongs to the deploy, not the code.
 
 ## Agent provenance
 

@@ -59,8 +59,10 @@ service, and the seam lives there; code below `services` takes the choice from i
 raises (`UnknownFeatureFlagError`; `useFlag` throws). `useFlag` never paints from a previous
 session: the flag list is excluded from the query cache's localStorage mirror.
 
-**Resolution, first match wins:** test override → public demo (always the default) →
-`ONW_FLAG_<NAME>=1|0|true|false` → the owner's stored choice → the declared default. Any other
+**Resolution, first match wins:** test override → `ONW_FLAG_<NAME>=1|0|true|false` → public demo
+(the declared default — a stored choice is never read there) → the owner's stored choice → the
+declared default. The environment is how whoever starts the app sets a flag, the public demo's
+deploy included: `ONW_FLAG_VOICE_CALLS=1` turns voice calls on there. Any other
 `ONW_FLAG_*` value is logged and ignored, so one bad line cannot take every flag down.
 
 Only the signed-in owner changes a flag (`PUT /api/feature-flags/{name}`, `{"enabled": true |
