@@ -47,8 +47,8 @@ export const PREVIEW: Preview = {
   base_currency: 'SGD',
   currency_change: true,
   currency_blocked: false,
-  money_data: [],
   prune: { categories: ['Vacation'], groups: [] },
+  money_data: [],
   category_groups: [
     {
       id: 'yg1',
@@ -72,10 +72,15 @@ export const PREVIEW: Preview = {
   ],
   category_choices: {
     categories: [
-      { ref: 'cat:u1', name: 'Utilities' },
-      { ref: 'cat:g9', name: 'Food shop' },
+      {
+        ref: 'cat:u1',
+        name: 'Utilities',
+        color: '#2a9d8f',
+        envelope: { name: 'Bills pot', color: '#e76f51', shared: false },
+      },
+      { ref: 'cat:g9', name: 'Food shop', color: '#e9c46a', envelope: null },
     ],
-    envelopes: [{ ref: 'env:e1', name: 'Gifts', holds: 2 }],
+    envelopes: [{ ref: 'env:e1', name: 'Gifts', color: '#9b5de5', holds: 2 }],
   },
   transaction_list: [
     {

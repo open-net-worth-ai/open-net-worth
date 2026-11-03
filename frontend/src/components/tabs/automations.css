@@ -745,6 +745,30 @@
 .a3-model-detail svg {
   color: var(--faint);
 }
+/* A data sync's setting, read like a Trigger and changed by clicking it: the value opens its
+   choices, the current one ticked. */
+.a3-setting .kebab-trigger {
+  margin-left: calc(-1 * var(--space-2));
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: inherit;
+  color: inherit;
+}
+.a3-setting .kebab-trigger:hover,
+.a3-setting .kebab-trigger[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.a3-setting .a3-trigger-detail {
+  color: var(--ink);
+}
+.a3-setting .a3-trigger-detail .a3-setting-caret {
+  color: var(--faint);
+}
+.a3-setting-blank {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+}
 .a3-model-detail b {
   color: var(--ink);
   font-weight: 600;
@@ -2076,14 +2100,6 @@
 .a3-views {
   margin-top: var(--space-4);
   margin-bottom: 0;
-}
-.a3-kind-line {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-  font-size: var(--text-xs);
-  color: var(--fg-3);
 }
 .a3-attention {
   padding: 14px 15px;

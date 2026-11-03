@@ -363,7 +363,7 @@ def test_from_ynab_never_writes_categories_to_ynab(world):  # noqa: F811
     ynab_sync.update_settings(True, "1h", ynab_stub.PLAN, "from_ynab")
     sync()
     make("Pets")
-    change(type="category_rename", key=cat("Rent")["id"], new_label="Housing")
+    change(type="category_rename", key=cat("Rent/Mortgage")["id"], new_label="Housing")
     ynab_stub.ynab_rename_category(world.state, "groc", "Food")
     run = sync()
     assert run["summary"] == "1 category change" and world.writes == []

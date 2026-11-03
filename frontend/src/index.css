@@ -10067,10 +10067,12 @@ body.hide-amounts .money * {
     border-color: var(--accent);
   }
 
+  /* The bubble and its scrim are portaled to <body>, so they stack above any modal the "i" sits
+     in (a bubble under --z-overlay opened behind the modal, unseen); toasts stay on top. */
   .info-pop-scrim {
     position: fixed;
     inset: 0;
-    z-index: var(--z-dropdown);
+    z-index: calc(var(--z-modal) + 1);
   }
 
   /* Explain's hover tooltip (a pulse flag, trend line, "× usual" note): fixed to the viewport
@@ -10100,7 +10102,7 @@ body.hide-amounts .money * {
      "open leftward" override. */
   .info-pop-bubble {
     position: fixed;
-    z-index: var(--z-overlay);
+    z-index: calc(var(--z-modal) + 2);
     background: var(--surface2);
     border: 1px solid var(--modal-border);
     border-radius: var(--radius-lg);
@@ -20090,11 +20092,9 @@ body.hide-amounts .mf-lbl-amt {
 .ynr-table tbody:first-of-type .ynr-group th {
   padding-top: var(--space-3);
 }
-/* Text beside a dropdown sits on the dropdown's line, not at the top of the row. */
-@media (min-width: 640px) {
-  .imp-table .ynr-celltext {
-    padding-top: calc(var(--space-3) + 8px);
-  }
+/* Categories: every row a chip or a dropdown in each column, centred on one line. */
+.imp-table.ynr-cats td {
+  vertical-align: middle;
 }
 .ynr-count {
   margin-left: var(--space-2);
@@ -20136,15 +20136,43 @@ body.hide-amounts .mf-lbl-amt {
   padding-top: 0;
   font-size: var(--text-sm);
 }
-/* A category's choice and the line under it saying what its budget does. */
-.ynr-cat {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  align-items: flex-start;
+.ynr-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 100%;
 }
-.ynr-catnote {
-  font-size: var(--text-xs);
+/* A category or envelope of yours, shown rather than asked: the dropdown's size and padding, no
+   frame, so its name sits exactly where a dropdown's would. */
+.ynr-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 6px 12px;
+  max-width: 220px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.ynr-chip--faint {
+  color: var(--faint);
+}
+.ynr-chip-nm {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ynr-glyph {
+  flex: none;
+}
+/* Something to check about a choice: hover or tap it to read why. */
+.ynr-warn {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  color: var(--warn);
+  cursor: help;
 }
 .ynr-pairs {
   list-style: none;

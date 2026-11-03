@@ -1,3 +1,5 @@
+import { Mail, Tag, TriangleAlert } from 'lucide-react'
+import { InfoPopover } from '../../ui'
 import { PMSelect } from '../accounts/ds'
 import type { CategoryChoices, Preview, PreviewCategory } from './runs'
 
@@ -6,7 +8,9 @@ import type { CategoryChoices, Preview, PreviewCategory } from './runs'
 // or close) or a new one. Envelope: only a NEW category has one to pick, a new envelope or one of
 // the book's; a category of yours keeps the envelope it is in, since nothing is moved. Both make
 // one choice for the server (``cat:…``, ``env:…`` or ``""``), re-checked by the review like an
-// account's.
+// account's. Every row has the same shape — a chip or a dropdown in each column, in the app's own
+// tag and envelope colours — and no line under it: anything worth checking is a warning beside
+// the choice, read by hovering or tapping it.
 
 // The choice shown for a category that matches several of the book's: no answer yet.
 export const ASK = 'ask'
@@ -30,7 +34,7 @@ export function Categories({ preview: p, ...pick }: { preview: Preview } & Categ
     return <p className="ynr-empty">This plan has no categories of its own.</p>
   const choices = p.category_choices
   return (
-    <table className="imp-table ynr-table">
+    <table className="imp-table ynr-table ynr-cats">
       <thead>
         <tr>
           <th>YNAB category</th>
@@ -64,14 +68,12 @@ function CategoryRow({ category: c, choices, preview: p, ...pick }: RowProps & C
   if (c.link?.kind === 'linked')
     return (
       <tr>
-        <td data-label="YNAB category" className="ynr-celltext">
-          {c.name}
+        <td data-label="YNAB category">{c.name}</td>
+        <td data-label="Category here">
+          <Chip kind="tag" color={colorOf(choices, c.link.ref)} name={c.link.name} />
         </td>
-        <td data-label="Category here" className="ynr-celltext">
-          {c.link.name}
-        </td>
-        <td data-label="Envelope" className="ynr-celltext ynr-dim">
-          {c.note}
+        <td data-label="Envelope">
+          <EnvelopeOfYours category={c} choices={choices} ref_={c.link.ref} />
         </td>
       </tr>
     )
@@ -91,13 +93,13 @@ function CategoryRow({ category: c, choices, preview: p, ...pick }: RowProps & C
   const choose = (r: string) => pick.onChoose(c.id, r)
   const toNew = () =>
     choose(proposed.startsWith('env:') && free(proposed) ? proposed : (c.offer ?? ''))
+  const chosenEnv = choices.envelopes.find((e) => e.ref === ref)
+  const why = categoryWarning(c, ref, askEnv)
   return (
     <tr>
-      <td data-label="YNAB category" className="ynr-celltext">
-        {c.name}
-      </td>
+      <td data-label="YNAB category">{c.name}</td>
       <td data-label="Category here">
-        <div className="ynr-cat">
+        <span className="ynr-cell">
           <PMSelect
             className="ynr-dest"
             ariaLabel={`Category here for ${c.name}`}
@@ -110,14 +112,14 @@ function CategoryRow({ category: c, choices, preview: p, ...pick }: RowProps & C
             options={categoryOptions(c, choices, free, proposed, askEnv)}
             onChange={(v) => (v === NEW ? toNew() : v !== ASK && choose(v))}
           />
-          {categoryNote(c, askEnv ? '' : ref)}
-        </div>
+          {why && <Warn text={why} name={c.name} />}
+        </span>
       </td>
-      <td data-label="Envelope" className={ours ? 'ynr-celltext ynr-dim' : undefined}>
+      <td data-label="Envelope">
         {ref === ASK && !askEnv ? null : ours ? (
-          c.note
+          <EnvelopeOfYours category={c} choices={choices} ref_={ref} />
         ) : (
-          <div className="ynr-cat">
+          <span className="ynr-cell">
             <PMSelect
               className="ynr-dest"
               ariaLabel={`Envelope for ${c.name}`}
@@ -130,40 +132,102 @@ function CategoryRow({ category: c, choices, preview: p, ...pick }: RowProps & C
               options={envelopeOptions(c, choices, free, proposed, askEnv)}
               onChange={(v) => v !== ASK && choose(v)}
             />
-            <span className="ynr-dim ynr-catnote">
-              {askEnv
-                ? 'More than one of yours has this name. Pick one.'
-                : envelopeNote(c, ref, choices)}
-            </span>
-          </div>
+            {askEnv ? (
+              <Warn text={sameNames(c)} name={c.name} />
+            ) : (
+              chosenEnv &&
+              chosenEnv.holds > 0 && <Warn text={shared(chosenEnv.name)} name={c.name} />
+            )}
+          </span>
         )}
       </td>
     </tr>
   )
 }
 
-function categoryNote(c: PreviewCategory, ref: string) {
-  const text =
-    ref === ASK
-      ? 'More than one of yours has this name. Pick one.'
-      : ref.startsWith('cat:')
-        ? c.close && c.link?.ref === ref && !c.chosen
-          ? 'Similar name'
-          : null
-        : c.hidden
-          ? 'Hidden in YNAB, so hidden here too'
-          : null
-  return text && <span className="ynr-dim ynr-catnote">{text}</span>
+/** The envelope a category of yours is already in — it stays there, so it is shown, not asked. */
+function EnvelopeOfYours({
+  category: c,
+  choices,
+  ref_,
+}: {
+  category: PreviewCategory
+  choices: CategoryChoices
+  ref_: string
+}) {
+  const mine = choices.categories.find((x) => x.ref === ref_)
+  const env = mine?.envelope
+  if (!env)
+    return c.assigned ? (
+      <Chip kind="envelope" name={`${mine?.new_envelope ?? mine?.name ?? c.name} (new)`} />
+    ) : (
+      <Chip kind="envelope" name="Not budgeted" faint />
+    )
+  return (
+    <span className="ynr-cell">
+      <Chip kind="envelope" color={env.color} name={env.name} />
+      {env.shared && <Warn text={shared(env.name)} name={c.name} />}
+    </span>
+  )
 }
 
-function envelopeNote(c: PreviewCategory, ref: string, choices: CategoryChoices) {
-  const env = choices.envelopes.find((e) => e.ref === ref)
-  if (env && env.holds > 0) return "Holds other categories too, so its Assigned won't sync"
-  if (!env && c.offer) {
-    const offered = choices.envelopes.find((e) => e.ref === c.offer)
-    if (offered) return `Your ${offered.name} has this name but holds other categories`
-  }
-  return 'Assigned syncs with YNAB'
+/** A new category or envelope has no colour yet, so its glyph is the faint one. */
+function Glyph({ kind, color }: { kind: 'tag' | 'envelope'; color?: string }) {
+  const Icon = kind === 'tag' ? Tag : Mail
+  return (
+    <Icon
+      className="ynr-glyph"
+      size={13}
+      strokeWidth={2.2}
+      color={color || 'var(--faint)'}
+      aria-hidden="true"
+    />
+  )
+}
+
+function Chip(props: { kind: 'tag' | 'envelope'; name: string; color?: string; faint?: boolean }) {
+  return (
+    <span className={'ynr-chip' + (props.faint ? ' ynr-chip--faint' : '')}>
+      <Glyph kind={props.kind} color={props.faint ? '' : props.color} />
+      <span className="ynr-chip-nm">{props.name}</span>
+    </span>
+  )
+}
+
+/** Something worth checking about a choice, read by hovering or tapping the mark beside it. */
+function Warn({ text, name }: { text: string; name: string }) {
+  return (
+    <InfoPopover text={text} triggerClassName="ynr-warn" label={`Check ${name}`}>
+      <TriangleAlert size={14} strokeWidth={2.2} aria-hidden="true" />
+    </InfoPopover>
+  )
+}
+
+const shared = (envelope: string) =>
+  `${envelope} holds other categories too, so its Assigned won't sync with YNAB. Their labels still do.`
+
+const sameNames = (c: PreviewCategory) =>
+  `${listed(c.options.map((o) => o.name))} all read the same as YNAB's ${c.name}. Pick the one it is.`
+
+function listed(names: string[]) {
+  return names.length < 2
+    ? (names[0] ?? '')
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+}
+
+/** Why the category picked for a row is worth a look — only when the review guessed it. */
+function categoryWarning(c: PreviewCategory, ref: string, askEnv: boolean) {
+  if (ref === ASK) return askEnv ? null : sameNames(c)
+  if (c.chosen || c.link?.ref !== ref) return null
+  if (c.among)
+    return `${listed(c.options.map((o) => o.name))} all read the same as YNAB's ${c.name}. This one is spelled most like it; change it if it's the wrong one.`
+  if (c.close)
+    return `Picked because its name is close to YNAB's ${c.name}. Change it if it's the wrong one.`
+  return null
+}
+
+function colorOf(choices: CategoryChoices, ref: string) {
+  return choices.categories.find((x) => x.ref === ref)?.color ?? ''
 }
 
 // The categories a row can go with: the suggested one and those it reads the same as first.
@@ -180,8 +244,12 @@ function categoryOptions(
     .sort((a, b) => Number(first.has(b.ref)) - Number(first.has(a.ref)))
   return [
     ...(c.ask && !askEnv ? [{ value: ASK, label: 'Choose one…' }] : []),
-    { value: NEW, label: 'New category' },
-    ...mine.map((x) => ({ value: x.ref, label: x.name })),
+    { value: NEW, label: 'New category', icon: <Glyph kind="tag" /> },
+    ...mine.map((x) => ({
+      value: x.ref,
+      label: x.name,
+      icon: <Glyph kind="tag" color={x.color} />,
+    })),
   ]
 }
 
@@ -199,7 +267,11 @@ function envelopeOptions(
   const mine = choices.envelopes.filter((e) => free(e.ref)).sort((a, b) => rank(a) - rank(b))
   return [
     ...(askEnv ? [{ value: ASK, label: 'Choose one…' }] : []),
-    { value: '', label: 'New envelope' },
-    ...mine.map((e) => ({ value: e.ref, label: e.name })),
+    { value: '', label: `${c.new_name ?? c.name} (new)`, icon: <Glyph kind="envelope" /> },
+    ...mine.map((e) => ({
+      value: e.ref,
+      label: e.name,
+      icon: <Glyph kind="envelope" color={e.color} />,
+    })),
   ]
 }

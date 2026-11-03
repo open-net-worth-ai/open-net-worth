@@ -984,7 +984,8 @@ export function CcyPicker({ value, onChange }: CcyPickerProps) {
 
 export interface PMSelectProps {
   value: string
-  options: Array<{ value: string; label: string }>
+  /** ``icon`` is drawn before the label, in the list and on the button (a category's coloured tag). */
+  options: Array<{ value: string; label: string; icon?: React.ReactNode }>
   onChange: (v: string) => void
   placeholder?: string
   className?: string
@@ -1141,6 +1142,7 @@ export function PMSelect({
           </svg>
         ) : (
           <>
+            {cur?.icon}
             <span className="acct-acctsel-nm">{cur ? cur.label : placeholder || ''}</span>
             <svg
               className="acct-acctsel-caret"
@@ -1193,6 +1195,7 @@ export function PMSelect({
               <span className="acct-acctsel-check">
                 {o.value === value ? <Check size={12} aria-hidden="true" /> : null}
               </span>
+              {o.icon}
               <span className="acct-acctsel-nm">{o.label}</span>
             </button>
           ))}

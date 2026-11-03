@@ -75,7 +75,8 @@ def test_a_matched_envelope_gets_the_ynab_assigned_and_the_pairing_survives_the_
 ):
     job = run(sync_direction="both")
     assert job["status"] == "done", job["error"]
-    assert pair_of(ynab, "rent")["category"] == cat("Rent")["id"]
+    # YNAB's Rent goes with the book's Rent/Mortgage: one side of its slash.
+    assert pair_of(ynab, "rent")["category"] == cat("Rent/Mortgage")["id"]
     assert ynab_pairs.load(ynab_stub.PLAN)[1]  # groups too, kept across turning the sync on
     assert ynab_sync.status()["enabled"]
 
@@ -152,6 +153,17 @@ def test_a_category_that_matches_two_is_never_guessed_and_the_import_waits_for_a
     assert pair_of(ynab, "dine")["category"] == second["id"]
 
 
+def test_of_two_that_read_the_same_the_review_takes_the_one_spelled_alike(ynab):
+    same = cat("Dining out")
+    change(type="category_create", label="dining out!", kind="expense")
+    row = rows(run("preview"))["Dining out"]
+    assert row["link"]["ref"] == f"cat:{same['id']}" and row["among"] and not row["ask"]
+    assert [o["name"] for o in row["options"]] == ["Dining out", "dining out!"]
+    job = run()  # nothing left to pick, so the import goes ahead
+    assert job["status"] == "done", job["error"]
+    assert pair_of(ynab, "dine")["category"] == same["id"]
+
+
 def test_a_category_in_no_envelope_is_not_budgeted_unless_ynab_budgets_it(ynab):
     loose = change(type="category_create", label="Fun Money", kind="expense")  # no envelope
     row = rows(run("preview"))["Fun Money"]
@@ -191,7 +203,7 @@ def test_a_run_that_stops_half_way_leaves_what_it_made_paired_not_made_again(yna
 
     def flaky(*args, **kwargs):
         calls.append(1)
-        if len(calls) == 3:
+        if len(calls) == 2:  # the second of the two new categories (Fun Money, Old Cat)
             raise RuntimeError("stopped")
         return real(*args, **kwargs)
 
@@ -336,6 +348,50 @@ def test_the_closest_of_two_rows_gets_the_suggestion(ynab):
     got = rows(run("preview"))
     assert got["Transports"]["link"]["ref"] == f"cat:{transport['id']}"
     assert got["Transportation"]["link"] is None
+
+
+def test_the_choices_carry_each_categorys_colour_and_the_envelope_it_is_in(ynab):
+    choices = run("preview")["preview"]["category_choices"]
+    groceries = cat("Groceries")
+    mine = next(c for c in choices["categories"] if c["name"] == "Groceries")
+    assert mine["color"] == (groceries.get("color") or "")
+    # its envelope wears its own colour, else its first category's — as the Plan screen does
+    envelope = env("Groceries")
+    assert mine["envelope"] == {
+        "name": "Groceries",
+        "color": envelope.get("color") or groceries.get("color") or "",
+        "shared": False,
+    }
+    listed = next(e for e in choices["envelopes"] if e["name"] == "Groceries")
+    assert listed["color"] == mine["envelope"]["color"]
+    assert mine["new_envelope"] is None
+
+
+def test_the_review_names_the_envelope_an_import_would_make(ynab):
+    change(type="category_create", label="Fun Money", kind="expense")  # in no envelope
+    job = run("preview")["preview"]
+    loose = next(c for c in job["category_choices"]["categories"] if c["name"] == "Fun Money")
+    assert loose["envelope"] is None and loose["new_envelope"] == "Fun Money"
+    assert rows({"preview": job})["Old Cat"]["new_name"] == "Old Cat"
+
+
+def test_an_emoji_with_a_variation_selector_reads_the_same_as_none():
+    # "🍽️" is U+1F37D then U+FE0F, an invisible selector Unicode files as a mark — it was kept,
+    # so "🍽️Dining out" missed "Dining out" and came back as only a similar name.
+    from backend.services.ynab_pairs import norm
+
+    assert norm("🍽️Dining out") == norm("🍽️ Dining out") == norm("Dining out") == "dining out"
+    assert norm("1️⃣ Rent") == "1 rent"
+    assert norm("Café") == "café"
+
+
+def test_a_name_of_alternatives_is_close_to_each_of_them():
+    from backend.services.ynab_migration.category_match import CLOSE, closeness
+
+    assert closeness("🏠 Rent/Mortgage", "Rent") >= CLOSE
+    assert closeness("Rent/Mortgage", "Mortgage") >= CLOSE
+    assert closeness("Rent", "Rent/Mortgage") >= CLOSE
+    assert closeness("Rent/Mortgage", "Renters insurance") < CLOSE
 
 
 def test_names_that_only_start_alike_are_not_close():

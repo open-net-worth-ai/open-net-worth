@@ -186,7 +186,7 @@ def test_assigned_is_sent_with_a_note_line_and_the_note_keeps_ten_lines(world):
     enable()
     sync()
     for n in range(12):
-        assign(0, "Rent", 1200 + n + 1)
+        assign(0, "Rent/Mortgage", 1200 + n + 1)
         sync()
     (_, path, body) = month_patches(world)[-1]
     assert body == {"category": {"budgeted": 1_212_000}}
@@ -233,7 +233,7 @@ def test_the_first_run_sends_edits_made_in_the_ledger_since_the_migration(world)
     bistro = row("Bistro")
     edit_onw(bistro["id"], memo="before first sync")
     edit_onw(bistro["id"], cleared=False)
-    assign(0, "Rent", 1300)
+    assign(0, "Rent/Mortgage", 1300)
     enable()
     run = sync()
     assert run["summary"] == "1 sent to YNAB, 1 needs review"
@@ -284,7 +284,7 @@ def test_request_cap_defers_the_rest_without_losing_it(world, monkeypatch):
     enable()
     sync()
     for off in (-2, -1, 0):
-        assign(off, "Rent", 1500 + off)
+        assign(off, "Rent/Mortgage", 1500 + off)
     monkeypatch.setattr(sync_state, "REQUEST_CAP", 3)  # the read, one figure, then out of budget
     first = sync()
     assert first["requests"] <= 3 and first["deferred"] >= 1

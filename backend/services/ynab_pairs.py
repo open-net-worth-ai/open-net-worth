@@ -16,10 +16,17 @@ import unicodedata
 from backend.db.ynab_sync_store import YnabBaselineStore
 
 
+def _emoji_part(c: str) -> bool:
+    """A mark that only shapes an emoji (variation selectors, the keycap), not a letter."""
+    return "\ufe00" <= c <= "\ufe0f" or "\U000e0100" <= c <= "\U000e01ef" or c == "\u20e3"
+
+
 def norm(name) -> str:
     """A name as people compare it: emoji and symbols dropped, case folded, spaces collapsed."""
     text = unicodedata.normalize("NFKC", str(name or "")).casefold()
-    kept = "".join(c if unicodedata.category(c)[0] in "LNM" else " " for c in text)
+    kept = "".join(
+        c if unicodedata.category(c)[0] in "LNM" and not _emoji_part(c) else " " for c in text
+    )
     return " ".join(kept.split())
 
 

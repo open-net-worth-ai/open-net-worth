@@ -104,6 +104,12 @@ export interface PreviewCategory {
   /** Matches more than one of the book's categories: the person has to pick. */
   ask: boolean
   options: { ref: string; name: string }[]
+  /** YNAB has money assigned to it, so one of yours with no envelope gets one. */
+  assigned?: boolean
+  /** Picked from several of yours that read the same, as the one spelled most like it. */
+  among?: boolean
+  /** The name a new category (and its new envelope) would get. */
+  new_name?: string
   /** One line on what its budget does. */
   note: string
 }
@@ -115,9 +121,23 @@ export interface PreviewGroup {
   group: { id: string; name: string } | null
   categories: PreviewCategory[]
 }
+/** One of the book's envelopes as a category of yours sits in it. */
+export interface ChoiceEnvelope {
+  name: string
+  color: string
+  /** It holds other categories too, so its Assigned won't sync. */
+  shared: boolean
+}
 export interface CategoryChoices {
-  categories: { ref: string; name: string }[]
-  envelopes: { ref: string; name: string; holds: number }[]
+  categories: {
+    ref: string
+    name: string
+    color?: string
+    envelope?: ChoiceEnvelope | null
+    /** In no envelope: what one made for it would be called. */
+    new_envelope?: string | null
+  }[]
+  envelopes: { ref: string; name: string; color?: string; holds: number }[]
 }
 export interface PreviewTxn {
   date: string
@@ -144,8 +164,8 @@ export interface Preview {
   base_currency: string
   currency_change: boolean
   currency_blocked: boolean
-  money_data: string[]
   prune: { categories: string[]; groups: string[] }
+  money_data: string[]
   /** Absent on a preview recorded before the review listed them. */
   category_groups?: PreviewGroup[]
   category_choices?: CategoryChoices

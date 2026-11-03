@@ -1,9 +1,18 @@
 import { useState } from 'react'
-import { Check, ChevronRight, Link2, Play, ShieldCheck } from 'lucide-react'
+import {
+  ArrowLeftRight,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  Link2,
+  Play,
+  ShieldCheck,
+} from 'lucide-react'
 import { authFetch } from '../../../../api/client'
 import { invalidateQueryCache } from '../../../../state/queryCache'
 import { fDate, fDateTime, fScheduleWhen, timeAgo } from '../../../../utils/format'
-import { Button, ErrorState, SegmentedControl, Select, Switch, TabSkeleton } from '../../../ui'
+import { ActionMenu, Button, ErrorState, SegmentedControl, Switch, TabSkeleton } from '../../../ui'
 import { ReviewCard } from '../../imports/ReviewItem'
 import { RunReportModal } from '../../imports/RunReport'
 import { YnabImport } from '../../imports/YnabImport'
@@ -109,7 +118,7 @@ export function YnabSyncDetail({
         ? 'Runs only when you start it.'
         : status.next_run_at
           ? `Next sync: ${fScheduleWhen(status.next_run_at)}`
-          : 'Next sync: any moment now'
+          : 'Next sync: within a minute' // due: the scheduler checks every 60 seconds
 
   return (
     <div className="a3-wrap" data-od-id="ynab-sync-detail">
@@ -129,10 +138,6 @@ export function YnabSyncDetail({
         <div className="a3-detail-title">
           <h1>{YNAB_SYNC_NAME}</h1>
           <div className="a3-detail-sub">{YNAB_SYNC_BLURB}</div>
-          <div className="a3-kind-line">
-            <span className="a3-tag">Data sync</span>
-            <span>Fixed rules, no AI.</span>
-          </div>
         </div>
         {setUp && (
           <div className="a3-detail-bar">
@@ -221,28 +226,33 @@ export function YnabSyncDetail({
                 ))}
               </section>
             )}
-            <section className="a3-block" data-od-id="ynab-sync-schedule">
-              <div className="a3-block-h">Settings</div>
-              <DirectionPicker
+            <section className="a3-block" data-od-id="ynab-sync-direction">
+              <div className="a3-block-h">Direction</div>
+              <SettingMenu
+                label="Sync direction"
+                icon={<ArrowLeftRight size={14} aria-hidden="true" />}
                 value={status.direction}
+                options={(Object.keys(DIRECTION_LABELS) as SyncDirection[]).map((d) => ({
+                  value: d,
+                  label: DIRECTION_LABELS[d],
+                }))}
                 disabled={!!busy || status.running}
-                onChange={(direction) => void send('settings', '/settings', 'PUT', { direction })}
+                onPick={(direction) => void send('settings', '/settings', 'PUT', { direction })}
               />
-              <div className="a3-schedule-row">
-                <Select
-                  id="ynab-sync-interval"
-                  aria-label="How often to sync"
-                  value={status.interval}
-                  options={status.intervals.map((i) => ({
-                    value: i,
-                    label: INTERVAL_LABELS[i] ?? i,
-                  }))}
-                  disabled={!!busy || status.running}
-                  onChange={(e) =>
-                    void send('settings', '/settings', 'PUT', { interval: e.target.value })
-                  }
-                />
-              </div>
+            </section>
+            <section className="a3-block" data-od-id="ynab-sync-schedule">
+              <div className="a3-block-h">Schedule</div>
+              <SettingMenu
+                label="How often to sync"
+                icon={<Clock3 size={14} aria-hidden="true" />}
+                value={status.interval}
+                options={status.intervals.map((i) => ({
+                  value: i,
+                  label: INTERVAL_LABELS[i] ?? i,
+                }))}
+                disabled={!!busy || status.running}
+                onPick={(interval) => void send('settings', '/settings', 'PUT', { interval })}
+              />
               {status.last_run && (
                 <div className={`a3-last-sync${status.last_run.ok ? '' : ' bad'}`}>
                   Last sync {timeAgo(status.last_run.finished_at)}:{' '}
@@ -282,7 +292,11 @@ export function YnabSyncDetail({
               <ul className="a3-rules">
                 <li>{FLOW[status.direction]}</li>
                 <li>A change on both sides waits for you.</li>
-                {status.direction !== 'from_ynab' && <li>What it sends is flagged red in YNAB.</li>}
+                {status.direction !== 'from_ynab' && (
+                  <li>
+                    What it adds or changes in YNAB gets YNAB's red flag, so you can spot it there.
+                  </li>
+                )}
               </ul>
             </section>
           </div>
@@ -315,6 +329,52 @@ const FLOW: Record<SyncDirection, string> = {
 }
 
 /** Which way changes flow. A change on both sides is asked about in every direction. */
+/** One setting read as a Lucius automation's Trigger reads — an icon and its value — that opens
+ *  the choices when clicked, the current one ticked. */
+function SettingMenu<T extends string>({
+  label,
+  icon,
+  value,
+  options,
+  disabled,
+  onPick,
+}: {
+  label: string
+  icon: React.ReactNode
+  value: T
+  options: { value: T; label: string }[]
+  disabled: boolean
+  onPick: (value: T) => void
+}) {
+  const current = options.find((o) => o.value === value)?.label ?? value
+  return (
+    <ActionMenu
+      label={label}
+      className="a3-setting"
+      trigger={
+        <span className="a3-trigger-detail">
+          {icon}
+          {current}
+          <ChevronDown size={13} aria-hidden="true" className="a3-setting-caret" />
+        </span>
+      }
+      items={options.map((o) => ({
+        label: o.label,
+        disabled,
+        icon:
+          o.value === value ? (
+            <Check size={14} aria-hidden="true" />
+          ) : (
+            <span className="a3-setting-blank" aria-hidden="true" />
+          ),
+        onSelect: () => {
+          if (o.value !== value) onPick(o.value)
+        },
+      }))}
+    />
+  )
+}
+
 function DirectionPicker({
   value,
   disabled,

@@ -20,12 +20,21 @@ from backend.services.ynab_migration.category_match import (
     closeness,
     env_ref,
     propose,
+    spelled_alike,
 )
 from backend.services.ynab_pairs import is_parking_name, norm
 
 
 def _state(
-    kind: str, *, category=None, envelope=None, options=None, chosen=False, offer=None, close=False
+    kind: str,
+    *,
+    category=None,
+    envelope=None,
+    options=None,
+    chosen=False,
+    offer=None,
+    close=False,
+    among=False,
 ):
     return {
         "kind": kind,
@@ -35,6 +44,8 @@ def _state(
         "chosen": chosen,
         "offer": offer,
         "close": close,
+        # Picked from several of the book's that read the same, as the one spelled most alike.
+        "among": among,
     }
 
 
@@ -99,8 +110,42 @@ def decide(
     for c in plan["categories"]:
         if c["id"] not in out:
             out[c["id"]] = _from_match(propose(c["name"], book, taken_c, taken_e), taken_c, taken_e)
+    _settle_ties(plan, out, book, taken_c, taken_e)
     _suggest_close(plan, out, book, taken_c)
     return out
+
+
+def _settle_ties(
+    plan: dict, out: dict[str, dict], book: Book, taken_c: set[str], taken_e: set[str]
+) -> None:
+    """A YNAB category that reads the same as several of the book's takes the one spelled most
+    like it (YNAB's "Fun Money": "fun money" over "Fun money!"). Only a true tie is left for the
+    person to pick. The review alone does this; the sync files a ``choose`` item instead."""
+    for c in plan["categories"]:
+        d = out[c["id"]]
+        if d["kind"] != "ambiguous":
+            continue
+        free = [o for o in d["options"] if o["ref"].partition(":")[2] not in taken_c | taken_e]
+        ranked = sorted(free, key=lambda o: -spelled_alike(c["name"], o["name"]))
+        if not ranked:
+            out[c["id"]] = _state("new")
+            continue
+        best = spelled_alike(c["name"], ranked[0]["name"])
+        if len(ranked) > 1 and spelled_alike(c["name"], ranked[1]["name"]) == best:
+            continue
+        out[c["id"]] = _take(ranked[0]["ref"], d["options"], book, taken_c, taken_e)
+
+
+def _take(ref: str, options: list, book: Book, taken_c: set[str], taken_e: set[str]) -> dict:
+    kind, _, ident = ref.partition(":")
+    if kind == "cat":
+        taken_c.add(ident)
+        return _state("category", category=book.rows[ident], options=options, among=True)
+    env = next(e for e in book.envelopes if e["id"] == ident)
+    if env.get("category_ids"):
+        return _state("new", offer=env, options=options, among=True)
+    taken_e.add(ident)
+    return _state("envelope", envelope=env, options=options, among=True)
 
 
 def _suggest_close(plan: dict, out: dict[str, dict], book: Book, taken_c: set[str]) -> None:
@@ -167,12 +212,45 @@ def has_assigned(plan: dict, ynab_id: str) -> bool:
     return any(month.get(ynab_id) for month in plan["assigned"].values())
 
 
+def _envelope_color(book: Book, env: dict) -> str:
+    """The Plan screen's colour for an envelope: its own, else its first category's."""
+    first = (env.get("category_ids") or [None])[0]
+    return env.get("color") or (book.rows.get(first) or {}).get("color") or ""
+
+
+def _envelope_view(book: Book, env: dict | None) -> dict | None:
+    if env is None:
+        return None
+    return {
+        "name": env["name"],
+        "color": _envelope_color(book, env),
+        "shared": len(env.get("category_ids") or []) > 1,
+    }
+
+
 def choices(book: Book) -> dict:
     """What a category can be sent to, listed once for every row of the review."""
     return {
-        "categories": [{"ref": cat_ref(c["id"]), "name": c["label"]} for c in book.matchable],
+        "categories": [
+            {
+                "ref": cat_ref(c["id"]),
+                "name": c["label"],
+                "color": c.get("color") or "",
+                "envelope": _envelope_view(book, book.env_of.get(c["id"])),
+                # What an envelope made for it would be called (it sits in none yet).
+                "new_envelope": None
+                if c["id"] in book.env_of
+                else book.free_envelope_name(c["label"]),
+            }
+            for c in book.matchable
+        ],
         "envelopes": [
-            {"ref": env_ref(e["id"]), "name": e["name"], "holds": len(e.get("category_ids") or [])}
+            {
+                "ref": env_ref(e["id"]),
+                "name": e["name"],
+                "color": _envelope_color(book, e),
+                "holds": len(e.get("category_ids") or []),
+            }
             for e in book.envelopes
         ],
     }
@@ -191,9 +269,13 @@ def rows(plan: dict, decisions: dict[str, dict], book: Book) -> dict[str, dict]:
             else {"ref": ref, "name": target.get("label") or target["name"], "kind": d["kind"]},
             "chosen": d["chosen"],
             "close": d["close"],
+            "among": d["among"],
+            # The name a new category made for it would get, and so its new envelope too.
+            "new_name": book.free_label(c["label"]),
             "offer": None if d["offer"] is None else env_ref(d["offer"]["id"]),
             "ask": d["kind"] == "ambiguous",
             "options": d["options"],
+            "assigned": has_assigned(plan, c["id"]),
             "note": note(book, d, c, has_assigned(plan, c["id"])),
         }
     return out

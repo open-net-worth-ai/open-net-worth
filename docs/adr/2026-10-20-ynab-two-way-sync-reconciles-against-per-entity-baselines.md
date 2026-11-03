@@ -191,12 +191,16 @@ category both **labels a transaction and holds the budget**; here a **category**
   yet paired: pair with it; (2) an unpaired envelope of that name: empty, the category is created
   inside it; holding categories, only offered — not pre-selected at import, and a review item in
   the sync (it would make the envelope shared); (3) nothing: a new category with an envelope of
-  its own in the group paired with its YNAB group. Two equal candidates are never guessed between
-  (ambiguous: the review asks, the sync files a `choose` item), nothing existing is renamed or
+  its own in the group paired with its YNAB group. Two candidates that read the same are never guessed between by the sync
+  (it files a `choose` item; the review settles them by spelling, below), nothing existing is renamed or
   moved, nothing is paired twice. The import's review alone then SUGGESTS a close name for a row
   left new (`category_links._suggest_close`, `category_match.closeness` >= `CLOSE`: same words up
-  to plurals and "and", or one name starting the other and most of it): the closest pair first,
-  after every exact match, never one category for two rows, shown as "Similar name". The sync
+  to plurals and "and", one name starting the other and most of it, or one side of the other's
+  slash): the closest pair first, after every exact match, never one category for two rows,
+  pre-selected and marked only by a warning beside it that says why. Of several that read the
+  same, the review takes the one spelled most alike (`category_links._settle_ties`,
+  `category_match.spelled_alike`: same text, then same up to capitals, then letters in common,
+  emoji dropped); only an exact tie still asks. The sync
   never pairs on a close name — nobody is there to check it. The import's `category_links` (YNAB category id -> `cat:<id>` |
   `env:<id>` | `""`) mirrors `account_links`.
 - **The budget follows the envelope.** A category's Assigned syncs only while its envelope holds

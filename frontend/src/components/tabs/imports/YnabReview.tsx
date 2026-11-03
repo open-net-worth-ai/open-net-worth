@@ -299,7 +299,9 @@ function Notes({ preview: p, asking }: { preview: Preview; asking: PreviewCatego
     })
   const pruned = [...p.prune.categories, ...p.prune.groups]
   if (pruned.length > 0)
-    lines.push({ text: `Unused starter items are removed: ${pruned.join(', ')}.` })
+    lines.push({
+      text: `The starter categories the app came with that you never used are removed, since YNAB brings its own: ${pruned.join(', ')}. To keep one, pick it for a YNAB category in Categories.`,
+    })
   for (const w of p.warnings) lines.push({ text: w })
   if (lines.length === 0) return null
   return (

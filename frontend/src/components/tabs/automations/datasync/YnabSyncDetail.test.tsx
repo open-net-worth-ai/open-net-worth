@@ -119,6 +119,11 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
+/** The Envelope column's text on the row of a YNAB category, found by its own cell. */
+const envelopeCell = (w: ReturnType<typeof within>, ynabName: string) =>
+  w.getAllByRole('cell', { name: ynabName })[0]!.closest('tr')!.querySelectorAll('td')[2]!
+    .textContent
+
 const page = (reportId: string | null = null) =>
   render(<YnabSyncDetail reportId={reportId} onBack={onBack} onOpenReport={onOpenReport} />)
 
@@ -386,8 +391,10 @@ describe('YnabSyncDetail setup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
     const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
     fireEvent.click(await w.findByRole('tab', { name: /Categories/ }))
-    expect(w.getByText('Budget syncs with envelope Utilities')).toBeTruthy()
-    expect(w.getByText('More than one of yours has this name. Pick one.')).toBeTruthy()
+    // one of yours keeps the envelope it is in, shown by name; no line under any row
+    expect(envelopeCell(w, 'Utilities')).toBe('Bills pot')
+    expect(w.queryByText(/Budget syncs|Pick one\.$|Similar name/)).toBeNull()
+    expect(w.getByText(/Dining out matches more than one of your categories/)).toBeTruthy()
     expect((w.getByRole('button', { name: 'Import' }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.click(w.getByRole('button', { name: 'Category here for Utilities' }))
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
@@ -395,6 +402,9 @@ describe('YnabSyncDetail setup', () => {
       'Utilities',
       'Food shop',
     ])
+    // each category wears its own colour, as everywhere else in the app
+    const tag = screen.getByRole('option', { name: 'Food shop' }).querySelector('svg')
+    expect(tag?.getAttribute('stroke')).toBe('#e9c46a')
     fireEvent.mouseDown(screen.getByRole('option', { name: 'New category' }))
     await waitFor(() =>
       expect(requests.at(-1)).toMatchObject({
@@ -402,15 +412,21 @@ describe('YnabSyncDetail setup', () => {
         body: { plan_id: 'p1', category_links: { c2: '' }, recheck_of: runs[0]!.id },
       }),
     )
-    expect(
-      await w.findByText("Holds other categories too, so its Assigned won't sync"),
-    ).toBeTruthy()
+    // Gifts holds other categories, so its Assigned won't sync: said by a mark, not a line
+    // the bubble is portaled to <body>, outside the dialog's accessibility tree; focus (or a
+    // hover, or a tap) opens it, and the recheck's re-render can come first
+    await waitFor(() => {
+      fireEvent.focus(w.getByRole('button', { name: 'Check Dining out' }))
+      expect(screen.getByRole('tooltip', { hidden: true }).textContent).toMatch(
+        /Gifts holds other categories/,
+      )
+    })
     // a new category picks its envelope in its own column; one of yours keeps the one it is in
     expect(w.getByRole('button', { name: 'Envelope for Dining out' }).textContent).toBe('Gifts')
     expect(w.queryByRole('button', { name: 'Envelope for Rent' })).toBeNull()
     fireEvent.click(w.getByRole('button', { name: 'Envelope for Utilities' }))
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['New envelope'])
-    expect(w.getByText('Not budgeted here')).toBeTruthy()
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Utilities (new)'])
+    expect(envelopeCell(w, 'Rent')).toBe('Not budgeted')
     fireEvent.click(w.getByRole('button', { name: 'Import' }))
     await waitFor(() =>
       expect(requests.at(-1)).toMatchObject({
@@ -420,7 +436,7 @@ describe('YnabSyncDetail setup', () => {
     )
   })
 
-  it('searches a long list of categories, and says a category hidden in YNAB comes in hidden', async () => {
+  it('searches a long list of categories', async () => {
     sync = notSetUp()
     const many = Array.from({ length: 12 }, (_, i) => ({ ref: `cat:k${i}`, name: `Shop ${i}` }))
     preview = {
@@ -465,9 +481,7 @@ describe('YnabSyncDetail setup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
     const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
     fireEvent.click(await w.findByRole('tab', { name: /Categories/ }))
-    expect(w.getByText('Hidden in YNAB, so hidden here too')).toBeTruthy()
-    // matched with one of yours, the import leaves it as it is: it is not said to be hidden
-    expect(w.getByText('Budget syncs with envelope Shop 1')).toBeTruthy()
+    expect(envelopeCell(w, 'Cold Cat')).toBe('Not budgeted')
     fireEvent.click(w.getByRole('button', { name: 'Category here for Old Cat' }))
     const box = screen.getByPlaceholderText('Search your categories…')
     fireEvent.change(box, { target: { value: 'shop 11' } })
@@ -514,11 +528,9 @@ describe('YnabSyncDetail setup', () => {
 })
 
 describe('YnabSyncDetail once set up', () => {
-  it('says it is a data sync and shows the next sync and the last result', async () => {
+  it('shows the next sync and the last result', async () => {
     page()
-    expect(await screen.findByText('Data sync')).toBeTruthy()
-    expect(screen.getByText('Fixed rules, no AI.')).toBeTruthy()
-    expect(screen.getByText(/Next sync:/)).toBeTruthy()
+    expect(await screen.findByText(/Next sync:/)).toBeTruthy()
     expect(screen.getByText(/3 sent to YNAB, 1 pulled, 1 needs review/)).toBeTruthy()
     expect((screen.getByRole('switch') as HTMLInputElement).checked).toBe(true)
   })
@@ -574,9 +586,9 @@ describe('YnabSyncDetail once set up', () => {
 
   it('changes the schedule, turns it off, and starts a sync', async () => {
     page()
-    fireEvent.change(await screen.findByLabelText('How often to sync'), {
-      target: { value: '6h' },
-    })
+    // read like a Trigger: the schedule is its value, and clicking it opens the choices
+    fireEvent.click(await screen.findByRole('button', { name: 'How often to sync' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Every 6 hours' }))
     await waitFor(() =>
       expect(requests[0]).toMatchObject({ method: 'PUT', body: { interval: '6h' } }),
     )
@@ -643,7 +655,7 @@ describe('YnabSyncDetail once set up', () => {
     page(runs[0]?.id ?? null)
     expect(await screen.findByText('Verification')).toBeTruthy()
     expect(screen.getByRole('dialog')).toBeTruthy()
-    expect(screen.getByText('Settings')).toBeTruthy() // the page is still underneath
+    expect(screen.getByText('Schedule')).toBeTruthy() // the page is still underneath
     fireEvent.click(screen.getByRole('button', { name: /close/i }))
     expect(onOpenReport).toHaveBeenCalledWith(null)
   })

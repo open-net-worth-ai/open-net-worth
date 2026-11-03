@@ -22,6 +22,7 @@ category for two rows. The sync does not: it pairs only on the same name."""
 
 from __future__ import annotations
 
+import unicodedata
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
 
@@ -126,10 +127,34 @@ def _key(name: str) -> str:
     return " ".join(_stem(w) for w in norm(name).split() if w != "and")
 
 
+def _as_seen(name: str) -> str:
+    """A name as it reads on screen: emoji and symbols dropped, capitals and punctuation kept."""
+    text = unicodedata.normalize("NFKC", str(name or ""))
+    kept = "".join(c for c in text if unicodedata.category(c)[0] in "LNPZ" or c == " ")
+    return " ".join(kept.split())
+
+
+def spelled_alike(a: str, b: str) -> float:
+    """Among names that read the same, how exactly they are spelled alike: the same text scores
+    highest, then the same up to capitals, then the share of characters in common."""
+    x, y = _as_seen(a), _as_seen(b)
+    if x == y:
+        return 2.0
+    if x.casefold() == y.casefold():
+        return 1.5
+    return SequenceMatcher(None, x.casefold(), y.casefold()).ratio()
+
+
+def _alternatives(name: str) -> set[str]:
+    """A name with a slash lists alternatives (Rent/Mortgage is Rent or Mortgage)."""
+    return {k for k in (_key(part) for part in str(name or "").split("/")) if k}
+
+
 def closeness(a: str, b: str) -> float:
     """How alike two names read, 0..1: the same words up to plurals and "and" score 1; one name
-    that starts the other and is most of it (Transport, Transportation) scores at least ``CLOSE``;
-    otherwise the share of letters in common."""
+    that starts the other and is most of it (Transport, Transportation), or that is one side of
+    the other's slash (Rent, Rent/Mortgage), scores at least ``CLOSE``; otherwise the share of
+    letters in common."""
     x, y = _key(a), _key(b)
     if not x or not y:
         return 0.0
@@ -138,5 +163,8 @@ def closeness(a: str, b: str) -> float:
     short, long_ = sorted((x, y), key=len)
     ratio = SequenceMatcher(None, x, y).ratio()
     if long_.startswith(short) and len(short) >= 4 and len(short) / len(long_) >= 0.6:
+        return max(ratio, 0.9)
+    alt_a, alt_b = _alternatives(a), _alternatives(b)
+    if (len(alt_a) > 1 or len(alt_b) > 1) and alt_a & alt_b:
         return max(ratio, 0.9)
     return ratio

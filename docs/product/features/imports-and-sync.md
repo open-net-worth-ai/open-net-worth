@@ -42,7 +42,8 @@ Until it is set up, its page is two steps, the second unlocked by the first:
    the plan afresh and opens it in one window; nothing is written. Under the title, one line says
    what the plan holds (currency, accounts, transactions, categories, budget months), then a note
    for anything the import would change in this book: a base-currency change (only in a book with
-   no money data yet), unused starter categories it would remove, accounts here that didn't come
+   no money data yet), the starter categories you never used, which it removes (pick one for a
+   YNAB category to keep it), accounts here that didn't come
    from YNAB (they stay as they are and the plan is added beside them), and any warnings. A plan
    in another currency than a book that already holds data can't be imported, and the note says
    so. Three tabs show the plan itself:
@@ -74,18 +75,26 @@ Until it is set up, its page is two steps, the second unlocked by the first:
    - **Category here**: one of your categories, or **New category**. One of yours is pre-selected
      when its name reads the same, ignoring emoji, symbols, capitals and extra spaces (YNAB's
      "🛒 Groceries" goes with your "Groceries"). When nothing reads the same, the closest name is
-     pre-selected and marked **Similar name** (your "Transport" for YNAB's "Transportation",
-     "Grocery" for "Groceries"); change it if it's wrong. A name that reads the same always wins,
-     and no category of yours is suggested for two rows. Nothing of yours is renamed or moved.
-   - **Envelope**: for one of your categories, the envelope it is already in. Alone in it, its
-     Assigned syncs with YNAB; if the envelope holds other categories too, its Assigned won't sync
-     (the labels still do); in no envelope it is **Not budgeted here** (it gets an envelope of its
-     own if YNAB has money assigned to it). For a **New category**, pick **New envelope** or one of
-     your envelopes. An empty envelope of the same name is pre-selected; one that already holds
+     pre-selected: your "Transport" for YNAB's "Transportation", "Grocery" for "Groceries", "Rent"
+     for "Rent/Mortgage" (one side of a slash). A name that reads the same always wins, and no
+     category of yours is suggested for two rows. When several of yours read the same, the one
+     spelled most like YNAB's is picked (your "fun money" over "Fun money!" for YNAB's "Fun
+     Money"); only two spelled exactly alike are left for you to choose. Nothing of yours is
+     renamed or moved.
+   - **Envelope**: for one of your categories, the envelope it is already in, shown by name; its
+     Assigned syncs with YNAB. In no envelope it reads **Not budgeted**, or the name of the
+     envelope the import makes for it, such as **Old Cats (new)**, when YNAB has money assigned to
+     it. For a **New category**, pick its own new envelope (named after it) or one of your
+     envelopes. An empty envelope of the same name is pre-selected; one that already holds
      categories is listed first but not pre-selected, because adding to it shares it.
 
+   Each category and envelope wears its own colour, as it does on the Plan screen. A warning mark
+   beside a choice means it's worth a look; hover over it or tap it to read why: the match was
+   picked by a close name, or from several that read the same, or the envelope holds other
+   categories too, so its Assigned won't sync (the labels still do).
+
    Both lists are searchable when they are long. A category hidden in YNAB comes in hidden, and
-   under the group it came from. If more than one of yours reads the same, nothing is guessed: it
+   under the group it came from. If two of yours are spelled exactly alike, nothing is guessed: it
    asks you to pick, and **Import** waits. A YNAB group goes with the group of yours that reads the
    same, else a new one. The two-way sync later pairs a category that is new in YNAB only on the
    same name, never a similar one.
@@ -114,9 +123,12 @@ time.
   an envelope that already holds others, which asks you to pick; and an account with a synced transaction
   dated before its Starting Balance, which moves only if you confirm **Move the Starting Balance**
   (or choose **Keep as history**).
-- **Settings**: the direction, and how often: every 15 or 30 minutes, hourly, every 6 hours, daily,
-  or manual only. Below them, the last sync and what it did ("3 sent to YNAB, 1 pulled, 1 needs
-  review"), or why it failed.
+- **Direction** and **Schedule**: each reads like an Automation's trigger; click it to change
+  it. How often: every 15 or 30 minutes, hourly, every 6 hours, daily, or manual only. Below them,
+  the last sync and what it did ("3 sent to YNAB, 1 pulled, 1 needs review"), or why it failed.
+  A sync that's due shows **Next sync: within a minute**: the app checks every minute.
+- **Red flag in YNAB.** Every transaction the sync adds or changes in YNAB gets YNAB's red flag, so
+  you can spot what came from Open Net Worth there.
 - **Direction.** **From YNAB** brings YNAB's changes in and never writes to YNAB; **To YNAB** sends
   this book's changes and never changes the book from YNAB. Either way, a transaction or a month's
   Assigned changed on *both* sides still goes to **Needs your review**, and keeping the side the
@@ -149,7 +161,8 @@ time.
   category you took out of its envelope, the review asks **Give it one?** rather than making an
   envelope for you.
 - **YNAB plan**: the plan it pairs with and when it was imported.
-- **⋯ → Re-check against YNAB** compares the book with YNAB's current figures, without writing.
+- **⋯ → Re-check against YNAB** compares the book with YNAB's current figures and reports any
+  difference, without writing; **Sync now** is the one that moves changes.
 
 How the sync decides, what it sends and its limits are in
 [Bank & brokerage connectors](../connectors/bank-brokerage.md#ynab).

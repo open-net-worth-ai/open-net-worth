@@ -71,7 +71,7 @@ def test_a_pulled_change_shows_each_field_before_and_after(stub):
 def test_assigned_moves_and_review_items_are_recorded(stub):
     enable()
     sync()
-    month, _ = assign(0, "Rent", 1300)
+    month, _ = assign(0, "Rent/Mortgage", 1300)
     ynab_stub.ynab_budget(stub.state, 0, "groc", 350_000)
     edit_onw(row("Bistro")["id"], memo="mine")
     ynab_stub.ynab_edit(
