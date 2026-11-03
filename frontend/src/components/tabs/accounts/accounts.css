@@ -5744,6 +5744,17 @@ select.acct-addin {
   margin-top: 2px;
   font-size: 12px;
 }
+.acct-inst-manager-actions .acct-inst-manager-icon {
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  justify-content: center;
+  color: var(--muted);
+}
+.acct-inst-manager-actions .acct-inst-manager-icon:hover {
+  color: var(--ink);
+}
 .acct-inst-manager-actions .acct-inst-manager-delete {
   color: var(--muted);
 }

@@ -26,7 +26,7 @@ describe('InstitutionManager', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Rename' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Rename DBS' }))
     fireEvent.change(screen.getByRole('textbox', { name: 'Institution name for DBS' }), {
       target: { value: 'DBS Bank' },
     })
