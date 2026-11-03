@@ -80,6 +80,11 @@ export function CardBodyV2({ change }: { change: ProposedChange }) {
       {change.reason && !isExternalMcp && change.type !== 'tool_permission' && (
         <ApprovalNote>Reason: {change.reason}</ApprovalNote>
       )}
+      {/* Why Auto asked rather than allowing it: a card with no word of it read as Auto never
+          having judged the call (owner, 2026-11-04). Any card, a connector's included. */}
+      {change.judge_reason && (
+        <ApprovalNote>Auto asked because: {change.judge_reason}</ApprovalNote>
+      )}
     </>
   )
 }

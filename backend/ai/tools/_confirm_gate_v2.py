@@ -578,6 +578,7 @@ def stage_generic(tool_name: str, args: dict) -> tuple[Optional[str], Optional[d
         "tool_use_id": tool_use_id,
         "session_id": get_session_id(),
         **automation_ref(),
+        **_judge_note(tool_name),
     }
     PendingPlanStore().stage_pending(
         tool_use_id,
@@ -785,6 +786,14 @@ def unknown_token_result(tool_name: str) -> tuple[str, None]:
     )
 
 
+def _judge_note(tool_name: str) -> dict:
+    """``{"judge_reason": …}`` when Auto judged this call and chose to ask — the card says why."""
+    from backend.ai import auto_judge
+
+    reason = auto_judge.ask_reason_for(tool_name)
+    return {"judge_reason": reason} if reason else {}
+
+
 def stage(tool_name: str, args: dict, change: dict) -> tuple[Optional[str], Optional[dict]]:
     """Stage ``args`` AWAITING APPROVAL, keyed by the in-flight ``tool_use_id``, and return
     ``(None, proposed_change)`` — the PAUSE sentinel (RFC 2026-07-22).
@@ -836,6 +845,7 @@ def stage(tool_name: str, args: dict, change: dict) -> tuple[Optional[str], Opti
         "grant_tool": tool_name,
         "session_id": get_session_id(),
         **automation_ref(),
+        **_judge_note(tool_name),
     }
     PendingPlanStore().stage_pending(
         tool_use_id,

@@ -832,19 +832,24 @@ def _dispatch_card(mode, tool_use_id, args=None):
         _unbind(token)
 
 
-def test_auto_ask_pauses_with_the_same_card_manual_shows(monkeypatch, probe_tool, db_isolated):
+def test_auto_ask_pauses_with_the_same_card_manual_shows_and_why(
+    monkeypatch, probe_tool, db_isolated
+):
+    """The manual card, plus the judge's reason (owner, 2026-11-04: an ask card that said
+    nothing read as Auto never having judged the call)."""
     _stub_judge(monkeypatch, "ask", "This writes a row you never mentioned.")
     text, auto_card = _dispatch_card("auto", "toolu_e2e_ask")
     assert text is None and probe_tool == []  # nothing ran
     _, manual_card = _dispatch_card("manual", "toolu_e2e_ask")
-    assert auto_card == manual_card
+    assert {k: v for k, v in auto_card.items() if k != "judge_reason"} == manual_card
+    assert auto_card["judge_reason"] == "This writes a row you never mentioned."
+    assert "judge_reason" not in manual_card
     assert auto_card["grant_tool"] == _PROBE
-    assert "Auto" not in json.dumps(auto_card) and "never mentioned" not in json.dumps(auto_card)
     from backend.db.pending_plan_store import PendingPlanStore
 
     _dispatch_card("auto", "toolu_e2e_ask")
     staged = PendingPlanStore().get_pending("toolu_e2e_ask")["change"]
-    assert "never mentioned" not in json.dumps(staged)
+    assert staged["judge_reason"] == "This writes a row you never mentioned."
 
 
 def test_no_provider_logs_the_judges_reply():
@@ -955,3 +960,21 @@ def test_manual_and_skip_never_call_a_model(monkeypatch, probe_tool, db_isolated
     assert seen == []
     assert (text is not None) is executes
     assert bool(probe_tool) is executes
+
+
+def test_an_ask_carries_its_reason_to_the_card_and_an_allow_does_not():
+    """Owner, 2026-11-04: an order's card said nothing about Auto, as if it had never judged it.
+    An ``ask`` reason now rides on the card (defanged and capped: it is model-written)."""
+    from backend.ai.tools import _confirm_gate_v2
+
+    set_tool_use_id("toolu_a")
+    long_reason = "A live order is not cheap to undo. " * 20
+    auto_judge._current.set(("toolu_a", "place_order", JudgeVerdict("ask", long_reason)))
+    note = _confirm_gate_v2._judge_note("place_order")
+    assert note["judge_reason"].startswith("A live order is not cheap to undo.")
+    assert len(note["judge_reason"]) <= 161
+    assert _confirm_gate_v2._judge_note("another_tool") == {}  # bound to this call and tool
+    auto_judge._current.set(("toolu_a", "place_order", JudgeVerdict("allow", "fine")))
+    assert _confirm_gate_v2._judge_note("place_order") == {}  # an allow is the row's "i"
+    set_tool_use_id("toolu_b")
+    assert _confirm_gate_v2._judge_note("place_order") == {}

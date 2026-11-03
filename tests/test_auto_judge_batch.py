@@ -464,11 +464,13 @@ def test_a_step_with_three_ask_calls_makes_one_model_call_and_each_call_its_own_
     assert [name for name, _ in probe_tools] == ["zz_batch_a", "zz_batch_c"]
 
 
-def test_a_batched_ask_stages_the_same_card_manual_would(probe_tools, auto_chat, model, single):
+def test_a_batched_ask_stages_the_card_manual_would_and_says_why(
+    probe_tools, auto_chat, model, single
+):
     model.reply = _verdicts("ask", "ask", "ask", reason="Never mentioned by you.")
     (text, card), *_ = _run(_dispatch_all(_step(*_TOOLS)))
     assert text is None and card["grant_tool"] == "zz_batch_a"
-    assert "Never mentioned" not in json.dumps(card) and "Auto" not in json.dumps(card)
+    assert card["judge_reason"] == "Never mentioned by you."
     assert probe_tools == []
 
 

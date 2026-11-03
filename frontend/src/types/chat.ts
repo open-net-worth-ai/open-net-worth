@@ -310,6 +310,9 @@ export interface ProposedChange {
   // silently keying off an external server's tool would be exactly the kind of collision
   // this codebase has been burned by.
   grant_tool?: string
+  // permissions_v2 only: why the Auto judge stopped to ask about this call (model-written, so
+  // shown as plain text only). Absent when Auto didn't judge it.
+  judge_reason?: string
   // permissions_v2 only: present when the call belongs to an Automation run — the Automation's
   // id. It is what makes the card's Always allow write to THIS Automation's own list (routed
   // server-side from `session_id`), never to the global table.

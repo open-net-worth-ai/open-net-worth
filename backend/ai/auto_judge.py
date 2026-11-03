@@ -58,6 +58,7 @@ from backend.ai.auto_judge_prompt import (  # noqa: F401
 from backend.ai.auto_judge_prompt import (
     SYSTEM as _SYSTEM,
 )
+from backend.core.untrusted import sanitize_untrusted
 from backend.models.mcp_client import mcp_connector_id
 
 logger = logging.getLogger(__name__)
@@ -79,8 +80,9 @@ APPROVAL_TASK = "approval"
 class JudgeVerdict:
     verdict: Literal["allow", "ask"]
     # Never logged. An ``allow`` reason is shown to the owner as the "i" on the row of the call it
-    # let through (``services.auto_approvals``); an ``ask`` reason is not shown — that call gets
-    # the ordinary card.
+    # let through (``services.auto_approvals``); an ``ask`` reason rides on that call's card
+    # (``ask_reason_for``), so the owner sees why Auto stopped to ask — a card with no reason
+    # read as Auto never having judged at all (owner, 2026-11-04).
     reason: str
     model: str = ""  # the ref that answered ("" = instance default) — for the audit log only
 
@@ -428,6 +430,18 @@ def _held_for(tool_name: str) -> Optional[JudgeVerdict]:
     if held is not None and held[0] == get_tool_use_id() and held[1] == tool_name:
         return held[2]
     return None
+
+
+def ask_reason_for(tool_name: str) -> str:
+    """Why the judge asked about the in-flight call, for its card: "" when it didn't judge it
+    or let it through. Model-written from the call's arguments, so untrusted: defanged and
+    capped here, and the card renders it as plain text only."""
+    from backend.services.auto_approvals import MAX_REASON_CHARS
+
+    verdict = _held_for(tool_name)
+    if verdict is None or verdict.allows:
+        return ""
+    return sanitize_untrusted(verdict.reason or "", MAX_REASON_CHARS).strip()
 
 
 def gate_verdict_for(tool_name: str) -> str:

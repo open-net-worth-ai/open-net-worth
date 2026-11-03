@@ -128,6 +128,8 @@ unsure, it stops.
   conversation. Hover it (or tap it on a phone) to see which model judged it and its one-line
   reason. Calls that didn't need judging — reads, and tools set to **Always allow** — have none.
   The reason stays with the conversation, so it's still there after a reload.
+- **You can see why a call stopped.** When the judge hands a call back to you, its approval card
+  says **Auto asked because:** and the judge's one-line reason.
 
 An Automatic judgement is a safety net, not a wall. For anything you would never want to happen
 unattended, set that tool to **Block**. For a tool where you want to see every call — a bulk
