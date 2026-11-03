@@ -22,6 +22,8 @@ export interface DesktopClientBridge {
   restartToUpdate?(): Promise<void>;
   offerUpdate?(): Promise<void>;
   takeWhatsNew?(): Promise<DesktopWhatsNew | null>;
+  // macOS only: start the system's own dictation in the focused field (Edit → Start Dictation…).
+  startDictation?(): Promise<void>;
   onCommand(listener: (command: DesktopCommand) => void): () => void;
 }
 export interface ImportSelection { cancelled: boolean; files: NativeFile[] }

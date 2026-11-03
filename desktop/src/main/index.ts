@@ -568,6 +568,13 @@ function registerIpc(): void {
     if (!main!.hosted || starting || quitting) throw new Error('Wait for the current operation to finish.');
     return hosted!.signInFresh(safeReturnPath(returnPath));
   });
+  // The page's mic (owner, 2026-11-03): the system's own dictation, typing into the focused field.
+  // It is the Edit menu's Start Dictation…, so it can do nothing a person could not by menu.
+  ipcMain.handle('desktop-client:start-dictation', event => {
+    main!.authorizeClient(event);
+    if (process.platform !== 'darwin') throw new Error('Dictation is a macOS feature.');
+    Menu.sendActionToFirstResponder('startDictation:');
+  });
   ipcMain.handle('desktop-client:open-browser', event => { main!.authorizeClient(event); return books!.exclusive(async () => { main!.authorizeClient(event); await openBrowser(); }); });
   ipcMain.handle('desktop-connection:retry', event => { main!.authorizeServerRetry(event); return books!.exclusive(async () => { main!.authorizeServerRetry(event); await connectionLoader!.retry(); }); });
   ipcMain.handle('desktop-hosted:sign-in', event => {

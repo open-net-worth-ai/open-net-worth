@@ -11,7 +11,12 @@ vi.mock('livekit-client', () => ({
 }))
 vi.mock('../../../api/client', () => ({ authFetch: vi.fn() }))
 let desktop = false
-vi.mock('../../../platform/desktop', () => ({ desktopBridge: () => (desktop ? {} : undefined) }))
+// The desktop app's window bridge, in either mode; `startDictation` only on a Mac.
+let client: { startDictation?: () => Promise<void> } | undefined
+vi.mock('../../../platform/desktop', () => ({
+  desktopBridge: () => (desktop ? {} : undefined),
+  desktopClientBridge: () => client,
+}))
 
 import { DictateButton } from './DictateButton'
 import { resetVoiceCallForTests, setVoiceCallForTests } from './voiceCall'
@@ -43,7 +48,9 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
+  localStorage.clear()
   desktop = false
+  client = undefined
   resetVoiceCallForTests()
   delete (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition
 })
@@ -51,7 +58,7 @@ afterEach(() => {
 describe('DictateButton', () => {
   it('writes everything heard so far, however the browser splits it, and settles on stop', () => {
     const onText = vi.fn()
-    render(<DictateButton onText={onText} empty={false} />)
+    render(<DictateButton focusBox={vi.fn()} onText={onText} empty={false} />)
     fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
     const rec = FakeRecognition.last
     expect(rec.start).toHaveBeenCalled()
@@ -75,11 +82,11 @@ describe('DictateButton', () => {
 
   it('stops, and writes nothing more, once the message it was writing is sent', () => {
     const onText = vi.fn()
-    const { rerender } = render(<DictateButton onText={onText} empty={false} />)
+    const { rerender } = render(<DictateButton focusBox={vi.fn()} onText={onText} empty={false} />)
     fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
     const rec = FakeRecognition.last
     act(() => rec.onresult?.({ resultIndex: 0, results: [result('send this', false)] }))
-    rerender(<DictateButton onText={onText} empty />) // sent: the box emptied
+    rerender(<DictateButton focusBox={vi.fn()} onText={onText} empty />) // sent: the box emptied
     expect(rec.abort).toHaveBeenCalled()
     act(() => {
       rec.onresult?.({ resultIndex: 0, results: [result('send this now', true)] })
@@ -90,7 +97,7 @@ describe('DictateButton', () => {
   })
 
   it('says when the microphone is blocked', () => {
-    render(<DictateButton onText={vi.fn()} empty />)
+    render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
     fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
     act(() => {
       FakeRecognition.last.onerror?.({ error: 'not-allowed' })
@@ -99,10 +106,10 @@ describe('DictateButton', () => {
     expect(screen.getByRole('button', { name: /can't use the microphone/ })).toBeTruthy()
   })
 
-  it('says why it failed beside the mic, then lets the tooltip keep it', () => {
+  it('says why it failed beside the mic, then the mic is plain again', () => {
     vi.useFakeTimers()
     try {
-      render(<DictateButton onText={vi.fn()} empty />)
+      render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
       fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
       act(() => {
         FakeRecognition.last.onerror?.({ error: 'not-allowed' })
@@ -111,33 +118,71 @@ describe('DictateButton', () => {
       expect(screen.getByRole('status').textContent).toMatch(/Chrome or Safari/)
       act(() => vi.advanceTimersByTime(6000))
       expect(screen.queryByRole('status')).toBeNull()
-      expect(screen.getByRole('button', { name: /can't use the microphone/ })).toBeTruthy()
-      // A browser with no speech service is told where dictation works, not to try again.
-      fireEvent.click(screen.getByRole('button', { name: /can't use the microphone/ }))
-      act(() => {
-        FakeRecognition.last.onerror?.({ error: 'network' })
-        FakeRecognition.last.onend?.()
-      })
-      expect(screen.getByRole('status').textContent).toMatch(/can't turn speech into text/)
+      const mic = screen.getByRole('button', { name: 'Dictate' })
+      expect(mic.dataset.problem).toBeUndefined()
     } finally {
       vi.useRealTimers()
     }
   })
 
+  it('hides itself for good in a browser with no speech service, once its reason is read', () => {
+    const first = render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
+    fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
+    act(() => {
+      FakeRecognition.last.onerror?.({ error: 'network' })
+      FakeRecognition.last.onend?.()
+    })
+    // Told where dictation works, not to try again.
+    expect(screen.getByRole('status').textContent).toMatch(/can't turn speech into text/)
+    // Typing is moving on: the tip goes, and so does a mic that can never work here.
+    act(() => {
+      fireEvent.keyDown(document, { key: 'a' })
+    })
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+    first.unmount()
+    render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
   it('is not offered where it cannot work, nor during a voice call', () => {
     delete (window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition
-    const { unmount } = render(<DictateButton onText={vi.fn()} empty />)
+    const { unmount } = render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
     expect(screen.queryByRole('button')).toBeNull()
     unmount()
     ;(window as unknown as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition =
       FakeRecognition
     desktop = true
-    const second = render(<DictateButton onText={vi.fn()} empty />)
+    const second = render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
     expect(screen.queryByRole('button')).toBeNull()
     second.unmount()
     desktop = false
     act(() => setVoiceCallForTests({ phase: 'live', sessionId: 's1' }))
-    render(<DictateButton onText={vi.fn()} empty />)
+    render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
+  it("hands over to macOS's own dictation in the Mac desktop app, never the browser's", async () => {
+    const startDictation = vi.fn(() => Promise.resolve())
+    client = { startDictation }
+    const focusBox = vi.fn()
+    const before = FakeRecognition.last
+    render(<DictateButton focusBox={focusBox} onText={vi.fn()} empty />)
+    fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
+    expect(focusBox).toHaveBeenCalledBefore(startDictation)
+    expect(startDictation).toHaveBeenCalledTimes(1)
+    expect(FakeRecognition.last).toBe(before) // no browser recogniser was made
+    // A refusal says how to turn it on.
+    startDictation.mockImplementationOnce(() => Promise.reject(new Error('off')))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
+    })
+    expect(screen.getByRole('status').textContent).toMatch(/Turn on Dictation in System Settings/)
+  })
+
+  it('is hidden in the desktop app off a Mac, even connected to a server', () => {
+    client = {} // a Windows or Linux window: no system dictation to start
+    render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
     expect(screen.queryByRole('button')).toBeNull()
   })
 })

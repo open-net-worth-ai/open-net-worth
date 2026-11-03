@@ -55,14 +55,24 @@ message.
 ## Say it instead of typing
 
 Press the **microphone** beside the send button and speak: your words appear in the message box as
-you say them, and nothing is sent until you press send. Press it again to stop. It uses your
-browser's own speech recognition, so your speech is handled by your browser's provider (Google in
-Chrome and Edge, Apple in Safari), not by Open Net Worth. The button only shows where the browser
-offers it, so not in the desktop app or Firefox, and not during a [voice call](../connectors/voice-calls.md), which
-already hears you. If dictation can't work, the button turns amber and says why above it: a
-blocked microphone (allow it for this site and press it again), no microphone, or a browser that
-has the button but no speech service behind it (Arc, Brave, the Claude app's browser), where
-Chrome, Edge or Safari will work.
+you say them, and nothing is sent until you press send.
+
+- **In the Mac desktop app** it starts macOS's own dictation in the message box, the same as
+  **Edit → Start Dictation…**: it runs on your Mac, in the language macOS is set to, and macOS
+  shows its own listening mark. The first time, macOS asks to turn Dictation on. Press the
+  microphone again, or stop talking, to finish.
+- **In a browser** it uses the browser's own speech recognition, so your speech is handled by the
+  browser's provider (Google in Chrome and Edge, Apple in Safari), not by Open Net Worth. Press it
+  again to stop.
+
+The button only shows where dictation can work: not in Firefox, not in the desktop app on Windows
+or Linux, and not during a [voice call](../connectors/voice-calls.md), which already hears you.
+If dictation can't work, the button turns amber and says why above it, until you type or click,
+or for a few seconds; then it's back to normal. The reason is a blocked microphone (allow it for
+this site and press it again), no microphone, or a browser that has the button but no speech
+service behind it (Arc, Brave, the Claude app's browser). In that last case dictation can never
+work there, so the button hides in that browser from then on; Chrome, Edge or Safari will work. Anywhere at all, your computer's own dictation types into the box too: press the
+Globe key twice on a Mac, or Win+H on Windows.
 
 ## Attach a file or picture
 

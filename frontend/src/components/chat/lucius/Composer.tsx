@@ -863,6 +863,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
             <DictateButton
               empty={isEmpty}
               onText={(text, final) => mentionRef.current?.dictate(text, final)}
+              focusBox={() => mentionRef.current?.focus()}
             />
             {busy && onStop && (sendBlocked || (isEmpty && attachments.length === 0)) ? (
               <button

@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { desktopBridge } from '../../../platform/desktop'
+import { desktopBridge, desktopClientBridge } from '../../../platform/desktop'
 
-// Dictation into the message box with the BROWSER's own speech recognition (owner, 2026-11-03):
-// free, no keys, the audio handled by the browser's provider (Google in Chrome and Edge, Apple
-// in Safari). Not offered where it can't work: a browser without it, and the desktop app, whose
-// built-in browser has the API but no speech service behind it.
+// Dictation into the message box (owner, 2026-11-03), with whatever this computer has:
+// - the Mac desktop app: macOS's own dictation, which types into the focused box itself — live,
+//   on the device, nothing to set up here (the app's Edit → Start Dictation…);
+// - a browser: its own speech recognition, the audio handled by its provider (Google in Chrome
+//   and Edge, Apple in Safari).
+// Never the browser engine inside the desktop app — Electron has the API but no speech service
+// behind it — whether it serves its own book or is connected to a server.
 
 interface SpeechResult {
   readonly isFinal: boolean
@@ -27,8 +30,12 @@ interface Recognition {
 }
 type RecognitionCtor = new () => Recognition
 
+function inDesktopApp(): boolean {
+  return Boolean(desktopBridge() || desktopClientBridge())
+}
+
 function recognitionCtor(): RecognitionCtor | null {
-  if (typeof window === 'undefined' || desktopBridge()) return null
+  if (typeof window === 'undefined' || inDesktopApp()) return null
   const w = window as unknown as {
     SpeechRecognition?: RecognitionCtor
     webkitSpeechRecognition?: RecognitionCtor
@@ -37,8 +44,28 @@ function recognitionCtor(): RecognitionCtor | null {
 }
 
 const NOTICE_MS = 6000
+// A browser that has the API but no speech service fails every time: once it has, the mic stays
+// hidden in it rather than sitting there amber (owner, 2026-11-03: "when would the mic become
+// normal colour?"). Per browser; a blocked or missing microphone can be fixed, so it isn't kept.
+const NO_SERVICE_KEY = 'onw:dictation-no-service'
 
-export type DictationProblem = 'blocked' | 'no-service' | 'no-mic' | null
+function rememberedNoService(): boolean {
+  try {
+    return localStorage.getItem(NO_SERVICE_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function rememberNoService(): void {
+  try {
+    localStorage.setItem(NO_SERVICE_KEY, '1')
+  } catch {
+    // Without storage it is hidden for this page's life only.
+  }
+}
+
+export type DictationProblem = 'blocked' | 'no-service' | 'no-mic' | 'system' | null
 
 export interface Dictation {
   supported: boolean
@@ -53,11 +80,16 @@ export interface Dictation {
   cancel(): void
 }
 
-/** `onText(text, final)`: everything this dictation has heard, revised until `final`. */
-export function useDictation(onText: (text: string, final: boolean) => void): Dictation {
+/** `onText(text, final)`: everything this dictation has heard, revised until `final`.
+ *  `focusBox`: put the caret in the message box — the system's dictation types where it is. */
+export function useDictation(
+  onText: (text: string, final: boolean) => void,
+  focusBox: () => void,
+): Dictation {
   const [listening, setListening] = useState(false)
   const [problem, setProblem] = useState<DictationProblem>(null)
   const [noticed, setNoticed] = useState(false)
+  const [noService, setNoService] = useState(rememberedNoService)
   const noticeTimer = useRef<number | undefined>(undefined)
   const rec = useRef<Recognition | null>(null)
   const sink = useRef(onText)
@@ -80,14 +112,47 @@ export function useDictation(onText: (text: string, final: boolean) => void): Di
     },
     [],
   )
-  const notice = useCallback((next: DictationProblem) => {
-    setProblem(next)
-    setNoticed(true)
+  // The tip has been read (or ignored): it goes, and the mic is its plain self again — or, where
+  // it can never work, gone.
+  const settle = useCallback(() => {
     window.clearTimeout(noticeTimer.current)
-    noticeTimer.current = window.setTimeout(() => setNoticed(false), NOTICE_MS)
+    setNoticed(false)
+    setProblem((was) => {
+      if (was === 'no-service') {
+        rememberNoService()
+        setNoService(true)
+      }
+      return null
+    })
   }, [])
+  const notice = useCallback(
+    (next: DictationProblem) => {
+      setProblem(next)
+      setNoticed(true)
+      window.clearTimeout(noticeTimer.current)
+      noticeTimer.current = window.setTimeout(settle, NOTICE_MS)
+    },
+    [settle],
+  )
+  // Typing or clicking anywhere is moving on: the tip doesn't sit over what you're doing.
+  useEffect(() => {
+    if (!noticed) return
+    document.addEventListener('keydown', settle, true)
+    document.addEventListener('pointerdown', settle, true)
+    return () => {
+      document.removeEventListener('keydown', settle, true)
+      document.removeEventListener('pointerdown', settle, true)
+    }
+  }, [noticed, settle])
 
+  const system = desktopClientBridge()?.startDictation ?? null
   const toggle = useCallback(() => {
+    if (system) {
+      // macOS shows its own listening mark and stops on its own (or on the same mic again).
+      focusBox()
+      system().catch(() => notice('system'))
+      return
+    }
     if (rec.current) {
       rec.current.stop()
       return
@@ -127,7 +192,15 @@ export function useDictation(onText: (text: string, final: boolean) => void): Di
     setNoticed(false)
     setListening(true)
     r.start()
-  }, [Ctor, notice])
+  }, [Ctor, notice, system, focusBox])
 
-  return { supported: Ctor !== null, listening, problem, noticed, toggle, stop, cancel }
+  return {
+    supported: system !== null || (Ctor !== null && !noService),
+    listening,
+    problem,
+    noticed,
+    toggle,
+    stop,
+    cancel,
+  }
 }

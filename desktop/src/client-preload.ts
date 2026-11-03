@@ -19,6 +19,8 @@ const client: DesktopClientBridge = {
   restartToUpdate: () => ipcRenderer.invoke('desktop-client:restart-to-update'),
   offerUpdate: () => ipcRenderer.invoke('desktop-client:offer-update'),
   takeWhatsNew: () => ipcRenderer.invoke('desktop-client:whats-new'),
+  // Only where there is a system dictation to start: the page offers its mic by this being present.
+  ...(process.platform === 'darwin' ? { startDictation: () => ipcRenderer.invoke('desktop-client:start-dictation') } : {}),
   onCommand: listener => {
     const handler = (_event: Electron.IpcRendererEvent, command: DesktopCommand) => listener(command);
     ipcRenderer.on('desktop-client:command', handler);
