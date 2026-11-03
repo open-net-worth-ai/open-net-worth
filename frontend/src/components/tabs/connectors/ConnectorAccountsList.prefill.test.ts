@@ -55,8 +55,8 @@ const at = (id: string, linked: string | null, institution = 'Chase') => ({
 it('reuses the institution the bank’s linked accounts are under, even after a rename', () => {
   const rows = [at('p1', 'a1'), at('p2', null)]
   const accounts = [{ id: 'a1', name: 'Checking', institution: 'Joint Chase' }]
-  expect(bankInstitution(rows[1], rows, accounts, 'Plaid')).toBe('Joint Chase')
-  expect(prefillFor(rows[1], 'Joint Chase').institution).toBe('Joint Chase')
+  expect(bankInstitution(rows[1]!, rows, accounts, 'Plaid')).toBe('Joint Chase')
+  expect(prefillFor(rows[1]!, 'Joint Chase').institution).toBe('Joint Chase')
 })
 
 it('takes the most common when the bank’s accounts are split, and ignores the placeholder', () => {
@@ -67,14 +67,14 @@ it('takes the most common when the bank’s accounts are split, and ignores the 
     { id: 'a3', name: '3', institution: 'Chase' },
     { id: 'a4', name: '4', institution: 'Plaid' },
   ]
-  expect(bankInstitution(rows[4], rows, accounts, 'Plaid')).toBe('Joint Chase')
+  expect(bankInstitution(rows[4]!, rows, accounts, 'Plaid')).toBe('Joint Chase')
 })
 
 it('a bank with nothing linked yet falls back to its own name; other banks never count', () => {
   const rows = [at('p1', 'a1', 'Wells Fargo'), at('p2', null, 'Chase')]
   const accounts = [{ id: 'a1', name: 'WF', institution: 'My WF' }]
-  expect(bankInstitution(rows[1], rows, accounts, 'Plaid')).toBeUndefined()
-  expect(prefillFor(rows[1]).institution).toBe('Chase')
+  expect(bankInstitution(rows[1]!, rows, accounts, 'Plaid')).toBeUndefined()
+  expect(prefillFor(rows[1]!).institution).toBe('Chase')
 })
 
 it('a bank with no known name leaves the institution blank — never the connector "Plaid"', () => {
