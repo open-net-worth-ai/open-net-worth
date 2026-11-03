@@ -750,12 +750,6 @@
   .lx-call-btn--setup {
     opacity: 0.55;
   }
-  @media (pointer: coarse) {
-    .lx-call-btn {
-      width: 44px;
-      height: 44px;
-    }
-  }
   .lx-callbar {
     display: flex;
     align-items: center;
