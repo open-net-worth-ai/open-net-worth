@@ -6,7 +6,7 @@ order: 20
 audience: [user]
 status: stable
 related: [lucius/overview, lucius/mentions, lucius/permissions, lucius/models-and-cost]
-keywords: [chat, prompting, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread]
+keywords: [chat, prompting, conversation, tips, attach, files, reports, pdf, spreadsheet, history, unread, dictation, dictate, speak, microphone]
 ---
 
 # How to talk to Lucius
@@ -51,6 +51,16 @@ still ask. Pick **Manual** if you want to approve every change. See
 
 Changed your mind? The **Restore** button on a reply puts your data back as it was before that
 message.
+
+## Say it instead of typing
+
+Press the **microphone** beside the send button and speak: your words appear in the message box as
+you say them, and nothing is sent until you press send. Press it again to stop. It uses your
+browser's own speech recognition, so your speech is handled by your browser's provider (Google in
+Chrome and Edge, Apple in Safari), not by Open Net Worth. The button only shows where the browser
+offers it, so not in the desktop app or Firefox, and not during a [voice call](../connectors/voice-calls.md), which
+already hears you. If your browser blocks the microphone, the button turns amber; allow the
+microphone for this site and press it again.
 
 ## Attach a file or picture
 

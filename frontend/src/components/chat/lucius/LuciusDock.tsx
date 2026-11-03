@@ -26,6 +26,7 @@ import { ConversationApprovalPicker } from '../ConversationApprovalPicker'
 import { VoiceCallButton } from './VoiceCallButton'
 import { VoiceCallNotice } from './VoiceCallNotice'
 import { VoiceCallSlot } from './VoiceCallSlot'
+import { VoiceCallPill } from './VoiceCallPill'
 import type { LuciusComposerHandle, ComposerParsed } from './Composer'
 import { MessageBubble } from '../MessageBubble'
 import { CompactingActivity } from '../CompactingActivity'
@@ -34,6 +35,9 @@ import { Spark } from '../../../lucius/identity'
 import { useHasAi } from '../../../hooks/useHasAi'
 import { SquarePen, PanelRight, ChevronDown } from '../../../ui/icons'
 import type { Message } from '../../../types/chat'
+import { useFlag } from '../../../hooks/useFlag'
+import { hasOpenCard } from '../../../utils/chatStore'
+import { useVoiceCall } from './voiceCall'
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -76,6 +80,8 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
   const { hasAi, loaded: aiLoaded } = useHasAi()
   const needsSetup = aiLoaded && !hasAi
   const [open, setOpen] = useState(false)
+  const voiceOn = useFlag('voice_calls') === true
+  const callIdle = useVoiceCall().phase === 'idle'
   const dockRef = useRef<HTMLDivElement>(null)
   const answerRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<LuciusComposerHandle>(null) as RefObject<LuciusComposerHandle>
@@ -339,25 +345,41 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
       role="complementary"
       aria-label="Ask Lucius"
     >
-      {/* Collapsed pill */}
-      <button
-        className="lx-dock-pill"
-        onMouseEnter={() => {
-          if (!needsSetup) setOpen(true)
-        }}
-        onClick={() => {
-          if (needsSetup) {
-            onSetUpAi?.()
-            return
-          }
-          setOpen(true)
-          requestAnimationFrame(() => composerRef.current?.focus())
-        }}
-        aria-label={needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
-      >
-        <Spark size={13} />
-        {needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
-      </button>
+      {/* Collapsed pill — with voice calls on, Call sits in it and the call happens there. */}
+      {voiceOn && !needsSetup ? (
+        <VoiceCallPill
+          sessionId={activeId}
+          busy={streaming || sending}
+          needsApproval={hasOpenCard(messages)}
+          onAsk={() => {
+            setOpen(true)
+            requestAnimationFrame(() => composerRef.current?.focus())
+          }}
+          onHoverOpen={() => {
+            if (callIdle) setOpen(true)
+          }}
+          onOpenDock={() => setOpen(true)}
+        />
+      ) : (
+        <button
+          className="lx-dock-pill"
+          onMouseEnter={() => {
+            if (!needsSetup) setOpen(true)
+          }}
+          onClick={() => {
+            if (needsSetup) {
+              onSetUpAi?.()
+              return
+            }
+            setOpen(true)
+            requestAnimationFrame(() => composerRef.current?.focus())
+          }}
+          aria-label={needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
+        >
+          <Spark size={13} />
+          {needsSetup ? 'Set up Lucius' : 'Ask Lucius'}
+        </button>
+      )}
 
       {/* Expanded card */}
       <div
@@ -500,9 +522,9 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
 
         {/* Screen bar + composer + its toolbar are ONE input field — see .lx-inputblock. */}
         <div className="lx-inputblock">
-          <VoiceCallNotice sessionId={activeId} />
+          <VoiceCallNotice sessionId={activeId} busy={streaming || sending} />
           {/* Shared composer — model/effort/cost ride in ITS toolbar row, next to Send. */}
-          <VoiceCallSlot busy={(streaming && !following) || sending}>
+          <VoiceCallSlot busy={streaming || sending} visible={open}>
             <LuciusComposer
               controls={
                 <ModelEffortCluster
@@ -514,7 +536,8 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
                 />
               }
               leadingControls={<ConversationApprovalPicker sessionId={activeId} />}
-              callAction={<VoiceCallButton sessionId={activeId} />}
+              // Mid-call the slot is Send again: what you type goes to Lucius, read aloud.
+              callAction={callIdle ? <VoiceCallButton sessionId={activeId} /> : null}
               ref={composerRef}
               busy={(streaming && !following) || sending}
               sendBlocked={((streaming && !following) || sending) && !multiTurnEnabled}

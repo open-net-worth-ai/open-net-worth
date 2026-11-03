@@ -17,6 +17,7 @@ import threading
 import time
 from typing import Optional
 
+from backend.core.config import get_settings
 from backend.db.voice_config_store import LANGUAGES, VoiceConfigStore, is_ready
 from backend.services.feature_flags import enabled as flag_enabled
 
@@ -44,7 +45,40 @@ _calls: dict[str, tuple[str, float]] = {}
 _calls_lock = threading.Lock()
 
 
+# Why the last call ended on its own — LiveKit refusing it — said once to the page that placed it
+# (``status``), then forgotten when the next call starts (owner, 2026-11-03).
+CALL_PROBLEMS = {
+    "credit": (
+        "Your LiveKit project is out of inference credit (or hit its rate limit), so Lucius "
+        "can't take calls. Check your plan and billing in LiveKit."
+    ),
+    "error": "The call's voice service failed, so Lucius couldn't answer. The app log has the details.",
+}
+_CALL_PROBLEM_S = 120.0
+_call_problem: Optional[tuple[str, float, str]] = None
+
+
+def note_call_problem(kind: str, detail: str = "") -> None:
+    global _call_problem
+    if kind in CALL_PROBLEMS:
+        _call_problem = (kind, time.monotonic(), detail)
+
+
+def call_problem() -> Optional[dict]:
+    if _call_problem is None or time.monotonic() - _call_problem[1] > _CALL_PROBLEM_S:
+        return None
+    kind, _at, detail = _call_problem
+    problem = {"kind": kind, "message": CALL_PROBLEMS[kind]}
+    # The service's raw words name the LiveKit project and session: the owner's to read, never a
+    # public demo visitor's.
+    if detail and not get_settings().demo_mode:
+        problem["detail"] = detail
+    return problem
+
+
 def register_call(room: str, session_id: str, ttl_s: float) -> None:
+    global _call_problem
+    _call_problem = None
     now = time.monotonic()
     with _calls_lock:
         for stale in [r for r, (_s, until) in _calls.items() if until < now]:
@@ -65,6 +99,47 @@ def claim_call(room: str) -> Optional[str]:
     if entry is None or entry[1] < time.monotonic():
         return None
     return entry[0]
+
+
+def close_when_over(room: str, seconds: float) -> None:
+    """The public demo's backstop for a call's limit: the worker is asked to hang up at it, but
+    the app never trusts the worker for a limit, so a room still open ``demo_calls.GRACE_S``
+    past it is closed from here, with the project's own keys. Runs on the app loop."""
+    from backend.services import demo_calls
+
+    async def later() -> None:
+        await asyncio.sleep(seconds + demo_calls.GRACE_S)
+        # Closed whatever the worker reported: its word that the call ended is not a limit
+        # (security review, 2026-11-03). Closing a room that is already gone is harmless.
+        if not demo_calls.ended(room):
+            log.warning("voice: a demo call ran past its limit; closing its room")
+        await _close_room(room)
+        demo_calls.end(room)
+
+    asyncio.get_running_loop().create_task(later())
+
+
+def close_refused(room: str) -> None:
+    """On the public demo, close a room the worker was refused for, so a visitor cannot keep one
+    open on the demo's project with no call in it. Off a demo, nothing. Runs on the app loop."""
+    from backend.services import demo_calls
+
+    if demo_calls.enabled() and room:
+        asyncio.get_running_loop().create_task(_close_room(room))
+
+
+async def _close_room(room: str, attempts: int = 2) -> None:
+    from backend.connectors.voice.rooms import delete_room
+
+    for attempt in range(attempts):
+        try:
+            await asyncio.to_thread(delete_room, VoiceConfigStore().get(), room)
+            return
+        except Exception:  # noqa: BLE001 — a closed room 404s; anything else is retried once
+            if attempt + 1 == attempts:
+                log.info("voice: couldn't close room %s (it may already be gone)", room)
+            else:
+                await asyncio.sleep(2.0)
 
 
 def calls_allowed() -> bool:
@@ -96,6 +171,7 @@ def status() -> dict:
         "libraries_installed": libraries_installed(),
         "running": running,
         "error": "" if running else _worker.error,
+        "call_problem": call_problem(),
     }
 
 

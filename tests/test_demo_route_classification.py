@@ -31,7 +31,9 @@ _XHR = {"X-Requested-With": "XMLHttpRequest"}
 
 # Routes a demo visitor may call: the fabricated book's own domains and their own conversations.
 # File ingestion is open on the demo by owner decision (2026-10-08): visitors try statement
-# import, receipts, attachments and Documents on the public, fabricated book.
+# import, receipts, attachments and Documents on the public, fabricated book. A visitor may start
+# a voice call (owner decision 2026-11-03): into their own conversation only, on their token
+# budget, under the call caps of services/demo_calls; every other voice write stays locked.
 REVIEWED_SAFE = frozenset(
     """
     POST /api/assets/{asset_id}/docs
@@ -232,6 +234,7 @@ REVIEWED_SAFE = frozenset(
     PUT /api/vault/items/{item_id}/name
     PUT /api/vault/items/{item_id}/note
     PUT /api/vault/items/{item_id}/tags
+    POST /api/voice/call
     POST /api/watchlist/items
     DELETE /api/watchlist/items/{item_id}
     PATCH /api/watchlist/items/{item_id}

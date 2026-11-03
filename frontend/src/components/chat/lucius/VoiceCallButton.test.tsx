@@ -123,9 +123,46 @@ describe('the call outlives the composer', () => {
         </VoiceCallSlot>
       </>,
     )
-    // … and the call is still on, with the call bar shown and the composer kept but hidden.
+    // … and the call is still on, its view shown, and the composer still there to type in.
     await waitFor(() => expect(screen.getByTestId('phase').textContent).toBe('connecting'))
     expect(screen.getByRole('group', { name: 'Voice call' })).toBeTruthy()
-    expect(screen.getByLabelText('draft').closest('[hidden]')).not.toBeNull()
+    expect(screen.getByLabelText('draft').closest('[hidden]')).toBeNull()
+  })
+})
+
+describe('the call notice', () => {
+  it("keeps LiveKit's own words folded under Details", async () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    respond(READY)
+    const { setVoiceCallForTests } = await import('./voiceCall')
+    act(() =>
+      setVoiceCallForTests({
+        problem: {
+          kind: 'service',
+          message: 'Your LiveKit project is out of inference credit.',
+          detail: 'LLM token credit quota exceeded, category: MaxGatewayCredits',
+        },
+      }),
+    )
+    render(<VoiceCallNotice sessionId="s1" />)
+    expect(screen.queryByText(/MaxGatewayCredits/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Details' }))
+    expect(screen.getByText(/MaxGatewayCredits/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Open LiveKit' }).getAttribute('href')).toBe(
+      'https://cloud.livekit.io',
+    )
+  })
+})
+
+describe('the call notice once you move on', () => {
+  it('clears when Lucius starts answering a message you sent', async () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    respond(READY)
+    const { setVoiceCallForTests } = await import('./voiceCall')
+    act(() => setVoiceCallForTests({ problem: { kind: 'dropped', message: 'The call dropped.' } }))
+    const { rerender } = render(<VoiceCallNotice sessionId="s1" busy={false} />)
+    expect(screen.getByText('The call dropped.')).toBeTruthy()
+    rerender(<VoiceCallNotice sessionId="s1" busy />)
+    expect(screen.queryByText('The call dropped.')).toBeNull()
   })
 })

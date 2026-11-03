@@ -47,7 +47,7 @@ def linked(monkeypatch):
     monkeypatch.setattr(host, "_lucius_model", lambda: "owner-pick")
     models: list[str] = []
 
-    async def ask(session_id, said, *, understood="", model_ref=""):
+    async def ask(session_id, said, *, understood="", shown=False, model_ref=""):
         models.append(model_ref)
         yield DeskEvent("text", f"answer to {said}")
         yield DeskEvent("end")

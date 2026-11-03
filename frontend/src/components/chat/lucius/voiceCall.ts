@@ -17,11 +17,13 @@ import { emitConversationChanged } from '../../../lucius/bus'
 
 export type CallPhase = 'idle' | 'connecting' | 'ringing' | 'live' | 'reconnecting' | 'ended'
 
-export type CallProblemKind = 'mic' | 'insecure' | 'setup' | 'dropped' | 'other'
+export type CallProblemKind = 'mic' | 'insecure' | 'setup' | 'dropped' | 'service' | 'other'
 
 export interface CallProblem {
   kind: CallProblemKind
   message: string
+  /** The service's own words (LiveKit's refusal), for the notice's Details. */
+  detail?: string
 }
 
 export interface CallState {
@@ -35,6 +37,8 @@ export interface CallState {
   problem: CallProblem | null
   /** The Voice calls setup dialog is open (over whatever screen the owner is on). */
   setupOpen: boolean
+  /** The call's big view (the stage) or the one-line bar — one choice for every surface. */
+  view: 'stage' | 'bar'
 }
 
 const IDLE: CallState = {
@@ -45,6 +49,7 @@ const IDLE: CallState = {
   endedSeconds: null,
   problem: null,
   setupOpen: false,
+  view: 'stage',
 }
 
 let state: CallState = IDLE
@@ -131,6 +136,59 @@ function watchFirstWord(track: MediaStreamTrack, onVoice: () => void): void {
   }
 }
 
+// How loud each side is right now, 0–1, for the call screen's orb. Read on every animation
+// frame (`readLevels`), so it lives outside the store: a level never re-renders React.
+type Side = 'lucius' | 'you'
+let levelCtx: AudioContext | null = null
+const meters: Partial<
+  Record<Side, { analyser: AnalyserNode; samples: Float32Array<ArrayBuffer> }>
+> = {}
+
+function openLevels(): void {
+  const Ctx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+  // Made inside the tap that starts the call: a phone keeps a context made later suspended.
+  if (Ctx && !levelCtx) levelCtx = new Ctx()
+}
+
+function meter(side: Side, track: MediaStreamTrack): void {
+  if (!levelCtx) return
+  const analyser = levelCtx.createAnalyser()
+  analyser.fftSize = 512
+  levelCtx.createMediaStreamSource(new MediaStream([track])).connect(analyser)
+  meters[side] = { analyser, samples: new Float32Array(analyser.fftSize) }
+  void levelCtx.resume()
+}
+
+function rms(side: Side): number {
+  const m = meters[side]
+  if (!m) return 0
+  m.analyser.getFloatTimeDomainData(m.samples)
+  let sum = 0
+  for (const v of m.samples) sum += v * v
+  const level = Math.sqrt(sum / m.samples.length)
+  // Lucius's voice arrives at full volume (speech ~0.02–0.2 RMS). Yours comes through the
+  // browser's echo cancelling and noise suppression, much quieter: a higher gain above a small
+  // noise floor, so the orb answers your voice as readily as his (owner, 2026-11-03).
+  if (side === 'you') return Math.min(1, Math.max(0, level - MIC_FLOOR) * MIC_GAIN)
+  return Math.min(1, level * 6)
+}
+
+const MIC_FLOOR = 0.004
+const MIC_GAIN = 16
+
+export function readLevels(): { lucius: number; you: number } {
+  return { lucius: rms('lucius'), you: state.muted ? 0 : rms('you') }
+}
+
+function closeLevels(): void {
+  delete meters.lucius
+  delete meters.you
+  void levelCtx?.close()
+  levelCtx = null
+}
+
 function classify(e: unknown): CallProblem {
   const name = e instanceof Error ? e.name : ''
   const message = e instanceof Error ? e.message : String(e)
@@ -150,13 +208,26 @@ function classify(e: unknown): CallProblem {
 const FOLLOW_MS = 1500
 let followTimer: number | undefined
 
+// The server's side can end a call without the room closing — the voice worker crashing, or the
+// app restarting — and the page sat "Connected" alone in an empty room. Lucius leaving ends the
+// call (a goodbye deletes the room within this grace, which reads as an ordinary end); so does
+// nobody picking up.
+export const LEFT_GRACE_MS = 1500
+export const PICKUP_TIMEOUT_MS = 30_000
+let leftTimer: number | undefined
+let pickupTimer: number | undefined
+let endProblem: CallProblem | null = null
+
 // The call's microphone, opened BEFORE the ringing starts and published once connected.
 let mic: LocalAudioTrack | null = null
 
 function teardown() {
   window.clearInterval(followTimer)
+  window.clearTimeout(leftTimer)
+  window.clearTimeout(pickupTimer)
   mic?.stop()
   mic = null
+  closeLevels()
   stopRing()
   stopRing = () => {}
   audioEls.forEach((el) => el.remove())
@@ -179,6 +250,9 @@ function finish(problem: CallProblem | null) {
     phase: seconds !== null ? 'ended' : 'idle',
     endedSeconds: seconds,
     setupOpen: state.setupOpen,
+    // "Call ended" shows where the call was: a folded-down phone call jumped back to full
+    // screen just to say it had ended (owner, 2026-11-03).
+    view: state.view,
   })
   window.clearTimeout(endedTimer)
   if (seconds !== null) endedTimer = window.setTimeout(() => set({ phase: 'idle' }), 3000)
@@ -198,17 +272,21 @@ export async function startCall(sessionId: string): Promise<void> {
     return
   }
   localHangUp = false
+  endProblem = null
+  openLevels()
   set({ ...IDLE, phase: 'connecting', sessionId })
   try {
     // The microphone first, THEN the ring: opening it reconfigures the audio device (a
     // Bluetooth headset switches to its call mode), which broke whichever ring was playing —
     // the second one, every time it opened mid-ring (owner, 2026-11-03).
     const opened = await createLocalAudioTrack()
-    if (state.phase !== 'connecting') {
+    // Read afresh: a hang-up while the microphone opened changed it (TS keeps the narrowed type).
+    if ((state.phase as CallPhase) !== 'connecting') {
       opened.stop() // hung up while the microphone was opening
       return
     }
     mic = opened
+    meter('you', opened.mediaStreamTrack)
     stopRing = startRingback()
     const r = await authFetch('/api/voice/call', {
       method: 'POST',
@@ -218,7 +296,10 @@ export async function startCall(sessionId: string): Promise<void> {
     if (!r.ok) {
       const d = await r.json().catch(() => ({}))
       teardown()
-      set({ ...IDLE, problem: { kind: 'setup', message: d.detail || 'The call could not start.' } })
+      // A limit reached (429: the demo's call caps, a token budget) isn't fixed in settings: say
+      // why and offer Try again, not a Voice calls settings button that can't help.
+      const kind: CallProblemKind = r.status === 429 ? 'other' : 'setup'
+      set({ ...IDLE, problem: { kind, message: d.detail || 'The call could not start.' } })
       return
     }
     const grant = (await r.json()) as { url: string; token: string; session_id: string }
@@ -229,6 +310,7 @@ export async function startCall(sessionId: string): Promise<void> {
     // the ring played over his "Hi" (live call, 2026-11-03); that report stays as a fallback.
     const pickedUp = () => {
       if (state.phase !== 'ringing' && state.phase !== 'connecting') return
+      window.clearTimeout(pickupTimer)
       stopRing()
       stopRing = () => {}
       set({ phase: 'live', connectedAt: Date.now() })
@@ -239,22 +321,42 @@ export async function startCall(sessionId: string): Promise<void> {
         el.className = 'lx-call-audio'
         document.body.appendChild(el)
         audioEls.push(el)
-        if (track.mediaStreamTrack) watchFirstWord(track.mediaStreamTrack, pickedUp)
+        if (track.mediaStreamTrack) {
+          watchFirstWord(track.mediaStreamTrack, pickedUp)
+          meter('lucius', track.mediaStreamTrack)
+        }
       }
     })
     next.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       if (speakers.some((p) => p.identity !== next.localParticipant.identity)) pickedUp()
+    })
+    next.on(RoomEvent.ParticipantConnected, () => window.clearTimeout(leftTimer))
+    next.on(RoomEvent.ParticipantDisconnected, () => {
+      if (next.remoteParticipants.size > 0) return
+      window.clearTimeout(leftTimer)
+      leftTimer = window.setTimeout(() => {
+        if (room !== next) return
+        endProblem = { kind: 'dropped', message: 'Lucius left the call. Call again to keep going.' }
+        void next.disconnect()
+      }, LEFT_GRACE_MS)
     })
     next.on(RoomEvent.Reconnecting, () => set({ phase: 'reconnecting' }))
     next.on(RoomEvent.Reconnected, () => set({ phase: state.connectedAt ? 'live' : 'ringing' }))
     next.on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
       // Lucius hangs up after a goodbye by closing the room — an ordinary end, like the
       // owner's own hang-up. Any other disconnect is a dropped call, said as such.
-      const ended = localHangUp || reason === DisconnectReason.ROOM_DELETED
-      finish(ended ? null : { kind: 'dropped', message: 'The call dropped.' })
+      const ended = !endProblem && (localHangUp || reason === DisconnectReason.ROOM_DELETED)
+      const byUs = localHangUp
+      finish(ended ? null : (endProblem ?? { kind: 'dropped', message: 'The call dropped.' }))
+      if (!byUs) void explainEnd()
     })
     await next.connect(grant.url, grant.token)
     set({ sessionId: grant.session_id, phase: 'ringing' })
+    pickupTimer = window.setTimeout(() => {
+      if (room !== next || state.phase !== 'ringing') return
+      endProblem = { kind: 'setup', message: "Lucius didn't pick up." }
+      void next.disconnect()
+    }, PICKUP_TIMEOUT_MS)
     // The call's small talk is recorded in a few ms — gone before the 4s live poll looks — so
     // while a call is on, the open chat checks its conversation's revision (a few bytes when
     // nothing changed) and the live poll looks, every 1.5s. Polled from here, not pushed over
@@ -265,6 +367,24 @@ export async function startCall(sessionId: string): Promise<void> {
     localHangUp = true
     await room?.disconnect()
     finish(classify(e))
+  }
+}
+
+/** A call that ended on its own may have a reason the server knows — LiveKit refusing it (out
+ *  of credit) — which the page can't see: ask, and show it instead (owner, 2026-11-03). */
+async function explainEnd(): Promise<void> {
+  try {
+    const r = await authFetch('/api/voice/config')
+    if (!r.ok) return
+    const d = (await r.json()) as {
+      worker?: { call_problem?: { message: string; detail?: string } | null }
+    }
+    const why = d.worker?.call_problem
+    if (why && !room && (state.phase === 'idle' || state.phase === 'ended')) {
+      set({ phase: 'idle', problem: { kind: 'service', message: why.message, detail: why.detail } })
+    }
+  } catch {
+    // Best effort: the plain "dropped" / "didn't pick up" note still stands.
   }
 }
 
@@ -280,6 +400,14 @@ export async function toggleMute(): Promise<void> {
   // The call's own track: "enable the microphone" could open a SECOND one beside it.
   if (mic) await (muted ? mic.mute() : mic.unmute())
   set({ muted })
+}
+
+export function minimizeCall(): void {
+  set({ view: 'bar' })
+}
+
+export function expandCall(): void {
+  set({ view: 'stage' })
 }
 
 export function dismissProblem(): void {
@@ -311,4 +439,9 @@ export function resetVoiceCallForTests(): void {
   window.clearTimeout(endedTimer)
   state = IDLE
   listeners.forEach((l) => l())
+}
+
+/** Tests only: put the store in a given state (a phase the views must draw). */
+export function setVoiceCallForTests(next: Partial<CallState>): void {
+  set(next)
 }

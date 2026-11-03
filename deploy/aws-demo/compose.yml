@@ -26,6 +26,16 @@ services:
       # One proxy (the Cloudflare edge) appends the visitor's address to X-Forwarded-For; the
       # quotas and conversation ownership key on that rightmost entry, never the client-written left.
       DEMO_TRUSTED_PROXY_HOPS: ${DEMO_TRUSTED_PROXY_HOPS:-1}
+      # Voice calls: off until `demo-aws.sh voice` stores the demo's own LiveKit project and
+      # sets this to 1. A call is billed by the minute, so the caps below always apply on a demo
+      # (services/demo_calls): the longest call, calls and minutes per visitor a day, minutes a
+      # day across all visitors, and calls at once.
+      ONW_FLAG_VOICE_CALLS: ${ONW_FLAG_VOICE_CALLS:-0}
+      DEMO_CALL_MAX_S: ${DEMO_CALL_MAX_S:-600}
+      DEMO_CALLS_PER_VISITOR_DAILY: ${DEMO_CALLS_PER_VISITOR_DAILY:-3}
+      DEMO_CALL_MINUTES_PER_VISITOR_DAILY: ${DEMO_CALL_MINUTES_PER_VISITOR_DAILY:-15}
+      DEMO_CALL_MINUTES_TOTAL_DAILY: ${DEMO_CALL_MINUTES_TOTAL_DAILY:-120}
+      DEMO_CALLS_CONCURRENT: ${DEMO_CALLS_CONCURRENT:-2}
       AUTH_DISABLED: "false"
       AUTH_TRUST_LOOPBACK: "false"
       # Minted on the VM, never shown or published: nobody signs in with it. It only keeps the

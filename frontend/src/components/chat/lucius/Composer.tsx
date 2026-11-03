@@ -38,6 +38,7 @@ import { byId } from '../../../lucius/objectFields'
 import { resolveChipMeta } from '../../../lucius/chipMeta'
 import { toSendAttachments, useComposerAttachments } from './useComposerAttachments'
 import type { AttachmentItem } from './useComposerAttachments'
+import { DictateButton } from './DictateButton'
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -858,6 +859,11 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
                 you can always cancel, you just cannot ALSO queue a second message while
                 multi-turn is off. With multi-turn on and something typed, Send still
                 queues into the running turn (acceptance C1/C2). */}
+            {/* Dictation sits left of Send / Call (owner, 2026-11-03). */}
+            <DictateButton
+              empty={isEmpty}
+              onText={(text, final) => mentionRef.current?.dictate(text, final)}
+            />
             {busy && onStop && (sendBlocked || (isEmpty && attachments.length === 0)) ? (
               <button
                 className="lx-send lx-stop"

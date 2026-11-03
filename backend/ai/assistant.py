@@ -2480,6 +2480,11 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                     msg["usage"] = usage_by_idx[i]
                 messages.append(msg)
                 last_assistant = msg
+            # Only the tool_results entry right before carries a turn on: a SECOND assistant
+            # entry in a row is a new line (a voice call's greeting or check-in after an
+            # answer). Left set, every one after a tool round piled into that round's bubble
+            # — a later call's greeting showed inside an earlier answer (owner, 2026-11-03).
+            continues_turn = False
 
     _land_pending_skills()
     _land_receipt()

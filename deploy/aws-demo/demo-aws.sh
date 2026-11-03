@@ -8,6 +8,7 @@
 #   demo-aws.sh book [DIR]         or copy an existing hosted demo book (default ~/.open-net-worth-demo)
 #   demo-aws.sh backup             save the live book to this machine (~/.open-net-worth-demo-backups)
 #   demo-aws.sh lucius             point Lucius at OpenRouter (key read silently, never echoed)
+#   demo-aws.sh voice              turn on voice calls with the demo's own LiveKit project (hidden prompts)
 #   demo-aws.sh verify             open the VM's demo at http://127.0.0.1:15175 over SSH
 #   demo-aws.sh tunnel             start the connector for a tunnel DEDICATED to the demo
 #   demo-aws.sh ssh | logs | status
@@ -30,6 +31,10 @@ BACKUP_KEEP="${ONW_DEMO_BACKUP_KEEP:-14}"
 # Read / write Lucius's AI settings inside the app container (they live in the book).
 AI_READ_PY='import json; from backend.db.model_config_store import ModelConfigStore as S; print(json.dumps(S().get() or {}))'
 AI_WRITE_PY='import json, sys; from backend.db.model_config_store import ModelConfigStore as S; raw = json.loads(sys.stdin.read()); raw and S().save(raw)'
+# The same for voice calls' LiveKit project (`demo-aws.sh voice`), also in the book. Written back
+# only when it holds a key, so a book that never had voice gets no connector row.
+VOICE_READ_PY='import json; from backend.db.voice_config_store import VoiceConfigStore as S; print(json.dumps(S().get()))'
+VOICE_WRITE_PY='import json, sys; from backend.db.voice_config_store import VoiceConfigStore as S; raw = json.loads(sys.stdin.read() or "{}"); raw.get("api_key") and S().update(raw)'
 
 ls_() { aws lightsail --region "${REGION}" "$@"; }
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -129,7 +134,8 @@ cmd_ship() {
     src="${BUILD_TMP}"
     echo "==> building committed ${ref} ${sha} (pass --worktree to include uncommitted work)"
   fi
-  docker buildx build --platform linux/amd64 -t "onw-demo:${sha}" --load "${src}"
+  # VOICE=1: the demo image carries the voice-call libraries; calls stay off until `voice`.
+  docker buildx build --platform linux/amd64 --build-arg VOICE=1 -t "onw-demo:${sha}" --load "${src}"
   echo "==> uploading the image (a few minutes)..."
   docker save "onw-demo:${sha}" | gzip -1 | remote 'gunzip | docker load'
   # The compose file ships with the code it was written for, not with this checkout's copy.
@@ -214,21 +220,27 @@ cmd_book_seed() {
 cmd_book_reset() {
   remote_env_has ONW_DEMO_TAG || die "no image on the VM yet — run ship first"
   cmd_backup
-  echo "==> replacing the book with a fresh one dated to today (AI settings kept)..."
+  echo "==> replacing the book with a fresh one dated to today (AI and voice settings kept)..."
   remote "STACK=${STACK} BOOK=${BOOK} bash -s" <<'SH'
 set -euo pipefail
 cd "${STACK}"
 read_py='import json; from backend.db.model_config_store import ModelConfigStore as S; print(json.dumps(S().get() or {}))'
 write_py='import json, sys; from backend.db.model_config_store import ModelConfigStore as S; raw = json.loads(sys.stdin.read()); raw and S().save(raw)'
+voice_read_py='import json; from backend.db.voice_config_store import VoiceConfigStore as S; print(json.dumps(S().get()))'
+voice_write_py='import json, sys; from backend.db.voice_config_store import VoiceConfigStore as S; raw = json.loads(sys.stdin.read() or "{}"); raw.get("api_key") and S().update(raw)'
 # This script arrives on bash's stdin, so every command that could read stdin gets /dev/null.
 ai="$(docker exec -e DEMO_MODE=0 onw-demo python3 -c "${read_py}" </dev/null)"
 [[ "${ai}" == "{}" ]] && echo "    (no AI settings in the old book — run: demo-aws.sh lucius)"
+# Voice calls' LiveKit project lives in the book too (demo-aws.sh voice); an image older than
+# voice calls has no store to read, which is no voice to carry.
+voice="$(docker exec -e DEMO_MODE=0 onw-demo python3 -c "${voice_read_py}" </dev/null 2>/dev/null || echo '{}')"
 docker compose stop app </dev/null
 # The app's nightly backups are copies of the old book, conversations included.
 rm -rf "${BOOK}/data" "${BOOK}/backups"
 mkdir -m 755 "${BOOK}/data" "${BOOK}/backups"
 docker compose run --rm --no-deps -T app python3 -m backend.scripts.seed_demo --commit --quiet </dev/null
 printf '%s' "${ai}" | docker compose run --rm --no-deps -T -e DEMO_MODE=0 app python3 -c "${write_py}"
+printf '%s' "${voice}" | docker compose run --rm --no-deps -T -e DEMO_MODE=0 app python3 -c "${voice_write_py}"
 docker compose up -d app </dev/null
 SH
   echo "==> fresh book is starting"
@@ -251,6 +263,8 @@ cmd_book_copy() {
   # (2026-10-26). Read them out of the running app first; they stay on the VM, owner-only.
   remote "umask 077; docker exec -e DEMO_MODE=0 onw-demo python3 -c '${AI_READ_PY}' > ${STACK}/.ai-carry.json 2>/dev/null \
     || echo '{}' > ${STACK}/.ai-carry.json"
+  remote "umask 077; docker exec -e DEMO_MODE=0 onw-demo python3 -c '${VOICE_READ_PY}' > ${STACK}/.voice-carry.json 2>/dev/null \
+    || echo '{}' > ${STACK}/.voice-carry.json"
   compose stop app 2>/dev/null || true
   local excl=(--exclude 'onw.db' --exclude 'onw.db-wal' --exclude 'onw.db-shm' --exclude '*.lock'
               --exclude 'backups/')
@@ -268,11 +282,15 @@ cmd_book_copy() {
       remote "cd ${STACK} && docker compose run --rm --no-deps -T -e DEMO_MODE=0 app python3 -c '${AI_WRITE_PY}' < .ai-carry.json"
       echo "==> Lucius's AI settings carried over"
     fi
-    remote "rm -f ${STACK}/.ai-carry.json"
+    remote "cd ${STACK} && docker compose run --rm --no-deps -T -e DEMO_MODE=0 app python3 -c '${VOICE_WRITE_PY}' < .voice-carry.json" \
+      || echo "    (voice-call settings were not carried over — run: $0 voice)"
+    remote "rm -f ${STACK}/.ai-carry.json ${STACK}/.voice-carry.json"
     compose up -d app
     echo "==> book in place and the demo is starting — next: $0 verify"
   else
-    echo "==> book in place — next: $0 ship"
+    # No image to write them with: the carried settings (keys included) must not stay behind.
+    remote "rm -f ${STACK}/.ai-carry.json ${STACK}/.voice-carry.json"
+    echo "==> book in place — next: $0 ship, then $0 lucius / $0 voice"
   fi
 }
 
@@ -320,6 +338,52 @@ PY
   echo "    set a credit limit on the key itself at https://openrouter.ai/settings/keys as the hard stop."
 }
 
+# Voice calls on the demo, with a LiveKit project of its OWN (never the owner's personal one):
+# its inference is billed by the call-minute, which DEMO_CALL_* in compose.yml caps. Each value
+# is read hidden and travels on stdin only; the keys are checked against LiveKit from the VM
+# (where the worker will connect from) before anything is stored.
+cmd_voice() {
+  local url key secret payload code
+  url="$(read_secret "The demo's LiveKit project URL, wss://… (input hidden): " | tr -d '[:space:]')"
+  key="$(read_secret "Its API key (input hidden): " | tr -d '[:space:]')"
+  secret="$(read_secret "Its API secret (input hidden): " | tr -d '[:space:]')"
+  [[ -n "${url}" && -n "${key}" && -n "${secret}" ]] || die "the URL, key and secret are all needed"
+  [[ "${url}" == wss://* ]] || die "the LiveKit URL starts with wss:// (${#url} characters given)"
+  payload="$(URL="${url}" KEY="${key}" SECRET="${secret}" python3 -c 'import json,os; print(json.dumps({"livekit_url": os.environ["URL"], "api_key": os.environ["KEY"], "api_secret": os.environ["SECRET"]}))')"
+  # DEMO_MODE=0 for this one process: the running demo refuses voice-settings writes from
+  # visitors (backend/api/demo_lockdown.py); the host's shell is the operator.
+  code="$(base64 <<'PY' | tr -d '\n'
+import json, subprocess, sys, urllib.error
+from backend.connectors.voice import rooms, service
+from backend.db.voice_config_store import VoiceConfigStore
+cfg = json.loads(sys.stdin.readline())
+if not service.libraries_installed():
+    sys.exit("This image has no voice libraries: run `demo-aws.sh ship` again first.")
+# Import them for real, in a child: a native library this CPU cannot run dies with SIGILL
+# (seen under amd64 emulation), which would otherwise surface only as a worker that never starts.
+probe = [sys.executable, "-c", "import livekit.agents, livekit.plugins.silero"]
+if subprocess.run(probe, capture_output=True, timeout=180).returncode != 0:
+    sys.exit("The voice libraries fail to load on this VM: import livekit.agents in the container to see why.")
+try:
+    rooms.list_rooms(cfg)
+except urllib.error.HTTPError as e:
+    sys.exit(f"LiveKit rejected those keys (HTTP {e.code}) — check the key and secret belong to the project at that URL.")
+except Exception as e:
+    sys.exit(f"LiveKit is unreachable from the VM ({type(e).__name__}) — check the URL.")
+VoiceConfigStore().update({**cfg, "enabled": True})
+print("==> LiveKit accepted the keys; voice calls are set up")
+PY
+)"
+  printf '%s\n' "${payload}" | remote "docker exec -i -e DEMO_MODE=0 onw-demo python3 -c \"import base64; exec(base64.b64decode('${code}'))\"" \
+    || die "nothing was stored"
+  printf '1' | remote_env_set ONW_FLAG_VOICE_CALLS
+  compose up -d app  # an environment change needs the container recreated, not restarted
+  echo "    Calls are capped by DEMO_CALL_* in ${STACK}/.env (defaults: 10 min a call, 3 calls and"
+  echo "    15 min per visitor a day, 120 min a day in all, 2 at once). Also set a spending limit"
+  echo "    on the LiveKit project itself, as the hard stop. Turn calls off: set"
+  echo "    ONW_FLAG_VOICE_CALLS=0 in ${STACK}/.env and run docker compose up -d app there."
+}
+
 cmd_verify() {
   remote "curl -fsS http://127.0.0.1:5175/api/health" && echo
   echo "==> forwarding http://127.0.0.1:15175 → the VM's demo (no login). Ctrl-C to stop."
@@ -348,7 +412,7 @@ cmd_status() {
 }
 
 case "${1:-}" in
-  ship|book|backup|lucius|verify|tunnel|status|logs|ssh) need_vm ;;
+  ship|book|backup|lucius|voice|verify|tunnel|status|logs|ssh) need_vm ;;
 esac
 case "${1:-}" in
   provision) cmd_provision ;;
@@ -361,10 +425,11 @@ case "${1:-}" in
              esac ;;
   backup)    cmd_backup ;;
   lucius)    cmd_lucius ;;
+  voice)     cmd_voice ;;
   verify)    cmd_verify ;;
   tunnel)    cmd_tunnel ;;
   status)    cmd_status ;;
   logs)      remote "docker logs --tail 200 -f onw-demo" ;;
   ssh)       shift; remote "$@" ;;
-  *) sed -n '2,16p' "$0"; exit 2 ;;
+  *) sed -n '2,17p' "$0"; exit 2 ;;
 esac

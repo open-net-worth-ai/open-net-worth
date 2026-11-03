@@ -33,22 +33,33 @@ export function useOpenVoiceSetup(): () => void {
   return openVoiceSetup
 }
 
-export function VoiceCallButton({ sessionId }: { sessionId: string }) {
+export function VoiceCallButton({
+  sessionId,
+  tone = 'composer',
+}: {
+  sessionId: string
+  /** `pill`: the dock's collapsed pill, where a call starts without opening the chat. */
+  tone?: 'composer' | 'pill'
+}) {
   const on = useFlag('voice_calls')
   const readiness = useVoiceReadiness()
   const call = useVoiceCall()
   const openSetup = useOpenVoiceSetup()
-  if (on !== true) return null
+  // Mid-call the slot is the composer's Send again: typing goes to Lucius, the call goes on.
+  if (on !== true || call.phase !== 'idle') return null
 
   const needsSetup = !!readiness && !readiness.ready
   const label = needsSetup ? 'Set up voice calls' : 'Call Lucius'
   return (
     <button
       type="button"
-      className={'lx-call-btn' + (needsSetup ? ' lx-call-btn--setup' : '')}
+      className={
+        'lx-call-btn' +
+        (tone === 'pill' ? ' lx-call-btn--pill' : '') +
+        (needsSetup ? ' lx-call-btn--setup' : '')
+      }
       aria-label={label}
       title={label}
-      disabled={call.phase === 'connecting'}
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => (needsSetup ? openSetup() : void startCall(sessionId))}
     >

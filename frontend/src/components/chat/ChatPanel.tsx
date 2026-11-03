@@ -61,6 +61,7 @@ import { Brain, ChevronRight, FolderLock, Menu, SquarePen } from '../../ui/icons
 import { ModelPicker, Skeleton } from '../ui'
 import { ConversationApprovalPicker } from './ConversationApprovalPicker'
 import { VoiceCallButton } from './lucius/VoiceCallButton'
+import { useVoiceCall } from './lucius/voiceCall'
 import { VoiceCallNotice } from './lucius/VoiceCallNotice'
 import { VoiceCallSlot } from './lucius/VoiceCallSlot'
 import { computeHomeEmpty } from './homeEmpty'
@@ -497,6 +498,7 @@ export function ChatPanel({
   // In place, over whatever is showing — the cards are hosted at the app level now, not on
   // the Accounts tab, so there is no tab to go to first.
   const { openReview } = useTransactionSurfaces()
+  const callIdle = useVoiceCall().phase === 'idle'
   const openTransactionReview = useCallback(() => openReview('all'), [openReview])
 
   // Master switch (Settings → Appearance → Chat).
@@ -1102,8 +1104,8 @@ export function ChatPanel({
   const composerFooter = (
     <div className="lx-side-foot" ref={footRef}>
       <div className="lx-inputblock">
-        <VoiceCallNotice sessionId={activeId} />
-        <VoiceCallSlot busy={streaming || sending}>
+        <VoiceCallNotice sessionId={activeId} busy={streaming || sending} />
+        <VoiceCallSlot busy={streaming || sending} visible={open}>
           <LuciusComposer
             /* Approvals govern the CONVERSATION, so it rides in the LEFT tool group beside
              attach/@//— not in `controls`, which is the model/effort/cost cluster. */
@@ -1170,7 +1172,8 @@ export function ChatPanel({
                 )}
               </>
             }
-            callAction={<VoiceCallButton sessionId={activeId} />}
+            // Mid-call the slot is Send again: what you type goes to Lucius, read aloud.
+            callAction={callIdle ? <VoiceCallButton sessionId={activeId} /> : null}
             ref={composerRef}
             busy={streaming || sending}
             sendBlocked={(streaming || sending) && !multiTurnEnabled}

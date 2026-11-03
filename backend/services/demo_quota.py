@@ -168,6 +168,19 @@ def bind_visitor(ip: str) -> None:
     _current_visitor.set(ip)
 
 
+def bind_session(session_id: str) -> str | None:
+    """Attribute model calls made from here on to whoever started ``session_id`` — for turns the
+    app spawns with no request behind them (a voice call's, asked for by the voice worker).
+    Returns that visitor's address; ``None`` off a demo or for a conversation nobody bound."""
+    if not enabled():
+        return None
+    with _lock:
+        ip = _session_ip.get(session_id)
+    if ip is not None:
+        _current_visitor.set(ip)
+    return ip
+
+
 def assert_model_available() -> None:
     """Refuse to build a model provider once the visitor or the demo is out of tokens.
 

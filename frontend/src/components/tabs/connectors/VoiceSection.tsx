@@ -6,6 +6,7 @@ import {
   ModelPicker,
   PasswordField,
   Select,
+  type SelectProps,
   Stack,
   Text,
   TextField,
@@ -13,6 +14,7 @@ import {
 } from '../../ui'
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
+import { ChevronDown } from '../../../ui/icons'
 
 // Voice calls over /api/voice/config (the `voice_calls` flag). Two layers on a call: a fast
 // FRONT voice holds the conversation, Lucius does the work behind it (ADR
@@ -120,6 +122,17 @@ function workerLine(c: VoiceConfig): { tone: 'faint' | 'warn' | 'good'; text: st
   if (!c.ready)
     return { tone: 'faint', text: 'Fill in your LiveKit project below to start taking calls.' }
   return { tone: 'faint', text: 'Paused. Use Resume on the connector card.' }
+}
+
+/** A select with the model picker's own chevron beside it, so every field here reads as one kind
+ *  of dropdown — the browser's chevron next to the picker's looked like two (owner, 2026-11-03). */
+function FieldSelect(props: SelectProps) {
+  return (
+    <div className="vc-select-wrap">
+      <Select {...props} className="vc-select" />
+      <ChevronDown size={14} className="vc-select-chev" aria-hidden="true" />
+    </div>
+  )
 }
 
 export function VoiceSection() {
@@ -315,7 +328,7 @@ export function VoiceSection() {
         htmlFor="conn-voice-front"
         help="Holds the conversation and answers in about a second. It never sees your data and never states a number: Lucius's answers are read out word for word."
       >
-        <Select
+        <FieldSelect
           id="conn-voice-front"
           value={form.front_model}
           options={FRONT_OPTIONS}
@@ -340,7 +353,7 @@ export function VoiceSection() {
         htmlFor="conn-voice-language"
         help="What you'll speak on calls. Lucius hears it, answers in it, and his voice speaks it."
       >
-        <Select
+        <FieldSelect
           id="conn-voice-language"
           value={form.language}
           options={LANGUAGE_OPTIONS}
@@ -356,7 +369,7 @@ export function VoiceSection() {
             : undefined
         }
       >
-        <Select
+        <FieldSelect
           id="conn-voice-stt"
           value={form.stt_model}
           options={STT_OPTIONS}
@@ -364,7 +377,7 @@ export function VoiceSection() {
         />
       </FormField>
       <FormField label="Voice" htmlFor="conn-voice-tts">
-        <Select
+        <FieldSelect
           id="conn-voice-tts"
           value={form.tts_model}
           options={TTS_OPTIONS}

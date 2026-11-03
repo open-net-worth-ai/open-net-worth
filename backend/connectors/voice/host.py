@@ -25,7 +25,18 @@ from backend.core.process_tree import kill_tree, spawn_kwargs
 
 log = logging.getLogger(__name__)
 
-CALLS = frozenset({"is_expected", "calls_allowed", "claim_call", "end_call", "record_exchange"})
+CALLS = frozenset(
+    {
+        "is_expected",
+        "calls_allowed",
+        "claim_call",
+        "call_limit",
+        "end_call",
+        "call_failed",
+        "record_said",
+        "record_exchange",
+    }
+)
 STREAMS = frozenset({"ask", "follow_next_turn"})
 _WORKER_ARGV = (sys.executable, "-m", "backend.connectors.voice.worker")
 _PACKAGE_ROOT = str(Path(__file__).resolve().parents[3])
@@ -47,6 +58,9 @@ class Host:
         # Conversations the app handed this worker for a call (``claim_call``) → when: Lucius's
         # side runs only on these, until the call ends (``end_call``) or ``CALL_TTL_S`` passes.
         self._sessions: dict[str, float] = {}
+        # Rooms whose call this worker took → their conversation (a public demo meters calls by
+        # room: ``services.demo_calls``).
+        self._rooms: dict[str, str] = {}
         self._asks: dict[str, list[float]] = {}
 
     def send(self, msg: dict) -> None:
@@ -96,23 +110,67 @@ class Host:
 
     async def _call(self, method: str, args: dict) -> Any:
         from backend.connectors.voice import desk, service
+        from backend.services import demo_calls
 
         if method == "is_expected":
-            return service.is_expected(str(args.get("room") or ""))
+            room = str(args.get("room") or "")
+            expected = service.is_expected(room)
+            if not expected:
+                service.close_refused(room)
+            return expected
         if method == "calls_allowed":
             return service.calls_allowed()
         if method == "claim_call":
-            session_id = service.claim_call(str(args.get("room") or ""))
-            if session_id:
-                self._sessions[session_id] = time.monotonic()
-            return session_id
+            return self._claim(str(args.get("room") or ""))
+        if method == "call_limit":
+            return demo_calls.remaining(self._room_of(self._owned(args), args))
         if method == "end_call":
-            self._sessions.pop(str(args.get("session_id") or ""), None)
+            session_id = str(args.get("session_id") or "")
+            self._sessions.pop(session_id, None)
+            ended = [str(args.get("room") or "")] if args.get("room") else list(self._rooms)
+            for room in [r for r in ended if self._rooms.get(r) == session_id]:
+                del self._rooms[room]
+                demo_calls.end(room)
+            return None
+        if method == "call_failed":
+            self._owned(args)
+            # The service's own words, as text only: printable, one line, bounded.
+            detail = "".join(c for c in str(args.get("detail") or "") if c.isprintable())[:400]
+            service.note_call_problem(str(args.get("kind") or ""), detail)
+            return None
+        if method == "record_said":
+            await desk.record_said(self._owned(args), str(args.get("said") or ""))
             return None
         await desk.record_exchange(
             self._owned(args), str(args.get("said") or ""), str(args.get("reply") or "")
         )
         return None
+
+    def _claim(self, room: str) -> Optional[str]:
+        """Take a call the app minted. On a public demo it also starts the call's clock: a
+        call past its admission window is refused, and one taken is closed by the app at its
+        limit if the worker doesn't hang up (``service.close_when_over``)."""
+        from backend.connectors.voice import service
+        from backend.services import demo_calls
+
+        session_id = service.claim_call(room)
+        limit = demo_calls.claim(room) if session_id else 0
+        if not session_id or (limit is not None and limit <= 0):
+            # A room the worker won't take — a late join, or a visitor rejoining a call that
+            # ended — would otherwise stay open on the demo's project with nobody closing it.
+            service.close_refused(room)
+            return None
+        self._sessions[session_id] = time.monotonic()
+        self._rooms[room] = session_id
+        if limit is not None:
+            service.close_when_over(room, limit)
+        return session_id
+
+    def _room_of(self, session_id: str, args: dict) -> str:
+        room = str(args.get("room") or "")
+        if self._rooms.get(room) != session_id:
+            raise PermissionError("not a call this app started")
+        return room
 
     def _stream(self, method: str, args: dict):
         from backend.connectors.voice import desk
@@ -120,10 +178,14 @@ class Host:
         session_id = self._owned(args)
         if method == "ask":
             self._count_ask(session_id)
+            refused = _out_of_budget(session_id)
+            if refused:
+                return _spoken(refused)
             return desk.ask(
                 session_id,
                 str(args.get("said") or ""),
                 understood=str(args.get("understood") or ""),
+                shown=bool(args.get("shown")),
                 model_ref=_lucius_model(),
             )
         return desk.follow_next_turn(session_id)
@@ -140,7 +202,16 @@ class Host:
             raise PermissionError("not the conversation of a call this app started")
         if not service.calls_allowed():
             raise PermissionError("voice calls are off")
+        if self._time_up(session_id):
+            raise PermissionError("this call's time is up")
         return session_id
+
+    def _time_up(self, session_id: str) -> bool:
+        """A public demo's call past its limit (and grace) does nothing more for the worker."""
+        from backend.services import demo_calls
+
+        rooms = [r for r, s in self._rooms.items() if s == session_id]
+        return bool(rooms) and all(demo_calls.over(r, grace_s=demo_calls.GRACE_S) for r in rooms)
 
     def _count_ask(self, session_id: str) -> None:
         now = time.monotonic()
@@ -148,6 +219,23 @@ class Host:
         if len(recent) >= MAX_ASKS_PER_MINUTE:
             raise PermissionError("too many requests on this call")
         self._asks[session_id] = [*recent, now]
+
+
+def _out_of_budget(session_id: str) -> str:
+    """On a public demo, the call's turns spend the visitor's own token budget (bound when the
+    call started): the reason, to be said on the call, once it is spent; else ``""``."""
+    from backend.services import demo_quota
+
+    ip = demo_quota.bind_session(session_id)
+    verdict = demo_quota.check_tokens(ip) if demo_quota.enabled() else None
+    return verdict.reason if verdict is not None and not verdict.allowed else ""
+
+
+async def _spoken(text: str):
+    from backend.connectors.voice.events import DeskEvent
+
+    yield DeskEvent("text", text)
+    yield DeskEvent("end")
 
 
 def _lucius_model() -> str:

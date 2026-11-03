@@ -33,6 +33,7 @@
     { "glob": "frontend/src/components/tabs/connectors/**", "docs": ["docs/product/connectors"] },
     { "glob": "backend/connectors/**", "docs": ["docs/product/connectors"] },
     { "glob": "backend/connectors/voice/**", "docs": ["docs/product/connectors/voice-calls.md"] },
+    { "glob": "backend/services/demo_calls.py", "docs": ["docs/product/connectors/voice-calls.md"] },
     { "glob": "frontend/src/components/chat/lucius/VoiceCallButton*", "docs": ["docs/product/connectors/voice-calls.md"] },
     { "glob": "backend/*/feature_flags.py", "docs": ["docs/product/features/settings.md"] },
     { "glob": "frontend/src/components/tabs/settings/ExperimentalPanel*", "docs": ["docs/product/features/settings.md"] },

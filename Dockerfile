@@ -76,6 +76,17 @@ RUN apt-get update \
 COPY desktop/runtime-requirements.lock ./requirements.lock
 RUN pip install --no-cache-dir --require-hashes --no-deps -r requirements.lock
 
+# Optional voice calls (the voice_calls flag): `--build-arg VOICE=1` adds the LiveKit libraries.
+# Off by default, so the published image is unchanged. Hash-pinned the same way: the voice lock
+# is the main lock's closure plus the voice libraries' (compiled with the main lock as a
+# constraint, command at its top), so nothing already installed changes version.
+ARG VOICE=0
+COPY requirements-voice.lock ./requirements-voice.lock
+RUN if [ "${VOICE}" = "1" ]; then \
+      pip install --no-cache-dir --require-hashes --no-deps -r requirements-voice.lock; \
+    fi \
+    && rm requirements-voice.lock
+
 # App source. .dockerignore keeps this from pulling in .venv/, node_modules/,
 # frontend/dist/ (built fresh in stage 1, not reused from the host), test data,
 # and anything under backend/data/ that isn't the tracked seed content.

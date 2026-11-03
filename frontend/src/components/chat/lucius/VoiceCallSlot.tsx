@@ -1,15 +1,29 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useFlag } from '../../../hooks/useFlag'
-import { VoiceCallBar } from './VoiceCallBar'
+import { useIsMobile } from '../../../hooks/useIsMobile'
+import { VoiceCallStage } from './VoiceCallStage'
 import { VoiceSetupDialog } from './VoiceSetupDialog'
 import { claimSetupHost, closeVoiceSetup, releaseSetupHost, useVoiceCall } from './voiceCall'
 
-/** Inside a composer card: while a call is open the call bar shows and the composer stays
- *  MOUNTED but hidden (one composer per surface — its refs and your draft survive the call).
- *  With the `voice_calls` flag off this is exactly the composer, nothing added. */
-export function VoiceCallSlot({ busy, children }: { busy: boolean; children: ReactNode }) {
+/** Inside a composer card: while a call is open its strip shows above the composer — or, on a
+ *  phone, the full-screen call until it is folded down to the same strip. The composer stays
+ *  under it: you can type or send a file mid-call, and Lucius reads the answer aloud (owner,
+ *  2026-11-03). With the `voice_calls` flag off this is exactly the composer. */
+export function VoiceCallSlot({
+  busy,
+  visible = true,
+  children,
+}: {
+  busy: boolean
+  /** False while the surface is collapsed or off-screen: no call view is mounted there (no
+   *  focusable Mute/End behind a hidden card, no second level loop). */
+  visible?: boolean
+  children: ReactNode
+}) {
   const on = useFlag('voice_calls')
   const call = useVoiceCall()
+  const mobile = useIsMobile()
   const [token] = useState(() => Symbol('voice-setup-host'))
   const [hosts, setHosts] = useState(false)
   useEffect(() => {
@@ -18,11 +32,13 @@ export function VoiceCallSlot({ busy, children }: { busy: boolean; children: Rea
     return () => releaseSetupHost(token)
   }, [on, token])
   if (on !== true) return <>{children}</>
-  const inCall = call.phase !== 'idle'
+  const shown = visible && call.phase !== 'idle'
+  const fullScreen = shown && mobile && call.view === 'stage'
   return (
     <>
-      {inCall && <VoiceCallBar busy={busy} />}
-      <div hidden={inCall}>{children}</div>
+      {shown && !fullScreen && <VoiceCallStage variant="card" busy={busy} expandable={mobile} />}
+      {fullScreen && createPortal(<VoiceCallStage variant="screen" busy={busy} />, document.body)}
+      {children}
       {hosts && <VoiceSetupDialog open={call.setupOpen} onClose={closeVoiceSetup} />}
     </>
   )

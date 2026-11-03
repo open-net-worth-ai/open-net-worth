@@ -6661,6 +6661,23 @@ body.hide-amounts .money * {
 
   /* Select: 13px field on --bg-2 with a --line-strong border + accent focus glow.
    The custom chevron stays a sibling <span> at the call site (unchanged). */
+  /* Voice calls settings: selects drawing the model picker's chevron (14px, faint, 12px in). */
+  .vc-select-wrap {
+    position: relative;
+  }
+  .vc-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: calc(var(--space-5) + 14px + var(--space-3));
+  }
+  .vc-select-chev {
+    position: absolute;
+    right: var(--space-5);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--faint);
+    pointer-events: none;
+  }
   .ui-select--dense {
     appearance: none;
     -webkit-appearance: none;
@@ -18667,8 +18684,9 @@ body.hide-amounts .money * {
 }
 .mp-trigger--field {
   width: 100%;
-  /* 1px less than the select's padding: the chevron's box makes this button 2px taller. */
-  padding: calc(var(--space-3) - 1px) var(--space-5);
+  /* The voice settings' selects draw the same chevron now (.vc-select): same padding, same
+     height (owner, 2026-11-03). */
+  padding: var(--space-3) var(--space-5);
   font-size: var(--text-md);
 }
 .mp-trigger-text {

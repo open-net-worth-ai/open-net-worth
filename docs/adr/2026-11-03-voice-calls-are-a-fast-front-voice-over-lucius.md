@@ -116,6 +116,45 @@ We will build voice calls as **two layers** inside the app, behind the `voice_ca
 - **Running the call as a chat connector (`connectors/processor.process_message`)** — rejected: its
   turns don't reach `live_sessions`, so the open chat panel would not show the call or its cards.
 
+## Amendment (2026-11-03): calls on the public demo, capped by the minute
+
+Owner decision: visitors of the public demo may make calls, on a LiveKit project of the demo's
+OWN (never the owner's personal one), because one person's testing used ~100 call-minutes of a
+project's inference credit. A call is billed by the minute whether or not Lucius is asked
+anything, and the demo's token budgets (`services/demo_quota`) see none of that, so:
+
+- **One new demo write, nothing else.** `POST /api/voice/call` joins the demo's write allowlist;
+  every other voice write (the LiveKit project, its keys, the call settings) stays locked
+  (`api/demo_lockdown.py`). The keys are stored from the server's shell (`demo-aws.sh voice`,
+  `DEMO_MODE=0` for that one process, as `demo-aws.sh lucius` does), checked against LiveKit
+  first, and carried across the daily book reset like Lucius's AI settings.
+- **A call is the visitor's own.** It goes only into a conversation the visitor owns (another
+  visitor's or an Automation run's is a 404, as in the chat) and claims the one it creates. Its
+  conversation is bound to the visitor's address when the call starts, so the Lucius turns the
+  worker spawns later — with no request behind them — are charged to that visitor's token budget
+  and run as that visitor (`demo_quota.bind_session`); a spent budget is said on the call instead
+  of starting a turn.
+- **Call caps in minutes** (`services/demo_calls`, env-configurable like `DEMO_TOKENS_*`): longest
+  call 10 min, 3 calls and 15 call-minutes per visitor per rolling day, 120 call-minutes per day
+  across all visitors, 2 calls at once. Each call gets its own limit at start — the shortest of
+  the longest call, the visitor's minutes left and the demo's — and **reserves that whole limit
+  while it is on**, so concurrent calls cannot add up past an allowance; once ended it counts
+  what it used. A call whose end never arrives counts as having run to its limit; a minted call
+  the worker never picks up within a minute counts one call and no minutes.
+- **The worker hangs up; the app makes sure.** The worker asks for the call's limit
+  (`call_limit`, a new allow-listed host call) and the front voice says it is nearly out of time
+  30 s before, then says goodbye and hangs up at the limit, in the call's language. The app, which
+  never trusts the worker for a limit, refuses the worker's requests for that call 20 s past it
+  and closes the room itself through LiveKit's room service (`connectors/voice/rooms.py`).
+- **The image carries the voice libraries** behind a `VOICE` build arg (default off, so the
+  published image is unchanged), from a hash-pinned lock (`requirements-voice.lock`) compiled
+  with the main lock as a constraint.
+
+Off the demo nothing changes: no cap, no limit, no new check. Rejected: limiting by the cookie
+identity (cleared in a click; the address is what the token budgets use); limiting only the
+front voice's tokens (the speech services bill by the minute, not by the token); trusting the
+worker alone to hang up (it is the process the host assumes compromised).
+
 ## Agent provenance
 
 - **Decided by:** orchestrating Claude agent, with the owner choosing "rebuild it" after the POC.

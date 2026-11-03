@@ -410,7 +410,7 @@ export function applyRestoreResult(
 }
 
 /** Does this conversation end on an unanswered confirm/permission card? */
-function hasOpenCard(messages: Message[] | null): boolean {
+export function hasOpenCard(messages: Message[] | null): boolean {
   const last = messages?.[messages.length - 1]
   return Boolean(last?.awaitingApproval || last?.proposedChanges?.length)
 }

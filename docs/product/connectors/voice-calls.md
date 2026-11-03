@@ -32,7 +32,7 @@ every request with Lucius's answer — so you can scroll back through it later, 
 what was said on the call next time you talk.
 
 When you ask for something real, the front voice hands it to Lucius and says something short
-("Sure, one sec"). Lucius's question and answer appear in the chat. If a lookup is genuinely slow,
+(*"let me check"*, *"I'll pull that up"* — never a promise of how long it takes). Lucius's question and answer appear in the chat. If a lookup is genuinely slow,
 you hear *"the live prices lookup is taking longer than usual"* — once, and only when it's true.
 Ask *"what are you doing?"* and the front voice tells you what Lucius is working on right now.
 
@@ -69,11 +69,34 @@ account to create. Its free plan includes a monthly allowance.
    where **Send** is while the message box is empty. Your browser asks for the microphone the
    first time.
 
-During a call the message box becomes a **call bar**: *Ringing…*, then *Connected · 0:42* (or
-*Lucius is working…* while he looks something up), with **Mute** and **End call**. Your draft is
-kept and comes back when you hang up. If a call can't start or drops, a note at the top of the box
-says why, with a button to try again, open Voice calls settings or view the app's logs; dismiss it
-with **×**.
+## During a call
+
+The call has its own view, with an **orb** that moves with whoever is talking: it swells and
+glows with whoever is talking, you as much as Lucius. While he looks something up it
+breathes slowly and the line under it says *Lucius is working…*. Under the orb are **Mute** and **End**.
+
+| Where | What you see |
+|---|---|
+| **On a phone** | The call takes the whole screen. The arrow at the top (or **Type**) puts it away so you can read the chat (approval cards included) or type, while you keep talking. |
+| **In the side panel or the Lucius tab** | The call sits just above the message box — a slim strip on a wide screen — so the chat above stays readable and its cards tappable. |
+| **The floating Lucius button** | It has a **phone** button beside **Ask Lucius**: press it and the call happens right in the button. It grows to show the orb, the time, **Mute** and **End**, and shrinks back when you hang up. Press the time to open the chat. If Lucius needs your approval it says **Needs approval**; press **Review** to see the card. |
+
+On a phone, the arrow (or Esc, or **Type**) folds the full-screen call down to the same strip
+you see on a computer, above the message box; its expand button opens the full screen again.
+Folding it never hangs up. If a call can't start or drops, a note at
+the top of the box (or in the floating button) says why, with a button to try again, open Voice
+calls settings or view the app's logs; dismiss it with **×**. That includes Lucius's side going
+away mid-call (the app restarting, say) and a call nobody picks up within 30 seconds — the call
+ends and says so instead of staying open, with a link to Voice calls settings. If LiveKit refuses
+the call because your LiveKit project is out of inference credit (or hit its rate limit), the note
+says exactly that, with a link to LiveKit Cloud to check your plan and billing. (LiveKit
+only says the credit ran out — not whether or when a free allowance comes back.) LiveKit counts participant minutes per person on the call, so each call minute is two
+— yours and Lucius's.
+
+**You can type during a call, too.** The message box stays under the call: type a question or
+attach a file, and it goes to Lucius like any other message — and he reads his answer aloud on the
+call, as well as showing it in the chat. The same goes for a change you approve on screen: what
+happens next is read out.
 
 **In the Open Net Worth desktop app**, the first call asks macOS for the microphone (once — it
 remembers). The desktop app allows the microphone for the app's own page only, and only audio;
@@ -102,6 +125,19 @@ readable back only by you through the eye on the field. Pausing the connector st
   your LiveKit project and the speech and model services it runs.
 - Your book itself stays with Lucius, as it does in the chat. The front voice has no access to it.
 - The conversation is saved like any chat with Lucius.
+
+## On the public demo
+
+The public demo lets visitors call Lucius too, about its fabricated book, with limits so the
+demo stays affordable:
+
+- a call lasts at most **10 minutes** — Lucius says when time is nearly up, then says goodbye;
+- each visitor gets **3 calls and 15 minutes of calls a day**;
+- the whole demo has **120 minutes of calls a day**, and takes **2 calls at once**.
+
+A call goes into your own conversation and counts toward your daily AI allowance like a typed
+message. When a limit is reached, the call doesn't start and the chat says which limit it was.
+Your own copy of Open Net Worth has none of these limits.
 
 ## Troubleshooting
 

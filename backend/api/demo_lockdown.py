@@ -26,7 +26,8 @@ fabricated book; nothing that reaches past it. Two rules, both inert unless ``se
      replaces or carries off the one book every visitor shares;
    - automations (create, edit, run: they spend tokens unattended and can send data out),
      skills, memory, notification channels, the monitoring schedule (``/api/watchlist/config``), the match judge's model and cap
-     and every provider/connector/integration config;
+     and every provider/connector/integration config — voice calls' included (a visitor may only
+     START a call, ``POST /api/voice/call``, metered by ``services.demo_calls``);
    - feature flags (``/api/feature-flags``): the demo always runs the declared defaults;
    - the host's logs and filesystem probes, turn checkpoints (they carry other visitors'
      conversations and restore the shared book), and the QA routes.
@@ -109,11 +110,15 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/cost/(budget|log)$",
         r"^/api/intel/(scan|sources)(/.*)?$",
         r"^/api/(alpaca|ibkr|plaid|enable-banking|gocardless|lunch-flow|lunch-money|simplefin|yodlee|ynab"
-        r"|telegram|email|market-data|integrations|account-linking|voice)(/.*)?$",
+        r"|telegram|email|market-data|integrations|account-linking)(/.*)?$",
+        # Voice calls: a visitor may START one (``_WRITABLE``), capped by ``services.demo_calls``;
+        # the LiveKit project, its keys and the call settings stay the operator's.
+        r"^/api/voice(?!/call$)(/.*)?$",
         r"^/api/setup-status/complete$",
         r"^/api/watchlist/config$",
         r"^/api/matches/config$",
     ),
+    *_rules(frozenset({"PUT", "PATCH", "DELETE"}), r"^/api/voice/call$"),
     *_rules(_ANY, r"^/api/lunch-flow/oauth(/.*)?$"),
     # the host and other visitors
     *_rules(
@@ -152,6 +157,7 @@ _WRITABLE: tuple[re.Pattern[str], ...] = tuple(
         # import, receipts and Documents working, and every visitor knows the book is public.
         # Size limits are the app's own; parsing spends the visitor's and the instance's budget.
         r"^/api/uploads?(/.*)?$",
+        r"^/api/voice/call$",
         r"^/api/statements(/.*)?$",
         r"^/api/vault(/.*)?$",
         r"^/api/watchlists?(/.*)?$",

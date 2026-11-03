@@ -30,8 +30,17 @@ def new_room_name() -> str:
 
 
 def mint_call_token(
-    *, api_key: str, api_secret: str, room: str, session_id: str, now: float | None = None
+    *,
+    api_key: str,
+    api_secret: str,
+    room: str,
+    session_id: str,
+    now: float | None = None,
+    ttl_s: int = TTL_S,
+    microphone_only: bool = False,
 ) -> str:
+    """``ttl_s`` / ``microphone_only``: the public demo's narrower grant — join only while the
+    call may ring, and publish nothing but a microphone (security review, 2026-11-03)."""
     issued = int(now if now is not None else time.time())
     dispatch_meta = json.dumps({"session_id": session_id})
     claims = {
@@ -39,7 +48,7 @@ def mint_call_token(
         "sub": OWNER_IDENTITY,
         "name": "Owner",
         "nbf": issued - 5,
-        "exp": issued + TTL_S,
+        "exp": issued + ttl_s,
         "video": {
             "roomJoin": True,
             "room": room,
@@ -49,7 +58,12 @@ def mint_call_token(
         },
         "roomConfig": {"agents": [{"agentName": AGENT_NAME, "metadata": dispatch_meta}]},
     }
+    if microphone_only:
+        claims["video"]["canPublishSources"] = ["microphone"]
+    return _sign(_b64(json.dumps(claims, separators=(",", ":")).encode()), api_secret)
+
+
+def _sign(body: str, api_secret: str) -> str:
     header = _b64(json.dumps({"alg": "HS256", "typ": "JWT"}, separators=(",", ":")).encode())
-    body = _b64(json.dumps(claims, separators=(",", ":")).encode())
     signature = hmac.new(api_secret.encode(), f"{header}.{body}".encode(), hashlib.sha256).digest()
     return f"{header}.{body}.{_b64(signature)}"

@@ -106,6 +106,38 @@ def test_a_note_beside_the_owners_words_hides_only_the_note(monkeypatch, db_isol
     ]
 
 
+def test_a_line_after_a_tool_answer_is_its_own_bubble(monkeypatch, db_isolated):
+    """Owner, 2026-11-03: a later voice call's greeting (an assistant line with nothing of the
+    owner's before it) showed INSIDE the earlier answer that had used tools — the tool round's
+    "same turn" flag never switched off."""
+    sid = "test-after-tool-answer"
+    assistant._store().upsert_meta(sid, {"id": sid})
+    monkeypatch.setattr(assistant, "_rehydrated_turn_usage", lambda *a, **k: {})
+    monkeypatch.setattr(
+        assistant,
+        "_load_session",
+        lambda _s: [
+            {"role": "user", "content": "anything urgent?"},
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "t1", "name": "get_alerts", "input": {}}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "[]"}],
+            },
+            {"role": "assistant", "content": [{"type": "text", "text": "Nothing urgent."}]},
+            {"role": "assistant", "content": [{"type": "text", "text": "Hello, it's Lucius."}]},
+        ],
+    )
+    rendered = assistant.rehydrate_messages(sid) or []
+    assert [(m["role"], m["text"]) for m in rendered] == [
+        ("user", "anything urgent?"),
+        ("assistant", "Nothing urgent."),
+        ("assistant", "Hello, it's Lucius."),
+    ]
+
+
 # ── the live path ─────────────────────────────────────────────────────────────
 
 

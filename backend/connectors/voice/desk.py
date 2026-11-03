@@ -14,6 +14,7 @@ import asyncio
 import logging
 import re
 import uuid
+from collections import OrderedDict
 from collections.abc import AsyncIterator
 from typing import Optional
 
@@ -34,8 +35,28 @@ VOICE_NOTE = (
 SMALL_TALK_NOTE = (
     "Said on a voice call and answered by the voice assistant directly, without a lookup."
 )
+# A request whose words are already in the chat (``record_said``): the message carries this
+# instead of repeating them, so the owner's bubble shows once.
+SHOWN_NOTE = (
+    "The owner's words for this request are their message just above, said on this voice "
+    "call; answer them now."
+)
 # How long a request waits for a turn the owner started some other way (typing) to finish.
 _BUSY_WAIT_S = 120.0
+
+# Turns a call started itself (its requests, the lines it records). The call follows every
+# OTHER turn on its conversation — something typed during the call, an approved change's
+# continuation — and reads the answer aloud (owner, 2026-11-03).
+_CALL_TURNS_MAX = 256
+_call_turns: "OrderedDict[str, None]" = OrderedDict()
+_followed: dict[str, str] = {}  # conversation → the last turn a call followed there
+
+
+def _own(turn_id: str) -> None:
+    _call_turns[turn_id] = None
+    while len(_call_turns) > _CALL_TURNS_MAX:
+        _call_turns.popitem(last=False)
+
 
 _MARKDOWN = re.compile(r"[*_`#>|]+")
 _LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
@@ -100,16 +121,18 @@ def relay_note(understood: str) -> str:
 
 
 async def ask(
-    session_id: str, said: str, *, understood: str = "", model_ref: str = ""
+    session_id: str, said: str, *, understood: str = "", shown: bool = False, model_ref: str = ""
 ) -> AsyncIterator[DeskEvent]:
     """Run ``said`` (the owner's own transcribed words) as their next message on
-    ``session_id``, with the front model's reading as a relay note; yield the turn's events."""
+    ``session_id``, with the front model's reading as a relay note; yield the turn's events.
+    ``shown``: those words are already the conversation's last message (``record_said``), so
+    this one carries only notes — hidden in the chat — and the owner's bubble shows once."""
     if not await _wait_until_idle(session_id):
         yield DeskEvent("error", "Lucius is still busy with another message in this conversation.")
         yield DeskEvent("end")
         return
     content = [
-        {"type": "text", "text": said},
+        {"type": "text", "text": harness_note(SHOWN_NOTE) if shown else said},
         {"type": "text", "text": relay_note(understood or said)},
     ]
 
@@ -126,19 +149,56 @@ async def ask(
     handle = turns.spawn(
         session_id, "chat", make_events, error_event=_error_event, cost_surface="web"
     )
+    _own(handle.turn_id)
+    if not shown:
+        _announce(session_id, handle.turn_id, said)
+    async for event in _follow(session_id, handle.turn_id):
+        yield event
+
+
+def _announce(session_id: str, turn_id: str, said: str) -> None:
     live_sessions.publish(
         session_id,
         {
             "type": "user_message",
             "session_id": session_id,
-            "turn_id": handle.turn_id,
+            "turn_id": turn_id,
             "message_id": f"voice_{uuid.uuid4().hex[:12]}",
             "text": said,
             "attachments": [],
         },
     )
-    async for event in _follow(session_id, handle.turn_id):
-        yield event
+
+
+async def record_said(session_id: str, said: str) -> None:
+    """Put the owner's words in the chat the moment the voice starts answering them itself,
+    instead of with its reply once that has finished playing (owner, 2026-11-03). The reply
+    follows on its own (``record_exchange`` with nothing said). Never calls a model."""
+    if not said.strip() or not await _wait_until_idle(session_id):
+        return
+
+    def make_events(turn_id: str):
+        async def events():
+            _sid, history = assistant.get_or_create_session(session_id)
+            history.append(
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": said},
+                        {"type": "text", "text": harness_note(SMALL_TALK_NOTE)},
+                    ],
+                }
+            )
+            assistant._save_session(session_id, history)
+            yield {"type": "done", "turn_id": turn_id}
+
+        return events()
+
+    handle = turns.spawn(
+        session_id, "chat", make_events, error_event=_error_event, cost_surface="web"
+    )
+    _own(handle.turn_id)
+    _announce(session_id, handle.turn_id, said)
 
 
 async def record_exchange(session_id: str, said: str, reply: str) -> None:
@@ -165,7 +225,12 @@ async def record_exchange(session_id: str, said: str, reply: str) -> None:
                 )
             history.append({"role": "assistant", "content": [{"type": "text", "text": reply}]})
             assistant._save_session(session_id, history)
-            yield {"type": "text_delta", "text": reply, "turn_id": turn_id}
+            # Streamed only after the owner's words: a line of the voice's own (a greeting, a
+            # check-in) has no message of theirs to start a new bubble, so the chat streamed
+            # it into the bubble before — a later call's greeting showed inside an earlier
+            # answer (owner, 2026-11-03). Those reach the chat by the call's refresh instead.
+            if said:
+                yield {"type": "text_delta", "text": reply, "turn_id": turn_id}
             yield {"type": "done", "turn_id": turn_id}
 
         return events()
@@ -173,32 +238,27 @@ async def record_exchange(session_id: str, said: str, reply: str) -> None:
     handle = turns.spawn(
         session_id, "chat", make_events, error_event=_error_event, cost_surface="web"
     )
+    _own(handle.turn_id)
     if said:
-        live_sessions.publish(
-            session_id,
-            {
-                "type": "user_message",
-                "session_id": session_id,
-                "turn_id": handle.turn_id,
-                "message_id": f"voice_{uuid.uuid4().hex[:12]}",
-                "text": said,
-                "attachments": [],
-            },
-        )
+        _announce(session_id, handle.turn_id, said)
 
 
-async def follow_next_turn(session_id: str, *, timeout: float = 300.0) -> AsyncIterator[DeskEvent]:
-    """After the owner approves a card in the app, the continuation runs as a new turn on the
-    same session; wait (up to ``timeout``) for it to start, then yield its events."""
+async def follow_next_turn(
+    session_id: str, *, timeout: Optional[float] = None
+) -> AsyncIterator[DeskEvent]:
+    """Wait for the next turn on ``session_id`` that the call did not start — the owner typed
+    during the call, or approved a change and its continuation runs — and yield its events.
+    The call keeps one of these open for as long as it lasts (cancelled when it ends)."""
     loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
-    while loop.time() < deadline:
+    deadline = None if timeout is None else loop.time() + timeout
+    while deadline is None or loop.time() < deadline:
         turn_id = turns.executing_turn_id(session_id)
-        if turn_id is not None:
+        if turn_id and turn_id not in _call_turns and _followed.get(session_id) != turn_id:
+            _followed[session_id] = turn_id
             async for event in _follow(session_id, turn_id):
                 yield event
             return
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(0.3)
 
 
 async def _follow(session_id: str, turn_id: str) -> AsyncIterator[DeskEvent]:
