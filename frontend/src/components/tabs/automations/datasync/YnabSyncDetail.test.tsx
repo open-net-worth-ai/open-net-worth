@@ -175,13 +175,13 @@ describe('YnabSyncDetail setup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
     const review = await screen.findByRole('dialog', { name: /Import Household/ })
     const w = within(review)
-    expect(await w.findByText(/USD · 1 account · 4 transactions · 3 categories/)).toBeTruthy()
+    expect(await w.findByText(/USD, 1 account, 4 transactions, 3 categories/)).toBeTruthy()
     // Three tabs over one pane: accounts first, then each category under its group, then rows.
     expect(w.getByRole('cell', { name: 'Checking' })).toBeTruthy()
     expect(w.getByRole('cell', { name: 'Cash' })).toBeTruthy() // the app's own type label
     fireEvent.click(w.getByRole('tab', { name: /Categories/ }))
     expect(w.getByRole('rowheader', { name: /Bills/ })).toBeTruthy()
-    expect(w.getByRole('cell', { name: 'Utilities' })).toBeTruthy()
+    expect(w.getAllByRole('cell', { name: 'Utilities' }).length).toBeGreaterThan(0)
     fireEvent.click(w.getByRole('tab', { name: /Transactions/ }))
     expect(w.getByRole('cell', { name: 'Landlord' })).toBeTruthy()
     expect(w.getByRole('cell', { name: 'Ready to Assign' })).toBeTruthy() // a blank inflow
@@ -298,7 +298,7 @@ describe('YnabSyncDetail setup', () => {
     ])
     fireEvent.mouseDown(screen.getByRole('option', { name: 'Use Everyday' }))
     expect(
-      await w.findByText('2 transactions already in Everyday, matched · 1 added · 1 to check.'),
+      await w.findByText('2 transactions already in Everyday. 1 added. 1 to check.'),
     ).toBeTruthy()
     expect(w.getByText(/1 transaction of Everyday’s own isn’t in YNAB/)).toBeTruthy()
     expect(requests.at(-1)).toMatchObject({
@@ -387,14 +387,13 @@ describe('YnabSyncDetail setup', () => {
     const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
     fireEvent.click(await w.findByRole('tab', { name: /Categories/ }))
     expect(w.getByText('Budget syncs with envelope Utilities')).toBeTruthy()
-    expect(w.getByText('Matches more than one of your categories. Pick one.')).toBeTruthy()
+    expect(w.getByText('More than one of yours has this name. Pick one.')).toBeTruthy()
     expect((w.getByRole('button', { name: 'Import' }) as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.click(w.getByRole('button', { name: 'Where Utilities goes' }))
+    fireEvent.click(w.getByRole('button', { name: 'Category here for Utilities' }))
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'Matches your Utilities',
       'New category',
-      'Use your Food shop',
-      'Into your envelope Gifts',
+      'Utilities',
+      'Food shop',
     ])
     fireEvent.mouseDown(screen.getByRole('option', { name: 'New category' }))
     await waitFor(() =>
@@ -404,8 +403,13 @@ describe('YnabSyncDetail setup', () => {
       }),
     )
     expect(
-      await w.findByText("Envelope Gifts holds other categories too — its Assigned won't sync"),
+      await w.findByText("Holds other categories too, so its Assigned won't sync"),
     ).toBeTruthy()
+    // a new category picks its envelope in its own column; one of yours keeps the one it is in
+    expect(w.getByRole('button', { name: 'Envelope for Dining out' }).textContent).toBe('Gifts')
+    expect(w.queryByRole('button', { name: 'Envelope for Rent' })).toBeNull()
+    fireEvent.click(w.getByRole('button', { name: 'Envelope for Utilities' }))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['New envelope'])
     expect(w.getByText('Not budgeted here')).toBeTruthy()
     fireEvent.click(w.getByRole('button', { name: 'Import' }))
     await waitFor(() =>
@@ -461,17 +465,13 @@ describe('YnabSyncDetail setup', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Review…' }))
     const w = within(await screen.findByRole('dialog', { name: /Import Household/ }))
     fireEvent.click(await w.findByRole('tab', { name: /Categories/ }))
-    expect(
-      w.getByText(
-        'Budget syncs with a new envelope of its own. Hidden in YNAB, so hidden here too',
-      ),
-    ).toBeTruthy()
+    expect(w.getByText('Hidden in YNAB, so hidden here too')).toBeTruthy()
     // matched with one of yours, the import leaves it as it is: it is not said to be hidden
     expect(w.getByText('Budget syncs with envelope Shop 1')).toBeTruthy()
-    fireEvent.click(w.getByRole('button', { name: 'Where Old Cat goes' }))
-    const box = screen.getByPlaceholderText('Search categories…')
+    fireEvent.click(w.getByRole('button', { name: 'Category here for Old Cat' }))
+    const box = screen.getByPlaceholderText('Search your categories…')
     fireEvent.change(box, { target: { value: 'shop 11' } })
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Use your Shop 11'])
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Shop 11'])
     fireEvent.change(box, { target: { value: 'zzz' } })
     expect(screen.getByText('No category matches.')).toBeTruthy()
   })

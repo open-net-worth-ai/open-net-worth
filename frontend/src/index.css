@@ -7440,7 +7440,9 @@ body.hide-amounts .money * {
   }
   .ui-page-tabs__tab {
     display: inline-flex;
-    align-items: center;
+    /* baseline, not center: a count's small digits centred on the label's capitals sit high
+       beside its lowercase; on the baseline they fill the lowercase band */
+    align-items: baseline;
     gap: var(--space-2);
     padding: var(--space-4) var(--space-5);
     background: none;
@@ -7480,7 +7482,8 @@ body.hide-amounts .money * {
     background: var(--surface2);
     color: var(--muted);
     border-radius: var(--radius-pill);
-    padding: 1px var(--space-2);
+    line-height: 1;
+    padding: 2px var(--space-2);
     transition:
       background 0.15s,
       color 0.15s;
@@ -19992,15 +19995,38 @@ body.hide-amounts .mf-lbl-amt {
   font-weight: 500;
   border-bottom: 1px solid var(--line);
 }
+/* One line under the column names; rows and groups are set apart by space, not rules. */
 .ynr-table td {
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0;
 }
 .ynr-table .ynr-group th {
   position: static;
-  padding-top: var(--space-4);
+  padding-top: var(--space-5);
+  border-bottom: 0;
   color: var(--ink);
   font-size: var(--text-sm);
   font-weight: 600;
+}
+.ynr-table tbody:first-of-type .ynr-group th {
+  padding-top: var(--space-3);
+}
+/* Text beside a dropdown sits on the dropdown's line, not at the top of the row. */
+@media (min-width: 640px) {
+  .imp-table .ynr-celltext {
+    padding-top: calc(var(--space-3) + 8px);
+  }
+}
+.ynr-count {
+  margin-left: var(--space-2);
+  color: var(--faint);
+  font-weight: 500;
+}
+.ynr-groupnote {
+  margin-left: var(--space-4);
+  color: var(--faint);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
 }
 .ynr-table tfoot td {
   border-bottom: 0;
@@ -20022,17 +20048,13 @@ body.hide-amounts .mf-lbl-amt {
   padding: var(--space-5) var(--space-4);
 }
 .pm-select.ynr-dest {
-  width: auto;
-  min-width: 180px;
+  width: 220px;
   max-width: 100%;
 }
 /* A linked account's line under its row: what it matches and adds, and the pairs to check. */
 .ynr-table .ynr-link td {
   padding-top: 0;
   font-size: var(--text-sm);
-}
-.ynr-table tbody tr:has(+ .ynr-link) td {
-  border-bottom: 0;
 }
 /* A category's choice and the line under it saying what its budget does. */
 .ynr-cat {

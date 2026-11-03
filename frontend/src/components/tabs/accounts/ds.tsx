@@ -994,6 +994,8 @@ export interface PMSelectProps {
   /** The trigger's accessible name, when no visible label names it. */
   ariaLabel?: string
   disabled?: boolean
+  /** The list's least width, when its names are longer than the trigger is wide. */
+  menuWidth?: number
 }
 
 export function PMSelect({
@@ -1008,6 +1010,7 @@ export function PMSelect({
   compact,
   ariaLabel,
   disabled,
+  menuWidth = 168,
 }: PMSelectProps) {
   const [open, setOpen] = useState(false),
     [pos, setPos] = useState<React.CSSProperties | null>(null)
@@ -1021,7 +1024,7 @@ export function PMSelect({
     if (!btnRef.current) return
     const r = btnRef.current.getBoundingClientRect(),
       below = window.innerHeight - r.bottom
-    const width = Math.round(Math.max(r.width, 168))
+    const width = Math.round(Math.min(Math.max(r.width, menuWidth), window.innerWidth - 16))
     let left = Math.round(r.left)
     if (left + width > window.innerWidth - 8) left = window.innerWidth - 8 - width
     const base: React.CSSProperties = { position: 'fixed', left, width, zIndex: 600 }

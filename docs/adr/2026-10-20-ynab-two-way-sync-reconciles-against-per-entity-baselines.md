@@ -193,7 +193,11 @@ category both **labels a transaction and holds the budget**; here a **category**
   the sync (it would make the envelope shared); (3) nothing: a new category with an envelope of
   its own in the group paired with its YNAB group. Two equal candidates are never guessed between
   (ambiguous: the review asks, the sync files a `choose` item), nothing existing is renamed or
-  moved, nothing is paired twice. The import's `category_links` (YNAB category id -> `cat:<id>` |
+  moved, nothing is paired twice. The import's review alone then SUGGESTS a close name for a row
+  left new (`category_links._suggest_close`, `category_match.closeness` >= `CLOSE`: same words up
+  to plurals and "and", or one name starting the other and most of it): the closest pair first,
+  after every exact match, never one category for two rows, shown as "Similar name". The sync
+  never pairs on a close name — nobody is there to check it. The import's `category_links` (YNAB category id -> `cat:<id>` |
   `env:<id>` | `""`) mirrors `account_links`.
 - **The budget follows the envelope.** A category's Assigned syncs only while its envelope holds
   that category alone (`pair.env`, re-derived each run). Leaving that state is reported once;

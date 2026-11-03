@@ -13,16 +13,20 @@ from __future__ import annotations
 
 from backend.core.errors import ValidationError
 from backend.services.ynab_migration.category_match import (
+    CLOSE,
     Book,
     Match,
     cat_ref,
+    closeness,
     env_ref,
     propose,
 )
 from backend.services.ynab_pairs import is_parking_name, norm
 
 
-def _state(kind: str, *, category=None, envelope=None, options=None, chosen=False, offer=None):
+def _state(
+    kind: str, *, category=None, envelope=None, options=None, chosen=False, offer=None, close=False
+):
     return {
         "kind": kind,
         "category": category,
@@ -30,6 +34,7 @@ def _state(kind: str, *, category=None, envelope=None, options=None, chosen=Fals
         "options": options or [],
         "chosen": chosen,
         "offer": offer,
+        "close": close,
     }
 
 
@@ -94,7 +99,34 @@ def decide(
     for c in plan["categories"]:
         if c["id"] not in out:
             out[c["id"]] = _from_match(propose(c["name"], book, taken_c, taken_e), taken_c, taken_e)
+    _suggest_close(plan, out, book, taken_c)
     return out
+
+
+def _suggest_close(plan: dict, out: dict[str, dict], book: Book, taken_c: set[str]) -> None:
+    """A category left new, with nothing of the same name, takes the book's category whose name
+    is closest — the closest pair first, so no category is suggested for two rows."""
+    open_ = [c for c in plan["categories"] if _is_plain_new(out[c["id"]])]
+    pairs = sorted(
+        (
+            (closeness(c["name"], row["label"]), i, row["id"], c["id"])
+            for i, c in enumerate(open_)
+            for row in book.matchable
+            if row["id"] not in taken_c
+        ),
+        key=lambda t: (-t[0], t[1]),
+    )
+    for score, _, cat_id, ynab_id in pairs:
+        if score < CLOSE:
+            break
+        if cat_id in taken_c or not _is_plain_new(out[ynab_id]):
+            continue
+        taken_c.add(cat_id)
+        out[ynab_id] = _state("category", category=book.rows[cat_id], close=True)
+
+
+def _is_plain_new(d: dict) -> bool:
+    return d["kind"] == "new" and not d["chosen"] and d["offer"] is None
 
 
 def unresolved(plan: dict, decisions: dict[str, dict]) -> list[str]:
@@ -158,6 +190,8 @@ def rows(plan: dict, decisions: dict[str, dict], book: Book) -> dict[str, dict]:
             if target is None
             else {"ref": ref, "name": target.get("label") or target["name"], "kind": d["kind"]},
             "chosen": d["chosen"],
+            "close": d["close"],
+            "offer": None if d["offer"] is None else env_ref(d["offer"]["id"]),
             "ask": d["kind"] == "ambiguous",
             "options": d["options"],
             "note": note(book, d, c, has_assigned(plan, c["id"])),

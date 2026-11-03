@@ -306,3 +306,50 @@ def test_a_category_in_one_of_ynabs_parking_groups_never_makes_a_book_group(ynab
     assert again["status"] == "done" and "Not budgeted" not in {
         g["name"] for g in planning.list_groups()
     }
+
+
+def test_a_close_name_is_suggested_when_nothing_reads_the_same(ynab):
+    ynab_stub.ynab_rename_category(ynab.state, "groc", "🚘 Transportation")
+    transport = change(type="category_create", label="Transport", kind="expense")
+    row = rows(run("preview"))["🚘 Transportation"]
+    assert row["link"] == {"ref": f"cat:{transport['id']}", "name": "Transport", "kind": "category"}
+    assert row["close"] and not row["chosen"]
+    assert run()["status"] == "done"
+    assert pair_of(ynab, "groc")["category"] == transport["id"]
+    assert not any("Transportation" in c["label"] for c in categories_service.all_category_rows())
+
+
+def test_a_category_is_suggested_for_one_row_only_and_the_same_name_comes_first(ynab):
+    ynab_stub.ynab_rename_category(ynab.state, "groc", "Transportation")
+    ynab_stub.ynab_rename_category(ynab.state, "dine", "Transport")
+    transport = change(type="category_create", label="Transport", kind="expense")
+    got = rows(run("preview"))
+    assert got["Transport"]["link"]["ref"] == f"cat:{transport['id']}"
+    assert not got["Transport"]["close"]
+    assert got["Transportation"]["link"] is None  # Transport is taken; never two rows' pick
+
+
+def test_the_closest_of_two_rows_gets_the_suggestion(ynab):
+    ynab_stub.ynab_rename_category(ynab.state, "groc", "Transportation")
+    ynab_stub.ynab_rename_category(ynab.state, "dine", "Transports")
+    transport = change(type="category_create", label="Transport", kind="expense")
+    got = rows(run("preview"))
+    assert got["Transports"]["link"]["ref"] == f"cat:{transport['id']}"
+    assert got["Transportation"]["link"] is None
+
+
+def test_names_that_only_start_alike_are_not_close():
+    from backend.services.ynab_migration.category_match import CLOSE, closeness
+
+    assert closeness("Groceries", "Grocery") == 1.0
+    assert closeness("Phone & Internet", "Phone and Internet") == 1.0
+    assert closeness("Transportation", "Transport") >= CLOSE
+    for a, b in [("Rent", "Renters insurance"), ("Car", "Car insurance"), ("Gifts", "Gas")]:
+        assert closeness(a, b) < CLOSE, (a, b)
+
+
+def test_the_sync_pairs_a_new_ynab_category_only_on_the_same_name(ynab):
+    from backend.services.ynab_migration.category_match import Book, propose
+
+    change(type="category_create", label="Transport", kind="expense")
+    assert propose("Transportation", Book(), set(), set()).kind == "new"

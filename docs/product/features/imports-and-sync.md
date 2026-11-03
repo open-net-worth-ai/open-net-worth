@@ -67,27 +67,28 @@ Until it is set up, its page is two steps, the second unlocked by the first:
    account's own transactions YNAB doesn't have; a sync to YNAB sends those there. An account a
    previous import linked shows as linked and stays so.
 
-   **Already have some of these categories here?** In the Categories tab, **In this book** says
-   where each YNAB category goes, and the dim line under it says what that means for its budget.
-   A YNAB category has a **label** (what its transactions are tagged with) and a **budget**; here
-   the label is a *category* and the budget belongs to an *envelope* that can hold several
-   categories. Names are compared ignoring emoji, symbols, capitals and extra spaces, so YNAB's
-   "🛒 Groceries" goes with your "Groceries". The choices:
-   - **Matches your…** (pre-selected when one of your categories reads the same). It keeps its name,
-     envelope and group; nothing is renamed or moved. If it is alone in its envelope the line says
-     **Budget syncs with envelope X**; if the envelope holds other categories too, **its Assigned
-     won't sync** (the labels still do); in no envelope, **Not budgeted here** (it gets an envelope
-     of its own if YNAB has money assigned to it).
-   - **Into your envelope…** when an envelope of that name exists. An empty one is pre-selected and the
-     category is created inside it; one that already holds categories is offered but not
-     pre-selected, because adding to it makes it a shared envelope.
-   - **New category**: a new category with an envelope of its own, in your group of the same name
-     (or a new group).
-   - **Use your…** any other category of yours that no YNAB category has taken.
+   **Already have some of these categories here?** A YNAB category has a **label** (what its
+   transactions are tagged with) and a **budget**; here the label is a *category* and the budget
+   belongs to an *envelope* that can hold several categories. So the Categories tab gives each
+   YNAB category two columns:
+   - **Category here**: one of your categories, or **New category**. One of yours is pre-selected
+     when its name reads the same, ignoring emoji, symbols, capitals and extra spaces (YNAB's
+     "🛒 Groceries" goes with your "Groceries"). When nothing reads the same, the closest name is
+     pre-selected and marked **Similar name** (your "Transport" for YNAB's "Transportation",
+     "Grocery" for "Groceries"); change it if it's wrong. A name that reads the same always wins,
+     and no category of yours is suggested for two rows. Nothing of yours is renamed or moved.
+   - **Envelope**: for one of your categories, the envelope it is already in. Alone in it, its
+     Assigned syncs with YNAB; if the envelope holds other categories too, its Assigned won't sync
+     (the labels still do); in no envelope it is **Not budgeted here** (it gets an envelope of its
+     own if YNAB has money assigned to it). For a **New category**, pick **New envelope** or one of
+     your envelopes. An empty envelope of the same name is pre-selected; one that already holds
+     categories is listed first but not pre-selected, because adding to it shares it.
 
-   The list is searchable when it is long. A category hidden in YNAB comes in hidden, and under
-   the group it came from. If a YNAB category matches more than one of yours, nothing is guessed:
-   it asks you to pick, and **Import** waits. A YNAB group goes with the group of yours that reads the same, else a new one.
+   Both lists are searchable when they are long. A category hidden in YNAB comes in hidden, and
+   under the group it came from. If more than one of yours reads the same, nothing is guessed: it
+   asks you to pick, and **Import** waits. A YNAB group goes with the group of yours that reads the
+   same, else a new one. The two-way sync later pairs a category that is new in YNAB only on the
+   same name, never a similar one.
 
    **After import** sets the sync (**Keep in sync both ways**, **Sync from YNAB only**, **Sync to
    YNAB only**, or **Don't sync, import once**); then **Import**. The app takes a

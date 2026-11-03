@@ -269,7 +269,7 @@ function Meta({ preview: p }: { preview: Preview }) {
         plural(p.transactions, 'transaction'),
         plural(p.categories, 'category', 'categories'),
         plural(p.budget_months, 'budget month'),
-      ].join(' · ')}
+      ].join(', ')}
     </span>
   )
 }
@@ -355,11 +355,11 @@ function Accounts({ preview: p, ...link }: { preview: Preview } & LinkProps) {
           <tr>
             <td data-label="Account">
               {a.name}
-              {a.closed && <span className="ynr-dim"> · closed</span>}
+              {a.closed && <span className="ynr-dim"> (closed)</span>}
             </td>
             <td data-label="Type" className="ynr-dim">
               {TYPE_LABELS[a.type as AccountType] ?? a.type}
-              {a.on_budget === false ? ' · tracking' : ''}
+              {a.on_budget === false ? ' (tracking)' : ''}
             </td>
             <td data-label="In this book">
               <Destination account={a} {...link} />
@@ -424,14 +424,14 @@ function LinkSummary({
     return <span className="ynr-dim">Checking which transactions are already there…</span>
   const here = a.link?.name ?? 'the account'
   const parts = [
-    `${plural(m.matched, 'transaction')} already in ${here}, matched`,
+    `${plural(m.matched, 'transaction')} already in ${here}`,
     `${m.added.toLocaleString()} added`,
   ]
   if (m.to_check > 0) parts.push(`${m.to_check.toLocaleString()} to check`)
   const money = (n: number) => fAmountNative(n, currency)
   return (
     <Stack gap="--space-2">
-      <span>{parts.join(' · ')}.</span>
+      <span>{parts.join('. ')}.</span>
       {m.own_only > 0 && (
         <span className="ynr-dim">
           {plural(m.own_only, 'transaction')} of {here}’s own{' '}
@@ -485,6 +485,7 @@ function Transactions({ preview: p }: { preview: Preview }) {
           <th>Date</th>
           <th>Account</th>
           <th>Payee</th>
+          <th>Memo</th>
           <th>Category</th>
           <th className="imp-table__num">Amount</th>
         </tr>
@@ -500,7 +501,9 @@ function Transactions({ preview: p }: { preview: Preview }) {
             </td>
             <td data-label="Payee" className="imp-table__wrap">
               {t.payee ?? ''}
-              {t.memo && <span className="ynr-dim"> · {t.memo}</span>}
+            </td>
+            <td data-label="Memo" className="imp-table__wrap ynr-dim">
+              {t.memo ?? ''}
             </td>
             <td data-label="Category" className="ynr-dim">
               {t.category ?? NO_CATEGORY[t.kind]}
@@ -514,7 +517,7 @@ function Transactions({ preview: p }: { preview: Preview }) {
       {rows.length < p.transactions && (
         <tfoot>
           <tr>
-            <td colSpan={5} className="ynr-dim">
+            <td colSpan={6} className="ynr-dim">
               The newest {rows.length} of {p.transactions.toLocaleString()}. The import brings them
               all.
             </td>

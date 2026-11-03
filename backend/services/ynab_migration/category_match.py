@@ -14,11 +14,16 @@ Names are compared with emoji and symbols dropped, case folded and spaces collap
   3. nothing: a new category with an envelope of its own.
 
 Two candidates that read the same are never guessed between (``ambiguous``), and nothing existing
-is renamed or moved to make a match."""
+is renamed or moved to make a match.
+
+The import's review also suggests a category whose name is only CLOSE (``closeness``: Transport
+for Transportation, Grocery for Groceries), once every exact match has been taken, and never one
+category for two rows. The sync does not: it pairs only on the same name."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 
 from backend.services import categories as categories_service
 from backend.services import envelopes as envelopes_service
@@ -103,3 +108,35 @@ def propose(name: str, book: Book, taken_cats: set[str], taken_envs: set[str]) -
             "ambiguous", options=[{"ref": env_ref(e["id"]), "name": e["name"]} for e in envs]
         )
     return Match("new")
+
+
+# A name closer than this to one of the book's categories is suggested in the review.
+CLOSE = 0.8
+
+
+def _stem(word: str) -> str:
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
+def _key(name: str) -> str:
+    return " ".join(_stem(w) for w in norm(name).split() if w != "and")
+
+
+def closeness(a: str, b: str) -> float:
+    """How alike two names read, 0..1: the same words up to plurals and "and" score 1; one name
+    that starts the other and is most of it (Transport, Transportation) scores at least ``CLOSE``;
+    otherwise the share of letters in common."""
+    x, y = _key(a), _key(b)
+    if not x or not y:
+        return 0.0
+    if x == y:
+        return 1.0
+    short, long_ = sorted((x, y), key=len)
+    ratio = SequenceMatcher(None, x, y).ratio()
+    if long_.startswith(short) and len(short) >= 4 and len(short) / len(long_) >= 0.6:
+        return max(ratio, 0.9)
+    return ratio

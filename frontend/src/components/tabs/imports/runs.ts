@@ -97,6 +97,10 @@ export interface PreviewCategory {
   /** One of the book's categories (cat:…), an envelope to add it to (env:…), or none: a new one. */
   link: { ref: string; name: string; kind: 'linked' | 'category' | 'envelope' } | null
   chosen: boolean
+  /** One of the book's categories suggested only because its name is close, not the same. */
+  close?: boolean
+  /** An envelope of the same name that holds other categories: offered, never chosen for them. */
+  offer?: string | null
   /** Matches more than one of the book's categories: the person has to pick. */
   ask: boolean
   options: { ref: string; name: string }[]
