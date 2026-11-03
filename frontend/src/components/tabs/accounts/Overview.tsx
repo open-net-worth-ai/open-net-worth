@@ -19,12 +19,20 @@ import {
   User,
   Archive,
   Smartphone,
+  Landmark,
 } from '../../../ui/icons'
 import type { AccountGroup } from './types'
 import { fCur } from './data'
 import { ReviewStrip, TxnCount } from './ReviewStrip'
 
-type OverviewMenuIcon = 'payees' | 'categories' | 'import' | 'export' | 'archive' | 'phone'
+type OverviewMenuIcon =
+  | 'payees'
+  | 'categories'
+  | 'institutions'
+  | 'import'
+  | 'export'
+  | 'archive'
+  | 'phone'
 
 function OverviewMenuItem({
   icon,
@@ -41,6 +49,7 @@ function OverviewMenuItem({
   const Icon = {
     payees: User,
     categories: Tags,
+    institutions: Landmark,
     import: Upload,
     export: Download,
     archive: Archive,
@@ -100,6 +109,8 @@ export interface OverviewProps {
   onAdd: () => void
   onManagePayees: () => void
   onManageCategories: () => void
+  /** Rename or remove a shared institution (the left rail's bank groups). */
+  onManageInstitutions?: () => void
   onImport: () => void
   onExport: () => void
   onReview: () => void
@@ -124,6 +135,7 @@ export function Overview({
   onAdd,
   onManagePayees,
   onManageCategories,
+  onManageInstitutions,
   onImport,
   onExport,
   onReview,
@@ -234,6 +246,17 @@ export function Overview({
                 >
                   Manage categories
                 </OverviewMenuItem>
+                {onManageInstitutions && (
+                  <OverviewMenuItem
+                    icon="institutions"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      onManageInstitutions()
+                    }}
+                  >
+                    Manage institutions
+                  </OverviewMenuItem>
+                )}
                 <OverviewMenuItem
                   icon="import"
                   className="acct-menu-collapsible"

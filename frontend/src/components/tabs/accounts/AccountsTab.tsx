@@ -61,7 +61,7 @@ import { emitDataChanged } from '../../../lucius/bus'
 import { fetchCachedQuery, useQueryCache } from '../../../state/queryCache'
 import AccountModal from './AccountModal'
 import type { InstitutionOption } from './ds'
-import type { InstitutionDeleteResult } from './InstitutionManager'
+import { InstitutionManager, type InstitutionDeleteResult } from './InstitutionManager'
 import { PayeesModal } from './PayeesModal'
 // The categories admin surface is shared, not Plan's property — same rationale as Manage payees
 // living here while every tab uses payees. One implementation, several entry points.
@@ -515,6 +515,7 @@ export function AccountsTab({
     return () => window.clearTimeout(timer)
   }, [reconcileBurst])
   const [showCategories, setShowCategories] = useState(false)
+  const [showInstitutions, setShowInstitutions] = useState(false)
 
   useEffect(() => {
     setShowPayees(showPayeesRoute)
@@ -2156,6 +2157,10 @@ export function AccountsTab({
                   onAdd={() => setAcctModal({ open: true, mode: 'add', account: null })}
                   onManagePayees={() => setShowPayees(true)}
                   onManageCategories={() => setShowCategories(true)}
+                  onManageInstitutions={() => {
+                    void loadInstitutions()
+                    setShowInstitutions(true)
+                  }}
                   onImport={() => setImportState({ accountId: null })}
                   onExport={() => exportCsv(filtered)}
                   onReview={addReviewToken}
@@ -2412,6 +2417,13 @@ export function AccountsTab({
             }}
           />
         )}
+        <InstitutionManager
+          open={showInstitutions}
+          institutions={institutions}
+          onClose={() => setShowInstitutions(false)}
+          onRename={renameInstitution}
+          onDelete={deleteInstitution}
+        />
         {showCategories && (
           <CategoriesManager
             toast={showToast}

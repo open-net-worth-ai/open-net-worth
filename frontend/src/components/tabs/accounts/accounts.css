@@ -1844,7 +1844,9 @@ body.hide-amounts .mask.l::after {
    the title + primary action + ⋯ stay on ONE line. Container-query on `.acct-main`
    so it tracks the header's REAL width (sidebar collapsed/expanded, Lucius panel
    open), not the viewport. Default = wide: menu-only items hidden, inline shown. */
-.acct-menu-collapsible {
+/* `.acct-menu` scoped so it outranks `.acct-menu button { display: flex }` — unscoped, the
+   folded-in items showed in the menu beside their inline twins at every width. */
+.acct-menu .acct-menu-collapsible {
   display: none;
 }
 @container acctmain (max-width: 860px) {
@@ -1860,7 +1862,7 @@ body.hide-amounts .mask.l::after {
   .acct-head-collapsible {
     display: none;
   }
-  .acct-menu-collapsible {
+  .acct-menu .acct-menu-collapsible {
     display: flex;
   }
 }

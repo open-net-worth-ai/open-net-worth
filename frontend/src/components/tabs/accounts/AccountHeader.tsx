@@ -499,9 +499,6 @@ export function AccountHeader({
                   Import
                 </AccountMenuItem>
                 <div className="acct-menu-collapsible sep" />
-                <AccountMenuItem icon="edit" onClick={onEdit}>
-                  Edit account
-                </AccountMenuItem>
                 <AccountMenuItem
                   icon="statements"
                   onClick={() => {
@@ -513,6 +510,9 @@ export function AccountHeader({
                 </AccountMenuItem>
                 <AccountMenuItem icon="export" onClick={onExport}>
                   Export transactions
+                </AccountMenuItem>
+                <AccountMenuItem icon="edit" onClick={onEdit}>
+                  Edit account
                 </AccountMenuItem>
                 <div className="sep" />
                 <AccountMenuItem icon="archive" danger onClick={onArchive}>

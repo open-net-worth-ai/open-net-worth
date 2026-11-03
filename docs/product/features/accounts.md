@@ -83,9 +83,10 @@ Open the account, click the **⋯** menu in its header → **Edit account**. Eve
 optional:
 
 - **Institution** — groups the account with others at the same bank or broker.
-  **Manage saved institutions** in its dropdown lists every institution with the accounts
-  filed under it: rename one and every account under it follows; delete one and its accounts
-  are simply unfiled (nothing else about them changes).
+  **Manage saved institutions** in its dropdown (or **Manage institutions** in the Accounts
+  **⋯** menu) lists every institution with the accounts filed under it: rename one and every
+  account under it follows; delete one and its accounts are simply unfiled (nothing else about
+  them changes).
 - **Note** — anything you or Lucius should know ("joint account with Alex").
 - **Last 4 digits** — helps Lucius and imports match the right account.
 - **Credit details** (Credit accounts) — **Interest rate (APR, %)**, **Credit limit**,
