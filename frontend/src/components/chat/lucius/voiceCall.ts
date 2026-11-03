@@ -8,6 +8,7 @@ import {
   type LocalAudioTrack,
 } from 'livekit-client'
 import { authFetch } from '../../../api/client'
+import { desktopBridge, desktopClientBridge } from '../../../platform/desktop'
 import { emitConversationChanged } from '../../../lucius/bus'
 
 // One voice call for the whole app (`voice_calls` flag), held OUTSIDE React. The first build kept
@@ -189,15 +190,21 @@ function closeLevels(): void {
   levelCtx = null
 }
 
+// Where the microphone was refused decides where it is turned back on: inside the desktop app it
+// is the system's switch for the app — there is no address bar (owner, 2026-11-03).
+function micBlockedMessage(): string {
+  if (desktopClientBridge()?.openMicrophoneSettings)
+    return "Open Net Worth isn't allowed to use the microphone. Turn it on in System Settings → Privacy & Security → Microphone, then try again."
+  if (desktopBridge() || desktopClientBridge())
+    return "Open Net Worth isn't allowed to use the microphone. Turn it on in your system's privacy settings, then try again."
+  return "The microphone is blocked. Allow it for this site (the browser's address bar, or your system's privacy settings), then try again."
+}
+
 function classify(e: unknown): CallProblem {
   const name = e instanceof Error ? e.name : ''
   const message = e instanceof Error ? e.message : String(e)
   if (name === 'NotAllowedError' || /permission denied/i.test(message)) {
-    return {
-      kind: 'mic',
-      message:
-        "The microphone is blocked. Allow it for this site (the browser's address bar, or your system's privacy settings), then try again.",
-    }
+    return { kind: 'mic', message: micBlockedMessage() }
   }
   if (name === 'NotFoundError') {
     return { kind: 'mic', message: 'No microphone was found. Connect one, then try again.' }

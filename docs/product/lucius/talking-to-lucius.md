@@ -70,8 +70,8 @@ or Linux, and not during a [voice call](../connectors/voice-calls.md), which alr
 If dictation can't work, the button turns amber and says why above it, until you type or click,
 or for a few seconds; then it's back to normal. The reason is a blocked microphone (allow it for
 this site and press it again), no microphone, or a browser that has the button but no speech
-service behind it (Arc, Brave, the Claude app's browser). In that last case dictation can never
-work there, so the button hides in that browser from then on; Chrome, Edge or Safari will work. Anywhere at all, your computer's own dictation types into the box too: press the
+service behind it (Arc, Brave, the Claude app's browser), where Chrome, Edge or Safari will
+work. The button stays either way, so a browser that gains dictation later just works. Anywhere at all, your computer's own dictation types into the box too: press the
 Globe key twice on a Mac, or Win+H on Windows.
 
 ## Attach a file or picture

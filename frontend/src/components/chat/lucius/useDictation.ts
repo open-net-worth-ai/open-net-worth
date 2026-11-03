@@ -44,27 +44,6 @@ function recognitionCtor(): RecognitionCtor | null {
 }
 
 const NOTICE_MS = 6000
-// A browser that has the API but no speech service fails every time: once it has, the mic stays
-// hidden in it rather than sitting there amber (owner, 2026-11-03: "when would the mic become
-// normal colour?"). Per browser; a blocked or missing microphone can be fixed, so it isn't kept.
-const NO_SERVICE_KEY = 'onw:dictation-no-service'
-
-function rememberedNoService(): boolean {
-  try {
-    return localStorage.getItem(NO_SERVICE_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function rememberNoService(): void {
-  try {
-    localStorage.setItem(NO_SERVICE_KEY, '1')
-  } catch {
-    // Without storage it is hidden for this page's life only.
-  }
-}
-
 export type DictationProblem = 'blocked' | 'no-service' | 'no-mic' | 'system' | null
 
 export interface Dictation {
@@ -89,7 +68,6 @@ export function useDictation(
   const [listening, setListening] = useState(false)
   const [problem, setProblem] = useState<DictationProblem>(null)
   const [noticed, setNoticed] = useState(false)
-  const [noService, setNoService] = useState(rememberedNoService)
   const noticeTimer = useRef<number | undefined>(undefined)
   const rec = useRef<Recognition | null>(null)
   const sink = useRef(onText)
@@ -112,18 +90,13 @@ export function useDictation(
     },
     [],
   )
-  // The tip has been read (or ignored): it goes, and the mic is its plain self again — or, where
-  // it can never work, gone.
+  // The tip has been read (or ignored): it goes, and the mic is its plain self again. A failure
+  // never hides the mic — a browser that can't today may tomorrow; the next press says why
+  // (owner, 2026-11-03: "always show that and show error instead").
   const settle = useCallback(() => {
     window.clearTimeout(noticeTimer.current)
     setNoticed(false)
-    setProblem((was) => {
-      if (was === 'no-service') {
-        rememberNoService()
-        setNoService(true)
-      }
-      return null
-    })
+    setProblem(null)
   }, [])
   const notice = useCallback(
     (next: DictationProblem) => {
@@ -195,7 +168,7 @@ export function useDictation(
   }, [Ctor, notice, system, focusBox])
 
   return {
-    supported: system !== null || (Ctor !== null && !noService),
+    supported: system !== null || Ctor !== null,
     listening,
     problem,
     noticed,

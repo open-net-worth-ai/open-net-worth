@@ -221,3 +221,31 @@ describe('VoiceCallPill', () => {
     expect(screen.getByRole('button', { name: 'Ask Lucius' })).toBeTruthy()
   })
 })
+
+describe('the pill with a refused microphone in the Mac desktop app', () => {
+  afterEach(() => {
+    delete (window as { onwDesktopClient?: unknown }).onwDesktopClient
+  })
+
+  it('opens System Settings instead of calling again', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    const openMicrophoneSettings = vi.fn(() => Promise.resolve())
+    ;(window as { onwDesktopClient?: unknown }).onwDesktopClient = {
+      version: 1,
+      openMicrophoneSettings,
+    }
+    act(() => setVoiceCallForTests({ problem: { kind: 'mic', message: 'Not allowed.' } }))
+    render(
+      <VoiceCallPill
+        sessionId="s1"
+        busy={false}
+        needsApproval={false}
+        onAsk={vi.fn()}
+        onHoverOpen={vi.fn()}
+        onOpenDock={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Open Settings' }))
+    expect(openMicrophoneSettings).toHaveBeenCalledTimes(1)
+  })
+})

@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { AlertCircle, ChevronUp, Mic, MicOff, PhoneOff, X } from 'lucide-react'
 import { Spark } from '../../../lucius/identity'
+import { desktopClientBridge } from '../../../platform/desktop'
 import {
   dismissProblem,
   expandCall,
@@ -123,15 +124,29 @@ export function VoiceCallPill({
               {PROBLEM[call.problem.kind].label}
             </span>
           </button>
-          <button
-            type="button"
-            className="lx-dock-pill-review"
-            onClick={() =>
-              call.problem?.kind === 'setup' ? openVoiceSetup() : void startCall(sessionId)
-            }
-          >
-            {PROBLEM[call.problem.kind].action}
-          </button>
+          {(() => {
+            // On a Mac desktop app a refused microphone is undone in System Settings, never by
+            // calling again: macOS doesn't ask twice.
+            const micSettings =
+              call.problem.kind === 'mic'
+                ? desktopClientBridge()?.openMicrophoneSettings
+                : undefined
+            return (
+              <button
+                type="button"
+                className="lx-dock-pill-review"
+                onClick={() =>
+                  micSettings
+                    ? void micSettings()
+                    : call.problem?.kind === 'setup'
+                      ? openVoiceSetup()
+                      : void startCall(sessionId)
+                }
+              >
+                {micSettings ? 'Open Settings' : PROBLEM[call.problem.kind].action}
+              </button>
+            )
+          })()}
           <button
             type="button"
             className="lx-dock-pill-btn"

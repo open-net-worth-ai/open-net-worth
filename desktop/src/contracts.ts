@@ -24,6 +24,8 @@ export interface DesktopClientBridge {
   takeWhatsNew?(): Promise<DesktopWhatsNew | null>;
   // macOS only: start the system's own dictation in the focused field (Edit → Start Dictation…).
   startDictation?(): Promise<void>;
+  // macOS only: open System Settings at Privacy & Security → Microphone, where a refusal is undone.
+  openMicrophoneSettings?(): Promise<void>;
   onCommand(listener: (command: DesktopCommand) => void): () => void;
 }
 export interface ImportSelection { cancelled: boolean; files: NativeFile[] }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { AlertCircle, X } from 'lucide-react'
+import { desktopClientBridge } from '../../../platform/desktop'
 import { useOpenVoiceSetup, useVoiceReadiness } from './VoiceCallButton'
 import { dismissProblem, startCall, useVoiceCall } from './voiceCall'
 
@@ -44,6 +45,7 @@ export function VoiceCallNotice({
 
   const message = problem?.message ?? workerReason
   const dismiss = () => (problem ? dismissProblem() : setDismissedReason(workerReason))
+  const micSettings = desktopClientBridge()?.openMicrophoneSettings
   const openLogs = () => void navigate({ to: '/settings', search: { sub: 'developer' } } as never)
   return (
     <div className="lx-call-notice" role="alert">
@@ -58,6 +60,16 @@ export function VoiceCallNotice({
         {problem?.kind === 'setup' && (
           <button type="button" className="lx-call-notice-action" onClick={openSetup}>
             Voice calls settings
+          </button>
+        )}
+        {problem?.kind === 'mic' && micSettings && (
+          // macOS never asks twice: a refused microphone is undone only in System Settings.
+          <button
+            type="button"
+            className="lx-call-notice-action"
+            onClick={() => void micSettings()}
+          >
+            Open System Settings
           </button>
         )}
         {problem?.kind === 'service' && (

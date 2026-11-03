@@ -166,3 +166,33 @@ describe('the call notice once you move on', () => {
     expect(screen.queryByText('The call dropped.')).toBeNull()
   })
 })
+
+describe('a refused microphone in the Mac desktop app', () => {
+  afterEach(() => {
+    delete (window as { onwDesktopClient?: unknown }).onwDesktopClient
+  })
+
+  it('offers System Settings, where macOS keeps the refusal', async () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    respond(READY)
+    const openMicrophoneSettings = vi.fn(() => Promise.resolve())
+    ;(window as { onwDesktopClient?: unknown }).onwDesktopClient = {
+      version: 1,
+      openMicrophoneSettings,
+    }
+    const { setVoiceCallForTests } = await import('./voiceCall')
+    act(() => setVoiceCallForTests({ problem: { kind: 'mic', message: 'Not allowed.' } }))
+    render(<VoiceCallNotice sessionId="s1" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Open System Settings' }))
+    expect(openMicrophoneSettings).toHaveBeenCalledTimes(1)
+  })
+
+  it('has no such button in a browser, which only the address bar can fix', async () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    respond(READY)
+    const { setVoiceCallForTests } = await import('./voiceCall')
+    act(() => setVoiceCallForTests({ problem: { kind: 'mic', message: 'Blocked.' } }))
+    render(<VoiceCallNotice sessionId="s1" />)
+    expect(screen.queryByRole('button', { name: 'Open System Settings' })).toBeNull()
+  })
+})

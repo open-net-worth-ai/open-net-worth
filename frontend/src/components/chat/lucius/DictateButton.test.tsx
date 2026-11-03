@@ -48,7 +48,6 @@ beforeEach(() => {
 })
 afterEach(() => {
   cleanup()
-  localStorage.clear()
   desktop = false
   client = undefined
   resetVoiceCallForTests()
@@ -125,7 +124,7 @@ describe('DictateButton', () => {
     }
   })
 
-  it('hides itself for good in a browser with no speech service, once its reason is read', () => {
+  it('stays in a browser with no speech service, saying why on every press', () => {
     const first = render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
     fireEvent.click(screen.getByRole('button', { name: 'Dictate' }))
     act(() => {
@@ -134,15 +133,16 @@ describe('DictateButton', () => {
     })
     // Told where dictation works, not to try again.
     expect(screen.getByRole('status').textContent).toMatch(/can't turn speech into text/)
-    // Typing is moving on: the tip goes, and so does a mic that can never work here.
+    // Typing is moving on: the tip goes, the mic stays, plain.
     act(() => {
       fireEvent.keyDown(document, { key: 'a' })
     })
     expect(screen.queryByRole('status')).toBeNull()
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Dictate' }).dataset.problem).toBeUndefined()
     first.unmount()
+    // Nothing is remembered: a later visit offers it again.
     render(<DictateButton focusBox={vi.fn()} onText={vi.fn()} empty />)
-    expect(screen.queryByRole('button')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Dictate' })).toBeTruthy()
   })
 
   it('is not offered where it cannot work, nor during a voice call', () => {

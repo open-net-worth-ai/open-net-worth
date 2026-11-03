@@ -45,7 +45,10 @@ const client: DesktopClientBridge = {
   offerUpdate: () => ipcRenderer.invoke('desktop-client:offer-update'),
   takeWhatsNew: () => ipcRenderer.invoke('desktop-client:whats-new'),
   // Only where there is a system dictation to start: the page offers its mic by this being present.
-  ...(process.platform === 'darwin' ? { startDictation: () => ipcRenderer.invoke('desktop-client:start-dictation') } : {}),
+  ...(process.platform === 'darwin' ? {
+    startDictation: () => ipcRenderer.invoke('desktop-client:start-dictation'),
+    openMicrophoneSettings: () => ipcRenderer.invoke('desktop-client:microphone-settings'),
+  } : {}),
   onCommand: listener => {
     const handler = (_event: Electron.IpcRendererEvent, command: DesktopCommand) => listener(command);
     ipcRenderer.on('desktop-client:command', handler);

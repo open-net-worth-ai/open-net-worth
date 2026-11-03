@@ -96,7 +96,9 @@ happens next is read out.
 
 **In the Open Net Worth desktop app**, the first call asks macOS for the microphone (once — it
 remembers). The desktop app allows the microphone for the app's own page only, and only audio;
-this needs desktop version with voice-call support or later.
+this needs desktop version with voice-call support or later. If you said no, macOS won't ask
+again: the call says so and offers **Open System Settings**, which opens **Privacy & Security →
+Microphone**, where you turn Open Net Worth on and call again.
 
 The browser only allows the microphone on a secure address: `localhost` on your own computer
 works; from another device the app must be reachable over HTTPS (see

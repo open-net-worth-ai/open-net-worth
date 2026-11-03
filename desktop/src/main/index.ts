@@ -575,6 +575,12 @@ function registerIpc(): void {
     if (process.platform !== 'darwin') throw new Error('Dictation is a macOS feature.');
     Menu.sendActionToFirstResponder('startDictation:');
   });
+  // macOS asks for the microphone once and remembers a refusal; this page is the only way back.
+  ipcMain.handle('desktop-client:microphone-settings', event => {
+    main!.authorizeClient(event);
+    if (process.platform !== 'darwin') throw new Error('This is a macOS setting.');
+    return shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone');
+  });
   ipcMain.handle('desktop-client:open-browser', event => { main!.authorizeClient(event); return books!.exclusive(async () => { main!.authorizeClient(event); await openBrowser(); }); });
   ipcMain.handle('desktop-connection:retry', event => { main!.authorizeServerRetry(event); return books!.exclusive(async () => { main!.authorizeServerRetry(event); await connectionLoader!.retry(); }); });
   ipcMain.handle('desktop-hosted:sign-in', event => {
