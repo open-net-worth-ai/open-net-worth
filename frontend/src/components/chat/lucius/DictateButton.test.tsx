@@ -112,6 +112,13 @@ describe('DictateButton', () => {
       act(() => vi.advanceTimersByTime(6000))
       expect(screen.queryByRole('status')).toBeNull()
       expect(screen.getByRole('button', { name: /can't use the microphone/ })).toBeTruthy()
+      // A browser with no speech service is told where dictation works, not to try again.
+      fireEvent.click(screen.getByRole('button', { name: /can't use the microphone/ }))
+      act(() => {
+        FakeRecognition.last.onerror?.({ error: 'network' })
+        FakeRecognition.last.onend?.()
+      })
+      expect(screen.getByRole('status').textContent).toMatch(/can't turn speech into text/)
     } finally {
       vi.useRealTimers()
     }

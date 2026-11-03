@@ -12,7 +12,8 @@ const LABEL = {
   listening: 'Stop dictating',
   blocked:
     "Dictation can't use the microphone in this browser. Allow it for this site, or open the app in Chrome or Safari.",
-  unavailable: "Dictation isn't available right now. Try again, or type instead.",
+  'no-service': "This browser can't turn speech into text. Dictate in Chrome, Edge or Safari.",
+  'no-mic': 'Dictation found no microphone. Connect one, then try again.',
 } as const
 
 export function DictateButton({

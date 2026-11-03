@@ -38,7 +38,7 @@ function recognitionCtor(): RecognitionCtor | null {
 
 const NOTICE_MS = 6000
 
-export type DictationProblem = 'blocked' | 'unavailable' | null
+export type DictationProblem = 'blocked' | 'no-service' | 'no-mic' | null
 
 export interface Dictation {
   supported: boolean
@@ -112,7 +112,10 @@ export function useDictation(onText: (text: string, final: boolean) => void): Di
     }
     r.onerror = (e) => {
       if (e.error === 'not-allowed' || e.error === 'service-not-allowed') notice('blocked')
-      else if (e.error === 'network' || e.error === 'audio-capture') notice('unavailable')
+      // `network` is a browser with the API but no speech service behind it (Arc, Brave, the
+      // Claude app's pane): trying again never helps there (owner, 2026-11-03).
+      else if (e.error === 'network') notice('no-service')
+      else if (e.error === 'audio-capture') notice('no-mic')
     }
     r.onend = () => {
       if (!dropped.current) sink.current(heard, true)

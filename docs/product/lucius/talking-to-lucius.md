@@ -59,8 +59,10 @@ you say them, and nothing is sent until you press send. Press it again to stop. 
 browser's own speech recognition, so your speech is handled by your browser's provider (Google in
 Chrome and Edge, Apple in Safari), not by Open Net Worth. The button only shows where the browser
 offers it, so not in the desktop app or Firefox, and not during a [voice call](../connectors/voice-calls.md), which
-already hears you. If your browser blocks the microphone, the button turns amber; allow the
-microphone for this site and press it again.
+already hears you. If dictation can't work, the button turns amber and says why above it: a
+blocked microphone (allow it for this site and press it again), no microphone, or a browser that
+has the button but no speech service behind it (Arc, Brave, the Claude app's browser), where
+Chrome, Edge or Safari will work.
 
 ## Attach a file or picture
 
