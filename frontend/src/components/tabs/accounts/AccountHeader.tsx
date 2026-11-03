@@ -21,6 +21,7 @@ import {
   ClockAlert,
   Download,
   FileText,
+  Landmark,
   Link2,
   MoreHorizontal,
   Pencil,
@@ -39,6 +40,7 @@ import { daysSinceReconcile, isReconcileOverdue } from './reconcileCadence'
 type MenuIconName =
   | 'payees'
   | 'categories'
+  | 'institutions'
   | 'import'
   | 'edit'
   | 'statements'
@@ -53,6 +55,8 @@ function MenuIcon({ name }: { name: MenuIconName }) {
       return <User {...common} />
     case 'categories':
       return <Tags {...common} />
+    case 'institutions':
+      return <Landmark {...common} />
     case 'import':
       return <Upload {...common} />
     case 'edit':
@@ -298,6 +302,8 @@ export interface AccountHeaderProps {
   onDelete: () => void
   onManagePayees: () => void
   onManageCategories: () => void
+  /** Rename or remove a shared institution (the left rail's bank groups). */
+  onManageInstitutions?: () => void
   onImport: () => void
   /** Hands a message to Lucius in a fresh conversation; absent in a context with no chat. */
   onAskLucius?: (text: string) => void
@@ -335,6 +341,7 @@ export function AccountHeader({
   onDelete,
   onManagePayees,
   onManageCategories,
+  onManageInstitutions,
   onImport,
   onAskLucius,
   onReviewStatement,
@@ -498,7 +505,14 @@ export function AccountHeader({
                 >
                   Import
                 </AccountMenuItem>
-                <div className="acct-menu-collapsible sep" />
+                {/* App-wide admin, like the two above — always in the menu, split from this
+                    account's own actions below. */}
+                {onManageInstitutions && (
+                  <AccountMenuItem icon="institutions" onClick={onManageInstitutions}>
+                    Manage institutions
+                  </AccountMenuItem>
+                )}
+                <div className={onManageInstitutions ? 'sep' : 'acct-menu-collapsible sep'} />
                 <AccountMenuItem
                   icon="statements"
                   onClick={() => {

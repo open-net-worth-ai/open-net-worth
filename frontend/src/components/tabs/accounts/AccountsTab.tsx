@@ -2119,6 +2119,11 @@ export function AccountsTab({
                       setMenuOpen(false)
                       setShowCategories(true)
                     }}
+                    onManageInstitutions={() => {
+                      setMenuOpen(false)
+                      void loadInstitutions()
+                      setShowInstitutions(true)
+                    }}
                     onAskLucius={onAskLucius}
                     onImport={() => {
                       setMenuOpen(false)
