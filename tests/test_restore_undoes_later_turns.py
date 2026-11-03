@@ -152,3 +152,28 @@ def test_a_rewound_message_is_never_grouped_with_the_new_one(db_isolated, monkey
 
     cp.restore(first, mode="data")
     assert _books() == {}
+
+
+def test_a_later_automation_that_wrote_other_rows_is_not_warned_about(three_turns):
+    """The preview used to list every later turn of another conversation as "also undone".
+    Restore replays only the rows its own chain recorded, so an Automation that booked
+    different rows is untouched — and must not be named (owner, 2026-11-04)."""
+    c1, _, _ = three_turns
+    _turn(1, _add("D"), session="automation-run-run_x")
+    assert cp.preview(c1)["cross_session_changes"] == []
+    cp.restore(c1, mode="data")
+    assert _books() == {"D": "D"}
+
+
+def test_a_later_conversation_that_edited_a_restored_row_is_named(three_turns, monkeypatch):
+    from backend.services.automations import runs as automation_runs
+
+    monkeypatch.setattr(
+        automation_runs,
+        "automation_run_for_session",
+        lambda sid: ({"id": "run_x"}, {"id": "auto_x", "name": "Email receipts"}),
+    )
+    c1, _, _ = three_turns
+    _turn(1, _rename("B", "B", "B9"), session="automation-run-run_x")
+    cross = cp.preview(c1)["cross_session_changes"]
+    assert [c["session_label"] for c in cross] == ["the Email receipts Automation"]

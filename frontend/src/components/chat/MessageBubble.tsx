@@ -687,10 +687,27 @@ const FILE_LABELS: Record<string, string> = {
   'memory.json': 'assistant memory',
 }
 
+// DB-backed stores preview as `db:<table>`. Names a person would not recognise get a
+// readable one; every other table reads as its name with spaces ("import batches").
+const TABLE_LABELS: Record<string, string> = {
+  automation_runs: 'Automation run history',
+  transaction_external_refs: 'transaction references',
+  connector_snapshots: 'connection snapshots',
+  intel_stories: 'intel stories',
+  memory: 'assistant memory',
+}
+
+function previewLabel(file: string): string {
+  if (FILE_LABELS[file]) return FILE_LABELS[file]
+  if (!file.startsWith('db:')) return file
+  const table = file.slice(3)
+  return TABLE_LABELS[table] ?? table.replace(/_/g, ' ')
+}
+
 function summarisePreview(changes: CheckpointFileChange[]): string {
   const parts: string[] = []
   for (const c of changes) {
-    const label = FILE_LABELS[c.file] || c.file
+    const label = previewLabel(c.file)
     if (c.delta > 0) parts.push(`restore ${c.delta} ${label}`)
     else if (c.delta < 0) parts.push(`remove ${-c.delta} ${label}`)
     else parts.push(`revert ${label}`)
@@ -853,7 +870,9 @@ function RestoreControl({
                 <ul>
                   {cross.map((c, i) => (
                     <li key={i}>
-                      {c.session_label}: “{c.message_preview.slice(0, 40)}”
+                      {c.message_preview.trim()
+                        ? `${c.session_label}: “${c.message_preview.slice(0, 40)}”`
+                        : c.session_label}
                     </li>
                   ))}
                 </ul>

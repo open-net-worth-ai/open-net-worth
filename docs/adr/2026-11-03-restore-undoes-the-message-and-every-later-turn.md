@@ -43,3 +43,7 @@ it". The owner restored an earlier message and found two things still in the boo
   dialog always promised. The preview counts every turn the restore will undo.
 - A pre_restore checkpoint still replays alone, so Undo, and Undo of an Undo, keep their
   one-level-at-a-time behaviour.
+- The preview's "also undoes later changes from …" warning names another conversation's later
+  turn only when it wrote a file or row the restore puts back (`_overlapping_later_turns`). It
+  used to list every later turn anywhere, a holdover from whole-file restores, and so warned
+  about Automation imports a restore never reaches (2026-11-04). An Automation is named as one.

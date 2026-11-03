@@ -128,7 +128,8 @@ longer offers **Undo**.
 
 Restoring to before an earlier message also undoes everything the later messages of that
 conversation changed, and hides their **Restore** while the restore stands. **Undo** brings back
-both the changes and the buttons. Changes made in your other conversations are not undone.
+both the changes and the buttons. Changes from your other conversations and Automations are
+left alone, unless they changed something the restore puts back; the dialog names those.
 
 A change you approve on a card belongs to the message that asked for it: restoring that message
 undoes it too.

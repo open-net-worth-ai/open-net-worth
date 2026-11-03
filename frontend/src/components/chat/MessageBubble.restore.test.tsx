@@ -171,3 +171,50 @@ describe('MessageBubble — Restore popover placement', () => {
     expect(document.body.querySelector('.msg-restore-popover')).toBeNull()
   })
 })
+
+describe('the Restore preview reads in words', () => {
+  async function previewText(preview: object): Promise<string> {
+    const onPreview = vi.fn().mockResolvedValue(preview)
+    const utils = render(
+      <MessageBubble
+        message={{ id: 'm1', role: 'user', text: 'book the rows', checkpointId: 'cp_1' }}
+        onSendMessage={vi.fn()}
+        onPreviewCheckpoint={onPreview}
+        onRestoreCheckpoint={vi.fn()}
+      />,
+    )
+    fireEvent.click(utils.container.querySelector('.msg-restore-trigger') as HTMLElement)
+    await waitFor(() =>
+      expect(document.body.querySelector('.msg-restore-preview')?.textContent).not.toBe(
+        'Checking impact…',
+      ),
+    )
+    return (document.body.querySelector('.msg-restore-popover') as HTMLElement).textContent ?? ''
+  }
+
+  it('names database tables, never db:<table>', async () => {
+    const text = await previewText({
+      changes: [
+        { file: 'db:transactions', current_count: 5, restored_count: 2, delta: -3 },
+        { file: 'db:import_batches', current_count: 1, restored_count: 0, delta: -1 },
+        { file: 'db:automation_runs', current_count: 1, restored_count: 1, delta: 0 },
+      ],
+      cross_session_changes: [],
+    })
+    expect(text).toContain(
+      'remove 3 transactions, remove 1 import batches, revert Automation run history.',
+    )
+    expect(text).not.toContain('db:')
+  })
+
+  it('shows an Automation with no message as its name alone, without empty quotes', async () => {
+    const text = await previewText({
+      changes: [],
+      cross_session_changes: [
+        { session_label: 'the Email receipts Automation', message_preview: '', created_at: 'x' },
+      ],
+    })
+    expect(text).toContain('the Email receipts Automation')
+    expect(text).not.toContain('“”')
+  })
+})

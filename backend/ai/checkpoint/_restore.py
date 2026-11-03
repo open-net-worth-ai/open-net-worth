@@ -57,11 +57,18 @@ def _blob_bytes(blob_ref: str) -> bytes:
 
 
 def _session_label(session_id: str | None) -> str:
-    """Human label for a session: 'Telegram', 'web', etc. Restore is point-in-time
-    and reverts GLOBAL data files, so changes from other channels matter.
-    """
+    """Human label for a session: 'Telegram', 'web', an Automation's name, etc."""
     if not session_id:
         return "another session"
+    try:
+        from backend.services.automations import runs as automation_runs
+
+        if automation_runs.is_automation_session(session_id):
+            found = automation_runs.automation_run_for_session(session_id)
+            name = (found[1].get("name") or "").strip() if found else ""
+            return f"the {name} Automation" if name else "an Automation"
+    except Exception:
+        return "an Automation"
     try:
         from backend.connectors import session_map
 
@@ -117,9 +124,10 @@ def _pk_param(pk_col, pk: str):
 def preview(checkpoint_id: str) -> dict:
     """What would change if this checkpoint were restored (per-file row deltas).
 
-    Also surfaces cross_session_changes: turns from OTHER sessions made after this
-    checkpoint. Because restore is point-in-time over global data files, restoring
-    here also undoes those — e.g. transactions you later added from Telegram.
+    Also surfaces cross_session_changes: later turns from OTHER sessions that wrote a file
+    or row this restore puts back, so restoring here changes their work too — e.g. a
+    transaction Lucius booked from Telegram and this message later edited. A later turn that
+    touched none of those is left alone and not listed (`_overlapping_later_turns`).
     """
     target = _index.find_checkpoint(checkpoint_id)
     if target is None:
@@ -140,24 +148,15 @@ def preview(checkpoint_id: str) -> dict:
         )
     changes.extend(_db_preview_rows(cp))
 
-    # Newer turns from a different session that this restore would also unwind.
-    this_session = cp.get("session_id")
-    cutoff = cp.get("created_at", "")
     cross: list[dict] = []
-    for e in _index._read_index():
-        if (
-            e.get("kind") == "turn"
-            and e.get("status") == "active"
-            and e.get("created_at", "") > cutoff
-            and e.get("session_id") != this_session
-        ):
-            cross.append(
-                {
-                    "session_label": _session_label(e.get("session_id")),
-                    "message_preview": e.get("message_preview", ""),
-                    "created_at": e.get("created_at", ""),
-                }
-            )
+    for e in _overlapping_later_turns(cp):
+        cross.append(
+            {
+                "session_label": _session_label(e.get("session_id")),
+                "message_preview": e.get("message_preview", ""),
+                "created_at": e.get("created_at", ""),
+            }
+        )
     cross.sort(key=lambda c: c["created_at"])
 
     return {
@@ -165,6 +164,52 @@ def preview(checkpoint_id: str) -> dict:
         "changes": changes,
         "cross_session_changes": cross,
     }
+
+
+def _overlapping_later_turns(cp: dict) -> list[dict]:
+    """Later turns of OTHER conversations that this restore really changes: ones that wrote a
+    file or a (table, pk) row the restore puts back. A restore replays only the rows its own
+    chain recorded, so a later Automation or Telegram turn that wrote other rows is untouched —
+    warning about every later turn told the owner a restore would undo email imports it never
+    reaches (2026-11-04)."""
+    this_session = cp.get("session_id")
+    cutoff = cp.get("created_at", "")
+    candidates = [
+        e
+        for e in _index._read_index()
+        if e.get("kind") == "turn"
+        and e.get("status") == "active"
+        and e.get("created_at", "") > cutoff
+        and e.get("session_id") != this_session
+    ]
+    if not candidates:
+        return []
+    files = set(cp.get("files") or {})
+    rows_by_cp = _touched_rows(_scope_ids(cp) + [e["id"] for e in candidates])
+    restored_rows = set().union(*(rows_by_cp.get(cp_id, set()) for cp_id in _scope_ids(cp)))
+    return [
+        e
+        for e in candidates
+        if files & set(e.get("files") or {}) or restored_rows & rows_by_cp.get(e["id"], set())
+    ]
+
+
+def _touched_rows(checkpoint_ids: list[str]) -> dict[str, set[tuple[str, str]]]:
+    from sqlalchemy import select
+
+    from backend.db import tables as db_tables
+    from backend.db.engine import get_engine
+
+    wl = db_tables.write_log
+    out: dict[str, set[tuple[str, str]]] = {}
+    with get_engine().connect() as conn:
+        for cp_id, table_name, pk in conn.execute(
+            select(wl.c.checkpoint_id, wl.c.table_name, wl.c.pk).where(
+                wl.c.checkpoint_id.in_(checkpoint_ids)
+            )
+        ):
+            out.setdefault(cp_id, set()).add((table_name, pk))
+    return out
 
 
 def _db_preview_rows(cp: dict) -> list[dict]:
