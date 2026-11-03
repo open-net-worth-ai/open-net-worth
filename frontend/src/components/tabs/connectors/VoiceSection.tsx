@@ -25,6 +25,8 @@ import { ChevronDown } from '../../../ui/icons'
 interface WorkerStatus {
   flag_on: boolean
   libraries_installed: boolean
+  /** Why calls can't run here for want of the voice libraries; "" when installed. */
+  libraries_problem?: string
   running: boolean
   error: string
 }
@@ -116,7 +118,9 @@ function workerLine(c: VoiceConfig): { tone: 'faint' | 'warn' | 'good'; text: st
   if (!c.worker.libraries_installed)
     return {
       tone: 'warn',
-      text: 'The voice libraries aren’t installed on this machine: run pip install -r requirements-voice.txt, then restart.',
+      text:
+        c.worker.libraries_problem ||
+        'The voice libraries are missing from this install. Reinstall Open Net Worth, then restart.',
     }
   if (c.worker.error) return { tone: 'warn', text: c.worker.error }
   if (!c.ready)

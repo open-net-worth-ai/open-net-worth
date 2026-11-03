@@ -4,8 +4,10 @@ The worker connects OUT to the owner's LiveKit project and waits for calls, the 
 Telegram connector polls, so the app opens no port. It is a process of its own (``host``): a
 crash in LiveKit's native layer ends the calls, never the app, and the worker restarts.
 
-The voice libraries are optional (``requirements-voice.txt``): without them the app runs
-exactly as before and the settings page says what to install.
+The voice libraries come with every install, so the flag is the only switch (owner,
+2026-11-03) — on the computers their native parts have a build for (``VOICE_PLATFORMS``, the same
+marker as ``requirements.txt``). Elsewhere the app runs exactly as before and the settings page
+says calls aren't available there.
 """
 
 from __future__ import annotations
@@ -13,6 +15,8 @@ from __future__ import annotations
 import asyncio
 import importlib.util
 import logging
+import platform
+import sys
 import threading
 import time
 from typing import Optional
@@ -156,6 +160,40 @@ def voice_server_url() -> Optional[str]:
     return config["livekit_url"] if is_ready(config) else None
 
 
+# Where LiveKit's WebRTC and onnxruntime ship a build — keep in step with requirements.txt.
+VOICE_PLATFORMS = "Apple Silicon on macOS 14 or later, Linux (x86_64 or aarch64) or Windows x64"
+
+
+def platform_supported(
+    system: Optional[str] = None, machine: Optional[str] = None, release: Optional[str] = None
+) -> bool:
+    system = system or sys.platform
+    machine = machine or platform.machine()
+    release = release or platform.release()
+    if system == "darwin":
+        try:
+            darwin_major = int(release.split(".")[0])
+        except ValueError:
+            return False
+        return machine == "arm64" and darwin_major >= 23  # Darwin 23 = macOS 14
+    if system.startswith("linux"):
+        return machine in ("x86_64", "aarch64")
+    if system == "win32":
+        return machine == "AMD64"
+    return False
+
+
+def libraries_problem() -> str:
+    """Why calls can't run here for want of the voice libraries, or "" when they are installed."""
+    if libraries_installed():
+        return ""
+    if not platform_supported():
+        return f"Voice calls aren't available on this computer: they need {VOICE_PLATFORMS}."
+    return (
+        "The voice libraries are missing from this install. Reinstall Open Net Worth, then restart."
+    )
+
+
 def libraries_installed() -> bool:
     try:
         return all(importlib.util.find_spec(name) is not None for name in _REQUIRED_MODULES)
@@ -169,6 +207,7 @@ def status() -> dict:
     return {
         "flag_on": flag_enabled(FLAG),
         "libraries_installed": libraries_installed(),
+        "libraries_problem": libraries_problem(),
         "running": running,
         "error": "" if running else _worker.error,
         "call_problem": call_problem(),
@@ -233,7 +272,7 @@ async def _start() -> None:
     if not is_ready(config):
         return
     if not libraries_installed():
-        _worker.error = "Voice libraries are not installed (pip install -r requirements-voice.txt)."
+        _worker.error = libraries_problem()
         log.info("voice calls configured but the voice libraries are not installed")
         return
     from backend.connectors.voice.host import WorkerProcess

@@ -53,19 +53,15 @@ and he waits quietly for as long as you asked (up to 10 minutes) before checking
 
 Voice calls run on your own [LiveKit](https://livekit.io) project. LiveKit carries the call's
 audio and runs the speech-to-text, the voice and the front voice model, so there is no other
-account to create. Its free plan includes a monthly allowance.
+account to create. Its free plan includes a monthly allowance. Everything voice calls need comes
+with Open Net Worth on a Mac with Apple Silicon (macOS 14 or later), Linux (x86_64 or aarch64) and
+Windows x64; on any other computer the settings page says calls aren't available there.
 
-1. **Install the voice libraries** on the machine Open Net Worth runs on, then restart the app:
-
-   ```bash
-   pip install -r requirements-voice.txt
-   ```
-
-2. **Create a LiveKit project** at [cloud.livekit.io](https://cloud.livekit.io) and, in its
+1. **Create a LiveKit project** at [cloud.livekit.io](https://cloud.livekit.io) and, in its
    **Settings → Keys**, create an API key. Keep the **URL** (`wss://…livekit.cloud`), the **API
    key** and the **API secret**.
-3. In Open Net Worth, open **Connectors → Voice calls** and paste the three values. Save.
-4. When the page says **Ready for calls**, press the **phone** button in Lucius's chat — it sits
+2. In Open Net Worth, open **Connectors → Voice calls** and paste the three values. Save.
+3. When the page says **Ready for calls**, press the **phone** button in Lucius's chat — it sits
    where **Send** is while the message box is empty. Your browser asks for the microphone the
    first time.
 
@@ -151,7 +147,7 @@ the Voice calls settings right where you are.
 or it is paused.
 
 **"The voice worker isn't running."** Open **Connectors → Voice calls**: it says why — usually the
-voice libraries aren't installed yet (step 1 above), or the LiveKit details are wrong.
+LiveKit details are wrong, or this computer is one voice calls aren't available on.
 
 **A call dropped, then voice calls came back on their own.** The voice side of the app runs
 separately from the rest of it, so a crash there ends the call but never the app; it restarts

@@ -997,3 +997,53 @@ def test_the_raw_reason_is_taken_from_the_service_error():
         "Error code: 429 — LLM token credit quota exceeded, MaxGatewayCredits"
     )
     assert len(agent._reason(RuntimeError("x" * 900))) == 400
+
+
+# ── The flag is the only switch: the voice libraries come with every install they have a build for ──
+
+_PLATFORMS = [
+    # sys.platform, machine, release, supported
+    ("darwin", "arm64", "24.2.0", True),  # macOS 15
+    ("darwin", "arm64", "23.0.0", True),  # macOS 14
+    ("darwin", "arm64", "22.6.0", False),  # macOS 13: onnxruntime ships macOS 14+
+    ("darwin", "x86_64", "24.2.0", False),  # Intel Mac: no onnxruntime build
+    ("linux", "x86_64", "6.8.0", True),
+    ("linux", "aarch64", "6.8.0", True),
+    ("linux", "armv7l", "6.8.0", False),
+    ("win32", "AMD64", "10", True),
+    ("win32", "ARM64", "10", False),  # no LiveKit WebRTC build
+]
+
+
+@pytest.mark.parametrize("system,machine,release,supported", _PLATFORMS)
+def test_requirements_marker_and_platform_check_agree(system, machine, release, supported):
+    from pathlib import Path
+
+    from packaging.requirements import Requirement
+
+    from backend.connectors.voice import service
+
+    lines = (
+        Path(__file__).resolve().parents[1].joinpath("requirements.txt").read_text().splitlines()
+    )
+    voice = [
+        Requirement(line) for line in lines if line.startswith(("livekit-agents", "livekit-api"))
+    ]
+    assert {r.name for r in voice} == {"livekit-agents", "livekit-api"}
+    env = {"sys_platform": system, "platform_machine": machine, "platform_release": release}
+    for req in voice:
+        assert req.marker is not None and req.marker.evaluate(env) is supported, req.name
+    assert service.platform_supported(system, machine, release) is supported
+
+
+def test_missing_voice_libraries_say_why(monkeypatch):
+    from backend.connectors.voice import service
+
+    monkeypatch.setattr(service, "libraries_installed", lambda: True)
+    assert service.libraries_problem() == ""
+    monkeypatch.setattr(service, "libraries_installed", lambda: False)
+    monkeypatch.setattr(service, "platform_supported", lambda *a: False)
+    assert "aren't available on this computer" in service.libraries_problem()
+    monkeypatch.setattr(service, "platform_supported", lambda *a: True)
+    assert "Reinstall Open Net Worth" in service.libraries_problem()
+    assert "pip install" not in service.libraries_problem()

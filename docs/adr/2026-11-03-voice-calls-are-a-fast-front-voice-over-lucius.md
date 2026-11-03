@@ -155,6 +155,28 @@ identity (cleared in a click; the address is what the token budgets use); limiti
 front voice's tokens (the speech services bill by the minute, not by the token); trusting the
 worker alone to hang up (it is the process the host assumes compromised).
 
+## Amendment (2026-11-03): the flag is the only switch
+
+The voice libraries were an optional install (`requirements-voice.txt`, a `VOICE` image build
+arg), so switching the flag on could still leave calls dead: 8080, restarted from a checkout set
+up without them, came back saying "Voice libraries are not installed". The owner: "ensure that the
+flag is the only thing to control".
+
+- `livekit-agents[silero]` and `livekit-api` are in `requirements.txt`, so they reach `make setup`,
+  CI, the wheel, the desktop runtime and every image through the one hash-pinned lock
+  (`desktop/runtime-requirements.lock`). The pins are the voice lock's, unchanged, and no existing
+  pin moved. `requirements-voice.*` and the `VOICE` build arg are gone.
+- Behind an environment marker: their native parts (LiveKit's WebRTC, onnxruntime) have builds for
+  Apple Silicon on macOS 14+, Linux x86_64/aarch64 and Windows x64 only, and an unconditional
+  dependency would fail the whole install on an Intel Mac or macOS 13. There the app installs as
+  before and `service.libraries_problem()` says calls aren't available on that computer
+  (`platform_supported` mirrors the marker).
+- Off is still the old app: nothing imports `livekit` unless the flag is on and the worker starts.
+
+Cost: every install is larger (onnxruntime ~15–24 MB and LiveKit's WebRTC ~10 MB as wheels, plus
+their dependencies), whether or not the flag is ever switched on. Rejected: an `[voice]` extra
+(still a second switch), and installing on first use (a network install from inside the app).
+
 ## Agent provenance
 
 - **Decided by:** orchestrating Claude agent, with the owner choosing "rebuild it" after the POC.

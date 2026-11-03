@@ -1,7 +1,7 @@
 """Mint the LiveKit access token a browser uses to join ONE voice call — stdlib only.
 
-The API path must work without the optional voice libraries installed (they are only
-needed by the worker), so this writes the same HS256 JWT ``livekit.api.AccessToken`` does:
+The API path must work where the voice libraries aren't installed (a computer they have no
+build for; they are only needed by the worker), so this writes the same HS256 JWT ``livekit.api.AccessToken`` does:
 the claims below were read off a token that library minted. The grant is as narrow as a
 call needs: join this one fresh room, nothing else, for ``TTL_S``; the room config
 dispatches the Lucius voice worker with the conversation id it must speak into.

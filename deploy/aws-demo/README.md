@@ -122,8 +122,8 @@ and voice models by the minute, whether or not Lucius is asked anything.
 
 1. Create a LiveKit Cloud project for the demo, set a spending limit on it, and copy its URL
    (`wss://….livekit.cloud`), API key and API secret.
-2. `demo-aws.sh ship` — the image is built with the voice libraries (`--build-arg VOICE=1`,
-   hash-pinned from `requirements-voice.lock`).
+2. `demo-aws.sh ship` — every image carries the voice libraries (hash-pinned in the same lock as
+   the rest of the app), so this is only needed if the VM still runs an image from before them.
 3. `demo-aws.sh voice` — asks for the URL, key and secret with hidden prompts (or reads three
    lines from a pipe), checks them against LiveKit from the VM, stores them in the book the way
    Settings would (with `DEMO_MODE=0` for that one process), sets `ONW_FLAG_VOICE_CALLS=1` in

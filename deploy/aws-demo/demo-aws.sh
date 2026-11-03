@@ -134,8 +134,8 @@ cmd_ship() {
     src="${BUILD_TMP}"
     echo "==> building committed ${ref} ${sha} (pass --worktree to include uncommitted work)"
   fi
-  # VOICE=1: the demo image carries the voice-call libraries; calls stay off until `voice`.
-  docker buildx build --platform linux/amd64 --build-arg VOICE=1 -t "onw-demo:${sha}" --load "${src}"
+  # Every image carries the voice-call libraries; calls stay off until `voice` sets the flag.
+  docker buildx build --platform linux/amd64 -t "onw-demo:${sha}" --load "${src}"
   echo "==> uploading the image (a few minutes)..."
   docker save "onw-demo:${sha}" | gzip -1 | remote 'gunzip | docker load'
   # The compose file ships with the code it was written for, not with this checkout's copy.
@@ -358,7 +358,7 @@ from backend.connectors.voice import rooms, service
 from backend.db.voice_config_store import VoiceConfigStore
 cfg = json.loads(sys.stdin.readline())
 if not service.libraries_installed():
-    sys.exit("This image has no voice libraries: run `demo-aws.sh ship` again first.")
+    sys.exit("This image has no voice libraries (it predates them): run `demo-aws.sh ship` again first.")
 # Import them for real, in a child: a native library this CPU cannot run dies with SIGILL
 # (seen under amd64 emulation), which would otherwise surface only as a worker that never starts.
 probe = [sys.executable, "-c", "import livekit.agents, livekit.plugins.silero"]

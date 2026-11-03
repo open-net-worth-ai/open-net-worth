@@ -27,3 +27,9 @@ SQLAlchemy>=2.0.30      # storage engine (Core only — no ORM); spec 2026-08-05
 alembic>=1.13.0          # versioned, ordered migrations; spec 2026-08-05 D3
 psycopg[binary]>=3.1.0   # Postgres dialect for hosted/CI; SQLite needs no driver
 trafilatura>=2.2.0       # local readability extraction for plain_get_fetch (ai/search/base.py)
+# Voice calls (the voice_calls flag is the only switch — owner, 2026-11-03). Installed everywhere
+# its native parts (LiveKit's WebRTC, onnxruntime for the voice-activity model) ship a build:
+# Apple Silicon on macOS 14+, Linux x86_64/aarch64, Windows x64. Elsewhere the app installs as
+# before and Connectors → Voice calls says calls aren't available on that computer.
+livekit-agents[silero]==1.8.10 ; (sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '23') or (sys_platform == 'linux' and platform_machine in 'x86_64 aarch64') or (sys_platform == 'win32' and platform_machine == 'AMD64')
+livekit-api==1.2.2 ; (sys_platform == 'darwin' and platform_machine == 'arm64' and platform_release >= '23') or (sys_platform == 'linux' and platform_machine in 'x86_64 aarch64') or (sys_platform == 'win32' and platform_machine == 'AMD64')
