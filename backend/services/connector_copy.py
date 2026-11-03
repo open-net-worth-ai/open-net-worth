@@ -472,10 +472,11 @@ LONG: dict[str, str] = {
     ),
     "ynab": (
         "If you already track spending in YNAB, paste a personal access token from its "
-        "Account Settings → Developer Settings page and its transactions flow into your "
-        "ledger from here on. A token that can see more than one budget asks you to pick "
-        "one in this connector's settings; when it can see only one, that one is picked "
-        "automatically. Categories are left for you or an Automation to set."
+        "Account Settings → Developer Settings page, and Lucius can read your plans and book "
+        "their transactions here. Nothing else is set on this page: if the token sees several "
+        "plans, Lucius asks which one you mean, and the first time it books a YNAB account it "
+        "asks which of your accounts that is. Categories are left for you or an Automation to "
+        "set."
     ),
     "enable_banking": (
         "Pick your bank, authorise access at the bank's own site, and balances and transactions "

@@ -258,6 +258,10 @@ plans, then reads the one you mean — its accounts and balances, a month's Read
 category's assigned, activity and available, or its transactions to book here. Reading YNAB never
 changes anything in it.
 
+To book a YNAB account's transactions here, Lucius links it to one of your accounts. The first
+time, it asks you which one that is (the Sync YNAB Automation does the same), and it remembers the
+link, so later runs book straight in and skip what's already there.
+
 Categories are not copied by this connector — they're left for you or an Automation to set. To
 move your whole plan across instead, use the migration below.
 

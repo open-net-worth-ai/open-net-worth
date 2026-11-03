@@ -363,8 +363,11 @@ async def lunch_flow_get_status(input_data: dict):
     "ynab_get_status",
     description=(
         "Check the YNAB connector: whether it's configured and enabled, and when it was "
-        "last fetched. Never returns secrets. Configured and linked by the user in the UI "
-        f"(Connectors → YNAB), never by you. To pull data, call ynab_fetch_transactions. "
+        "last fetched. Never returns secrets. The token is saved by the user in the UI "
+        "(Connectors → YNAB), never by you; the YNAB page has no account links to set. Linking "
+        "a YNAB account to one of the user's accounts is yours: ynab_list_accounts shows which "
+        "are linked, and update_accounts (external_ids) links one. Ask the user which of their "
+        "accounts it is before linking. To pull data, call ynab_fetch_transactions. "
         f"{PROVIDERS['ynab'].note}"
     ),
     input_schema=schema_of(_NoArgsInput, tool_name="ynab_get_status"),
