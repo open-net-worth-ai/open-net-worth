@@ -28,29 +28,13 @@ const WEB_SEARCH_PREFIX = 'web_search:'
  *  vs. `auth_error` is the MCP-specific fact `statusOf` needs and `status` cannot carry. */
 const ERROR_STATUSES = new Set(['error', 'connect_error', 'auth_error', 'failed'])
 
-/** Family membership per connector kind. An ARRAY: a connector appears under every
- *  section it belongs to, and both the section and the filter test membership rather
- *  than a single primary family (spec §1).
- *
- *  Email is ONE connector under Data sources, not an "Email (SMTP)" channel plus an
- *  "Email import (IMAP)" data source (spec §8). Webhook is a Channel here — it is only
- *  the DIRECTORY that never offers it as an addable card. */
-const FAMILIES: Record<string, ConnectorFamily[]> = {
-  telegram: ['Channel'],
-  voice: ['Channel'],
+/** The family of a connector the directory never shows as a card. Every other one sits under
+ *  the family its catalog entry gives it, so the connected list and Browse can't disagree, and
+ *  only an MCP server is ever under MCP. An ARRAY: a connector appears under every section it
+ *  belongs to (spec §1). Webhook is a Channel here; only the directory never offers it (§8). */
+const UNLISTED_FAMILIES: Record<string, ConnectorFamily[]> = {
   webhook: ['Channel'],
-  email: ['Data source'],
-  plaid: ['Data source'],
-  lunch_flow: ['Data source'],
-  enable_banking: ['Data source'],
-  gocardless: ['Data source'],
   yodlee: ['Data source'],
-  alpaca: ['Data source'],
-  ibkr: ['Data source'],
-  yahoo_finance: ['Data source'],
-  coingecko: ['Data source'],
-  web_search: ['Web'],
-  mcp: ['MCP'],
 }
 
 /** The fallback category glyph + tint per kind. A connector with a licensed brand mark shows
@@ -303,7 +287,9 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     // a server calling itself `stripe` must not be able to borrow Stripe's mark. Absent a
     // catalog match, a server shows the icon IT or its website declared — never ours.
     logo: provenance?.logo ?? (mcp ? mcpIconUrl(c) : connectorLogo(c.id)),
-    families: FAMILIES[kind] ?? ['MCP'],
+    families: mcp
+      ? ['MCP']
+      : (CATALOG.find((e) => e.id === c.id)?.families ?? UNLISTED_FAMILIES[kind] ?? []),
     categories: mcp
       ? (provenance?.categories ?? [])
       : (CATALOG.find((e) => e.id === c.id)?.categories ?? []),
