@@ -204,11 +204,9 @@ function WhatsNewDialog() {
           <PartyPopper size={30} strokeWidth={1.75} />
         </span>
         <p className="whats-new__headline">You’re on {note.version}</p>
-        <p className="whats-new__lede">
-          {hasHighlights
-            ? 'Here’s what’s new.'
-            : 'The highlights couldn’t load right now. They’re on the release page.'}
-        </p>
+        {/* No highlights is usually a release without any, not a failure: the line said "couldn't
+            load" over a notes step that had simply written none (owner, 2026-11-04). */}
+        {hasHighlights && <p className="whats-new__lede">Here’s what’s new.</p>}
       </div>
       {hasHighlights && (
         <ul className="whats-new-list">

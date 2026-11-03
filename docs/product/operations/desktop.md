@@ -167,7 +167,7 @@ The app checks for a new version 30 seconds after it starts and every 4 hours af
    immediately offers the next.
 3. After restarting, a notification confirms "Open Net Worth was updated to X.", and the window
    shows **What's new in X** once: the release's highlights, with **All changes** to open its full
-   release notes. If the notes can't be loaded (offline), it says so and offers **See what's new** to open them.
+   release notes. With no highlights to show (a release without any, or you're offline), it says only which version you're on and offers **See what's new** to open the notes.
 
 When a new version can't download by itself — this copy can't update itself (a Linux `.deb`, or
 an AppImage in a read-only folder), the download failed, or you chose **Later** — the bar says

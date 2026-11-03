@@ -132,7 +132,10 @@ describe('DesktopUpdateNotices', () => {
     const open = vi.spyOn(window, 'open').mockReturnValue(null)
     render(<DesktopUpdateNotices />)
     await settle()
-    expect(screen.getByText(/couldn’t load right now/)).toBeTruthy()
+    // Just the version: a release with no highlights is not an error to report.
+    expect(screen.getByText('You’re on 0.2.0')).toBeTruthy()
+    expect(screen.queryByText(/couldn’t load/)).toBeNull()
+    expect(screen.queryByText('Here’s what’s new.')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: /See what’s new/ }))
     expect(open).toHaveBeenCalledWith(
       'https://github.com/o/r/releases/tag/v0.2.0',
@@ -140,6 +143,6 @@ describe('DesktopUpdateNotices', () => {
       'noopener,noreferrer',
     )
     fireEvent.click(screen.getByRole('button', { name: 'Not now' }))
-    expect(screen.queryByText(/couldn’t load right now/)).toBeNull()
+    expect(screen.queryByText('You’re on 0.2.0')).toBeNull()
   })
 })
