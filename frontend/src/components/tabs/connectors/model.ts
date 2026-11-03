@@ -390,6 +390,9 @@ export interface ConnectorDetailEntry extends ConnectorEntry {
    *  Connect opens its configuration form instead of PATCHing `enabled` (spec §3). */
   configured: boolean
   desc: string
+  /** The outside service a native connector runs on (catalog `service`): its name in `desc`
+   *  is linked. */
+  service?: { name: string; url: string }
   /** Publisher line. Absent for a custom MCP server, which claims no author (spec §5). */
   developer?: string
   /** Where the publisher lives — same field as `DirectoryRow.homepageUrl`, threaded through

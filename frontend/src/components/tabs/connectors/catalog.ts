@@ -92,6 +92,12 @@ export interface CatalogEntry extends Omit<
    */
   privacyUrl?: string
   /**
+   * The outside service a NATIVE connector runs on, when it is not ours (Voice calls on LiveKit):
+   * its name in the description links there, where the account, billing and limits live
+   * (owner, 2026-11-04).
+   */
+  service?: { name: string; url: string }
+  /**
    * The generic add-flow launcher. It has nothing to preview — no endpoint, no tools, no
    * publisher — so a click anywhere on it goes straight to the add form (spec §6).
    */
@@ -266,6 +272,7 @@ export const CATALOG: CatalogEntry[] = [
     homepageUrl: 'https://opennetworth.ai',
     // The call's audio and the front voice's side of the conversation cross LiveKit.
     privacyUrl: 'https://livekit.io/legal/privacy-policy',
+    service: { name: 'LiveKit', url: 'https://cloud.livekit.io' },
     mcp: false,
     popular: false,
     tools: [],

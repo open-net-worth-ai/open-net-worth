@@ -473,7 +473,7 @@ export function ConnectorDetail({
 
           {entry.desc ? (
             <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
-              {entry.desc}
+              <LinkedDesc desc={entry.desc} service={entry.service} />
             </p>
           ) : null}
 
@@ -654,4 +654,23 @@ function removeProviderRevokeNote(entry: ConnectorDetailEntry): string {
   }
   const label = providerLabel[entry.id]
   return label ? `You may also want to revoke access from your ${label} account directly. ` : ''
+}
+
+/** The description, its outside service's name (its first mention) linked to it. */
+function LinkedDesc({
+  desc,
+  service,
+}: {
+  desc: string
+  service?: { name: string; url: string }
+}): JSX.Element {
+  const at = service ? desc.indexOf(service.name) : -1
+  if (!service || at < 0) return <>{desc}</>
+  return (
+    <>
+      {desc.slice(0, at)}
+      <ExternalLink href={service.url}>{service.name}</ExternalLink>
+      {desc.slice(at + service.name.length)}
+    </>
+  )
 }

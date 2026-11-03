@@ -345,6 +345,21 @@ describe('the publisher panel is MCP-only (spec §5)', () => {
     expect(container.textContent).not.toContain('Only connectors you add are reachable')
   })
 
+  it("links the outside service's name in the description, and nothing when there is none", () => {
+    renderDetail(
+      entry({
+        desc: 'Press Call and talk. Runs on your LiveKit project.',
+        service: { name: 'LiveKit', url: 'https://cloud.livekit.io' },
+      }),
+    )
+    const link = screen.getByRole('link', { name: /LiveKit/ })
+    expect(link.getAttribute('href')).toBe('https://cloud.livekit.io')
+    expect(link.closest('p')?.textContent).toMatch(/Runs on your LiveKit.? project\./)
+    cleanup()
+    renderDetail(entry({ desc: 'Press Call and talk. Runs on your LiveKit project.' }))
+    expect(screen.queryByRole('link', { name: /LiveKit/ })).toBeNull()
+  })
+
   it('says the same for a connector WE publish — the name, and nothing more', () => {
     const { container } = renderDetail(entry({ id: 'telegram', developer: 'Open Net Worth' }))
     expect(container.textContent).toContain('Developed by Open Net Worth')
