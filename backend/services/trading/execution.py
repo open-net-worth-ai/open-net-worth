@@ -14,6 +14,7 @@ from backend.services.trading.common import (
     instant,
     now,
     require_bound_run,
+    uses_broker_execution,
     validated,
 )
 from backend.services.trading.fills import apply_receipt
@@ -35,7 +36,7 @@ async def submit_order(run_id, data):
                 raise ConflictError("Request ID was already used for a different order")
             return existing
         assert_running(run)
-        if run["mode"] != "live" and clean["time_in_force"] == "day":
+        if not uses_broker_execution(run) and clean["time_in_force"] == "day":
             raise ConflictError(
                 "DAY requires a verified session calendar; this simulator supports GTC"
             )
@@ -50,7 +51,7 @@ async def submit_order(run_id, data):
             "run_id": run_id,
             "intent_hash": fingerprint(clean),
             "instrument_key": instrument_key(clean["instrument"]),
-            "status": "pending" if run["mode"] == "live" else "open",
+            "status": "pending" if uses_broker_execution(run) else "open",
             "filled_quantity": "0",
             "reserved_cash": str(reserved_cash),
             "reserved_quantity": str(reserved_qty),
@@ -66,7 +67,7 @@ async def submit_order(run_id, data):
             "order_submitted",
             {"order_id": key, "instrument": clean["instrument"], "side": clean["side"]},
         )
-        if run["mode"] != "live":
+        if not uses_broker_execution(run):
             match_orders(conn, run)
             snapshot_performance(conn, run)
             return TradingStore("orders").required(key, conn=conn)
@@ -143,7 +144,8 @@ async def dispatch_live_order(run_id, order_id):
         return _unknown(run_id, order_id, "submission_unknown", type(exc).__name__)
     from backend.services.trading.book_projection import project_live_fills
 
-    project_live_fills(run_id)
+    if run["mode"] == "live":
+        project_live_fills(run_id)
     return order
 
 
@@ -172,7 +174,7 @@ async def cancel_order(run_id, order_id):
         order = _owned_order(conn, run_id, order_id)
         if order["status"] not in ACTIVE_ORDER_STATES:
             return order
-        if run["mode"] != "live" or order["status"] == "pending":
+        if not uses_broker_execution(run) or order["status"] == "pending":
             order = TradingStore("orders").update_by_id(
                 order_id,
                 {"status": "canceled", "reserved_cash": "0", "reserved_quantity": "0"},

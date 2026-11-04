@@ -2,11 +2,13 @@
 
 from backend.core.errors import ConflictError, ValidationError
 from backend.db.trading_store import TradingStore
-from backend.services.trading.common import amount, event, identity, instant
+from backend.services.trading.common import amount, event, identity, instant, uses_broker_execution
+from backend.services.trading.fees import base_fee_quantity
 from backend.services.trading.market import instrument_key
 
 
 def apply_fill(conn, run, order, raw):
+    base_fee = base_fee_quantity(raw)
     if not isinstance(raw.get("execution_id"), str) or not raw["execution_id"]:
         raise ValidationError("Broker fill needs a stable execution identity")
     account = TradingStore("accounts").required(order["account_id"], conn=conn)
@@ -22,6 +24,9 @@ def apply_fill(conn, run, order, raw):
         for name in ("quantity", "price", "fees"):
             if amount(existing[name]) != amount(raw.get(name, 0)):
                 raise ConflictError("Execution correction requires explicit reconciliation")
+        for name in ("fee_asset", "fee_quantity", "fee_value_quote"):
+            if existing.get(name) != raw.get(name):
+                raise ConflictError("Execution fee correction requires explicit reconciliation")
         return order
     quantity, price, fees = (
         amount(raw["quantity"]),
@@ -33,7 +38,7 @@ def apply_fill(conn, run, order, raw):
         raise ValidationError("Invalid fill quantity, price or fee")
     if instrument_key(raw["instrument"]) != order["instrument_key"] or raw["side"] != order["side"]:
         raise ConflictError("Broker fill does not match the order instrument and side")
-    if instant(raw["timestamp"]) < instant(order["created_at"]) and run["mode"] == "live":
+    if instant(raw["timestamp"]) < instant(order["created_at"]) and uses_broker_execution(run):
         raise ConflictError("Broker fill predates the order")
     gross = quantity * price
     positions = dict(account["positions"])
@@ -46,15 +51,16 @@ def apply_fill(conn, run, order, raw):
     held, basis = amount(position["quantity"]), amount(position["cost_basis"])
     cash = amount(account["cash"])
     if order["side"] == "buy":
-        if gross + fees > cash:
+        if gross + fees > cash or base_fee >= quantity:
             raise ConflictError("Fill exceeds account cash; reconciliation required")
-        position.update(quantity=str(held + quantity), cost_basis=str(basis + gross + fees))
+        position.update(quantity=str(held + quantity - base_fee), cost_basis=str(basis + gross + fees))
         cash -= gross + fees
     else:
-        if quantity > held or fees > gross:
+        disposed = quantity + base_fee
+        if disposed > held or fees > gross:
             raise ConflictError("Fill exceeds held quantity or proceeds")
         position.update(
-            quantity=str(held - quantity), cost_basis=str(basis * (held - quantity) / held)
+            quantity=str(held - disposed), cost_basis=str(basis * (held - disposed) / held)
         )
         cash += gross - fees
     positions[order["instrument_key"]] = position

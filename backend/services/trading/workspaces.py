@@ -15,6 +15,7 @@ from backend.services.trading.common import (
     fingerprint,
     instant,
     now,
+    uses_broker_execution,
     validated,
 )
 
@@ -66,6 +67,7 @@ def update_workspace(workspace_id, changes):
 
 def create_run(workspace_id, data):
     clean = validated(RunCreate, data)
+    external_execution = _execution_source(clean)
     _validate_observations(clean)
     with trading_transaction() as conn:
         workspace = TradingStore("workspaces").required(workspace_id, conn=conn)
@@ -83,6 +85,7 @@ def create_run(workspace_id, data):
             "model_cost_usd": "0",
             "agent_state": "idle",
             "initial_capital": {},
+            "external_execution": external_execution,
             "valuation_history": [],
         }
         for allocation in clean["accounts"]:
@@ -99,7 +102,7 @@ def create_run(workspace_id, data):
                 "scope_id": run["id"],
                 "cash": allocation["capital"],
                 "positions": {},
-                "reconciliation_status": "unverified" if clean["mode"] == "live" else "simulated",
+                "reconciliation_status": "unverified" if uses_broker_execution(run) else "simulated",
             }
             TradingStore("accounts").insert(account, conn=conn)
         scenario = {
@@ -122,10 +125,35 @@ def create_run(workspace_id, data):
             key=lambda row: (row["venue"], row["currency"], row["capital"]),
         )
         scenario["mandate"] = workspace["mandate"]
+        scenario["external_execution"] = external_execution
         run["scenario_hash"] = fingerprint(scenario)
         TradingStore("runs").insert(run, conn=conn)
         event(conn, run, "run_created", {"mode": run["mode"]})
     return public_run(run)
+
+
+def _execution_source(clean):
+    native = [a for a in clean["accounts"] if a.get("connector_id") == "binance"]
+    if not native:
+        return None
+    from backend.services.binance_connector import status
+
+    config = status()
+    if not config["configured"] or not config["enabled"]:
+        raise ConflictError("Configure and enable Binance before allocating its wallet")
+    testnet = config["environment"] == "testnet"
+    if clean["mode"] != ("paper" if testnet else "live"):
+        raise ValidationError("Binance Spot Testnet requires Paper; Binance real funds require Live")
+    if len(native) != 1 or (testnet and len(clean["accounts"]) != 1):
+        raise ValidationError("Allocate the entire Binance wallet once; Testnet runs cannot mix execution sources")
+    for account in native:
+        if testnet and account.get("book_account_id"):
+            raise ValidationError("Binance Spot Testnet cannot be linked to the real book")
+        expected = {"currency": config["quote_currency"], "venue": config["venue"],
+                    "broker_account_id": config["broker_account_id"]}
+        if any(account.get(key) != value for key, value in expected.items()):
+            raise ValidationError("Binance allocation must match the configured wallet, venue and quote currency")
+    return "binance_testnet" if testnet else None
 
 
 def _validate_observations(data):

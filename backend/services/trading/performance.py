@@ -101,7 +101,8 @@ def calculate_performance(run, *, conn=None):
     complete = complete and fees_complete
     fees = sum(
         (
-            amount(fill["fees"]) * amount(run["fx_rates"][fill["instrument"]["currency"]])
+            amount(fill.get("fee_value_quote", fill["fees"]))
+            * amount(run["fx_rates"][fill["instrument"]["currency"]])
             for fill in fills
         ),
         amount(0),

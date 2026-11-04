@@ -234,6 +234,21 @@ export const RETIRED_CATALOG: CatalogEntry[] = [
 ]
 
 export const CATALOG: CatalogEntry[] = [
+  {
+    id: 'binance',
+    name: 'Binance Spot',
+    families: ['Data source'],
+    categories: ['Brokerage'],
+    icon: 'investments',
+    hue: 'var(--crypto)',
+    publisher: 'Open Net Worth',
+    verification: 'unverified',
+    homepageUrl: 'https://developers.binance.com/docs/binance-spot-api-docs',
+    service: { name: 'Binance', url: 'https://www.binance.com' },
+    mcp: false,
+    popular: false,
+    tools: [],
+  },
   // ── Channels ───────────────────────────────────────────────────────────────
   {
     id: 'telegram',

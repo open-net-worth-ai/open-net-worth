@@ -1,6 +1,6 @@
 # RFC: Autonomous Agent Trading Workspace
 
-**Status**: Draft
+**Status**: Superseded product design — see [A Delegated, Observable Trading Workspace](autonomous-trading-workspace-v2.md). Earlier implementation evidence does not establish acceptance of the redesigned product.
 
 **Author**: Codex, for the Jack/TD product discussion
 

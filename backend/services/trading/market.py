@@ -90,11 +90,14 @@ def ingest_observations(run_id, observations):
 
 
 def get_environment(run_id):
+    from backend.services.trading.common import uses_broker_execution
+
     run = TradingStore("runs").required(run_id)
     return {
         "schema_version": 1,
         "run_id": run_id,
         "mode": run["mode"],
+        "external_execution": run.get("external_execution"),
         "state": run["state"],
         "current_time": environment_time(run).isoformat(),
         "start_at": run["start_at"],
@@ -105,7 +108,7 @@ def get_environment(run_id):
             "asset_classes": run["workspace_snapshot"]["mandate"]["allowed_asset_classes"],
             "order_types": ["market", "limit"],
             "time_in_force": ["day", "gtc"] if run["mode"] == "live" else ["gtc"],
-            "session_calendar": "provider" if run["mode"] == "live" else "observation_availability",
+            "session_calendar": "provider" if uses_broker_execution(run) else "observation_availability",
             "history_window": 20000,
             "shorting": False,
             "leverage": False,

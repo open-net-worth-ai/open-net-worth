@@ -2,7 +2,7 @@
 
 from backend.core.errors import ConflictError
 from backend.db.trading_store import TradingStore, trading_transaction
-from backend.services.trading.common import ACTIVE_ORDER_STATES, amount, event
+from backend.services.trading.common import ACTIVE_ORDER_STATES, amount, event, uses_broker_execution
 from backend.services.trading.fills import apply_receipt
 from backend.services.trading.market import environment_time
 from backend.services.trading.performance import snapshot_performance
@@ -34,8 +34,8 @@ def account_matches(expected, actual):
 async def reconcile_run(run_id):
     with trading_transaction() as conn:
         run = TradingStore("runs").required(run_id, conn=conn)
-        if run["mode"] != "live":
-            raise ConflictError("Only live runs use broker reconciliation")
+        if not uses_broker_execution(run):
+            raise ConflictError("Only broker-executed runs use broker reconciliation")
         if run["state"] == "ready":
             raise ConflictError("Start the live mandate before reconciling its executions")
         run = TradingStore("runs").update_by_id(
@@ -90,7 +90,8 @@ async def reconcile_run(run_id):
         snapshot_performance(conn, run)
     from backend.services.trading.book_projection import project_live_fills
 
-    project_live_fills(run_id)
+    if run["mode"] == "live":
+        project_live_fills(run_id)
     if desired != "running":
         await _drive_stop_policy(run_id, clean)
     return public_run(TradingStore("runs").required(run_id))
@@ -110,7 +111,9 @@ async def _drive_stop_policy(run_id, account_matched):
             await cancel_order(run_id, order["id"])
             canceled = True
     if canceled:
-        project_live_fills(run_id)
+        run = TradingStore("runs").required(run_id)
+        if run["mode"] == "live":
+            project_live_fills(run_id)
         for account in TradingStore("accounts").list_scope(run_id):
             try:
                 actual = await get_live_adapter(account).inspect_account(account)
@@ -186,7 +189,7 @@ def recover_runs():
                         order["id"], {"status": "submission_unknown"}, conn=conn
                     )
                     uncertain = True
-            if run["mode"] == "live" and run["state"] in {"running", "stopping"}:
+            if uses_broker_execution(run) and run["state"] in {"running", "stopping"}:
                 uncertain = True
             if uncertain:
                 TradingStore("runs").update_by_id(

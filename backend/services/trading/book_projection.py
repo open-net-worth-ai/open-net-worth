@@ -11,6 +11,7 @@ from backend.db.trading_store import TradingStore, trading_transaction
 from backend.db.transaction_store import TransactionStore
 from backend.services import lots, positions
 from backend.services.trading.common import amount, event, instant, now
+from backend.services.trading.fees import book_execution_terms
 
 
 def execution_external_ref(fill):
@@ -109,9 +110,10 @@ def _book(account, fill):
     if cash is not None:
         raise ConflictError("Execution cash is already imported; reconcile its lot before booking")
     instrument = _book_instrument(fill["instrument"])
+    quantity, price, fees = book_execution_terms(fill)
     change = {
         "idempotency_key": fill["id"],
-        "quantity": float(amount(fill["quantity"])),
+        "quantity": float(quantity),
         "source": "automation",
         "external_refs": [ref],
         "allow_duplicate": True,
@@ -122,9 +124,9 @@ def _book(account, fill):
             kind="buy",
             instrument_id=instrument["id"],
             account_id=book_account["id"],
-            unit_cost=float(amount(fill["price"])),
+            unit_cost=float(price),
             cost_currency=account["currency"],
-            fees=float(amount(fill["fees"])),
+            fees=float(fees),
             acquired_at=fill["timestamp"][:10],
             funding_account_id=book_account["id"],
         )
@@ -137,9 +139,9 @@ def _book(account, fill):
             position_id=position["id"],
             method="fifo",
             disposed_at=fill["timestamp"][:10],
-            proceeds_per_unit=float(amount(fill["price"])),
+            proceeds_per_unit=float(price),
             proceeds_currency=account["currency"],
-            disposal_fees=float(amount(fill["fees"])),
+            disposal_fees=float(fees),
             proceeds_account_id=book_account["id"],
         )
     return lots.apply_lot_change(change)

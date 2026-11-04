@@ -27,6 +27,10 @@ ACTIVE_ORDER_STATES = {
 }
 
 
+def uses_broker_execution(run: dict) -> bool:
+    return run["mode"] == "live" or run.get("external_execution") == "binance_testnet"
+
+
 def now() -> str:
     return datetime.now(timezone.utc).isoformat()
 

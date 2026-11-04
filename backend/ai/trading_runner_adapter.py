@@ -205,7 +205,9 @@ async def run_due_trading_agents() -> dict:
 
 
 async def _advance_environment(run: dict) -> dict:
-    if run["mode"] == "live":
+    from backend.services.trading.common import uses_broker_execution
+
+    if uses_broker_execution(run):
         return await trading.reconcile_run(run["id"])
     mandate = run["workspace_snapshot"]["mandate"]
     if run["mode"] == "paper" and mandate.get("market_data_source") == "yahoo":

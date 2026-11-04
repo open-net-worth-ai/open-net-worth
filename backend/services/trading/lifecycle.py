@@ -9,6 +9,7 @@ from backend.services.trading.common import (
     event,
     instant,
     now,
+    uses_broker_execution,
     validated,
 )
 from backend.services.trading.execution import cancel_order
@@ -42,7 +43,7 @@ async def _start(run_id, action):
         instant(run["start_at"]) <= instant(now()) < instant(run["end_at"])
     ):
         raise ConflictError("Current time is outside the trading mandate period")
-    verified = await _verify_live(run, initial=action == "start") if run["mode"] == "live" else {}
+    verified = await _verify_live(run, initial=action == "start") if uses_broker_execution(run) else {}
     with trading_transaction() as conn:
         run = TradingStore("runs").required(run_id, conn=conn)
         if run["state"] != expected:
@@ -67,7 +68,7 @@ async def _start(run_id, action):
 
 
 async def _verify_live(run, *, initial):
-    if not run["live_authorized"]:
+    if run["mode"] == "live" and not run["live_authorized"]:
         raise ConflictError("Human authorization is required for a live run")
     verified = {}
     for account in TradingStore("accounts").list_scope(run["id"]):
@@ -108,13 +109,13 @@ async def _verify_live(run, *, initial):
 
 
 def _assert_exclusive_account(conn, run):
-    if run["mode"] != "live":
+    if not uses_broker_execution(run):
         return
     active = {
         row["id"]
         for row in TradingStore("runs").all(conn=conn)
         if row["id"] != run["id"]
-        and row["mode"] == "live"
+        and uses_broker_execution(row)
         and row["state"] not in {"stopped", "completed", "ready"}
     }
     own_accounts = TradingStore("accounts").list_scope(run["id"], conn=conn)
@@ -167,7 +168,7 @@ async def _stop(run_id, action):
             for row in TradingStore("orders").list_scope(run_id, conn=conn)
         )
         state = (
-            ("needs_reconciliation" if run["mode"] == "live" else "stopping")
+            ("needs_reconciliation" if uses_broker_execution(run) else "stopping")
             if outstanding or has_unresolved_book_fills(run_id, conn=conn)
             else target
         )
@@ -210,8 +211,8 @@ def _advance(run_id, until):
 
 
 def _advance_time(run, until):
-    if run["mode"] == "live":
-        raise ConflictError("Live clocks advance through broker reconciliation")
+    if uses_broker_execution(run):
+        raise ConflictError("Broker clocks advance through broker reconciliation")
     if run["mode"] == "paper":
         if until is not None:
             raise ValidationError("Paper clock follows current time")

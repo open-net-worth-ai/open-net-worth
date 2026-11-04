@@ -11,6 +11,15 @@ keywords: [trading, workspace, autonomous, agent, backtest, paper trading, live 
 
 # Trading workspace
 
+> **Development archive:** Issue #62 and draft PR #63 are being redesigned around a
+> persistent delegated workspace, conversational setup, and linked market/portfolio and
+> agent-work views. The interface described below is the earlier implementation, not
+> acceptance of that design. Archived Binance integration code is incomplete and is not
+> registered as an operational connector; IBKR currently provides preflight/refusal only.
+> Neither integration has authenticated trading acceptance. See the
+> [revised issue](https://github.com/open-net-worth-ai/open-net-worth/issues/62) and the
+> [design RFC](../../../.Codex/rfcs/autonomous-trading-workspace-v2.md).
+
 Open **Trading** to give an agent a trading mandate and follow its actions and results.
 A workspace stores the instructions and limits. Each run fixes an environment, period,
 funded account scope and starting capital. Changing environment creates a new run.
