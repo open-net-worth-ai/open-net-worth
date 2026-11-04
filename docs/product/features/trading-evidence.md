@@ -30,6 +30,14 @@ bucket. Their exact provider interval and adjustment basis are not guaranteed, s
 explicitly say `provider_intraday` and `provider_default_unspecified`. The original provider
 timestamp is preserved; the workspace receipt time is when the data became available here.
 
+The current Yahoo trading feed requires the provider's exact USD currency metadata and a
+verified observation time for a numeric quote. An executor-declared currency or a fallback's
+retrieval time is insufficient. Bars require source currency proof and their own valid closed
+timestamps. Missing proof appears as unavailable data: it blocks new orders and paper fills,
+and leaves affected current valuations incomplete until resolved. Original observations remain
+available for audit; existing orders can still be inspected, canceled and reconciled.
+The chart identifies an unverified current quote and retains its history as recorded evidence.
+
 The first recorded bar is immutable. A later provider correction is counted in the feed
 activity as a retained-original revision, rather than silently rewriting the evidence under
 an earlier decision. Missing or stale data can prevent an order or a complete valuation.

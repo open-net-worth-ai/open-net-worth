@@ -44,6 +44,7 @@ export interface TradingInstrument {
   currency: string
 }
 export interface TradingObservation {
+  current_quote_authorized?: boolean
   instrument: TradingInstrument
   timestamp: string
   available_at?: string | null

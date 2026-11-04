@@ -3743,13 +3743,18 @@ def fetch_yahoo_quotes(tickers: list[str]) -> dict:
     """Direct Yahoo Finance quotes for arbitrary symbols — equities, ETFs, indices, FX pairs
     (e.g. 'EURUSD=X'), and any Yahoo-priceable crypto pair. NO CoinGecko fallback: a symbol
     Yahoo can't price comes back state="unavailable", never silently substituted. See the
-    module note above for why this neither caches nor records into price_history."""
+    module note above for why this neither caches nor records into price_history.
+    ``currencies`` preserves the provider's unit verbatim (GBp is not GBP).
+    ``timestamp_verified`` distinguishes the selected quote's actual observation time
+    from the legacy retrieval-time fallback in ``as_of``."""
     symbols = list(dict.fromkeys(t.strip() for t in tickers if t and t.strip()))
     prices: dict[str, float] = {}
     prev_prices: dict[str, float] = {}
     providers: dict[str, str | None] = {}
     states: dict[str, str] = {}
     as_of: dict[str, str | None] = {}
+    currencies: dict[str, str | None] = {}
+    timestamp_verified: dict[str, bool] = {}
     if not symbols:
         return {
             "prices": prices,
@@ -3757,6 +3762,8 @@ def fetch_yahoo_quotes(tickers: list[str]) -> dict:
             "providers": providers,
             "states": states,
             "as_of": as_of,
+            "currencies": currencies,
+            "timestamp_verified": timestamp_verified,
             "extended": {},
         }
 
@@ -3767,6 +3774,10 @@ def fetch_yahoo_quotes(tickers: list[str]) -> dict:
     extended: dict[str, dict] = {}
     for sym in symbols:
         q = batch.get(sym)
+        currencies[sym] = (
+            q.get("currency") if q is not None and isinstance(q.get("currency"), str) else None
+        )
+        timestamp_verified[sym] = False
         if q is not None:
             price, prev = _quote_to_price(q)
             cached_market = _market_cache.get(sym)
@@ -3774,8 +3785,9 @@ def fetch_yahoo_quotes(tickers: list[str]) -> dict:
             # See fetch_live's same bound — regularMarketTime is when this price printed,
             # in every state (a delayed venue's first REGULAR minutes still carry yesterday's).
             max_age = 24 * 7.0
+            observed_at = _as_of(q.get("regularMarketTime"), max_age_hours=max_age)
             if price is not None:
-                raw[sym] = (price, prev, _as_of(q.get("regularMarketTime"), max_age_hours=max_age))
+                raw[sym] = (price, prev, observed_at)
             ext = _extended_hours_from_quote(q, gated_state)
             if ext:
                 extended[sym] = ext
@@ -3798,6 +3810,7 @@ def fetch_yahoo_quotes(tickers: list[str]) -> dict:
             as_of[sym] = None
             continue
         price, prev, observed_at = hit
+        timestamp_verified[sym] = observed_at is not None
         prices[sym] = price
         if prev is not None:
             prev_prices[sym] = prev
@@ -3811,6 +3824,8 @@ def fetch_yahoo_quotes(tickers: list[str]) -> dict:
         "providers": providers,
         "states": states,
         "as_of": as_of,
+        "currencies": currencies,
+        "timestamp_verified": timestamp_verified,
         "extended": extended,
     }
 

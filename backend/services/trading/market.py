@@ -31,6 +31,13 @@ def available_observations(run, *, instrument=None):
 
 
 def latest_quote(run, instrument):
+    from backend.services.trading.quote_authority import quote_is_authorized
+
+    quote = raw_latest_quote(run, instrument)
+    return quote if quote is not None and quote_is_authorized(run, instrument, quote) else None
+
+
+def raw_latest_quote(run, instrument):
     rows = available_observations(run, instrument=instrument)
     return max(rows, key=lambda row: instant(row["timestamp"])) if rows else None
 
@@ -63,9 +70,14 @@ def observation_record(row, data_version):
 
 
 def get_market_series(run_id, *, key=None, limit=500, offset=0):
+    from backend.services.trading.quote_authority import quote_is_authorized
+
     run = TradingStore("runs").required(run_id)
     rows = [
-        observation_record(row, run["data_version"])
+        {
+            **observation_record(row, run["data_version"]),
+            "current_quote_authorized": quote_is_authorized(run, row["instrument"], row),
+        }
         for row in available_observations(run)
         if key is None or instrument_key(row["instrument"]) == key
     ]

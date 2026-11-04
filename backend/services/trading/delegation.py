@@ -134,7 +134,8 @@ def workspace_overview(workspace_id):
         "executor": executor_capabilities(workspace),
         "current_work": {
             "state": state,
-            "summary": (current or {}).get("current_task") or summary,
+            "summary": ((current or {}).get("current_task") if state == "working" else None)
+            or summary,
             "last_activity_at": events[-1]["created_at"] if events else None,
             "next_wake_at": (current or {}).get("next_wake_at"),
             "blocker": (current or {}).get("environment_error")

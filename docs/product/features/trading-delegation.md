@@ -34,6 +34,19 @@ a planning turn. A source failure appears as a blocker; genuine historical bars 
 even when no usable current quote is available. Recovery clears that source blocker only after
 an actual successful environment update.
 
+The Yahoo adapter accepts a quote only when the provider reports its currency as exactly
+USD and verifies the selected price's observation time. A retrieval timestamp does not make
+an unstamped fallback price fresh. Foreign, minor-unit or unknown currencies are unavailable
+on this USD feed. New historical bars also require provider currency evidence and their own
+closed, timezone-aware timestamps; the workspace's requested currency is not source proof.
+An unresolved environment failure refuses new orders even if an earlier quote remains in
+history. Existing order lookups, cancellation and reconciliation remain available.
+Source authority is tracked separately for each instrument and must match its exact quote's
+currency, observation time and price. A valid quote for one symbol cannot authorize a rejected
+symbol. Rejected or unverified marks remain available as raw history for inspection, but do
+not value holdings, supply complete equity/P&L, or fill resting Paper orders. Confirming a
+repeated legacy quote records new source evidence without rewriting the earlier observation.
+
 The original request is immutable. Pause the workspace before amending instructions or limits;
 review the change and its reason. Amendments retain the previous interpretation, author, time
 and effective revision. Already recorded orders and work retain the revision under which they

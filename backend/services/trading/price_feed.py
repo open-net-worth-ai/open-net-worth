@@ -12,6 +12,7 @@ from backend.services import prices
 from backend.services.trading import ingest_observations, record_activity
 from backend.services.trading.common import instant
 from backend.services.trading.market_requests import market_instruments
+from backend.services.trading.quote_authority import record_quote_authority
 
 
 def _feed_snapshot(run_id: str) -> dict:
@@ -40,8 +41,26 @@ def refresh_run_market_data(run_id: str) -> dict:
     }
     quotes = prices.fetch_yahoo_quotes(list(dict.fromkeys(symbols.values())))
     observations, missing = [], []
+    rejected = {}
     received_at = datetime.now(timezone.utc).isoformat()
+    verified_symbols = {}
     for key, symbol in symbols.items():
+        currency = quotes.get("currencies", {}).get(symbol)
+        if currency != "USD":
+            missing.append(symbol)
+            rejected[symbol] = (
+                "Provider quote currency is unavailable"
+                if currency is None
+                else f"Provider quote currency {currency} is not supported by this USD feed"
+            )
+            continue
+        verified_symbols[key] = symbol
+        if quotes.get("timestamp_verified", {}).get(symbol) is not True:
+            missing.append(symbol)
+            rejected[symbol] = (
+                "Provider observation time is not verified; retrieval time is not a quote timestamp"
+            )
+            continue
         price, timestamp = quotes.get("prices", {}).get(symbol), quotes.get("as_of", {}).get(symbol)
         if price is None or not timestamp:
             missing.append(symbol)
@@ -58,12 +77,27 @@ def refresh_run_market_data(run_id: str) -> dict:
                 "available_at": received_at,
                 "received_at": received_at,
                 "source": "yahoo",
+                "source_version": "yahoo-quote-currency-and-time-verified",
             }
         )
     if missing:
-        record_activity(run_id, "market_data_unavailable", {"source": "yahoo", "symbols": missing})
+        record_activity(
+            run_id,
+            "market_data_unavailable",
+            {"source": "yahoo", "symbols": missing, "reasons": rejected},
+        )
     has_current_quotes = bool(observations)
-    bars, revisions = _history_bars(run_id, run, universe, symbols, received_at)
+    provenance = {
+        symbol: {
+            "currency": quotes.get("currencies", {}).get(symbol),
+            "timestamp_verified": quotes.get("timestamp_verified", {}).get(symbol) is True,
+            "observed_at": quotes.get("as_of", {}).get(symbol)
+            if quotes.get("timestamp_verified", {}).get(symbol) is True
+            else None,
+        }
+        for symbol in symbols.values()
+    }
+    bars, revisions = _history_bars(run_id, run, universe, verified_symbols, received_at)
     quote_keys = {(tuple(row["instrument"].values()), row["timestamp"]) for row in observations}
     observations.extend(
         row
@@ -71,6 +105,14 @@ def refresh_run_market_data(run_id: str) -> dict:
         if (tuple(row["instrument"].values()), row["timestamp"]) not in quote_keys
     )
     observations = [Observation.model_validate(row).model_dump(mode="json") for row in observations]
+    authority = record_quote_authority(
+        run_id,
+        [(universe[key], symbol) for key, symbol in symbols.items()],
+        quotes,
+        observations,
+        received_at,
+        rejected,
+    )
     # Preserve the original availability instant when a provider repeats a quote.
     prior = {
         (
@@ -103,14 +145,19 @@ def refresh_run_market_data(run_id: str) -> dict:
             "source": "yahoo",
             "received": len(observations),
             "missing": missing,
+            "rejected": rejected,
             "bars_received": len(bars),
             "bar_revisions_retained_original": revisions,
+            "quote_provenance": provenance,
         },
     )
     return {
         **result,
         "source": "yahoo",
         "missing": missing,
+        "rejected": rejected,
+        "quote_provenance": provenance,
+        "quote_authority": authority,
         **(
             {
                 "status": "unavailable",
@@ -159,7 +206,7 @@ def _history_bars(run_id, run, universe, symbols, received_at):
                         "volume": point.get("volume"),
                         **{field: point[field] for field in ("open", "high", "low", "close")},
                         "source": "yahoo",
-                        "source_version": "1D-intraday-provider-bars",
+                        "source_version": "1D-intraday-provider-bars; quote-currency=USD",
                         "interval": "provider_intraday",
                         "adjustment": "provider_default_unspecified",
                     }

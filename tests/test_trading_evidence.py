@@ -104,6 +104,27 @@ def test_statement_realized_unrealized_and_cash_identity_include_fees():
     ) == pytest.approx(float(account["closing_cash"]))
 
 
+def test_market_series_discloses_current_authority_without_rewriting_raw_history():
+    from backend.services.trading.market import instrument_key
+
+    run = make_run(mode="paper", mandate={"market_data_source": "yahoo"})
+    original = TradingStore("runs").required(run["id"])["observations"][0]
+    data = get_market_series(run["id"])
+    assert not data["items"][0]["current_quote_authorized"]
+    assert data["items"][0]["price"] == original["price"]
+    proof = {
+        "status": "verified",
+        "currency": INSTRUMENT["currency"],
+        "timestamp": original["timestamp"],
+        "price": original["price"],
+    }
+    TradingStore("runs").update_by_id(
+        run["id"], {"market_quote_authority": {instrument_key(INSTRUMENT): proof}}
+    )
+    assert get_market_series(run["id"])["items"][0]["current_quote_authorized"]
+    assert TradingStore("runs").required(run["id"])["observations"][0] == original
+
+
 def test_statement_marks_unexplained_cash_and_missing_fee_evidence_unknown():
     run = make_run()
     account = trading.get_account(run["id"])["items"][0]

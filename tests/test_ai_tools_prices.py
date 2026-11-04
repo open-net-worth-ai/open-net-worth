@@ -130,6 +130,8 @@ def test_fetch_yahoo_quotes_empty_input_returns_empty_shape():
         "providers": {},
         "states": {},
         "as_of": {},
+        "currencies": {},
+        "timestamp_verified": {},
         "extended": {},
     }
 

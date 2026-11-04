@@ -92,6 +92,35 @@ afterEach(() => {
 })
 
 describe('actual trading observability', () => {
+  it('keeps rejected current quotes as recorded history without a current numeric headline', () => {
+    render(
+      <TradingMarketChart
+        observations={[
+          {
+            instrument,
+            timestamp: '2026-01-01T10:00:00Z',
+            price: '999.99',
+            open: '998',
+            high: '1001',
+            low: '997',
+            close: '999.99',
+            volume: '100',
+            source: 'yahoo',
+            current_quote_authorized: false,
+          },
+        ]}
+        orders={[]}
+        fills={[]}
+        onSelect={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('Current quote unverified')).toBeTruthy()
+    expect(screen.queryByText('$999.99')).toBeNull()
+    expect(screen.getByText(/Recorded market history is retained below/)).toBeTruthy()
+    expect(fixture.main.mock.calls[0]?.[0][0]).toMatchObject({ close: 999.99 })
+    expect(screen.getByText('999.99')).toBeTruthy()
+  })
+
   it('keeps real candles when quote updates share the stream, without inventing OHLCV for quotes', () => {
     const rows: TradingObservation[] = [
       {

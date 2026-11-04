@@ -66,6 +66,18 @@ def test_common_review_and_atomic_create_preserve_exact_original():
     assert overview["amendments"] == []
 
 
+def test_waiting_work_uses_actual_decision_instead_of_a_finished_tool_label():
+    result = create()
+    run_id = result["run"]["id"]
+    trading.record_decision(run_id, {"summary": "Waiting for the next supplied market update."})
+    trading.update_runtime(
+        run_id, {"agent_state": "waiting", "current_task": "Using get_trading_account"}
+    )
+    overview = delegation.workspace_overview(result["workspace"]["id"])
+    assert overview["current_work"]["state"] == "waiting"
+    assert overview["current_work"]["summary"] == "Waiting for the next supplied market update."
+
+
 def test_invalid_environment_rolls_back_workspace_and_accounts():
     data = draft()
     data["environment"]["accounts"] = [{"capital": "1000", "currency": "EUR"}]

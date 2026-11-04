@@ -180,8 +180,18 @@ export function TradingMarketChart({
             label: `${instrument.symbol} · ${instrument.venue}`,
           }))}
         />
-        <Text weight={600}>{tradingMoney(latest.price, latest.instrument.currency)}</Text>
+        <Text weight={600} tone={latest.current_quote_authorized === false ? 'warn' : 'ink'}>
+          {latest.current_quote_authorized === false
+            ? 'Current quote unverified'
+            : tradingMoney(latest.price, latest.instrument.currency)}
+        </Text>
       </Cluster>
+      {latest.current_quote_authorized === false && (
+        <Text size="sm" tone="warn">
+          Recorded market history is retained below. This observation is not verified as a current
+          quote.
+        </Text>
+      )}
       <Text size="xs" tone="muted">
         {hasCandles
           ? `OHLCV candles · ${bars.length} recorded bars`

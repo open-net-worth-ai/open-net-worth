@@ -18,9 +18,15 @@ from backend.services.trading.common import (
     validated,
 )
 from backend.services.trading.fills import apply_receipt
-from backend.services.trading.market import environment_time, instrument_key, latest_quote
+from backend.services.trading.market import (
+    environment_time,
+    instrument_key,
+    latest_quote,
+    raw_latest_quote,
+)
 from backend.services.trading.performance import account_snapshot, snapshot_performance
 from backend.services.trading.providers import get_live_adapter
+from backend.services.trading.quote_authority import assert_quote_authority
 from backend.services.trading.simulation import match_orders
 
 
@@ -36,6 +42,10 @@ async def submit_order(run_id, data):
                 raise ConflictError("Request ID was already used for a different order")
             return existing
         assert_running(run)
+        if run.get("environment_error"):
+            raise ConflictError(
+                "Trading environment has an unresolved error; repair it before submitting new orders"
+            )
         if clean.get("decision_id"):
             decision = TradingStore("events").required(clean["decision_id"], conn=conn)
             if decision["run_id"] != run_id or decision["kind"] != "agent_decision":
@@ -97,6 +107,9 @@ def _reserve(conn, run, clean):
         raise ConflictError("Order currency and venue must match its allocated account")
     quote = latest_quote(run, instrument)
     if quote is None:
+        raw = raw_latest_quote(run, instrument)
+        if raw is not None:
+            assert_quote_authority(run, instrument, raw)
         raise ConflictError("No market observation is available at the environment time")
     if (
         run["mode"] != "backtest"

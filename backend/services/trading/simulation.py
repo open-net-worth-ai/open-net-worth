@@ -4,6 +4,7 @@ from backend.db.trading_store import TradingStore
 from backend.services.trading.common import ACTIVE_ORDER_STATES, amount, identity, instant
 from backend.services.trading.fills import apply_fill
 from backend.services.trading.market import available_observations, instrument_key
+from backend.services.trading.quote_authority import quote_is_authorized
 
 
 def match_orders(conn, run):
@@ -42,6 +43,8 @@ def _eligible(run, order, observation):
     if order["status"] not in ACTIVE_ORDER_STATES or order["instrument_key"] != instrument_key(
         observation["instrument"]
     ):
+        return False
+    if not quote_is_authorized(run, observation["instrument"], observation):
         return False
     stamp = instant(observation["available_at"] or observation["timestamp"])
     if run["mode"] == "backtest" and (
