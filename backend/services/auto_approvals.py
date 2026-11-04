@@ -1,4 +1,4 @@
-"""Which calls the Auto judge let through, and the one-line reason it gave, kept with the
+"""Which calls the Auto judge let through, and the one-sentence reason it gave, kept with the
 conversation (``permissions_v2``).
 
 A call the judge allows runs with no card, so the transcript alone cannot tell it from a call
@@ -8,12 +8,14 @@ it to the live ``tool_done`` event and ``assistant.rehydrate_messages`` to the t
 reload, and the chat shows it as a small "i" on the row.
 
 The reason is model-written from the call's arguments, so it is untrusted text: it is defanged
-and capped here, and the client renders it as plain text only. It never goes to the log.
+here (never shortened: the judge's token budget is its only bound), and the client renders it as
+plain text only. It never goes to the log.
 """
 
 from __future__ import annotations
 
 import logging
+import sys
 import threading
 from collections import OrderedDict
 
@@ -22,7 +24,6 @@ from backend.core.untrusted import sanitize_untrusted
 logger = logging.getLogger(__name__)
 
 _KEY = "auto_approvals"
-MAX_REASON_CHARS = 160
 # Verdicts waiting for their call's tool_done. Popped there; the cap only bounds a call that
 # never finishes (a crash mid-dispatch), so a long-lived process cannot grow it without limit.
 _LIVE_CAP = 256
@@ -32,9 +33,14 @@ _meta_lock = threading.Lock()
 _live: OrderedDict[str, dict] = OrderedDict()
 
 
+def clean_reason(reason: str) -> str:
+    """A judge's reason, defanged and whole, for a row's "i" or a card."""
+    return sanitize_untrusted(reason or "", sys.maxsize).strip()
+
+
 def _entry(reason: str, model: str) -> dict:
     model_name = (model or "").rsplit(":", 1)[-1]
-    entry = {"reason": sanitize_untrusted(reason or "", MAX_REASON_CHARS).strip()}
+    entry = {"reason": clean_reason(reason)}
     if model_name:
         entry["model"] = sanitize_untrusted(model_name, 40)
     return entry

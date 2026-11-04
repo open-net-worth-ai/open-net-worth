@@ -578,7 +578,7 @@ def stage_generic(tool_name: str, args: dict) -> tuple[Optional[str], Optional[d
         "tool_use_id": tool_use_id,
         "session_id": get_session_id(),
         **automation_ref(),
-        **_judge_note(tool_name),
+        **judge_note(tool_name),
     }
     PendingPlanStore().stage_pending(
         tool_use_id,
@@ -786,7 +786,7 @@ def unknown_token_result(tool_name: str) -> tuple[str, None]:
     )
 
 
-def _judge_note(tool_name: str) -> dict:
+def judge_note(tool_name: str) -> dict:
     """``{"judge_reason": …}`` when Auto judged this call and chose to ask — the card says why."""
     from backend.ai import auto_judge
 
@@ -845,7 +845,7 @@ def stage(tool_name: str, args: dict, change: dict) -> tuple[Optional[str], Opti
         "grant_tool": tool_name,
         "session_id": get_session_id(),
         **automation_ref(),
-        **_judge_note(tool_name),
+        **judge_note(tool_name),
     }
     PendingPlanStore().stage_pending(
         tool_use_id,

@@ -476,9 +476,9 @@ def test_a_cancelled_judge_propagates_instead_of_being_swallowed(judge_env):
         _run(auto_judge.judge_call("get_transactions", {}))
 
 
-def test_an_overlong_reason_is_clipped(judge_env):
+def test_a_long_reason_is_kept_whole(judge_env):
     judge_env(_reply("ask", "r" * 900))
-    assert len(_run(auto_judge.judge_call("get_transactions", {})).reason) == 160
+    assert len(_run(auto_judge.judge_call("get_transactions", {})).reason) == 900
 
 
 def test_the_answering_model_is_recorded_for_the_audit_log(judge_env, monkeypatch):
@@ -874,8 +874,8 @@ def test_a_self_staging_tools_own_reason_is_kept_untouched_in_auto(
     monkeypatch, db_isolated, reason
 ):
     """A tool that copies the model's ``reason`` argument into its card keeps it verbatim: the
-    judge neither overwrites it nor gets a line of its own beside it, and a reason that claims to
-    be Auto's is just the tool's reason."""
+    judge never overwrites it, its own line stays in its own field, and a reason that claims to be
+    Auto's is just the tool's reason."""
     name = "zz_auto_judge_self_staging_probe"
 
     @registry.tool(
@@ -905,11 +905,39 @@ def test_a_self_staging_tools_own_reason_is_kept_untouched_in_auto(
         registry._REGISTRY.pop(name, None)
     assert text is None
     assert card["reason"] == reason
-    assert "never named" not in json.dumps(card)
+    assert card["judge_reason"] == "This deletes a lot you never named."
     from backend.db.pending_plan_store import PendingPlanStore
 
     staged = PendingPlanStore().get_pending("toolu_self_stage")["change"]
-    assert staged["reason"] == reason and "never named" not in json.dumps(staged)
+    assert staged["reason"] == reason
+    assert staged["judge_reason"] == "This deletes a lot you never named."
+
+
+def test_an_external_mcp_card_says_why_auto_asked(monkeypatch):
+    """An order placed through a connector was judged ``ask`` and its card said nothing about it
+    (owner, 2026-11-04): the card extras carry the reason as they do for a native card."""
+    from backend.ai import _confirm_gate_v2 as policy
+    from backend.ai import permissions
+    from backend.ai.tools import _confirm_gate_v2 as gate
+
+    name = "mcp__acme__place_order"
+    seen: dict = {}
+
+    class _Dispatcher:
+        async def call(self, _name, _args, *, card_extras=None):
+            seen.update(card_extras or {})
+            return None, {"type": "external_mcp_call"}, []
+
+    async def _already_judged(_name, _args):
+        return None
+
+    engine = permissions.NewEngine(gate, policy)
+    monkeypatch.setattr(engine, "prepare", _already_judged)
+    monkeypatch.setattr(gate, "external_decision", lambda _name: "gate")
+    set_tool_use_id("toolu_external")
+    auto_judge._current.set(("toolu_external", name, JudgeVerdict("ask", "A live order.")))
+    _run(engine.dispatch_external(_Dispatcher(), name, {}))
+    assert seen["judge_reason"] == "A live order."
 
 
 def test_auto_with_a_failing_judge_pauses_instead_of_writing(monkeypatch, probe_tool, db_isolated):
@@ -964,17 +992,17 @@ def test_manual_and_skip_never_call_a_model(monkeypatch, probe_tool, db_isolated
 
 def test_an_ask_carries_its_reason_to_the_card_and_an_allow_does_not():
     """Owner, 2026-11-04: an order's card said nothing about Auto, as if it had never judged it.
-    An ``ask`` reason now rides on the card (defanged and capped: it is model-written)."""
+    An ``ask`` reason now rides on the card, defanged because it is model-written, and whole: a
+    cap cut it mid-sentence on the card (same day)."""
     from backend.ai.tools import _confirm_gate_v2
 
     set_tool_use_id("toolu_a")
-    long_reason = "A live order is not cheap to undo. " * 20
+    long_reason = "\x1bA live order is not cheap to undo. " * 20
     auto_judge._current.set(("toolu_a", "place_order", JudgeVerdict("ask", long_reason)))
-    note = _confirm_gate_v2._judge_note("place_order")
-    assert note["judge_reason"].startswith("A live order is not cheap to undo.")
-    assert len(note["judge_reason"]) <= 161
-    assert _confirm_gate_v2._judge_note("another_tool") == {}  # bound to this call and tool
+    note = _confirm_gate_v2.judge_note("place_order")
+    assert note["judge_reason"] == long_reason.replace("\x1b", "").strip()
+    assert _confirm_gate_v2.judge_note("another_tool") == {}  # bound to this call and tool
     auto_judge._current.set(("toolu_a", "place_order", JudgeVerdict("allow", "fine")))
-    assert _confirm_gate_v2._judge_note("place_order") == {}  # an allow is the row's "i"
+    assert _confirm_gate_v2.judge_note("place_order") == {}  # an allow is the row's "i"
     set_tool_use_id("toolu_b")
-    assert _confirm_gate_v2._judge_note("place_order") == {}
+    assert _confirm_gate_v2.judge_note("place_order") == {}

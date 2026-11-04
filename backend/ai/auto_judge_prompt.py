@@ -88,7 +88,7 @@ When in doubt, ask. Asking costs the owner one tap; a wrong allow can cost them 
 
 _REPLY = """\
 Reply with ONLY a JSON object: {"verdict": "allow" or "ask", "reason": "<one plain sentence \
-for the owner, 160 characters at most>"}"""
+for the owner>"}"""
 
 SYSTEM = f"{_INTRO}\n\n{_RULES}\n\n{_REPLY}"
 
@@ -111,8 +111,7 @@ plainly asked for exactly that. A call that is the other half of a combination y
 about is itself an ask.
 
 Reply with ONLY a JSON object holding one entry per call, each id exactly once: {{"verdicts": \
-[{{"id": "c1", "verdict": "allow" or "ask", "reason": "<one plain sentence, 160 characters at \
-most>"}}, …]}}"""
+[{{"id": "c1", "verdict": "allow" or "ask", "reason": "<one plain sentence>"}}, …]}}"""
 
 
 def clip(text: str, limit: int) -> str:
