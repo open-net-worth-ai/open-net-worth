@@ -24,7 +24,7 @@ from backend.services.mentions.descriptor import EntityDescriptor, FieldSpec
 from backend.services.mentions.types import SearchQuery
 
 
-def _connector_rows(query: SearchQuery) -> list[dict]:
+def _connector_rows(query: SearchQuery | None = None) -> list[dict]:
     """Non-secret projection of the synthesized ConnectorView list.
 
     Reads ONLY the sanitizing service (``list_connectors``) — never a raw connector
@@ -63,6 +63,28 @@ def _connector_sublabel(row: dict) -> str:
         return "Connected"
     configured = str(row.get("id") or "").startswith("mcp:") or status != "not_configured"
     return "Disconnected" if configured else "Not connected"
+
+
+def connector_problems() -> list[tuple[str, str]]:
+    """(name, state) for each connector the page's Attention filter lists, so what Lucius is told
+    and what the screen shows cannot disagree. ``auth`` needs a sign-in; ``failed`` is an MCP
+    server, whose tool list an error empties; ``error`` is a built-in, whose tools stay offered
+    while it is enabled. Skips one that is not set up, and one withdrawn from the product, as
+    ``get_connector_status`` does."""
+    from backend.services.connector_catalog import CATALOG
+
+    withdrawn = frozenset(key for key, kind in CATALOG.items() if kind.disabled)
+    problems = []
+    for row in _connector_rows():
+        mcp = row["id"].startswith("mcp:")
+        if row["id"] in withdrawn or not (mcp or row["status"] != "not_configured"):
+            continue
+        label = _connector_sublabel(row)
+        if label in ("Sign-in needed", "Auth error"):
+            problems.append((row["name"], "auth"))
+        elif label == "Error":
+            problems.append((row["name"], "failed" if mcp else "error"))
+    return problems
 
 
 register(

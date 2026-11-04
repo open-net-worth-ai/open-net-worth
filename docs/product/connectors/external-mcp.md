@@ -206,7 +206,8 @@ Open the server under **Connectors**:
 - **⋯ → Remove connector** — removes the server and its saved credentials.
 - **Reconnect** — appears if the server stopped answering or a sign-in expired. A red dot on
   **Connectors** in the navigation tells you a connector needs this, the **Attention** filter lists
-  which ones, and holding the pointer over its **Error** status shows the reason.
+  which ones, and holding the pointer over its **Error** status shows the reason. Lucius is told
+  too: each turn it sees which connectors have a problem, so it can say why a tool is missing.
 
 ## Permissions — start cautious
 
