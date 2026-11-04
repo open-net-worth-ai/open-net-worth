@@ -32,12 +32,18 @@ every request with Lucius's answer — so you can scroll back through it later, 
 what was said on the call next time you talk.
 
 When you ask for something real, the front voice hands it to Lucius and says something short
-(*"let me check"*, *"I'll pull that up"* — never a promise of how long it takes). Lucius's question and answer appear in the chat. If a lookup is genuinely slow,
-you hear *"the live prices lookup is taking longer than usual"* — once, and only when it's true.
+about what you asked (*"okay, let me check your grocery spending"* — never a promise of how long it takes, or a hint of the answer). Lucius's question and answer appear in the chat. If a lookup is genuinely slow,
+you hear that it's taking longer than usual — once, and only when it's true. After about 10 seconds
+of hearing nothing, he tells you he's still on it (*"still working on your grocery spending"*), then
+again every 30 to 45 seconds until the answer starts. He stays quiet while you're talking or after
+you've asked him to wait. These lines repeat what you asked, never a figure. To cut him off, say at
+least two words (*"hold on"*, *"stop there"*): a lone *"okay"* or background noise doesn't.
+Only his final reply is read out; a link in it shows in the chat, and you hear just its name.
 Ask *"what are you doing?"* and the front voice tells you what Lucius is working on right now.
 
-**Changes still need your approval.** When Lucius proposes one, he says so, and the approval card
-appears in the chat on your screen. Tap **Approve** and he tells you on the call when it's done.
+**Changes follow your usual approvals**, which depend on the conversation's mode and the tool's
+permission. When one waits for you, he says so, and the approval card appears in the chat on your
+screen. Tap **Approve** and he tells you on the call when it's done.
 Your [permission settings](../lucius/permissions.md) apply exactly as they do in the chat.
 
 You only ever talk to Lucius: the front voice speaks as him, so you'll hear *"let me check"*,
@@ -46,7 +52,9 @@ never *"let me ask Lucius"*.
 Say *"bye"* or *"that's all"* and Lucius says goodbye and hangs up. Closing the tab ends the call
 too. If the line goes quiet for about 20 seconds he asks *"are you still there?"*, and after
 another 20 he says goodbye and hangs up — never while he's still working on something for you or
-a change is waiting for your approval. Need a moment? Say *"hold on"* or *"give me two minutes"*
+a change is waiting for your approval, unless the line has been silent for five minutes (his work
+and the card carry on in the chat). A call also closes as soon as your phone drops off for good,
+and after an hour at most. Need a moment? Say *"hold on"* or *"give me two minutes"*
 and he waits quietly for as long as you asked (up to 10 minutes) before checking in.
 
 ## Set it up
@@ -98,7 +106,8 @@ happens next is read out.
 remembers). The desktop app allows the microphone for the app's own page only, and only audio;
 this needs desktop version with voice-call support or later. If you said no, macOS won't ask
 again: the call says so and offers **Open System Settings**, which opens **Privacy & Security →
-Microphone**, where you turn Open Net Worth on and call again.
+Microphone**, where you turn Open Net Worth on. macOS then asks to quit and reopen the app: choose
+**Quit & Reopen**, and it comes back ready for your call.
 
 The browser only allows the microphone on a secure address: `localhost` on your own computer
 works; from another device the app must be reachable over HTTPS (see

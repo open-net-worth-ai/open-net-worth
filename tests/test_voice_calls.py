@@ -354,6 +354,8 @@ def bare_desk(agent, said: list | None = None):
     desk_._recent = {}
     desk_._checked_in = desk_._approving = desk_._following = False
     desk_._hold_until, desk_._hold_timer = 0.0, None
+    desk_.timing = agent.TurnTiming()
+    desk_._away_since, desk_._busy_timer = None, None
     desk_._answers, desk_._turn_said, desk_._shown = set(), "", False
     desk_.hung_up = False
     desk_.rearmed = 0
@@ -365,6 +367,9 @@ def bare_desk(agent, said: list | None = None):
         class _Session:
             def reset_away_timer(self):
                 desk_.rearmed += 1
+
+            def say(self, text, **_):
+                said.append(text)
 
         desk_._session = _Session()
     return desk_
@@ -388,13 +393,18 @@ def test_a_silent_line_is_checked_on_once_then_hung_up():
 
 def test_no_check_in_while_lucius_works_or_a_change_awaits_approval():
     agent = pytest.importorskip("backend.connectors.voice.agent")
-    said: list[str] = []
-    desk_ = bare_desk(agent, said)
-    desk_._current = "What did I spend?"
-    desk_.away()
-    desk_._current, desk_._approving = None, True
-    desk_.away()
-    assert said == [] and not desk_.hung_up
+
+    async def run():
+        said: list[str] = []
+        desk_ = bare_desk(agent, said)
+        desk_._current = "What did I spend?"
+        desk_.away()
+        desk_._current, desk_._approving = None, True
+        desk_.away()
+        assert said == [] and not desk_.hung_up
+        desk_.back()
+
+    asyncio.run(run())
 
 
 def test_asked_to_wait_it_waits_then_checks_in():
@@ -634,7 +644,7 @@ def test_a_queued_request_gets_our_own_one_sec_and_no_reply_from_the_front_model
     desk_ = bare_desk(agent, said)
     desk_.heard("anything urgent?")
     assert desk_.submit("Is anything urgent in my finances?") is None
-    assert said[0].removesuffix(agent.ACK_RULE) in agent.ACKS
+    assert said[0].partition(agent.ACK_RULE)[0] in agent.ACKS
     desk_._current = "Is anything urgent in my finances?"
     desk_.heard("and my spending?")
     assert desk_.submit("What did I spend this month?") is None
@@ -667,7 +677,7 @@ def test_the_acknowledgement_fits_the_kind_of_request_and_never_claims_it_done()
     desk_ = bare_desk(agent, said)
     desk_.heard("add a coffee for five dollars")
     assert desk_.submit("Add a 5 USD coffee expense today", "task") is None
-    assert said[0].removesuffix(agent.ACK_RULE) in agent.ACKS_BY_KIND["task"]
+    assert said[0].partition(agent.ACK_RULE)[0] in agent.ACKS_BY_KIND["task"]
 
 
 def test_parallel_slow_lookups_ask_to_hang_on_once():
@@ -690,8 +700,7 @@ def test_parallel_slow_lookups_ask_to_hang_on_once():
 
     text, _ = asyncio.run(desk_._collect(events()))
     assert text == "Here you go."
-    slow = agent.SLOW_LOOKUP.format(noun="live prices")
-    assert said.count(slow) == 1
+    assert said.count(agent.SLOW_LOOKUP + agent.STILL_ON_IT_RULE) == 1
 
 
 def test_a_line_of_the_voices_own_is_saved_but_never_streamed_into_the_last_bubble(monkeypatch):
@@ -924,13 +933,14 @@ def test_an_answer_drops_a_holding_line_that_has_not_made_a_sound():
     said: list[str] = []
     desk_ = bare_desk(agent, said)
     waiting = Handle()
-    desk_._hold_line = waiting
+    older = Handle()
+    desk_._hold_lines = [older, waiting]
     desk_._session.current_speech, desk_._session.agent_state = None, "listening"
     desk_._answer_now("Nothing urgent.")
-    assert waiting.interrupted and said == ["Nothing urgent."]
+    assert older.interrupted and waiting.interrupted and said == ["Nothing urgent."]
 
     speaking = Handle()
-    desk_._hold_line = speaking
+    desk_._hold_lines = [speaking]
     desk_._session.current_speech, desk_._session.agent_state = speaking, "speaking"
     desk_._answer_now("Your balance is fine.")
     assert not speaking.interrupted and said[-1] == "Your balance is fine."
@@ -951,7 +961,7 @@ def test_no_still_working_line_once_the_answer_has_begun():
 
     text, _ = asyncio.run(desk_._collect(events()))
     assert text == "Nothing urgent, all steady."
-    assert agent.STILL_WORKING not in said
+    assert said == []
 
 
 def test_long_work_gets_a_varied_reminder_until_the_answer_starts():
@@ -962,7 +972,7 @@ def test_long_work_gets_a_varied_reminder_until_the_answer_starts():
 
     said: list[str] = []
     desk_ = bare_desk(agent, said)
-    desk_.SLOW_S, desk_.REMIND_S, desk_._doing = 0.0, (0.0, 0.0), ""
+    desk_.SLOW_S, desk_.QUIET_S, desk_.REMIND_S, desk_._doing = 0.0, 0.0, (0.0, 0.0), ""
 
     async def events():
         yield DeskEvent(kind="tool", ref="a", noun="live prices")
@@ -974,13 +984,398 @@ def test_long_work_gets_a_varied_reminder_until_the_answer_starts():
         yield DeskEvent(kind="end")
 
     asyncio.run(desk_._collect(events()))
-    slow = agent.SLOW_LOOKUP.format(noun="live prices")
+    slow = agent.SLOW_LOOKUP + agent.STILL_ON_IT_RULE
     assert said[0] == slow and said.count(slow) == 1
     reminders = [s for s in said[1:] if s.endswith(agent.STILL_ON_IT_RULE)]
     assert len(reminders) >= 3
     assert all(a != b for a, b in zip(reminders, reminders[1:]))
     # Nothing after the answer started arriving (the last 4 events came after its text).
     assert len(said) == 1 + 6
+
+
+def _timed_desk(agent, said, monkeypatch):
+    """A desk on a clock the test moves: ``clock[0]`` is now."""
+    from types import SimpleNamespace
+
+    clock = [100.0]
+    monkeypatch.setattr(agent, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    desk_ = bare_desk(agent, said)
+    desk_._doing = ""
+    return desk_, clock
+
+
+def test_quick_lookups_in_a_row_still_get_a_line_saying_what_he_is_on(monkeypatch):
+    """Owner, 2026-11-04: "I haven't heard these". Every lookup restarted the wait."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    from backend.connectors.voice.events import DeskEvent
+
+    said: list[str] = []
+    desk_, clock = _timed_desk(agent, said, monkeypatch)
+    desk_._current = "Check my ACME performance"
+
+    async def events():
+        for i in range(5):
+            yield DeskEvent(kind="tool", ref=str(i), noun="live prices")
+            clock[0] += 3
+            yield DeskEvent(kind="tool_done", ref=str(i))
+        yield DeskEvent(kind="text", text="Here you go.")
+
+    asyncio.run(desk_._collect(events()))
+    assert len(said) == 1 and "ACME performance" in said[0]
+    assert "live prices" not in said[0]
+
+
+def test_a_note_before_a_lookup_is_not_the_answer_starting(monkeypatch):
+    """A note beside a lookup turned every "still on it" off for the rest of the request."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    from backend.connectors.voice.events import DeskEvent
+
+    said: list[str] = []
+    desk_, clock = _timed_desk(agent, said, monkeypatch)
+    desk_._current = "Find my ACME trades"
+
+    async def events():
+        yield DeskEvent(kind="text", text="Let me look. ")
+        yield DeskEvent(kind="tool", ref="a", noun="transactions")
+        yield DeskEvent(kind="tool_done", ref="a")
+        clock[0] += 11
+        yield DeskEvent(kind="tick")
+        clock[0] += 50
+        yield DeskEvent(kind="tick")
+        clock[0] += 50
+        yield DeskEvent(kind="text", text="All done.")
+        clock[0] += 50
+        yield DeskEvent(kind="text", text=" Really.")
+
+    text, _ = asyncio.run(desk_._collect(events()))
+    assert text == "All done. Really."
+    # One at the quiet mark, one reminder before the answer's text arrives, none during it.
+    assert len(said) == 2 and all("ACME trades" in line for line in said)
+
+
+def test_no_line_over_speech_or_during_a_hold_and_the_wait_counts_from_what_was_heard(monkeypatch):
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    from backend.connectors.voice.events import DeskEvent
+
+    said: list[str] = []
+    desk_, clock = _timed_desk(agent, said, monkeypatch)
+    session = desk_._session
+
+    async def events():
+        session.agent_state = "speaking"  # the acknowledgement, still playing at 11s
+        clock[0] += 11
+        yield DeskEvent(kind="tick")
+        session.agent_state = "listening"
+        clock[0] += 9
+        yield DeskEvent(kind="tick")  # only 9s since it ended
+        assert said == []
+        session.user_state = "speaking"
+        clock[0] += 2
+        yield DeskEvent(kind="tick")  # they're talking
+        assert said == []
+        session.user_state = "listening"
+        desk_._hold_until = clock[0] + 60
+        clock[0] += 30
+        yield DeskEvent(kind="tick")  # "hold on"
+        assert said == []
+        desk_._hold_until = 0.0
+        yield DeskEvent(kind="tick")
+        assert len(said) == 1
+
+    asyncio.run(desk_._collect(events()))
+
+
+def test_only_a_tools_noun_reaches_the_front_voice_and_every_running_step_is_named(monkeypatch):
+    """A label can carry a value from the call's input; the front voice never sees the book.
+    And one lookup finishing mustn't read as "thinking it through" while another still runs."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    from backend.connectors.voice.events import DeskEvent
+
+    said: list[str] = []
+    desk_, clock = _timed_desk(agent, said, monkeypatch)
+    desk_._current, desk_._started = "the request", 100.0
+    seen: list[str] = []
+
+    async def events():
+        yield DeskEvent(kind="tool", ref="a", text="Search: ACME 123", noun="transactions")
+        yield DeskEvent(kind="tool", ref="b", text="Get: ACME 123", noun="live prices")
+        seen.append(desk_.status())
+        yield DeskEvent(kind="tool_done", ref="a")
+        seen.append(desk_.status())
+        clock[0] += 11
+        yield DeskEvent(kind="tick")
+        seen.extend(said)
+
+    asyncio.run(desk_._collect(events()))
+    assert "transactions and live prices" in seen[0]
+    assert "currently: live prices" in seen[1]
+    assert len(seen) == 3 and "the request" in seen[2] and "live prices" not in seen[2]
+    assert not any("ACME" in line for line in seen)
+
+
+def test_the_log_says_where_a_spoken_turns_wait_went_and_no_words(caplog):
+    from types import SimpleNamespace
+
+    from backend.connectors.voice.timing import TurnTiming
+
+    timing = TurnTiming()
+    with caplog.at_level("INFO", logger="backend.connectors.voice.timing"):
+        timing.user_state("speaking")
+        timing.user_state("listening")
+        timing.handed()
+        timing.agent_speaking()
+        timing.agent_speaking()  # only the first sound of a turn
+        for metrics in (
+            SimpleNamespace(
+                type="eou_metrics", end_of_utterance_delay=0.5, transcription_delay=0.3
+            ),
+            SimpleNamespace(type="llm_metrics", ttft=0.7, duration=1.1, prompt_tokens=900),
+            SimpleNamespace(type="tts_metrics", ttfb=0.2),
+            SimpleNamespace(type="other"),
+        ):
+            timing.metrics(SimpleNamespace(metrics=metrics))
+    assert caplog.text.count("first sound") == 1
+    assert "handed to Lucius" in caplog.text
+    assert "end of turn 0.50s (transcript 0.30s)" in caplog.text
+    assert "first token 0.70s" in caplog.text and "first audio 0.20s" in caplog.text
+
+
+def test_only_his_final_reply_is_read_out():
+    """Owner, 2026-11-04: "Note: I used an incorrect format…" was read out on a call."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    from backend.connectors.voice.events import DeskEvent
+
+    def collect(*script):
+        async def events():
+            for event in script:
+                yield event
+
+        return asyncio.run(bare_desk(agent, [])._collect(events()))
+
+    note = DeskEvent(kind="text", text="A note. ")
+    call = DeskEvent(kind="tool", ref="a", noun="live prices")
+    done = DeskEvent(kind="tool_done", ref="a")
+    final = DeskEvent(kind="text", text="The answer.")
+    assert collect(note, call, done, final) == ("The answer.", False)
+    # He answered, then one last call (saving a fact, say): that answer is still his reply.
+    assert collect(final, call, done) == ("The answer.", False)
+    # Stopped at a card: the note isn't said, and the line that a card is waiting is ours.
+    assert collect(note, call, DeskEvent(kind="approval")) == ("", True)
+    # A failure after a note is said as a failure.
+    failed = collect(note, call, done, DeskEvent(kind="error", text="boom"))
+    assert failed == ("Sorry, I couldn't finish that one.", False)
+
+
+def test_a_call_says_a_change_awaits_approval_only_from_a_real_pending_card():
+    """Owner, 2026-11-04: it depends on the conversation's mode and the tool's permission, so
+    nothing is said upfront: only a pending card, or a tool's result, decides what is said."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    from backend.connectors.voice.desk import VOICE_NOTE
+
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_._speak("It ran.", False)
+    assert said == ["It ran."]
+    said.clear()
+    desk_._speak("", True)
+    assert said == [agent.APPROVAL_WAITING]
+    assert "never call it waiting for approval" in VOICE_NOTE
+    assert "will need approving" in VOICE_NOTE
+    assert "approves it on screen" not in VOICE_NOTE
+    assert "are approved by" not in agent.FRONT_INSTRUCTIONS
+
+
+def test_a_link_in_a_reply_shows_in_the_chat_and_only_its_name_is_read_out():
+    """Owner, 2026-11-04: "I'll put the link on screen", and no link ever came."""
+    from backend.connectors.voice.desk import VOICE_NOTE, speakable
+
+    assert "markdown link" in VOICE_NOTE
+    assert speakable("Open [the ACME page](https://acme.example/x).") == "Open the ACME page."
+
+
+def test_a_call_left_silent_ends_even_with_a_card_waiting_or_work_running(monkeypatch):
+    """Owner, 2026-11-04: no call may run up the LiveKit bill. LiveKit says "away" once, so a
+    card nobody answered kept the call open for good."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    async def main():
+        said: list[str] = []
+        desk_, clock = _timed_desk(agent, said, monkeypatch)
+        desk_._approving = True
+        desk_.away()
+        assert said == [] and not desk_.hung_up and desk_._busy_timer is not None
+        clock[0] += desk_.BUSY_AWAY_S
+        desk_._busy_again()
+        assert said == [agent.HANG_UP] and desk_.hung_up
+
+        # Speaking starts the silence over.
+        said2: list[str] = []
+        desk2, clock2 = _timed_desk(agent, said2, monkeypatch)
+        desk2._approving = True
+        desk2.away()
+        clock2[0] += desk2.BUSY_AWAY_S - 1
+        desk2.heard("hello")
+        assert desk2._busy_timer is None and desk2._away_since is None
+        desk2.away()
+        assert said2 == [] and not desk2.hung_up
+        desk2.back()
+
+    asyncio.run(main())
+
+
+def test_the_room_closes_when_the_caller_leaves_for_any_reason():
+    """A phone losing signal isn't a hang-up: LiveKit kept the session and cancelled the silence
+    timer, leaving the agent alone in the room."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    from types import SimpleNamespace
+
+    deleted: list[int] = []
+
+    class Ctx:
+        async def delete_room(self):
+            deleted.append(1)
+
+    async def main():
+        agent._caller_left(Ctx(), SimpleNamespace(identity="someone-else"))
+        await asyncio.sleep(0)
+        assert deleted == []
+        agent._caller_left(Ctx(), SimpleNamespace(identity=agent.OWNER_IDENTITY))
+        await asyncio.sleep(0)
+
+    asyncio.run(main())
+    assert deleted == [1]
+
+
+def test_an_agent_stops_waiting_for_a_caller_who_never_comes():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    from types import SimpleNamespace
+
+    class Room:
+        remote_participants: dict = {}
+
+        def on(self, *_):
+            pass
+
+    assert asyncio.run(agent._wait_for_caller(Room(), timeout=0.01)) is False
+    here = Room()
+    here.remote_participants = {"a": SimpleNamespace(identity=agent.OWNER_IDENTITY)}
+    assert asyncio.run(agent._wait_for_caller(here)) is True
+
+
+def test_the_front_models_own_line_is_said_with_no_second_model_run(caplog):
+    """Owner, 2026-11-04: the wait before the first sound. Wording the line separately was a
+    second model run on every request."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_.heard("how is my ACME doing")
+    with caplog.at_level("INFO", logger=agent.log.name):
+        assert desk_.submit("Check my ACME performance", "question", "Okay, checking ACME.") is None
+    assert said == ["Okay, checking ACME."]
+    assert "holding line" in caplog.text and "ACME" not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "ack",
+    [
+        "",
+        "Your balance is 4,200 dollars.",
+        "It's up 5%.",
+        "Okay, that's done.",
+        "Sure, the order is placed.",
+        "It's waiting for your approval.",
+        "Okay " * 13,
+        "x" * 81,
+    ],
+)
+def test_a_line_that_could_carry_an_answer_or_a_claim_is_not_said(ack):
+    """One front model once made up a whole answer: its line is only ever an acknowledgement."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_.heard("how is my ACME doing")
+    assert desk_.submit("Check my ACME performance", "question", ack) is None
+    assert said[0].partition(agent.ACK_RULE)[0] in agent.ACKS_BY_KIND["question"]
+
+
+def test_a_queued_request_never_says_its_own_line():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_._current = "another"
+    desk_.heard("and my ACME")
+    desk_.submit("Check my ACME performance", "question", "Okay, checking ACME.")
+    assert said == [agent.QUEUED]
+
+
+def test_a_pause_mid_sentence_does_not_end_the_turn():
+    """Owner, 2026-11-05: at a 0.3s wait one sentence became two requests. The fixed wait is
+    LiveKit's own again, and speech-to-text no longer ends a turn at any breath."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    from pathlib import Path
+
+    assert "min_endpointing_delay" not in Path(agent.__file__).read_text(encoding="utf-8")
+    assert agent.PATIENT_TURNS["end_of_turn_confidence_threshold"] >= 0.4
+    assert agent.PATIENT_TURNS["max_turn_silence"] >= 1000
+
+
+def test_finding_a_tool_is_no_step_of_the_request():
+    """Owner, 2026-11-04: "you're still on tools" made no sense on a call."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    assert agent._named(["tools", "live prices", "that"]) == "live prices"
+
+
+def test_a_second_line_never_queues_behind_one_that_has_not_played(monkeypatch):
+    """Owner, 2026-11-04: things said out of order. A line held up (the network, once) played
+    long after it was asked for, with the next one behind it."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    from backend.connectors.voice.events import DeskEvent
+
+    class Waiting:
+        def done(self):
+            return False
+
+        def interrupt(self):
+            pass
+
+    said: list[str] = []
+    desk_, clock = _timed_desk(agent, said, monkeypatch)
+    desk_._hold_lines = [Waiting()]
+
+    async def events():
+        clock[0] += 200
+        yield DeskEvent(kind="tick")
+
+    asyncio.run(desk_._collect(events()))
+    assert said == []
+
+
+def test_an_acknowledgement_is_about_what_was_asked_and_the_log_never_holds_it(caplog):
+    """Owner, 2026-11-04: "let me check that for you" on every request. The same sentences, but
+    naming what was asked — and the request stays out of the log, as it always has."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_.heard("how is my ACME doing")
+    with caplog.at_level("INFO", logger=agent.log.name):
+        assert desk_.submit("Check \u00abmy\u00bb ACME performance", "question") is None
+    pick, rule, about = said[0].partition(agent.ACK_RULE)
+    assert pick in agent.ACKS_BY_KIND["question"] and rule
+    assert about.endswith("\u00abCheck my ACME performance\u00bb")
+    assert "never its amounts, prices" in about
+    assert "holding line" in caplog.text and "ACME" not in caplog.text
+    # No request, no quote to name it from.
+    assert desk_._ack("task").partition(agent.ACK_RULE)[2] == ""
+    assert len(desk_._ack("question", "x" * 900)) < 800
+
+
+def test_each_holding_line_is_logged_so_a_real_call_can_be_checked(caplog):
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    with caplog.at_level("INFO", logger=agent.log.name):
+        desk_._holding("say you're still on it")
+    assert "holding line: say you're still on it" in caplog.text
 
 
 def test_livekits_own_words_reach_the_owner_but_never_a_demo_visitor(db_isolated):

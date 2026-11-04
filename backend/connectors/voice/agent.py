@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import re
 import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -35,6 +36,7 @@ from livekit.agents import (
 )
 from livekit.plugins import silero
 
+from backend.connectors.voice.timing import TurnTiming
 from backend.connectors.voice.tokens import OWNER_IDENTITY
 
 if TYPE_CHECKING:
@@ -53,8 +55,10 @@ You don't have {owner}'s numbers in your head: balances, accounts, spending, bud
 investments, prices and plans all need a lookup. So:
 - For ANY question or request about their finances, or any change, call `work_on_request`
   with the request written out in full (resolve "that", "those two" from the conversation so
-  it stands on its own) and say NOTHING yourself, before or after: a short acknowledgement
-  is said for you. NEVER answer it from memory, never guess, never state a number, never invent a
+  it stands on its own), and with it `ack`: the few words you say right away, starting with
+  something like "okay" or "sure" and naming just the subject ("Okay, let me check your grocery
+  spending."), worded differently each time, with no number, price or result. Say NOTHING else,
+  before or after. NEVER answer it from memory, never guess, never state a number, never invent a
   fact — not even a vague one ("your balance looks a bit high"). That includes things said
   earlier on this call: they may be out of date, and a new question always goes to
   `work_on_request` — only "say that again" gets an earlier answer, repeated word for word.
@@ -70,8 +74,8 @@ investments, prices and plans all need a lookup. So:
   asked to do something: then call `work_on_request` with "Yes, go ahead with what you
   offered: <the offer, quoted>". Never turn a question the owner asked ("should I sell?")
   into an instruction ("sell"). If it is unclear what they're agreeing to, ask.
-- Changes are approved by {owner} on screen in the app, and the answer says so. Never claim
-  something is done unless an answer said it is.
+- Whether a change needs {owner}'s approval depends on their settings, and you can't tell. Never
+  say something is done, or waiting for approval, unless an answer said so.
 - If {owner} asks you to wait ("hold on", "give me a minute", "let me find it"), say a few
   words ("Sure, take your time.") and call `wait_for_owner` with how long they asked for
   (two minutes if they didn't say). Then stay quiet until they speak.
@@ -103,10 +107,11 @@ FAILED = "say you hit a problem with that request and ask if they want you to tr
 APPROVAL_WAITING = (
     "say it's ready for them to approve on the screen, and that you'll carry on once they do"
 )
-SLOW_LOOKUP = "say the {noun} lookup is taking longer than usual and to hang on"
-STILL_WORKING = "say you're still working on it"
-# After the first progress line, a short reminder now and then on long work — a phone line
+SLOW_LOOKUP = "say this is taking longer than usual and to hang on"
+# A quiet stretch gets a short line, then a reminder now and then on long work — a phone line
 # silent for a minute feels dropped (owner, 2026-11-03). Never the same wording twice running.
+# Both name the REQUEST (``ACK_ABOUT``), never the step: "still on tools" and "still working on
+# asset context" are our words for our own steps, and made no sense on a call (owner, 2026-11-04).
 STILL_ON_IT = (
     "say you're still on it",
     "say you're still working through it",
@@ -151,12 +156,52 @@ ACK_RULE = (
     " — a few words, no promise of how long it takes, nothing about what the answer might be,"
     " and never that it's done"
 )
+# The same sentences, but about what was asked: "that" on every request sounded like nobody had
+# listened (owner, 2026-11-04). The request is the front model's own, from words it already heard,
+# and a line can call no tool. Named only here, after the " — ": the log keeps what comes before.
+ACK_ABOUT = (
+    '. Say what it\'s about in place of "that" or "it": just the subject, two or three of their '
+    "words, never its amounts, prices or other details, since the answer will cover those; if "
+    "it's too vague to name, leave it out. They asked: \u00ab{request}\u00bb"
+)
+# The fast way to the first sound: the front model writes its line in the handover itself, where
+# wording it separately cost a second model run on every request (0.4-1.1s of a 2.7-4s wait, live
+# call, 2026-11-04). It may NOT carry the answer (one once made up a whole answer and spoke it), so
+# it is said only if it passes ``_usable_ack``; otherwise the sets above are worded as before.
+ACK_MAX_CHARS = 80
+ACK_MAX_WORDS = 12
+ACK_REFUSED = re.compile(
+    r"[\d$\u20ac\u00a3\u00a5%]|\b(?:done|finished|completed?|placed|saved|sent|approv\w*|confirm\w*)\b",
+    re.IGNORECASE,
+)
 QUEUED = "say you'll get to that right after the one you're on, in a few words"
 # A call with a time limit (the public demo's, ``services.demo_calls``): a heads-up before it,
 # then a goodbye and the hang-up at it.
 TIME_NEARLY_UP = "say we're nearly out of time on this call, so there's time for one quick thing"
 TIME_UP = "say that's all the time this call has, thank them, and say goodbye"
 TIME_WARNING_S = 30
+# No call is left to run up the LiveKit bill (owner, 2026-11-04): the longest any call runs (the
+# demo's own limit is shorter), and how long a dispatched agent waits for a caller who never came.
+MAX_CALL_S = 3600
+# When speech-to-text may call a turn over. The gateway's own defaults (0.01 confidence, no
+# silence) end it at any breath, leaving LiveKit's fixed 0.5s as the only guard: at 0.3s one
+# sentence became two requests (owner, 2026-11-05). A finished-sounding sentence ends quickly; an
+# unfinished one gets up to ``max_turn_silence`` ms.
+PATIENT_TURNS = {
+    "end_of_turn_confidence_threshold": 0.4,
+    "min_end_of_turn_silence_when_confident": 160,
+    "max_turn_silence": 1280,
+}
+CALLER_WAIT_S = 60
+
+
+def _usable_ack(ack: str) -> str:
+    """The front model's own acknowledgement, if it is only that: short, and with no figure or
+    claim that anything has happened. ``""`` otherwise."""
+    line = " ".join((ack or "").split())
+    if len(line) > ACK_MAX_CHARS or len(line.split()) > ACK_MAX_WORDS or ACK_REFUSED.search(line):
+        return ""
+    return line
 
 
 def _mentions_approval(text: str) -> bool:
@@ -187,19 +232,21 @@ class FrontAgent(Agent):
 
     @function_tool
     async def work_on_request(
-        self, context: RunContext, request: str, kind: str = "question"
+        self, context: RunContext, request: str, kind: str = "question", ack: str = ""
     ) -> str | None:
         """Look up a finance question or carry out a request, with the owner's real data and
-        tools. Returns at once; a short acknowledgement is spoken for you, then the answer
-        when it is ready — say nothing yourself.
+        tools. Returns at once; your ``ack`` is spoken, then the answer when it is ready — say
+        nothing else yourself.
 
         Args:
             request: The owner's request, written out so it stands on its own.
             kind: "question" when they want to know something, "task" when they want something
                 done or changed, "follow_up" for a short reply to what was just said ("yes",
                 "the second one", "go ahead").
+            ack: What you say right away, a few words naming just the subject: "Okay, let me
+                check your grocery spending." No number, price or result.
         """
-        return self._lucius.submit(request, kind)
+        return self._lucius.submit(request, kind, ack)
 
     @function_tool
     async def check_progress(self, context: RunContext) -> str:
@@ -234,8 +281,10 @@ class LuciusDesk:
     """
 
     SLOW_S = 8.0
+    QUIET_S = 10.0  # since the owner last heard anything, before a line says what he's on
     REMIND_S = (30.0, 45.0)  # between reminders on long work, picked at random each time
     AWAY_S = 20.0  # silence before checking in, and again before hanging up
+    BUSY_AWAY_S = 300.0  # silence before hanging up even while he works or a card waits
     MAX_HOLD_S = 600
     MAX_QUEUED = 3
     MAX_PER_MINUTE = 10  # the chat channels' per-sender ceiling
@@ -266,6 +315,9 @@ class LuciusDesk:
         self._checked_in = False  # asked "still there?" since the owner last spoke
         self._approving = False  # a change is waiting on the owner's approval on screen
         self._following = False  # reading out a turn the call didn't start (``_follow_others``)
+        self.timing = TurnTiming()
+        self._away_since: float | None = None  # silent while busy, since when
+        self._busy_timer: asyncio.TimerHandle | None = None
         self._hold_until = 0.0  # the owner asked us to wait until then
         self._hold_timer: asyncio.TimerHandle | None = None
         self._started = 0.0
@@ -277,6 +329,7 @@ class LuciusDesk:
     async def aclose(self) -> None:
         self._runner.cancel()
         self._others.cancel()
+        self.back()
         for timer in self._limit_timers:
             timer.cancel()
 
@@ -304,10 +357,22 @@ class LuciusDesk:
             or self._following
         )
 
+    def back(self) -> None:
+        """The owner made a sound: not gone."""
+        self._away_since = None
+        if self._busy_timer is not None:
+            self._busy_timer.cancel()
+            self._busy_timer = None
+
+    def _busy_again(self) -> None:
+        self._busy_timer = None
+        self.away()
+
     def heard(self, transcript: str) -> None:
         text = transcript.strip()
         if not text:
             return
+        self.back()
         if self._spoken_since_heard:
             self._heard.clear()
             self._spoken_since_heard = False
@@ -336,9 +401,21 @@ class LuciusDesk:
     def away(self) -> None:
         """The line has been silent for ``AWAY_S``: check in once, then say goodbye and hang
         up — so a forgotten call doesn't stay open. Never while a request is still being
-        worked on or approved on screen: then the owner is busy with us, not gone."""
+        worked on or approved on screen: then the owner is busy with us, not gone — but only up
+        to ``BUSY_AWAY_S``: LiveKit says "away" once, so a card nobody answered kept the call, and
+        its bill, open for good. His work and the card carry on in the chat."""
         if self._busy():
+            now = time.monotonic()
+            self._away_since = self._away_since if self._away_since is not None else now
+            if now - self._away_since >= self.BUSY_AWAY_S:
+                self._line(HANG_UP)
+                self.hang_up_after_speech()
+            elif self._busy_timer is None:
+                self._busy_timer = asyncio.get_running_loop().call_later(
+                    self.AWAY_S, self._busy_again
+                )
             return
+        self._away_since = None
         if getattr(self._session, "agent_state", "") == "speaking":
             # Still reading out an answer: the owner is listening, not gone (owner, 2026-11-03,
             # "it asks am I still there mid-answer"). Count the silence from its end instead.
@@ -388,20 +465,39 @@ class LuciusDesk:
     def _holding(self, intent: str) -> None:
         """A holding line ("let me check", "taking longer, hang on"): kept, so the answer can
         drop it if it hasn't made a sound yet (``_answer_now``)."""
-        self._hold_line = self._line(intent)
+        # Never what comes after the " — ": it can hold the owner's words (``ACK_ABOUT``).
+        log.info("voice: holding line: %s", intent.partition(" \u2014 ")[0])
+        self._keep_holding(self._line(intent))
+
+    def _holding_said(self, line: str) -> None:
+        """A holding line already worded: no model run. Never logged, it can hold their words."""
+        log.info("voice: holding line: the front voice's own (%d chars)", len(line))
+        try:
+            self._keep_holding(self._session.say(line, add_to_chat_ctx=True))
+        except RuntimeError:
+            log.info("voice: the call ended before a line could be said")
+
+    def _keep_holding(self, line) -> None:
+        self._hold_lines = self._waiting_lines() + ([line] if line else [])
+
+    def _waiting_lines(self) -> list:
+        return [h for h in getattr(self, "_hold_lines", []) if not h.done()]
 
     def _answer_now(self, text: str) -> None:
         """Speak Lucius's answer. A holding line still being prepared or waiting its turn is
         dropped — "hang on" followed at once by the answer sounded like two robots (owner,
         2026-11-03); one already being spoken finishes its sentence first, like a person."""
-        held, self._hold_line = getattr(self, "_hold_line", None), None
-        if held is not None and not held.done():
+        # Every one still waiting, not just the newest: an older one played after the answer it
+        # was holding for, and "still on it" then read as nonsense (owner, 2026-11-04).
+        held, self._hold_lines = self._waiting_lines(), []
+        for line in held:
             playing = (
-                self._session.current_speech is held
+                self._session.current_speech is line
                 and getattr(self._session, "agent_state", "") == "speaking"
             )
             if not playing:
-                held.interrupt()
+                log.info("voice: the answer dropped a holding line that hadn't started")
+                line.interrupt()
         self._say(text, answer=True)
 
     def item_added(self, role: str, text: str) -> None:
@@ -439,7 +535,7 @@ class LuciusDesk:
             self._rt.app.call("record_said", session_id=self._session_id, said=said)
         )
 
-    def submit(self, request: str, kind: str = "question") -> str | None:
+    def submit(self, request: str, kind: str = "question", ack: str = "") -> str | None:
         """Queue the owner's request. ``None`` once it is queued: the tool then asks for no
         reply, because the reply the front model wrote after this tool once made up a whole
         answer and spoke it before Lucius's (live call, 2026-11-03) — so we say the "one
@@ -461,17 +557,22 @@ class LuciusDesk:
         self._turn_said = ""  # the owner's words travel with the request instead
         self._sent_at.append(now)
         log.info("voice: front handed Lucius a %s request (%d chars)", kind, len(request))
+        self.timing.handed()
         busy = self._current is not None
         self._queue.put_nowait((said, request, shown))
-        self._holding(QUEUED if busy else self._ack(kind))
+        line = "" if busy else _usable_ack(ack)
+        if line:
+            self._holding_said(line)
+        else:
+            self._holding(QUEUED if busy else self._ack(kind, request))
         return None
 
-    def _ack(self, kind: str = "question") -> str:
+    def _ack(self, kind: str = "question", request: str = "") -> str:
         lines = ACKS_BY_KIND.get(kind, ACKS_BY_KIND["question"])
         last = getattr(self, "_last_ack", None)
         pick = random.choice([a for a in lines if a != last])
         self._last_ack = pick
-        return pick + ACK_RULE
+        return pick + ACK_RULE + _about(request)
 
     def status(self) -> str:
         if self._current is None and self._queue.empty():
@@ -523,59 +624,68 @@ class LuciusDesk:
             self._line(APPROVAL_WAITING)
 
     async def _collect(self, events) -> tuple[str, bool]:
-        """Gather Lucius's reply, speaking a progress line only on a REAL delay, at most once
-        each per request: a lookup past ``SLOW_S`` (one line however many lookups run side by
-        side — one per lookup repeated "hang on" over parallel calls, 2026-11-03), and a long
-        think after the last result. After the first of those, a short varied reminder every
-        ``REMIND_S`` until his answer starts arriving."""
-        text, approval, told = "", False, set()
+        """Gather Lucius's reply. The owner is never left in silence: a lookup past ``SLOW_S``
+        is said once (however many run side by side — one per lookup repeated "hang on" over
+        parallel calls, 2026-11-03), ``QUIET_S`` since they last heard anything gets a line saying
+        what he's on, and then a varied reminder every ``REMIND_S``, until his answer starts.
+
+        Quick lookups in a row no longer restart that wait, and a note he writes before a lookup
+        isn't the answer starting: the two together meant the line was almost never heard (owner,
+        2026-11-04)."""
+        text, answer, approval, slow_told = "", "", False, False
         running: dict[str, tuple[str, float]] = {}
-        last_news = time.monotonic()
-        said_at, gap = 0.0, 0.0  # when the last progress line went out; the wait before the next
+        heard_at, wait = time.monotonic(), self.QUIET_S
         async for event in _with_ticks(events, 1.0):
             now = time.monotonic()
             if event is not None:
-                last_news = now if event.kind in ("tool", "tool_done") else last_news
                 if event.kind == "text":
                     text += event.text
+                    answer += event.text
                 elif event.kind == "tool":
                     running[event.ref] = (event.noun or "that", now)
-                    self._doing = event.text or event.noun
+                    answer = ""
                 elif event.kind == "tool_done":
                     running.pop(event.ref, None)
-                    self._doing = ""
                 elif event.kind == "approval":
                     approval = True
-                elif event.kind == "error" and not text:
-                    text = "Sorry, I couldn't finish that one."
+                elif event.kind == "error" and not answer.strip():
+                    text = answer = "Sorry, I couldn't finish that one."
+                self._doing = _named(n for n, _ in running.values())
+            if getattr(self._session, "agent_state", "") == "speaking":
+                heard_at = now  # counted from the end of what they're hearing
+            # Not over the owner, not once they asked us to wait, and not once his answer is
+            # arriving or a card is waiting: those have their own words.
+            if (
+                getattr(self._session, "agent_state", "") == "speaking"
+                or getattr(self._session, "user_state", "") == "speaking"
+                or now < self._hold_until
+                or approval
+                or answer.strip()
+                or self._waiting_lines()  # one at a time: the last hasn't even played yet
+            ):
+                continue
             slow = next(
                 (n for n, started in running.values() if now - started >= self.SLOW_S), None
             )
             intent = None
-            if slow is not None and "slow" not in told:
-                told.add("slow")
-                intent = SLOW_LOOKUP.format(noun=slow)
-            # Not once his answer has begun arriving: it is moments away.
-            elif (
-                not running
-                and not text.strip()
-                and "think" not in told
-                and now - last_news >= 2 * self.SLOW_S
-            ):
-                told.add("think")
-                intent = STILL_WORKING
-            elif told and not text.strip() and now - said_at >= gap:
+            if slow is not None and not slow_told:
+                slow_told = True
+                intent = SLOW_LOOKUP + STILL_ON_IT_RULE + _about(self._current)
+            elif now - heard_at >= wait:
                 intent = self._still_on_it()
             if intent is not None:
-                said_at, gap = now, random.uniform(*self.REMIND_S)
+                heard_at, wait = now, random.uniform(*self.REMIND_S)
                 self._holding(intent)
-        return text, approval
+        # What he wrote before a later lookup is his working, not his answer: "Note: I used an
+        # incorrect format" was read out, and "understood" said twice (owner, 2026-11-04). With
+        # nothing after it, an earlier reply is still his reply, unless a card is what he left.
+        return (answer if answer.strip() or approval else text), approval
 
     def _still_on_it(self) -> str:
         last = getattr(self, "_last_reminder", None)
         pick = random.choice([r for r in STILL_ON_IT if r != last])
         self._last_reminder = pick
-        return pick + STILL_ON_IT_RULE
+        return pick + STILL_ON_IT_RULE + _about(self._current)
 
     async def _follow_others(self) -> None:
         """For the whole call, read out every turn on the conversation the call didn't start:
@@ -611,6 +721,20 @@ async def _prepend(first, rest):
     yield first
     async for event in rest:
         yield event
+
+
+def _about(request: str) -> str:
+    """What a line says it's about. Its guillemets stripped, as in ``desk.relay_note``: nothing
+    closes the quote early."""
+    about = " ".join((request or "").replace("\u00ab", "").replace("\u00bb", "").split())[:200]
+    return ACK_ABOUT.format(request=about) if about else ""
+
+
+def _named(nouns) -> str:
+    """What's running, for ``check_progress``: the newest two. Not "that" (no noun known), and
+    not looking for a tool, which is no step of the owner's request."""
+    names = list(dict.fromkeys(n for n in nouns if n not in ("that", "tools")))
+    return " and ".join(names[-2:])
 
 
 async def _with_ticks(events, every: float):
@@ -671,7 +795,7 @@ async def entrypoint(ctx: JobContext) -> None:
     # gateway sends each sentence as a final AND the whole turn again unpunctuated, so every
     # sentence reached Lucius twice (measured against the live service, 2026-11-03).
     stt_kwargs = (
-        {"extra_kwargs": {"format_turns": True}}
+        {"extra_kwargs": {"format_turns": True, **PATIENT_TURNS}}
         if cfg["stt_model"].startswith("assemblyai/")
         else {}
     )
@@ -689,15 +813,18 @@ async def entrypoint(ctx: JobContext) -> None:
         # Off: preemptive replies run the front model on a PARTIAL sentence, and its tool call
         # went to Lucius as well — one spoken request became two lookups (live call, 2026-11-03).
         preemptive_generation=False,
+        # A lone "okay" (said to the line before) cut Lucius's answer off four seconds in, and the
+        # front voice moved on to "anything else?" (live call, 2026-11-04). It also keeps street
+        # noise, which transcribes as nothing, from cutting him off at all.
+        min_interruption_words=2,
         user_away_timeout=LuciusDesk.AWAY_S,
     )
     lucius = LuciusDesk(session, ctx, runtime, session_id)
     ctx.add_shutdown_callback(lucius.aclose)
     room_name = ctx.job.room.name
-    # How long the call may run, from the app (``None``: no limit — only the demo has one).
+    # How long the call may run, from the app (the demo's limit), else ``MAX_CALL_S``.
     limit_s = await runtime.app.call("call_limit", room=room_name, session_id=session_id)
-    if limit_s:
-        lucius.limit_call(float(limit_s))
+    lucius.limit_call(float(limit_s or MAX_CALL_S))
 
     async def _call_ended() -> None:  # the app stops answering for this conversation
         await runtime.app.call("end_call", session_id=session_id, room=room_name)
@@ -749,14 +876,20 @@ async def entrypoint(ctx: JobContext) -> None:
 
     @session.on("user_state_changed")
     def _away(ev) -> None:
-        if ev.new_state == "away":
+        lucius.timing.user_state(ev.new_state)
+        if ev.new_state == "speaking":
+            lucius.back()
+        elif ev.new_state == "away":
             lucius.away()
 
     @session.on("agent_state_changed")
     def _spoke(ev) -> None:
         if ev.new_state == "speaking":
+            lucius.timing.agent_speaking()
             lucius.spoke()
 
+    session.on("metrics_collected", lucius.timing.metrics)
+    ctx.room.on("participant_disconnected", lambda who: _caller_left(ctx, who))
     owner = runtime.owner_name
     await session.start(
         agent=FrontAgent(owner, runtime.language_name, lucius),
@@ -767,7 +900,10 @@ async def entrypoint(ctx: JobContext) -> None:
             text_enabled=False, participant_identity=OWNER_IDENTITY
         ),
     )
-    await _wait_for_caller(ctx.room)
+    if not await _wait_for_caller(ctx.room):
+        log.warning("voice: no caller came; closing the room")
+        await ctx.delete_room()
+        return
     await asyncio.sleep(1.5)  # one ring before "picking up"; an instant greeting cut the ring off
     session.generate_reply(instructions=GREETING.format(owner=owner or "them"), tool_choice="none")
 
@@ -784,12 +920,36 @@ def _reason(error) -> str:
     return " ".join(str(inner).split())[:400]
 
 
-async def _wait_for_caller(room: rtc.Room) -> None:
-    if any(p.identity == OWNER_IDENTITY for p in room.remote_participants.values()):
+def _caller_left(ctx, participant) -> None:
+    """The caller is gone for good (LiveKit has already waited out a reconnect): close the room.
+    On its own LiveKit ends the session only for a hang-up, and on any other way of leaving — a
+    phone losing signal, a killed page — it also cancels the silence timer, so the agent stayed
+    in the room with nobody on the line, running up the bill (owner, 2026-11-04)."""
+    if participant.identity != OWNER_IDENTITY:
         return
+    log.info("voice: the caller left; closing the room")
+
+    async def _close() -> None:
+        try:
+            await ctx.delete_room()
+        except Exception:  # noqa: BLE001 — a hang-up may have closed it already
+            log.info("voice: the room was already closed")
+
+    asyncio.ensure_future(_close())
+
+
+async def _wait_for_caller(room: rtc.Room, timeout: float = CALLER_WAIT_S) -> bool:
+    """``False`` if no caller came: the page failed after asking for the call, and the agent
+    would otherwise wait in the room for good."""
+    if any(p.identity == OWNER_IDENTITY for p in room.remote_participants.values()):
+        return True
     joined = asyncio.Event()
     room.on(
         "participant_connected",
         lambda p: joined.set() if p.identity == OWNER_IDENTITY else None,
     )
-    await joined.wait()
+    try:
+        await asyncio.wait_for(joined.wait(), timeout)
+    except asyncio.TimeoutError:
+        return False
+    return True

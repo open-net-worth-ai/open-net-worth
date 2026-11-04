@@ -27,10 +27,15 @@ log = logging.getLogger(__name__)
 
 VOICE_NOTE = (
     "This message was spoken on a live voice call and your reply will be read aloud word "
-    "for word. Answer in one to three short spoken sentences: no markdown, lists, tables, "
-    "links or emoji; round amounts the way a person says them. A voice assistant in front "
-    "of you has already told the owner you're on it, so don't announce lookups. If you "
-    "propose a change, the owner approves it on screen in the app; say so briefly."
+    "for word. Answer in one to three short spoken sentences: no markdown, lists, tables or "
+    "emoji; round amounts the way a person says them. A voice assistant in front of you has "
+    "already told the owner you're on it and what about, so don't announce lookups or say "
+    "their request back to them, unless you need them to confirm a detail. Say only what has "
+    "happened: a tool that gave you a result has run, so never call it waiting for approval. "
+    "Don't say beforehand that a change will need approving: you can't know, and when it does "
+    "the app stops you, shows the card and tells them. Never promise something for later that "
+    "this reply doesn't do. To give them a link, write it as a markdown link with a short "
+    "label: only the label is read aloud, and the link shows in the chat."
 )
 SMALL_TALK_NOTE = (
     "Said on a voice call and answered by the voice assistant directly, without a lookup."
