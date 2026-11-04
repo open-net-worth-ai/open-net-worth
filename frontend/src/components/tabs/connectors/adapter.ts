@@ -297,6 +297,7 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     statusText: status.statusText,
     tone: status.tone,
     attention: status.attention,
+    lastError: status.attention ? c.error || str(cfg, 'last_error') || undefined : undefined,
     enabled: c.enabled,
     // An MCP server is configured the moment it is in the store — its endpoint WAS the
     // setup. Everything else earns it by holding credentials.

@@ -77,7 +77,7 @@ export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps):
             <Icons.checkcircle /> <span className="cn-statusgood-label">{entry.statusText}</span>
           </span>
         ) : entry.tone === 'bad' ? (
-          <span className="cn-statusbad" title={entry.statusText}>
+          <span className="cn-statusbad" title={entry.lastError ?? entry.statusText}>
             <Icons.warn /> {entry.statusText}
           </span>
         ) : (

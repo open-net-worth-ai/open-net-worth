@@ -20,7 +20,7 @@ import { ErrorState, TabSkeleton } from '../../ui'
 import './connectors.css'
 import { Icons } from './icons'
 import { Btn, Tabs, useToast } from './primitives'
-import { ConnectorList } from './ConnectorList'
+import { ConnectorList, statusCounts } from './ConnectorList'
 import { ConnectorDetail } from './ConnectorDetail'
 import { ConnectorConfig, hasConfigForm } from './ConnectorConfig'
 import { DirectoryModal } from './DirectoryModal'
@@ -73,6 +73,7 @@ export function ConnectorsTab(): JSX.Element {
     () => (query.trim() || statusFilter !== 'all' ? undefined : suggestionsBySection(connectors)),
     [connectors, query, statusFilter],
   )
+  const counts = useMemo(() => statusCounts(entries, { query, tab }), [entries, query, tab])
   const [detailId, setDetailId] = useState<string | null>(null)
   /** The MCP server whose connection is being edited — the add flow, reopened pre-filled. */
   const [editMcpId, setEditMcpId] = useState<string | null>(null)
@@ -395,6 +396,15 @@ export function ConnectorsTab(): JSX.Element {
                   onClick={() => setStatusFilter(k)}
                 >
                   {label}
+                  {initialLoading || error ? null : (
+                    <span
+                      className={
+                        'cn-seg-count' + (k === 'attention' && counts[k] > 0 ? ' bad' : '')
+                      }
+                    >
+                      {counts[k]}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>

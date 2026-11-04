@@ -610,7 +610,13 @@ function Identity({
             <span className="cn-version">v{entry.version.replace(/^v/i, '')}</span>
           ) : null}
           {entry.tag ? <span className="cn-tag">{entry.tag}</span> : null}
-          <Badge tone={entry.tone}>{entry.statusText}</Badge>
+          {entry.lastError ? (
+            <span className="cn-statushint" title={entry.lastError}>
+              <Badge tone={entry.tone}>{entry.statusText}</Badge>
+            </span>
+          ) : (
+            <Badge tone={entry.tone}>{entry.statusText}</Badge>
+          )}
         </div>
         <div className="cn-idhead-sub">{entry.sub}</div>
       </div>

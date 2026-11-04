@@ -276,6 +276,8 @@ export interface ConnectorEntry {
   tone: StatusTone
   /** True only for an ACTUAL error — never "configured but switched off" (spec §1). */
   attention: boolean
+  /** Why it needs attention, in the words the failure recorded — the status's hover text. */
+  lastError?: string
   /** Drives the detail page's primary action: Disconnect ⇄ Connect (spec §3). */
   enabled: boolean
   /** The connector's own sub-line — bot handle, mailbox, query name, provider. Shown on

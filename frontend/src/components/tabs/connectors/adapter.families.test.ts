@@ -39,3 +39,26 @@ describe('a connected connector’s family', () => {
     expect(toEntry(native('some_future_kind')).families).not.toContain('MCP')
   })
 })
+
+describe('why a connector needs attention', () => {
+  it('carries the error the wire reports', () => {
+    const entry = toEntry({ ...native('plaid'), status: 'error', error: 'Bad key' })
+    expect(entry.attention).toBe(true)
+    expect(entry.lastError).toBe('Bad key')
+  })
+
+  it('reads an MCP failure from its config', () => {
+    const entry = toEntry({
+      ...native('mcp:acme'),
+      kind: 'mcp',
+      config: { last_status: 'connect_error', last_error: 'Unreachable' },
+    })
+    expect(entry.lastError).toBe('Unreachable')
+  })
+
+  it('carries none while healthy', () => {
+    const entry = toEntry({ ...native('plaid'), config: { last_error: 'An old failure' } })
+    expect(entry.attention).toBe(false)
+    expect(entry.lastError).toBeUndefined()
+  })
+})

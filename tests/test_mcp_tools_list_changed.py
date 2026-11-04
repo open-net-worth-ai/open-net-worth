@@ -175,15 +175,42 @@ def test_the_error_shows_after_three_failures_in_a_row(manager, tmp_path):
     assert server.discovered_tools == []
 
 
-def test_boot_still_shows_a_failure_at_once(manager, tmp_path):
+def test_one_failed_read_at_boot_keeps_the_tools(manager, tmp_path):
     mgr, store = manager
     _unreachable(store, tmp_path)
 
     mgr.connect_enabled()
 
     server = store.find("down")
+    assert server.last_status == "ok"
+    assert [t["name"] for t in server.discovered_tools] == ["ping"]
+    assert server.refresh_failures == 1
+
+
+def test_boot_misses_count_toward_the_same_three_in_a_row(manager, tmp_path):
+    from backend.mcp.client_manager import REFRESH_FAILURES_BEFORE_ERROR
+
+    mgr, store = manager
+    _unreachable(store, tmp_path)
+
+    for _ in range(REFRESH_FAILURES_BEFORE_ERROR):
+        mgr.connect_enabled()
+
+    server = store.find("down")
     assert server.last_status != "ok"
     assert server.discovered_tools == []
+
+
+def test_boot_shows_a_failure_at_once_with_no_good_list_to_keep(manager, tmp_path):
+    mgr, store = manager
+    _unreachable(store, tmp_path)
+    store.record_discovery("down", [], "never_connected", None)
+
+    mgr.connect_enabled()
+
+    server = store.find("down")
+    assert server.last_status == "connect_error"
+    assert server.last_error
 
 
 def test_the_hourly_retry_skips_healthy_servers_and_a_success_resets_the_count(

@@ -3830,6 +3830,15 @@ body.hide-amounts .money * {
     padding: 0 3px;
     line-height: 1;
   }
+  .sidebar-attention-dot {
+    position: absolute;
+    top: -2px;
+    right: -3px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--bad);
+  }
 
   @media (max-width: 720px) {
     .intel-header-actions {

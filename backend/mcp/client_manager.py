@@ -830,25 +830,27 @@ class McpClientManager:
         server can take as long as it likes without delaying the app becoming ready to serve
         requests.
         """
-        self._connect_all(self._store.enabled(), unattended=False)
+        self._connect_all(self._store.enabled())
 
     def refresh_tools(self, *, only_unhealthy: bool = False) -> None:
         """The scheduled re-read: every enabled server (daily), or only those whose last read
-        failed (hourly). Unlike boot, ONE failed read keeps the last good tool list — a
+        failed (hourly). Like boot, ONE failed read keeps the last good tool list — a
         30-second blip must not hide a server's tools until somebody notices; the error shows
         only after ``REFRESH_FAILURES_BEFORE_ERROR`` failures in a row."""
         servers = self._store.enabled()
         if only_unhealthy:
             servers = [s for s in servers if s.last_status != "ok" or s.refresh_failures > 0]
-        self._connect_all(servers, unattended=True)
+        self._connect_all(servers)
 
-    def _connect_all(self, servers: List[McpServerConfig], *, unattended: bool) -> None:
+    def _connect_all(self, servers: List[McpServerConfig]) -> None:
+        """Read each server on its own thread. Unattended by definition, boot included: the
+        network is often not up yet in the seconds after a start, and nobody is watching."""
         if not servers:
             return
         threads = [
             threading.Thread(
                 target=self._connect_one_at_boot,
-                args=(server, unattended),
+                args=(server,),
                 daemon=True,
                 name=f"mcp-connect:{server.id}",
             )
@@ -859,12 +861,12 @@ class McpClientManager:
         for t in threads:
             t.join()
 
-    def _connect_one_at_boot(self, server: McpServerConfig, unattended: bool = False) -> None:
+    def _connect_one_at_boot(self, server: McpServerConfig) -> None:
         """One server's connect attempt — runs in its own thread. Never raises."""
         if server.transport == "stdio":
-            self._boot_connect_one(server, unattended=unattended)
+            self._boot_connect_one(server, unattended=True)
         else:
-            self._discover(server, unattended=unattended)
+            self._discover(server, unattended=True)
 
     def _record_failure(
         self, server_id: str, status: str, error: str, *, unattended: bool, auth: bool = False
