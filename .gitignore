@@ -168,3 +168,6 @@ qa/artifacts/
 /docs/security/
 /docs/launch/
 /.design-sync/
+# Project-owned CLI sign-ins; never share global refreshable login state.
+.codex-home/
+.claude-home/

@@ -152,6 +152,16 @@ def _bearer_token(request: HTTPConnection) -> Optional[str]:
 
 def require_auth(request: HTTPConnection) -> None:
     """Gate every request. Returns ``None`` to allow; raises ``HTTPException(401)`` to deny."""
+    route = request.scope.get("route")
+    if getattr(route, "path", None) == "/api/trading/gateway/{run_id}":
+        from backend.api.demo_lockdown import refuse_on_demo
+        from backend.services.trading_access import authenticate_access
+
+        refuse_on_demo(request)
+        presented = _bearer_token(request)
+        if presented and authenticate_access(request.path_params["run_id"], presented):
+            return
+        raise _UNAUTHORIZED
     if getattr(request.state, "desktop_authenticated", False):
         return
     if getattr(request.state, "gateway_authenticated", False):

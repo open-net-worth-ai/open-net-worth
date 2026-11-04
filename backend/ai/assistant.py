@@ -4806,6 +4806,11 @@ async def _run_turn(
                             activation = None
                             _mcp_image_ids: list[str] = []
                             try:
+                                from backend.core.trading_runtime import trading_tool_refusal
+
+                                trading_refusal = trading_tool_refusal(tool_name)
+                                if trading_refusal is not None:
+                                    raise ValueError(trading_refusal)
                                 # External-MCP tools (P3-MCP-CLIENT) carry the reserved
                                 # ``mcp__`` namespace and are NOT in the internal registry;
                                 # route them to the external dispatcher via the

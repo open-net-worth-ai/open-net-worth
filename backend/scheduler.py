@@ -574,6 +574,15 @@ def _outward_jobs_allowed() -> bool:
     return os.environ.get("ONW_QA_RUN_SCHEDULES") == "1"
 
 
+async def _run_trading_agents() -> None:
+    try:
+        from backend.ai.trading_runner_adapter import run_due_trading_agents
+
+        await run_due_trading_agents()
+    except Exception:
+        logger.exception("scheduler: trading workspace tick failed")
+
+
 def start() -> None:
     global _scheduler
     if _scheduler and _scheduler.running:
@@ -627,6 +636,14 @@ def start() -> None:
     # `enabled` flag (P2-SK2) — but not on a QA run (see _outward_jobs_allowed).
     if outward:
         _schedule_automations_job()
+        _scheduler.add_job(
+            _run_trading_agents,
+            trigger=IntervalTrigger(seconds=30),
+            id="trading_workspaces",
+            replace_existing=True,
+            misfire_grace_time=60,
+            max_instances=1,
+        )
 
     # Two-way YNAB sync — one tick a minute; the schedule itself (15 min … daily, or manual
     # only) lives in the sync's state, so changing it needs no re-registration here.

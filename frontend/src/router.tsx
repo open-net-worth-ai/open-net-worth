@@ -98,6 +98,29 @@ const investmentsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/investments',
 })
+export function validateTradingSearch(search: Record<string, unknown>): {
+  view?: 'workspaces' | 'compare'
+  workspace?: string
+  run?: string
+  section?: 'overview' | 'activity' | 'orders' | 'holdings' | 'artifacts'
+  comparison?: string
+} {
+  const sections = ['overview', 'activity', 'orders', 'holdings', 'artifacts'] as const
+  return {
+    view: search.view === 'compare' ? 'compare' : 'workspaces',
+    workspace: typeof search.workspace === 'string' ? search.workspace : undefined,
+    run: typeof search.run === 'string' ? search.run : undefined,
+    section: sections.includes(search.section as (typeof sections)[number])
+      ? (search.section as (typeof sections)[number])
+      : 'overview',
+    comparison: typeof search.comparison === 'string' ? search.comparison : undefined,
+  }
+}
+const tradingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/trading',
+  validateSearch: validateTradingSearch,
+})
 // Optional keys, so a navigate() that predates a newly added param still typechecks.
 export function validateAccountsSearch(search: Record<string, unknown>): {
   account?: string
@@ -275,6 +298,7 @@ const routeTree = rootRoute.addChildren([
   dashboardRoute,
   inboxRoute,
   investmentsRoute,
+  tradingRoute,
   // Drill-in before parent so specificity matches first
   accountsPayeesRoute,
   accountsRoute,

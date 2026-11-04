@@ -84,6 +84,17 @@ def check_snapshot(name: str, observed: dict, differ) -> list[str]:
 
 
 @pytest.fixture
+def project_cli_cache(monkeypatch):
+    from backend.ai.models import codex_home
+
+    selected = os.environ.get("CODEX_HOME")
+    if selected:
+        cache = Path(selected) / "onw-managed-cli"
+        cache.mkdir(mode=0o700, parents=True, exist_ok=True)
+        monkeypatch.setattr(codex_home, "_HOME_DIR", cache)
+
+
+@pytest.fixture
 async def codex_frames(monkeypatch):
     """Record every frame the Codex app-server sends us, and stop its child afterwards.
 

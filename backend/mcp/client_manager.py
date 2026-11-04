@@ -62,6 +62,7 @@ transport doesn't share the bug).
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import threading
 import time
@@ -447,6 +448,44 @@ class McpClientManager:
         ``blocked`` — re-read by ``apply_confirmed`` so nothing the caller decided fires past
         them."""
         return await self.apply_confirmed(name, args)
+
+    async def call_structured_tool(self, server_id: str, tool: str, args: dict) -> object:
+        """Read a typed provider receipt without stripping model-facing text fences.
+
+        Trading adapters consume only reviewed JSON fields. They still require the same
+        standing tool permission as unattended external calls; this is not an approval path.
+        """
+        import jsonschema
+
+        from backend.core.errors import ConflictError
+
+        server = self._store.find(server_id)
+        refusal = self._dispatch_refusal(server, tool)
+        if refusal is not None or server is None:
+            raise ConflictError("Broker MCP tool is unavailable")
+        level = tool_permissions.get_tool_permission(mcp_connector_id(server.id), tool)
+        if level != "always_allow":
+            raise ConflictError("Broker MCP tool requires an explicit standing permission")
+        discovered = next((t for t in server.discovered_tools if t.get("name") == tool), None)
+        if discovered is None:
+            raise ConflictError("Broker MCP tool schema is unavailable")
+        try:
+            jsonschema.validate(args, discovered.get("inputSchema") or {})
+        except (jsonschema.ValidationError, jsonschema.SchemaError) as exc:
+            raise ConflictError("Broker MCP tool schema does not match the adapter") from exc
+        try:
+            server = await asyncio.to_thread(oauth_flow.ensure_fresh_token, server)
+            raw, images = await asyncio.to_thread(self._call_tool_blocking, server, tool, args)
+            if images or len(raw) > 2_000_000:
+                raise ValueError("Expected a bounded JSON receipt")
+            result = json.loads(raw) if raw.strip() else None
+        except Exception as exc:
+            raise ConflictError(
+                "Broker MCP receipt unavailable; reconcile before retrying"
+            ) from exc
+        if isinstance(result, dict) and result.get("error"):
+            raise ConflictError("Broker reported an error; reconcile before retrying")
+        return result
 
     async def _fire(
         self, server: McpServerConfig, tool: str, args: dict, name: str

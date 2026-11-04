@@ -37,6 +37,11 @@ The providers you can add: **Anthropic**, **OpenAI**, **Google Gemini**, **xAI (
 (OpenAI-compatible)** for any other endpoint that speaks the OpenAI API, and the **Claude Code
 CLI**, **Codex CLI** and **Antigravity CLI** programs if they're installed on this computer.
 
+For a project-specific Claude Code login, launch the app with `CLAUDE_CONFIG_DIR` pointing
+to that project's private login directory. The Claude CLI child honors an explicitly
+selected directory; its login need not be the operator's global CLI login. Keep sign-ins
+local and ignored by Git, and complete authentication through the CLI's own login flow.
+
 Each provider row shows whether it works: **Ready**, **Key rejected** or **Can't connect** (for
 a CLI: **Installed** or **Not installed**). Click **Edit** on a row to change it, **Test
 connection**, or **Remove** it. The switch on a row turns a provider off without deleting it.

@@ -1570,7 +1570,6 @@ def test_the_child_env_cannot_reroute_the_cli_or_read_app_secrets(monkeypatch):
         "ANTHROPIC_API_KEY",
         "ANTHROPIC_BASE_URL",
         "ANTHROPIC_AUTH_TOKEN",
-        "CLAUDE_CONFIG_DIR",
         "CLAUDE_CODE_USE_BEDROCK",
         "OTEL_EXPORTER_OTLP_ENDPOINT",
         "ONW_SECRET_THING",
@@ -1583,7 +1582,6 @@ def test_the_child_env_cannot_reroute_the_cli_or_read_app_secrets(monkeypatch):
     assert "ANTHROPIC_API_KEY" not in env
     assert "ANTHROPIC_BASE_URL" not in env  # would silently meter a subscription run
     assert "ANTHROPIC_AUTH_TOKEN" not in env
-    assert "CLAUDE_CONFIG_DIR" not in env
     assert "CLAUDE_CODE_USE_BEDROCK" not in env
     assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in env
     assert "ONW_SECRET_THING" not in env
@@ -1592,6 +1590,16 @@ def test_the_child_env_cannot_reroute_the_cli_or_read_app_secrets(monkeypatch):
 
     # An explicitly-stored key is the ONE thing that comes back.
     assert ccp._child_env("sk-ant-test")["ANTHROPIC_API_KEY"] == "sk-ant-test"
+
+
+def test_explicit_project_login_home_reaches_claude_child(monkeypatch, tmp_path):
+    project_home = tmp_path / "project-owned-claude-home"
+    project_home.mkdir()
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(project_home))
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "synthetic-unselected-key")
+    env = ccp._child_env("")
+    assert env["CLAUDE_CONFIG_DIR"] == str(project_home)
+    assert "ANTHROPIC_API_KEY" not in env
 
 
 # ── Echoed <tool_result> blocks (live, 2026-08-03) ────────────────────────────

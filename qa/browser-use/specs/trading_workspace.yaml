@@ -1,0 +1,15 @@
+id: TRD-WORKSPACE
+title: Trading workspace real-browser lifecycle and execution
+description: Exercise the complete synthetic trading UI through an attested isolated app.
+acceptance_ids: [TRD-01, TRD-02, TRD-03, TRD-04, TRD-05, TRD-06]
+setup_script: verify_trading_workspace.py
+fixture_only: true
+acceptance_criteria:
+  - Workspace and multi-account backtest persist through UI reload.
+  - Lifecycle confirmations produce persisted state transitions.
+  - Isolated strategy emits orders and fills are reflected in account performance.
+  - Scoped access is one-time, is absent from browser persistence, and revokes.
+  - Comparisons enforce shared scenario conditions.
+  - Controls and table layout remain usable at declared responsive widths.
+expected:
+  pass_condition: "result contains 'PASS'"

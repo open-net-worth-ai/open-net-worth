@@ -341,11 +341,15 @@ def test_every_dispatch_site_consults_the_permission_store():
             if name in reads:
                 callers.setdefault(rel, set()).add(name)
 
-    assert set(callers) == {
-        "ai/tools/_confirm_gate.py",
-        "ai/tools/_confirm_gate_v2.py",
-        "mcp/client_manager.py",
-    }, (
+    assert (
+        set(callers)
+        == {
+            "ai/tools/_confirm_gate.py",
+            "ai/tools/_confirm_gate_v2.py",
+            "mcp/client_manager.py",
+            "services/trading_scripts.py",  # parent validates script-emitted intents against the same permission authority
+        }
+    ), (
         "the permission store is read somewhere new. Every dispatch site MUST consult it, "
         "and every consulting site must be a dispatch site — review this addition rather "
         f"than widening the assertion. Found: {sorted(callers)}"

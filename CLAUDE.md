@@ -71,6 +71,7 @@ current base; otherwise recompute via `txn_base_amount()`.
 | Intel claims (cross-subject push dedup) | `claims_service.apply_claim_push` |
 | Intel delivery (now / later / skip, flag `intel_delivery_decider`) | `news_delivery.apply_delivery_change` |
 | Memory | `memory_write.apply_memory_change` |
+| Trading workspace orders | `services.trading.submit_order` / `cancel_order`; run authority is server-bound, simulated funds never enter the real book |
 
 - `ledger.resolve_transaction_row(...)` is the resolution half, NO store write — previews render
   exactly what a write would store.

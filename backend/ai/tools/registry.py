@@ -946,6 +946,11 @@ async def _dispatch_call(
     # was asked for.
     invoked = name
     started = time.perf_counter()
+    from backend.core.trading_runtime import trading_tool_refusal
+
+    trading_refusal = trading_tool_refusal(name)
+    if trading_refusal is not None:
+        return json.dumps({"error": trading_refusal}), None
     # Set (not reset-in-finally, mirroring ``_active_call`` below): read via
     # ``core.tool_use_context.get_tool_use_id()`` by the permission gate and by any
     # self-staging handler's own confirm-gate call, both of which run inside THIS dispatch.
@@ -961,6 +966,16 @@ async def _dispatch_call(
         # PREVIOUS dispatch's narrowing, which ``_active_call`` still holds by design.
         _record_call(name, invoked, input_data, unknown, started, ())
         return unknown, None
+    from backend.core.trading_runtime import trading_context
+
+    if trading_context() is not None:
+        strict_error = external_args_error(name, entry.input_schema, input_data)
+        if strict_error is not None:
+            return json.dumps({"error": strict_error}), None
+        if gate.effective_level(name) != "always_allow":
+            return json.dumps(
+                {"error": f"The owner must allow {name} before an autonomous run can use it."}
+            ), None
     refusal, input_data = _refusal_before_gate(name, entry, input_data, gate)
     if refusal is not None:
         _record_call(name, invoked, input_data, refusal, started, ())

@@ -243,6 +243,7 @@ async def run_spec(
             fixtures_dir=FIXTURES_DIR,
             backend_url=backend_url,
             qa_nonce=qa_nonce,
+            timeout_s=effective_timeout,
         )
         if not setup.ok:
             return SpecResult(

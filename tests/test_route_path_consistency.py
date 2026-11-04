@@ -251,6 +251,7 @@ _KNOWN_FRONTEND_EXTRAS: frozenset[str] = frozenset(
         # invalidateQueryCache('/api/desktop/') to drop every cached /api/desktop/* read. Exact
         # match on purpose — a startswith skip would also hide a missing /api/desktop/<route>.
         "/api/desktop/",
+        "/api/trading",  # shared prefix in tradingRequest(), not a separately fetched endpoint
     }
 )
 

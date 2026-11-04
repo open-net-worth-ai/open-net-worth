@@ -57,13 +57,16 @@ def test_windows_names_match_whatever_their_case():
 def test_the_cli_providers_use_the_same_filter(monkeypatch):
     for key, value in {**SECRETS, **KEPT}.items():
         monkeypatch.setenv(key, value)
-    for env in (
-        claude_cli_provider._child_env(""),
-        codex_cli_provider._child_env(""),
-        codex_app_server.child_env(""),
+    for provider, env in (
+        ("claude", claude_cli_provider._child_env("")),
+        ("codex", codex_cli_provider._child_env("")),
+        ("codex_native", codex_app_server.child_env("")),
     ):
         for secret in SECRETS:
             if secret == "CODEX_HOME":  # the Codex providers set their own isolated one
+                continue
+            if secret == "CLAUDE_CONFIG_DIR" and provider == "claude":
+                assert env[secret] == SECRETS[secret]  # explicit project-owned login selector
                 continue
             assert secret not in env
         assert env["PATH"] == "/usr/bin"

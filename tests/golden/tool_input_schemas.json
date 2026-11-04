@@ -10744,5 +10744,211 @@
     },
     "type": "object",
     "required": []
+  },
+  "get_trading_environment": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "get_trading_account": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  },
+  "get_trading_market_data": {
+    "type": "object",
+    "properties": {
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 200
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "additionalProperties": false
+  },
+  "submit_trading_order": {
+    "additionalProperties": false,
+    "properties": {
+      "account_id": {
+        "type": "string"
+      },
+      "instrument": {
+        "additionalProperties": false,
+        "properties": {
+          "symbol": {
+            "maxLength": 32,
+            "minLength": 1,
+            "type": "string"
+          },
+          "venue": {
+            "default": "simulation",
+            "maxLength": 80,
+            "minLength": 1,
+            "type": "string"
+          },
+          "asset_class": {
+            "default": "stock",
+            "enum": [
+              "stock",
+              "crypto"
+            ],
+            "type": "string"
+          },
+          "currency": {
+            "default": "USD",
+            "pattern": "^[A-Z]{3,8}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "type": "object"
+      },
+      "side": {
+        "enum": [
+          "buy",
+          "sell"
+        ],
+        "type": "string"
+      },
+      "quantity": {
+        "anyOf": [
+          {
+            "exclusiveMinimum": 0.0,
+            "type": "number"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "order_type": {
+        "default": "market",
+        "enum": [
+          "market",
+          "limit"
+        ],
+        "type": "string"
+      },
+      "limit_price": {
+        "anyOf": [
+          {
+            "exclusiveMinimum": 0.0,
+            "type": "number"
+          },
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "time_in_force": {
+        "default": "gtc",
+        "enum": [
+          "day",
+          "gtc"
+        ],
+        "type": "string"
+      },
+      "request_id": {
+        "maxLength": 120,
+        "minLength": 1,
+        "type": "string"
+      },
+      "decision_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "account_id",
+      "instrument",
+      "side",
+      "quantity",
+      "request_id"
+    ],
+    "type": "object"
+  },
+  "cancel_trading_order": {
+    "type": "object",
+    "properties": {
+      "order_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "order_id"
+    ],
+    "additionalProperties": false
+  },
+  "list_trading_orders": {
+    "type": "object",
+    "properties": {
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 200
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "additionalProperties": false
+  },
+  "list_trading_fills": {
+    "type": "object",
+    "properties": {
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 200
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "additionalProperties": false
+  },
+  "record_trading_decision": {
+    "type": "object",
+    "properties": {
+      "summary": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 4000
+      },
+      "wake_after_seconds": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 86400,
+        "description": "Optional delay until the next decision, measured by this environment's clock."
+      }
+    },
+    "required": [
+      "summary"
+    ],
+    "additionalProperties": false
+  },
+  "run_trading_strategy": {
+    "type": "object",
+    "properties": {
+      "source": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64000
+      }
+    },
+    "required": [
+      "source"
+    ],
+    "additionalProperties": false
   }
 }

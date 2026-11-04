@@ -239,6 +239,9 @@ def _child_env(api_key: str, no_thinking: bool = False) -> dict:
     that is the whole point of this transport.
     """
     env = scrubbed_environ()
+    config_dir = (os.environ.get("CLAUDE_CONFIG_DIR") or "").strip()
+    if config_dir:
+        env["CLAUDE_CONFIG_DIR"] = config_dir
     if api_key:
         env["ANTHROPIC_API_KEY"] = api_key
     # Non-interactive, machine-readable: no spinner/telemetry surprises in the stream.

@@ -167,6 +167,9 @@ const Automations = lazyChunk(() =>
     default: m.Automations,
   })),
 )
+const Trading = lazyChunk(() =>
+  import('./components/tabs/Trading').then((m) => ({ default: m.Trading })),
+)
 const Builder = lazyChunk(() =>
   import('./components/tabs/Builder').then((m) => ({ default: m.Builder })),
 )
@@ -176,7 +179,7 @@ const Connectors = lazyChunk(() =>
   })),
 )
 
-const LAZY_TABS = [Commitments, Assets, Intel, Skills, Automations, Builder, Connectors]
+const LAZY_TABS = [Commitments, Assets, Intel, Skills, Automations, Trading, Builder, Connectors]
 
 /** Warms every lazy tab once the shell is idle, so a first visit skips the chunk wait. */
 function useWarmLazyTabs() {
@@ -198,6 +201,7 @@ const TAB_SKELETON_VARIANTS: Record<TabId, TabSkeletonVariant> = {
   dashboard: 'dashboard',
   inbox: 'inbox',
   investments: 'holdings',
+  trading: 'holdings',
   accounts: 'accounts',
   assets: 'assets',
   commitments: 'commitments',
@@ -251,6 +255,7 @@ const TAB_ICONS: Record<TabId, ReactElement> = {
   dashboard: <LayoutGrid {...ICON_PROPS} />,
   inbox: <InboxIcon {...ICON_PROPS} />,
   investments: <TrendingUp {...ICON_PROPS} />,
+  trading: <TrendingUp {...ICON_PROPS} />,
   accounts: <Wallet {...ICON_PROPS} />,
   assets: <Box {...ICON_PROPS} />,
   commitments: <Target {...ICON_PROPS} />,
@@ -1588,6 +1593,7 @@ function RouterShellInner() {
                                 subTabRequest={subTabRequest}
                               />
                             )}
+                            {tabToRender === 'trading' && <Trading />}
                             {tabToRender === 'accounts' && (
                               <AccountsTab
                                 refresh={refresh}

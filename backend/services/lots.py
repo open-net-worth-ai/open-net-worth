@@ -787,6 +787,7 @@ def _book_funding_debit(
         "from_amount": gross,
         "from_currency": cost_ccy,
         "source": change.get("source", "manual"),
+        "external_refs": change.get("external_refs", []),
     }
     if payee_id:
         txn_data["payee_id"] = payee_id
@@ -1193,6 +1194,7 @@ def _book_deposit_proceeds(
         "to_amount": net_proceeds,
         "to_currency": proceeds_ccy,
         "source": change.get("source", "manual"),
+        "external_refs": change.get("external_refs", []),
     }
     if payee_id:
         txn_data["payee_id"] = payee_id

@@ -276,7 +276,9 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # ynab_list_plans and ynab_get_plan, plus a plan_id on ynab_list_accounts /
     # ynab_fetch_transactions — the connector keeps only the token and Lucius names the plan per
     # call. ~1.4K chars, connector-scoped, so the CORE default offer is unchanged.
-    budget = 477_000
+    # 2026-11-04: nine explicitly scoped trading operations, ~3.3K additional registry
+    # bytes. Ordinary CORE offers are unchanged; the separate default-offer gate still applies.
+    budget = 482_000
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

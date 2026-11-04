@@ -1,0 +1,13 @@
+id: TRD-EXTERNAL-PROVIDER
+title: Independent provider agent trades through the scoped MCP gateway
+description: A real Codex provider drives an independent MCP client against synthetic capital.
+acceptance_ids: [TRD-03, TRD-04]
+setup_script: verify_trading_external_provider.py
+fixture_only: true
+timeout_seconds: 210
+acceptance_criteria:
+  - The provider authors and executes strategy code through actual HTTP MCP tools.
+  - The normalized order produces a simulated fill and the scoped grant is revoked.
+  - Provider usage and tool receipts are retained without credentials.
+expected:
+  pass_condition: "result contains 'passed'"

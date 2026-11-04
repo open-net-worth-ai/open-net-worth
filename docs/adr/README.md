@@ -75,6 +75,7 @@ away**. To change a recorded decision, add a **new** ADR and flip the old one's 
 
 | ADR | Title | Status | Date |
 |---|---|---|---|
+| [2026-11-04-trading-workspaces-own-execution](2026-11-04-trading-workspaces-own-execution.md) | Trading workspaces own execution and run-scoped agent authority | Accepted | 2026-11-04 |
 | [2026-10-03-codex-tools-are-native-calls-the-host-runs](2026-10-03-codex-tools-are-native-calls-the-host-runs.md) | Codex gets our tools as real tool calls — captured, never executed, by the host loop | Accepted | 2026-10-03 |
 | [2026-10-03-conversation-read-state-lives-on-the-server](2026-10-03-conversation-read-state-lives-on-the-server.md) | Conversation read state lives on the server, not in one browser | Accepted | 2026-10-03 |
 | [2026-09-12-accounts-have-no-colour](2026-09-12-accounts-have-no-colour.md) | Accounts have no user-configured colour | Accepted | 2026-09-12 |

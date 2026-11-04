@@ -44,6 +44,7 @@ const BOOT = arg('boot') === true
 const TABS = [
   'dashboard',
   'investments',
+  'trading',
   'accounts',
   'assets',
   'commitments',

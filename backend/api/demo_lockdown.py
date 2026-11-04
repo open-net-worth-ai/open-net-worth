@@ -58,6 +58,7 @@ def _rules(methods: frozenset[str], *patterns: str) -> tuple[_Rule, ...]:
 
 
 _LOCKED: tuple[_Rule, ...] = (
+    *_rules(_WRITE, r"^/api/trading(/.*)?$"),
     # secrets, credentials, auth state
     *_rules(
         _ANY,
