@@ -1,4 +1,4 @@
-import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, Notification, powerMonitor, protocol, safeStorage, shell, Tray } from 'electron';
+import { app, autoUpdater, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, net, Notification, powerMonitor, protocol, safeStorage, shell, systemPreferences, Tray } from 'electron';
 import { existsSync } from 'node:fs';
 import { release } from 'node:os';
 import { mkdir, readFile, realpath } from 'node:fs/promises';
@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import type { DesktopCommand, DesktopConnection, DesktopSettings, DesktopUpdateState, DesktopWhatsNew } from '../contracts';
 import { BackendSupervisor } from './backend';
 import { startDictation, stopDictation } from './dictation';
+import { MicrophoneReopen } from './microphone-reopen';
 import { microphoneSettingsUrl } from './microphone-settings';
 import { chooseImportFiles, saveExport } from './dialogs';
 import { readSelectedFiles, supportedFile } from './files';
@@ -62,6 +63,7 @@ if (qaInactiveMode(app.isPackaged, process.env) && process.platform === 'darwin'
 if (qaMode && process.env.ONW_DESKTOP_ROOT) app.setPath('userData', resolve(process.env.ONW_DESKTOP_ROOT, 'desktop'));
 else if (PROFILE.settingsFolder) app.setPath('userData', join(app.getPath('appData'), PROFILE.settingsFolder));
 const QUIT_DEADLINE_MS = 40_000;
+const microphoneReopen = new MicrophoneReopen(() => systemPreferences.getMediaAccessStatus('microphone'));
 // At login a server on this machine starts alongside the app; keep the opening splash up this long for it.
 const SERVER_STARTUP_PATIENCE_MS = 60_000;
 const pendingFiles: string[] = [];
@@ -131,9 +133,13 @@ if (squirrelStartup || !app.requestSingleInstanceLock()) {
     if (process.platform === 'darwin' && updates?.phase === 'ready') showUpdateProgress(updates.readyVersion, false);
     // Every wait inside shutdown() is bounded, but quitting must not depend on that staying true.
     const installing = process.platform === 'darwin' && updates?.phase === 'ready' ? updates.readyVersion : undefined;
+    const reopen = process.platform === 'darwin' && installing === undefined && microphoneReopen.shouldReopen(BrowserWindow.getFocusedWindow() !== null);
     void Promise.race([shutdown(), new Promise<void>(done => setTimeout(done, QUIT_DEADLINE_MS).unref())])
       .then(() => installing !== undefined && preferences?.current.notifications ? announceInstall(installing, true) : undefined)
-      .finally(() => app.exit(0));
+      .finally(() => {
+        if (reopen) app.relaunch();
+        app.exit(0);
+      });
   });
   process.on('SIGTERM', () => app.quit());
   process.on('SIGINT', () => app.quit());
@@ -255,6 +261,7 @@ async function runtime(): Promise<RuntimeConfig> {
 }
 
 async function boot(): Promise<void> {
+  if (process.platform === 'darwin') microphoneReopen.watch();
   await mkdir(app.getPath('userData'), { recursive: true, mode: 0o700 });
   const profile = await realpath(app.getPath('userData'));
   const fallback = join(app.getPath('home'), PROFILE.bookFolder);
