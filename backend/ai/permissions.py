@@ -69,6 +69,9 @@ class OldEngine(_Engine):
     def automation_ref(self, session_id: Optional[str] = None) -> dict:
         return {}
 
+    def judge_note(self, tool_name: str) -> dict:
+        return {}
+
     def automation_refusal(self, tool_name: str) -> Optional[tuple[str, None]]:
         return None
 
@@ -199,10 +202,15 @@ class NewEngine(_Engine):
         if decision == "allow":
             return await dispatcher.fire_allowed(name, args)
         # The card must say which conversation and Automation it belongs to, so its Always allow
-        # lands on that Automation's own list exactly as a native card's does.
+        # lands on that Automation's own list exactly as a native card's does — and why Auto asked,
+        # as a native card does.
         from backend.core.chat_session import get_session_id
 
-        extras = {**self._gate.automation_ref(), "session_id": get_session_id() or ""}
+        extras = {
+            **self._gate.automation_ref(),
+            **self._gate.judge_note(name),
+            "session_id": get_session_id() or "",
+        }
         return await dispatcher.call(name, args, card_extras=extras)
 
     def confirm_call_kwargs(self, token: str) -> dict:

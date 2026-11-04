@@ -283,6 +283,7 @@ def stage_write(
         "tool_use_id": tool_use_id,
         "session_id": session_id,
         **engine().automation_ref(),
+        **engine().judge_note(tool_name),
     }
     PendingPlanStore().stage_pending(
         tool_use_id,

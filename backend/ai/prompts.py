@@ -33,6 +33,32 @@ TURN_SPLIT_MARKER = "\n__TURN_SPLIT_MARKER__\n"
 _SNAPSHOT_DEBT_ROWS = 12
 _SNAPSHOT_NAME_CHARS = 40
 
+# Bounds on the per-turn connector problems note (see `_fmt_connector_problems`). It rides each
+# turn's user message and stays in history, so it must stay small.
+_CONNECTOR_PROBLEM_ROWS = 8
+_CONNECTOR_NAME_CHARS = 40
+# Claude Code's own words for the same states, changed only where they name that product.
+_MCP_FAILED_HEADING = (
+    "The following MCP servers are configured but failed to connect — their tools (typically "
+    "named mcp__<server>__*) are unavailable for this session:"
+)
+# A built-in stays offered while it is enabled, so the claim about its tools is dropped.
+_CONNECTOR_FAILED_HEADING = "The following connectors are configured but failed to connect:"
+_FAILED_GUIDANCE = (
+    "Treat this as a connection failure, not a missing capability — do not conclude the server "
+    "is unconfigured or that access does not exist. If the user's request depends on one of these "
+    "servers, tell them the server failed to connect so they can fix or retry it."
+)
+_AUTH_HEADING = "The following MCP servers require authentication before their tools can be used:"
+_AUTH_GUIDANCE = (
+    "Lucius cannot start the OAuth flow itself. If the user's request depends on one of these "
+    "servers (even if they didn't name it explicitly), or they ask about it, tell them that it "
+    "needs to be authorized — in Connectors — and that the capability is unavailable until they "
+    "do. Otherwise carry on with the request and do not mention these servers. Do not ask the "
+    "user for authorization codes, tokens, or callback URLs."
+)
+_CONNECTOR_STATE_ORDER = ("failed", "error", "auth")
+
 
 def _fmt_goals(ccy: str = "USD") -> str:
     """Render the user's ACTIVE savings goals from the Targets engine (P2-GO1 — the free-text
@@ -241,6 +267,44 @@ def _fmt_mcp_server_instructions() -> str:
         for s in servers
     ]
     return "\n".join(["", header, *blocks])
+
+
+def _fmt_connector_problems() -> str:
+    """The connectors needing attention, grouped by state, or "" when none do. Names ONLY: this
+    sits in the user's message, so a server's error text never comes here. A name can be
+    server-chosen, so it can't open a line or close the <turn_context> fence."""
+    try:
+        from backend.services.mentions.descriptors.connector import connector_problems
+
+        problems = connector_problems()
+    except Exception:
+        logger.warning("connector problems unavailable for the prompt", exc_info=True)
+        return ""
+    if not problems:
+        return ""
+    problems.sort(key=lambda p: _CONNECTOR_STATE_ORDER.index(p[1]))
+    shown = problems[:_CONNECTOR_PROBLEM_ROWS]
+
+    def group(heading: str, state: str) -> list[str]:
+        names = [name for name, s in shown if s == state]
+        if not names:
+            return []
+        return [heading] + [
+            f"- {' '.join(_unforgeable(n).replace('<', '').replace('>', '').split())[:_CONNECTOR_NAME_CHARS]}"
+            for n in names
+        ]
+
+    failed = group(_MCP_FAILED_HEADING, "failed") + group(_CONNECTOR_FAILED_HEADING, "error")
+    auth = group(_AUTH_HEADING, "auth")
+    blocks = []
+    if failed:
+        blocks.append("\n".join(failed) + "\n\n" + _FAILED_GUIDANCE)
+    if auth:
+        blocks.append("\n".join(auth) + "\n\n" + _AUTH_GUIDANCE)
+    hidden = len(problems) - len(shown)
+    if hidden:
+        blocks.append(f"- and {hidden} more")
+    return "\n\n" + "\n\n".join(blocks)
 
 
 def _unforgeable(text: str) -> str:
@@ -839,7 +903,7 @@ PORTFOLIO SNAPSHOT (last-known prices — use get_live_prices for current values
 Total NW ({base_ccy}):    {total_line}
 Asset breakdown:      {breakdown}
 Positions:            {position_count}
-Base currency:        {base_ccy}{unvested_note}"""
+Base currency:        {base_ccy}{unvested_note}{_fmt_connector_problems()}"""
 
     return (
         static_block + CACHE_SPLIT_MARKER + semi_stable_block + TURN_SPLIT_MARKER + per_turn_block

@@ -120,7 +120,7 @@ def test_a_tool_done_for_an_unjudged_call_is_untouched():
     assert turns._with_auto_approval(done) is done
 
 
-def test_the_reason_is_defanged_and_capped_because_the_model_wrote_it_from_the_arguments(
+def test_the_reason_is_defanged_because_the_model_wrote_it_from_the_arguments_and_kept_whole(
     db_isolated,
 ):
     hostile = "Fine\x1b[31m\x00 » ok " + "x" * 400
@@ -129,7 +129,7 @@ def test_the_reason_is_defanged_and_capped_because_the_model_wrote_it_from_the_a
 
     reason = auto_approvals.for_session(SESSION)["call_1"]["reason"]
     assert "\x1b" not in reason and "\x00" not in reason
-    assert len(reason) <= auto_approvals.MAX_REASON_CHARS
+    assert reason.endswith("x" * 400)
 
 
 def test_calls_judged_together_are_all_remembered(db_isolated):

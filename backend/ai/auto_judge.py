@@ -58,7 +58,6 @@ from backend.ai.auto_judge_prompt import (  # noqa: F401
 from backend.ai.auto_judge_prompt import (
     SYSTEM as _SYSTEM,
 )
-from backend.core.untrusted import sanitize_untrusted
 from backend.models.mcp_client import mcp_connector_id
 
 logger = logging.getLogger(__name__)
@@ -69,9 +68,10 @@ logger = logging.getLogger(__name__)
 #: twice the slowest, for a cold start or a busy machine. Slower than that is a card, never a stall.
 JUDGE_TIMEOUT_S = 10.0
 JUDGE_MAX_TOKENS = 200
-#: A batch reply carries one entry (id, verdict, a reason of up to MAX_REASON_CHARS) per call.
+#: A batch reply carries one entry (id, verdict, a one-sentence reason) per call. A reason has no
+#: length cap of its own: a slice cut it mid-sentence on the card (owner, 2026-11-04). These token
+#: budgets are the only bound, and a reply past them is unusable JSON — a card, never a clipped one.
 BATCH_EXTRA_TOKENS_PER_CALL = 120
-MAX_REASON_CHARS = 160
 
 APPROVAL_TASK = "approval"
 
@@ -138,7 +138,7 @@ _current: ContextVar[Optional[tuple[str, str, JudgeVerdict]]] = ContextVar(
 
 
 def _ask(reason: str) -> JudgeVerdict:
-    return JudgeVerdict("ask", reason[:MAX_REASON_CHARS])
+    return JudgeVerdict("ask", reason)
 
 
 # ── Model selection ──────────────────────────────────────────────────────────────────────
@@ -315,7 +315,7 @@ async def judge_call(name: str, input_data: dict) -> JudgeVerdict:
         return _ask("unusable reply")
     _breaker.record(True)
     verdict, reason = parsed
-    return JudgeVerdict(verdict, reason[:MAX_REASON_CHARS], target.ref)
+    return JudgeVerdict(verdict, reason, target.ref)
 
 
 async def judge_calls(calls: list[tuple[str, dict]]) -> list[JudgeVerdict]:
@@ -365,7 +365,7 @@ async def judge_calls(calls: list[tuple[str, dict]]) -> list[JudgeVerdict]:
         return [_ask("unusable reply")] * count
     _breaker.record(True)
     return [
-        JudgeVerdict(answers[i][0], answers[i][1][:MAX_REASON_CHARS], target.ref)
+        JudgeVerdict(answers[i][0], answers[i][1], target.ref)
         if i in answers
         else _ask("no usable verdict")
         for i in ids
@@ -434,14 +434,14 @@ def _held_for(tool_name: str) -> Optional[JudgeVerdict]:
 
 def ask_reason_for(tool_name: str) -> str:
     """Why the judge asked about the in-flight call, for its card: "" when it didn't judge it
-    or let it through. Model-written from the call's arguments, so untrusted: defanged and
-    capped here, and the card renders it as plain text only."""
-    from backend.services.auto_approvals import MAX_REASON_CHARS
+    or let it through. Model-written from the call's arguments, so untrusted: defanged here, and
+    the card renders it as plain text only."""
+    from backend.services.auto_approvals import clean_reason
 
     verdict = _held_for(tool_name)
     if verdict is None or verdict.allows:
         return ""
-    return sanitize_untrusted(verdict.reason or "", MAX_REASON_CHARS).strip()
+    return clean_reason(verdict.reason)
 
 
 def gate_verdict_for(tool_name: str) -> str:

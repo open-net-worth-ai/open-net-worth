@@ -91,6 +91,7 @@ import {
   useProfile,
   useSetupStatus,
 } from './hooks/serverState'
+import { useConnectorAttentionCount } from './components/tabs/connectors/useConnectors'
 import { VisibleIdsProvider } from './lucius/visibleIds'
 import { LuciusDock } from './components/chat/lucius/LuciusDock'
 import { ArtifactPanelProvider } from './state/artifactPanel'
@@ -1003,6 +1004,8 @@ function RouterShellInner() {
     setDedupCount(matchReviews.data.count ?? 0)
   }, [matchReviews.data])
 
+  const connectorsAttention = useConnectorAttentionCount()
+
   const now = fDateTime(new Date(), 'long', 'always')
   // Clock-only form for the ticker head — see TickerStripProps.asOf for why.
   const nowShort = new Date().toLocaleString(undefined, { hour: '2-digit', minute: '2-digit' })
@@ -1199,6 +1202,13 @@ function RouterShellInner() {
           <span className="sidebar-intel-badge">
             {inboxUnread + dedupCount > 9 ? '9+' : inboxUnread + dedupCount}
           </span>
+        )}
+        {t === 'connectors' && connectorsAttention > 0 && (
+          <span
+            className="sidebar-attention-dot"
+            role="img"
+            aria-label="A connector needs attention"
+          />
         )}
       </span>
       <span className="sidebar-label">{TAB_LABELS[t]}</span>
@@ -1915,6 +1925,7 @@ function RouterShellInner() {
                       badges={{
                         inbox: inboxUnread + dedupCount,
                         intel: intelUnread,
+                        connectors: connectorsAttention,
                       }}
                       moreOpen={mobileMoreOpen}
                       onMoreOpenChange={setMobileMoreOpen}

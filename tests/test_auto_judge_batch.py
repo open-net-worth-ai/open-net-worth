@@ -279,14 +279,14 @@ def test_the_request_is_cheap_json_attributed_and_sized_for_its_calls(model):
     assert "book the coffee" in sent["prompt"] and "Call c3:" in sent["prompt"]
 
 
-def test_the_answering_model_and_a_clipped_reason_are_kept_per_call(model, monkeypatch):
+def test_the_answering_model_and_a_whole_reason_are_kept_per_call(model, monkeypatch):
     monkeypatch.setattr(
         auto_judge, "_resolve_target", lambda: auto_judge._Target("claude_cli:sonnet")
     )
     model.reply = _verdicts("allow", "ask", "ask", reason="x" * 500)
     out = _run(auto_judge.judge_calls(_pairs()))
     assert {v.model for v in out} == {"claude_cli:sonnet"}
-    assert {len(v.reason) for v in out} == {auto_judge.MAX_REASON_CHARS}
+    assert {len(v.reason) for v in out} == {500}
 
 
 @pytest.mark.parametrize(

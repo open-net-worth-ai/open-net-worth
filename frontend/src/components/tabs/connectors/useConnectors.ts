@@ -5,7 +5,11 @@
 
 import { useMemo } from 'react'
 import { authFetch } from '../../../api/client'
-import { type QueryCacheResult, useCachedFetchState } from '../../../state/queryCache'
+import {
+  type QueryCacheResult,
+  useCachedFetchState,
+  useQueryCache,
+} from '../../../state/queryCache'
 import { toEntries } from './adapter'
 import type { ConnectorDetailEntry } from './model'
 import type { Connector } from './types'
@@ -30,4 +34,14 @@ export function useConnectors(): ConnectorsRead {
   const connectors = useMemo(() => query.data ?? [], [query.data])
   const entries = useMemo(() => toEntries(connectors), [connectors])
   return { ...query, connectors, entries }
+}
+
+/** How many installed connectors the Attention filter lists — the nav's red dot. Polled, because
+ *  a background re-read can fail with no write to announce it. */
+export function useConnectorAttentionCount(): number {
+  const { data } = useQueryCache<Connector[]>(CONNECTORS_KEY, fetchConnectors, {
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  })
+  return useMemo(() => toEntries(data ?? []).filter((e) => e.attention).length, [data])
 }

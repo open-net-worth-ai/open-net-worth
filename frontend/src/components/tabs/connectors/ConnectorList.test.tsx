@@ -8,7 +8,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { render, screen, cleanup, fireEvent, within } from '@testing-library/react'
-import { ConnectorList, visibleSections, type ListFilters } from './ConnectorList'
+import { ConnectorList, visibleSections, type ListFilters, statusCounts } from './ConnectorList'
 import type { ConnectorEntry } from './model'
 
 afterEach(cleanup)
@@ -124,6 +124,32 @@ describe('four family sections', () => {
 })
 
 describe('filters', () => {
+  it('counts what each status button would list', () => {
+    expect(statusCounts(ALL, { query: '', tab: 'all' })).toEqual({
+      all: 4,
+      connected: 3,
+      attention: 1,
+    })
+  })
+
+  it('counts within the current tab and search, like the list', () => {
+    expect(statusCounts(ALL, { query: '', tab: 'web' })).toEqual({
+      all: 1,
+      connected: 1,
+      attention: 0,
+    })
+    expect(statusCounts(ALL, { query: 'plaid', tab: 'all' })).toEqual({
+      all: 1,
+      connected: 0,
+      attention: 1,
+    })
+  })
+
+  it('counts a connector in two families once on All', () => {
+    const both = entry({ id: 'both', families: ['Data source', 'Web'] })
+    expect(statusCounts([both], { query: '', tab: 'all' }).all).toBe(1)
+  })
+
   it('narrows to one section on a family tab', () => {
     const { container } = renderList(ALL, { ...NONE, tab: 'web' })
     expect(sectionTitles(container)).toEqual(['Web'])

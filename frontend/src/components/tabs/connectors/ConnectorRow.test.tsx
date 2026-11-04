@@ -35,6 +35,25 @@ function renderRow(e: ConnectorEntry) {
   return { container, onOpen, onReconnect }
 }
 
+describe('an error says why on hover', () => {
+  const failing = {
+    statusText: 'Error',
+    tone: 'bad',
+    attention: true,
+    lastError: 'The host could not be resolved.',
+  } as const
+
+  it('shows the recorded error, not the status word again', () => {
+    const { container } = renderRow(entry(failing))
+    expect(container.querySelector('.cn-statusbad')?.getAttribute('title')).toBe(failing.lastError)
+  })
+
+  it('falls back to the status when no reason was recorded', () => {
+    const { container } = renderRow(entry({ ...failing, lastError: undefined }))
+    expect(container.querySelector('.cn-statusbad')?.getAttribute('title')).toBe('Error')
+  })
+})
+
 describe('status is plain coloured text, one vocabulary', () => {
   it('reads "Connected" with the healthy treatment — never "Active"', () => {
     const { container } = renderRow(entry())

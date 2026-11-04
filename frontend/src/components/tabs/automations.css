@@ -1962,12 +1962,14 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
+/* The value column is as wide as the picker's two pills below it, and the rows share its 14px
+   inset, so the table and the picker line up on both edges. */
 .a3-perm-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 132px auto;
+  grid-template-columns: minmax(0, 1fr) 111px 28px;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 6px;
+  padding: 6px 14px;
   border-bottom: 1px solid var(--line);
   min-width: 0;
 }
@@ -1975,12 +1977,44 @@
   border-bottom: none;
 }
 .a3-perm-row.head {
-  padding: 6px 10px;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: var(--fg-3);
+}
+@media (max-width: 600px) {
+  .a3-perm-row {
+    grid-template-columns: minmax(0, 1fr) 111px 40px;
+  }
+}
+.a3-perm-head-value {
+  grid-column: 2 / -1;
+  white-space: nowrap;
+}
+.a3-perm-select {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+.a3-perm-select-chev {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--faint);
+  pointer-events: none;
+}
+.a3-perm-row .ui-select--dense {
+  display: block;
+  width: 100%;
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 26px 0 10px;
+  border-radius: var(--radius-md);
+  background-color: var(--surface);
+  font-size: 12px;
+  font-weight: 600;
 }
 .a3-perm-name {
   min-width: 0;
@@ -1995,9 +2029,6 @@
   font-size: 12.5px;
   color: var(--muted);
 }
-.a3-linkbtn.danger {
-  color: var(--bad);
-}
 .a3-perm-add {
   margin: 8px 0 6px;
 }
@@ -2007,11 +2038,12 @@
   gap: 4px;
 }
 .a3-perm-picker {
+  container-type: inline-size;
   margin-top: 8px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px;
+  padding: 10px 14px;
   background: var(--bg-2);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
@@ -2031,17 +2063,23 @@
 .a3-perm-picker input:focus {
   border-color: var(--accent);
 }
+/* The scrollbar sits in the picker's right inset. Each row takes the picker's width rather than
+   the list's, so a scrollbar of any width never pushes the pills out of line with the table. */
 .a3-perm-list {
   display: flex;
   flex-direction: column;
   max-height: 280px;
+  overflow-x: hidden;
   overflow-y: auto;
+  margin-right: -14px;
 }
 .a3-perm-cand {
+  box-sizing: border-box;
+  width: 100cqw;
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 4px;
+  padding: 6px 0;
   border-bottom: 1px solid var(--line);
 }
 .a3-perm-cand:last-child {

@@ -62,6 +62,17 @@ export function visibleSections(
     .filter((s) => s.entries.length > 0)
 }
 
+/** What each status filter would list on this tab and search, so a count always matches the
+ *  rows its button shows. A connector in several families still counts once. */
+export function statusCounts(
+  entries: ConnectorEntry[],
+  { query, tab }: Pick<ListFilters, 'query' | 'tab'>,
+): Record<StatusFilter, number> {
+  const rows = entries.filter((e) => inFamily(e, tab) && passesQuery(e, query))
+  const count = (filter: StatusFilter) => rows.filter((e) => passesStatus(e, filter)).length
+  return { all: count('all'), connected: count('connected'), attention: count('attention') }
+}
+
 export interface ConnectorListProps {
   entries: ConnectorEntry[]
   filters: ListFilters

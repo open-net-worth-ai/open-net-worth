@@ -652,6 +652,15 @@
   background: var(--surface);
   box-shadow: var(--shadow-sm);
 }
+.cn-page .cn-seg-count {
+  margin-left: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--faint);
+}
+.cn-page .cn-seg-count.bad {
+  color: var(--bad);
+}
 
 /* ── connector list rows (compact list, replaces card grid) ────────────────── */
 .cn-page .cn-list {
@@ -793,6 +802,10 @@
   color: var(--bad);
   font-size: 12px;
   font-weight: 600;
+  cursor: help;
+}
+.cn-page .cn-statushint {
+  cursor: help;
 }
 .cn-page .cn-statusbad svg {
   width: 13px;
