@@ -58,6 +58,7 @@ vi.mock('../../../api/client', () => ({
 vi.mock('../../../lucius/bus', () => ({ emitConversationChanged: vi.fn() }))
 
 import {
+  hangUp,
   LEFT_GRACE_MS,
   PICKUP_TIMEOUT_MS,
   minimizeCall,
@@ -66,6 +67,7 @@ import {
   useVoiceCall,
 } from './voiceCall'
 import { renderHook } from '@testing-library/react'
+import { authFetch } from '../../../api/client'
 
 function state() {
   return renderHook(() => useVoiceCall()).result.current
@@ -92,6 +94,43 @@ afterEach(() => {
   serverProblem.current = null
   resetVoiceCallForTests()
   vi.useRealTimers()
+})
+
+describe('hanging up yourself', () => {
+  it('says nothing when you hang up while it is still connecting', async () => {
+    const connect = vi.spyOn(FakeRoom.prototype, 'connect').mockImplementationOnce(async () => {
+      await hangUp()
+      throw new Error('Client initiated disconnect')
+    })
+    await startCall('s1')
+    connect.mockRestore()
+    expect(state().problem).toBeNull()
+    expect(state().phase).toBe('idle')
+  })
+
+  it('does not go on connecting when you hang up while the call is being asked for', async () => {
+    const before = FakeRoom.last
+    vi.mocked(authFetch).mockImplementationOnce(async () => {
+      await hangUp()
+      return {
+        ok: true,
+        json: async () => ({ url: 'wss://acme.example', token: 't', session_id: 's1' }),
+      } as Response
+    })
+    await startCall('s1')
+    expect(FakeRoom.last).toBe(before)
+    expect(state().phase).toBe('idle')
+    expect(state().problem).toBeNull()
+  })
+
+  it('still reports a connect that failed on its own', async () => {
+    const connect = vi.spyOn(FakeRoom.prototype, 'connect').mockImplementationOnce(async () => {
+      throw new Error('could not establish signal connection')
+    })
+    await startCall('s1')
+    connect.mockRestore()
+    expect(state().problem?.message).toBe('could not establish signal connection')
+  })
 })
 
 describe('the server ending a call', () => {

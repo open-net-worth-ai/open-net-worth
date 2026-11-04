@@ -310,6 +310,9 @@ export async function startCall(sessionId: string): Promise<void> {
       return
     }
     const grant = (await r.json()) as { url: string; token: string; session_id: string }
+    // Hung up while the call was being asked for: it went on connecting behind an idle screen,
+    // microphone and all. The agent the app asked for gives up by itself (``CALLER_WAIT_S``).
+    if ((state.phase as CallPhase) !== 'connecting') return
     const next = new Room({ adaptiveStream: true })
     room = next
     // Lucius "picks up" when he first speaks: stop the ring and start the clock then. The level
@@ -371,9 +374,13 @@ export async function startCall(sessionId: string): Promise<void> {
     followTimer = window.setInterval(() => emitConversationChanged(grant.session_id), FOLLOW_MS)
     await next.localParticipant.publishTrack(mic)
   } catch (e) {
+    // Hanging up while it was still connecting rejects the connect ("Client initiated
+    // disconnect"): what you just did, not a problem to report (owner, 2026-11-04).
+    const mine = localHangUp
     localHangUp = true
     await room?.disconnect()
-    finish(classify(e))
+    if (!mine) finish(classify(e))
+    else if (room) finish(null)
   }
 }
 
