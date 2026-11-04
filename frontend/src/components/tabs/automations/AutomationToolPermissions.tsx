@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Plus } from 'lucide-react'
+import { ChevronDown, Plus, Trash2 } from 'lucide-react'
 import type { Automation } from '../../../api/automations'
 import {
   LEVEL_LABELS,
@@ -104,8 +104,7 @@ export function AutomationToolPermissions({
         <div className="a3-perm" role="table" aria-label="Tool permissions in this Automation">
           <div className="a3-perm-row head" role="row">
             <span>Tool</span>
-            <span>In this Automation</span>
-            <span />
+            <span className="a3-perm-head-value">In this Automation</span>
           </div>
           {rows.map((row) => {
             const title = row.tool ? listedTitle(row.tool) : row.label
@@ -119,23 +118,27 @@ export function AutomationToolPermissions({
                   {title}
                 </span>
                 {row.tool ? (
-                  <Select
-                    dense
-                    aria-label={`Permission for ${title} in this Automation`}
-                    value={row.value}
-                    disabled={busy}
-                    options={VALUE_OPTIONS}
-                    onChange={(event) =>
-                      onSave(setTool(lists, row.tool!, event.target.value as AutomationToolValue))
-                    }
-                  />
+                  <span className="a3-perm-select">
+                    <Select
+                      dense
+                      aria-label={`Permission for ${title} in this Automation`}
+                      value={row.value}
+                      disabled={busy}
+                      options={VALUE_OPTIONS}
+                      onChange={(event) =>
+                        onSave(setTool(lists, row.tool!, event.target.value as AutomationToolValue))
+                      }
+                    />
+                    <ChevronDown size={13} className="a3-perm-select-chev" aria-hidden="true" />
+                  </span>
                 ) : (
                   <span className="a3-perm-fixed">{LEVEL_LABELS.always_allow}</span>
                 )}
                 <button
                   type="button"
-                  className="a3-linkbtn danger"
+                  className="a3-iconbtn danger"
                   aria-label={`Remove ${title}`}
+                  title="Remove"
                   disabled={busy}
                   onClick={() =>
                     onSave(
@@ -145,7 +148,7 @@ export function AutomationToolPermissions({
                     )
                   }
                 >
-                  Remove
+                  <Trash2 size={14} strokeWidth={1.8} aria-hidden="true" />
                 </button>
               </div>
             )
