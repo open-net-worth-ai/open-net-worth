@@ -10,7 +10,7 @@ from backend.db.realized_event_store import RealizedEventStore
 from backend.db.trading_store import TradingStore, trading_transaction
 from backend.db.transaction_store import TransactionStore
 from backend.services import lots, positions
-from backend.services.trading.common import amount, event, instant, now
+from backend.services.trading.common import event, instant, now
 from backend.services.trading.fees import book_execution_terms
 
 

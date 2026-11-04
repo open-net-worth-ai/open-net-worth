@@ -4,6 +4,7 @@ description: Exercise the complete synthetic trading UI through an attested isol
 acceptance_ids: [TRD-01, TRD-02, TRD-03, TRD-04, TRD-05, TRD-06]
 setup_script: verify_trading_workspace.py
 fixture_only: true
+timeout_seconds: 200
 acceptance_criteria:
   - Workspace and multi-account backtest persist through UI reload.
   - Lifecycle confirmations produce persisted state transitions.

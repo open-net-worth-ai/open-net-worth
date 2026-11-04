@@ -11,9 +11,12 @@ from pydantic import ValidationError as SchemaError
 
 from backend.core.errors import ValidationError
 from backend.core.trading_runtime import trading_context
+from backend.db.trading_store import TradingStore
 from backend.models.trading import Decision, OrderIntent
 from backend.sandbox.trading import run_trading_script
 from backend.services import tool_permissions, trading
+from backend.services.trading.common import identity
+from backend.services.trading.work_records import write_workspace_file
 
 
 async def execute_strategy(run_id: str, source: str) -> dict:
@@ -42,6 +45,7 @@ async def execute_strategy(run_id: str, source: str) -> dict:
 
 async def _execute(run_id: str, source: str) -> dict:
     source_digest = hashlib.sha256(source.encode()).hexdigest()
+    source_file = write_workspace_file(run_id, "strategy.py", source)
     trading.update_runtime(
         run_id, {"agent_script_source": source, "agent_script_sha256": source_digest}
     )
@@ -52,8 +56,11 @@ async def _execute(run_id: str, source: str) -> dict:
     }
     artifact = {
         "kind": "strategy",
-        "source": source,
-        "sha256": hashlib.sha256(source.encode()).hexdigest(),
+        "source": source_file["payload"]["content"],
+        "sha256": source_file["payload"]["sha256"],
+        "file_event_id": source_file["id"],
+        "version": source_file["payload"]["version"],
+        "redacted": source_file["payload"]["redacted"],
     }
     trading.record_activity(run_id, "script_started", {"artifact": artifact})
     cancellation = threading.Event()
@@ -92,10 +99,10 @@ async def _execute(run_id: str, source: str) -> dict:
         raise ValidationError(
             "The owner must allow submit_trading_order before a script can place orders"
         )
+    recorded = trading.record_decision(run_id, decision)
     results = []
     for intent in orders:
-        results.append(await trading.submit_order(run_id, intent))
-    trading.record_decision(run_id, decision)
+        results.append(await trading.submit_order(run_id, _linked_intent(run_id, intent, recorded)))
     trading.record_activity(run_id, "script_finished", {**receipt, "orders": results})
     fresh = trading.get_run(run_id)
     next_wake = (
@@ -106,3 +113,11 @@ async def _execute(run_id: str, source: str) -> dict:
     )
     trading.update_runtime(run_id, {"next_wake_at": next_wake})
     return {"run_id": run_id, **receipt, "orders": results}
+
+
+def _linked_intent(run_id: str, intent: dict, decision: dict) -> dict:
+    existing = TradingStore("orders").find_by_id(
+        identity(run_id, intent["account_id"], intent["request_id"])
+    )
+    decision_id = existing.get("decision_id") if existing else decision["id"]
+    return {**intent, "decision_id": decision_id}

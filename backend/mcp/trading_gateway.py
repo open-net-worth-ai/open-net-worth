@@ -11,6 +11,7 @@ from backend.ai.tools import TOOL_SCHEMAS, execute_tool
 from backend.core.errors import OpenNetWorthError
 from backend.core.ratelimit import SlidingWindowLimiter
 from backend.core.trading_runtime import TRADING_TOOLS, bind_trading_context
+from backend.services.trading.work_records import record_work
 from backend.services.trading_access import authenticate_access, token_digest
 
 router = APIRouter()
@@ -106,7 +107,24 @@ async def _bounded_body(request: Request) -> bytes | None:
 async def _call(run_id: str, token: str, name: str, arguments: dict) -> dict:
     try:
         with bind_trading_context(run_id, "external", token_digest(token)):
+            call = record_work(
+                run_id,
+                "tool_call",
+                {"name": name, "input": arguments},
+                source="host_observed_gateway",
+            )
             text, proposed = await execute_tool(name, arguments)
+            record_work(
+                run_id,
+                "tool_result",
+                {
+                    "name": name,
+                    "tool_use_id": call["id"],
+                    "result": text,
+                    "pending_approval": proposed is not None,
+                },
+                source="host_observed_gateway",
+            )
         if proposed is not None:
             return {
                 "isError": True,

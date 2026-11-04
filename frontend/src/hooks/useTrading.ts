@@ -11,6 +11,13 @@ export function useTradingRuns(workspaceId: string) {
     { enabled: !!workspaceId },
   )
 }
+export function useTradingOverview(workspaceId: string) {
+  return useQueryCache(
+    `${tradingRoot}/workspaces/${workspaceId}/overview`,
+    () => tradingApi.overview(workspaceId),
+    { enabled: !!workspaceId },
+  )
+}
 export function useTradingRun(runId: string) {
   const enabled = !!runId
   const root = `${tradingRoot}/runs/${runId}`

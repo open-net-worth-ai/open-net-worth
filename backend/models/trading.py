@@ -30,13 +30,48 @@ class Observation(TradingInput):
     available_at: datetime | None = None
     price: Decimal = Field(gt=0)
     volume: Decimal | None = Field(default=None, ge=0)
+    open: Decimal | None = Field(default=None, gt=0)
+    high: Decimal | None = Field(default=None, gt=0)
+    low: Decimal | None = Field(default=None, gt=0)
+    close: Decimal | None = Field(default=None, gt=0)
+    bar_start_at: datetime | None = None
+    interval: str | None = Field(default=None, max_length=40)
+    source: str = Field(default="supplied", min_length=1, max_length=120)
+    source_version: str | None = Field(default=None, max_length=120)
+    adjustment: str | None = Field(default=None, max_length=120)
+    received_at: datetime | None = None
 
-    @field_validator("timestamp", "available_at")
+    @field_validator("timestamp", "available_at", "bar_start_at", "received_at")
     @classmethod
     def aware(cls, value):
         if value is not None and value.utcoffset() is None:
             raise ValueError("timestamp requires an explicit timezone")
         return value
+
+    @model_validator(mode="after")
+    def validate_bar(self):
+        values = (self.open, self.high, self.low, self.close)
+        if any(value is not None for value in values):
+            if self.open is None or self.high is None or self.low is None or self.close is None:
+                raise ValueError("OHLC requires open, high, low and close together")
+            if (
+                not self.low
+                <= min(self.open, self.close)
+                <= max(self.open, self.close)
+                <= self.high
+            ):
+                raise ValueError("OHLC prices must lie within low and high")
+            if self.close != self.price:
+                raise ValueError("A candle price must equal its close")
+        if self.available_at is not None and self.available_at < self.timestamp:
+            raise ValueError("Observation cannot be available before its timestamp")
+        if self.bar_start_at is not None and self.bar_start_at >= self.timestamp:
+            raise ValueError("A bar must end after its start")
+        if self.received_at is not None and self.received_at < (
+            self.available_at or self.timestamp
+        ):
+            raise ValueError("Receipt cannot precede observation availability")
+        return self
 
 
 class AccountAllocation(TradingInput):
@@ -66,15 +101,18 @@ class Mandate(TradingInput):
 class WorkspaceCreate(TradingInput):
     name: str = Field(min_length=1, max_length=120)
     instructions: str = Field(default="", max_length=12000)
-    agent_kind: Literal["lucius", "external", "script"] = "lucius"
+    agent_kind: str = Field(
+        default="lucius", min_length=1, max_length=80, pattern="^[a-z][a-z0-9_-]*$"
+    )
     agent_label: str = Field(default="Lucius", min_length=1, max_length=120)
     mandate: Mandate = Field(default_factory=Mandate)
+    strategy_source: str | None = Field(default=None, min_length=1, max_length=64000)
 
 
 class RunCreate(TradingInput):
     mode: Literal["backtest", "paper", "live"] = "paper"
     start_at: datetime
-    end_at: datetime
+    end_at: datetime | None = None
     accounts: list[AccountAllocation] = Field(
         default_factory=lambda: [AccountAllocation()], min_length=1, max_length=20
     )
@@ -87,9 +125,13 @@ class RunCreate(TradingInput):
 
     @model_validator(mode="after")
     def check_period(self):
-        if self.start_at.utcoffset() is None or self.end_at.utcoffset() is None:
+        if self.start_at.utcoffset() is None or (
+            self.end_at is not None and self.end_at.utcoffset() is None
+        ):
             raise ValueError("run period requires explicit timezones")
-        if self.end_at <= self.start_at:
+        if self.mode == "backtest" and self.end_at is None:
+            raise ValueError("backtest requires an end_at")
+        if self.end_at is not None and self.end_at <= self.start_at:
             raise ValueError("end_at must follow start_at")
         if any(rate <= 0 or not rate.is_finite() for rate in self.fx_rates.values()):
             raise ValueError("FX rates must be positive finite numbers")
@@ -132,3 +174,32 @@ class Decision(TradingInput):
 class ComparisonCreate(TradingInput):
     name: str = Field(min_length=1, max_length=120)
     run_ids: list[str] = Field(min_length=2, max_length=30)
+
+
+class DelegationCreate(TradingInput):
+    workspace: WorkspaceCreate
+    environment: RunCreate
+    start: bool = True
+
+
+class DelegationActivation(TradingInput):
+    environment: RunCreate
+    start: bool = True
+    expected_revision: int = Field(ge=1)
+
+
+class TradingMarketRequest(TradingInput):
+    instruments: list[Instrument] = Field(min_length=1, max_length=30)
+
+
+class MandateAmendment(TradingInput):
+    instructions: str | None = Field(default=None, max_length=12000)
+    mandate: Mandate | None = None
+    reason: str = Field(min_length=1, max_length=2000)
+    expected_revision: int = Field(ge=1)
+
+    @model_validator(mode="after")
+    def has_change(self):
+        if self.instructions is None and self.mandate is None:
+            raise ValueError("An amendment must change instructions or mandate limits")
+        return self

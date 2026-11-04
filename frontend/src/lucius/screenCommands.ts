@@ -97,11 +97,27 @@ export const CONNECTORS_OPEN_SETUP_SPEC: ScreenCommandSpec = {
   params: [{ name: 'id', type: 'string', required: true }],
 }
 
+export const TRADING_REVIEW_DRAFT_SPEC: ScreenCommandSpec = {
+  name: 'trading.review_draft',
+  description:
+    'Open an unsaved trading workspace mandate for human review. No workspace or live authority is created until the user confirms.',
+  route: 'trading',
+  params: [
+    {
+      name: 'delegation',
+      type: 'object',
+      required: true,
+      items: '{workspace:{name,instructions,agent_kind,agent_label,mandate},environment:{mode,start_at,end_at,accounts,observations?,data_version?},start}',
+    },
+  ],
+}
+
 export const OFFSCREEN_COMMAND_CATALOG: ScreenCommandSpec[] = [
   PLAN_STAGE_WHATIF_SPEC,
   PLAN_RESET_SPEC,
   AUTOMATIONS_REVIEW_DRAFT_SPEC,
   CONNECTORS_OPEN_SETUP_SPEC,
+  TRADING_REVIEW_DRAFT_SPEC,
 ]
 
 const MAX_MANIFEST_COMMANDS = 12

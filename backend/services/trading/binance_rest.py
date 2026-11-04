@@ -14,8 +14,12 @@ from backend.core.errors import ConflictError, ExternalServiceError
 
 HOSTS = {"live": "https://api.binance.com", "testnet": "https://testnet.binance.vision"}
 _READS = {
-    "/api/v3/account", "/api/v3/openOrders", "/api/v3/order", "/api/v3/myTrades",
-    "/api/v3/exchangeInfo", "/sapi/v1/account/apiRestrictions",
+    "/api/v3/account",
+    "/api/v3/openOrders",
+    "/api/v3/order",
+    "/api/v3/myTrades",
+    "/api/v3/exchangeInfo",
+    "/sapi/v1/account/apiRestrictions",
 }
 _MAX_BYTES = 2_000_000
 
@@ -72,7 +76,9 @@ class BinanceRest:
             query += "&signature=" + signature
         url = HOSTS[self.environment] + path + ("?" + query if query else "")
         try:
-            async with httpx.AsyncClient(timeout=15, follow_redirects=False, trust_env=False) as client:
+            async with httpx.AsyncClient(
+                timeout=15, follow_redirects=False, trust_env=False
+            ) as client:
                 async with client.stream(method, url, headers=headers) as response:
                     if response.status_code != 200:
                         raise ExternalServiceError(

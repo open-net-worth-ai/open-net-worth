@@ -18,7 +18,7 @@ export function tradingPercent(value: Amount | null | undefined) {
     ? '—'
     : `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
 }
-export function tradingTime(value?: string) {
+export function tradingTime(value?: string | null) {
   return value ? new Date(value).toLocaleString() : '—'
 }
 export function statusTone(value: string): BadgeTone {

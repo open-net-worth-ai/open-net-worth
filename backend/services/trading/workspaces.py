@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import timedelta
 
 from backend.core.errors import ConflictError, ValidationError
@@ -28,7 +29,7 @@ def get_workspace(workspace_id):
     return TradingStore("workspaces").required(workspace_id)
 
 
-def create_workspace(data):
+def create_workspace(data, *, conn=None):
     clean = validated(WorkspaceCreate, data)
     row = {
         **clean,
@@ -37,8 +38,10 @@ def create_workspace(data):
         "revision": 1,
         "created_at": now(),
         "updated_at": now(),
+        "original_mandate": {**clean, "revision": 1, "created_at": now()},
+        "amendments": [],
     }
-    with trading_transaction() as conn:
+    with nullcontext(conn) if conn is not None else trading_transaction() as conn:
         TradingStore("workspaces").insert(row, conn=conn)
         from backend.core.data_events import publish
         from backend.db.engine import on_commit
@@ -53,23 +56,47 @@ def update_workspace(workspace_id, changes):
         current = store.required(workspace_id, conn=conn)
         clean = validated(
             WorkspaceCreate,
-            {key: changes.get(key, current[key]) for key in WorkspaceCreate.model_fields},
+            {key: changes.get(key, current.get(key)) for key in WorkspaceCreate.model_fields},
         )
         unknown = set(changes) - set(WorkspaceCreate.model_fields)
         if unknown:
             raise ValidationError("Unknown workspace fields", fields=sorted(unknown))
+        active = [
+            r
+            for r in TradingStore("runs").list_scope(workspace_id, conn=conn)
+            if r["state"] in {"running", "paused", "needs_reconciliation", "stopping"}
+        ]
+        if active:
+            raise ConflictError(
+                "Amend the workspace mandate instead of editing an active definition"
+            )
+        stamp = now()
+        amendment = {
+            "id": new_id("tam"),
+            "revision": current["revision"] + 1,
+            "author": "user",
+            "created_at": stamp,
+            "reason": "Workspace definition edited",
+            "before": {key: current.get(key) for key in WorkspaceCreate.model_fields},
+            "after": clean,
+        }
         return store.update_by_id(
             workspace_id,
-            {**clean, "revision": current["revision"] + 1, "updated_at": now()},
+            {
+                **clean,
+                "revision": current["revision"] + 1,
+                "updated_at": stamp,
+                "amendments": [*current.get("amendments", []), amendment],
+            },
             conn=conn,
         )
 
 
-def create_run(workspace_id, data):
+def create_run(workspace_id, data, *, conn=None):
     clean = validated(RunCreate, data)
     external_execution = _execution_source(clean)
     _validate_observations(clean)
-    with trading_transaction() as conn:
+    with nullcontext(conn) if conn is not None else trading_transaction() as conn:
         workspace = TradingStore("workspaces").required(workspace_id, conn=conn)
         run = {
             **clean,
@@ -77,6 +104,8 @@ def create_run(workspace_id, data):
             "scope_id": workspace_id,
             "workspace_id": workspace_id,
             "workspace_snapshot": workspace,
+            "initial_workspace_snapshot": workspace,
+            "mandate_revision": workspace["revision"],
             "state": "ready",
             "current_time": clean["start_at"],
             "clock_cursor": 0,
@@ -84,6 +113,9 @@ def create_run(workspace_id, data):
             "updated_at": now(),
             "model_cost_usd": "0",
             "agent_state": "idle",
+            "agent_script_source": workspace.get("strategy_source")
+            if workspace["agent_kind"] == "script"
+            else None,
             "initial_capital": {},
             "external_execution": external_execution,
             "valuation_history": [],
@@ -102,7 +134,9 @@ def create_run(workspace_id, data):
                 "scope_id": run["id"],
                 "cash": allocation["capital"],
                 "positions": {},
-                "reconciliation_status": "unverified" if uses_broker_execution(run) else "simulated",
+                "reconciliation_status": "unverified"
+                if uses_broker_execution(run)
+                else "simulated",
             }
             TradingStore("accounts").insert(account, conn=conn)
         scenario = {
@@ -128,6 +162,9 @@ def create_run(workspace_id, data):
         scenario["external_execution"] = external_execution
         run["scenario_hash"] = fingerprint(scenario)
         TradingStore("runs").insert(run, conn=conn)
+        TradingStore("workspaces").update_by_id(
+            workspace_id, {"current_run_id": run["id"]}, conn=conn
+        )
         event(conn, run, "run_created", {"mode": run["mode"]})
     return public_run(run)
 
@@ -143,16 +180,25 @@ def _execution_source(clean):
         raise ConflictError("Configure and enable Binance before allocating its wallet")
     testnet = config["environment"] == "testnet"
     if clean["mode"] != ("paper" if testnet else "live"):
-        raise ValidationError("Binance Spot Testnet requires Paper; Binance real funds require Live")
+        raise ValidationError(
+            "Binance Spot Testnet requires Paper; Binance real funds require Live"
+        )
     if len(native) != 1 or (testnet and len(clean["accounts"]) != 1):
-        raise ValidationError("Allocate the entire Binance wallet once; Testnet runs cannot mix execution sources")
+        raise ValidationError(
+            "Allocate the entire Binance wallet once; Testnet runs cannot mix execution sources"
+        )
     for account in native:
         if testnet and account.get("book_account_id"):
             raise ValidationError("Binance Spot Testnet cannot be linked to the real book")
-        expected = {"currency": config["quote_currency"], "venue": config["venue"],
-                    "broker_account_id": config["broker_account_id"]}
+        expected = {
+            "currency": config["quote_currency"],
+            "venue": config["venue"],
+            "broker_account_id": config["broker_account_id"],
+        }
         if any(account.get(key) != value for key, value in expected.items()):
-            raise ValidationError("Binance allocation must match the configured wallet, venue and quote currency")
+            raise ValidationError(
+                "Binance allocation must match the configured wallet, venue and quote currency"
+            )
     return "binance_testnet" if testnet else None
 
 
@@ -216,6 +262,9 @@ def update_runtime(run_id, patch):
         "agent_script_sha256",
         "usage_state",
         "usage_turn_id",
+        "last_activity_at",
+        "current_task",
+        "reasoning_availability",
     }
     if set(patch) - allowed:
         raise ValidationError("Unsupported trading runtime fields")
@@ -267,9 +316,9 @@ def release_agent_cycle(run_id, lease_id):
         run = TradingStore("runs").required(run_id, conn=conn)
         if run.get("agent_lease_id") != lease_id:
             raise ConflictError("Decision lease does not belong to this cycle")
-        state = "usage_unknown" if run.get("usage_state") in {"pending", "unknown"} else "idle"
-        if run.get("agent_state") == "budget_exhausted":
-            state = "budget_exhausted"
+        state = "usage_unknown" if run.get("usage_state") in {"pending", "unknown"} else "waiting"
+        if state != "usage_unknown" and run.get("agent_state") in {"budget_exhausted", "failed"}:
+            state = run["agent_state"]
         TradingStore("runs").update_by_id(
             run_id,
             {"agent_lease_id": None, "agent_lease_expires_at": None, "agent_state": state},

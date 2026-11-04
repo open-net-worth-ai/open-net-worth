@@ -11,6 +11,15 @@ import type {
   Performance,
   TradingComparison,
   RunCreate,
+  DelegationCreate,
+  DelegationReview,
+  DelegationResult,
+  WorkspaceOverview,
+  TradingMarketSeries,
+  TradingStatement,
+  TradingEvidence,
+  EvidenceSelection,
+  TradingFile,
 } from '../types/trading'
 
 export const tradingRoot = '/api/trading'
@@ -39,6 +48,47 @@ export async function tradingRequest<T>(path: string, init?: RequestInit): Promi
 const post = <T>(path: string, value: unknown) =>
   tradingRequest<T>(path, { method: 'POST', body: JSON.stringify(value) })
 export const tradingApi = {
+  files: (id: string) =>
+    tradingRequest<Collection<TradingFile>>(`/runs/${encodeURIComponent(id)}/files`),
+  file: (id: string, name: string, version: number) =>
+    tradingRequest<TradingFile>(
+      `/runs/${encodeURIComponent(id)}/files?name=${encodeURIComponent(name)}&version=${version}`,
+    ),
+  workRecord: (id: string, recordId: string) =>
+    tradingRequest<TradingEvent>(
+      `/runs/${encodeURIComponent(id)}/work/${encodeURIComponent(recordId)}`,
+    ),
+  reviewDelegation: (draft: DelegationCreate) =>
+    post<DelegationReview>('/delegations/review', draft),
+  createDelegation: (draft: DelegationCreate) => post<DelegationResult>('/delegations', draft),
+  activateWorkspace: (id: string, draft: DelegationCreate, expectedRevision: number) =>
+    post<DelegationResult>(`/workspaces/${encodeURIComponent(id)}/activate`, {
+      environment: draft.environment,
+      start: draft.start,
+      expected_revision: expectedRevision,
+    }),
+  overview: (id: string) =>
+    tradingRequest<WorkspaceOverview>(`/workspaces/${encodeURIComponent(id)}/overview`),
+  amend: (
+    id: string,
+    data: {
+      instructions?: string
+      mandate?: TradingWorkspace['mandate']
+      reason: string
+      expected_revision: number
+    },
+  ) =>
+    post<{ workspace: TradingWorkspace }>(`/workspaces/${encodeURIComponent(id)}/amendments`, data),
+  workspaceAction: (id: string, action: string) =>
+    post<TradingRun>(`/workspaces/${encodeURIComponent(id)}/actions`, { action }),
+  marketSeries: (id: string) =>
+    tradingRequest<TradingMarketSeries>(`/runs/${encodeURIComponent(id)}/market-series?limit=500`),
+  statement: (id: string) =>
+    tradingRequest<TradingStatement>(`/runs/${encodeURIComponent(id)}/statement`),
+  evidence: (id: string, selection: EvidenceSelection) =>
+    tradingRequest<TradingEvidence>(
+      `/runs/${encodeURIComponent(id)}/evidence/${selection.kind}/${encodeURIComponent(selection.id)}`,
+    ),
   workspaces: () => tradingRequest<Collection<TradingWorkspace>>('/workspaces'),
   workspace: (id: string) =>
     tradingRequest<TradingWorkspace>(`/workspaces/${encodeURIComponent(id)}`),

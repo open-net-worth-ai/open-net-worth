@@ -3,25 +3,55 @@
 from datetime import timedelta
 
 from backend.core.errors import ValidationError
+from backend.core.trading_runtime import trading_context
 from backend.db.trading_store import TradingStore, trading_transaction
 from backend.models.trading import Decision
-from backend.services.trading.common import amount, collection, event, validated
-from backend.services.trading.market import environment_time
+from backend.services.trading.common import (
+    amount,
+    collection,
+    event,
+    identity,
+    require_bound_run,
+    validated,
+)
+from backend.services.trading.market import available_observations, environment_time, instrument_key
+from backend.services.trading.work_records import safe_work_payload
 
 
 def record_activity(run_id, kind, payload):
     if not isinstance(kind, str) or len(kind) > 80:
         raise ValidationError("Invalid trading activity kind")
     with trading_transaction() as conn:
+        require_bound_run(conn, run_id)
         run = TradingStore("runs").required(run_id, conn=conn)
-        return event(conn, run, kind, payload)
+        return event(conn, run, kind, safe_work_payload(payload))
 
 
 def record_decision(run_id, data):
     clean = validated(Decision, data)
     clean.pop("model_cost_usd", None)
     with trading_transaction() as conn:
+        require_bound_run(conn, run_id)
         run = TradingStore("runs").required(run_id, conn=conn)
+        context = trading_context()
+        if (
+            context
+            and context.principal == "lucius"
+            and context.cycle_lease_id == run.get("agent_lease_id")
+        ):
+            clean["turn_id"] = run.get("turn_id")
+        clean["mandate_revision"] = run.get(
+            "mandate_revision", run["workspace_snapshot"]["revision"]
+        )
+        clean["data_context"] = {
+            "cutoff": environment_time(run).isoformat(),
+            "data_version": run["data_version"],
+            "observation_ids": [
+                identity(instrument_key(row["instrument"]), row["timestamp"])
+                for row in available_observations(run)
+            ],
+            "meaning": "Available environment records; not proof the executor consumed every observation.",
+        }
         wake = clean.get("wake_after_seconds")
         TradingStore("runs").update_by_id(
             run_id,
@@ -33,7 +63,7 @@ def record_decision(run_id, data):
             },
             conn=conn,
         )
-        return event(conn, run, "agent_decision", clean)
+        return event(conn, run, "agent_decision", safe_work_payload(clean))
 
 
 def record_agent_usage(run_id, data, *, conn=None):

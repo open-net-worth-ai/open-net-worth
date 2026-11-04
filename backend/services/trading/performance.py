@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from backend.db.trading_store import TradingStore
+from backend.services.trading.accounting import execution_ledger, unrealized_result
 from backend.services.trading.common import ACTIVE_ORDER_STATES, amount, instant
 from backend.services.trading.market import environment_time, latest_quote
 
@@ -107,10 +108,26 @@ def calculate_performance(run, *, conn=None):
         ),
         amount(0),
     )
+    realized, unrealized, basis_complete = amount(0), amount(0), True
+    for account in TradingStore("accounts").list_scope(run["id"], conn=conn):
+        rate = amount(run["fx_rates"][account["currency"]])
+        ledger = execution_ledger(
+            account, [fill for fill in fills if fill["account_id"] == account["id"]]
+        )
+        if ledger["realized_pnl"] is None:
+            basis_complete = False
+        else:
+            realized += ledger["realized_pnl"] * rate
+        result = unrealized_result(run, account["positions"])
+        if result is not None:
+            unrealized += result * rate
     return {
         "initial_equity": float(initial),
         "equity": float(equity) if complete else None,
         "pnl": float(equity - initial) if complete else None,
+        "realized_pnl": float(realized) if complete and basis_complete else None,
+        "unrealized_pnl": float(unrealized) if complete and basis_complete else None,
+        "cost_basis_complete": basis_complete,
         "return_pct": float((equity / initial - 1) * 100) if complete and initial else None,
         "max_drawdown_pct": float(drawdown) if complete else None,
         "lifetime_peak_equity": str(peak),

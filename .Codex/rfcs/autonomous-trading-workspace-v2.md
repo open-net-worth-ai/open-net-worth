@@ -1,6 +1,6 @@
 # RFC: A Delegated, Observable Trading Workspace
 
-**Status**: Draft redesign; replaces the product model of the first RFC, not an implementation-complete claim
+**Status**: Redesign implemented for product review in PR #63; funded venue acceptance and owner sign-off remain outstanding
 
 **Author**: Codex, incorporating the owner's clarified requirements
 
@@ -25,7 +25,7 @@ The example is: tell Lucius to allocate a hypothetical $1,000 for one month, cho
 
 ## Non-goals
 
-- This revision is product/technical design. It does not resume the paused connector/UI implementation, authorize real trades, or claim that the new experience exists.
+- This RFC defines the redesigned product implemented after the owner's request to change the actual app directly. It does not authorize real trades or substitute for funded venue acceptance. The owner cancelled the proposed standalone HTML mockup.
 - The product does not require the user to author a fixed strategy, and does not prescribe a team's topology or a particular model/provider.
 - The product does not promise profitable trading or invent unexposed internal model reasoning. It presents actual provider/executor output according to the capabilities available.
 - Automations provides reusable interaction and runtime patterns; this design does not replace its one-task execution semantics with a trading account or build a second generic scheduler.

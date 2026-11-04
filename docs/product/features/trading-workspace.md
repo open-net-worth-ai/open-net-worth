@@ -1,121 +1,130 @@
 ---
 title: Trading workspace
-description: Give an agent a defined trading allocation and period, follow its activity, and compare runs across backtest, paper and live environments.
+description: Delegate a persistent trading mandate and follow market, portfolio and agent work together.
 category: features
 order: 85
 audience: [user]
 status: beta
 related: [features/investments, connectors/bank-brokerage, lucius/models-and-cost, lucius/permissions]
-keywords: [trading, workspace, autonomous, agent, backtest, paper trading, live trading, comparison, strategy, stocks, crypto]
+keywords: [trading, workspace, autonomous, mandate, backtest, paper trading, live trading, comparison, stocks, crypto]
 ---
 
 # Trading workspace
 
-> **Development archive:** Issue #62 and draft PR #63 are being redesigned around a
-> persistent delegated workspace, conversational setup, and linked market/portfolio and
-> agent-work views. The interface described below is the earlier implementation, not
-> acceptance of that design. Archived Binance integration code is incomplete and is not
-> registered as an operational connector; IBKR currently provides preflight/refusal only.
-> Neither integration has authenticated trading acceptance. See the
-> [revised issue](https://github.com/open-net-worth-ai/open-net-worth/issues/62) and the
-> [design RFC](../../../.Codex/rfcs/autonomous-trading-workspace-v2.md).
+**Trading** is a persistent workspace for a delegated trading mandate. Describe an objective,
+funds and period to Lucius, or use **Expert setup**. Review the same workspace contract before
+starting. Trading's navigation icon is a candlestick chart; Investments keeps its trend arrow.
 
-Open **Trading** to give an agent a trading mandate and follow its actions and results.
-A workspace stores the instructions and limits. Each run fixes an environment, period,
-funded account scope and starting capital. Changing environment creates a new run.
+## Delegate through Lucius or a form
 
-## Create a workspace and run
+**Create with Lucius** starts a conversation. Explain what you want, for example managing a
+synthetic allocation of 1,000 USD for a month. Discuss markets, environment, executor, account
+scope, trading limits and agent usage budget. Lucius validates an unsaved draft and opens
+it for review; that preview does not create a workspace or grant trading authority.
 
-1. Select **New workspace**, give it a name and instructions, and choose Lucius, an external
-   agent, or a strategy script.
-2. Choose the permitted instruments and limits. Model usage has its own budget, separate
-   from trading capital. Current public Yahoo quotes are available for USD-quoted stocks
-   and crypto pairs; provider delays and quote age still apply. Alternatively supply your
-   own observations.
-3. Create a run with a start/end period and an allocation for each venue/currency account.
-   Backtests require a versioned observation dataset. A synthetic example is available in
-   the run form to explore the workflow without funding an account.
-4. Review the frozen mandate and select **Start run**. The environment and account bindings
-   cannot be changed while the run is operating.
+**Expert setup** opens the same contract directly. Review original instructions, effective
+limits, allocation, environment, duration and executor. Starting can fail if execution
+prerequisites are missing; the saved workspace and its blocker remain inspectable.
 
-## Choose an environment
+Original instructions are preserved for new workspaces. Amendments retain before/after
+values, reason, author and effective revision. Pause active work before changing the mandate.
+Earlier decisions and orders retain their recorded revision. An older workspace whose original
+instruction was not preserved says **Not recorded** rather than inventing an original.
 
-**Backtest** replays supplied historical observations. The agent receives data only once
-it is available at the simulated time. Advance the run to process subsequent observations.
-Fees, slippage and participation limits belong to the frozen mandate. This observation-based
-simulation does not establish that an order would have filled at a real exchange; include
-the dataset's calendar, liquidity and corporate-action assumptions when interpreting results.
-The observation simulator supports GTC orders; DAY orders require a verified session calendar
-and are explicitly refused in simulated runs. Capabilities report this distinction.
-Data isolation cannot remove historical facts already learned during a model's training.
+## Autonomous work and executor choice
 
-**Paper** uses simulated funds with current time. Choose a current quote source and instrument
-universe for unattended operation, or ingest your own observations. Missing or stale prices
-are shown and can prevent orders or a complete valuation. Paper holdings never enter your
-personal net worth. Public quotes may be delayed and are not a guarantee of executable prices.
+A workspace has one logical executor. It may be Lucius, a coding agent, a team, another
+external tool-using agent, or a strategy adapter. Internal organization is the executor's
+choice. Available control and visibility depend on the integration.
 
-**Live** sends orders to an eligible connected broker. The reviewed Alpaca MCP v2 mapping
-requires an explicitly live-configured transport, standing permissions for its required
-tools, and an active unleveraged USD cash account. The authorized allocation must match the
-entire initially empty funded account; an unrestricted account with additional capital is
-not treated as a smaller virtual allocation. Broker identity, order identity and fills must
-be available for reconciliation. Unsupported or incompletely configured accounts refuse to
-start. Connecting a broker does not authorize a live run: the run requires explicit human
-authorization. Fees whose broker metadata is incomplete must not be interpreted as confirmed
-zero fees.
+Lucius can inspect workspace data, research public current information in Paper/Live, save
+versioned research/code/test files, run isolated Python strategies, trade directly, or wait.
+The server scheduler continues across bounded decision cycles and resumes saved session/files.
+Normal operation does not require repeatedly pressing an agent or historical-advance button.
+The browser can close while server-owned work continues.
 
-The per-order notional limit checks the current quote and limit price before submission;
-it is not a guarantee of the eventual execution value during a price move. The funded,
-unleveraged account scope remains the capital boundary.
+Unattended calls require explicit **Always allow** permissions for scoped tools in
+**Settings → Permissions**. A workspace cannot grant itself permissions, change funding or
+switch to live trading. Trading capital and model usage budget are separate. Unknown billing
+or an exhausted budget blocks further paid cycles until resolved.
 
-## Participants
+External agents use a revocable, expiring workspace MCP credential. Issue it from executor
+controls and copy it to the selected agent. It grants workspace tools, not your personal
+book or broker secrets. Gateway tool calls/results are observed by the host; other inputs,
+outputs, reasoning and child activity are visible only if the executor reports them. An
+external process with unrelated tools remains outside this application's containment.
 
-**Lucius** works in bounded decision cycles and can wake again while the run remains active.
-Its trading tools read the run's environment and submit intents through the same execution
-boundary as other participants. Inspect activity and usage to see what actually happened.
-An exhausted model budget prevents new decision cycles.
+Strategy source runs in a separate Docker container without host mounts, credentials or
+network access. The pinned Python image and Docker must be provisioned. File versions,
+source, execution output, errors and order/decision identities remain inspectable.
+Saving a file does not execute it.
 
-Unattended trading requires explicit **Always allow** permissions for its trading tools,
-including order submission and strategy execution. Review these in **Settings → Permissions**;
-the run's account and capital limits still apply to every call. A run cannot grant these
-permissions to itself. Broker MCP tools also need their own standing permissions on the
-connector. Refused calls remain visible in run activity.
+## Two views of the same workspace
 
-For an **external agent**, issue access from the run. Copy the scoped endpoint and one-time
-credential to that agent's MCP client. It grants access to this run's trading tools, not your
-personal book or broker credentials. Revoke it from the run when finished. Its own unrelated
-tools or network access are outside this application's control; a protected comparison also
-needs to constrain the external agent's execution environment.
+**Market & portfolio** shows recorded market data, positions, orders/fills, cash, valuation,
+returns/drawdown, fees and statements. OHLCV candles and volume are rendered only when bar
+fields were supplied by the data source. A quote-only dataset stays a quote series; missing
+bars are not fabricated. Source, observation time, availability and dataset version help
+distinguish current data from what was available at a historical decision.
 
-For a **strategy script**, provide Python source in the run. It receives the run snapshot
-and returns typed order intents for the parent to validate and execute. It runs in a separate
-container without host mounts, host credentials or network access. Docker and the supported
-Python execution image must already be provisioned; the application refuses execution if
-they are unavailable. The source hash, output, failures and submitted orders are recorded.
-Code cannot grant itself another account or promote a simulation to live execution.
+**Agent work** shows actual emitted inputs/outputs, available analysis, provider-exposed
+reasoning or summaries, tool arguments/results, files and execution history. Expand records
+for details. Large work payloads can be retrieved separately. Provider output, host observations
+and executor-reported content carry different provenance. **Not provided**, **Not recorded**,
+**Pending** and **Redacted** describe different states. Hidden reasoning and unreported child
+work are not reconstructed.
 
-## Follow and control a run
+Both regions are equally visible on wide layouts; compact layouts let you switch between
+them while retaining mandate and current status above. Selecting a fill, order or decision
+opens its linked evidence. Relationships use recorded identities, not timestamp guesses.
+Missing decision/data/file links remain visible as missing.
 
-Run details show financial summaries, accounts, holdings, orders and fills, activity and
-artifacts. Equity, return, drawdown and fees come from the backend. Agent/model costs are
-shown separately. Missing marks or FX produce an incomplete valuation, not a zero balance.
+The statement reconciles opening allocation, execution cash movements, fees, closing cash
+and positions, and known realized/unrealized results. It is an application projection, not
+an official broker statement. Missing marks, basis, FX, fees or reconciliation can make
+figures unavailable. Agent/model costs appear separately from trading P&L.
 
-**Pause** and **Stop** prevent new trading decisions and apply the run's open-order
-cancellation policy. Holdings remain. These actions do not promise that an order already
-sent to a venue cannot execute. Cancellation remains pending until confirmed, and an unknown
-submission outcome requires reconciliation before safe recovery. **Resume** rechecks the
-mandate and eligibility. Expiry also stops new actions. Flattening a position is a separate
-trade rather than an implicit effect of Stop.
+## Environments and data boundaries
 
-Live fills are reconciled by broker execution identity and booked through the normal
-investment/transaction paths. Importers with overlapping fills must share that identity or
-resolve the overlap explicitly; similar amounts and timestamps do not prove duplication.
-Application undo cannot undo an external trade or resurrect revoked trading access.
+**Backtest** replays a versioned historical dataset. The scheduler moves its environment
+clock; tools receive only observations available then. Current web research is refused.
+Fees/slippage/liquidity assumptions belong to the reviewed scenario. Simulation cannot
+establish exchange fillability or eliminate a model's learned historical facts.
 
-## Compare agents
+**Paper** uses simulated funds and current time. Select an explicit instrument universe and
+supported current data source, or supply observations. Missing/stale quotes can prevent
+orders or complete valuation. Public bars/quotes may be delayed. Paper holdings never enter
+personal net worth.
 
-Open **Compare** and select runs with common starting conditions. The comparison records
-period, capital, market access and execution assumptions and shows returns, drawdown, trading
-fees and agent costs. Incompatible runs are identified rather than presented as equivalent
-competitors. A historical replay, a provider's paper account and an actual funded live run
-are different kinds of evidence even when the trading tools have the same interface.
+**Live** requires separately reviewed human authorization and a verified eligible account.
+Connection or OAuth success alone is insufficient. The reviewed Alpaca mapping requires an
+unleveraged USD cash account with its entire initially empty funded allocation isolated,
+stable order/fill identity, lookup/cancellation capabilities and standing MCP permissions.
+A small virtual slice of an unrestricted larger account is not isolated funding.
+
+Binance and IBKR remain approved integration targets. Archived Binance code is incomplete;
+the current IBKR trading adapter performs preflight/refusal. Neither is presented as an
+authenticated, funded execution path. Real-order acceptance requires a specified account,
+scope and authorization; no real funds are needed to inspect a synthetic workspace.
+
+## Observe, pause and recover
+
+Current work distinguishes working, waiting, blocked, recovery, pause and end states. Waiting
+can include the next automatic wake. Unknown external status stays unknown. An interrupted
+browser update does not imply the executor stopped.
+
+**Pause** and **End workspace** prevent new decisions and request cancellation under the
+execution policy. Sent orders may still execute; cancellation is pending until confirmed.
+Unknown outcomes require reconciliation before resubmission. Holdings remain. **Resume**
+rechecks eligibility and keeps allocation/history. Expiry also stops new work; ending does
+not silently liquidate positions.
+
+Live fills use canonical execution identity and existing financial write chokes. Undo in
+this application cannot undo an external trade. Simulations remain separate from the real ledger.
+
+## Compare workspaces
+
+**Compare** uses recorded environments with common period, capital, data and execution
+assumptions. Results show return, drawdown, trading fees and separate agent costs. Incompatible
+scenarios and incomplete valuations are disclosed rather than ranked as equivalent. Historical,
+paper and funded live execution remain different evidence, despite a common tool contract.

@@ -35,6 +35,7 @@ export interface TradingWorkspace {
   revision: number
   created_at: string
   updated_at: string
+  strategy_source?: string | null
 }
 export interface TradingInstrument {
   symbol: string
@@ -48,6 +49,16 @@ export interface TradingObservation {
   available_at?: string | null
   price: Amount
   volume?: Amount
+  id?: string
+  received_at?: string
+  open?: Amount | null
+  high?: Amount | null
+  low?: Amount | null
+  close?: Amount | null
+  interval?: string | null
+  source?: string | null
+  source_version?: string | null
+  adjustment?: string | null
 }
 export interface Allocation {
   name: string
@@ -65,7 +76,7 @@ export interface TradingRun {
   mode: TradingMode
   state: TradingState
   start_at: string
-  end_at: string
+  end_at: string | null
   current_time: string
   created_at: string
   agent_state: string
@@ -76,6 +87,8 @@ export interface TradingRun {
   initial_capital: Record<string, Amount>
   next_wake_at?: string
   last_agent_error?: string
+  agent_session_id?: string
+  last_agent_at?: string
 }
 export interface TradingPosition {
   instrument: TradingInstrument
@@ -110,6 +123,8 @@ export interface TradingOrder {
   request_id: string
   broker_order_id?: string
   reserved_cash?: Amount
+  decision_id?: string
+  mandate_revision?: number
 }
 export interface TradingFill {
   id: string
@@ -123,6 +138,7 @@ export interface TradingFill {
   side?: string
 }
 export interface TradingEvent {
+  sequence?: number
   id: string
   kind: string
   created_at?: string
@@ -144,6 +160,8 @@ export interface Performance {
   valuation_complete?: boolean
   valuation_status?: string
   missing_marks?: string[]
+  realized_pnl?: Amount | null
+  unrealized_pnl?: Amount | null
   history?: { timestamp: string; equity: Amount | null }[]
 }
 export interface TradingComparison {
@@ -180,7 +198,7 @@ export interface TradingComparison {
 export interface RunCreate {
   mode: TradingMode
   start_at: string
-  end_at: string
+  end_at: string | null
   accounts: Allocation[]
   observations: TradingObservation[]
   data_version: string
@@ -188,4 +206,113 @@ export interface RunCreate {
   base_currency: string
   fx_rates: Record<string, Amount>
   live_authorized: boolean
+}
+
+export interface DelegationCreate {
+  workspace: Pick<
+    TradingWorkspace,
+    'name' | 'instructions' | 'agent_kind' | 'agent_label' | 'mandate' | 'strategy_source'
+  >
+  environment: RunCreate
+  start: boolean
+}
+export interface DelegationReview extends DelegationCreate {
+  ready: boolean
+  issues: string[]
+  executor?: { kind: string; label: string; capabilities?: Record<string, unknown> }
+}
+export interface DelegationResult {
+  workspace: TradingWorkspace
+  run: TradingRun
+  started: boolean
+  activation_error?: { code: string; message: string }
+}
+export interface MandateAmendment {
+  id: string
+  revision: number
+  reason: string
+  created_at: string
+  author?: string
+  before?: Record<string, unknown>
+  after?: Record<string, unknown>
+  [key: string]: unknown
+}
+export interface WorkspaceOverview {
+  workspace: TradingWorkspace
+  current_run: TradingRun | null
+  original_mandate: Pick<
+    TradingWorkspace,
+    'instructions' | 'mandate' | 'agent_kind' | 'agent_label' | 'created_at' | 'revision'
+  > | null
+  original_availability?: string
+  amendments: MandateAmendment[]
+  current_work: {
+    state: string
+    summary: string | null
+    last_activity_at?: string | null
+    next_wake_at?: string | null
+    blocker?: string | null
+    executor?: string | Record<string, unknown>
+  }
+  visibility?: Record<string, unknown>
+}
+export interface TradingMarketSeries extends Collection<TradingObservation> {
+  current_time: string
+  data_version: string
+  candle_count: number
+  quote_count: number
+}
+export interface TradingStatement {
+  period: { start_at: string; end_at: string | null; as_of: string }
+  base_currency: string
+  initial_equity: Amount
+  equity: Amount | null
+  pnl: Amount | null
+  realized_pnl: Amount | null
+  unrealized_pnl: Amount | null
+  fees: Amount | null
+  fees_complete: boolean
+  valuation_complete: boolean
+  model_cost_usd: Amount
+  accounts: {
+    id: string
+    name: string
+    currency: string
+    opening_cash: Amount
+    closing_cash: Amount
+    cash_change: Amount
+    realized_pnl: Amount | null
+    unrealized_pnl: Amount | null
+    positions: Record<string, TradingPosition>
+    movements: {
+      id: string
+      timestamp: string
+      kind: string
+      amount: Amount
+      order_id?: string
+      fill_id?: string
+    }[]
+  }[]
+  fills: TradingFill[]
+}
+export type EvidenceSelection = { kind: 'order' | 'fill' | 'event'; id: string }
+export interface TradingEvidence {
+  selection: EvidenceSelection
+  order: TradingOrder | null
+  orders?: TradingOrder[]
+  fills: TradingFill[]
+  decision: TradingEvent | null
+  events: TradingEvent[]
+  observations: TradingObservation[]
+  data_context: { label: string; cutoff: string; data_version: string }
+  files: Record<string, unknown>[]
+  missing_links: string[]
+}
+export interface TradingFile {
+  name: string
+  version: number
+  sha256: string
+  content: string | null
+  event_id: string
+  redacted: boolean
 }

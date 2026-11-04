@@ -1,16 +1,16 @@
 import { useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useTradingWorkspaces, useTradingRuns } from '../../hooks/useTrading'
-import { useQueryCache } from '../../state/queryCache'
-import { tradingApi, tradingRoot } from '../../api/trading'
-import type { TradingWorkspace } from '../../types/trading'
+import { useTradingWorkspaces, useTradingOverview } from '../../hooks/useTrading'
+import type { DelegationCreate, TradingWorkspace } from '../../types/trading'
+import { TRADING_REVIEW_DRAFT_SPEC } from '../../lucius/screenCommands'
+import { useRegisterScreenCommands } from '../../lucius/useScreenContract'
 import {
   Badge,
   Button,
+  Cluster,
   Container,
   EmptyState,
   ErrorState,
-  Grid,
   Loading,
   PageHeader,
   PageTabs,
@@ -19,43 +19,69 @@ import {
   Text,
   TextField,
 } from '../ui'
+import { LuciusCta } from '../intro/LuciusCta'
 import { WorkspaceForm } from './trading/WorkspaceForm'
-import { WorkspaceDetail, type TradingSection } from './trading/WorkspaceDetail'
+import { WorkspaceDetail } from './trading/WorkspaceDetail'
 import { TradingComparisons } from './trading/TradingComparisons'
-import {
-  errorText,
-  readable,
-  statusTone,
-  tradingTime,
-  tradingMoney,
-  tradingPercent,
-} from './trading/presentation'
+import { errorText, readable, statusTone, tradingMoney, tradingTime } from './trading/presentation'
 
-export function Trading() {
+export function Trading({ onAskLucius }: { onAskLucius?: (text: string) => void }) {
   const search = useSearch({ from: '/trading' })
   const navigate = useNavigate()
   const workspaces = useTradingWorkspaces()
-  const [form, setForm] = useState<TradingWorkspace | 'new' | null>(null)
+  const [form, setForm] = useState<{ draft?: DelegationCreate } | null>(null)
+  const [draftError, setDraftError] = useState('')
   const [filter, setFilter] = useState('')
   const selected = workspaces.data?.items.find((workspace) => workspace.id === search.workspace)
   const view = search.view ?? 'workspaces'
-  const section = (search.section ?? 'overview') as TradingSection
   function route(patch: Partial<typeof search>) {
     void navigate({ to: '/trading', search: { ...search, ...patch } })
   }
+  useRegisterScreenCommands([
+    {
+      spec: TRADING_REVIEW_DRAFT_SPEC,
+      handler: (args) => {
+        const value = args.delegation
+        if (
+          !value ||
+          typeof value !== 'object' ||
+          Array.isArray(value) ||
+          !('workspace' in value) ||
+          !('environment' in value)
+        ) {
+          setDraftError(
+            'The delegation draft is incomplete. Ask Lucius to preview the workspace again.',
+          )
+          return
+        }
+        setDraftError('')
+        setForm({ draft: value as DelegationCreate })
+      },
+    },
+  ])
   const items = (workspaces.data?.items ?? []).filter((item) =>
-    `${item.name} ${item.agent_label}`.toLowerCase().includes(filter.toLowerCase()),
+    `${item.name} ${item.agent_label} ${item.instructions}`
+      .toLowerCase()
+      .includes(filter.toLowerCase()),
   )
   return (
     <Container size="wide" className="trading-page">
       <Stack gap="--space-6">
         <PageHeader
           title="Trading"
-          subtitle="Autonomous trading workspaces, from backtest to live"
+          subtitle="Delegate a trading mandate and follow the markets, portfolio and agent’s work."
           actions={
-            <Button variant="primary" onClick={() => setForm('new')}>
-              New workspace
-            </Button>
+            <Cluster>
+              <LuciusCta
+                label="Create with Lucius"
+                size="md"
+                message="Help me create a persistent autonomous trading workspace. Discuss my mandate, funding, period, executor, environment and limits. Use preview_trading_workspace to validate an unsaved draft, then open trading.review_draft so I can review it. Do not create or authorize live trading without my review."
+                onAskLucius={onAskLucius}
+              />
+              <Button variant="secondary" onClick={() => setForm({})}>
+                Expert setup
+              </Button>
+            </Cluster>
           }
         />
         <PageTabs
@@ -67,6 +93,7 @@ export function Trading() {
             { key: 'compare', label: 'Compare' },
           ]}
         />
+        {draftError && <ErrorState message={draftError} />}
         <div role="tabpanel" aria-labelledby={`ui-page-tab-${view}`}>
           {view === 'compare' ? (
             <TradingComparisons
@@ -88,11 +115,8 @@ export function Trading() {
                   key={selected.id}
                   workspace={selected}
                   runId={search.run ?? ''}
-                  section={section}
                   onRun={(id) => route({ run: id })}
-                  onSection={(value) => route({ section: value })}
                   onBack={() => route({ workspace: undefined, run: undefined, section: undefined })}
-                  onEdit={() => setForm(selected)}
                 />
               ) : search.workspace && !workspaces.initialLoading && !workspaces.error ? (
                 <ErrorState
@@ -100,36 +124,30 @@ export function Trading() {
                   onRetry={() => route({ workspace: undefined, run: undefined })}
                 />
               ) : (
-                <Stack gap="--space-6">
+                <Stack gap="--space-4">
                   {!workspaces.initialLoading &&
                   !workspaces.error &&
                   !workspaces.data?.items.length ? (
                     <EmptyState
-                      title="Create your first trading workspace"
-                      body="Give an agent a defined allocation and period, then follow its actions and results."
-                      action={
-                        <Button variant="primary" onClick={() => setForm('new')}>
-                          New workspace
-                        </Button>
-                      }
+                      title="Give an agent a trading mandate"
+                      body="Describe what you want to delegate to Lucius, or use expert setup. A workspace retains its mandate, account activity and the agent’s work over time."
+                      action={<Button onClick={() => setForm({})}>Expert setup</Button>}
                     />
                   ) : (
                     <>
                       <TextField
                         aria-label="Search workspaces"
-                        placeholder="Search workspaces"
+                        placeholder="Search mandates, workspaces or executors"
                         value={filter}
                         onChange={(e) => setFilter(e.target.value)}
                       />
-                      <Grid>
-                        {items.map((workspace) => (
-                          <WorkspaceCard
-                            key={workspace.id}
-                            workspace={workspace}
-                            onOpen={() => route({ workspace: workspace.id, run: undefined })}
-                          />
-                        ))}
-                      </Grid>
+                      {items.map((workspace) => (
+                        <WorkspaceCard
+                          key={workspace.id}
+                          workspace={workspace}
+                          onOpen={() => route({ workspace: workspace.id, run: undefined })}
+                        />
+                      ))}
                       {!!workspaces.data?.items.length && !items.length && (
                         <EmptyState title="No matching workspaces" />
                       )}
@@ -142,11 +160,11 @@ export function Trading() {
         </div>
         {form && (
           <WorkspaceForm
-            workspace={form === 'new' ? undefined : form}
+            draft={form.draft}
             onClose={() => setForm(null)}
-            onSaved={(workspace) => {
+            onSaved={(workspace, runId) => {
               setForm(null)
-              route({ view: 'workspaces', workspace: workspace.id })
+              route({ view: 'workspaces', workspace: workspace.id, run: runId })
             }}
           />
         )}
@@ -156,46 +174,42 @@ export function Trading() {
 }
 
 function WorkspaceCard({ workspace, onOpen }: { workspace: TradingWorkspace; onOpen: () => void }) {
-  const runs = useTradingRuns(workspace.id)
-  const latest = runs.data?.items.at(-1)
-  const performance = useQueryCache(
-    `${tradingRoot}/runs/${latest?.id ?? ''}/performance`,
-    () => tradingApi.performance(latest!.id),
-    { enabled: !!latest },
-  )
+  const overview = useTradingOverview(workspace.id)
+  const current = overview.data?.current_run
+  const work = overview.data?.current_work
   return (
-    <Panel title={workspace.name} className="trading-workspace-card">
-      <Stack gap="--space-4">
-        <Text>
-          {workspace.agent_label} · {workspace.mandate.allowed_asset_classes.join(', ')}
+    <Panel
+      title={workspace.name}
+      className="trading-workspace-card"
+      actions={<Button onClick={onOpen}>Open workspace</Button>}
+    >
+      <Stack gap="--space-3">
+        <Text className="trading-mandate-excerpt">
+        {overview.data?.original_mandate?.instructions ?? workspace.instructions}
         </Text>
-        {latest ? (
-          <>
-            <Badge tone={statusTone(latest.state)}>{readable(latest.state)}</Badge>
-            <Text size="sm" tone="muted">
-              {latest.mode} · {tradingTime(latest.start_at)} – {tradingTime(latest.end_at)}
-            </Text>
-          </>
-        ) : (
-          <Text tone="muted">
-            {runs.initialLoading
-              ? 'Loading latest run…'
-              : runs.error
-                ? 'Run status unavailable'
-                : 'No runs yet'}
-          </Text>
-        )}
-        <Text size="sm" tone="muted">
-          {workspace.instructions || 'Create a run to define its capital, period and environment.'}
-        </Text>
-        {performance.data && (
+        <Cluster>
+          <Badge tone={statusTone(current?.state ?? '')}>
+            {current
+              ? readable(current.state)
+              : overview.initialLoading
+                ? 'Loading status…'
+                : overview.error
+                  ? 'Status unavailable'
+                  : 'Not activated'}
+          </Badge>
           <Text size="sm">
-            Equity {tradingMoney(performance.data.equity, performance.data.base_currency)} · Return{' '}
-            {tradingPercent(performance.data.return_pct)} · Drawdown{' '}
-            {tradingPercent(performance.data.max_drawdown_pct)}
+            {workspace.agent_label}
+            {current
+              ? ` · ${current.mode} · ${Object.entries(current.initial_capital)
+                  .map(([currency, capital]) => tradingMoney(capital, currency))
+                  .join(' / ')}`
+              : ''}
           </Text>
-        )}
-        <Button onClick={onOpen}>Open workspace</Button>
+        </Cluster>
+        <Text size="sm" tone="muted">
+          {work?.summary ?? 'No work reported yet.'} · Updated{' '}
+          {tradingTime(work?.last_activity_at ?? workspace.updated_at)}
+        </Text>
       </Stack>
     </Panel>
   )

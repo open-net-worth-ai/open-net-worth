@@ -3,17 +3,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { tradingApi } from '../../../api/trading'
 import type { TradingRun, TradingWorkspace, TradingOrder } from '../../../types/trading'
-import { WorkspaceForm } from './WorkspaceForm'
 import { RunForm } from './RunForm'
 import { TradingOrders } from './TradingOrders'
 import { RunTools } from './RunTools'
 import { WorkspaceDetail } from './WorkspaceDetail'
-import { useTradingRun, useTradingRuns } from '../../../hooks/useTrading'
+import { useTradingRun, useTradingOverview } from '../../../hooks/useTrading'
 
-vi.mock('../../../hooks/useTrading', () => ({ useTradingRun: vi.fn(), useTradingRuns: vi.fn() }))
+vi.mock('../../../hooks/useTrading', () => ({
+  useTradingRun: vi.fn(),
+  useTradingOverview: vi.fn(),
+}))
+vi.mock('./TradingMarketPortfolio', () => ({
+  TradingMarketPortfolio: () => <div>Market &amp; portfolio</div>,
+}))
+vi.mock('./TradingAgentWork', () => ({ TradingAgentWork: () => <div>Agent work</div> }))
 vi.mock('./TradingPerformance', () => ({ TradingPerformance: () => null }))
 
 vi.mock('../../../api/trading', () => ({
+  tradingRoot: '/api/trading',
   tradingApi: {
     createWorkspace: vi.fn(),
     updateWorkspace: vi.fn(),
@@ -89,59 +96,23 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('trading workspace configuration', () => {
-  it.each(['workspace', 'run'] as const)(
-    'preserves Escape dismissal after a refused %s save',
-    async (kind) => {
-      let reject!: (error: Error) => void
-      const request = new Promise<never>((_, deny) => {
+  it('preserves Escape dismissal after a refused environment save', async () => {
+    let reject!: (error: Error) => void
+    vi.mocked(tradingApi.createRun).mockReturnValue(
+      new Promise<never>((_, deny) => {
         reject = deny
-      })
-      const close = vi.fn()
-      if (kind === 'workspace') {
-        vi.mocked(tradingApi.createWorkspace).mockReturnValue(request)
-        render(<WorkspaceForm onClose={close} onSaved={vi.fn()} />)
-        fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Monthly account' } })
-      } else {
-        vi.mocked(tradingApi.createRun).mockReturnValue(request)
-        render(<RunForm workspace={workspace} onClose={close} onSaved={vi.fn()} />)
-      }
-      const submit = screen.getByRole('button', {
-        name: kind === 'workspace' ? 'Create workspace' : 'Create run',
-      })
-      submit.focus()
-      fireEvent.click(submit)
-      expect(document.activeElement).not.toBe(submit)
-      reject(new Error('Server refused save'))
-      await screen.findByText('Server refused save')
-      fireEvent.keyDown(document.activeElement!, { key: 'Escape', code: 'Escape' })
-      await waitFor(() => expect(close).toHaveBeenCalled())
-    },
-  )
-
-  it('creates an agent-independent workspace with a server-enforced mandate', async () => {
-    vi.mocked(tradingApi.createWorkspace).mockResolvedValue(workspace)
-    const saved = vi.fn()
-    render(<WorkspaceForm onClose={vi.fn()} onSaved={saved} />)
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Monthly account' } })
-    fireEvent.change(screen.getByLabelText('Agent'), { target: { value: 'external' } })
-    fireEvent.change(screen.getByLabelText('Maximum order value'), { target: { value: '250' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
-    await waitFor(() => expect(tradingApi.createWorkspace).toHaveBeenCalled())
-    expect(vi.mocked(tradingApi.createWorkspace).mock.calls[0]?.[0]).toMatchObject({
-      name: 'Monthly account',
-      agent_kind: 'external',
-      mandate: { max_order_notional: '250', max_model_cost_usd: '10' },
-    })
-    expect(saved).toHaveBeenCalledWith(workspace)
-  })
-
-  it('retains the workspace draft after a refused save', async () => {
-    vi.mocked(tradingApi.createWorkspace).mockRejectedValue(new Error('Invalid mandate'))
-    render(<WorkspaceForm onClose={vi.fn()} onSaved={vi.fn()} />)
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Keep this name' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Create workspace' }))
-    expect(await screen.findByText('Invalid mandate')).toBeTruthy()
-    expect((screen.getByLabelText('Name') as HTMLInputElement).value).toBe('Keep this name')
+      }),
+    )
+    const close = vi.fn()
+    render(<RunForm workspace={workspace} onClose={close} onSaved={vi.fn()} />)
+    const submit = screen.getByRole('button', { name: 'Create run' })
+    submit.focus()
+    fireEvent.click(submit)
+    expect(document.activeElement).not.toBe(submit)
+    reject(new Error('Server refused save'))
+    await screen.findByText('Server refused save')
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape', code: 'Escape' })
+    await waitFor(() => expect(close).toHaveBeenCalled())
   })
 
   it('creates a backtest with an explicit synthetic dataset and multiple accounts', async () => {
@@ -190,7 +161,15 @@ describe('execution visibility and controls', () => {
       refreshing: false,
       refresh: vi.fn().mockResolvedValue(data),
     })
-    vi.mocked(useTradingRuns).mockReturnValue(query({ items: [ready], total: 1 }))
+    vi.mocked(useTradingOverview).mockReturnValue(
+      query({
+        workspace,
+        current_run: ready,
+        original_mandate: workspace,
+        amendments: [],
+        current_work: { state: 'ready', summary: null },
+      }),
+    )
     vi.mocked(useTradingRun).mockReturnValue({
       run: query(ready),
       accounts: query({ items: [], total: 0 }),
@@ -212,9 +191,9 @@ describe('execution visibility and controls', () => {
         onEdit={vi.fn()}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Start run' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Start workspace' }))
     const confirm = screen.getByRole('dialog')
-    fireEvent.click(within(confirm).getByRole('button', { name: 'Start run' }))
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Start workspace' }))
     const error = await screen.findByRole('alert')
     expect(error.textContent).toContain('No verified live trading adapter is available')
     expect(screen.queryByRole('dialog')).toBeNull()

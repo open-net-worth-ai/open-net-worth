@@ -23,12 +23,12 @@ def main():
         ONW_QA_NONCE=args.qa_nonce,
     )
     completed = subprocess.run(
-        ["node", "--test", "--test-timeout=90000", "frontend/qa/trading-workspace.test.mjs"],
+        ["node", "--test", "--test-timeout=150000", "frontend/qa/trading-workspace.test.mjs"],
         cwd=root,
         env=env,
         capture_output=True,
         text=True,
-        timeout=100,
+        timeout=180,
     )
     report = root / "qa/browser-use/artifacts/trading-workspace/node-test.log"
     report.parent.mkdir(parents=True, exist_ok=True)

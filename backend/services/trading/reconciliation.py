@@ -2,7 +2,14 @@
 
 from backend.core.errors import ConflictError
 from backend.db.trading_store import TradingStore, trading_transaction
-from backend.services.trading.common import ACTIVE_ORDER_STATES, amount, event, uses_broker_execution
+from backend.services.trading.common import (
+    ACTIVE_ORDER_STATES,
+    amount,
+    event,
+    instant,
+    now,
+    uses_broker_execution,
+)
 from backend.services.trading.fills import apply_receipt
 from backend.services.trading.market import environment_time
 from backend.services.trading.performance import snapshot_performance
@@ -178,11 +185,43 @@ def _apply_account_result(conn, run, account, result):
     return clean
 
 
-def recover_runs():
+def recover_runs(*, boot_owned=False):
     changed = []
     with trading_transaction() as conn:
         for run in TradingStore("runs").all(conn=conn):
             uncertain = False
+            if run.get("agent_lease_id") and (
+                boot_owned
+                or (
+                    run.get("agent_lease_expires_at")
+                    and instant(run["agent_lease_expires_at"]) <= instant(now())
+                )
+            ):
+                pending = run.get("usage_state") in {"pending", "unknown"}
+                TradingStore("runs").update_by_id(
+                    run["id"],
+                    {
+                        "agent_lease_id": None,
+                        "agent_lease_expires_at": None,
+                        "agent_state": "usage_unknown" if pending else "waiting",
+                        "usage_state": "unknown" if pending else run.get("usage_state"),
+                        "last_agent_error": "Previous model usage is unknown. Reconcile the interrupted turn's billing before continuing paid work."
+                        if pending
+                        else run.get("last_agent_error"),
+                    },
+                    conn=conn,
+                )
+                event(
+                    conn,
+                    run,
+                    "agent_recovery",
+                    {
+                        "state": "usage_unknown" if pending else "waiting",
+                        "message": "Previous work was interrupted; billing must be reconciled before another paid turn."
+                        if pending
+                        else "Persistent workspace is ready to continue.",
+                    },
+                )
             for order in TradingStore("orders").list_scope(run["id"], conn=conn):
                 if order["status"] == "submitting":
                     TradingStore("orders").update_by_id(

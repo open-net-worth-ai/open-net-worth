@@ -12,7 +12,9 @@ def base_fee_quantity(fill):
     instrument = fill["instrument"]
     parts = instrument["symbol"].split("/")
     if instrument["asset_class"] != "crypto" or len(parts) != 2:
-        raise ConflictError("Asset-denominated execution fees require a BASE/QUOTE crypto instrument")
+        raise ConflictError(
+            "Asset-denominated execution fees require a BASE/QUOTE crypto instrument"
+        )
     base, quote = parts
     quantity = amount(fill["fee_quantity"])
     cash_fee, value = amount(fill["fees"]), amount(fill["fee_value_quote"])

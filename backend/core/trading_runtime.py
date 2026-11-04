@@ -18,6 +18,12 @@ TRADING_TOOLS = frozenset(
         "list_trading_fills",
         "record_trading_decision",
         "run_trading_strategy",
+        "write_trading_file",
+        "read_trading_files",
+        "record_trading_work",
+        "search_trading_research",
+        "fetch_trading_research",
+        "request_trading_market_data",
     }
 )
 

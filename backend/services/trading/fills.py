@@ -53,7 +53,9 @@ def apply_fill(conn, run, order, raw):
     if order["side"] == "buy":
         if gross + fees > cash or base_fee >= quantity:
             raise ConflictError("Fill exceeds account cash; reconciliation required")
-        position.update(quantity=str(held + quantity - base_fee), cost_basis=str(basis + gross + fees))
+        position.update(
+            quantity=str(held + quantity - base_fee), cost_basis=str(basis + gross + fees)
+        )
         cash -= gross + fees
     else:
         disposed = quantity + base_fee

@@ -25,6 +25,7 @@ import {
   Box,
   Inbox as InboxIcon,
   TrendingUp,
+  ChartCandlestick,
   Wallet,
   Target,
   Receipt,
@@ -255,7 +256,7 @@ const TAB_ICONS: Record<TabId, ReactElement> = {
   dashboard: <LayoutGrid {...ICON_PROPS} />,
   inbox: <InboxIcon {...ICON_PROPS} />,
   investments: <TrendingUp {...ICON_PROPS} />,
-  trading: <TrendingUp {...ICON_PROPS} />,
+  trading: <ChartCandlestick {...ICON_PROPS} />,
   accounts: <Wallet {...ICON_PROPS} />,
   assets: <Box {...ICON_PROPS} />,
   commitments: <Target {...ICON_PROPS} />,
@@ -1593,7 +1594,14 @@ function RouterShellInner() {
                                 subTabRequest={subTabRequest}
                               />
                             )}
-                            {tabToRender === 'trading' && <Trading />}
+                            {tabToRender === 'trading' && (
+                              <Trading
+                                onAskLucius={(text) => {
+                                  setChatPrefill(text)
+                                  openLucius()
+                                }}
+                              />
+                            )}
                             {tabToRender === 'accounts' && (
                               <AccountsTab
                                 refresh={refresh}

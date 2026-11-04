@@ -198,7 +198,9 @@ from backend.api.statement_parse_api import router as statement_parse_router
 from backend.api.terminal import router as terminal_router
 from backend.api.tool_permissions import router as tool_permissions_router
 from backend.api.trading_api import router as trading_router
+from backend.api.trading_evidence_api import router as trading_evidence_router
 from backend.api.trading_runtime_api import router as trading_runtime_router
+from backend.api.trading_workspace_api import router as trading_workspace_router
 from backend.api.upload import router as upload_router
 from backend.api.vault import router as vault_router
 from backend.api.voice import router as voice_router
@@ -664,7 +666,7 @@ async def lifespan(app: FastAPI):
     register_configured_alpaca_adapters()
     from backend.services.trading import recover_runs
 
-    await asyncio.to_thread(recover_runs)
+    await asyncio.to_thread(recover_runs, boot_owned=True)
 
     # Boot recovery for server-owned turns (concurrent-conversations RFC Phase 3), modelled
     # on recover_automation_runs just above: a conversation whose last_turn_status is still
@@ -1185,7 +1187,9 @@ app.include_router(vault_router)
 app.include_router(assets_router)
 app.include_router(automations_router)
 app.include_router(trading_router)
+app.include_router(trading_evidence_router)
 app.include_router(trading_runtime_router)
+app.include_router(trading_workspace_router)
 app.include_router(trading_gateway_router)
 app.include_router(ibkr_router)
 app.include_router(yodlee_router)

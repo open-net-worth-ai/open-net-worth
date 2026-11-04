@@ -72,6 +72,8 @@ def event(conn, run: dict, kind: str, payload: dict | None = None) -> dict:
         "scope_id": run["id"],
         "kind": kind,
         "run_id": run["id"],
+        "workspace_id": run["workspace_id"],
+        "mandate_revision": run.get("mandate_revision", run["workspace_snapshot"]["revision"]),
         "sequence": sequence,
         "environment_time": run["current_time"],
         "created_at": now(),
@@ -85,9 +87,9 @@ def event(conn, run: dict, kind: str, payload: dict | None = None) -> dict:
 def assert_running(run: dict) -> None:
     if run["state"] != "running":
         raise ConflictError("Trading run is not running", state=run["state"])
-    if run["mode"] != "backtest" and instant(now()) >= instant(run["end_at"]):
+    if run.get("end_at") and run["mode"] != "backtest" and instant(now()) >= instant(run["end_at"]):
         raise ConflictError("Trading mandate has expired")
-    if instant(run["current_time"]) >= instant(run["end_at"]):
+    if run.get("end_at") and instant(run["current_time"]) >= instant(run["end_at"]):
         raise ConflictError("Trading mandate has expired")
 
 

@@ -9,11 +9,13 @@ export function TradingOrders({
   fills,
   onCancel,
   busy,
+  onInspect,
 }: {
   orders: TradingOrder[]
   fills: TradingFill[]
   onCancel: (order: TradingOrder) => Promise<void>
   busy: boolean
+  onInspect?: (order: TradingOrder) => void
 }) {
   const [selectedId, setSelected] = useState<string | null>(null)
   const selected = orders.find((order) => order.id === selectedId)
@@ -60,7 +62,7 @@ export function TradingOrders({
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => setSelected(order.id)}
+                        onClick={() => (onInspect ? onInspect(order) : setSelected(order.id))}
                         aria-label={`View order ${order.instrument.symbol}`}
                       >
                         Details

@@ -40,10 +40,13 @@ async def _start(run_id, action):
     if run["state"] != expected:
         raise ConflictError(f"Run must be {expected} to {action}")
     if run["mode"] != "backtest" and not (
-        instant(run["start_at"]) <= instant(now()) < instant(run["end_at"])
+        instant(run["start_at"]) <= instant(now())
+        and (run.get("end_at") is None or instant(now()) < instant(run["end_at"]))
     ):
         raise ConflictError("Current time is outside the trading mandate period")
-    verified = await _verify_live(run, initial=action == "start") if uses_broker_execution(run) else {}
+    verified = (
+        await _verify_live(run, initial=action == "start") if uses_broker_execution(run) else {}
+    )
     with trading_transaction() as conn:
         run = TradingStore("runs").required(run_id, conn=conn)
         if run["state"] != expected:
@@ -60,6 +63,8 @@ async def _start(run_id, action):
                 "desired_state": "running",
                 "current_time": environment_time(run).isoformat(),
                 "updated_at": now(),
+                "last_agent_error": None,
+                "agent_state": "idle",
             },
             conn=conn,
         )
@@ -203,7 +208,7 @@ def _advance(run_id, until):
             )
             match_orders(conn, run)
             run = snapshot_performance(conn, run)
-        if instant(target) >= instant(run["end_at"]):
+        if run.get("end_at") and instant(target) >= instant(run["end_at"]):
             _expire_simulated_orders(conn, run)
             TradingStore("runs").update_by_id(run_id, {"state": "completed"}, conn=conn)
         event(conn, run, "clock_advanced", {"current_time": target})
@@ -246,6 +251,7 @@ async def expire_runs():
         if (
             run["mode"] != "backtest"
             and run["state"] in {"running", "paused", "needs_reconciliation"}
+            and run.get("end_at") is not None
             and instant(now()) >= instant(run["end_at"])
         ):
             await _stop(run["id"], "stop")

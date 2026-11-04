@@ -4,6 +4,7 @@ import {
   OFFSCREEN_COMMAND_CATALOG,
   PLAN_RESET_SPEC,
   PLAN_STAGE_WHATIF_SPEC,
+  TRADING_REVIEW_DRAFT_SPEC,
   buildCommandManifest,
   commandCatalogSnapshot,
   setLiveCommands,
@@ -34,6 +35,13 @@ it('with nothing live the catalog rides as live:false with a route', () => {
     expect.objectContaining({ name: 'automation', type: 'object', required: true }),
   ])
   expect(AUTOMATIONS_REVIEW_DRAFT_SPEC.description).toContain('unsaved')
+  const trading = m.find((c) => c.name === 'trading.review_draft')
+  expect(trading?.live).toBe(false)
+  expect(trading?.route).toBe('trading')
+  expect(trading?.params).toEqual([
+    expect.objectContaining({ name: 'delegation', type: 'object', required: true }),
+  ])
+  expect(TRADING_REVIEW_DRAFT_SPEC.description).toContain('unsaved')
 })
 
 it('caps at 12 and keeps wire params compact', () => {

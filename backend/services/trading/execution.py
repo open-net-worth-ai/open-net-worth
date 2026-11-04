@@ -36,6 +36,12 @@ async def submit_order(run_id, data):
                 raise ConflictError("Request ID was already used for a different order")
             return existing
         assert_running(run)
+        if clean.get("decision_id"):
+            decision = TradingStore("events").required(clean["decision_id"], conn=conn)
+            if decision["run_id"] != run_id or decision["kind"] != "agent_decision":
+                raise ConflictError(
+                    "Order decision must be a recorded decision in this workspace environment"
+                )
         if not uses_broker_execution(run) and clean["time_in_force"] == "day":
             raise ConflictError(
                 "DAY requires a verified session calendar; this simulator supports GTC"
@@ -49,6 +55,7 @@ async def submit_order(run_id, data):
             "id": key,
             "scope_id": run_id,
             "run_id": run_id,
+            "mandate_revision": run.get("mandate_revision", run["workspace_snapshot"]["revision"]),
             "intent_hash": fingerprint(clean),
             "instrument_key": instrument_key(clean["instrument"]),
             "status": "pending" if uses_broker_execution(run) else "open",

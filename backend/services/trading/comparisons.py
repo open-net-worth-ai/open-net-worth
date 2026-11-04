@@ -31,8 +31,10 @@ def get_comparison(comparison_id):
     row = TradingStore("comparisons").required(comparison_id)
     results = []
     historical_clocks = set()
+    scenario_hashes = set()
     for run_id in row["run_ids"]:
         run = TradingStore("runs").required(run_id)
+        scenario_hashes.add(run["scenario_hash"])
         if run["mode"] == "backtest":
             historical_clocks.add(run["current_time"])
         results.append(
@@ -52,6 +54,9 @@ def get_comparison(comparison_id):
         )
     complete = all(result["valuation_complete"] for result in results)
     reasons = [] if complete else ["One or more valuations are incomplete"]
+    if len(scenario_hashes) != 1 or row["scenario_hash"] not in scenario_hashes:
+        complete = False
+        reasons.append("Mandate or execution conditions changed after this comparison was created")
     if len(historical_clocks) > 1:
         complete = False
         reasons.append("Historical runs are at different environment times")

@@ -5,13 +5,13 @@ from __future__ import annotations
 from backend.core.errors import ConflictError, ValidationError
 from backend.db.trading_store import TradingStore, trading_transaction
 from backend.models.trading import Instrument, Observation
-from backend.services.trading.common import collection, event, instant, now, validated
+from backend.services.trading.common import collection, event, identity, instant, now, validated
 
 
 def environment_time(run):
     if run["mode"] == "backtest" or run["state"] in {"stopped", "completed", "failed"}:
         return instant(run["current_time"])
-    return min(instant(now()), instant(run["end_at"]))
+    return min(instant(now()), instant(run["end_at"])) if run.get("end_at") else instant(now())
 
 
 def instrument_key(instrument):
@@ -50,6 +50,38 @@ def get_market_data(run_id, instrument=None, *, limit=100, offset=0, latest=Fals
     }
 
 
+def observation_record(row, data_version):
+    return {
+        **row,
+        "id": identity(instrument_key(row["instrument"]), row["timestamp"]),
+        "data_version": data_version,
+        "available_at": row.get("available_at") or row["timestamp"],
+        "candle_available": all(
+            row.get(key) is not None for key in ("open", "high", "low", "close")
+        ),
+    }
+
+
+def get_market_series(run_id, *, key=None, limit=500, offset=0):
+    run = TradingStore("runs").required(run_id)
+    rows = [
+        observation_record(row, run["data_version"])
+        for row in available_observations(run)
+        if key is None or instrument_key(row["instrument"]) == key
+    ]
+    rows.sort(key=lambda row: instant(row["timestamp"]))
+    end = max(0, len(rows) - max(offset, 0))
+    return {
+        "items": rows[max(0, end - min(max(limit, 1), 500)) : end],
+        "total": len(rows),
+        "candle_count": sum(row["candle_available"] for row in rows),
+        "quote_count": sum(not row["candle_available"] for row in rows),
+        "current_time": environment_time(run).isoformat(),
+        "data_version": run["data_version"],
+        "schema_version": 2,
+    }
+
+
 def ingest_observations(run_id, observations):
     if not observations or len(observations) > 2000:
         raise ValidationError("Supply between 1 and 2000 observations")
@@ -73,7 +105,7 @@ def ingest_observations(run_id, observations):
         }
         for row in clean:
             key = instrument_key(row["instrument"]), row["timestamp"]
-            if key in keyed and keyed[key] != row:
+            if key in keyed and validated(Observation, keyed[key]) != row:
                 raise ConflictError("An observation timestamp cannot be silently rewritten")
             keyed[key] = row
         retained = sorted(keyed.values(), key=lambda r: instant(r["timestamp"]))[-20000:]
@@ -108,7 +140,9 @@ def get_environment(run_id):
             "asset_classes": run["workspace_snapshot"]["mandate"]["allowed_asset_classes"],
             "order_types": ["market", "limit"],
             "time_in_force": ["day", "gtc"] if run["mode"] == "live" else ["gtc"],
-            "session_calendar": "provider" if uses_broker_execution(run) else "observation_availability",
+            "session_calendar": "provider"
+            if uses_broker_execution(run)
+            else "observation_availability",
             "history_window": 20000,
             "shorting": False,
             "leverage": False,
