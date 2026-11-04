@@ -10950,5 +10950,610 @@
       "source"
     ],
     "additionalProperties": false
+  },
+  "list_trading_workspaces": {
+    "type": "object",
+    "properties": {
+      "limit": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 100
+      },
+      "offset": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "additionalProperties": false
+  },
+  "write_trading_file": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "maxLength": 160
+      },
+      "content": {
+        "type": "string",
+        "maxLength": 64000
+      }
+    },
+    "required": [
+      "name",
+      "content"
+    ],
+    "additionalProperties": false
+  },
+  "read_trading_files": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "maxLength": 160
+      },
+      "version": {
+        "type": "integer",
+        "minimum": 1
+      }
+    },
+    "additionalProperties": false
+  },
+  "record_trading_work": {
+    "type": "object",
+    "properties": {
+      "kind": {
+        "type": "string",
+        "enum": [
+          "input",
+          "output",
+          "analysis",
+          "reasoning",
+          "tool_call",
+          "tool_result",
+          "error",
+          "wait",
+          "actor",
+          "native_event"
+        ]
+      },
+      "payload": {
+        "type": "object"
+      }
+    },
+    "required": [
+      "kind",
+      "payload"
+    ],
+    "additionalProperties": false
+  },
+  "search_trading_research": {
+    "type": "object",
+    "properties": {
+      "query": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1000
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "additionalProperties": false
+  },
+  "fetch_trading_research": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+      }
+    },
+    "required": [
+      "url"
+    ],
+    "additionalProperties": false
+  },
+  "request_trading_market_data": {
+    "additionalProperties": false,
+    "properties": {
+      "instruments": {
+        "items": {
+          "additionalProperties": false,
+          "properties": {
+            "symbol": {
+              "maxLength": 32,
+              "minLength": 1,
+              "type": "string"
+            },
+            "venue": {
+              "default": "simulation",
+              "maxLength": 80,
+              "minLength": 1,
+              "type": "string"
+            },
+            "asset_class": {
+              "default": "stock",
+              "enum": [
+                "stock",
+                "crypto"
+              ],
+              "type": "string"
+            },
+            "currency": {
+              "default": "USD",
+              "pattern": "^[A-Z]{3,8}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "symbol"
+          ],
+          "type": "object"
+        },
+        "maxItems": 30,
+        "minItems": 1,
+        "type": "array"
+      }
+    },
+    "required": [
+      "instruments"
+    ],
+    "type": "object"
+  },
+  "preview_trading_workspace": {
+    "additionalProperties": false,
+    "properties": {
+      "workspace": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "instructions": {
+            "default": "",
+            "maxLength": 12000,
+            "type": "string"
+          },
+          "agent_kind": {
+            "default": "lucius",
+            "maxLength": 80,
+            "minLength": 1,
+            "pattern": "^[a-z][a-z0-9_-]*$",
+            "type": "string"
+          },
+          "agent_label": {
+            "default": "Lucius",
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "mandate": {
+            "additionalProperties": false,
+            "properties": {
+              "instruments": {
+                "items": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "symbol": {
+                      "maxLength": 32,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "venue": {
+                      "default": "simulation",
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "asset_class": {
+                      "default": "stock",
+                      "enum": [
+                        "stock",
+                        "crypto"
+                      ],
+                      "type": "string"
+                    },
+                    "currency": {
+                      "default": "USD",
+                      "pattern": "^[A-Z]{3,8}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "symbol"
+                  ],
+                  "type": "object"
+                },
+                "maxItems": 100,
+                "type": "array"
+              },
+              "market_data_source": {
+                "default": "supplied",
+                "enum": [
+                  "supplied",
+                  "yahoo"
+                ],
+                "type": "string"
+              },
+              "allowed_asset_classes": {
+                "items": {
+                  "enum": [
+                    "stock",
+                    "crypto"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "max_order_notional": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "max_model_cost_usd": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "default": "10"
+              },
+              "fee_bps": {
+                "anyOf": [
+                  {
+                    "maximum": 1000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "default": "0"
+              },
+              "slippage_bps": {
+                "anyOf": [
+                  {
+                    "maximum": 1000.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "default": "0"
+              },
+              "max_participation": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0.0,
+                    "maximum": 1.0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ],
+                "default": "1"
+              },
+              "max_quote_age_seconds": {
+                "default": 300,
+                "maximum": 86400,
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "strategy_source": {
+            "maxLength": 64000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "environment": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "default": "paper",
+            "enum": [
+              "backtest",
+              "paper",
+              "live"
+            ],
+            "type": "string"
+          },
+          "start_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "end_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "accounts": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "default": "Trading account",
+                  "maxLength": 120,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "currency": {
+                  "default": "USD",
+                  "pattern": "^[A-Z]{3,8}$",
+                  "type": "string"
+                },
+                "capital": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0.0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ],
+                  "default": "1000"
+                },
+                "venue": {
+                  "default": "simulation",
+                  "maxLength": 80,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "connector_id": {
+                  "type": "string"
+                },
+                "broker_account_id": {
+                  "type": "string"
+                },
+                "book_account_id": {
+                  "type": "string"
+                }
+              },
+              "type": "object"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
+          "observations": {
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "instrument": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "symbol": {
+                      "maxLength": 32,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "venue": {
+                      "default": "simulation",
+                      "maxLength": 80,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "asset_class": {
+                      "default": "stock",
+                      "enum": [
+                        "stock",
+                        "crypto"
+                      ],
+                      "type": "string"
+                    },
+                    "currency": {
+                      "default": "USD",
+                      "pattern": "^[A-Z]{3,8}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "symbol"
+                  ],
+                  "type": "object"
+                },
+                "timestamp": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "available_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "price": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0.0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "volume": {
+                  "anyOf": [
+                    {
+                      "minimum": 0.0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "open": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0.0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "high": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0.0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "low": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0.0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "close": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0.0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "bar_start_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "interval": {
+                  "maxLength": 40,
+                  "type": "string"
+                },
+                "source": {
+                  "default": "supplied",
+                  "maxLength": 120,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "source_version": {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "adjustment": {
+                  "maxLength": 120,
+                  "type": "string"
+                },
+                "received_at": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "instrument",
+                "timestamp",
+                "price"
+              ],
+              "type": "object"
+            },
+            "maxItems": 20000,
+            "type": "array"
+          },
+          "data_version": {
+            "default": "user-supplied",
+            "maxLength": 120,
+            "minLength": 1,
+            "type": "string"
+          },
+          "agent_version": {
+            "default": "unspecified",
+            "maxLength": 120,
+            "type": "string"
+          },
+          "base_currency": {
+            "default": "USD",
+            "pattern": "^[A-Z]{3,8}$",
+            "type": "string"
+          },
+          "fx_rates": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "type": "object"
+          },
+          "live_authorized": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "start_at"
+        ],
+        "type": "object"
+      },
+      "start": {
+        "default": true,
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "workspace",
+      "environment"
+    ],
+    "type": "object"
   }
 }
