@@ -48,6 +48,8 @@ def test_a_held_call_keeps_its_place_ahead_of_a_different_call():
     "leak",
     [
         "Wait, I must use the required format.",
+        "Note: I used an incorrect format above. Correcting to the required protocol.",
+        "Correcting to the required protocol.",
         "Actually, using the required format:",
         "Actually, I need to use the correct format.",
         "I need to use the proper tool call format.",

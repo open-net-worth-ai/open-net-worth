@@ -164,6 +164,11 @@ _FORMAT_NARRATION_RE = re.compile(
     # finance answer never uses.
     r"|^[^\n]{0,120}?(?:\btool[ \t_-]?calls?\b|\bcall[ \t]+(?:format|block|structure|syntax)\b"
     r"|\bemit the call\b)[^\n]{0,120}$"
+    # "Note: I used an incorrect format above. Correcting to the required protocol." (read out
+    # on a live call, 2026-11-04). About the model's own format, never "the CSV used…".
+    r"|^[^\n]{0,40}\bi[ \t]+used[ \t]+(?:an?[ \t]+|the[ \t]+)?(?:incorrect|wrong|bad)[ \t]+format\b"
+    r"[^\n]{0,120}$"
+    r"|^[^\n]{0,120}\bthe[ \t]+required[ \t]+protocol\b[^\n]{0,120}$"
     r"|^[ \t]*w?ait[ \t.!]*$"
     r"|(?<![\w<])_calls?>",
     re.IGNORECASE | re.MULTILINE,
