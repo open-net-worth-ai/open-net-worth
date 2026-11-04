@@ -27,7 +27,7 @@ from backend.services.ynab_sync import (
 from backend.services.ynab_sync import state as sync_state
 from backend.services.ynab_sync.baselines import Baselines
 from backend.services.ynab_sync.client import Budget, YnabClient
-from backend.services.ynab_sync.txn_sync import _record_sent
+from backend.services.ynab_sync.txn_sync import _record_sent, follow_merges
 from backend.services.ynab_sync.units import Unit
 
 RESOLVE_REQUESTS = 6  # one resolution never needs more than a PATCH, its note and a DELETE
@@ -135,7 +135,7 @@ def _assigned(item: dict, keep: str, client: YnabClient, base: Baselines, meta: 
 
 
 def _unit(ctx, item: dict, base: Baselines) -> Unit:
-    onw_id = item.get("onw_txn_id")
+    onw_id = follow_merges(base).get(item.get("onw_txn_id"), item.get("onw_txn_id"))
     row = ledger_service.transactions.find_by_id(onw_id) if onw_id else None
     refs = (base.txns.get(onw_id) or {}).get("refs") or (
         [] if not item["key"].startswith("y:") else [item["key"][2:]]

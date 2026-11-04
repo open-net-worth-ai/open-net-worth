@@ -85,6 +85,13 @@ and amount on update, takes no future dates, and allows 200 requests an hour per
   YNAB reports as changed.
 - A crash between creating a transaction in YNAB and linking its id in the ledger can duplicate it
   once; the window is one local write.
+- A merge is not a deletion (2026-11-04, closing the limit the 2026-11-03 linking amendment
+  names): a baseline follows its YNAB ids onto the live row that holds them
+  (`txn_sync.follow_merges`), through a merge and back through its undo, on a first run and when
+  resolving a review item too. The survivor is compared with YNAB against the merged row's last
+  agreed state, so its version goes to YNAB as an edit, or to review if YNAB changed too; an open
+  item about the old row closes and is asked again about the survivor. Two rows YNAB holds
+  separately still cannot be merged (the merge choke's same-source veto).
 
 ## Amendment 2026-11-02: a direction
 

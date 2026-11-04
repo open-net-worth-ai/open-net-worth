@@ -346,6 +346,12 @@ with both balances. **Move the Starting Balance to** the earliest such date keep
 counts those transactions, as YNAB does. **Keep as history** changes nothing, leaves the account
 that much apart from YNAB, and isn't asked again for those transactions.
 
+**Merging a synced transaction.** Merging it with a duplicate here deletes nothing in YNAB: the
+row you keep takes over the link, and its version is sent to YNAB as an edit on the next run (or
+waits in the review list if YNAB changed that transaction too). Undoing the merge puts the link
+back, and the other row goes to YNAB as a new transaction. Two transactions that YNAB holds
+separately can't be merged here; delete one instead.
+
 **Limits.** YNAB allows 200 requests an hour; a run uses at most 40 and carries the rest to the next
 run, so nothing is lost. Turning the sync on replaces the plain YNAB import for that plan (Lucius's
 YNAB fetch refuses it, so nothing is booked twice). When a run would delete many synced
