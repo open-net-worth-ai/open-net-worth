@@ -288,6 +288,23 @@ export function ensureAssistant(ownerId: string): void {
  * `thinking` is still accumulated alongside, as the message-level field older transcripts and
  * readers use.
  */
+/** How much of a bubble's text and thinking a live replay can send again. A replay covers the
+ * RUNNING turn only, and a card pauses a turn: everything before the last answered card belongs
+ * to the turn that ended there. Counting it skipped that many characters of the new answer
+ * (live report 2026-11-04, a reconnect during an approved Automation run: "t, so the
+ * notification did not reach you"). */
+function replayableChars(m: Message): { text: number; thinking: number } {
+  const blocks = m.blocks || []
+  const pause = blocks.findLastIndex((b) => b.type === 'change' && Boolean(b.change.status))
+  if (pause === -1) return { text: m.text.length, thinking: (m.thinking || '').length }
+  const sinceCard = { text: 0, thinking: 0 }
+  for (const block of blocks.slice(pause + 1)) {
+    if (block.type === 'text') sinceCard.text += block.content.length
+    if (block.type === 'thinking') sinceCard.thinking += block.content.length
+  }
+  return sinceCard
+}
+
 function appendThinking(m: Message, text: string): Message {
   const blocks = [...(m.blocks || [])]
   const last = blocks[blocks.length - 1]
@@ -677,8 +694,9 @@ export async function consumeEventStream(
   function armSkipFromReplay(owner: Message): void {
     if (skipArmed) return
     skipArmed = true
-    skipTextChars = owner.text.length
-    skipThinkingChars = (owner.thinking || '').length
+    const replayable = replayableChars(owner)
+    skipTextChars = replayable.text
+    skipThinkingChars = replayable.thinking
   }
 
   // A prior attach for this conversation may have left a bubble open without ever
