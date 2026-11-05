@@ -1,0 +1,232 @@
+{
+ "apply": [
+  "This book's base currency is EUR but the YNAB plan is USD, and the book already holds accounts. Change the base currency in Settings first, or import into an empty book.",
+  "YNAB import: the same transaction as one already in the linked account"
+ ],
+ "category_review": [
+  "Fun is chosen for two YNAB categories.",
+  "Bills is chosen for two YNAB categories.",
+  "Gets an envelope here, since YNAB has money assigned to it"
+ ],
+ "import_log_fresh": [
+  "Backup taken: <name>. Restore it from Settings → Data → Backup & restore.",
+  "Base currency set from EUR to USD.",
+  "Accounts: 5 created, 0 linked to accounts already here, 0 already there.",
+  "Added 2 categories and 2 envelopes; the rest were already here.",
+  "19 transactions added.",
+  "Cleared set on 0 transaction(s).",
+  "Archived 1 closed account(s).",
+  "Budget method set to zero-based, as in YNAB.",
+  "Removed unused starter items: 7 categories.",
+  "Budget: 14 monthly assignment(s) written."
+ ],
+ "import_log_linked": [
+  "Backup taken: <name>. Restore it from Settings → Data → Backup & restore.",
+  "Accounts: 4 created, 1 linked to accounts already here, 0 already there.",
+  "Added 2 categories and 2 envelopes; the rest were already here.",
+  "19 transactions added.",
+  "Linked accounts: 0 YNAB transaction(s) matched to ones already here; 0 possible match(es) were added as new.",
+  "Cleared set on 0 transaction(s).",
+  "Archived 1 closed account(s).",
+  "Budget: 14 monthly assignment(s) written."
+ ],
+ "import_log_rerun": [
+  "Backup taken: <name>. Restore it from Settings → Data → Backup & restore.",
+  "Accounts: 0 created, 0 linked to accounts already here, 5 already there.",
+  "All the categories and envelopes were already here.",
+  "0 transactions added; 19 were already here.",
+  "Cleared set on 0 transaction(s).",
+  "Budget: 0 monthly assignment(s) written."
+ ],
+ "job_refusals": [
+  "kind must be one of import, verify, preview",
+  "only a preview or an import links accounts and categories",
+  "only a preview re-checks another",
+  "only an import can turn the sync on",
+  "direction must be one of both, from_ynab, to_ynab",
+  "pick the YNAB plan to migrate",
+  "save a YNAB access token first",
+  "A YNAB sync is running; start the import when it finishes."
+ ],
+ "links_refusals": [
+  "That YNAB account is not in the plan; review it again.",
+  "The account chosen for Checking is not in this book.",
+  "Checking is already linked to Everyday.",
+  "Checking cannot be linked to ACME Card: it must be an open USD account of a matching type that no other YNAB account uses.",
+  "Everyday is chosen for two YNAB accounts."
+ ],
+ "mapping": [
+  "YNAB balance not covered by its transactions",
+  "Booked by the YNAB import (e.g. loan interest YNAB calculates itself)",
+  "1 amount(s) have sub-cent precision; they are rounded to cents.",
+  "2 line(s) use a category YNAB no longer lists; they import uncategorized.",
+  "3 transfer(s) have no matching row in the other account; they import as plain income or expense.",
+  "YNAB returned an amount that is not a valid whole number.",
+  "Commitments (YNAB)"
+ ],
+ "names": [
+  "Fun (YNAB 2)",
+  "Pets (YNAB)",
+  "Dining",
+  "Bills (YNAB 2)",
+  "Rent (YNAB)",
+  "Commitments (YNAB)",
+  "Needs",
+  "ACME Bills holds several categories, so its Assigned isn't synced with YNAB.",
+  "YNAB's Fun matches more than one of your categories. Pick one."
+ ],
+ "outcomes": [
+  "Would bring across 5 accounts and 19 transactions",
+  "Created 5 accounts, 19 transactions; 28 of 28 checks match",
+  "Created 0 accounts, 0 transactions; 28 of 28 checks match",
+  "28 of 28 checks match"
+ ],
+ "report": [
+  "Open Net Worth refused this row. Fix the cause in YNAB, or add the transaction by hand.",
+  "It looks like a transaction already in the book. If it is a separate one, add it by hand.",
+  "You deleted this transaction here earlier, so it was not booked again. Restore it from Accounts if you want it back.",
+  "Set that month's Assigned by hand in Plan.",
+  "",
+  "1 transaction added.",
+  "2 transactions added; 1 was already here.",
+  "2 transactions added; 2 were already here.",
+  "0 transactions added; 1 was left out (see the problems).",
+  "0 transactions added; 2 were left out (see the problems).",
+  "1 transaction added; 1 transaction could not be added.",
+  "1 transaction added; 2 transactions could not be added.",
+  "All the categories and envelopes were already here.",
+  "Added 1 category; the rest were already here.",
+  "Added 2 categories and 1 envelope; the rest were already here.",
+  "Added 2 categories, 2 envelopes and 1 group; the rest were already here.",
+  "No unused starter items to remove.",
+  "Removed unused starter items: 1 category.",
+  "Removed unused starter items: 2 categories and 1 envelope.",
+  "Removed unused starter items: 2 categories, 2 envelopes and 1 group.",
+  "3 of 4 checks match",
+  "Would bring across 1 accounts and 7 transactions",
+  "Created 2 accounts, 7 transactions; 3 of 4 checks match",
+  "Created 2 accounts, 7 transactions"
+ ],
+ "review_assigned": [
+  "This book couldn't take YNAB's Assigned for Fun in March 2026. Keep Open Net Worth's to send this book's instead.",
+  "This book couldn't take YNAB's Assigned for this category in March 2026. Keep Open Net Worth's to send this book's instead.",
+  "Changed in both Open Net Worth and YNAB since the last sync.",
+  "The Assigned of Pets for March 2026 differs between Open Net Worth and YNAB. Pick the one to keep.",
+  "YNAB did not accept it: ACME said no"
+ ],
+ "review_categories": [
+  "Renamed here and in YNAB. Pick the name to keep.",
+  "Changed here and in YNAB. Pick the version to keep.",
+  "YNAB changed Fun here, but this book could not take the change. Keep Open Net Worth's version to send it to YNAB instead.",
+  "YNAB did not accept the change to Fun. Keep YNAB's version, or change it there and sync again.",
+  "YNAB would not move Fun to Hidden in Open Net Worth. Move it there or hide it in YNAB yourself.",
+  "The group Here was renamed in both Open Net Worth and YNAB. Pick the name to keep.",
+  "YNAB renamed the group Here to There, but this book could not take the change. Keep Open Net Worth's name to send it to YNAB instead.",
+  "YNAB did not accept the new name for the group Here. Keep YNAB's name, or change it there and sync again.",
+  "YNAB's Pets could not be added here. Rename it in YNAB or here, then try again, or leave it out.",
+  "YNAB's Pets matches more than one of your categories. Pick one.",
+  "YNAB's Pets matches your envelope Household, which already holds other categories. Add it there, or as a new category.",
+  "YNAB did not accept the category Pets or its group. Rename them here and sync again, or leave it out of YNAB.",
+  "YNAB has several categories called Pets. Rename or remove the extras in YNAB, then try again.",
+  "YNAB has money assigned to Fun, which has no envelope here. Give it one?"
+ ],
+ "review_start": [
+  "1 synced transaction is dated before ACME Checking's Starting Balance (<date>). Open Net Worth treats it as history already inside the Starting Balance, so the balance stays 100.00 USD. YNAB adds it to the balance. Move the Starting Balance to <date>: its amount stays the same, it counts, and the balance becomes 75.50 USD, as in YNAB. Keep as history: nothing changes here, and ACME Checking stays 24.50 USD apart from YNAB.",
+  "2 synced transactions are dated before ACME Checking's Starting Balance (<date>). Open Net Worth treats them as history already inside the Starting Balance, so the balance stays 100.00 USD. YNAB adds them to the balance. Move the Starting Balance to <date>: its amount stays the same, they count, and the balance becomes 75.50 USD, as in YNAB. Keep as history: nothing changes here, and ACME Checking stays 24.50 USD apart from YNAB."
+ ],
+ "review_transactions": [
+  "Changed here while the sync was running.",
+  "The ledger refused YNAB's version: ACME refused",
+  "Changed in both Open Net Worth and YNAB since the last sync.",
+  "The ACME reason.",
+  "30 of 30 synced transactions were deleted in YNAB at once; confirm each deletion here.",
+  "26 deletions would be sent to YNAB at once; confirm each one.",
+  "YNAB did not accept it: ACME said no",
+  "Sent to YNAB, but linking it here failed: ACME refused"
+ ],
+ "run_failures": [
+  "That YNAB plan is not visible to the saved token.",
+  "That YNAB plan has no valid currency set; open it in YNAB once first.",
+  "YNAB's Fun Money matches more than one of your categories. Pick one.",
+  "This book already has accounts that did not come from YNAB. Confirm to import alongside them.",
+  "This book has accounts that did not come from YNAB."
+ ],
+ "run_summary": [
+  "Nothing changed",
+  "2 sent to YNAB",
+  "3 pulled",
+  "1 category change",
+  "2 category changes",
+  "1 needs review",
+  "2 need review",
+  "4 waiting for the next run (request limit)",
+  "1 sent to YNAB, 1 pulled, 1 category change, 1 needs review, 1 waiting for the next run (request limit)"
+ ],
+ "sync_turned_on": [
+  "Sync turned on: both ways.",
+  "Sync turned on: from YNAB.",
+  "Sync turned on: to YNAB.",
+  "The sync was not turned on: ACME refused. Turn it on from Data sync."
+ ],
+ "unsupported": [
+  "a adjustment transaction has no YNAB equivalent",
+  "YNAB does not accept transactions dated in the future",
+  "the account is not linked to a YNAB account",
+  "YNAB only holds USD; this transaction is in EUR, GBP",
+  "this transfer cannot be expressed as a YNAB transfer",
+  "turning a transaction into a transfer (or back) cannot be sent to YNAB",
+  "YNAB's API cannot split an existing transaction",
+  "changing a transfer's accounts or category cannot be sent to YNAB",
+  "this is one part of a larger YNAB split; edit it in YNAB",
+  "YNAB's API cannot change a split's date, amount, category or lines; change it in YNAB, or keep YNAB's version",
+  "The category Groceries isn't in YNAB yet.",
+  "the transaction is in a YNAB account that is not in this book",
+  "The YNAB category Pets isn't in this book yet.",
+  "this is one part of a larger YNAB split; delete it in YNAB",
+  "YNAB created it but did not report which one it is",
+  "Transactions in Pets go to YNAB uncategorized, as Pets isn't in YNAB."
+ ],
+ "verify_notes": [
+  "Checking: balance | YNAB's transactions sum to 2.00",
+  "Checking: cleared balance | YNAB 0.5 +0.50: a transfer is cleared per transaction here",
+  "Checking: transactions | YNAB has 3",
+  "Checking: YNAB transactions | YNAB has 3; 1 more here are this account's own, not in YNAB",
+  "Uncategorized: available <date> | YNAB activity 2.00, assigned 1.00",
+  "ACME: available <date> | YNAB activity 0.00, assigned 0.00",
+  "Fun: first differs <date> | available · activity YNAB -5.00 here -1.00 · only in YNAB: ['-5.00 [abcdefgh]'] · only here: []",
+  "Ready to Assign: first differs <date> | ",
+  "Can differ, as this book also has accounts YNAB doesn't.",
+  "Can differ, as this book also has accounts YNAB doesn't and the Assigned of A, B isn't synced.",
+  "Can differ, as this book also has accounts YNAB doesn't and the Assigned of A, B, C and others isn't synced."
+ ],
+ "verify_rows": [
+  "Checking: balance | ",
+  "Checking: cleared balance | ",
+  "Checking: transactions | YNAB has 17",
+  "Savings: balance | ",
+  "Savings: cleared balance | ",
+  "Savings: transactions | YNAB has 4",
+  "Visa: balance | ",
+  "Visa: cleared balance | YNAB -310 -50.00: a transfer is cleared per transaction here",
+  "Visa: transactions | YNAB has 4",
+  "Old Account: balance | ",
+  "Old Account: cleared balance | ",
+  "Old Account: transactions | YNAB has 2",
+  "Brokerage: balance | ",
+  "Brokerage: cleared balance | ",
+  "Brokerage: transactions | YNAB has 1",
+  "Rent: assigned <date> | ",
+  "Rent: available <date> | ",
+  "Utilities: assigned <date> | ",
+  "Utilities: available <date> | ",
+  "Groceries: assigned <date> | ",
+  "Groceries: available <date> | ",
+  "Dining out: assigned <date> | ",
+  "Dining out: available <date> | ",
+  "Fun Money: assigned <date> | ",
+  "Fun Money: available <date> | ",
+  "Old Cat: assigned <date> | ",
+  "Old Cat: available <date> | ",
+  "Ready to Assign <date> | "
+ ]
+}
