@@ -79,3 +79,22 @@ describe('Actual, its connector status unreadable', () => {
     expect(mounts).toEqual({ page: 1, unmounts: 0 })
   })
 })
+
+describe('Actual, on the public demo', () => {
+  it('isn’t one of the syncs, since the demo locks its routes', async () => {
+    authFetch.mockImplementation((url: string) => {
+      if (url.split('?')[0] === '/api/actual-budget/status') {
+        statusReads += 1
+        return reply({ detail: { code: 'demo_locked' } }, 403)
+      }
+      return reply({})
+    })
+    render(<Probe />)
+    await waitFor(() => expect(statusReads).toBeGreaterThan(0))
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    expect(seen.at(-1)?.actual).toBe(false)
+    expect(mounts.page).toBe(mounts.unmounts)
+  })
+})

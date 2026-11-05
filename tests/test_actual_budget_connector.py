@@ -394,6 +394,12 @@ def test_the_public_demo_locks_the_writes():
     assert is_demo_locked("POST", "/api/actual-budget/anything")
 
 
+@pytest.mark.parametrize("route", ["status", "budgets", "migration", "sync"])
+def test_the_public_demo_locks_the_reads_too(route):
+    """``budgets`` signs in with whatever is saved and answers with the budgets' names."""
+    assert is_demo_locked("GET", f"/api/actual-budget/{route}")
+
+
 # ── switching how you sign in ────────────────────────────────────────────────
 
 

@@ -110,7 +110,7 @@ _LOCKED: tuple[_Rule, ...] = (
         r"^/api/cost/(budget|log)$",
         r"^/api/intel/(scan|sources)(/.*)?$",
         r"^/api/(alpaca|ibkr|plaid|enable-banking|gocardless|lunch-flow|lunch-money|simplefin|yodlee|ynab"
-        r"|actual-budget|telegram|email|market-data|integrations|account-linking)(/.*)?$",
+        r"|telegram|email|market-data|integrations|account-linking)(/.*)?$",
         # Voice calls: a visitor may START one (``_WRITABLE``), capped by ``services.demo_calls``;
         # the LiveKit project, its keys and the call settings stay the operator's.
         r"^/api/voice(?!/call$)(/.*)?$",
@@ -120,6 +120,8 @@ _LOCKED: tuple[_Rule, ...] = (
     ),
     *_rules(frozenset({"PUT", "PATCH", "DELETE"}), r"^/api/voice/call$"),
     *_rules(_ANY, r"^/api/lunch-flow/oauth(/.*)?$"),
+    # Actual reads a saved server on a GET too: a budget list signs in and answers with names.
+    *_rules(_ANY, r"^/api/actual-budget(/.*)?$"),
     # the host and other visitors
     *_rules(
         _ANY,

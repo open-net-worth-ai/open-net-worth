@@ -70,6 +70,7 @@ function isPlainHttpRemote(value: string) {
 export function ActualSection() {
   const status = useQueryCache<ActualStatus>(STATUS_KEY, async () => {
     const r = await authFetch(STATUS_KEY)
+    if (r.status === 403) return { available: false } as ActualStatus // locked on the public demo
     if (!r.ok) throw new Error(await detailOf(r, 'Could not load the Actual connector status.'))
     return (await r.json()) as ActualStatus
   })

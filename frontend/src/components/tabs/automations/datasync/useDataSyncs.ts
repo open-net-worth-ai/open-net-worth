@@ -21,6 +21,7 @@ function useActualAvailable(flagOn: boolean): boolean {
       // Every write revalidates every subscriber, so this is what keeps a flag that's off quiet.
       if (!flagOn) return undefined as unknown as { available?: boolean }
       const r = await authFetch(key)
+      if (r.status === 403) return { available: false } // the public demo locks it outright
       if (!r.ok) throw new Error(await detailOf(r, 'Could not read the Actual connector.'))
       return (await r.json()) as { available?: boolean }
     },
