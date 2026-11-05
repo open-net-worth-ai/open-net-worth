@@ -234,6 +234,11 @@ def test_plain_http_to_another_machine_warns_but_is_allowed(
             never_leaks(ExternalServiceError(notice))
 
 
+def test_the_plain_http_warning_names_the_password_and_tampering():
+    (notice,) = client.plain_http_notice("http://192.168.1.20:5006")
+    assert "password or token" in notice and "change what this app reads and writes" in notice
+
+
 def test_the_password_signs_in_when_both_are_saved(store, work, fake):
     store.update({"password": PASSWORD, "token": TOKEN})
     with client.open_copy(store, "f1"):
@@ -412,6 +417,7 @@ def test_a_certificate_failure_says_so(store, work, fake):
         client.list_budgets(store)
     never_leaks(err.value)
     assert "certificate" in str(err.value).lower()
+    assert "http" not in str(err.value).lower(), "and no way around it is suggested"
 
 
 def test_budget_gone_plain_error(store, work, fake):

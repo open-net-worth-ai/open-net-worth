@@ -65,8 +65,8 @@ _BUDGET_FILES = frozenset({"db.sqlite", "metadata.json"})
 _TOO_LARGE = "This Actual file is too large to read safely."
 _NOT_A_BUDGET = "This Actual file holds more than a budget, so it wasn't read."
 _PLAIN_HTTP = (
-    "This Actual server is reached over plain http, which isn't encrypted. "
-    "Anyone on that network could read the budget as it downloads."
+    "This Actual server is reached over plain http, which isn't encrypted. Anyone on that network "
+    "could read your password or token and the budget, and change what this app reads and writes."
 )
 PAUSED = (
     "The Actual connection is paused, so this app isn't talking to your server. "
@@ -279,7 +279,7 @@ def _plain_error(exc: Exception) -> Stopped:
     elif has(ssl.SSLError):
         text = (
             "The Actual server's certificate could not be verified. "
-            "Use a certificate this computer trusts, or plain http on a private network."
+            "Use a certificate this computer trusts."
         )
     elif code:
         text = f"The Actual server answered with an error (HTTP {code})."

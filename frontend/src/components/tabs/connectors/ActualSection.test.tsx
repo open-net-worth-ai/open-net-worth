@@ -190,6 +190,8 @@ describe('ActualSection', () => {
     status = { ...SAVED, server_plain_http: true, server_host: '192.168.1.20:5006' }
     form()
     expect(await screen.findByText(warning)).toBeTruthy()
+    expect(screen.getByText(/your password or token/)).toBeTruthy()
+    expect(screen.getByText(/change what this app reads and writes/)).toBeTruthy()
   })
 
   it('a new address needs its sign-in again, and the same server written another way doesn’t', async () => {

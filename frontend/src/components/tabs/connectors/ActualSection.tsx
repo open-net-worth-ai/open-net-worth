@@ -224,7 +224,8 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
           plainHttp ? (
             <Text size="sm" tone="warn">
               This address uses plain http, which isn&apos;t encrypted. Anyone on that network could
-              read your budget as it downloads. It still works; use https if you can.
+              read your password or token and your budget, and change what this app reads and
+              writes. It still works; use https if you can.
             </Text>
           ) : cfg.has_server_url ? (
             'Saved. Type a new address to replace it.'

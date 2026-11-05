@@ -26,7 +26,10 @@ Open **Automations → Data sync → Actual** and click **Connect Actual…**. I
 **Connectors → Actual Budget**, and it opens right over the page.
 
 - **Server address** is the address you open Actual at. Plain http to another computer still works,
-  but it isn't encrypted, so the form warns you under the field.
+  but it isn't encrypted: anyone on that network could read your password or token and your budget,
+  and change what this app reads and writes. The form warns you under the field, so use https if you
+  can. A certificate this computer doesn't trust stops the connection, and there's no switch to skip
+  that check.
 - **Sign in with** is a password or a token, whichever your server takes. Typing a new one replaces
   the other. A new server address asks for it again, so a mistyped address is never sent your saved
   password. That covers the host, the port, and a change between http and https.
@@ -121,7 +124,8 @@ These never stop an import. The review says each one, and the run's log says it 
   counts the lines, so that's what is booked. The review and the report name each one, with both
   figures, so you can correct it in Actual if the total was the right one.
 - **Plain http.** If your server is reached over unencrypted http on another computer, the review
-  says so.
+  says so, and what that exposes: your password or token, your budget, and what this app reads and
+  writes.
 
 ## Importing and checking
 
