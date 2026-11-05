@@ -91,7 +91,7 @@ def _prepared(tmp_path, monkeypatch) -> FakeServer:
     server.install(monkeypatch)
     categories_service.ensure_builtins_seeded()
     envelopes_service.ensure_envelopes_migrated()
-    ActualBudgetConfigStore().update({"server_url": URL, "password": PASSWORD})
+    ActualBudgetConfigStore().update({"enabled": True, "server_url": URL, "password": PASSWORD})
     return server
 
 

@@ -40,6 +40,13 @@ field blank keeps it.
 
 On a hosted instance the form says Actual isn't available, and **Data sync** doesn't list it.
 
+**Pausing the connector stops all contact with your server.** No scheduled run starts, a run under way
+stops at its next batch, and **Sync now**, the review, the import, a re-check and the budget list all
+wait. Your sign-in stays saved, and the form still saves a new address or password, but it doesn't
+list budgets until you press **Resume** on the connector. **Worth checking** on the sync's page says
+it's paused, with a link to the connection. The sync's own switch stays as you left it, so the next
+due run goes as soon as you resume, and the YNAB sync still can't be turned on beside it.
+
 ## Before you start
 
 - **Turn off the YNAB sync** if it's on. A book syncs with one app at a time, so an import from

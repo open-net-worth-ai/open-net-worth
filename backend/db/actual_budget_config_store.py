@@ -143,6 +143,10 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
         secret = self.credentials()
         return bool(secret["server_url"] and (secret["password"] or secret["token"]))
 
+    def paused(self) -> bool:
+        """Set up and switched off: nothing talks to the server until it is resumed."""
+        return self.is_configured() and not self.get()["enabled"]
+
     def public(self) -> dict:
         cfg = self.get()
         secret = self.credentials()

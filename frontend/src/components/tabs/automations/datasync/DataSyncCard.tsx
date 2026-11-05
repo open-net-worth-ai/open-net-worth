@@ -23,6 +23,7 @@ export function DataSyncCard({
 }) {
   const [busy, setBusy] = useState(false)
   const on = sync.stage === 'on'
+  const paused = !!sync.status?.connector_paused
   const act = async (path: string, method: string, body?: unknown) => {
     setBusy(true)
     onError?.(null)
@@ -47,6 +48,7 @@ export function DataSyncCard({
           <span className="t">{app.name}</span>
           {sync.toReview > 0 && <span className="a3-tag warn">{sync.toReview} to review</span>}
           {!on && <span className="a3-tag warn">Off</span>}
+          {on && paused && <span className="a3-tag warn">Connection paused</span>}
         </span>
         <span className="a3-row-blurb">
           {sync.planName ? `${sync.planName}: ` : ''}
@@ -69,7 +71,7 @@ export function DataSyncCard({
           items={[
             {
               label: 'Sync now',
-              disabled: busy || !on || sync.running,
+              disabled: busy || !on || sync.running || paused,
               onSelect: () => void act('/run', 'POST'),
             },
             {

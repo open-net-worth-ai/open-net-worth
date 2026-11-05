@@ -154,7 +154,9 @@ class World:
     def prepared(cls, server: Server) -> "World":
         categories_service.ensure_builtins_seeded()
         envelopes_service.ensure_envelopes_migrated()
-        ActualBudgetConfigStore().update({"server_url": server.url, "password": PASSWORD})
+        ActualBudgetConfigStore().update(
+            {"enabled": True, "server_url": server.url, "password": PASSWORD}
+        )
         return cls(server)
 
     def seed(self, *, tracking: bool = False, encryption: str | None = None) -> Budget:

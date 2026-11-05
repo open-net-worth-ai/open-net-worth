@@ -44,7 +44,7 @@ ENC = "ENCRYPTION-SENTINEL-9"
 @pytest.fixture
 def store(db_isolated):
     s = ActualBudgetConfigStore()
-    s.update({"server_url": URL, "password": PASSWORD})
+    s.update({"enabled": True, "server_url": URL, "password": PASSWORD})
     return s
 
 
@@ -227,7 +227,7 @@ def test_plain_http_to_another_machine_warns_but_is_allowed(
     db_isolated, work, fake, address, warned
 ):
     s = ActualBudgetConfigStore()
-    s.update({"server_url": address, "password": PASSWORD})
+    s.update({"enabled": True, "server_url": address, "password": PASSWORD})
     with client.open_copy(s, "f1") as copy:
         assert bool(copy.notices) is warned
         for notice in copy.notices:
@@ -244,7 +244,7 @@ def test_the_password_signs_in_when_both_are_saved(store, work, fake):
 
 def test_a_token_alone_signs_in(db_isolated, work, fake):
     s = ActualBudgetConfigStore()
-    s.update({"server_url": URL, "token": TOKEN})
+    s.update({"enabled": True, "server_url": URL, "token": TOKEN})
     with client.open_copy(s, "f1"):
         pass
     kwargs = fake.instances[0].kwargs
@@ -262,7 +262,7 @@ def test_https_context_passed_as_cert(db_isolated, work, fake, monkeypatch):
     sentinel = object()
     monkeypatch.setattr(client, "https_context", lambda: sentinel)
     s = ActualBudgetConfigStore()
-    s.update({"server_url": f"https://{HOST}", "password": PASSWORD})
+    s.update({"enabled": True, "server_url": f"https://{HOST}", "password": PASSWORD})
     with client.open_copy(s, "f1"):
         pass
     assert fake.instances[0].kwargs["cert"] is sentinel
@@ -553,7 +553,11 @@ def test_no_log_record_carries_the_address(db_isolated, work, monkeypatch, caplo
     real_client = httpx.Client
     s = ActualBudgetConfigStore()
     s.update(
-        {"server_url": "http://alice:hunter2@acme-actual.example.test:5006", "password": PASSWORD}
+        {
+            "enabled": True,
+            "server_url": "http://alice:hunter2@acme-actual.example.test:5006",
+            "password": PASSWORD,
+        }
     )
     serve(monkeypatch, lambda: httpx.Response(404))
     caplog.set_level(logging.DEBUG)
@@ -699,6 +703,7 @@ def test_a_real_server_end_to_end(db_isolated, work):
     s = ActualBudgetConfigStore()
     s.update(
         {
+            "enabled": True,
             "server_url": os.environ["ACTUAL_TEST_URL"],
             "password": os.environ.get("ACTUAL_TEST_PASSWORD", ""),
             "encryption_password": os.environ.get("ACTUAL_TEST_ENCRYPTION_PASSWORD", ""),

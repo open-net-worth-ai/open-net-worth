@@ -127,6 +127,9 @@ class BudgetApp:
     # Whether it can run here: its flag is on and nothing refuses it. Off, its stored state can
     # hold nothing up.
     is_on: Callable[[], bool] = lambda: True
+    # Its connector is paused, so a tick leaves it alone. Not the same as off: its sync is still
+    # on, and still holds another app's off.
+    paused: Callable[[], bool] = lambda: False
     # Its runs stay off the scheduler's tick, so one that hangs holds up no other app, and it gives
     # way to another app's sync if a book ends up with both on.
     defers: bool = False
@@ -245,7 +248,7 @@ def syncing_apps(on_failure: Callable[[Exception], None] = lambda _exc: None) ->
     for entry in list(_apps.values()):
         try:
             app = entry() if callable(entry) else entry
-            if app.syncs and app.is_on():
+            if app.syncs and app.is_on() and not app.paused():
                 found.append(app)
         except Exception as exc:
             on_failure(exc)

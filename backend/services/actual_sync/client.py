@@ -4,7 +4,8 @@
 checks it (migrations before they run, columns after), hands back a ``Copy``, and ALWAYS removes
 the directory when the block ends. ``list_budgets`` lists what the saved sign-in can see. Both are
 gated by the ``actual_budget_sync`` flag and refused behind the gateway, whatever ``enabled`` says:
-the generic connector PATCH can set ``enabled`` without either check.
+the generic connector PATCH can set ``enabled`` without either check. Both are refused while the
+connector is paused too: a pause is what a person does when a server looks wrong.
 
 Everything a person can read from here is ours: an exception from ``actualpy`` or ``httpx`` can
 carry the server address or a password, so it is classified and replaced, never shown. The
@@ -34,7 +35,12 @@ from typing import Any, Iterator
 import httpx
 
 from backend.core import platform_fs
-from backend.core.errors import ExternalServiceError, OpenNetWorthError, ValidationError
+from backend.core.errors import (
+    ConflictError,
+    ExternalServiceError,
+    OpenNetWorthError,
+    ValidationError,
+)
 from backend.core.pinned_http import https_context
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore, plain_http_remote
 from backend.services import actual_flag
@@ -61,6 +67,10 @@ _NOT_A_BUDGET = "This Actual file holds more than a budget, so it wasn't read."
 _PLAIN_HTTP = (
     "This Actual server is reached over plain http, which isn't encrypted. "
     "Anyone on that network could read the budget as it downloads."
+)
+PAUSED = (
+    "The Actual connection is paused, so this app isn't talking to your server. "
+    "Resume it on the connector, then try again."
 )
 _GONE = "That budget is no longer on the Actual server. Pick it again in Connectors."
 _TOO_SLOW = "This Actual file took too long to download."
@@ -297,13 +307,20 @@ def _plainly(call, *args):
 # ── connecting ──────────────────────────────────────────────────────────────
 
 
+def refuse_while_paused(store: ActualBudgetConfigStore | None = None) -> None:
+    if (store or ActualBudgetConfigStore()).paused():
+        raise ConflictError(PAUSED)
+
+
 def _prepare(store: ActualBudgetConfigStore | None) -> tuple[ActualBudgetConfigStore, dict]:
+    """What every contact with the server passes first."""
     actual_flag.require()
     store = store or ActualBudgetConfigStore()
     store.require_available()
     creds = store.credentials()
     if not creds["server_url"] or not (creds["password"] or creds["token"]):
         raise ValidationError("Add the Actual server address and a password or token first.")
+    refuse_while_paused(store)
     return store, creds
 
 

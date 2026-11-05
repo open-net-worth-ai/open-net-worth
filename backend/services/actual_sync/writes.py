@@ -19,6 +19,7 @@ import time
 from contextlib import contextmanager
 from typing import Callable, Iterator
 
+from backend.db.actual_budget_config_store import ActualBudgetConfigStore
 from backend.services.actual_sync import apply_rows, client, shape, shape_delta
 from backend.services.actual_sync.shape_values import text
 from backend.services.budget_app import current
@@ -85,6 +86,9 @@ class ActualClient:
     def _ready(self) -> None:
         if self._broken:
             raise Stopped(_STOPPED)
+        if ActualBudgetConfigStore().paused():
+            self._broken = True
+            raise Stopped(client.PAUSED)
         if time.monotonic() > self._deadline:
             self._broken = True
             raise Stopped(_TOO_LONG)

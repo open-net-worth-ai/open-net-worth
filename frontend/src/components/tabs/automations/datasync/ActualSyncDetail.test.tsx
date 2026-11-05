@@ -84,6 +84,7 @@ beforeEach(() => {
   requests = []
   config = {
     configured: true,
+    enabled: true,
     available: true,
     has_password: true,
     has_encryption_password: false,
@@ -383,6 +384,28 @@ describe('importing from Worth checking', () => {
 })
 
 describe('the connection links', () => {
+  it('a paused connection says so, leads to it, and Sync now waits', async () => {
+    config = { ...config, enabled: false }
+    actual = actualStatus({
+      connector_paused: true,
+      warnings: [
+        { kind: 'connector_paused', text: 'The Actual connection is paused.' },
+        IMPORT_FIRST,
+      ],
+    })
+    page()
+    const heading = await screen.findByText('Worth checking')
+    const block = within(heading.closest('section')!)
+    expect(block.getByText(/The Actual connection is paused\./)).toBeTruthy()
+    const syncNow = screen.getByRole('button', { name: 'Sync now' }) as HTMLButtonElement
+    expect(syncNow.disabled).toBe(true)
+    expect(screen.getByText('Waiting: the Actual connection is paused.')).toBeTruthy()
+    expect(block.queryByRole('button', { name: /Review/ })).toBeNull()
+    fireEvent.click(block.getByRole('button', { name: 'Open the connection' }))
+    expect(await screen.findByLabelText(/Server address/)).toBeTruthy()
+    expect(screen.getByText(/Resume the connector/)).toBeTruthy()
+  })
+
   it('open the form even when the connector is healthy', async () => {
     actual = notSetUp()
     page()

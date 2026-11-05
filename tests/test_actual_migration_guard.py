@@ -24,6 +24,8 @@ from tests.test_actual_client_io import FILES, PASSWORD, URL, make_db, never_lea
 actual = pytest.importorskip("actual")
 create_engine = pytest.importorskip("sqlalchemy").create_engine
 
+pytestmark = pytest.mark.flags(actual_budget_sync=True)
+
 
 @pytest.fixture
 def outside(tmp_path) -> Path:

@@ -104,15 +104,18 @@ export function YnabSyncDetail({
   const setUp = sync.stage === 'on' || sync.stage === 'off'
   const on = sync.stage === 'on'
   const tracking = status.budget_mode === 'tracking'
+  const paused = !!status.connector_paused
   const next = !on
     ? 'Off'
     : status.running
       ? 'Syncing now…'
-      : status.interval === 'manual'
-        ? 'Runs only when you start it.'
-        : status.next_run_at
-          ? `Next sync: ${fScheduleWhen(status.next_run_at)}`
-          : 'Next sync: within a minute' // due: the scheduler checks every 60 seconds
+      : paused
+        ? `Waiting: the ${app.name} connection is paused.`
+        : status.interval === 'manual'
+          ? 'Runs only when you start it.'
+          : status.next_run_at
+            ? `Next sync: ${fScheduleWhen(status.next_run_at)}`
+            : 'Next sync: within a minute' // due: the scheduler checks every 60 seconds
 
   return (
     <div className="a3-wrap" data-od-id="ynab-sync-detail">
@@ -152,7 +155,7 @@ export function YnabSyncDetail({
               <Button
                 size="sm"
                 variant="primary"
-                disabled={!on || status.running}
+                disabled={!on || status.running || paused}
                 loading={status.running || busy === 'run'}
                 iconLeft={<Play size={12} aria-hidden="true" />}
                 onClick={() => void send('run', '/run', 'POST')}
@@ -164,7 +167,7 @@ export function YnabSyncDetail({
                 items={[
                   {
                     label: `Re-check against ${app.name}`,
-                    disabled: !!busy || sync.running,
+                    disabled: !!busy || sync.running || paused,
                     icon: (
                       <span className="a3-menu-ic">
                         <ShieldCheck size={14} aria-hidden="true" />

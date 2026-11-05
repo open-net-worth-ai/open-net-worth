@@ -70,9 +70,12 @@ export interface SyncStatus {
   /** Actual only: what the last read said, and what the page keeps saying while it holds. */
   budget_mode?: 'envelope' | 'tracking' | null
   warnings?: SyncWarning[]
+  /** Its connector is paused: nothing talks to the server, whatever the sync's own switch says. */
+  connector_paused?: boolean
 }
 export interface SyncWarning {
   kind:
+    | 'connector_paused'
     | 'income_in_envelope'
     | 'not_in_this_budget'
     | 'waiting_for_both_ways'

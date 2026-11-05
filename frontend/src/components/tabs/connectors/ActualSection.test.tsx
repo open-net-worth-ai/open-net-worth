@@ -361,4 +361,22 @@ describe('ActualSection', () => {
     form()
     expect(await screen.findByText(/Currently paused/)).toBeTruthy()
   })
+
+  it('reads no budgets while paused, and says how to choose one', async () => {
+    status = { ...SAVED, enabled: false, budget_id: 'b1', budget_name: 'ACME Household' }
+    form()
+    expect(await screen.findByText(/nothing talks to your Actual server/)).toBeTruthy()
+    expect(screen.getByText(/ACME Household\. Resume the connector/)).toBeTruthy()
+    expect(requests.map((r) => r.url)).not.toContain('/api/actual-budget/budgets')
+  })
+
+  it('a save while paused sends the sign-in and no budget, so it isn’t refused', async () => {
+    status = { ...SAVED, enabled: false }
+    budgets = { budgets: [HOUSEHOLD] }
+    form()
+    await screen.findByText(/Resume the connector to choose a budget/)
+    type(/^Password/, 'pw-2')
+    await save()
+    expect(lastSave()).toEqual({ password: 'pw-2' })
+  })
 })

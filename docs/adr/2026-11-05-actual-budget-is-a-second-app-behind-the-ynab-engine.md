@@ -54,6 +54,10 @@ twice, and nothing a YNAB user sees or gets could change.
   genuine one that needs either is refused in plain words until it's reviewed, and then allowed as that
   exact case. What else runs on a copy can't leave it either: a trigger or view can't hold an `ATTACH`,
   and `actualpy`'s engine runs only its own statements, naming tables it reflected.
+- **A paused connector stops all contact with the server.** A pause is what a person does when a server
+  looks wrong. The tick skips the app (`BudgetApp.paused`), `client._prepare` refuses every path, and a
+  run under way stops at its next batch. `other_sync_on` keeps reading the sync's own switch, so a paused
+  Actual sync still holds YNAB off and the one-app rule stays simple.
 - **Income is real.** An Actual income category is an income-kind category here with no envelope, so
   salary raises Ready to Assign. Starting Balances is internal, and an opening stays an opening.
 - **One app at a time.** Turning one app's sync on, or importing from it, is refused while the other's

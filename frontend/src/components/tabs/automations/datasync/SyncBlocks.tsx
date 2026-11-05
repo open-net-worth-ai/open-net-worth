@@ -33,8 +33,9 @@ export function WorthChecking({
 }) {
   const warnings = status.warnings ?? []
   const differs = warnings.find((w) => w.kind === 'budget_differs')
-  const offer =
-    differs && !status.enabled
+  const offer = status.connector_paused
+    ? null
+    : differs && !status.enabled
       ? { startFrom: differs.plan_id, initialSync: status.direction }
       : warnings.some((w) => w.kind === 'import_first')
         ? { startFrom: planId, initialSync: status.enabled ? status.direction : ('off' as const) }
@@ -44,7 +45,17 @@ export function WorthChecking({
       <div className="a3-block-h">Worth checking</div>
       <ul className="a3-rules">
         {warnings.map((w) => (
-          <li key={w.kind}>{w.text}</li>
+          <li key={w.kind}>
+            {w.text}
+            {w.kind === 'connector_paused' && (
+              <>
+                {' '}
+                <button type="button" className="a3-linkbtn" onClick={onConnect}>
+                  Open the connection
+                </button>
+              </>
+            )}
+          </li>
         ))}
       </ul>
       {offer && (

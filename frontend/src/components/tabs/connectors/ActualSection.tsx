@@ -113,8 +113,11 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
   const passwordTouched = useTouched()
   const tokenTouched = useTouched()
 
-  const budgets = usePlans(ACTUAL_APP, cfg.configured)
-  const list = budgets.data ?? []
+  // While paused nothing talks to the server, so there's no list to read, and none held from before
+  // may start a pick that a save would then be refused for.
+  const paused = cfg.configured && !cfg.enabled
+  const budgets = usePlans(ACTUAL_APP, cfg.configured && !paused)
+  const list = paused ? [] : (budgets.data ?? [])
   const budgetId = pick ?? cfg.budget_id ?? ''
   const picked = list.find((b) => b.id === budgetId)
   if (pick !== null && pick === cfg.budget_id) setPick(null)
@@ -191,10 +194,10 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
         import it and keep it in step from Automations, under Data sync.
       </Text>
 
-      {cfg.configured && !cfg.enabled && (
+      {paused && (
         <Text size="xs" tone="warn">
-          Currently paused — saving here won&apos;t resume it. Use Resume on the connector card to
-          turn it back on.
+          Currently paused, so nothing talks to your Actual server. Saving here won&apos;t resume
+          it. Go back to the connector and use Resume to turn it back on.
         </Text>
       )}
       {cfg.last_synced_at && (
@@ -276,7 +279,15 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
         />
       </FormField>
 
-      {cfg.configured ? (
+      {paused ? (
+        <FormField label="Budget">
+          <Text size="sm" tone="faint">
+            {cfg.budget_name
+              ? `${cfg.budget_name}. Resume the connector to choose another.`
+              : 'Resume the connector to choose a budget.'}
+          </Text>
+        </FormField>
+      ) : cfg.configured ? (
         <PlanPicker
           app={ACTUAL_APP}
           plans={budgets}

@@ -128,7 +128,9 @@ class Server:
 def server(db_isolated, monkeypatch):
     categories_service.ensure_builtins_seeded()
     envelopes_service.ensure_envelopes_migrated()
-    ActualBudgetConfigStore().update({"server_url": "http://127.0.0.1:5006", "password": "pw-1"})
+    ActualBudgetConfigStore().update(
+        {"enabled": True, "server_url": "http://127.0.0.1:5006", "password": "pw-1"}
+    )
     return Server(monkeypatch)
 
 

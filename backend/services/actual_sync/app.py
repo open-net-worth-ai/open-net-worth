@@ -2,7 +2,9 @@
 
 Every entry point checks the flag and the gateway itself, whatever the connector's ``enabled``
 says: the generic connector PATCH can set that with neither check. The tick reads the same through
-``is_on``.
+``is_on``. A paused connector stops all contact with the server: the tick skips it (``paused``),
+what would reach the server is refused here in one sentence, and ``client._prepare`` refuses it
+whatever the path. What is only read from this book still answers, so the page can say why.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from backend.db.actual_sync_store import (
     ActualSyncStateStore,
 )
 from backend.services import actual_flag
-from backend.services.actual_sync import writes
+from backend.services.actual_sync import client, writes
 from backend.services.actual_sync.reader import ActualReader
 from backend.services.budget_app import (
     BudgetApp,
@@ -33,6 +35,10 @@ from backend.services.ynab_sync import state as sync_state
 
 def _usable() -> bool:
     return actual_flag.on() and ActualBudgetConfigStore().available()
+
+
+def _paused() -> bool:
+    return ActualBudgetConfigStore().paused()
 
 
 ACTUAL = BudgetApp(
@@ -74,6 +80,7 @@ ACTUAL = BudgetApp(
     lock=threading.Lock(),
     pool=ThreadPoolExecutor(max_workers=1, thread_name_prefix="actual-sync"),
     is_on=_usable,
+    paused=_paused,
     defers=True,
     asks_type_and_currency=True,
     article="An",
@@ -100,6 +107,7 @@ def start_migration(kind: str, budget_id: str, **choices) -> dict:
     """``job.start`` for Actual. ``choices``: its keyword arguments. A preview also says what an
     import of this budget would be refused with right now."""
     _open()
+    client.refuse_while_paused()
     with using(ACTUAL):
         run = job.start(kind, budget_id, **choices)
         if kind != "preview":
@@ -158,11 +166,27 @@ def _budget_differs(st: dict) -> dict | None:
     }
 
 
+def _paused_warning() -> list[dict]:
+    if not _paused():
+        return []
+    name = ACTUAL.name
+    return [
+        {
+            "kind": "connector_paused",
+            "text": (
+                f"The {name} connection is paused, so nothing here talks to your {name} server: "
+                "no scheduled run, no Sync now, no import or re-check. Resume it to carry on."
+            ),
+        }
+    ]
+
+
 def _warnings(meta: dict, st: dict) -> list[dict]:
     """Where money isn't landing where it should, or an answer hasn't taken effect yet. Each is
     ``{"kind", "text"}``."""
     pairs = ACTUAL.stores.baselines().pairs(st["plan_id"])[0]
-    found = [
+    found = _paused_warning()
+    found += [
         {"kind": "income_in_envelope", "text": item["reason"]}
         for item in budget_mode.income_in_envelopes(meta, pairs)
     ]
@@ -205,6 +229,7 @@ def _status() -> dict:
         "available": True,
         "budget_mode": meta.get("budget_mode"),
         "warnings": _warnings(meta, st),
+        "connector_paused": _paused(),
         "waiting": _waiting(st),
         "conflicts_count": len(status["conflicts"]),
     }
@@ -231,6 +256,7 @@ def sync_settings(
 
 def start_sync() -> dict:
     _open()
+    client.refuse_while_paused()
     with using(ACTUAL):
         runner.start_now()
         return _status()
@@ -238,6 +264,7 @@ def start_sync() -> dict:
 
 def resolve_sync_item(conflict_id: str, keep: str, choice: str | None = None) -> dict:
     _open()
+    client.refuse_while_paused()
     with using(ACTUAL):
         resolve.resolve(conflict_id, keep, choice)
         return _status()
