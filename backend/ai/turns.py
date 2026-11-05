@@ -269,6 +269,11 @@ def executing_turn_id(session_id: str) -> Optional[str]:
     return ids[0] if ids else None
 
 
+def any_running() -> bool:
+    """True while any turn is registered, chats and Automation runs alike (both register here)."""
+    return bool(_turns)
+
+
 def _unregister(handle: TurnHandle) -> None:
     _turns.pop(handle.turn_id, None)
     ids = _by_session.get(handle.session_id)

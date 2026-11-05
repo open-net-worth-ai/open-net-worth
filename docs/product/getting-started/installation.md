@@ -115,7 +115,8 @@ port 8080. You open it in a browser, or connect the desktop app to it from anoth
 3. Your browser opens `http://127.0.0.1:8080`. Follow [Your first run](first-run.md).
 
 Add `--autostart` to the end of the installer command (`… | sh -s -- --autostart`) to also start
-it at login and restart it if it crashes.
+it at login and restart it if it crashes. Add `--auto-upgrade` instead to do that and also install
+new versions automatically — see [Upgrading](../operations/upgrading.md).
 
 ### Windows
 
@@ -129,11 +130,11 @@ The `install-server.sh` script is for macOS and Linux. On Windows, in PowerShell
 
 | Command | What it does |
 |---|---|
-| `onw start` | Run the app. `--open` opens your browser once it's up; `--port 9000` or `--host 0.0.0.0` override the defaults (`127.0.0.1:8080`). |
-| `onw autostart install` | Start at login/boot and restart on crash — a launchd agent on macOS, a systemd user service on Linux, a Task Scheduler task on Windows. No `sudo` or admin. |
-| `onw autostart status` | Show whether that service is installed and running. |
+| `onw start` | Run the app. `--open` opens your browser once it's up; `--port 9000` or `--host 0.0.0.0` override the defaults (`127.0.0.1:8080`). `--autostart` runs it as the boot service instead of in this terminal; `--auto-upgrade` installs new versions automatically ([Upgrading](../operations/upgrading.md)). |
+| `onw autostart install` | Start at login/boot and restart on crash — a launchd agent on macOS, a systemd user service on Linux, a Task Scheduler task on Windows. No `sudo` or admin. The same as `onw start --autostart`. |
+| `onw autostart status` | Show whether that service is installed and running, and whether auto-upgrade is on. |
 | `onw autostart stop` | Stop it and remove the service. |
-| `onw upgrade` | Update to the newest release. |
+| `onw upgrade` | Update to the newest release. `--check` only says whether one is out. |
 | `onw reset-password` | Set a new password if you've forgotten it — see [I lost my password](../troubleshooting/lost-password.md). |
 | `onw mcp` | Let another AI app (Claude Desktop, Cursor…) use your book — see [Connect AI apps](../operations/connect-ai-apps.md). |
 | `onw version` | Print the installed version. |

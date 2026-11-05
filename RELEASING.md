@@ -144,7 +144,8 @@ These are the things only the owner can do; the pipeline fails loudly and names 
 1. **minisign key** (blocks every release). On a trusted machine:
    `minisign -G -W -p onw-update.pub -s onw-update.key` (passwordless; CI has no tty). Put the
    public key (second line of the `.pub`, starting `RW`) into `UPDATE_PUBLIC_KEY` in
-   `desktop/src/main/update-key.ts` and commit it (also into the portal repo's configuration). Add the
+   `desktop/src/main/update-key.ts` and `backend/cli/release_check.py` (`onw start --auto-upgrade`
+   trusts it too) and commit it (also into the portal repo's configuration). Add the
    whole secret key file as the **releases repo** secret `ONW_MINISIGN_SECRET_KEY` (and in this
    repo too once its Actions run), then keep the file offline. Rotation procedure:
    `desktop/README.md` ("Linux update signing").

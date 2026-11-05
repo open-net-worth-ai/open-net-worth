@@ -111,6 +111,23 @@ def test_uv_in_local_bin_but_off_path_is_reused_and_the_profile_fixed(machine):
     assert update_shell_paths(home) == [user_path]
 
 
+def test_auto_upgrade_starts_the_service_with_the_flag(machine):
+    home, stubs, fake_uv = machine
+    fake = fake_uv.read_text().replace(
+        'echo "open-net-worth 9.9.9"\\n\'',
+        'echo "$*" >> "$HOME/onw-calls"\\n\'',
+    )
+    fake_uv.write_text(fake)
+    env = {"HOME": str(home), "PATH": f"{stubs}:/usr/bin:/bin", "FAKE_UV_SRC": str(fake_uv)}
+
+    result = subprocess.run(
+        ["sh", str(SCRIPT), "--auto-upgrade"], env=env, capture_output=True, text=True, timeout=60
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "start --autostart --auto-upgrade" in (home / "onw-calls").read_text()
+
+
 @pytest.mark.skipif(shutil.which("shellcheck") is None, reason="shellcheck not installed")
 def test_script_is_shellcheck_clean():
     subprocess.run(["shellcheck", str(SCRIPT)], check=True, timeout=60)
