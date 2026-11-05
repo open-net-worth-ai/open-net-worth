@@ -11,6 +11,7 @@ import re
 import sqlite3
 from pathlib import Path
 
+from backend.services.actual_sync import sql_guard
 from backend.services.actual_sync.shape import Rows
 
 _TABLES = {
@@ -31,9 +32,10 @@ _CURRENCY = re.compile(r"^[A-Z]{3}$")
 
 
 def connect(directory: Path) -> sqlite3.Connection:
-    """The copy's database, read-only."""
+    """The copy's database, read-only, under a time limit: its schema is the server's."""
     conn = sqlite3.connect(f"{(directory / 'db.sqlite').resolve().as_uri()}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
+    sql_guard.limit(conn, sql_guard.READ_SECONDS)
     return conn
 
 

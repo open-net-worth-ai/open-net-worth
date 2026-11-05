@@ -18,8 +18,9 @@ import pytest
 
 from backend.core.errors import ExternalServiceError
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
-from backend.services.actual_sync import client, compat, sql_guard
+from backend.services.actual_sync import client, compat, rows, sql_guard
 from tests.test_actual_client_io import FILES, PASSWORD, URL, make_db, never_leaks
+from tests.test_actual_compat import SCHEMA
 
 actual = pytest.importorskip("actual")
 create_engine = pytest.importorskip("sqlalchemy").create_engine
@@ -448,3 +449,106 @@ def test_an_error_status_still_reads_as_one(db_isolated, monkeypatch):
     session = real_session(monkeypatch, lambda _r: httpx.Response(500))
     with pytest.raises(httpx.HTTPStatusError):
         session.data_file("migrations/9000000000052_a.sql")
+
+
+# ── SQL inside a copy has a time limit, and doesn't lean on its own schema ───
+
+ENDLESS = "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) SELECT count(*) FROM c"
+
+
+def test_a_migration_that_never_ends_is_stopped_plainly(copy, monkeypatch):
+    monkeypatch.setattr(sql_guard, "MIGRATION_SECONDS", 0.05)
+    file = "migrations/9000000000060_a.sql"
+    refused(stub(copy, {file: f"{ENDLESS};"}), file)
+    assert 9000000000060 not in recorded(copy)
+
+
+def test_a_server_cant_spend_the_limit_one_file_at_a_time(copy, monkeypatch):
+    monkeypatch.setattr(sql_guard, "MIGRATION_SECONDS", 100.0)
+    first = "migrations/9000000000061_a.sql"
+    second = "migrations/9000000000062_a.sql"
+    session = stub(copy, {first: "CREATE TABLE one (a);", second: "CREATE TABLE two (a);"})
+    moments = iter(float(n) * 60 for n in range(10_000))
+    monkeypatch.setattr(sql_guard.time, "monotonic", lambda: next(moments))
+    with pytest.raises(ExternalServiceError) as caught:
+        session.run_migrations([first, second])
+    assert caught.value.message == sql_guard._REFUSED
+
+
+def test_a_view_that_never_ends_stops_a_read(copy, monkeypatch):
+    monkeypatch.setattr(sql_guard, "READ_SECONDS", 0.05)
+    conn = sqlite3.connect(copy / "db.sqlite")
+    conn.execute("ALTER TABLE accounts RENAME TO accounts_real")
+    conn.execute(f"CREATE VIEW accounts AS {ENDLESS}")
+    conn.commit()
+    conn.close()
+    read = rows.connect(copy)
+    try:
+        with pytest.raises(sqlite3.OperationalError):
+            read.execute("SELECT * FROM accounts").fetchall()
+    finally:
+        read.close()
+
+
+def test_a_view_that_never_ends_is_a_plain_error_on_a_copy(copy, monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(sql_guard, "READ_SECONDS", 0.05)
+    conn = sqlite3.connect(copy / "db.sqlite")
+    conn.execute("ALTER TABLE accounts RENAME TO accounts_real")
+    conn.execute(
+        "CREATE VIEW accounts AS WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c) "
+        "SELECT x AS id, x AS name, x AS offbudget, x AS closed, x AS tombstone FROM c"
+    )
+    conn.commit()
+    conn.close()
+    held = client.Copy(
+        directory=copy,
+        name="ACME Home",
+        encrypted=False,
+        currency="USD",
+        server_version=None,
+        mode="envelope",
+        metadata={},
+        actual=SimpleNamespace(),
+    )
+    with pytest.raises(ExternalServiceError) as caught:
+        held.rows()
+    never_leaks(caught.value)
+
+
+def test_both_connections_distrust_the_schema(copy):
+    read = rows.connect(copy)
+    try:
+        assert read.execute("PRAGMA trusted_schema").fetchone()[0] == 0
+        assert read.execute("SELECT id FROM accounts").fetchall()[0][0] == "a1", "reads as before"
+    finally:
+        read.close()
+    conn = sqlite3.connect(copy / "db.sqlite")
+    try:
+        sql_guard.limit(conn, 60)
+        assert conn.execute("PRAGMA trusted_schema").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+def test_a_read_under_the_limit_reads_the_same(copy):
+    read = rows.connect(copy)
+    try:
+        found = rows.read_rows(read, "envelope")
+    finally:
+        read.close()
+    assert [a["id"] for a in found.accounts] == ["a1"]
+
+
+@pytest.mark.parametrize("table", ["accounts", "zero_budget_months"])
+def test_a_view_standing_in_for_a_table_it_reads_is_refused(table):
+    conn = sqlite3.connect(":memory:")
+    for name, columns in SCHEMA.items():
+        conn.execute(f"CREATE TABLE {name} ({', '.join(columns.split())})")
+    if table == "accounts":
+        conn.execute("DROP TABLE accounts")
+    conn.execute(f"CREATE VIEW {table} AS {ENDLESS}")
+    with pytest.raises(ExternalServiceError, match=table):
+        compat.check_schema(conn)
+    conn.close()

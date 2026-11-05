@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import sqlite3
+import time
 from contextlib import closing
 from pathlib import Path
 from typing import Callable
@@ -26,10 +27,22 @@ _REFUSED = (
     f"budget wasn't read. {compat.REFRESH}"
 )
 _DENIED = frozenset({sqlite3.SQLITE_ATTACH, sqlite3.SQLITE_DETACH, sqlite3.SQLITE_PRAGMA})
+MIGRATION_SECONDS = 600.0
+READ_SECONDS = 300.0  # one read of a whole budget: 1.5s for 5,000 rows
+_STEPS = 10_000  # how many SQLite steps between looks at the clock
 
 
 def _authorize(action: int, *_details) -> int:
     return sqlite3.SQLITE_DENY if action in _DENIED else sqlite3.SQLITE_OK
+
+
+def limit(conn: sqlite3.Connection, seconds: float) -> None:
+    """``conn`` gives up on any statement after ``seconds`` from now, and doesn't lean on what the
+    file's own schema names. A view or a migration can hold a query that never ends, and a run's
+    deadline is only checked between batches."""
+    conn.execute("PRAGMA trusted_schema=OFF")
+    stop_at = time.monotonic() + seconds
+    conn.set_progress_handler(lambda: time.monotonic() > stop_at, _STEPS)
 
 
 def confine(conn: sqlite3.Connection) -> None:
@@ -49,14 +62,19 @@ def _apply(
     fetch: Callable[[str], bytes],
     js_statements: Callable[[str], list[str]],
 ) -> None:
-    """The library's loop: what the budget lacks, fetched and run, each recorded as done."""
+    """The library's loop: what the budget lacks, fetched and run, each recorded as done. The time
+    limit covers the fetching, or a server could spend it one file at a time."""
+    stop_at = time.monotonic() + MIGRATION_SECONDS
     for file in files:
         if not file.startswith("migrations"):
             continue
         number = compat.migration_number(file)
         if conn.execute("SELECT id FROM __migrations__ WHERE id = ?", (number,)).fetchone():
             continue
-        conn.executescript(_script(file, fetch(file), js_statements))
+        body = fetch(file)
+        if time.monotonic() > stop_at:
+            raise ExternalServiceError(_REFUSED)
+        conn.executescript(_script(file, body, js_statements))
         conn.execute("INSERT INTO __migrations__ (id) VALUES (?)", (number,))
     conn.commit()
 
@@ -72,6 +90,7 @@ def run_migrations(
     says can quote the statement or a path. What it leaves half done dies with the copy."""
     failure = None
     with closing(sqlite3.connect(db)) as conn:
+        limit(conn, MIGRATION_SECONDS)
         confine(conn)
         compat.check_pending(compat.pending_names(conn, files))
         try:

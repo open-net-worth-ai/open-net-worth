@@ -53,6 +53,8 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
     "preferences": "id value".split(),
 }
 
+_ALSO_READ = ("zero_budget_months",)  # read where it exists; a copy without it holds no money back
+
 _NAME = re.compile(r"^(\d+)_(.+)\.(\w+)$")
 _PATH = re.compile(r"migrations/(\d+)_[^/]+")
 _MODES = {
@@ -114,8 +116,11 @@ def check_pending(names: list[str]) -> None:
 
 
 def check_schema(conn: sqlite3.Connection) -> None:
-    """Raise ``ExternalServiceError`` naming what the database lacks."""
-    missing = []
+    """Raise ``ExternalServiceError`` naming what the database lacks. A view standing in for a
+    table this client reads isn't one: a table's rows end where the capped file does, and a view's
+    needn't, however soon the read gives up."""
+    views = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'view'")}
+    missing = sorted(views & {*REQUIRED_COLUMNS, *_ALSO_READ})
     for table, columns in REQUIRED_COLUMNS.items():
         have = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
         if not have:
