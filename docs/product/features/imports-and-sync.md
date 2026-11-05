@@ -29,8 +29,10 @@ saved, so you can come back to its report whenever you like, from any device.
 This is separate from [importing a statement](importing.md), which reads one bank or card file, and
 from the one-way **Sync YNAB** template, where Lucius fetches new YNAB transactions on a schedule.
 
-Coming from Actual Budget instead? It has its own card under **Data sync**, and works the same way:
-see [Import from Actual Budget](actual-budget-import.md).
+Coming from Actual Budget instead? It has its own card under **Data sync**, and works the same way,
+with a few differences its page lists: see [Import from Actual Budget](actual-budget-import.md). A
+book syncs with one of the two at a time, and an import from one is refused while the other's sync is
+on.
 
 ## Set it up
 

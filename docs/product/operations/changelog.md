@@ -22,6 +22,14 @@ The full list of versions and their downloads is on the
 which version you have: in the desktop app, **Open Net Worth → About Open Net Worth** on a Mac or
 **Help → Check for Updates…** on Windows and Linux; on a server, run `onw version`.
 
+## 2026-11-05 — Actual Budget can be imported and kept in step
+
+**Automations → Data sync** now has an [Actual](../features/actual-budget-import.md) card beside YNAB:
+connect your own Actual server, review what would come across, import it, and keep the two in step if
+you want to. Nothing changes for a book that doesn't use it, and YNAB's sync reads and behaves as it
+did. Once imported, Ready to Assign won't match Actual's To Budget, because the two are worked out
+differently; the review says so.
+
 ## 2026-11-02 — Credit on a card now counts in Ready to Assign
 
 If you paid a card more than it owed, or a refund landed after you'd paid the bill, the extra
