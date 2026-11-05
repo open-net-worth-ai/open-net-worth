@@ -107,6 +107,12 @@ READ_ONLY_TOOLS = frozenset(
         # services.owned_assets.get_asset / list_assets only — no store write.
         "get_asset",
         "get_asset_context",
+        # The Analysis tab's compute_technicals / compute_fundamentals, never their
+        # ensure_*_narrative write half. Traced: market data caches in memory only
+        # (`_history_cache`, `_sector_cache`, `_SECTOR_CACHE`), and the only store access is
+        # reading the instrument and its AssetBriefStore row.
+        "get_asset_fundamentals",
+        "get_asset_technicals",
         "get_budget_month",
         # The pluggable-budget-engines Lucius surface (ai/tools/budget_engines.py, RFC
         # 2026-08-22-pluggable-budget-engines.md Decision F) — these three read the ENGINES

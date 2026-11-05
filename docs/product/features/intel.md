@@ -198,6 +198,10 @@ the stock right away (its call and buttons included); clicking again while it's 
 start a second one. If nothing is being written, you see
 *"No key issues yet"*; click **Refresh now** to try again.
 
+Lucius can read the **Fundamentals** and **Technicals** figures on this tab too, so you can ask it
+things like *"Is ACME expensive for its sector?"* or *"Is ACME overbought?"* and get the same
+numbers you see here.
+
 **Lucius's take on your position** gives its reasoning, then one clear call under it: **Hold**,
 **Add**, **Trim** or **Sell** for a stock you own, **Buy** or **Wait** for one you only watch, with
 a sentence on why and what would change it. Each new take is shown Lucius's previous call, so it

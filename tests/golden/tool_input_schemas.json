@@ -722,6 +722,36 @@
     "type": "object",
     "required": []
   },
+  "get_asset_fundamentals": {
+    "additionalProperties": false,
+    "properties": {
+      "ticker": {
+        "type": "string",
+        "description": "Ticker, or pass instrument_id."
+      },
+      "instrument_id": {
+        "type": "string",
+        "description": "Instrument id, or pass ticker."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
+  "get_asset_technicals": {
+    "additionalProperties": false,
+    "properties": {
+      "ticker": {
+        "type": "string",
+        "description": "Ticker, or pass instrument_id."
+      },
+      "instrument_id": {
+        "type": "string",
+        "description": "Instrument id, or pass ticker."
+      }
+    },
+    "type": "object",
+    "required": []
+  },
   "list_assets": {
     "additionalProperties": false,
     "properties": {
