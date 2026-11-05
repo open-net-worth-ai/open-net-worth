@@ -169,6 +169,80 @@
   "4 waiting for the next run (request limit)",
   "1 sent to YNAB, 1 pulled, 1 category change, 1 needs review, 1 waiting for the next run (request limit)"
  ],
+ "sync_category_resolve_refusals": [
+  "YNAB can't take any more requests for now. Try again shortly.",
+  "In To YNAB mode this book isn't changed. Switch to Both ways first.",
+  "That category is already matched with another YNAB category. Pick another.",
+  "In From YNAB mode YNAB isn't changed. Switch to Both ways first."
+ ],
+ "sync_category_resolve_trail": [
+  "Added Pets here, as it is new in YNAB.",
+  "Added Pets to your envelope Household, as it is new in YNAB."
+ ],
+ "sync_client": [
+  "refused to send a malformed id to YNAB",
+  "YNAB request limit reached; the rest waits for the next run",
+  "YNAB rate limit hit; the rest waits for the next run"
+ ],
+ "sync_phases": [
+  "reading YNAB"
+ ],
+ "sync_resolve_refusals": [
+  "choose the YNAB plan to sync first",
+  "A YNAB sync is running; resolve this when it finishes.",
+  "A YNAB import is running; resolve this when it finishes."
+ ],
+ "sync_resolve_sending": [
+  "YNAB did not accept it: ACME said no",
+  "YNAB's version cannot be brought in: ACME blocked",
+  "YNAB cannot take this change: ACME said no",
+  "Out of YNAB requests for now; try again shortly."
+ ],
+ "sync_run_in_progress": [
+  "A ynab run is already in progress."
+ ],
+ "sync_runner_refusals": [
+  "turn the two-way sync on first",
+  "A YNAB sync is already running.",
+  "A YNAB sync is running; change the settings when it finishes.",
+  "That YNAB plan is not visible to the saved token.",
+  "That YNAB plan has no currency set; open it in YNAB once first.",
+  "save a YNAB access token first",
+  "pick the YNAB plan to sync",
+  "migrate the YNAB plan into this book first; the sync pairs with what it imported"
+ ],
+ "sync_trail_deferred": [
+  "Waiting for the next run (YNAB request limit)."
+ ],
+ "sync_trail_groups": [
+  "Renamed the group Here to There here, as in YNAB.",
+  "Renamed the group There to Here in YNAB.",
+  "Added the group ACME parking to YNAB.",
+  "Added the group Brand new to YNAB."
+ ],
+ "sync_trail_new": [
+  "Added Pets here, as it is new in YNAB.",
+  "Matched YNAB's Pets with your Pets.",
+  "Matched YNAB's Dogs with your Dogs.",
+  "Added Cats to YNAB.",
+  "Added an envelope for Fun here, as YNAB has money assigned to it."
+ ],
+ "sync_trail_notes": [
+  "Fun is no longer in an envelope, so its Assigned isn't synced with YNAB.",
+  "Household holds several categories, so its Assigned isn't synced with YNAB.",
+  "Some category changes wait for the next run (YNAB request limit)."
+ ],
+ "sync_trail_paired": [
+  "Renamed Fun here to Fun there here, as in YNAB.",
+  "Hid Fun here here, as in YNAB.",
+  "Showed Fun here here, as in YNAB.",
+  "Moved Fun jar to Needs here, as in YNAB.",
+  "Renamed Fun there to Fun here in YNAB.",
+  "Moved Fun here to Hidden in Open Net Worth in YNAB, as it is hidden here. You can hide it in YNAB yourself.",
+  "Moved Fun here back to Wants in YNAB, as it is shown here.",
+  "Moved Fun here to Needs in YNAB.",
+  "Moved Fun to Hidden in Open Net Worth in YNAB, as it was removed here. You can hide it in YNAB yourself."
+ ],
  "sync_turned_on": [
   "Sync turned on: both ways.",
   "Sync turned on: from YNAB.",
