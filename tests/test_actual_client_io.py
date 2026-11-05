@@ -234,7 +234,7 @@ def test_plain_http_to_another_machine_warns_but_is_allowed(
 
 
 def test_the_password_signs_in_when_both_are_saved(store, work, fake):
-    store.update({"token": TOKEN})
+    store.update({"password": PASSWORD, "token": TOKEN})
     with client.open_copy(store, "f1"):
         pass
     kwargs = fake.instances[0].kwargs

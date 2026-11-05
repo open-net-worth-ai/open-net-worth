@@ -49,6 +49,7 @@ from backend.services.ynab_sync import (
     units,
 )
 from backend.services.ynab_sync import client as ynab_client
+from backend.services.ynab_sync import settings as ynab_settings
 from backend.services.ynab_sync import state as sync_state
 from tests.actual_sync_stub import (
     BUDGET,
@@ -2082,6 +2083,36 @@ def _cats() -> list[str]:
 
 def _envs() -> list[str]:
     return sorted(e["name"] for e in envelopes_service.all_envelopes())
+
+
+def _warning_kinds() -> list[str]:
+    return [w["kind"] for w in actual_app.sync_status()["warnings"]]
+
+
+def test_importing_the_budget_answers_import_first_without_waiting_for_a_run(world):
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    _to_other_budget()
+    assert sync()["summary"] == "Import this budget first"
+    assert "import_first" in _warning_kinds()
+    _import_other_budget()
+    assert "import_first" not in _warning_kinds()
+
+
+def test_importing_another_budget_leaves_import_first_standing(world):
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    _to_other_budget()
+    assert sync()["summary"] == "Import this budget first"
+    with using(ACTUAL):
+        ynab_settings.import_finished("budget-never-synced")
+    assert "import_first" in _warning_kinds()
 
 
 def test_a_budget_never_imported_is_not_synced(world):

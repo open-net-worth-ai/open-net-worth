@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.api.actual_budget_api import router
+from backend.api.ynab_api import router as ynab_router
 from backend.core.errors import ConflictError, ValidationError
 from backend.core.user_time import user_today
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
@@ -956,6 +957,60 @@ def _actual_with_sync_on() -> budget_app.BudgetApp:
         actual_app.ACTUAL,
         stores=dataclasses.replace(actual_app.ACTUAL.stores, state=lambda: state),
     )
+
+
+def _api() -> TestClient:
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+def _finish(run_id: str) -> None:
+    deadline = time.time() + 60
+    while time.time() < deadline and import_runs.get(run_id)["status"] == "running":
+        time.sleep(0.02)
+
+
+def test_a_review_says_the_import_would_be_refused_before_it_is(server):
+    """The same sentence the start refuses with, without anything started."""
+    api = _api()
+    assert api.get("/api/actual-budget/migration").json()["blocked_reason"] is None
+    YnabSyncStateStore().save({"id": "state", "enabled": True})
+    with pytest.raises(ConflictError) as refused:
+        actual_app.start_migration("import", BUDGET, account_types=TYPES)
+    told = api.get("/api/actual-budget/migration", params={"plan_id": BUDGET}).json()
+    assert told["blocked_reason"] == refused.value.message
+    preview = api.post("/api/actual-budget/migration/preview", json={"plan_id": BUDGET})
+    assert preview.status_code == 202
+    assert preview.json()["blocked_reason"] == refused.value.message
+    _finish(preview.json()["id"])
+
+    YnabSyncStateStore().save({"id": "state", "enabled": False})
+    assert api.get("/api/actual-budget/migration").json()["blocked_reason"] is None
+    preview = api.post("/api/actual-budget/migration/preview", json={"plan_id": BUDGET})
+    assert preview.json()["blocked_reason"] is None
+    _finish(preview.json()["id"])
+
+
+def test_a_review_of_another_budget_says_the_sync_is_on_for_the_first(server):
+    api = _api()
+    actual_app.ACTUAL.stores.state().save(
+        {"id": "state", "enabled": True, "plan_id": "budget-9", "plan_name": "ACME Other"}
+    )
+    told = api.get("/api/actual-budget/migration", params={"plan_id": BUDGET}).json()
+    assert "ACME Other" in told["blocked_reason"] and "Turn it off" in told["blocked_reason"]
+    with pytest.raises(ConflictError) as refused:
+        actual_app.start_migration("import", BUDGET, account_types=TYPES)
+    assert told["blocked_reason"] == refused.value.message
+    assert api.get("/api/actual-budget/migration").json()["blocked_reason"] is None
+    same = api.get("/api/actual-budget/migration", params={"plan_id": "budget-9"}).json()
+    assert same["blocked_reason"] is None
+
+
+def test_ynabs_routes_carry_no_blocked_reason(db_isolated):
+    app = FastAPI()
+    app.include_router(ynab_router)
+    assert "blocked_reason" not in TestClient(app).get("/api/ynab/migration").json()
 
 
 def test_a_ynab_import_is_refused_while_actuals_sync_is_on(db_isolated, monkeypatch):

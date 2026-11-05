@@ -15,7 +15,6 @@ a real timeout, and a download a time limit of its own, so no server can hold a 
 from __future__ import annotations
 
 import functools
-import ipaddress
 import logging
 import shutil
 import sqlite3
@@ -29,14 +28,13 @@ from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterator
-from urllib.parse import urlsplit
 
 import httpx
 
 from backend.core import platform_fs
 from backend.core.errors import ExternalServiceError, OpenNetWorthError, ValidationError
 from backend.core.pinned_http import https_context
-from backend.db.actual_budget_config_store import ActualBudgetConfigStore
+from backend.db.actual_budget_config_store import ActualBudgetConfigStore, plain_http_remote
 from backend.services import actual_flag
 from backend.services.actual_sync import compat, shape
 from backend.services.actual_sync import rows as reader
@@ -357,16 +355,7 @@ class Copy:
 
 def plain_http_notice(url: str) -> list[str]:
     """A warning when the address is plain http to anything but this computer. Allowed, not hidden."""
-    parts = urlsplit(url)
-    host = (parts.hostname or "").lower()
-    if parts.scheme.lower() != "http" or host == "localhost" or host.endswith(".localhost"):
-        return []
-    try:
-        if ipaddress.ip_address(host).is_loopback:
-            return []
-    except ValueError:
-        pass
-    return [_PLAIN_HTTP]
+    return [_PLAIN_HTTP] if plain_http_remote(url) else []
 
 
 def _server_version(session) -> str | None:

@@ -27,7 +27,7 @@ from backend.services.budget_app import (
     other_sync_on,
     using,
 )
-from backend.services.ynab_migration import job
+from backend.services.ynab_migration import guards, job
 from backend.services.ynab_sync import budget_mode, resolve, runner
 from backend.services.ynab_sync import state as sync_state
 
@@ -88,17 +88,22 @@ def _open() -> None:
     ActualBudgetConfigStore().require_available()
 
 
-def migration_status() -> dict:
+def migration_status(plan_id: str | None = None) -> dict:
+    """``blocked_reason``: what an import of ``plan_id`` would be refused with right now."""
     _open()
     with using(ACTUAL):
-        return job.status()
+        return {**job.status(), "blocked_reason": guards.import_refusal(ACTUAL, plan_id)}
 
 
 def start_migration(kind: str, budget_id: str, **choices) -> dict:
-    """``job.start`` for Actual. ``choices``: its keyword arguments."""
+    """``job.start`` for Actual. ``choices``: its keyword arguments. A preview also says what an
+    import of this budget would be refused with right now."""
     _open()
     with using(ACTUAL):
-        return job.start(kind, budget_id, **choices)
+        run = job.start(kind, budget_id, **choices)
+        if kind != "preview":
+            return run
+        return {**run, "blocked_reason": guards.import_refusal(ACTUAL, budget_id)}
 
 
 # ── the sync ──
@@ -179,7 +184,7 @@ def _warnings(meta: dict, st: dict) -> list[dict]:
                 "text": (
                     f"Import this budget first. No account of {st['plan_name']} is in this book, "
                     "so the sync has nothing to pair with and leaves both sides alone. Import it "
-                    f"from the {ACTUAL.name} connector, and the next run carries on."
+                    "below, and the next run carries on."
                 ),
             }
         )

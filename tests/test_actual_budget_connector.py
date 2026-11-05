@@ -19,6 +19,7 @@ from backend.core import feature_flags
 from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
 from backend.services import actual_flag
+from backend.services.actual_sync.client import plain_http_notice
 from backend.services.connector_catalog import CATALOG
 from tests.flags import flags
 
@@ -391,3 +392,76 @@ def test_behind_the_gateway_status_says_unavailable_and_the_rest_refuse(
 def test_the_public_demo_locks_the_writes():
     assert is_demo_locked("PUT", "/api/actual-budget/config")
     assert is_demo_locked("POST", "/api/actual-budget/anything")
+
+
+# ── switching how you sign in ────────────────────────────────────────────────
+
+
+def test_a_new_token_replaces_a_saved_password(client, store):
+    client.put(
+        "/api/actual-budget/config",
+        json={"server_url": "https://actual.acme.test", "password": "PASSWORD-SENTINEL"},
+    )
+    r = client.put("/api/actual-budget/config", json={"token": "TOKEN-SENTINEL"})
+    assert r.status_code == 200
+    assert r.json()["has_token"] is True and r.json()["has_password"] is False
+    assert store.credentials()["password"] == ""
+    assert store.credentials()["token"] == "TOKEN-SENTINEL"
+
+
+def test_a_new_password_replaces_a_saved_token(client, store):
+    client.put(
+        "/api/actual-budget/config",
+        json={"server_url": "https://actual.acme.test", "token": "TOKEN-SENTINEL"},
+    )
+    r = client.put("/api/actual-budget/config", json={"password": "PASSWORD-SENTINEL"})
+    assert r.json()["has_password"] is True and r.json()["has_token"] is False
+    assert store.credentials()["token"] == ""
+
+
+def test_a_blank_sign_in_replaces_nothing(client, store):
+    client.put(
+        "/api/actual-budget/config",
+        json={"server_url": "https://actual.acme.test", "password": "PASSWORD-SENTINEL"},
+    )
+    client.put("/api/actual-budget/config", json={"token": "   ", "password": ""})
+    assert store.credentials()["password"] == "PASSWORD-SENTINEL"
+    assert store.is_configured() is True
+
+
+def test_an_address_or_encryption_change_leaves_the_sign_in(client, store):
+    client.put(
+        "/api/actual-budget/config",
+        json={"server_url": "https://actual.acme.test", "token": "TOKEN-SENTINEL"},
+    )
+    client.put(
+        "/api/actual-budget/config",
+        json={"server_url": "https://other.acme.test", "encryption_password": "ENC"},
+    )
+    assert store.credentials()["token"] == "TOKEN-SENTINEL"
+
+
+# ── a saved address that isn't encrypted ─────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "url, plain",
+    [
+        ("http://192.168.1.20:5006", True),
+        ("http://actual.acme.test", True),
+        ("https://actual.acme.test", False),
+        ("http://localhost:5006", False),
+        ("http://actual.localhost:5006", False),
+        ("http://127.0.0.1:5006", False),
+        ("http://127.8.8.8:5006", False),
+        ("http://[::1]:5006", False),
+    ],
+)
+def test_public_says_when_a_saved_address_is_plain_http(store, url, plain):
+    store.update({"server_url": url})
+    assert store.public()["server_plain_http"] is plain
+    assert bool(plain_http_notice(url)) is plain
+
+
+def test_public_says_no_plain_http_with_nothing_saved(store):
+    assert store.public()["server_plain_http"] is False

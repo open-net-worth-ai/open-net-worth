@@ -55,6 +55,21 @@ def links_to(accounts: set[str]) -> bool:
     return any(ref in accounts for ref in _links())
 
 
+def import_finished(plan_id: str) -> None:
+    """A run that stopped to ask for this import has its answer. A run in progress works it out
+    for itself."""
+    app = current()
+    if not app.caps.budget_scoped_accounts or not app.lock.acquire(blocking=False):
+        return
+    try:
+        st = sync_state.load()
+        if st["awaiting_import"] and st["plan_id"] == plan_id:
+            st["awaiting_import"] = False
+            sync_state.save(st)
+    finally:
+        app.lock.release()
+
+
 def _adopt_plan(plan_id: str) -> dict:
     app = current()
     plans = app.reader.list_plans(app.config_store())

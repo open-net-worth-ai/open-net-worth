@@ -16,6 +16,7 @@ Data-only repository (import-linter: ``db`` may import ``core``/``models`` only)
 
 from __future__ import annotations
 
+import ipaddress
 from urllib.parse import urlsplit
 
 from backend.core import config
@@ -59,6 +60,20 @@ def display_host(url: str) -> str | None:
     return f"{host}:{parts.port}" if parts.port else host
 
 
+def plain_http_remote(url: str) -> bool:
+    """Plain http to anything but this computer. Allowed, and said wherever it matters."""
+    parts = _parts(url)
+    if parts is None or parts.scheme != "http":
+        return False
+    host = parts.hostname.lower()
+    if host == "localhost" or host.endswith(".localhost"):
+        return False
+    try:
+        return not ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return True
+
+
 class ActualBudgetConfigStore(AggregatorConfigStore):
     KIND = "actual_budget"
     LABEL = "Actual Budget"
@@ -83,8 +98,13 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
     def _normalize(self, clean: dict) -> None:
         """Refuse any write behind the gateway, and an address that is not http(s) with a host.
         ``budget_id`` reads a blank as "clear the pick" (it is not a secret), which also drops
-        the cached name and currency."""
+        the cached name and currency. A new password or token replaces the other: a saved
+        password would otherwise win over a token typed to replace it."""
         self.require_available()
+        if "token" in clean and "password" not in clean:
+            clean["password"] = None
+        elif "password" in clean and "token" not in clean:
+            clean["token"] = None
         if "server_url" in clean and _parts(clean["server_url"]) is None:
             raise ValidationError(
                 "The server address must start with http:// or https:// and name a host."
@@ -124,6 +144,7 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
             "has_encryption_password": bool(secret["encryption_password"]),
             "has_server_url": bool(secret["server_url"]),
             "server_host": display_host(secret["server_url"]),
+            "server_plain_http": plain_http_remote(secret["server_url"]),
             "budget_id": cfg.get("budget_id"),
             "budget_name": cfg.get("budget_name"),
             "budget_currency": cfg.get("budget_currency"),

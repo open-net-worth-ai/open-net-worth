@@ -138,8 +138,7 @@ def start(
 
     with starting():
         if kind == "import":
-            guards.refuse_beside_the_other_app(app)
-            guards.refuse_another_budget(app, plan_id.strip())
+            guards.refuse_import(app, plan_id.strip())
         if kind == "import" and not confirm_nonempty and _foreign_accounts_exist():
             raise ConfirmationRequired(
                 f"This book already has accounts that did not come from {app.name}. Confirm to "
@@ -210,6 +209,8 @@ def _run(
     run = _Run(run_id)
     try:
         _execute(run, kind, plan_id, confirm, choice or {})
+        if kind == "import":
+            _answer_import_first(plan_id)
         if sync:
             _turn_on_sync(run, plan_id, sync)
     except OpenNetWorthError as exc:
@@ -224,6 +225,17 @@ def _run(
         )
     else:
         _settle(run_id, "done", phase="done", outcome=_outcome(kind, run_id))
+
+
+def _answer_import_first(plan_id: str) -> None:
+    """The next run would find the accounts anyway; the page shouldn't ask until then. A failure
+    here must not fail an import that completed."""
+    from backend.services.ynab_sync import settings
+
+    try:
+        settings.import_finished(plan_id)
+    except Exception:
+        logger.exception("%s could not clear import-first for %s", current().name, plan_id)
 
 
 def _turn_on_sync(run: _Run, plan_id: str, direction: str) -> None:

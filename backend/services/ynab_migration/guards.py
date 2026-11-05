@@ -44,6 +44,23 @@ def refuse_another_budget(app, plan_id: str) -> None:
         )
 
 
+def refuse_import(app, plan_id: str | None) -> None:
+    """What stops an import from starting. With no plan named, only what stops any import."""
+    refuse_beside_the_other_app(app)
+    if plan_id:
+        refuse_another_budget(app, plan_id)
+
+
+def import_refusal(app, plan_id: str | None) -> str | None:
+    """What ``refuse_import`` would say right now, for a review to say before the person has
+    settled anything. Reads only."""
+    try:
+        refuse_import(app, plan_id)
+    except ConflictError as exc:
+        return exc.message or str(exc)
+    return None
+
+
 def money_data() -> list[str]:
     """What in the book carries money. Empty means the base currency is safe to change."""
     found = []

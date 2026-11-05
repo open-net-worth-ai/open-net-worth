@@ -147,10 +147,11 @@ def _migration(kind: str, body: MigrationRequest) -> dict:
 
 
 @router.get("/api/actual-budget/migration")
-def actual_budget_migration_status():
-    """The newest import run and whether a sign-in is saved. Never a secret."""
+def actual_budget_migration_status(plan_id: Optional[str] = None):
+    """The newest import run, whether a sign-in is saved, and what an import of ``plan_id`` would
+    be refused with right now. Never a secret."""
     try:
-        return actual_app.migration_status()
+        return actual_app.migration_status(plan_id)
     except OpenNetWorthError as exc:
         raise _refuse(exc) from exc
 
