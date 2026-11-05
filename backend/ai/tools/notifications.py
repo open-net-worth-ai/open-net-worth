@@ -56,6 +56,17 @@ class TelegramMessageInput(ChannelMessageInput):
     )
 
 
+def _send_result(delivered: dict[str, dict]) -> str:
+    """``ok`` means the message got there. A channel swallows its own send failures and reports
+    ``sent: 0``, so an unconditional ``ok: true`` let an unattended run read a lost message as a
+    success. A file the turn already sent has got there, so that skip still counts."""
+    reached = any(
+        result.get("sent") or result.get("skipped") == "already_sent_this_turn"
+        for result in delivered.values()
+    )
+    return json.dumps({"ok": bool(reached), "delivered": delivered}, ensure_ascii=False)
+
+
 async def _send_to_channel(channel: str, input_data: dict) -> tuple[str, None]:
     from backend.core.errors import OpenNetWorthError
     from backend.services.notify import notify as send_notification
@@ -72,14 +83,14 @@ async def _send_to_channel(channel: str, input_data: dict) -> tuple[str, None]:
             )
         except OpenNetWorthError as exc:
             return json.dumps({"error": exc.message or str(exc)}), None
-        return json.dumps({"ok": True, "delivered": delivered}, ensure_ascii=False), None
+        return _send_result(delivered), None
 
     delivered = await send_notification(
         input_data.get("message") or "",
         channels=[channel],
         title=input_data.get("title"),
     )
-    return json.dumps({"ok": True, "delivered": delivered}, ensure_ascii=False), None
+    return _send_result(delivered), None
 
 
 @tool(

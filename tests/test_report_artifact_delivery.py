@@ -105,8 +105,31 @@ def test_telegram_tool_attaches_the_artifact(artifact, registry):
         telegram_send_message({"message": "headline", "artifact_id": artifact["id"]})
     )
 
-    assert json.loads(out)["delivered"] == {"telegram": {"sent": 1}}
+    assert json.loads(out) == {"ok": True, "delivered": {"telegram": {"sent": 1}}}
     assert sent[0][0] == "doc"
+
+
+def test_a_file_that_failed_to_send_is_not_ok(artifact, registry):
+    from backend.ai.tools.notifications import telegram_send_message
+
+    async def doc(content, filename, caption):
+        return {"sent": 0}
+
+    channels.register_document_channel("telegram", doc)
+
+    out, _ = asyncio.run(
+        telegram_send_message({"message": "headline", "artifact_id": artifact["id"]})
+    )
+
+    assert json.loads(out) == {"ok": False, "delivered": {"telegram": {"sent": 0}}}
+
+
+def test_a_file_already_sent_this_turn_is_still_ok(artifact, registry):
+    from backend.ai.tools.notifications import _send_result
+
+    delivered = {"telegram": {"skipped": "already_sent_this_turn"}}
+
+    assert json.loads(_send_result(delivered)) == {"ok": True, "delivered": delivered}
 
 
 def test_telegram_tool_reports_an_unknown_artifact(artifact, registry):

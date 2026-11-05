@@ -242,6 +242,34 @@ async def test_telegram_send_message_targets_only_telegram(clean_registry):
     assert calls == {"telegram": 1, "webhook": 0}
 
 
+@pytest.mark.parametrize(
+    "channel_result",
+    [{"sent": 0}, {"error": "webhook channel not configured"}],
+)
+async def test_a_send_that_reached_nobody_is_not_ok(clean_registry, channel_result):
+    # A Telegram timeout came back as sent: 0 under ok: true, so a lost message read as a success.
+    async def telegram_chan(msg):
+        return channel_result
+
+    channels.register_channel("telegram", telegram_chan)
+
+    from backend.ai.tools import execute_tool
+
+    raw, _ = await execute_tool("telegram_send_message", {"message": "hi"})
+
+    assert json.loads(raw) == {"ok": False, "delivered": {"telegram": channel_result}}
+
+
+async def test_a_channel_that_is_not_set_up_is_not_ok(clean_registry):
+    from backend.ai.tools import execute_tool
+
+    raw, _ = await execute_tool("telegram_send_message", {"message": "hi"})
+
+    result = json.loads(raw)
+    assert result["ok"] is False
+    assert result["delivered"]["telegram"] == {"skipped": "unknown_channel"}
+
+
 async def test_webhook_send_message_targets_only_webhook(clean_registry):
     calls = {"telegram": 0, "webhook": 0}
 
