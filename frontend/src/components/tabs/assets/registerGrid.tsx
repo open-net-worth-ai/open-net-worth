@@ -12,7 +12,7 @@ import { byValue, registerItems, type AssetStack } from './stacks'
 
 function Delta({ value }: { value: number | null }) {
   return (
-    <span className={'as-delta ' + (value == null ? 'flat' : value >= 0 ? 'pos' : 'neg')}>
+    <span className={'as-delta money ' + (value == null ? 'flat' : value >= 0 ? 'pos' : 'neg')}>
       {value == null ? '' : pct(value)}
     </span>
   )

@@ -18,6 +18,7 @@ import { useTheme } from '../../../theme'
 import { cssToken } from '../../../utils/chartTheme'
 import { Text } from '../../ui'
 import { purchaseCopy } from './assetCategoryRules'
+import { amountsHidden, subscribeAmountsHidden } from '../../../utils/amountMask'
 import { fmt, fmtK, monthYear } from './assetsData'
 import {
   COLOR_TOKEN,
@@ -174,6 +175,7 @@ export function MarkChart({ a }: MarkChartProps) {
               label: (it) => {
                 const m = marksAsc[(it.raw as MarkChartSeriesPoint).i]
                 if (!m) return ''
+                if (amountsHidden()) return '***'
                 if (a.cost == null || m.value === a.cost) return fmt(m.value)
                 const d = m.value - a.cost
                 return `${fmt(m.value)}   ${d >= 0 ? '+' : '−'}${Math.abs((d / a.cost) * 100).toFixed(1)}%`
@@ -228,13 +230,22 @@ export function MarkChart({ a }: MarkChartProps) {
               font: { size: 11 },
               maxTicksLimit: 5,
               padding: 8,
-              callback: (v) => fmtK(v as number),
+              callback: (v) => (amountsHidden() ? '***' : fmtK(v as number)),
             },
           },
         },
       },
     })
   }, [a.id, drawn, theme])
+
+  // Its axis and tooltip read the flag when drawn, so a flip has to redraw what's on screen.
+  useEffect(
+    () =>
+      subscribeAmountsHidden(() => {
+        instRef.current?.update('none')
+      }),
+    [],
+  )
 
   useEffect(() => {
     return () => {

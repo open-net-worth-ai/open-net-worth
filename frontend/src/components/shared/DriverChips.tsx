@@ -3,6 +3,7 @@
 // the Investments tab's original look — Intel's own `.intel-brief-mover*`
 // markup was retired in favor of this shared component.
 
+import { useMaskText } from '../../utils/amountMask'
 import { fBase, fPct } from '../../utils/format'
 import { StatInfo } from '../ui/StatInfo'
 import type { DriverChip } from '../../types/portfolioDrivers'
@@ -35,6 +36,7 @@ function uniqueDrivers(chips: DriverChip[]): DriverChip[] {
 }
 
 export function DriverChips({ gainers, losers, onOpenAsset }: Props) {
+  const maskText = useMaskText()
   const uniqueGainers = uniqueDrivers(gainers)
   const uniqueLosers = uniqueDrivers(losers)
   if (uniqueGainers.length + uniqueLosers.length === 0) return null
@@ -53,7 +55,9 @@ export function DriverChips({ gainers, losers, onOpenAsset }: Props) {
             type="button"
             className="mvr-chip"
             key={'g' + chip.instrument_id}
-            title={`Open ${chip.ticker || chip.label} — ${sgn(chip.day_change_base)} today`}
+            title={maskText(
+              `Open ${chip.ticker || chip.label} — ${sgn(chip.day_change_base)} today`,
+            )}
             onClick={() => onOpenAsset(chip)}
           >
             <span className="mvr-sym">{chip.ticker || chip.label}</span>
@@ -66,7 +70,9 @@ export function DriverChips({ gainers, losers, onOpenAsset }: Props) {
             type="button"
             className="mvr-chip"
             key={'l' + chip.instrument_id}
-            title={`Open ${chip.ticker || chip.label} — ${sgn(chip.day_change_base)} today`}
+            title={maskText(
+              `Open ${chip.ticker || chip.label} — ${sgn(chip.day_change_base)} today`,
+            )}
             onClick={() => onOpenAsset(chip)}
           >
             <span className="mvr-sym">{chip.ticker || chip.label}</span>

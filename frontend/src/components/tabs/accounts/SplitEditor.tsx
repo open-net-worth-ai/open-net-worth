@@ -118,7 +118,13 @@ export function SplitEditor({
           <Plus size={12} aria-hidden="true" /> Add line
         </button>
         <span className={`acct-edit-splitremain${balanced ? ' ok' : ''}`}>
-          {balanced ? 'Balanced' : `Remaining ${fCur(remaining, currency, { cents: true })}`}
+          {balanced ? (
+            'Balanced'
+          ) : (
+            <>
+              Remaining <span className="money">{fCur(remaining, currency, { cents: true })}</span>
+            </>
+          )}
         </span>
       </div>
     </div>

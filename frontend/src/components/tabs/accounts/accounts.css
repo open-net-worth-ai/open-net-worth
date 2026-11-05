@@ -1073,29 +1073,6 @@
   }
 }
 
-/* privacy: mask amounts. Children are blanked too — a child that sets its own color
-   (the register's native-currency line, .acct-amt-orig) would otherwise leak through. */
-body.hide-amounts .mask {
-  color: transparent !important;
-  position: relative;
-}
-body.hide-amounts .mask * {
-  color: transparent !important;
-}
-body.hide-amounts .mask::after {
-  content: '••••';
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--muted);
-  letter-spacing: 1px;
-  font-size: 0.86em;
-}
-body.hide-amounts .mask.l::after {
-  left: 0;
-  right: auto;
-}
 /* ── shell ─────────────────────────────────────────────────────────────────── */
 /* Fills the app shell's panel column (RouterShell wraps the tab in a flex-column,
    viewport-capped, overflow-hidden region); the sidebar + main scroll independently. */

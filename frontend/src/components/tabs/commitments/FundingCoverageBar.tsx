@@ -40,7 +40,7 @@ function gapSegment(gap: number, scaleMax: number): MeterSegment | null {
     className: 'gap',
     title: `Unfunded: ${fBase(gap)}`,
     ariaLabel: `Unfunded: ${fBase(gap)}`,
-    content: fCompactCurrency(gap),
+    content: <span className="money">{fCompactCurrency(gap)}</span>,
   }
 }
 
@@ -121,7 +121,7 @@ export function FundingCoverageBar({
       className: s.type,
       ariaLabel: `${s.label}: ${fBase(s.val)}`,
       ariaExpanded: hovered?.type === s.type,
-      content: fCompactCurrency(s.val),
+      content: <span className="money">{fCompactCurrency(s.val)}</span>,
       onClick: (e: MouseEvent<HTMLButtonElement>) =>
         toggleNow(s.type, e.currentTarget.getBoundingClientRect()),
       onMouseEnter: (e: MouseEvent<HTMLButtonElement>) =>
@@ -156,7 +156,7 @@ export function FundingCoverageBar({
         />
       )}
       <div className="c2-fund-scale">
-        <span>{fBase(0)}</span>
+        <span className="money">{fBase(0)}</span>
         <span>
           <span className="money">{fBase(remaining)}</span> to cover
         </span>

@@ -733,7 +733,11 @@ const SavingsRate: ComponentType<WidgetContentProps> = ({ instance, def }) => {
             {trailing.months}-month average ({fMonth(`${trailing.from}-01`, 'short')} to{' '}
             {fMonth(`${trailing.to}-01`, 'short')}):{' '}
             <span className="money">{fBaseCompact(trailing.monthly)}</span> a month
-            {trailing.rate_pct != null ? `, ${Math.round(trailing.rate_pct)}%` : ''}
+            {trailing.rate_pct != null && (
+              <>
+                , <span className="money">{Math.round(trailing.rate_pct)}%</span>
+              </>
+            )}
           </Text>
         )}
         {caveat && (

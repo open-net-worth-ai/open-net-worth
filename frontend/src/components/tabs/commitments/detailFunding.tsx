@@ -5,6 +5,7 @@ import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import type { Commitment, FundingSource, FundingType } from '../../../types/commitments'
 import { fBase, getCurrencySymbol, toBase } from '../../../utils/format'
+import { MaskedText } from '../../ui/MaskedText'
 import {
   FUNDING_LABELS,
   fmtDate,
@@ -227,7 +228,9 @@ function FundRow({ c, f, pos, m }: FundRowProps) {
             >
               {isEnvelopeSource(f) ? 'Budget target' : FUNDING_LABELS[f.type] || f.type}
             </span>
-            <span className="c2-fund-when c2-fund-when-inline">{fundingWhen(f, pos)}</span>
+            <span className="c2-fund-when c2-fund-when-inline">
+              <MaskedText>{fundingWhen(f, pos)}</MaskedText>
+            </span>
           </div>
           {(f.note ||
             f.disabled ||
@@ -286,7 +289,9 @@ function FundRow({ c, f, pos, m }: FundRowProps) {
           )}
         </div>
       </div>
-      <span className="c2-fund-when c2-fund-when-standalone">{fundingWhen(f, pos)}</span>
+      <span className="c2-fund-when c2-fund-when-standalone">
+        <MaskedText>{fundingWhen(f, pos)}</MaskedText>
+      </span>
       <span className={'c2-fund-amt money' + (f.disabled ? ' c3-fund-lost-amt' : '')}>
         {/* Was `f.type === 'income'`, which is TRUE for both the one live-synced envelope
             (isEnvelopeSource — genuinely no fixed number; it accrues dynamically in Planning,

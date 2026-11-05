@@ -447,7 +447,7 @@ export function CommitmentDetail({
                   <span className={`c2-tag status-${c.status}`}>{c.status}</span>
                   {atRisk && c.coverage && (
                     <span className="c2-chip short">
-                      {fBase(c.coverage.shortfall_base)} unfunded by{' '}
+                      <span className="money">{fBase(c.coverage.shortfall_base)}</span> unfunded by{' '}
                       {c.coverage.earliest_shortfall_date
                         ? fmtDate(c.coverage.earliest_shortfall_date)
                         : ''}
@@ -597,7 +597,7 @@ export function CommitmentDetail({
                 <span className="k">{tracker ? 'Contributed' : 'Paid'}</span>
                 <span className={moneyClass('v')}>{fBase(paidBase(c, fx))}</span>
                 <span className="u">
-                  {fPct(paidPct(c))} of{' '}
+                  <span className="money">{fPct(paidPct(c))}</span> of{' '}
                   <span className="money">{fBase(nativeTotalBase(c, fx))}</span>
                 </span>
               </div>
@@ -620,7 +620,7 @@ export function CommitmentDetail({
                   <span className="k">Loan balance</span>
                   <span className={moneyClass('v')}>{fBase(loan.balance)}</span>
                   <span className="u">
-                    {loan.apr}% APR • {loan.monthsLeft} months left
+                    <span className="money">{loan.apr}%</span> APR • {loan.monthsLeft} months left
                   </span>
                 </div>
               )}
@@ -631,7 +631,13 @@ export function CommitmentDetail({
                     {fBase(funded)}
                   </span>
                   <span className="u">
-                    {fundGap ? `${fBase(remB - funded)} short of remaining` : 'covers remaining'}
+                    {fundGap ? (
+                      <>
+                        <span className="money">{fBase(remB - funded)}</span> short of remaining
+                      </>
+                    ) : (
+                      'covers remaining'
+                    )}
                   </span>
                 </div>
               )}

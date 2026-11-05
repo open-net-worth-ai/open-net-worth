@@ -78,7 +78,7 @@ export function Masthead({ d, sparkValues, totalDay, totalPL }: Props) {
                   {ytd.benchYtd != null ? `YTD vs ${ytd.benchSym}` : 'YTD'}
                 </div>
                 <div className="mk-sum-ytd-pair">
-                  <span className="mk-sum-ytd-val" style={{ color: tone(ytd.portYtd) }}>
+                  <span className="mk-sum-ytd-val money" style={{ color: tone(ytd.portYtd) }}>
                     {(ytd.portYtd >= 0 ? '+' : '') + (ytd.portYtd * 100).toFixed(1) + '%'}
                   </span>
                   {ytd.benchYtd != null && (
@@ -89,7 +89,7 @@ export function Masthead({ d, sparkValues, totalDay, totalPL }: Props) {
                 </div>
                 {ytd.ahead != null && (
                   <div
-                    className="mk-sum-ytd-sub"
+                    className="mk-sum-ytd-sub money"
                     style={{ color: ytd.ahead >= 0 ? 'var(--good)' : 'var(--bad)' }}
                   >
                     {(ytd.ahead >= 0 ? '+' : '−') + Math.abs(ytd.ahead).toFixed(1)} pts{' '}
@@ -111,14 +111,14 @@ export function Masthead({ d, sparkValues, totalDay, totalPL }: Props) {
                   >
                     {signed(totalPL, fBase)}
                   </span>
-                  <span style={{ color: tone(totalPL) }}>
+                  <span className="money" style={{ color: tone(totalPL) }}>
                     {signed(uplPct, (n) => n.toFixed(1) + '%')}
                   </span>
                 </span>
               )}
               {portfolioTotal > 0 && (
                 <span className="mk-sum-meta-item" data-ctx-fact="% of net worth">
-                  {pctNW.toFixed(1)}% of net worth
+                  <span className="money">{pctNW.toFixed(1)}%</span> of net worth
                 </span>
               )}
             </div>
@@ -140,7 +140,7 @@ export function Masthead({ d, sparkValues, totalDay, totalPL }: Props) {
             </div>
             {portfolioTotal > 0 && (
               <div className="mk-sum-sub" data-ctx-fact="% of net worth">
-                {pctNW.toFixed(1)}% of net worth
+                <span className="money">{pctNW.toFixed(1)}%</span> of net worth
               </div>
             )}
           </div>
@@ -159,7 +159,7 @@ export function Masthead({ d, sparkValues, totalDay, totalPL }: Props) {
         <div className="mk-sum-val mask" style={{ color: tone(totalDay) }} data-ctx-fact="Today">
           {signed(totalDay, fBase)}
         </div>
-        <div className="mk-sum-sub" style={{ color: tone(totalDay) }}>
+        <div className="mk-sum-sub money" style={{ color: tone(totalDay) }}>
           {fPct(d.todayPct)}
         </div>
       </div>
@@ -172,7 +172,7 @@ export function Masthead({ d, sparkValues, totalDay, totalPL }: Props) {
         {ytd ? (
           <>
             <div className="mk-sum-val mk-sum-val-pair" data-ctx-fact="YTD return">
-              <span style={{ color: tone(ytd.portYtd) }}>
+              <span className="money" style={{ color: tone(ytd.portYtd) }}>
                 {(ytd.portYtd >= 0 ? '+' : '') + (ytd.portYtd * 100).toFixed(1) + '%'}
               </span>
               {ytd.benchYtd != null && (
@@ -182,7 +182,7 @@ export function Masthead({ d, sparkValues, totalDay, totalPL }: Props) {
               )}
             </div>
             {ytd.ahead != null && (
-              <div className="mk-sum-sub" style={{ color: tone(ytd.ahead) }}>
+              <div className="mk-sum-sub money" style={{ color: tone(ytd.ahead) }}>
                 {(ytd.ahead >= 0 ? '+' : '−') + Math.abs(ytd.ahead).toFixed(1)} pts{' '}
                 {ytd.ahead >= 0 ? 'ahead' : 'behind'}
               </div>
@@ -206,7 +206,7 @@ export function Masthead({ d, sparkValues, totalDay, totalPL }: Props) {
           {totalPL !== 0 ? signed(totalPL, fBase) : '—'}
         </div>
         {totalPL !== 0 && (
-          <div className="mk-sum-sub" style={{ color: tone(totalPL) }}>
+          <div className="mk-sum-sub money" style={{ color: tone(totalPL) }}>
             {signed(uplPct, (n) => n.toFixed(1) + '%')}
           </div>
         )}

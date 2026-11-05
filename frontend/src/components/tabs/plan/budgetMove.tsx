@@ -406,7 +406,7 @@ export function AvailCell({
     // A zero that's underfunded is still amber — that's the commonest case of all (nothing
     // assigned yet, target unmet), and the neutral grey pill said nothing about it.
     if (isZero)
-      return <span className={'pl-avail ' + (isUnder ? 'under mask' : 'zero')}>{text}</span>
+      return <span className={'pl-avail mask ' + (isUnder ? 'under' : 'zero')}>{text}</span>
     return <span className={'pl-avail mask ' + tone}>{text}</span>
   }
 

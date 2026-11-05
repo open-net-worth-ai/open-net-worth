@@ -18,6 +18,7 @@ import {
   useCachedFetchState,
 } from '../../../../state/queryCache'
 import { fBase, fBaseCompact, getCurrencySymbol } from '../../../../utils/format'
+import { MaskedText } from '../../../ui/MaskedText'
 import {
   EMPTY_FIRE_DRAFT,
   fireHorizon,
@@ -318,10 +319,11 @@ function FireModal({
         <div className="rd-callout">
           <span className="rd-callout-k">FIRE number</span>
           <span className="rd-callout-calc">
-            {fBase(Number(s.monthlyRetirementSpending))} × 12 ÷ {s.withdrawalRate}%
+            <span className="money">{fBase(Number(s.monthlyRetirementSpending))}</span> × 12 ÷{' '}
+            {s.withdrawalRate}%
           </span>
           <span className="rd-callout-eq">=</span>
-          <b className="rd-callout-v">{fBaseCompact(fireNum)}</b>
+          <b className="rd-callout-v money">{fBaseCompact(fireNum)}</b>
         </div>
       )}
       <div className="rd-formgrid">
@@ -767,7 +769,7 @@ export function ProfileSection({
             <div className="rd-readout-item" key={k}>
               <span className="rd-readout-k">{k}</span>
               <span className="rd-readout-v rd-mono">
-                {v}
+                <MaskedText>{v}</MaskedText>
                 {note ? <em>{note}</em> : null}
               </span>
             </div>

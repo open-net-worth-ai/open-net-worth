@@ -11,7 +11,9 @@ import {
 } from '../../ui'
 import type { BadgeTone } from '../../ui'
 import { Building2, Plus, ChevronRight } from '../../../ui/icons'
+import { useMaskText } from '../../../utils/amountMask'
 import { fNum, fCurrency, fDate } from '../../../utils/format'
+import { MaskedText } from '../../ui/MaskedText'
 import type { Grant, PendingReleaseItem, Tranche } from '../../../types/equity'
 import type { ComputedRow } from '../../../types/portfolio'
 import { useEquityView } from './useEquityView'
@@ -55,6 +57,7 @@ interface DrawerProps {
 }
 
 function EqDrawer({ gvm, rawGrant, onMark, onRefetch }: DrawerProps) {
+  const maskText = useMaskText()
   const [deleteState, setDeleteState] = useState<'idle' | 'confirm'>('idle')
   const [editOpen, setEditOpen] = useState(false)
   // Undo is confirmed in a Modal, never inline: the timeline row's action column is
@@ -112,9 +115,12 @@ function EqDrawer({ gvm, rawGrant, onMark, onRefetch }: DrawerProps) {
       <div className="eq-dr-top">
         <div className="eq-dr-prog">
           <div className="eq-dr-prog-head">
-            <span className="eq-dr-prog-pct">{gvm.pct}% vested</span>
+            <span className="eq-dr-prog-pct">
+              <span className="money">{gvm.pct}%</span> vested
+            </span>
             <span className="eq-dr-prog-sub">
-              {fNum(gvm.vested)} of {fNum(gvm.total)} units
+              <span className="money">{fNum(gvm.vested)}</span> of{' '}
+              <span className="money">{fNum(gvm.total)}</span> units
             </span>
           </div>
           <div className="eq-dr-bar">
@@ -130,11 +136,15 @@ function EqDrawer({ gvm, rawGrant, onMark, onRefetch }: DrawerProps) {
                       ? 'color-mix(in srgb, var(--accent) 55%, var(--surface2))'
                       : 'var(--surface2)',
                 }}
-                title={`${fDate(t.date, 'short', 'always')} • ${fNum(t.units)} units`}
+                title={maskText(`${fDate(t.date, 'short', 'always')} • ${fNum(t.units)} units`)}
               />
             ))}
           </div>
-          {gvm.sinceGrantLine && <div className="eq-dr-since">{gvm.sinceGrantLine}</div>}
+          {gvm.sinceGrantLine && (
+            <div className="eq-dr-since">
+              <MaskedText>{gvm.sinceGrantLine}</MaskedText>
+            </div>
+          )}
         </div>
         <div className="eq-dr-meta">
           <div className="eq-dr-meta-k">Next vest</div>
@@ -143,7 +153,7 @@ function EqDrawer({ gvm, rawGrant, onMark, onRefetch }: DrawerProps) {
           </div>
           {nextT && (
             <div className="eq-dr-meta-sub">
-              {nextT.sub} • {fNum(nextT.units)} units
+              {nextT.sub} • <span className="money">{fNum(nextT.units)}</span> units
             </div>
           )}
         </div>
@@ -239,7 +249,7 @@ function TlRow({ t, rawGrant, onMark, onUndo, undoing, undoError }: TlRowProps) 
       <div>
         <div className="eq-tl-date">{fDate(t.date, 'short', 'always')}</div>
         <div className="eq-tl-sub">
-          {fNum(t.units)} units • {t.sub}
+          <span className="money">{fNum(t.units)}</span> units • {t.sub}
         </div>
         {undoError && <div className="eq-tl-err">{undoError}</div>}
       </div>
@@ -282,7 +292,7 @@ function UpcomingVestsList({ upcoming, rawGrants, onMark }: UpcomingProps) {
             {u.overdue && <Badge tone="neg">Overdue</Badge>}
             <span className="eq-up-date">{fDate(u.date, 'short', 'always')}</span>
             <span className="eq-up-meta">
-              {u.symbol} • {fNum(u.units)} units
+              {u.symbol} • <span className="money">{fNum(u.units)}</span> units
             </span>
           </div>
           <button
@@ -372,14 +382,19 @@ function VestHistoryPanel({
                     <strong>{row.symbol}</strong>
                     <span className="inv-event-mobile-meta">
                       {' '}
-                      • {fNum(row.units)} units
-                      {row.fmvPerUnit != null && row.fmvCurrency
-                        ? ` • ${fCurrency(row.fmvPerUnit, row.fmvCurrency)}`
-                        : ''}
+                      • <span className="money">{fNum(row.units)}</span> units
+                      {row.fmvPerUnit != null && row.fmvCurrency && (
+                        <>
+                          {' • '}
+                          <span className="money">
+                            {fCurrency(row.fmvPerUnit, row.fmvCurrency)}
+                          </span>
+                        </>
+                      )}
                     </span>
                   </span>
-                  <span className="inv-event-units">{fNum(row.units)}</span>
-                  <span className="inv-event-price">
+                  <span className="inv-event-units money">{fNum(row.units)}</span>
+                  <span className="inv-event-price money">
                     {row.fmvPerUnit != null && row.fmvCurrency
                       ? fCurrency(row.fmvPerUnit, row.fmvCurrency)
                       : '—'}
@@ -562,12 +577,12 @@ export function EquityTab({ rows = [], onAskLucius }: Props) {
                         <td className="l">
                           <strong>{g.symbol}</strong>
                         </td>
-                        <td className="l">{fDate(g.grantDate, 'short', 'always')}</td>
+                        <td className="l not-money">{fDate(g.grantDate, 'short', 'always')}</td>
                         <td>{g.grantPrice != null ? fCurrency(g.grantPrice, g.currency) : '—'}</td>
                         <td>{fNum(g.total)}</td>
                         <td>{fNum(g.vested)}</td>
                         <td>{fNum(g.unvested)}</td>
-                        <td className="l">
+                        <td className="l not-money">
                           {g.nextVest ? (
                             <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>
                               {fDate(g.nextVest, 'short', 'always')}
@@ -577,10 +592,10 @@ export function EquityTab({ rows = [], onAskLucius }: Props) {
                             '—'
                           )}
                         </td>
-                        <td className="l">
+                        <td className="l not-money">
                           <Badge tone={g.badgeTone as BadgeTone}>{g.badgeLabel}</Badge>
                         </td>
-                        <td>
+                        <td className="not-money">
                           <span className={`eq-caret${open ? ' open' : ''}`} aria-hidden="true">
                             <ChevronRight size={14} />
                           </span>

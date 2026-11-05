@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Panel } from '../ui'
 import { authFetch } from '../../api/client'
 import { LotsPanel } from '../shared/LotsPanel'
+import { MaskedText } from '../ui/MaskedText'
 import type { WriteTarget } from '../shared/LotsPanel'
 import {
   fAmountNative,
@@ -53,8 +54,10 @@ function Cell({
   return (
     <div className="asd-pos-sum-cell">
       <div className="asd-pos-sum-k">{label}</div>
-      <div className={`asd-pos-sum-v${valueTone ? ` ${valueTone}` : ''}`}>{value}</div>
-      <div className={`asd-pos-sum-sub${subTone ? ` ${subTone}` : ''}`}>{sub}</div>
+      <div className={`asd-pos-sum-v money${valueTone ? ` ${valueTone}` : ''}`}>{value}</div>
+      <div className={`asd-pos-sum-sub${subTone ? ` ${subTone}` : ''}`}>
+        <MaskedText>{sub}</MaskedText>
+      </div>
     </div>
   )
 }
@@ -275,7 +278,7 @@ export function PositionSubtab({
                       <td>{t.date ? fDate(t.date, 'short', 'always') : '—'}</td>
                       <td>{t.units.toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
                       <td>{t.value_base != null ? fBase(t.value_base) : '—'}</td>
-                      <td>
+                      <td className="not-money">
                         <span className={`vest-badge vest-${status}`}>{status}</span>
                       </td>
                     </tr>

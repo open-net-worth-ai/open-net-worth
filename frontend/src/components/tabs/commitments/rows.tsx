@@ -176,7 +176,8 @@ function Row({
       <span className="c2-row-chip">
         {rs === 'risk' && (
           <span className="c2-chip short">
-            {fDual(c.coverage?.shortfall_base ?? 0, base, fx)} unfunded
+            <span className="money">{fDual(c.coverage?.shortfall_base ?? 0, base, fx)}</span>{' '}
+            unfunded
           </span>
         )}
         {rs === 'ok' && <span className="c2-chip ok">Funded</span>}
@@ -193,9 +194,14 @@ function Row({
           {fDual(remB, base, fx)}
         </span>
         <span className="u" style={{ display: 'block' }}>
-          {c.currency !== base
-            ? `${fDual(remainingTotal(c), c.currency, fx).split(' • ')[0]} left`
-            : 'left'}
+          {c.currency !== base && (
+            <>
+              <span className="money">
+                {fDual(remainingTotal(c), c.currency, fx).split(' • ')[0]}
+              </span>{' '}
+            </>
+          )}
+          left
         </span>
       </span>
       <span className="c2-row-chev">

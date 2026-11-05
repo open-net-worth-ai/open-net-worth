@@ -227,7 +227,7 @@ export function WatchTable({
                   </td>
                 )}
                 {columns.map((c) => (
-                  <td key={c.key} className={c.mask ? 'mask' : undefined}>
+                  <td key={c.key} className={c.mask ? 'mask' : 'not-money'}>
                     {c.cell(r)}
                   </td>
                 ))}

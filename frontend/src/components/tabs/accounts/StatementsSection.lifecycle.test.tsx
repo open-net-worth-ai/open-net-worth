@@ -340,7 +340,7 @@ describe('StatementsModal — one clear status per row (owner, 2026-10-06)', () 
     const row = screen.getByText('may-normal.csv').closest('.acct-stmt-row') as HTMLElement
     expect(within(row).getByText(`Imported ${fDate('2026-07-28T10:00:00Z')}`)).toBeTruthy()
     expect(within(row).getByText('96 rows · 90 new · 6 linked')).toBeTruthy()
-    expect(within(row).getByText(/^Balance off by /)).toBeTruthy()
+    expect(within(row).getByText(/^Balance off by/)).toBeTruthy()
     expect(within(row).queryByText('—')).toBeNull()
   })
 

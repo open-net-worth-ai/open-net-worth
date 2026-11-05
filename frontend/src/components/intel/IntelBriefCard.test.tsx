@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, cleanup, fireEvent } from '@testing-library/react'
+import { render, cleanup, fireEvent, waitFor } from '@testing-library/react'
 import type { IntelDigest } from '../../types/intelDigest'
 
 const mockAuthFetch = vi.fn()
@@ -119,8 +119,8 @@ describe('IntelBriefCard — header + brief', () => {
     // Lucius's narrative has its own request at level 5 (see "verbosity" below); a stray
     // narration on the plain digest must not replace the chosen level's text.
     mockAuthFetch.mockImplementation(makeFetch({ ...DIGEST, narration: 'A calm day for you.' }))
-    const { findByText, queryByText } = renderCard()
-    expect(await findByText(/You're .* pts ahead of SPY/)).toBeTruthy()
+    const { container, queryByText } = renderCard()
+    await waitFor(() => expect(container.textContent).toMatch(/You're .* pts ahead of SPY/))
     expect(queryByText('A calm day for you.')).toBeNull()
   })
 

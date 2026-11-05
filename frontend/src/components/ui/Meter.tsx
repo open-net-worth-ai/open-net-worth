@@ -1,4 +1,5 @@
 import type { CSSProperties, FocusEvent, MouseEvent, ReactNode } from 'react'
+import { useMaskText } from '../../utils/amountMask'
 
 export type MeterVariant = 'linear' | 'ring'
 export type MeterSize = 'sm' | 'md' | 'lg'
@@ -92,6 +93,9 @@ const RING_COMPLETE_STROKE = 5
 const RING_CHECK_PATH = 'M30 40.5l7 7 13.5-14.5'
 
 function Segment({ segment }: { segment: MeterSegment }) {
+  const maskText = useMaskText()
+  const title = segment.title && maskText(segment.title)
+  const label = segment.ariaLabel && maskText(segment.ariaLabel)
   const interactive = !!(
     segment.onClick ||
     segment.onMouseEnter ||
@@ -115,8 +119,8 @@ function Segment({ segment }: { segment: MeterSegment }) {
         type="button"
         className={cls}
         style={style}
-        title={segment.title}
-        aria-label={segment.ariaLabel}
+        title={title}
+        aria-label={label}
         aria-expanded={segment.ariaExpanded}
         onClick={segment.onClick}
         onMouseEnter={segment.onMouseEnter}
@@ -129,7 +133,7 @@ function Segment({ segment }: { segment: MeterSegment }) {
     )
   }
   return (
-    <div className={cls} style={style} title={segment.title} aria-label={segment.ariaLabel}>
+    <div className={cls} style={style} title={title} aria-label={label}>
       {content}
     </div>
   )
@@ -146,6 +150,7 @@ function LinearMeter({
   valueText,
   className,
 }: MeterProps & { size: MeterSize }) {
+  const maskText = useMaskText()
   const rootClass = `ui-meter ui-meter--linear ui-meter--${size}${className ? ` ${className}` : ''}`
 
   if (segments) {
@@ -157,8 +162,8 @@ function LinearMeter({
         aria-valuemin={0}
         aria-valuemax={100}
         aria-valuenow={Math.round(totalPct)}
-        aria-label={ariaLabel}
-        aria-valuetext={valueText}
+        aria-label={maskText(ariaLabel)}
+        aria-valuetext={valueText && maskText(valueText)}
       >
         {segments.map((seg) => (
           <Segment key={seg.id} segment={seg} />
@@ -183,8 +188,8 @@ function LinearMeter({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(pct)}
-      aria-label={ariaLabel}
-      aria-valuetext={valueText}
+      aria-label={maskText(ariaLabel)}
+      aria-valuetext={valueText && maskText(valueText)}
     >
       <div
         className="ui-meter__fill"

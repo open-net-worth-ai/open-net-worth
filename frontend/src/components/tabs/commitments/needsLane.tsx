@@ -3,7 +3,7 @@
 // actions, all in one consolidated, capped, expandable lane.
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Money } from '../../ui'
+import { Button, MaskedText, Money } from '../../ui'
 import { fBase } from '../../../utils/format'
 import { BellIcon, CheckIcon, LinkIcon, TaskIcon } from './icons'
 import { ArrowDown } from '../../../ui/icons'
@@ -100,7 +100,9 @@ export function NeedsLane({
           </span>
           <div className="c2-need-main">
             <div className="c2-need-t">{it.title}</div>
-            <div className="c2-need-d">{it.desc}</div>
+            <div className="c2-need-d">
+              <MaskedText>{it.desc}</MaskedText>
+            </div>
           </div>
           <div className="c2-need-btns">
             {it.kind === 'confirm' ? (

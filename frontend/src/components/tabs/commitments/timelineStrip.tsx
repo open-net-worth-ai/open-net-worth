@@ -361,7 +361,7 @@ export function TimelineStrip({ commitment: c, fx }: Props) {
                 onPointerDown={() => toggleTip('d:' + group.id, group.posPx, stemH, tip)}
               >
                 <span className="lbl" style={{ bottom: stemH + 'px' }}>
-                  {fCompactCurrency(group.total)}
+                  <span className="money">{fCompactCurrency(group.total)}</span>
                   {group.items.length > 1 && (
                     <span className="cnt"> +{group.items.length - 1}</span>
                   )}

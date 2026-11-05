@@ -1,4 +1,5 @@
 import type { MentionRef } from '../../types/mentions'
+import { MaskedText } from './MaskedText'
 import { LuciusAskButton } from '../shared/AskLucius'
 import { entityRefProps } from '../../utils/mentionable'
 
@@ -47,7 +48,11 @@ export function SummaryBar({ cards }: SummaryBarProps) {
             >
               {value}
             </div>
-            {caption && <div className="sc">{caption}</div>}
+            {caption && (
+              <div className="sc">
+                <MaskedText>{caption}</MaskedText>
+              </div>
+            )}
             {mention && (
               <LuciusAskButton
                 type={mention.type}

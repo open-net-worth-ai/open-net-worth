@@ -5,6 +5,7 @@
 import { useId, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { CashFlowGraph, CashFlowNode } from '../../../types/aggregates'
+import { useMaskText } from '../../../utils/amountMask'
 import {
   fitLabel,
   flowLinkColor,
@@ -46,6 +47,7 @@ export function MoneyFlowChart({
   /** Grow to the height the parent gives it (a flex column), never below the content minimum. */
   fill?: boolean
 }) {
+  const maskText = useMaskText()
   const [wrapRef, box] = useElementSize<HTMLDivElement>()
   const measured = box.w
   const [hover, setHover] = useState<string | null>(null)
@@ -223,7 +225,7 @@ export function MoneyFlowChart({
               }
               tabIndex={0}
               role={open ? 'link' : undefined}
-              aria-label={`${n.label}: ${fBase(n.amount)}, ${n.pct}%`}
+              aria-label={maskText(`${n.label}: ${fBase(n.amount)}, ${n.pct}%`)}
               onMouseEnter={(e) => {
                 setHover(n.id)
                 place(e, nodeTip(n))

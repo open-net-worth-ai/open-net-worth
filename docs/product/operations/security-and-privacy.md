@@ -120,8 +120,10 @@ anything; what he may do is decided by you, in [Permissions](../lucius/permissio
 
 Press <kbd>H</kbd>, or use **Hide amounts** in the sidebar (on a phone, in the **More** menu), to
 replace your figures with `***` across the app, charts included — handy when sharing your screen.
-Market prices and daily % changes in the ticker strip stay visible. Press <kbd>H</kbd> again to
-show them.
+That covers your amounts, share quantities and your own percentages, such as returns, allocation
+and savings rate. The market's own numbers stay visible: share prices and their daily % changes.
+So do your price alerts and thesis levels, and the assumptions you set in Plan, such as a
+withdrawal rate. Press <kbd>H</kbd> again to show them.
 
 ## Related pages
 

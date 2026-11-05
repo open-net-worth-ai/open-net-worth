@@ -1958,7 +1958,9 @@
     padding: calc(var(--safe-t) + var(--space-8)) calc(var(--safe-r) + var(--space-6))
       calc(var(--safe-b) + var(--space-9)) calc(var(--safe-l) + var(--space-6));
   }
-  body.hide-amounts tbody td:not(:first-child),
+  /* A table masks every cell but its first: a cell that holds no figure (a status, a date, the
+     row's buttons) opts out with `.not-money`, and an empty one has nothing to mask. */
+  body.hide-amounts tbody td:not(:first-child, :empty, .not-money),
   body.hide-amounts tfoot td:not([colspan]),
   body.hide-amounts .total span:not(.cur),
   body.hide-amounts .split .v,
@@ -1968,8 +1970,21 @@
     position: relative;
     user-select: none;
   }
-  body.hide-amounts tbody td:not(:first-child)::after,
+  /* A child with its own colour would stay readable under the `***`; controls stay usable. */
+  body.hide-amounts
+    tbody
+    td:not(:first-child, :empty, .not-money)
+    *:not(button, button *, a, a *, input, select, textarea),
+  body.hide-amounts
+    tfoot
+    td:not([colspan])
+    *:not(button, button *, a, a *, input, select, textarea) {
+    color: transparent !important;
+    user-select: none;
+  }
+  body.hide-amounts tbody td:not(:first-child, :empty, .not-money)::after,
   body.hide-amounts tfoot td:not([colspan])::after {
+    pointer-events: none;
     content: '***';
     position: absolute;
     inset: 0;
@@ -2000,17 +2015,28 @@
    The `***` overlay follows the element's own `text-align`, so a right-aligned
    table cell stays right-aligned and a left-aligned hero stays left. */
   body.hide-amounts .money,
+  body.hide-amounts .mask,
 /* also blank any nested element that sets its OWN color (a toned <Text>, a
    colored link/button), so the amount can't leak through a child. The `***`
    overlay below sits on the .money element itself. */
-body.hide-amounts .money * {
+body.hide-amounts .money *,
+body.hide-amounts .mask * {
     color: transparent !important;
     user-select: none;
   }
-  body.hide-amounts .money {
+  /* No fade: a `transition: color` on the element would show the figure on its way out. */
+  body.hide-amounts .money,
+  body.hide-amounts .mask {
     position: relative;
+    transition: none !important;
   }
-  body.hide-amounts .money::after {
+  /* A figure in an input has no box to overlay, and typing into it must stay possible. */
+  body.hide-amounts .pl-lever--money input:not(:focus),
+  body.hide-amounts .rd-moneyfield input:not(:focus) {
+    color: transparent;
+  }
+  body.hide-amounts .money::after,
+  body.hide-amounts .mask::after {
     content: '***';
     position: absolute;
     inset: 0;
@@ -2019,6 +2045,9 @@ body.hide-amounts .money * {
     color: var(--muted);
     font-weight: 400;
     pointer-events: none;
+  }
+  body.hide-amounts .mask.l::after {
+    text-align: left;
   }
 
   /* ── Misc ── */

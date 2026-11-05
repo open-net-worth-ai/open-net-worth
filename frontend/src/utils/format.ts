@@ -4,7 +4,7 @@
  * .money` rule in index.css — no per-selector allowlist. Use this helper to add
  * the class to an element that already has its own classes (a `<td>`, a flex
  * cell); for a plain wrapper prefer the <Money> ui primitive. Only the AMOUNT
- * should carry it — keep labels/dates/percentages off the masked element.
+ * or percentage should carry it — keep labels and dates off the masked element.
  */
 export const MONEY_CLASS = 'money'
 export const moneyClass = (...extra: (string | false | null | undefined)[]): string =>

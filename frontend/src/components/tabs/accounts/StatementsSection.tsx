@@ -14,7 +14,17 @@ import { Modal } from '../../ui/Modal'
 import { ConfirmModal } from './ConfirmModal'
 import { Button } from '../../ui/Button'
 import { LuciusCta } from '../../intro/LuciusCta'
-import { ActionMenu, Badge, Cluster, EmptyState, ErrorState, Loading, Money, Stack } from '../../ui'
+import {
+  ActionMenu,
+  Badge,
+  Cluster,
+  EmptyState,
+  ErrorState,
+  Loading,
+  MaskedText,
+  Money,
+  Stack,
+} from '../../ui'
 import { fDate, fDateTime } from '../../../utils/format'
 import { Download, FileText, ChevronDown, ChevronRight, Trash2 } from '../../../ui/icons'
 import { fCur } from './data'
@@ -103,9 +113,16 @@ function BalanceBadge({ s }: { s: StatementRow }) {
     return (
       <span title={hint}>
         <Badge tone="warn">
-          {typeof r.delta === 'number'
-            ? `Balance off by ${fCur(Math.abs(r.delta), s.currency || 'SGD', { cents: true })}`
-            : 'Balance off'}
+          {typeof r.delta === 'number' ? (
+            <>
+              Balance off by{' '}
+              <span className="money">
+                {fCur(Math.abs(r.delta), s.currency || 'SGD', { cents: true })}
+              </span>
+            </>
+          ) : (
+            'Balance off'
+          )}
         </Badge>
       </span>
     )
@@ -346,7 +363,7 @@ export function StatementViewer({
       onClose={onClose}
       size="xl"
       title={stmt.filename || 'Statement'}
-      subtitle={facts || undefined}
+      subtitle={facts ? <MaskedText>{facts}</MaskedText> : undefined}
       footer={
         <Button
           size="sm"

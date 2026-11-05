@@ -118,6 +118,8 @@ export type { TextProps, TextSize, TextTone, TextWeight, TextElement } from './T
 export { Money } from './Money'
 export type { MoneyProps } from './Money'
 
+export { MaskedText } from './MaskedText'
+
 export { Switch } from './Switch'
 export type { SwitchProps } from './Switch'
 

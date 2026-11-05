@@ -126,12 +126,14 @@ export function RealizedPnlPanel({ instrumentNames }: Props) {
                       </span>
                       {fDate(ev.disposed_at, 'short', 'always')}
                     </td>
-                    <td>
+                    <td className="not-money">
                       <strong>{instLabel(ev)}</strong>
                       {!ev.is_taxable && <span className="wrapper-badge">transfer</span>}
                     </td>
                     <td className="num">{ev.quantity.toLocaleString(undefined)}</td>
-                    <td className="muted">{ev.method === 'specific_id' ? 'Specific' : 'FIFO'}</td>
+                    <td className="muted not-money">
+                      {ev.method === 'specific_id' ? 'Specific' : 'FIFO'}
+                    </td>
                     <td className={`num ${gain == null ? 'muted' : plClass(gain)}`}>
                       {gain == null ? '—' : (gain >= 0 ? '+' : '') + fBase(gain)}
                     </td>
@@ -161,7 +163,7 @@ export function RealizedPnlPanel({ instrumentNames }: Props) {
                                   <td className="num">
                                     {c.unit_cost == null ? '—' : c.unit_cost.toLocaleString()}
                                   </td>
-                                  <td>
+                                  <td className="not-money">
                                     <span className={`term-badge term-${c.term}`}>{c.term}</span>
                                   </td>
                                   <td

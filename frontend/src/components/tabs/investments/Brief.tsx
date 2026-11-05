@@ -18,6 +18,7 @@ import { Skeleton } from '../../ui/Skeleton'
 import { usePortfolioDrivers } from '../../../hooks/usePortfolioDrivers'
 import { DriverChips } from '../../shared/DriverChips'
 import { INTEL_SUBTAB_KEY } from '../../../hooks/useIntelStoryIndex'
+import { MaskedText } from '../../ui/MaskedText'
 
 interface Props {
   d: DerivedBook
@@ -196,7 +197,9 @@ export function Brief({
           >
             {leadSig.tag}
           </span>
-          <p className="intel-brief-narrative">{leadSig.narrative}</p>
+          <p className="intel-brief-narrative">
+            <MaskedText>{leadSig.narrative}</MaskedText>
+          </p>
           {shownMore.length > 0 && compact && (
             <button
               type="button"
@@ -215,7 +218,9 @@ export function Brief({
               {shownMore.map((s) => (
                 <li key={s.id}>
                   <span className="brief-dot" style={{ background: toneVar(s.tone) }} />
-                  <span>{s.narrative}</span>
+                  <span>
+                    <MaskedText>{s.narrative}</MaskedText>
+                  </span>
                 </li>
               ))}
             </ul>

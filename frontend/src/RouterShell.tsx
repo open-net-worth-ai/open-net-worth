@@ -7,6 +7,7 @@ import {
   Fragment,
   Suspense,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type MutableRefObject,
@@ -970,7 +971,8 @@ function RouterShellInner() {
     })
   }
 
-  useEffect(() => {
+  // Before the first paint, or a reload shows the figures for a frame.
+  useLayoutEffect(() => {
     document.body.classList.toggle('hide-amounts', hidden)
   }, [hidden])
 

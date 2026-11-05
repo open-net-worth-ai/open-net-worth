@@ -95,14 +95,16 @@ export function ActivityRows({ rows, baseCurrency }: RowsProps) {
           {rows.map((r) => (
             <tr key={r.source_id}>
               <td className="act-date">{fmtDate(r.date)}</td>
-              <td>
+              <td className="not-money">
                 <TypePill type={r.type} />
               </td>
-              <td>
+              <td className="not-money">
                 {r.symbol && <span className="act-sym">{r.symbol} </span>}
-                <span className="act-detail">{r.detail || r.name || ''}</span>
+                <span className={r.detail ? 'act-detail money' : 'act-detail'}>
+                  {r.detail || r.name || ''}
+                </span>
               </td>
-              <td className="act-acct">{r.account_name || '—'}</td>
+              <td className="act-acct not-money">{r.account_name || '—'}</td>
               <td className={'num ' + moneyClass()} style={{ color: amountColor(r.type) }}>
                 {fmtAmount(r, baseCurrency)}
               </td>
@@ -148,7 +150,7 @@ export function ActivityCards({ rows, baseCurrency }: RowsProps) {
             >
               {fmtAmount(r, baseCurrency)}
             </span>
-            <span className="act-mcard-sub">{sub}</span>
+            <span className={r.detail ? 'act-mcard-sub money' : 'act-mcard-sub'}>{sub}</span>
             <span className="act-mcard-meta">
               {fmtDate(r.date)} · {r.account_name || '—'}
             </span>
