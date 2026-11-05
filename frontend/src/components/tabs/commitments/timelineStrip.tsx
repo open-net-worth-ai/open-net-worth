@@ -9,10 +9,12 @@
 // payment's height" — so two draws that land next to each other are never at the same height
 // and can't collide, without an unbounded/unpredictable stack.
 //
-// Geometry: each calendar month gets a FIXED minimum pixel width (MONTH_PX) rather than
-// squeezing the whole span into the container's width — a long span just renders wider than
-// the viewport, and the strip scrolls horizontally (.c2-strip-scroll) instead of cramming
-// markers and month labels into unreadable density.
+// Geometry: each calendar month gets one equal slot (at least MONTH_PX) rather than squeezing
+// the whole span into the container's width — a long span just renders wider than the
+// viewport, and the strip scrolls horizontally (.c2-strip-scroll) instead of cramming markers
+// and month labels into unreadable density. Every marker starts at its month's tick, directly
+// above that month's label, whatever its day of the month: placed by literal date, a payment
+// due on the 30th sat beside the NEXT month's label.
 //
 // Tooltip: rendered OUTSIDE the scrolling element, driven by JS hover state instead of a
 // per-marker CSS :hover .c3-tip. `overflow-x: auto` on .c2-strip-scroll forces the used value
@@ -50,19 +52,31 @@ export function tipAlignStyle(leftPx: number, visibleWidth: number): CSSProperti
   return undefined
 }
 
-const DAY_MS = 86400000
 const monthKey = (date: string): string => (date || '').slice(0, 7)
+const monthOrdinal = (key: string): number =>
+  Number(key.slice(0, 4)) * 12 + Number(key.slice(5, 7)) - 1
 
-// Fixed pixel width per calendar month — the strip's total width is `months.length * MONTH_PX`
-// (floored at MIN_STRIP_PX), never compressed to fit the viewport. Guarantees a minimum
-// distance between month ticks and between markers regardless of how many months the plan
-// spans; a long plan just scrolls further instead of cramming.
+// Minimum pixel width per calendar month — the strip's total width is one slot per month plus
+// LEFT_PAD_PX (floored at MIN_STRIP_PX), never compressed to fit the viewport. Guarantees a
+// minimum distance between month ticks and between markers regardless of how many months the
+// plan spans; a long plan just scrolls further instead of cramming.
 const MONTH_PX = 80
 const MIN_STRIP_PX = 320
-const EDGE_PAD_PX = 14
+// Month labels ("Nov 2026") and amount labels are centred on their tick and run ~50px wide, so
+// the first tick needs half of that clear of the strip's left edge.
+const LEFT_PAD_PX = 28
 // Amount labels ("$27.4K") run ~40-46px wide at this font size — two markers closer than this
 // have their labels touch or overlap regardless of which month(s) they fall in.
 const MIN_MARKER_GAP_PX = 46
+
+// One slot width for the whole strip, wide enough for its busiest month: markers in the same
+// month spread right from its tick, and a slot too narrow to hold them would push every later
+// marker further and further from its own month's label.
+function monthSlotPx(markerMonths: string[]): number {
+  const counts = new Map<string, number>()
+  for (const key of markerMonths) counts.set(key, (counts.get(key) ?? 0) + 1)
+  return Math.max(MONTH_PX, Math.max(0, ...counts.values()) * MIN_MARKER_GAP_PX)
+}
 
 // Crowded draw labels merge by literal CALENDAR MONTH, never by pixel/percentage proximity —
 // a marker represents "this month's draws", full stop, so a Aug-31 set-aside and a Sep-15 loan
@@ -74,9 +88,6 @@ interface DrawGroup {
   items: FundingSource[]
 }
 
-// Position a group at its MONTH's own tick, not an average of its items' literal day-of-month
-// — an item dated Aug 31 is grouped as "August", so it sits under the "Aug" label, never
-// drifting toward Sep just because the 31st is date-wise close to next month.
 function groupDrawsByMonth(
   draws: FundingSource[],
   posForMonth: (key: string) => number,
@@ -159,36 +170,35 @@ export function TimelineStrip({ commitment: c, fx }: Props) {
   const unpaid = c.installments.filter((i) => i.status !== 'paid')
   if (!unpaid.length) return null
   const draws = (c.funding_plan || []).filter((f) => f.available_date && !f.disabled)
+  const gapDate = c.coverage?.at_risk ? c.coverage.earliest_shortfall_date : null
   const today = new Date()
-  const t0 = new Date(today.getFullYear(), today.getMonth(), 1).getTime()
+  const firstOrdinal = today.getFullYear() * 12 + today.getMonth()
   const allDates = [
     ...unpaid.map((i) => i.due_date),
     ...draws.map((f) => f.available_date as string),
+    ...(gapDate ? [gapDate] : []),
   ]
-  if (!allDates.length) return null
-  const tEnd = Math.max(...allDates.map((d) => new Date(d + 'T00:00:00').getTime()))
-  const span = tEnd - t0 + 45 * DAY_MS
+  // The month a date falls in, counted from this month. An overdue date has no slot of its
+  // own, so it shares this month's.
+  const monthIndex = (key: string): number => Math.max(0, monthOrdinal(key) - firstOrdinal)
+  const lastIndex = Math.max(...allDates.map((d) => monthIndex(monthKey(d))))
+  const months = Array.from({ length: lastIndex + 1 }, (_, i) => {
+    const d = new Date(today.getFullYear(), today.getMonth() + i, 1)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
 
-  const months: Array<{ ym: string; t: number }> = []
-  const endD = new Date(t0 + span)
-  for (const d = new Date(t0); d <= endD; d.setMonth(d.getMonth() + 1)) {
-    months.push({
-      ym: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-      t: d.getTime(),
-    })
-  }
-  const W = Math.max(MIN_STRIP_PX, months.length * MONTH_PX)
-
-  const pos = (dateStr: string): number =>
-    Math.min(
-      W - EDGE_PAD_PX,
-      Math.max(EDGE_PAD_PX, ((new Date(dateStr + 'T00:00:00').getTime() - t0) / span) * W),
-    )
-  const gapDate = c.coverage?.at_risk ? c.coverage.earliest_shortfall_date : null
+  // One entry per marker the strip will draw, keyed by the slot it lands in.
+  const slotOf = (date: string): string => months[monthIndex(monthKey(date))]!
+  const slotPx = monthSlotPx([
+    ...[...new Set(unpaid.map((i) => i.due_date))].map(slotOf),
+    ...[...new Set(draws.map((f) => monthKey(f.available_date as string)))].map(slotOf),
+  ])
+  const W = Math.max(MIN_STRIP_PX, LEFT_PAD_PX + months.length * slotPx)
+  const posForMonth = (key: string): number => LEFT_PAD_PX + monthIndex(key) * slotPx
 
   // merge installments that share a due date into one marker
   const payMarks: PayMark[] = []
-  for (const i of unpaid.slice(0, 14)) {
+  for (const i of unpaid) {
     const instBase = toBase(i.amount, c.currency, fx)
     const g = payMarks.find((x) => x.due_date === i.due_date)
     if (g) {
@@ -200,20 +210,19 @@ export function TimelineStrip({ commitment: c, fx }: Props) {
         due_date: i.due_date,
         amount: instBase,
         labels: [i.label],
-        posPx: pos(i.due_date),
+        posPx: posForMonth(monthKey(i.due_date)),
       })
     }
   }
 
-  const drawGroups = groupDrawsByMonth(draws, (key) => pos(`${key}-01`))
+  const drawGroups = groupDrawsByMonth(draws, posForMonth)
 
-  // MONTH_PX only guarantees calendar MONTHS don't compress — two events days apart (one late
-  // in a month, one early the next, or a payment and a draw in the same busy month) can still
-  // land close enough that their amount labels overlap. Greedy left-to-right minimum-gap pass
-  // across payments AND draws TOGETHER (not each series separately, since a payment marker and
-  // a draw marker crowd each other just as much as two of the same kind): walking markers in
-  // chronological order, each one is pushed right only as far as needed to clear the previous
-  // one's label width — never left, so nothing at the very start of the strip moves.
+  // Markers in the same month all start on its tick, so their amount labels would overlap.
+  // Greedy left-to-right minimum-gap pass across payments AND draws TOGETHER (not each series
+  // separately, since a payment marker and a draw marker crowd each other just as much as two
+  // of the same kind): walking markers in chronological order, each one is pushed right only
+  // as far as needed to clear the previous one's label width — never left, so nothing at the
+  // very start of the strip moves. slotPx leaves room for this inside the month.
   const combined = [
     ...payMarks.map((g) => ({ ref: g as PayMark | DrawGroup, pos: g.posPx })),
     ...drawGroups.map((g) => ({ ref: g as PayMark | DrawGroup, pos: g.posPx })),
@@ -229,13 +238,16 @@ export function TimelineStrip({ commitment: c, fx }: Props) {
   // draw — never an arbitrary evenly-spaced sample. Every month with real activity gets its
   // label, full stop, so a real event is never silently skipped in favor of an evenly-spaced
   // but quiet neighbor.
-  const monthPos = (mo: { t: number }): number =>
-    Math.min(W - EDGE_PAD_PX, Math.max(EDGE_PAD_PX, ((mo.t - t0) / span) * W))
   const shownMonths = new Set<string>()
   for (const g of payMarks) shownMonths.add(monthKey(g.due_date))
   for (const group of drawGroups)
     for (const f of group.items) shownMonths.add(monthKey(f.available_date as string))
   if (gapDate) shownMonths.add(monthKey(gapDate))
+
+  // The shade opens at the first payment it covers, so a covered payment earlier in the same
+  // month stays outside it; a gap with no payment on it opens at its month's tick.
+  const firstBadPay = gapDate ? payMarks.find((g) => g.due_date >= gapDate) : undefined
+  const shadeLeft = gapDate ? (firstBadPay?.posPx ?? posForMonth(monthKey(gapDate))) : 0
 
   // Position + show the shared floating tooltip for a marker at `posPx` (the strip's own
   // coordinate system), `stemPx` above its own stem+label (same `stemH + 24` offset the
@@ -288,7 +300,7 @@ export function TimelineStrip({ commitment: c, fx }: Props) {
       </div>
       <div className="c2-strip-scroll" ref={scrollRef} onScroll={hideTip}>
         <div className="c2-strip" style={{ width: W }} ref={stripRef}>
-          {gapDate && <div className="c2-strip-shade" style={{ left: pos(gapDate), right: 0 }} />}
+          {gapDate && <div className="c2-strip-shade" style={{ left: shadeLeft, right: 0 }} />}
           <div className="c2-strip-rail" />
           {payMarks.map((g) => {
             const bad = !!gapDate && g.due_date >= gapDate
@@ -361,13 +373,13 @@ export function TimelineStrip({ commitment: c, fx }: Props) {
           })}
         </div>
         <div className="c2-strip-months" style={{ width: W }}>
-          {months.map((mo) => (
+          {months.map((ym) => (
             <span
-              key={mo.ym}
-              className={gapDate && monthKey(gapDate) === mo.ym ? 'gap' : ''}
-              style={{ left: monthPos(mo) }}
+              key={ym}
+              className={gapDate && monthKey(gapDate) === ym ? 'gap' : ''}
+              style={{ left: posForMonth(ym) }}
             >
-              {shownMonths.has(mo.ym) ? monthShortYear(mo.ym) : ''}
+              {shownMonths.has(ym) ? monthShortYear(ym) : ''}
             </span>
           ))}
         </div>
