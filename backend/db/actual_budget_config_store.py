@@ -78,7 +78,7 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
 
     def require_available(self) -> None:
         if not self.available():
-            raise ConflictError("Actual Budget isn't available on a hosted instance.")
+            raise ConflictError("Actual isn't available on a hosted instance.")
 
     def _normalize(self, clean: dict) -> None:
         """Refuse any write behind the gateway, and an address that is not http(s) with a host.

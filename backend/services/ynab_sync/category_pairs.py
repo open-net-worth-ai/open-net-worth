@@ -18,6 +18,10 @@ from backend.services.ynab_sync.client import RateCapReached
 LABELS = {"name": "Name", "hidden": "Visibility", "group": "Group"}
 
 
+def hides() -> bool:
+    return current().caps.hide_categories
+
+
 class Pairs(Base):
     # ── deciding ──
     def same(self, field: str, y, o) -> bool:
@@ -168,19 +172,19 @@ class Pairs(Base):
         """The YNAB group this category belongs in: "Hidden in Open Net Worth" while it is hidden
         here. When shown again: the group it was taken from, unless its envelope has moved since
         (then the group paired with the envelope's), else where it is, else "Not budgeted"."""
-        current = (self.yc.get(ycid) or {}).get("category_group_id")
-        if o["hidden"]:
-            if not self.parking(current):
-                p["home"], p["home_for"] = current, o["group"]
+        current_group = (self.yc.get(ycid) or {}).get("category_group_id")
+        if o["hidden"] and not hides():
+            if not self.parking(current_group):
+                p["home"], p["home_for"] = current_group, o["group"]
             return self.parking_group(HIDDEN_HERE)
         home = p.get("home")
         home_ok = home in self.yg and not self.yg[home].get("deleted") and not self.parking(home)
-        if home_ok and self.parking(current) and p.get("home_for") == o["group"]:
+        if home_ok and self.parking(current_group) and p.get("home_for") == o["group"]:
             return home
-        if o["group"] and (moved or self.parking(current)):
+        if o["group"] and (moved or self.parking(current_group)):
             return self.ynab_group_for(o["group"])
-        if not self.parking(current):
-            return current
+        if not self.parking(current_group):
+            return current_group
         return home if home_ok else self.not_budgeted_group()
 
     def push(self, ycid: str, p: dict, cat: dict, y: dict, o: dict, fields: list[str]) -> None:
@@ -188,7 +192,9 @@ class Pairs(Base):
             body: dict = {}
             if "name" in fields:
                 body["name"] = o["name"][:50]
-            if {"hidden", "group"} & set(fields):
+            if hides() and "hidden" in fields:
+                body["hidden"] = o["hidden"]
+            if {"group"} & set(fields) if hides() else {"hidden", "group"} & set(fields):
                 gid = self.target_group(ycid, p, o, "group" in fields)
                 if gid and gid != (self.yc.get(ycid) or {}).get("category_group_id"):
                     body["category_group_id"] = gid
@@ -224,17 +230,37 @@ class Pairs(Base):
 
     def say_pushed(self, y: dict, o: dict, fields: list[str], body: dict) -> None:
         name, app = o["name"], current().name
+        parked = o["hidden"] and not hides()
         if "name" in body:
             self.count("sent", f"Renamed {y['name']} to {name} in {app}.")
+        if "hidden" in body:
+            verb = "Hid" if o["hidden"] else "Showed"
+            self.count("sent", f"{verb} {name} in {app}, as it is here.")
         if "category_group_id" in body:
-            where = HIDDEN_HERE if o["hidden"] else self.ygroup_name(body["category_group_id"])
-            if o["hidden"]:
+            where = HIDDEN_HERE if parked else self.ygroup_name(body["category_group_id"])
+            if parked:
                 line = f"Moved {name} to {where} in {app}, as it is hidden here. You can hide it in {app} yourself."
-            elif "hidden" in fields:
+            elif "hidden" in fields and not hides():
                 line = f"Moved {name} back to {where} in {app}, as it is shown here."
             else:
                 line = f"Moved {name} to {where} in {app}."
             self.count("sent", line)
+
+    def hide_gone(self, ycid: str, p: dict, name: str, app: str) -> None:
+        """An app that can hide a category hides it, and is never asked to delete it."""
+        try:
+            saved = self.send(self.client.update_category, ycid, {"hidden": True})
+        except RateCapReached:
+            self.deferred += 1
+            return
+        except ExternalServiceError as exc:
+            self.refused(exc)
+            reason = f"{app} would not hide {name}. Hide it in {app} yourself."
+            return self.file(conflicts.FAILED, f"cat:{ycid}", name, reason, entity="category")
+        self.put_cat(saved)
+        p["onw"]["hidden"], p["ynab"]["hidden"] = True, True
+        self.count("sent", f"Hid {name} in {app}, as it was removed here.")
+        self.base.set_cat(p)
 
     def ours_gone(self, ycid: str, p: dict, ycat: dict | None) -> None:
         """Deleted here (or merged into another category): YNAB's API can neither delete nor hide
@@ -245,6 +271,8 @@ class Pairs(Base):
             p["gone"] = True
         elif p.get("parked") or not self.can_push or f"cat:{ycid}" in self.open:
             return
+        elif hides():
+            return self.hide_gone(ycid, p, name, app)
         else:
             try:
                 gid = self.parking_group(HIDDEN_HERE)

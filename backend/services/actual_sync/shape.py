@@ -29,7 +29,7 @@ __all__ = ["Rows", "delta_against", "plan_from_rows"]
 SB_PAYEE_NAME = "Starting Balance"
 SB_PAYEE_ID = "starting-balance"
 SB_CATEGORY = "starting balances"
-_BAD_MONTH = "Actual Budget returned a budget month that is not a real month."
+_BAD_MONTH = "Actual returned a budget month that is not a real month."
 
 
 @dataclass

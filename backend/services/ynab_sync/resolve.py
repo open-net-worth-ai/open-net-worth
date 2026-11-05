@@ -10,7 +10,7 @@ from backend.core import audit_context, data_events
 from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.services import import_runs, planning
 from backend.services import ledger as ledger_service
-from backend.services.budget_app import current
+from backend.services.budget_app import current, refuse_while_others_run
 from backend.services.ynab_sync import (
     assigned,
     category_resolve,
@@ -30,8 +30,6 @@ from backend.services.ynab_sync.client import Budget, YnabClient
 from backend.services.ynab_sync.txn_sync import _record_sent
 from backend.services.ynab_sync.units import Unit
 
-RESOLVE_REQUESTS = 6  # one resolution never needs more than a PATCH, its note and a DELETE
-
 
 def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
     app = current()
@@ -43,15 +41,24 @@ def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
     if item is None:
         raise NotFoundError("That review item is already resolved.")
     if not app.lock.acquire(blocking=False):
-        raise ConflictError(f"A {app.name} sync is running; resolve this when it finishes.")
+        raise ConflictError(
+            f"{app.article} {app.name} sync is running; resolve this when it finishes."
+        )
     if import_runs.has_running(app.key):
         app.lock.release()
-        raise ConflictError(f"A {app.name} import is running; resolve this when it finishes.")
+        raise ConflictError(
+            f"{app.article} {app.name} import is running; resolve this when it finishes."
+        )
+    try:
+        refuse_while_others_run("resolve this")
+    except ConflictError:
+        app.lock.release()
+        raise
     token = audit_context.set_audit_scope("user", app.surface, note="review list")
     rec = recorder.Recorder()
     rec_token = recorder.activate(rec)
     started = datetime.now(timezone.utc)
-    budget = Budget(RESOLVE_REQUESTS)
+    budget = Budget(app.caps.resolve_request_cap)
     try:
         st = sync_state.load()
         meta, mirror_store = sync_state.load_meta(), app.stores.mirror()
@@ -192,5 +199,9 @@ def _transaction(ctx, item: dict, keep: str, client: YnabClient, base: Baselines
         raise ConflictError(f"{current().name} cannot take this change: {why}")
     if out.deferred:
         raise ConflictError(f"Out of {current().name} requests for now; try again shortly.")
+    if out.moved:
+        raise ConflictError(
+            f"This changed in {current().name} since the last sync. Sync, then look at it again."
+        )
     recorder.txn_change("sent", ctx, send.onw_id, send.base, send.onw)
     _record_sent(send, out, base)

@@ -7,8 +7,8 @@ from datetime import date
 from backend.core.errors import ValidationError
 from backend.services.ynab_migration import mapping
 
-_NOT_WHOLE = "Actual Budget returned an amount that is not a whole number of cents."
-_BAD_DATE = "Actual Budget returned a date that is not a real calendar date."
+_NOT_WHOLE = "Actual returned an amount that is not a whole number of cents."
+_BAD_DATE = "Actual returned a date that is not a real calendar date."
 
 
 def flag(value) -> bool:

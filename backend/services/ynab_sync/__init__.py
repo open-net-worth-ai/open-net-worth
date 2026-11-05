@@ -24,21 +24,21 @@ resolve_item = ynab_flag.gated(resolve.resolve)
 
 def run_if_due() -> bool:
     """The scheduler's tick has no request to say which app it is for, so it names each one with
-    a sync whose flag is on (``budget_app.syncing_apps``) and runs that app's own. One app failing
-    doesn't stop the next; the first failure is raised once all have had their turn, for the
-    scheduler to log."""
-    ran, failed = False, None
-    for app in budget_app.syncing_apps():
+    a sync that can run here (``budget_app.syncing_apps``) and runs that app's own. One app failing
+    doesn't stop the next, and one that ``defers`` doesn't hold the tick; the first failure is raised
+    once all have had their turn, for the scheduler to log."""
+    ran = False
+    failures: list[Exception] = []
+    for app in budget_app.syncing_apps(failures.append):
         try:
             with budget_app.using(app):
                 ran = runner.run_if_due() or ran
         except Exception as exc:
-            if failed is None:
-                failed = exc
-            else:
-                logger.exception("%s sync tick failed", app.name)
-    if failed is not None:
-        raise failed
+            failures.append(exc)
+    for later in failures[1:]:
+        logger.error("sync tick failed", exc_info=later)
+    if failures:
+        raise failures[0]
     return ran
 
 

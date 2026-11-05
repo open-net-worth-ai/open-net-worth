@@ -10,7 +10,9 @@ from __future__ import annotations
 import re
 from typing import Callable
 
+from backend.services import ledger as ledger_service
 from backend.services.actual_sync import client
+from backend.services.budget_app import current
 from backend.services.ynab_migration import source
 
 _CARD_LIKE = re.compile(r"\b(card|credit|visa|mastercard|amex|american express|discover)\b", re.I)
@@ -48,6 +50,18 @@ class ActualReader:
             "held": plan["held"],
             "notices": list(notices),
         }
+
+    def currency_of(self, store, plan_id: str) -> str | None:
+        """What the budget itself says, else what the review settled at the import: the currency of
+        the accounts brought in from it."""
+        with client.open_copy(store, plan_id) as copy:
+            if copy.currency:
+                return copy.currency
+        source_key = current().source
+        for account in ledger_service.accounts.query_accounts(include_archived=True):
+            if any(e.get("source") == source_key for e in account.get("external_ids") or []):
+                return account.get("currency")
+        return None
 
     def fetch_accounts(self, store, plan_id: str) -> list[dict]:
         with client.open_copy(store, plan_id) as copy:

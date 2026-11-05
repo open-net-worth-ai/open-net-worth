@@ -31,7 +31,7 @@ def merge_meta(plan: dict, meta: dict) -> None:
     meta["groups"] = _upsert(
         meta["groups"],
         [
-            {k: g.get(k) for k in ("id", "name", "hidden", "deleted")}
+            {k: g.get(k) for k in ("id", "name", "hidden", "deleted", "is_income")}
             for g in plan.get("category_groups") or []
         ],
     )

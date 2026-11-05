@@ -356,8 +356,8 @@ events) can't be told apart from YNAB's on the first run.
 
 ## Actual Budget
 
-Bring a whole Actual budget here once, from your own Actual server. See
-[Import from Actual Budget](../features/actual-budget-import.md).
+Bring a whole Actual budget here from your own Actual server, and keep the two in step if you want
+to. See [Import from Actual Budget](../features/actual-budget-import.md).
 
 ## Alpaca
 

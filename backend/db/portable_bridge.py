@@ -401,6 +401,9 @@ from backend.db.tables import (
     accounts,
     actions,
     actual_sync_baselines,
+    actual_sync_conflicts,
+    actual_sync_mirror,
+    actual_sync_state,
     alerts,
     artifacts,
     asset_brief,
@@ -1287,8 +1290,16 @@ def _wipe_ynab_sync(conn: Connection) -> list[Path]:
 
 
 def _wipe_actual_sync(conn: Connection) -> list[Path]:
-    """As ``_wipe_ynab_sync``: Actual's pairs describe categories the reset removes."""
-    return _capture_then_delete(conn, actual_sync_baselines, "id")
+    """As ``_wipe_ynab_sync``, for Actual's own tables."""
+    paths: list[Path] = []
+    for table in (
+        actual_sync_conflicts,
+        actual_sync_baselines,
+        actual_sync_mirror,
+        actual_sync_state,
+    ):
+        paths.extend(_capture_then_delete(conn, table, "id"))
+    return paths
 
 
 def _wipe_settings_namespace(conn: Connection, namespace: str) -> list[Path]:

@@ -25,6 +25,7 @@ import pytest
 from backend.core.errors import ConflictError, ExternalServiceError, NotFoundError, ValidationError
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
 from backend.services.actual_sync import client
+from backend.services.ynab_sync import client as ynab_client
 from tests.flags import flags
 from tests.test_actual_compat import SCHEMA
 
@@ -631,3 +632,106 @@ def test_a_real_server_end_to_end(db_isolated, work):
         assert copy.server_version
         directory = copy.directory
     assert not directory.exists()
+
+
+# ── what a sync uses of a copy ──
+
+
+def test_every_connection_has_real_timeouts(store, work, fake):
+    with client.open_copy(store, "f1"):
+        timeout = FakeActual.instances[0].kwargs["timeout"]
+    assert isinstance(timeout, httpx.Timeout)
+    assert timeout.connect and timeout.read and timeout.write and timeout.pool
+
+
+def test_a_download_that_trickles_on_is_stopped(monkeypatch):
+    moments = iter([0.0, 1.0, client.DOWNLOAD_SECONDS + 1])
+    monkeypatch.setattr(client.time, "monotonic", lambda: next(moments))
+
+    class Trickle:
+        headers: dict = {}
+
+        def iter_bytes(self):
+            while True:
+                yield b"x"
+
+    with pytest.raises(ExternalServiceError) as stopped:
+        client._read_capped(Trickle())
+    assert "too long" in stopped.value.message
+
+
+def test_a_reset_budget_is_found_by_its_file_id_under_its_new_group(store, work, fake):
+    FakeActual.files = [dto(name="ACME Home")]
+    FakeActual.files[0].group_id = "group-after-reset"
+    with client.open_copy(store, "f1"):
+        assert FakeActual.instances[0].file.group_id == "group-after-reset"
+
+
+@pytest.mark.parametrize("method", ["pull", "commit"])
+def test_sync_and_commit_fail_plainly(store, work, fake, method):
+    leak = httpx.ConnectError(f"{URL} refused {PASSWORD}")
+
+    def boom():
+        raise leak
+
+    with client.open_copy(store, "f1") as copy:
+        copy.actual.sync = boom
+        copy.actual.commit = boom
+        with pytest.raises(ExternalServiceError) as caught:
+            getattr(copy, method)()
+    never_leaks(caught.value)
+    assert caught.value.__context__ is None and caught.value.__cause__ is None
+
+
+def test_an_error_naming_a_status_ends_a_run(store, work, fake):
+    response = httpx.Response(404, request=httpx.Request("POST", URL))
+    leak = httpx.HTTPStatusError(URL, request=response.request, response=response)
+
+    def boom():
+        raise leak
+
+    with client.open_copy(store, "f1") as copy:
+        copy.actual.sync = boom
+        with pytest.raises(ynab_client.Stopped) as caught:
+            copy.pull()
+    assert "HTTP 404" in caught.value.message
+    assert not ynab_client.rejected(caught.value) and not ynab_client.not_found(caught.value)
+
+
+def test_reading_a_copy_that_was_swept_is_a_plain_error(store, work, fake):
+    with client.open_copy(store, "f1") as copy:
+        (copy.directory / "db.sqlite").unlink()
+        (copy.directory / "db.sqlite").mkdir()
+        with pytest.raises(ExternalServiceError) as caught:
+            copy.rows()
+        (copy.directory / "db.sqlite").rmdir()
+    never_leaks(caught.value)
+    assert not isinstance(caught.value, sqlite3.Error)
+
+
+def test_people_read_actual_not_actual_budget():
+    names = ("client.py", "compat.py", "shape.py", "shape_values.py", "writes.py", "apply_rows.py")
+    folder = Path(client.__file__).parent
+    for name in names:
+        tree = ast.parse((folder / name).read_text("utf-8"))
+        logged = {
+            id(arg)
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and getattr(node.func, "attr", "") in ("info", "warning")
+            for arg in node.args
+        }
+        docs = {
+            id(node.body[0].value)
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.Module, ast.FunctionDef, ast.ClassDef))
+            and node.body
+            and isinstance(node.body[0], ast.Expr)
+        }
+        said = [
+            node.value
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and id(node) not in logged | docs
+        ]
+        assert [line for line in said if "Actual Budget" in line] == [], name

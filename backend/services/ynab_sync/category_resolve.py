@@ -88,6 +88,7 @@ def _plan_category(sync: News, ycid: str) -> dict:
         "group_id": ycat["category_group_id"],
         "group_name": sync.ygroup_name(ycat["category_group_id"]),
         "hidden": sync.ystate(ycat)["hidden"],
+        **({"kind": "income"} if ycat.get("is_income") else {}),
     }
 
 

@@ -226,6 +226,10 @@ def _push_all(
         _file(ctx, u, conflicts.UNSUPPORTED, reason)
     for u, reason in out.failed:
         _file(ctx, u, conflicts.FAILED, f"{current().name} did not accept it: {reason}")
+    for u in out.moved:
+        _file(
+            ctx, u, conflicts.CONFLICT, f"Changed in {current().name} while the sync was running."
+        )
     tally["sent"] += len(out.sent)
     for u in out.deferred:
         recorder.deferred(_title(u), f"Waiting for the next run ({current().name} request limit).")

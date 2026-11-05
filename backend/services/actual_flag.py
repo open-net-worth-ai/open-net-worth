@@ -22,7 +22,7 @@ def on() -> bool:
 def require() -> None:
     """Raise ``NotFoundError`` while the flag is off."""
     if not on():
-        raise NotFoundError("Actual Budget import and sync are turned off.")
+        raise NotFoundError("Actual import and sync are turned off.")
 
 
 def gated(fn: F) -> F:

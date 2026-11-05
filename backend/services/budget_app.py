@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import contextvars
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, ContextManager, Iterator, Protocol
 
+from backend.core.errors import ConflictError
 from backend.db.ynab_config_store import YnabConfigStore
 from backend.db.ynab_sync_store import (
     YnabBaselineStore,
@@ -48,6 +50,10 @@ class Capabilities:
     request_cap: int
     category_request_cap: int
     flag_trail: bool
+    # What settling one review item may spend: a PATCH, its note and a DELETE, at most.
+    resolve_request_cap: int = 6
+    # A transfer between a budget account and another keeps its category on the budget leg.
+    categorized_transfers: bool = False
 
 
 @dataclass(frozen=True)
@@ -75,6 +81,10 @@ class Reader(Protocol):
 
     def fetch_month(self, store, plan_id: str, month: str) -> dict: ...
 
+    def currency_of(self, store, plan_id: str) -> str | None:
+        """The budget's currency, where ``list_plans`` can't say it."""
+        ...
+
 
 @dataclass(frozen=True)
 class BudgetApp:
@@ -88,13 +98,19 @@ class BudgetApp:
     open_client: Callable[[str, "Budget"], ContextManager[Any]]
     stores: SyncStores
     lock: threading.Lock
-    # Whether its feature flag is on. Off, its stored state can hold nothing up.
+    pool: ThreadPoolExecutor  # where its background sync runs go
+    # Whether it can run here: its flag is on and nothing refuses it. Off, its stored state can
+    # hold nothing up.
     is_on: Callable[[], bool] = lambda: True
+    # Its runs stay off the scheduler's tick, so one that hangs holds up no other app, and it gives
+    # way to another app's sync if a book ends up with both on.
+    defers: bool = False
     # Its budget doesn't say an account's type or, always, its currency: the review settles them.
     asks_type_and_currency: bool = False
     # Its two-way sync exists, so an import may turn it on.
     syncs: bool = True
     # What a person reads, where the name alone doesn't carry the sentence.
+    article: str = "A"
     plan_word: str = "plan"
     sign_in: str = "a YNAB access token"
     saved_sign_in: str = "token"
@@ -115,6 +131,9 @@ class _YnabReader:
 
     def fetch_month(self, store, plan_id: str, month: str) -> dict:
         return _ynab_source().fetch_month(store, plan_id, month)
+
+    def currency_of(self, store, plan_id: str) -> str | None:
+        return None
 
 
 def _ynab_source():
@@ -156,6 +175,7 @@ YNAB = BudgetApp(
         conflicts=YnabConflictStore,
     ),
     lock=threading.Lock(),
+    pool=ThreadPoolExecutor(max_workers=1, thread_name_prefix="ynab-sync"),
     is_on=ynab_flag.on,
 )
 
@@ -193,9 +213,18 @@ def all_apps() -> list[BudgetApp]:
     return [app() if callable(app) else app for app in _apps.values()]
 
 
-def syncing_apps() -> list[BudgetApp]:
-    """Those whose two-way sync exists and whose flag is on: what a scheduled tick goes through."""
-    return [app for app in all_apps() if app.syncs and app.is_on()]
+def syncing_apps(on_failure: Callable[[Exception], None] = lambda _exc: None) -> list[BudgetApp]:
+    """Those whose two-way sync exists and that can run here: what a scheduled tick goes through.
+    One that can't be loaded or asked is left out and reported, and stops no other."""
+    found = []
+    for entry in list(_apps.values()):
+        try:
+            app = entry() if callable(entry) else entry
+            if app.syncs and app.is_on():
+                found.append(app)
+        except Exception as exc:
+            on_failure(exc)
+    return found
 
 
 def _others() -> list[BudgetApp]:
@@ -212,5 +241,32 @@ def other_sync_on() -> BudgetApp | None:
 
 
 def other_running() -> bool:
-    """Another app has an import run, or a recorded sync run, in progress."""
+    """Another app has an import run, or a recorded sync run, in progress. A scheduled run has no
+    record, and needs none here: its sync is on, and stays on until it ends."""
     return any(import_runs.has_running(a.key) for a in _others())
+
+
+_starting = threading.Lock()
+
+
+@contextmanager
+def starting() -> Iterator[None]:
+    """Held while "nothing of another app stands in the way" is checked and the run is started or
+    the sync turned on: two apps starting together would otherwise each find the other idle."""
+    with _starting:
+        yield
+
+
+def refuse_while_others_run(then: str) -> None:
+    if other_running():
+        names = " or ".join(a.name for a in _others())
+        raise ConflictError(f"An import or sync with {names} is running; {then} when it finishes.")
+
+
+def refuse_beside_others(before: str, then: str) -> None:
+    """``before`` and ``then``: what the person is doing, for the two sentences."""
+    if other := other_sync_on():
+        raise ConflictError(
+            f"The {other.name} sync is on. Turn it off in Data sync before {before}."
+        )
+    refuse_while_others_run(then)

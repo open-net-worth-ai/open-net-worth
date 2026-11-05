@@ -140,7 +140,8 @@ class News(Pairs):
             conflicts.close(key)
 
     def new_from_ynab(self, c: dict, paired: set[str]) -> None:
-        m = propose(c["name"], self.book, paired, set())
+        as_income = {"income": True} if c.get("kind") == "income" else {}
+        m = propose(c["name"], self.book, paired, set(), **as_income)
         if m.kind in ("offer", "ambiguous", "envelope"):
             self.held_names.add(norm(c["name"]))
         if m.kind == "category":
@@ -158,6 +159,10 @@ class News(Pairs):
         self.pair_new(c, self.book.rows[cat["id"]], text, fresh=m.kind == "envelope")
 
     def create_here(self, c: dict) -> dict:
+        if c.get("kind") == "income":
+            return make.make_category(
+                self.book, c["label"], None, c["hidden"], budgeted=False, kind="income"
+            )[0]
         if self.parking(c["group_id"]):
             return make.make_category(self.book, c["label"], None, c["hidden"], budgeted=False)[0]
         gid = self.groups.ensure(self.book, c["group_id"], c["group_name"])
@@ -207,7 +212,8 @@ class News(Pairs):
         if not self.can_push:
             return
         paired = {p["category"] for p in self.base.cats.values()}
-        for cat in self.book.matchable:
+        income = self.book.income if current().caps.income_categories else []
+        for cat in [*self.book.matchable, *income]:
             skip = cat["id"] in paired or cat.get("hidden") or norm(cat["label"]) in self.held_names
             if skip or f"o:{cat['id']}" in self.base.declined:
                 continue
@@ -219,20 +225,30 @@ class News(Pairs):
                 self.deferred += 1
                 return
 
-    def same_named_in_ynab(self, label: str) -> list[dict]:
+    def same_named_in_ynab(self, label: str, income: bool = False) -> list[dict]:
         """YNAB's categories of this name that no category here is paired with — hidden ones
-        included, which is why this reads all of YNAB's, not only the ones the plan mirrors."""
+        included, which is why this reads all of YNAB's, not only the ones the plan mirrors. Income
+        pairs with income only, where an app has it."""
         key = norm(label)
+        cards = current().caps.card_payment_categories
         return [
             c for c in self.yc.values()
             if not c.get("deleted") and not c.get("internal") and c["id"] not in self.base.cats
             and norm(clean(c["name"], 120)) == key
-            and norm((self.yg.get(c.get("category_group_id")) or {}).get("name", "")) != "credit card payments"
+            and bool(c.get("is_income")) == income
+            and not (cards and norm((self.yg.get(c.get("category_group_id")) or {}).get("name", "")) == "credit card payments")
         ]  # fmt: skip
+
+    def income_group(self) -> str | None:
+        """The app's own group for income categories, which is where a new one goes."""
+        return next(
+            (g["id"] for g in self.yg.values() if g.get("is_income") and not g.get("deleted")), None
+        )
 
     def create_in_ynab(self, cat: dict) -> None:
         key = f"newhere:{cat['id']}"
-        same = self.same_named_in_ynab(cat["label"])
+        income = cat.get("kind") == "income"
+        same = self.same_named_in_ynab(cat["label"], income)
         if len(same) == 1:
             text = f"Matched {current().name}'s {clean(same[0]['name'], 120)} with your {cat['label']}."
             return self.pair_new({"id": same[0]["id"]}, cat, text)
@@ -245,7 +261,8 @@ class News(Pairs):
             return self.file(conflicts.FAILED, key, cat["label"], reason, entity="new_category", options=[], category=cat["id"])  # fmt: skip
         solo, held = self.book.solo_envelope(cat["id"]), self.book.env_of.get(cat["id"])
         try:
-            gid = self.ynab_group_for(held["group_id"]) if held else None
+            gid = self.income_group() if income else None
+            gid = gid or (self.ynab_group_for(held["group_id"]) if held else None)
             saved = self.send(
                 self.client.create_category, gid or self.not_budgeted_group(), cat["label"][:50]
             )
@@ -277,7 +294,8 @@ class News(Pairs):
         resumed = Resumed()
         for ycid, p in self.base.cats.items():
             cat = self.book.rows.get(p["category"])
-            if p["gone"] or cat is None:
+            # An income category holds no budget of its own in the app, whatever it holds here.
+            if p["gone"] or cat is None or (self.yc.get(ycid) or {}).get("is_income"):
                 continue
             solo = self.book.solo_envelope(cat["id"])
             now = solo["id"] if solo else None

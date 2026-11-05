@@ -8,7 +8,8 @@ the generic connector PATCH can set ``enabled`` without either check.
 
 Everything a person can read from here is ours: an exception from ``actualpy`` or ``httpx`` can
 carry the server address or a password, so it is classified and replaced, never shown. The
-downloaded file is capped (``MAX_DOWNLOAD_BYTES``) both on the wire and unpacked.
+downloaded file is capped (``MAX_DOWNLOAD_BYTES``) both on the wire and unpacked. Every request has
+a real timeout, and a download a time limit of its own, so no server can hold a run forever.
 """
 
 from __future__ import annotations
@@ -39,21 +40,26 @@ from backend.db.actual_budget_config_store import ActualBudgetConfigStore
 from backend.services import actual_flag
 from backend.services.actual_sync import compat, shape
 from backend.services.actual_sync import rows as reader
+from backend.services.actual_sync.log_guard import keep_address_out_of_logs
 from backend.services.ynab_migration import mapping
+from backend.services.ynab_sync.client import Stopped
 
 logger = logging.getLogger(__name__)
 
 MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
+TIMEOUT = httpx.Timeout(connect=15.0, read=120.0, write=120.0, pool=15.0)
+DOWNLOAD_SECONDS = 600.0  # a read timeout covers one chunk; a trickle could go on for ever
 
 _active: set[str] = set()
 _active_lock = threading.Lock()
 
-_TOO_LARGE = "This Actual Budget file is too large to read safely."
+_TOO_LARGE = "This Actual file is too large to read safely."
 _PLAIN_HTTP = (
-    "This Actual Budget server is reached over plain http, which isn't encrypted. "
+    "This Actual server is reached over plain http, which isn't encrypted. "
     "Anyone on that network could read the budget as it downloads."
 )
-_GONE = "That budget is no longer on the Actual Budget server. Pick it again in Connectors."
+_GONE = "That budget is no longer on the Actual server. Pick it again in Connectors."
+_TOO_SLOW = "This Actual file took too long to download."
 
 
 def work_root() -> Path:
@@ -126,10 +132,13 @@ def _read_capped(response: httpx.Response) -> bytes:
     if declared.isdigit() and int(declared) > MAX_DOWNLOAD_BYTES:
         raise ExternalServiceError(_TOO_LARGE)
     body = bytearray()
+    stop_at = time.monotonic() + DOWNLOAD_SECONDS
     for chunk in response.iter_bytes():
         body += chunk
         if len(body) > MAX_DOWNLOAD_BYTES:
             raise ExternalServiceError(_TOO_LARGE)
+        if time.monotonic() > stop_at:
+            raise ExternalServiceError(_TOO_SLOW)
     return bytes(body)
 
 
@@ -188,9 +197,9 @@ def _chain(exc: BaseException) -> list[BaseException]:
     return out
 
 
-def _plain_error(exc: Exception) -> ExternalServiceError:
+def _plain_error(exc: Exception) -> Stopped:
     """Ours, in plain words, from whatever the library raised. Never ``str(exc)``: it can hold
-    the server address or a password."""
+    the server address or a password. It ends a run, whatever status it names."""
     from actual import exceptions as ax
 
     chain = _chain(exc)
@@ -200,26 +209,24 @@ def _plain_error(exc: Exception) -> ExternalServiceError:
 
     status = next((e for e in chain if isinstance(e, httpx.HTTPStatusError)), None)
     if has(ax.AuthorizationError) or (status and status.response.status_code in (401, 403)):
-        text = "Actual Budget refused the sign-in. Check the password or token in Connectors."
+        text = "Actual refused the sign-in. Check the password or token in Connectors."
     elif has(ax.UnknownFileId):
         text = _GONE
     elif has(ax.ActualDecryptionError, ax.ActualEncryptionError):
         text = "This budget is encrypted, and its encryption password is missing or wrong."
     elif has(ssl.SSLError):
         text = (
-            "The Actual Budget server's certificate could not be verified. "
+            "The Actual server's certificate could not be verified. "
             "Use a certificate this computer trusts, or plain http on a private network."
         )
     elif status:
-        text = (
-            f"The Actual Budget server answered with an error (HTTP {status.response.status_code})."
-        )
+        text = f"The Actual server answered with an error (HTTP {status.response.status_code})."
     elif has(httpx.TransportError, TimeoutError):
-        text = "Could not reach the Actual Budget server. Check the address and that it is running."
+        text = "Could not reach the Actual server. Check the address and that it is running."
     else:
-        text = f"Actual Budget could not read this budget ({type(exc).__name__})."
+        text = f"Actual could not read this budget ({type(exc).__name__})."
     logger.info("Actual Budget request failed (%s)", type(exc).__name__)
-    return ExternalServiceError(text)
+    return Stopped(text)
 
 
 def _plainly(call, *args):
@@ -236,50 +243,6 @@ def _plainly(call, *args):
     raise failure
 
 
-# ── keeping the address out of logs ─────────────────────────────────────────
-
-_HTTP_LOGGERS = (
-    "httpx",
-    "httpcore",
-    "httpcore.connection",
-    "httpcore.http11",
-    "httpcore.http2",
-    "httpcore.proxy",
-)
-
-
-class _AddressFilter(logging.Filter):
-    """Drops a record that names a configured server. ``httpx`` logs every request's full URL at
-    INFO (userinfo included) and the app's root level is INFO; the address is a credential. A
-    record about any other host passes untouched, so the rest of the app logs as before."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.tokens: set[str] = set()
-
-    def add(self, url: str) -> None:
-        parts = urlsplit(url)
-        self.tokens |= {t for t in (url.rstrip("/"), parts.netloc, parts.hostname) if t}
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        try:
-            text = record.getMessage()
-        except Exception:
-            return False
-        return not any(token in text for token in self.tokens)
-
-
-_address_filter = _AddressFilter()
-
-
-def _keep_address_out_of_logs(url: str) -> None:
-    _address_filter.add(url)
-    for name in _HTTP_LOGGERS:
-        logger_ = logging.getLogger(name)
-        if _address_filter not in logger_.filters:
-            logger_.addFilter(_address_filter)
-
-
 # ── connecting ──────────────────────────────────────────────────────────────
 
 
@@ -289,7 +252,7 @@ def _prepare(store: ActualBudgetConfigStore | None) -> tuple[ActualBudgetConfigS
     store.require_available()
     creds = store.credentials()
     if not creds["server_url"] or not (creds["password"] or creds["token"]):
-        raise ValidationError("Add the Actual Budget server address and a password or token first.")
+        raise ValidationError("Add the Actual server address and a password or token first.")
     return store, creds
 
 
@@ -301,16 +264,17 @@ def _build(creds: dict, directory: Path | None = None):
     except ImportError:
         actual = None
     if actual is None:
-        raise ExternalServiceError("Actual Budget support isn't installed in this build.")
+        raise ExternalServiceError("Actual support isn't installed in this build.")
 
     url = creds["server_url"]
-    _keep_address_out_of_logs(url)
+    keep_address_out_of_logs(url)
     kwargs: dict[str, Any] = {
         "base_url": url,
         "password": creds["password"] or None,
         "token": None if creds["password"] else creds["token"],
         "cert": https_context() if url.lower().startswith("https:") else True,
         "encryption_password": creds["encryption_password"] or None,
+        "timeout": TIMEOUT,
     }
     if directory is not None:
         kwargs["data_dir"] = str(directory)
@@ -353,15 +317,42 @@ class Copy:
     server_version: str | None
     mode: str
     metadata: dict
-    actual: Any = field(repr=False)  # the live client, for the writes of a later stage
+    actual: Any = field(repr=False)  # the live client; reached through the methods below
     notices: list[str] = field(default_factory=list)  # things to show once, never the address
 
-    def rows(self) -> shape.Rows:
+    def _read_rows(self) -> shape.Rows:
         with closing(reader.connect(self.directory)) as conn:
             return reader.read_rows(conn, self.mode)
 
+    def rows(self) -> shape.Rows:
+        return _plainly(self._read_rows)
+
     def plan(self) -> dict:
         return shape.plan_from_rows(self.rows())
+
+    @property
+    def session(self) -> Any:
+        """The library's session on this copy: what a write changes before ``commit``."""
+        return self.actual.session
+
+    @property
+    def db(self) -> Any:
+        """The library's table models."""
+        from actual import database
+
+        return database
+
+    def pull(self) -> None:
+        """Bring in what the server has. Never over uncommitted edits: replaying its messages has
+        no timestamp check, so it would write straight over them."""
+        _plainly(self.actual.sync)
+
+    def commit(self) -> None:
+        _plainly(self.actual.commit)
+
+    def plainly(self, call, *args) -> Any:
+        """``call(*args)``, with whatever the library raises replaced by a plain error."""
+        return _plainly(call, *args)
 
 
 def plain_http_notice(url: str) -> list[str]:

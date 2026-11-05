@@ -4,28 +4,34 @@ request budget; anything it cannot finish is kept for the next run, never droppe
 
 At most one run at a time (a lock, not a queue): a due run that finds one in progress is skipped
 and "Sync now" gets a 409. The YNAB token is read inside ``client`` and appears in no state,
-status or log line.
+status or log line. ``settings`` holds the controls.
 
-All of it works for ``budget_app.current()``. A run holds only its own app's lock, and the apps
-share one pool, so a run queued behind another app's waits its turn while it already reads as
-running."""
+All of it works for ``budget_app.current()``. A run holds only its own app's lock and goes on its
+own app's pool. A book syncs with one app at a time, so a run doesn't start beside another app's
+import or recorded run (``budget_app.starting``)."""
 
 from __future__ import annotations
 
 import contextvars
 import logging
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from backend.core import audit_context, data_events
 from backend.core.errors import ConflictError, OpenNetWorthError, ValidationError
 from backend.db.transaction_audit_store import TransactionAuditStore
 from backend.services import import_runs, planning
-from backend.services import ledger as ledger_service
-from backend.services.budget_app import current
+from backend.services.budget_app import (
+    current,
+    other_running,
+    other_sync_on,
+    refuse_beside_others,
+    refuse_while_others_run,
+    starting,
+)
 from backend.services.ynab_sync import (
     assigned,
+    budget_mode,
     category_sync,
     conflicts,
     context,
@@ -38,6 +44,13 @@ from backend.services.ynab_sync import (
 from backend.services.ynab_sync import state as sync_state
 from backend.services.ynab_sync.baselines import Baselines
 from backend.services.ynab_sync.client import Budget, YnabClient
+from backend.services.ynab_sync.settings import (
+    _adopt_plan,
+    _require_ready,
+    status,
+    update_settings,
+)
+from backend.services.ynab_sync.settings import manual_runs as _manual_runs
 
 logger = logging.getLogger(__name__)
 
@@ -57,8 +70,17 @@ class _CurrentLock:
 
 
 _lock = _CurrentLock()
-_manual_runs: dict[str, str] = {}  # app key -> the record of its manual run in progress
-_POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ynab-sync")
+
+__all__ = [
+    "_adopt_plan",
+    "_require_ready",
+    "is_running",
+    "month_name",
+    "run_if_due",
+    "start_now",
+    "status",
+    "update_settings",
+]
 
 
 def month_name(month: str) -> str:
@@ -198,10 +220,12 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
     meta, mirror_store = sync_state.load_meta(), current().stores.mirror()
     mirror = {} if first else mirror_store.by_id()
     loaded = dict(mirror)
-    change = delta.apply_read(
-        client.read_plan(None if first else st["server_knowledge"]), mirror, meta, first
-    )
+    data = client.read_plan(None if first else st["server_knowledge"])
+    change = delta.apply_read(data, mirror, meta, first)
     base = Baselines(st["plan_id"])
+    syncs_assigned = budget_mode.settle(data, meta, base)
+    if not syncs_assigned:
+        change.assigned.clear()
     if first:
         base.seed_assigned({k: v for k, v in change.assigned.items() if v})
     recorder.phase("reconciling categories")
@@ -218,6 +242,7 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
         sync_state.save_meta(meta)
         raise
     ctx = context.build(st, meta, mirror, base.assigned, base.cats, base.declined)
+    budget_mode.warn(meta, base)
     recorder.phase("reconciling transactions")
     scan = units.audit_touched(st["audit_cursor"], upto) | set(st["pending"]) | set(st["held"])
     scan |= {c["onw_txn_id"] for c in conflicts.listing() if c.get("onw_txn_id")}
@@ -229,9 +254,10 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
         )
         st["held"], st["held_ynab"] = sorted(held["onw"]), sorted(held["ynab"])
         tally["deferred"] += len(st["pending"])
-        recorder.phase("reconciling Assigned")
-        _assigned_phase(ctx, client, base, change, tally, first, st, fresh)
-        _compared(base, fresh)
+        if syncs_assigned:
+            recorder.phase("reconciling Assigned")
+            _assigned_phase(ctx, client, base, change, tally, first, st, fresh)
+            _compared(base, fresh)
         starts.review(ctx, st)
     finally:
         base.flush()
@@ -357,19 +383,31 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
     data_events.publish(["*"])
 
 
+def _hold_off_for_others() -> None:
+    """A manual start: another app's run stands in the way, and so does its sync if this app is
+    the one that gives way."""
+    app = current()
+    if app.defers:
+        refuse_beside_others(f"syncing {app.name}", f"sync {app.name}")
+    else:
+        refuse_while_others_run(f"sync {app.name}")
+
+
 def start_now() -> dict:
     """ "Sync now": claim the run lock here (so a second click is a 409), open the run's record
-    (which also refuses while an import is running) and run in the pool."""
+    (which also refuses while an import is running) and run in the app's pool."""
     app = current()
     st = sync_state.load()
     if not st["plan_id"] or not st["enabled"]:
         raise ValidationError("turn the two-way sync on first")
     if not app.lock.acquire(blocking=False):
-        raise ConflictError(f"A {app.name} sync is already running.")
+        raise ConflictError(f"{app.article} {app.name} sync is already running.")
     try:
-        run = import_runs.start(
-            app.key, "sync", st["plan_id"], "manual", st["plan_name"] or "", busy=app.run_busy
-        )
+        with starting():
+            _hold_off_for_others()
+            run = import_runs.start(
+                app.key, "sync", st["plan_id"], "manual", st["plan_name"] or "", busy=app.run_busy
+            )
     except Exception:
         app.lock.release()
         raise
@@ -386,7 +424,7 @@ def start_now() -> dict:
 
     _manual_runs[app.key] = run["id"]
     try:
-        _POOL.submit(contextvars.copy_context().run, work)
+        app.pool.submit(contextvars.copy_context().run, work)
     except Exception:
         logger.exception("%s sync run %s could not be queued", app.name, run["id"])
         _manual_runs.pop(app.key, None)
@@ -408,15 +446,52 @@ def _fail(run_id: str) -> None:
         logger.exception("%s sync run %s could not be recorded as failed", current().name, run_id)
 
 
+def _claim_due() -> bool:
+    """The run lock, if a run is due and nothing stands in its way; the next tick retries."""
+    app = current()
+    with starting():
+        if not sync_state.is_due(sync_state.load()) or not app.lock.acquire(blocking=False):
+            return False
+        try:
+            clear = not (
+                import_runs.has_running(app.key)
+                or other_running()
+                or (app.defers and other_sync_on())
+            )
+        except Exception:
+            app.lock.release()
+            raise
+        if not clear:
+            app.lock.release()
+        return clear
+
+
+def _run_aside(app) -> None:
+    """On the app's own pool, so the tick comes straight back whatever becomes of the run."""
+
+    def work() -> None:
+        try:
+            _locked_run("scheduled")
+        except Exception:
+            logger.exception("%s sync's scheduled run crashed", app.name)
+        finally:
+            app.lock.release()
+
+    try:
+        app.pool.submit(contextvars.copy_context().run, work)
+    except Exception:
+        app.lock.release()
+        raise
+
+
 def run_if_due() -> bool:
     """One app's tick (every minute): run when due and nothing is running."""
     app = current()
-    st = sync_state.load()
-    if not sync_state.is_due(st) or not app.lock.acquire(blocking=False):
+    if not _claim_due():
         return False
-    if import_runs.has_running(app.key):  # an import is writing the book; the next tick retries
-        app.lock.release()
-        return False
+    if app.defers:
+        _run_aside(app)
+        return True
     try:
         _locked_run("scheduled")
     finally:
@@ -426,99 +501,3 @@ def run_if_due() -> bool:
 
 def is_running() -> bool:
     return _lock.locked()
-
-
-def status() -> dict:
-    app = current()
-    st = sync_state.load()
-    return {
-        "token_saved": app.config_store().is_configured(),
-        "enabled": st["enabled"],
-        "interval": st["interval"],
-        "intervals": list(sync_state.INTERVALS),
-        "direction": st["direction"],
-        "directions": list(sync_state.DIRECTIONS),
-        "plan_id": st["plan_id"],
-        "plan_name": st["plan_name"],
-        "running": app.lock.locked(),
-        "run_id": _manual_runs.get(app.key),
-        "last_run": st["last_run"],
-        "next_run_at": st["next_run_at"] if st["enabled"] else None,
-        "conflicts": conflicts.listing(),
-    }
-
-
-def _linked_book() -> bool:
-    source = current().source
-    return any(
-        e.get("source") == source
-        for a in ledger_service.accounts.query_accounts(include_archived=True)
-        for e in a.get("external_ids") or []
-    )
-
-
-def _adopt_plan(plan_id: str) -> dict:
-    app = current()
-    plans = app.reader.list_plans(app.config_store())
-    plan = next((p for p in plans if p["id"] == plan_id), None)
-    if plan is None:
-        raise ValidationError(
-            f"That {app.name} {app.plan_word} is not visible to the saved {app.saved_sign_in}."
-        )
-    currency = (plan.get("currency") or "").upper()
-    if len(currency) != 3:
-        raise ValidationError(
-            f"That {app.name} {app.plan_word} has no currency set; open it in {app.name} once first."
-        )
-    sync_state.reset()
-    return {
-        **sync_state.blank(),
-        "plan_id": plan_id,
-        "plan_name": plan["name"],
-        "currency": currency,
-    }
-
-
-def update_settings(
-    enabled: bool | None,
-    interval: str | None,
-    plan_id: str | None,
-    direction: str | None = None,
-) -> dict:
-    app = current()
-    if not app.lock.acquire(blocking=False):
-        raise ConflictError(f"A {app.name} sync is running; change the settings when it finishes.")
-    try:
-        st = sync_state.load()
-        if plan_id and plan_id.strip() != st["plan_id"]:
-            st = _adopt_plan(plan_id.strip())
-        if interval is not None:
-            st["interval"] = sync_state.validate_interval(interval)
-        if direction is not None:
-            st["direction"] = sync_state.validate_direction(direction)
-        if enabled:
-            _require_ready(st)
-        if enabled is not None:
-            st["enabled"] = enabled
-        last = st["last_run"]
-        if enabled or not last:
-            st["next_run_at"] = None  # due on the scheduler's next tick
-        else:
-            sync_state.schedule_next(st, sync_state.parse(last["started_at"]))
-        sync_state.save(st)
-    finally:
-        app.lock.release()
-    return status()
-
-
-def _require_ready(st: dict) -> None:
-    app = current()
-    if not app.config_store().is_configured():
-        raise ValidationError(f"save {app.sign_in} first")
-    if not st["plan_id"]:
-        raise ValidationError(f"pick the {app.name} {app.plan_word} to sync")
-    if not _linked_book():
-        raise ValidationError(
-            f"migrate the {app.name} {app.plan_word} into this book first; "
-            "the sync pairs with what it imported"
-        )

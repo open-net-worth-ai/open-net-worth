@@ -16,7 +16,8 @@ def _live_lines(row: dict) -> dict[str, dict]:
     return {s["id"]: s for s in row.get("subtransactions") or [] if not s.get("deleted")}
 
 
-def _differs(old: dict, new: dict) -> bool:
+def differs(old: dict, new: dict) -> bool:
+    """Whether ``new`` says anything ``old`` doesn't, its live lines included."""
     if any(old.get(k) != v for k, v in new.items() if k != "subtransactions"):
         return True
     before, after = _live_lines(old), _live_lines(new)
@@ -52,7 +53,7 @@ def delta_against(plan: dict, mirror: dict[str, dict], meta: dict) -> dict:
     sent_s: list[dict] = []
     for tid, row in nested.items():
         old = mirror.get(tid)
-        if old is not None and not _differs(old, row):
+        if old is not None and not differs(old, row):
             continue
         sent_t.append(flat[tid])
         sent_s += lines.get(tid, [])

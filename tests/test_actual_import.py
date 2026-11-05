@@ -217,9 +217,12 @@ def test_the_description_of_actual():
         zero_based_on_fresh_book=True,
         request_cap=1_000_000,
         category_request_cap=1_000_000,
+        resolve_request_cap=1_000_000,
         flag_trail=False,
+        categorized_transfers=True,
     )
     assert app.stores.state().doc("state") == {"id": "state"}
+    assert app.syncs is True and app.defers is True
 
 
 def test_actual_is_registered_whatever_was_imported_first(tmp_path):
@@ -1012,15 +1015,11 @@ def _boom(*_args, **_kwargs):
     raise AssertionError("reached YNAB's sync")
 
 
-def test_a_sync_direction_is_refused_plainly(server, monkeypatch):
+def test_a_sync_direction_is_for_an_import_only(server, monkeypatch):
     monkeypatch.setattr(runner, "update_settings", _boom)
-    for call in (
-        lambda: actual_app.start_migration("import", BUDGET, sync_direction="both"),
-        lambda: _start_as_actual(sync_direction="both"),
-    ):
-        with pytest.raises(ValidationError) as refused:
-            call()
-        assert "Actual" in refused.value.message and "sync" in refused.value.message
+    with pytest.raises(ValidationError) as refused:
+        actual_app.start_migration("preview", BUDGET, sync_direction="both")
+    assert "only an import" in refused.value.message
     assert import_runs.latest("actual_budget", job.KINDS) is None
 
 
@@ -1029,8 +1028,7 @@ def _start_as_actual(**kw):
         return job.start("import", BUDGET, **kw)
 
 
-def test_turning_on_the_sync_cannot_reach_ynab_from_an_actual_import(server, monkeypatch):
-    monkeypatch.setattr(runner, "update_settings", _boom)
+def test_turning_on_the_sync_cannot_reach_ynab_from_an_actual_import(server):
     before = YnabSyncStateStore().doc("state")
     baselines = YnabBaselineStore().all()
     lines: list[str] = []
@@ -1219,15 +1217,14 @@ def test_the_route_asks_for_confirmation_on_a_book_with_its_own_accounts(api):
     assert response.json()["detail"]["error"] == "confirm_nonempty"
 
 
-def test_the_route_refuses_a_sync_direction(api, monkeypatch):
+def test_only_an_import_route_takes_a_sync_direction(api, monkeypatch):
     monkeypatch.setattr(runner, "update_settings", _boom)
     response = api.post(
-        "/api/actual-budget/migration/start",
-        json={"plan_id": BUDGET, "account_types": TYPES, "sync_direction": "both"},
+        "/api/actual-budget/migration/preview",
+        json={"plan_id": BUDGET, "sync_direction": "both"},
     )
-    assert response.status_code == 422
-    assert "sync" in response.json()["detail"]
-    assert api.get("/api/actual-budget/migration").json()["job"] is None
+    assert response.status_code == 202  # the direction isn't read for a preview
+    _settled(api)
 
 
 @pytest.mark.flags(actual_budget_sync=False)

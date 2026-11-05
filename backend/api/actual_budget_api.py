@@ -13,6 +13,8 @@ Thin router over ``db.ActualBudgetConfigStore`` and ``services.actual_sync``, al
   * ``GET /api/actual-budget/budgets`` - the budgets the saved sign-in can see, for a picker.
   * ``GET /api/actual-budget/migration`` / ``POST /api/actual-budget/migration/{preview,start,verify}``
     - the one-time import, the same server-owned job YNAB's is (``services.actual_sync.app``).
+  * ``GET /api/actual-budget/sync`` / ``PUT .../sync/settings`` / ``POST .../sync/run`` /
+    ``POST .../sync/conflicts/{id}/resolve`` - the scheduled sync, the same shape as YNAB's.
 
 Refused behind the gateway (``core.config.gateway_active``): a hosted instance must not reach
 its own network.
@@ -35,7 +37,7 @@ from backend.services.ynab_migration import ConfirmationRequired
 
 def _flag_on() -> None:
     if not actual_flag.on():
-        raise HTTPException(404, "Actual Budget import and sync are turned off.")
+        raise HTTPException(404, "Actual import and sync are turned off.")
 
 
 router = APIRouter(dependencies=[Depends(_flag_on)])
@@ -110,7 +112,7 @@ class MigrationRequest(BaseModel):
     # The budget is always an explicit pick: the wrong one writes someone else's money here.
     plan_id: str
     confirm_nonempty: bool = False
-    # Refused until Actual can sync; an import never quietly drops what it was asked to do.
+    # An import only: turn the sync on in this direction once it succeeds.
     sync_direction: Optional[str] = None
     account_links: Optional[dict[str, str]] = None
     same_as: Optional[dict[str, str]] = None
@@ -128,7 +130,7 @@ def _migration(kind: str, body: MigrationRequest) -> dict:
             kind,
             body.plan_id,
             confirm_nonempty=body.confirm_nonempty,
-            sync_direction=body.sync_direction or None,
+            sync_direction=(body.sync_direction or None) if kind == "import" else None,
             account_links=body.account_links,
             same_as=body.same_as,
             category_links=body.category_links,
@@ -169,3 +171,48 @@ def actual_budget_migration_start(body: MigrationRequest):
 def actual_budget_migration_verify(body: MigrationRequest):
     """Re-check an earlier import against Actual's current figures; writes nothing."""
     return _migration("verify", body)
+
+
+class SyncSettings(BaseModel):
+    enabled: Optional[bool] = None
+    interval: Optional[str] = None
+    direction: Optional[str] = None  # "both" | "from_ynab" | "to_ynab"
+    # The imported budget to keep in sync; changing it forgets the previous one's sync state.
+    plan_id: Optional[str] = None
+
+
+class SyncResolution(BaseModel):
+    keep: str  # "onw" | "ynab"
+    # A category Actual has that matches several things here: which to use ("cat:<id>"/"env:<id>").
+    choice: Optional[str] = None
+
+
+def _sync(call, *args) -> dict:
+    try:
+        return call(*args)
+    except OpenNetWorthError as exc:
+        raise _refuse(exc) from exc
+
+
+@router.get("/api/actual-budget/sync")
+def actual_budget_sync_status():
+    """Schedule, last and next run, the review list and notes. Never a secret or the address."""
+    return _sync(actual_app.sync_status)
+
+
+@router.put("/api/actual-budget/sync/settings")
+def actual_budget_sync_settings(body: SyncSettings):
+    return _sync(
+        actual_app.sync_settings, body.enabled, body.interval, body.plan_id, body.direction
+    )
+
+
+@router.post("/api/actual-budget/sync/run", status_code=202)
+def actual_budget_sync_run():
+    """Sync now: starts a run in the background (409 while one is running); poll the status."""
+    return _sync(actual_app.start_sync)
+
+
+@router.post("/api/actual-budget/sync/conflicts/{conflict_id}/resolve")
+def actual_budget_sync_resolve(conflict_id: str, body: SyncResolution):
+    return _sync(actual_app.resolve_sync_item, conflict_id, body.keep, body.choice)

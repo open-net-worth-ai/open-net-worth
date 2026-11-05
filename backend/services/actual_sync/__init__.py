@@ -38,6 +38,6 @@ def resolve_budget(budget_id: str, store: ActualBudgetConfigStore | None = None)
     if found is None:
         available = ", ".join(f"'{b['name']}' ({b['id']})" for b in budgets) or "none"
         raise ValidationError(
-            f"That budget wasn't found on this Actual Budget server. Available: {available}"
+            f"That budget wasn't found on this Actual server. Available: {available}"
         )
     return {**found, "currency": _currency_of(found["id"], store)}

@@ -112,8 +112,11 @@ class Base:
         self.yg[saved["id"]] = {**self.yg.get(saved["id"], {}), **saved}
 
     def parking(self, ygid: str | None) -> bool:
-        """A YNAB group that only holds categories the book has no group for."""
-        return norm((self.yg.get(ygid) or {}).get("name", "")) in PARKING
+        """A YNAB group that only holds categories the book has no group for. An app that can hide
+        a category parks nothing, so there the one such group is where a category in no envelope
+        lives."""
+        name = norm((self.yg.get(ygid) or {}).get("name", ""))
+        return name == norm(NOT_BUDGETED) if current().caps.hide_categories else name in PARKING
 
     def parking_group(self, name: str) -> str:
         """The YNAB group of this name, made on first use."""
@@ -133,8 +136,9 @@ class Base:
 
     def mirrorable_group(self, g: dict) -> bool:
         """A YNAB group a book group can pair with: not deleted, not the one YNAB keeps for card
-        payments, not a parking group, not an internal one."""
-        if g.get("deleted") or norm(g["name"]) in ("credit card payments", *PARKING):
+        payments, not a parking group, not an internal one, not an app's income group."""
+        reserved = ("credit card payments",) if current().caps.card_payment_categories else ()
+        if g.get("deleted") or g.get("is_income") or norm(g["name"]) in (*reserved, *PARKING):
             return False
         members = [c for c in self.yc.values() if c.get("category_group_id") == g["id"]]
         return not (members and all(c.get("internal") for c in members))

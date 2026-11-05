@@ -115,7 +115,36 @@ class YnabClient:
         )["category"]
 
 
+class Refused(ExternalServiceError):
+    """The app refused this request's content, said by a client with no HTTP status to say it."""
+
+
+class NotThere(Refused):
+    """What the request is about no longer exists."""
+
+
+class Moved(Refused):
+    """What the request is about changed since this run read it. Nothing was written."""
+
+
+class Stopped(ExternalServiceError):
+    """Ends the run, whatever its words say."""
+
+
 def rejected(exc: Exception) -> bool:
-    """YNAB refused this request's content (400/404/409) — the change is not retryable as sent,
-    unlike an auth failure, an outage or the rate limit, which stop the whole run."""
-    return any(f"HTTP {code}" in str(exc) for code in (400, 404, 409))
+    """The app refused this request's content (for YNAB: 400/404/409) — the change is not
+    retryable as sent, unlike an auth failure, an outage or the rate limit, which stop the whole
+    run."""
+    if isinstance(exc, Stopped):
+        return False
+    return isinstance(exc, Refused) or any(f"HTTP {code}" in str(exc) for code in (400, 404, 409))
+
+
+def not_found(exc: Exception) -> bool:
+    if isinstance(exc, Stopped):
+        return False
+    return isinstance(exc, NotThere) or "HTTP 404" in str(exc)
+
+
+def moved(exc: Exception) -> bool:
+    return isinstance(exc, Moved)

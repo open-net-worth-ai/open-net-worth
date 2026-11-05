@@ -1,32 +1,39 @@
-"""Actual Budget as a ``BudgetApp``, and the way into the import for it.
-
-The sync half is not here yet, so ``stores`` holds only what the import uses: the category pairs,
-and a state that reads as "sync off" for ``budget_app.other_sync_on``.
+"""Actual Budget as a ``BudgetApp``, and the way into its import and sync.
 
 Every entry point checks the flag and the gateway itself, whatever the connector's ``enabled``
-says: the generic connector PATCH can set that with neither check.
+says: the generic connector PATCH can set that with neither check. The tick reads the same through
+``is_on``.
 """
 
 from __future__ import annotations
 
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
-from backend.core.errors import ValidationError
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
-from backend.db.actual_sync_store import ActualBaselineStore
+from backend.db.actual_sync_store import (
+    ActualBaselineStore,
+    ActualConflictStore,
+    ActualMirrorStore,
+    ActualSyncStateStore,
+)
 from backend.services import actual_flag
+from backend.services.actual_sync import writes
 from backend.services.actual_sync.reader import ActualReader
-from backend.services.budget_app import BudgetApp, Capabilities, SyncStores, using
+from backend.services.budget_app import (
+    BudgetApp,
+    Capabilities,
+    SyncStores,
+    other_sync_on,
+    using,
+)
 from backend.services.ynab_migration import job
+from backend.services.ynab_sync import budget_mode, resolve, runner
+from backend.services.ynab_sync import state as sync_state
 
 
-class _NoSyncState:
-    def doc(self, doc_id: str) -> dict:
-        return {"id": doc_id}
-
-
-def _no_sync(*_args, **_kwargs):
-    raise ValidationError("Keeping Actual in sync isn't available yet.")
+def _usable() -> bool:
+    return actual_flag.on() and ActualBudgetConfigStore().available()
 
 
 ACTUAL = BudgetApp(
@@ -45,20 +52,24 @@ ACTUAL = BudgetApp(
         request_cap=1_000_000,
         category_request_cap=1_000_000,
         flag_trail=False,
+        resolve_request_cap=1_000_000,
+        categorized_transfers=True,
     ),
     config_store=ActualBudgetConfigStore,
     reader=ActualReader(),
-    open_client=_no_sync,
+    open_client=writes.open_sync_client,
     stores=SyncStores(
-        state=_NoSyncState,
-        mirror=_no_sync,
+        state=ActualSyncStateStore,
+        mirror=ActualMirrorStore,
         baselines=ActualBaselineStore,
-        conflicts=_no_sync,
+        conflicts=ActualConflictStore,
     ),
     lock=threading.Lock(),
-    is_on=actual_flag.on,
+    pool=ThreadPoolExecutor(max_workers=1, thread_name_prefix="actual-sync"),
+    is_on=_usable,
+    defers=True,
     asks_type_and_currency=True,
-    syncs=False,
+    article="An",
     plan_word="budget",
     sign_in="an Actual server address and sign-in",
     saved_sign_in="sign-in",
@@ -82,3 +93,81 @@ def start_migration(kind: str, budget_id: str, **choices) -> dict:
     _open()
     with using(ACTUAL):
         return job.start(kind, budget_id, **choices)
+
+
+# ── the sync ──
+
+
+def _notes(meta: dict) -> list[dict]:
+    """What the page shows for as long as it holds. Each is ``{"item", "reason"}``, as a run's."""
+    notes = []
+    if meta.get("budget_mode") == budget_mode.TRACKING:
+        notes.append(
+            {"item": budget_mode.MODE_ITEM, "reason": budget_mode.tracking_line(ACTUAL.name)}
+        )
+    if other := other_sync_on():
+        notes.append(
+            {
+                "item": f"{other.name} sync",
+                "reason": (
+                    f"The {other.name} sync is on, so this one waits. A book syncs with one app at "
+                    "a time: turn one of them off."
+                ),
+            }
+        )
+    return notes
+
+
+def _warnings(meta: dict) -> list[dict]:
+    """Where money isn't landing where it should. Each is ``{"kind", "text"}``."""
+    pairs = ACTUAL.stores.baselines().pairs(sync_state.load()["plan_id"])[0]
+    return [
+        {"kind": "income_in_envelope", "text": found["reason"]}
+        for found in budget_mode.income_in_envelopes(meta, pairs)
+    ]
+
+
+def _status() -> dict:
+    status = runner.status()
+    meta = sync_state.load_meta()
+    return {
+        **status,
+        "available": True,
+        "budget_mode": meta.get("budget_mode"),
+        "notes": _notes(meta),
+        "warnings": _warnings(meta),
+        "conflicts_count": len(status["conflicts"]),
+    }
+
+
+def sync_status() -> dict:
+    """``runner.status`` for Actual, plus what its page says beside it."""
+    _open()
+    with using(ACTUAL):
+        return _status()
+
+
+def sync_settings(
+    enabled: bool | None,
+    interval: str | None,
+    plan_id: str | None,
+    direction: str | None = None,
+) -> dict:
+    _open()
+    with using(ACTUAL):
+        runner.update_settings(enabled, interval, plan_id, direction)
+        return _status()
+
+
+def start_sync() -> dict:
+    _open()
+    with using(ACTUAL):
+        runner.start_now()
+        return _status()
+
+
+def resolve_sync_item(conflict_id: str, keep: str, choice: str | None = None) -> dict:
+    _open()
+    with using(ACTUAL):
+        resolve.resolve(conflict_id, keep, choice)
+        return _status()

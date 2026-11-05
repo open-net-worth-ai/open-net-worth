@@ -591,9 +591,10 @@ def test_a_tick_runs_only_the_apps_that_are_due_and_on(monkeypatch):
     _ynab_untouched()
 
 
-def test_actual_stays_out_of_the_tick_until_it_syncs():
-    assert ACTUAL.syncs is False
-    assert ACTUAL not in budget_app.syncing_apps()
+@pytest.mark.flags(actual_budget_sync=True)
+def test_actual_is_in_the_tick_beside_ynab():
+    assert ACTUAL.syncs is True
+    assert ACTUAL in budget_app.syncing_apps()
     assert YNAB in budget_app.syncing_apps()
 
 

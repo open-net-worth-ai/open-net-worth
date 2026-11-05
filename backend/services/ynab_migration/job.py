@@ -32,7 +32,7 @@ from backend.core import data_events
 from backend.core.errors import ConflictError, OpenNetWorthError, ValidationError
 from backend.services import categories as categories_service
 from backend.services import import_runs, ynab_pairs
-from backend.services.budget_app import current
+from backend.services.budget_app import current, starting
 from backend.services.budget_engines import service as budget_engines_service
 from backend.services.ynab_migration import (
     apply,
@@ -134,18 +134,21 @@ def start(
         raise ValidationError(f"pick the {app.name} {app.plan_word} to migrate")
     if not app.config_store().is_configured():
         raise ValidationError(f"save {app.sign_in} first")
-    if kind == "import":
-        guards.refuse_beside_the_other_app(app)
-    if kind == "import" and not confirm_nonempty and _foreign_accounts_exist():
-        raise ConfirmationRequired(
-            f"This book already has accounts that did not come from {app.name}. Confirm to import "
-            "alongside them."
-        )
     from backend.services.ynab_sync import runner  # lazily: the sync imports this package
 
-    if app.syncs and runner.is_running():
-        raise ConflictError(f"A {app.name} sync is running; start the import when it finishes.")
-    run = import_runs.start(app.key, kind, plan_id.strip(), busy=app.run_busy)
+    with starting():
+        if kind == "import":
+            guards.refuse_beside_the_other_app(app)
+        if kind == "import" and not confirm_nonempty and _foreign_accounts_exist():
+            raise ConfirmationRequired(
+                f"This book already has accounts that did not come from {app.name}. Confirm to "
+                "import alongside them."
+            )
+        if app.syncs and runner.is_running():
+            raise ConflictError(
+                f"{app.article} {app.name} sync is running; start the import when it finishes."
+            )
+        run = import_runs.start(app.key, kind, plan_id.strip(), busy=app.run_busy)
     try:
         choice = {
             "account_links": dict(account_links or {}),

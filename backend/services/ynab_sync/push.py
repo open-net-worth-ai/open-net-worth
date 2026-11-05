@@ -19,6 +19,7 @@ from backend.services.ynab_sync.payloads import (
     classify,
     create_payload,
     update_payloads,
+    whole_split,
 )
 from backend.services.ynab_sync.units import Unit
 
@@ -31,6 +32,7 @@ class Outcome:
     deferred: list[Unit] = field(default_factory=list)
     unsupported: list[tuple[Unit, str]] = field(default_factory=list)
     failed: list[tuple[Unit, str]] = field(default_factory=list)
+    moved: list[Unit] = field(default_factory=list)  # changed there during the run; not written
     new_refs: dict[str, list[str]] = field(default_factory=dict)  # unit key -> YNAB ids created
     # Called the moment a unit is confirmed sent, so refs and baselines are recorded per batch and
     # a later failure in the run cannot leave YNAB holding rows the ledger has not linked.
@@ -71,7 +73,10 @@ def _send(client: YnabClient, method: str, jobs: list[tuple[Unit, list[dict]]], 
         if not ynab_client.rejected(exc):
             raise
         if len(jobs) == 1:
-            out.failed.append((jobs[0][0], str(exc)))
+            if ynab_client.moved(exc):
+                out.moved.append(jobs[0][0])
+            else:
+                out.failed.append((jobs[0][0], str(exc)))
             return
         mid = len(jobs) // 2
         _send(client, method, jobs[:mid], out, done)
@@ -165,7 +170,13 @@ def send_updates(ctx: Context, client: YnabClient, units: list[Unit], out: Outco
     def done(batch, saved):
         for s in saved:
             _remember(ctx, s)
-        for unit, _ in batch:
+        by_id = {s["id"]: s for s in saved}
+        for unit, ops in batch:
+            for op in ops:
+                # All its lines were rewritten, so the ledger row's link to them is too.
+                if "subtransactions" in op:
+                    lines = by_id[op["id"]].get("subtransactions") or []
+                    out.new_refs[unit.key] = [*(s["id"] for s in lines), op["id"]]
             _confirm(out, unit)
 
     _run(ctx, client, "PATCH", jobs, out, done)
@@ -174,7 +185,12 @@ def send_updates(ctx: Context, client: YnabClient, units: list[Unit], out: Outco
 def send_deletes(ctx: Context, client: YnabClient, units: list[Unit], out: Outcome) -> None:
     for i, unit in enumerate(units):
         shape, tops = classify(ctx, unit.refs)
-        if shape == "complex" or not tops:
+        partial = (
+            shape == "split"
+            and current().caps.edit_splits
+            and not whole_split(ctx.mirror[tops[0]], unit.base)
+        )
+        if shape == "complex" or not tops or partial:
             app = current().name
             out.unsupported.append(
                 (unit, f"this is one part of a larger {app} split; delete it in {app}")
@@ -186,7 +202,10 @@ def send_deletes(ctx: Context, client: YnabClient, units: list[Unit], out: Outco
             out.deferred += units[i:]
             return
         except ExternalServiceError as exc:
-            if "HTTP 404" not in str(exc):
+            if ynab_client.moved(exc):
+                out.moved.append(unit)
+                continue
+            if not ynab_client.not_found(exc):
                 raise
         for gone in (tops[0], ctx.mirror.get(tops[0], {}).get("transfer_transaction_id")):
             ctx.mirror.pop(gone, None)

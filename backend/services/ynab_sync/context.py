@@ -25,7 +25,7 @@ class Context:
     ynab_acct: dict[str, str]  # ledger account id -> YNAB account id
     cat_ids: dict[str, str | None]  # YNAB category id -> ledger category id
     ynab_cat: dict[str, str]  # ledger category id -> YNAB category id
-    income: frozenset[str]  # ledger income categories: YNAB sees their rows as Ready to Assign
+    income: frozenset[str]  # ledger income categories
     env_of: dict[str, str]  # YNAB category id -> the envelope holding only that category
     card_env: dict[str, str]  # YNAB card-payment category id -> payment envelope id
     names: dict
@@ -84,7 +84,7 @@ def build(
     live = {c["id"] for c in rows}
     paired = {y: p for y, p in pairs.items() if not p.get("gone") and p["category"] in live}
     accounts = ledger_service.accounts.query_accounts(include_archived=True)
-    source = current().source
+    source, caps = current().source, current().caps
     acct_ids = {
         e["ref"]: a["id"]
         for a in accounts
@@ -110,7 +110,7 @@ def build(
         unsent=frozenset(
             c["id"]
             for c in rows
-            if c.get("kind", "expense") == "expense"
+            if (c.get("kind", "expense") == "expense" or caps.income_categories)
             and c["id"] not in {p["category"] for p in paired.values()}
             and (c.get("hidden") or f"o:{c['id']}" in declined)
         ),

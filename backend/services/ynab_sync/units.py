@@ -102,12 +102,14 @@ def _render(ctx: Context, piece: dict) -> tuple[dict | None, str | None]:
 def _income_view(ctx: Context, rendered: dict | None, ref: Canon) -> dict | None:
     """YNAB books an inflow without a category as Ready to Assign, and a row in a category that
     is not in YNAB goes there uncategorized, so it cannot say which category the ledger row has:
-    the ledger's own stands, and is not read as a change."""
+    the ledger's own stands, and is not read as a change. An app with income categories says."""
     mine = ref.get("category") if ref else None
+    says_income = current().caps.income_categories
+    is_income = rendered and rendered.get("kind") == "income" and mine in ctx.income
     if (
         rendered
         and not rendered.get("category")
-        and ((rendered.get("kind") == "income" and mine in ctx.income) or mine in ctx.unsent)
+        and ((is_income and not says_income) or mine in ctx.unsent)
     ):
         return {**rendered, "category": ref["category"]}
     return rendered

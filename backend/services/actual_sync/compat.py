@@ -97,8 +97,7 @@ def check_pending(names: list[str]) -> None:
             continue
         if extension != "js" or label == "remove_cache" or label not in SAFE_JS_MIGRATIONS:
             raise ExternalServiceError(
-                "This budget was saved by an older Actual Budget than this app can read safely. "
-                + REFRESH
+                "This budget was saved by an older Actual than this app can read safely. " + REFRESH
             )
 
 
@@ -113,7 +112,7 @@ def check_schema(conn: sqlite3.Connection) -> None:
             missing += [f"{table}.{c}" for c in columns if c not in have]
     if missing:
         raise ExternalServiceError(
-            "This Actual Budget database doesn't have what this app needs: "
+            "This Actual database doesn't have what this app needs: "
             f"{', '.join(missing)}. Update this app, or open the budget in a matching Actual."
         )
 
