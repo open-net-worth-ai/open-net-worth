@@ -557,7 +557,11 @@ def recover_interrupted_turns() -> dict:
     for row in assistant.list_sessions():
         if row.get("last_turn_status") != "running":
             continue
-        assistant.upsert_session_meta(row["id"], last_turn_status="interrupted")
+        assistant.upsert_session_meta(
+            row["id"],
+            last_turn_status="interrupted",
+            last_turn_error=stopped_summary_note("crash", subject="turn"),
+        )
         recovered += 1
     if recovered:
         logger.info("turn_recovered_at_boot count=%d", recovered)

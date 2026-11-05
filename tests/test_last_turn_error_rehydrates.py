@@ -106,6 +106,20 @@ def test_a_turn_that_did_not_fail_renders_nothing_extra(_session, status):
     assert not any(m.get("error") for m in messages)
 
 
+def test_a_turn_recovered_at_boot_says_why_it_stopped(_session):
+    """A crash leaves a stale `running`. Boot corrected the status and stored no text, so the
+    conversation ended on its tool pills while the sidebar beside it said Failed."""
+    import backend.ai.turns as turns
+
+    assistant.upsert_session_meta(_session, last_turn_status="running")
+
+    turns.recover_interrupted_turns()
+
+    last = _rendered(_session)[-1]
+    assert "the server stopped unexpectedly while this turn was working" in last["error"]
+    assert "notice" not in last, "it is a failure, like the run beside it"
+
+
 def test_a_later_successful_turn_clears_the_error(_session):
     """The reason the field is stamped on EVERY status, not only on failure: a conversation
     that recovered must stop rendering the error it moved past."""
