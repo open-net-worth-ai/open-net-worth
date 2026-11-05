@@ -328,7 +328,7 @@ def test_list_budgets(store, fake):
     "error,words",
     [
         (
-            actual_exc.AuthorizationError(f"Server returned an HTTP error '400': {URL} {PASSWORD}"),
+            actual_exc.AuthorizationError("Could not validate password on login."),
             "password",
         ),
         (httpx.ConnectError(f"All connection attempts failed for {URL}"), "reach"),
@@ -359,6 +359,37 @@ def test_wrong_password_plain_error(store, work, fake, error, words):
             call()
         never_leaks(err.value)
         assert words in err.value.message.lower() or words in str(err.value).lower()
+
+
+def _login_error(status: int) -> actual_exc.AuthorizationError:
+    """What actualpy raises for a login answered with ``status`` (any above 400)."""
+    return actual_exc.AuthorizationError(f"Server returned an HTTP error '{status}': '{URL}'")
+
+
+@pytest.mark.parametrize(
+    "status,refused",
+    [(401, True), (403, True), (404, False), (429, False), (500, False)],
+)
+def test_only_a_401_or_403_login_is_a_refused_sign_in(store, work, fake, status, refused):
+    fake.build_error = _login_error(status)
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    never_leaks(err.value)
+    if refused:
+        assert err.value.message == "Actual refused the sign-in. Check its password or token."
+        assert store.public()["last_status"] == "auth_error"
+    else:
+        assert err.value.message == f"The Actual server answered with an error (HTTP {status})."
+        assert store.public()["last_status"] != "auth_error"
+
+
+def test_a_login_failure_that_names_no_status_isnt_a_refused_sign_in(store, work, fake):
+    fake.build_error = actual_exc.AuthorizationError(f"Something went wrong on login: {URL}")
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    never_leaks(err.value)
+    assert err.value.message == "Actual could not read this budget (AuthorizationError)."
+    assert store.public()["last_status"] != "auth_error"
 
 
 def test_server_down_plain_error(store, work, fake):
@@ -774,7 +805,9 @@ def test_a_sync_run_that_cannot_connect_leaves_no_copy(store, work, fake):
 @pytest.fixture
 def refused(monkeypatch):
     def refuse(_creds):
-        raise actual_exc.AuthorizationError(f"Server said no: {URL} {PASSWORD}")
+        raise actual_exc.AuthorizationError(
+            f"Server returned an HTTP error '401': '{URL} {PASSWORD}'"
+        )
 
     monkeypatch.setattr(client, "_list_files", refuse)
 
@@ -827,7 +860,7 @@ def test_opening_a_copy_clears_it_too(store, work, fake):
 
 def test_opening_a_copy_refused_marks_it(store, work, fake, monkeypatch):
     def refuse(*_a):
-        raise actual_exc.AuthorizationError(f"Server said no: {URL}")
+        raise _login_error(401)
 
     monkeypatch.setattr(client, "_download", refuse)
     with pytest.raises(ExternalServiceError):

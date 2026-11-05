@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import re
 import shutil
 import sqlite3
 import ssl
@@ -211,7 +212,16 @@ def _plain_error(exc: Exception) -> Stopped:
         return any(isinstance(e, types) for e in chain)
 
     status = next((e for e in chain if isinstance(e, httpx.HTTPStatusError)), None)
-    if has(ax.AuthorizationError) or (status and status.response.status_code in (401, 403)):
+    code = status.response.status_code if status else None
+    # actualpy's login raises AuthorizationError for any status above 400, so the status is in its text.
+    auth = next((e for e in chain if isinstance(e, ax.AuthorizationError)), None)
+    if auth:
+        said = str(auth)
+        found = re.search(r"HTTP error '(\d+)'", said)
+        code = int(found[1]) if found else code
+        if "Could not validate password on login" in said:
+            code = 401
+    if code in (401, 403):
         return SignInRefused("Actual refused the sign-in. Check its password or token.")
     elif has(ax.UnknownFileId):
         text = _GONE
@@ -222,8 +232,8 @@ def _plain_error(exc: Exception) -> Stopped:
             "The Actual server's certificate could not be verified. "
             "Use a certificate this computer trusts, or plain http on a private network."
         )
-    elif status:
-        text = f"The Actual server answered with an error (HTTP {status.response.status_code})."
+    elif code:
+        text = f"The Actual server answered with an error (HTTP {code})."
     elif has(httpx.TransportError, TimeoutError):
         text = "Could not reach the Actual server. Check the address and that it is running."
     else:
