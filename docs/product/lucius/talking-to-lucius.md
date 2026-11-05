@@ -121,7 +121,8 @@ Want everything? Say so: *"give me a full breakdown of…"*.
 ## He can see what you're looking at
 
 With **Screen awareness** on (the default), what's on your screen goes along with your message —
-*"why did this drop?"* while looking at a chart is enough. Password and key fields are never
+*"why did this drop?"* while looking at a chart is enough. With it off, nothing goes along
+automatically, but he can still look if you ask about your screen. Password and key fields are never
 included. See [Mentioning things in chat](mentions.md#screen-awareness--lucius-sees-what-youre-looking-at).
 
 ## What you see while he works

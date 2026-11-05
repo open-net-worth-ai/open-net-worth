@@ -20,7 +20,6 @@ logger = logging.getLogger(__name__)
 _SCREEN_SURFACES = frozenset({"chat:web", "chat:voice"})
 
 _NOTES = {
-    "sharing_off": "The user turned off screen sharing with Lucius on this device.",
     "no_screen": (
         "Nothing to read: Lucius or the call screen is filling the display. They can open the "
         "screen they mean, or fold the call away, and ask again."
@@ -58,6 +57,7 @@ def _unavailable(session_id: str, status: str) -> tuple[str, None]:
 )
 async def read_screen(input_data: dict):
     from backend.ai import assistant
+    from backend.ai.tools._extra_groups_scope import add_extra_names
     from backend.core.audit_context import get_audit_scope
     from backend.core.chat_session import get_session_id, is_run_session
     from backend.services import screen_context, screen_read
@@ -90,5 +90,7 @@ async def read_screen(input_data: dict):
 
     handles, commands = screen_context.session_manifests(reply.snapshot)
     assistant.upsert_session_meta(session_id, screen_handles=handles, screen_commands=commands)
-    assistant.load_screen_tools(session_id, reply.snapshot.title)
+    # Into this turn's scope too: the offer is seeded once at turn start, and a later find_tools
+    # persists that scope, which would drop a load only the session meta knew about.
+    add_extra_names(assistant.load_screen_tools(session_id, reply.snapshot.title))
     return _result("ok", screen=block)

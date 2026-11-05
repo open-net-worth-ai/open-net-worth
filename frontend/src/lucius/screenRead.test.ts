@@ -11,7 +11,6 @@ import {
 } from './screenRead'
 
 const view = {
-  sharing: true,
   onCall: false,
   focused: false,
   visible: true,
@@ -33,13 +32,6 @@ describe('decideScreenReply', () => {
 
   it('does not answer from a tab out of view', () => {
     expect(decideScreenReply({ ...view, visible: false, onCall: true })).toBeNull()
-  })
-
-  it('refuses at full rank when sharing is off, so no other device is read instead', () => {
-    expect(decideScreenReply({ ...view, sharing: false, onCall: true })).toEqual({
-      status: 'sharing_off',
-      rank: RANK_CALL,
-    })
   })
 
   it('claims no rank when the page is covered, so a device in view can still answer', () => {

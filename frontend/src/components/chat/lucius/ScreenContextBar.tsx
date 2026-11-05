@@ -282,10 +282,10 @@ export function ScreenContextBar({
               aria-checked={enabled}
               aria-label={
                 enabled
-                  ? 'Screen awareness on — click to stop sharing this screen'
-                  : 'Screen awareness off — click to share this screen'
+                  ? 'Screen awareness on — click to stop sending this screen with each message'
+                  : 'Screen awareness off — click to send this screen with each message'
               }
-              title={enabled ? 'Using this screen as context' : 'Not using this screen as context'}
+              title={enabled ? 'Sent with each message' : 'Not sent with your messages'}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => setEnabled(!enabled)}
             >
@@ -347,7 +347,7 @@ export function ScreenContextBar({
             aria-checked={enabled}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => setEnabled(!enabled)}
-            title={enabled ? 'Using this screen as context' : 'Not using this screen as context'}
+            title={enabled ? 'Sent with each message' : 'Not sent with your messages'}
           >
             <span className="lx-switch-knob" />
           </button>

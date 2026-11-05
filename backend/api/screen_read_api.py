@@ -14,7 +14,7 @@ router = APIRouter()
 
 
 class ScreenReadAnswer(BaseModel):
-    status: Literal["ok", "sharing_off", "no_screen"]
+    status: Literal["ok", "no_screen"]
     rank: int = Field(default=screen_read.RANK_COVERED, ge=0, le=screen_read.RANK_CALL)
     screen: Optional[ScreenSnapshot] = None
 

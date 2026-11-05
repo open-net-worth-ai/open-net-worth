@@ -72,11 +72,15 @@ describe('ScreenReadResponder', () => {
     expect(posted().body.rank).toBe(3)
   })
 
-  it('never captures with sharing off', () => {
+  it('reads the page the same with Screen awareness off', () => {
     h.enabled = false
     ask()
-    expect(h.capture).not.toHaveBeenCalled()
-    expect(posted().body).toEqual({ status: 'sharing_off', rank: 2, screen: null })
+    expect(h.capture).toHaveBeenCalledOnce()
+    expect(posted().body).toEqual({
+      status: 'ok',
+      rank: 2,
+      screen: { id: 'lucius-read', title: 'ACME Budget' },
+    })
   })
 
   it('never captures the Lucius page as if it were a screen', () => {

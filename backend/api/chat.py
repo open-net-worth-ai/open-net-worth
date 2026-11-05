@@ -584,6 +584,8 @@ async def chat(req: ChatRequest, request: Request):
             assistant.load_screen_tools(session_id, req.screen.title)
         else:
             assistant.upsert_session_meta(session_id, screen_handles=[], screen_commands=[])
+            # Screen awareness off sends no snapshot; he can still look if the owner means it.
+            assistant.load_session_tools(session_id, frozenset({"read_screen"}))
 
     # Resolve direct skills into structured host requests. The assistant renders and
     # persists them before its first provider call; no imperative user-text shim asks

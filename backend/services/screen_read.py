@@ -8,8 +8,7 @@ hears it, each one that has this conversation open and is in view answers on
 Which device: an answer carries a rank (``RANK_*``). The device running the call ends the wait at
 once; otherwise the first answer opens a short settle window, so a focused laptop on a slower link
 still beats an idle tablet that answered first. Rank-0 answers ("the page is covered") open no
-window, because a device in view may still be on its way. A device whose owner turned sharing off
-answers at its full rank, so it wins as a refusal and no other device is read in its place.
+window, because a device in view may still be on its way.
 
 In-process and ephemeral, like ``core.data_events``: nothing is stored, a request lives only
 while the turn waits on it, and its id is single-use and unguessable.
@@ -32,7 +31,6 @@ MAX_READS_PER_TURN = 3
 _MAX_REPLIES = 16
 
 STATUS_OK = "ok"
-STATUS_SHARING_OFF = "sharing_off"
 STATUS_NO_SCREEN = "no_screen"
 
 RANK_COVERED = 0
@@ -76,9 +74,7 @@ def consume_read() -> bool:
 def _best(replies: list[ScreenReply]) -> Optional[ScreenReply]:
     if not replies:
         return None
-    return max(
-        replies, key=lambda r: (r.rank, r.status == STATUS_SHARING_OFF, r.status == STATUS_OK)
-    )
+    return max(replies, key=lambda r: (r.rank, r.status == STATUS_OK))
 
 
 async def _collect(pending: _Pending) -> Optional[ScreenReply]:

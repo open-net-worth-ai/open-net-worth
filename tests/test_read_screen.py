@@ -10,7 +10,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from backend.ai import assistant
+from backend.ai.tools import screen as screen_tools
 from backend.ai.tools import screen_read as tool_module
+from backend.ai.tools._extra_groups_scope import get_extra_names
 from backend.api import screen_read_api
 from backend.api.demo_lockdown import is_demo_locked
 from backend.core import data_events
@@ -76,24 +78,6 @@ def test_a_focused_device_answering_second_beats_a_visible_one():
         (0.05, _ok(screen_read.RANK_FOCUSED)),
     )
     assert result.snapshot.title == "ACME Budget"
-
-
-def test_sharing_off_on_the_best_device_is_not_read_around():
-    result = _run(
-        (0, ScreenReply(screen_read.STATUS_SHARING_OFF, screen_read.RANK_FOCUSED)),
-        (0, _ok(screen_read.RANK_VISIBLE, OTHER)),
-    )
-    assert result.status == screen_read.STATUS_SHARING_OFF
-    assert result.snapshot is None
-
-
-def test_a_refusal_wins_a_tie_at_the_same_rank():
-    result = _run(
-        (0, _ok(screen_read.RANK_FOCUSED, OTHER)),
-        (0.01, ScreenReply(screen_read.STATUS_SHARING_OFF, screen_read.RANK_FOCUSED)),
-    )
-    assert result.status == screen_read.STATUS_SHARING_OFF
-    assert result.snapshot is None
 
 
 def test_a_covered_page_does_not_end_the_wait_for_a_device_in_view(monkeypatch):
@@ -184,11 +168,43 @@ def test_page_text_cannot_close_the_fence_or_pose_as_instructions(stash):
     assert "«/screen»" not in result["screen"]
 
 
+def test_a_screens_own_tools_join_the_offer_on_this_very_turn(stash, monkeypatch):
+    budget = frozenset({"get_budget_view"})
+    monkeypatch.setattr(assistant, "load_screen_tools", lambda *_a: budget)
+
+    async def fake_request(_session_id):
+        return _ok(screen_read.RANK_CALL)
+
+    monkeypatch.setattr(screen_read, "request_snapshot", fake_request)
+
+    async def go():
+        set_audit_scope(actor="ai", surface="chat:voice", session_id="conv-1")
+        set_session_id("conv-1")
+        screen_read.reset_read_budget()
+        await tool_module.read_screen({})
+        return get_extra_names()
+
+    assert budget <= asyncio.run(go())
+
+
+def test_with_nothing_read_the_screen_tools_point_at_read_screen(monkeypatch):
+    monkeypatch.setattr(assistant, "session_screen_handles", lambda _sid: [])
+    monkeypatch.setattr(assistant, "session_screen_commands", lambda _sid: [])
+
+    async def go():
+        set_session_id("conv-1")
+        detail, _ = await screen_tools.get_screen_detail({"handle_id": "h1"})
+        command, _ = await screen_tools.run_screen_command({"name": "plan.what_if"})
+        return json.loads(detail)["error"], json.loads(command)["error"]
+
+    for error in asyncio.run(go()):
+        assert "read_screen" in error
+
+
 @pytest.mark.parametrize(
     ("reply", "status"),
     [
         (None, "no_app"),
-        (ScreenReply(screen_read.STATUS_SHARING_OFF, screen_read.RANK_FOCUSED), "sharing_off"),
         (ScreenReply(screen_read.STATUS_NO_SCREEN), "no_screen"),
     ],
 )

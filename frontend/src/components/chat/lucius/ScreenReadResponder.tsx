@@ -24,13 +24,13 @@ function isCallCoveringPage(): boolean {
  *  captures the page the same way a typed message does. Mounted once, renders nothing. */
 export function ScreenReadResponder() {
   const { activeId } = useLuciusChat()
-  const { enabled, pinnedHandleIds } = useScreenSnapshot()
+  const { pinnedHandleIds } = useScreenSnapshot()
   const { visibleIds } = useVisibleIdsValue()
   const call = useVoiceCall()
 
-  const latest = useRef({ activeId, enabled, pinnedHandleIds, visibleIds, call })
+  const latest = useRef({ activeId, pinnedHandleIds, visibleIds, call })
   useEffect(() => {
-    latest.current = { activeId, enabled, pinnedHandleIds, visibleIds, call }
+    latest.current = { activeId, pinnedHandleIds, visibleIds, call }
   })
 
   useEffect(() => {
@@ -39,7 +39,6 @@ export function ScreenReadResponder() {
       const onCall = now.call.phase !== 'idle' && now.call.sessionId === request.session_id
       if (!onCall && now.activeId !== request.session_id) return
       const reply = decideScreenReply({
-        sharing: now.enabled,
         onCall,
         focused: document.hasFocus(),
         visible: document.visibilityState === 'visible',

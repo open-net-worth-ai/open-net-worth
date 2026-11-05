@@ -32,6 +32,7 @@ The server had no way to ask a client a question and wait for the answer.
 - **Refusing is not the same as having nothing to show.** With Screen awareness off a device refuses
   at its full rank, so no other device is read in its place. A page covered by Lucius or the phone's
   full-screen call answers at rank 0 and opens no window, so a device in view can still answer.
+  (The Screen awareness refusal was reversed the same day; see the amendment.)
 - **Only the owner at the app may ask.** The tool requires a `chat:web` or `chat:voice` audit surface
   on a non-run session that no chat channel owns. A Telegram sender, an Automation and inbound MCP get "no screen", and the demo
   refuses the tool and locks the route: on a demo every open app is a different visitor.
@@ -64,3 +65,25 @@ The server had no way to ask a client a question and wait for the answer.
   when used.
 - **First answer wins.** Picks the device with the best connection, not the one being looked at.
 - **Screenshots.** Pixels add cost and bypass the capture's secret-field and opt-out rules.
+
+## Amendment, 2026-11-05: Screen awareness only decides what a message carries
+
+The owner's call, once the refusal had shipped: the switch is about whether the screen is sent by
+default, and it should not block anything else. So `read_screen` works whichever way it is set, on
+every device, and `sharing_off` is gone. An app still open from before this change gets a 422 on its
+old refusal, which counts as no answer.
+
+- **What still keeps content from Lucius** is what kept it from the typed path: `data-ctx-secret`,
+  password-shaped fields, Private files, and only a device in view showing this conversation answers.
+  The chat's "Read your screen" row is still the only cue. Turning the switch off no longer stops him
+  looking: an owner who wants that has no control for it today.
+- **A turn with no snapshot offers `read_screen`.** `api/chat` loads it, as a call already does. Its
+  schema is small, and only sessions that sent a message with the switch off carry it. A surface that
+  replaces the screen sends the command catalog, not null, so it doesn't load it.
+- **A read is a full substitute for a snapshot.** Same capture, same block and same manifests, so
+  `get_screen_detail` and `run_screen_command` act on it in the same turn, and their empty-manifest
+  errors now point at `read_screen`. A screen's own tools join this turn's scope as well as the
+  session's: the offer is seeded once at turn start, so they used to arrive a turn late, and a later
+  `find_tools` persisted that scope over them.
+- The consequences above about Screen awareness governing a look and a refusal arriving late no
+  longer apply.
