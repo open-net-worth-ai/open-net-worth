@@ -36,6 +36,7 @@ RUN_SECONDS = 20 * 60.0
 _MOVED = "It changed in Actual while the sync was running, so it wasn't written."
 _TOO_LONG = "This sync ran for too long and stopped. The next run carries on from here."
 _STOPPED = "This sync stopped after an error. The next run works out what is left."
+_PAUSED_PARTWAY = "The Actual connection was paused, so this run stopped. The next run carries on."
 _CATEGORY_FIELDS = ("name", "hidden", "category_group_id", "deleted")
 
 
@@ -88,7 +89,7 @@ class ActualClient:
             raise Stopped(_STOPPED)
         if ActualBudgetConfigStore().paused():
             self._broken = True
-            raise Stopped(client.PAUSED)
+            raise Stopped(_PAUSED_PARTWAY)
         if time.monotonic() > self._deadline:
             self._broken = True
             raise Stopped(_TOO_LONG)

@@ -212,7 +212,8 @@ def test_a_run_under_way_stops_at_its_next_batch(world):
         calls_before = list(world.calls)
         with pytest.raises(Stopped) as stopped:
             made.save_transactions("POST", [])
-        assert stopped.value.message == client.PAUSED
+        assert stopped.value.message == writes._PAUSED_PARTWAY
+        assert "was paused" in stopped.value.message, "still read after a resume, so in the past"
         assert world.calls == calls_before
 
 

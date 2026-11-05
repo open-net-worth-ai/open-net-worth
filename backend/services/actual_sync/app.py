@@ -156,6 +156,8 @@ def _budget_differs(st: dict) -> dict | None:
         if st["enabled"]
         else f"import {budget} here"
     )
+    if _paused():
+        how = f"resume the connection, then {how}"
     return {
         "kind": "budget_differs",
         "plan_id": saved,
@@ -189,9 +191,16 @@ def _import_first_line(st: dict, differs: dict | None) -> str:
         f"No account of {plan} is in this book, so the sync has nothing to pair with and leaves "
         "both sides alone."
     )
+    paused = _paused()
     if differs and not st["enabled"]:
-        return f"{why} To stay on {plan}, choose it in the list below and import it."
-    return f"Import this budget first. {why} Import it below, and the next run carries on."
+        where = (
+            "resume the connection, then choose it in the list"
+            if paused
+            else "choose it in the list below"
+        )
+        return f"{why} To stay on {plan}, {where} and import it."
+    step = "Resume the connection and import it here" if paused else "Import it below"
+    return f"Import this budget first. {why} {step}, and the next run carries on."
 
 
 def _warnings(meta: dict, st: dict) -> list[dict]:

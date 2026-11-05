@@ -76,6 +76,22 @@ def test_a_first_pick_of_a_copy_holds_a_row_it_lacks_and_deletes_nothing(world):
     assert item["onw_txn_id"] == by_ref("t-market")["id"]
 
 
+def test_importing_a_copy_with_the_sync_on_holds_a_row_it_lacks_and_deletes_nothing(world):
+    """An import adds rows and removes none, so importing the copy doesn't make it what this book
+    holds: the row the copy lacks is still here, and still only asked about."""
+    _copy_of_the_budget(world)
+    with world.on(BUDGET_B):
+        _gone_there(world, "t-market")
+    rows_here = _live_here()
+    _import(budget=BUDGET_B, sync_direction="both", confirm_nonempty=True)
+    assert sync_state_of()["plan_id"] == BUDGET_B
+    assert sync_state_of()["switched"] is True
+    sync()
+    assert _live_here() == rows_here, "nothing goes silently"
+    (item,) = open_items()
+    assert item["onw_txn_id"] == by_ref("t-market")["id"]
+
+
 def test_a_first_pick_with_nothing_linked_has_nothing_to_hold(db_isolated, tmp_path, monkeypatch):
     server = _prepared(tmp_path, monkeypatch)
     seed(server, KEY, PAST, TODAY)

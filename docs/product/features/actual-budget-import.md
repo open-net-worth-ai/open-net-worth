@@ -48,8 +48,9 @@ On a hosted instance the form says Actual isn't available, and **Data sync** doe
 stops at its next batch, and **Sync now**, the review, the import, a re-check and the budget list all
 wait. Your sign-in stays saved, and the form still saves a new address or password, but it doesn't
 list budgets until you press **Resume** on the connector. **Worth checking** on the sync's page says
-it's paused, with a link to the connection. The sync's own switch stays as you left it, so the next
-due run goes as soon as you resume, and the YNAB sync still can't be turned on beside it.
+it's paused, with a link to the connection. The sync's own switch stays as you left it, so a run the
+pause held back goes as soon as you resume. A run the pause stopped partway waits for its next
+scheduled time, or for **Sync now**. The YNAB sync still can't be turned on beside it.
 
 ## Before you start
 
@@ -251,7 +252,7 @@ so it says nothing about them until then. The first sync after the move holds ba
 the new budget doesn't have, however few, and asks about each one in the review list: a budget
 restored from an export, or duplicated in Actual, keeps the same row ids under a new name, so a row it
 lacks may be one you added here since. The same goes the first time a sync follows a budget this book
-wasn't imported from. Importing another budget is refused while the sync is on, which is why you turn
+wasn't imported from, or when this book was imported from more than one budget. Importing another budget is refused while the sync is on, which is why you turn
 it off first. If a move is refused, the sync stays on the first budget with everything it had,
 including its review list.
 
@@ -278,7 +279,8 @@ your book. A change to the budget that it sends runs only on the temporary copy.
 reach anything else, or a download holding more than a budget, stops with a message saying so, and
 your book and other files aren't touched.
 
-**The limits.** The sync reads a fresh copy of the budget on every run and deletes it afterwards, so
-your decrypted budget doesn't stay on disk. It's tested against a real Actual server for every case on
-this page, including end-to-end encrypted and tracking budgets. It hasn't been tested on Windows,
+**The limits.** The sync reads a fresh copy of the budget on every run and deletes it afterwards, or
+within about an hour of a later run if a crash stops that, so your decrypted budget doesn't stay on
+disk. It's tested against a real Actual server for the sync cases on this page, including end-to-end
+encrypted and tracking budgets. It hasn't been tested on Windows,
 with OpenID-only servers, or on large real budgets.

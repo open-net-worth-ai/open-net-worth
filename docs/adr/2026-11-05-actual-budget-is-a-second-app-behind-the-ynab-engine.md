@@ -53,7 +53,10 @@ twice, and nothing a YNAB user sees or gets could change.
   26.9.0 or 26.11.0 uses a `PRAGMA`; the one `VACUUM` is in `remove_cache`, already refused. A later
   genuine one that needs either is refused in plain words until it's reviewed, and then allowed as that
   exact case. What else runs on a copy can't leave it either: a trigger or view can't hold an `ATTACH`,
-  and `actualpy`'s engine runs only its own statements, naming tables it reflected.
+  and `actualpy`'s engine runs only its own statements, naming tables it reflected. That engine has no
+  time limit, though: a hostile snapshot could spin a run on a trigger during a write or on the first
+  read of `messages_clock`, costing availability until a restart, never data. Accepted, since the server
+  is normally the person's own.
 - **A paused connector stops all contact with the server.** A pause is what a person does when a server
   looks wrong. The tick skips the app (`BudgetApp.paused`), `client._prepare` refuses every path, and a
   run under way stops at its next batch. `other_sync_on` keeps reading the sync's own switch, so a paused

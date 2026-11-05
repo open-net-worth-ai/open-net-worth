@@ -76,14 +76,14 @@ def import_finished(plan_id: str) -> None:
 
 def _a_copy_on_first_pick(plan_id: str) -> bool:
     """Never synced, and this book holds rows from a budget other than the one picked: the pick may
-    be a duplicate of it, with the same row ids. The budget it was imported from can't be: what the
-    import read is what this book holds."""
-    imported = (
-        run
+    be a duplicate of it, with the same row ids. Importing it doesn't settle that, because an import
+    adds rows and removes none. Only a book imported from this budget alone holds what it read."""
+    imported = {
+        run["plan_id"]
         for run in import_runs.list_runs(current().key, include_archived=True)
         if run["kind"] == "import" and run["status"] in ("done", "running")
-    )
-    return _linked_book() and not any(run["plan_id"] == plan_id for run in imported)
+    }
+    return _linked_book() and (plan_id not in imported or len(imported) > 1)
 
 
 def _adopt_plan(plan_id: str) -> dict:

@@ -74,8 +74,8 @@ TYPES = {"a1": "cash", "a2": "investment", "a3": "credit"}
 WAIT = 30
 
 
-def _import(**kw) -> dict:
-    actual_app.start_migration("import", BUDGET, account_types=TYPES, **kw)
+def _import(budget: str = BUDGET, **kw) -> dict:
+    actual_app.start_migration("import", budget, account_types=TYPES, **kw)
     deadline = time.time() + 60
     while time.time() < deadline:
         record = import_runs.latest("actual_budget", job.KINDS)
