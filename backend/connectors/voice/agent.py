@@ -40,6 +40,7 @@ from backend.connectors.voice.connection import CallConnection
 from backend.connectors.voice.events import speakable
 from backend.connectors.voice.timing import AnswerTiming, TurnTiming
 from backend.connectors.voice.tokens import OWNER_IDENTITY
+from backend.connectors.voice.tts_models import voice_for
 
 if TYPE_CHECKING:
     from backend.connectors.voice.app_link import AppLink
@@ -869,7 +870,8 @@ async def entrypoint(ctx: JobContext) -> None:
         if cfg["stt_model"].startswith("assemblyai/")
         else {}
     )
-    tts_kwargs = {"voice": cfg["tts_voice"]} if cfg.get("tts_voice") else {}
+    voice = voice_for(cfg["tts_model"], cfg.get("tts_voice"))
+    tts_kwargs = {"voice": voice} if voice else {}
     language = cfg.get("language") or "en"
     session = AgentSession(
         # The call's language, for hearing and for speaking ("auto" lets LiveKit pick the

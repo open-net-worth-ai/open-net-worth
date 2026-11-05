@@ -130,7 +130,12 @@ works; from another device the app must be reachable over HTTPS (see
 | **Lucius on calls** | The model Lucius answers with during a call. Unset, he uses the conversation's own model. A faster one keeps the waits short. |
 | **Language** | What you speak on calls: English, Vietnamese, Chinese, Japanese, Korean, Hindi, Indonesian, Spanish, French, German or Portuguese. Lucius hears it, his greeting and check-ins are in it, and his voice speaks it. |
 | **Speech to text** | Which service turns your voice into text. *Automatic* lets LiveKit pick the best one for your language; *AssemblyAI Universal (English)* hears English only, so another language moves you to Automatic. |
-| **Voice** and **Voice id** | Which service speaks, and which of its voices (blank = its default). |
+| **Voice** and **Voice id** | Which service speaks, what it costs, and which of its voices (blank = a default voice for that model). Only voices that speak your language are offered, and picking another service clears the voice id. |
+
+**What a call costs.** Lucius's voice is most of it, and it's charged by the character, so the price
+beside each voice and the length of his answers matter most. Settings shows an estimate for the voice
+you pick: on LiveKit's free $2.50 credit, about 80 minutes at $50 per million characters, about 140 at
+$25 and about 200 at $15. A call that talks more uses it faster, and LiveKit sets the prices.
 
 The LiveKit key and secret are stored like every connector credential: never shown to Lucius,
 readable back only by you through the eye on the field. Pausing the connector stops taking calls.

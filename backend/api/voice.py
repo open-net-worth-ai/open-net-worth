@@ -18,6 +18,7 @@ from backend.ai import assistant, turns
 from backend.api import demo_visitor
 from backend.connectors.voice import service as voice_service
 from backend.connectors.voice.tokens import TTL_S, mint_call_token, new_room_name
+from backend.connectors.voice.tts_models import speaks
 from backend.db.voice_config_store import (
     ENGLISH_ONLY_STT,
     LANGUAGES,
@@ -79,7 +80,8 @@ def _view(config: dict) -> dict:
 
 
 def _check_language(saved: dict, body: VoiceConfigPatch) -> None:
-    """A call in a language its speech-to-text can't hear would just mishear every word."""
+    """A call in a language its speech-to-text can't hear would just mishear every word, and one
+    its voice can't speak would have no words at all."""
     language = body.language if body.language is not None else saved.get("language") or "en"
     stt = body.stt_model if body.stt_model is not None else saved.get("stt_model") or ""
     if language not in LANGUAGES:
@@ -91,6 +93,12 @@ def _check_language(saved: dict, body: VoiceConfigPatch) -> None:
                 f"That speech-to-text model hears English only. Pick Automatic for "
                 f"{LANGUAGES[language]}."
             ),
+        )
+    tts = body.tts_model if body.tts_model is not None else saved.get("tts_model") or ""
+    if not speaks(tts, language):
+        raise HTTPException(
+            status_code=422,
+            detail=f"That voice can't speak {LANGUAGES[language]}. Pick another voice.",
         )
 
 

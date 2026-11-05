@@ -1985,3 +1985,27 @@ def test_an_approval_card_is_said_out_loud_when_lucius_wrote_nothing_about_it():
     said.clear()
     desk_._speak("Your balance is up this week.", False)
     assert agent.APPROVAL_WAITING not in said
+
+
+def test_a_blank_voice_id_gets_a_voice_the_model_is_documented_with():
+    """LiveKit's docs name no default voice for these models, so nothing is left to chance."""
+    from backend.connectors.voice.tts_models import voice_for
+
+    assert voice_for("inworld/inworld-tts-2-flash", "") == "Ashley"
+    assert voice_for("inworld/inworld-tts-2-flash", "Mine") == "Mine"
+    assert voice_for("cartesia/sonic-3", "") is None  # the voice calls have been tested with
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_a_voice_that_cannot_speak_the_language_is_refused(client):
+    refused = client.put(
+        "/api/voice/config",
+        json={"language": "vi", "stt_model": "auto", "tts_model": "assemblyai/assemblyai-tts-1"},
+    )
+    assert refused.status_code == 422
+    assert "can't speak Vietnamese" in refused.json()["detail"]
+    fine = client.put(
+        "/api/voice/config",
+        json={"language": "vi", "stt_model": "auto", "tts_model": "inworld/inworld-tts-2"},
+    )
+    assert fine.status_code == 200
