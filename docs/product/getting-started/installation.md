@@ -177,7 +177,8 @@ change it later in **Settings → Security**.
 What the Compose file does:
 
 - Pulls `ghcr.io/open-net-worth-ai/open-net-worth`, pinned to the release the file came with
-  (set `ONW_VERSION=x.y.z` to run another one).
+  (set `ONW_VERSION=x.y.z` to run another one). The image also has `latest` and `0.1` tags that
+  move to each new release — see [Upgrading](../operations/upgrading.md#update-for-your-install).
 - Publishes port 8080 on `127.0.0.1` only, so other devices on your network can't reach it until
   you change that line (the comment beside it explains the risk). `PORT=9000` picks another port.
 - Keeps your data in a Docker volume named `open-net-worth-data`, which survives
