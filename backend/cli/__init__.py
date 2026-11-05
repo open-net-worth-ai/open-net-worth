@@ -74,6 +74,10 @@ def build_parser() -> argparse.ArgumentParser:
     upgrade.add_argument(
         "--check", action="store_true", help="only report whether a newer release is out"
     )
+    agy = sub.add_parser("antigravity", help="start with a private Linux Antigravity login")
+    agy.add_argument("--login", action="store_true", help="open agy for interactive sign-in first")
+    agy.add_argument("--host", help="bind address")
+    agy.add_argument("--port", type=int, help="port")
     sub.add_parser("version", help="print the installed version")
     return parser
 
@@ -112,6 +116,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             auto_upgrade=args.auto_upgrade,
             service=args.service,
         )
+    if args.command == "antigravity":
+        from backend.cli.antigravity import run
+
+        return run(login=args.login, host=args.host, port=args.port)
     if args.command == "autostart-run":
         from backend.cli.autostart_windows import run_service
 

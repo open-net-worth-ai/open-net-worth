@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import stat
 import sys
 import textwrap
@@ -140,6 +141,14 @@ def _clean_pool():
 @pytest.fixture
 def agy(tmp_path, monkeypatch):
     script = _fake_agy(tmp_path)
+    monkeypatch.setattr(
+        "backend.ai.models.antigravity_cli_provider.child_environment",
+        lambda: {
+            "PATH": os.environ["PATH"],
+            "HOME": str(tmp_path),
+            "ONW_PRIVATE_BUS_ID": "synthetic",
+        },
+    )
     monkeypatch.setattr(
         "backend.db.model_config_store.cli_binary_path", lambda *_a, **_k: str(script)
     )
@@ -297,6 +306,17 @@ async def test_a_changed_system_prompt_never_shares_a_session(provider, tmp_path
     first_row, second_row = _received(tmp_path)
     assert second_row["pid"] != first_row["pid"]
     assert "Prompt B" in second_row["event"]["message"]["content"]
+
+
+async def test_changed_identity_never_shares_a_session(provider, tmp_path, monkeypatch):
+    await _chat(provider, [USER])
+    monkeypatch.setattr(
+        "backend.ai.models.antigravity_cli_provider.child_environment",
+        lambda: {"PATH": os.environ["PATH"], "HOME": str(tmp_path), "ONW_PRIVATE_BUS_ID": "other"},
+    )
+    await _chat(provider, [USER, ASSISTANT, TOOL_RESULT])
+    first_row, second_row = _received(tmp_path)
+    assert second_row["pid"] != first_row["pid"]
 
 
 async def test_a_changed_tool_manifest_never_shares_a_session(provider, tmp_path):

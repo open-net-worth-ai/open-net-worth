@@ -16,13 +16,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import shutil
 import time
 from dataclasses import dataclass, field
 from typing import AsyncGenerator, List, Optional
 
-from backend.core.child_env import scrubbed_environ
+from backend.core.antigravity_identity import child_environment
 from backend.core.errors import ConfigurationError, ExternalServiceError
 
 from . import antigravity_live_session
@@ -220,7 +219,7 @@ class AntigravityCliProvider(AIProvider):
         result: Optional[dict] = None
         usage: dict[str, int] = {}
         async with self._semaphore:
-            session = await antigravity_live_session.spawn(argv, scrubbed_environ())
+            session = await antigravity_live_session.spawn(argv, child_environment())
             try:
                 await session.send(antigravity_live_session.with_system(system, prompt))
                 async for ev in session.events():
@@ -328,7 +327,8 @@ class AntigravityCliProvider(AIProvider):
         fresh: bool,
     ) -> AsyncGenerator[str, None]:
         """One model round on a live (pooled) or one-shot process; yields visible text."""
-        env = dict(os.environ)
+        env = child_environment()
+        key_argv = [*key_argv, env["HOME"], env["ONW_PRIVATE_BUS_ID"]]
         async with self._semaphore:
             if pooled:
                 session, text, _images, rnd.reused = await antigravity_live_session.acquire(

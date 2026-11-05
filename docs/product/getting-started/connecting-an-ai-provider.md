@@ -61,6 +61,15 @@ and [Codex](https://developers.openai.com/codex/cli) instructions.
 **Google Antigravity:** if Google's Antigravity CLI (`agy`) is installed and signed in on that
 computer, it's offered as **Antigravity CLI** the same way.
 
+On Linux, a source checkout can instead keep its Antigravity login in a private project keyring.
+Install `agy`, D-Bus, GNOME Keyring and `gdbus`, then run `onw antigravity --login`. Complete
+the interactive `agy` sign-in and exit `agy` to start Open Net Worth. For later starts, run
+`onw antigravity`. The project keyring uses an empty password and relies on local file permissions
+for protection. Add `--host` or `--port` when needed. The login is stored in the checkout's ignored
+`scratch/antigravity` directory. Once this private login has
+been initialized, ordinary starts cannot fall back to the desktop keyring. Start the app with
+`onw antigravity` to use it. This private-session command currently supports Linux only.
+
 **Installed somewhere unusual?** In **Settings → AI**, click **Edit** on the provider and set
 **Binary path** to the full path of `claude` or `codex`. The macOS desktop app already looks in
 `~/.local/bin`, `/opt/homebrew/bin` and `/usr/local/bin`.
