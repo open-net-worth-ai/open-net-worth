@@ -73,7 +73,7 @@ def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
             elif item["entity"] in ("category", "group", "new_category", "budget"):
                 category_resolve.apply(item, keep, choice, st, meta, base, client)
             elif _held_side(st["direction"], keep):
-                _accept(ctx, item, keep, base)
+                _accept(ctx, item, keep, base, st)
             elif item["entity"] == "assigned":
                 _assigned(item, keep, client, base, meta)
             else:
@@ -97,7 +97,7 @@ def _held_side(direction: str, keep: str) -> bool:
     return (direction, keep) in (("from_ynab", "onw"), ("to_ynab", "ynab"))
 
 
-def _accept(ctx, item: dict, keep: str, base: Baselines) -> None:
+def _accept(ctx, item: dict, keep: str, base: Baselines, st: dict) -> None:
     """Keep ``keep``'s version WITHOUT writing the side the one-way direction protects: the other
     side's current state becomes the agreed one, so nothing moves now and a later change on both
     sides is asked about again."""
@@ -111,11 +111,33 @@ def _accept(ctx, item: dict, keep: str, base: Baselines) -> None:
     unit = _unit(ctx, item, base)
     if unit.onw_id is None:
         return
+    if unit.missing:
+        return _accept_missing(unit, keep, base, st)
     other = unit.ynab if keep == "onw" else unit.onw
     if other is None:
         base.drop_txn(unit.onw_id)
     else:
         base.set_txn(unit.onw_id, unit.refs, other)
+
+
+def _unlink(unit: Unit) -> None:
+    """Its ids name rows the app no longer holds, and they mustn't stand for this one."""
+    for ref in unit.refs:
+        ledger_service.detach_external_ref(
+            unit.onw_id, current().source, ref, reason="no longer in the budget app"
+        )
+
+
+def _accept_missing(unit: Unit, keep: str, base: Baselines, st: dict) -> None:
+    """The person chose, for a row the app no longer holds, and the direction protects the side
+    that choice writes. It waits as what one way holds back does, for a switch to both ways."""
+    if keep == "ynab":  # remove it here, once the book may change
+        base.set_txn(unit.onw_id, unit.refs, unit.onw)
+        st["held_ynab"] = sorted(set(st["held_ynab"]) | set(unit.refs))
+    else:  # send it as new, once the app may change: until then it is linked to nothing
+        _unlink(unit)
+        st["held"] = sorted(set(st["held"]) | {unit.onw_id})
+    sync_state.save(st)
 
 
 def _assigned(item: dict, keep: str, client: YnabClient, base: Baselines, meta: dict) -> None:
@@ -148,6 +170,8 @@ def _unit(ctx, item: dict, base: Baselines) -> Unit:
     refs = (base.txns.get(onw_id) or {}).get("refs") or (
         [] if not item["key"].startswith("y:") else [item["key"][2:]]
     )
+    if not refs and row and current().caps.links_without_baseline:
+        refs = units.ynab_refs(row)
     rows = {onw_id: row} if row else {}
     index = {r: onw_id for r in refs} if onw_id else {}
     found = units.build(
@@ -206,3 +230,5 @@ def _transaction(ctx, item: dict, keep: str, client: YnabClient, base: Baselines
         )
     recorder.txn_change("sent", ctx, send.onw_id, send.base, send.onw)
     _record_sent(send, out, base)
+    if unit.missing:
+        _unlink(unit)

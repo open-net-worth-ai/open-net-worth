@@ -36,6 +36,9 @@ class Unit:
     rendered: dict | None = None
     blocked: str | None = None
     attach: bool = False  # the ledger row must take ``refs`` (it claimed an unowned YNAB row)
+    # Linked, with no baseline, and the app no longer holds it: only the person can say which side
+    # is right (``links_without_baseline``).
+    missing: bool = False
 
     @property
     def key(self) -> str:
@@ -166,6 +169,8 @@ def build(
             ynab = canon(rendered) if rendered else None
             units.append(Unit(None, None, list(piece["refs"]), None, None, ynab, rendered, blocked))
     known = lambda r: r in ctx.mirror or r in ctx.sub_parent or r in removed_ok  # noqa: E731
+    held = lambda r: r in ctx.mirror or r in ctx.sub_parent  # noqa: E731
+    keeps_links = current().caps.links_without_baseline
     for onw_id, row in rows.items():
         # Refs YNAB never held (a restored row's stale ones) are not links.
         refs = [r for r in ynab_refs(row) if known(r)]
@@ -178,6 +183,14 @@ def build(
             rendered = _income_view(ctx, rendered, onw or base)
             ynab = canon(rendered) if rendered else base
             units.append(Unit(onw_id, row, refs, base, onw, ynab, rendered, blocked))
+        elif (
+            keeps_links
+            and base is None
+            and onw is not None
+            and (linked := ynab_refs(row))
+            and not any(held(r) for r in linked)
+        ):
+            units.append(Unit(onw_id, row, linked, None, onw, None, missing=True))
         elif refs and any(r in removed_ok for r in refs):
             units.append(Unit(onw_id, row, refs, base, onw, None))
         elif refs and base is not None:
@@ -191,13 +204,18 @@ def _claim_unowned(units: list[Unit]) -> list[Unit]:
     """A ledger row with no YNAB link that is identical to a YNAB row nobody owns IS that row:
     a create whose answer was lost (a timeout after YNAB saved it). It takes the YNAB ids instead
     of being sent a second time, and the YNAB row is not pulled in as a duplicate."""
-    free = [u for u in units if u.onw_id is None and u.ynab is not None and not u.blocked]
+    free = [
+        (u, comparable(u.ynab))
+        for u in units
+        if u.onw_id is None and u.ynab is not None and not u.blocked
+    ]
     for mine in [u for u in units if u.onw_id and not u.refs and u.base is None and u.onw]:
         wanted = comparable(mine.onw)
-        twin = next((f for f in free if comparable(f.ynab) == wanted), None)
-        if twin is None:
+        found = next((f for f in free if f[1] == wanted), None)
+        if found is None:
             continue
-        free.remove(twin)
+        free.remove(found)
+        twin = found[0]
         units.remove(twin)
         mine.refs, mine.ynab, mine.rendered, mine.attach = (
             list(twin.refs),

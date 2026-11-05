@@ -44,7 +44,6 @@ from backend.services.ynab_sync import (
     push,
     resolve,
     runner,
-    txn_sync,
     units,
 )
 from backend.services.ynab_sync import client as ynab_client
@@ -919,21 +918,46 @@ def test_an_unexpected_error_mid_run_loses_no_pull(world, monkeypatch, broken):
     assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
 
 
-def test_a_ledger_refusal_that_escapes_the_loop_loses_no_pull(world, monkeypatch):
+def test_a_ledger_refusal_recording_an_agreed_row_loses_no_pull(world, monkeypatch):
+    """A claim's link is written while recording what both sides agree on, outside any catch."""
     enable()
     sync()
     world.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-market'")
     world.queue.clear()
-    real = txn_sync._apply_pull
-
-    def boom(*_a, **_k):
-        raise ValidationError("the ledger refused it")
-
-    monkeypatch.setattr(txn_sync, "_apply_pull", boom)
+    made = new_row(description="ACME Lost", from_amount=7.77, category=category_here("Food")["id"])
+    world.commit_error = (httpx.ReadTimeout("timed out"), True)
     assert _run()["ok"] is False
-    monkeypatch.setattr(txn_sync, "_apply_pull", real)
-    assert sync()["summary"] == "1 pulled"
+    real = ledger_service.update_transaction
+
+    def refuse(txn_id, changes, **kw):
+        if "external_refs" in changes and txn_id == made["id"]:
+            raise ValidationError("the ledger refused the link")
+        return real(txn_id, changes, **kw)
+
+    monkeypatch.setattr(ledger_service, "update_transaction", refuse)
+    assert _run()["ok"] is False
+    assert "t-market" in sync_state_of()["held_ynab"]
+    monkeypatch.setattr(ledger_service, "update_transaction", real)
+    sync()
     assert by_ref("t-market")["memo"] == "there"
+    assert len(world.live("amount = -777")) == 1 and open_items() == []
+
+
+def test_held_ids_are_on_disk_before_the_mirror_moves(world, monkeypatch):
+    enable("to_ynab")
+    sync()
+    world.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-market'")
+    world.queue.clear()
+    seen: list[list[str]] = []
+    real = delta.save_changes
+
+    def spy(*a, **k):
+        seen.append(ActualSyncStateStore().doc("state").get("held_ynab"))
+        return real(*a, **k)
+
+    monkeypatch.setattr(delta, "save_changes", spy)
+    sync()
+    assert seen == [["t-market"]]
 
 
 @pytest.mark.parametrize("direction", ["both", "to_ynab"])
@@ -1120,6 +1144,190 @@ def test_a_kill_after_a_create_is_linked_is_not_stuck(world, monkeypatch):
     assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
 
 
+def _killed_create(monkeypatch) -> dict:
+    enable()
+    sync()
+    made = new_row(category=category_here("Food")["id"])
+    _killed_run(monkeypatch)
+    return made
+
+
+def _killed_pull(world, monkeypatch) -> dict:
+    enable()
+    sync()
+    world.txn(
+        "t-new", "a1", -700, TODAY, description="p-market", category="c-fun", notes="brand new"
+    )
+    world.queue.clear()
+    _killed_run(monkeypatch)
+    return by_ref("t-new")
+
+
+@pytest.mark.parametrize("keep, memo", [("onw", "edited here"), ("ynab", "")])
+def test_a_conflict_on_a_killed_create_can_be_answered_either_way(world, monkeypatch, keep, memo):
+    made = _killed_create(monkeypatch)
+    edit_here(made["id"], memo="edited here")
+    sync()
+    (item,) = open_items()
+    assert "both" in item["reason"]
+    actual_app.resolve_sync_item(item["id"], keep)
+    assert open_items() == []
+    (remote,) = world.live("amount = -1234")
+    assert (remote["notes"] or "") == memo
+    assert (ledger_service.transactions.find_by_id(made["id"]).get("memo") or "") == memo
+    assert made["id"] in ActualBaselineStore().split()[0]
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+@pytest.mark.parametrize("keep, memo", [("onw", "edited here"), ("ynab", "edited there")])
+def test_a_conflict_on_a_killed_pull_can_be_answered_either_way(world, monkeypatch, keep, memo):
+    made = _killed_pull(world, monkeypatch)
+    world.edit("UPDATE transactions SET notes = 'edited there' WHERE id = 't-new'")
+    world.queue.clear()
+    edit_here(made["id"], memo="edited here")
+    sync()
+    (item,) = open_items()
+    actual_app.resolve_sync_item(item["id"], keep)
+    assert open_items() == []
+    assert world.row("transactions", "t-new")["notes"] == memo
+    assert by_ref("t-new")["memo"] == memo
+    assert made["id"] in ActualBaselineStore().split()[0]
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def _reads_as_missing(item: dict) -> None:
+    assert item["kind"] == "conflict"
+    assert "no longer in Actual" in item["reason"] and "larger" not in item["reason"]
+
+
+@pytest.mark.parametrize("keep", ["onw", "ynab"])
+def test_a_killed_create_then_deleted_in_actual_asks_which_side(world, monkeypatch, keep):
+    made = _killed_create(monkeypatch)
+    (remote,) = world.live("amount = -1234")
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id = ?", remote["id"])
+    world.queue.clear()
+    world.calls.clear()
+    run = sync()
+    assert run["sent"] == 0 and writes_seen(world) == []  # not recreated
+    assert not world.live("amount = -1234")
+    assert not ledger_service.transactions.find_by_id(made["id"]).get("deleted")  # not deleted
+    (item,) = open_items()
+    _reads_as_missing(item)
+    sync()  # it waits, and isn't filed again
+    assert [i["id"] for i in open_items()] == [item["id"]]
+    actual_app.resolve_sync_item(item["id"], keep)
+    assert open_items() == []
+    if keep == "onw":
+        (again,) = world.live("amount = -1234")
+        assert again["id"] != remote["id"]
+        assert made["id"] in ActualBaselineStore().split()[0]
+        refs = ledger_service.transactions.find_by_id(made["id"])["external_refs"]
+        assert [e["ref"] for e in refs] == [again["id"]]
+    else:
+        assert not world.live("amount = -1234")
+        assert ledger_service.transactions.find_by_id(made["id"]) is None or (
+            ledger_service.transactions.find_by_id(made["id"]).get("deleted")
+        )
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+    assert open_items() == []
+
+
+@pytest.mark.parametrize("keep", ["onw", "ynab"])
+def test_a_killed_pull_then_deleted_in_actual_asks_which_side(world, monkeypatch, keep):
+    made = _killed_pull(world, monkeypatch)
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id = 't-new'")
+    world.queue.clear()
+    assert sync()["sent"] == 0
+    (item,) = open_items()
+    _reads_as_missing(item)
+    assert not ledger_service.transactions.find_by_id(made["id"]).get("deleted")
+    actual_app.resolve_sync_item(item["id"], keep)
+    assert open_items() == []
+    live_new = world.live("notes = 'brand new'")
+    gone_here = ledger_service.transactions.find_by_id(made["id"])
+    if keep == "onw":
+        assert len(live_new) == 1 and live_new[0]["id"] != "t-new"
+        assert not gone_here.get("deleted")
+    else:
+        assert live_new == [] and (gone_here is None or gone_here.get("deleted"))
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+@pytest.mark.parametrize("keep", ["onw", "ynab"])
+def test_a_row_with_no_baseline_that_the_read_says_was_deleted_asks_which_side(world, keep):
+    """The mirror held it and the read reports it gone. It used to read as part of a larger split."""
+    enable()
+    sync()
+    market = by_ref("t-market")
+    ActualBaselineStore().delete("t:" + market["id"])
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id = 't-market'")
+    world.queue.clear()
+    assert _run()["ok"] is True
+    (item,) = open_items()
+    _reads_as_missing(item)
+    actual_app.resolve_sync_item(item["id"], keep)
+    assert open_items() == []
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_a_row_that_comes_back_before_the_answer_closes_the_question(world, monkeypatch):
+    made = _killed_create(monkeypatch)
+    (remote,) = world.live("amount = -1234")
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id = ?", remote["id"])
+    world.queue.clear()
+    sync()
+    assert len(open_items()) == 1
+    world.edit("UPDATE transactions SET tombstone = 0 WHERE id = ?", remote["id"])
+    world.queue.clear()
+    sync()
+    assert open_items() == [] and made["id"] in ActualBaselineStore().split()[0]
+
+
+def test_one_way_a_kept_side_waits_for_both_ways(world, monkeypatch):
+    # From Actual: keeping ours can't write to Actual yet.
+    made = _killed_create(monkeypatch)
+    (remote,) = world.live("amount = -1234")
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id = ?", remote["id"])
+    world.queue.clear()
+    enable("from_ynab")
+    sync()
+    (item,) = open_items()
+    world.calls.clear()
+    actual_app.resolve_sync_item(item["id"], "onw")
+    assert writes_seen(world) == [] and not world.live("amount = -1234")
+    assert sync()["sent"] == 0 and open_items() == []
+    enable("both")
+    assert sync()["summary"] == "1 sent to Actual"
+    assert len(world.live("amount = -1234")) == 1 and open_items() == []
+    assert not ledger_service.transactions.find_by_id(made["id"]).get("deleted")
+
+
+def test_one_way_keeping_actuals_side_waits_for_both_ways(world, monkeypatch):
+    # To Actual: keeping Actual's can't change the book yet.
+    made = _killed_create(monkeypatch)
+    (remote,) = world.live("amount = -1234")
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id = ?", remote["id"])
+    world.queue.clear()
+    enable("to_ynab")
+    sync()
+    (item,) = open_items()
+    actual_app.resolve_sync_item(item["id"], "ynab")
+    assert not ledger_service.transactions.find_by_id(made["id"]).get("deleted")
+    sync()
+    assert open_items() == [] and not world.live("amount = -1234")
+    assert not ledger_service.transactions.find_by_id(made["id"]).get("deleted")
+    enable("both")
+    sync()
+    found = ledger_service.transactions.find_by_id(made["id"])
+    assert (found is None or found.get("deleted")) and open_items() == []
+    assert not world.live("amount = -1234")
+
+
 def test_a_kill_after_a_pull_is_not_stuck(world, monkeypatch):
     enable()
     sync()
@@ -1155,6 +1363,47 @@ def test_an_empty_copy_of_a_small_book_deletes_nothing(world):
     assert len([t for t in ledger_service.transactions.all() if not t.get("deleted")]) == rows_here
     world.calls.clear()
     assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_an_empty_read_holds_a_row_differing_only_cosmetically(world):
+    enable()
+    sync()
+    market = by_ref("t-market")
+    edit_here(market["id"], description=market["description"].upper())
+    world.edit("UPDATE transactions SET tombstone = 1")
+    world.queue.clear()
+    run = sync()
+    assert run["pulled"] == 0
+    assert not ledger_service.transactions.find_by_id(market["id"]).get("deleted")
+    assert any(c.get("onw_txn_id") == market["id"] for c in open_items())
+    world.edit("UPDATE transactions SET tombstone = 0")
+    world.queue.clear()
+    sync()
+    assert open_items() == []
+    assert not ledger_service.transactions.find_by_id(market["id"]).get("deleted")
+    assert world.row("transactions", "t-market")["tombstone"] == 0
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_the_mass_delete_guard_counts_a_row_differing_only_cosmetically(world):
+    enable()
+    sync()
+    for n in range(30):
+        world.txn(f"t-more-{n}", "a1", -100 - n, TODAY, description="p-market", category="c-food")
+    world.queue.clear()
+    sync()
+    market = by_ref("t-market")
+    edit_here(market["id"], description=market["description"].upper())
+    # Most of the rows go, so the read isn't empty and only the threshold can hold them.
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id LIKE 't-more-%' OR id = 't-market'")
+    world.queue.clear()
+    run = sync()
+    assert run["pulled"] == 0
+    assert not ledger_service.transactions.find_by_id(market["id"]).get("deleted")
+    assert any(
+        c.get("onw_txn_id") == market["id"] and "at once" in c["reason"] for c in open_items()
+    )
 
 
 def test_a_real_deletion_of_a_few_rows_needs_no_confirming(world):

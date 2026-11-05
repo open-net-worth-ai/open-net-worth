@@ -123,7 +123,10 @@ to refuse a write over a newer one.
 - A split can be edited here, and an existing row split: its date, amount and lines are all sent. A
   split whose lines don't add up to its total is refused and goes to the review list. Changing a
   transfer's accounts or category, or turning a row into a transfer or back, stays in the review list.
-- A category you clear in Actual stays cleared here: no rule or payee default fills it back in.
+- A category you clear in Actual stays cleared here: no rule or payee default fills it back in,
+  until you edit that row here.
+- A change in only the letter case of a payee in Actual doesn't come across on its own. It arrives
+  with the next other change to that row in Actual.
 - Income rows keep their category both ways. A new income category here goes into Actual's income
   group. An inflow with no category stays blank in Actual, where it doesn't count towards To Budget;
   the run says so once for each payee.
@@ -160,6 +163,10 @@ the server already took. The one exception is a row you edit in the moments befo
 which can come across twice. A row you delete in Actual never comes back. What changed in Actual
 during a run that failed is looked at again on the next run, in whichever direction you have chosen,
 so it isn't missed. A run stops itself if it goes on too long, and the next one carries on.
+
+If the app stops partway through a run and a row it had just linked is then gone from Actual, the
+sync can't tell who removed it, so it asks. The review list says the row is no longer in Actual, and
+you choose: send it to Actual as new, or remove it here.
 
 **If a budget reads as empty,** or many rows seem to vanish at once, nothing is deleted here. Each
 deletion waits in the review list for you to confirm, and if the rows come back, the items close on

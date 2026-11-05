@@ -26,12 +26,8 @@ MIN_REMOVAL_GUARD = 25  # ...but never for fewer rows than this
 def _rows(ctx: Context, base: Baselines, change: Change, first: bool, scan: set[str]):
     """(ledger rows to look at, their baselines, ref -> ledger id, refs YNAB no longer holds)."""
     index = {ref: i for i, d in base.txns.items() for ref in d["refs"]}
-    if current().caps.links_without_baseline and not first:
-        for r in ledger_service.transactions.all():
-            for ref in units.ynab_refs(r) if not r.get("deleted") else ():
-                index.setdefault(ref, r["id"])
+    everything = {r["id"]: r for r in ledger_service.transactions.all()}
     if first:
-        everything = {r["id"]: r for r in ledger_service.transactions.all()}
         for r in everything.values():
             for ref in units.ynab_refs(r):
                 index.setdefault(ref, r["id"])
@@ -47,11 +43,13 @@ def _rows(ctx: Context, base: Baselines, change: Change, first: bool, scan: set[
             - set(ctx.sub_parent)
         )
         return rows, bases, index, gone
-    wanted = scan | {index[r] for r in change.touched if r in index}
+    wanted = set(scan)
+    if current().caps.links_without_baseline:
+        wanted |= _links_without_baseline(everything, base, index)
+    wanted |= {index[r] for r in change.touched if r in index}
     wanted |= {index[s] for t in change.touched for s in _line_ids(ctx, t) if s in index}
     # Changes nobody audited (a checkpoint rewind, a batch rollback) are found by comparing
     # every baselined row with the ledger as it is now — local, no audit event needed.
-    everything = {r["id"]: r for r in ledger_service.transactions.all()}
     wanted |= {
         i
         for i, d in base.txns.items()
@@ -62,6 +60,20 @@ def _rows(ctx: Context, base: Baselines, change: Change, first: bool, scan: set[
     bases = {i: base.txns[i]["canon"] for i in rows if i in base.txns}
     gone = {r for r in change.touched if r not in ctx.mirror and r not in ctx.sub_parent}
     return rows, bases, index, gone
+
+
+def _links_without_baseline(everything: dict, base: Baselines, index: dict[str, str]) -> set[str]:
+    """Live rows that carry their ids: each is that row, baseline or none, and joins ``index``. One
+    with no baseline was left by a run killed before saving: it is looked at whether or not this
+    read mentions it, as the row may be gone from the app by now."""
+    loose = set()
+    for r in everything.values():
+        linked = [] if r.get("deleted") else units.ynab_refs(r)
+        for ref in linked:
+            index.setdefault(ref, r["id"])
+        if linked and r["id"] not in base.txns:
+            loose.add(r["id"])
+    return loose
 
 
 def _line_ids(ctx: Context, top: str) -> list[str]:
@@ -152,6 +164,10 @@ def settle(
     )
     todo: list[Unit] = []
     for u in all_units:
+        if u.missing:
+            if u.key not in open_items:
+                _file(ctx, u, conflicts.CONFLICT, _missing_reason())
+            continue
         action = decide_unit(u)
         if u.blocked and u.onw_id is None:
             _file(ctx, u, conflicts.UNSUPPORTED, u.blocked)
@@ -189,12 +205,25 @@ def settle(
     return _push_all(ctx, client, base, todo, tally)
 
 
+def _missing_reason() -> str:
+    app = current().name
+    return (
+        f"This transaction is no longer in {app}. Keep Open Net Worth's to send it to {app} as "
+        f"new, or keep {app}'s to remove it here."
+    )
+
+
 def _hold_removals(ctx: Context, all_units: list[Unit], open_items: dict) -> list[Unit]:
     """A read that would delete many synced rows here at once is held: each deletion waits in
     the review list, where keeping YNAB's confirms it, and the rest of the run goes ahead."""
     linked = sum(1 for u in all_units if u.refs)
     removals = [
-        u for u in all_units if u.refs and u.ynab is None and u.onw is not None and u.base == u.onw
+        u
+        for u in all_units
+        if u.refs
+        and u.ynab is None
+        and u.onw is not None
+        and units.comparable(u.base) == units.comparable(u.onw)
     ]
     # A whole read with no rows at all says more about the read than about a small book's rows.
     read_nothing = removals and not ctx.mirror and not current().caps.delta_read
