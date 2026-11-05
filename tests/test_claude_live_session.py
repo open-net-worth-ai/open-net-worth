@@ -95,9 +95,13 @@ def test_a_first_turn_sends_the_whole_transcript():
     assert "what did I spend?" in text and "and last month?" in text
 
 
-def test_consecutive_assistant_messages_are_all_skipped():
-    text = cls.pending_messages([USER, REPLY, REPLY, FOLLOW], consumed=1)
+def test_an_alert_pushed_after_the_reply_is_sent_to_the_session():
+    """The CLI wrote its reply, not the alert that landed after it, and the person may be
+    answering that alert."""
+    alert = {"role": "assistant", "content": "ACME fell 9% today."}
+    text = cls.pending_messages([USER, REPLY, alert, FOLLOW], consumed=1)
     assert "You spent $10." not in text
+    assert "ACME fell 9% today." in text
     assert "and last month?" in text
 
 

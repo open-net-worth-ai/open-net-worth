@@ -2702,6 +2702,10 @@ FOLD_TRIGGER_FRACTION = 0.55  # of the model's real context window — confirmed
 # a named constant (not an inline literal) so a reader recognises it as the same text
 # on both the write side (below) and any future read side, not a copy that can drift.
 FOLD_SUMMARY_MARKER = "[CONVERSATION SUMMARY SO FAR]"
+# A provider needs a user message first, and a thread can open on Lucius's own words: an alert
+# or a briefing is an ordinary assistant message, and a quiet person's window may hold nothing
+# else before their reply. Those messages stay; this is what stands in front of them.
+WINDOW_OPENS_ON_LUCIUS_MARKER = "[THE VISIBLE PART OF THIS THREAD STARTS HERE]"
 
 _FOLD_SUMMARIZE_SYSTEM = (
     "You compress the older portion of a financial-advisory conversation into a faithful "
@@ -2770,6 +2774,9 @@ def _prepare_messages(
        window_start is computed ONCE per turn and passed in so it stays pinned across all
        loop iterations of the same turn (prevents a mid-turn chunk-boundary shift from
        rewriting the prefix every round-trip).
+       The window is the thread as it stands: alerts and briefings count and stay, however
+       long ago the person last wrote. It used to be cut to its first user message, which
+       sent a reply to an alert with no alert in front of it (live, 2026-11-05).
     2. Orphan tool_result blocks (whose tool_use was evicted from the window) are dropped
        per-iteration — orphan-drop is a correctness invariant so it stays live.
     3. Context fold (RFC D): when fold_summary is provided, a synthetic user text block
@@ -2802,24 +2809,9 @@ def _prepare_messages(
             window_start = 0
     windowed = history[window_start:]
 
-    # Find the first message that is a clean conversation start:
-    # a user text message (not a tool_result-only message).
-    start = 0
-    for i, msg in enumerate(windowed):
-        if msg.get("role") != "user":
-            continue
-        content = msg.get("content")
-        if isinstance(content, str):
-            start = i
-            break
-        if isinstance(content, list) and content and content[0].get("type") != "tool_result":
-            start = i
-            break
-    windowed = windowed[start:]
-
     # Drop any tool_result blocks whose tool_use_id isn't present in this window
     known_ids = _collect_tool_use_ids(windowed)
-    abs_offset = window_start + start  # windowed[i] is history[abs_offset + i]
+    abs_offset = window_start  # windowed[i] is history[abs_offset + i]
     result = []
     active_skills_injected = False
     for i, msg in enumerate(windowed):
@@ -2869,6 +2861,8 @@ def _prepare_messages(
             lines = "\n".join(f'{i}. "{m["text"]}"' for i, m in enumerate(fold_verbatim, start=1))
             block_text += f"\n\n[USER'S OWN WORDS, VERBATIM, IN ORDER]\n{lines}"
         result = [{"role": "user", "content": block_text}] + result
+    elif result and result[0].get("role") != "user":
+        result = [{"role": "user", "content": WINDOW_OPENS_ON_LUCIUS_MARKER}] + result
 
     # A resume can have no fresh user entry. Its original logical-turn skill body is still
     # retained by turn_start, so active entries are intentionally not appended a second time.
