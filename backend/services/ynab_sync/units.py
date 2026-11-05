@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from backend.db.transaction_audit_store import TransactionAuditStore
 from backend.services import ledger as ledger_service
 from backend.services.budget_app import current
+from backend.services.ynab_migration.mapping import clean
 from backend.services.ynab_sync import context
 from backend.services.ynab_sync.canon import Canon, canon, reconstruct_original
 from backend.services.ynab_sync.context import Context
@@ -48,6 +49,25 @@ def decide(base: Canon, onw: Canon, ynab: Canon) -> str:
     if onw_changed:
         return "push"
     return "pull" if ynab_changed else "noop"
+
+
+def comparable(c: Canon) -> Canon:
+    """A canonical form as an app that stores text its own way can be expected to hold it: a payee
+    whatever its case, and text only as long as the request carried it. A row here and its copy
+    there that differ by no more than this are the same, and neither side has changed it."""
+    if c is None or not current().caps.normalises_text:
+        return c
+    splits = c.get("splits")
+    return {
+        **c,
+        "description": clean(c["description"][:200], 200).casefold(),
+        "memo": clean(c["memo"][:500], 500),
+        "splits": [[s[0], s[1], clean(s[2][:500], 500)] for s in splits] if splits else splits,
+    }
+
+
+def decide_unit(u: "Unit") -> str:
+    return decide(comparable(u.base), comparable(u.onw), comparable(u.ynab))
 
 
 def ynab_refs(row: dict) -> list[str]:
@@ -173,7 +193,8 @@ def _claim_unowned(units: list[Unit]) -> list[Unit]:
     of being sent a second time, and the YNAB row is not pulled in as a duplicate."""
     free = [u for u in units if u.onw_id is None and u.ynab is not None and not u.blocked]
     for mine in [u for u in units if u.onw_id and not u.refs and u.base is None and u.onw]:
-        twin = next((f for f in free if f.ynab == mine.onw), None)
+        wanted = comparable(mine.onw)
+        twin = next((f for f in free if comparable(f.ynab) == wanted), None)
         if twin is None:
             continue
         free.remove(twin)

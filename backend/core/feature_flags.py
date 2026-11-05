@@ -126,7 +126,7 @@ FLAGS: tuple[Flag, ...] = (
     Flag(
         name="actual_budget_sync",
         description=(
-            "Connect an Actual Budget server, import a whole budget and keep it and this book "
+            "Connect an Actual server, import a whole budget and keep it and this book "
             "in step on a schedule. Shares the Data sync tab in Automations with YNAB."
         ),
         default=True,

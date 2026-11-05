@@ -241,7 +241,7 @@ def test_another_apps_run_is_found(db_isolated, monkeypatch):
     other = other_app()
     budget_app.register(other)
     assert budget_app.other_running() is False
-    run_id = import_runs.start("ynab", "preview", "plan-1")["id"]
+    run_id = import_runs.start("ynab", "import", "plan-1")["id"]
     assert budget_app.other_running() is False  # YNAB's own run is not another app's
     with using(other):
         assert budget_app.other_running() is True

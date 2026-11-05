@@ -10,7 +10,7 @@ from backend.core import audit_context, data_events
 from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.services import import_runs, planning
 from backend.services import ledger as ledger_service
-from backend.services.budget_app import current, refuse_while_others_run
+from backend.services.budget_app import current, refuse_while_others_run, starting
 from backend.services.ynab_sync import (
     assigned,
     category_resolve,
@@ -50,7 +50,8 @@ def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
             f"{app.article} {app.name} import is running; resolve this when it finishes."
         )
     try:
-        refuse_while_others_run("resolve this")
+        with starting():
+            refuse_while_others_run("resolve this")
     except ConflictError:
         app.lock.release()
         raise

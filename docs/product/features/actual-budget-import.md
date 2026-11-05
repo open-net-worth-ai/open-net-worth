@@ -123,6 +123,7 @@ to refuse a write over a newer one.
 - A split can be edited here, and an existing row split: its date, amount and lines are all sent. A
   split whose lines don't add up to its total is refused and goes to the review list. Changing a
   transfer's accounts or category, or turning a row into a transfer or back, stays in the review list.
+- A category you clear in Actual stays cleared here: no rule or payee default fills it back in.
 - Income rows keep their category both ways. A new income category here goes into Actual's income
   group. An inflow with no category stays blank in Actual, where it doesn't count towards To Budget;
   the run says so once for each payee.
@@ -149,14 +150,20 @@ Assigned is never sent or taken. That's one reason Ready to Assign won't match T
 
 **One app at a time.** A book syncs with YNAB or Actual, not both, since two apps writing Assigned to
 the same envelopes would fight. Turning one on is refused while the other's sync is on, or while it
-is running an import or a sync, and so is **Sync now**.
+is running an import or a sync, and so is **Sync now**. Looking at the review or running Verify in
+the other app reads only, and gets in nothing's way.
 
 **If something goes wrong.** A server that's down, a wrong password or a budget that's gone stops the
 run with a plain message. Nothing is lost. What was already confirmed stays recorded, and the next
 run works out the rest. A run that's cut off partway can't send a row twice: the next run links what
 the server already took. The one exception is a row you edit in the moments before that next run,
-which can come across twice. A row you delete in Actual never comes back. A run stops itself if it
-goes on too long, and the next one carries on.
+which can come across twice. A row you delete in Actual never comes back. What changed in Actual
+during a run that failed is looked at again on the next run, in whichever direction you have chosen,
+so it isn't missed. A run stops itself if it goes on too long, and the next one carries on.
+
+**If a budget reads as empty,** or many rows seem to vanish at once, nothing is deleted here. Each
+deletion waits in the review list for you to confirm, and if the rows come back, the items close on
+their own.
 
 **Reset sync in Actual** is fine. Row ids don't change, so the next run carries on as before, with no
 pairing lost and nothing read as deleted.

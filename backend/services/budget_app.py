@@ -16,6 +16,7 @@ needs of them is imported on the call."""
 from __future__ import annotations
 
 import contextvars
+import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager, nullcontext
@@ -34,6 +35,8 @@ from backend.services import import_runs, ynab_flag
 
 if TYPE_CHECKING:
     from backend.services.ynab_sync.client import Budget
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,18 @@ class Capabilities:
     resolve_request_cap: int = 6
     # A transfer between a budget account and another keeps its category on the budget leg.
     categorized_transfers: bool = False
+    # The server reports what changed since a cursor that stays put when a run fails. Without one,
+    # a later read compares with the mirror, so what a failed run read must be carried forward.
+    delta_read: bool = True
+    # It stores text its own way (a payee found whatever its case, text as long as the request
+    # takes), so two sides that differ only by that haven't changed anything.
+    normalises_text: bool = False
+    # What it says of a row's category is the row's category: no rule or payee default fills a
+    # blank it sent.
+    labels_as_given_on_pull: bool = False
+    # A ledger row carrying its ids is that row, even with no baseline yet: a run was killed after
+    # writing the link and before saving what it had agreed.
+    links_without_baseline: bool = False
 
 
 @dataclass(frozen=True)
@@ -228,8 +243,18 @@ def syncing_apps(on_failure: Callable[[Exception], None] = lambda _exc: None) ->
 
 
 def _others() -> list[BudgetApp]:
+    """An app that can't be loaded has nothing running, and holds no other up."""
     me = current().key
-    return [app for app in all_apps() if app.key != me]
+    found = []
+    for entry in list(_apps.values()):
+        try:
+            app = entry() if callable(entry) else entry
+        except Exception:
+            logger.exception("a budget app could not be loaded")
+            continue
+        if app.key != me:
+            found.append(app)
+    return found
 
 
 def other_sync_on() -> BudgetApp | None:
@@ -241,9 +266,10 @@ def other_sync_on() -> BudgetApp | None:
 
 
 def other_running() -> bool:
-    """Another app has an import run, or a recorded sync run, in progress. A scheduled run has no
-    record, and needs none here: its sync is on, and stays on until it ends."""
-    return any(import_runs.has_running(a.key) for a in _others())
+    """Another app has an import run, or a recorded sync run, in progress; a preview or a verify
+    writes nothing, so it stands in nobody's way. A scheduled run has no record, and needs none
+    here: its sync is on, and stays on until it ends."""
+    return any(import_runs.has_writing_run(a.key) for a in _others())
 
 
 _starting = threading.Lock()

@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import shutil
 import sqlite3
+import uuid
 from contextlib import closing, contextmanager
 from pathlib import Path
+from types import SimpleNamespace
 
 import httpx
 from sqlalchemy import create_engine
@@ -43,6 +45,7 @@ class FakeActual:
         from sqlmodel import Session
 
         self.server, self.path = server, path
+        self.file = SimpleNamespace(file_id=BUDGET, group_id=server.group_id)
         self.engine = create_engine(f"sqlite:///{path}")
         self.session = actual_database.strong_reference_session(Session(self.engine))
 
@@ -50,9 +53,18 @@ class FakeActual:
         s = self.session
         return bool(s.new or s.dirty or s.info.get("messages"))
 
+    def _current_group(self) -> None:
+        """A reset changes the group, and the server refuses the old one until it is read again."""
+        if self.file.group_id != self.server.group_id:
+            request = httpx.Request("POST", URL)
+            raise httpx.HTTPStatusError(
+                "file-has-reset", request=request, response=httpx.Response(400, request=request)
+            )
+
     def sync(self):
         server = self.server
         server.calls.append("sync")
+        self._current_group()
         if self.uncommitted():
             server.synced_over_uncommitted = True
         if server.sync_error is not None:
@@ -68,6 +80,7 @@ class FakeActual:
         server.calls.append("commit")
         self.session.flush()
         self.session.commit()
+        self._current_group()
         if server.commit_error is not None:
             error, taken = server.commit_error
             server.commit_error = None
@@ -94,10 +107,15 @@ class FakeServer:
         self.mode = "envelope"
         self.currency: str | None = "USD"
         self.copies: list[Path] = []
+        self.group_id = "group-1"
         self.opens = 0
         engine = create_engine(f"sqlite:///{self.path}")
         actual_database.SQLModel.metadata.create_all(engine)
         engine.dispose()
+
+    def reset_sync(self) -> None:
+        """Actual's Reset sync: a new group and snapshot, the same file id and row ids."""
+        self.group_id = f"group-{uuid.uuid4().hex}"
 
     # ── what is on the server ──
     def insert(self, table: str, **values) -> None:
@@ -187,6 +205,8 @@ class FakeServer:
     @contextmanager
     def open_copy(self, store, budget_id):
         actual_flag.require()
+        if budget_id != BUDGET:
+            raise AssertionError(f"opened by {budget_id}, which isn't the budget's file id")
         self.opens += 1
         if self.open_error is not None:
             raise self.open_error

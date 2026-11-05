@@ -259,11 +259,24 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
             _assigned_phase(ctx, client, base, change, tally, first, st, fresh)
             _compared(base, fresh)
         starts.review(ctx, st)
+    except BaseException:
+        _carry_unsettled(st, change, held)
+        raise
     finally:
         base.flush()
+        if not current().caps.delta_read:
+            sync_state.save(st)  # first: once the mirror holds a read, nothing else reports it
         delta.save_changes(mirror_store, loaded, mirror, change.touched, change.full)
         sync_state.save_meta(meta)
     st.update(server_knowledge=change.knowledge, audit_cursor=upto, bootstrapped=True)
+
+
+def _carry_unsettled(st: dict, change: delta.Change, held: dict[str, set[str]]) -> None:
+    """YNAB's cursor stays put when a run fails, so its next read reports the rows again. An app
+    whose reads compare with the mirror won't: everything this one read is looked at again next
+    run, where a row already settled changes nothing."""
+    if not current().caps.delta_read:
+        st["held_ynab"] = sorted(set(st["held_ynab"]) | change.touched | held["ynab"])
 
 
 def _compared(base: Baselines, fresh: set[str]) -> None:

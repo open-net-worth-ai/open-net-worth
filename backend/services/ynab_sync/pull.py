@@ -83,5 +83,7 @@ def apply(row: dict | None, rendered: dict | None) -> tuple[Canon, str | None]:
         return canon(created), created["id"]
     row = _unchanged(row)
     patch = row_changes(rendered, row, changed_fields(canon(row), canon(rendered)))
-    updated = ledger_service.update_transaction(row["id"], patch) if patch else row
+    # The app's word on the category stands; YNAB's path stays as it has always been.
+    given = {"labels_as_given": True} if current().caps.labels_as_given_on_pull else {}
+    updated = ledger_service.update_transaction(row["id"], patch, **given) if patch else row
     return canon(updated or row), row["id"]

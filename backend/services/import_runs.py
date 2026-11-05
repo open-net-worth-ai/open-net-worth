@@ -23,6 +23,7 @@ from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.db.import_run_store import COLUMNS, ImportRunStore
 
 KINDS = ("import", "verify", "preview", "sync")
+WRITING_KINDS = ("import", "sync")  # a preview or a verify only reads
 TRIGGERS = ("manual", "scheduled")
 LIST_LIMIT = 200
 _lock = threading.Lock()
@@ -128,6 +129,10 @@ def latest(provider: str, kinds: tuple[str, ...] | None = None) -> dict | None:
 
 def has_running(provider: str) -> bool:
     return ImportRunStore().has_running(provider)
+
+
+def has_writing_run(provider: str) -> bool:
+    return ImportRunStore().has_running(provider, WRITING_KINDS)
 
 
 def summary(run: dict) -> dict:

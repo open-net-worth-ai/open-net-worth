@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from backend import scheduler
 from backend.api.actual_budget_api import router
 from backend.core import audit_context
-from backend.core.errors import ConflictError, ExternalServiceError, NotFoundError
+from backend.core.errors import ConflictError, ExternalServiceError, NotFoundError, ValidationError
 from backend.core.user_time import user_today
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
 from backend.db.actual_sync_store import (
@@ -25,6 +25,7 @@ from backend.db.actual_sync_store import (
     ActualMirrorStore,
     ActualSyncStateStore,
 )
+from backend.db.payee_store import PayeeStore
 from backend.db.ynab_config_store import YnabConfigStore
 from backend.db.ynab_sync_store import YnabSyncStateStore
 from backend.services import budget_app, import_runs, planning, ynab_sync
@@ -36,8 +37,17 @@ from backend.services.actual_sync import shape, writes
 from backend.services.actual_sync.app import ACTUAL
 from backend.services.budget_app import YNAB, using
 from backend.services.ynab_migration import job
+from backend.services.ynab_sync import (
+    baselines,
+    delta,
+    pull,
+    push,
+    resolve,
+    runner,
+    txn_sync,
+    units,
+)
 from backend.services.ynab_sync import client as ynab_client
-from backend.services.ynab_sync import delta, push, resolve, runner
 from backend.services.ynab_sync import state as sync_state
 from tests.actual_sync_stub import BUDGET, HOST, PASSWORD, URL, FakeServer, down, seed
 from tests.flags import flags
@@ -856,7 +866,303 @@ def test_server_down_leaves_baselines(world, failure):
     assert HOST not in run["error"] and PASSWORD not in run["error"]
     assert ActualBaselineStore().all() == baselines
     assert ActualMirrorStore().all() == mirror
-    assert all(not path.exists() for path in world.copies)
+
+
+# ── a failed run loses nothing ──
+
+
+def by_ref(ref: str) -> dict:
+    return next(
+        t
+        for t in ledger_service.transactions.all()
+        if any(e["ref"] == ref for e in t.get("external_refs") or [])
+    )
+
+
+def test_to_actual_a_failed_run_keeps_an_edit_made_there(world):
+    enable("to_ynab")
+    sync()
+    world.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-market'")
+    world.queue.clear()
+    edit_here(row("ACME Corp")["id"], memo="here")
+    world.commit_error = (down(), False)
+    assert _run()["ok"] is False
+    assert "t-market" in sync_state_of()["held_ynab"]
+    assert sync()["summary"] == "1 sent to Actual"
+    assert world.row("transactions", "t-pay")["notes"] == "here"
+    assert by_ref("t-market").get("memo") != "there"  # To Actual doesn't change the book
+    enable("both")
+    assert sync()["summary"] == "1 pulled"
+    assert by_ref("t-market")["memo"] == "there"
+    assert open_items() == []
+
+
+@pytest.mark.parametrize("broken", ["pull", "build"])
+def test_an_unexpected_error_mid_run_loses_no_pull(world, monkeypatch, broken):
+    enable()
+    sync()
+    world.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-market'")
+    world.queue.clear()
+    target, name = (pull, "apply") if broken == "pull" else (units, "build")
+    real = getattr(target, name)
+
+    def boom(*_a, **_k):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(target, name, boom)
+    assert _run()["ok"] is False
+    monkeypatch.setattr(target, name, real)
+    assert sync()["summary"] == "1 pulled"
+    assert by_ref("t-market")["memo"] == "there"
+    assert open_items() == []
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_a_ledger_refusal_that_escapes_the_loop_loses_no_pull(world, monkeypatch):
+    enable()
+    sync()
+    world.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-market'")
+    world.queue.clear()
+    real = txn_sync._apply_pull
+
+    def boom(*_a, **_k):
+        raise ValidationError("the ledger refused it")
+
+    monkeypatch.setattr(txn_sync, "_apply_pull", boom)
+    assert _run()["ok"] is False
+    monkeypatch.setattr(txn_sync, "_apply_pull", real)
+    assert sync()["summary"] == "1 pulled"
+    assert by_ref("t-market")["memo"] == "there"
+
+
+@pytest.mark.parametrize("direction", ["both", "to_ynab"])
+def test_a_row_deleted_in_actual_during_a_failed_run_is_still_deleted_here(
+    world, monkeypatch, direction
+):
+    enable(direction)
+    sync()
+    market = by_ref("t-market")["id"]
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id = 't-market'")
+    world.queue.clear()
+    if direction == "both":
+        real = pull.apply
+
+        def boom(*_a, **_k):
+            raise RuntimeError("database is locked")
+
+        monkeypatch.setattr(pull, "apply", boom)
+        assert _run()["ok"] is False
+        monkeypatch.setattr(pull, "apply", real)
+    else:
+        edit_here(row("ACME Corp")["id"], memo="here")
+        world.commit_error = (down(), False)
+        assert _run()["ok"] is False
+        sync()
+        enable("both")
+    sync()
+    assert ledger_service.transactions.find_by_id(market).get("deleted")
+    assert open_items() == []
+
+
+def test_a_run_that_fails_then_succeeds_leaves_both_sides_equal(world):
+    enable()
+    sync()
+    world.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-market'")
+    world.txn(
+        "t-new", "a1", -700, TODAY, description="p-market", category="c-fun", notes="brand new"
+    )
+    world.queue.clear()
+    edit_here(row("ACME Corp")["id"], memo="here")
+    world.commit_error = (down(), False)
+    assert _run()["ok"] is False
+    run = sync()
+    assert run["ok"] is True and open_items() == []
+    assert world.row("transactions", "t-pay")["notes"] == "here"
+    assert by_ref("t-market")["memo"] == "there"
+    assert by_ref("t-new")["memo"] == "brand new"
+    assert len([t for t in ledger_service.transactions.all() if t.get("memo") == "brand new"]) == 1
+    assert sync_state_of()["held_ynab"] == []
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_replaying_settled_rows_changes_nothing(world):
+    enable()
+    sync()
+    with using(ACTUAL):
+        st = sync_state.load()
+        st["held_ynab"] = sorted(ActualMirrorStore().by_id())
+        sync_state.save(st)
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed"
+    assert writes_seen(world) == [] and open_items() == []
+
+
+# ── what Actual does to text ──
+
+
+@pytest.mark.parametrize(
+    "description",
+    ["corner market", "ACME " + "x" * 250],
+    ids=["a payee in another case", "a payee past the request's length"],
+)
+def test_a_lost_answer_is_claimed_when_actual_normalised_the_row(world, description):
+    enable()
+    sync()
+    made = new_row(description=description, from_amount=7.77, category=category_here("Food")["id"])
+    world.commit_error = (httpx.ReadTimeout("timed out"), True)
+    assert _run()["ok"] is False
+    sync()
+    assert len(world.live("amount = -777")) == 1
+    (booked,) = [
+        t
+        for t in ledger_service.transactions.all()
+        if not t.get("deleted") and abs((t.get("from_amount") or 0) - 7.77) < 0.001
+    ]
+    assert booked["id"] == made["id"] and open_items() == []
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+@pytest.mark.parametrize(
+    "description", ["corner market", "ACME " + "x" * 250], ids=["case", "length"]
+)
+def test_a_later_edit_of_a_normalised_row_is_no_false_conflict(world, description):
+    enable()
+    sync()
+    made = new_row(description=description, from_amount=7.77, category=category_here("Food")["id"])
+    assert sync()["summary"] == "1 sent to Actual"
+    edit_here(made["id"], memo="later")
+    assert sync()["summary"] == "1 sent to Actual"
+    assert open_items() == []
+    (remote,) = world.live("amount = -777")
+    assert remote["notes"] == "later"
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_a_real_rename_in_actual_still_comes_across(world):
+    enable()
+    sync()
+    world.edit("UPDATE payees SET name = 'Corner Shop' WHERE id = 'p-market'")
+    world.queue.clear()
+    sync()
+    assert by_ref("t-market")["description"] == "Corner Shop"
+
+
+# ── a category cleared in Actual ──
+
+
+def test_a_category_cleared_in_actual_stays_cleared_here(world):
+    enable()
+    sync()
+    market = by_ref("t-market")
+    food = category_here("Food")["id"]
+    PayeeStore().set_default_category_for_kind(market["payee_id"], "expense", food)
+    world.edit("UPDATE transactions SET category = NULL WHERE id = 't-market'")
+    world.queue.clear()
+    assert sync()["summary"] == "1 pulled"
+    assert by_ref("t-market").get("category") is None
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+    edit_here(by_ref("t-market")["id"], memo="note here")
+    assert open_items() == []
+    # The edit here runs the normal path, where a payee default may fill a blank: that is the
+    # person's own edit, and it reaches Actual as one.
+    sync()
+    assert open_items() == []
+    assert world.row("transactions", "t-market")["notes"] == "note here"
+
+
+def test_every_other_caller_of_the_ledger_choke_still_fills_a_blank(world):
+    market = by_ref("t-market")
+    food = category_here("Food")["id"]
+    PayeeStore().set_default_category_for_kind(market["payee_id"], "expense", food)
+    updated = as_person(ledger_service.update_transaction, market["id"], {"category": None})
+    assert updated["category"] == food
+    kept = as_person(
+        ledger_service.update_transaction, market["id"], {"category": None}, labels_as_given=True
+    )
+    assert kept.get("category") is None
+
+
+# ── a process killed mid-run ──
+
+
+def _killed_run(monkeypatch) -> None:
+    """What's on disk when the process dies with the run's work done and nothing saved at its end."""
+    with monkeypatch.context() as killed:
+        killed.setattr(baselines.Baselines, "flush", lambda self: None)
+        killed.setattr(delta, "save_changes", lambda *a, **k: None)
+        killed.setattr(sync_state, "save", lambda st: None)
+        killed.setattr(sync_state, "save_meta", lambda meta: None)
+        with using(ACTUAL):
+            runner._locked_run("manual")
+
+
+def test_a_kill_after_a_create_is_linked_is_not_stuck(world, monkeypatch):
+    enable()
+    sync()
+    made = new_row(category=category_here("Food")["id"])
+    _killed_run(monkeypatch)
+    assert made["id"] not in ActualBaselineStore().split()[0]
+    assert ledger_service.transactions.find_by_id(made["id"])["external_refs"]
+    run = sync()
+    assert run["ok"] is True and open_items() == []
+    assert made["id"] in ActualBaselineStore().split()[0]
+    assert len(world.live("amount = -1234")) == 1
+    edit_here(made["id"], memo="later")
+    assert sync()["summary"] == "1 sent to Actual"
+    (remote,) = world.live("amount = -1234")
+    assert remote["notes"] == "later"
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_a_kill_after_a_pull_is_not_stuck(world, monkeypatch):
+    enable()
+    sync()
+    world.txn(
+        "t-new", "a1", -700, TODAY, description="p-market", category="c-fun", notes="brand new"
+    )
+    world.queue.clear()
+    _killed_run(monkeypatch)
+    assert "t-new" in by_ref("t-new")["external_refs"][0]["ref"]
+    run = sync()
+    assert run["ok"] is True and open_items() == []
+    assert len([t for t in ledger_service.transactions.all() if t.get("memo") == "brand new"]) == 1
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+# ── an empty read ──
+
+
+def test_an_empty_copy_of_a_small_book_deletes_nothing(world):
+    enable()
+    sync()
+    rows_here = len([t for t in ledger_service.transactions.all() if not t.get("deleted")])
+    world.edit("UPDATE transactions SET tombstone = 1")
+    world.queue.clear()
+    sync()
+    assert any("at once" in c["reason"] for c in open_items())
+    assert len([t for t in ledger_service.transactions.all() if not t.get("deleted")]) == rows_here
+    world.edit("UPDATE transactions SET tombstone = 0")
+    world.queue.clear()
+    assert sync()["ok"] is True
+    assert open_items() == []  # back as it was: nothing's left to ask
+    assert len([t for t in ledger_service.transactions.all() if not t.get("deleted")]) == rows_here
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_a_real_deletion_of_a_few_rows_needs_no_confirming(world):
+    enable()
+    sync()
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id = 't-pay'")
+    world.queue.clear()
+    assert sync()["summary"] == "1 pulled" and open_items() == []
 
 
 def test_a_commit_error_keeps_what_earlier_batches_confirmed(world, monkeypatch):
@@ -902,18 +1208,40 @@ def test_sync_reset_keeps_pairing_no_mass_delete(world):
     enable()
     sync()
     baselines = ActualBaselineStore().all()
-    # A Reset sync gives the budget a new group and snapshot: the file and row ids stay.
+    mirror = ActualMirrorStore().all()
+    before = world.group_id
+    world.reset_sync()
+    assert world.group_id != before
     world.calls.clear()
     assert sync()["summary"] == "Nothing changed"
-    assert writes_seen(world) == []
-    assert open_items() == []
-    assert ActualBaselineStore().all() == baselines
-    assert all(
-        not t.get("deleted")
-        for t in ledger_service.transactions.all()
-        if t["description"] == "ACME Corp"
-    )
+    assert writes_seen(world) == [] and open_items() == []
+    assert ActualBaselineStore().all() == baselines and ActualMirrorStore().all() == mirror
     assert sync_state_of()["plan_id"] == BUDGET
+    edit_here(row("ACME Corp")["id"], memo="after the reset")
+    assert sync()["summary"] == "1 sent to Actual"
+    assert world.row("transactions", "t-pay")["notes"] == "after the reset"
+
+
+def test_a_reset_during_a_run_stops_it_and_the_next_run_carries_on(world):
+    enable()
+    sync()
+    edit_here(row("ACME Corp")["id"], memo="here")
+    baselines = ActualBaselineStore().all()
+    real = writes.ActualClient.save_transactions
+
+    def reset_first(self, method, rows):
+        world.reset_sync()
+        return real(self, method, rows)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(writes.ActualClient, "save_transactions", reset_first)
+    try:
+        run = _run()
+    finally:
+        monkeypatch.undo()
+    assert run["ok"] is False and ActualBaselineStore().all() == baselines
+    assert sync()["summary"] == "1 sent to Actual"
+    assert world.row("transactions", "t-pay")["notes"] == "here"
 
 
 def sync_state_of() -> dict:
@@ -1020,7 +1348,7 @@ def test_sync_now_refused_while_other_running_both_ways(world, monkeypatch):
     import_runs.finish(run_id, "done")
 
     _ynab_on()
-    run_id = import_runs.start("actual_budget", "preview", BUDGET)["id"]
+    run_id = import_runs.start("actual_budget", "import", BUDGET)["id"]
     with pytest.raises(ConflictError) as refused:
         ynab_sync.start_now()
     assert "Actual" in refused.value.message
@@ -1047,6 +1375,42 @@ def test_the_tick_waits_for_the_other_apps_run_both_ways(world, monkeypatch):
     assert ynab_sync.run_if_due() is False and ran == []
     import_runs.finish(run_id, "done")
     assert ynab_sync.run_if_due() is True and ran == ["ynab"]
+
+
+def test_a_preview_or_a_verify_stands_in_nobodys_way(world, monkeypatch):
+    ran: list[str] = []
+    monkeypatch.setattr(runner, "_execute", lambda st, tally: ran.append(budget_app.current().key))
+    _ynab_on()
+    run_id = import_runs.start("actual_budget", "preview", BUDGET)["id"]
+    assert ynab_sync.run_if_due() is True and ran == ["ynab"]
+    started = ynab_sync.start_now()
+    assert started["running"] is True
+    _free(YNAB)
+    import_runs.finish(run_id, "done")
+    run_id = import_runs.start("actual_budget", "verify", BUDGET)["id"]
+    with using(YNAB):
+        assert budget_app.other_running() is False
+    import_runs.finish(run_id, "done")
+
+
+def test_settling_a_review_item_checks_inside_the_guard(world, monkeypatch):
+    enable()
+    sync()
+    edit_here(row("ACME Corp")["id"], memo="here")
+    world.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-pay'")
+    world.queue.clear()
+    sync()
+    (item,) = open_items()
+    held: list[bool] = []
+    real = resolve.refuse_while_others_run
+
+    def spy(then):
+        held.append(budget_app._starting.locked())
+        return real(then)
+
+    monkeypatch.setattr(resolve, "refuse_while_others_run", spy)
+    actual_app.resolve_sync_item(item["id"], "onw")
+    assert held == [True]
 
 
 def test_settling_a_review_item_waits_for_the_other_app(world):
@@ -1167,6 +1531,21 @@ def test_tick_runs_each_app_separately(world, monkeypatch):
     assert ynab_sync.run_if_due() is True
     assert ran == [("actual_budget", BUDGET), ("ynab", "plan-y")]
     assert budget_app.current() is YNAB
+
+
+def test_an_app_that_cannot_load_stops_no_other_app(world, monkeypatch):
+    ran: list[str] = []
+    monkeypatch.setattr(runner, "_execute", lambda st, tally: ran.append(budget_app.current().key))
+    boom = ImportError("no Actual here")
+
+    def broken():
+        raise boom
+
+    monkeypatch.setitem(budget_app._apps, "actual_budget", broken)
+    _ynab_on()
+    with pytest.raises(ImportError):
+        ynab_sync.run_if_due()
+    assert ran == ["ynab"]
 
 
 def test_an_is_on_that_raises_stops_no_other_app(world, monkeypatch):

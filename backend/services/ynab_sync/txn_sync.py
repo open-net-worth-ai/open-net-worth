@@ -15,7 +15,7 @@ from backend.services.ynab_sync.canon import canon, view
 from backend.services.ynab_sync.client import YnabClient
 from backend.services.ynab_sync.context import Context
 from backend.services.ynab_sync.delta import Change
-from backend.services.ynab_sync.units import Unit, decide
+from backend.services.ynab_sync.units import Unit, decide_unit
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,10 @@ MIN_REMOVAL_GUARD = 25  # ...but never for fewer rows than this
 def _rows(ctx: Context, base: Baselines, change: Change, first: bool, scan: set[str]):
     """(ledger rows to look at, their baselines, ref -> ledger id, refs YNAB no longer holds)."""
     index = {ref: i for i, d in base.txns.items() for ref in d["refs"]}
+    if current().caps.links_without_baseline and not first:
+        for r in ledger_service.transactions.all():
+            for ref in units.ynab_refs(r) if not r.get("deleted") else ():
+                index.setdefault(ref, r["id"])
     if first:
         everything = {r["id"]: r for r in ledger_service.transactions.all()}
         for r in everything.values():
@@ -148,7 +152,7 @@ def settle(
     )
     todo: list[Unit] = []
     for u in all_units:
-        action = decide(u.base, u.onw, u.ynab)
+        action = decide_unit(u)
         if u.blocked and u.onw_id is None:
             _file(ctx, u, conflicts.UNSUPPORTED, u.blocked)
             continue
@@ -158,7 +162,10 @@ def settle(
                 and u.onw_id is None
                 and not u.blocked
             )
-            if action != "adopt" and not waiting_on_a_category:
+            # Where every read is whole, something held can come back as it was: nothing's left
+            # to ask about.
+            back_as_it_was = action == "noop" and not current().caps.delta_read
+            if action != "adopt" and not waiting_on_a_category and not back_as_it_was:
                 continue
             conflicts.close(u.key)
         if action == "conflict":
@@ -189,7 +196,9 @@ def _hold_removals(ctx: Context, all_units: list[Unit], open_items: dict) -> lis
     removals = [
         u for u in all_units if u.refs and u.ynab is None and u.onw is not None and u.base == u.onw
     ]
-    if len(removals) <= max(MIN_REMOVAL_GUARD, MAX_REMOVAL_FRACTION * linked):
+    # A whole read with no rows at all says more about the read than about a small book's rows.
+    read_nothing = removals and not ctx.mirror and not current().caps.delta_read
+    if not read_nothing and len(removals) <= max(MIN_REMOVAL_GUARD, MAX_REMOVAL_FRACTION * linked):
         return all_units
     reason = (
         f"{len(removals)} of {linked} synced transactions were deleted in {current().name} at once; "

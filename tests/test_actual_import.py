@@ -220,6 +220,10 @@ def test_the_description_of_actual():
         resolve_request_cap=1_000_000,
         flag_trail=False,
         categorized_transfers=True,
+        delta_read=False,
+        normalises_text=True,
+        labels_as_given_on_pull=True,
+        links_without_baseline=True,
     )
     assert app.stores.state().doc("state") == {"id": "state"}
     assert app.syncs is True and app.defers is True

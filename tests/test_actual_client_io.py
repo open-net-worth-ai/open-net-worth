@@ -24,8 +24,9 @@ import pytest
 
 from backend.core.errors import ConflictError, ExternalServiceError, NotFoundError, ValidationError
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
-from backend.services.actual_sync import client
+from backend.services.actual_sync import client, writes
 from backend.services.ynab_sync import client as ynab_client
+from backend.services.ynab_sync.client import Budget
 from tests.flags import flags
 from tests.test_actual_compat import SCHEMA
 
@@ -89,6 +90,8 @@ def dto(file_id="f1", name="ACME Home", key=None, deleted=0):
 
 class FakeActual:
     """Stands in for ``actual.Actual``: records how it was built and writes a small budget."""
+
+    session = SimpleNamespace(new=(), dirty=(), info={})
 
     instances: list["FakeActual"] = []
     files = [dto()]
@@ -735,3 +738,31 @@ def test_people_read_actual_not_actual_budget():
             and id(node) not in logged | docs
         ]
         assert [line for line in said if "Actual Budget" in line] == [], name
+
+
+def test_a_sync_run_removes_its_copy_on_success_and_failure(store, work, fake):
+    """Through the real ``open_copy``, the way a run opens its client."""
+    with writes.open_sync_client("f1", Budget(10)) as made:
+        directory = made.copy.directory
+        assert directory.is_dir()
+    assert not directory.exists()
+
+    def boom():
+        raise httpx.ConnectError(f"{URL} refused {PASSWORD}")
+
+    with pytest.raises(ynab_client.Stopped) as caught:
+        with writes.open_sync_client("f1", Budget(10)) as made:
+            directory = made.copy.directory
+            made.copy.actual.sync = boom
+            made.copy.pull()
+    never_leaks(caught.value)
+    assert not directory.exists() and list(work.iterdir()) == []
+
+
+def test_a_sync_run_that_cannot_connect_leaves_no_copy(store, work, fake):
+    FakeActual.build_error = httpx.ConnectError(f"{URL} refused {PASSWORD}")
+    with pytest.raises(ExternalServiceError) as caught:
+        with writes.open_sync_client("f1", Budget(10)):
+            raise AssertionError("no client without a connection")
+    never_leaks(caught.value)
+    assert list(work.iterdir()) == []
