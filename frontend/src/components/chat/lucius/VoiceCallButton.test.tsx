@@ -9,6 +9,8 @@ const navigate = vi.fn()
 vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
 const dispatch = vi.fn()
 vi.mock('../../../lucius/bus', () => ({ dispatchScreenCommand: (c: unknown) => dispatch(c) }))
+let mobile = false
+vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => mobile }))
 // No real room in jsdom.
 vi.mock('livekit-client', () => ({
   Room: vi.fn(),
@@ -147,6 +149,48 @@ describe('VoiceCallButton', () => {
     expect(JSON.parse(init.body)).toEqual({ session_id: 's1' })
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  describe('where a call opens', () => {
+    function pressCall(tone?: 'composer' | 'pill' | 'fab') {
+      function View() {
+        return <output>{useVoiceCall().view}</output>
+      }
+      restore = overrideFlagsForTests({ voice_calls: true })
+      // Never answers: the call stays connecting, in the view it opened in.
+      authFetch.mockImplementation((url: string) =>
+        url === '/api/voice/config'
+          ? Promise.resolve({ ok: true, json: async () => READY })
+          : new Promise(() => {}),
+      )
+      render(
+        <>
+          <VoiceCallButton sessionId="s1" tone={tone} />
+          <View />
+        </>,
+      )
+      return screen.findByRole('button', { name: 'Call Lucius' })
+    }
+    afterEach(() => {
+      mobile = false
+    })
+
+    it('opens full screen from the message box on a phone', async () => {
+      mobile = true
+      fireEvent.click(await pressCall())
+      expect(screen.getByRole('status').textContent).toBe('stage')
+    })
+
+    it.each(['fab', 'pill'] as const)('stays small from the %s on a phone', async (tone) => {
+      mobile = true
+      fireEvent.click(await pressCall(tone))
+      expect(screen.getByRole('status').textContent).toBe('bar')
+    })
+
+    it('stays a strip from the message box on a wide screen', async () => {
+      fireEvent.click(await pressCall())
+      expect(screen.getByRole('status').textContent).toBe('bar')
+    })
   })
 })
 

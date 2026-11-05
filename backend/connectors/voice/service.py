@@ -178,12 +178,16 @@ def calls_allowed() -> bool:
     return flag_enabled(FLAG) and is_ready(VoiceConfigStore().get())
 
 
+LIVEKIT_CLOUD_URL = "wss://livekit.cloud"
+
+
 def voice_server_url() -> Optional[str]:
-    """The LiveKit URL the browser must be allowed to reach, while calls are on and set up."""
+    """The LiveKit server the browser must be allowed to reach while the flag is on: the saved one,
+    else LiveKit Cloud. A page keeps the policy it loaded with, so one that waited for setup was
+    refused the server its own owner had just saved (reported by a tester, 2026-11-05)."""
     if not flag_enabled(FLAG):
         return None
-    config = VoiceConfigStore().get()
-    return config["livekit_url"] if is_ready(config) else None
+    return VoiceConfigStore().get().get("livekit_url") or LIVEKIT_CLOUD_URL
 
 
 # Where LiveKit's WebRTC and onnxruntime ship a build — keep in step with requirements.txt.

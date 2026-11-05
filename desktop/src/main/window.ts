@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { desktopEvent } from './desktop-events';
 import type { DesktopCommand, DesktopUpdateState, HistoryState } from '../contracts';
 import { BackendSupervisor } from './backend';
-import { appDocument, clipboardWriteAllowed, microphoneAllowed, credentialHeaders, externalUrl, safeServerCommand, serverHeaders, validCommand, initialNavigationTrusted, serverRecoveryAllowed, trustedFrame } from './security';
+import { appDocument, clipboardWriteAllowed, connectSources, microphoneAllowed, credentialHeaders, externalUrl, safeServerCommand, serverHeaders, validCommand, initialNavigationTrusted, serverRecoveryAllowed, trustedFrame } from './security';
 import { artifactFrameAllowed, artifactPolicy, artifactRequest } from './artifact-policy';
 import { prepareArtifactSrcDoc } from '../artifact-document';
 import { ArtifactProtocolOwner } from './artifact-protocol';
@@ -458,8 +458,9 @@ export class DesktopWindow {
       if (this.serverOrigin) { callback({}); return; }
       if (!this.backend.origin || details.resourceType !== 'mainFrame' || !details.url.startsWith(`${this.backend.origin}/`) || new URL(details.url).pathname.startsWith('/api/')) { callback({}); return; }
       const headers = { ...details.responseHeaders };
-      const csp = `default-src 'self'; script-src 'self' ${this.inlineScriptHashes.join(' ')}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self'; frame-src 'self' blob: onw-artifact: https:; object-src 'none'; base-uri 'none'; form-action 'self';`;
-      const existingName = Object.keys(headers).find(name => name.toLowerCase() === 'content-security-policy') ?? 'Content-Security-Policy';
+      const existingPolicyName = Object.keys(headers).find(name => name.toLowerCase() === 'content-security-policy');
+      const csp = `default-src 'self'; script-src 'self' ${this.inlineScriptHashes.join(' ')}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; ${connectSources(existingPolicyName ? headers[existingPolicyName] : undefined)}; frame-src 'self' blob: onw-artifact: https:; object-src 'none'; base-uri 'none'; form-action 'self';`;
+      const existingName = existingPolicyName ?? 'Content-Security-Policy';
       headers[existingName] = [...(headers[existingName] ?? []), csp];
       callback({ responseHeaders: headers });
     });

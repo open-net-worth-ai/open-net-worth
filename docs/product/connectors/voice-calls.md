@@ -38,9 +38,10 @@ of hearing nothing, he tells you he's still on it (*"still working on your groce
 again every 30 to 45 seconds until the answer starts. He stays quiet while you're talking or after
 you've asked him to wait. These lines repeat what you asked, never a figure. To cut him off, say at
 least two words (*"hold on"*, *"stop there"*): a lone *"okay"* or background noise doesn't.
-Correct him while he's looking (*"no, I meant the other card"*) and he moves on to what you meant without
-reading out the first answer. A change you've already asked for can't be taken back this way: it may
-still happen, so you always hear how it went, then he gets to your correction.
+Correct him (*"no, I meant the other card"*) and he moves on to what you meant, skipping the first
+answer if it hasn't been read out yet; he also knows you never heard it. Asking something different
+keeps the first answer, in order. A change can't be taken back this way: if the first request did
+change something, you always hear how it went, then he gets to your correction.
 Only his final reply is read out. A link in it shows in the chat: inside a sentence you hear just its
 name, and on a line of its own you don't hear it at all.
 Ask *"what are you doing?"* and the front voice tells you what Lucius is working on right now.
@@ -91,7 +92,7 @@ nobody is. While he looks something up it moves faster and the line under it say
 
 | Where | What you see |
 |---|---|
-| **On a phone** | The call starts small, as a strip above the message box, so you keep your place. Its expand button opens the full call screen. The arrow at the top (or **Type**) puts that away again so you can read the chat (approval cards included) or type, while you keep talking. |
+| **On a phone** | Pressing **Call** in the Lucius chat opens the full call screen. The arrow at the top (or **Type**) folds it into a strip above the message box so you can read the chat (approval cards included) or type, while you keep talking. The strip's expand button opens the full screen again. |
 | **On a phone, away from the Lucius tab** | A small round button sits above the tab bar. With no call on it shows **voice bars**: tap it to call, or to go to Voice calls in Connectors if calls aren't set up. During a call it grows into a small pill with the moving **orb** and the time, or what's going on instead (*Working…*, *Poor connection*, *Reconnecting…*): tap it to open the full call screen, where **End** is. |
 | **In the side panel or the Lucius tab** | The call sits just above the message box — a slim strip on a wide screen — so the chat above stays readable and its cards tappable. |
 | **The floating Lucius button** | It has a **Call** button (four voice bars) beside **Ask Lucius**: press it and the call happens right in the button. It grows to show the orb, the time, **Mute** and **End**, and shrinks back when you hang up. Press the time to open the chat. On a poor connection it says so and shows the signal bars. If Lucius needs your approval it says **Needs approval**; press **Review** to see the card. |
@@ -130,7 +131,13 @@ works; from another device the app must be reachable over HTTPS (see
 | **Lucius on calls** | The model Lucius answers with during a call. Unset, he uses the conversation's own model. A faster one keeps the waits short. |
 | **Language** | What you speak on calls: English, Vietnamese, Chinese, Japanese, Korean, Hindi, Indonesian, Spanish, French, German or Portuguese. Lucius hears it, his greeting and check-ins are in it, and his voice speaks it. |
 | **Speech to text** | Which service turns your voice into text. *Automatic* lets LiveKit pick the best one for your language; *AssemblyAI Universal (English)* hears English only, so another language moves you to Automatic. |
-| **Voice** and **Voice id** | Which service speaks, and which of its voices (blank = its default). |
+| **Voice model** | Which service speaks and what it costs. *Inworld 2.0 Flash* is the default for a new setup: it's the cheapest model that speaks every language here. A setup you've already saved keeps its choice until you change it. Only models that speak your language are offered. |
+| **Voice** | Who speaks: male and female voices where LiveKit names them, marked with the gender its docs state. These are a sample. Pick **Another voice…** to paste an id from that service's library, which has many more. Picking another service goes back to its default voice. A voice may not sound natural in every language, so try it with a short call. |
+
+**What a call costs.** Lucius's voice is most of it, and it's charged by the character, so the price
+beside each voice and the length of his answers matter most. Settings shows an estimate for the voice
+you pick: on LiveKit's free $2.50 credit, about 80 minutes at $50 per million characters, about 140 at
+$25 and about 200 at $15. A call that talks more uses it faster, and LiveKit sets the prices.
 
 The LiveKit key and secret are stored like every connector credential: never shown to Lucius,
 readable back only by you through the eye on the field. Pausing the connector stops taking calls.
@@ -163,6 +170,16 @@ on the floating Lucius button takes you to Voice calls in Connectors. It also gi
 
 **The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it opens
 the Voice calls settings right where you are.
+
+**"Calls are ready."** The page had to reload before it could reach your voice server, for example
+because it was already open when calls were set up on another device. Press **Call**.
+
+**"Your browser blocked the connection to your voice server."** Reloading didn't help, so something
+in front of the app, such as a proxy or an extension, is refusing the connection. **Details** has
+the browser's words.
+
+**"Couldn't connect to your voice server."** Your internet is down, or the LiveKit URL, key or secret
+in Voice calls settings is wrong. **Details** has LiveKit's words.
 
 **"Set up Voice calls in Connectors first."** The connector has no LiveKit URL, key or secret yet,
 or it is paused.

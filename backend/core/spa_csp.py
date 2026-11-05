@@ -20,10 +20,12 @@ nor send data anywhere. What each non-obvious directive is for:
 * ``frame-ancestors 'none'`` — the app is never framed (clickjacking); the desktop window loads
   it as a top-level document.
 * ``connect-src`` + the voice server — a voice call's browser connects to the owner's own
-  LiveKit server (signalling over wss, region lookup over https). Only when voice calls are on
-  and set up, and only that server: ``*.livekit.cloud`` for LiveKit Cloud (it hands the browser
-  a regional host), the exact host otherwise. Without it the browser refused the connection
-  before the call could even ask for the microphone (live test, 2026-11-03).
+  LiveKit server (signalling over wss, region lookup over https). Only while the voice calls flag
+  is on, and only that server: ``*.livekit.cloud`` for LiveKit Cloud (it hands the browser a
+  regional host) and before one is saved, the exact host otherwise. Without it the browser refused
+  the connection before the call could even ask for the microphone (live test, 2026-11-03). Not
+  waiting for setup: a page keeps the policy it loaded with, so a page opened before setup was
+  refused anyway; a saved self-hosted server still reloads it (``voicePagePolicy.ts``).
 """
 
 from __future__ import annotations

@@ -12,6 +12,12 @@ import {
 import { authFetch } from '../../../api/client'
 import { desktopBridge, desktopClientBridge } from '../../../platform/desktop'
 import { emitConversationChanged } from '../../../lucius/bus'
+import {
+  clearPolicyReload,
+  reloadForPolicy,
+  takeReloadNotice,
+  watchPolicyBlock,
+} from './voicePagePolicy'
 
 // One voice call for the whole app (`voice_calls` flag), held OUTSIDE React. The first build kept
 // the LiveKit room inside the Call button, so a chat that re-laid its composer (the landing screen
@@ -20,7 +26,15 @@ import { emitConversationChanged } from '../../../lucius/bus'
 
 export type CallPhase = 'idle' | 'connecting' | 'ringing' | 'live' | 'reconnecting' | 'ended'
 
-export type CallProblemKind = 'mic' | 'insecure' | 'setup' | 'dropped' | 'service' | 'other'
+export type CallProblemKind =
+  | 'mic'
+  | 'insecure'
+  | 'setup'
+  | 'dropped'
+  | 'service'
+  | 'other'
+  /** Not a problem: the page reloaded so it could reach the voice server, and a call needs a tap. */
+  | 'ready'
 
 export interface CallProblem {
   kind: CallProblemKind
@@ -70,7 +84,9 @@ const IDLE: CallState = {
   luciusWorking: false,
 }
 
-let state: CallState = IDLE
+let state: CallState = takeReloadNotice()
+  ? { ...IDLE, problem: { kind: 'ready', message: 'Calls are ready.' } }
+  : IDLE
 const listeners = new Set<() => void>()
 let room: Room | null = null
 let stopRing: () => void = () => {}
@@ -226,6 +242,14 @@ function classify(e: unknown): CallProblem {
   if (name === 'NotFoundError') {
     return { kind: 'mic', message: 'No microphone was found. Connect one, then try again.' }
   }
+  // LiveKit's own words name no cause or next step: they stay behind Details.
+  if (/signal connection/i.test(message)) {
+    return {
+      kind: 'setup',
+      message: "Couldn't connect to your voice server. Check your internet and LiveKit settings.",
+      detail: message,
+    }
+  }
   return { kind: 'other', message: message || 'The call could not start.' }
 }
 
@@ -351,7 +375,7 @@ function finish(problem: CallProblem | null) {
   if (seconds !== null) endedTimer = window.setTimeout(() => set({ phase: 'idle' }), 3000)
 }
 
-export async function startCall(sessionId: string): Promise<void> {
+export async function startCall(sessionId: string, view: CallState['view'] = 'bar'): Promise<void> {
   if (room || state.phase === 'connecting') return
   window.clearTimeout(endedTimer)
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -367,9 +391,10 @@ export async function startCall(sessionId: string): Promise<void> {
   localHangUp = false
   endProblem = null
   openLevels()
-  // Folded on a phone too: pressing Call shouldn't take over the screen, and the pill or the strip
-  // opens it when you want it (owner, 2026-11-05).
-  set({ ...IDLE, phase: 'connecting', sessionId, view: 'bar' })
+  // Folded unless the caller says otherwise: a call started from another screen shouldn't take it
+  // over, and the pill or the strip opens it when you want it (owner, 2026-11-05).
+  set({ ...IDLE, phase: 'connecting', sessionId, view })
+  const policy = watchPolicyBlock()
   try {
     // The microphone first, THEN the ring: opening it reconfigures the audio device (a
     // Bluetooth headset switches to its call mode), which broke whichever ring was playing —
@@ -455,6 +480,7 @@ export async function startCall(sessionId: string): Promise<void> {
       if (!byUs) void explainEnd()
     })
     await next.connect(grant.url, grant.token)
+    clearPolicyReload()
     set({ sessionId: grant.session_id, phase: 'ringing' })
     pickupTimer = window.setTimeout(() => {
       if (room !== next || state.phase !== 'ringing') return
@@ -475,8 +501,15 @@ export async function startCall(sessionId: string): Promise<void> {
     const mine = localHangUp
     localHangUp = true
     await room?.disconnect()
-    if (!mine) finish(classify(e))
+    if (!mine && policy.blocked()) {
+      if (reloadForPolicy()) return
+      const detail = e instanceof Error ? e.message : String(e)
+      const message = 'Your browser blocked the connection to your voice server.'
+      finish({ kind: 'other', message, detail })
+    } else if (!mine) finish(classify(e))
     else if (room) finish(null)
+  } finally {
+    policy.stop()
   }
 }
 

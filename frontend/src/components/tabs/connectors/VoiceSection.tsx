@@ -5,16 +5,22 @@ import {
   FormField,
   ModelPicker,
   PasswordField,
-  Select,
-  type SelectProps,
   Stack,
   Text,
   TextField,
   useSecretReveal,
 } from '../../ui'
+import { page, saveNeedsReload } from '../../chat/lucius/voicePagePolicy'
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
-import { ChevronDown } from '../../../ui/icons'
+import {
+  DEFAULT_VOICE_MODEL,
+  voiceCostLine,
+  voiceIdAfterChange,
+  voiceOptions,
+  voiceSpeaks,
+} from './voiceOptions'
+import { FieldSelect, VoicePicker } from './VoicePicker'
 
 // Voice calls over /api/voice/config (the `voice_calls` flag). Two layers on a call: a fast
 // FRONT voice holds the conversation, Lucius does the work behind it (ADR
@@ -91,11 +97,10 @@ const STT_OPTIONS = [
   },
   { value: 'deepgram/nova-3', label: 'Deepgram Nova-3' },
 ]
-const TTS_OPTIONS = [
-  { value: 'cartesia/sonic-3', label: 'Cartesia Sonic 3' },
-  { value: 'cartesia/sonic-3.6', label: 'Cartesia Sonic 3.6' },
-  { value: 'elevenlabs/eleven_flash_v2_5', label: 'ElevenLabs Flash 2.5' },
-]
+
+function withVoiceModel(f: VoiceForm, tts_model: string) {
+  return { tts_model, tts_voice: voiceIdAfterChange(f.tts_model, tts_model, f.tts_voice) }
+}
 
 function formOf(c: VoiceConfig): VoiceForm {
   return {
@@ -125,17 +130,6 @@ function workerLine(c: VoiceConfig): { tone: 'faint' | 'warn' | 'good'; text: st
   if (!c.ready)
     return { tone: 'faint', text: 'Fill in your LiveKit project below to start taking calls.' }
   return { tone: 'faint', text: 'Paused. Use Resume on the connector card.' }
-}
-
-/** A select with the model picker's own chevron beside it, so every field here reads as one kind
- *  of dropdown — the browser's chevron next to the picker's looked like two (owner, 2026-11-03). */
-function FieldSelect(props: SelectProps) {
-  return (
-    <div className="vc-select-wrap">
-      <Select {...props} className="vc-select" />
-      <ChevronDown size={14} className="vc-select-chev" aria-hidden="true" />
-    </div>
-  )
 }
 
 export function VoiceSection() {
@@ -185,6 +179,11 @@ export function VoiceSection() {
         const d = await r.json().catch(() => ({}))
         setSaveErr(d.detail || 'Could not save the Voice calls settings.')
         return false
+      }
+      // This page's security policy still names the old server: without a reload, Call is refused.
+      if (saveNeedsReload(cfg.livekit_url, form.livekit_url)) {
+        page.reload()
+        return true
       }
       setForm((f) => f && { ...f, api_key: '', api_secret: '' })
       load()
@@ -257,8 +256,10 @@ export function VoiceSection() {
           ...f,
           language,
           stt_model: language !== 'en' && ENGLISH_ONLY_STT.has(f.stt_model) ? 'auto' : f.stt_model,
+          ...(voiceSpeaks(f.tts_model, language) ? {} : withVoiceModel(f, DEFAULT_VOICE_MODEL)),
         },
     )
+  const pickVoice = (model: string) => setForm((f) => f && { ...f, ...withVoiceModel(f, model) })
   const status = workerLine(cfg)
 
   return (
@@ -379,25 +380,20 @@ export function VoiceSection() {
           onChange={(e) => set('stt_model', e.target.value)}
         />
       </FormField>
-      <FormField label="Voice" htmlFor="conn-voice-tts">
+      <FormField label="Voice model" htmlFor="conn-voice-tts" help={voiceCostLine(form.tts_model)}>
         <FieldSelect
           id="conn-voice-tts"
           value={form.tts_model}
-          options={TTS_OPTIONS}
-          onChange={(e) => set('tts_model', e.target.value)}
+          options={voiceOptions(form.language, form.tts_model)}
+          onChange={(e) => pickVoice(e.target.value)}
         />
       </FormField>
-      <FormField
-        label="Voice id"
-        htmlFor="conn-voice-voice"
-        help="Optional: a voice id from the provider. Blank uses its default voice."
-      >
-        <TextField
-          id="conn-voice-voice"
-          value={form.tts_voice}
-          onChange={(e) => set('tts_voice', e.target.value)}
-        />
-      </FormField>
+      <VoicePicker
+        key={form.tts_model}
+        model={form.tts_model}
+        voiceId={form.tts_voice}
+        onChange={(voiceId) => set('tts_voice', voiceId)}
+      />
 
       {saveErr && (
         <Text size="xs" tone="bad">

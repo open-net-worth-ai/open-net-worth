@@ -1,6 +1,7 @@
 import { useNavigate } from '@tanstack/react-router'
 import { authFetch } from '../../../api/client'
 import { useFlag } from '../../../hooks/useFlag'
+import { useIsMobile } from '../../../hooks/useIsMobile'
 import { dispatchScreenCommand } from '../../../lucius/bus'
 import { CONNECTORS_OPEN_SETUP_SPEC } from '../../../lucius/screenCommands'
 import { useQueryCache } from '../../../state/queryCache'
@@ -87,11 +88,15 @@ export function VoiceCallButton({
   const readiness = useVoiceReadiness()
   const call = useVoiceCall()
   const openSetup = useOpenVoiceSetup()
+  const mobile = useIsMobile()
   // Mid-call the slot is the composer's Send again: typing goes to Lucius, the call goes on.
   if (on !== true || call.phase !== 'idle') return null
 
   const needsSetup = !!readiness && !readiness.ready
   const label = needsSetup ? 'Set up voice calls' : 'Call Lucius'
+  // In a phone's chat the call is what you came for; the pill and the round button keep your place
+  // on whatever screen you're on (owner, 2026-11-06).
+  const view = tone === 'composer' && mobile ? 'stage' : 'bar'
   return (
     <button
       type="button"
@@ -99,7 +104,7 @@ export function VoiceCallButton({
       aria-label={label}
       title={label}
       onMouseDown={(e) => e.preventDefault()}
-      onClick={() => (needsSetup ? openSetup() : void startCall(sessionId))}
+      onClick={() => (needsSetup ? openSetup() : void startCall(sessionId, view))}
     >
       <VoiceBars large={tone === 'fab'} />
     </button>

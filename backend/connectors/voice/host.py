@@ -204,6 +204,7 @@ class Host:
                 understood=str(args.get("understood") or ""),
                 shown=bool(args.get("shown")),
                 model_ref=_lucius_model(),
+                unheard=bool(args.get("unheard")),
             )
         return desk.follow_next_turn(session_id)
 
