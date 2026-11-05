@@ -42,6 +42,18 @@ twice, and nothing a YNAB user sees or gets could change.
   migration not on the list, refuses the budget with words asking for a Reset sync. The budget mode is
   read as the preference, else `metadata.json`, else envelope, because `prefs` isn't carried over by
   `actualpy` and a July 2024 tracking budget otherwise reads as envelope.
+- **A chosen server is trusted with a budget, not with the book.** Everything in a download is the
+  server's to choose, over plain http anyone on the way can too, so none of it may reach past the copy.
+  Server migrations run on a connection that can't attach another database and can't run a `PRAGMA`
+  (`actual_sync/sql_guard.py`, in place of `actualpy`'s own loop), and the attach limit also stops the
+  `VACUUM` forms, which attach internally (read in SQLite's `attachFunc` and `sqlite3RunVacuum`). A file
+  name of any shape but Actual's is refused before it is fetched. A download holding more than
+  `db.sqlite` and `metadata.json` is refused before it is unpacked, because a journal file beside the
+  database is replayed on open and can name a file for SQLite to delete. No migration in 6.8.2, 25.12.0,
+  26.9.0 or 26.11.0 uses a `PRAGMA`; the one `VACUUM` is in `remove_cache`, already refused. A later
+  genuine one that needs either is refused in plain words until it's reviewed, and then allowed as that
+  exact case. What else runs on a copy can't leave it either: a trigger or view can't hold an `ATTACH`,
+  and `actualpy`'s engine runs only its own statements, naming tables it reflected.
 - **Income is real.** An Actual income category is an income-kind category here with no envelope, so
   salary raises Ready to Assign. Starting Balances is internal, and an opening stays an opening.
 - **One app at a time.** Turning one app's sync on, or importing from it, is refused while the other's

@@ -54,6 +54,7 @@ REQUIRED_COLUMNS: dict[str, tuple[str, ...]] = {
 }
 
 _NAME = re.compile(r"^(\d+)_(.+)\.(\w+)$")
+_PATH = re.compile(r"migrations/(\d+)_[^/]+")
 _MODES = {
     "tracking": "tracking",
     "report": "tracking",
@@ -82,6 +83,17 @@ def pending_names(conn: sqlite3.Connection, migration_files: list[str]) -> list[
         if base.split("_")[0] not in done:
             pending.append(base)
     return pending
+
+
+def migration_number(file: str) -> int:
+    """What a migration file is recorded under. The name comes from the server, so anything but
+    the shape Actual uses is refused before it is fetched."""
+    match = _PATH.fullmatch(file)
+    if match is None:
+        raise ExternalServiceError(
+            f"This budget needs a change this app doesn't recognise. {REFRESH}"
+        )
+    return int(match[1])
 
 
 def check_pending(names: list[str]) -> None:

@@ -38,7 +38,7 @@ from backend.core.errors import ExternalServiceError, OpenNetWorthError, Validat
 from backend.core.pinned_http import https_context
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore, plain_http_remote
 from backend.services import actual_flag
-from backend.services.actual_sync import compat, shape
+from backend.services.actual_sync import compat, shape, sql_guard
 from backend.services.actual_sync import rows as reader
 from backend.services.actual_sync.log_guard import keep_address_out_of_logs
 from backend.services.ynab_migration import mapping
@@ -54,7 +54,10 @@ CLOCK_MARGIN = timedelta(minutes=10)  # how far behind a person's device clock a
 _active: set[str] = set()
 _active_lock = threading.Lock()
 
+_BUDGET_FILES = frozenset({"db.sqlite", "metadata.json"})
+
 _TOO_LARGE = "This Actual file is too large to read safely."
+_NOT_A_BUDGET = "This Actual file holds more than a budget, so it wasn't read."
 _PLAIN_HTTP = (
     "This Actual server is reached over plain http, which isn't encrypted. "
     "Anyone on that network could read the budget as it downloads."
@@ -143,13 +146,17 @@ def _read_capped(response: httpx.Response) -> bytes:
     return bytes(body)
 
 
-def _check_unpacked_size(source) -> None:
+def _check_archive(source) -> None:
+    """Only a budget and its metadata, and not too much of them. A journal file beside the database
+    would be replayed when it opens, and a journal can name a file for SQLite to delete."""
     try:
         with zipfile.ZipFile(source) as archive:
-            total = sum(info.file_size for info in archive.infolist())
+            members = archive.infolist()
     except zipfile.BadZipFile:
         return  # the library raises its own error for this
-    if total > MAX_DOWNLOAD_BYTES:
+    if any(info.filename not in _BUDGET_FILES for info in members):
+        raise ExternalServiceError(_NOT_A_BUDGET)
+    if sum(info.file_size for info in members) > MAX_DOWNLOAD_BYTES:
         raise ExternalServiceError(_TOO_LARGE)
 
 
@@ -157,15 +164,23 @@ def _check_unpacked_size(source) -> None:
 def checked_class(base: type) -> type:
     """``base`` (``actual.Actual``) with three overrides: the migrations a snapshot still needs
     are checked BEFORE they run (``actualpy`` records one as done even when it ran only part of
-    it), the columns this app reads and writes are checked after, and the download and unzip are
-    size-capped (``actualpy`` buffers a download whole and has no cap)."""
+    it) and run confined to the copy (``sql_guard``), the columns this app reads and writes are
+    checked after, and the download and unzip are checked for size and content (``actualpy``
+    buffers a download whole, unpacks whatever it holds, and has no cap)."""
 
     class Checked(base):  # type: ignore[valid-type, misc]
         def run_migrations(self, migration_files):
+            """In place of the library's loop, whose connection can reach any file. The rest of
+            what its method does, the reflection at the end, stays."""
+            from actual.database import reflect_model
+            from actual.exceptions import ActualError
+            from actual.migrations import js_migration_statements
+
             db = self.data_dir / "db.sqlite"
-            with closing(sqlite3.connect(db)) as conn:
-                compat.check_pending(compat.pending_names(conn, migration_files))
-            super().run_migrations(migration_files)
+            sql_guard.run_migrations(db, migration_files, self.data_file, js_migration_statements)
+            if self.engine is None:
+                raise ActualError("Engine not initialized.")
+            self._database_metadata = reflect_model(self.engine)
             with closing(sqlite3.connect(db)) as conn:
                 compat.check_schema(conn)
 
@@ -179,7 +194,7 @@ def checked_class(base: type) -> type:
                 return _read_capped(response)
 
         def import_zip(self, file_bytes):
-            _check_unpacked_size(file_bytes)
+            _check_archive(file_bytes)
             if hasattr(file_bytes, "seek"):
                 file_bytes.seek(0)
             return super().import_zip(file_bytes)

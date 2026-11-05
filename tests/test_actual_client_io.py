@@ -581,9 +581,11 @@ def test_checked_before_migrations_run(tmp_path):
 
     class Base:
         data_dir = tmp_path
+        engine = None
 
-        def run_migrations(self, migration_files):
-            ran.append(list(migration_files))
+        def data_file(self, file):
+            ran.append(file)
+            return b""
 
     conn = sqlite3.connect(tmp_path / "db.sqlite")
     conn.execute("CREATE TABLE __migrations__ (id INT PRIMARY KEY NOT NULL)")
@@ -596,18 +598,22 @@ def test_checked_before_migrations_run(tmp_path):
 
 
 def test_a_safe_pending_migration_runs_and_then_the_schema_is_checked(tmp_path):
+    from sqlalchemy import create_engine
+
     ran = []
 
     class Base:
         data_dir = tmp_path
+        engine = create_engine(f"sqlite:///{tmp_path}/db.sqlite")
 
-        def run_migrations(self, migration_files):
-            ran.append(list(migration_files))
+        def data_file(self, file):
+            ran.append(file)
+            return b""
 
     make_db(tmp_path / "db.sqlite")
     files = ["db.sqlite", "migrations/1723665565000_prefs.js"]
     client.checked_class(Base)().run_migrations(files)
-    assert ran == [files]
+    assert ran == files[1:]
 
     conn = sqlite3.connect(tmp_path / "db.sqlite")
     conn.execute("ALTER TABLE accounts DROP COLUMN offbudget")

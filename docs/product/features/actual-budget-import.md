@@ -253,6 +253,11 @@ one carries on.
 copy on the server dates from before September 2021, or that needs a change this app hasn't reviewed
 yet, is refused with a message saying so. **Settings → Reset sync** in Actual refreshes it.
 
+**What your server can reach.** The server you chose is trusted with your budget, not with the rest of
+your book. A change to the budget that it sends runs only on the temporary copy. One that tries to
+reach anything else, or a download holding more than a budget, stops with a message saying so, and
+your book and other files aren't touched.
+
 **The limits.** The sync reads a fresh copy of the budget on every run and deletes it afterwards, so
 your decrypted budget doesn't stay on disk. It's tested against a real Actual server for every case on
 this page, including end-to-end encrypted and tracking budgets. It hasn't been tested on Windows,
