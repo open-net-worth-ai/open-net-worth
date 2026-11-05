@@ -27,7 +27,7 @@ import pytest
 
 from backend.core.errors import ConflictError, ExternalServiceError, NotFoundError, ValidationError
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
-from backend.services.actual_sync import client, writes
+from backend.services.actual_sync import client, shape, writes
 from backend.services.ynab_sync import client as ynab_client
 from backend.services.ynab_sync.client import Budget
 from tests.flags import flags
@@ -411,7 +411,9 @@ def test_a_login_failure_that_names_no_status_isnt_a_refused_sign_in(store, work
     with pytest.raises(ExternalServiceError) as err:
         client.list_budgets(store)
     never_leaks(err.value)
-    assert err.value.message == "Actual could not read this budget (AuthorizationError)."
+    assert (
+        err.value.message == "Actual could not read this budget. Check the server, then try again."
+    )
     assert store.public()["last_status"] != "auth_error"
 
 
@@ -1029,3 +1031,23 @@ def test_failing_to_note_it_doesnt_hide_the_refusal(store, refused, monkeypatch)
     with pytest.raises(ExternalServiceError) as err:
         client.list_budgets(store)
     assert "refused the sign-in" in err.value.message
+
+
+# ── what the throwaway Actual server is started with ─────────────────────────
+
+
+@pytest.mark.parametrize(
+    "starter",
+    ["tests/actual_live/harness.py", "qa/browser-use/fixtures/verify_actual_budget_flow.py"],
+)
+def test_the_node_server_gets_the_scrubbed_environment_and_the_core_process_helpers(starter):
+    root = Path(client.__file__).resolve().parents[3]
+    source = (root / starter).read_text(encoding="utf-8")
+    for banned in ("**os.environ", "os.killpg", "start_new_session"):
+        assert banned not in source, banned
+    assert "**scrubbed_environ()" in source and "**spawn_kwargs()" in source
+
+
+def test_a_plan_cant_be_shaped_without_being_told_today():
+    with pytest.raises(TypeError):
+        shape.Rows()

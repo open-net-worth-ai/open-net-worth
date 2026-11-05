@@ -15,7 +15,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from backend.core.errors import ValidationError
-from backend.core.user_time import user_today
 from backend.services.actual_sync import available, shape_notes
 from backend.services.actual_sync.shape_delta import delta_against
 from backend.services.actual_sync.shape_values import flag as _flag
@@ -36,6 +35,7 @@ _BAD_MONTH = "Actual returned a budget month that is not a real month."
 class Rows:
     """Plain dicts straight from the copy's tables, keyed by Actual's own column names."""
 
+    today: str  # ISO; the user's today, which this module has no clock to know
     accounts: list[dict] = field(default_factory=list)
     transactions: list[dict] = field(default_factory=list)
     payees: list[dict] = field(default_factory=list)
@@ -47,7 +47,6 @@ class Rows:
     notes: list[dict] = field(default_factory=list)
     held: list[dict] = field(default_factory=list)  # zero_budget_months: id "YYYY-MM", buffered
     mode: str = "envelope"
-    today: str | None = None  # ISO; the user's today
 
 
 def _month_int(value) -> int:
@@ -355,7 +354,7 @@ def plan_from_rows(rows: Rows) -> dict:
     place for beside it (``budget_mode``, ``split_gaps``, ``held``). Raises ``ValidationError`` on
     an amount, date or month that is not a plain whole value."""
     book = _Book(rows)
-    today = rows.today or user_today().isoformat()
+    today = rows.today
     transactions = [_transaction(book, t) for t in book.top]
     subtransactions = [
         _line(book, c) for parent in book.top for c in book.lines.get(parent["id"], [])

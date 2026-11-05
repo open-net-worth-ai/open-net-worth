@@ -61,7 +61,7 @@ def _merge_lines(row: dict, lines: list[dict]) -> None:
 
 def merge_transactions(plan: dict, mirror: dict[str, dict], meta: dict, full: bool) -> set[str]:
     """Update ``mirror`` in place; returns the ids of every transaction the read touched."""
-    nested = source._nest_transactions(
+    nested = source.nest_transactions(
         {
             "payees": [{"id": i, "name": n} for i, n in meta["payees"].items()],
             "transactions": plan.get("transactions") or [],

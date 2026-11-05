@@ -41,8 +41,8 @@ class ActualReader:
         progress("reading the budget", 1, 1)
         return {
             "accounts": [_with_default_type(a) for a in plan["accounts"]],
-            "groups": source._nest_groups(plan),
-            "transactions": source._nest_transactions(plan),
+            "groups": source.nest_groups(plan),
+            "transactions": source.nest_transactions(plan),
             "months": plan["months"] if with_budget else [],
             "currency": currency,
             "budget_mode": plan["budget_mode"],

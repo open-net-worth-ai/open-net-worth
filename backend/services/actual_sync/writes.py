@@ -40,7 +40,7 @@ _CATEGORY_FIELDS = ("name", "hidden", "category_group_id", "deleted")
 
 
 def _nested(plan: dict) -> dict[str, dict]:
-    return {t["id"]: t for t in source._nest_transactions(plan)}
+    return {t["id"]: t for t in source.nest_transactions(plan)}
 
 
 def _by_id(items: list[dict]) -> dict[str, dict]:

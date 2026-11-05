@@ -43,7 +43,7 @@ def _all(conn: sqlite3.Connection, table: str, columns: str) -> list[dict]:
     return [dict(row) for row in conn.execute(f"SELECT {columns} FROM {table}")]
 
 
-def read_rows(conn: sqlite3.Connection, mode: str, today: str | None = None) -> Rows:
+def read_rows(conn: sqlite3.Connection, mode: str, today: str) -> Rows:
     rows = Rows(mode=mode, today=today)
     for table, columns in _TABLES.items():
         setattr(rows, table, _all(conn, table, columns))

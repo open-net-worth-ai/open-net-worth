@@ -537,7 +537,7 @@ def test_both_connections_distrust_the_schema(copy):
 def test_a_read_under_the_limit_reads_the_same(copy):
     read = rows.connect(copy)
     try:
-        found = rows.read_rows(read, "envelope")
+        found = rows.read_rows(read, "envelope", "2026-10-13")
     finally:
         read.close()
     assert [a["id"] for a in found.accounts] == ["a1"]

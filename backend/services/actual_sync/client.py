@@ -46,6 +46,7 @@ from backend.core.errors import (
     ValidationError,
 )
 from backend.core.pinned_http import https_context
+from backend.core.user_time import user_today
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore, plain_http_remote
 from backend.services import actual_flag
 from backend.services.actual_sync import compat, shape, sql_guard
@@ -353,7 +354,7 @@ def _plain_error(exc: Exception) -> Stopped:
     elif has(httpx.TransportError, TimeoutError):
         text = "Could not reach the Actual server. Check the address and that it is running."
     else:
-        text = f"Actual could not read this budget ({type(exc).__name__})."
+        text = "Actual could not read this budget. Check the server, then try again."
     return Stopped(text)
 
 
@@ -476,7 +477,7 @@ class Copy:
 
     def _read_rows(self) -> shape.Rows:
         with closing(reader.connect(self.directory)) as conn:
-            return reader.read_rows(conn, self.mode)
+            return reader.read_rows(conn, self.mode, user_today().isoformat())
 
     def rows(self) -> shape.Rows:
         return _plainly(self._read_rows)

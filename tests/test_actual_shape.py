@@ -162,7 +162,7 @@ def test_split_is_flat_with_transaction_id():
     assert lines["s1a"]["transaction_id"] == "s1" and lines["s1a"]["memo"] == "veg"
     assert (lines["s1a"]["amount"], lines["s1b"]["amount"]) == (-70000, -30000)
     assert plan["transactions"][0]["category_id"] is None
-    nested = source._nest_transactions(plan)
+    nested = source.nest_transactions(plan)
     assert [s["id"] for s in nested[0]["subtransactions"]] == ["s1a", "s1b"]
     assert nested[0]["payee_name"] == "Corner Market"
     assert one(plan["accounts"], "a1")["balance"] == -100000
@@ -234,7 +234,7 @@ def test_transfer_links():
     assert payees["pt2"]["transfer_account_id"] == "a2"
     assert payees["pt2"]["name"] == "ACME Savings"
     assert payees["p1"]["transfer_account_id"] is None
-    nested = source._nest_transactions(plan)
+    nested = source.nest_transactions(plan)
     assert one(nested, "x1")["payee_name"] == "ACME Savings"
 
 
@@ -322,7 +322,7 @@ def test_opening_row_payee_maps_to_sb():
             txn("o2", "a2", 100000, 20261105, description=None, starting_balance_flag=1),
         ],
     )
-    nested = source._nest_transactions(plan)
+    nested = source.nest_transactions(plan)
     for t in nested:
         assert t["payee_name"].strip().lower() == mapping.SB_PAYEE
     assert one(nested, "o1")["payee_id"] == "psb"
@@ -334,7 +334,7 @@ def test_a_renamed_opening_payee_is_still_the_opening():
         payees=[payee("p9", "Opening")],
         transactions=[txn("o1", "a1", 500000, 20261105, description="p9", starting_balance_flag=1)],
     )
-    assert one(source._nest_transactions(plan), "o1")["payee_name"] == "Starting Balance"
+    assert one(source.nest_transactions(plan), "o1")["payee_name"] == "Starting Balance"
 
 
 def test_category_through_category_mapping():
@@ -365,7 +365,7 @@ def test_payee_through_payee_mapping():
     ]
     plan = shape.plan_from_rows(rows)
     assert one(plan["transactions"], "t1")["payee_id"] == "p1"
-    assert source._nest_transactions(plan)[0]["payee_name"] == "Corner Market"
+    assert source.nest_transactions(plan)[0]["payee_name"] == "Corner Market"
 
 
 def test_text_goes_through_clean():
@@ -503,7 +503,7 @@ def test_amounts_pass_the_engines_own_validation():
         ],
         budgets=[budget(202606, "c_food", 100)],
     )
-    nested = source._nest_transactions(plan)
+    nested = source.nest_transactions(plan)
     mapping.validate_amounts(plan["accounts"], nested, plan["months"])
 
 
@@ -521,7 +521,7 @@ def meta_for(plan):
 
 
 def mirror_of(plan):
-    return {t["id"]: t for t in source._nest_transactions(plan)}
+    return {t["id"]: t for t in source.nest_transactions(plan)}
 
 
 def split_rows(*lines):
@@ -648,6 +648,6 @@ def test_a_live_child_under_a_plain_row_is_its_own_row_and_nothing_is_lost():
     assert one(month["categories"], "c_food")["activity"] == -10000
     assert one(month["categories"], "c_fun")["activity"] == -3000
     pieces, _, _ = mapping.plan_transactions(
-        source._nest_transactions(plan), plan["accounts"], {"categories": [], "skipped": {}}
+        source.nest_transactions(plan), plan["accounts"], {"categories": [], "skipped": {}}
     )
     assert sorted(p["from"][1] for p in pieces) == [3000, 10000]

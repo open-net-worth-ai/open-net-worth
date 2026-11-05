@@ -44,7 +44,7 @@ def delta_against(plan: dict, mirror: dict[str, dict], meta: dict) -> dict:
     """``plan`` reduced to what differs from ``mirror`` (nested rows by id) and ``meta`` (payee
     names): changed or new transactions with all their lines, removed rows and lines with
     ``deleted: True``, changed payees. Accounts, groups, categories and months are always full."""
-    nested = {t["id"]: t for t in source._nest_transactions(plan)}
+    nested = {t["id"]: t for t in source.nest_transactions(plan)}
     flat = {t["id"]: t for t in plan.get("transactions") or []}
     lines: dict[str, list[dict]] = {}
     for s in plan.get("subtransactions") or []:

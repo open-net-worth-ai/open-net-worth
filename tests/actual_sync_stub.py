@@ -18,6 +18,7 @@ from typing import Iterator
 import httpx
 from sqlalchemy import create_engine
 
+from backend.core.user_time import user_today
 from backend.services import actual_flag
 from backend.services.actual_sync import client as actual_client
 from backend.services.actual_sync import rows as actual_rows
@@ -213,7 +214,9 @@ class FakeServer:
     def plan(self) -> dict:
         with closing(sqlite3.connect(self.path)) as conn:
             conn.row_factory = sqlite3.Row
-            return shape.plan_from_rows(actual_rows.read_rows(conn, self.mode))
+            return shape.plan_from_rows(
+                actual_rows.read_rows(conn, self.mode, user_today().isoformat())
+            )
 
     def take(self, local: Path, home: Path) -> None:
         shutil.copy(local, home)

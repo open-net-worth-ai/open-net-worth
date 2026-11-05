@@ -90,7 +90,7 @@ def make_rows(**extra) -> shape.Rows:
         ],
     )
     kw.update(extra)
-    rows = shape.Rows(**kw)
+    rows = shape.Rows(today=user_today().isoformat(), **kw)
     rows.category_mapping = [{"id": c["id"], "transferId": c["id"]} for c in rows.categories]
     rows.payee_mapping = [{"id": p["id"], "targetId": p["id"]} for p in rows.payees]
     return rows
