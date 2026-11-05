@@ -4681,6 +4681,12 @@ select.acct-addin {
 .acct-td-amt.neg {
   color: var(--ink);
 }
+/* A transfer seen from neither of its accounts: unsigned and muted like its payee cell, so it
+   doesn't read as an expense in the All accounts list. */
+.acct-td-amt.transfer,
+.acct-card-amt.transfer {
+  color: var(--muted);
+}
 /* kind=investment reads purple in both signs — same hue as the drawer's Type: Investment
    (.acct-detail-kind.investment), so a buy/sell is recognizable at a glance in the register. */
 .acct-td-amt.invest {
