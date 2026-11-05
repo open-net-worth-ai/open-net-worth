@@ -34,7 +34,7 @@ import './automations.css'
 
 type AutomationsView = 'lucius' | 'sync'
 
-// The masthead while the ynab_import_and_sync flag is off: one list, no Data sync tab.
+// The masthead while no data sync is on offer: one list, no Data sync tab.
 const LUCIUS_ONLY_SUBTITLE =
   'Run on a schedule or when something happens. Every run is a conversation you can pick back up.'
 

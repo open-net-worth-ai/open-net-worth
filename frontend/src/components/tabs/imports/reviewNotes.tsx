@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useIsMobile } from '../../../hooks/useIsMobile'
 import { Button, Cluster } from '../../ui'
 import type { BudgetAppInfo } from '../automations/datasync/budgetApps'
 import type { Preview, PreviewCategory } from './runs'
@@ -130,8 +131,9 @@ export function SettleNotes({
       : l.asks
   const stops = [...asks, ...l.blocked]
   const notes = [...l.change, ...l.foreign, ...p.warnings, ...l.rerun, ...l.prune]
-  const shown = allShown ? notes : notes.slice(0, SHOWN_NOTES)
-  const more = notes.length - SHOWN_NOTES
+  const first = useIsMobile() ? 1 : SHOWN_NOTES
+  const shown = allShown ? notes : notes.slice(0, first)
+  const more = notes.length - first
   if (!blocked && unsettled === 0 && stops.length === 0 && notes.length === 0) return null
   return (
     <>

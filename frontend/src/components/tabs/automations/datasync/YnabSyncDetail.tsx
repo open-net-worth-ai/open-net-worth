@@ -122,6 +122,7 @@ export function YnabSyncDetail({
         <ConnectorPanel
           connectorId={app.key}
           configureOnOpen
+          formFirst={app.opensConnectorForm}
           onClose={() => {
             setConnectOpen(false)
             sync.refresh()

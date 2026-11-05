@@ -21,11 +21,14 @@ import type { PermissionLevel } from './model'
 export function ConnectorPanel({
   connectorId,
   configureOnOpen = false,
+  formFirst = false,
   onClose,
 }: {
   connectorId: string
   /** Open on the credential form rather than the overview. */
   configureOnOpen?: boolean
+  /** With `configureOnOpen`: the form even when the connector is healthy. */
+  formFirst?: boolean
   onClose: () => void
 }) {
   const { connectors, entries, refresh } = useConnectors()
@@ -107,6 +110,7 @@ export function ConnectorPanel({
         onSetGroupPermission={(tools, level) => persist(tools, level)}
         configForm={wire && hasConfigForm(wire) ? <ConnectorConfig connector={wire} /> : undefined}
         configureOnOpen={configure.on}
+        formFirst={formFirst}
         onConfigClosed={() => void reload()}
         onSaved={() => toast('Configuration saved')}
       />

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { invalidateQueryCache, useQueryCache } from '../../../state/queryCache'
 import { FormField, PasswordField, SegmentedControl, Stack, Text, TextField } from '../../ui'
@@ -8,6 +8,7 @@ import { usePlans } from '../imports/plans'
 import { detailOf } from '../imports/runs'
 import { ConnectorStatusLine } from './ConnectorStatusLine'
 import { useConnectorSave, useTouched } from './formSave'
+import { CONNECTORS_KEY } from './useConnectors'
 
 // The Actual connector's form: the address of the person's own server, how they sign in to it, and
 // which budget. Every secret is write-only: unlike YNAB's token, nothing here reads one back, so a
@@ -104,16 +105,26 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
   const [password, setPassword] = useState('')
   const [token, setToken] = useState('')
   const [encryption, setEncryption] = useState('')
-  const [budgetId, setBudgetId] = useState(cfg.budget_id ?? '')
+  // Only what was picked here: the rest follows the server, or a stale read would be saved back.
+  const [pick, setPick] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
   const urlTouched = useTouched()
-  const secretTouched = useTouched()
+  const passwordTouched = useTouched()
+  const tokenTouched = useTouched()
 
   const budgets = usePlans(ACTUAL_APP, cfg.configured)
   const list = budgets.data ?? []
+  const budgetId = pick ?? cfg.budget_id ?? ''
   const picked = list.find((b) => b.id === budgetId)
-  if (!budgetId && list.length === 1) setBudgetId(list[0]!.id)
+  if (pick !== null && pick === cfg.budget_id) setPick(null)
+  if (!budgetId && list.length === 1) setPick(list[0]!.id)
+
+  // A read that was refused, or stopped being, changes the connector's status elsewhere on screen.
+  const readOutcome = budgets.error ? 'refused' : budgets.data ? 'read' : null
+  useEffect(() => {
+    if (readOutcome) invalidateQueryCache(CONNECTORS_KEY)
+  }, [readOutcome])
 
   const secret = signIn === 'password' ? password : token
   const secretSaved = signIn === 'password' ? cfg.has_password : cfg.has_token
@@ -168,6 +179,7 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
   })
 
   const secretWord = signIn === 'password' ? 'password' : 'token'
+  const secretTouched = signIn === 'password' ? passwordTouched : tokenTouched
   return (
     <Stack gap="--space-4">
       <Text size="sm" tone="faint">
@@ -269,9 +281,10 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
           app={ACTUAL_APP}
           plans={budgets}
           planId={picked ? budgetId : ''}
-          onChange={setBudgetId}
+          onChange={setPick}
           id="conn-actual-budget"
           label="Budget"
+          framed
           help={
             cfg.budget_id && !list.some((b) => b.id === cfg.budget_id) ? (
               <Text size="sm" tone="warn">
@@ -285,9 +298,11 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
           }
         />
       ) : (
-        <Text size="sm" tone="faint">
-          Your budgets appear here once you save an address and sign-in.
-        </Text>
+        <FormField label="Budget">
+          <Text size="sm" tone="faint">
+            Your budgets appear here once you save an address and sign-in.
+          </Text>
+        </FormField>
       )}
 
       <FormField

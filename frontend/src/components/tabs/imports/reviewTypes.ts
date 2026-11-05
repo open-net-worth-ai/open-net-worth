@@ -1,8 +1,6 @@
 import { useState } from 'react'
-import { authFetch } from '../../../api/client'
-import { useQueryCache } from '../../../state/queryCache'
 import type { BudgetAppInfo } from '../automations/datasync/budgetApps'
-import { detailOf, type Preview, type PreviewAccount } from './runs'
+import type { Preview, PreviewAccount } from './runs'
 
 // The state of a review that settles a type for each new account. The choices come from the
 // server (`type_options`); a suggestion counts only once it has been looked at, because a card
@@ -64,22 +62,5 @@ export function useAccountTypes(first: Preview | null | undefined, shown: Previe
   return types
 }
 
-export function useImportBlock(
-  app: BudgetAppInfo,
-  planId: string | undefined,
-  seed: string | null,
-) {
-  const key = `${app.apiPrefix}/migration?plan_id=${encodeURIComponent(planId ?? '')}`
-  const live = useQueryCache<{ blocked_reason?: string | null }>(
-    key,
-    async () => {
-      const r = await authFetch(key)
-      if (!r.ok) throw new Error(await detailOf(r, 'Could not read the import.'))
-      return (await r.json()) as { blocked_reason?: string | null }
-    },
-    { enabled: app.tellsImportBlock && !!planId },
-  )
-  if (!app.tellsImportBlock) return { blocked: null, refresh: () => undefined }
-  const blocked = live.data ? (live.data.blocked_reason ?? null) : seed
-  return { blocked, refresh: () => void live.refresh() }
-}
+export const importBlockKey = (app: BudgetAppInfo, planId: string) =>
+  `${app.apiPrefix}/migration?plan_id=${encodeURIComponent(planId)}`

@@ -30,7 +30,8 @@ Open **Automations → Data sync → Actual** and click **Connect Actual…**. I
 - **Sign in with** is a password or a token, whichever your server takes. Typing a new one replaces
   the other.
 - **Budget** appears once an address and sign-in are saved. There's no test button: if the sign-in is
-  wrong, this is where it says so. Pick one here and it's the one the import starts from.
+  wrong, this is where it says so, and the connector shows **Auth error** until a read works again.
+  The budget you pick here is the one the import starts from.
 - **Encryption password** is only for a budget with end-to-end encryption on in Actual. An encrypted
   budget says `(encrypted)` in the list, and **Save** waits until it has its password.
 
@@ -77,7 +78,7 @@ starts from your book's base currency. A budget that states a currency keeps it,
 doesn't appear.
 
 The notes above the tabs show what would stop the import first, then the first three things worth
-knowing. **Show more notes** opens the rest.
+knowing, or the first one on a phone. **Show more notes** opens the rest.
 
 ## What comes across, and how
 
@@ -139,7 +140,7 @@ ask. It covers transactions, each month's Assigned, categories and groups. No AI
 Once it's set up, **Automations → Data sync → Actual** has the switch and **Sync now** at the top,
 then **Needs your review**, **Worth checking** (only when there's something to say), **Direction**,
 **Schedule**, the budget, how it decides, and a history of every run. It reads the same as YNAB's
-page. **Actual connection…** in the menu opens the connector.
+page. **Actual connection…** in the menu opens the connector's form.
 
 **Which way changes go.** You choose a direction at import or later:
 
@@ -193,8 +194,8 @@ Assigned is never sent or taken. That's one reason Ready to Assign won't match T
 
 **One app at a time.** A book syncs with YNAB or Actual, not both, since two apps writing Assigned to
 the same envelopes would fight. Turning one on is refused while the other's sync is on, or while it
-is running an import or a sync, and so is **Sync now**. The refusal says which, wherever you pressed. Looking at the review or running Verify in
-the other app reads only, and gets in nothing's way.
+is running an import or a sync, and so is **Sync now**. The refusal says which, wherever you pressed.
+Looking at the review or re-checking against the other app reads only, and gets in nothing's way.
 
 **If something goes wrong.** A server that's down, a wrong password or a budget that's gone stops the
 run with a plain message. Nothing is lost. What was already confirmed stays recorded, and the next
@@ -216,17 +217,22 @@ deletion waits in the review list for you to confirm, and if the rows come back,
 their own. Rewinding to a checkpoint here can bring rows back that Actual no longer has; the sync
 then asks about each of them, one at a time, rather than deleting them again on its own.
 
-**Picking another budget** deletes nothing here. Rows on the first budget's accounts stay in this
-book, the sync leaves them alone, and the page says how many there are. The first sync after the
-switch holds back every row the new budget doesn't have, however few, and asks about each one in the
-review list: a budget restored from an export, or duplicated in Actual, keeps the same row ids under a
-new name, so a row it lacks may be one you added here since. Importing another budget is refused
-while the sync is on: turn it off first, import, then pick the budget to sync.
+**Moving the sync to another budget** starts in the connector: **Budget** in its form is the one
+place to choose. Pick the other budget and save, and **Worth checking** says the connection and the
+sync no longer agree. Turn the sync off, press **Review…** there, and import. The sync moves to that
+budget in the direction it already had.
 
-**A budget you haven't imported** isn't synced. If you pick one that has no account in this book,
-each run stops with "Import this budget first", and nothing is written, paired or filed on either
-side. **Worth checking** says so and offers the import right there. Import it, the warning goes, and
-the next run carries on as normal.
+Moving deletes nothing here. Rows on the first budget's accounts stay in this book, the sync leaves
+them alone, and the page says how many there are. The first sync after the move holds back every row
+the new budget doesn't have, however few, and asks about each one in the review list: a budget
+restored from an export, or duplicated in Actual, keeps the same row ids under a new name, so a row it
+lacks may be one you added here since. Importing another budget is refused while the sync is on,
+which is why you turn it off first.
+
+**A budget you haven't imported** isn't synced. If the sync follows one that has no account in this
+book, each run stops, and nothing is written, paired or filed on either side. **Worth checking** says
+so and offers the import right there. It keeps the direction you have, and a sync you've turned off
+stays off. Import it, the warning goes, and the next run carries on as normal.
 
 **Reset sync in Actual** is fine. Row ids don't change, so the next run carries on as before, with no
 pairing lost and nothing read as deleted.

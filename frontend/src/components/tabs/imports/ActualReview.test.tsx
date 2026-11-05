@@ -5,7 +5,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { clearQueryCache } from '../../../state/queryCache'
+import { clearQueryCache, invalidateQueryCache } from '../../../state/queryCache'
 import { ACTUAL_APP } from '../automations/datasync/budgetApps'
 import { PREVIEW, run } from './importsFixtures'
 import type { Preview, PreviewAccount, RunRecord } from './runs'
@@ -60,6 +60,8 @@ let settle: (id: string) => boolean
 let requests: { url: string; body: Record<string, unknown> }[]
 let blocked: string | null
 let startRefusal: string | null
+let refuseRecheck: string | null
+let holdPost: Promise<void> | null
 const onClose = vi.fn()
 const onStarted = vi.fn()
 
@@ -73,7 +75,9 @@ beforeEach(() => {
   requests = []
   blocked = null
   startRefusal = null
-  authFetch.mockImplementation((url: string, init?: RequestInit) => {
+  refuseRecheck = null
+  holdPost = null
+  authFetch.mockImplementation(async (url: string, init?: RequestInit) => {
     const path = url.split('?')[0] ?? ''
     const method = init?.method ?? 'GET'
     const body = init?.body ? JSON.parse(init.body as string) : null
@@ -81,6 +85,8 @@ beforeEach(() => {
     if (path === '/api/actual-budget/migration' && method === 'GET')
       return reply({ token_saved: true, job: null, blocked_reason: blocked })
     if (path === '/api/actual-budget/migration/preview') {
+      if (refuseRecheck) return reply({ detail: refuseRecheck }, 422)
+      if (holdPost) await holdPost
       const started = run({ provider: 'actual_budget', plan_id: 'b1', preview, status: 'running' })
       runs.set(started.id, started)
       return reply({ ...started, blocked_reason: blocked }, 202)
@@ -102,13 +108,15 @@ afterEach(() => {
   cleanup()
   clearQueryCache()
   vi.clearAllMocks()
+  vi.unstubAllGlobals()
 })
 
-async function open() {
+async function open(props: { onConnect?: () => void } = {}) {
   const first = run({ provider: 'actual_budget', plan_id: 'b1', preview })
   runs.set(first.id, first)
   render(
     <YnabReview
+      {...props}
       app={ACTUAL_APP}
       runId={first.id}
       planLabel="ACME Household"
@@ -433,5 +441,126 @@ describe('Actual’s words', () => {
     fireEvent.click(w.getByRole('tab', { name: /Categories/ }))
     expect(w.getByRole('columnheader', { name: 'Category in Actual' })).toBeTruthy()
     expect(document.body.textContent).not.toContain('YNAB')
+  })
+})
+
+describe('while a re-check runs', () => {
+  it('Import shows it is busy, and other choices wait for the POST too', async () => {
+    let release = () => undefined as void
+    holdPost = new Promise((r) => {
+      release = r
+    })
+    preview = actualPreview({
+      accounts: [
+        account('a1', 'ACME Checking', 'cash', {
+          candidates: [{ id: 'x', name: 'Mine', type: 'cash' }],
+        }),
+      ],
+    })
+    const w = await open()
+    pick(w, 'ACME Checking', 'Credit')
+    await waitFor(() => expect(previews().length).toBe(1), { timeout: 2000 })
+    const where = w.getByRole('button', { name: 'Where ACME Checking goes' }) as HTMLButtonElement
+    await waitFor(() => expect(where.disabled).toBe(true))
+    expect(importButton(w).getAttribute('aria-busy')).toBe('true')
+    expect(typeOf(w, 'ACME Checking').disabled).toBe(false)
+    release()
+    await waitFor(() => expect(where.disabled).toBe(false), { timeout: 4000 })
+  })
+
+  it('a refused type re-check says so, doesn’t loop, and leaves Import usable', async () => {
+    refuseRecheck = 'ACME Checking can’t be credit.'
+    const w = await open()
+    fireEvent.click(w.getByRole('button', { name: 'Accept suggestions' }))
+    pick(w, 'ACME Checking', 'Credit')
+    expect(await w.findByText(refuseRecheck, undefined, { timeout: 2000 })).toBeTruthy()
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 900))
+    })
+    expect(previews().length).toBe(1)
+    expect(importButton(w).disabled).toBe(false)
+  })
+})
+
+describe('when it can’t go on', () => {
+  it('a failed read links to the connection, closing the window', async () => {
+    const onConnect = vi.fn()
+    const failed = run({
+      provider: 'actual_budget',
+      plan_id: 'b1',
+      status: 'failed',
+      preview: null,
+      error: 'This budget is encrypted, and its encryption password is missing or wrong.',
+    })
+    runs.set(failed.id, failed)
+    render(
+      <YnabReview
+        app={ACTUAL_APP}
+        runId={failed.id}
+        planLabel="ACME Vault"
+        onClose={onClose}
+        onStarted={onStarted}
+        onConnect={onConnect}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Open the connection' }))
+    expect(onConnect).toHaveBeenCalled()
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('a refusal the block now states says it once, and focus isn’t left on a dead button', async () => {
+    const sentence = 'The YNAB sync is on. Turn it off in Data sync before importing from Actual.'
+    startRefusal = sentence
+    const w = await open()
+    fireEvent.click(w.getByRole('button', { name: 'Accept suggestions' }))
+    blocked = sentence
+    importButton(w).focus()
+    fireEvent.click(importButton(w))
+    await waitFor(() => expect(importButton(w).disabled).toBe(true))
+    expect(w.getAllByText(sentence)).toHaveLength(1)
+    expect(w.queryByRole('alert')).toBeNull()
+    await waitFor(() => expect(document.activeElement?.id).toBe('ui-page-tab-accounts'))
+  })
+})
+
+describe('on a phone', () => {
+  const asPhone = () =>
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: true,
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    }))
+
+  it('shows one note before folding, and blockers stay', async () => {
+    asPhone()
+    preview = actualPreview({ warnings: ['Note one.', 'Note two.', 'Note three.'] })
+    const w = await open()
+    expect(w.getByText(/3 still need a type/)).toBeTruthy()
+    expect(w.getByText('Note one.')).toBeTruthy()
+    expect(w.queryByText('Note two.')).toBeNull()
+    expect(w.getByRole('button', { name: 'Show 2 more notes' })).toBeTruthy()
+  })
+
+  it('lets the list flow into the sheet', async () => {
+    const w = await open()
+    expect(w.getByRole('tabpanel').className).toContain('ynr-pane--flow')
+  })
+})
+
+describe('YNAB’s review', () => {
+  it('reads no migration status, even when every read is refreshed, and keeps its pane', async () => {
+    const first = run({ preview: { ...PREVIEW } })
+    runs.set(first.id, first)
+    render(
+      <YnabReview runId={first.id} planLabel="Household" onClose={onClose} onStarted={onStarted} />,
+    )
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByRole('cell', { name: 'Checking' })
+    expect(within(dialog).getByRole('tabpanel').className).toBe('ynr-pane')
+    invalidateQueryCache(() => true)
+    await new Promise((r) => setTimeout(r, 20))
+    const asked = authFetch.mock.calls.map(([url]) => String(url))
+    expect(asked.filter((u) => /\/migration(\?|$)/.test(u))).toEqual([])
   })
 })

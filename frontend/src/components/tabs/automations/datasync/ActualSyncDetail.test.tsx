@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { clearQueryCache } from '../../../../state/queryCache'
-import { SYNC_ITEM, run, syncStatus } from '../../imports/importsFixtures'
+import { PREVIEW, SYNC_ITEM, run, syncStatus } from '../../imports/importsFixtures'
 import type { RunRecord } from '../../imports/runs'
 import { ACTUAL_APP, YNAB_APP, type BudgetAppInfo } from './budgetApps'
 import { DataSyncView } from './DataSyncView'
@@ -29,7 +29,7 @@ const CONNECTOR = {
   secrets_public: {},
   status: 'connected',
   pausable: true,
-  short_description: 'Import a budget from your Actual Budget server and keep it in step.',
+  short_description: 'Import a budget from your Actual server and keep it in step.',
   tools: [],
 }
 
@@ -40,6 +40,22 @@ let runs: RunRecord[]
 let config: Record<string, unknown>
 let refuseSettings: string | null
 let requests: { url: string; method: string; body: unknown }[]
+const known = new Map<string, RunRecord>()
+const NO_ACCOUNTS = {
+  ...PREVIEW,
+  plan_name: 'ACME Household',
+  accounts: [],
+  warnings: [],
+  prune: { categories: [], groups: [] },
+  currency_change: false,
+}
+const startBody = () =>
+  requests.find((r) => r.url === '/api/actual-budget/migration/start')?.body as {
+    plan_id: string
+    sync_direction: string | null
+  }
+const IMPORT_FIRST = { kind: 'import_first', text: 'Import this budget first.' }
+const DIFFERS = { kind: 'budget_differs', text: 'The connection is elsewhere.', plan_id: 'b2' }
 const onBack = vi.fn()
 const onOpenReport = vi.fn()
 
@@ -53,7 +69,6 @@ const actualStatus = (over: Record<string, unknown> = {}) =>
     conflicts: [],
     budget_mode: 'envelope',
     warnings: [],
-    notes: [],
     last_run: null,
     ...over,
   })
@@ -91,6 +106,20 @@ beforeEach(() => {
       return reply(actual)
     }
     if (path === '/api/actual-budget/status') return reply(config)
+    if (path === '/api/actual-budget/migration/preview') {
+      const started = run({
+        provider: 'actual_budget',
+        plan_id: body.plan_id,
+        preview: NO_ACCOUNTS,
+      })
+      known.set(started.id, started)
+      return reply({ ...started, blocked_reason: null }, 202)
+    }
+    if (path === '/api/actual-budget/migration/start')
+      return reply(run({ provider: 'actual_budget', kind: 'import', status: 'running' }), 202)
+    if (path === '/api/actual-budget/migration') return reply({ blocked_reason: null })
+    const one = /\/api\/imports\/runs\/(\w+)$/.exec(path)?.[1]
+    if (one) return reply(known.get(one))
     if (path === '/api/actual-budget/budgets') {
       return reply({
         budgets: [
@@ -297,6 +326,111 @@ describe('the Actual sync, set up', () => {
     await waitFor(() =>
       expect(requests.at(-1)?.url).toMatch(/^\/api\/actual-budget\/sync\/conflicts/),
     )
+  })
+})
+
+describe('importing from Worth checking', () => {
+  async function review() {
+    fireEvent.click(await screen.findByRole('button', { name: 'Review…' }))
+    return within(await screen.findByRole('dialog', { name: /Import/ }))
+  }
+
+  it('import first keeps the direction the sync is on', async () => {
+    actual = actualStatus({ direction: 'from_ynab', warnings: [IMPORT_FIRST] })
+    page()
+    const w = await review()
+    await w.findByText(/Sync from Actual only/)
+    fireEvent.click(w.getByRole('button', { name: 'Import' }))
+    await waitFor(() => expect(startBody()?.sync_direction).toBe('from_ynab'))
+  })
+
+  it('import first on a paused sync leaves it paused', async () => {
+    actual = actualStatus({ enabled: false, direction: 'to_ynab', warnings: [IMPORT_FIRST] })
+    page()
+    const w = await review()
+    await w.findByText(/Don’t sync, import once/)
+    fireEvent.click(w.getByRole('button', { name: 'Import' }))
+    await waitFor(() => expect(startBody()).toBeTruthy())
+    expect(startBody().sync_direction).toBeNull()
+  })
+
+  it('the first setup still starts on both ways', async () => {
+    actual = notSetUp()
+    page()
+    const w = await review()
+    expect(await w.findByText(/Keep in sync both ways/)).toBeTruthy()
+  })
+
+  it('a budget that differs offers no import while the sync is on', async () => {
+    actual = actualStatus({ warnings: [DIFFERS] })
+    page()
+    expect(await screen.findByText(DIFFERS.text)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Review…' })).toBeNull()
+  })
+
+  it('a budget that differs, sync off: imports it in the sync’s direction', async () => {
+    config = { ...config, has_encryption_password: true }
+    actual = actualStatus({ enabled: false, direction: 'from_ynab', warnings: [DIFFERS] })
+    page()
+    const picker = (await screen.findByLabelText(/Actual budget/)) as HTMLSelectElement
+    await waitFor(() => expect(picker.value).toBe('b2'))
+    const w = await review()
+    await w.findByText(/Sync from Actual only/)
+    fireEvent.click(w.getByRole('button', { name: 'Import' }))
+    await waitFor(() => expect(startBody()).toBeTruthy())
+    expect(startBody()).toMatchObject({ plan_id: 'b2', sync_direction: 'from_ynab' })
+  })
+})
+
+describe('the connection links', () => {
+  it('open the form even when the connector is healthy', async () => {
+    actual = notSetUp()
+    page()
+    fireEvent.click(await screen.findByRole('button', { name: 'Change' }))
+    expect(await screen.findByLabelText(/Server address/)).toBeTruthy()
+  })
+
+  it('YNAB’s still open the overview', async () => {
+    authFetch.mockImplementation((url: string) => {
+      const path = url.split('?')[0] ?? ''
+      if (path === '/api/ynab/sync') return reply(syncStatus({ enabled: false, plan_id: null }))
+      if (path === '/api/ynab/status')
+        return reply({ configured: true, enabled: true, has_access_token: true })
+      if (path === '/api/ynab/budgets') return reply({ budgets: [] })
+      if (path === '/api/connectors')
+        return reply({
+          connectors: [{ ...CONNECTOR, id: 'ynab', name: 'YNAB', kind: 'ynab' }],
+        })
+      if (path === '/api/imports/runs') return reply({ runs: [] })
+      return reply({})
+    })
+    render(<YnabSyncDetail reportId={null} onBack={onBack} onOpenReport={onOpenReport} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Change' }))
+    await waitFor(() => expect(document.querySelector('.rd-modal')).toBeTruthy())
+    expect(screen.queryByLabelText(/Access token/)).toBeNull()
+  })
+})
+
+describe('the history', () => {
+  it('Actual lists no previews unless they failed, and counts what it lists', async () => {
+    runs = [
+      run({ provider: 'actual_budget', kind: 'sync', outcome: 'Nothing changed' }),
+      run({ provider: 'actual_budget', kind: 'preview', outcome: 'Would bring across' }),
+      run({
+        provider: 'actual_budget',
+        kind: 'preview',
+        status: 'failed',
+        outcome: '',
+        error: 'Down',
+      }),
+    ]
+    page()
+    const history = (await screen.findByRole('list', {
+      name: 'Actual sync history',
+    })) as HTMLElement
+    expect(within(history).getAllByRole('listitem')).toHaveLength(2)
+    expect(screen.getByText('2 runs')).toBeTruthy()
+    expect(screen.queryByText(/Would bring across/)).toBeNull()
   })
 })
 

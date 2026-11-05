@@ -36,6 +36,10 @@ export interface BudgetAppInfo {
   refreshesAfterImport: boolean
   /** The sync can move between budgets, so an import date belongs to the one it was of. */
   importsPerPlan: boolean
+  /** Its page's links to the connector open the form, not the overview, even when it's healthy. */
+  opensConnectorForm: boolean
+  /** History lists a review's previews. Each re-check is one, which swamps a settled review's. */
+  listsPreviewRuns: boolean
 }
 
 // Built from a part so that this file holds no `/api/...` literal: the route consistency test
@@ -64,6 +68,8 @@ export const YNAB_APP: BudgetAppInfo = {
   tellsImportBlock: false,
   refreshesAfterImport: false,
   importsPerPlan: false,
+  opensConnectorForm: false,
+  listsPreviewRuns: true,
 }
 
 export const ACTUAL_APP: BudgetAppInfo = {
@@ -88,6 +94,8 @@ export const ACTUAL_APP: BudgetAppInfo = {
   tellsImportBlock: true,
   refreshesAfterImport: true,
   importsPerPlan: true,
+  opensConnectorForm: true,
+  listsPreviewRuns: false,
 }
 
 /** Fixed order: the cards never swap places. */

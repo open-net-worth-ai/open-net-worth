@@ -167,8 +167,12 @@ function isSecretKey(key: string): boolean {
  *  the refetch. `useFlag` reads `undefined` until this session has fetched instead. */
 const LIVE_ONLY_KEYS = new Set(['/api/feature-flags'])
 
+/** A read that names something meant to stay on its own screen: the Actual connector's status
+ *  holds the server's address, which localStorage would keep long after the form is closed. */
+const SCREEN_ONLY_KEYS = new Set(['/api/actual-budget/status'])
+
 function isPersistable(key: string): boolean {
-  return !isSecretKey(key) && !LIVE_ONLY_KEYS.has(key)
+  return !isSecretKey(key) && !LIVE_ONLY_KEYS.has(key) && !SCREEN_ONLY_KEYS.has(key)
 }
 
 function persistNow(): void {

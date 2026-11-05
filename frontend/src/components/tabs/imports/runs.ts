@@ -285,6 +285,8 @@ export function useRuns(provider: string, includeArchived: boolean, enabled = tr
   const runs = useQueryCache<RunSummary[]>(
     `/api/imports/runs?provider=${provider}&archived=${includeArchived}`,
     async () => {
+      // Every write revalidates every subscriber, so this is what keeps an app that's off quiet.
+      if (!enabled) return undefined as unknown as RunSummary[]
       const r = await authFetch(
         `/api/imports/runs?provider=${provider}&archived=${includeArchived}`,
       )

@@ -6,7 +6,7 @@
 import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { clearQueryCache } from '../../../state/queryCache'
+import { clearQueryCache, invalidateQueryCache, useQueryCache } from '../../../state/queryCache'
 import { ActualSection } from './ActualSection'
 import { hasConfigForm } from './ConnectorConfig'
 import type { Connector } from './types'
@@ -90,6 +90,10 @@ function Harness() {
       <ActualSection />
     </host.Provider>
   )
+}
+function ConnectorsReader() {
+  useQueryCache('/api/connectors', async () => (await authFetch('/api/connectors')).json())
+  return null
 }
 const form = () => render(<Harness />)
 const canSave = () => !!footer?.state?.dirty
@@ -282,6 +286,74 @@ describe('ActualSection', () => {
     form()
     await screen.findByLabelText(/Server address/)
     expect(screen.queryByText(/Last fetched/)).toBeNull()
+  })
+
+  it('labels the Budget slot before it has anything to pick, and through an error', async () => {
+    form()
+    const before = await screen.findByText(/Your budgets appear here/)
+    expect(before.closest('.ui-field')?.querySelector('.form-label')?.textContent).toBe('Budget')
+    cleanup()
+    clearQueryCache()
+    budgets = { status: 502, detail: 'Actual refused the sign-in. Check its password or token.' }
+    status = SAVED
+    form()
+    const error = await screen.findByText(/refused the sign-in/)
+    const field = error.closest('.ui-field')
+    expect(field?.querySelector('.form-label')?.textContent).toBe('Budget')
+    expect(field?.querySelector('button')?.textContent).toBe('Retry')
+    expect(screen.queryByRole('combobox')).toBeNull()
+  })
+
+  it('follows a budget changed elsewhere, unless one has been picked here', async () => {
+    status = { ...SAVED, budget_id: 'b1', budget_name: 'ACME Household' }
+    form()
+    const picker = (await screen.findByLabelText(/^Budget/)) as HTMLSelectElement
+    await waitFor(() => expect(picker.value).toBe('b1'))
+    status = { ...SAVED, budget_id: 'b2', budget_name: 'ACME Vault' }
+    invalidateQueryCache('/api/actual-budget/status')
+    await waitFor(() => expect(picker.value).toBe('b2'))
+    expect(canSave()).toBe(false)
+    fireEvent.change(picker, { target: { value: 'b1' } })
+    expect(picker.value).toBe('b1')
+    expect(canSave()).toBe(true)
+  })
+
+  it('a save doesn’t put back a budget it didn’t change', async () => {
+    status = { ...SAVED, budget_id: 'b1', budget_name: 'ACME Household' }
+    form()
+    await screen.findByLabelText(/^Budget/)
+    status = { ...SAVED, budget_id: 'b2', budget_name: 'ACME Vault', has_encryption_password: true }
+    invalidateQueryCache('/api/actual-budget/status')
+    await waitFor(() =>
+      expect((screen.getByLabelText(/^Budget/) as HTMLSelectElement).value).toBe('b2'),
+    )
+    type(/^Password/, 'pw-2')
+    await save()
+    expect(lastSave()).toEqual({ password: 'pw-2' })
+  })
+
+  it('leaving the password blank doesn’t mark an empty Token tab as missing', async () => {
+    form()
+    const password = await screen.findByLabelText(/^Password/)
+    fireEvent.blur(password)
+    expect(screen.getByText('A password is required.')).toBeTruthy()
+    fireEvent.click(screen.getByRole('tab', { name: 'Token' }))
+    expect(screen.queryByText('A token is required.')).toBeNull()
+  })
+
+  it('tells the connector list when a read is refused', async () => {
+    budgets = { status: 502, detail: 'Actual refused the sign-in. Check its password or token.' }
+    status = SAVED
+    render(
+      <>
+        <ConnectorsReader />
+        <Harness />
+      </>,
+    )
+    await screen.findByText(/refused the sign-in/)
+    await waitFor(() =>
+      expect(requests.filter((r) => r.url === '/api/connectors').length).toBeGreaterThan(1),
+    )
   })
 
   it('says it is paused, as the other connectors do', async () => {

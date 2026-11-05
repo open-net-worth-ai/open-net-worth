@@ -72,11 +72,20 @@ export interface SyncStatus {
   warnings?: SyncWarning[]
 }
 export interface SyncWarning {
-  kind: 'income_in_envelope' | 'not_in_this_budget' | 'waiting_for_both_ways' | 'import_first'
+  kind:
+    | 'income_in_envelope'
+    | 'not_in_this_budget'
+    | 'waiting_for_both_ways'
+    | 'import_first'
+    | 'budget_differs'
   text: string
+  /** budget_differs: the budget the connector is set to, which an import would move the sync to. */
+  plan_id?: string
 }
 
 export type SyncDirection = 'both' | 'from_ynab' | 'to_ynab'
+/** What an import does to the sync when it ends: turn it on this way, or leave it. */
+export type SyncChoice = SyncDirection | 'off'
 export const directionLabels = (app: BudgetAppInfo): Record<SyncDirection, string> => ({
   both: 'Both ways',
   from_ynab: `From ${app.name}`,
@@ -100,6 +109,8 @@ export function useSyncStatus(enabled = true, app: BudgetAppInfo = YNAB_APP) {
   const status = useQueryCache<SyncStatus>(
     endpoint,
     async () => {
+      // Every write revalidates every subscriber, so this is what keeps an app that's off quiet.
+      if (!enabled) return undefined as unknown as SyncStatus
       const r = await authFetch(endpoint)
       if (!r.ok) throw new Error(await detailOf(r, 'Could not read the sync status.'))
       return (await r.json()) as SyncStatus

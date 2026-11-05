@@ -11,8 +11,9 @@ import type { BudgetAppInfo } from './budgetApps'
 
 type HistoryFilter = 'all' | 'attention'
 
-/** What the server says is worth a look while it holds. When it says to import first, the
- *  import is here too: nowhere else on a set-up page offers one. */
+/** What the server says is worth a look while it holds. Where its advice is to import, the import
+ *  is here too: nowhere else on a set-up page offers one. It leaves the sync as it was, unless
+ *  moving the sync to another budget is the point of it. */
 export function WorthChecking({
   app,
   status,
@@ -31,6 +32,13 @@ export function WorthChecking({
   onImported: () => void
 }) {
   const warnings = status.warnings ?? []
+  const differs = warnings.find((w) => w.kind === 'budget_differs')
+  const offer =
+    differs && !status.enabled
+      ? { startFrom: differs.plan_id, initialSync: status.direction }
+      : warnings.some((w) => w.kind === 'import_first')
+        ? { startFrom: planId, initialSync: status.enabled ? status.direction : ('off' as const) }
+        : null
   return (
     <section className="a3-block a3-attention" data-od-id="ynab-sync-warnings">
       <div className="a3-block-h">Worth checking</div>
@@ -39,11 +47,13 @@ export function WorthChecking({
           <li key={w.kind}>{w.text}</li>
         ))}
       </ul>
-      {warnings.some((w) => w.kind === 'import_first') && (
+      {offer && (
         <YnabImport
+          key={offer.startFrom}
           app={app}
           runs={runs}
-          startFrom={planId}
+          startFrom={offer.startFrom}
+          initialSync={offer.initialSync}
           onStarted={onImported}
           onOpen={onOpen}
           onConnect={onConnect}
@@ -110,13 +120,16 @@ export function SyncHistory({
 }) {
   const [filter, setFilter] = useState<HistoryFilter>('all')
   const needsAttention = (r: RunSummary) => r.status === 'failed' || r.status === 'interrupted'
-  const shown = filter === 'all' ? runs : runs.filter(needsAttention)
+  const listed = app.listsPreviewRuns
+    ? runs
+    : runs.filter((r) => r.kind !== 'preview' || r.status === 'failed')
+  const shown = filter === 'all' ? listed : listed.filter(needsAttention)
   return (
     <div className="a3-block a3-col-history" data-od-id="ynab-sync-history">
       <div className="a3-block-h">
         History
         <span className="count">
-          {runs.length} {runs.length === 1 ? 'run' : 'runs'}
+          {listed.length} {listed.length === 1 ? 'run' : 'runs'}
         </span>
       </div>
       <SegmentedControl

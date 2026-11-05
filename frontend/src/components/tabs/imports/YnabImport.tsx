@@ -5,6 +5,7 @@ import { Button, Cluster, FormField, Meter, Select, Stack, Text } from '../../ui
 import { YNAB_APP, type BudgetAppInfo } from '../automations/datasync/budgetApps'
 import { usePlans, type Plan } from './plans'
 import { detailOf, messageOf, type RunSummary } from './runs'
+import type { SyncChoice } from './sync'
 import { YnabReview } from './YnabReview'
 
 // The import step of a budget app's data sync: pick a plan, then Review. Review reads the plan afresh
@@ -23,6 +24,8 @@ export function YnabImport({
   runs: RunSummary[] | undefined
   /** The plan to start from, ahead of any the connector remembers. */
   startFrom?: string | null
+  /** What the import does to the sync unless the person changes it in the review. */
+  initialSync?: SyncChoice
   onStarted: () => void
   onOpen: (id: string) => void
   onConnect?: () => void
@@ -132,6 +135,8 @@ export function YnabImport({
             plans.data?.find((x) => x.id === planId),
           )}
           blockedAtStart={blockedAtStart}
+          initialSync={props.initialSync}
+          onConnect={props.onConnect}
           onClose={() => setReviewId(null)}
           onStarted={props.onStarted}
         />
@@ -152,6 +157,7 @@ export function PlanPicker({
   id = `imports-${app.key}-plan`,
   label = `${app.name} ${app.planWord}`,
   help,
+  framed = false,
 }: {
   app: BudgetAppInfo
   plans: ReturnType<typeof usePlans>
@@ -161,9 +167,13 @@ export function PlanPicker({
   id?: string
   label?: string
   help?: React.ReactNode
+  /** Keep the label over whatever stands in for the select, so the slot doesn't move. */
+  framed?: boolean
 }) {
+  const frame = (node: React.ReactElement) =>
+    framed ? <FormField label={label}>{node}</FormField> : node
   if (plans.error) {
-    return (
+    return frame(
       <Cluster gap="--space-2">
         <Text size="sm" tone="bad">
           {plans.error instanceof Error
@@ -177,14 +187,14 @@ export function PlanPicker({
         >
           Retry
         </Button>
-      </Cluster>
+      </Cluster>,
     )
   }
   if (plans.initialLoading) {
-    return (
+    return frame(
       <Text size="sm" tone="faint">
         {`Loading your ${app.name} ${app.planWord}s…`}
-      </Text>
+      </Text>,
     )
   }
   const options = (plans.data ?? []).map((p) => ({
@@ -192,10 +202,10 @@ export function PlanPicker({
     label: p.encrypted ? `${planLabel(app, p)} (encrypted)` : planLabel(app, p),
   }))
   if (options.length === 0) {
-    return (
+    return frame(
       <Text size="sm" tone="warn">
         {`This ${app.tokenNoun} can't see any ${app.name} ${app.planWord}s.`}
-      </Text>
+      </Text>,
     )
   }
   return (

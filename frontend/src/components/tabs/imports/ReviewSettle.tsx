@@ -1,4 +1,6 @@
-import { Fragment } from 'react'
+import { Fragment, useEffect } from 'react'
+import { authFetch } from '../../../api/client'
+import { useQueryCache } from '../../../state/queryCache'
 import { fAmountNative } from '../../../utils/format'
 import { CURRENCY_OPTIONS } from '../../firstrun/currencies'
 import { Cluster, Text } from '../../ui'
@@ -6,11 +8,35 @@ import { TYPE_LABELS, type AccountType } from '../accounts/categories'
 import { PMSelect } from '../accounts/ds'
 import type { BudgetAppInfo } from '../automations/datasync/budgetApps'
 import { Destination, LinkSummary, type LinkProps } from './ReviewLinks'
-import type { AccountTypes } from './reviewTypes'
-import type { Preview, PreviewAccount } from './runs'
+import { importBlockKey, type AccountTypes } from './reviewTypes'
+import { detailOf, type Preview, type PreviewAccount } from './runs'
 
 // What only an app that doesn't say what its accounts are needs in the review: a type for each new
 // account, grouped by the band that limits it, and a currency when the budget states none.
+
+/** What the server would refuse this import with right now. Its own component, mounted only for an
+ *  app that says: any subscriber is revalidated on every write, whatever `enabled` says. */
+export function ImportBlockReader({
+  app,
+  planId,
+  onRead,
+}: {
+  app: BudgetAppInfo
+  planId: string
+  onRead: (blocked: string | null) => void
+}) {
+  const key = importBlockKey(app, planId)
+  const live = useQueryCache<{ blocked_reason?: string | null }>(key, async () => {
+    const r = await authFetch(key)
+    if (!r.ok) throw new Error(await detailOf(r, 'Could not read the import.'))
+    return (await r.json()) as { blocked_reason?: string | null }
+  })
+  const blocked = live.data ? (live.data.blocked_reason ?? null) : undefined
+  useEffect(() => {
+    if (blocked !== undefined) onRead(blocked)
+  }, [blocked, onRead])
+  return null
+}
 
 export function CurrencyRow({
   app,
@@ -24,7 +50,7 @@ export function CurrencyRow({
   onChange: (code: string) => void
 }) {
   return (
-    <Cluster gap="--space-3">
+    <Cluster gap="--space-3" className="ynr-currency">
       <span className="form-label">Budget currency</span>
       <PMSelect
         className="ynr-dest"
@@ -38,7 +64,7 @@ export function CurrencyRow({
         menuWidth={280}
         onChange={onChange}
       />
-      <Text size="sm" tone="faint">
+      <Text size="sm" tone="muted">
         {app.name} doesn’t say, so this starts from this book’s currency.
       </Text>
     </Cluster>

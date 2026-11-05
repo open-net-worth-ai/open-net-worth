@@ -63,6 +63,21 @@ scratch with `ONW_QA_MODE=1`, ports 8090-8099.
 - WHEN I press **Review…** in **Worth checking** and import
 - THEN the warning goes as the import ends, without a further sync
 
+### ACTUAL-PAGE-MOVE
+- GIVEN a sync on one budget in From Actual
+- WHEN I pick another budget in the connector form and save, turn the sync off, and import it from **Worth checking**
+- THEN the warning appears while they differ, the import starts on **Sync from Actual only**, and afterwards the sync follows the new budget in that direction, the connector agrees and the warning is gone
+
+### ACTUAL-PAGE-IMPORT-KEEPS-SYNC
+- GIVEN the sync stopped with its import-first warning, in From Actual or switched off
+- WHEN I import from **Worth checking** without changing the dropdown
+- THEN the direction is unchanged, and a sync that was off stays off
+
+### ACTUAL-CONNECT-AUTH-ERROR
+- GIVEN a saved sign-in the server refuses
+- WHEN the form reads the budgets
+- THEN the connector reads **Auth error**, not **Connected**, until a read works again
+
 ### ACTUAL-PAGE-TRACKING
 - GIVEN a budget in tracking mode
 - WHEN I open the page

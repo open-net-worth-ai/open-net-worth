@@ -17,13 +17,16 @@ function useActualAvailable(flagOn: boolean): boolean {
   const status = useQueryCache<{ available?: boolean }>(
     key,
     async () => {
+      // Every write revalidates every subscriber, so this is what keeps a flag that's off quiet.
+      if (!flagOn) return undefined as unknown as { available?: boolean }
       const r = await authFetch(key)
       if (!r.ok) throw new Error(await detailOf(r, 'Could not read the Actual connector.'))
       return (await r.json()) as { available?: boolean }
     },
     { enabled: flagOn },
   )
-  return flagOn && status.data?.available === true
+  // Only the server saying no takes Actual away: a failed read shows as its sync failing to load.
+  return flagOn && (status.data ? status.data.available !== false : !!status.error)
 }
 
 /** The data syncs this instance offers, in fixed order: an app whose flag is off, or which can't

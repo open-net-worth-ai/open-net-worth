@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react'
 import { authFetch } from '../../../api/client'
-import { fAmountNative, fDate } from '../../../utils/format'
-import { Button, Cluster, Modal, PageTabs, Skeleton, Stack, Text } from '../../ui'
-import { TYPE_LABELS, type AccountType } from '../accounts/categories'
+import { invalidateQueryCache } from '../../../state/queryCache'
+import { Button, Cluster, Modal, PageTabs, Stack, Text } from '../../ui'
 import { PMSelect } from '../accounts/ds'
 import { YNAB_APP, type BudgetAppInfo } from '../automations/datasync/budgetApps'
-import { Destination, LinkSummary, type LinkProps } from './ReviewLinks'
-import { CurrencyRow, SettleAccounts } from './ReviewSettle'
-import { useAccountTypes, useImportBlock } from './reviewTypes'
+import { Accounts, Meta, Placeholder, Transactions } from './ReviewPanes'
+import { CurrencyRow, ImportBlockReader, SettleAccounts } from './ReviewSettle'
+import { importBlockKey, useAccountTypes } from './reviewTypes'
 import { BLOCKED_NOTE_ID, Notes, SettleNotes, TYPES_NOTE_ID } from './reviewNotes'
 import { ASK, Categories } from './YnabCategories'
-import { messageOf, plural, useRun, type Preview, type PreviewTxn } from './runs'
-import type { SyncDirection } from './sync'
+import { messageOf, useRun } from './runs'
+import type { SyncChoice } from './sync'
 
 // The review before a budget app's import, in one window: a line saying what the plan holds, what it
 // changes in this book, then the plan itself in three tabs (accounts, categories, transactions)
@@ -30,7 +29,6 @@ import type { SyncDirection } from './sync'
 // re-checked like an account's. A category that matches several of the book's must be picked
 // before the import can start.
 
-type SyncChoice = SyncDirection | 'off'
 type Pane = 'accounts' | 'categories' | 'transactions'
 
 const TYPES_SETTLE_MS = 400
@@ -47,8 +45,10 @@ export function YnabReview({
   runId,
   planLabel,
   blockedAtStart = null,
+  initialSync = 'both',
   onClose,
   onStarted,
+  onConnect,
 }: {
   app?: BudgetAppInfo
   runId: string
@@ -56,8 +56,12 @@ export function YnabReview({
   planLabel: string
   /** What the preview's own answer said an import would be refused with. */
   blockedAtStart?: string | null
+  /** What the import does to the sync unless the person changes it here. */
+  initialSync?: SyncChoice
   onClose: () => void
   onStarted: () => void
+  /** Where a budget that can't be read gets fixed. */
+  onConnect?: () => void
 }) {
   const [shownId, setShownId] = useState(runId)
   const [checkId, setCheckId] = useState<string | null>(null)
@@ -67,7 +71,7 @@ export function YnabReview({
   const p = run?.status === 'done' ? run.preview : null
   const reading = !run || run.status === 'running'
   const [pane, setPane] = useState<Pane>('accounts')
-  const [sync, setSync] = useState<SyncChoice>('both')
+  const [sync, setSync] = useState<SyncChoice>(initialSync)
   const [links, setLinks] = useState<Record<string, string>>({})
   const [sameAs, setSameAs] = useState<Record<string, string>>({})
   const [catLinks, setCatLinks] = useState<Record<string, string>>({})
@@ -77,7 +81,7 @@ export function YnabReview({
   const [posting, setPosting] = useState(false)
   const [checkedTypes, setCheckedTypes] = useState<string | null>(null)
   const types = useAccountTypes(first, p)
-  const block = useImportBlock(app, run?.plan_id, blockedAtStart)
+  const [blocked, setBlocked] = useState(blockedAtStart)
   const asks = app.asksTypeAndCurrency
   const askedCurrency = asks && p?.currency_asked ? (currency ?? p.currency) : null
   const settling = asks ? types.unsettled : 0
@@ -90,6 +94,8 @@ export function YnabReview({
     setCheckId(null)
   }
   const checking = checkId !== null
+  // A choice during a type's re-check would start a second one, and the older answer could win.
+  const locked = checking || (asks && posting)
   // What the first answer proposed for each category: the choice the person did not make.
   const proposals = Object.fromEntries(
     (first?.category_groups ?? [])
@@ -169,7 +175,13 @@ export function YnabReview({
     p.currency_blocked ||
     checking ||
     asking.length > 0 ||
-    (asks && (posting || !!typesAhead || settling > 0 || !!block.blocked))
+    (asks && (posting || !!typesAhead || settling > 0 || !!blocked))
+
+  // A refusal the block now states leaves Import disabled, with focus on it.
+  const refusalIsBlock = !!error && error === blocked
+  useEffect(() => {
+    if (refusalIsBlock) document.getElementById('ui-page-tab-accounts')?.focus()
+  }, [refusalIsBlock])
 
   async function importNow() {
     if (!run || !p || cannotImport) return
@@ -197,7 +209,7 @@ export function YnabReview({
       })
       if (!r.ok) {
         setError(messageOf(await r.json().catch(() => null), 'Could not start the import.'))
-        block.refresh()
+        if (app.tellsImportBlock) invalidateQueryCache(importBlockKey(app, run.plan_id))
         return
       }
       onStarted()
@@ -234,9 +246,9 @@ export function YnabReview({
               size="sm"
               variant="primary"
               disabled={cannotImport}
-              loading={busy}
+              loading={busy || (asks && (checking || posting))}
               onClick={importNow}
-              {...importBlockedProps(block.blocked, settling)}
+              {...importBlockedProps(blocked, settling)}
             >
               Import
             </Button>
@@ -245,10 +257,29 @@ export function YnabReview({
       }
     >
       <Stack gap="--space-4">
+        {app.tellsImportBlock && run?.plan_id && (
+          <ImportBlockReader app={app} planId={run.plan_id} onRead={setBlocked} />
+        )}
         {failed ? (
-          <Text size="sm" tone="bad">
-            {run?.error || `The ${app.planWord} could not be read.`}
-          </Text>
+          <>
+            <Text size="sm" tone="bad">
+              {run?.error || `The ${app.planWord} could not be read.`}
+            </Text>
+            {asks && onConnect && (
+              <div>
+                <button
+                  type="button"
+                  className="a3-linkbtn"
+                  onClick={() => {
+                    onClose()
+                    onConnect()
+                  }}
+                >
+                  Open the connection
+                </button>
+              </div>
+            )}
+          </>
         ) : p && asks ? (
           <>
             {askedCurrency && (
@@ -266,7 +297,7 @@ export function YnabReview({
               app={app}
               preview={p}
               asking={asking}
-              blocked={block.blocked}
+              blocked={blocked}
               unsettled={types.unsettled}
               suggested={types.acceptable}
               onAccept={() => {
@@ -279,7 +310,7 @@ export function YnabReview({
         ) : (
           p && <Notes app={app} preview={p} asking={asking} />
         )}
-        {error && (
+        {error && !refusalIsBlock && (
           <div role="alert">
             <Text size="sm" tone="bad">
               {error}
@@ -299,7 +330,7 @@ export function YnabReview({
               ]}
             />
             <div
-              className="ynr-pane"
+              className={asks ? 'ynr-pane ynr-pane--flow' : 'ynr-pane'}
               role="tabpanel"
               aria-labelledby={`ui-page-tab-${pane}`}
               aria-busy={reading}
@@ -312,7 +343,7 @@ export function YnabReview({
                   preview={p}
                   types={types}
                   links={links}
-                  checking={checking}
+                  checking={locked}
                   onLink={relink}
                   sameAs={sameAs}
                   onSameAs={setSameAs}
@@ -333,7 +364,7 @@ export function YnabReview({
                   preview={p}
                   catLinks={catLinks}
                   proposals={proposals}
-                  checking={checking}
+                  checking={locked}
                   onChoose={recategorize}
                 />
               ) : (
@@ -356,146 +387,4 @@ function importBlockedProps(blocked: string | null, settling: number) {
       .filter(Boolean)
       .join(' '),
   }
-}
-
-function Meta({ preview: p }: { preview: Preview }) {
-  return (
-    <span className="ynr-meta">
-      {[
-        p.currency,
-        plural(p.accounts.length, 'account'),
-        plural(p.transactions, 'transaction'),
-        plural(p.categories, 'category', 'categories'),
-        plural(p.budget_months, 'budget month'),
-      ].join(', ')}
-    </span>
-  )
-}
-
-function Placeholder() {
-  return (
-    <div className="ynr-placeholder">
-      <Stack gap="--space-4">
-        {[92, 78, 85, 64, 88, 70].map((w) => (
-          <Skeleton key={w} width={`${w}%`} height={12} />
-        ))}
-      </Stack>
-    </div>
-  )
-}
-
-function Empty({ children }: { children: string }) {
-  return <p className="ynr-empty">{children}</p>
-}
-
-function Accounts({ preview: p, ...link }: { preview: Preview } & LinkProps) {
-  if (p.accounts.length === 0) return <Empty>{`This ${link.app.planWord} has no accounts.`}</Empty>
-  return (
-    <table className="imp-table ynr-table">
-      <thead>
-        <tr>
-          <th>Account</th>
-          <th>Type</th>
-          <th>In this book</th>
-          <th className="imp-table__num">Transactions</th>
-          <th className="imp-table__num">Opening balance</th>
-        </tr>
-      </thead>
-      {p.accounts.map((a) => (
-        <tbody key={a.id ?? a.name}>
-          <tr>
-            <td data-label="Account">
-              {a.name}
-              {a.closed && <span className="ynr-dim"> (closed)</span>}
-            </td>
-            <td data-label="Type" className="ynr-dim">
-              {TYPE_LABELS[a.type as AccountType] ?? a.type}
-              {a.on_budget === false ? ' (tracking)' : ''}
-            </td>
-            <td data-label="In this book">
-              <Destination account={a} {...link} />
-            </td>
-            <td data-label="Transactions" className="imp-table__num">
-              {a.transactions}
-            </td>
-            <td data-label="Opening balance" className="imp-table__num">
-              {a.link ? (
-                <span className="ynr-dim">Its own</span>
-              ) : (
-                fAmountNative(a.opening_balance, p.currency)
-              )}
-            </td>
-          </tr>
-          {a.match && a.chosen && (
-            <tr className="ynr-link">
-              <td colSpan={5}>
-                <LinkSummary account={a} match={a.match} currency={p.currency} {...link} />
-              </td>
-            </tr>
-          )}
-        </tbody>
-      ))}
-    </table>
-  )
-}
-
-// A blank category on an inflow is money to assign, as in YNAB; on a spend it is uncategorized.
-const NO_CATEGORY: Record<PreviewTxn['kind'], string> = {
-  income: 'Ready to Assign',
-  expense: 'Uncategorized',
-  transfer: '',
-}
-
-function Transactions({ app, preview: p }: { app: BudgetAppInfo; preview: Preview }) {
-  const rows = p.transaction_list
-  if (!rows) return <Empty>Review again to see the transactions.</Empty>
-  if (rows.length === 0) return <Empty>{`This ${app.planWord} has no transactions.`}</Empty>
-  return (
-    <table className="imp-table ynr-table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Account</th>
-          <th>Payee</th>
-          <th>Memo</th>
-          <th>Category</th>
-          <th className="imp-table__num">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((t, i) => (
-          <tr key={i}>
-            <td data-label="Date" className="ynr-dim ynr-nowrap">
-              {fDate(t.date)}
-            </td>
-            <td data-label="Account">
-              {t.kind === 'transfer' ? `${t.account ?? '?'} → ${t.to_account ?? '?'}` : t.account}
-            </td>
-            <td data-label="Payee" className="imp-table__wrap">
-              {t.payee ?? ''}
-            </td>
-            <td data-label="Memo" className="imp-table__wrap ynr-dim">
-              {t.memo ?? ''}
-            </td>
-            <td data-label="Category" className="ynr-dim">
-              {t.category ?? NO_CATEGORY[t.kind]}
-            </td>
-            <td data-label="Amount" className="imp-table__num ynr-nowrap">
-              {fAmountNative(t.amount, p.currency)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-      {rows.length < p.transactions && (
-        <tfoot>
-          <tr>
-            <td colSpan={6} className="ynr-dim">
-              The newest {rows.length} of {p.transactions.toLocaleString()}. The import brings them
-              all.
-            </td>
-          </tr>
-        </tfoot>
-      )}
-    </table>
-  )
 }
