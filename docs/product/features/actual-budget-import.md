@@ -220,7 +220,9 @@ then asks about each of them, one at a time, rather than deleting them again on 
 **Moving the sync to another budget** starts in the connector: **Budget** in its form is the one
 place to choose. Pick the other budget and save, and **Worth checking** says the connection and the
 sync no longer agree. Turn the sync off, press **Review…** there, and import. The sync moves to that
-budget in the direction it already had, and on the schedule it already kept.
+budget in the direction it already had, and on the schedule it already kept. A sync you turned off to
+make the move comes back on when the import finishes with a way of syncing chosen in the review's
+footer; choose **Don’t sync, import once** there and it stays off.
 
 Moving deletes nothing here. Rows on the first budget's accounts stay in this book, the sync leaves
 them alone, and the page says how many there are. The first sync after the move holds back every row
