@@ -75,6 +75,12 @@ With no floor set, the warning fires only when cash is projected to go below zer
 - The list shows each commitment's progress, what's left and whether it's on track. Switch
   between **Active**, **At risk**, **Completed** and **Goals**, and sort with
   **Sort: Most at risk**, **Sort: Next payment** or **Sort: Remaining**.
+- A commitment is **At risk**, and shows an amount as **unfunded**, when its own funding sources
+  don't cover its payments up to that date. The amount and date are the first point it falls
+  short, so they can be smaller than the total on its **Funding** tab. This check counts only
+  funding added to that commitment, not your account balances or your safety floor: a loan with
+  no funding sources shows as unfunded even if you have the cash. The funding outlook's headline
+  is the separate check on your cash.
 
 The Dashboard's **Funding shortfall** flag is the same 12-month figure: both screens read one
 shared fetch of it, so they can't differ because they asked at different moments.

@@ -21,7 +21,7 @@ import type { Txn, Account, Category, FxRates } from './types'
 import { fBase } from './format'
 import { fDate } from '../../../utils/format'
 import { buildTxnView } from './txnView'
-import { categoryPill } from './TxnRow'
+import { categoryPill, transferLabel } from './TxnRow'
 import { SourceIcon, IconCheck } from './pickers'
 import { Check, Circle } from '../../../ui/icons'
 import { SplitChip, SplitLines } from './SplitView'
@@ -64,6 +64,7 @@ export function TxnCard({
   const {
     ccy,
     pos,
+    amtTone,
     baseVal,
     amtTitle,
     nativeMain,
@@ -76,22 +77,15 @@ export function TxnCard({
     payeeText,
     payeeFromName,
     payeeToName,
+    transferViewedLeg,
     mentionSub,
   } = buildTxnView(t, accounts, selectedId, payeeName, rates, showAccount)
 
-  const payeeMain: React.ReactNode = isTransfer ? (
-    isAdjustment ? (
-      'Balance adjustment'
-    ) : (
-      <span>
-        {payeeFromName || '—'}
-        <span className="arrow">→</span>
-        {payeeToName || '—'}
-      </span>
-    )
-  ) : (
-    payeeText
-  )
+  const payeeMain: React.ReactNode = isTransfer
+    ? isAdjustment
+      ? 'Balance adjustment'
+      : transferLabel(payeeFromName, payeeToName, transferViewedLeg)
+    : payeeText
   const askLabel = payeeName || t.description || '(no description)'
   const askSearch = [t.description, t.memo, payeeName, primaryAcct?.name, t.category]
     .filter(Boolean)
@@ -136,11 +130,7 @@ export function TxnCard({
           <span className="acct-card-top">
             <span className={'acct-payee-nm' + (isTransfer ? ' transfer' : '')}>{payeeMain}</span>
             <span
-              className={
-                'acct-card-amt ' +
-                (pos ? 'pos' : 'neg') +
-                (t.kind === 'investment' ? ' invest' : '')
-              }
+              className={'acct-card-amt ' + amtTone + (t.kind === 'investment' ? ' invest' : '')}
               title={amtTitle}
             >
               <span className="acct-amt-main">{showAccount ? baseMain : nativeMain}</span>
