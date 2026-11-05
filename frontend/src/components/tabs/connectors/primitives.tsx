@@ -366,11 +366,9 @@ export function Modal({
     const paddingV = parseFloat(bodyStyle.paddingTop) + parseFloat(bodyStyle.paddingBottom)
     const natural = content.scrollHeight + paddingV
     const maxTotal = parseFloat(getComputedStyle(card).maxHeight)
+    // Everything in the card but the body counts, the phone sheet's drag handle included.
     const available = Number.isFinite(maxTotal)
-      ? Math.max(
-          0,
-          maxTotal - (headRef.current?.offsetHeight ?? 0) - (footRef.current?.offsetHeight ?? 0),
-        )
+      ? Math.max(0, maxTotal - (card.offsetHeight - body.offsetHeight))
       : Infinity
     const next = Math.min(natural, available)
     setBodyHeight((prev) => {
