@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { authFetch } from '../../../../api/client'
 import { useFlag } from '../../../../hooks/useFlag'
 import { useQueryCache } from '../../../../state/queryCache'
@@ -25,8 +26,13 @@ function useActualAvailable(flagOn: boolean): boolean {
     },
     { enabled: flagOn },
   )
+  // A re-read clears `error` while it is in flight; with no data the failure is remembered, or
+  // the entry (and the page open on it) vanishes for the round trip.
+  const [failed, setFailed] = useState(false)
+  const stands = status.data ? false : status.error ? true : failed
+  if (stands !== failed) setFailed(stands)
   // Only the server saying no takes Actual away: a failed read shows as its sync failing to load.
-  return flagOn && (status.data ? status.data.available !== false : !!status.error)
+  return flagOn && (status.data ? status.data.available !== false : stands)
 }
 
 /** The data syncs this instance offers, in fixed order: an app whose flag is off, or which can't
