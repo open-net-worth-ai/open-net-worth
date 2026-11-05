@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { authFetch } from '../../../api/client'
 import { invalidateQueryCache, useQueryCache } from '../../../state/queryCache'
+import { YNAB_APP, type BudgetAppInfo } from '../automations/datasync/budgetApps'
 import { detailOf } from './runs'
 
 // The scheduled data sync with the migrated YNAB plan (one way or both) (/api/ynab/sync). The server owns the
@@ -66,14 +67,22 @@ export interface SyncStatus {
   last_run: LastRun | null
   next_run_at: string | null
   conflicts: ReviewItem[]
+  /** Actual only: what the last read said, and what the page keeps saying while it holds. */
+  budget_mode?: 'envelope' | 'tracking' | null
+  warnings?: SyncWarning[]
+}
+export interface SyncWarning {
+  kind: 'income_in_envelope' | 'not_in_this_budget' | 'waiting_for_both_ways' | 'import_first'
+  text: string
 }
 
 export type SyncDirection = 'both' | 'from_ynab' | 'to_ynab'
-export const DIRECTION_LABELS: Record<SyncDirection, string> = {
+export const directionLabels = (app: BudgetAppInfo): Record<SyncDirection, string> => ({
   both: 'Both ways',
-  from_ynab: 'From YNAB',
-  to_ynab: 'To YNAB',
-}
+  from_ynab: `From ${app.name}`,
+  to_ynab: `To ${app.name}`,
+})
+export const DIRECTION_LABELS = directionLabels(YNAB_APP)
 
 export const SYNC_ENDPOINT = '/api/ynab/sync'
 export const INTERVAL_LABELS: Record<string, string> = {
@@ -85,12 +94,13 @@ export const INTERVAL_LABELS: Record<string, string> = {
   manual: 'Manual only',
 }
 
-export function useSyncStatus(enabled = true) {
+export function useSyncStatus(enabled = true, app: BudgetAppInfo = YNAB_APP) {
   const [polling, setPolling] = useState(false)
+  const endpoint = `${app.apiPrefix}/sync`
   const status = useQueryCache<SyncStatus>(
-    SYNC_ENDPOINT,
+    endpoint,
     async () => {
-      const r = await authFetch(SYNC_ENDPOINT)
+      const r = await authFetch(endpoint)
       if (!r.ok) throw new Error(await detailOf(r, 'Could not read the sync status.'))
       return (await r.json()) as SyncStatus
     },
@@ -106,16 +116,18 @@ export async function sendSync(
   path: string,
   method: string,
   body?: unknown,
+  app: BudgetAppInfo = YNAB_APP,
 ): Promise<string | null> {
+  const endpoint = `${app.apiPrefix}/sync`
   try {
-    const r = await authFetch(`${SYNC_ENDPOINT}${path}`, {
+    const r = await authFetch(`${endpoint}${path}`, {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
     })
     if (!r.ok) return await detailOf(r, 'That did not work.')
     invalidateQueryCache('/api/imports/runs')
-    invalidateQueryCache(SYNC_ENDPOINT)
+    invalidateQueryCache(endpoint)
     return null
   } catch {
     return 'Could not reach the server.'

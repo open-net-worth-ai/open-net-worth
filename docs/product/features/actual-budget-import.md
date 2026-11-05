@@ -20,34 +20,64 @@ It needs your own Actual server, and it isn't available on a hosted instance. An
 your budget in Actual. Nothing changes there unless you turn the sync on, in a direction that writes
 to Actual.
 
+## Connect your server
+
+Open **Automations → Data sync → Actual** and click **Connect Actual…**. It's the same panel as
+**Connectors → Actual Budget**, and it opens right over the page.
+
+- **Server address** is the address you open Actual at. Plain http to another computer still works,
+  but it isn't encrypted, so the form warns you under the field.
+- **Sign in with** is a password or a token, whichever your server takes. Typing a new one replaces
+  the other.
+- **Budget** appears once an address and sign-in are saved. There's no test button: if the sign-in is
+  wrong, this is where it says so. Pick one here and it's the one the import starts from.
+- **Encryption password** is only for a budget with end-to-end encryption on in Actual. An encrypted
+  budget says `(encrypted)` in the list, and **Save** waits until it has its password.
+
+Passwords and tokens never come back from the server. A saved one shows as dots, and leaving the
+field blank keeps it.
+
+On a hosted instance the form says Actual isn't available, and **Data sync** doesn't list it.
+
 ## Before you start
 
 - **Turn off the YNAB sync** if it's on. A book syncs with one app at a time, so an import from
   Actual is refused while YNAB's sync is on, or while a YNAB import or sync is running. You can
-  still look at the review.
+  still look at the review. It says so at the top and keeps **Import** off, so you know before you
+  settle anything.
 - **Pick the right budget.** The server can hold several, and importing the wrong one writes
   someone else's money into your book.
 
 ## What the review asks
 
-The review shows what would come across. Nothing is written until you import. It works like the
-[YNAB review](imports-and-sync.md#set-it-up): each account can go to a new account or one you
-already have, and each category to a new category or one of yours. Actual leaves two things for
-you to settle.
+Click **Review…** to see what would come across. Nothing is written until you import. It works like
+the [YNAB review](imports-and-sync.md#set-it-up): each account can go to a new account or one you
+already have, and each category to a new category or one of yours. Actual leaves two things for you
+to settle.
 
 **A type for every account.** Actual only knows whether an account is on budget or off budget, so
 it can't tell a credit card from a current account. A card imported as cash would inflate your cash
-on hand and Ready to Assign, so the review shows a type for each new account:
+on hand and Ready to Assign, so the **Accounts** tab groups the new accounts by band, with a **Type**
+dropdown for each:
 
 | In Actual | Types you can choose | Starts as |
 |---|---|---|
 | On budget | Cash, Credit | Credit if the balance is negative and the name looks like a card; otherwise Cash |
 | Off budget | Fixed deposit, Investment, Retirement, Receivable, Loan | Investment |
 
-An account you link to one already here keeps the type it has, and must fit the same choices.
+Each one starts on a suggestion, marked `(suggested)`, and **Import** stays off until every account
+has been looked at. Pick one in its dropdown, even the one it suggests, or press **Accept
+suggestions** to take them all at once. You can change a type while the review checks another one.
 
-**A currency, if the budget doesn't state one.** The review starts from your book's base currency.
-A budget that states a currency keeps it.
+An account you link to one already here keeps the type it has, and must fit the same choices. It
+says **Keeps its own**.
+
+**A currency, if the budget doesn't state one.** **Budget currency** appears above the notes and
+starts from your book's base currency. A budget that states a currency keeps it, and the dropdown
+doesn't appear.
+
+The notes above the tabs show what would stop the import first, then the first three things worth
+knowing. **Show more notes** opens the rest.
 
 ## What comes across, and how
 
@@ -86,6 +116,9 @@ These never stop an import. The review says each one, and the run's log says it 
 
 ## Importing and checking
 
+The dropdown at the bottom of the review says what happens afterwards: keep in sync both ways, sync
+from Actual only, sync to Actual only, or import once and stop.
+
 **Import** takes a [backup](../operations/backup-and-restore.md) first and names it in the report; if
 the backup fails, nothing is imported. The import runs on the server, so you can close the tab.
 Running it again is safe: nothing is booked twice, and no category is made twice.
@@ -95,13 +128,18 @@ Afterwards it compares these with Actual, row by row:
 - each account's balance, cleared balance and number of transactions;
 - each envelope's Assigned and available for the current month.
 
-A tracking budget compares its accounts only. **Verify** runs the same comparison again whenever you
-like, against Actual's figures at that moment.
+A tracking budget compares its accounts only. **Re-check against Actual**, in the page's menu, runs
+the same comparison again whenever you like, against Actual's figures at that moment.
 
 ## Keep the two in step
 
 The sync runs on a schedule, every 15 or 30 minutes, hourly, every 6 hours, daily or only when you
 ask. It covers transactions, each month's Assigned, categories and groups. No AI model is involved.
+
+Once it's set up, **Automations → Data sync → Actual** has the switch and **Sync now** at the top,
+then **Needs your review**, **Worth checking** (only when there's something to say), **Direction**,
+**Schedule**, the budget, how it decides, and a history of every run. It reads the same as YNAB's
+page. **Actual connection…** in the menu opens the connector.
 
 **Which way changes go.** You choose a direction at import or later:
 
@@ -139,13 +177,15 @@ to refuse a write over a newer one.
   and a note would read as a change.
 - Rules in Actual don't run on what the sync writes, so a row arrives as it is here.
 
-**A budget in tracking mode** syncs everything except Assigned, and the page says why. If a budget
+**A budget in tracking mode** syncs everything except Assigned, and the page says why, under the
+budget's name. If a budget
 changes mode while the sync is on, the sync follows it. Going to tracking stops Assigned. Coming back
 to envelopes compares every category afresh: any difference goes to the review list and no figure
 moves.
 
 **An income category you later put in an envelope** keeps syncing, but what it receives stays in
-that envelope and doesn't raise Ready to Assign. The page warns you, and its Assigned stays here.
+that envelope and doesn't raise Ready to Assign. **Worth checking** warns you, and its Assigned stays
+here.
 
 **What stays local.** Actual's rules, schedules, tags, goals, account groups, dashboards and bank
 sync are never touched. Card payment envelopes are this book's own: Actual has none, so their
@@ -153,7 +193,7 @@ Assigned is never sent or taken. That's one reason Ready to Assign won't match T
 
 **One app at a time.** A book syncs with YNAB or Actual, not both, since two apps writing Assigned to
 the same envelopes would fight. Turning one on is refused while the other's sync is on, or while it
-is running an import or a sync, and so is **Sync now**. Looking at the review or running Verify in
+is running an import or a sync, and so is **Sync now**. The refusal says which, wherever you pressed. Looking at the review or running Verify in
 the other app reads only, and gets in nothing's way.
 
 **If something goes wrong.** A server that's down, a wrong password or a budget that's gone stops the
@@ -184,8 +224,9 @@ new name, so a row it lacks may be one you added here since. Importing another b
 while the sync is on: turn it off first, import, then pick the budget to sync.
 
 **A budget you haven't imported** isn't synced. If you pick one that has no account in this book,
-each run stops with "Import this budget first", the page says so, and nothing is written, paired or
-filed on either side. Import it, and the next run carries on as normal.
+each run stops with "Import this budget first", and nothing is written, paired or filed on either
+side. **Worth checking** says so and offers the import right there. Import it, the warning goes, and
+the next run carries on as normal.
 
 **Reset sync in Actual** is fine. Row ids don't change, so the next run carries on as before, with no
 pairing lost and nothing read as deleted.

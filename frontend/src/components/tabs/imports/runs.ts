@@ -87,6 +87,8 @@ export interface PreviewAccount {
   chosen?: boolean
   candidates?: { id: string; name: string; type: string }[]
   match?: LinkMatch | null
+  /** The types the server allows for it, for an app that doesn't say. */
+  type_options?: string[]
 }
 /** Where a YNAB category goes in this book, as the server decided it for the review. */
 export interface PreviewCategory {
@@ -170,6 +172,9 @@ export interface Preview {
   category_groups?: PreviewGroup[]
   category_choices?: CategoryChoices
   transaction_list?: PreviewTxn[]
+  /** The budget states no currency, so the review asks. */
+  currency_asked?: boolean
+  budget_mode?: 'envelope' | 'tracking' | null
 }
 export interface FieldChange {
   name: string
@@ -261,6 +266,9 @@ export const STATUS_TONE: Record<RunStatus, BadgeTone> = {
 }
 
 const POLL_MS = 2000
+
+export const plural = (n: number, one: string, many = `${one}s`) =>
+  `${n.toLocaleString()} ${n === 1 ? one : many}`
 
 export function messageOf(body: { detail?: unknown } | null, fallback: string): string {
   const detail = body?.detail as string | { message?: string } | undefined

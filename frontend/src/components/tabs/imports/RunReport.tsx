@@ -14,6 +14,7 @@ import {
   Text,
 } from '../../ui'
 import { fTime } from '../../../utils/format'
+import { appForProvider, type BudgetAppInfo } from '../automations/datasync/budgetApps'
 import { ProblemList, ResultsTable, VerificationBody } from './ReportTables'
 import { SyncSections } from './SyncReport'
 import {
@@ -29,16 +30,19 @@ import {
   type RunRecord,
 } from './runs'
 
-const BOOK_STATE_LABEL = {
+const BOOK_STATE_LABEL = (app: BudgetAppInfo) => ({
   fresh: 'First import',
-  rerun: 'Re-import of this plan',
+  rerun: `Re-import of this ${app.planWord}`,
   foreign: 'Import alongside existing accounts',
-}
+})
+
+const titled = (word: string) => `${word[0]!.toUpperCase()}${word.slice(1)}`
 
 // One run, opened as a page. A running run polls and fills in as it goes; a failed or
 // interrupted one shows everything it captured before it stopped.
 /** Everything under a run's header: its facts, outcome, problems, sections and log. */
 function RunReportBody({ r }: { r: RunRecord }) {
+  const app = appForProvider(r.provider)
   return (
     <>
       <SummaryBar
@@ -47,9 +51,9 @@ function RunReportBody({ r }: { r: RunRecord }) {
           { label: 'Trigger', value: r.trigger === 'scheduled' ? 'Scheduled' : 'Manual' },
           { label: 'Started', value: formatWhen(r.started_at) },
           { label: 'Duration', value: formatDuration(r) },
-          { label: 'Plan', value: r.plan_name || r.plan_id },
-          ...(r.kind === 'sync' && r.requests_used != null
-            ? [{ label: 'YNAB requests', value: String(r.requests_used) }]
+          { label: titled(app.planWord), value: r.plan_name || r.plan_id },
+          ...(app.showsRequests && r.kind === 'sync' && r.requests_used != null
+            ? [{ label: `${app.name} requests`, value: String(r.requests_used) }]
             : []),
         ]}
       />
@@ -61,7 +65,7 @@ function RunReportBody({ r }: { r: RunRecord }) {
         </Text>
       )}
       {r.status === 'running' && <Progress run={r} />}
-      <Sections run={r} />
+      <Sections app={app} run={r} />
       <Log run={r} />
     </>
   )
@@ -148,12 +152,12 @@ function Progress({ run }: { run: RunRecord }) {
   )
 }
 
-function Sections({ run }: { run: RunRecord }) {
-  if (run.kind === 'sync') return <SyncSections run={run} />
+function Sections({ app, run }: { app: BudgetAppInfo; run: RunRecord }) {
+  if (run.kind === 'sync') return <SyncSections app={app} run={run} />
   const problems = [...run.problems, ...run.warnings]
   return (
     <>
-      {run.kind === 'import' && <Setup run={run} />}
+      {run.kind === 'import' && <Setup app={app} run={run} />}
       {run.kind === 'preview' && run.preview && <WouldCreate preview={run.preview} />}
       {run.kind === 'import' && (
         <Panel title="Results">
@@ -170,19 +174,19 @@ function Sections({ run }: { run: RunRecord }) {
           title="Verification"
           subtitle={`${run.verification.checks_total} checks, ${run.verification.checks_matching} match`}
         >
-          <VerificationBody verification={run.verification} />
+          <VerificationBody app={app} verification={run.verification} />
         </Panel>
       )}
     </>
   )
 }
 
-function Setup({ run }: { run: RunRecord }) {
+function Setup({ app, run }: { app: BudgetAppInfo; run: RunRecord }) {
   const navigate = useNavigate()
   return (
     <Panel title="Setup">
       <Stack gap="--space-2">
-        <Text size="sm">{run.book_state ? BOOK_STATE_LABEL[run.book_state] : '—'}</Text>
+        <Text size="sm">{run.book_state ? BOOK_STATE_LABEL(app)[run.book_state] : '—'}</Text>
         {run.backup_name && (
           <Cluster gap="--space-2">
             <Text size="sm">Backup taken first: {run.backup_name}.</Text>

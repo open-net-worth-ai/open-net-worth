@@ -357,7 +357,10 @@ events) can't be told apart from YNAB's on the first run.
 ## Actual Budget
 
 Bring a whole Actual budget here from your own Actual server, and keep the two in step if you want
-to. See [Import from Actual Budget](../features/actual-budget-import.md).
+to. The connector asks for the server's address, a password or token, and the encryption password
+if the budget has one, then lists your budgets. Passwords and tokens never come back from the server:
+a saved one shows as dots, and leaving the field blank keeps it. It isn't available on a hosted
+instance. See [Import from Actual Budget](../features/actual-budget-import.md).
 
 ## Alpaca
 

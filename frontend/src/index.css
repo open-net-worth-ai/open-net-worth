@@ -20251,3 +20251,36 @@ body.hide-amounts .mf-lbl-amt {
     text-align: right;
   }
 }
+
+/* Actual's review: every account row holds a dropdown, so cells centre on it as Categories' do. */
+.imp-table.ynr-accts td {
+  vertical-align: middle;
+}
+.ynr-phone-only {
+  display: none;
+}
+@media (max-width: 1023.98px) {
+  .imp-table.ynr-accts .ynr-roomy {
+    display: none;
+  }
+}
+@media (max-width: 639.98px) {
+  .imp-table.ynr-accts td.ynr-wide-only {
+    display: none;
+  }
+  .imp-table.ynr-accts .ynr-phone-only {
+    display: inline;
+  }
+  .ynr-table.ynr-accts .ynr-group th {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+@media (pointer: coarse) and (max-width: 767.98px) {
+  .ynr-accts .pm-select .acct-acctsel-btn {
+    min-height: var(--tap-min);
+  }
+  .ynr-more {
+    min-height: var(--tap-min);
+  }
+}

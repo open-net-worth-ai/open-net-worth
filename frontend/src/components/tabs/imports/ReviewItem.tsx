@@ -1,4 +1,5 @@
 import { Badge, Button, Cluster, Grid, Stack, Text } from '../../ui'
+import { YNAB_APP, type BudgetAppInfo } from '../automations/datasync/budgetApps'
 import type { ReviewItem as Item, Version } from './sync'
 
 // One thing the sync would not apply on its own: both versions side by side, and the choice of
@@ -43,7 +44,15 @@ function context(v: Version | null): string {
     .join(' · ')
 }
 
-function Differences({ onw, ynab }: { onw: Version | null; ynab: Version | null }) {
+function Differences({
+  name,
+  onw,
+  ynab,
+}: {
+  name: string
+  onw: Version | null
+  ynab: Version | null
+}) {
   const rows = differences(onw, ynab)
   if (rows.length === 0) return null
   const gone = onw === null || ynab === null
@@ -63,7 +72,7 @@ function Differences({ onw, ynab }: { onw: Version | null; ynab: Version | null 
             </Text>
             <Text size="sm">
               <Text size="xs" tone="faint">
-                YNAB:{' '}
+                {`${name}:`}{' '}
               </Text>
               {gone ? (ynab === null ? 'Deleted' : context(ynab)) : shown(key, ynab)}
             </Text>
@@ -74,12 +83,15 @@ function Differences({ onw, ynab }: { onw: Version | null; ynab: Version | null 
   )
 }
 
-const badgeOf = (item: Item) =>
-  item.kind === 'conflict' && item.fresh ? 'Differs' : KIND_LABEL[item.kind]
+const badgeOf = (item: Item, name: string) =>
+  item.kind === 'conflict' && item.fresh
+    ? 'Differs'
+    : item.kind === 'unsupported'
+      ? `${name} can't take it`
+      : KIND_LABEL[item.kind]
 
-const KIND_LABEL: Record<Item['kind'], string> = {
+const KIND_LABEL: Record<Exclude<Item['kind'], 'unsupported'>, string> = {
   conflict: 'Changed in both',
-  unsupported: "YNAB can't take it",
   failed: 'Refused',
   before_start: 'Before the Starting Balance',
   choose: 'Needs your choice',
@@ -89,8 +101,8 @@ type Keep = (keep: 'onw' | 'ynab', choice?: string) => void
 
 // A category or a group: what differs is a few words, and a category YNAB has that could go
 // with several things here asks which. Each button says what it does.
-function NameCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
-  const { item, busy, onKeep } = props
+function NameCard(props: { name: string; item: Item; busy: boolean; onKeep: Keep }) {
+  const { name, item, busy, onKeep } = props
   const asking = item.kind === 'choose' && item.entity === 'new_category'
   const ours = item.category !== undefined // a category here YNAB would not take
   return (
@@ -99,7 +111,7 @@ function NameCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
         <Text size="sm" weight={600}>
           {item.title}
         </Text>
-        <Badge tone={item.kind === 'failed' ? 'neg' : 'warn'}>{badgeOf(item)}</Badge>
+        <Badge tone={item.kind === 'failed' ? 'neg' : 'warn'}>{badgeOf(item, name)}</Badge>
       </Cluster>
       <Text size="sm" tone={item.kind === 'failed' ? 'bad' : 'faint'}>
         {item.reason}
@@ -114,7 +126,8 @@ function NameCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
           </Text>
           <Text size="sm">
             <Text size="xs" tone="faint">
-              YNAB {f.label.toLowerCase()}:{' '}
+              {`${name} `}
+              {f.label.toLowerCase()}:{' '}
             </Text>
             {f.ynab}
           </Text>
@@ -147,7 +160,7 @@ function NameCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
               Try again
             </Button>
             <Button size="sm" disabled={busy} onClick={() => onKeep(ours ? 'ynab' : 'onw')}>
-              {ours ? 'Leave it out of YNAB' : 'Leave it out'}
+              {ours ? `Leave it out of ${name}` : 'Leave it out'}
             </Button>
           </>
         ) : (
@@ -156,7 +169,7 @@ function NameCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
               Keep Open Net Worth&apos;s
             </Button>
             <Button size="sm" disabled={busy} onClick={() => onKeep('ynab')}>
-              Keep YNAB&apos;s
+              {`Keep ${name}'s`}
             </Button>
           </>
         )}
@@ -209,18 +222,27 @@ function StartCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
   )
 }
 
-export function ReviewCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
+export function ReviewCard({
+  app = YNAB_APP,
+  ...props
+}: {
+  app?: BudgetAppInfo
+  item: Item
+  busy: boolean
+  onKeep: Keep
+}) {
   const { item } = props
+  const name = app.name
   if (item.entity === 'start') return <StartCard {...props} />
   if (['category', 'group', 'new_category', 'budget'].includes(item.entity ?? ''))
-    return <NameCard {...props} />
+    return <NameCard name={name} {...props} />
   return (
     <Stack gap="--space-2">
       <Cluster gap="--space-2" align="center">
         <Text size="sm" weight={600}>
           {item.title}
         </Text>
-        <Badge tone={item.kind === 'conflict' ? 'warn' : 'neg'}>{badgeOf(item)}</Badge>
+        <Badge tone={item.kind === 'conflict' ? 'warn' : 'neg'}>{badgeOf(item, name)}</Badge>
       </Cluster>
       <Text
         size="sm"
@@ -229,7 +251,7 @@ export function ReviewCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
       >
         {item.reason}
       </Text>
-      <Differences onw={item.onw} ynab={item.ynab} />
+      <Differences name={name} onw={item.onw} ynab={item.ynab} />
       <Text size="xs" tone="faint">
         {context(item.onw ?? item.ynab)}
       </Text>
@@ -240,7 +262,7 @@ export function ReviewCard(props: { item: Item; busy: boolean; onKeep: Keep }) {
           </Button>
         )}
         <Button size="sm" disabled={props.busy} onClick={() => props.onKeep('ynab')}>
-          Keep YNAB&apos;s
+          {`Keep ${name}'s`}
         </Button>
       </Cluster>
     </Stack>

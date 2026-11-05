@@ -15,7 +15,6 @@ import type { Automation, AutomationDraft, AutomationRun } from '../../api/autom
 import { AUTOMATIONS_REVIEW_DRAFT_SPEC } from '../../lucius/screenCommands'
 import { useRegisterScreenCommands } from '../../lucius/useScreenContract'
 import { useDataVersion } from '../../hooks/useDataVersion'
-import { useFlag } from '../../hooks/useFlag'
 import { useViewScroll } from '../../hooks/useViewScroll'
 import { Button, ErrorState, Modal, PageHeader, PageTabs, TabSkeleton } from '../ui'
 import { AutomationDetailSwitch } from './automations/AutomationDetailSwitch'
@@ -25,7 +24,7 @@ import { useKeepAwakeSettled } from './automations/KeepAwakeBanner'
 import { ALL_TEMPLATES } from './automations/automationTemplates'
 import { DataSyncView } from './automations/datasync/DataSyncView'
 import { YnabSyncDetail } from './automations/datasync/YnabSyncDetail'
-import { YNAB_FLAG, YNAB_SYNC_KEY, useYnabSync } from './automations/datasync/ynabSync'
+import { useDataSyncs } from './automations/datasync/useDataSyncs'
 import {
   EMPTY_AUTOMATION_OPTIONS,
   missingTriggerFields,
@@ -64,14 +63,16 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
   const selectedAutomationId = typeof search.automation === 'string' ? search.automation : null
   const selectedRunId = typeof search.run === 'string' ? search.run : null
   const templateKey = typeof search.template === 'string' ? search.template : null
-  // Two views: Lucius's Automations, and data syncs (fixed rules, no AI) — today only the
-  // two-way YNAB sync, whose page `?sync=ynab` opens (`report` = one of its runs). Behind the
-  // ynab_import_and_sync flag: off (or still loading), only the Lucius list, as before.
-  const syncOn = useFlag(YNAB_FLAG) === true
-  const syncKey = syncOn && search.sync === YNAB_SYNC_KEY ? search.sync : null
+  // Two views: Lucius's Automations, and data syncs (fixed rules, no AI): the two-way sync with a
+  // budget app, whose page `?sync=<app>` opens (`report` = one of its runs). Each behind its own
+  // flag: all off (or still loading), only the Lucius list, as before.
+  const dataSyncs = useDataSyncs()
+  const syncOn = dataSyncs.length > 0
+  const syncEntry = dataSyncs.find((e) => e.app.key === search.sync) ?? null
+  const syncKey = syncEntry?.app.key ?? null
   const view: AutomationsView = syncOn && (syncKey || search.view === 'sync') ? 'sync' : 'lucius'
   const reportId = syncKey && typeof search.report === 'string' ? search.report : null
-  const ynabSync = useYnabSync(false, syncOn)
+  const toReview = dataSyncs.reduce((total, e) => total + e.sync.toReview, 0)
   const [automations, setAutomations] = useState<Automation[]>([])
   const automationsRef = useRef(automations)
   useEffect(() => {
@@ -519,7 +520,7 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
               onChange={setView}
               tabs={[
                 { key: 'lucius', label: 'Lucius' },
-                { key: 'sync', label: 'Data sync', badge: ynabSync.toReview || undefined },
+                { key: 'sync', label: 'Data sync', badge: toReview || undefined },
               ]}
             />
           )}
@@ -530,18 +531,19 @@ export function Automations({ onOpenChat, onOpenConversation }: AutomationsProps
           {actionError}
         </div>
       )}
-      {syncKey ? (
+      {syncEntry ? (
         <YnabSyncDetail
+          app={syncEntry.app}
           reportId={reportId}
           onBack={() => openSync(null)}
-          onOpenReport={(id) => openSync(syncKey, id)}
+          onOpenReport={(id) => openSync(syncEntry.app.key, id)}
         />
       ) : view === 'sync' ? (
         <DataSyncView
-          sync={ynabSync}
-          onOpen={() => {
+          entries={dataSyncs}
+          onOpen={(key) => {
             rememberScroll()
-            openSync(YNAB_SYNC_KEY)
+            openSync(key)
           }}
         />
       ) : loading || !keepAwakeSettled ? (
