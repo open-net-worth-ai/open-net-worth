@@ -631,3 +631,23 @@ def test_a_budget_row_for_a_dead_category_starts_no_month():
         budgets=[budget(209912, "c_old", 100), budget(202610, "c_food", 100)],
     )
     assert [m["month"] for m in plan["months"]] == ["2026-10-01", "2026-11-01"]
+
+
+def test_a_live_child_under_a_plain_row_is_its_own_row_and_nothing_is_lost():
+    """Actual sums every isParent = 0 row, so a stray child counts beside its non-split parent."""
+    plan = plan_of(
+        transactions=[
+            txn("t1", "a1", -1000, 20261003, category="c_food"),
+            child("stray", "t1", "a1", -300, 20261003, category="c_fun"),
+        ]
+    )
+    assert plan["subtransactions"] == []
+    assert {t["id"]: t["amount"] for t in plan["transactions"]} == {"t1": -10000, "stray": -3000}
+    assert one(plan["accounts"], "a1")["balance"] == -13000
+    month = by_month(plan, "2026-10-01")
+    assert one(month["categories"], "c_food")["activity"] == -10000
+    assert one(month["categories"], "c_fun")["activity"] == -3000
+    pieces, _, _ = mapping.plan_transactions(
+        source._nest_transactions(plan), plan["accounts"], {"categories": [], "skipped": {}}
+    )
+    assert sorted(p["from"][1] for p in pieces) == [3000, 10000]

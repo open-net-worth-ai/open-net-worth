@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import ast
 import io
+import logging
 import os
 import sqlite3
 import stat
@@ -142,6 +143,7 @@ def never_leaks(error: BaseException) -> None:
     for secret in (HOST, PASSWORD, TOKEN, ENC, "5006", "http://"):
         assert secret not in text
     assert error.__cause__ is None
+    assert error.__context__ is None
 
 
 # ── the copy ─────────────────────────────────────────────────────────────────
@@ -508,6 +510,27 @@ def test_a_zip_that_unpacks_larger_than_the_cap_is_refused_before_unpacking(
             pass
     assert "too large" in str(err.value).lower()
     assert list(work.iterdir()) == []
+
+
+def test_no_log_record_carries_the_address(db_isolated, work, monkeypatch, caplog):
+    """httpx logs each request's full URL at INFO, userinfo and all."""
+    real_client = httpx.Client
+    s = ActualBudgetConfigStore()
+    s.update(
+        {"server_url": "http://alice:hunter2@acme-actual.example.test:5006", "password": PASSWORD}
+    )
+    serve(monkeypatch, lambda: httpx.Response(404))
+    caplog.set_level(logging.DEBUG)
+    assert client.list_budgets(s)
+    with pytest.raises(ExternalServiceError):
+        with client.open_copy(s, "f1"):
+            pass
+    with real_client(transport=httpx.MockTransport(lambda r: httpx.Response(200))) as other:
+        other.get("http://other.example.test/x")
+    seen = [r.getMessage() for r in caplog.records]
+    for secret in ("hunter2", "alice", "acme-actual", "5006", PASSWORD):
+        assert not [m for m in seen if secret in m]
+    assert [m for m in seen if "other.example.test" in m], "other hosts still log"
 
 
 def test_the_cap_is_512_mib():

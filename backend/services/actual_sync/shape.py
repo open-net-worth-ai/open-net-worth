@@ -123,11 +123,16 @@ class _Book:
             and t.get("acct") in self.live_accounts
         ]
         top = [t for t in base if not _flag(t.get("isChild"))]
-        parents = {t["id"] for t in top}
+        live = {t["id"] for t in top}
+        splits = {t["id"] for t in top if _flag(t.get("isParent"))}
         lines: dict[str, list[dict]] = {}
         for t in base:
-            if _flag(t.get("isChild")) and t.get("parent_id") in parents:
+            if not _flag(t.get("isChild")) or t.get("parent_id") not in live:
+                continue
+            if t["parent_id"] in splits:
                 lines.setdefault(t["parent_id"], []).append(t)
+            else:
+                top.append(t)  # a live child under a plain row: Actual counts it as a row
         return top, lines
 
     def effective_amount(self, t: dict) -> int:

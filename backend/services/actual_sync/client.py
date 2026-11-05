@@ -222,14 +222,62 @@ def _plain_error(exc: Exception) -> ExternalServiceError:
     return ExternalServiceError(text)
 
 
-@contextmanager
-def _plain() -> Iterator[None]:
+def _plainly(call, *args):
+    """``call(*args)``, with anything the libraries raise replaced by our own error. Ours is
+    raised AFTER the ``except`` block ends, so no ``__context__`` keeps the original (and the
+    address its text can hold) alive on the new one."""
+    failure = None
     try:
-        yield
+        return call(*args)
     except OpenNetWorthError:
         raise
     except Exception as exc:
-        raise _plain_error(exc) from None
+        failure = _plain_error(exc)
+    raise failure
+
+
+# ── keeping the address out of logs ─────────────────────────────────────────
+
+_HTTP_LOGGERS = (
+    "httpx",
+    "httpcore",
+    "httpcore.connection",
+    "httpcore.http11",
+    "httpcore.http2",
+    "httpcore.proxy",
+)
+
+
+class _AddressFilter(logging.Filter):
+    """Drops a record that names a configured server. ``httpx`` logs every request's full URL at
+    INFO (userinfo included) and the app's root level is INFO; the address is a credential. A
+    record about any other host passes untouched, so the rest of the app logs as before."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.tokens: set[str] = set()
+
+    def add(self, url: str) -> None:
+        parts = urlsplit(url)
+        self.tokens |= {t for t in (url.rstrip("/"), parts.netloc, parts.hostname) if t}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            text = record.getMessage()
+        except Exception:
+            return False
+        return not any(token in text for token in self.tokens)
+
+
+_address_filter = _AddressFilter()
+
+
+def _keep_address_out_of_logs(url: str) -> None:
+    _address_filter.add(url)
+    for name in _HTTP_LOGGERS:
+        logger_ = logging.getLogger(name)
+        if _address_filter not in logger_.filters:
+            logger_.addFilter(_address_filter)
 
 
 # ── connecting ──────────────────────────────────────────────────────────────
@@ -251,9 +299,12 @@ def _build(creds: dict, directory: Path | None = None):
     try:
         import actual
     except ImportError:
-        raise ExternalServiceError("Actual Budget support isn't installed in this build.") from None
+        actual = None
+    if actual is None:
+        raise ExternalServiceError("Actual Budget support isn't installed in this build.")
 
     url = creds["server_url"]
+    _keep_address_out_of_logs(url)
     kwargs: dict[str, Any] = {
         "base_url": url,
         "password": creds["password"] or None,
@@ -266,13 +317,16 @@ def _build(creds: dict, directory: Path | None = None):
     return checked_class(actual.Actual)(**kwargs)
 
 
+def _list_files(creds: dict) -> list:
+    with _build(creds) as session:
+        return session.list_user_files().data
+
+
 def list_budgets(store: ActualBudgetConfigStore | None = None) -> list[dict]:
     """What the saved sign-in can see: ``{"id" (the cloud file id), "name", "currency", "encrypted"}``.
     ``currency`` is ``None`` here: it lives inside each budget, which is not downloaded to list it."""
     _, creds = _prepare(store)
-    with _plain():
-        with _build(creds) as session:
-            files = session.list_user_files().data
+    files = _plainly(_list_files, creds)
     return [
         {
             "id": f.file_id,
@@ -371,11 +425,9 @@ def open_copy(store: ActualBudgetConfigStore | None, budget_id: str) -> Iterator
     _, creds = _prepare(store)
     directory = _new_directory()
     try:
-        with _plain():
-            session = _build(creds, directory)
+        session = _plainly(_build, creds, directory)
         with session:
-            with _plain():
-                copy = _download(session, creds, budget_id, directory)
+            copy = _plainly(_download, session, creds, budget_id, directory)
             yield copy
     finally:
         _remove(directory)
