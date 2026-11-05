@@ -27,6 +27,8 @@ def _rows(ctx: Context, base: Baselines, change: Change, first: bool, scan: set[
     """(ledger rows to look at, their baselines, ref -> ledger id, refs YNAB no longer holds)."""
     index = {ref: i for i, d in base.txns.items() for ref in d["refs"]}
     everything = {r["id"]: r for r in ledger_service.transactions.all()}
+    if current().caps.budget_scoped_accounts:
+        ctx.meta["other_budget_rows"] = _on_other_budgets(ctx, everything)
     if first:
         for r in everything.values():
             for ref in units.ynab_refs(r):
@@ -60,6 +62,17 @@ def _rows(ctx: Context, base: Baselines, change: Change, first: bool, scan: set[
     bases = {i: base.txns[i]["canon"] for i in rows if i in base.txns}
     gone = {r for r in change.touched if r not in ctx.mirror and r not in ctx.sub_parent}
     return rows, bases, index, gone
+
+
+def _on_other_budgets(ctx: Context, everything: dict) -> int:
+    """How many live rows sit on an account of another budget. ``units._eligible`` leaves them out,
+    so the sync never reads their absence as a deletion, and the status says so once."""
+    others = ctx.other_budget_accounts
+    return sum(
+        1
+        for r in everything.values()
+        if not r.get("deleted") and {r.get("from_account_id"), r.get("to_account_id")} & others
+    )
 
 
 def _links_without_baseline(everything: dict, base: Baselines, index: dict[str, str]) -> set[str]:
@@ -159,14 +172,18 @@ def settle(
     held = held if held is not None else {"onw": set(), "ynab": set()}
     rows, bases, index, gone = _rows(ctx, base, change, first, scan)
     open_items = conflicts.open_keys()
+    if not current().caps.delta_read:
+        _close_now_owned(open_items, index)
     all_units = _hold_removals(
         ctx, units.build(ctx, rows, bases, index, change.touched, gone), open_items
     )
     todo: list[Unit] = []
     for u in all_units:
+        _close_if_it_flipped(u, open_items)
         if u.missing:
-            if u.key not in open_items:
-                _file(ctx, u, conflicts.CONFLICT, _missing_reason())
+            reason = _missing_reason(direction)
+            if (open_items.get(u.key) or {}).get("reason") != reason:
+                _file(ctx, u, conflicts.CONFLICT, reason)
             continue
         action = decide_unit(u)
         if u.blocked and u.onw_id is None:
@@ -205,18 +222,46 @@ def settle(
     return _push_all(ctx, client, base, todo, tally)
 
 
-def _missing_reason() -> str:
-    app = current().name
-    return (
-        f"This transaction is no longer in {app}. Keep Open Net Worth's to send it to {app} as "
-        f"new, or keep {app}'s to remove it here."
-    )
+def _close_now_owned(open_items: dict, index: dict[str, str]) -> None:
+    """An item about a row with no home here is moot once a row here holds it: its budget was
+    imported since, and from now on that row answers for it."""
+    for key in [k for k in open_items if k.startswith("y:") and k[2:] in index]:
+        conflicts.close(key)
+        del open_items[key]
+
+
+def _close_if_it_flipped(u: Unit, open_items: dict) -> None:
+    """Where every read is whole, a filed item can stop being true: the row it shows as gone came
+    back, or the row it shows went. Its words and snapshot would have a person pick a version and
+    get a deletion, or the reverse, so it is asked afresh."""
+    item = open_items.get(u.key)
+    if item is None or current().caps.delta_read or item.get("entity") != "txn":
+        return
+    if (item.get("ynab") is None) != (u.ynab is None):
+        conflicts.close(u.key)
+        del open_items[u.key]
+
+
+def _missing_reason(direction: str) -> str:
+    app, gone = current().name, f"This transaction is no longer in {current().name}."
+    if direction == "from_ynab":
+        return (
+            f"{gone} Keep {app}'s to remove it here now. Keep Open Net Worth's to keep it, and it "
+            f"goes to {app} as new when the sync goes both ways: this sync doesn't write to {app}."
+        )
+    if direction == "to_ynab":
+        return (
+            f"{gone} Keep Open Net Worth's to send it to {app} as new now. Keep {app}'s and it "
+            "stays here until the sync goes both ways, then it is removed: this sync doesn't "
+            "change this book."
+        )
+    return f"{gone} Keep Open Net Worth's to send it to {app} as new, or keep {app}'s to remove it here."
 
 
 def _hold_removals(ctx: Context, all_units: list[Unit], open_items: dict) -> list[Unit]:
     """A read that would delete many synced rows here at once is held: each deletion waits in
     the review list, where keeping YNAB's confirms it, and the rest of the run goes ahead."""
-    linked = sum(1 for u in all_units if u.refs)
+    linked = sum(1 for u in all_units if u.refs and not u.missing)
     removals = [
         u
         for u in all_units

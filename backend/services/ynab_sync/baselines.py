@@ -11,6 +11,10 @@ from backend.services.ynab_sync.canon import Canon
 FLUSH_BULK = 200  # past this many changes, rewrite the table in one transaction
 
 
+def categories_paired_elsewhere(store, plan_id: str | None) -> set[str]:
+    return {d["category"] for d in store.of_other_plans(plan_id) if d["id"].startswith("c:")}
+
+
 class Baselines:
     def __init__(self, plan_id: str | None = None) -> None:
         self._store = current().stores.baselines()
@@ -49,6 +53,10 @@ class Baselines:
         """Leave a category out of the other side for good (``y:<ynab id>`` / ``o:<id>``)."""
         self.declined.add(key)
         self._dirty.add(f"x:{key}")
+
+    def categories_of_other_plans(self) -> set[str]:
+        """Categories here that are paired with another budget of the app."""
+        return categories_paired_elsewhere(self._store, self.plan_id)
 
     def told(self, env_id: str) -> bool:
         """Whether the person was already told this envelope's categories share their Assigned

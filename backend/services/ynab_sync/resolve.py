@@ -111,7 +111,8 @@ def _accept(ctx, item: dict, keep: str, base: Baselines, st: dict) -> None:
     unit = _unit(ctx, item, base)
     if unit.onw_id is None:
         return
-    if unit.missing:
+    gone_there = unit.refs and unit.onw is not None and unit.ynab is None
+    if gone_there and current().caps.links_without_baseline:
         return _accept_missing(unit, keep, base, st)
     other = unit.ynab if keep == "onw" else unit.onw
     if other is None:
@@ -122,7 +123,8 @@ def _accept(ctx, item: dict, keep: str, base: Baselines, st: dict) -> None:
 
 def _unlink(unit: Unit) -> None:
     """Its ids name rows the app no longer holds, and they mustn't stand for this one."""
-    for ref in unit.refs:
+    held = units.ynab_refs(unit.row)
+    for ref in (r for r in unit.refs if r in held):
         ledger_service.detach_external_ref(
             unit.onw_id, current().source, ref, reason="no longer in the budget app"
         )
@@ -136,6 +138,7 @@ def _accept_missing(unit: Unit, keep: str, base: Baselines, st: dict) -> None:
         st["held_ynab"] = sorted(set(st["held_ynab"]) | set(unit.refs))
     else:  # send it as new, once the app may change: until then it is linked to nothing
         _unlink(unit)
+        base.drop_txn(unit.onw_id)
         st["held"] = sorted(set(st["held"]) | {unit.onw_id})
     sync_state.save(st)
 
@@ -230,5 +233,5 @@ def _transaction(ctx, item: dict, keep: str, client: YnabClient, base: Baselines
         )
     recorder.txn_change("sent", ctx, send.onw_id, send.base, send.onw)
     _record_sent(send, out, base)
-    if unit.missing:
+    if unit.refs and unit.ynab is None and current().caps.links_without_baseline:
         _unlink(unit)

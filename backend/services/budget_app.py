@@ -69,6 +69,9 @@ class Capabilities:
     # A ledger row carrying its ids is that row, even with no baseline yet: a run was killed after
     # writing the link and before saving what it had agreed.
     links_without_baseline: bool = False
+    # A book can hold another budget's accounts from the same app: rows on those aren't this
+    # budget's, so their absence from a read says nothing, and they are left alone.
+    budget_scoped_accounts: bool = False
 
 
 @dataclass(frozen=True)

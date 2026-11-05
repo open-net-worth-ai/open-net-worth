@@ -9,6 +9,7 @@ Two decisions, both made from what the book HOLDS rather than from "has no accou
 
 from __future__ import annotations
 
+from backend.core.errors import ConflictError
 from backend.db.budget_assignments_store import BudgetAssignmentsStore
 from backend.db.commitments_store import CommitmentsStore
 from backend.db.grant_store import GrantStore
@@ -29,6 +30,18 @@ def refuse_beside_the_other_app(app) -> None:
     """Categories an import creates here would be pushed into another app whose sync is on, and a
     sync and an import must not interleave."""
     refuse_beside_others(f"importing from {app.name}", "start this import")
+
+
+def refuse_another_budget(app, plan_id: str) -> None:
+    """Its rows would land on accounts the running sync doesn't know, beside the budget it holds."""
+    if not app.caps.budget_scoped_accounts:
+        return
+    st = app.stores.state().doc("state")
+    if st.get("enabled") and st.get("plan_id") not in (None, plan_id):
+        raise ConflictError(
+            f"The {app.name} sync is on for {st.get('plan_name')}. Turn it off in Data sync before "
+            f"importing another {app.name} {app.plan_word}."
+        )
 
 
 def money_data() -> list[str]:

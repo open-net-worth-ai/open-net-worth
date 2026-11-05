@@ -139,6 +139,7 @@ def start(
     with starting():
         if kind == "import":
             guards.refuse_beside_the_other_app(app)
+            guards.refuse_another_budget(app, plan_id.strip())
         if kind == "import" and not confirm_nonempty and _foreign_accounts_exist():
             raise ConfirmationRequired(
                 f"This book already has accounts that did not come from {app.name}. Confirm to "

@@ -166,11 +166,18 @@ so it isn't missed. A run stops itself if it goes on too long, and the next one 
 
 If the app stops partway through a run and a row it had just linked is then gone from Actual, the
 sync can't tell who removed it, so it asks. The review list says the row is no longer in Actual, and
-you choose: send it to Actual as new, or remove it here.
+you choose: send it to Actual as new, or remove it here. In a one-way sync, the answer that would
+write to the protected side takes effect when the sync goes both ways, and the page says how many
+are waiting. If you undo the deletion in Actual while an answer waits and also edit that row here,
+the row can end up there twice.
 
 **If a budget reads as empty,** or many rows seem to vanish at once, nothing is deleted here. Each
 deletion waits in the review list for you to confirm, and if the rows come back, the items close on
 their own.
+
+**Picking another budget** deletes nothing here. Rows on the first budget's accounts stay in this
+book, the sync leaves them alone, and the page says how many there are. Importing another budget is
+refused while the sync is on: turn it off first, import, then pick the budget to sync.
 
 **Reset sync in Actual** is fine. Row ids don't change, so the next run carries on as before, with no
 pairing lost and nothing read as deleted.

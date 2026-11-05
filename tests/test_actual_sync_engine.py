@@ -48,7 +48,17 @@ from backend.services.ynab_sync import (
 )
 from backend.services.ynab_sync import client as ynab_client
 from backend.services.ynab_sync import state as sync_state
-from tests.actual_sync_stub import BUDGET, HOST, PASSWORD, URL, FakeServer, down, seed
+from tests.actual_sync_stub import (
+    BUDGET,
+    BUDGET_B,
+    HOST,
+    PASSWORD,
+    URL,
+    FakeServer,
+    down,
+    seed,
+    seed_other_budget,
+)
 from tests.flags import flags
 
 pytestmark = pytest.mark.flags(actual_budget_sync=True, ynab_import_and_sync=True)
@@ -922,11 +932,11 @@ def test_a_ledger_refusal_recording_an_agreed_row_loses_no_pull(world, monkeypat
     """A claim's link is written while recording what both sides agree on, outside any catch."""
     enable()
     sync()
-    world.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-market'")
-    world.queue.clear()
     made = new_row(description="ACME Lost", from_amount=7.77, category=category_here("Food")["id"])
     world.commit_error = (httpx.ReadTimeout("timed out"), True)
     assert _run()["ok"] is False
+    world.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-market'")
+    world.queue.clear()  # read only by the run that is refused
     real = ledger_service.update_transaction
 
     def refuse(txn_id, changes, **kw):
@@ -1328,6 +1338,165 @@ def test_one_way_keeping_actuals_side_waits_for_both_ways(world, monkeypatch):
     assert not world.live("amount = -1234")
 
 
+def _gone_there(world, ref: str, gone: int = 1) -> None:
+    world.edit("UPDATE transactions SET tombstone = ? WHERE id = ?", gone, ref)
+    world.queue.clear()
+
+
+def test_from_actual_keeping_ours_on_a_row_gone_there_is_not_asked_again(world):
+    enable("from_ynab")
+    sync()
+    market = by_ref("t-market")
+    edit_here(market["id"], memo="mine")
+    _gone_there(world, "t-market")
+    sync()
+    (item,) = open_items()
+    actual_app.resolve_sync_item(item["id"], "onw")
+    assert sync()["sent"] == 0 and open_items() == []
+    assert actual_app.sync_status()["waiting"] == 1
+    enable("both")
+    assert sync()["summary"] == "1 sent to Actual"
+    assert len(world.live("notes = 'mine'")) == 1 and open_items() == []
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+
+
+def test_from_actual_a_mass_hold_is_answered_once_per_row(world):
+    enable("from_ynab")
+    sync()
+    market = by_ref("t-market")
+    world.edit("UPDATE transactions SET tombstone = 1")
+    world.queue.clear()
+    sync()
+    item = next(c for c in open_items() if c.get("onw_txn_id") == market["id"])
+    actual_app.resolve_sync_item(item["id"], "onw")
+    sync()
+    assert not [c for c in open_items() if c.get("onw_txn_id") == market["id"]]
+
+
+def test_to_actual_keeping_actuals_side_of_an_edited_row_is_not_lost(world):
+    enable("to_ynab")
+    sync()
+    market = by_ref("t-market")
+    edit_here(market["id"], memo="mine")
+    _gone_there(world, "t-market")
+    sync()
+    (item,) = open_items()
+    actual_app.resolve_sync_item(item["id"], "ynab")
+    sync()
+    assert open_items() == []
+    assert not ledger_service.transactions.find_by_id(market["id"]).get("deleted")
+    enable("both")
+    sync()
+    found = ledger_service.transactions.find_by_id(market["id"])
+    assert found is None or found.get("deleted")
+    assert open_items() == [] and world.row("transactions", "t-market")["tombstone"] == 1
+
+
+def test_a_waiting_answer_survives_an_edit_and_a_second_answer(world, monkeypatch):
+    made = _killed_create(monkeypatch)
+    (remote,) = world.live("amount = -1234")
+    _gone_there(world, remote["id"])
+    enable("to_ynab")
+    sync()
+    (item,) = open_items()
+    actual_app.resolve_sync_item(item["id"], "ynab")
+    edit_here(made["id"], memo="edited while waiting")
+    sync()
+    (item,) = open_items()
+    actual_app.resolve_sync_item(item["id"], "ynab")
+    assert open_items() == []
+    sync()
+    enable("both")
+    sync()
+    found = ledger_service.transactions.find_by_id(made["id"])
+    assert (found is None or found.get("deleted")) and open_items() == []
+    assert not world.live("amount = -1234")
+
+
+@pytest.mark.parametrize(
+    "direction, promise, waits",
+    [
+        ("both", "to remove it here.", None),
+        ("from_ynab", "when the sync goes both ways", "onw"),
+        ("to_ynab", "until the sync goes both ways", "ynab"),
+    ],
+)
+def test_the_question_and_the_status_say_what_an_answer_does(
+    world, monkeypatch, direction, promise, waits
+):
+    _killed_create(monkeypatch)
+    (remote,) = world.live("amount = -1234")
+    _gone_there(world, remote["id"])
+    enable(direction)
+    sync()
+    (item,) = open_items()
+    assert promise in item["reason"] and "no longer in Actual" in item["reason"]
+    if waits is None:
+        assert "both ways" not in item["reason"]
+        return
+    after = actual_app.resolve_sync_item(item["id"], waits)
+    assert after["waiting"] == 1
+    (warning,) = [w for w in after["warnings"] if w["kind"] == "waiting_for_both_ways"]
+    assert "both ways" in warning["text"]
+    if direction == "to_ynab":
+        assert "stays here" in warning["text"] and "net worth" in warning["text"]
+
+
+def test_the_question_follows_a_change_of_direction(world, monkeypatch):
+    _killed_create(monkeypatch)
+    (remote,) = world.live("amount = -1234")
+    _gone_there(world, remote["id"])
+    enable("to_ynab")
+    sync()
+    assert "until the sync goes both ways" in open_items()[0]["reason"]
+    enable("both")
+    sync()
+    (item,) = open_items()
+    assert "both ways" not in item["reason"]
+
+
+def test_a_both_ways_sync_has_nothing_waiting(world):
+    enable()
+    sync()
+    status = actual_app.sync_status()
+    assert status["waiting"] == 0 and status["warnings"] == []
+
+
+def test_a_gone_row_that_returns_changed_is_asked_afresh(world, monkeypatch):
+    made = _killed_create(monkeypatch)
+    (remote,) = world.live("amount = -1234")
+    _gone_there(world, remote["id"])
+    sync()
+    assert "no longer" in open_items()[0]["reason"]
+    world.edit(
+        "UPDATE transactions SET tombstone = 0, notes = 'changed there' WHERE id = ?", remote["id"]
+    )
+    world.queue.clear()
+    sync()
+    (item,) = open_items()
+    assert "no longer" not in item["reason"] and item["ynab"]["memo"] == "changed there"
+    actual_app.resolve_sync_item(item["id"], "ynab")
+    found = ledger_service.transactions.find_by_id(made["id"])
+    assert not found.get("deleted") and found["memo"] == "changed there"  # a version, no deletion
+    assert open_items() == []
+
+
+def test_a_conflict_whose_row_then_goes_is_asked_afresh(world, monkeypatch):
+    made = _killed_create(monkeypatch)
+    edit_here(made["id"], memo="edited here")
+    sync()
+    (item,) = open_items()
+    assert "both" in item["reason"] and item["ynab"] is not None
+    (remote,) = world.live("amount = -1234")
+    _gone_there(world, remote["id"])
+    sync()
+    (item,) = open_items()
+    assert "no longer in Actual" in item["reason"] and item["ynab"] is None
+    actual_app.resolve_sync_item(item["id"], "onw")
+    assert len(world.live("notes = 'edited here'")) == 1 and open_items() == []
+
+
 def test_a_kill_after_a_pull_is_not_stuck(world, monkeypatch):
     enable()
     sync()
@@ -1404,6 +1573,31 @@ def test_the_mass_delete_guard_counts_a_row_differing_only_cosmetically(world):
     assert any(
         c.get("onw_txn_id") == market["id"] and "at once" in c["reason"] for c in open_items()
     )
+
+
+def test_missing_rows_dont_raise_the_mass_delete_limit(world, monkeypatch):
+    enable()
+    for n in range(30):
+        world.txn(f"t-more-{n}", "a1", -100 - n, TODAY, description="p-market", category="c-food")
+    world.queue.clear()
+    sync()
+    # A hundred linked rows with no baseline, gone from Actual.
+    with monkeypatch.context() as killed:
+        killed.setattr(baselines.Baselines, "flush", lambda self: None)
+        killed.setattr(delta, "save_changes", lambda *a, **k: None)
+        killed.setattr(sync_state, "save", lambda st: None)
+        killed.setattr(sync_state, "save_meta", lambda meta: None)
+        for n in range(100):
+            new_row(description=f"ACME Loose {n}", from_amount=1000.0 + n, date=PAST)
+        with using(ACTUAL):
+            runner._locked_run("manual")
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE amount <= -100000")
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id LIKE 't-more-%'")
+    world.queue.clear()
+    assert sync()["pulled"] == 0
+    held = [c for c in open_items() if "at once" in c["reason"]]
+    assert len(held) == 30
+    assert len(world.rows("transactions", "tombstone = 1 AND id LIKE 't-more-%'")) == 30
 
 
 def test_a_real_deletion_of_a_few_rows_needs_no_confirming(world):
@@ -1519,6 +1713,217 @@ def test_a_whole_budget_vanishing_reads_as_a_held_mass_delete(world):
     ]
 
 
+# ── another budget ──
+
+
+def _live_here() -> int:
+    return len([t for t in ledger_service.transactions.all() if not t.get("deleted")])
+
+
+def _to_other_budget(direction: str = "both") -> None:
+    return actual_app.sync_settings(True, "1h", BUDGET_B, direction)
+
+
+@pytest.mark.parametrize("extra", [0, 40], ids=["under the mass-delete limit", "over it"])
+def test_switching_budgets_deletes_nothing_here(world, extra):
+    enable()
+    for n in range(extra):
+        world.txn(f"t-more-{n}", "a1", -100 - n, TODAY, description="p-market", category="c-food")
+    world.queue.clear()
+    sync()
+    rows_here = _live_here()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    a_before = world.rows("transactions")
+    _to_other_budget()
+    assert sync()["ok"] is True
+    assert _live_here() == rows_here  # not one row went
+    assert world.rows("transactions") == a_before  # and the old budget wasn't written
+    assert all(not c.get("onw_txn_id") for c in open_items())  # no item per old row
+    assert sync()["ok"] is True
+    assert _live_here() == rows_here
+    assert all(not c.get("onw_txn_id") for c in open_items())
+    (warning,) = [
+        w for w in actual_app.sync_status()["warnings"] if w["kind"] == "not_in_this_budget"
+    ]
+    assert str(rows_here) in warning["text"]
+    assert f"ACME {BUDGET_B}" in warning["text"] and "stay here" in warning["text"]
+
+
+def _import_other_budget() -> None:
+    actual_app.start_migration(
+        "import", BUDGET_B, account_types={"b1": "cash"}, confirm_nonempty=True
+    )
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        record = import_runs.latest("actual_budget", job.KINDS)
+        if record["status"] != "running":
+            assert record["status"] == "done", record["error"]
+            return
+        time.sleep(0.02)
+    raise AssertionError("the import did not finish")
+
+
+def test_moving_to_an_imported_budget_and_back(world):
+    enable()
+    sync()
+    rows_a = _live_here()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    actual_app.sync_settings(False, None, None, None)
+    _import_other_budget()
+    rows_both = _live_here()
+    assert rows_both > rows_a
+    a_before = world.rows("transactions")
+    _to_other_budget()
+    assert sync()["ok"] is True
+    assert _live_here() == rows_both and open_items() == []
+    assert world.rows("transactions") == a_before
+    with world.on(BUDGET_B):  # the first budget's categories and groups stay out of this one
+        assert {r["name"] for r in world.rows("categories")} == {"Zenith Food", "Starting Balances"}
+        assert {r["name"] for r in world.rows("category_groups")} == {"Zenith Group", "Income"}
+        cells = world.rows("zero_budgets")
+    assert cells == []
+
+    # This budget's rows sync; the other's are left alone.
+    edit_here(by_ref("z-1")["id"], memo="zen edited")
+    edit_here(by_ref("t-pay")["id"], memo="old budget, edited here")
+    assert sync()["sent"] == 1
+    with world.on(BUDGET_B):
+        assert world.row("transactions", "z-1")["notes"] == "zen edited"
+    assert world.rows("transactions") == a_before
+    assert open_items() == []
+
+    # And back: the other budget's rows stay, and this one's are linked again.
+    actual_app.sync_settings(True, "1h", BUDGET, "both")
+    assert sync()["ok"] is True
+    assert _live_here() == rows_both
+    assert by_ref("z-1")["memo"] == "zen edited"
+    assert all(not c.get("onw_txn_id") or "no longer" not in c["reason"] for c in open_items())
+    assert world.row("transactions", "t-pay")["notes"] == "old budget, edited here"
+
+
+def test_two_budgets_cannot_share_an_account_here(world):
+    """Why a row's account can say which budget it's in: the import refuses the link."""
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    actual_app.sync_settings(False, None, None, None)
+    actual_app.start_migration(
+        "import",
+        BUDGET_B,
+        account_links={"b1": account_here("ACME Checking")["id"]},
+        confirm_nonempty=True,
+    )
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        record = import_runs.latest("actual_budget", job.KINDS)
+        if record["status"] != "running":
+            break
+        time.sleep(0.02)
+    assert record["status"] == "failed" and "cannot be linked" in record["error"]
+
+
+def test_a_first_read_that_comes_back_empty_deletes_nothing(db_isolated, tmp_path, monkeypatch):
+    server = _prepared(tmp_path, monkeypatch)
+    seed(server, KEY, PAST, TODAY)
+    _import()
+    rows_here = _live_here()
+    enable()
+    server.edit("UPDATE transactions SET tombstone = 1")
+    server.queue.clear()
+    assert sync()["ok"] is True
+    assert _live_here() == rows_here
+    server.edit("UPDATE transactions SET tombstone = 0")
+    server.queue.clear()
+    assert sync()["ok"] is True
+    assert _live_here() == rows_here and open_items() == []
+    server.edit("UPDATE transactions SET notes = 'there' WHERE id = 't-pay'")
+    server.queue.clear()
+    assert sync()["summary"] == "1 pulled"
+    assert by_ref("t-pay")["memo"] == "there"
+
+
+def test_an_old_budgets_account_appears_nowhere_in_what_is_sent(world):
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    _to_other_budget()
+    sync()
+    new_row()  # on the old budget's account, with no link at all
+    assert sync()["sent"] == 0 and all(not c.get("onw_txn_id") for c in open_items())
+    with world.on(BUDGET_B):
+        assert not world.live("amount = -1234")
+    assert not world.live("amount = -1234")
+
+
+def test_importing_the_budget_switched_to_closes_its_rows_items(world):
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    _to_other_budget()
+    sync()
+    assert [c for c in open_items() if c["key"].startswith("y:")]  # no account here for its rows
+    actual_app.sync_settings(False, None, None, None)
+    _import_other_budget()
+    actual_app.sync_settings(True, None, None, None)
+    sync()
+    assert open_items() == []
+
+
+def test_a_row_given_another_budgets_category_goes_uncategorized_and_says_so(world):
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    actual_app.sync_settings(False, None, None, None)
+    _import_other_budget()
+    _to_other_budget()
+    sync()
+    edit_here(by_ref("z-1")["id"], category=category_here("Food")["id"])
+    with using(ACTUAL):
+        runner._locked_run("manual")
+        st = sync_state.load()
+        run = import_runs.get(st["last_run"]["run_id"])
+    assert st["last_run"]["sent"] == 1 and st["last_run"]["deferred"] == 0
+    with world.on(BUDGET_B):
+        assert world.row("transactions", "z-1")["category"] is None
+    assert any("Food" in n["item"] for n in run["notes"])
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and writes_seen(world) == []
+    assert by_ref("z-1")["category"] == category_here("Food")["id"]
+
+
+def test_importing_another_budget_is_refused_while_the_sync_is_on(world):
+    enable()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    rows_here = _live_here()
+    with pytest.raises(ConflictError) as refused:
+        actual_app.start_migration(
+            "import", BUDGET_B, account_types={"b1": "cash"}, confirm_nonempty=True
+        )
+    assert "Turn it off" in refused.value.message and "Actual" in refused.value.message
+    assert _live_here() == rows_here
+    actual_app.start_migration("preview", BUDGET_B)  # looking is still fine
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        if import_runs.latest("actual_budget", job.KINDS)["status"] != "running":
+            break
+        time.sleep(0.02)
+    _import()  # and so is importing the one being synced, again
+
+
 # ── one app at a time ──
 
 
@@ -1632,9 +2037,9 @@ def test_a_preview_or_a_verify_stands_in_nobodys_way(world, monkeypatch):
     _ynab_on()
     run_id = import_runs.start("actual_budget", "preview", BUDGET)["id"]
     assert ynab_sync.run_if_due() is True and ran == ["ynab"]
-    started = ynab_sync.start_now()
-    assert started["running"] is True
+    ynab_sync.start_now()
     _free(YNAB)
+    assert ran == ["ynab", "ynab"]
     import_runs.finish(run_id, "done")
     run_id = import_runs.start("actual_budget", "verify", BUDGET)["id"]
     with using(YNAB):
@@ -1853,13 +2258,14 @@ def test_a_hung_actual_run_starves_no_manual_ynab_run(world, monkeypatch):
     _tick()
     assert entered.wait(WAIT)
 
-    _ynab_on()
-    assert ACTUAL.pool is not YNAB.pool
-    assert ynab_sync.start_now()["running"] is True
-    _free(YNAB)
-    assert sync_state.load()["last_run"]["ok"] is True
-
-    leave.set()
+    try:
+        _ynab_on()
+        assert ACTUAL.pool is not YNAB.pool
+        ynab_sync.start_now()
+        _free(YNAB)
+        assert sync_state.load()["last_run"]["ok"] is True
+    finally:
+        leave.set()
     _free(ACTUAL)
 
 

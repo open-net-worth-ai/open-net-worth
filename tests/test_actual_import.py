@@ -224,6 +224,7 @@ def test_the_description_of_actual():
         normalises_text=True,
         labels_as_given_on_pull=True,
         links_without_baseline=True,
+        budget_scoped_accounts=True,
     )
     assert app.stores.state().doc("state") == {"id": "state"}
     assert app.syncs is True and app.defers is True

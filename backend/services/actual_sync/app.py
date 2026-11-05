@@ -57,6 +57,7 @@ ACTUAL = BudgetApp(
         normalises_text=True,
         labels_as_given_on_pull=True,
         links_without_baseline=True,
+        budget_scoped_accounts=True,
         categorized_transfers=True,
     ),
     config_store=ActualBudgetConfigStore,
@@ -122,24 +123,67 @@ def _notes(meta: dict) -> list[dict]:
     return notes
 
 
-def _warnings(meta: dict) -> list[dict]:
-    """Where money isn't landing where it should. Each is ``{"kind", "text"}``."""
-    pairs = ACTUAL.stores.baselines().pairs(sync_state.load()["plan_id"])[0]
-    return [
-        {"kind": "income_in_envelope", "text": found["reason"]}
-        for found in budget_mode.income_in_envelopes(meta, pairs)
+def _waiting(st: dict) -> int:
+    """What a one-way sync is holding back for a switch to both ways, as rows and figures."""
+    if st["direction"] == "both":
+        return 0
+    txns = ACTUAL.stores.baselines().split()[0]
+    owner = {ref: i for i, doc in txns.items() for ref in doc["refs"]}
+    rows = {owner.get(ref, ref) for ref in st["held_ynab"]} | set(st["held"])
+    return len(rows) + len(st["held_assigned"])
+
+
+def _waiting_line(st: dict, count: int) -> str:
+    many = count != 1
+    what = f"{count} change{'s' if many else ''}"
+    if st["direction"] == "to_ynab":
+        return (
+            f"{what} from {ACTUAL.name} {'wait' if many else 'waits'} until this sync goes both "
+            "ways. This book isn't changed until then, so a row you chose to remove stays here and "
+            "in your net worth for now."
+        )
+    return (
+        f"{what} here {'wait' if many else 'waits'} until this sync goes both ways. "
+        f"{ACTUAL.name} isn't written until then."
+    )
+
+
+def _warnings(meta: dict, st: dict) -> list[dict]:
+    """Where money isn't landing where it should, or an answer hasn't taken effect yet. Each is
+    ``{"kind", "text"}``."""
+    pairs = ACTUAL.stores.baselines().pairs(st["plan_id"])[0]
+    found = [
+        {"kind": "income_in_envelope", "text": item["reason"]}
+        for item in budget_mode.income_in_envelopes(meta, pairs)
     ]
+    if others := meta.get("other_budget_rows"):
+        many = others != 1
+        found.append(
+            {
+                "kind": "not_in_this_budget",
+                "text": (
+                    f"{others} transaction{'s' if many else ''} here {'are' if many else 'is'} on "
+                    f"accounts from another {ACTUAL.name} budget, not {st['plan_name']}. "
+                    f"{'They stay' if many else 'It stays'} here, and this sync leaves "
+                    f"{'them' if many else 'it'} alone."
+                ),
+            }
+        )
+    if count := _waiting(st):
+        found.append({"kind": "waiting_for_both_ways", "text": _waiting_line(st, count)})
+    return found
 
 
 def _status() -> dict:
     status = runner.status()
-    meta = sync_state.load_meta()
+    meta, st = sync_state.load_meta(), sync_state.load()
     return {
         **status,
         "available": True,
         "budget_mode": meta.get("budget_mode"),
         "notes": _notes(meta),
-        "warnings": _warnings(meta),
+        "warnings": _warnings(meta, st),
+        "waiting": _waiting(st),
         "conflicts_count": len(status["conflicts"]),
     }
 

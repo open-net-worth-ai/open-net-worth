@@ -13,6 +13,7 @@ import uuid
 from contextlib import closing, contextmanager
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Iterator
 
 import httpx
 from sqlalchemy import create_engine
@@ -25,6 +26,7 @@ from backend.services.actual_sync import shape
 actual_database = __import__("actual.database").database
 
 BUDGET = "budget-1"
+BUDGET_B = "budget-2"
 HOST = "acme-actual.example.test"
 PASSWORD = "PASSWORD-SENTINEL-9"
 URL = f"http://{HOST}:5006"
@@ -45,6 +47,7 @@ class FakeActual:
         from sqlmodel import Session
 
         self.server, self.path = server, path
+        self.home = server.path  # the budget this copy came from
         self.file = SimpleNamespace(file_id=BUDGET, group_id=server.group_id)
         self.engine = create_engine(f"sqlite:///{path}")
         self.session = actual_database.strong_reference_session(Session(self.engine))
@@ -85,9 +88,9 @@ class FakeActual:
             error, taken = server.commit_error
             server.commit_error = None
             if taken:
-                server.take(self.path)
+                server.take(self.path, self.home)
             raise error
-        server.take(self.path)
+        server.take(self.path, self.home)
 
     def close(self):
         self.session.close()
@@ -98,6 +101,7 @@ class FakeServer:
     def __init__(self, root: Path):
         self.root = root
         self.path = root / "server.sqlite"
+        self.budgets = {BUDGET: self.path}
         self.calls: list[str] = []
         self.queue: list[tuple[str, tuple]] = []
         self.sync_error: Exception | None = None
@@ -109,9 +113,26 @@ class FakeServer:
         self.copies: list[Path] = []
         self.group_id = "group-1"
         self.opens = 0
-        engine = create_engine(f"sqlite:///{self.path}")
+        self._create(self.path)
+
+    @staticmethod
+    def _create(path: Path) -> None:
+        engine = create_engine(f"sqlite:///{path}")
         actual_database.SQLModel.metadata.create_all(engine)
         engine.dispose()
+
+    def add_budget(self, budget_id: str) -> None:
+        self.budgets[budget_id] = self.root / f"{budget_id}.sqlite"
+        self._create(self.budgets[budget_id])
+
+    @contextmanager
+    def on(self, budget_id: str) -> Iterator[None]:
+        """What's seeded, edited or read in this block is in that budget."""
+        before, self.path = self.path, self.budgets[budget_id]
+        try:
+            yield
+        finally:
+            self.path = before
 
     def reset_sync(self) -> None:
         """Actual's Reset sync: a new group and snapshot, the same file id and row ids."""
@@ -194,9 +215,9 @@ class FakeServer:
             conn.row_factory = sqlite3.Row
             return shape.plan_from_rows(actual_rows.read_rows(conn, self.mode))
 
-    def take(self, local: Path) -> None:
-        shutil.copy(local, self.path)
-        with closing(sqlite3.connect(self.path)) as conn:
+    def take(self, local: Path, home: Path) -> None:
+        shutil.copy(local, home)
+        with closing(sqlite3.connect(home)) as conn:
             for sql, args in self.queue:
                 conn.execute(sql, args)
             conn.commit()
@@ -205,17 +226,18 @@ class FakeServer:
     @contextmanager
     def open_copy(self, store, budget_id):
         actual_flag.require()
-        if budget_id != BUDGET:
-            raise AssertionError(f"opened by {budget_id}, which isn't the budget's file id")
+        if budget_id not in self.budgets:
+            raise AssertionError(f"opened by {budget_id}, which isn't a budget's file id")
         self.opens += 1
         if self.open_error is not None:
             raise self.open_error
         directory = self.root / f"run-{self.opens}"
         directory.mkdir()
         self.copies.append(directory)
-        shutil.copy(self.path, directory / "db.sqlite")
+        shutil.copy(self.budgets[budget_id], directory / "db.sqlite")
         self.queue = []
         session = FakeActual(self, directory / "db.sqlite")
+        session.home = self.budgets[budget_id]
         try:
             yield actual_client.Copy(
                 directory=directory,
@@ -237,7 +259,8 @@ class FakeServer:
             actual_client,
             "list_budgets",
             lambda store=None: [
-                {"id": BUDGET, "name": "ACME Budget", "currency": None, "encrypted": False}
+                {"id": b, "name": f"ACME {b}", "currency": None, "encrypted": False}
+                for b in self.budgets
             ],
         )
         return self
@@ -245,6 +268,23 @@ class FakeServer:
 
 def down() -> httpx.ConnectError:
     return httpx.ConnectError(f"could not reach {URL} with {PASSWORD}")
+
+
+def seed_other_budget(server: FakeServer, past: str, today: str) -> None:
+    """A second made-up budget: its own account and rows, no id shared with ``seed``'s."""
+    server.account("b1", "ZENITH Checking")
+    server.payee("p-zenith", "Zenith Store")
+    server.payee("p-zsb", "Starting Balance")
+    server.group("zg", "Zenith Group")
+    server.group("zi", "Income", income=1)
+    server.category("z-food", "Zenith Food", "zg")
+    server.category("z-sb", "Starting Balances", "zi", income=1)
+    server.txn(
+        "z-open", "b1", 50_000, past, description="p-zsb", category="z-sb", starting_balance_flag=1
+    )
+    server.txn(
+        "z-1", "b1", -1_100, today, description="p-zenith", category="z-food", notes="zen one"
+    )
 
 
 def seed(server: FakeServer, key: str, past: str, today: str) -> None:

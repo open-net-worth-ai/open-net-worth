@@ -212,6 +212,8 @@ class News(Pairs):
         if not self.can_push:
             return
         paired = {p["category"] for p in self.base.cats.values()}
+        if current().caps.budget_scoped_accounts:  # another budget's aren't new to this one
+            paired |= self.base.categories_of_other_plans()
         income = self.book.income if current().caps.income_categories else []
         for cat in [*self.book.matchable, *income]:
             skip = cat["id"] in paired or cat.get("hidden") or norm(cat["label"]) in self.held_names
