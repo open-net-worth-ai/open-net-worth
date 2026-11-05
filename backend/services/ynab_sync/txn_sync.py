@@ -23,31 +23,75 @@ MAX_REMOVAL_FRACTION = 0.25  # a read that would delete more of the ledger than 
 MIN_REMOVAL_GUARD = 25  # ...but never for fewer rows than this
 
 
+def _moved_links(refs_of: dict[str, list[str]], everything: dict[str, dict]) -> dict[str, str]:
+    """Rows whose YNAB ids now sit on another live row, old id -> that row. A merge carries them
+    onto the survivor and leaves a tombstone, and undoing it carries them back; neither is a
+    deletion here. A row deleted outright keeps its ids and no one else holds them."""
+    holder = {
+        ref: r["id"]
+        for r in everything.values()
+        if not r.get("deleted")
+        for ref in units.ynab_refs(r)
+    }
+    moved: dict[str, str] = {}
+    for i, refs in refs_of.items():
+        row = everything.get(i)
+        if row is None or (row.get("deleted") and not row.get("merged_into")):
+            continue
+        if not row.get("deleted") and set(refs) <= set(units.ynab_refs(row)):
+            continue
+        found = {holder.get(r) for r in refs}
+        if len(found) == 1 and None not in found:
+            moved[i] = found.pop()
+    return moved
+
+
+def follow_merges(base: Baselines, everything: dict[str, dict] | None = None) -> dict[str, str]:
+    """Put each baseline on the row that holds its YNAB ids now, so that row is what gets compared
+    with YNAB and the tombstone never reads as a deletion to send. A review item about the old
+    row closes: comparing the row that holds the link now asks again if it still has to."""
+    if everything is None:
+        everything = {r["id"]: r for r in ledger_service.transactions.all()}
+    moved = _moved_links({i: d["refs"] for i, d in base.txns.items()}, everything)
+    for old, new in moved.items():
+        agreed = base.txns.get(new) or base.txns[old]
+        base.set_txn(new, units.ynab_refs(everything[new]), agreed["canon"])
+        base.drop_txn(old)
+        conflicts.close(old)
+    return moved
+
+
 def _rows(ctx: Context, base: Baselines, change: Change, first: bool, scan: set[str]):
     """(ledger rows to look at, their baselines, ref -> ledger id, refs YNAB no longer holds)."""
+    everything = {r["id"]: r for r in ledger_service.transactions.all()}
+    moved = follow_merges(base, everything)
     index = {ref: i for i, d in base.txns.items() for ref in d["refs"]}
     if first:
-        everything = {r["id"]: r for r in ledger_service.transactions.all()}
-        for r in everything.values():
-            for ref in units.ynab_refs(r):
-                index.setdefault(ref, r["id"])
+        linked = {r["id"]: units.ynab_refs(r) for r in everything.values() if units.ynab_refs(r)}
+        moved_before = _moved_links(linked, everything)
         rows = {
             i: r
             for i, r in everything.items()
-            if units.ynab_refs(r) or (r["kind"] in units.CREATABLE and not r.get("deleted"))
+            if i not in moved_before
+            and (i in linked or (r["kind"] in units.CREATABLE and not r.get("deleted")))
         }
-        bases = units.first_run_bases([r for r in rows.values() if units.ynab_refs(r)])
+        for r in rows.values():
+            for ref in units.ynab_refs(r):
+                index.setdefault(ref, r["id"])
+        bases = units.first_run_bases([everything[i] for i in linked])
+        for old, new in moved_before.items():
+            bases[new] = bases.pop(old)  # YNAB holds what the merged row was booked as
         gone = (
             {ref for r in rows.values() for ref in units.ynab_refs(r)}
             - set(ctx.mirror)
             - set(ctx.sub_parent)
         )
         return rows, bases, index, gone
-    wanted = scan | {index[r] for r in change.touched if r in index}
+    wanted = scan | set(moved) | set(moved.values())
+    wanted |= {index[r] for r in change.touched if r in index}
     wanted |= {index[s] for t in change.touched for s in _line_ids(ctx, t) if s in index}
     # Changes nobody audited (a checkpoint rewind, a batch rollback) are found by comparing
     # every baselined row with the ledger as it is now — local, no audit event needed.
-    everything = {r["id"]: r for r in ledger_service.transactions.all()}
     wanted |= {
         i
         for i, d in base.txns.items()
