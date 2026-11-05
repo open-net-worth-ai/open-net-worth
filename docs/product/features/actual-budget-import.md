@@ -249,8 +249,10 @@ Moving deletes nothing here. Rows on the first budget's accounts stay in this bo
 them alone, and the page says how many there are. The first sync after the move holds back every row
 the new budget doesn't have, however few, and asks about each one in the review list: a budget
 restored from an export, or duplicated in Actual, keeps the same row ids under a new name, so a row it
-lacks may be one you added here since. Importing another budget is refused while the sync is on,
-which is why you turn it off first.
+lacks may be one you added here since. The same goes the first time a sync follows a budget this book
+wasn't imported from. Importing another budget is refused while the sync is on, which is why you turn
+it off first. If a move is refused, the sync stays on the first budget with everything it had,
+including its review list.
 
 **A budget you haven't imported** isn't synced. If the sync follows one that has no account in this
 book, each run stops, and nothing is written, paired or filed on either side. **Worth checking** says

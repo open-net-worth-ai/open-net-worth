@@ -8,6 +8,7 @@ import logging
 from typing import Iterator
 
 from backend.core.errors import ConflictError, ValidationError
+from backend.services import import_runs
 from backend.services import ledger as ledger_service
 from backend.services.budget_app import current, refuse_beside_others, starting
 from backend.services.ynab_sync import conflicts
@@ -73,6 +74,18 @@ def import_finished(plan_id: str) -> None:
         app.lock.release()
 
 
+def _a_copy_on_first_pick(plan_id: str) -> bool:
+    """Never synced, and this book holds rows from a budget other than the one picked: the pick may
+    be a duplicate of it, with the same row ids. The budget it was imported from can't be: what the
+    import read is what this book holds."""
+    imported = (
+        run
+        for run in import_runs.list_runs(current().key, include_archived=True)
+        if run["kind"] == "import" and run["status"] in ("done", "running")
+    )
+    return _linked_book() and not any(run["plan_id"] == plan_id for run in imported)
+
+
 def _adopt_plan(plan_id: str) -> dict:
     app = current()
     plans = app.reader.list_plans(app.config_store())
@@ -88,8 +101,9 @@ def _adopt_plan(plan_id: str) -> dict:
             f"That {app.name} {app.plan_word} has no currency set; open it in {app.name} once first."
         )
     old = sync_state.load()
-    switched = app.caps.copies_keep_ids and bool(old["plan_id"])
-    sync_state.reset()
+    switched = app.caps.copies_keep_ids and (bool(old["plan_id"]) or _a_copy_on_first_pick(plan_id))
+    if not app.caps.budget_scoped_accounts:
+        sync_state.reset()
     kept = {"interval": old["interval"]} if app.caps.budget_scoped_accounts else {}
     return {
         **sync_state.blank(),
@@ -157,6 +171,10 @@ def update_settings(
         with starting():
             if enabled:
                 _refuse_beside_others()
+            # Past every refusal, so one leaves the old budget's state as it was. YNAB still forgets
+            # its plan first, in ``_adopt_plan``: nothing it does may change in this work.
+            if adopted and app.caps.budget_scoped_accounts:
+                sync_state.reset()
             sync_state.save(st)
         if adopted:
             _point_connector_at(st)
