@@ -2421,6 +2421,24 @@
     /* Warm-tinted like every other light-theme elevation token, and fainter still. */
     box-shadow: 0 -4px 14px rgba(48, 42, 30, 0.08);
   }
+  /* What the Screen awareness switch just did: floats over the bar like Peek, so it never moves
+     the composer, and takes no clicks. */
+  .lx-scope-notice {
+    position: fixed;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--modal-bg);
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--muted);
+    box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.16);
+    z-index: calc(var(--z-toast) + 20);
+    pointer-events: none;
+  }
+  :root:is([data-theme='warm'], [data-theme='light']) .lx-scope-notice {
+    box-shadow: 0 -4px 14px rgba(48, 42, 30, 0.08);
+  }
   .lx-scope-peek-h {
     font-size: 9.5px;
     font-weight: 700;

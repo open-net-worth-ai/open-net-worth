@@ -14,11 +14,19 @@ import type { ReactNode } from 'react'
 // host state. Re-exported here for backward compatibility — every existing importer is unchanged.
 import { serializeSnapshot } from '../lucius/screenSnapshotWire'
 import type { ScreenHandle, ScreenSnapshot, ScreenSnapshotWire } from '../lucius/screenSnapshotWire'
+import {
+  SCREEN_AWARENESS_DEFAULT_CHANGED_EVENT,
+  useScreenAwarenessDefault,
+} from '../hooks/useChatSuggestionsEnabled'
 
 export { serializeSnapshot }
 export type { ScreenHandle, ScreenSnapshot, ScreenSnapshotWire }
 
 const ENABLED_KEY = 'screen-awareness'
+
+function storedChoice(stored: string | null): boolean | null {
+  return stored === null ? null : stored !== 'off'
+}
 
 interface ScreenSnapshotValue {
   snapshot: ScreenSnapshot | null
@@ -37,21 +45,36 @@ const ScreenSnapshotContext = createContext<ScreenSnapshotValue | null>(null)
 export function ScreenSnapshotProvider({ children }: { children: ReactNode }) {
   const [snapshot, setSnapshot] = useState<ScreenSnapshot | null>(null)
   const [pinnedHandleIds, setPinned] = useState<string[]>([])
-  const [enabled, setEnabledState] = useState<boolean>(
-    () => localStorage.getItem(ENABLED_KEY) !== 'off', // default ON; transparent via the panel
+  // This device's own choice, null until it makes one: the account's default applies until then.
+  const [deviceChoice, setDeviceChoice] = useState<boolean | null>(() =>
+    storedChoice(localStorage.getItem(ENABLED_KEY)),
   )
+  const { enabled: accountDefault } = useScreenAwarenessDefault()
+  const enabled = deviceChoice ?? accountDefault
 
-  // The toggle lives per browser, so another window turning it off applies here too, at once.
+  // The toggle lives per browser, so another window changing it applies here too, at once.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key === ENABLED_KEY) setEnabledState(e.newValue !== 'off')
+      if (e.key === ENABLED_KEY) setDeviceChoice(storedChoice(e.newValue))
+    }
+    const onDefaultChanged = () => {
+      setDeviceChoice(null)
+      try {
+        localStorage.removeItem(ENABLED_KEY)
+      } catch {
+        // blocked storage — ignore
+      }
     }
     window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
+    window.addEventListener(SCREEN_AWARENESS_DEFAULT_CHANGED_EVENT, onDefaultChanged)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener(SCREEN_AWARENESS_DEFAULT_CHANGED_EVENT, onDefaultChanged)
+    }
   }, [])
 
   const setEnabled = useCallback((b: boolean) => {
-    setEnabledState(b)
+    setDeviceChoice(b)
     try {
       localStorage.setItem(ENABLED_KEY, b ? 'on' : 'off')
     } catch {

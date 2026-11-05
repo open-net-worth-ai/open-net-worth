@@ -87,3 +87,9 @@ old refusal, which counts as no answer.
   `find_tools` persisted that scope over them.
 - The consequences above about Screen awareness governing a look and a refusal arriving late no
   longer apply.
+- **The name stays, so the bar explains it.** The owner kept "Screen awareness". Flipping the switch
+  shows what it did, and while it's off the bar says what turning it on does: "Attach screen content
+  as context".
+- **A default joins the per-device switch.** `profile.screen_awareness_default` (on) is what a device
+  uses until it has a stored choice, so an existing choice survives. Changing it in Settings → Chat
+  drops the stored choice on that device only: another device keeps the choice it made.

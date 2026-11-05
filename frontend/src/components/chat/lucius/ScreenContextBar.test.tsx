@@ -11,10 +11,12 @@ afterEach(() => {
   cleanup()
   vi.unstubAllGlobals()
   mockHandles.length = 0
+  mockScreen.enabled = true
+  mockScreen.setEnabled.mockClear()
 })
 import { ScreenContextBar } from './ScreenContextBar'
 
-const { mockHandles } = vi.hoisted(() => ({
+const { mockHandles, mockScreen } = vi.hoisted(() => ({
   mockHandles: [] as Array<{
     id: string
     type: string
@@ -22,12 +24,13 @@ const { mockHandles } = vi.hoisted(() => ({
     descriptor: string
     source: string
   }>,
+  mockScreen: { enabled: true, setEnabled: vi.fn() },
 }))
 
 vi.mock('../../../state/screenSnapshot', () => ({
   useScreenSnapshot: () => ({
-    enabled: true,
-    setEnabled: vi.fn(),
+    enabled: mockScreen.enabled,
+    setEnabled: mockScreen.setEnabled,
     pinnedHandleIds: [],
     togglePin: vi.fn(),
     clearPins: vi.fn(),
@@ -104,6 +107,58 @@ describe('ScreenContextBar', () => {
     const { container } = render(<ScreenContextBar visibleIds={EMPTY_VISIBLE_IDS} />)
     // Mock returns enabled=true. Toggle should have class "on".
     expect(container.querySelector('.lx-switch.on')).not.toBeNull()
+  })
+
+  it('says what turning it off does, and that Lucius can still look', () => {
+    const { container } = render(<ScreenContextBar visibleIds={EMPTY_VISIBLE_IDS} />)
+    expect(document.body.querySelector('.lx-scope-notice')).toBeNull()
+
+    fireEvent.click(container.querySelector('.lx-switch')!)
+
+    expect(mockScreen.setEnabled).toHaveBeenCalledWith(false)
+    const notice = document.body.querySelector('.lx-scope-notice')
+    expect(notice?.getAttribute('role')).toBe('status')
+    expect(notice?.textContent).toContain("won't be sent with messages")
+    expect(notice?.textContent).toContain('can still look')
+  })
+
+  it('says what turning it on does, and lets the notice go', () => {
+    vi.useFakeTimers()
+    try {
+      mockScreen.enabled = false
+      const { container } = render(<ScreenContextBar visibleIds={EMPTY_VISIBLE_IDS} />)
+
+      fireEvent.click(container.querySelector('.lx-switch')!)
+
+      expect(mockScreen.setEnabled).toHaveBeenCalledWith(true)
+      expect(document.body.querySelector('.lx-scope-notice')?.textContent).toContain(
+        'sent with each message',
+      )
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+      expect(document.body.querySelector('.lx-scope-notice')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it.each([[false], [true]])('says what the switch would do while off (compact: %s)', (compact) => {
+    mockScreen.enabled = false
+    const { container } = render(
+      <ScreenContextBar compact={compact} visibleIds={EMPTY_VISIBLE_IDS} />,
+    )
+    expect(container.textContent).toContain('Attach screen content as context')
+    expect(container.textContent).not.toContain('Overview')
+  })
+
+  it('does not call the screen passed to Lucius in Peek while off', () => {
+    mockScreen.enabled = false
+    const { container } = render(<ScreenContextBar visibleIds={EMPTY_VISIBLE_IDS} />)
+    fireEvent.click(container.querySelector('.lx-scope-peek')!)
+    const peekbox = document.body.querySelector('.lx-scope-peekbox')
+    expect(peekbox?.textContent).toContain('read only if he looks')
+    expect(peekbox?.textContent).not.toContain('passed to Lucius')
   })
 
   it('peekbox is absent before clicking Peek', () => {

@@ -6,6 +6,7 @@ import {
   CHAT_THINKING_GROUPED_CHANGED_EVENT,
   CHAT_MULTI_TURN_CHANGED_EVENT,
   CHAT_SUGGESTIONS_CHANGED_EVENT,
+  SCREEN_AWARENESS_DEFAULT_CHANGED_EVENT,
 } from '../../../../hooks/useChatSuggestionsEnabled'
 import { authFetch } from '../../../../api/client'
 import { setCachedQueryData, useCachedFetchState } from '../../../../state/queryCache'
@@ -21,6 +22,7 @@ export function ChatSection({ toast }: SectionProps) {
     chat_cost_visible?: boolean
     chat_multi_turn_enabled?: boolean
     chat_thinking_grouped?: boolean
+    screen_awareness_default?: boolean
   }>(
     PROFILE_KEY,
     () =>
@@ -29,6 +31,7 @@ export function ChatSection({ toast }: SectionProps) {
         chat_cost_visible?: boolean
         chat_multi_turn_enabled?: boolean
         chat_thinking_grouped?: boolean
+        screen_awareness_default?: boolean
       }>(PROFILE_KEY),
     { staleTime: 0 },
   )
@@ -73,6 +76,27 @@ export function ChatSection({ toast }: SectionProps) {
       // An already-open chat panel listens for this and reacts without a reload.
       window.dispatchEvent(new Event(CHAT_SUGGESTIONS_CHANGED_EVENT))
       toast(enabled ? 'Follow-up suggestions on' : 'Follow-up suggestions off')
+    } catch {
+      toast('Could not reach the server. Try again.')
+    }
+  }
+
+  async function putScreenAwarenessDefault(enabled: boolean) {
+    try {
+      const r = await authFetch(PROFILE_KEY, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ screen_awareness_default: enabled }),
+      })
+      if (!r.ok) {
+        toast(`Could not save (HTTP ${r.status})`)
+        return
+      }
+      const body = (await r.json()) as { profile?: unknown }
+      setCachedQueryData(PROFILE_KEY, body.profile ?? body)
+      // This device follows at once, dropping any choice it made with the switch.
+      window.dispatchEvent(new Event(SCREEN_AWARENESS_DEFAULT_CHANGED_EVENT))
+      toast(enabled ? 'Screen awareness on by default' : 'Screen awareness off by default')
     } catch {
       toast('Could not reach the server. Try again.')
     }
@@ -133,6 +157,21 @@ export function ChatSection({ toast }: SectionProps) {
           disabled={!suggestions.data}
           onChange={(v) => void putSuggestionsEnabled(v)}
           label="Follow-up suggestions"
+        />
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600 }}>Screen awareness by default</div>
+          <div className="rd-help" style={{ marginTop: 3, display: 'block', lineHeight: 1.5 }}>
+            On: the screen you're on goes along with each message. Off: it doesn't, but Lucius can
+            still look if you ask. The switch above the message box changes it on that device.
+          </div>
+        </div>
+        <Toggle
+          on={suggestions.data?.screen_awareness_default !== false}
+          disabled={!suggestions.data}
+          onChange={(v) => void putScreenAwarenessDefault(v)}
+          label="Screen awareness by default"
         />
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
