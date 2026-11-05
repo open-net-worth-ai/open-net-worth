@@ -1237,6 +1237,10 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             "a3ea85de528f72da449398bf5648c12683cc2dff4dafa55078c949c2c21d66cf",
         }
     ),
+    # 2026-11-05: before one money test for every email, and connecting each item to the books.
+    "email-finance-digest": frozenset(
+        {"39aa239fc5d8f0dd57029bb9d26ae0fca06af1cf1134d11327906bdf43a92194"}
+    ),
 }
 
 
@@ -1308,6 +1312,8 @@ _ADDED_STARTERS: tuple[str, ...] = (
     "log-transactions-from-email",
     # 2026-10-15: why an account's balance differs from the bank's, traced row by row.
     "balance-mismatch-tracer",
+    # 2026-11-05: the Email finance digest template runs it — logging plus what else needs them.
+    "email-finance-digest",
 )
 
 # ── Built-in starter skills ────────────────────────────────────────────────────

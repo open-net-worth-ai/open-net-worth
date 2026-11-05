@@ -463,7 +463,7 @@ describe('the Automate action', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Automate' }))
     expect(navigate).toHaveBeenCalledWith({
       to: '/automations',
-      search: { template: 'mail_ledger' },
+      search: { template: 'mail_digest' },
     })
   })
 

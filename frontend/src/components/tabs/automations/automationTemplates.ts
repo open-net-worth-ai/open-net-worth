@@ -19,16 +19,17 @@ export type AutomationTemplate = AutomationDraft & { key: string }
  *  Shown first and always; the other lists exclude them. */
 export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
   {
-    key: 'mail_ledger',
-    name: 'Auto-log transactions from email',
+    key: 'mail_digest',
+    name: 'Email finance digest',
     description:
-      'Reads bank, card and trade confirmation mail and logs it — payees resolved, nothing ' +
-      'double-booked.',
+      'Logs bank, card and trade mail, then tells you what else needs you — a failed payment, ' +
+      'a bill due, a new login to a money account, a deposit maturing.',
     instructions:
-      'Check my email for bank, card and trade confirmations and log them, ' +
-      'using the Log transactions from email skill. Message me with what you logged, or if ' +
-      'anything went wrong.',
-    trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
+      'Go through my email for anything about my money, using the Email finance digest skill. ' +
+      'Log my bank, card and trade confirmations, then tell me what else I should know. Send ' +
+      "it on Telegram, or by webhook if that's what I use; if I have neither, show it here. " +
+      "If there's nothing worth saying, don't message me.",
+    trigger: { kind: 'schedule', type: 'rrule', rrule: 'FREQ=DAILY;BYHOUR=0,12;BYMINUTE=0' },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',
   },
@@ -71,6 +72,20 @@ export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
 ]
 
 export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
+  {
+    key: 'mail_ledger',
+    name: 'Auto-log transactions from email',
+    description:
+      'Reads bank, card and trade confirmation mail and logs it — payees resolved, nothing ' +
+      'double-booked.',
+    instructions:
+      'Check my email for bank, card and trade confirmations and log them, ' +
+      'using the Log transactions from email skill. Message me with what you logged, or if ' +
+      'anything went wrong.',
+    trigger: { kind: 'schedule', type: 'interval', seconds: 43200 },
+    execution: { kind: 'lucius' },
+    permission_mode: 'auto',
+  },
   {
     key: 'subscriptions',
     name: 'Subscription creep',
@@ -134,8 +149,8 @@ export const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
 /** One template per OFFERED connector (Yodlee, Alpaca and IBKR Flex excluded — `disabled=True`
  *  server-side, hidden from the directory; Alpaca's and IBKR Flex's kept in `RETIRED_SYNC_TEMPLATES`). Display names are the exact provider labels from
  *  `backend/services/aggregation/providers.py`, not the raw connector key. Email's template
- *  (`mail_ledger`) is in RECOMMENDED_TEMPLATES; its instructions live in the
- *  log-transactions-from-email starter skill, so a fix reaches every unedited copy. */
+ *  (`mail_digest`) is in RECOMMENDED_TEMPLATES; its instructions live in the
+ *  email-finance-digest starter skill, so a fix reaches every unedited copy. */
 export const CONNECTOR_SYNC_TEMPLATES: AutomationTemplate[] = [
   {
     key: 'sync_simplefin',
@@ -266,10 +281,10 @@ export const ALL_TEMPLATES: AutomationTemplate[] = [
   ...CONNECTOR_SYNC_TEMPLATES,
 ]
 
-/** The template that puts a connector to work — Email logs from the mailbox, a bank or broker
- *  syncs. Null for a connector with nothing to automate (web search, Telegram…). */
+/** The template that puts a connector to work — Email logs and digests the mailbox, a bank or
+ *  broker syncs. Null for a connector with nothing to automate (web search, Telegram…). */
 export function templateKeyForConnector(providerKind: string): string | null {
-  const key = providerKind === 'email' ? 'mail_ledger' : `sync_${providerKind}`
+  const key = providerKind === 'email' ? 'mail_digest' : `sync_${providerKind}`
   return ALL_TEMPLATES.some((t) => t.key === key) ? key : null
 }
 
@@ -284,6 +299,7 @@ export const TEMPLATE_ICONS: Record<string, LucideIcon> = {
   'large-charge': BellRing,
   'new-payee': ReceiptText,
   drift: ChartNoAxesCombined,
+  mail_digest: Mail,
   mail_ledger: Mail,
   ...Object.fromEntries(CONNECTOR_SYNC_TEMPLATES.map((template) => [template.key, Link2])),
 }
