@@ -64,6 +64,13 @@ def client(db_isolated, monkeypatch):
     return TestClient(app)
 
 
+def test_the_flag_is_on_unless_someone_turned_it_off():
+    from backend.core.feature_flags import REGISTRY
+
+    assert REGISTRY["voice_calls"].default is True
+
+
+@pytest.mark.flags(voice_calls=False)
 def test_every_route_is_absent_while_the_flag_is_off(client):
     assert client.get("/api/voice/config").status_code == 404
     assert client.put("/api/voice/config", json={"enabled": True}).status_code == 404

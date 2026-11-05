@@ -11,8 +11,9 @@ keywords: [voice, call, talk, speak, microphone, livekit, phone, speech, hands-f
 
 # Voice calls
 
-> **Experimental.** Voice calls are off by default. Turn them on in **Settings → Developer →
-> Experimental → Voice calls**. While the switch is off, nothing on this page appears in the app.
+> **Experimental.** Voice calls are on by default, and nothing happens until you connect a LiveKit
+> project. To hide them, turn off **Settings → Developer → Experimental → Voice calls**. While the
+> switch is off, nothing on this page appears in the app.
 
 Press **Call** in Lucius's chat and talk instead of typing. Lucius answers out loud, looks things
 up, and proposes changes exactly as he does in the chat — and the call shows up in that same
@@ -164,7 +165,7 @@ Your own copy of Open Net Worth has none of these limits.
 
 ## Troubleshooting
 
-**The Call button isn't there.** Voice calls are off: turn them on in **Settings → Developer →
+**The Call button isn't there.** Voice calls may be switched off: check **Settings → Developer →
 Experimental**. Or they aren't set up yet: until then the message box keeps **Send**, and the **Call** button
 on the floating Lucius button takes you to Voice calls in Connectors. It also gives way to **Send** as soon as you type.
 
