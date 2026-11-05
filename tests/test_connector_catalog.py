@@ -18,6 +18,7 @@ def test_catalog_lists_every_kind_the_migration_creates():
         "lunch_money",
         "lunch_flow",
         "ynab",
+        "actual_budget",
         "enable_banking",
         "gocardless",
         "yodlee",
@@ -268,6 +269,7 @@ def test_each_kinds_config_keys_are_the_settings_its_store_writes_to_config():
     """``config_keys`` is what Move keeps from a received row. It must name exactly the
     settings the kind's facade store files under ``connectors.config`` — a key missing here is
     silently dropped by a move, a key extra here is a field nothing reads."""
+    from backend.db.actual_budget_config_store import ActualBudgetConfigStore
     from backend.db.alpaca_config_store import AlpacaConfigStore
     from backend.db.channel_config_store import DEFAULTS as WEBHOOK_DEFAULTS
     from backend.db.email_config_store import DEFAULTS as EMAIL_DEFAULTS
@@ -287,6 +289,7 @@ def test_each_kinds_config_keys_are_the_settings_its_store_writes_to_config():
         LunchMoneyConfigStore,
         LunchFlowConfigStore,
         YnabConfigStore,
+        ActualBudgetConfigStore,
         EnableBankingConfigStore,
         YodleeConfigStore,
         AlpacaConfigStore,

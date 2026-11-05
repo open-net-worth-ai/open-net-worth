@@ -160,6 +160,11 @@ def _needs(secrets: tuple[str, ...] = (), config: tuple[str, ...] = ()) -> Calla
     return configured
 
 
+def _actual_budget_configured(row: Row, have: Have) -> bool:
+    """An address and one way to sign in: a password, or a token for a server without one."""
+    return "server_url" in have and ("password" in have or "token" in have)
+
+
 def _plaid_configured(row: Row, have: Have) -> bool:
     """Keys plus at least one linked bank — the multi-bank list, or the legacy single token."""
     return bool(
@@ -535,6 +540,17 @@ _KINDS: tuple[ConnectorKind, ...] = (
         "YNAB",
         _needs(secrets=("access_token",)),
         secret_fields=_secrets("access_token"),
+        config_keys=("budget_id",),
+        moved_state=("budget_name", "budget_currency"),
+    ),
+    _kind(
+        # Import and two-way sync of an Actual Budget server (flag ``actual_budget_sync``). The
+        # address is a secret too: it can carry credentials, and an endpoint is one. No Lucius
+        # tools - the connector is driven from the Data sync tab.
+        "actual_budget",
+        "Actual Budget",
+        _actual_budget_configured,
+        secret_fields=_secrets("server_url", "password", "token", "encryption_password"),
         config_keys=("budget_id",),
         moved_state=("budget_name", "budget_currency"),
     ),

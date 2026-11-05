@@ -378,6 +378,7 @@ SHORT: dict[str, str] = {
     "lunch_money": "Transactions already aggregated in your Lunch Money account.",
     "lunch_flow": "Bank and investment accounts across 30+ countries, via OAuth.",
     "ynab": "Transactions already tracked in your YNAB budget.",
+    "actual_budget": "Import a budget from your Actual Budget server and keep it in step.",
     "enable_banking": "Bank accounts from the EU and UK, under PSD2.",
     "gocardless": "EU and UK bank accounts, for an existing GoCardless Bank Account Data login.",
     "yodlee": "Bank and card accounts, worldwide.",
@@ -477,6 +478,13 @@ LONG: dict[str, str] = {
         "plans, Lucius asks which one you mean, and the first time it books a YNAB account it "
         "asks which of your accounts that is. Categories are left for you or an Automation to "
         "set."
+    ),
+    "actual_budget": (
+        "Sign in to your own Actual Budget server and import a whole budget, then keep it and "
+        "this book in step on a schedule. You need the server's address and its password, or a "
+        "token if it does not take one; a budget that is end-to-end encrypted also needs its "
+        "encryption password. The address is kept like a password, since it can carry a login. "
+        "Not available on a hosted instance, and sign-in through OpenID has not been tested."
     ),
     "enable_banking": (
         "Pick your bank, authorise access at the bank's own site, and balances and transactions "

@@ -81,6 +81,7 @@ const DEVELOPERS: Record<string, { name: string; url: string }> = {
   lunch_money: { name: 'Lunch Money', url: 'https://lunchmoney.app' },
   lunch_flow: { name: 'Lunch Flow', url: 'https://lunchflow.app' },
   ynab: { name: 'YNAB', url: 'https://www.ynab.com' },
+  actual_budget: { name: 'Actual Budget', url: 'https://actualbudget.org' },
   enable_banking: {
     name: 'Enable Banking',
     url: 'https://enablebanking.com/docs/api/reference/',

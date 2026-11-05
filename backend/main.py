@@ -91,6 +91,7 @@ from backend.api._deps import require_auth
 from backend.api.account_linking_api import router as account_linking_router
 from backend.api.actions_api import router as actions_router
 from backend.api.activity import router as activity_router
+from backend.api.actual_budget_api import router as actual_budget_router
 from backend.api.alerts import router as alerts_router
 from backend.api.alpaca_api import router as alpaca_router
 from backend.api.artifacts import router as artifacts_router
@@ -1174,6 +1175,7 @@ app.include_router(ibkr_router)
 app.include_router(yodlee_router)
 app.include_router(lunch_money_router)
 app.include_router(ynab_router)
+app.include_router(actual_budget_router)
 app.include_router(import_runs_router)
 app.include_router(account_linking_router)
 app.include_router(integrations_router)
