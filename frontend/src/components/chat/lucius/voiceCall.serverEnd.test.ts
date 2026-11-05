@@ -68,6 +68,7 @@ import {
   startCall,
   useVoiceCall,
 } from './voiceCall'
+import { page, saveNeedsReload, takeReloadNotice } from './voicePagePolicy'
 import { renderHook } from '@testing-library/react'
 import { authFetch } from '../../../api/client'
 
@@ -131,7 +132,85 @@ describe('hanging up yourself', () => {
     })
     await startCall('s1')
     connect.mockRestore()
-    expect(state().problem?.message).toBe('could not establish signal connection')
+    expect(state().problem).toMatchObject({
+      kind: 'setup',
+      message: "Couldn't connect to your voice server. Check your internet and LiveKit settings.",
+      detail: 'could not establish signal connection',
+    })
+  })
+})
+
+describe('a page whose security policy refuses the voice server', () => {
+  function refused() {
+    return vi.spyOn(FakeRoom.prototype, 'connect').mockImplementation(async () => {
+      const refusal = new Event('securitypolicyviolation')
+      Object.assign(refusal, { effectiveDirective: 'connect-src' })
+      document.dispatchEvent(refusal)
+      throw new Error('could not establish signal connection: Failed to fetch')
+    })
+  }
+  afterEach(() => {
+    vi.restoreAllMocks()
+    sessionStorage.clear()
+  })
+
+  it('reloads once, and the reloaded page offers the call instead of an error', async () => {
+    const reload = vi.spyOn(page, 'reload').mockImplementation(() => {})
+    refused()
+    await startCall('s1')
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(state().problem).toBeNull()
+    expect(takeReloadNotice()).toBe(true)
+    expect(takeReloadNotice()).toBe(false) // shown once
+  })
+
+  it('says so plainly when a reload did not cure it, and never reloads again', async () => {
+    const reload = vi.spyOn(page, 'reload').mockImplementation(() => {})
+    refused()
+    await startCall('s1')
+    await startCall('s1')
+    expect(reload).toHaveBeenCalledTimes(1)
+    expect(state().problem).toMatchObject({
+      kind: 'other',
+      message: 'Your browser blocked the connection to your voice server.',
+      detail: 'could not establish signal connection: Failed to fetch',
+    })
+  })
+
+  it('may reload again after a call has connected', async () => {
+    const reload = vi.spyOn(page, 'reload').mockImplementation(() => {})
+    const connect = refused()
+    await startCall('s1')
+    connect.mockRestore()
+    await startCall('s1')
+    expect(state().phase).toBe('ringing')
+    await hangUp()
+    refused()
+    await startCall('s1')
+    expect(reload).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not reload for a connection that failed some other way', async () => {
+    const reload = vi.spyOn(page, 'reload').mockImplementation(() => {})
+    vi.spyOn(FakeRoom.prototype, 'connect').mockImplementationOnce(async () => {
+      throw new Error('could not establish signal connection: Failed to fetch')
+    })
+    await startCall('s1')
+    expect(reload).not.toHaveBeenCalled()
+  })
+})
+
+describe('saving a voice server', () => {
+  it('reloads only when the page would be left with the wrong policy', () => {
+    const cloud = 'wss://acme-x1.livekit.cloud'
+    expect(saveNeedsReload('', cloud)).toBe(false)
+    expect(saveNeedsReload(cloud, 'wss://other.livekit.cloud')).toBe(false)
+    expect(saveNeedsReload(cloud, cloud)).toBe(false)
+    expect(saveNeedsReload('', 'wss://voice.acme.test:7443')).toBe(true)
+    expect(saveNeedsReload(cloud, 'wss://voice.acme.test')).toBe(true)
+    expect(saveNeedsReload('wss://voice.acme.test', cloud)).toBe(true)
+    expect(saveNeedsReload('wss://voice.acme.test', 'wss://voice.acme.test:7443')).toBe(true)
+    expect(saveNeedsReload('wss://voice.acme.test', '  wss://voice.acme.test  ')).toBe(false)
   })
 })
 

@@ -24,3 +24,4 @@ class DeskEvent:
     text: str = ""
     ref: str = ""
     noun: str = ""
+    changes: bool = False  # a tool that can change the owner's data, or one we can't vouch for

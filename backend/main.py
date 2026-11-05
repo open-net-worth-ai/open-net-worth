@@ -1017,8 +1017,8 @@ from backend.core.spa_csp import spa_csp
 
 
 def _voice_csp_url() -> str | None:
-    """The owner's LiveKit server, for the page's ``connect-src`` — only while voice calls are on
-    and set up (``core.spa_csp``). Never fails the page: unreadable means no extra source."""
+    """The LiveKit server for the page's ``connect-src``, while the voice calls flag is on
+    (``core.spa_csp``). Never fails the page: unreadable means no extra source."""
     try:
         from backend.connectors.voice import service as voice_service
 

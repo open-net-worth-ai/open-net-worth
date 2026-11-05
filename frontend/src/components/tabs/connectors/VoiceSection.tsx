@@ -12,8 +12,16 @@ import {
   TextField,
   useSecretReveal,
 } from '../../ui'
+import { page, saveNeedsReload } from '../../chat/lucius/voicePagePolicy'
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
+import {
+  DEFAULT_VOICE_MODEL,
+  voiceCostLine,
+  voiceIdAfterChange,
+  voiceOptions,
+  voiceSpeaks,
+} from './voiceOptions'
 import { ChevronDown } from '../../../ui/icons'
 
 // Voice calls over /api/voice/config (the `voice_calls` flag). Two layers on a call: a fast
@@ -91,11 +99,10 @@ const STT_OPTIONS = [
   },
   { value: 'deepgram/nova-3', label: 'Deepgram Nova-3' },
 ]
-const TTS_OPTIONS = [
-  { value: 'cartesia/sonic-3', label: 'Cartesia Sonic 3' },
-  { value: 'cartesia/sonic-3.6', label: 'Cartesia Sonic 3.6' },
-  { value: 'elevenlabs/eleven_flash_v2_5', label: 'ElevenLabs Flash 2.5' },
-]
+
+function withVoiceModel(f: VoiceForm, tts_model: string) {
+  return { tts_model, tts_voice: voiceIdAfterChange(f.tts_model, tts_model, f.tts_voice) }
+}
 
 function formOf(c: VoiceConfig): VoiceForm {
   return {
@@ -186,6 +193,11 @@ export function VoiceSection() {
         setSaveErr(d.detail || 'Could not save the Voice calls settings.')
         return false
       }
+      // This page's security policy still names the old server: without a reload, Call is refused.
+      if (saveNeedsReload(cfg.livekit_url, form.livekit_url)) {
+        page.reload()
+        return true
+      }
       setForm((f) => f && { ...f, api_key: '', api_secret: '' })
       load()
       return true
@@ -257,8 +269,10 @@ export function VoiceSection() {
           ...f,
           language,
           stt_model: language !== 'en' && ENGLISH_ONLY_STT.has(f.stt_model) ? 'auto' : f.stt_model,
+          ...(voiceSpeaks(f.tts_model, language) ? {} : withVoiceModel(f, DEFAULT_VOICE_MODEL)),
         },
     )
+  const pickVoice = (model: string) => setForm((f) => f && { ...f, ...withVoiceModel(f, model) })
   const status = workerLine(cfg)
 
   return (
@@ -379,18 +393,18 @@ export function VoiceSection() {
           onChange={(e) => set('stt_model', e.target.value)}
         />
       </FormField>
-      <FormField label="Voice" htmlFor="conn-voice-tts">
+      <FormField label="Voice" htmlFor="conn-voice-tts" help={voiceCostLine(form.tts_model)}>
         <FieldSelect
           id="conn-voice-tts"
           value={form.tts_model}
-          options={TTS_OPTIONS}
-          onChange={(e) => set('tts_model', e.target.value)}
+          options={voiceOptions(form.language, form.tts_model)}
+          onChange={(e) => pickVoice(e.target.value)}
         />
       </FormField>
       <FormField
         label="Voice id"
         htmlFor="conn-voice-voice"
-        help="Optional: a voice id from the provider. Blank uses its default voice."
+        help="Optional: a voice id from the provider. Blank uses a default voice for this model."
       >
         <TextField
           id="conn-voice-voice"

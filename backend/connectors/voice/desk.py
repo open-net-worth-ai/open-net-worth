@@ -19,6 +19,7 @@ from typing import Optional
 
 from backend.ai import assistant, conversation, live_sessions, turns
 from backend.ai.tool_text import harness_note
+from backend.ai.tools.registry import may_change_something
 from backend.connectors.voice.events import DeskEvent, speakable
 from backend.core.chat_context_markers import HARNESS_NOTE_CLOSE, HARNESS_NOTE_OPEN
 
@@ -53,6 +54,14 @@ SHOWN_NOTE = (
 # How long a request waits for a turn the owner started some other way (typing) to finish.
 _BUSY_WAIT_S = 120.0
 
+# They corrected the request before its answer was spoken, so it was never read aloud: otherwise
+# the transcript says they heard it, and a "yes" could land on a question it asked (owner,
+# 2026-11-05).
+UNHEARD_NOTE = (
+    "Your previous answer on this call was not read aloud, because the owner corrected or "
+    "replaced that request first: they have not heard it. Don't refer back to it as if they had, "
+    "and don't treat anything they say now as a reply to a question in it."
+)
 # Turns a call started itself (its requests, the lines it records). The call follows every
 # OTHER turn on its conversation — something typed during the call, an approved change's
 # continuation — and reads the answer aloud (owner, 2026-11-03).
@@ -80,6 +89,7 @@ def translate(raw: dict) -> Optional[DeskEvent]:
             speakable(display.get("label") or ""),
             ref=str(raw.get("id") or ""),
             noun=speakable(display.get("noun") or ""),
+            changes=may_change_something(str(raw.get("name") or "")),
         )
     if kind == "tool_done":
         return DeskEvent("tool_done", ref=str(raw.get("id") or ""))
@@ -123,7 +133,13 @@ def relay_note(understood: str) -> str:
 
 
 async def ask(
-    session_id: str, said: str, *, understood: str = "", shown: bool = False, model_ref: str = ""
+    session_id: str,
+    said: str,
+    *,
+    understood: str = "",
+    shown: bool = False,
+    model_ref: str = "",
+    unheard: bool = False,
 ) -> AsyncIterator[DeskEvent]:
     """Run ``said`` (the owner's own transcribed words) as their next message on
     ``session_id``, with the front model's reading as a relay note; yield the turn's events.
@@ -141,6 +157,8 @@ async def ask(
         {"type": "text", "text": harness_note(SHOWN_NOTE) if shown else said},
         {"type": "text", "text": relay_note(understood or said)},
     ]
+    if unheard:
+        content.append({"type": "text", "text": harness_note(UNHEARD_NOTE)})
 
     def make_events(turn_id: str):
         return conversation.stream_turn(
