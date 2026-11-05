@@ -98,6 +98,10 @@ as it was before the upgrade.**
 2. If it fails again, go back to the version you were using before — your book still works
    with it — and [report the problem](reporting-a-problem.md), including the message.
 
+**If it runs as a boot service with `--auto-upgrade`**, it keeps restarting into this same error,
+and it can't upgrade itself while it does. Run `onw autostart stop`. Once a fixed version is out,
+run `onw upgrade`, then `onw start --autostart --auto-upgrade`.
+
 **If the message also says `the automatic restore ALSO failed`**, it names the safety copy to
 use. Restore it by hand:
 
