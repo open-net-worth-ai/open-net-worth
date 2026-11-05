@@ -5,9 +5,11 @@ Thin router over ``db.ActualBudgetConfigStore`` and ``services.actual_sync``, al
   * ``GET /api/actual-budget/status``  - the public config. Never a secret: only ``has_<secret>``
     flags and the server's host with any userinfo stripped; ``available`` is false behind the
     gateway.
-  * ``PUT /api/actual-budget/config``  - set the server address and sign-in, enable or disable.
-    A blank secret leaves the saved one (write-only discipline); the operator reads a secret back
-    through ``GET /api/connectors/actual_budget/secret/<name>``.
+  * ``PUT /api/actual-budget/config``  - set the server address and sign-in, pick a budget,
+    enable or disable. A blank secret leaves the saved one (write-only discipline); the operator
+    reads a secret back through ``GET /api/connectors/actual_budget/secret/<name>``. A budget
+    pick is VALIDATED live against the sign-in's budget list (the way ``/api/ynab/config``
+    validates one), and its name and currency are cached; a blank pick clears it.
   * ``GET /api/actual-budget/budgets`` - the budgets the saved sign-in can see, for a picker.
 
 Refused behind the gateway (``core.config.gateway_active``): a hosted instance must not reach
@@ -41,6 +43,8 @@ class ActualBudgetConfigUpdate(BaseModel):
     password: Optional[str] = None
     token: Optional[str] = None
     encryption_password: Optional[str] = None
+    # The budget's cloud file id. Blank clears the pick; omitted leaves it.
+    budget_id: Optional[str] = None
     enabled: Optional[bool] = None
 
 
@@ -64,11 +68,12 @@ async def actual_budget_budgets():
 
 
 @router.put("/api/actual-budget/config")
-def update_actual_budget_config(body: ActualBudgetConfigUpdate):
+async def update_actual_budget_config(body: ActualBudgetConfigUpdate):
     """A fresh sign-in that makes the connector complete enables it unless ``enabled`` says
-    otherwise. Returns the public status."""
+    otherwise. The sign-in is saved FIRST, so a budget pick in the same request is checked against
+    it. Returns the public status."""
     store = ActualBudgetConfigStore()
-    changes = body.model_dump(exclude={"enabled"})
+    changes = body.model_dump(exclude={"enabled", "budget_id"})
     if body.enabled is not None:
         changes["enabled"] = body.enabled
     try:
@@ -76,6 +81,22 @@ def update_actual_budget_config(body: ActualBudgetConfigUpdate):
         store.update(changes)
         if body.enabled is None and not was_configured and store.is_configured():
             store.update({"enabled": True})
+        if body.budget_id is not None:
+            await _pick_budget(store, body.budget_id.strip())
     except OpenNetWorthError as exc:
         raise _refuse(exc) from exc
     return store.public()
+
+
+async def _pick_budget(store: ActualBudgetConfigStore, chosen: str) -> None:
+    if not chosen:
+        store.update({"budget_id": ""})
+        return
+    budget = await asyncio.to_thread(actual_sync.resolve_budget, chosen, store)
+    store.update(
+        {
+            "budget_id": budget["id"],
+            "budget_name": budget["name"],
+            "budget_currency": budget.get("currency"),
+        }
+    )

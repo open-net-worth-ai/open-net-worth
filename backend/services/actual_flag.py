@@ -19,13 +19,18 @@ def on() -> bool:
     return enabled(ACTUAL_FLAG)
 
 
+def require() -> None:
+    """Raise ``NotFoundError`` while the flag is off."""
+    if not on():
+        raise NotFoundError("Actual Budget import and sync are turned off.")
+
+
 def gated(fn: F) -> F:
     """``fn``, refused with ``NotFoundError`` while the flag is off."""
 
     @functools.wraps(fn)
     def call(*args, **kwargs):
-        if not on():
-            raise NotFoundError("Actual Budget import and sync are turned off.")
+        require()
         return fn(*args, **kwargs)
 
     return call  # type: ignore[return-value]

@@ -402,6 +402,13 @@ async def lifespan(app: FastAPI):
 
     sweep_stale_exports()
 
+    try:
+        from backend.services.actual_sync import sweep_leftovers
+
+        sweep_leftovers()
+    except Exception:
+        _log.exception("Actual Budget leftover sweep failed (non-fatal)")
+
     # Boot sweep (B20): the parse-progress registry is in-process and ephemeral — a restart
     # (crash, `kill -9`, redeploy) mid-parse leaves no live entry to ask, so any statement
     # still stamped `parsing` from before THIS boot can never actually finish. Flip it to

@@ -261,9 +261,107 @@ def test_budgets_runs_the_seam_off_the_event_loop(client, store, monkeypatch):
     assert r.json() == {"budgets": [{"id": "b1", "name": "ACME Home", "currency": "USD"}]}
 
 
-def test_budgets_has_a_typed_answer_until_the_client_lands(client):
+def test_budgets_without_a_saved_sign_in_is_a_plain_422(client):
     r = client.get("/api/actual-budget/budgets")
-    assert r.status_code == 409 and "not available" in r.json()["detail"].lower()
+    assert r.status_code == 422 and "password or token" in r.json()["detail"]
+
+
+BUDGETS = [
+    {"id": "f1", "name": "ACME Home", "currency": None, "encrypted": False},
+    {"id": "f2", "name": "ACME Vault", "currency": None, "encrypted": True},
+]
+
+
+@pytest.fixture
+def server(monkeypatch):
+    """The Actual client seam, faked: a fixed budget list and a currency read from the copy."""
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+
+    from backend.services.actual_sync import client as actual_client
+
+    seen = {"signed_in_with": []}
+
+    def list_budgets(store=None):
+        seen["signed_in_with"].append(ActualBudgetConfigStore().credentials()["password"])
+        return list(BUDGETS)
+
+    @contextmanager
+    def open_copy(store, budget_id):
+        if seen.get("open_error"):
+            raise seen["open_error"]
+        yield SimpleNamespace(currency="EUR")
+
+    monkeypatch.setattr(actual_client, "list_budgets", list_budgets)
+    monkeypatch.setattr(actual_client, "open_copy", open_copy)
+    return seen
+
+
+def test_put_config_picks_a_budget_validated_live_and_caches_its_name_and_currency(
+    client, store, server
+):
+    r = client.put("/api/actual-budget/config", json={**SECRETS, "budget_id": " f2 "})
+    assert r.status_code == 200
+    body = r.json()
+    assert (body["budget_id"], body["budget_name"], body["budget_currency"]) == (
+        "f2",
+        "ACME Vault",
+        "EUR",
+    )
+    assert server["signed_in_with"] == [SECRETS["password"]]
+    _no_secret_in(body)
+    assert store.budget_id() == "f2"
+
+
+def test_put_config_refuses_a_budget_the_sign_in_cannot_see(client, store, server):
+    store.update({"budget_id": "f1", "budget_name": "ACME Home"})
+    r = client.put("/api/actual-budget/config", json={**SECRETS, "budget_id": "nope"})
+    assert r.status_code == 422
+    detail = r.json()["detail"]
+    assert "ACME Home" in detail and "f2" in detail
+    assert store.budget_id() == "f1"
+    assert store.get()["budget_name"] == "ACME Home"
+    _no_secret_in(detail)
+
+
+def test_put_config_cannot_read_the_currency_still_picks(client, store, server):
+    from backend.core.errors import ExternalServiceError
+
+    server["open_error"] = ExternalServiceError("This budget needs refreshing in Actual first.")
+    r = client.put("/api/actual-budget/config", json={**SECRETS, "budget_id": "f1"})
+    assert r.status_code == 200
+    assert r.json()["budget_id"] == "f1" and r.json()["budget_currency"] is None
+
+
+def test_put_config_blank_budget_clears_the_pick_and_omitted_keeps_it(client, store, server):
+    client.put("/api/actual-budget/config", json={**SECRETS, "budget_id": "f1"})
+    assert (
+        client.put("/api/actual-budget/config", json={"enabled": True}).json()["budget_id"] == "f1"
+    )
+    cleared = client.put("/api/actual-budget/config", json={"budget_id": ""}).json()
+    assert cleared["budget_id"] is None and cleared["budget_name"] is None
+    assert cleared["budget_currency"] is None
+
+
+def test_put_config_saves_the_sign_in_before_checking_the_budget(client, store, server):
+    r = client.put("/api/actual-budget/config", json={**SECRETS, "budget_id": "f1"})
+    assert r.status_code == 200
+    assert server["signed_in_with"] == ["PASSWORD-SENTINEL"]
+
+
+def test_put_config_budget_pick_is_refused_behind_the_gateway(client, store, behind_gateway):
+    r = client.put("/api/actual-budget/config", json={"budget_id": "f1"})
+    assert r.status_code == 409
+
+
+def test_the_seam_itself_checks_the_flag_and_the_gateway(store, behind_gateway):
+    from backend.services import actual_sync
+
+    with pytest.raises(ConflictError):
+        actual_sync.list_budgets()
+    with pytest.raises(ConflictError):
+        with actual_sync.open_copy(None, "f1"):
+            pass
 
 
 ROUTES = [
