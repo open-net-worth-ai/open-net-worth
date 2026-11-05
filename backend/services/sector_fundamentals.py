@@ -283,9 +283,13 @@ _LOWER_IS_BETTER = frozenset(
     }
 )
 
-_PCT_METRICS = frozenset(
+# Ratios by the time they reach format_metric (1.06 is 106%) — a growth or ROE figure
+# above 1 is real, so its size says nothing about its unit.
+_RATIO_PCT_METRICS = frozenset(
     {"dividend_yield", "eps_growth", "revenue_growth", "profit_margin", "return_on_equity"}
 )
+# Yahoo's debtToEquity is already a percent (84.3 is debt at 0.84x equity).
+_PERCENT_METRICS = frozenset({"debt_to_equity"})
 _MONEY_METRICS = frozenset({"eps"})
 
 
@@ -298,9 +302,11 @@ def format_metric(metric_id: str, n: float, currency: str = "USD") -> str:
     """Server-side display string so the frontend does not re-derive format rules."""
     from backend.services.portfolio_brief import _CURRENCY_SYMBOL
 
-    if metric_id in _PCT_METRICS:
-        pct = n * 100.0 if abs(n) <= 1.0 else n
+    if metric_id in _RATIO_PCT_METRICS:
+        pct = n * 100.0
         return f"{pct:.1f}%" if metric_id != "dividend_yield" else f"{pct:.2f}%"
+    if metric_id in _PERCENT_METRICS:
+        return f"{n:.1f}%"
     if metric_id in _MONEY_METRICS:
         sym = _CURRENCY_SYMBOL.get((currency or "USD").upper()) or (currency or "USD")
         sign = "-" if n < 0 else ""

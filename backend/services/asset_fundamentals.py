@@ -17,7 +17,9 @@ from backend.services.asset_detail import fundamentals_snapshot
 
 _log = logging.getLogger(__name__)
 
-PROMPT_VERSION = "v2-lean"
+# v3: rows now show percents above 100% correctly, so paragraphs quoting the old
+# figures must not survive on a matching hash (it reads raw numbers, not the display).
+PROMPT_VERSION = "v3-percent-units"
 _LEAN_BUY = 0.25
 _LEAN_SELL = -0.25
 
