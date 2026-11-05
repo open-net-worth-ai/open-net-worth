@@ -10744,5 +10744,11 @@
     },
     "type": "object",
     "required": []
+  },
+  "read_screen": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object",
+    "required": []
   }
 }

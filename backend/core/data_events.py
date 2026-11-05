@@ -54,6 +54,18 @@ def publish(domains: Iterable[str]) -> None:
             pass
 
 
+def publish_request(event: dict) -> None:
+    """Fan a request to every open app (``event["type"]`` names it; see ``screen_read``). Same
+    stream, no seq: it is not a write, and an app that missed it simply doesn't answer."""
+    with _lock:
+        targets = list(_subscribers)
+    for loop, queue in targets:
+        try:
+            loop.call_soon_threadsafe(_offer, queue, event)
+        except RuntimeError:
+            pass
+
+
 def _offer(queue: asyncio.Queue, event: dict) -> None:
     # A client too slow to drain 64 events loses the OLDEST, never the newest: the newest is
     # the one that says what to refetch now, and any refetch covers everything older.

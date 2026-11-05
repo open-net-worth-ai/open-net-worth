@@ -62,6 +62,14 @@ this drop?"* while looking at a chart is enough.
   Skills and Automations, among others — send structured details about the rows and figures on
   them. Other screens, including Settings, send their visible text.
 
+Lucius can also look again on his own when he needs to: on a voice call, where no message carries
+your screen, or if the page may have changed since you sent yours. The chat shows **Read your
+screen** when he does. The same switch governs this, on each device separately. He only looks at an
+app that is in view and showing this conversation. If you have the conversation open on more than
+one device, he reads the one running the call, otherwise the one you're using. With the switch off
+on that device, he tells you he can't see the screen and doesn't try your other devices. Telegram
+and Automations can't look at your screen, and neither can the public demo.
+
 **Never sent:** anything in a password, API key, token, one-time code, PIN, CVV, private key or
 recovery phrase field, and any area the app marks as secret.
 

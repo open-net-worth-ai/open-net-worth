@@ -7,6 +7,7 @@ import type { AssetDoc, OwnedAsset } from '../../../types/assets'
 import { Button, Modal } from '../../ui'
 import { DocumentPages } from '../../vault/DocumentPages'
 import { NoPreview } from '../../vault/NoPreview'
+import { PrivateContent } from '../../vault/PrivateContent'
 import { TablePreview } from '../../vault/TablePreview'
 import { formatSize, isPdf, isTable } from '../../vault/vaultFormat'
 import '../../vault/vault.css'
@@ -28,7 +29,8 @@ function asVaultItem(a: OwnedAsset, doc: AssetDoc): VaultItem {
     size_bytes: doc.size_bytes ?? null,
     added_at: doc.added_on,
     year: null,
-    private: false,
+    // "Lucius can't read" IS Private: the same guard, here as in every model read.
+    private: !doc.lucius_readable,
     file_url: docFileUrl(doc),
     asset_id: a.id,
     asset_name: a.name,
@@ -87,7 +89,9 @@ export function AttachmentViewer({ a, doc, onClose }: AttachmentViewerProps) {
       }
     >
       <div className="as-viewer">
-        <Preview a={a} doc={doc} />
+        <PrivateContent hidden={!doc.lucius_readable}>
+          <Preview a={a} doc={doc} />
+        </PrivateContent>
       </div>
     </Modal>
   )

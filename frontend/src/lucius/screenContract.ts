@@ -326,11 +326,12 @@ export function getScreenSnapshot(visibleIds?: Set<string>): ScreenSnapshotResul
   // ── Modal occlusion ───────────────────────────────────────────────────────
   // An open dialog is what the user is focused on; page behind is occluded.
   // Treat the dialog as the primary content region on top.
-  const modalEl =
-    [...document.querySelectorAll('[data-ctx-modal], [role="dialog"]')].find(
-      (el) => !isIgnored(el),
-    ) ?? null
-  if (modalEl) contentEls = [modalEl, ...contentEls]
+  // Dialogs stack in document order (each portals to the end of <body>): the last is on top.
+  const openDialogs = [...document.querySelectorAll('[data-ctx-modal], [role="dialog"]')]
+    .filter((el) => !isIgnored(el))
+    .reverse()
+  const modalEl = openDialogs[0] ?? null
+  contentEls = [...openDialogs, ...contentEls]
 
   // ── View state ────────────────────────────────────────────────────────────
   const states: string[] = [...document.querySelectorAll('[data-ctx-state]')]
@@ -448,6 +449,9 @@ export function getScreenSnapshot(visibleIds?: Set<string>): ScreenSnapshotResul
     raw +=
       (raw ? '\n\n' : '') +
       'A DIALOG IS OPEN — this is what the user is focused on right now; the rest of the screen is behind it.'
+    // Here, ahead of any rows: a list behind a dialog must not push out what the dialog says.
+    const dialogText = clean(openDialogs.map((el) => filteredText(el)).join('\n')).slice(0, 1600)
+    if (dialogText) raw += `\nThe dialog says (top dialog first):\n${dialogText}`
   }
 
   if (cView.length) {
@@ -495,7 +499,10 @@ export function getScreenSnapshot(visibleIds?: Set<string>): ScreenSnapshotResul
     // Collect visible text while excluding opted-out subtrees. We walk the
     // content region's text nodes rather than innerText of the whole element,
     // so [data-ctx-ignore]/[role=tooltip]/[role=menu] subtrees are excluded.
-    const visibleText = contentEls.map((region) => filteredText(region)).join('\n')
+    const visibleText = contentEls
+      .filter((region) => !openDialogs.includes(region))
+      .map((region) => filteredText(region))
+      .join('\n')
     if (visibleText) {
       raw +=
         (raw ? '\n\n' : '') +

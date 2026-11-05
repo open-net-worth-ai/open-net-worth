@@ -212,6 +212,7 @@ READ_ONLY_TOOLS = frozenset(
         "get_returns",
         "get_risk_signals",
         "get_screen_detail",
+        "read_screen",
         "show_guide",  # lights up a control in the open app; writes nothing
         "get_spending_breakdown",
         "get_spending_summary",

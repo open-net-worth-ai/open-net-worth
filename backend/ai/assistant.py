@@ -1056,7 +1056,11 @@ def load_screen_tools(session_id: str, screen_title: Optional[str]) -> frozenset
     newly loaded (empty when the screen has none or they are already loaded)."""
     from backend.ai.tools._screen_tools import tools_for_screen
 
-    wanted = tools_for_screen(screen_title)
+    return load_session_tools(session_id, tools_for_screen(screen_title))
+
+
+def load_session_tools(session_id: str, wanted: frozenset[str]) -> frozenset[str]:
+    """Add ``wanted`` to this session's sticky offer; returns the names newly loaded."""
     if not wanted:
         return frozenset()
     entry = _session_meta_entry(session_id) or {}
@@ -1077,6 +1081,12 @@ def session_brief(session_id: str) -> Tuple[Optional[str], str]:
         return (None, "")
     iid = (entry.get("brief_instrument_id") or "").strip()
     return (iid or None, entry.get("brief_label") or "")
+
+
+def session_channel(session_id: str) -> str:
+    """The chat channel (Telegram, ...) that owns this conversation; '' for the app's own."""
+    entry = _session_meta_entry(session_id)
+    return (entry.get("channel") or "") if entry is not None else ""
 
 
 def session_screen_handles(session_id: str) -> list:
@@ -3855,8 +3865,10 @@ async def _run_turn(
     # Reset the per-turn screen-handle fetch budget (get_screen_detail is capped per turn so a
     # runaway loop can't hammer the network). Co-located with the session binding — same boundary.
     from backend.services import screen_context as _screen_context
+    from backend.services import screen_read as _screen_read
 
     _screen_context.reset_fetch_budget()
+    _screen_read.reset_read_budget()
     # Open a fresh artifact scope for this turn: stamps create_artifact calls with the
     # owning session and enforces the per-turn artifact cap (services/artifacts.py).
     from backend.services import artifacts as _artifacts_service

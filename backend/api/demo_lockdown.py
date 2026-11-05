@@ -68,6 +68,7 @@ _LOCKED: tuple[_Rule, ...] = (
     ),
     *_rules(
         _WRITE,
+        r"^/api/screen-reads/[^/]+$",
         r"^/api/model-config(/.*)?$",
         r"^/api/preferred-models$",
         r"^/api/auth/(change|remove)-password$",

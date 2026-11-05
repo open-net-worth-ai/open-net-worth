@@ -36,13 +36,7 @@ from backend.services.mentions import (
     resolve_mentions,
     session_brief_block,
 )
-from backend.services.screen_context import (
-    MAX_SCREEN_COMMAND_PARAMS,
-    MAX_SCREEN_COMMANDS,
-    MAX_SCREEN_HANDLES,
-    SCREEN_COMMAND_NAME_RE,
-    format_screen_context,
-)
+from backend.services.screen_context import format_screen_context, session_manifests
 from backend.services.slash_command import resolve_slash_skills
 
 logger = logging.getLogger(__name__)
@@ -582,23 +576,9 @@ async def chat(req: ChatRequest, request: Request):
             screen_block = format_screen_context(req.screen)
             if screen_block:
                 new_messages[-1] = _merge_mention_context(new_messages[-1], screen_block)
-            # Stash caps: outer lists AND each command's params list — a hostile client
-            # can't bloat the session index or the per-call validation walk. The name
-            # regex gates the STASH too, so a command the prose renderer would drop is
-            # equally un-invocable via run_screen_command (one invariant, two doors).
-            _cmds = []
-            for c in req.screen.commands:
-                if len(_cmds) >= MAX_SCREEN_COMMANDS:
-                    break
-                if not SCREEN_COMMAND_NAME_RE.match(c.name or ""):
-                    continue
-                d = c.model_dump()
-                d["params"] = (d.get("params") or [])[:MAX_SCREEN_COMMAND_PARAMS]
-                _cmds.append(d)
+            _handles, _cmds = session_manifests(req.screen)
             assistant.upsert_session_meta(
-                session_id,
-                screen_handles=[h.model_dump() for h in req.screen.handles][:MAX_SCREEN_HANDLES],
-                screen_commands=_cmds,
+                session_id, screen_handles=_handles, screen_commands=_cmds
             )
             # The screen's own tools (Plan → Budget's envelope/cap tools) join the offer.
             assistant.load_screen_tools(session_id, req.screen.title)

@@ -37,6 +37,7 @@ async def _event_stream(request: Request):
                     yield ": ping\n\n"
                 continue
             idle = 0.0
+            # An event naming its own type (``publish_request``) keeps it.
             yield f"data: {json.dumps({'type': 'data_changed', **event})}\n\n"
 
 

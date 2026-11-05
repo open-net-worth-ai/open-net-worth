@@ -93,6 +93,7 @@ import {
 } from './hooks/serverState'
 import { useConnectorAttentionCount } from './components/tabs/connectors/useConnectors'
 import { VisibleIdsProvider } from './lucius/visibleIds'
+import { ScreenReadResponder } from './components/chat/lucius/ScreenReadResponder'
 import { LuciusDock } from './components/chat/lucius/LuciusDock'
 import { ArtifactPanelProvider } from './state/artifactPanel'
 import { DockArtifactPanel } from './components/tabs/lucius/DockArtifactPanel'
@@ -1388,6 +1389,7 @@ function RouterShellInner() {
               }
             />
             <VisibleIdsProvider>
+              <ScreenReadResponder />
               <PaletteBridge
                 requestOpenRef={chatRequestOpenRef}
                 switchConversationRef={chatSwitchConversationRef}

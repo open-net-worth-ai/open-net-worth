@@ -40,6 +40,10 @@ VOICE_NOTE = (
 SMALL_TALK_NOTE = (
     "Said on a voice call and answered by the voice assistant directly, without a lookup."
 )
+SCREEN_NOTE = (
+    "A call sends no view of their screen: if they mean what they're looking at, call "
+    "read_screen, and never guess."
+)
 # A request whose words are already in the chat (``record_said``): the message carries this
 # instead of repeating them, so the owner's bubble shows once.
 SHOWN_NOTE = (
@@ -118,7 +122,7 @@ def relay_note(understood: str) -> str:
     reading = understood.replace(HARNESS_NOTE_OPEN, "").replace(HARNESS_NOTE_CLOSE, "")
     reading = " ".join(reading.replace("«", "").replace("»", "").split())[:600]
     return harness_note(
-        f"{VOICE_NOTE} The voice assistant relayed this message and took it to mean: "
+        f"{VOICE_NOTE} {SCREEN_NOTE} The voice assistant relayed this message and took it to mean: "
         f"\u00ab{reading}\u00bb. That reading is the assistant's, not the owner's: act on what the "
         "owner actually said, and if the reading asks for more than their words do, ask them "
         "first."
@@ -136,6 +140,10 @@ async def ask(
         yield DeskEvent("error", "Lucius is still busy with another message in this conversation.")
         yield DeskEvent("end")
         return
+    # A call is a turn with no screen: nothing from an earlier look stays invocable, and the one
+    # way to look is on offer without a find_tools round while someone waits on the line.
+    assistant.upsert_session_meta(session_id, screen_handles=[], screen_commands=[])
+    assistant.load_session_tools(session_id, frozenset({"read_screen"}))
     content = [
         {"type": "text", "text": harness_note(SHOWN_NOTE) if shown else said},
         {"type": "text", "text": relay_note(understood or said)},

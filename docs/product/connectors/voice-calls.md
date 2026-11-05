@@ -46,6 +46,11 @@ permission. When one waits for you, he says so, and the approval card appears in
 screen. Tap **Approve** and he tells you on the call when it's done.
 Your [permission settings](../lucius/permissions.md) apply exactly as they do in the chat.
 
+**He can look at your screen.** Ask *"what am I looking at?"* and he reads the screen open in the
+app, under the same [Screen awareness](../lucius/mentions.md#screen-awareness--lucius-sees-what-youre-looking-at)
+switch as the chat. On a phone, fold the full-screen call away first, so there's a page for him to
+read. If he can't see one, he says so.
+
 You only ever talk to Lucius: the front voice speaks as him, so you'll hear *"let me check"*,
 never *"let me ask Lucius"*.
 

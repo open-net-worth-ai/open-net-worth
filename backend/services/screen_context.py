@@ -64,6 +64,25 @@ def consume_fetch_budget() -> bool:
     return True
 
 
+def session_manifests(snapshot: ScreenSnapshot) -> tuple[list[dict], list[dict]]:
+    """The handle + command manifests to stash for ``get_screen_detail``/``run_screen_command``.
+
+    Caps: outer lists AND each command's params list, so a hostile client can't bloat the session
+    index or the per-call validation walk. The name regex gates the stash too, so a command the
+    prose renderer would drop is equally un-invocable (one invariant, two doors).
+    """
+    commands: list[dict] = []
+    for c in snapshot.commands:
+        if len(commands) >= MAX_SCREEN_COMMANDS:
+            break
+        if not SCREEN_COMMAND_NAME_RE.match(c.name or ""):
+            continue
+        d = c.model_dump()
+        d["params"] = (d.get("params") or [])[:MAX_SCREEN_COMMAND_PARAMS]
+        commands.append(d)
+    return [h.model_dump() for h in snapshot.handles][:MAX_SCREEN_HANDLES], commands
+
+
 def _sanitize(s: str) -> str:
     """Thin re-export of ``core.untrusted.sanitize_untrusted`` for local callers.
 

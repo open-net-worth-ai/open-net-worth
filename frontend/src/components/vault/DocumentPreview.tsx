@@ -6,6 +6,7 @@ import { DocumentPages } from './DocumentPages'
 import { DocumentReader } from './DocumentReader'
 import { ImagePreview } from './ImagePreview'
 import { NoPreview } from './NoPreview'
+import { PrivateContent } from './PrivateContent'
 import { TablePreview } from './TablePreview'
 import { TextPreview } from './TextPreview'
 import { isImage, isPdf, isTable, isText } from './vaultFormat'
@@ -52,11 +53,21 @@ export function DocumentPreview({
   /** Selector of the scrolling container to read a PDF inline in (the import's file pane). */
   pdfReaderIn?: string
 }) {
-  if (isPdf(item)) return <PdfPreview item={item} readerIn={pdfReaderIn} />
-  if (isTable(item)) return <TablePreview key={item.id} item={item} highlightRow={highlightRow} />
-  if (item.kind === 'artifact' && onOpenArtifact)
-    return <ArtifactPreview item={item} onOpen={onOpenArtifact} />
-  if (isImage(item) && item.file_url) return <ImagePreview item={item} src={item.file_url} />
-  if (isText(item) && item.file_url) return <TextPreview key={item.id} item={item} />
-  return <NoPreview item={item} />
+  return (
+    <PrivateContent hidden={item.private}>
+      {isPdf(item) ? (
+        <PdfPreview item={item} readerIn={pdfReaderIn} />
+      ) : isTable(item) ? (
+        <TablePreview key={item.id} item={item} highlightRow={highlightRow} />
+      ) : item.kind === 'artifact' && onOpenArtifact ? (
+        <ArtifactPreview item={item} onOpen={onOpenArtifact} />
+      ) : isImage(item) && item.file_url ? (
+        <ImagePreview item={item} src={item.file_url} />
+      ) : isText(item) && item.file_url ? (
+        <TextPreview key={item.id} item={item} />
+      ) : (
+        <NoPreview item={item} />
+      )}
+    </PrivateContent>
+  )
 }

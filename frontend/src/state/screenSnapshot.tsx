@@ -41,6 +41,15 @@ export function ScreenSnapshotProvider({ children }: { children: ReactNode }) {
     () => localStorage.getItem(ENABLED_KEY) !== 'off', // default ON; transparent via the panel
   )
 
+  // The toggle lives per browser, so another window turning it off applies here too, at once.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === ENABLED_KEY) setEnabledState(e.newValue !== 'off')
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
   const setEnabled = useCallback((b: boolean) => {
     setEnabledState(b)
     try {
