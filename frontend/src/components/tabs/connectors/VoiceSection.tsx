@@ -5,8 +5,6 @@ import {
   FormField,
   ModelPicker,
   PasswordField,
-  Select,
-  type SelectProps,
   Stack,
   Text,
   TextField,
@@ -22,7 +20,7 @@ import {
   voiceOptions,
   voiceSpeaks,
 } from './voiceOptions'
-import { ChevronDown } from '../../../ui/icons'
+import { FieldSelect, VoicePicker } from './VoicePicker'
 
 // Voice calls over /api/voice/config (the `voice_calls` flag). Two layers on a call: a fast
 // FRONT voice holds the conversation, Lucius does the work behind it (ADR
@@ -132,17 +130,6 @@ function workerLine(c: VoiceConfig): { tone: 'faint' | 'warn' | 'good'; text: st
   if (!c.ready)
     return { tone: 'faint', text: 'Fill in your LiveKit project below to start taking calls.' }
   return { tone: 'faint', text: 'Paused. Use Resume on the connector card.' }
-}
-
-/** A select with the model picker's own chevron beside it, so every field here reads as one kind
- *  of dropdown — the browser's chevron next to the picker's looked like two (owner, 2026-11-03). */
-function FieldSelect(props: SelectProps) {
-  return (
-    <div className="vc-select-wrap">
-      <Select {...props} className="vc-select" />
-      <ChevronDown size={14} className="vc-select-chev" aria-hidden="true" />
-    </div>
-  )
 }
 
 export function VoiceSection() {
@@ -393,7 +380,7 @@ export function VoiceSection() {
           onChange={(e) => set('stt_model', e.target.value)}
         />
       </FormField>
-      <FormField label="Voice" htmlFor="conn-voice-tts" help={voiceCostLine(form.tts_model)}>
+      <FormField label="Voice model" htmlFor="conn-voice-tts" help={voiceCostLine(form.tts_model)}>
         <FieldSelect
           id="conn-voice-tts"
           value={form.tts_model}
@@ -401,17 +388,12 @@ export function VoiceSection() {
           onChange={(e) => pickVoice(e.target.value)}
         />
       </FormField>
-      <FormField
-        label="Voice id"
-        htmlFor="conn-voice-voice"
-        help="Optional: a voice id from the provider. Blank uses a default voice for this model."
-      >
-        <TextField
-          id="conn-voice-voice"
-          value={form.tts_voice}
-          onChange={(e) => set('tts_voice', e.target.value)}
-        />
-      </FormField>
+      <VoicePicker
+        key={form.tts_model}
+        model={form.tts_model}
+        voiceId={form.tts_voice}
+        onChange={(voiceId) => set('tts_voice', voiceId)}
+      />
 
       {saveErr && (
         <Text size="xs" tone="bad">

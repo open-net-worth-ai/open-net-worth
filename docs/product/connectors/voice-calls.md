@@ -92,7 +92,7 @@ nobody is. While he looks something up it moves faster and the line under it say
 
 | Where | What you see |
 |---|---|
-| **On a phone** | The call starts small, as a strip above the message box, so you keep your place. Its expand button opens the full call screen. The arrow at the top (or **Type**) puts that away again so you can read the chat (approval cards included) or type, while you keep talking. |
+| **On a phone** | Pressing **Call** in the Lucius chat opens the full call screen. The arrow at the top (or **Type**) folds it into a strip above the message box so you can read the chat (approval cards included) or type, while you keep talking. The strip's expand button opens the full screen again. |
 | **On a phone, away from the Lucius tab** | A small round button sits above the tab bar. With no call on it shows **voice bars**: tap it to call, or to go to Voice calls in Connectors if calls aren't set up. During a call it grows into a small pill with the moving **orb** and the time, or what's going on instead (*Working…*, *Poor connection*, *Reconnecting…*): tap it to open the full call screen, where **End** is. |
 | **In the side panel or the Lucius tab** | The call sits just above the message box — a slim strip on a wide screen — so the chat above stays readable and its cards tappable. |
 | **The floating Lucius button** | It has a **Call** button (four voice bars) beside **Ask Lucius**: press it and the call happens right in the button. It grows to show the orb, the time, **Mute** and **End**, and shrinks back when you hang up. Press the time to open the chat. On a poor connection it says so and shows the signal bars. If Lucius needs your approval it says **Needs approval**; press **Review** to see the card. |
@@ -131,7 +131,8 @@ works; from another device the app must be reachable over HTTPS (see
 | **Lucius on calls** | The model Lucius answers with during a call. Unset, he uses the conversation's own model. A faster one keeps the waits short. |
 | **Language** | What you speak on calls: English, Vietnamese, Chinese, Japanese, Korean, Hindi, Indonesian, Spanish, French, German or Portuguese. Lucius hears it, his greeting and check-ins are in it, and his voice speaks it. |
 | **Speech to text** | Which service turns your voice into text. *Automatic* lets LiveKit pick the best one for your language; *AssemblyAI Universal (English)* hears English only, so another language moves you to Automatic. |
-| **Voice** and **Voice id** | Which service speaks, what it costs, and which of its voices (blank = a default voice for that model). Only voices that speak your language are offered, and picking another service clears the voice id. |
+| **Voice model** | Which service speaks and what it costs. *Inworld 2.0 Flash* is the default for a new setup: it's the cheapest model that speaks every language here. A setup you've already saved keeps its choice until you change it. Only models that speak your language are offered. |
+| **Voice** | Who speaks: male and female voices where LiveKit names them, marked with the gender its docs state. These are a sample. Pick **Another voice…** to paste an id from that service's library, which has many more. Picking another service goes back to its default voice. A voice may not sound natural in every language, so try it with a short call. |
 
 **What a call costs.** Lucius's voice is most of it, and it's charged by the character, so the price
 beside each voice and the length of his answers matter most. Settings shows an estimate for the voice

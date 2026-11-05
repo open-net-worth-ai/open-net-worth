@@ -27,7 +27,8 @@ CONFIG_DEFAULTS: dict = {
     "livekit_url": "",
     "front_model": "google/gemma-4-31b-it",
     "stt_model": "assemblyai/universal-streaming",
-    "tts_model": "cartesia/sonic-3",
+    # The cheapest voice that speaks every language in ``LANGUAGES``; a saved voice stays as it is.
+    "tts_model": "inworld/inworld-tts-2-flash",
     "tts_voice": "",
     "lucius_model": "",
     "language": "en",

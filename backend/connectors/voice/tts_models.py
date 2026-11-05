@@ -2,7 +2,7 @@
 
 From LiveKit's docs, read 2026-11-05. They name no default voice for these models, so a blank Voice
 id gets the voice LiveKit's own examples use; Cartesia keeps what a blank has always meant, as that
-is the voice calls have been tested with.
+was the first voice calls were tested with.
 """
 
 from __future__ import annotations

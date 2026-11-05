@@ -1,11 +1,28 @@
 import { describe, expect, it } from 'vitest'
-import { voiceCostLine, voiceIdAfterChange, voiceOptions, voiceSpeaks } from './voiceOptions'
+import {
+  DEFAULT_VOICE_MODEL,
+  OTHER_VOICE,
+  speakerChoice,
+  speakerOptions,
+  voiceCostLine,
+  voiceIdAfterChange,
+  voiceLibrary,
+  voiceOptions,
+  voiceSpeaks,
+} from './voiceOptions'
 
 describe('the voices offered for a call', () => {
   it('shows what each voice costs', () => {
     const labels = voiceOptions('en', 'cartesia/sonic-3').map((o) => o.label)
-    expect(labels).toContain('Cartesia Sonic 3 (default): $50 per 1M characters')
-    expect(labels).toContain('Inworld 2.0 Flash: $15 per 1M characters')
+    expect(labels).toContain('Inworld 2.0 Flash (default): $15 per 1M characters')
+    expect(labels).toContain('Cartesia Sonic 3: $50 per 1M characters')
+  })
+
+  it('defaults to a voice every language can fall back to', () => {
+    expect(DEFAULT_VOICE_MODEL).toBe('inworld/inworld-tts-2-flash')
+    for (const language of ['en', 'vi', 'zh', 'ja', 'ko', 'hi', 'id', 'es', 'fr', 'de', 'pt']) {
+      expect(voiceSpeaks(DEFAULT_VOICE_MODEL, language)).toBe(true)
+    }
   })
 
   it('offers only the voices that speak the language', () => {
@@ -34,5 +51,50 @@ describe('the voices offered for a call', () => {
     const cartesia = 'cartesia/sonic-3'
     expect(voiceIdAfterChange(cartesia, 'cartesia/sonic-3.6', 'abc')).toBe('abc')
     expect(voiceIdAfterChange(cartesia, 'inworld/inworld-tts-2', 'abc')).toBe('')
+  })
+})
+
+describe('who speaks on a voice model', () => {
+  const flash = 'inworld/inworld-tts-2-flash'
+  const labels = (model: string) => speakerOptions(model).map((o) => o.label)
+
+  it('offers male and female voices, its default first and marked', () => {
+    expect(labels(flash)).toEqual([
+      'Ashley (female, default)',
+      'Olivia (female)',
+      'Edward (male)',
+      'Diego (male)',
+      'Another voice…',
+    ])
+    expect(speakerOptions(flash)[0].value).toBe('')
+    expect(speakerOptions(flash)[2].value).toBe('Edward')
+  })
+
+  it('states no gender the docs do not state', () => {
+    expect(labels('assemblyai/assemblyai-tts-1')[0]).toBe('Audrey (default)')
+    expect(labels('fishaudio/s2.1-pro')).toContain('Ethan')
+  })
+
+  it('says when LiveKit chooses, and names no voice a model has none documented for', () => {
+    expect(labels('cartesia/sonic-3')[0]).toBe('Default (LiveKit chooses)')
+    expect(labels('cartesia/sonic-3')).toContain('Blake (male)')
+    expect(labels('cartesia/sonic-3.6')).toEqual(['Default (LiveKit chooses)', 'Another voice…'])
+    expect(labels('elevenlabs/eleven_flash_v2_5')).toEqual([
+      'Default (LiveKit chooses)',
+      'Another voice…',
+    ])
+  })
+
+  it('reads a saved id back as the right entry', () => {
+    expect(speakerChoice(flash, '', false)).toBe('')
+    expect(speakerChoice(flash, 'Ashley', false)).toBe('')
+    expect(speakerChoice(flash, 'Edward', false)).toBe('Edward')
+    expect(speakerChoice(flash, 'Someone-Else', false)).toBe(OTHER_VOICE)
+    expect(speakerChoice('cartesia/sonic-3.6', 'abc', false)).toBe(OTHER_VOICE)
+  })
+
+  it('points at the library of the model it is on', () => {
+    expect(voiceLibrary(flash)?.name).toBe('Inworld')
+    expect(voiceLibrary('elevenlabs/eleven_flash_v2_5')).toBeUndefined()
   })
 })

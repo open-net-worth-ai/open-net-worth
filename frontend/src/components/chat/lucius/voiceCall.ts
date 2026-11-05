@@ -375,7 +375,7 @@ function finish(problem: CallProblem | null) {
   if (seconds !== null) endedTimer = window.setTimeout(() => set({ phase: 'idle' }), 3000)
 }
 
-export async function startCall(sessionId: string): Promise<void> {
+export async function startCall(sessionId: string, view: CallState['view'] = 'bar'): Promise<void> {
   if (room || state.phase === 'connecting') return
   window.clearTimeout(endedTimer)
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -391,9 +391,9 @@ export async function startCall(sessionId: string): Promise<void> {
   localHangUp = false
   endProblem = null
   openLevels()
-  // Folded on a phone too: pressing Call shouldn't take over the screen, and the pill or the strip
-  // opens it when you want it (owner, 2026-11-05).
-  set({ ...IDLE, phase: 'connecting', sessionId, view: 'bar' })
+  // Folded unless the caller says otherwise: a call started from another screen shouldn't take it
+  // over, and the pill or the strip opens it when you want it (owner, 2026-11-05).
+  set({ ...IDLE, phase: 'connecting', sessionId, view })
   const policy = watchPolicyBlock()
   try {
     // The microphone first, THEN the ring: opening it reconfigures the audio device (a

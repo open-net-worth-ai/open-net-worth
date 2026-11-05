@@ -265,9 +265,15 @@ describe('the server ending a call', () => {
 })
 
 describe('starting a call', () => {
-  it('starts folded, so pressing Call never takes over a phone screen', async () => {
+  it('starts folded, so a call from another screen never takes it over', async () => {
     await liveCall()
     expect(state().view).toBe('bar')
+  })
+
+  it('opens the full view when its caller asks for it', async () => {
+    await startCall('s1', 'stage')
+    expect(state().phase).toBe('ringing')
+    expect(state().view).toBe('stage')
   })
 })
 

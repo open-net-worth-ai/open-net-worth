@@ -2207,6 +2207,49 @@ def test_a_blank_voice_id_gets_a_voice_the_model_is_documented_with():
     assert voice_for("cartesia/sonic-3", "") is None  # the voice calls have been tested with
 
 
+def test_a_goodbye_is_not_modelled_on_a_time_of_day_the_front_voice_cannot_know():
+    """It copied its first example, so it wished a great day at 2am (owner, 2026-11-06)."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    examples = agent.FRONT_INSTRUCTIONS.split("A goodbye (", 1)[1].split(")", 1)[0].lower()
+
+    assert "bye" in examples
+    assert not any(word in examples for word in ("day", "night", "morning", "evening"))
+    assert "never mentions it" in agent.FRONT_INSTRUCTIONS
+
+
+def test_the_default_voice_is_the_cheap_one_and_speaks_every_language():
+    from backend.connectors.voice.tts_models import speaks
+    from backend.db.voice_config_store import CONFIG_DEFAULTS, LANGUAGES
+
+    assert CONFIG_DEFAULTS["tts_model"] == "inworld/inworld-tts-2-flash"
+    assert all(speaks(CONFIG_DEFAULTS["tts_model"], language) for language in LANGUAGES)
+
+
+def test_the_settings_menu_marks_the_voice_a_blank_id_really_gets():
+    """The menu labels one voice "default"; only ``voice_for`` decides who actually speaks."""
+    from pathlib import Path
+
+    from backend.connectors.voice.tts_models import _DEFAULT_VOICES
+    from backend.db.voice_config_store import CONFIG_DEFAULTS
+
+    source = (
+        Path(__file__).parents[1] / "frontend/src/components/tabs/connectors/voiceOptions.ts"
+    ).read_text()
+    assert f"DEFAULT_VOICE_MODEL = '{CONFIG_DEFAULTS['tts_model']}'" in source
+    assert all(f"defaultVoice: '{voice}'" in source for voice in _DEFAULT_VOICES.values())
+    assert source.count("defaultVoice: '") == len(_DEFAULT_VOICES)
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_a_saved_voice_outlives_a_change_of_default(client):
+    from backend.db.voice_config_store import VoiceConfigStore
+
+    VoiceConfigStore().update({"tts_model": "cartesia/sonic-3"})
+
+    assert VoiceConfigStore().get()["tts_model"] == "cartesia/sonic-3"
+    assert client.get("/api/voice/config").json()["tts_model"] == "cartesia/sonic-3"
+
+
 @pytest.mark.flags(voice_calls=True)
 def test_a_voice_that_cannot_speak_the_language_is_refused(client):
     refused = client.put(
