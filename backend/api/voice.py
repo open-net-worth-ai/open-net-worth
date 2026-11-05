@@ -164,6 +164,14 @@ def start_call(body: StartCallRequest, request: Request):
     return {"url": config["livekit_url"], "token": token, "room": room, "session_id": session_id}
 
 
+@router.get("/api/voice/call/health")
+def call_health(room: str):
+    """Whether this call's line is broken on the app's side. Asked every few seconds by the call
+    screen, which takes no answer at all to mean the same thing."""
+    _require_flag()
+    return {"trouble": voice_service.call_connection_trouble(room)}
+
+
 def _admit_on_demo(room: str, ip: str) -> demo_calls.Admission:
     """The visitor's token budget, then the demo's call caps — before anything is minted. Both
     always allow off a demo."""

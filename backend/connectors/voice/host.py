@@ -33,6 +33,7 @@ CALLS = frozenset(
         "call_limit",
         "end_call",
         "call_failed",
+        "call_connection",
         "record_said",
         "record_exchange",
     }
@@ -138,6 +139,12 @@ class Host:
             for room in [r for r in ended if self._rooms.get(r) == session_id]:
                 del self._rooms[room]
                 demo_calls.end(room)
+            for room in ended:
+                service.note_call_connection(room, False)
+            return None
+        if method == "call_connection":
+            room = self._room_of(self._owned(args), args)
+            service.note_call_connection(room, bool(args.get("trouble")))
             return None
         if method == "call_failed":
             self._owned(args)

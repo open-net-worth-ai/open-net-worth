@@ -34,7 +34,7 @@ export function callStatus(call: CallState, now: number, busy: boolean): CallSta
       return {
         text: 'Reconnecting…',
         dot: 'warn',
-        line: 'Reconnecting…',
+        line: 'Your connection dropped. Reconnecting…',
         short: 'Reconnecting…',
         time: '',
       }
@@ -45,6 +45,15 @@ export function callStatus(call: CallState, now: number, busy: boolean): CallSta
     }
     default: {
       const secs = call.connectedAt ? Math.max(0, Math.round((now - call.connectedAt) / 1000)) : 0
+      if (call.luciusTrouble) {
+        return {
+          text: "Lucius's connection dropped",
+          dot: 'warn',
+          line: "Lucius's connection dropped. Reconnecting…",
+          short: 'Reconnecting…',
+          time: clock(secs),
+        }
+      }
       // Muted needs no words: the pressed Unmute button already says it (owner, 2026-11-03).
       const line = busy ? 'Lucius is working…' : ''
       return {
@@ -68,6 +77,7 @@ export function orbState(call: CallState, busy: boolean): OrbState {
     case 'ended':
       return 'ended'
     default:
+      if (call.luciusTrouble) return 'reconnecting'
       return busy ? 'working' : 'live'
   }
 }
@@ -93,6 +103,7 @@ export function pillMode(call: CallState, needsApproval: boolean): PillMode {
     case 'ringing':
       return 'calling'
     case 'live':
+      if (call.luciusTrouble) return 'reconnecting'
       return needsApproval ? 'attention' : 'live'
     default:
       return 'rest'

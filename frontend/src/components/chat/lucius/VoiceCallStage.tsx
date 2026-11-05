@@ -32,7 +32,7 @@ export function VoiceCallStage({
     call.phase === 'connecting' ||
     call.phase === 'ringing' ||
     call.phase === 'reconnecting' ||
-    (call.phase === 'live' && busy)
+    (call.phase === 'live' && (busy || call.luciusTrouble))
   const root = useRef<HTMLDivElement>(null)
   const screen = variant === 'screen'
 

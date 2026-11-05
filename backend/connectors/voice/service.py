@@ -80,6 +80,22 @@ def call_problem() -> Optional[dict]:
     return problem
 
 
+# Rooms whose call is reconnecting on this side, as the worker tells it (``connection``): the call
+# screen asks, since the room can't carry it while it is the thing that broke.
+_troubled_rooms: set[str] = set()
+
+
+def note_call_connection(room: str, trouble: bool) -> None:
+    if trouble:
+        _troubled_rooms.add(room)
+    else:
+        _troubled_rooms.discard(room)
+
+
+def call_connection_trouble(room: str) -> bool:
+    return room in _troubled_rooms
+
+
 def register_call(room: str, session_id: str, ttl_s: float) -> None:
     global _call_problem
     _call_problem = None
@@ -87,6 +103,7 @@ def register_call(room: str, session_id: str, ttl_s: float) -> None:
     with _calls_lock:
         for stale in [r for r, (_s, until) in _calls.items() if until < now]:
             del _calls[stale]
+            _troubled_rooms.discard(stale)
         _calls[room] = (session_id, now + ttl_s)
 
 

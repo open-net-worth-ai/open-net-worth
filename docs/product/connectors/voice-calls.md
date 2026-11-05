@@ -164,6 +164,13 @@ LiveKit details are wrong, or this computer is one voice calls aren't available 
 separately from the rest of it, so a crash there ends the call but never the app; it restarts
 itself within a few seconds. Call again.
 
+**The call says a connection dropped.** A call runs from your phone through LiveKit to the computer
+running the app, so either end can break it, and the screen says which. *Your connection dropped* is
+the device you're holding. *Lucius's connection dropped* is the computer running the app: while it
+shows, he can't hear you, so anything you said may need repeating. If it keeps happening, that
+computer's network is the place to look, and a wired connection is the surest fix: a computer that
+keeps switching between wifi bands drops calls even with a strong signal.
+
 **Lucius takes a while to answer.** The front voice answers at once; Lucius's own answer takes as
 long as a chat reply. Pick a faster model under **Lucius on calls**, and close heavy programs —
 a very busy computer also slows how fast the call notices you've stopped talking.

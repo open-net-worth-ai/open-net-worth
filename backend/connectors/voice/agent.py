@@ -36,6 +36,7 @@ from livekit.agents import (
 )
 from livekit.plugins import silero
 
+from backend.connectors.voice.connection import CallConnection
 from backend.connectors.voice.timing import TurnTiming
 from backend.connectors.voice.tokens import OWNER_IDENTITY
 
@@ -831,6 +832,20 @@ async def entrypoint(ctx: JobContext) -> None:
 
     ctx.add_shutdown_callback(_call_ended)
 
+    async def _tell_connection(trouble: bool) -> None:
+        await runtime.app.call(
+            "call_connection", session_id=session_id, room=room_name, trouble=trouble
+        )
+
+    connection = CallConnection(_tell_connection)
+
+    async def _connection_done() -> None:
+        connection.aclose()
+
+    ctx.add_shutdown_callback(_connection_done)
+    ctx.room.on("reconnecting", lambda: connection.reconnecting(True))
+    ctx.room.on("reconnected", lambda: connection.reconnecting(False))
+
     @session.on("user_input_transcribed")
     def _heard(ev) -> None:
         if ev.is_final:
@@ -855,6 +870,8 @@ async def entrypoint(ctx: JobContext) -> None:
             # The first refusal carries LiveKit's own words ("token credit quota exceeded…");
             # the session's closing error is usually a bare 429.
             refused["detail"] = refused["detail"] or _reason(ev.error)
+        elif getattr(ev.error, "type", "") in ("stt_error", "tts_error"):
+            connection.service_failed()
 
     @session.on("close")
     def _closed(ev) -> None:

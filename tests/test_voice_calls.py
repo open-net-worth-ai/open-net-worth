@@ -11,6 +11,7 @@ import base64
 import hashlib
 import hmac
 import json
+import time
 
 import pytest
 from fastapi import FastAPI
@@ -288,6 +289,96 @@ def test_a_call_records_its_room_and_refuses_automation_conversations(client, mo
 
     monkeypatch.setattr(runs, "automation_run_for_session", lambda sid: ({"id": "a"}, {"id": "r"}))
     assert client.post("/api/voice/call", json={"session_id": "sess-auto"}).status_code == 409
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_the_call_screen_asks_whether_a_calls_line_is_broken(client):
+    room = "voice-acme"
+    assert client.get("/api/voice/call/health", params={"room": room}).json() == {"trouble": False}
+    service.note_call_connection(room, True)
+    assert client.get("/api/voice/call/health", params={"room": room}).json() == {"trouble": True}
+    assert client.get("/api/voice/call/health", params={"room": "other"}).json() == {
+        "trouble": False
+    }
+    service.note_call_connection(room, False)
+    assert client.get("/api/voice/call/health", params={"room": room}).json() == {"trouble": False}
+
+
+def test_a_worker_tells_the_connection_only_of_its_own_calls_and_the_end_clears_it(monkeypatch):
+    from backend.connectors.voice.host import Host
+
+    monkeypatch.setattr(service, "calls_allowed", lambda: True)
+    host = Host(None, None)
+    host._sessions["s1"] = {"voice-a": time.monotonic()}
+    host._rooms["voice-a"] = "s1"
+    args = {"session_id": "s1", "room": "voice-a", "trouble": True}
+
+    asyncio.run(host._call("call_connection", args))
+    assert service.call_connection_trouble("voice-a")
+
+    with pytest.raises(PermissionError):
+        asyncio.run(host._call("call_connection", {**args, "room": "voice-other"}))
+    assert not service.call_connection_trouble("voice-other")
+
+    asyncio.run(host._call("end_call", {"session_id": "s1", "room": "voice-a"}))
+    assert not service.call_connection_trouble("voice-a")
+
+
+def _connection():
+    from backend.connectors.voice.connection import CallConnection
+
+    told: list[bool] = []
+
+    async def report(trouble: bool) -> None:
+        told.append(trouble)
+
+    connection = CallConnection(report)
+    connection.FAILURE_HOLD_S = 0.01
+    return connection, told
+
+
+def test_a_reconnecting_room_is_trouble_until_it_is_back():
+    async def run():
+        connection, told = _connection()
+        connection.reconnecting(True)
+        await asyncio.sleep(0)
+        connection.reconnecting(False)
+        await asyncio.sleep(0.01)
+        return told
+
+    assert asyncio.run(run()) == [True, False]
+
+
+def test_speech_failures_are_trouble_until_they_stop_and_a_room_still_down_outlasts_them():
+    async def run():
+        connection, told = _connection()
+        connection.reconnecting(True)
+        connection.service_failed()
+        connection.service_failed()
+        await asyncio.sleep(0.03)
+        assert connection.trouble  # the hold ran out; the room is still reconnecting
+        connection.reconnecting(False)
+        await asyncio.sleep(0.01)
+        connection.service_failed()
+        await asyncio.sleep(0.03)
+        return told
+
+    assert asyncio.run(run()) == [True, False, True, False]
+
+
+def test_failing_to_tell_the_app_never_ends_the_call():
+    from backend.connectors.voice.connection import CallConnection
+
+    async def refuse(trouble: bool) -> None:
+        raise OSError("gone")
+
+    async def run():
+        connection = CallConnection(refuse)
+        connection.reconnecting(True)
+        await asyncio.sleep(0.01)
+        return connection.trouble
+
+    assert asyncio.run(run()) is True
 
 
 @pytest.mark.parametrize("retired", ["google/gemini-2.5-flash-lite", "google/gemini-2.5-flash"])

@@ -59,6 +59,7 @@ vi.mock('../../../lucius/bus', () => ({ emitConversationChanged: vi.fn() }))
 
 import {
   hangUp,
+  HEALTH_MS,
   LEFT_GRACE_MS,
   PICKUP_TIMEOUT_MS,
   minimizeCall,
@@ -180,5 +181,77 @@ describe('the server ending a call', () => {
     await vi.advanceTimersByTimeAsync(PICKUP_TIMEOUT_MS)
     expect(state().phase).toBe('idle')
     expect(state().problem?.message).toMatch(/didn't pick up/)
+  })
+})
+
+describe("Lucius's side of the call dropping", () => {
+  const health = (answer: () => Promise<unknown>) =>
+    vi.mocked(authFetch).mockImplementation(async (url) => {
+      if (String(url).startsWith('/api/voice/call/health')) return answer() as Promise<Response>
+      return { ok: true, json: async () => ({}) } as Response
+    })
+  const answers = (trouble: boolean) => async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ trouble }),
+  })
+  const askAgain = () => vi.advanceTimersByTimeAsync(HEALTH_MS)
+
+  afterEach(() => {
+    vi.mocked(authFetch).mockReset()
+    vi.mocked(authFetch).mockImplementation(async (url) => {
+      return {
+        ok: true,
+        json: async () =>
+          url === '/api/voice/config'
+            ? { worker: { call_problem: serverProblem.current } }
+            : { url: 'wss://acme.example', token: 't', session_id: 's1' },
+      } as Response
+    })
+  })
+
+  it('takes one lost reply for nothing, and two in a row for a dropped line', async () => {
+    await liveCall()
+    health(() => Promise.reject(new TypeError('Load failed')))
+    await askAgain()
+    expect(state().luciusTrouble).toBe(false)
+    await askAgain()
+    expect(state().luciusTrouble).toBe(true)
+    expect(state().phase).toBe('live')
+  })
+
+  it('counts a tunnel that cannot reach the app, but not an answer from the app', async () => {
+    await liveCall()
+    health(async () => ({ ok: false, status: 530 }))
+    await askAgain()
+    await askAgain()
+    expect(state().luciusTrouble).toBe(true)
+    health(async () => ({ ok: false, status: 404 }))
+    await askAgain()
+    expect(state().luciusTrouble).toBe(false)
+  })
+
+  it('believes the app when it answers that the line is still broken, until it is back', async () => {
+    await liveCall()
+    health(answers(true))
+    await askAgain()
+    expect(state().luciusTrouble).toBe(true)
+    health(answers(false))
+    await askAgain()
+    expect(state().luciusTrouble).toBe(false)
+  })
+
+  it('leaves a drop on this device to its own phase, and stops asking after the call', async () => {
+    const room = await liveCall()
+    room.emit('reconnecting')
+    health(() => Promise.reject(new TypeError('Load failed')))
+    await askAgain()
+    await askAgain()
+    expect(state().luciusTrouble).toBe(false)
+    room.emit('reconnected')
+    await hangUp()
+    vi.mocked(authFetch).mockClear()
+    await askAgain()
+    expect(authFetch).not.toHaveBeenCalled()
   })
 })

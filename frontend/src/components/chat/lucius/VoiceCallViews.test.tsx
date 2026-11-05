@@ -24,7 +24,7 @@ import {
   useVoiceCall,
   type CallState,
 } from './voiceCall'
-import { callStatus, pillMode } from './voiceCallStatus'
+import { callStatus, orbState, pillMode } from './voiceCallStatus'
 
 const LIVE: Partial<CallState> = { phase: 'live', sessionId: 's1', connectedAt: Date.now() }
 
@@ -46,6 +46,7 @@ function call(over: Partial<CallState>): CallState {
     problem: null,
     setupOpen: false,
     view: 'stage',
+    luciusTrouble: false,
     ...over,
   }
 }
@@ -73,6 +74,21 @@ describe('call status', () => {
       short: 'Working…',
     })
     expect(callStatus({ ...live, muted: true }, now, false).line).toBe('')
+  })
+
+  it('says whose connection dropped, over everything else on the line', () => {
+    const now = Date.now()
+    const live = call({ phase: 'live', connectedAt: now - 134_000, luciusTrouble: true })
+    expect(callStatus(live, now, true)).toMatchObject({
+      line: "Lucius's connection dropped. Reconnecting…",
+      dot: 'warn',
+      time: '2:14',
+    })
+    expect(orbState(live, true)).toBe('reconnecting')
+    expect(pillMode(live, true)).toBe('reconnecting')
+    expect(callStatus(call({ phase: 'reconnecting' }), now, false).line).toBe(
+      'Your connection dropped. Reconnecting…',
+    )
   })
 })
 

@@ -40,6 +40,9 @@ export interface CallState {
   setupOpen: boolean
   /** The call's big view (the stage) or the one-line bar — one choice for every surface. */
   view: 'stage' | 'bar'
+  /** This device is still connected, but Lucius's side of the call has dropped: the room can't
+   *  say so, as it is the broken part. The phone's own drop is the `reconnecting` phase. */
+  luciusTrouble: boolean
 }
 
 const IDLE: CallState = {
@@ -51,6 +54,7 @@ const IDLE: CallState = {
   problem: null,
   setupOpen: false,
   view: 'stage',
+  luciusTrouble: false,
 }
 
 let state: CallState = IDLE
@@ -215,6 +219,41 @@ function classify(e: unknown): CallProblem {
 const FOLLOW_MS = 1500
 let followTimer: number | undefined
 
+// Lucius's side dropping looked like a healthy call that had stopped hearing you (owner,
+// 2026-11-05): ask the app every couple of seconds. No answer means its network is down; an answer
+// can still say its line is broken, which outlasts the network coming back. One slow or lost
+// reply on a phone is nothing: only two in a row count.
+export const HEALTH_MS = 2000
+const HEALTH_TIMEOUT_MS = 2500
+const HEALTH_MISSES = 2
+let healthTimer: number | undefined
+
+function watchLuciusLine(roomName: string): void {
+  let misses = 0
+  let asking = false
+  healthTimer = window.setInterval(async () => {
+    if (asking || state.phase !== 'live') return
+    asking = true
+    const giveUp = new AbortController()
+    const timer = window.setTimeout(() => giveUp.abort(), HEALTH_TIMEOUT_MS)
+    let said = false
+    try {
+      const r = await authFetch(`/api/voice/call/health?room=${encodeURIComponent(roomName)}`, {
+        signal: giveUp.signal,
+      })
+      // A tunnel answers 5xx for an app it can't reach; a 4xx is the app itself, so it's there.
+      misses = r.status >= 500 ? misses + 1 : 0
+      if (r.ok) said = Boolean(((await r.json()) as { trouble?: boolean }).trouble)
+    } catch {
+      misses += 1
+    }
+    window.clearTimeout(timer)
+    asking = false
+    const trouble = said || misses >= HEALTH_MISSES
+    if (state.phase === 'live' && state.luciusTrouble !== trouble) set({ luciusTrouble: trouble })
+  }, HEALTH_MS)
+}
+
 // The server's side can end a call without the room closing — the voice worker crashing, or the
 // app restarting — and the page sat "Connected" alone in an empty room. Lucius leaving ends the
 // call (a goodbye deletes the room within this grace, which reads as an ordinary end); so does
@@ -230,6 +269,7 @@ let mic: LocalAudioTrack | null = null
 
 function teardown() {
   window.clearInterval(followTimer)
+  window.clearInterval(healthTimer)
   window.clearTimeout(leftTimer)
   window.clearTimeout(pickupTimer)
   mic?.stop()
@@ -309,7 +349,12 @@ export async function startCall(sessionId: string): Promise<void> {
       set({ ...IDLE, problem: { kind, message: d.detail || 'The call could not start.' } })
       return
     }
-    const grant = (await r.json()) as { url: string; token: string; session_id: string }
+    const grant = (await r.json()) as {
+      url: string
+      token: string
+      room: string
+      session_id: string
+    }
     // Hung up while the call was being asked for: it went on connecting behind an idle screen,
     // microphone and all. The agent the app asked for gives up by itself (``CALLER_WAIT_S``).
     if ((state.phase as CallPhase) !== 'connecting') return
@@ -372,6 +417,7 @@ export async function startCall(sessionId: string): Promise<void> {
     // nothing changed) and the live poll looks, every 1.5s. Polled from here, not pushed over
     // the room: a data message from the in-app worker crashed LiveKit's native layer (2026-11-03).
     followTimer = window.setInterval(() => emitConversationChanged(grant.session_id), FOLLOW_MS)
+    watchLuciusLine(grant.room)
     await next.localParticipant.publishTrack(mic)
   } catch (e) {
     // Hanging up while it was still connecting rejects the connect ("Client initiated
