@@ -6,7 +6,7 @@ order: 30
 audience: [user, operator]
 status: stable
 related: [operations/backup-and-restore, operations/desktop, operations/changelog, getting-started/installation]
-keywords: [upgrade, update, auto-upgrade, automatic updates, onw upgrade, uv tool upgrade, docker pull, ONW_VERSION, git pull, make setup, migration, schema, downgrade]
+keywords: [upgrade, update, auto-upgrade, automatic updates, onw upgrade, uv tool upgrade, docker pull, docker latest tag, ONW_VERSION, git pull, make setup, migration, schema, downgrade]
 ---
 
 # Upgrading
@@ -76,7 +76,7 @@ To check by hand, `onw upgrade --check` says whether a newer version is out and 
 ### Docker
 
 The `docker-compose.yml` you downloaded is pinned to the version it came with, so
-`docker compose pull` on its own does **not** move you to a newer release. Either:
+`docker compose pull` on its own does **not** move you to a newer release. Pick one:
 
 - **Download the new compose file** (recommended — it always matches its release):
 
@@ -93,6 +93,17 @@ The `docker-compose.yml` you downloaded is pinned to the version it came with, s
   ```
 
   Put `ONW_VERSION=x.y.z` in the `.env` file next to `docker-compose.yml` to make it stick.
+
+- **Or follow a moving tag**, if you write your own Compose file:
+
+  ```yaml
+  image: ghcr.io/open-net-worth-ai/open-net-worth:latest
+  ```
+
+  `latest` moves to each new release, and `0.1` moves to each new `0.1.x` release. Run
+  `docker compose pull && docker compose up -d` to update. New releases can come out as often as
+  every night, and [you can't simply go back](#going-back-to-an-older-version) after an update, so
+  only let a tool update these tags automatically if you're happy to take every release.
 
 Your data is in the `open-net-worth-data` volume and survives both. Keep `AUTH_PASSWORD` set
 (in `.env` or on the command line) as you did the first time. Check the new version with
