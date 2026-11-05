@@ -105,11 +105,11 @@ export function Masthead({
         {atRisk && riskC ? (
           <>
             <span className="c2-ribbon-core">
-              <b>{riskC.name}</b> runs{' '}
+              <b>{riskC.name}</b>&apos;s funding runs{' '}
               <b className={moneyClass()}>
                 {fBaseWhole(riskC.coverage?.shortfall_base ?? shortfall)}
               </b>{' '}
-              short around{' '}
+              short of its payments by{' '}
               <b>
                 {riskC.coverage?.earliest_shortfall_date
                   ? fmtDate(riskC.coverage.earliest_shortfall_date)
