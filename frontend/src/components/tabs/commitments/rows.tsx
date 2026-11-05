@@ -45,7 +45,7 @@ function FilterEmpty({ filter, onClear }: FilterEmptyProps) {
       Icon: CheckIcon,
       tone: 'good',
       t: 'Nothing at risk',
-      d: 'Every active commitment is funded above your cash floor — no shortfalls in the current outlook.',
+      d: 'Every active commitment has funding lined up for its payments — no shortfalls in the current outlook.',
       cta: 'View all active',
       target: 'all',
     },
@@ -176,7 +176,7 @@ function Row({
       <span className="c2-row-chip">
         {rs === 'risk' && (
           <span className="c2-chip short">
-            Short {fDual(c.coverage?.shortfall_base ?? 0, base, fx)}
+            {fDual(c.coverage?.shortfall_base ?? 0, base, fx)} unfunded
           </span>
         )}
         {rs === 'ok' && <span className="c2-chip ok">Funded</span>}
