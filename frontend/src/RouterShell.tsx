@@ -59,6 +59,7 @@ import { getTickerEnabled, subscribeTicker } from './tickerPref'
 import { Overview } from './components/tabs/overview/Overview'
 import { LuciusHome } from './components/tabs/lucius/LuciusHome'
 import { LuciusMobile } from './components/tabs/lucius/LuciusMobile'
+import { VoiceCallFab } from './components/chat/lucius/VoiceCallFab'
 import { Inbox } from './components/tabs/Inbox'
 import { Investments } from './components/tabs/Investments'
 import AccountsTab from './components/tabs/accounts/AccountsTab'
@@ -1417,6 +1418,14 @@ function RouterShellInner() {
                 <div {...behindFirstRunWrap}>
                   <NewVersionBanner />
                   <DesktopUpdateNotices />
+                  {isMobile && !onboarding && (
+                    <VoiceCallFab
+                      onLuciusTab={tabToRender === 'lucius'}
+                      onOpenChat={() =>
+                        void navigate({ to: '/lucius', search: { conversation: undefined } })
+                      }
+                    />
+                  )}
                 </div>
                 <nav
                   className={`sidebar${sidebarExpanded ? ' expanded' : ''}${drawerOpen ? ' drawer-open' : ''}`}

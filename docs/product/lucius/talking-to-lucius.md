@@ -21,7 +21,7 @@ no need to be formal.
   looking at (<kbd>Ctrl</kbd> <kbd>/</kbd> shows or hides it — see [Keyboard
   shortcuts](../reference/keyboard-shortcuts.md)).
 - **On your phone** — through [Telegram](../connectors/telegram.md), once it's set up.
-- **Out loud** — press the phone button in the chat for a [voice call](../connectors/voice-calls.md)
+- **Out loud** — press the Call button in the chat for a [voice call](../connectors/voice-calls.md)
   (experimental, off by default).
 
 Lucius needs an AI model first. If he asks to be set up, see [Connecting an AI

@@ -115,6 +115,13 @@ def is_expected(room: str) -> bool:
         return bool(entry and entry[1] >= time.monotonic())
 
 
+def call_session(room: str) -> Optional[str]:
+    """The conversation a call this app started is talking into, or None."""
+    with _calls_lock:
+        entry = _calls.get(room)
+        return entry[0] if entry and entry[1] >= time.monotonic() else None
+
+
 def claim_call(room: str) -> Optional[str]:
     """The conversation a minted room belongs to, at most once; ``None`` for any other room."""
     with _calls_lock:

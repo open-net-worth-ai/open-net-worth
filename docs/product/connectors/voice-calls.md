@@ -38,6 +38,9 @@ of hearing nothing, he tells you he's still on it (*"still working on your groce
 again every 30 to 45 seconds until the answer starts. He stays quiet while you're talking or after
 you've asked him to wait. These lines repeat what you asked, never a figure. To cut him off, say at
 least two words (*"hold on"*, *"stop there"*): a lone *"okay"* or background noise doesn't.
+Correct him while he's looking (*"no, I meant the other card"*) and he moves on to what you meant without
+reading out the first answer. A change you've already asked for can't be taken back this way: it may
+still happen, so you always hear how it went, then he gets to your correction.
 Only his final reply is read out. A link in it shows in the chat: inside a sentence you hear just its
 name, and on a line of its own you don't hear it at all.
 Ask *"what are you doing?"* and the front voice tells you what Lucius is working on right now.
@@ -75,7 +78,7 @@ Windows x64; on any other computer the settings page says calls aren't available
    **Settings → Keys**, create an API key. Keep the **URL** (`wss://…livekit.cloud`), the **API
    key** and the **API secret**.
 2. In Open Net Worth, open **Connectors → Voice calls** and paste the three values. Save.
-3. When the page says **Ready for calls**, press the **phone** button in Lucius's chat — it sits
+3. When the page says **Ready for calls**, press the **Call** button (four voice bars) in Lucius's chat — it sits
    where **Send** is while the message box is empty. Your browser asks for the microphone the
    first time.
 
@@ -89,8 +92,9 @@ nobody is. While he looks something up it moves faster and the line under it say
 | Where | What you see |
 |---|---|
 | **On a phone** | The call takes the whole screen. The arrow at the top (or **Type**) puts it away so you can read the chat (approval cards included) or type, while you keep talking. |
+| **On a phone, away from the Lucius tab** | A small round button sits above the tab bar. With no call on it shows **voice bars**: tap it to call, or to go to Voice calls in Connectors if calls aren't set up. During a call it grows into a small pill with the moving **orb** and the time, or what's going on instead (*Working…*, *Poor connection*, *Reconnecting…*): tap it to open the full call screen, where **End** is. |
 | **In the side panel or the Lucius tab** | The call sits just above the message box — a slim strip on a wide screen — so the chat above stays readable and its cards tappable. |
-| **The floating Lucius button** | It has a **phone** button beside **Ask Lucius**: press it and the call happens right in the button. It grows to show the orb, the time, **Mute** and **End**, and shrinks back when you hang up. Press the time to open the chat. On a poor connection it says so and shows the signal bars. If Lucius needs your approval it says **Needs approval**; press **Review** to see the card. |
+| **The floating Lucius button** | It has a **Call** button (four voice bars) beside **Ask Lucius**: press it and the call happens right in the button. It grows to show the orb, the time, **Mute** and **End**, and shrinks back when you hang up. Press the time to open the chat. On a poor connection it says so and shows the signal bars. If Lucius needs your approval it says **Needs approval**; press **Review** to see the card. |
 
 On a phone, the arrow (or Esc, or **Type**) folds the full-screen call down to the same strip
 you see on a computer, above the message box; its expand button opens the full screen again.
@@ -156,7 +160,7 @@ Your own copy of Open Net Worth has none of these limits.
 ## Troubleshooting
 
 **The Call button isn't there.** Voice calls are off: turn them on in **Settings → Developer →
-Experimental**. Or they aren't set up yet: until then the message box keeps **Send**, and the **phone**
+Experimental**. Or they aren't set up yet: until then the message box keeps **Send**, and the **Call** button
 on the floating Lucius button takes you to Voice calls in Connectors. It also gives way to **Send** as soon as you type.
 
 **The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it opens

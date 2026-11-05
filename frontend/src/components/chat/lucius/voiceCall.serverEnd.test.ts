@@ -263,6 +263,21 @@ describe("Lucius's side of the call dropping", () => {
     })
   })
 
+  it('follows whether Lucius is working, from the same answer', async () => {
+    await liveCall()
+    const reply = (working: boolean) => async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ trouble: false, working }),
+    })
+    health(reply(true))
+    await askAgain()
+    expect(state().luciusWorking).toBe(true)
+    health(reply(false))
+    await askAgain()
+    expect(state().luciusWorking).toBe(false)
+  })
+
   it('takes one lost reply for nothing, and two in a row for a dropped line', async () => {
     await liveCall()
     health(() => Promise.reject(new TypeError('Load failed')))

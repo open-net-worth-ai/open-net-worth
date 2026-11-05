@@ -1,5 +1,4 @@
 import { useNavigate } from '@tanstack/react-router'
-import { Phone } from 'lucide-react'
 import { authFetch } from '../../../api/client'
 import { useFlag } from '../../../hooks/useFlag'
 import { dispatchScreenCommand } from '../../../lucius/bus'
@@ -52,13 +51,37 @@ export function useOpenVoiceSetup(): () => void {
   }
 }
 
+/** Our own, not an icon set's: four thick bars stay clear on the message box's small button, where
+ *  Lucide's six thin ones got busy, and it reads as talking to Lucius (owner, 2026-11-05). */
+function VoiceBars({ large }: { large: boolean }) {
+  const size = large ? 22 : 15
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={large ? 2.4 : 3}
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M4.5 10v4" />
+      <path d="M9.5 6v12" />
+      <path d="M14.5 3v18" />
+      <path d="M19.5 8v8" />
+    </svg>
+  )
+}
+
 export function VoiceCallButton({
   sessionId,
   tone = 'composer',
 }: {
   sessionId: string
-  /** `pill`: the dock's collapsed pill, where a call starts without opening the chat. */
-  tone?: 'composer' | 'pill'
+  /** `pill`: the dock's collapsed pill, where a call starts without opening the chat. `fab`: a
+   *  phone's round button, for the same reason. */
+  tone?: 'composer' | 'pill' | 'fab'
 }) {
   const on = useFlag('voice_calls')
   const readiness = useVoiceReadiness()
@@ -72,13 +95,13 @@ export function VoiceCallButton({
   return (
     <button
       type="button"
-      className={'lx-call-btn' + (tone === 'pill' ? ' lx-call-btn--pill' : '')}
+      className={'lx-call-btn' + (tone === 'composer' ? '' : ` lx-call-btn--${tone}`)}
       aria-label={label}
       title={label}
       onMouseDown={(e) => e.preventDefault()}
       onClick={() => (needsSetup ? openSetup() : void startCall(sessionId))}
     >
-      <Phone size={16} fill="currentColor" strokeWidth={1.5} />
+      <VoiceBars large={tone === 'fab'} />
     </button>
   )
 }

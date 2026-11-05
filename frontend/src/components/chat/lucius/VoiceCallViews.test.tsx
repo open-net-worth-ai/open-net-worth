@@ -18,6 +18,7 @@ let mobile = false
 vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => mobile }))
 
 import { VoiceCallButton } from './VoiceCallButton'
+import { VoiceCallFab } from './VoiceCallFab'
 import { VoiceCallPill } from './VoiceCallPill'
 import { VoiceCallSlot } from './VoiceCallSlot'
 import {
@@ -50,6 +51,7 @@ function call(over: Partial<CallState>): CallState {
     luciusTrouble: false,
     quality: null,
     offline: false,
+    luciusWorking: false,
     ...over,
   }
 }
@@ -239,6 +241,71 @@ describe('VoiceCallSlot', () => {
     slot(false)
     expect(screen.queryByRole('button', { name: 'End call' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open call' })).toBeNull()
+  })
+})
+
+describe("the phone's round button", () => {
+  const fab = (onLuciusTab = false, onOpenChat = vi.fn()) =>
+    render(<VoiceCallFab onLuciusTab={onLuciusTab} onOpenChat={onOpenChat} />)
+
+  it('is not there with the flag off, or on the Lucius tab, which has the call itself', () => {
+    restore = overrideFlagsForTests({ voice_calls: false })
+    act(() => setVoiceCallForTests({ ...LIVE, view: 'bar' }))
+    const { container, unmount } = fab()
+    expect(container.querySelector('.lx-call-fab')).toBeNull()
+    unmount()
+    restore()
+    restore = overrideFlagsForTests({ voice_calls: true })
+    const onTab = fab(true)
+    expect(onTab.container.querySelector('.lx-call-fab')).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('shows a folded call as a button that opens the full call screen in place', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    act(() => setVoiceCallForTests({ ...LIVE, view: 'bar' }))
+    const onOpenChat = vi.fn()
+    fab(false, onOpenChat)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open call' }))
+    const stage = screen.getByRole('dialog', { name: 'Voice call with Lucius' })
+    expect(within(stage).getByRole('button', { name: 'End call' })).toBeTruthy()
+    expect(onOpenChat).not.toHaveBeenCalled()
+    fireEvent.click(within(stage).getByRole('button', { name: 'Minimise call' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Open call' })).toBeTruthy()
+  })
+
+  it('shows the call at a glance: the clock, or what is going on instead', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    const now = Date.now()
+    act(() =>
+      setVoiceCallForTests({ ...LIVE, connectedAt: now - 134_000, view: 'bar', quality: 'good' }),
+    )
+    fab()
+    const pill = screen.getByRole('button', { name: 'Open call' })
+    expect(within(pill).getByRole('status').textContent).toMatch(/^2:1\d$/)
+    expect(within(pill).queryByRole('img')).toBeNull()
+    act(() => setVoiceCallForTests({ luciusWorking: true }))
+    expect(within(pill).getByRole('status').textContent).toBe('Working…')
+    act(() => setVoiceCallForTests({ luciusWorking: false, luciusTrouble: true }))
+    expect(within(pill).getByRole('status').textContent).toBe('Poor connection')
+  })
+
+  it('takes Type to the chat, the only place with a message box', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    act(() => setVoiceCallForTests(LIVE))
+    const onOpenChat = vi.fn()
+    fab(false, onOpenChat)
+    fireEvent.click(screen.getByRole('button', { name: 'Type a message' }))
+    expect(onOpenChat).toHaveBeenCalledTimes(1)
+  })
+
+  it('says why a call failed, wherever you started it', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    act(() => setVoiceCallForTests({ problem: { kind: 'other', message: 'It did not start.' } }))
+    fab()
+    expect(screen.getByRole('alert').textContent).toContain('It did not start.')
   })
 })
 

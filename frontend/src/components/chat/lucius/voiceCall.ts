@@ -51,6 +51,9 @@ export interface CallState {
   /** The browser says this device has no network. LiveKit's rating comes from its server, so it
    *  can't change once the network is gone, and it notices a drop only some seconds later. */
   offline: boolean
+  /** Lucius has a turn running on the call's conversation, as the app reports it: away from the
+   *  chat there is nothing else to say so. */
+  luciusWorking: boolean
 }
 
 const IDLE: CallState = {
@@ -64,6 +67,7 @@ const IDLE: CallState = {
   luciusTrouble: false,
   quality: null,
   offline: false,
+  luciusWorking: false,
 }
 
 let state: CallState = IDLE
@@ -246,20 +250,28 @@ function watchLuciusLine(roomName: string): void {
     const giveUp = new AbortController()
     const timer = window.setTimeout(() => giveUp.abort(), HEALTH_TIMEOUT_MS)
     let said = false
+    let working = false
     try {
       const r = await authFetch(`/api/voice/call/health?room=${encodeURIComponent(roomName)}`, {
         signal: giveUp.signal,
       })
       // A tunnel answers 5xx for an app it can't reach; a 4xx is the app itself, so it's there.
       misses = r.status >= 500 ? misses + 1 : 0
-      if (r.ok) said = Boolean(((await r.json()) as { trouble?: boolean }).trouble)
+      if (r.ok) {
+        const health = (await r.json()) as { trouble?: boolean; working?: boolean }
+        said = Boolean(health.trouble)
+        working = Boolean(health.working)
+      }
     } catch {
       misses += 1
     }
     window.clearTimeout(timer)
     asking = false
     const trouble = said || misses >= HEALTH_MISSES
-    if (state.phase === 'live' && state.luciusTrouble !== trouble) set({ luciusTrouble: trouble })
+    if (state.phase !== 'live') return
+    if (state.luciusTrouble !== trouble || state.luciusWorking !== working) {
+      set({ luciusTrouble: trouble, luciusWorking: working })
+    }
   }, HEALTH_MS)
 }
 

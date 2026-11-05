@@ -18,10 +18,13 @@ export function VoiceCallStage({
   variant,
   busy,
   expandable = false,
+  onType = minimizeCall,
 }: {
   variant: 'screen' | 'card'
   busy: boolean
   expandable?: boolean
+  /** Away from the chat there is no message box to fold down to. */
+  onType?: () => void
 }) {
   const call = useVoiceCall()
   const now = useCallClock(call)
@@ -136,7 +139,7 @@ export function VoiceCallStage({
                   className="lx-callstage-btn"
                   aria-label="Type a message"
                   disabled={ended}
-                  onClick={minimizeCall}
+                  onClick={onType}
                 >
                   <Keyboard size={26} />
                 </button>

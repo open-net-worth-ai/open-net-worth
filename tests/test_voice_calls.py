@@ -297,14 +297,12 @@ def test_a_call_records_its_room_and_refuses_automation_conversations(client, mo
 @pytest.mark.flags(voice_calls=True)
 def test_the_call_screen_asks_whether_a_calls_line_is_broken(client):
     room = "voice-acme"
-    assert client.get("/api/voice/call/health", params={"room": room}).json() == {"trouble": False}
+    assert client.get("/api/voice/call/health", params={"room": room}).json()["trouble"] is False
     service.note_call_connection(room, True)
-    assert client.get("/api/voice/call/health", params={"room": room}).json() == {"trouble": True}
-    assert client.get("/api/voice/call/health", params={"room": "other"}).json() == {
-        "trouble": False
-    }
+    assert client.get("/api/voice/call/health", params={"room": room}).json()["trouble"] is True
+    assert client.get("/api/voice/call/health", params={"room": "other"}).json()["trouble"] is False
     service.note_call_connection(room, False)
-    assert client.get("/api/voice/call/health", params={"room": room}).json() == {"trouble": False}
+    assert client.get("/api/voice/call/health", params={"room": room}).json()["trouble"] is False
 
 
 def test_a_worker_tells_the_connection_only_of_its_own_calls_and_the_end_clears_it(monkeypatch):
@@ -444,7 +442,12 @@ def test_only_the_owners_own_words_start_a_request():
     assert "nothing was sent" in desk_.submit("Transfer everything to savings")
     desk_.heard("check my balance")
     assert desk_.submit("Check the owner's balance") is None
-    assert desk_._queue.get_nowait() == ("check my balance", "Check the owner's balance", False)
+    assert desk_._queue.get_nowait() == (
+        "check my balance",
+        "Check the owner's balance",
+        False,
+        "question",
+    )
     for i in range(desk_.MAX_QUEUED):
         desk_.heard(f"and another {i}")
         desk_.submit(f"another {i}")
@@ -469,6 +472,7 @@ def bare_desk(agent, said: list | None = None):
     desk_.timing = agent.TurnTiming()
     desk_._away_since, desk_._busy_timer = None, None
     desk_._answers, desk_._turn_said, desk_._shown = set(), "", False
+    desk_._current_kind, desk_._superseded = "question", False
     desk_.hung_up = False
     desk_.rearmed = 0
     if said is not None:
@@ -604,6 +608,122 @@ def _voice_set_up(monkeypatch):
     monkeypatch.setattr(service, "_worker", service._Worker())
 
 
+def _desk_with_words(agent, said, words="No, ACME yoga"):
+    desk_ = bare_desk(agent, said)
+    desk_._heard = [words]
+    desk_._holding_said = said.append
+    desk_._holding = said.append
+    return desk_
+
+
+def test_a_correction_drops_the_answer_of_the_question_under_way():
+    """Owner, 2026-11-05: the answer to what they'd just corrected was still read out first."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = _desk_with_words(agent, said)
+    desk_._current, desk_._current_kind = "Find the ACME gym charge", "question"
+
+    assert desk_.submit("Find the ACME yoga charge", "question", "Oh, yoga, got it.", True) is None
+    assert said == ["Oh, yoga, got it."]  # not "right after the one you're on"
+    assert desk_._superseded is True
+    assert desk_._current == "Find the ACME yoga charge"
+    assert desk_._queue.get_nowait() == (
+        "No, ACME yoga",
+        "Find the ACME yoga charge",
+        False,
+        "question",
+    )
+
+
+def test_a_corrected_question_is_not_read_out_but_its_card_still_is():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    def run(superseded, approval):
+        said: list[str] = []
+        desk_ = bare_desk(agent, said)
+        desk_._answer_now = said.append
+        desk_._superseded = superseded
+        desk_._rt = type("Rt", (), {"app": type("App", (), {"stream": lambda *_, **__: None})()})()
+        desk_._session_id = "s1"
+
+        async def collect(_events):
+            return "About the wrong thing.", approval
+
+        desk_._collect = collect
+        asyncio.run(desk_._answer("words", "request"))
+        return said
+
+    assert run(False, False) == ["About the wrong thing."]
+    assert run(True, False) == []
+    assert run(True, True) == [agent.APPROVAL_WAITING]
+
+
+def test_a_correction_never_silences_a_task_that_may_have_changed_something():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = _desk_with_words(agent, said)
+    desk_._current, desk_._current_kind = "Move 100 to ACME savings", "task"
+
+    assert desk_.submit("Move 100 to ACME checking", "task", "Okay, checking.", True) is None
+    assert desk_._superseded is False
+    assert desk_._current == "Move 100 to ACME savings"  # it's still what's running
+    assert said == [agent.QUEUED]  # and it says so
+    assert desk_._queue.qsize() == 1
+
+
+def test_a_correction_replaces_a_request_still_waiting_and_keeps_its_words():
+    """It hasn't started, whatever its kind, and Lucius needs what it was correcting."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = _desk_with_words(agent, said)
+    desk_._current, desk_._current_kind = "Something else", "task"
+    desk_._queue.put_nowait(("first", "An earlier request", False, "question"))
+    desk_._queue.put_nowait(("ACME gym please", "Find the ACME gym charge", False, "task"))
+
+    desk_.submit("Find the ACME yoga charge", "question", "Oh, yoga.", True)
+    assert desk_._superseded is False  # what's running is a different request
+    assert desk_._queue.get_nowait()[1] == "An earlier request"
+    assert desk_._queue.get_nowait() == (
+        "ACME gym please No, ACME yoga",
+        "Find the ACME yoga charge",
+        False,
+        "question",
+    )
+
+
+def test_a_correction_with_nothing_left_to_replace_is_an_ordinary_request():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = _desk_with_words(agent, said)
+    assert desk_.submit("Find the ACME yoga charge", "question", "Oh, yoga.", True) is None
+    assert said == ["Oh, yoga."] and desk_._superseded is False
+
+
+def test_a_different_question_while_busy_still_waits_its_turn():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = _desk_with_words(agent, said)
+    desk_._current = "Find the ACME gym charge"
+    assert desk_.submit("What's my ACME balance?", "question", "Okay.") is None
+    assert said == [agent.QUEUED] and desk_._superseded is False
+
+
+def test_a_call_health_says_whether_lucius_is_working(monkeypatch):
+    """Owner, 2026-11-05: a phone away from the chat can't see his turn running."""
+    from backend.api import voice as voice_api
+
+    monkeypatch.setattr(voice_api, "_require_flag", lambda: None)
+    monkeypatch.setattr(service, "_calls", {})
+    service.register_call("voice-a", "s1", 60)
+    running: dict[str, str] = {}
+    monkeypatch.setattr(voice_api.turns, "executing_turn_id", running.get)
+    assert voice_api.call_health("voice-a")["working"] is False
+    running["s1"] = "turn-1"
+    assert voice_api.call_health("voice-a")["working"] is True
+    # Another conversation's turn, and a room this app didn't start, say nothing about it.
+    assert voice_api.call_health("voice-b")["working"] is False
+
+
 @pytest.mark.flags(voice_calls=True)
 def test_a_worker_too_slow_to_start_is_tried_again(db_isolated, monkeypatch):
     """Owner, 2026-11-05: under heavy load it missed the wait, and calls stayed dead until someone
@@ -633,7 +753,7 @@ def test_a_worker_that_died_starting_is_not_retried_twice(db_isolated, monkeypat
     monkeypatch.setattr(service, "_schedule_restart", retries.append)
     asyncio.run(service.start())
     assert retries == []
-    assert _SlowWorker.stopped > 0  # it got as far as the failed start
+    assert Died.stopped > 0  # it got as far as the failed start
 
 
 def test_automatic_retries_stop_and_say_how_to_try_again(monkeypatch):
@@ -715,7 +835,7 @@ def test_only_the_owners_current_turn_is_sent():
     desk_.spoke()  # the front voice answered the small talk
     desk_.heard("So what was my spending yesterday?")
     desk_.submit("What did the owner spend yesterday?")
-    said, _, _ = desk_._queue.get_nowait()
+    said, *_ = desk_._queue.get_nowait()
     assert said == "So what was my spending yesterday?"
 
 
@@ -1007,6 +1127,7 @@ def test_words_already_shown_are_never_shown_twice_when_they_become_a_request(mo
         "anything urgent?",
         "Is anything urgent in my finances?",
         True,
+        "question",
     )
 
     published: list = []

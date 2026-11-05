@@ -77,7 +77,7 @@ const LAST_VIEWED_KEY = 'lucius_conversation_last_viewed'
 const PENDING_KEY = 'lucius_pending_conversation'
 const MAX_CONVS = 50
 
-function readActiveId(): string {
+export function readActiveId(): string {
   try {
     return localStorage.getItem(ACTIVE_KEY) || ''
   } catch {

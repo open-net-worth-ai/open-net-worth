@@ -921,6 +921,63 @@
   .lx-call-btn svg {
     display: block;
   }
+  /* A phone's call away from the Lucius tab: one round button above the tab bar, and a call's
+     problem above that. */
+  .lx-call-float {
+    position: fixed;
+    right: var(--space-4);
+    bottom: calc(24px + var(--safe-b));
+    z-index: var(--z-sticky);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-2);
+    max-width: calc(100vw - 2 * var(--space-4));
+    pointer-events: none;
+  }
+  .lx-call-float > * {
+    pointer-events: auto;
+  }
+  .lx-call-float .lx-call-notice {
+    margin: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  }
+  .lx-call-btn.lx-call-btn--fab {
+    width: 3rem;
+    height: 3rem;
+    flex: none;
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.2),
+      0 6px 16px rgba(0, 0, 0, 0.22);
+  }
+  .lx-call-fab {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 3rem;
+    padding: 0 var(--space-4) 0 var(--space-2);
+    border: none;
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.2),
+      0 6px 16px rgba(0, 0, 0, 0.22);
+  }
+  .lx-call-fab .lx-orb {
+    --lx-orb-size: 2rem;
+  }
+  .lx-call-fab-text {
+    font-variant-numeric: tabular-nums;
+  }
   /* The call's big view: `--screen` is the phone's full-screen call, `--card` takes the composer's
      place on a computer so the chat above stays readable. One look on every surface. */
   .lx-callstage {
