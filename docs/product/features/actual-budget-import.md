@@ -245,8 +245,9 @@ budget in the direction it already had, and on the schedule it already kept. A s
 make the move comes back on when the import finishes with a way of syncing chosen in the review's
 footer; choose **Don’t sync, import once** there and it stays off.
 
-Moving deletes nothing here. Rows on the first budget's accounts stay in this book, the sync leaves
-them alone, and the page says how many there are. The first sync after the move holds back every row
+Moving deletes nothing here. Rows on the first budget's accounts stay in this book and the sync leaves
+them alone. **Worth checking** says how many there are once a run on the new budget has counted them,
+so it says nothing about them until then. The first sync after the move holds back every row
 the new budget doesn't have, however few, and asks about each one in the review list: a budget
 restored from an export, or duplicated in Actual, keeps the same row ids under a new name, so a row it
 lacks may be one you added here since. The same goes the first time a sync follows a budget this book
@@ -257,7 +258,12 @@ including its review list.
 **A budget you haven't imported** isn't synced. If the sync follows one that has no account in this
 book, each run stops, and nothing is written, paired or filed on either side. **Worth checking** says
 so and offers the import right there. It keeps the direction you have, and a sync you've turned off
-stays off. Import it, the warning goes, and the next run carries on as normal.
+stays off. Import it, the warning goes, and the next run carries on as normal. If the connection is on
+a different budget and the sync is off, the import starts from the connection's budget, so choose the
+sync's budget in the list if that's the one you want.
+
+**A budget deleted in Actual** stops each run, which says the budget is gone and nothing here changes.
+Choose another in the connection and import it, as for a move.
 
 **Reset sync in Actual** is fine. Row ids don't change, so the next run carries on as before, with no
 pairing lost and nothing read as deleted. A run going at the moment of the reset stops, and the next

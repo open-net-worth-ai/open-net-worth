@@ -82,7 +82,7 @@ PAUSED = (
     "The Actual connection is paused, so this app isn't talking to your server. "
     "Resume it on the connector, then try again."
 )
-_GONE = "That budget is no longer on the Actual server. Pick it again in Connectors."
+_GONE = "That budget is no longer on the Actual server. Choose another in the connection."
 _TOO_SLOW = "This Actual file took too long to download."
 
 
@@ -417,22 +417,24 @@ def _build(creds: dict, directory: Path | None = None):
     return checked_class(actual.Actual)(**kwargs)
 
 
-def _note_sign_in(store: ActualBudgetConfigStore, refused: bool) -> None:
-    """Never in the way of the read's own outcome."""
+def _note_sign_in(store: ActualBudgetConfigStore, creds: dict, refused: bool) -> None:
+    """Never in the way of the read's own outcome, and only about the sign-in still saved: a run
+    that began before a new password was saved says nothing of the new one."""
     try:
-        store.note_sign_in(refused)
+        if store.credentials() == creds:
+            store.note_sign_in(refused)
     except Exception:
         logger.warning("could not note the Actual Budget sign-in", exc_info=False)
 
 
 @contextmanager
-def _sign_in_noted(store: ActualBudgetConfigStore) -> Iterator[None]:
+def _sign_in_noted(store: ActualBudgetConfigStore, creds: dict) -> Iterator[None]:
     try:
         yield
     except SignInRefused:
-        _note_sign_in(store, refused=True)
+        _note_sign_in(store, creds, refused=True)
         raise
-    _note_sign_in(store, refused=False)
+    _note_sign_in(store, creds, refused=False)
 
 
 def _list_files(creds: dict) -> list:
@@ -444,7 +446,7 @@ def list_budgets(store: ActualBudgetConfigStore | None = None) -> list[dict]:
     """What the saved sign-in can see: ``{"id" (the cloud file id), "name", "currency", "encrypted"}``.
     ``currency`` is ``None`` here: it lives inside each budget, which is not downloaded to list it."""
     store, creds = _prepare(store)
-    with _sign_in_noted(store):
+    with _sign_in_noted(store, creds):
         files = _plainly(_list_files, creds)
     return [
         {
@@ -563,10 +565,10 @@ def open_copy(store: ActualBudgetConfigStore | None, budget_id: str) -> Iterator
     store, creds = _prepare(store)
     directory = _new_directory()
     try:
-        with _sign_in_noted(store):  # signing in is part of building the client
+        with _sign_in_noted(store, creds):  # signing in is part of building the client
             session = _plainly(_build, creds, directory)
         with session:
-            with _sign_in_noted(store):
+            with _sign_in_noted(store, creds):
                 copy = _plainly(_download, session, creds, budget_id, directory)
             yield copy
     finally:

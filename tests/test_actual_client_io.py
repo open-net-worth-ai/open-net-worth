@@ -1051,3 +1051,34 @@ def test_the_node_server_gets_the_scrubbed_environment_and_the_core_process_help
 def test_a_plan_cant_be_shaped_without_being_told_today():
     with pytest.raises(TypeError):
         shape.Rows()
+
+
+# ── a sign-in that changed while a read was going ────────────────────────────
+
+
+def test_a_refusal_of_the_old_password_says_nothing_of_the_new_one(store, monkeypatch):
+    def refused_after_the_save(_creds):
+        store.update({"password": "a-new-password"})
+        raise _login_error(401)
+
+    monkeypatch.setattr(client, "_list_files", refused_after_the_save)
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    assert "refused the sign-in" in err.value.message, "the read itself still says so"
+    assert store.public()["last_status"] == "never_run"
+
+
+def test_a_good_read_with_the_old_password_clears_nothing_of_the_new_one(store, monkeypatch):
+    store.note_sign_in(refused=True)
+
+    def good_after_the_save(_creds):
+        store.update({"password": "a-new-password"})
+        return []
+
+    monkeypatch.setattr(client, "_list_files", good_after_the_save)
+    assert client.list_budgets(store) == []
+    assert store.public()["last_status"] == "auth_error"
+
+
+def test_a_budget_gone_doesnt_ask_to_pick_it_again():
+    assert "Pick it again" not in client._GONE and "Choose another" in client._GONE

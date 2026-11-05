@@ -181,6 +181,19 @@ def _paused_warning() -> list[dict]:
     ]
 
 
+def _import_first_line(st: dict, differs: dict | None) -> str:
+    """With the sync off and the connection on another budget, the import below starts from that
+    one, so "import it below" would name the wrong budget."""
+    plan = st["plan_name"]
+    why = (
+        f"No account of {plan} is in this book, so the sync has nothing to pair with and leaves "
+        "both sides alone."
+    )
+    if differs and not st["enabled"]:
+        return f"{why} To stay on {plan}, choose it in the list below and import it."
+    return f"Import this budget first. {why} Import it below, and the next run carries on."
+
+
 def _warnings(meta: dict, st: dict) -> list[dict]:
     """Where money isn't landing where it should, or an answer hasn't taken effect yet. Each is
     ``{"kind", "text"}``."""
@@ -205,19 +218,11 @@ def _warnings(meta: dict, st: dict) -> list[dict]:
         )
     if count := _waiting(st):
         found.append({"kind": "waiting_for_both_ways", "text": _waiting_line(st, count)})
-    if differs := _budget_differs(st):
+    differs = _budget_differs(st)
+    if differs:
         found.append(differs)
     if st["awaiting_import"]:
-        found.append(
-            {
-                "kind": "import_first",
-                "text": (
-                    f"Import this budget first. No account of {st['plan_name']} is in this book, "
-                    "so the sync has nothing to pair with and leaves both sides alone. Import it "
-                    "below, and the next run carries on."
-                ),
-            }
-        )
+        found.append({"kind": "import_first", "text": _import_first_line(st, differs)})
     return found
 
 

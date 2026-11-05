@@ -17,7 +17,7 @@ from backend.services.actual_sync.app import ACTUAL
 from backend.services.ynab_sync import runner
 from backend.services.ynab_sync import settings as ynab_settings
 from backend.services.ynab_sync import state as sync_state
-from tests.actual_sync_stub import BUDGET, BUDGET_B, seed
+from tests.actual_sync_stub import BUDGET, BUDGET_B, seed, seed_other_budget
 from tests.test_actual_sync_engine import (
     KEY,
     PAST,
@@ -165,3 +165,54 @@ def test_the_budget_it_was_imported_from_is_no_copy(world):
     enable()
     assert sync_state_of()["switched"] is False
     assert sync_state_of()["plan_id"] == BUDGET
+
+
+# ── two warnings on one page ─────────────────────────────────────────────────
+
+
+def _awaiting_import_and_elsewhere(world, enabled: bool) -> dict[str, str]:
+    world.add_budget(BUDGET_B)
+    seed_other_budget_on(world)
+    enable()
+    sync()
+    actual_app.sync_settings(enabled, None, BUDGET_B)
+    with budget_app.using(ACTUAL):
+        st = sync_state.load()
+        st["awaiting_import"] = True
+        sync_state.save(st)
+    ActualBudgetConfigStore().update({"budget_id": BUDGET, "budget_name": "ACME Home"})
+    return {w["kind"]: w["text"] for w in actual_app.sync_status()["warnings"]}
+
+
+def seed_other_budget_on(world) -> None:
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+
+
+def test_off_and_on_another_budget_the_import_below_is_said_to_start_there(world):
+    said = _awaiting_import_and_elsewhere(world, enabled=False)
+    plan = sync_state_of()["plan_name"]
+    assert "budget_differs" in said
+    assert f"To stay on {plan}, choose it in the list below" in said["import_first"]
+    assert "Import it below" not in said["import_first"]
+
+
+def test_on_and_on_another_budget_the_import_below_is_the_syncs_own(world):
+    said = _awaiting_import_and_elsewhere(world, enabled=True)
+    assert "budget_differs" in said
+    assert "Import it below" in said["import_first"]
+
+
+def test_alone_it_reads_as_it_did(world):
+    world.add_budget(BUDGET_B)
+    seed_other_budget_on(world)
+    enable()
+    sync()
+    actual_app.sync_settings(False, None, BUDGET_B)
+    with budget_app.using(ACTUAL):
+        st = sync_state.load()
+        st["awaiting_import"] = True
+        sync_state.save(st)
+    said = {w["kind"]: w["text"] for w in actual_app.sync_status()["warnings"]}
+    assert "budget_differs" not in said
+    assert said["import_first"].startswith("Import this budget first.")
