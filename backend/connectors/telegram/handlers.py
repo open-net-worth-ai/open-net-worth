@@ -443,6 +443,9 @@ class _TelegramAdapter(BaseChannelAdapter):
             chat_id=int(channel_id),
             text=f"Proposed change:\n\n{summary}",
             reply_markup=keyboard,
+            # Plain text, but Telegram still fetches a preview of any URL in it, and the
+            # arguments and the judge's reason are untrusted: no attacker's card on an approval.
+            disable_web_page_preview=True,
         )
 
 

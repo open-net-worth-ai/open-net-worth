@@ -69,8 +69,10 @@ logger = logging.getLogger(__name__)
 JUDGE_TIMEOUT_S = 10.0
 JUDGE_MAX_TOKENS = 200
 #: A batch reply carries one entry (id, verdict, a one-sentence reason) per call. A reason has no
-#: length cap of its own: a slice cut it mid-sentence on the card (owner, 2026-11-04). These token
-#: budgets are the only bound, and a reply past them is unusable JSON — a card, never a clipped one.
+#: length cap of its own: a slice cut it mid-sentence on the card (owner, 2026-11-04). On an API
+#: model these token budgets bound it, and a reply past them is unusable JSON — a card, never a
+#: clipped one. A CLI transport cannot enforce them, so there only ``JUDGE_TIMEOUT_S`` does: a
+#: surface with a length limit has to cope with a long reason (``connectors.processor.send_approval``).
 BATCH_EXTRA_TOKENS_PER_CALL = 120
 
 APPROVAL_TASK = "approval"

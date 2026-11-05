@@ -11,6 +11,7 @@ import asyncio
 import logging
 import re
 import time
+import unicodedata
 from typing import TYPE_CHECKING, Callable, Optional
 
 from backend.ai import conversation
@@ -150,6 +151,52 @@ def format_permission_card(change: dict, summary: str) -> str:
         f"revoke in Settings › Permissions."
     )
     return "\n".join(lines)
+
+
+# Draw as blank but are not whitespace to ``str.split``: braille blank and the Hangul fillers.
+_BLANK_FILLERS = "\u2800\u115f\u1160\u3164\uffa0"
+_APPROVAL_NOT_SHOWN = "I couldn't show an approval here. Nothing ran. Open the app to answer it."
+
+
+def _one_visible_line(text: str) -> str:
+    """``text`` as one line that also LOOKS like one: no line breaks, no format characters, and
+    no run of blanks that would wrap the rest onto a row of its own on a phone."""
+    visible = "".join(
+        " " if ch in _BLANK_FILLERS else ch for ch in text if unicodedata.category(ch) != "Cf"
+    )
+    return " ".join(visible.split())
+
+
+def with_judge_reason(summary: str, change: dict) -> str:
+    """``summary`` plus why the Auto judge asked, for the message the owner reads. Same words as
+    the web card.
+
+    Kept out of ``format_change_summary`` because ``chat/confirm`` writes that summary into a
+    session note, and this is untrusted text the model wrote from the call's arguments. A native
+    reply to the card can still quote it into a later turn, sanitized and fenced as data, like the
+    summary's own untrusted names. One visible line so it cannot forge rows of its own on a
+    permission prompt; each adapter's rendering of the summary escapes it
+    (``format_permission_card``)."""
+    reason = _one_visible_line(str(change.get("judge_reason") or ""))
+    return f"{summary}\nAuto asked because: {reason}" if reason else summary
+
+
+async def send_approval(connector, channel_id: str, change: dict, change_id: str) -> None:
+    """Put one approval in front of the owner, whatever it takes to keep it from going quiet.
+
+    A failed send used to leave only a log line: the turn had paused on a card nobody saw. An
+    over-long message is the likely cause, and a reason can be what tips it over, so the card goes
+    again without it, whole or not at all because a cut reason read wrongly (owner, 2026-11-04).
+    Only the exception's type is logged: a reason never reaches the log."""
+    plain = format_change_summary(change)
+    summary = with_judge_reason(plain, change)
+    for text in [summary] if summary == plain else [summary, plain]:
+        try:
+            await connector.send_proposed_change(channel_id, change, change_id, text)
+            return
+        except Exception as exc:  # noqa: BLE001 — the owner must hear about this approval
+            log.warning("[%s] approval not sent: %s", channel_id, type(exc).__name__)
+    await connector.send_text(channel_id, _APPROVAL_NOT_SHOWN)
 
 
 def format_change_summary(change: dict) -> str:
@@ -714,14 +761,13 @@ async def pump_channel_turn(
                     channel_id=channel_id,
                     sender_id=sender_id,
                 )
-                summary = format_change_summary(change)
                 log.info(
                     "[%s] proposed_change type=%s label=%s",
                     channel_id,
                     change.get("type"),
                     change.get("label") or change.get("row", {}).get("label"),
                 )
-                await connector.send_proposed_change(channel_id, change, change_id, summary)
+                await send_approval(connector, channel_id, change, change_id)
 
             elif etype == "error":
                 # A turn can FAIL without raising: assistant.run maps a provider/tool
