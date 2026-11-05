@@ -32,6 +32,8 @@ export interface ReviewItem {
   options?: { ref: string; name: string }[]
   // ... or a category here YNAB would not take (a 'failed' item has no YNAB side)
   category?: string
+  // entity 'assigned': the month the figure is for
+  month?: string
   // entity 'start': synced rows dated before the account's Starting Balance
   start?: string
   earliest?: string

@@ -51,7 +51,7 @@ export function FileUnderBankFix({
         <div key={bank} className="conn-file-fix-row">
           <Text size="xs" tone="muted">
             {list.length === 1
-              ? `“${list[0].name}” is filed under ${providerLabel} instead of ${bank}.`
+              ? `“${list[0]?.name}” is filed under ${providerLabel} instead of ${bank}.`
               : `${list.length} accounts are filed under ${providerLabel} instead of ${bank}.`}
           </Text>
           <Button size="sm" loading={busy === bank} onClick={() => void fileUnder(bank, list)}>

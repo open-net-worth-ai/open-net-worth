@@ -53,7 +53,8 @@ def test_read_shaped_tools_do_not_need_approval_even_though_they_write():
 
 
 # Exempt tools that write NOTHING (no `mutates=` tag, listed in READ_ONLY_TOOLS): the bank
-# account lists. They are exempt for permission only — nothing to refresh afterwards.
+# account lists, and YNAB's plan reads. They are exempt for permission only — nothing to
+# refresh afterwards.
 _NEVER_WRITE = frozenset(
     f"{provider}_list_accounts"
     for provider in (
@@ -66,7 +67,7 @@ _NEVER_WRITE = frozenset(
         "gocardless",
         "yodlee",
     )
-)
+) | {"ynab_list_plans", "ynab_get_plan"}
 
 
 def test_the_exempt_class_is_the_expected_curated_set_not_a_heuristic():
@@ -85,6 +86,8 @@ def test_the_exempt_class_is_the_expected_curated_set_not_a_heuristic():
     # than the fetch that writes nothing at all, so unlike every member above they carry no
     # `mutates=` tag; the exemption exists only so an "ask" connector default does not park
     # an unattended sync run (see _NEVER_WRITE above).
+    # 2026-11-03: ynab_list_plans and ynab_get_plan joined (6c7aca40) — live YNAB GETs that
+    # record no status and write nothing, exempt on the same grounds as the account lists.
     assert policy.GATE_EXEMPT_READ_SHAPED == frozenset(
         {
             "email_search_messages",
