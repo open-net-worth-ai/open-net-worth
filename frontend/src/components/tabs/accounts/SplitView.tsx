@@ -82,7 +82,7 @@ export function SplitLines({
               <span className="acct-splitline-cat">{c?.label || 'Uncategorized'}</span>
               {s.note && <span className="acct-splitline-note">{s.note}</span>}
             </span>
-            <span className="acct-splitline-amt">
+            <span className="acct-splitline-amt mask">
               {sign}
               {fCur(s.amount, currency, { cents: true }).replace('-', '')}
             </span>

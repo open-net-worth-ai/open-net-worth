@@ -130,7 +130,9 @@ export function TxnCard({
           <span className="acct-card-top">
             <span className={'acct-payee-nm' + (isTransfer ? ' transfer' : '')}>{payeeMain}</span>
             <span
-              className={'acct-card-amt ' + amtTone + (t.kind === 'investment' ? ' invest' : '')}
+              className={
+                'acct-card-amt mask ' + amtTone + (t.kind === 'investment' ? ' invest' : '')
+              }
               title={amtTitle}
             >
               <span className="acct-amt-main">{showAccount ? baseMain : nativeMain}</span>

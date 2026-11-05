@@ -217,7 +217,7 @@ function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
             <>
               <div className="acct-pop-q">
                 Is the real balance{' '}
-                <b className={account.clearedBalance < 0 ? 'neg' : ''}>
+                <b className={'mask l' + (account.clearedBalance < 0 ? ' neg' : '')}>
                   {fCur(account.clearedBalance, account.currency, { cents: true })}{' '}
                   {account.currency}
                 </b>
@@ -252,7 +252,7 @@ function ReconcilePopover({ account, onReconcile }: ReconcilePopoverProps) {
               {has && (
                 <div className="acct-pop-diff">
                   <span>Adjustment</span>
-                  <b className={diff < 0 ? 'neg' : diff > 0 ? 'pos' : ''}>
+                  <b className={diff < 0 ? 'neg mask' : diff > 0 ? 'pos mask' : ''}>
                     {diff === 0
                       ? 'In sync'
                       : (diff > 0 ? '+' : '') + fCur(diff, account.currency, { cents: true })}
@@ -552,7 +552,13 @@ export function AccountHeader({
             {dueInfo.source === 'statement' ? (
               <>
                 Congrats — this statement is <b>paid in full</b>
-                {dueInfo.totalDue != null && <> ({fCur(dueInfo.totalDue, dueInfo.currency)})</>}.
+                {dueInfo.totalDue != null && (
+                  <>
+                    {' '}
+                    (<span className="mask l">{fCur(dueInfo.totalDue, dueInfo.currency)}</span>)
+                  </>
+                )}
+                .
                 {dueInfo.statementId && (
                   <button
                     type="button"
@@ -571,9 +577,16 @@ export function AccountHeader({
               // total is only what it covers — never claim an estimated figure was "paid
               // in full" (the actual payment usually differs).
               <>
-                Congrats — <b>{fCur(dueInfo.paidAmount ?? 0, dueInfo.currency)}</b> paid this cycle,
-                covering your estimated balance
-                {dueInfo.totalDue != null && <> of ~{fCur(dueInfo.totalDue, dueInfo.currency)}</>}.
+                Congrats —{' '}
+                <b className="mask l">{fCur(dueInfo.paidAmount ?? 0, dueInfo.currency)}</b> paid
+                this cycle, covering your estimated balance
+                {dueInfo.totalDue != null && (
+                  <>
+                    {' '}
+                    of <span className="mask l">~{fCur(dueInfo.totalDue, dueInfo.currency)}</span>
+                  </>
+                )}
+                .
               </>
             )}
           </span>
@@ -612,17 +625,22 @@ export function AccountHeader({
                 {dueInfo.partial ? (
                   <>
                     {' '}
-                    Paid <b>{fCur(dueInfo.paidAmount ?? 0, dueInfo.currency)}</b>
+                    Paid <b className="mask l">{fCur(dueInfo.paidAmount ?? 0, dueInfo.currency)}</b>
                     {dueInfo.totalDue != null && (
-                      <> of {fCur(dueInfo.totalDue, dueInfo.currency)}</>
+                      <>
+                        {' '}
+                        of{' '}
+                        <span className="mask l">{fCur(dueInfo.totalDue, dueInfo.currency)}</span>
+                      </>
                     )}{' '}
-                    — <b>{fCur(dueInfo.amountDue, dueInfo.currency)}</b> still{' '}
+                    — <b className="mask l">{fCur(dueInfo.amountDue, dueInfo.currency)}</b>{' '}
+                    still{' '}
                   </>
                 ) : (
                   <>
                     {' '}
                     Payment of{' '}
-                    <b>
+                    <b className="mask l">
                       {dueInfo.source !== 'statement' ? '~' : ''}
                       {fCur(dueInfo.amountDue, dueInfo.currency)}
                     </b>{' '}
@@ -651,7 +669,8 @@ export function AccountHeader({
                   ((dueInfo.paidAmount ?? 0) < dueInfo.minPayment ? (
                     <>
                       {' '}
-                      • minimum <b>{fCur(dueInfo.minPayment, dueInfo.currency)}</b>
+                      • minimum{' '}
+                      <b className="mask l">{fCur(dueInfo.minPayment, dueInfo.currency)}</b>
                       {(dueInfo.paidAmount ?? 0) > 0 && ' not yet met'}
                     </>
                   ) : (

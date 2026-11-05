@@ -577,7 +577,7 @@ export function TxnRow({
                   {s.note}
                 </span>
               )}
-              <span className="acct-split-amt" style={{ gridColumn: gcol('amount') }}>
+              <span className="acct-split-amt mask" style={{ gridColumn: gcol('amount') }}>
                 {pos ? '+' : '−'}
                 {fCur(s.amount, t.fromCurrency ?? ccy, { cents: true }).replace('-', '')}
               </span>
