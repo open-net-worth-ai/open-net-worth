@@ -523,7 +523,11 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
 
         {/* Screen bar + composer + its toolbar are ONE input field — see .lx-inputblock. */}
         <div className="lx-inputblock">
-          <VoiceCallNotice sessionId={activeId} busy={streaming || sending} />
+          <VoiceCallNotice
+            sessionId={activeId}
+            busy={streaming || sending}
+            onNewChat={() => createConversation()}
+          />
           {/* Shared composer — model/effort/cost ride in ITS toolbar row, next to Send. */}
           <VoiceCallSlot busy={streaming || sending} visible={open}>
             <LuciusComposer

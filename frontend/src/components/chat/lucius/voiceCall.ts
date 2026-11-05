@@ -33,6 +33,8 @@ export type CallProblemKind =
   | 'dropped'
   | 'service'
   | 'other'
+  /** This conversation can't take a call (an Automation's): the way out is another one. */
+  | 'conversation'
   /** Not a problem: the page reloaded so it could reach the voice server, and a call needs a tap. */
   | 'ready'
 
@@ -41,6 +43,8 @@ export interface CallProblem {
   message: string
   /** The service's own words (LiveKit's refusal), for the notice's Details. */
   detail?: string
+  /** The conversation the call was for: its problem doesn't follow you to another. */
+  sessionId?: string
 }
 
 export type CallQuality = 'excellent' | 'good' | 'poor' | 'lost'
@@ -94,8 +98,13 @@ let audioEls: HTMLElement[] = []
 let localHangUp = false
 let endedTimer: number | undefined
 
+/** The conversation the latest call was for, which every problem from then on belongs to. */
+let callSession: string | null = null
+
 function set(next: Partial<CallState>) {
-  state = { ...state, ...next }
+  const problem =
+    next.problem && callSession ? { sessionId: callSession, ...next.problem } : next.problem
+  state = { ...state, ...next, ...(next.problem !== undefined && { problem }) }
   listeners.forEach((l) => l())
 }
 
@@ -378,6 +387,7 @@ function finish(problem: CallProblem | null) {
 export async function startCall(sessionId: string, view: CallState['view'] = 'bar'): Promise<void> {
   if (room || state.phase === 'connecting') return
   window.clearTimeout(endedTimer)
+  callSession = sessionId || null
   if (!navigator.mediaDevices?.getUserMedia) {
     set({
       ...IDLE,
@@ -418,7 +428,8 @@ export async function startCall(sessionId: string, view: CallState['view'] = 'ba
       teardown()
       // A limit reached (429: the demo's call caps, a token budget) isn't fixed in settings: say
       // why and offer Try again, not a Voice calls settings button that can't help.
-      const kind: CallProblemKind = r.status === 429 ? 'other' : 'setup'
+      const kind: CallProblemKind =
+        r.status === 429 ? 'other' : r.status === 423 ? 'conversation' : 'setup'
       set({ ...IDLE, problem: { kind, message: d.detail || 'The call could not start.' } })
       return
     }
@@ -561,6 +572,7 @@ export function dismissProblem(): void {
 export function resetVoiceCallForTests(): void {
   teardown()
   window.clearTimeout(endedTimer)
+  callSession = null
   state = IDLE
   listeners.forEach((l) => l())
 }

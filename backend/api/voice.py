@@ -148,8 +148,9 @@ def start_call(body: StartCallRequest, request: Request):
     if body.session_id and not demo_visitors.may_access(body.session_id, visitor, write=True):
         raise HTTPException(status_code=404, detail="No such conversation.")
     if body.session_id and _automation_owned(body.session_id):
+        # Its own status, not "not set up"'s 409: the page offers a new chat here, not settings.
         raise HTTPException(
-            status_code=409,
+            status_code=423,
             detail="A call can't join an Automation's conversation. Start a new chat.",
         )
     room = new_room_name()

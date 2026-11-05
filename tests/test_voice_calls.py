@@ -291,7 +291,7 @@ def test_a_call_records_its_room_and_refuses_automation_conversations(client, mo
     import backend.services.automations.runs as runs
 
     monkeypatch.setattr(runs, "automation_run_for_session", lambda sid: ({"id": "a"}, {"id": "r"}))
-    assert client.post("/api/voice/call", json={"session_id": "sess-auto"}).status_code == 409
+    assert client.post("/api/voice/call", json={"session_id": "sess-auto"}).status_code == 423
 
 
 @pytest.mark.flags(voice_calls=True)
@@ -2211,10 +2211,13 @@ def test_a_blank_voice_id_gets_a_voice_the_model_is_documented_with():
 def test_a_goodbye_is_not_modelled_on_a_time_of_day_the_front_voice_cannot_know():
     """It copied its first example, so it wished a great day at 2am (owner, 2026-11-06)."""
     agent = pytest.importorskip("backend.connectors.voice.agent")
-    examples = agent.FRONT_INSTRUCTIONS.split("A goodbye (", 1)[1].split(")", 1)[0].lower()
+    text = " ".join(agent.FRONT_INSTRUCTIONS.split())
+    examples = text.split("A goodbye (", 1)[1].split(")", 1)[0].lower()
 
-    assert "bye" in examples
+    assert "take care" in examples
     assert not any(word in examples for word in ("day", "night", "morning", "evening"))
+    # Bare "Take care." sounded curt after a thank-you (owner, 2026-11-06).
+    assert all(len(line.split()) >= 5 for line in examples.split('", "'))
     assert "never mentions it" in agent.FRONT_INSTRUCTIONS
 
 
