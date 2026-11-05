@@ -355,3 +355,96 @@ def test_a_file_holding_more_than_a_budget_is_refused_before_it_is_unpacked(
     never_leaks(caught.value)
     assert "more than a budget" in caught.value.message
     assert list(work.iterdir()) == []
+
+
+# ── what else a run reads at length has a cap and a time limit ───────────────
+
+
+def endless(chunk: bytes = b"x" * 400):
+    while True:
+        yield chunk
+
+
+def real_session(monkeypatch, handler):
+    """The real class, signed in, over ``handler`` for everything but the sign-in."""
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/account/login"):
+            return httpx.Response(200, json={"status": "ok", "data": {"token": "tok"}})
+        if path.endswith("/account/validate"):
+            return httpx.Response(200, json={"status": "ok", "data": {"validated": True}})
+        return handler(request)
+
+    real = httpx.Client
+    monkeypatch.setattr(
+        httpx, "Client", lambda **kw: real(transport=httpx.MockTransport(answer), **kw)
+    )
+    return client.checked_class(actual.Actual)(base_url=URL, password=PASSWORD)
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda s: s.data_file_index(),
+        lambda s: s.data_file("migrations/9000000000050_a.sql"),
+        lambda s: s.list_user_files(),
+    ],
+)
+@pytest.mark.parametrize("with_length", [True, False])
+def test_a_small_answer_past_its_cap_is_refused(db_isolated, monkeypatch, call, with_length):
+    monkeypatch.setattr(client, "MAX_SMALL_BYTES", 1000)
+    body = b"x" * 5000 if with_length else endless()
+    session = real_session(monkeypatch, lambda _r: httpx.Response(200, content=body))
+    with pytest.raises(ExternalServiceError, match="too large"):
+        call(session)
+
+
+def test_a_sync_answer_past_its_cap_is_refused(db_isolated, monkeypatch):
+    from actual.protobuf_models import SyncRequest
+
+    monkeypatch.setattr(client, "MAX_DOWNLOAD_BYTES", 1000)
+    session = real_session(monkeypatch, lambda _r: httpx.Response(200, content=endless()))
+    request = SyncRequest({"messages": [], "fileId": "f1", "groupId": "g1", "keyId": None})
+    with pytest.raises(ExternalServiceError, match="too large"):
+        session.sync_sync(request)
+
+
+def test_a_small_answer_that_trickles_on_is_stopped(db_isolated, monkeypatch):
+    session = real_session(monkeypatch, lambda _r: httpx.Response(200, content=endless(b"x")))
+    moments = iter(float(n) * 10 for n in range(10_000))
+    monkeypatch.setattr(client.time, "monotonic", lambda: next(moments))
+    with pytest.raises(ExternalServiceError, match="too long"):
+        session.data_file("migrations/9000000000051_a.sql")
+
+
+def test_answers_inside_their_caps_read_as_the_library_read_them(db_isolated, monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.endswith("/data-file-index.txt"):
+            return httpx.Response(200, text="default-db.sqlite\nmigrations/1_a.sql\n")
+        if path.endswith("/data/migrations/1_a.sql"):
+            return httpx.Response(200, text="SELECT 1;")
+        if path.endswith("/sync/list-user-files"):
+            return httpx.Response(200, json=FILES)
+        if path.endswith("/sync/sync"):
+            assert request.headers["content-type"] == "application/actual-sync"
+            assert request.headers["x-actual-file-id"] == "f1"
+            return httpx.Response(200, content=b"")
+        return httpx.Response(404)
+
+    from actual.protobuf_models import SyncRequest
+
+    session = real_session(monkeypatch, handler)
+    assert session.data_file_index() == ["default-db.sqlite", "migrations/1_a.sql"]
+    assert session.data_file("migrations/1_a.sql") == b"SELECT 1;"
+    (listed,) = session.list_user_files().data
+    assert listed.file_id == "f1" and listed.name == "ACME Home"
+    request = SyncRequest({"messages": [], "fileId": "f1", "groupId": "g1", "keyId": None})
+    assert list(session.sync_sync(request).messages) == []
+
+
+def test_an_error_status_still_reads_as_one(db_isolated, monkeypatch):
+    session = real_session(monkeypatch, lambda _r: httpx.Response(500))
+    with pytest.raises(httpx.HTTPStatusError):
+        session.data_file("migrations/9000000000052_a.sql")

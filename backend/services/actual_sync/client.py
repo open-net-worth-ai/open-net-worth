@@ -10,12 +10,16 @@ connector is paused too: a pause is what a person does when a server looks wrong
 Everything a person can read from here is ours: an exception from ``actualpy`` or ``httpx`` can
 carry the server address or a password, so it is classified and replaced, never shown. The
 downloaded file is capped (``MAX_DOWNLOAD_BYTES``) both on the wire and unpacked. Every request has
-a real timeout, and a download a time limit of its own, so no server can hold a run forever.
+a real timeout. What a run reads at any length (the budget, migrations, the file lists, a sync's
+answer) also has a size cap and a time limit of its own (``Checked._capped``), so no server can
+hold a run forever with those. The short answers ``actualpy`` reads itself (sign-in, its validation,
+server info, an encryption key) have only the timeout, as signing in happens inside its constructor.
 """
 
 from __future__ import annotations
 
 import functools
+import io
 import logging
 import re
 import shutil
@@ -53,8 +57,10 @@ from backend.services.ynab_sync.client import Stopped
 logger = logging.getLogger(__name__)
 
 MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
+MAX_SMALL_BYTES = 4 * 1024 * 1024  # a migration file, the migration list, the budget list
 TIMEOUT = httpx.Timeout(connect=15.0, read=120.0, write=120.0, pool=15.0)
 DOWNLOAD_SECONDS = 600.0  # a read timeout covers one chunk; a trickle could go on for ever
+SMALL_SECONDS = 120.0
 CLOCK_MARGIN = timedelta(minutes=10)  # how far behind a person's device clock a read still sees
 
 _active: set[str] = set()
@@ -141,19 +147,24 @@ def sweep_leftovers() -> int:
 # ── the checked client class ─────────────────────────────────────────────────
 
 
-def _read_capped(response: httpx.Response) -> bytes:
+def _read_capped(
+    response: httpx.Response, limit: int | None = None, seconds: float | None = None
+) -> bytes:
+    """The body, up to ``limit`` bytes and ``seconds``, by default those of a whole budget.
+    ``getvalue`` hands over the buffer rather than copying it."""
+    limit = MAX_DOWNLOAD_BYTES if limit is None else limit
     declared = response.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > MAX_DOWNLOAD_BYTES:
+    if declared.isdigit() and int(declared) > limit:
         raise ExternalServiceError(_TOO_LARGE)
-    body = bytearray()
-    stop_at = time.monotonic() + DOWNLOAD_SECONDS
+    body = io.BytesIO()
+    stop_at = time.monotonic() + (DOWNLOAD_SECONDS if seconds is None else seconds)
     for chunk in response.iter_bytes():
-        body += chunk
-        if len(body) > MAX_DOWNLOAD_BYTES:
+        body.write(chunk)
+        if body.tell() > limit:
             raise ExternalServiceError(_TOO_LARGE)
         if time.monotonic() > stop_at:
             raise ExternalServiceError(_TOO_SLOW)
-    return bytes(body)
+    return body.getvalue()
 
 
 def _check_archive(source) -> None:
@@ -172,11 +183,12 @@ def _check_archive(source) -> None:
 
 @functools.lru_cache(maxsize=8)
 def checked_class(base: type) -> type:
-    """``base`` (``actual.Actual``) with three overrides: the migrations a snapshot still needs
+    """``base`` (``actual.Actual``) with these overrides: the migrations a snapshot still needs
     are checked BEFORE they run (``actualpy`` records one as done even when it ran only part of
     it) and run confined to the copy (``sql_guard``), the columns this app reads and writes are
-    checked after, and the download and unzip are checked for size and content (``actualpy``
-    buffers a download whole, unpacks whatever it holds, and has no cap)."""
+    checked after, the download and unzip are checked for size and content (``actualpy`` buffers
+    a download whole, unpacks whatever it holds, and has no cap), and so is what else a run reads
+    at length."""
 
     class Checked(base):  # type: ignore[valid-type, misc]
         def run_migrations(self, migration_files):
@@ -194,14 +206,47 @@ def checked_class(base: type) -> type:
             with closing(sqlite3.connect(db)) as conn:
                 compat.check_schema(conn)
 
+        def _capped(self, method, url, limit=None, seconds=None, **request):
+            with self._requests_session.stream(method, url, **request) as response:
+                response.raise_for_status()
+                return _read_capped(response, limit, seconds)
+
+        def _capped_small(self, url):
+            return self._capped("GET", url, MAX_SMALL_BYTES, SMALL_SECONDS)
+
         def download_user_file(self, file_id):
             from actual.api.models import Endpoints
 
-            with self._requests_session.stream(
-                "GET", Endpoints.DOWNLOAD_USER_FILE.value, headers=self.headers(file_id)
-            ) as response:
-                response.raise_for_status()
-                return _read_capped(response)
+            url = Endpoints.DOWNLOAD_USER_FILE.value
+            return self._capped("GET", url, headers=self.headers(file_id))
+
+        def data_file_index(self):
+            from actual.api.models import Endpoints
+
+            return self._capped_small(Endpoints.DATA_FILE_INDEX.value).decode().splitlines()
+
+        def data_file(self, file_path):
+            return self._capped_small(f"/data/{file_path}")
+
+        def list_user_files(self):
+            from actual.api.models import Endpoints, ListUserFilesDTO
+
+            body = self._capped_small(Endpoints.LIST_USER_FILES.value)
+            return ListUserFilesDTO.model_validate_json(body)
+
+        def sync_sync(self, request):
+            """As big as a budget: what a sync answers is what changed since the snapshot."""
+            from actual.api.models import Endpoints
+            from actual.protobuf_models import SyncRequest, SyncResponse
+
+            headers = {"Content-Type": "application/actual-sync"}
+            body = self._capped(
+                "POST",
+                Endpoints.SYNC.value,
+                headers=self.headers(request.fileId, extra_headers=headers),
+                content=SyncRequest.serialize(request),
+            )
+            return SyncResponse.deserialize(body)
 
         def import_zip(self, file_bytes):
             _check_archive(file_bytes)
