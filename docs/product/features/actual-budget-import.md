@@ -139,8 +139,9 @@ ask. It covers transactions, each month's Assigned, categories and groups. No AI
 
 Once it's set up, **Automations → Data sync → Actual** has the switch and **Sync now** at the top,
 then **Needs your review**, **Worth checking** (only when there's something to say), **Direction**,
-**Schedule**, the budget, how it decides, and a history of every run. It reads the same as YNAB's
-page. **Actual connection…** in the menu opens the connector's form.
+**Schedule**, the budget, how it decides, and a history of its runs. The history leaves out previews
+that went fine, since each re-check of the review would add one; a failed preview stays. It reads the
+same as YNAB's page. **Actual connection…** in the menu opens the connector's form.
 
 **Which way changes go.** You choose a direction at import or later:
 
@@ -153,8 +154,10 @@ What one direction held back isn't lost. Switch back to both ways and the next s
 **When both sides changed the same thing.** It waits in the review list, whichever direction you
 chose, and you pick the version to keep. The same goes for a row someone edits in Actual during
 the moments a sync is writing it: the sync checks each row just before writing and leaves one that
-moved. That narrows the gap to milliseconds. It can't close it, because an Actual server has no way
-to refuse a write over a newer one.
+moved. That narrows the gap to milliseconds, plus the time a request takes to reach your server. It
+can't close it, because an Actual server has no way to refuse a write over a newer one: if your edit
+lands inside that gap, on a field the sync is writing, the sync's value wins and nothing is filed. A
+device whose clock runs more than ten minutes behind can lose the same way.
 
 **What differs from YNAB's sync:**
 
@@ -197,6 +200,12 @@ the same envelopes would fight. Turning one on is refused while the other's sync
 is running an import or a sync, and so is **Sync now**. The refusal says which, wherever you pressed.
 Looking at the review or re-checking against the other app reads only, and gets in nothing's way.
 
+**A very large run** does part of its work and says the rest is waiting for the next run. An Actual
+server takes 500 requests a minute from one address, so a run stops itself well short of that: it
+writes about 200 batches, and a figure in Assigned with its note line is two of them. If you press
+**Sync now** again straight after, the server can turn the run away with `HTTP 429`. Nothing is lost,
+and a later run carries on.
+
 **If something goes wrong.** A server that's down, a wrong password or a budget that's gone stops the
 run with a plain message. Nothing is lost. What was already confirmed stays recorded, and the next
 run works out the rest. A run that's cut off partway can't send a row twice: the next run links what
@@ -237,8 +246,14 @@ so and offers the import right there. It keeps the direction you have, and a syn
 stays off. Import it, the warning goes, and the next run carries on as normal.
 
 **Reset sync in Actual** is fine. Row ids don't change, so the next run carries on as before, with no
-pairing lost and nothing read as deleted.
+pairing lost and nothing read as deleted. A run going at the moment of the reset stops, and the next
+one carries on.
+
+**A budget last refreshed long ago.** Budgets from older versions of Actual open normally. One whose
+copy on the server dates from before September 2021, or that needs a change this app hasn't reviewed
+yet, is refused with a message saying so. **Settings → Reset sync** in Actual refreshes it.
 
 **The limits.** The sync reads a fresh copy of the budget on every run and deletes it afterwards, so
-your decrypted budget doesn't stay on disk. It hasn't been tested on Windows, with OpenID-only
-servers, or on large real budgets.
+your decrypted budget doesn't stay on disk. It's tested against a real Actual server for every case on
+this page, including end-to-end encrypted and tracking budgets. It hasn't been tested on Windows,
+with OpenID-only servers, or on large real budgets.

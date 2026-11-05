@@ -48,8 +48,9 @@ ACTUAL = BudgetApp(
         card_payment_categories=False,
         compares_ready_to_assign=False,
         zero_based_on_fresh_book=True,
-        request_cap=1_000_000,
-        category_request_cap=1_000_000,
+        # A batch is two requests, and the server allows one address 500 a minute.
+        request_cap=200,
+        category_request_cap=100,
         flag_trail=False,
         resolve_request_cap=1_000_000,
         delta_read=False,

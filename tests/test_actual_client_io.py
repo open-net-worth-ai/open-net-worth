@@ -9,6 +9,7 @@ the real class over an in-process ``httpx`` transport. One test is skipped unles
 from __future__ import annotations
 
 import ast
+import datetime
 import io
 import logging
 import os
@@ -614,6 +615,46 @@ def test_a_safe_pending_migration_runs_and_then_the_schema_is_checked(tmp_path):
     conn.close()
     with pytest.raises(ExternalServiceError, match="accounts"):
         client.checked_class(Base)().run_migrations(files)
+
+
+def test_a_later_read_asks_from_where_the_copy_began_not_from_the_clock():
+    """Found on a real server: a commit moves the clock past our own messages and the server
+    answers only what is stamped later, so a person's edit stamped just before ours never reached
+    this copy, and a later batch wrote over it unseen."""
+    from actual.protobuf_models import HULC_Client
+
+    day = datetime.datetime(2026, 11, 5, 12, 0, 0)
+    floor = day - client.CLOCK_MARGIN
+    asked = []
+
+    class Base:
+        _hulc_client = HULC_Client("aaaaaaaaaaaaaaaa", 0, day)
+        answers = []
+
+        def sync(self):
+            asked.append(self._hulc_client.ts)
+            if self.answers:
+                self._hulc_client = HULC_Client.from_timestamp(self.answers.pop())
+            return []
+
+    checked = client.checked_class(Base)()
+    checked.sync()  # the copy's first read
+    assert asked == [day]
+
+    committed = day + datetime.timedelta(seconds=5)
+    checked._hulc_client = HULC_Client("aaaaaaaaaaaaaaaa", 3, committed)
+    clock = checked._hulc_client
+    checked.sync()
+    assert asked[-1] == floor, "asks again from a little before the copy began"
+    assert checked._hulc_client is clock, "with nothing back, the clock stays where commit put it"
+
+    later = "2026-11-05T12:00:09.000Z-0002-bbbbbbbbbbbbbbbb"
+    Base.answers.append(later)
+    checked.sync()
+    assert asked[-1] == floor
+    assert checked._hulc_client.ts == datetime.datetime(2026, 11, 5, 12, 0, 9), "keeps what it read"
+    checked.sync()
+    assert asked[-1] == floor, "and the floor never moves within a copy"
 
 
 def test_the_checked_class_is_a_real_subclass_of_whatever_actual_is(fake):

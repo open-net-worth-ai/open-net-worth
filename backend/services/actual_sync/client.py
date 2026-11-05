@@ -27,6 +27,7 @@ import uuid
 import zipfile
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -48,6 +49,7 @@ logger = logging.getLogger(__name__)
 MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024
 TIMEOUT = httpx.Timeout(connect=15.0, read=120.0, write=120.0, pool=15.0)
 DOWNLOAD_SECONDS = 600.0  # a read timeout covers one chunk; a trickle could go on for ever
+CLOCK_MARGIN = timedelta(minutes=10)  # how far behind a person's device clock a read still sees
 
 _active: set[str] = set()
 _active_lock = threading.Lock()
@@ -181,6 +183,28 @@ def checked_class(base: type) -> type:
             if hasattr(file_bytes, "seek"):
                 file_bytes.seek(0)
             return super().import_zip(file_bytes)
+
+        _reads_from = None
+
+        def sync(self):
+            """Asks from a little before this copy began, not from the clock. ``commit`` stamps our
+            messages and moves the clock past them, and the server answers only what is stamped
+            later, so an edit stamped just before ours and arriving just after would stay out of
+            this copy, and a later batch would write over it unseen. What comes back twice is
+            replayed in timestamp order, so each cell ends where the server's does."""
+            clock = self._hulc_client
+            if self._reads_from is None:
+                changes = super().sync()
+                ts = self._hulc_client.ts
+                self._reads_from = ts - CLOCK_MARGIN if ts else None
+                return changes
+            asked = type(clock)(clock.client_id, 0, self._reads_from)
+            self._hulc_client = asked
+            try:
+                return super().sync()
+            finally:
+                if self._hulc_client is asked:
+                    self._hulc_client = clock
 
     return Checked
 

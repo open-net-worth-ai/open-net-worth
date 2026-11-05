@@ -2925,3 +2925,25 @@ def test_an_import_route_can_turn_the_sync_on(db_isolated, tmp_path, monkeypatch
     ):
         time.sleep(0.02)
     assert client.get("/api/actual-budget/sync").json()["enabled"] is True
+
+
+# ── the server's request limit, found on a real one ──
+
+
+def test_a_run_keeps_under_the_servers_limit_and_says_what_waits(world, monkeypatch):
+    """The real server takes 500 requests a minute from an address, and a batch is two. Past the
+    cap the rest waits for the next run, in the words a person sees."""
+    assert ACTUAL.caps.request_cap * 2 < 500
+    assert ACTUAL.caps.category_request_cap < ACTUAL.caps.request_cap
+    enable()
+    sync()
+    world.calls.clear()
+    planning.apply_budget_change(
+        {"type": "assign", "month": KEY, "envelope_id": envelope_here("Food")["id"], "amount": 77.0}
+    )
+    with monkeypatch.context() as capped:
+        capped.setattr(sync_state, "request_cap", lambda: 2)
+        first = sync()
+    assert "waiting for the next run" in first["summary"]
+    assert writes_seen(world) == []
+    assert "sent to Actual" in sync()["summary"]
