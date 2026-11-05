@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import http.server
 import json
+import socket
 import socketserver
 import threading
 import time
@@ -496,6 +497,52 @@ def test_complete_reconnect_updates_the_existing_server(db_isolated, monkeypatch
     assert store.find("mercury").enabled is True  # reconnect does not touch enabled
 
 
+def _begin_a_reconnect(store, monkeypatch) -> str:
+    store.create(
+        McpServerConfig(
+            id="mercury",
+            name="Mercury",
+            transport="http",
+            url="https://mcp.mercury.com/mcp",
+            auth_type="oauth",
+            enabled=True,
+        )
+    )
+    _fake_discovery(monkeypatch)
+    _fake_register(monkeypatch)
+    return oauth_flow.begin(server_id="mercury", request_base_url=BASE_URL)["flow_id"]
+
+
+def test_the_poll_reads_pending_during_the_token_exchange(db_isolated, monkeypatch):
+    store = McpClientStore()
+    state = _begin_a_reconnect(store, monkeypatch)
+    seen = []
+
+    def exchange(*a, **kw):
+        seen.append(oauth_pending.get_status(state)["status"])
+        return oauth.TokenResponse(access_token="new", refresh_token="r", expires_in=300, scope="")
+
+    monkeypatch.setattr(oauth, "exchange_code_for_token", exchange)
+
+    assert oauth_flow.complete(state=state, code="c")["ok"] is True
+
+    assert seen == ["pending"]
+    assert oauth_pending.get_status(state)["status"] == "ok"
+    assert store.find("mercury").last_status == "ok"
+
+
+def test_a_crash_while_finishing_does_not_leave_the_poll_waiting(db_isolated, monkeypatch):
+    state = _begin_a_reconnect(McpClientStore(), monkeypatch)
+    monkeypatch.setattr(
+        oauth, "exchange_code_for_token", lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("x"))
+    )
+
+    with pytest.raises(RuntimeError):
+        oauth_flow.complete(state=state, code="c")
+
+    assert oauth_pending.get_status(state)["status"] == "error"
+
+
 # ── ensure_fresh_token: invalid_client clears registration, never re-registers ──
 
 
@@ -566,6 +613,68 @@ def test_ensure_fresh_token_other_failure_marks_auth_error_but_keeps_the_registr
     stored = store.find("mercury")
     assert stored.oauth is not None  # registration kept — only the token is stale
     assert stored.oauth.client_id == "client-1"
+
+
+def test_a_refused_refresh_logs_the_servers_answer_and_no_token(db_isolated, monkeypatch, caplog):
+    store = McpClientStore()
+    server = _seeded_oauth_server(store, expires_at=time.time() - 100)
+    monkeypatch.setattr(
+        oauth,
+        "refresh_token",
+        lambda *a, **kw: (_ for _ in ()).throw(
+            oauth.TokenExchangeError(
+                "refresh failed", code="invalid_grant", detail="token was already used"
+            )
+        ),
+    )
+
+    with caplog.at_level("WARNING", logger="backend.mcp.oauth_flow"):
+        oauth_flow.ensure_fresh_token(server)
+
+    assert "invalid_grant (token was already used)" in caplog.text
+    assert server.oauth.refresh_token not in caplog.text
+
+
+def test_ensure_fresh_token_leaves_the_sign_in_alone_when_the_network_failed(
+    db_isolated, monkeypatch
+):
+    store = McpClientStore()
+    server = _seeded_oauth_server(store, expires_at=time.time() - 100)
+    store.record_discovery("mercury", [{"name": "list_files"}], "ok", None)
+    monkeypatch.setattr(
+        oauth,
+        "refresh_token",
+        lambda *a, **kw: (_ for _ in ()).throw(oauth.OAuthUnreachableError("no dns")),
+    )
+
+    result = oauth_flow.ensure_fresh_token(server)
+
+    assert result.last_status == "ok"
+    assert result.last_error is None
+    assert store.find("mercury").oauth.refresh_token == server.oauth.refresh_token
+
+
+def test_no_dns_at_boot_with_a_stale_token_changes_nothing_but_the_count(db_isolated, monkeypatch):
+    """The whole real sequence: a stale token at startup, no DNS for the refresh or the read."""
+    from backend.db.pending_plan_store import PendingPlanStore
+    from backend.mcp.client_manager import McpClientManager
+
+    def no_dns(*a, **kw):
+        raise socket.gaierror(8, "nodename nor servname provided")
+
+    store = McpClientStore()
+    _seeded_oauth_server(store, expires_at=time.time() - 100)
+    store.update("mercury", {"enabled": True})
+    store.record_discovery("mercury", [{"name": "list_files"}], "ok", None)
+    monkeypatch.setattr(socket, "getaddrinfo", no_dns)
+
+    McpClientManager(store=store, pending=PendingPlanStore()).connect_enabled()
+
+    stored = store.find("mercury")
+    assert stored.last_status == "ok"
+    assert [t["name"] for t in stored.discovered_tools] == ["list_files"]
+    assert stored.refresh_failures == 1
+    assert stored.oauth is not None
 
 
 def test_ensure_fresh_token_never_re_registers_on_a_background_path(db_isolated, monkeypatch):

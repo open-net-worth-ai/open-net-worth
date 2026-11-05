@@ -113,7 +113,13 @@ def test_a_call_needs_setup_then_a_running_worker(client, monkeypatch):
             "api_secret": SECRET,
         },
     )
-    assert client.post("/api/voice/call", json={}).status_code == 503
+    retried: list[int] = []
+    monkeypatch.setattr(service, "retry_start", lambda: retried.append(1))
+    monkeypatch.setattr(service, "libraries_installed", lambda: True)
+    down = client.post("/api/voice/call", json={})
+    assert down.status_code == 503
+    assert "starting up" in down.json()["detail"]
+    assert retried == [1]  # pressing Call is the manual retry
 
     monkeypatch.setattr(
         service,
@@ -158,10 +164,7 @@ def test_worker_stays_down_without_flag_setup_or_libraries(db_isolated, monkeypa
 
 
 def test_live_events_become_what_a_voice_needs():
-    assert (
-        desk.translate({"type": "text_delta", "text": "**About** [two](x) dollars"}).text
-        == "About two dollars"
-    )
+    assert desk.translate({"type": "text_delta", "text": "[two](x"}).text == "[two](x"
     tool = desk.translate(
         {
             "type": "tool_use_start",
@@ -564,6 +567,125 @@ def test_a_worker_that_cannot_load_says_why(db_isolated, monkeypatch):
     asyncio.run(service.start())
     status = service.status()
     assert status["running"] is False and "couldn't start" in status["error"]
+
+
+class _SlowWorker:
+    """A worker that never says it is ready: still alive when the wait runs out."""
+
+    alive_now = True
+    stopped = 0
+
+    def __init__(self, _loop, _on_exit):
+        pass
+
+    def start(self, _init):
+        return False
+
+    def alive(self):
+        return self.alive_now
+
+    def stop(self):
+        type(self).stopped += 1
+        self.alive_now = False
+
+
+def _voice_set_up(monkeypatch):
+    from backend.db.voice_config_store import VoiceConfigStore
+
+    VoiceConfigStore().update(
+        {
+            "enabled": True,
+            "livekit_url": "wss://acme.livekit.cloud",
+            "api_key": "APIx",
+            "api_secret": SECRET,
+        }
+    )
+    monkeypatch.setattr(service, "libraries_installed", lambda: True)
+    monkeypatch.setattr(service, "_worker", service._Worker())
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_a_worker_too_slow_to_start_is_tried_again(db_isolated, monkeypatch):
+    """Owner, 2026-11-05: under heavy load it missed the wait, and calls stayed dead until someone
+    restarted the app, with nothing in the log to say why."""
+    from backend.connectors.voice import host
+
+    _voice_set_up(monkeypatch)
+    monkeypatch.setattr(host, "WorkerProcess", _SlowWorker)
+    retries: list = []
+    monkeypatch.setattr(service, "_schedule_restart", retries.append)
+    asyncio.run(service.start())
+    assert len(retries) == 1
+    assert service.status()["running"] is False
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_a_worker_that_died_starting_is_not_retried_twice(db_isolated, monkeypatch):
+    """Its exit has already scheduled the restart: two timers would use up the attempts."""
+    from backend.connectors.voice import host
+
+    class Died(_SlowWorker):
+        alive_now = False
+
+    _voice_set_up(monkeypatch)
+    monkeypatch.setattr(host, "WorkerProcess", Died)
+    retries: list = []
+    monkeypatch.setattr(service, "_schedule_restart", retries.append)
+    asyncio.run(service.start())
+    assert retries == []
+    assert _SlowWorker.stopped > 0  # it got as far as the failed start
+
+
+def test_automatic_retries_stop_and_say_how_to_try_again(monkeypatch):
+    monkeypatch.setattr(service, "_worker", service._Worker())
+    service._worker.restarts = len(service._RESTART_DELAYS)
+    service._schedule_restart(None)
+    assert service._worker.error == "Voice calls couldn't start. Press Call to try again."
+
+
+def test_pressing_call_with_the_worker_down_starts_it_with_fresh_attempts(monkeypatch):
+    monkeypatch.setattr(service, "_worker", service._Worker())
+    service._worker.restarts = 3
+    started: list[int] = []
+
+    async def fake_start():
+        started.append(service._worker.restarts)
+
+    monkeypatch.setattr(service, "_start", fake_start)
+
+    async def main():
+        service._worker.app_loop = asyncio.get_running_loop()
+        service.retry_start()
+        await asyncio.sleep(0.01)
+
+    asyncio.run(main())
+    assert started == [0]
+
+
+def test_pressing_call_leaves_a_worker_that_has_come_up_alone(monkeypatch):
+    """A second press while the first start was under way must not restart a healthy worker."""
+    monkeypatch.setattr(service, "_worker", service._Worker())
+    service._worker.restarts = 2
+    monkeypatch.setattr(service, "_running", lambda: True)
+    started: list[int] = []
+
+    async def fake_start():
+        started.append(1)
+
+    monkeypatch.setattr(service, "_start", fake_start)
+
+    async def main():
+        service._worker.app_loop = asyncio.get_running_loop()
+        service.retry_start()
+        await asyncio.sleep(0.01)
+
+    asyncio.run(main())
+    assert started == [] and service._worker.restarts == 2
+
+
+def test_retry_does_nothing_before_the_app_has_a_loop(monkeypatch):
+    monkeypatch.setattr(service, "_worker", service._Worker())
+    service.retry_start()
 
 
 def test_the_page_may_reach_only_the_owners_voice_server():
@@ -1300,6 +1422,131 @@ def test_a_link_in_a_reply_shows_in_the_chat_and_only_its_name_is_read_out():
 
     assert "markdown link" in VOICE_NOTE
     assert speakable("Open [the ACME page](https://acme.example/x).") == "Open the ACME page."
+    assert speakable("**About** [two](x) dollars") == "About two dollars"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "[Review and submit](https://acme.example/x)",
+        "- [Review and submit](https://acme.example/x)",
+        "**[Review and submit](https://acme.example/x)**",
+        "[Review and submit](https://acme.example/x).",
+    ],
+)
+def test_a_link_on_its_own_line_is_not_read_out(line):
+    """Owner, 2026-11-05: the sentence said to open the link, then its label was read as well."""
+    from backend.connectors.voice.desk import speakable
+
+    assert speakable(f"It's saved. Open the link in the chat.\n\n{line}") == (
+        "It's saved. Open the link in the chat."
+    )
+    assert speakable(line).endswith("Review and submit") or speakable(line).endswith(
+        "Review and submit."
+    )
+
+
+def test_the_greeting_does_not_always_ask_the_same_thing():
+    """Owner, 2026-11-05: not always "what can I do for you"."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    assert len(set(agent.GREETING_OPENINGS)) >= 4
+    lines = {agent._greeting("Sam", "morning") for _ in range(200)}
+    assert any('"good morning"' in line for line in lines)
+    assert any('"hi"' in line for line in lines)
+    assert all('"Sam"' in line and "what you can do for them" not in line for line in lines)
+    assert all('"hi"' in agent._greeting("Sam", "") for _ in range(20))
+
+
+def test_a_greeting_never_asks_the_same_thing_twice_running():
+    """Owner, 2026-11-05: the same ending three calls in a row."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    size = len(agent.GREETING_OPENINGS)
+    picks = [agent._next_opening() for _ in range(size * 40)]
+    assert all(a != b for a, b in zip(picks, picks[1:]))
+    agent._opening_bag.clear()
+    bag = [agent._next_opening() for _ in range(size)]
+    assert sorted(bag) == sorted(agent.GREETING_OPENINGS)
+
+
+@pytest.mark.parametrize(
+    "hour, part",
+    [(5, "morning"), (11, "morning"), (12, "afternoon"), (17, "afternoon")]
+    + [(18, "evening"), (22, "evening"), (23, ""), (4, "")],
+)
+def test_the_greeting_goes_by_the_owners_clock(monkeypatch, hour, part):
+    from datetime import datetime
+
+    from backend.connectors.voice import host
+
+    monkeypatch.setattr(service, "user_now", lambda: datetime(2026, 1, 1, hour))
+    assert service.part_of_day() == part
+    assert "part_of_day" in host.CALLS
+
+
+def test_the_log_times_lucius_writing_from_after_his_last_lookup(caplog, monkeypatch):
+    """Owner, 2026-11-05: how much would speaking while the answer streams actually save?"""
+    import logging
+    from types import SimpleNamespace
+
+    from backend.connectors.voice import timing
+
+    clock = iter([10.0, 11.0, 14.0, 14.5])
+    monkeypatch.setattr(timing, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+    with caplog.at_level(logging.INFO, logger=timing.__name__):
+        answer = timing.AnswerTiming()  # asked at 10
+        answer.text("Let me look. ")  # 11: his working
+        answer.lookup()
+        answer.text("  ")  # no clock read: nothing written yet
+        answer.text("About two dollars.")  # 14
+        answer.text(" Really.")
+        answer.done(25)  # 14.5
+    assert "began 4.00s after the request, written in 0.50s, 25 chars" in caplog.text
+    assert "dollars" not in caplog.text
+
+
+def test_a_request_that_ends_without_an_answer_is_logged_as_that(caplog):
+    import logging
+
+    from backend.connectors.voice import timing
+
+    with caplog.at_level(logging.INFO, logger=timing.__name__):
+        answer = timing.AnswerTiming()
+        answer.text("Let me look.")
+        answer.lookup()
+        answer.done(0)
+    assert "no answer" in caplog.text
+
+
+def test_collect_logs_how_long_the_answer_took(caplog):
+    import logging
+
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    desk_ = bare_desk(agent, [])
+
+    async def events():
+        yield desk.translate({"type": "text_delta", "text": "All done."})
+
+    with caplog.at_level(logging.INFO, logger="backend.connectors.voice.timing"):
+        asyncio.run(desk_._collect(events()))
+    assert "written in" in caplog.text and "9 chars" in caplog.text
+
+
+def test_a_link_split_across_stream_chunks_is_still_read_as_its_label():
+    """Cleaned chunk by chunk, the regex saw half a link and the address would be read out."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_._answer_now = said.append
+
+    async def events():
+        for part in ("Open [the ACME", " page](https://acme", ".example/x) now.\n\n[Go](y)"):
+            yield desk.translate({"type": "text_delta", "text": part})
+
+    text, approval = asyncio.run(desk_._collect(events()))
+    desk_._speak(text, approval)
+    assert said == ["Open the ACME page now."]
 
 
 def test_a_call_left_silent_ends_even_with_a_card_waiting_or_work_running(monkeypatch):

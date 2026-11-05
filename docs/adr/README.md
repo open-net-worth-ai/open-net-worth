@@ -531,3 +531,4 @@ away**. To change a recorded decision, add a **new** ADR and flip the old one's 
 | [2026-11-03-lucius-may-hand-the-user-a-plaid-reconnect-link](2026-11-03-lucius-may-hand-the-user-a-plaid-reconnect-link.md) | Lucius may hand the user a Plaid reconnect link | Accepted | 2026-11-03 |
 | [2026-11-05-a-telegram-owner-sets-and-gets-the-approval-mode](2026-11-05-a-telegram-owner-sets-and-gets-the-approval-mode.md) | A Telegram owner's turn follows the approval mode, and the owner can set it from the bot | Accepted | 2026-11-05 |
 | [2026-11-05-lucius-can-ask-the-open-app-what-is-on-screen](2026-11-05-lucius-can-ask-the-open-app-what-is-on-screen.md) | Lucius can ask the open app what is on screen (`read_screen`) | Accepted | 2026-11-05 |
+| [2026-11-05-a-runs-behaviour-lives-in-its-instructions](2026-11-05-a-runs-behaviour-lives-in-its-instructions.md) | A run's behaviour lives in its instructions, and the app only supplies facts about runs | Accepted | 2026-11-05 |

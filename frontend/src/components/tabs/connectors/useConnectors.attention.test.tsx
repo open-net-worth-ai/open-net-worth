@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 //
-// The nav's red dot reads the same `attention` the list's Attention filter does.
+// The nav's dot reads the same `attention` the list's Attention filter does.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, renderHook, waitFor } from '@testing-library/react'
 import { clearQueryCache } from '../../../state/queryCache'
-import { useConnectorAttentionCount } from './useConnectors'
+import { useConnectorAttentionCount, useConnectorAttentionIsSignInOnly } from './useConnectors'
 import type { Connector } from './types'
 
 const authFetch = vi.hoisted(() => vi.fn())
@@ -51,5 +51,25 @@ describe('useConnectorAttentionCount', () => {
     const { result } = renderHook(() => useConnectorAttentionCount())
     await waitFor(() => expect(authFetch).toHaveBeenCalled())
     expect(result.current).toBe(0)
+  })
+})
+
+describe('useConnectorAttentionIsSignInOnly', () => {
+  const signedOut = connector({ id: 'mcp:acme', config: { last_status: 'auth_error' } })
+
+  it('is amber while every problem is a sign-in', async () => {
+    serve([signedOut, connector({ id: 'mcp:fine', config: { last_status: 'ok' } })])
+    const { result } = renderHook(() => useConnectorAttentionIsSignInOnly())
+    await waitFor(() => expect(result.current).toBe(true))
+  })
+
+  it('goes back to red as soon as something is actually failing', async () => {
+    serve([signedOut, connector({ id: 'mcp:down', config: { last_status: 'connect_error' } })])
+    const { result } = renderHook(() => ({
+      count: useConnectorAttentionCount(),
+      signInOnly: useConnectorAttentionIsSignInOnly(),
+    }))
+    await waitFor(() => expect(result.current.count).toBe(2))
+    expect(result.current.signInOnly).toBe(false)
   })
 })

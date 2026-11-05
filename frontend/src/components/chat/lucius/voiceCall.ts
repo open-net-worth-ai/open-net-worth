@@ -5,7 +5,9 @@ import {
   RoomEvent,
   Track,
   createLocalAudioTrack,
+  type ConnectionQuality,
   type LocalAudioTrack,
+  type Participant,
 } from 'livekit-client'
 import { authFetch } from '../../../api/client'
 import { desktopBridge, desktopClientBridge } from '../../../platform/desktop'
@@ -27,6 +29,8 @@ export interface CallProblem {
   detail?: string
 }
 
+export type CallQuality = 'excellent' | 'good' | 'poor' | 'lost'
+
 export interface CallState {
   phase: CallPhase
   sessionId: string | null
@@ -36,13 +40,17 @@ export interface CallState {
   /** Length of the call that just ended, for the brief "Call ended · 2:14". */
   endedSeconds: number | null
   problem: CallProblem | null
-  /** The Voice calls setup dialog is open (over whatever screen the owner is on). */
-  setupOpen: boolean
   /** The call's big view (the stage) or the one-line bar — one choice for every surface. */
   view: 'stage' | 'bar'
   /** This device is still connected, but Lucius's side of the call has dropped: the room can't
    *  say so, as it is the broken part. The phone's own drop is the `reconnecting` phase. */
   luciusTrouble: boolean
+  /** The weaker of the two connections, yours and Lucius's, as LiveKit rates them; null until it
+   *  has rated one. */
+  quality: CallQuality | null
+  /** The browser says this device has no network. LiveKit's rating comes from its server, so it
+   *  can't change once the network is gone, and it notices a drop only some seconds later. */
+  offline: boolean
 }
 
 const IDLE: CallState = {
@@ -52,9 +60,10 @@ const IDLE: CallState = {
   connectedAt: null,
   endedSeconds: null,
   problem: null,
-  setupOpen: false,
   view: 'stage',
   luciusTrouble: false,
+  quality: null,
+  offline: false,
 }
 
 let state: CallState = IDLE
@@ -254,6 +263,30 @@ function watchLuciusLine(roomName: string): void {
   }, HEALTH_MS)
 }
 
+const markOffline = () => set({ offline: true })
+const markOnline = () => set({ offline: false })
+
+function watchDeviceNetwork(): void {
+  window.addEventListener('offline', markOffline)
+  window.addEventListener('online', markOnline)
+}
+
+function unwatchDeviceNetwork(): void {
+  window.removeEventListener('offline', markOffline)
+  window.removeEventListener('online', markOnline)
+}
+
+const QUALITY_WORST_FIRST: CallQuality[] = ['lost', 'poor', 'good', 'excellent']
+const qualities = new Map<string, CallQuality>()
+
+function noteQuality(rated: ConnectionQuality, who: Participant): void {
+  const quality = rated as string as CallQuality
+  if (QUALITY_WORST_FIRST.includes(quality)) qualities.set(who.identity, quality)
+  else qualities.delete(who.identity) // LiveKit's "unknown": no longer a rating to go by
+  const rates = [...qualities.values()]
+  set({ quality: QUALITY_WORST_FIRST.find((q) => rates.includes(q)) ?? null })
+}
+
 // The server's side can end a call without the room closing — the voice worker crashing, or the
 // app restarting — and the page sat "Connected" alone in an empty room. Lucius leaving ends the
 // call (a goodbye deletes the room within this grace, which reads as an ordinary end); so does
@@ -272,6 +305,8 @@ function teardown() {
   window.clearInterval(healthTimer)
   window.clearTimeout(leftTimer)
   window.clearTimeout(pickupTimer)
+  qualities.clear()
+  unwatchDeviceNetwork()
   mic?.stop()
   mic = null
   closeLevels()
@@ -289,14 +324,13 @@ function finish(problem: CallProblem | null) {
   if (ended) window.setTimeout(() => emitConversationChanged(ended), 1000)
   teardown()
   if (problem) {
-    set({ ...IDLE, problem, setupOpen: state.setupOpen })
+    set({ ...IDLE, problem })
     return
   }
   set({
     ...IDLE,
     phase: seconds !== null ? 'ended' : 'idle',
     endedSeconds: seconds,
-    setupOpen: state.setupOpen,
     // "Call ended" shows where the call was: a folded-down phone call jumped back to full
     // screen just to say it had ended (owner, 2026-11-03).
     view: state.view,
@@ -385,6 +419,7 @@ export async function startCall(sessionId: string): Promise<void> {
     next.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
       if (speakers.some((p) => p.identity !== next.localParticipant.identity)) pickedUp()
     })
+    next.on(RoomEvent.ConnectionQualityChanged, noteQuality)
     next.on(RoomEvent.ParticipantConnected, () => window.clearTimeout(leftTimer))
     next.on(RoomEvent.ParticipantDisconnected, () => {
       if (next.remoteParticipants.size > 0) return
@@ -418,6 +453,7 @@ export async function startCall(sessionId: string): Promise<void> {
     // the room: a data message from the in-app worker crashed LiveKit's native layer (2026-11-03).
     followTimer = window.setInterval(() => emitConversationChanged(grant.session_id), FOLLOW_MS)
     watchLuciusLine(grant.room)
+    watchDeviceNetwork()
     await next.localParticipant.publishTrack(mic)
   } catch (e) {
     // Hanging up while it was still connecting rejects the connect ("Client initiated
@@ -472,25 +508,6 @@ export function expandCall(): void {
 
 export function dismissProblem(): void {
   set({ problem: null })
-}
-
-export function openVoiceSetup(): void {
-  set({ setupOpen: true, problem: null })
-}
-
-export function closeVoiceSetup(): void {
-  set({ setupOpen: false })
-}
-
-// One setup dialog for the app, whichever chat surfaces are mounted (panel and dock can both be):
-// the first host to mount renders it.
-let setupHost: symbol | null = null
-export function claimSetupHost(token: symbol): boolean {
-  if (setupHost === null) setupHost = token
-  return setupHost === token
-}
-export function releaseSetupHost(token: symbol): void {
-  if (setupHost === token) setupHost = null
 }
 
 /** Tests only: put the store back to its starting state. */

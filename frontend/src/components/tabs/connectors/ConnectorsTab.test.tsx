@@ -16,6 +16,8 @@ import type { Connector } from './types'
 
 const authFetch = vi.hoisted(() => vi.fn())
 vi.mock('../../../api/client', () => ({ authFetch }))
+const signInWithOAuth = vi.hoisted(() => vi.fn(() => Promise.resolve({ ok: true, error: null })))
+vi.mock('./oauthSignIn', () => ({ signInWithOAuth }))
 vi.mock('@tanstack/react-router', () => ({
   useNavigate: () => vi.fn(),
   useRouterState: () => undefined,
@@ -86,6 +88,80 @@ async function renderTab() {
   await screen.findByText('Telegram')
   return view
 }
+
+describe('Reconnect on a server that signs in', () => {
+  function server(oauth: { connected: boolean; needs_reauth: boolean }): Connector {
+    return {
+      id: 'mcp:acme',
+      name: 'Acme',
+      kind: 'mcp',
+      enabled: true,
+      config: {
+        auth_type: 'oauth',
+        oauth,
+        last_status: oauth.needs_reauth ? 'auth_error' : 'connect_error',
+      },
+      secrets_public: {},
+      status: 'error',
+      error: 'Can’t reach this server.',
+      pausable: true,
+      short_description: '',
+      tools: [],
+    }
+  }
+
+  function withServer(row: Connector) {
+    const fallback = authFetch.getMockImplementation()!
+    authFetch.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/connectors') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ connectors: [TELEGRAM, row] }),
+        })
+      }
+      if (url === '/api/mcp-clients/acme/test') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ last_status: 'connect_error' }),
+        })
+      }
+      return fallback(url, init)
+    })
+  }
+
+  const tested = () => authFetch.mock.calls.filter(([url]) => url === '/api/mcp-clients/acme/test')
+
+  beforeEach(() => signInWithOAuth.mockClear())
+
+  it('tries the connection again and opens no sign-in window for a network failure', async () => {
+    withServer(server({ connected: true, needs_reauth: false }))
+    await renderTab()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reconnect' }))
+
+    await waitFor(() => expect(tested()).toHaveLength(1))
+    expect(signInWithOAuth).not.toHaveBeenCalled()
+  })
+
+  it('says Authenticate, and opens the sign-in window, when it has never signed in', async () => {
+    withServer(server({ connected: false, needs_reauth: false }))
+    await renderTab()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Authenticate' }))
+
+    await waitFor(() => expect(signInWithOAuth).toHaveBeenCalledWith({ server_id: 'acme' }))
+  })
+
+  it('opens the sign-in window straight away when the sign-in is dead', async () => {
+    withServer(server({ connected: true, needs_reauth: true }))
+    await renderTab()
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Reconnect' }))
+
+    await waitFor(() => expect(signInWithOAuth).toHaveBeenCalledWith({ server_id: 'acme' }))
+    expect(tested()).toHaveLength(0)
+  })
+})
 
 describe('Browse & add is mounted, not a placeholder', () => {
   it('opens the real directory', async () => {

@@ -409,7 +409,11 @@ export function ConnectorDetail({
       </Btn>
     ) : (
       <Btn size="lg" variant="primary" disabled={reconnecting} onClick={onReconnect}>
-        {reconnecting ? 'Reconnecting…' : 'Reconnect'}
+        {!reconnecting
+          ? entry.fixLabel
+          : entry.fixLabel === 'Authenticate'
+            ? 'Authenticating…'
+            : 'Reconnecting…'}
       </Btn>
     )
   ) : entry.enabled ? (
@@ -470,6 +474,24 @@ export function ConnectorDetail({
               )
             }
           />
+
+          {entry.lastError ? (
+            <div
+              className={entry.tone === 'warn' ? 'cn-errorbox cn-errorbox-warn' : 'cn-errorbox'}
+              data-ctx-ignore
+            >
+              <div className="cn-errorbox-text">{entry.lastError}</div>
+              {entry.mcp ? (
+                <div className="cn-errorbox-note">
+                  {entry.fixLabel === 'Authenticate'
+                    ? 'Lucius can’t use these tools until you sign in with Authenticate.'
+                    : entry.tone === 'warn'
+                      ? 'Lucius can’t use these tools until you reconnect.'
+                      : 'Lucius can’t use these tools until this connects again. Open Net Worth tries again by itself every hour; Reconnect tries now.'}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {entry.desc ? (
             <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, margin: 0 }}>
@@ -610,13 +632,7 @@ function Identity({
             <span className="cn-version">v{entry.version.replace(/^v/i, '')}</span>
           ) : null}
           {entry.tag ? <span className="cn-tag">{entry.tag}</span> : null}
-          {entry.lastError ? (
-            <span className="cn-statushint" title={entry.lastError}>
-              <Badge tone={entry.tone}>{entry.statusText}</Badge>
-            </span>
-          ) : (
-            <Badge tone={entry.tone}>{entry.statusText}</Badge>
-          )}
+          <Badge tone={entry.tone}>{entry.statusText}</Badge>
         </div>
         <div className="cn-idhead-sub">{entry.sub}</div>
       </div>

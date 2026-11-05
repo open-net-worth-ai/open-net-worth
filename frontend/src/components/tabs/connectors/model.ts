@@ -174,7 +174,8 @@ export const CATEGORY_HUE: Record<ConnectorCategory, string> = {
 // ── status ──────────────────────────────────────────────────────────────────
 
 /** Row/badge tone. `''` is the neutral badge (a deliberately disconnected connector). */
-export type StatusTone = 'good' | 'bad' | ''
+/** `warn` is a sign-in the user has to renew; `bad` is something actually failing. */
+export type StatusTone = 'good' | 'warn' | 'bad' | ''
 
 export type StatusFilter = 'all' | 'connected' | 'attention'
 
@@ -276,6 +277,8 @@ export interface ConnectorEntry {
   tone: StatusTone
   /** True only for an ACTUAL error — never "configured but switched off" (spec §1). */
   attention: boolean
+  /** What the fix button says: Authenticate when it has never signed in, else Reconnect. */
+  fixLabel: 'Authenticate' | 'Reconnect'
   /** Why it needs attention, in the words the failure recorded — the status's hover text. */
   lastError?: string
   /** Drives the detail page's primary action: Disconnect ⇄ Connect (spec §3). */

@@ -34,6 +34,7 @@ CALLS = frozenset(
         "end_call",
         "call_failed",
         "call_connection",
+        "part_of_day",
         "record_said",
         "record_exchange",
     }
@@ -126,6 +127,8 @@ class Host:
             return service.calls_allowed()
         if method == "claim_call":
             return self._claim(str(args.get("room") or ""))
+        if method == "part_of_day":
+            return service.part_of_day()
         if method == "call_limit":
             return demo_calls.remaining(self._room_of(self._owned(args), args))
         if method == "end_call":

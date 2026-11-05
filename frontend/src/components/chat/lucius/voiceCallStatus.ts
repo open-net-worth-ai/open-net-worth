@@ -14,10 +14,11 @@ export function clock(seconds: number): string {
 export interface CallStatus {
   /** The bar's one line ("Connected · 2:14"). */
   text: string
-  dot: 'wait' | 'warn' | 'live'
   /** The stage's line under the orb — empty unless something is happening (working, ringing,
    *  reconnecting): listening and muted need no words. */
   line: string
+  /** The wide strip's line, where it differs from `line`: its heading already says "Lucius". */
+  stripLine?: string
   /** The bare clock while live ("2:14"); the phase word otherwise. */
   short: string
   /** The call's clock, only while it is connected ("2:14"); empty otherwise. */
@@ -27,13 +28,12 @@ export interface CallStatus {
 export function callStatus(call: CallState, now: number, busy: boolean): CallStatus {
   switch (call.phase) {
     case 'connecting':
-      return { text: 'Calling…', dot: 'wait', line: 'Calling…', short: 'Calling…', time: '' }
+      return { text: 'Calling…', line: 'Calling…', short: 'Calling…', time: '' }
     case 'ringing':
-      return { text: 'Ringing…', dot: 'wait', line: 'Ringing…', short: 'Ringing…', time: '' }
+      return { text: 'Ringing…', line: 'Ringing…', short: 'Ringing…', time: '' }
     case 'reconnecting':
       return {
         text: 'Reconnecting…',
-        dot: 'warn',
         line: 'Your connection dropped. Reconnecting…',
         short: 'Reconnecting…',
         time: '',
@@ -41,16 +41,27 @@ export function callStatus(call: CallState, now: number, busy: boolean): CallSta
     case 'ended': {
       const t = clock(call.endedSeconds ?? 0)
       // The top already says it ("Call ended · 2:14"): once is enough.
-      return { text: `Call ended · ${t}`, dot: 'wait', line: '', short: 'Call ended', time: '' }
+      return { text: `Call ended · ${t}`, line: '', short: 'Call ended', time: '' }
     }
     default: {
       const secs = call.connectedAt ? Math.max(0, Math.round((now - call.connectedAt) / 1000)) : 0
+      if (call.offline) {
+        return {
+          text: 'Reconnecting…',
+          line: 'Your connection dropped. Reconnecting…',
+          short: 'Reconnecting…',
+          time: clock(secs),
+        }
+      }
       if (call.luciusTrouble) {
         return {
-          text: "Lucius's connection dropped",
-          dot: 'warn',
-          line: "Lucius's connection dropped. Reconnecting…",
-          short: 'Reconnecting…',
+          // Says what it means for you, not whose fault it is: the app can't tell a home network
+          // from a speech service's hiccup, and "Lucius's connection dropped" read as the product
+          // breaking (owner, 2026-11-05).
+          text: 'Poor connection',
+          line: 'Poor connection. Lucius may not hear you.',
+          stripLine: 'Poor connection',
+          short: 'Poor connection',
           time: clock(secs),
         }
       }
@@ -58,13 +69,31 @@ export function callStatus(call: CallState, now: number, busy: boolean): CallSta
       const line = busy ? 'Lucius is working…' : ''
       return {
         text: busy ? 'Lucius is working…' : `Connected · ${clock(secs)}`,
-        dot: 'live',
         line,
         short: busy ? 'Working…' : clock(secs),
         time: clock(secs),
       }
     }
   }
+}
+
+export type CallSignal = { bars: 0 | 1 | 3 | 4; label: string }
+
+const SIGNALS: Record<NonNullable<CallState['quality']>, CallSignal> = {
+  excellent: { bars: 4, label: 'excellent' },
+  good: { bars: 3, label: 'good' },
+  poor: { bars: 1, label: 'poor' },
+  lost: { bars: 0, label: 'lost' },
+}
+
+/** The call screen's signal bars, only while a call is connected. What the call already knows
+ *  outranks LiveKit's rating, which lags a few seconds behind a drop. */
+export function callSignal(call: CallState): CallSignal | null {
+  if (call.phase === 'reconnecting') return SIGNALS.lost
+  if (call.phase !== 'live') return null
+  if (call.offline) return SIGNALS.lost
+  if (call.luciusTrouble) return call.quality === 'lost' ? SIGNALS.lost : SIGNALS.poor
+  return call.quality ? SIGNALS[call.quality] : null
 }
 
 export function orbState(call: CallState, busy: boolean): OrbState {
@@ -77,7 +106,7 @@ export function orbState(call: CallState, busy: boolean): OrbState {
     case 'ended':
       return 'ended'
     default:
-      if (call.luciusTrouble) return 'reconnecting'
+      if (call.offline || call.luciusTrouble) return 'reconnecting'
       return busy ? 'working' : 'live'
   }
 }
@@ -88,6 +117,7 @@ export type PillMode =
   | 'live'
   | 'attention'
   | 'reconnecting'
+  | 'poor'
   | 'ended'
   | 'problem'
 
@@ -103,7 +133,8 @@ export function pillMode(call: CallState, needsApproval: boolean): PillMode {
     case 'ringing':
       return 'calling'
     case 'live':
-      if (call.luciusTrouble) return 'reconnecting'
+      if (call.offline) return 'reconnecting'
+      if (call.luciusTrouble) return 'poor'
       return needsApproval ? 'attention' : 'live'
     default:
       return 'rest'

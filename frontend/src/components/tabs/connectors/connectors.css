@@ -770,11 +770,12 @@
   width: 14px;
   height: 14px;
 }
-/* In a narrow list the tick alone says "connected"; the word squeezed the name into an
-   ellipsis. Measured on the LIST, not the window — the Lucius panel narrows it on a wide
-   screen too. Kept for screen readers, not removed. */
+/* In a narrow list the icon alone says the status, and on a failing row the reason under the name
+   says what is wrong; the word squeezed the name out of the row. Measured on the LIST, not the
+   window — the Lucius panel narrows it on a wide screen too. Kept for screen readers, not removed. */
 @container cn-list (max-width: 520px) {
-  .cn-page .cn-statusgood-label {
+  .cn-page .cn-statusgood-label,
+  .cn-page .cn-statusbad-label {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -794,20 +795,65 @@
     -webkit-line-clamp: 2;
     overflow-wrap: anywhere;
   }
+  .cn-page .cn-row .cn-rowerror {
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
 }
-.cn-page .cn-statusbad {
+.cn-page .cn-statusbad,
+.cn-page .cn-statuswarn {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   color: var(--bad);
   font-size: 12px;
   font-weight: 600;
-  cursor: help;
 }
-.cn-page .cn-statushint {
-  cursor: help;
+.cn-page .cn-statuswarn {
+  color: var(--warn);
 }
-.cn-page .cn-statusbad svg {
+.cn-page .cn-rowerror {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--bad);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.cn-page .cn-errorbox {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--bad) 35%, var(--bg));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bad) 8%, var(--bg));
+}
+.cn-page .cn-errorbox-text {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--bad) 75%, var(--ink));
+  overflow-wrap: anywhere;
+}
+.cn-page .cn-rowerror-warn {
+  color: var(--warn);
+}
+.cn-page .cn-errorbox-warn {
+  border-color: color-mix(in srgb, var(--warn) 35%, var(--bg));
+  background: color-mix(in srgb, var(--warn) 8%, var(--bg));
+}
+.cn-page .cn-errorbox-warn .cn-errorbox-text {
+  color: color-mix(in srgb, var(--warn) 75%, var(--ink));
+}
+.cn-page .cn-errorbox-note {
+  margin-top: 4px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.cn-page .cn-statusbad svg,
+.cn-page .cn-statuswarn svg {
   width: 13px;
   height: 13px;
 }

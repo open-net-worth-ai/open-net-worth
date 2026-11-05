@@ -22,6 +22,7 @@ function entry(overrides: Partial<ConnectorEntry> = {}): ConnectorEntry {
     statusText: 'Connected',
     tone: 'good',
     attention: false,
+    fixLabel: 'Reconnect',
     enabled: true,
     sub: 'Bot @onw_lucius_bot',
     ...overrides,
@@ -35,7 +36,7 @@ function renderRow(e: ConnectorEntry) {
   return { container, onOpen, onReconnect }
 }
 
-describe('an error says why on hover', () => {
+describe('an error says why, in plain view', () => {
   const failing = {
     statusText: 'Error',
     tone: 'bad',
@@ -43,14 +44,22 @@ describe('an error says why on hover', () => {
     lastError: 'The host could not be resolved.',
   } as const
 
-  it('shows the recorded error, not the status word again', () => {
+  it('shows the recorded error on the row without a hover', () => {
     const { container } = renderRow(entry(failing))
-    expect(container.querySelector('.cn-statusbad')?.getAttribute('title')).toBe(failing.lastError)
+    const reason = container.querySelector('.cn-rowerror')
+    expect(reason?.textContent).toBe(failing.lastError)
+    // clipped to one line by CSS, so the whole text stays on hover
+    expect(reason?.getAttribute('title')).toBe(failing.lastError)
   })
 
-  it('falls back to the status when no reason was recorded', () => {
+  it("keeps a server's error text out of what Lucius scans from the screen", () => {
+    const { container } = renderRow(entry(failing))
+    expect(container.querySelector('.cn-rowerror')?.hasAttribute('data-ctx-ignore')).toBe(true)
+  })
+
+  it('adds no line when no reason was recorded', () => {
     const { container } = renderRow(entry({ ...failing, lastError: undefined }))
-    expect(container.querySelector('.cn-statusbad')?.getAttribute('title')).toBe('Error')
+    expect(container.querySelector('.cn-rowerror')).toBeNull()
   })
 })
 
@@ -63,11 +72,25 @@ describe('status is plain coloured text, one vocabulary', () => {
   })
 
   it('uses the error treatment when the connector is erroring', () => {
-    const { container } = renderRow(
-      entry({ statusText: 'Auth error', tone: 'bad', attention: true }),
-    )
-    expect(container.querySelector('.cn-statusbad')?.textContent?.trim()).toBe('Auth error')
+    const { container } = renderRow(entry({ statusText: 'Error', tone: 'bad', attention: true }))
+    expect(container.querySelector('.cn-statusbad')?.textContent?.trim()).toBe('Error')
     expect(container.querySelector('.cn-statusgood')).toBeNull()
+  })
+
+  it('uses amber, not the error treatment, for a sign-in to renew', () => {
+    const { container } = renderRow(
+      entry({
+        statusText: 'Auth error',
+        tone: 'warn',
+        attention: true,
+        lastError: 'Sign-in expired',
+      }),
+    )
+    expect(container.querySelector('.cn-statuswarn')?.textContent?.trim()).toBe('Auth error')
+    // CSS hides this word in a narrow list; the name needs the room, and the reason says why.
+    expect(container.querySelector('.cn-statuswarn .cn-statusbad-label')).toBeTruthy()
+    expect(container.querySelector('.cn-statusbad')).toBeNull()
+    expect(container.querySelector('.cn-rowerror-warn')?.textContent).toBe('Sign-in expired')
   })
 
   it('falls back to a neutral badge for a deliberately disconnected connector', () => {
@@ -85,8 +108,16 @@ describe('status is plain coloured text, one vocabulary', () => {
 
 describe('the one row action', () => {
   it('offers Reconnect only on an erroring connector', () => {
-    renderRow(entry({ tone: 'bad', statusText: 'Auth error', attention: true }))
+    renderRow(entry({ tone: 'bad', statusText: 'Error', attention: true }))
     expect(screen.getByRole('button', { name: 'Reconnect' })).toBeTruthy()
+  })
+
+  it('says Authenticate when the fix is a sign-in', () => {
+    renderRow(
+      entry({ tone: 'warn', statusText: 'Auth error', attention: true, fixLabel: 'Authenticate' }),
+    )
+    expect(screen.getByRole('button', { name: 'Authenticate' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull()
   })
 
   it('offers no action on a healthy connector', () => {
@@ -104,7 +135,7 @@ describe('the one row action', () => {
 
   it('reconnects without also opening the detail page', () => {
     const { onOpen, onReconnect } = renderRow(
-      entry({ tone: 'bad', statusText: 'Auth error', attention: true }),
+      entry({ tone: 'bad', statusText: 'Error', attention: true }),
     )
     fireEvent.click(screen.getByRole('button', { name: 'Reconnect' }))
     expect(onReconnect).toHaveBeenCalledTimes(1)
@@ -112,9 +143,7 @@ describe('the one row action', () => {
   })
 
   it('keeps status and action in ONE flush-right group', () => {
-    const { container } = renderRow(
-      entry({ tone: 'bad', statusText: 'Auth error', attention: true }),
-    )
+    const { container } = renderRow(entry({ tone: 'bad', statusText: 'Error', attention: true }))
     const meta = container.querySelector('.cn-meta')
     expect(meta?.querySelector('.cn-statusbad')).toBeTruthy()
     expect(meta?.textContent).toContain('Reconnect')

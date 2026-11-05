@@ -70,15 +70,30 @@ export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps):
           {entry.tag ? <span className="cn-tag">{entry.tag}</span> : null}
           {entry.categories?.length ? <CategoryChips categories={entry.categories} /> : null}
         </div>
+        {/* The sub-line's one exception: a connector that is failing says why without a hover.
+            `data-ctx-ignore`: a server's error text reaches Lucius only through
+            `get_connector_status`, which withholds a local server's. */}
+        {entry.lastError ? (
+          <div
+            className={entry.tone === 'warn' ? 'cn-rowerror cn-rowerror-warn' : 'cn-rowerror'}
+            title={entry.lastError}
+            data-ctx-ignore
+          >
+            {entry.lastError}
+          </div>
+        ) : null}
       </div>
       <div className="cn-meta">
         {entry.tone === 'good' ? (
           <span className="cn-statusgood" title={entry.statusText}>
             <Icons.checkcircle /> <span className="cn-statusgood-label">{entry.statusText}</span>
           </span>
-        ) : entry.tone === 'bad' ? (
-          <span className="cn-statusbad" title={entry.lastError ?? entry.statusText}>
-            <Icons.warn /> {entry.statusText}
+        ) : entry.tone === 'bad' || entry.tone === 'warn' ? (
+          <span
+            className={entry.tone === 'warn' ? 'cn-statuswarn' : 'cn-statusbad'}
+            title={entry.statusText}
+          >
+            <Icons.warn /> <span className="cn-statusbad-label">{entry.statusText}</span>
           </span>
         ) : (
           <Badge tone={entry.tone}>{entry.statusText}</Badge>
@@ -86,7 +101,7 @@ export function ConnectorRow({ entry, onOpen, onReconnect }: ConnectorRowProps):
         {entry.attention ? (
           <span onClick={(e) => e.stopPropagation()}>
             <Btn size="xs" variant="primary" onClick={() => onReconnect(entry)}>
-              Reconnect
+              {entry.fixLabel}
             </Btn>
           </span>
         ) : null}

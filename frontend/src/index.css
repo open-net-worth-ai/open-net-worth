@@ -3840,6 +3840,10 @@ body.hide-amounts .money * {
     background: var(--bad);
   }
 
+  .sidebar-attention-dot-warn {
+    background: var(--warn);
+  }
+
   @media (max-width: 720px) {
     .intel-header-actions {
       align-self: flex-end;

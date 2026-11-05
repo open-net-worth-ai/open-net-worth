@@ -91,7 +91,10 @@ import {
   useProfile,
   useSetupStatus,
 } from './hooks/serverState'
-import { useConnectorAttentionCount } from './components/tabs/connectors/useConnectors'
+import {
+  useConnectorAttentionCount,
+  useConnectorAttentionIsSignInOnly,
+} from './components/tabs/connectors/useConnectors'
 import { VisibleIdsProvider } from './lucius/visibleIds'
 import { ScreenReadResponder } from './components/chat/lucius/ScreenReadResponder'
 import { LuciusDock } from './components/chat/lucius/LuciusDock'
@@ -1006,6 +1009,7 @@ function RouterShellInner() {
   }, [matchReviews.data])
 
   const connectorsAttention = useConnectorAttentionCount()
+  const connectorsSignInOnly = useConnectorAttentionIsSignInOnly()
 
   const now = fDateTime(new Date(), 'long', 'always')
   // Clock-only form for the ticker head — see TickerStripProps.asOf for why.
@@ -1206,7 +1210,11 @@ function RouterShellInner() {
         )}
         {t === 'connectors' && connectorsAttention > 0 && (
           <span
-            className="sidebar-attention-dot"
+            className={
+              connectorsSignInOnly
+                ? 'sidebar-attention-dot sidebar-attention-dot-warn'
+                : 'sidebar-attention-dot'
+            }
             role="img"
             aria-label="A connector needs attention"
           />

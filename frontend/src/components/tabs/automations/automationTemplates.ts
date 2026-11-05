@@ -25,10 +25,11 @@ export const RECOMMENDED_TEMPLATES: AutomationTemplate[] = [
       'Logs bank, card and trade mail, then tells you what else needs you — a failed payment, ' +
       'a bill due, a new login to a money account, a deposit maturing.',
     instructions:
-      'Go through my email for anything about my money, using the Email finance digest skill. ' +
-      'Log my bank, card and trade confirmations, then tell me what else I should know. Send ' +
-      "it on Telegram, or by webhook if that's what I use; if I have neither, show it here. " +
-      "If there's nothing worth saying, don't message me.",
+      'Go through my email for anything about my money since the run before last, using the ' +
+      'Email finance digest skill. Log my bank, card and trade confirmations, then tell me what ' +
+      'else I should know. Leave out what the last run already told me, and tell me again ' +
+      "anything that didn't reach me. Send it on Telegram, or by webhook if that's what I use; " +
+      "if I have neither, show it here. If there's nothing worth saying, don't message me.",
     trigger: { kind: 'schedule', type: 'rrule', rrule: 'FREQ=DAILY;BYHOUR=0,12;BYMINUTE=0' },
     execution: { kind: 'lucius' },
     permission_mode: 'auto',

@@ -268,7 +268,22 @@ def complete(
     flow = oauth_pending.pop(state)
     if flow is None:
         return {"ok": False}
+    try:
+        return _finish_popped_flow(flow, state=state, code=code, iss=iss, error=error)
+    except Exception:
+        # The poll would otherwise read `pending` until the status expired.
+        oauth_pending.record_status(state, "error", "The sign-in could not be completed.")
+        raise
 
+
+def _finish_popped_flow(
+    flow: oauth_pending.PendingFlow,
+    *,
+    state: str,
+    code: Optional[str],
+    iss: Optional[str],
+    error: Optional[str],
+) -> dict:
     if error:
         oauth_pending.record_status(state, "error", "The vendor declined or cancelled the sign-in.")
         return {"ok": False}
@@ -368,8 +383,8 @@ def _is_stale(ob: McpOAuth, *, now: float) -> bool:
     return (now - last_known) >= UNKNOWN_EXPIRY_RECHECK_SECONDS
 
 
-def _reason_for_dead_sign_in(server: McpServerConfig) -> str:
-    return f"Sign-in expired — reconnect {server.name or server.id} in Connectors."
+def dead_sign_in_reason() -> str:
+    return "Connection has expired. You can reconnect to re-authenticate."
 
 
 # Per-server (NOT per-table) in-flight-refresh coalescing lock — LOW finding #8. Guards only
@@ -458,10 +473,22 @@ def ensure_fresh_token(
             token = oauth.refresh_token(
                 as_meta, client, current.url, refresh_token=ob.refresh_token
             )
+        except oauth.OAuthUnreachableError as exc:
+            # The network failed, not the sign-in. Recording auth_error here told the user a
+            # DNS blip was an expired sign-in and sent them to link the account again.
+            logger.info("mcp '%s' token refresh could not run: %s", server.id, exc.detail)
+            return current
         except oauth.TokenExchangeError as exc:
             invalid_client = exc.code == "invalid_client"
-        except oauth.OAuthDiscoveryError:
-            pass
+            # The one record of WHY a sign-in died: nothing else keeps the server's answer.
+            logger.warning(
+                "mcp '%s' token refresh refused: %s (%s)",
+                server.id,
+                exc.code or "no error code",
+                exc.detail,
+            )
+        except oauth.OAuthDiscoveryError as exc:
+            logger.warning("mcp '%s' token refresh failed: %s", server.id, exc.detail)
 
         now = time.time()
         with store.transaction(server.id) as conn:
@@ -497,9 +524,7 @@ def ensure_fresh_token(
                 )
                 return store.find(server.id, conn=conn) or current
 
-            store.record_oauth_status(
-                server.id, "auth_error", _reason_for_dead_sign_in(current), conn=conn
-            )
+            store.record_oauth_status(server.id, "auth_error", dead_sign_in_reason(), conn=conn)
             return store.find(server.id, conn=conn) or current
 
 

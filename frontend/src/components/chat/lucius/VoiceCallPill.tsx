@@ -7,14 +7,21 @@ import {
   expandCall,
   hangUp,
   minimizeCall,
-  openVoiceSetup,
   startCall,
   toggleMute,
   useVoiceCall,
   type CallProblemKind,
 } from './voiceCall'
-import { callStatus, orbState, pillMode, useCallClock } from './voiceCallStatus'
-import { VoiceCallButton } from './VoiceCallButton'
+import {
+  callSignal,
+  callStatus,
+  orbState,
+  pillMode,
+  useCallClock,
+  type PillMode,
+} from './voiceCallStatus'
+import { useOpenVoiceSetup, VoiceCallButton } from './VoiceCallButton'
+import { VoiceCallSignal } from './VoiceCallSignal'
 import { VoiceOrb } from './VoiceOrb'
 
 // The dock's collapsed pill with voice calls on (`voice_calls` flag): Call beside Ask Lucius, and
@@ -32,6 +39,8 @@ const PROBLEM: Record<CallProblemKind, { label: string; action: string }> = {
   insecure: { label: "Call couldn't start", action: 'Try again' },
   other: { label: "Call couldn't start", action: 'Try again' },
 }
+
+const IN_CALL_MODES: PillMode[] = ['calling', 'live', 'attention', 'reconnecting', 'poor']
 
 export function VoiceCallPill({
   sessionId,
@@ -56,6 +65,8 @@ export function VoiceCallPill({
   const now = useCallClock(call)
   const mode = pillMode(call, needsApproval)
   const status = callStatus(call, now, busy)
+  const signal = callSignal(call)
+  const openSetup = useOpenVoiceSetup()
   const root = useRef<HTMLDivElement>(null)
   const dwell = useRef<number | undefined>(undefined)
   const lastMode = useRef(mode)
@@ -66,6 +77,8 @@ export function VoiceCallPill({
     lastMode.current = mode
     const el = root.current
     if (!el || was === mode) return
+    // Within a call nothing unmounts: the connection changing is no reason to move focus.
+    if (IN_CALL_MODES.includes(was) && IN_CALL_MODES.includes(mode)) return
     const focused = document.activeElement
     if (focused && focused !== document.body && !el.contains(focused)) return
     const target =
@@ -139,7 +152,7 @@ export function VoiceCallPill({
                   micSettings
                     ? void micSettings()
                     : call.problem?.kind === 'setup'
-                      ? openVoiceSetup()
+                      ? openSetup()
                       : void startCall(sessionId)
                 }
               >
@@ -167,6 +180,7 @@ export function VoiceCallPill({
       {(mode === 'calling' ||
         mode === 'live' ||
         mode === 'reconnecting' ||
+        mode === 'poor' ||
         mode === 'attention') && (
         <>
           <button
@@ -186,6 +200,8 @@ export function VoiceCallPill({
             >
               {mode === 'attention' ? 'Needs approval' : status.short}
             </span>
+            {/* Only when there's something to tell: full bars on the pill would be clutter. */}
+            {signal && signal.bars <= 1 && <VoiceCallSignal signal={signal} />}
             {mode === 'live' && <ChevronUp size={14} aria-hidden="true" />}
           </button>
           {mode === 'attention' && (

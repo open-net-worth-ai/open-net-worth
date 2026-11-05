@@ -32,7 +32,7 @@ import { deleteMcpServer } from './mcpApi'
 import { signInWithOAuth } from './oauthSignIn'
 import { savePermissions } from './permissions'
 import { removeNativeConnector, setConnectorEnabled } from './connectorActions'
-import { mcpAuthType, toEntry, toMcpEditTarget } from './adapter'
+import { mcpAuthType, mcpNeedsSignIn, toEntry, toMcpEditTarget } from './adapter'
 import { CONNECTORS_KEY, useConnectors } from './useConnectors'
 import {
   useRegisterScreenCommands,
@@ -235,9 +235,11 @@ export function ConnectorsTab(): JSX.Element {
     toast(result.message)
   }
 
-  /** An OAuth MCP server reconnects with a fresh sign-in (RFC `2026-08-14-mcp-oauth` §4.7's
-   *  "Recovery is one button"); any other MCP server reconnects by re-running
-   *  `initialize` + `tools/list`; a native connector re-arms by being switched back on —
+  /** An MCP server reconnects by re-running `initialize` + `tools/list`; only a sign-in the server
+   *  knows is dead opens the sign-in window (RFC `2026-08-14-mcp-oauth` §4.7's "Recovery is one
+   *  button"). A DNS failure used to send the user to link the account again, with nothing wrong
+   *  with the link. A retry that discovers a dead sign-in says so and the next click opens the
+   *  window: opened after a fetch, a popup blocker would refuse it. A native connector re-arms by being switched back on —
    *  UNLESS it's already on, which is every case this button actually shows for (`attention`
    *  — and so this row action — is only ever true for `error`/`auth_error`, and both require
    *  `enabled` already true, see `services/connectors.py::_status`). Re-PATCHing the same
@@ -260,7 +262,7 @@ export function ConnectorsTab(): JSX.Element {
     const wire = connectors.find((c) => c.id === entry.id)
     setReconnectingId(entry.id)
     try {
-      if (wire && mcpAuthType(wire) === 'oauth') {
+      if (wire && mcpNeedsSignIn(wire)) {
         // Registration is reused; only the user's consent is re-obtained (§4.5's "a background
         // path never re-registers" — this is the one human-initiated `begin` that may).
         const outcome = await signInWithOAuth({ server_id: serverId })
@@ -275,8 +277,13 @@ export function ConnectorsTab(): JSX.Element {
       const res = await authFetch(`/api/mcp-clients/${encodeURIComponent(serverId)}/test`, {
         method: 'POST',
       })
+      // The route answers 200 for a failed read too: the result's status is the answer.
+      const status = res.ok ? ((await res.json()) as { last_status?: string }).last_status : null
       await reload()
-      toast(res.ok ? `${entry.name} reconnected` : `Couldn't reach ${entry.name}`)
+      if (status === 'ok') toast(`${entry.name} reconnected`)
+      else if (status === 'auth_error' && wire && mcpAuthType(wire) === 'oauth')
+        toast(`${entry.name} needs you to sign in again. Select Reconnect to do it.`)
+      else toast(`Couldn't reach ${entry.name}`)
     } finally {
       setReconnectingId((id) => (id === entry.id ? null : id))
     }

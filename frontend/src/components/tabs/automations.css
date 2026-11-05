@@ -742,6 +742,29 @@
   color: var(--accent);
   flex: none;
 }
+/* The icon stays beside the words, however long they run. */
+.a3-trigger-line {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+.a3-trigger-line svg {
+  margin-top: 3px;
+}
+.a3-trigger-line .grow {
+  flex: 1;
+  min-width: 0;
+}
+.a3-trigger-words,
+.a3-trigger-rule {
+  display: block;
+}
+.a3-trigger-rule {
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--fg-3);
+  overflow-wrap: anywhere;
+}
 .a3-model-detail svg {
   color: var(--faint);
 }

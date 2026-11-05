@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { ChevronDown, Keyboard, Maximize2, Mic, MicOff, PhoneOff } from 'lucide-react'
 import { expandCall, hangUp, minimizeCall, toggleMute, useVoiceCall } from './voiceCall'
-import { callStatus, orbState, useCallClock } from './voiceCallStatus'
+import { callSignal, callStatus, orbState, useCallClock } from './voiceCallStatus'
+import { VoiceCallSignal } from './VoiceCallSignal'
 import { VoiceOrb } from './VoiceOrb'
 
 // The call's view (`voice_calls` flag). `screen` is the phone's full-screen call; `card` is the
@@ -32,7 +33,8 @@ export function VoiceCallStage({
     call.phase === 'connecting' ||
     call.phase === 'ringing' ||
     call.phase === 'reconnecting' ||
-    (call.phase === 'live' && (busy || call.luciusTrouble))
+    (call.phase === 'live' && (busy || call.luciusTrouble || call.offline))
+  const signal = callSignal(call)
   const root = useRef<HTMLDivElement>(null)
   const screen = variant === 'screen'
 
@@ -57,9 +59,7 @@ export function VoiceCallStage({
     >
       <div className="lx-callstage-inner">
         <div className="lx-callstage-top">
-          {top && (
-            <span className={`lx-callbar-dot lx-callbar-dot--${status.dot}`} aria-hidden="true" />
-          )}
+          {signal && <VoiceCallSignal signal={signal} />}
           <span className="lx-callstage-clock" role="timer" aria-label="Call duration">
             {top}
           </span>
@@ -110,7 +110,7 @@ export function VoiceCallStage({
             aria-hidden="true"
             data-shimmer={(waiting && !!status.line) || undefined}
           >
-            {status.line || top}
+            {status.stripLine ?? (status.line || top)}
           </span>
         </div>
         {
