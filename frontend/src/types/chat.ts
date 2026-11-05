@@ -415,11 +415,13 @@ export interface SearchCall {
 
 export type ToolStatus = 'streaming' | 'executing' | 'done'
 
-/** The Auto judge's verdict on a call it let through (`services/auto_approvals.py`). The reason
- *  is model-written from the call's arguments: plain text only, never markup. */
+/** The Auto judge's verdict on a call it decided (`services/auto_approvals.py`). No `verdict`
+ *  means it let the call through. The reason is model-written from the call's arguments: plain
+ *  text only, never markup. */
 export interface AutoApproval {
   reason: string
   model?: string
+  verdict?: 'ask'
 }
 
 /**

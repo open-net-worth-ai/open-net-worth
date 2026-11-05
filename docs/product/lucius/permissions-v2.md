@@ -149,6 +149,9 @@ unsure, it stops.
 - **You can see why a call stopped.** When the judge hands a call back to you, its approval card
   says **Auto asked because:** and the judge's reason, in full. A connector's card says it too. A
   card staged before you updated keeps the card it was given, with no reason on it.
+- **The reason stays after you answer.** Whether you approve, deny or never answer, the call keeps
+  its **i**, saying Auto asked you first and why, and an answered card still shows the reason after
+  a reload. A call you answered before you updated has no reason to show, because none was kept.
 
 An Automatic judgement is a safety net, not a wall. For anything you would never want to happen
 unattended, set that tool to **Block**. For a tool where you want to see every call — a bulk

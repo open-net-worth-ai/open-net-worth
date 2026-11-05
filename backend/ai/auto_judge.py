@@ -79,8 +79,8 @@ APPROVAL_TASK = "approval"
 @dataclass(frozen=True)
 class JudgeVerdict:
     verdict: Literal["allow", "ask"]
-    # Never logged. An ``allow`` reason is shown to the owner as the "i" on the row of the call it
-    # let through (``services.auto_approvals``); an ``ask`` reason rides on that call's card
+    # Never logged. Either reason is kept on the call and shown as the "i" on its row
+    # (``services.auto_approvals``); an ``ask`` reason also rides on that call's card
     # (``ask_reason_for``), so the owner sees why Auto stopped to ask — a card with no reason
     # read as Auto never having judged at all (owner, 2026-11-04).
     reason: str
@@ -448,17 +448,21 @@ def gate_verdict_for(tool_name: str) -> str:
     """``"allow"`` or ``"gate"`` for the in-flight call. No verdict, a verdict for another
     call or another tool, or ``ask`` all mean ``gate``."""
     verdict = _held_for(tool_name)
-    if verdict is None or not verdict.allows:
+    if verdict is None:
         return "gate"
-    _remember_allow(verdict)
-    return "allow"
+    _remember(verdict)
+    return "allow" if verdict.allows else "gate"
 
 
-def _remember_allow(verdict: JudgeVerdict) -> None:
+def _remember(verdict: JudgeVerdict) -> None:
     from backend.core.chat_session import get_session_id
     from backend.core.tool_use_context import get_tool_use_id
     from backend.services import auto_approvals
 
     auto_approvals.record(
-        get_session_id() or "", get_tool_use_id() or "", verdict.reason, verdict.model
+        get_session_id() or "",
+        get_tool_use_id() or "",
+        verdict.reason,
+        verdict.model,
+        verdict.verdict,
     )

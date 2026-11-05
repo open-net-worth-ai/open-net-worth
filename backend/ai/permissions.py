@@ -72,6 +72,9 @@ class OldEngine(_Engine):
     def judge_note(self, tool_name: str) -> dict:
         return {}
 
+    def recorded_judge_note(self, session_id: str, tool_use_id: str) -> dict:
+        return {}
+
     def automation_refusal(self, tool_name: str) -> Optional[tuple[str, None]]:
         return None
 
@@ -166,6 +169,13 @@ class NewEngine(_Engine):
         from backend.ai import auto_judge
 
         await auto_judge.prepare(tool_name, input_data)
+
+    def recorded_judge_note(self, session_id: str, tool_use_id: str) -> dict:
+        """``{"judge_reason": …}`` for a card rebuilt from a call the judge asked about."""
+        from backend.services import auto_approvals
+
+        reason = auto_approvals.ask_reason(session_id, tool_use_id)
+        return {"judge_reason": reason} if reason else {}
 
     async def judge_step(self, calls: list[tuple[str, str, dict]]) -> None:
         """Judge a step's Ask calls TOGETHER, once, before the first is dispatched."""

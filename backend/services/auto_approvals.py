@@ -1,11 +1,13 @@
-"""Which calls the Auto judge let through, and the one-sentence reason it gave, kept with the
-conversation (``permissions_v2``).
+"""What the Auto judge decided about each call it judged, and the one-sentence reason it gave, kept
+with the conversation (``permissions_v2``).
 
-A call the judge allows runs with no card, so the transcript alone cannot tell it from a call
-that never needed approval. The verdict is stored on the session's own meta row, keyed by the
+The verdict belongs to the call, not to a card. A call the judge allows has no card, and the card
+of one it asks about is deleted once answered, or with the turn if it never is, so neither could
+say why afterwards. The verdict is stored on the session's own meta row, keyed by the
 ``tool_use_id``, the same way ``tool_resolutions`` keeps a card's answer: ``ai.turns`` attaches
 it to the live ``tool_done`` event and ``assistant.rehydrate_messages`` to the tool block after a
-reload, and the chat shows it as a small "i" on the row.
+reload, and the chat shows it as a small "i" on the row. An entry with no ``verdict`` is an allow,
+which is every entry written before asks were kept.
 
 The reason is model-written from the call's arguments, so it is untrusted text: it is defanged
 here (never shortened: the judge's token budget is its only bound), and the client renders it as
@@ -24,6 +26,7 @@ from backend.core.untrusted import sanitize_untrusted
 logger = logging.getLogger(__name__)
 
 _KEY = "auto_approvals"
+ASK = "ask"
 # Verdicts waiting for their call's tool_done. Popped there; the cap only bounds a call that
 # never finishes (a crash mid-dispatch), so a long-lived process cannot grow it without limit.
 _LIVE_CAP = 256
@@ -38,20 +41,24 @@ def clean_reason(reason: str) -> str:
     return sanitize_untrusted(reason or "", sys.maxsize).strip()
 
 
-def _entry(reason: str, model: str) -> dict:
+def _entry(reason: str, model: str, verdict: str) -> dict:
     model_name = (model or "").rsplit(":", 1)[-1]
     entry = {"reason": clean_reason(reason)}
     if model_name:
         entry["model"] = sanitize_untrusted(model_name, 40)
+    if verdict == ASK:
+        entry["verdict"] = ASK
     return entry
 
 
-def record(session_id: str, tool_use_id: str, reason: str, model: str = "") -> None:
-    """Remember that the judge allowed ``tool_use_id``. Best-effort: a failure costs the "i" on
-    one row, and must never fail the call it describes."""
+def record(
+    session_id: str, tool_use_id: str, reason: str, model: str = "", verdict: str = "allow"
+) -> None:
+    """Remember what the judge decided about ``tool_use_id``. Best-effort: a failure costs the "i"
+    on one row, and must never fail the call it describes."""
     if not tool_use_id:
         return
-    entry = _entry(reason, model)
+    entry = _entry(reason, model, verdict)
     with _lock:
         _live[tool_use_id] = entry
         while len(_live) > _LIVE_CAP:
@@ -81,7 +88,7 @@ def take_live(tool_use_id: str) -> dict | None:
 
 
 def for_session(session_id: str) -> dict[str, dict]:
-    """``{tool_use_id: {"reason", "model"?}}`` for every call the judge allowed here."""
+    """``{tool_use_id: {"reason", "model"?, "verdict"?}}`` for every call the judge decided here."""
     if not session_id:
         return {}
     try:
@@ -96,3 +103,9 @@ def for_session(session_id: str) -> dict[str, dict]:
         for k, v in stored.items()
         if isinstance(k, str) and isinstance(v, dict) and isinstance(v.get("reason"), str)
     }
+
+
+def ask_reason(session_id: str, tool_use_id: str) -> str:
+    """Why the judge asked about this call, for a card rebuilt after a reload: "" when it didn't."""
+    entry = for_session(session_id).get(tool_use_id) or {}
+    return entry["reason"] if entry.get("verdict") == ASK else ""

@@ -852,6 +852,28 @@ def test_auto_ask_pauses_with_the_same_card_manual_shows_and_why(
     assert staged["judge_reason"] == "This writes a row you never mentioned."
 
 
+def test_a_call_auto_asked_about_keeps_its_verdict_once_its_card_is_gone(
+    monkeypatch, probe_tool, db_isolated
+):
+    """The card is deleted when it is answered; the verdict stays on the call."""
+    from backend.core.chat_session import clear_session_id, set_session_id
+    from backend.db.pending_plan_store import PendingPlanStore
+    from backend.services import auto_approvals
+
+    _stub_judge(monkeypatch, "ask", "This writes a row you never mentioned.")
+    set_session_id("s-verdict")
+    try:
+        _dispatch_card("auto", "toolu_kept")
+    finally:
+        clear_session_id()
+    PendingPlanStore().pop_pending("toolu_kept")
+
+    assert auto_approvals.for_session("s-verdict")["toolu_kept"] == {
+        "reason": "This writes a row you never mentioned.",
+        "verdict": "ask",
+    }
+
+
 def test_no_provider_logs_the_judges_reply():
     """``complete_done`` writes a bounded copy of every reply to the log; the judge's is the one
     reply that carries a call's own details back out, so its cap is zero."""
