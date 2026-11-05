@@ -95,6 +95,24 @@ control.
 In a conversation that is an Automation run, the control is greyed out with *"Set by this
 Automation — change it on the Automation."* Change it in the Automation's editor instead.
 
+## Approvals on Telegram
+
+Your private chat with the bot follows the same modes. Send `/approvals` and tap **manual** or
+**auto**, or open the conversation in the app and use the same control. It's one setting: changing
+it in either place changes it in the other. It applies from your next message. `/status` shows the
+current one. `/new` keeps **manual**.
+
+**Skip** can only be turned on in the app, and `/new` ends it.
+
+This works only on a bot with one approved person, in that person's private chat. Approve a second
+person and everyone goes back to a card for every tool set to **Ask**, you included, because the bot
+can't tell you apart. An approved group always gets cards, and so do Slack, Discord and WhatsApp.
+
+**If you tap Deny,** the rest of that reply keeps asking, even in **auto**.
+
+**A forwarded message isn't your request.** Lucius and the automatic check both treat it as something
+you're showing them, so say what you'd like done with it.
+
 ## How Automatically approve decides
 
 Before a call to a tool set to **Ask**, a small model reads the tool's name and description,

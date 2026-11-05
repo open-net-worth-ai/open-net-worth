@@ -282,6 +282,13 @@ def engine() -> Any:
     return _old
 
 
+def channel_turns_follow_mode() -> bool:
+    """Whether a chat channel's owner turn is governed by the conversation's approval mode. Only
+    the new model: there Auto is a per-call judge, while the old Auto waves nearly every write
+    through, which nobody chose for a phone. A flag that cannot be read RAISES."""
+    return enabled(FLAG)
+
+
 def permission_api() -> Any:
     """The permission REST API's behaviour — the router calls this and never branches."""
     if enabled(FLAG):
