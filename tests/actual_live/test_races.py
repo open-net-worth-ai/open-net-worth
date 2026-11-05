@@ -63,7 +63,7 @@ def lost_then_settled(armed: dict) -> None:
     last = run()
     assert armed["lost"] == lost_before + 1, "the answer was to be lost"
     assert not last["ok"], "a commit with no answer ends the run"
-    assert "http" not in (last["error"] or "").lower() or "127.0.0.1" not in last["error"]
+    assert "127.0.0.1" not in last["error"], "the address never shows"
     sync()
     quiet()
 
@@ -245,7 +245,7 @@ def the_row(view: dict, notes: str) -> str:
     return row["id"]
 
 
-def test_an_edit_inside_a_batch_is_seen_by_the_next_batch(world, record_property):
+def test_an_edit_inside_a_batch_is_seen_by_the_next_batch(world):
     """The row the person edited isn't in this batch, and the next batch writes it: that batch
     must find it moved, not write over the person."""
     budget = world.seed()
@@ -312,7 +312,7 @@ def test_an_edit_from_a_window_left_open_with_a_clock_behind_is_seen_by_the_next
     assert there(budget.view(), "behind")
 
 
-def test_the_same_field_inside_its_own_batch_is_the_race_left(world, record_property):
+def test_the_same_field_inside_its_own_batch_is_the_race_left(world):
     """Nothing can close this: no compare-and-set on the server. The later timestamp wins, here
     ours, with nothing filed. The time between a batch's pull and its commit is the true window,
     measured over a real write and printed for the ADR."""
