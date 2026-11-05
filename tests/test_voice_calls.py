@@ -473,6 +473,9 @@ def bare_desk(agent, said: list | None = None):
     desk_._away_since, desk_._busy_timer = None, None
     desk_._answers, desk_._turn_said, desk_._shown = set(), "", False
     desk_._current_kind, desk_._superseded = "question", False
+    desk_.speech_log = agent.SpeechLog()
+    desk_._turn_changed, desk_._unheard = False, False
+    desk_._unspoken, desk_._last_answer = [], None
     desk_.hung_up = False
     desk_.rearmed = 0
     if said is not None:
@@ -635,40 +638,184 @@ def test_a_correction_drops_the_answer_of_the_question_under_way():
     )
 
 
-def test_a_corrected_question_is_not_read_out_but_its_card_still_is():
+def _answer_run(agent, superseded, changed, approval=False):
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_._answer_now = said.append
+    desk_._superseded = superseded
+    desk_._session_id = "s1"
+    desk_._rt = type("Rt", (), {"app": type("App", (), {"stream": lambda *_, **__: None})()})()
+
+    async def collect(_events):
+        desk_._turn_changed = changed
+        return "About the wrong thing.", approval
+
+    desk_._collect = collect
+    asyncio.run(desk_._answer("words", "request"))
+    return said, desk_
+
+
+def test_a_corrected_answer_is_not_read_out_unless_it_changed_something():
+    """Owner, 2026-11-05: what it did decides, not the front voice's label."""
     agent = pytest.importorskip("backend.connectors.voice.agent")
 
-    def run(superseded, approval):
-        said: list[str] = []
-        desk_ = bare_desk(agent, said)
-        desk_._answer_now = said.append
-        desk_._superseded = superseded
-        desk_._rt = type("Rt", (), {"app": type("App", (), {"stream": lambda *_, **__: None})()})()
-        desk_._session_id = "s1"
-
-        async def collect(_events):
-            return "About the wrong thing.", approval
-
-        desk_._collect = collect
-        asyncio.run(desk_._answer("words", "request"))
-        return said
-
-    assert run(False, False) == ["About the wrong thing."]
-    assert run(True, False) == []
-    assert run(True, True) == [agent.APPROVAL_WAITING]
+    said, desk_ = _answer_run(agent, superseded=False, changed=False)
+    assert said == ["About the wrong thing."] and desk_._unheard is False
+    said, desk_ = _answer_run(agent, superseded=True, changed=False)
+    assert said == [] and desk_._unheard is True
+    said, desk_ = _answer_run(agent, superseded=True, changed=True)
+    assert said == ["About the wrong thing."] and desk_._unheard is False
+    said, _ = _answer_run(agent, superseded=True, changed=False, approval=True)
+    assert said == [agent.APPROVAL_WAITING]
 
 
-def test_a_correction_never_silences_a_task_that_may_have_changed_something():
+def test_correcting_a_task_says_it_finishes_first_and_its_result_still_decides():
     agent = pytest.importorskip("backend.connectors.voice.agent")
     said: list[str] = []
     desk_ = _desk_with_words(agent, said)
     desk_._current, desk_._current_kind = "Move 100 to ACME savings", "task"
 
     assert desk_.submit("Move 100 to ACME checking", "task", "Okay, checking.", True) is None
-    assert desk_._superseded is False
+    assert desk_._superseded is True  # dropped only if it turns out to have changed nothing
     assert desk_._current == "Move 100 to ACME savings"  # it's still what's running
     assert said == [agent.QUEUED]  # and it says so
     assert desk_._queue.qsize() == 1
+
+
+class _QueuedSpeech:
+    def __init__(self, done=False):
+        self._isdone, self.interrupted = done, False
+
+    def done(self):
+        return self._isdone
+
+    def interrupt(self):
+        self.interrupted = True
+
+
+def _desk_with_unspoken(agent, said, playing=None):
+    desk_ = _desk_with_words(agent, said)
+    desk_._session = type("Session", (), {"current_speech": playing})()
+    return desk_
+
+
+def test_a_correction_drops_answers_waiting_to_be_spoken_and_says_so():
+    """Owner, 2026-11-05: four answers piled up in half a minute of corrections."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    waiting, played = _QueuedSpeech(), _QueuedSpeech(done=True)
+    playing = _QueuedSpeech()
+    desk_ = _desk_with_unspoken(agent, said, playing)
+    desk_._answers = {"waiting", "playing", "played"}
+    desk_._unspoken = [(waiting, "waiting"), (playing, "playing"), (played, "played")]
+
+    assert desk_.submit("Find the ACME yoga charge", "question", "Oh, yoga.", True) is None
+    assert waiting.interrupted is True
+    assert playing.interrupted is False  # their own voice is what cuts that one off
+    assert played.interrupted is False
+    assert desk_._answers == {"playing", "played"}
+    assert desk_._unspoken == [] and desk_._unheard is True
+
+
+def test_a_different_question_leaves_answers_waiting_to_be_spoken_alone():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    said: list[str] = []
+    waiting = _QueuedSpeech()
+    desk_ = _desk_with_unspoken(agent, said)
+    desk_._unspoken = [(waiting, "waiting")]
+
+    assert desk_.submit("What's my ACME balance?", "question", "Okay.") is None
+    assert waiting.interrupted is False and desk_._unheard is False
+    assert desk_._unspoken == [(waiting, "waiting")]
+
+
+def test_only_an_answer_that_changed_nothing_can_be_dropped_later():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    def run(changed, approval=False):
+        said: list[str] = []
+        desk_ = bare_desk(agent, said)
+        speech = _QueuedSpeech()
+
+        def answer_now(text):
+            desk_._last_answer = speech
+
+        desk_._answer_now = answer_now
+        desk_._session_id = "s1"
+        desk_._rt = type("Rt", (), {"app": type("App", (), {"stream": lambda *_, **__: None})()})()
+
+        async def collect(_events):
+            desk_._turn_changed = changed
+            return "An answer.", approval
+
+        desk_._collect = collect
+        asyncio.run(desk_._answer("words", "request"))
+        return desk_._unspoken
+
+    assert [t for _s, t in run(False)] == ["An answer."]
+    assert run(True) == []
+    assert run(False, approval=True) == []
+
+
+def test_the_next_request_says_the_last_answer_was_not_heard():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    asked: list[dict] = []
+
+    class App:
+        def stream(self, method, **args):
+            asked.append(args)
+            return None
+
+    said: list[str] = []
+    desk_ = bare_desk(agent, said)
+    desk_._session_id = "s1"
+    desk_._rt = type("Rt", (), {"app": App()})()
+
+    async def collect(_events):
+        return "", False
+
+    desk_._collect = collect
+    asyncio.run(desk_._answer("words", "request", False, True))
+    assert asked[0]["unheard"] is True
+
+
+def test_lucius_is_told_when_an_answer_was_not_heard(monkeypatch):
+    sent: list = []
+
+    def fake_stream_turn(session_id, messages, **_):
+        sent.append(messages)
+
+        async def events():
+            yield {"type": "done"}
+
+        return events()
+
+    monkeypatch.setattr(desk.conversation, "stream_turn", fake_stream_turn)
+
+    async def run(**kwargs):
+        return [e async for e in desk.ask("sess-unheard", "No, ACME yoga", **kwargs)]
+
+    asyncio.run(run())
+    asyncio.run(run(unheard=True))
+    note = desk.UNHEARD_NOTE
+    assert not any(note in b["text"] for b in sent[0][0]["content"])
+    assert any(note in b["text"] for b in sent[1][0]["content"])
+
+
+@pytest.mark.parametrize(
+    "name, changes",
+    [
+        ("get_transactions", False),
+        ("read_screen", False),
+        ("approve_transactions", True),
+        ("email_send_message", True),
+        ("some_external_mcp_tool", True),
+    ],
+)
+def test_the_call_hears_which_tools_can_change_something(name, changes):
+    """An unknown tool counts: nothing vouches that it only reads."""
+    event = desk.translate({"type": "tool_use_start", "id": "t1", "name": name})
+    assert event.changes is changes
 
 
 def test_a_correction_replaces_a_request_still_waiting_and_keeps_its_words():
@@ -706,6 +853,70 @@ def test_a_different_question_while_busy_still_waits_its_turn():
     desk_._current = "Find the ACME gym charge"
     assert desk_.submit("What's my ACME balance?", "question", "Okay.") is None
     assert said == [agent.QUEUED] and desk_._superseded is False
+
+
+class _FakeSpeech:
+    def __init__(self, id_="s1"):
+        self.id, self.interrupted, self._done = id_, False, None
+
+    def add_done_callback(self, done):
+        self._done = done
+
+    def end(self, interrupted=False):
+        self.interrupted = interrupted
+        self._done(self)
+
+
+def _speech_log(caplog):
+    import logging
+
+    from backend.connectors.voice import timing
+
+    caplog.set_level(logging.INFO, logger=timing.__name__)
+    return timing.SpeechLog()
+
+
+def test_the_log_follows_a_spoken_line_from_queued_to_finished(caplog):
+    """Owner, 2026-11-05: an answer heard out of order, and nothing to say what had played."""
+    speech_log, speech = _speech_log(caplog), _FakeSpeech()
+    speech_log.created(speech)
+    speech_log.label(speech, "answer", 407)
+    speech_log.playing(speech)
+    speech.end()
+    assert "#1 answer (407 chars) queued" in caplog.text
+    assert "#1 answer (407 chars) started" in caplog.text
+    assert "#1 answer (407 chars) finished after" in caplog.text
+
+
+def test_the_log_tells_cut_off_from_never_played_and_a_line_coming_back(caplog):
+    speech_log = _speech_log(caplog)
+    cut, dropped, front = _FakeSpeech("a"), _FakeSpeech("b"), _FakeSpeech("c")
+    unseen = _FakeSpeech("d")
+    for speech in (cut, dropped, front, unseen):
+        speech_log.created(speech)
+    speech_log.label(cut, "answer", 10)
+    speech_log.label(dropped, "answer", 20)
+    speech_log.playing(cut)
+    speech_log.playing(cut)
+    speech_log.resumed(True)
+    speech_log.playing(front)
+    cut.end(interrupted=True)
+    dropped.end(interrupted=True)
+    unseen.end()
+    assert "#4 ended, start not seen" in caplog.text
+    assert "#1 answer (10 chars) playing again" in caplog.text
+    assert "false interruption, the line resumed" in caplog.text
+    assert "#1 answer (10 chars) cut off after" in caplog.text
+    assert "#2 answer (20 chars) dropped before it played" in caplog.text
+    assert "#3 started" in caplog.text
+
+
+def test_the_log_ignores_a_line_it_never_saw(caplog):
+    speech_log = _speech_log(caplog)
+    speech_log.label(None, "answer", 10)
+    speech_log.playing(None)
+    speech_log.playing(_FakeSpeech("unknown"))
+    assert "voice speech" not in caplog.text
 
 
 def test_a_call_health_says_whether_lucius_is_working(monkeypatch):

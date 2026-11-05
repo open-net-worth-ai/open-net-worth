@@ -480,6 +480,12 @@ def written_domains(name: str) -> tuple[str, ...]:
     return t.mutates if t is not None else ()
 
 
+def may_change_something(name: str) -> bool:
+    """Whether running ``name`` can change data or send something out. A tool this registry
+    doesn't know (an external MCP server's) counts: nothing vouches that it only reads."""
+    return name not in _REGISTRY or bool(written_domains(name)) or has_external_effect(name)
+
+
 def has_external_effect(name: str) -> bool:
     """Whether ``name`` declares ``external_effect=`` (it sends something out of this install or
     runs code on the owner's machine) — ``False`` for an unknown tool."""

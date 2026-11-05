@@ -38,7 +38,7 @@ from livekit.plugins import silero
 
 from backend.connectors.voice.connection import CallConnection
 from backend.connectors.voice.events import speakable
-from backend.connectors.voice.timing import AnswerTiming, TurnTiming
+from backend.connectors.voice.timing import AnswerTiming, SpeechLog, TurnTiming
 from backend.connectors.voice.tokens import OWNER_IDENTITY
 from backend.connectors.voice.tts_models import voice_for
 
@@ -342,10 +342,15 @@ class LuciusDesk:
         self._current: str | None = None
         self._current_kind = "question"
         self._superseded = False  # the owner corrected the request under way: no reading it out
+        self._turn_changed = False  # the request under way ran something that can change data
+        self._unspoken: list = []  # (speech, text): answers waiting to play that changed nothing
+        self._last_answer = None  # the speech of the answer just queued
+        self._unheard = False  # the last answer was never read out: the next request says so
         self._checked_in = False  # asked "still there?" since the owner last spoke
         self._approving = False  # a change is waiting on the owner's approval on screen
         self._following = False  # reading out a turn the call didn't start (``_follow_others``)
         self.timing = TurnTiming()
+        self.speech_log = SpeechLog()
         self._away_since: float | None = None  # silent while busy, since when
         self._busy_timer: asyncio.TimerHandle | None = None
         self._hold_until = 0.0  # the owner asked us to wait until then
@@ -475,7 +480,10 @@ class LuciusDesk:
         if answer:
             self._answers.add(text)
         try:
-            self._session.say(text, add_to_chat_ctx=True)
+            speech = self._session.say(text, add_to_chat_ctx=True)
+            self.speech_log.label(speech, "answer" if answer else "line", len(text))
+            if answer:
+                self._last_answer = speech
         except RuntimeError:
             log.info("voice: the call ended before Lucius's answer was ready; it is in the chat")
 
@@ -503,7 +511,9 @@ class LuciusDesk:
         """A holding line already worded: no model run. Never logged, it can hold their words."""
         log.info("voice: holding line: the front voice's own (%d chars)", len(line))
         try:
-            self._keep_holding(self._session.say(line, add_to_chat_ctx=True))
+            speech = self._session.say(line, add_to_chat_ctx=True)
+            self.speech_log.label(speech, "holding line", len(line))
+            self._keep_holding(speech)
         except RuntimeError:
             log.info("voice: the call ended before a line could be said")
 
@@ -565,12 +575,34 @@ class LuciusDesk:
             self._rt.app.call("record_said", session_id=self._session_id, said=said)
         )
 
+    def _drop_unspoken(self) -> None:
+        """Answers already written but waiting to be spoken, once the owner has corrected the
+        request: four piled up in half a minute on one call (owner, 2026-11-05). The one playing
+        stays, as their own voice is what cuts that off. Only answers that changed nothing are
+        ever here (``_answer``)."""
+        if not self._unspoken:
+            return
+        playing = self._session.current_speech
+        dropped = 0
+        for speech, text in self._unspoken:
+            if speech.done() or speech is playing:
+                continue
+            speech.interrupt()
+            self._answers.discard(text)
+            dropped += 1
+        self._unspoken = []
+        if dropped:
+            log.info("voice: dropped %d unspoken answer(s) the owner had moved past", dropped)
+            self._unheard = True
+
     def _replace_last(self, said: str) -> tuple[str, bool]:
         """The owner corrected their last request: the answer to what they'd taken back was read
-        out first (owner, 2026-11-05). One still waiting hasn't started, so it goes, and
-        its words ride along. One under way can't be taken back and runs on, so a question's answer
-        is just not read out. A task's always is: it may have changed something, and the owner has
-        to hear that. Returns the words to send, and whether this is now a clean replacement."""
+        out first (owner, 2026-11-05). One still waiting hasn't started, so it goes, and its words
+        ride along. One under way can't be taken back and runs on; whether its answer is read out
+        depends on what it actually did (``_answer``), but a task's wording here says it finishes
+        first, as it may well change something. Returns the words to send, and whether this reads
+        to the owner as a clean replacement."""
+        self._drop_unspoken()
         waiting: list[tuple[str, str, bool, str]] = []
         while not self._queue.empty():
             waiting.append(self._queue.get_nowait())
@@ -579,10 +611,10 @@ class LuciusDesk:
             for item in waiting:
                 self._queue.put_nowait(item)
             return (said if old_shown else f"{old_said} {said}"), True
-        if self._current is not None and self._current_kind == "question":
-            self._superseded = True
+        if self._current is None:
             return said, True
-        return said, self._current is None
+        self._superseded = True
+        return said, self._current_kind == "question"
 
     def submit(
         self, request: str, kind: str = "question", ack: str = "", replaces_last: bool = False
@@ -657,8 +689,9 @@ class LuciusDesk:
             said, request, shown, kind = await self._queue.get()
             self._current, self._started, self._doing = request, time.monotonic(), ""
             self._current_kind, self._superseded = kind, False
+            unheard, self._unheard = self._unheard, False
             try:
-                await self._answer(said, request, shown)
+                await self._answer(said, request, shown, unheard)
             except Exception:  # noqa: BLE001 — a failed request must not end the call
                 log.exception("voice: Lucius request failed")
                 self._current = None  # no longer working: this line belongs in the chat
@@ -667,16 +700,30 @@ class LuciusDesk:
             finally:
                 self._current, self._doing = None, ""
 
-    async def _answer(self, said: str, understood: str, shown: bool = False) -> None:
+    async def _answer(
+        self, said: str, understood: str, shown: bool = False, unheard: bool = False
+    ) -> None:
         events = self._rt.app.stream(
-            "ask", session_id=self._session_id, said=said, understood=understood, shown=shown
+            "ask",
+            session_id=self._session_id,
+            said=said,
+            understood=understood,
+            shown=shown,
+            unheard=unheard,
         )
+        self._turn_changed = False
         text, approval = await self._collect(events)
-        if self._superseded:
-            # A card it left still waits, so that part is still said. The chat has the answer.
+        # What it actually did decides, not how the front voice labelled it: a "question" can end
+        # in a change, and the owner must always hear about one. A card it left still waits, so
+        # that part is always said too. The chat has the answer either way.
+        if self._superseded and not self._turn_changed:
             log.info("voice: an answer the owner had corrected wasn't read out")
             text = ""
+            self._unheard = True
+        self._last_answer = None
         self._speak(text, approval)
+        if self._last_answer is not None and not self._turn_changed and not approval:
+            self._unspoken.append((self._last_answer, speakable(text)))
         if approval:
             self._approving = True  # its continuation is read out by ``_follow_others``
 
@@ -710,6 +757,7 @@ class LuciusDesk:
                     answer += event.text
                     timing.text(event.text)
                 elif event.kind == "tool":
+                    self._turn_changed = self._turn_changed or event.changes
                     running[event.ref] = (event.noun or "that", now)
                     answer = ""
                     timing.lookup()
@@ -974,9 +1022,12 @@ async def entrypoint(ctx: JobContext) -> None:
     def _spoke(ev) -> None:
         if ev.new_state == "speaking":
             lucius.timing.agent_speaking()
+            lucius.speech_log.playing(session.current_speech)
             lucius.spoke()
 
     session.on("metrics_collected", lucius.timing.metrics)
+    session.on("speech_created", lambda ev: lucius.speech_log.created(ev.speech_handle))
+    session.on("agent_false_interruption", lambda ev: lucius.speech_log.resumed(ev.resumed))
     ctx.room.on("participant_disconnected", lambda who: _caller_left(ctx, who))
     owner = runtime.owner_name
     await session.start(

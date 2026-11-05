@@ -38,9 +38,10 @@ of hearing nothing, he tells you he's still on it (*"still working on your groce
 again every 30 to 45 seconds until the answer starts. He stays quiet while you're talking or after
 you've asked him to wait. These lines repeat what you asked, never a figure. To cut him off, say at
 least two words (*"hold on"*, *"stop there"*): a lone *"okay"* or background noise doesn't.
-Correct him while he's looking (*"no, I meant the other card"*) and he moves on to what you meant without
-reading out the first answer. A change you've already asked for can't be taken back this way: it may
-still happen, so you always hear how it went, then he gets to your correction.
+Correct him (*"no, I meant the other card"*) and he moves on to what you meant, skipping the first
+answer if it hasn't been read out yet; he also knows you never heard it. Asking something different
+keeps the first answer, in order. A change can't be taken back this way: if the first request did
+change something, you always hear how it went, then he gets to your correction.
 Only his final reply is read out. A link in it shows in the chat: inside a sentence you hear just its
 name, and on a line of its own you don't hear it at all.
 Ask *"what are you doing?"* and the front voice tells you what Lucius is working on right now.
