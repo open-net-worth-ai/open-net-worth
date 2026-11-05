@@ -84,6 +84,7 @@ Talk to it like the in-app chat. Useful commands:
 | `/cost` | Today's and the last 30 days' AI spend |
 | `/effort` | Set response depth: `low`, `medium`, `high` or `max` |
 | `/streaming`, `/suggestions`, `/toolstream` | Turn live-updating replies, follow-up suggestions, or "what I'm doing" progress on or off |
+| `/approvals` | Choose how much Lucius asks before acting: `manual` or `auto`. Needs [Permissions v2](../lucius/permissions-v2.md) |
 | `/help` | Show the full list |
 
 You can also send photos (a receipt, a screenshot of a statement) and documents. If Telegram

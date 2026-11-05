@@ -16,17 +16,19 @@ from backend.core.chat_context_markers import CONTEXT_OPENINGS, strip_user_msg_f
 
 REPLY_QUOTE_KEEP_CHARS = 160
 
-_REPLY_QUOTE = re.compile(
-    r"«reply_quote:(?P<nonce>[0-9a-fA-F]+)»\s*(?:\[[^\]\n]*\]\s*)?(?P<body>.*?)«/reply_quote:(?P=nonce)»",
+_RELAYED = re.compile(
+    r"«(?P<label>reply_quote|forwarded):(?P<nonce>[0-9a-fA-F]+)»\s*(?:\[[^\]\n]*\]\s*)?"
+    r"(?P<body>.*?)«/(?P=label):(?P=nonce)»",
     re.S,
 )
+_RELAYED_AS = {"reply_quote": "replying to", "forwarded": "forwarded, not their own words"}
 
 
 def _short_quote(match: re.Match) -> str:
     body = " ".join(match.group("body").split())
     if len(body) > REPLY_QUOTE_KEEP_CHARS:
         body = body[:REPLY_QUOTE_KEEP_CHARS].rstrip() + "…"
-    return f"(replying to: {body}) " if body else ""
+    return f"({_RELAYED_AS[match.group('label')]}: {body}) " if body else ""
 
 
 def readable_block(role: str, text: str) -> str:
@@ -35,7 +37,7 @@ def readable_block(role: str, text: str) -> str:
         return text.strip()
     if text.lstrip().startswith(CONTEXT_OPENINGS):
         return ""
-    return strip_user_msg_fence_tokens(_REPLY_QUOTE.sub(_short_quote, text))
+    return strip_user_msg_fence_tokens(_RELAYED.sub(_short_quote, text))
 
 
 __all__ = ["readable_block"]

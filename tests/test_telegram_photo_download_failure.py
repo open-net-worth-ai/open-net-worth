@@ -60,7 +60,13 @@ def tg(db_isolated, monkeypatch):
     seen: list[dict] = []
 
     async def _spy(connector, channel_id, session_id, text, effort_default="high", **kw):
-        seen.append({"text": text, "attachment_refs": kw.get("attachment_refs")})
+        seen.append(
+            {
+                "text": text,
+                "attachment_refs": kw.get("attachment_refs"),
+                "sender_id": kw.get("sender_id"),
+            }
+        )
 
     monkeypatch.setattr(handlers, "process_message", _spy)
     yield seen
@@ -76,6 +82,7 @@ async def test_a_timed_out_photo_download_is_retried_once(tg):
     assert len(tg) == 1, "the retried photo never reached Lucius"
     assert tg[0]["text"] == "Find this transaction and attach"
     assert tg[0]["attachment_refs"] and tg[0]["attachment_refs"][0].startswith("att_")
+    assert tg[0]["sender_id"] == "4242", "a photo must follow the owner's approval mode too"
 
 
 @pytest.mark.asyncio

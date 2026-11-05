@@ -10,7 +10,7 @@ WHAT IT IS NOT: this decides whether the owner is ASKED, never WHAT MAY BE CALLE
 a reachability list, it cannot widen a tool offer, and ``blocked`` is refused in
 ``registry.dispatch`` before any of this is consulted.
 
-WHO MAY SET IT: a human, through REST. No tool writes it, and no tool schema advertises it.
+WHO MAY SET IT: a human, through REST or a Telegram owner's ``/approvals``. No tool writes it, and no tool schema advertises it.
 That is the load-bearing security property, not a nicety — a conversation reads untrusted
 text all day (a fetched page, an email body, an MCP result), so a model able to set its own
 mode turns a prompt injection into an approvals-off switch. Automations' own
