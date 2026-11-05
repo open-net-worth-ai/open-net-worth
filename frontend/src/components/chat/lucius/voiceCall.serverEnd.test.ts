@@ -185,6 +185,13 @@ describe('the server ending a call', () => {
   })
 })
 
+describe('starting a call', () => {
+  it('starts folded, so pressing Call never takes over a phone screen', async () => {
+    await liveCall()
+    expect(state().view).toBe('bar')
+  })
+})
+
 describe('the connection rating', () => {
   const you = { identity: 'owner' }
   const lucius = { identity: 'lucius' }

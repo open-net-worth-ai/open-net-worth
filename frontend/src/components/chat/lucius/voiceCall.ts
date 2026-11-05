@@ -367,7 +367,9 @@ export async function startCall(sessionId: string): Promise<void> {
   localHangUp = false
   endProblem = null
   openLevels()
-  set({ ...IDLE, phase: 'connecting', sessionId })
+  // Folded on a phone too: pressing Call shouldn't take over the screen, and the pill or the strip
+  // opens it when you want it (owner, 2026-11-05).
+  set({ ...IDLE, phase: 'connecting', sessionId, view: 'bar' })
   try {
     // The microphone first, THEN the ring: opening it reconfigures the audio device (a
     // Bluetooth headset switches to its call mode), which broke whichever ring was playing —

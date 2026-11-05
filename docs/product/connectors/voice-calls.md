@@ -91,13 +91,11 @@ nobody is. While he looks something up it moves faster and the line under it say
 
 | Where | What you see |
 |---|---|
-| **On a phone** | The call takes the whole screen. The arrow at the top (or **Type**) puts it away so you can read the chat (approval cards included) or type, while you keep talking. |
+| **On a phone** | The call starts small, as a strip above the message box, so you keep your place. Its expand button opens the full call screen. The arrow at the top (or **Type**) puts that away again so you can read the chat (approval cards included) or type, while you keep talking. |
 | **On a phone, away from the Lucius tab** | A small round button sits above the tab bar. With no call on it shows **voice bars**: tap it to call, or to go to Voice calls in Connectors if calls aren't set up. During a call it grows into a small pill with the moving **orb** and the time, or what's going on instead (*Working…*, *Poor connection*, *Reconnecting…*): tap it to open the full call screen, where **End** is. |
 | **In the side panel or the Lucius tab** | The call sits just above the message box — a slim strip on a wide screen — so the chat above stays readable and its cards tappable. |
 | **The floating Lucius button** | It has a **Call** button (four voice bars) beside **Ask Lucius**: press it and the call happens right in the button. It grows to show the orb, the time, **Mute** and **End**, and shrinks back when you hang up. Press the time to open the chat. On a poor connection it says so and shows the signal bars. If Lucius needs your approval it says **Needs approval**; press **Review** to see the card. |
 
-On a phone, the arrow (or Esc, or **Type**) folds the full-screen call down to the same strip
-you see on a computer, above the message box; its expand button opens the full screen again.
 Folding it never hangs up. If a call can't start or drops, a note at
 the top of the box (or in the floating button) says why, with a button to try again, open Voice
 calls settings or view the app's logs; dismiss it with **×**. That includes Lucius's side going
