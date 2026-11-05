@@ -24,7 +24,7 @@ const BLANK = {
   has_encryption_password: false,
   has_server_url: false,
   server_host: null as string | null,
-  server_origin: null as string | null,
+  server_scheme: null as string | null,
   server_plain_http: false,
   budget_id: null as string | null,
   budget_name: null as string | null,
@@ -40,7 +40,7 @@ const SAVED = {
   has_password: true,
   has_server_url: true,
   server_host: 'actual.acme.test',
-  server_origin: 'https://actual.acme.test',
+  server_scheme: 'https',
 }
 const HOUSEHOLD = { id: 'b1', name: 'ACME Household', currency: null, encrypted: false }
 const VAULT = { id: 'b2', name: 'ACME Vault', currency: null, encrypted: true }

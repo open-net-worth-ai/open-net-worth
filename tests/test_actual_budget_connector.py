@@ -519,10 +519,12 @@ def test_the_first_address_clears_nothing(store):
 
 def test_public_says_where_a_sign_in_would_go_without_the_userinfo(store):
     store.update(SECRETS)
-    assert store.public()["server_origin"] == "https://actual.acme.test:5006"
+    public = store.public()
+    assert (public["server_scheme"], public["server_host"]) == ("https", "actual.acme.test:5006")
     store.update({"server_url": "https://[::1]:443/x"})
-    assert store.public()["server_origin"] == "https://[::1]"
-    _no_secret_in(store.public()["server_origin"])
+    public = store.public()
+    assert (public["server_scheme"], public["server_host"]) == ("https", "[::1]:443")
+    _no_secret_in(public["server_scheme"] + public["server_host"])
 
 
 # ── a saved address that isn't encrypted ─────────────────────────────────────

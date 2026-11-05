@@ -60,6 +60,12 @@ def display_host(url: str) -> str | None:
     return f"{host}:{parts.port}" if parts.port else host
 
 
+def server_scheme(url: str) -> str | None:
+    """With ``display_host``, all the form needs to tell that a typed address is another server."""
+    parts = _parts(url)
+    return parts.scheme if parts else None
+
+
 def server_origin(url: str) -> str | None:
     """Where a saved password would go: scheme, host and port, written as a browser writes an origin."""
     parts = _parts(url)
@@ -178,7 +184,7 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
             "has_encryption_password": bool(secret["encryption_password"]),
             "has_server_url": bool(secret["server_url"]),
             "server_host": display_host(secret["server_url"]),
-            "server_origin": server_origin(secret["server_url"]),
+            "server_scheme": server_scheme(secret["server_url"]),
             "server_plain_http": plain_http_remote(secret["server_url"]),
             "budget_id": cfg.get("budget_id"),
             "budget_name": cfg.get("budget_name"),

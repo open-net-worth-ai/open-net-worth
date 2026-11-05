@@ -26,7 +26,7 @@ interface ActualStatus {
   has_encryption_password: boolean
   has_server_url: boolean
   server_host: string | null
-  server_origin: string | null
+  server_scheme: string | null
   server_plain_http: boolean
   budget_id: string | null
   budget_name: string | null
@@ -139,7 +139,7 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
     !!urlTyped &&
     urlValid &&
     cfg.has_server_url &&
-    parsedUrl(urlTyped)?.origin !== cfg.server_origin
+    parsedUrl(urlTyped)?.origin !== parsedUrl(`${cfg.server_scheme}://${cfg.server_host}`)?.origin
   const secretSaved = !moved && (signIn === 'password' ? cfg.has_password : cfg.has_token)
   const secretValid = !!secret.trim() || secretSaved
   const needsEncryption = !!picked?.encrypted && !cfg.has_encryption_password && !encryption.trim()
