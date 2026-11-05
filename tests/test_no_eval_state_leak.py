@@ -27,10 +27,13 @@ asserted.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -79,3 +82,30 @@ def test_the_four_victim_modules_pass_when_run_after_the_eval_harness():
         "eval harness leaked into a later module.\n"
         f"--- stdout ---\n{result.stdout[-4000:]}\n--- stderr ---\n{result.stderr[-2000:]}"
     )
+
+
+def _env_guard():
+    spec = importlib.util.spec_from_file_location(
+        "evals_env_guard", REPO_ROOT / "tests" / "evals" / "conftest.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.pytest_runtest_logfinish
+
+
+def test_the_apps_trust_store_choice_at_boot_is_not_a_leak(monkeypatch):
+    """Windows has no platform CA file, so importing backend.main sets SSL_CERT_FILE. The guard's
+    assertion runs in a hook, where it ended the whole Windows run 8% of the way through."""
+    monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+    monkeypatch.setattr("tests.conftest.PRISTINE_ENV", dict(os.environ))
+    monkeypatch.setenv("SSL_CERT_FILE", "/synthetic/cacert.pem")
+
+    _env_guard()("tests/evals/test_synthetic.py::test_synthetic", None)
+
+
+def test_any_other_new_variable_is_still_a_leak(monkeypatch):
+    monkeypatch.setattr("tests.conftest.PRISTINE_ENV", dict(os.environ))
+    monkeypatch.setenv("ONW_SYNTHETIC_LEAK", "1")
+
+    with pytest.raises(AssertionError, match="ONW_SYNTHETIC_LEAK"):
+        _env_guard()("tests/evals/test_synthetic.py::test_synthetic", None)
