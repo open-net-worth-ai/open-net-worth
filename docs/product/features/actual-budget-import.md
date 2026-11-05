@@ -173,11 +173,19 @@ the row can end up there twice.
 
 **If a budget reads as empty,** or many rows seem to vanish at once, nothing is deleted here. Each
 deletion waits in the review list for you to confirm, and if the rows come back, the items close on
-their own.
+their own. Rewinding to a checkpoint here can bring rows back that Actual no longer has; the sync
+then asks about each of them, one at a time, rather than deleting them again on its own.
 
 **Picking another budget** deletes nothing here. Rows on the first budget's accounts stay in this
-book, the sync leaves them alone, and the page says how many there are. Importing another budget is
-refused while the sync is on: turn it off first, import, then pick the budget to sync.
+book, the sync leaves them alone, and the page says how many there are. The first sync after the
+switch holds back every row the new budget doesn't have, however few, and asks about each one in the
+review list: a budget restored from an export, or duplicated in Actual, keeps the same row ids under a
+new name, so a row it lacks may be one you added here since. Importing another budget is refused
+while the sync is on: turn it off first, import, then pick the budget to sync.
+
+**A budget you haven't imported** isn't synced. If you pick one that has no account in this book,
+each run stops with "Import this budget first", the page says so, and nothing is written, paired or
+filed on either side. Import it, and the next run carries on as normal.
 
 **Reset sync in Actual** is fine. Row ids don't change, so the next run carries on as before, with no
 pairing lost and nothing read as deleted.

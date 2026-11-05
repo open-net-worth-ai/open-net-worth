@@ -4,6 +4,8 @@ no state, status or log line."""
 
 from __future__ import annotations
 
+from typing import Iterator
+
 from backend.core.errors import ConflictError, ValidationError
 from backend.services import ledger as ledger_service
 from backend.services.budget_app import current, refuse_beside_others, starting
@@ -33,13 +35,24 @@ def status() -> dict:
     }
 
 
-def _linked_book() -> bool:
+def _links() -> Iterator[str]:
+    """The app's account ids that ledger accounts are linked to."""
     source = current().source
-    return any(
-        e.get("source") == source
+    return (
+        e["ref"]
         for a in ledger_service.accounts.query_accounts(include_archived=True)
         for e in a.get("external_ids") or []
+        if e.get("source") == source
     )
+
+
+def _linked_book() -> bool:
+    return any(_links())
+
+
+def links_to(accounts: set[str]) -> bool:
+    """Whether a ledger account is linked to one of these accounts of the app."""
+    return any(ref in accounts for ref in _links())
 
 
 def _adopt_plan(plan_id: str) -> dict:
@@ -56,12 +69,14 @@ def _adopt_plan(plan_id: str) -> dict:
         raise ValidationError(
             f"That {app.name} {app.plan_word} has no currency set; open it in {app.name} once first."
         )
+    switched = app.caps.copies_keep_ids and bool(sync_state.load()["plan_id"])
     sync_state.reset()
     return {
         **sync_state.blank(),
         "plan_id": plan_id,
         "plan_name": plan["name"],
         "currency": currency,
+        "switched": switched,
     }
 
 

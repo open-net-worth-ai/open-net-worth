@@ -72,6 +72,10 @@ class Capabilities:
     # A book can hold another budget's accounts from the same app: rows on those aren't this
     # budget's, so their absence from a read says nothing, and they are left alone.
     budget_scoped_accounts: bool = False
+    # A duplicated or restored budget keeps its row ids under a new file id, so the first read
+    # after a switch can't tell a row deleted there from one added here since the copy: every
+    # removal it finds is held for review.
+    copies_keep_ids: bool = False
 
 
 @dataclass(frozen=True)

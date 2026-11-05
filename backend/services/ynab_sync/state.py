@@ -56,6 +56,12 @@ def blank() -> dict:
         "held": [],
         "held_ynab": [],
         "held_assigned": [],
+        # The plan was changed from another (``copies_keep_ids``): the first run that could delete
+        # here holds every removal it finds, until one such run succeeds.
+        "switched": False,
+        # The last read held no account linked here (``budget_scoped_accounts``): the plan was
+        # never imported, so the run stopped before pairing or writing anything.
+        "awaiting_import": False,
         "last_run": None,
         "next_run_at": None,
     }

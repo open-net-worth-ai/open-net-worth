@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
+import shutil
 import threading
 import time
 
@@ -39,6 +40,7 @@ from backend.services.budget_app import YNAB, using
 from backend.services.ynab_migration import job
 from backend.services.ynab_sync import (
     baselines,
+    conflicts,
     delta,
     pull,
     push,
@@ -1440,7 +1442,8 @@ def test_the_question_and_the_status_say_what_an_answer_does(
     (warning,) = [w for w in after["warnings"] if w["kind"] == "waiting_for_both_ways"]
     assert "both ways" in warning["text"]
     if direction == "to_ynab":
-        assert "stays here" in warning["text"] and "net worth" in warning["text"]
+        assert "stays as it is here" in warning["text"] and "net worth" in warning["text"]
+        assert "a row you chose to remove" in warning["text"] and "edited" in warning["text"]
 
 
 def test_the_question_follows_a_change_of_direction(world, monkeypatch):
@@ -1454,6 +1457,27 @@ def test_the_question_follows_a_change_of_direction(world, monkeypatch):
     sync()
     (item,) = open_items()
     assert "both ways" not in item["reason"]
+
+
+@pytest.mark.parametrize(
+    "direction, promise",
+    [
+        ("both", "to remove it here."),
+        ("from_ynab", "when the sync goes both ways"),
+        ("to_ynab", "until the sync goes both ways"),
+    ],
+)
+def test_a_row_edited_here_and_gone_there_says_what_each_answer_does(world, direction, promise):
+    enable(direction)
+    sync()
+    market = by_ref("t-market")
+    edit_here(market["id"], memo="mine")
+    _gone_there(world, "t-market")
+    sync()
+    (item,) = open_items()
+    assert item["onw_txn_id"] == market["id"] and item["kind"] == "conflict"
+    assert "no longer in Actual" in item["reason"] and promise in item["reason"]
+    assert "Changed in both" not in item["reason"]
 
 
 def test_a_both_ways_sync_has_nothing_waiting(world):
@@ -1600,6 +1624,32 @@ def test_missing_rows_dont_raise_the_mass_delete_limit(world, monkeypatch):
     assert len(world.rows("transactions", "tombstone = 1 AND id LIKE 't-more-%'")) == 30
 
 
+def test_to_actual_a_mass_deletion_in_actual_asks_nothing_until_both_ways(world):
+    enable()
+    for n in range(35):
+        world.txn(f"t-more-{n}", "a1", -100 - n, TODAY, description="p-market", category="c-food")
+    world.queue.clear()
+    sync()
+    enable("to_ynab")
+    sync()
+    rows_here = _live_here()
+    world.edit("UPDATE transactions SET tombstone = 1 WHERE id LIKE 't-more-%'")
+    world.queue.clear()
+    for _ in range(2):
+        assert sync()["ok"] is True
+        assert open_items() == [] and _live_here() == rows_here
+        assert actual_app.sync_status()["waiting"] == 35
+    enable("both")
+    sync()
+    items = open_items()
+    assert len(items) == 35 and all("at once" in c["reason"] for c in items)
+    for item in items:
+        actual_app.resolve_sync_item(item["id"], "ynab")
+    assert _live_here() == rows_here - 35
+    assert sync()["summary"] == "Nothing changed" and open_items() == []
+    assert actual_app.sync_status()["waiting"] == 0
+
+
 def test_a_real_deletion_of_a_few_rows_needs_no_confirming(world):
     enable()
     sync()
@@ -1731,10 +1781,12 @@ def test_switching_budgets_deletes_nothing_here(world, extra):
         world.txn(f"t-more-{n}", "a1", -100 - n, TODAY, description="p-market", category="c-food")
     world.queue.clear()
     sync()
-    rows_here = _live_here()
     world.add_budget(BUDGET_B)
     with world.on(BUDGET_B):
         seed_other_budget(world, PAST, TODAY)
+    actual_app.sync_settings(False, None, None, None)
+    _import_other_budget()
+    rows_here = _live_here()
     a_before = world.rows("transactions")
     _to_other_budget()
     assert sync()["ok"] is True
@@ -1747,13 +1799,13 @@ def test_switching_budgets_deletes_nothing_here(world, extra):
     (warning,) = [
         w for w in actual_app.sync_status()["warnings"] if w["kind"] == "not_in_this_budget"
     ]
-    assert str(rows_here) in warning["text"]
+    assert str(rows_here - 2) in warning["text"]  # the other budget's opening and one row
     assert f"ACME {BUDGET_B}" in warning["text"] and "stay here" in warning["text"]
 
 
-def _import_other_budget() -> None:
+def _import_other_budget(**types) -> None:
     actual_app.start_migration(
-        "import", BUDGET_B, account_types={"b1": "cash"}, confirm_nonempty=True
+        "import", BUDGET_B, account_types={"b1": "cash", **types}, confirm_nonempty=True
     )
     deadline = time.time() + 60
     while time.time() < deadline:
@@ -1854,28 +1906,53 @@ def test_an_old_budgets_account_appears_nowhere_in_what_is_sent(world):
     world.add_budget(BUDGET_B)
     with world.on(BUDGET_B):
         seed_other_budget(world, PAST, TODAY)
+    actual_app.sync_settings(False, None, None, None)
+    _import_other_budget()
     _to_other_budget()
     sync()
     new_row()  # on the old budget's account, with no link at all
-    assert sync()["sent"] == 0 and all(not c.get("onw_txn_id") for c in open_items())
+    assert sync()["sent"] == 0 and open_items() == []
     with world.on(BUDGET_B):
         assert not world.live("amount = -1234")
     assert not world.live("amount = -1234")
 
 
-def test_importing_the_budget_switched_to_closes_its_rows_items(world):
+def test_reimporting_the_budget_with_a_new_account_closes_its_rows_items(world):
     enable()
     sync()
     world.add_budget(BUDGET_B)
     with world.on(BUDGET_B):
         seed_other_budget(world, PAST, TODAY)
-    _to_other_budget()
-    sync()
-    assert [c for c in open_items() if c["key"].startswith("y:")]  # no account here for its rows
     actual_app.sync_settings(False, None, None, None)
     _import_other_budget()
-    actual_app.sync_settings(True, None, None, None)
+    _to_other_budget()
     sync()
+    with world.on(BUDGET_B):  # an account made in Actual since the import, with a row
+        world.account("b2", "ZENITH Card")
+        world.txn("z-2", "b2", -700, TODAY, description="p-zenith", category="z-food")
+        world.queue.clear()
+    sync()
+    (item,) = open_items()
+    assert item["key"] == "y:z-2"
+    assert "in an Actual account that is not in this book" in item["reason"]
+    _import_other_budget(b2="credit")
+    sync()
+    assert open_items() == [] and by_ref("z-2")["memo"] == ""
+
+
+def test_a_leftover_item_keyed_on_a_transfers_other_leg_closes_once_the_row_is_here(world):
+    enable()
+    sync()
+    moved = by_ref("t-out")
+    with using(ACTUAL):
+        base = baselines.Baselines(BUDGET)
+        base.drop_txn(moved["id"])
+        base.flush()
+        conflicts.file(
+            conflicts.UNSUPPORTED, "y:t-in", "ACME", "left over", None, None, entity="txn"
+        )
+    as_person(ledger_service.detach_external_ref, moved["id"], "actual_budget", "t-in", reason="x")
+    assert sync()["ok"] is True
     assert open_items() == []
 
 
@@ -1922,6 +1999,131 @@ def test_importing_another_budget_is_refused_while_the_sync_is_on(world):
             break
         time.sleep(0.02)
     _import()  # and so is importing the one being synced, again
+
+
+def _copy_of_the_budget(world) -> None:
+    """A budget restored from an export, or duplicated: a new file id over the same row ids."""
+    world.add_budget(BUDGET_B)
+    shutil.copy(world.budgets[BUDGET], world.budgets[BUDGET_B])
+
+
+def test_a_budget_sharing_row_ids_deletes_nothing_on_a_switch(world):
+    enable()
+    sync()
+    _copy_of_the_budget(world)
+    added = new_row()  # here since the copy, so the copy never held it
+    assert sync()["sent"] == 1
+    with world.on(BUDGET_B):
+        _gone_there(world, "t-market")
+    market_id = by_ref("t-market")["id"]
+    rows_here = _live_here()
+    _to_other_budget()
+    run = sync()
+    assert run["pulled"] == 0 and _live_here() == rows_here
+    asked = {c["onw_txn_id"]: c["reason"] for c in open_items()}
+    assert set(asked) == {market_id, added["id"]}
+    assert all("moved to" in reason and "no longer" not in reason for reason in asked.values())
+    for item in open_items():
+        actual_app.resolve_sync_item(
+            item["id"], "ynab" if item["onw_txn_id"] == market_id else "onw"
+        )
+    assert _live_here() == rows_here - 1
+    with world.on(BUDGET_B):
+        assert world.live("amount = -1234")
+    world.calls.clear()
+    assert sync()["summary"] == "Nothing changed" and open_items() == []
+    assert writes_seen(world) == [] and sync_state_of()["switched"] is False
+
+
+def test_a_failed_first_run_after_a_switch_keeps_holding(world, monkeypatch):
+    enable()
+    sync()
+    _copy_of_the_budget(world)
+    with world.on(BUDGET_B):
+        _gone_there(world, "t-market")
+    rows_here = _live_here()
+    _to_other_budget()
+
+    def boom(ctx, st):
+        raise RuntimeError("boom")
+
+    with monkeypatch.context() as m:
+        m.setattr(runner.starts, "review", boom)
+        assert _run()["ok"] is False
+    assert sync_state_of()["switched"] is True and _live_here() == rows_here
+    assert len(open_items()) == 1
+    assert sync()["ok"] is True
+    assert _live_here() == rows_here and len(open_items()) == 1
+    assert sync_state_of()["switched"] is False
+
+
+def test_a_to_actual_run_after_a_switch_leaves_the_hold_for_both_ways(world):
+    enable()
+    sync()
+    _copy_of_the_budget(world)
+    with world.on(BUDGET_B):
+        _gone_there(world, "t-market")
+    rows_here = _live_here()
+    _to_other_budget("to_ynab")
+    assert sync()["ok"] is True
+    assert open_items() == [] and _live_here() == rows_here
+    assert actual_app.sync_status()["waiting"] == 1 and sync_state_of()["switched"] is True
+    _to_other_budget("both")
+    assert sync()["ok"] is True
+    assert _live_here() == rows_here
+    (item,) = open_items()
+    assert item["onw_txn_id"] == by_ref("t-market")["id"] and "keep Actual's" in item["reason"]
+    assert sync_state_of()["switched"] is False
+
+
+def _cats() -> list[str]:
+    return sorted(c["label"] for c in categories_service.all_category_rows())
+
+
+def _envs() -> list[str]:
+    return sorted(e["name"] for e in envelopes_service.all_envelopes())
+
+
+def test_a_budget_never_imported_is_not_synced(world):
+    enable()
+    sync()
+    categories_service.create_category("Book Only")
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+        world.assign(KEY, "z-food", 45_600)
+        b_before = [world.rows(t) for t in ("categories", "category_groups", "zero_budgets")]
+    here_before = (_cats(), _envs(), planning.assignments_store.month_map(KEY), _live_here())
+    manual = import_runs.latest("actual_budget", ("sync",))
+    _to_other_budget()
+    run = sync()
+    assert run["ok"] is True and run["summary"] == "Import this budget first"
+    assert open_items() == [] and writes_seen(world) == []
+    assert (
+        _cats(),
+        _envs(),
+        planning.assignments_store.month_map(KEY),
+        _live_here(),
+    ) == here_before
+    with world.on(BUDGET_B):
+        assert [
+            world.rows(t) for t in ("categories", "category_groups", "zero_budgets")
+        ] == b_before
+    assert sync_state_of()["bootstrapped"] is False and ActualMirrorStore().by_id() == {}
+    (warning,) = [w for w in actual_app.sync_status()["warnings"] if w["kind"] == "import_first"]
+    assert "Import this budget first" in warning["text"] and f"ACME {BUDGET_B}" in warning["text"]
+    assert import_runs.latest("actual_budget", ("sync",))["id"] != manual["id"]
+    stored = import_runs.latest("actual_budget", ("sync",))
+    assert _run("scheduled")["summary"] == "Import this budget first"
+    assert import_runs.latest("actual_budget", ("sync",)) == stored  # no record per tick
+
+    actual_app.sync_settings(False, None, None, None)
+    _import_other_budget()
+    actual_app.sync_settings(True, None, None, None)
+    run = sync()
+    assert run["ok"] is True and run["summary"] != "Import this budget first"
+    assert sync_state_of()["bootstrapped"] is True and open_items() == []
+    assert not [w for w in actual_app.sync_status()["warnings"] if w["kind"] == "import_first"]
 
 
 # ── one app at a time ──

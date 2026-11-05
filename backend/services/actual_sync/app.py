@@ -58,6 +58,7 @@ ACTUAL = BudgetApp(
         labels_as_given_on_pull=True,
         links_without_baseline=True,
         budget_scoped_accounts=True,
+        copies_keep_ids=True,
         categorized_transfers=True,
     ),
     config_store=ActualBudgetConfigStore,
@@ -139,8 +140,8 @@ def _waiting_line(st: dict, count: int) -> str:
     if st["direction"] == "to_ynab":
         return (
             f"{what} from {ACTUAL.name} {'wait' if many else 'waits'} until this sync goes both "
-            "ways. This book isn't changed until then, so a row you chose to remove stays here and "
-            "in your net worth for now."
+            f"ways. This book isn't changed until then, so a row edited or deleted in {ACTUAL.name}, "
+            "or a row you chose to remove, stays as it is here and in your net worth for now."
         )
     return (
         f"{what} here {'wait' if many else 'waits'} until this sync goes both ways. "
@@ -171,6 +172,17 @@ def _warnings(meta: dict, st: dict) -> list[dict]:
         )
     if count := _waiting(st):
         found.append({"kind": "waiting_for_both_ways", "text": _waiting_line(st, count)})
+    if st["awaiting_import"]:
+        found.append(
+            {
+                "kind": "import_first",
+                "text": (
+                    f"Import this budget first. No account of {st['plan_name']} is in this book, "
+                    "so the sync has nothing to pair with and leaves both sides alone. Import it "
+                    f"from the {ACTUAL.name} connector, and the next run carries on."
+                ),
+            }
+        )
     return found
 
 

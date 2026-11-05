@@ -47,12 +47,15 @@ from backend.services.ynab_sync.client import Budget, YnabClient
 from backend.services.ynab_sync.settings import (
     _adopt_plan,
     _require_ready,
+    links_to,
     status,
     update_settings,
 )
 from backend.services.ynab_sync.settings import manual_runs as _manual_runs
 
 logger = logging.getLogger(__name__)
+
+IMPORT_FIRST = "Import this budget first"
 
 
 class _CurrentLock:
@@ -203,18 +206,29 @@ def _file_assigned(it, names: dict, kind: str, reason: str, fresh: bool = False)
     )
 
 
-def _execute(st: dict, tally: Counter) -> None:
-    """One run's work; raises on anything that stops it (the caller records the failure)."""
+def _execute(st: dict, tally: Counter) -> str | None:
+    """One run's work; raises on anything that stops it (the caller records the failure). Returns
+    what the run has to say when it stopped short of reconciling, else None."""
     app = current()
     with app.open_client(st["plan_id"], Budget(sync_state.request_cap())) as client:
         recorder.phase(f"reading {app.name}")
         try:
-            _reconcile(st, tally, client)
+            return _reconcile(st, tally, client)
         finally:
             tally["requests"] = client.budget.used
 
 
-def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
+def _awaiting_import(st: dict, meta: dict) -> bool:
+    """A plan none of whose accounts is linked here was never imported: the sync has nothing to
+    pair with, and pairing by name would write each side's categories into the other. The run
+    stops before saving, filing or writing anything, and the status says to import first."""
+    if not current().caps.budget_scoped_accounts:
+        return False
+    st["awaiting_import"] = not links_to({a["id"] for a in meta["accounts"]})
+    return st["awaiting_import"]
+
+
+def _reconcile(st: dict, tally: Counter, client: YnabClient) -> str | None:
     first = not st["bootstrapped"]
     upto = TransactionAuditStore().max_seq()
     meta, mirror_store = sync_state.load_meta(), current().stores.mirror()
@@ -222,6 +236,8 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
     loaded = dict(mirror)
     data = client.read_plan(None if first else st["server_knowledge"])
     change = delta.apply_read(data, mirror, meta, first)
+    if _awaiting_import(st, meta):
+        return IMPORT_FIRST
     base = Baselines(st["plan_id"])
     syncs_assigned = budget_mode.settle(data, meta, base)
     if not syncs_assigned:
@@ -250,7 +266,7 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
     held: dict[str, set[str]] = {"onw": set(), "ynab": set()}
     try:
         st["pending"] = txn_sync.settle(
-            ctx, client, base, change, first, scan, tally, st["direction"], held
+            ctx, client, base, change, first, scan, tally, st["direction"], held, st["switched"]
         )
         st["held"], st["held_ynab"] = sorted(held["onw"]), sorted(held["ynab"])
         tally["deferred"] += len(st["pending"])
@@ -268,7 +284,12 @@ def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
             sync_state.save(st)  # first: once the mirror holds a read, nothing else reports it
         delta.save_changes(mirror_store, loaded, mirror, change.touched, change.full)
         sync_state.save_meta(meta)
-    st.update(server_knowledge=change.knowledge, audit_cursor=upto, bootstrapped=True)
+    # A To-app run deletes nothing here, so it proves nothing about the switch.
+    switched = st["switched"] and st["direction"] == "to_ynab"
+    st.update(
+        server_knowledge=change.knowledge, audit_cursor=upto, bootstrapped=True, switched=switched
+    )
+    return None
 
 
 def _carry_unsettled(st: dict, change: delta.Change, held: dict[str, set[str]]) -> None:
@@ -365,8 +386,9 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
     rec = recorder.Recorder(run_id)
     token = audit_context.set_audit_scope("system", current().surface)
     rec_token = recorder.activate(rec)
+    stopped = None
     try:
-        _execute(st, tally)
+        stopped = _execute(st, tally)
     except OpenNetWorthError as exc:
         error = exc.message or str(exc)
     except Exception as exc:
@@ -376,7 +398,7 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
         recorder.deactivate(rec_token)
         audit_context.clear_audit_scope(token)
     open_items = len(conflicts.listing())
-    summary = _summary(tally, open_items) if error is None else "Failed"
+    summary = "Failed" if error is not None else stopped or _summary(tally, open_items)
     stored = store_record(st, rec, trigger, started, error, summary, tally["requests"], run_id)
     st["last_run"] = {
         "trigger": trigger,

@@ -9,7 +9,7 @@ from collections import Counter
 from backend.core.errors import OpenNetWorthError
 from backend.services import ledger as ledger_service
 from backend.services.budget_app import current
-from backend.services.ynab_sync import conflicts, pull, push, recorder, units
+from backend.services.ynab_sync import conflicts, context, pull, push, recorder, units
 from backend.services.ynab_sync.baselines import Baselines
 from backend.services.ynab_sync.canon import canon, view
 from backend.services.ynab_sync.client import YnabClient
@@ -163,20 +163,21 @@ def settle(
     tally: Counter,
     direction: str = "both",
     held: dict[str, set[str]] | None = None,
+    switched: bool = False,
 ) -> list[str]:
     """Reconcile every changed transaction; returns the ledger ids whose push is still owed.
 
     ``direction`` "from_ynab" skips sends and "to_ynab" skips pulls; a change on both sides is
     filed for review either way. What was skipped lands in ``held`` (``onw``: ledger ids,
-    ``ynab``: YNAB ids) so the run can remember it for a later switch back to both ways."""
+    ``ynab``: YNAB ids) so the run can remember it for a later switch back to both ways.
+    ``switched``: the first run since the plan was changed, whose removals are all held."""
     held = held if held is not None else {"onw": set(), "ynab": set()}
     rows, bases, index, gone = _rows(ctx, base, change, first, scan)
     open_items = conflicts.open_keys()
     if not current().caps.delta_read:
-        _close_now_owned(open_items, index)
-    all_units = _hold_removals(
-        ctx, units.build(ctx, rows, bases, index, change.touched, gone), open_items
-    )
+        _close_now_owned(ctx, open_items, index)
+    built = units.build(ctx, rows, bases, index, change.touched, gone)
+    all_units = _hold_removals(ctx, built, open_items, direction, switched)
     todo: list[Unit] = []
     for u in all_units:
         _close_if_it_flipped(u, open_items)
@@ -202,12 +203,7 @@ def settle(
                 continue
             conflicts.close(u.key)
         if action == "conflict":
-            _file(
-                ctx,
-                u,
-                conflicts.CONFLICT,
-                f"Changed in both Open Net Worth and {current().name} since the last sync.",
-            )
+            _file(ctx, u, conflicts.CONFLICT, _conflict_reason(u, direction))
         elif action == "pull" and direction == "to_ynab":
             held["ynab"].update(u.refs)
         elif action == "pull":
@@ -222,12 +218,25 @@ def settle(
     return _push_all(ctx, client, base, todo, tally)
 
 
-def _close_now_owned(open_items: dict, index: dict[str, str]) -> None:
-    """An item about a row with no home here is moot once a row here holds it: its budget was
-    imported since, and from now on that row answers for it."""
-    for key in [k for k in open_items if k.startswith("y:") and k[2:] in index]:
-        conflicts.close(key)
-        del open_items[key]
+def _close_now_owned(ctx: Context, open_items: dict, index: dict[str, str]) -> None:
+    """An item about a row with no home here is moot once a row here holds it, by any of its
+    ids: its budget was imported since, and from now on that row answers for it."""
+    for key in [k for k in open_items if k.startswith("y:")]:
+        ref = key[2:]
+        ids = {ref}
+        if context.top_of(ctx, ref):
+            ids |= {r for p in context.pieces(ctx, {ref}) if ref in p["refs"] for r in p["refs"]}
+        if ids & index.keys():
+            conflicts.close(key)
+            del open_items[key]
+
+
+def _conflict_reason(u: Unit, direction: str) -> str:
+    """Both sides changed it. Where a row keeps its ids, "changed" there can be "deleted": then
+    the question is which side to keep, and what that does in this direction."""
+    if u.ynab is None and current().caps.links_without_baseline:
+        return _missing_reason(direction)
+    return f"Changed in both Open Net Worth and {current().name} since the last sync."
 
 
 def _close_if_it_flipped(u: Unit, open_items: dict) -> None:
@@ -242,8 +251,10 @@ def _close_if_it_flipped(u: Unit, open_items: dict) -> None:
         del open_items[u.key]
 
 
-def _missing_reason(direction: str) -> str:
-    app, gone = current().name, f"This transaction is no longer in {current().name}."
+def _missing_reason(direction: str, gone: str | None = None) -> str:
+    """``gone``: why the app doesn't hold the row, where "no longer" isn't the whole story."""
+    app = current().name
+    gone = gone or f"This transaction is no longer in {app}."
     if direction == "from_ynab":
         return (
             f"{gone} Keep {app}'s to remove it here now. Keep Open Net Worth's to keep it, and it "
@@ -258,9 +269,21 @@ def _missing_reason(direction: str) -> str:
     return f"{gone} Keep Open Net Worth's to send it to {app} as new, or keep {app}'s to remove it here."
 
 
-def _hold_removals(ctx: Context, all_units: list[Unit], open_items: dict) -> list[Unit]:
+def _hold_removals(
+    ctx: Context,
+    all_units: list[Unit],
+    open_items: dict,
+    direction: str = "both",
+    switched: bool = False,
+) -> list[Unit]:
     """A read that would delete many synced rows here at once is held: each deletion waits in
-    the review list, where keeping YNAB's confirms it, and the rest of the run goes ahead."""
+    the review list, where keeping YNAB's confirms it, and the rest of the run goes ahead. So is
+    every removal the first read after a plan change finds (``switched``): a copy of the old plan
+    holds the same ids, and a row it lacks may be one added here since. Where every read is
+    whole, a To-app run holds nothing: it deletes nothing here, and what it skips is read again
+    under both ways, where this applies; held, each answer would be read as a fresh deletion."""
+    if direction == "to_ynab" and not current().caps.delta_read:
+        return all_units
     linked = sum(1 for u in all_units if u.refs and not u.missing)
     removals = [
         u
@@ -272,12 +295,19 @@ def _hold_removals(ctx: Context, all_units: list[Unit], open_items: dict) -> lis
     ]
     # A whole read with no rows at all says more about the read than about a small book's rows.
     read_nothing = removals and not ctx.mirror and not current().caps.delta_read
-    if not read_nothing and len(removals) <= max(MIN_REMOVAL_GUARD, MAX_REMOVAL_FRACTION * linked):
+    many = len(removals) > max(MIN_REMOVAL_GUARD, MAX_REMOVAL_FRACTION * linked)
+    if not (read_nothing or many or (switched and removals)):
         return all_units
-    reason = (
-        f"{len(removals)} of {linked} synced transactions were deleted in {current().name} at once; "
-        "confirm each deletion here."
-    )
+    if switched:
+        app = current().name
+        reason = _missing_reason(
+            direction, f"The sync moved to another {app} budget, and this transaction isn't in it."
+        )
+    else:
+        reason = (
+            f"{len(removals)} of {linked} synced transactions were deleted in {current().name} at "
+            "once; confirm each deletion here."
+        )
     for u in removals:
         if u.key not in open_items:
             _file(ctx, u, conflicts.CONFLICT, reason)

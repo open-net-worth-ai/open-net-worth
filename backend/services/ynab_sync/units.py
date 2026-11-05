@@ -112,7 +112,11 @@ def _render(ctx: Context, piece: dict) -> tuple[dict | None, str | None]:
     try:
         rendered = context.render(ctx, piece)
     except KeyError:
-        return None, f"the transaction is in a {current().name} account that is not in this book"
+        app = current()
+        return (
+            None,
+            f"the transaction is in {app.article.lower()} {app.name} account that is not in this book",
+        )
     wanted = [piece["category"]] if piece["category"] else []
     wanted += [s["category"] for s in piece["splits"] or []]
     for cid in wanted:
