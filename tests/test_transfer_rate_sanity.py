@@ -217,6 +217,11 @@ class _TxnStore:
         self._rows[row["id"]] = row
         return row
 
+    def replace_at_end(self, row, *, conn=None):
+        self._rows.pop(row["id"], None)
+        self._rows[row["id"]] = row
+        return row
+
     def delete(self, tid, *, conn=None):
         return self._rows.pop(tid, None) is not None
 

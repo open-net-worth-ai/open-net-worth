@@ -103,6 +103,11 @@ class _TxnStore:
         self._rows[row["id"]] = row
         return row
 
+    def replace_at_end(self, row, *, conn=None):
+        self._rows.pop(row["id"], None)
+        self._rows[row["id"]] = row
+        return row
+
     def transfer_routes(self):
         return frozenset(
             frozenset((t["from_account_id"], t["to_account_id"]))

@@ -123,6 +123,8 @@ One line each — full reasoning and the scar behind each is in
 - A DELETED identity is remembered (`rejected_identities`, movement-scoped, written at the delete choke) and
   EVERY create choke refuses it as `previously_deleted` regardless of `force` — only `resurrect` / a `create`
   decision books it back. Rollback ≠ reject: `batch_id` rollback, trade undo and merge tombstones write nothing.
+- `lots.txn_id` is a real FK column (`ON DELETE SET NULL`), and only the column counts. A soft delete never fires
+  it, so the delete chokes clear the link; never delete + re-insert a transaction, or the lot silently unlinks.
 - Payee normalization: `services/payees._normalize_payee()`, one source of truth.
 - Seven account types are the ONLY classification axis (`cash, fixed_deposit, investment,
   retirement, receivable, credit, loan`); `kind`, band, spendability and budget membership

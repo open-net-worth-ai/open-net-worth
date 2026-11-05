@@ -788,7 +788,10 @@ BRIDGED: dict[str, Bridge] = {
     # task's own report) and UNDOABLE (investments_io.import_payload_list/import_watchlist
     # fire fire_db_write_hook unconditionally, like money/planning).
     "positions.json": _investment_bridge(positions),
-    "lots.json": _investment_bridge(lots),
+    "lots.json": Bridge(
+        export_fn=investments_io.export_lots,
+        import_fn=investments_io.import_lots,
+    ),
     "grants.json": _investment_bridge(grants),
     "vest_events.json": _investment_bridge(vest_events),
     "option_contracts.json": _investment_bridge(option_contracts),

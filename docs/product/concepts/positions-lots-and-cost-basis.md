@@ -97,6 +97,9 @@ the **Not a sale** option.
 - Click any lot to correct its date, quantity, cost, fees or kind — including a lot you've sold
   from. If you deducted its cost from an account, that purchase is corrected to match; changing
   only the note leaves it alone.
+- If you delete the cash transaction behind a lot, the lot stays and keeps its cost, but it no
+  longer has a linked purchase. Correcting that lot later doesn't change or add any cash. To book
+  the purchase again, pick an account under **Deduct from**.
 - Correcting a sold lot keeps every sale exactly as recorded (which lots it used, how many,
   the price and the cash). Only that lot's lines on the sale follow: a new date updates their
   holding period, and a new cost or fees updates the sale's gain. A sold lot can't be made

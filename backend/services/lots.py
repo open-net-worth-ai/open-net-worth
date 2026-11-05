@@ -1235,8 +1235,32 @@ def _funding_account_from_txn(txn_id: str | None) -> Optional[str]:
         return None
     from backend.db.transaction_store import TransactionStore
 
-    txn = TransactionStore().find_by_id(txn_id) or {}
-    return txn.get("from_account_id")
+    txn = TransactionStore().find_by_id(txn_id)
+    return None if _cash_row_is_gone(txn) else txn.get("from_account_id")
+
+
+def _cash_row_is_gone(txn: Optional[dict]) -> bool:
+    return not txn or bool(txn.get("deleted") or txn.get("merged_into"))
+
+
+_GONE_CASH_NOTE = (
+    "This lot's linked cash row had already been deleted, so no cash row was changed or added. "
+    "The dead link was cleared."
+)
+
+
+def _drop_gone_cash_link(lot: dict) -> tuple[dict, bool]:
+    """The lot as an amend must see it: a link to a deleted or merged row is no link, or the
+    amend re-books a purchase the ledger already holds (or no longer wants). An import rollback
+    and a merge keep their link on purpose, so this stays even though deletes clear theirs."""
+    txn_id = lot.get("txn_id")
+    if not txn_id:
+        return lot, False
+    from backend.db.transaction_store import TransactionStore
+
+    if not _cash_row_is_gone(TransactionStore().find_by_id(txn_id)):
+        return lot, False
+    return {**lot, "txn_id": None}, True
 
 
 def _apply_amend(change: dict) -> dict:
@@ -1331,6 +1355,8 @@ def _amend_sold_lot(lot: dict, change: dict) -> dict:
     )
     if plan.get("error"):
         return {"error": plan["error"]}
+    lot, link_gone = _drop_gone_cash_link(lot)
+    lot_updates = {**plan["lot_updates"], **({"txn_id": None} if link_gone else {})}
     funding = (
         change["funding_account_id"]
         if "funding_account_id" in change
@@ -1347,7 +1373,7 @@ def _amend_sold_lot(lot: dict, change: dict) -> dict:
     with locked_unit_of_work(
         lots_tbl, positions_tbl, realized_tbl, txns_tbl, txn_audit_tbl
     ) as conn:
-        patched = LotStore().touch(lot["id"], plan["lot_updates"], conn=conn) or lot
+        patched = LotStore().touch(lot["id"], lot_updates, conn=conn) or lot
         for event_id, patch in plan["event_updates"].items():
             RealizedEventStore().update_by_id(event_id, patch, conn=conn)
         if rewrite_cash:
@@ -1358,8 +1384,17 @@ def _amend_sold_lot(lot: dict, change: dict) -> dict:
         "lot_id": lot["id"],
         "position_id": lot.get("position_id"),
         "sales_updated": plan["sales"],
+        **({"cash_note": _GONE_CASH_NOTE} if link_gone and not rewrite_cash else {}),
         **agg,
     }
+
+
+def _replaces_its_own_row(lot: dict, change: dict) -> bool:
+    """A rewrite of a live cash row adds no booking, so the duplicate guard has nothing to catch.
+    It also scans on its own connection and can't see the old row's delete in this still-open
+    transaction, so it would match the row being replaced. Call after ``_drop_gone_cash_link``:
+    a lot with no live row books a genuinely new one, and the guard applies."""
+    return bool(change.get("allow_duplicate") or lot.get("txn_id"))
 
 
 def _rewrite_funding_debit(
@@ -1383,6 +1418,7 @@ def _rewrite_funding_debit(
         "cost_currency": patched.get("cost_currency"),
         "funding_account_id": funding,
         "source": change.get("source", "manual"),
+        "allow_duplicate": _replaces_its_own_row(lot, change),
     }
     if lot.get("txn_id"):
         ledger_service.bulk_delete_transactions([lot["txn_id"]], conn=conn, reject_identities=False)
@@ -1395,7 +1431,8 @@ def _rewrite_funding_debit(
 
 
 def _amend_open_lot(lot: dict, change: dict) -> dict:
-    updates: dict = {}
+    lot, link_gone = _drop_gone_cash_link(lot)
+    updates: dict = {"txn_id": None} if link_gone else {}
     if "quantity" in change:
         qty = float(change.get("quantity") or 0)
         if not math.isfinite(qty) or qty <= 0:
@@ -1424,6 +1461,7 @@ def _amend_open_lot(lot: dict, change: dict) -> dict:
         "cost_currency": updates.get("cost_currency", lot.get("cost_currency")),
         "funding_account_id": funding,
         "source": change.get("source", "manual"),
+        "allow_duplicate": _replaces_its_own_row(lot, change),
     }
     if not _cash_changed(lot, change):
         with locked_unit_of_work(lots_tbl, positions_tbl) as conn:
@@ -1435,6 +1473,7 @@ def _amend_open_lot(lot: dict, change: dict) -> dict:
             "position_id": lot.get("position_id"),
             "funding_account_id": funding,
             "cash_leg_id": lot.get("txn_id"),
+            **({"cash_note": _GONE_CASH_NOTE} if link_gone else {}),
             **agg,
         }
     will_fund = _will_fund_acquire(fund_change)
@@ -1461,6 +1500,7 @@ def _amend_open_lot(lot: dict, change: dict) -> dict:
         "position_id": lot.get("position_id"),
         "funding_account_id": funding if will_fund else None,
         "cash_leg_id": cash_leg_id if will_fund else None,
+        **({"cash_note": _GONE_CASH_NOTE} if link_gone and not cash_leg_id else {}),
         **agg,
     }
 

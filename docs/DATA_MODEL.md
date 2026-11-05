@@ -396,6 +396,8 @@ ondelete="RESTRICT")` — the `delete_account` 409-while-referenced invariant is
 (force-cascading past it hard-deletes the referencing rows first, in the same transaction — ADR
 `2026-09-06-force-delete-account-hard-removes-its-cascaded-transactions`);
 `transaction_splits`/`transaction_external_refs` FK `transactions.id` `ondelete="CASCADE"`.
+`lots.txn_id` FK `transactions.id` `ondelete="SET NULL"` (the one promoted column on a payload
+table; ADR `2026-11-06-a-lots-cash-link-is-a-real-foreign-key`).
 `opening_txn_id` (accounts) and `merged_into` (transactions) carry NO FK — both are
 circular-reference hazards the services layer already owns (the dangling-RAISES-but-repairable
 contract for the former; a transient mid-tombstone pointer during merge/undo for the latter). **No

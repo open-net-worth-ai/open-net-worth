@@ -21,6 +21,7 @@ from backend.ai.tools import registry
 from backend.ai.tools.lots import _batch_summary, _for_model, _position_display
 from backend.ai.tools.registry import tool
 from backend.ai.tools.schema_from_model import ToolInput, schema_of_batch_only
+from backend.core.errors import OpenNetWorthError
 from backend.core.user_time import user_today
 from backend.services import lots as lots_service
 
@@ -213,6 +214,15 @@ def _same(before, after) -> bool:
         return str(before).strip().upper() == str(after).strip().upper()
 
 
+def _apply_or_refuse(item: dict) -> dict:
+    """A choke's refusal is this item's result, so Lucius reads the reason and the rest of a batch
+    still applies. Each item is its own unit of work: a refused one rolled back whole."""
+    try:
+        return _apply(item)
+    except OpenNetWorthError as exc:
+        return {"error": exc.message or str(exc)}
+
+
 def _apply(item: dict) -> dict:
     """Validate, then write — on EVERY path, an unattended one included (no card there)."""
     _, error = _build_lot_update_change(item)
@@ -273,7 +283,7 @@ async def update_lots(input_data: dict):
             return registry.stage_write(change)
         if change["display"] != promised:
             return _gate.outcome_mismatch_result("update_lots")
-    return json.dumps(_apply(input_data), ensure_ascii=False), None
+    return json.dumps(_apply_or_refuse(input_data), ensure_ascii=False), None
 
 
 def _batch(items: list[dict], gated: bool):
@@ -304,5 +314,5 @@ def _batch(items: list[dict], gated: bool):
             seen_sales |= sales
             rows.append(change["display"])
         return registry.stage_batch("lot_update_batch", items, rows, "Correct lots")
-    results = [{"lot_id": item.get("lot_id"), **_apply(item)} for item in items]
+    results = [{"lot_id": item.get("lot_id"), **_apply_or_refuse(item)} for item in items]
     return json.dumps(_batch_summary(results), ensure_ascii=False), None

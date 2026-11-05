@@ -44,10 +44,12 @@ from backend.db import read_cache
 from backend.db.account_store import AccountStore
 from backend.db.engine import locked_unit_of_work, on_commit, unit_of_work
 from backend.db.import_batch_store import ImportBatchStore
+from backend.db.lot_store import LotStore
 from backend.db.merge_journal_store import MergeJournalStore
 from backend.db.statement_store import StatementStore
 from backend.db.tables import accounts as accounts_table
 from backend.db.tables import commitments as commitments_table
+from backend.db.tables import lots as lots_table
 from backend.db.tables import merge_journal as merge_journal_table
 from backend.db.tables import rejected_identities as rejected_identities_table
 from backend.db.tables import transactions as transactions_table
@@ -214,7 +216,7 @@ def _suppress_inner_create_audit():
 
 
 @contextlib.contextmanager
-def _txn_unit_of_work(conn: Connection | None):
+def _txn_unit_of_work(conn: Connection | None, *also_lock):
     """The composing half of the ledger choke's conn= contract (Task 4, storage plan 4b
     — extending Plan 3's own money-core chokes to accept a FOREIGN conn, which they did
     not yet support): reuse a caller's own open transaction when given — the caller MUST
@@ -227,12 +229,13 @@ def _txn_unit_of_work(conn: Connection | None):
     The standalone set also holds ``rejected_identities``: the delete choke remembers a deleted
     row's refs in the same transaction that deletes it, and a resurrecting create forgets them
     in the same transaction that books it. A composed caller (trade undo, vest) holds only the
-    two ledger locks — and passes ``reject_identities=False``, so it never writes that table."""
+    two ledger locks — and passes ``reject_identities=False``, so it never writes that table.
+    ``also_lock`` adds tables one standalone write also touches (the delete choke's ``lots``)."""
     if conn is not None:
         yield conn
         return
     with locked_unit_of_work(
-        transactions_table, txn_audit_table, rejected_identities_table
+        transactions_table, txn_audit_table, rejected_identities_table, *also_lock
     ) as owned:
         yield owned
 
@@ -3034,7 +3037,9 @@ def update_transaction(
     # two independent transactions, never a nested one (locked_unit_of_work's per-table locks
     # are non-reentrant; nesting would self-deadlock).
     with locked_unit_of_work(transactions_table, txn_audit_table) as conn:
-        transactions.delete(rebuilt["id"], conn=conn)  # remove the appended dup
+        same_row = rebuilt["id"] == txn_id
+        if not same_row:
+            transactions.delete(rebuilt["id"], conn=conn)  # remove the appended dup
         rebuilt["id"] = txn_id
         # Re-attach the original provenance list so the dedup keys are preserved on the stored row.
         if original_external_refs:
@@ -3064,7 +3069,11 @@ def update_transaction(
             rebuilt["fx_rate"] = (
                 existing.get("fx_rate") if _leg_resolved_unchanged else rebuilt.get("fx_rate")
             )
-        transactions.upsert(rebuilt, conn=conn)  # replace original in place
+        if same_row:
+            # Never delete + re-insert: a true removal fires lots.txn_id's ON DELETE SET NULL.
+            transactions.replace_at_end(rebuilt, conn=conn)
+        else:
+            transactions.upsert(rebuilt, conn=conn)  # replace original in place
         # Provenance (transaction-provenance RFC): record the edit with a sparse before/after
         # field diff. Skip the no-op case (an edit that changed no meaningful field).
         from backend.services import audit as audit_service
@@ -3608,6 +3617,11 @@ def bulk_delete_transactions(
     =False`` is for a caller undoing its OWN booking (a trade undo reversing a linked cash leg)
     — reversing is not rejecting. Batch rollback never reaches this choke at all.
 
+    The same decision clears ``lots.txn_id`` on any lot that named a deleted row as its purchase
+    cash, in this transaction, and returns those lots as ``unlinked_lots`` (absent when none). A
+    soft delete is an UPDATE, so the foreign key cannot do it. A ``reject_identities=False``
+    caller owns its lot and its lock set, so it is left to manage its own link.
+
     Refuses OUTRIGHT (ConflictError) — before deleting anything — when ANY requested id is
     a Starting Balance transaction (ledger-tracking-start Phase 2): change the account's
     opening balance instead. Pre-scanned so the refusal is atomic — no partial delete of
@@ -3636,7 +3650,7 @@ def bulk_delete_transactions(
     # STORAGE PLAN 4B TASK 4: `_txn_unit_of_work` composes into a caller's conn when given.
     # `composed` is captured BEFORE that rebinding — see _publish_transaction_events_after_commit.
     composed = conn is not None
-    with _txn_unit_of_work(conn) as conn:
+    with _txn_unit_of_work(conn, *((lots_table,) if reject_identities else ())) as conn:
         for txn_id in ids:
             row = transactions.soft_delete(txn_id, conn=conn)
             if row is None:
@@ -3653,6 +3667,7 @@ def bulk_delete_transactions(
             from backend.services import rejected_identities as _rejected
 
             rejected = _rejected.remember_deleted(deleted_rows, conn=conn)
+        unlinked = LotStore().clear_cash_links(deleted, conn=conn) if reject_identities else []
     # Same composed-conn handling as create_transaction's own publish call above — see
     # _publish_transaction_events_after_commit for why the composed case must defer.
     _publish_transaction_events_after_commit(
@@ -3663,6 +3678,7 @@ def bulk_delete_transactions(
         "not_found": not_found,
         "count": len(deleted),
         "rejected": len(rejected),
+        **({"unlinked_lots": unlinked} if unlinked else {}),
     }
 
 
@@ -5177,7 +5193,8 @@ def delete_transactions_where(
       asserting ``bulk_delete_where`` has exactly one caller.
     - The deleted rows' ref identities are remembered (``rejected_identities``) in the same
       transaction, as in ``bulk_delete_transactions`` — EXCEPT under a ``batch_id`` filter,
-      which is a rollback of an import, and rolling back is not rejecting."""
+      which is a rollback of an import, and rolling back is not rejecting. Lot links to the
+      deleted rows are cleared under the same rule."""
     filters = _resolve_bulk_delete_filters(
         date_from=date_from,
         date_to=date_to,
@@ -5189,12 +5206,13 @@ def delete_transactions_where(
     protected = opening_txn_ids()
     selected = transactions.select_where(**filters, protected_ids=protected)
     balance_before = _capture_automation_balance_snapshot()
-    with locked_unit_of_work(transactions_table, rejected_identities_table) as conn:
+    with locked_unit_of_work(lots_table, transactions_table, rejected_identities_table) as conn:
         deleted = transactions.bulk_delete_where(**filters, protected_ids=protected, conn=conn)
         if deleted and batch_id is None:
             from backend.services import rejected_identities as _rejected
 
             _rejected.remember_deleted(selected, conn=conn)
+            LotStore().clear_cash_links([row["id"] for row in selected], conn=conn)
     if deleted:
         _publish_committed_transaction_events("delete", selected, balance_before=balance_before)
     return deleted
@@ -5597,7 +5615,6 @@ def _assert_account_not_net_worth_linked(account_id: str, acc: dict) -> None:
     convention too but don't move a live net-worth number the way these four do. Commitment
     links are instead CLEARED in the delete's own unit of work
     (``_unlink_account_from_commitments``, 2026-10-13); the rest stay the ADR's named gap."""
-    from backend.db.lot_store import LotStore
     from backend.db.option_contract_store import OptionContractStore
     from backend.db.owned_assets_store import OwnedAssetsStore
     from backend.db.position_store import PositionStore
@@ -5759,7 +5776,10 @@ def _cascade_delete_account_transactions(
         _rejected.remember_deleted(deleted_rows, conn=conn)
 
     swept_ids = {row["id"] for row in deleted_rows}
-    for row in transactions.query_txns(account_id=account_id, include_deleted=True):
+    doomed = transactions.query_txns(account_id=account_id, include_deleted=True)
+    # Explicit, not left to ON DELETE SET NULL: this write is checkpointed, the FK's is not.
+    LotStore().clear_cash_links([row["id"] for row in doomed], conn=conn)
+    for row in doomed:
         if row["id"] not in swept_ids:
             audit_service.record_txn_event(
                 "delete", row["id"], source=row.get("source"), before=row, after=None, conn=conn
@@ -5848,6 +5868,7 @@ def delete_account(account_id: str, *, force: bool = False) -> bool:
         txn_audit_table,
         rejected_identities_table,
         commitments_table,
+        lots_table,
     ) as conn:
         deleted_rows = _cascade_delete_account_transactions(account_id, refs, conn=conn)
         _unlink_account_from_commitments(account_id, conn=conn)

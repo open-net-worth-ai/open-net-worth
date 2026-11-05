@@ -9,6 +9,7 @@ from backend.db.instrument_store import InstrumentStore
 from backend.db.lot_store import LotStore
 from backend.db.position_store import PositionStore
 from backend.db.realized_event_store import RealizedEventStore
+from backend.db.transaction_store import TransactionStore
 from backend.services.lot_integrity import repair_orphan_lots
 
 
@@ -18,6 +19,16 @@ def isolated(tmp_path, monkeypatch, db_isolated):
 
 
 def _lot(position_id, *, original=10.0, remaining=10.0, txn_id=None, instrument_id="inst-x"):
+    if txn_id:  # lots.txn_id is a real FK
+        TransactionStore().upsert(
+            {
+                "id": txn_id,
+                "date": "2026-06-08",
+                "kind": "investment",
+                "source": "manual",
+                "description": "Share purchase",
+            }
+        )
     return LotStore().insert(
         {
             "id": f"lot-{position_id}-{original}-{remaining}-{txn_id}",

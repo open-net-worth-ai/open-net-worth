@@ -1682,7 +1682,23 @@ async def delete_transactions(input_data: dict):
     if not_found:
         logger.warning("tool delete_transactions: not_found=%s", not_found)
     return json.dumps(
-        {"ok": True, "deleted": len(deleted), "deleted_ids": deleted, "not_found": not_found}
+        {
+            "ok": True,
+            "deleted": len(deleted),
+            "deleted_ids": deleted,
+            "not_found": not_found,
+            **(
+                {
+                    "unlinked_lots": result["unlinked_lots"],
+                    "note": (
+                        "These lots used a deleted row as their purchase cash. They now have no "
+                        "linked cash row, and their cost is unchanged. Tell the user."
+                    ),
+                }
+                if result.get("unlinked_lots")
+                else {}
+            ),
+        }
     ), None
 
 

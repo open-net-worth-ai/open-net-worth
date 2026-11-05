@@ -352,6 +352,17 @@ def test_internal_transfer_leaves_twr_unchanged(isolated_stores):
 
 
 def test_funded_transfer_in_remains_an_external_flow(isolated_stores):
+    from backend.db.transaction_store import TransactionStore
+
+    TransactionStore().upsert(
+        {
+            "id": "txn-funding-debit",
+            "date": "2025-09-01",
+            "kind": "investment",
+            "source": "manual",
+            "description": "Share purchase",
+        }
+    )
     _write(
         isolated_stores / "lots.json",
         [
