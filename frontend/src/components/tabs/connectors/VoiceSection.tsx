@@ -12,6 +12,7 @@ import {
   TextField,
   useSecretReveal,
 } from '../../ui'
+import { page, saveNeedsReload } from '../../chat/lucius/voicePagePolicy'
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
 import { ChevronDown } from '../../../ui/icons'
@@ -185,6 +186,11 @@ export function VoiceSection() {
         const d = await r.json().catch(() => ({}))
         setSaveErr(d.detail || 'Could not save the Voice calls settings.')
         return false
+      }
+      // This page's security policy still names the old server: without a reload, Call is refused.
+      if (saveNeedsReload(cfg.livekit_url, form.livekit_url)) {
+        page.reload()
+        return true
       }
       setForm((f) => f && { ...f, api_key: '', api_secret: '' })
       load()

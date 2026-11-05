@@ -197,6 +197,9 @@
     background: var(--bad);
     margin-left: var(--space-2);
   }
+  .lx-dock-pill-alert[data-ready] {
+    background: var(--good);
+  }
   @media (hover: hover) {
     .lx-dock-pill--call:hover {
       transform: none;
@@ -1574,6 +1577,9 @@
     color: var(--bad);
     /* On the first line of the words, not the middle of a wrapped paragraph. */
     margin-top: 0.15em;
+  }
+  .lx-call-notice[data-ready] > svg {
+    color: var(--good);
   }
   .lx-call-notice-text {
     min-width: 0;

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { AlertCircle, ChevronUp, Mic, MicOff, PhoneOff, X } from 'lucide-react'
+import { AlertCircle, CheckCircle2, ChevronUp, Mic, MicOff, PhoneOff, X } from 'lucide-react'
 import { Spark } from '../../../lucius/identity'
 import { desktopClientBridge } from '../../../platform/desktop'
 import {
@@ -32,6 +32,7 @@ import { VoiceOrb } from './VoiceOrb'
 const HOVER_DWELL_MS = 200
 
 const PROBLEM: Record<CallProblemKind, { label: string; action: string }> = {
+  ready: { label: 'Calls are ready', action: 'Call' },
   mic: { label: "Can't use the microphone", action: 'Try again' },
   dropped: { label: 'Call dropped', action: 'Call again' },
   setup: { label: "Call couldn't start", action: 'Set up' },
@@ -129,8 +130,12 @@ export function VoiceCallPill({
 
       {mode === 'problem' && call.problem && (
         <>
-          <span className="lx-dock-pill-alert" aria-hidden="true">
-            <AlertCircle size={13} />
+          <span
+            className="lx-dock-pill-alert"
+            aria-hidden="true"
+            data-ready={call.problem.kind === 'ready' || undefined}
+          >
+            {call.problem.kind === 'ready' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
           </span>
           <button type="button" className="lx-dock-pill-open" onClick={onOpenDock}>
             <span className="lx-dock-pill-time" role="alert">

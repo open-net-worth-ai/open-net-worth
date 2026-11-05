@@ -33,6 +33,17 @@ export function microphoneAllowed(origin: string | null, ownedContentsId: number
   return details.isMainFrame !== false && appDocument(origin, details.requestingUrl ?? details.securityOrigin ?? '');
 }
 
+// Two policies both apply, so the window's own `connect-src 'self'` refused the voice server the app's
+// page allows. The window takes that one directive from its own backend's policy, which names only
+// the owner's LiveKit server and only while the voice calls flag is on (`core/spa_csp.py`).
+export function connectSources(serverPolicies: string[] | undefined): string {
+  for (const policy of serverPolicies ?? []) {
+    const directive = policy.split(';').map((d) => d.trim()).find((d) => /^connect-src\s/i.test(d));
+    if (directive) return directive;
+  }
+  return "connect-src 'self'";
+}
+
 function urlOrigin(value: string): string | null {
   try { return new URL(value).origin; } catch { return null; }
 }

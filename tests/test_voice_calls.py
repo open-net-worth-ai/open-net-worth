@@ -825,6 +825,26 @@ def test_the_page_may_reach_only_the_owners_voice_server():
     assert connect_src(spa_csp(voice_url="https://not-a-voice-url.test")) == "connect-src 'self'"
 
 
+def test_a_page_opened_before_setup_can_already_reach_livekit_cloud(db_isolated, monkeypatch):
+    """A page keeps the policy it loaded with and the app changes screens without loading one: a
+    new install's first call was refused until a reload (reported by a tester, 2026-11-05)."""
+    from backend.connectors.voice import service
+    from backend.core.spa_csp import voice_connect_sources
+    from backend.db.voice_config_store import VoiceConfigStore
+
+    monkeypatch.setattr(service, "flag_enabled", lambda _name: False)
+    assert service.voice_server_url() is None
+
+    monkeypatch.setattr(service, "flag_enabled", lambda _name: True)
+    assert service.voice_server_url() == "wss://livekit.cloud"
+    assert voice_connect_sources(service.voice_server_url()) == (
+        "https://*.livekit.cloud",
+        "wss://*.livekit.cloud",
+    )
+    VoiceConfigStore().update({"livekit_url": "wss://voice.acme.test:7443"})
+    assert service.voice_server_url() == "wss://voice.acme.test:7443"
+
+
 def test_only_the_owners_current_turn_is_sent():
     """Live call, 2026-11-03: every utterance of the call reached Lucius as one message. Now only
     the owner's words since the voice last spoke are sent (small talk it answered stays out)."""

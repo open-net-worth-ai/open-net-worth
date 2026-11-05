@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertCircle, X } from 'lucide-react'
+import { AlertCircle, CheckCircle2, X } from 'lucide-react'
 import { desktopClientBridge } from '../../../platform/desktop'
 import { useOpenVoiceSetup } from './VoiceCallButton'
 import { dismissProblem, startCall, useVoiceCall } from './voiceCall'
@@ -37,8 +37,12 @@ export function VoiceCallNotice({
 
   const micSettings = desktopClientBridge()?.openMicrophoneSettings
   return (
-    <div className="lx-call-notice" role="alert">
-      <AlertCircle size={14} aria-hidden="true" />
+    <div className="lx-call-notice" role="alert" data-ready={problem.kind === 'ready' || undefined}>
+      {problem.kind === 'ready' ? (
+        <CheckCircle2 size={14} aria-hidden="true" />
+      ) : (
+        <AlertCircle size={14} aria-hidden="true" />
+      )}
       <span className="lx-call-notice-text">{problem.message}</span>
       <button
         type="button"
@@ -83,7 +87,11 @@ export function VoiceCallNotice({
             className="lx-call-notice-action"
             onClick={() => void startCall(sessionId)}
           >
-            {problem.kind === 'dropped' ? 'Call again' : 'Try again'}
+            {problem.kind === 'dropped'
+              ? 'Call again'
+              : problem.kind === 'ready'
+                ? 'Call'
+                : 'Try again'}
           </button>
         )}
         {problem.detail && (

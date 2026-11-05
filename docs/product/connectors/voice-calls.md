@@ -164,6 +164,16 @@ on the floating Lucius button takes you to Voice calls in Connectors. It also gi
 **The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it opens
 the Voice calls settings right where you are.
 
+**"Calls are ready."** The page had to reload before it could reach your voice server, for example
+because it was already open when calls were set up on another device. Press **Call**.
+
+**"Your browser blocked the connection to your voice server."** Reloading didn't help, so something
+in front of the app, such as a proxy or an extension, is refusing the connection. **Details** has
+the browser's words.
+
+**"Couldn't connect to your voice server."** Your internet is down, or the LiveKit URL, key or secret
+in Voice calls settings is wrong. **Details** has LiveKit's words.
+
 **"Set up Voice calls in Connectors first."** The connector has no LiveKit URL, key or secret yet,
 or it is paused.
 
