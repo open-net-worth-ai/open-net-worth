@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from backend.services import categories as categories_service
 from backend.services import planning, ynab_pairs
+from backend.services.budget_app import current
 from backend.services.ynab_migration.category_match import Book
 from backend.services.ynab_migration.mapping import RESERVED_GROUPS
 from backend.services.ynab_pairs import is_parking_name, norm
@@ -63,7 +64,7 @@ def set_hidden(category_ids: list[str], hidden: bool) -> None:
 def our_group_name(ynab_name: str) -> str:
     """The app keeps Commitments and Credit Card Payments for itself."""
     name = ynab_name.strip()
-    return f"{name} (YNAB)" if norm(name) in RESERVED_GROUPS else name
+    return f"{name} ({current().name})" if norm(name) in RESERVED_GROUPS else name
 
 
 class Groups:

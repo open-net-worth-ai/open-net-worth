@@ -23,8 +23,9 @@ from backend.core.errors import ValidationError
 from backend.core.txn_sources import canonical_writer
 from backend.services import ledger as ledger_service
 from backend.services import match_preflight
+from backend.services.budget_app import current
 from backend.services.matching import DUPLICATE_CLASSES
-from backend.services.ynab_migration.mapping import SOURCE, amt, render_piece
+from backend.services.ynab_migration.mapping import amt, render_piece
 
 # A tracking (off-budget) asset may live in any off-budget asset account; a budget account only
 # in an account of its own type, or the budget's cash and card coverage would change.
@@ -48,7 +49,11 @@ class _NoCategory(dict):
 
 def ynab_ref(account: dict) -> str | None:
     return next(
-        (e.get("ref") for e in account.get("external_ids") or [] if e.get("source") == SOURCE),
+        (
+            e.get("ref")
+            for e in account.get("external_ids") or []
+            if e.get("source") == current().source
+        ),
         None,
     )
 
@@ -87,7 +92,9 @@ def resolve(plan: dict, links: dict[str, str] | None, existing: list[dict]) -> d
     for ynab_id, account_id in (links or {}).items():
         pa, account = plan_accounts.get(ynab_id), by_id.get(account_id)
         if pa is None:
-            raise ValidationError("That YNAB account is not in the plan; review it again.")
+            raise ValidationError(
+                f"That {current().name} account is not in the plan; review it again."
+            )
         name = pa["payload"]["name"]
         if account is None:
             raise ValidationError(f"The account chosen for {name} is not in this book.")
@@ -97,10 +104,11 @@ def resolve(plan: dict, links: dict[str, str] | None, existing: list[dict]) -> d
         if not _fits(pa, account, plan["currency"]):
             raise ValidationError(
                 f"{name} cannot be linked to {account['name']}: it must be an open "
-                f"{plan['currency']} account of a matching type that no other YNAB account uses."
+                f"{plan['currency']} account of a matching type that no other {current().name} "
+                "account uses."
             )
         if account_id in {a["id"] for a in out.values()}:
-            raise ValidationError(f"{account['name']} is chosen for two YNAB accounts.")
+            raise ValidationError(f"{account['name']} is chosen for two {current().name} accounts.")
         out[ynab_id] = account
     return out
 
@@ -127,7 +135,7 @@ def _decide(row: dict, result: dict, taken: set[str], openings: frozenset[str]) 
         or result["band"] not in ("strong", "review")
         or txn["id"] in taken
         or txn["id"] in openings
-        or any(e.get("source") == SOURCE for e in txn.get("external_refs") or [])
+        or any(e.get("source") == current().source for e in txn.get("external_refs") or [])
     ):
         return "add", None
     sure = result["band"] == "strong" and _accounts_of(txn) == _accounts_of(row)
@@ -150,11 +158,13 @@ def match(
         i
         for i, p in enumerate(pieces)
         if _legs(p) & linked
-        and not any(ledger_service.transactions.has_external_ref(SOURCE, r) for r in p["refs"])
+        and not any(
+            ledger_service.transactions.has_external_ref(current().source, r) for r in p["refs"]
+        )
     ]
     # One account's rows together, in date order: a chunk boundary then cuts the fewest pairs.
     todo.sort(key=lambda i: (min(_legs(pieces[i]) & linked), pieces[i]["date"]))
-    source = canonical_writer(SOURCE) or SOURCE
+    source = canonical_writer(current().source) or current().source
     openings = ledger_service.opening_txn_ids()
     taken: set[str] = set()
     out: dict[int, dict] = {}
@@ -220,7 +230,7 @@ def summary(plan: dict, rows: dict[str, dict], decisions: dict[int, dict]) -> di
             if acct in _accounts_of(t)
             and t["id"] not in openings
             and t["id"] not in claimed
-            and not any(e.get("source") == SOURCE for e in t.get("external_refs") or [])
+            and not any(e.get("source") == current().source for e in t.get("external_refs") or [])
         )
         out[ynab_id] = {
             "matched": count["link"],

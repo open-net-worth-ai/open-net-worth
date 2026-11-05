@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import unicodedata
 
-from backend.db.ynab_sync_store import YnabBaselineStore
+from backend.services.budget_app import current
 
 
 def _emoji_part(c: str) -> bool:
@@ -80,11 +80,11 @@ def group_doc(plan_id: str, ynab_id: str, group_id: str, onw_name: str, ynab_nam
 
 
 def load(plan_id: str | None) -> tuple[dict[str, dict], dict[str, dict]]:
-    return YnabBaselineStore().pairs(plan_id)
+    return current().stores.baselines().pairs(plan_id)
 
 
 def save(docs: list[dict]) -> None:
-    store = YnabBaselineStore()
+    store = current().stores.baselines()
     for doc in docs:
         store.upsert(doc)
 
@@ -92,7 +92,7 @@ def save(docs: list[dict]) -> None:
 def declined(plan_id: str | None) -> set[str]:
     """What the person chose to leave out: ``y:<ynab category id>`` (not added here) and
     ``o:<category id>`` (not added to YNAB)."""
-    return YnabBaselineStore().declined(plan_id)
+    return current().stores.baselines().declined(plan_id)
 
 
 def decline_doc(plan_id: str | None, key: str) -> dict:
@@ -103,4 +103,4 @@ def keep_for() -> list[dict]:
     """Every plan's pair and decision documents, to carry across a reset of the sync's other
     state: how a YNAB category pairs with a category here is knowledge about the book, so
     pointing the sync at another plan and back (or importing again) does not lose it."""
-    return YnabBaselineStore().pair_documents()
+    return current().stores.baselines().pair_documents()

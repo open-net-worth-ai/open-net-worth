@@ -29,6 +29,7 @@ from difflib import SequenceMatcher
 from backend.services import categories as categories_service
 from backend.services import envelopes as envelopes_service
 from backend.services import planning
+from backend.services.budget_app import current
 from backend.services.ynab_pairs import norm
 
 
@@ -76,17 +77,17 @@ class Book:
         """``label``, or ``label (YNAB)`` / ``label (YNAB 2)`` … when a category (or, with
         ``envelopes``, an envelope) already carries it."""
         taken = self.labels | (self.names if envelopes else set())
-        out, n = label, 1
+        app, out, n = current().name, label, 1
         while out.strip().lower() in taken:
             n += 1
-            out = f"{label} (YNAB)" if n == 2 else f"{label} (YNAB {n - 1})"
+            out = f"{label} ({app})" if n == 2 else f"{label} ({app} {n - 1})"
         return out
 
     def free_envelope_name(self, name: str) -> str:
-        out, n = name, 1
+        app, out, n = current().name, name, 1
         while out.strip().lower() in self.names:
             n += 1
-            out = f"{name} (YNAB)" if n == 2 else f"{name} (YNAB {n - 1})"
+            out = f"{name} ({app})" if n == 2 else f"{name} ({app} {n - 1})"
         return out
 
 

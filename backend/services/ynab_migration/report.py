@@ -5,8 +5,10 @@ from __future__ import annotations
 
 from collections import Counter
 
+from backend.services.budget_app import current
+
 _HINTS = {
-    "failed": "Open Net Worth refused this row. Fix the cause in YNAB, or add the transaction by "
+    "failed": "Open Net Worth refused this row. Fix the cause in {app}, or add the transaction by "
     "hand.",
     "refused_duplicate": "It looks like a transaction already in the book. If it is a separate "
     "one, add it by hand.",
@@ -88,7 +90,7 @@ def problem(raw: dict) -> dict:
     return {
         "item": raw["ref"],
         "reason": raw.get("reason") or "",
-        "hint": _HINTS.get(raw.get("kind", ""), ""),
+        "hint": _HINTS.get(raw.get("kind", ""), "").format(app=current().name),
     }
 
 

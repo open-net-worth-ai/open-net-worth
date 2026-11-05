@@ -17,11 +17,13 @@ category id -> one of the book's categories, an envelope to add it to, or a new 
 that re-check reuses the plan its preview read moments ago (``_CACHE_SECONDS``) instead of
 reading YNAB again. Every other run reads it afresh.
 
-The YNAB token is read from ``YnabConfigStore`` inside the worker and never enters a run record.
+A job runs for ``budget_app.current()``, and its worker carries that context. The token is read
+from that app's config store inside the worker and never enters a run record.
 """
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import re
 import time
@@ -30,9 +32,9 @@ from datetime import datetime, timezone
 
 from backend.core import data_events
 from backend.core.errors import ConflictError, OpenNetWorthError, ValidationError
-from backend.db.ynab_config_store import YnabConfigStore
 from backend.services import categories as categories_service
 from backend.services import import_runs, ynab_pairs
+from backend.services.budget_app import current
 from backend.services.budget_engines import service as budget_engines_service
 from backend.services.ynab_migration import (
     apply,
@@ -45,13 +47,11 @@ from backend.services.ynab_migration import (
     preview,
     report,
     review,
-    source,
     verify,
 )
 
 logger = logging.getLogger(__name__)
 
-PROVIDER = "ynab"
 KINDS = ("import", "verify", "preview")  # a sync run is the sync's, not the migration's
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ynab-migration")
@@ -86,14 +86,14 @@ class _Run:
 def status() -> dict:
     """The newest run, plus whether a token is saved. Safe to poll."""
     return {
-        "token_saved": YnabConfigStore().is_configured(),
-        "job": import_runs.latest(PROVIDER, KINDS),
+        "token_saved": current().config_store().is_configured(),
+        "job": import_runs.latest(current().key, KINDS),
     }
 
 
 def _foreign_accounts_exist() -> bool:
     return any(
-        not any(e.get("source") == mapping.SOURCE for e in a.get("external_ids") or [])
+        not any(e.get("source") == current().source for e in a.get("external_ids") or [])
         for a in apply.ledger_service.accounts.query_accounts(include_archived=True)
     )
 
@@ -112,6 +112,7 @@ def start(
     import succeeds — the worker does it, so closing the page mid-import does not lose it.
     ``account_links`` / ``same_as`` / ``category_links`` (a preview or an import): see the module
     docstring."""
+    app = current()
     if kind not in KINDS:
         raise ValidationError(f"kind must be one of {', '.join(KINDS)}")
     if (account_links or same_as or category_links) and kind == "verify":
@@ -125,19 +126,19 @@ def start(
             raise ValidationError("only an import can turn the sync on")
         sync_direction = sync_state.validate_direction(sync_direction)
     if not (plan_id or "").strip():
-        raise ValidationError("pick the YNAB plan to migrate")
-    if not YnabConfigStore().is_configured():
-        raise ValidationError("save a YNAB access token first")
+        raise ValidationError(f"pick the {app.name} plan to migrate")
+    if not app.config_store().is_configured():
+        raise ValidationError(f"save a {app.name} access token first")
     if kind == "import" and not confirm_nonempty and _foreign_accounts_exist():
         raise ConfirmationRequired(
-            "This book already has accounts that did not come from YNAB. Confirm to import "
+            f"This book already has accounts that did not come from {app.name}. Confirm to import "
             "alongside them."
         )
     from backend.services.ynab_sync import runner  # lazily: the sync imports this package
 
     if runner.is_running():
-        raise ConflictError("A YNAB sync is running; start the import when it finishes.")
-    run = import_runs.start(PROVIDER, kind, plan_id.strip())
+        raise ConflictError(f"A {app.name} sync is running; start the import when it finishes.")
+    run = import_runs.start(app.key, kind, plan_id.strip())
     try:
         choice = {
             "account_links": dict(account_links or {}),
@@ -146,10 +147,17 @@ def start(
             "recheck_of": recheck_of,
         }
         _POOL.submit(
-            _run, run["id"], kind, plan_id.strip(), confirm_nonempty, sync_direction, choice
+            contextvars.copy_context().run,
+            _run,
+            run["id"],
+            kind,
+            plan_id.strip(),
+            confirm_nonempty,
+            sync_direction,
+            choice,
         )
     except Exception:
-        logger.exception("YNAB migration run %s could not be queued", run["id"])
+        logger.exception("%s migration run %s could not be queued", app.name, run["id"])
         _settle(run["id"], "failed", error="The run could not be started.", outcome="Failed")
         raise
     return run
@@ -161,7 +169,9 @@ def _settle(run_id: str, status: str, **fields) -> None:
     try:
         import_runs.finish(run_id, status, **fields)
     except Exception:
-        logger.exception("YNAB migration run %s could not be recorded as %s", run_id, status)
+        logger.exception(
+            "%s migration run %s could not be recorded as %s", current().name, run_id, status
+        )
 
 
 def _outcome(kind: str, run_id: str) -> str:
@@ -170,7 +180,9 @@ def _outcome(kind: str, run_id: str) -> str:
     try:
         return report.outcome(kind, import_runs.get(run_id))
     except Exception:
-        logger.exception("YNAB migration run %s outcome could not be summarized", run_id)
+        logger.exception(
+            "%s migration run %s outcome could not be summarized", current().name, run_id
+        )
         return ""
 
 
@@ -190,7 +202,7 @@ def _run(
     except OpenNetWorthError as exc:
         _settle(run_id, "failed", error=exc.message or str(exc), outcome="Failed")
     except Exception as exc:
-        logger.exception("YNAB migration run %s crashed", run_id)
+        logger.exception("%s migration run %s crashed", current().name, run_id)
         _settle(
             run_id,
             "failed",
@@ -211,36 +223,35 @@ def _turn_on_sync(run: _Run, plan_id: str, direction: str) -> None:
     except OpenNetWorthError as exc:
         run.log(f"The sync was not turned on: {exc.message or exc}. Turn it on from Data sync.")
         return
-    label = {"both": "both ways", "from_ynab": "from YNAB", "to_ynab": "to YNAB"}
+    name = current().name
+    label = {"both": "both ways", "from_ynab": f"from {name}", "to_ynab": f"to {name}"}
     run.log(f"Sync turned on: {label.get(direction, direction)}.")
 
 
-def _read(
-    run: _Run, store: YnabConfigStore, plan_id: str, recheck_of: str | None
-) -> tuple[dict, dict]:
+def _read(run: _Run, store, plan_id: str, recheck_of: str | None) -> tuple[dict, dict]:
     cached = _read_cache.pop(recheck_of, None) if recheck_of else None
     if cached and cached[1] == plan_id and time.monotonic() - cached[0] < _CACHE_SECONDS:
         _read_cache.clear()
         _read_cache[run.id] = cached
         return cached[2], cached[3]
-    summary = next((p for p in source.list_plans(store) if p["id"] == plan_id), None)
+    app = current()
+    summary = next((p for p in app.reader.list_plans(store) if p["id"] == plan_id), None)
     if summary is None:
-        raise ValidationError("That YNAB plan is not visible to the saved token.")
-    run.progress("reading YNAB")
-    data = source.fetch_plan(store, plan_id, with_budget=True, progress=run.progress)
+        raise ValidationError(f"That {app.name} plan is not visible to the saved token.")
+    run.progress(f"reading {app.name}")
+    data = app.reader.fetch_plan(store, plan_id, with_budget=True, progress=run.progress)
     _read_cache.clear()
     _read_cache[run.id] = (time.monotonic(), plan_id, summary, data)
     return summary, data
 
 
-def _load_plan(
-    run: _Run, store: YnabConfigStore, plan_id: str, recheck_of: str | None = None
-) -> dict:
+def _load_plan(run: _Run, store, plan_id: str, recheck_of: str | None = None) -> dict:
     summary, data = _read(run, store, plan_id, recheck_of)
     currency = (summary.get("currency") or "").strip().upper()
     if not _CURRENCY.match(currency):
         raise ValidationError(
-            "That YNAB plan has no valid currency set; open it in YNAB once first."
+            f"That {current().name} plan has no valid currency set; open it in "
+            f"{current().name} once first."
         )
     run.progress("mapping")
     return mapping.build_plan(
@@ -254,7 +265,7 @@ def _load_plan(
 
 
 def _execute(run: _Run, kind: str, plan_id: str, confirm: bool, choice: dict) -> None:
-    store = YnabConfigStore()
+    store = current().config_store()
     plan = _load_plan(run, store, plan_id, choice.get("recheck_of"))
     state, existing = apply.book_state(plan)
     chosen = links.resolve(plan, choice.get("account_links"), existing)
@@ -284,10 +295,12 @@ def _execute(run: _Run, kind: str, plan_id: str, confirm: bool, choice: dict) ->
         )
         return
     if state == "foreign" and not confirm:
-        raise ConfirmationRequired("This book has accounts that did not come from YNAB.")
+        raise ConfirmationRequired(
+            f"This book has accounts that did not come from {current().name}."
+        )
     if names := category_links.unresolved(plan, decisions):
         raise ValidationError(
-            f"YNAB's {names[0]} matches more than one of your categories. Pick one."
+            f"{current().name}'s {names[0]} matches more than one of your categories. Pick one."
         )
     picks = {"accounts": chosen, "same_as": same_as, "categories": decisions}
     _import(run, store, plan_id, plan, state, existing, picks)
@@ -341,8 +354,8 @@ def _import(
     run.log(report.transactions_line(tally))
     if matches:
         run.log(
-            f"Linked accounts: {tally['matched']} YNAB transaction(s) matched to ones already "
-            f"here; {tally['possible_match']} possible match(es) were added as new."
+            f"Linked accounts: {tally['matched']} {current().name} transaction(s) matched to ones "
+            f"already here; {tally['possible_match']} possible match(es) were added as new."
         )
     run.progress("marking cleared")
     run.log(f"Cleared set on {apply.mark_cleared(plan)} transaction(s).")
@@ -376,7 +389,7 @@ def _budget(
     """The budget half of an import; returns the envelopes verification compares."""
     if state == "fresh":
         budget_engines_service.set_home_engine("zero_based")  # YNAB is zero-based budgeting
-        run.log("Budget method set to zero-based, as in YNAB.")
+        run.log(f"Budget method set to zero-based, as in {current().name}.")
         prune = guards.starter_prune_plan({c["label"].lower() for c in plan["categories"]}, kept)
         names = {c["group"].lower() for c in plan["categories"]}
         paired = {g["group"] for g in ynab_pairs.load(plan_id)[1].values()}
