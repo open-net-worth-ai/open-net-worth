@@ -55,6 +55,8 @@ def stub(directory: Path, served: dict[str, str | bytes]):
     class Base:
         data_dir = directory
         engine = create_engine(f"sqlite:///{directory}/db.sqlite")
+
+    class Served(client.checked_class(Base)):
         asked: list[str] = []
 
         def data_file(self, file):
@@ -62,7 +64,7 @@ def stub(directory: Path, served: dict[str, str | bytes]):
             body = served[file]
             return body.encode() if isinstance(body, str) else body
 
-    return client.checked_class(Base)()
+    return Served()
 
 
 def recorded(directory: Path) -> list[int]:

@@ -108,7 +108,25 @@ class FakeActual:
         self.closed = False
         self.file = None
         self.engine_open = False
+        # ``Checked`` reads the budget list itself, through the library's own HTTP client.
+        self._requests_session = httpx.Client(
+            base_url=URL, transport=httpx.MockTransport(self._answer)
+        )
         FakeActual.instances.append(self)
+
+    @staticmethod
+    def _answer(_request: httpx.Request) -> httpx.Response:
+        listed = [
+            {
+                "deleted": f.deleted,
+                "fileId": f.file_id,
+                "groupId": f.group_id,
+                "name": f.name,
+                "encryptKeyId": f.encrypt_key_id,
+            }
+            for f in FakeActual.files
+        ]
+        return httpx.Response(200, json={"status": "ok", "data": listed})
 
     def __enter__(self):
         return self
@@ -118,9 +136,6 @@ class FakeActual:
 
     def info(self):
         return SimpleNamespace(build=SimpleNamespace(version=FakeActual.version))
-
-    def list_user_files(self):
-        return SimpleNamespace(data=list(FakeActual.files))
 
     def set_file(self, file):
         self.file = file
@@ -593,6 +608,7 @@ def test_checked_before_migrations_run(tmp_path):
         data_dir = tmp_path
         engine = None
 
+    class Served(client.checked_class(Base)):
         def data_file(self, file):
             ran.append(file)
             return b""
@@ -601,9 +617,8 @@ def test_checked_before_migrations_run(tmp_path):
     conn.execute("CREATE TABLE __migrations__ (id INT PRIMARY KEY NOT NULL)")
     conn.commit()
     conn.close()
-    checked = client.checked_class(Base)
     with pytest.raises(ExternalServiceError):
-        checked().run_migrations(["db.sqlite", "migrations/1632571489012_remove_cache.js"])
+        Served().run_migrations(["db.sqlite", "migrations/1632571489012_remove_cache.js"])
     assert ran == []
 
 
@@ -616,13 +631,14 @@ def test_a_safe_pending_migration_runs_and_then_the_schema_is_checked(tmp_path):
         data_dir = tmp_path
         engine = create_engine(f"sqlite:///{tmp_path}/db.sqlite")
 
+    class Served(client.checked_class(Base)):
         def data_file(self, file):
             ran.append(file)
             return b""
 
     make_db(tmp_path / "db.sqlite")
     files = ["db.sqlite", "migrations/1723665565000_prefs.js"]
-    client.checked_class(Base)().run_migrations(files)
+    Served().run_migrations(files)
     assert ran == files[1:]
 
     conn = sqlite3.connect(tmp_path / "db.sqlite")
@@ -630,7 +646,7 @@ def test_a_safe_pending_migration_runs_and_then_the_schema_is_checked(tmp_path):
     conn.commit()
     conn.close()
     with pytest.raises(ExternalServiceError, match="accounts"):
-        client.checked_class(Base)().run_migrations(files)
+        Served().run_migrations(files)
 
 
 def test_a_later_read_asks_from_where_the_copy_began_not_from_the_clock():
