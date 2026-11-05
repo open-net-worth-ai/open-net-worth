@@ -9,7 +9,6 @@ const h = vi.hoisted(() => ({
   capture: vi.fn(() => ({ id: 'lucius-read', title: 'ACME Budget' })),
   activeId: 'conv-1',
   enabled: true,
-  mobile: false,
   call: { phase: 'idle', sessionId: null as string | null, view: 'stage' },
 }))
 
@@ -24,7 +23,6 @@ vi.mock('../../../state/luciusChat', () => ({
 vi.mock('../../../state/screenSnapshot', () => ({
   useScreenSnapshot: () => ({ enabled: h.enabled, pinnedHandleIds: [] }),
 }))
-vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => h.mobile }))
 vi.mock('./voiceCall', () => ({ useVoiceCall: () => h.call }))
 
 function ask(sessionId = 'conv-1') {
@@ -43,7 +41,6 @@ describe('ScreenReadResponder', () => {
     h.capture.mockClear()
     h.activeId = 'conv-1'
     h.enabled = true
-    h.mobile = false
     h.call = { phase: 'idle', sessionId: null, view: 'stage' }
     vi.spyOn(document, 'hasFocus').mockReturnValue(true)
   })
@@ -92,14 +89,19 @@ describe('ScreenReadResponder', () => {
     expect(posted().body.status).toBe('no_screen')
   })
 
-  it("treats the phone's full-screen call as covering the page, but not its folded bar", () => {
-    h.mobile = true
+  it('treats the full-screen call on the page as covering it', () => {
     h.call = { phase: 'live', sessionId: 'conv-1', view: 'stage' }
+    const stage = document.createElement('div')
+    stage.className = 'lx-callstage lx-callstage--screen'
+    document.body.appendChild(stage)
     ask()
-    expect(posted().body.status).toBe('no_screen')
-    cleanup()
-    h.authFetch.mockClear()
-    h.call = { phase: 'live', sessionId: 'conv-1', view: 'bar' }
+    stage.remove()
+    expect(h.capture).not.toHaveBeenCalled()
+    expect(posted().body).toEqual({ status: 'no_screen', rank: 0, screen: null })
+  })
+
+  it('reads the page when the call still says stage but nothing covers it', () => {
+    h.call = { phase: 'live', sessionId: 'conv-1', view: 'stage' }
     ask()
     expect(posted().body).toMatchObject({ status: 'ok', rank: 3 })
   })

@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react'
 import { authFetch } from '../../../api/client'
-import { useIsMobile } from '../../../hooks/useIsMobile'
 import { onScreenRequest, type ScreenRequest } from '../../../lucius/bus'
 import { captureAndSerialize } from '../../../lucius/screenContract'
 import { decideScreenReply } from '../../../lucius/screenRead'
@@ -15,6 +14,12 @@ function isLuciusPage(): boolean {
   return document.querySelector('[data-ctx-screen]')?.getAttribute('data-ctx-screen') === 'Lucius'
 }
 
+// The full-screen call itself, not `call.view`: that stays 'stage' when a back gesture leaves the
+// call's chat without folding it, and then nothing covers the page. VoiceCallStage's `screen` class.
+function isCallCoveringPage(): boolean {
+  return document.querySelector('.lx-callstage--screen') !== null
+}
+
 /** Answers read_screen: when Lucius asks what is on screen, an app showing that conversation
  *  captures the page the same way a typed message does. Mounted once, renders nothing. */
 export function ScreenReadResponder() {
@@ -22,11 +27,10 @@ export function ScreenReadResponder() {
   const { enabled, pinnedHandleIds } = useScreenSnapshot()
   const { visibleIds } = useVisibleIdsValue()
   const call = useVoiceCall()
-  const mobile = useIsMobile()
 
-  const latest = useRef({ activeId, enabled, pinnedHandleIds, visibleIds, call, mobile })
+  const latest = useRef({ activeId, enabled, pinnedHandleIds, visibleIds, call })
   useEffect(() => {
-    latest.current = { activeId, enabled, pinnedHandleIds, visibleIds, call, mobile }
+    latest.current = { activeId, enabled, pinnedHandleIds, visibleIds, call }
   })
 
   useEffect(() => {
@@ -39,8 +43,7 @@ export function ScreenReadResponder() {
         onCall,
         focused: document.hasFocus(),
         visible: document.visibilityState === 'visible',
-        covered:
-          isLuciusPage() || (now.mobile && now.call.phase !== 'idle' && now.call.view === 'stage'),
+        covered: isLuciusPage() || isCallCoveringPage(),
       })
       if (!reply) return
       const screen =
