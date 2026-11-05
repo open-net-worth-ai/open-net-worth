@@ -961,8 +961,8 @@
     padding: 0 var(--space-4) 0 var(--space-2);
     border: none;
     border-radius: var(--radius-pill);
-    background: var(--surface);
-    color: var(--ink);
+    background: var(--cta);
+    color: var(--ink-on-cta);
     font: inherit;
     font-size: var(--text-sm);
     font-weight: 600;
@@ -974,6 +974,27 @@
   }
   .lx-call-fab .lx-orb {
     --lx-orb-size: 2rem;
+  }
+  /* A response to the press: without one a tap looked like nothing until the call rang. A darker
+     or lighter shade, not reversed colours, which on a same-coloured page made the button vanish. */
+  .lx-call-btn:active,
+  .lx-call-fab:active {
+    background: var(--cta-hover);
+  }
+  .lx-call-btn.lx-call-btn--pill:active {
+    background: rgba(255, 255, 255, 0.34);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lx-call-btn,
+    .lx-call-fab {
+      transition:
+        scale 0.12s ease,
+        background-color 0.12s ease;
+    }
+    .lx-call-btn:active,
+    .lx-call-fab:active {
+      scale: 0.94;
+    }
   }
   .lx-call-fab-text {
     font-variant-numeric: tabular-nums;
