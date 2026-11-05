@@ -26,6 +26,7 @@ interface ActualStatus {
   has_encryption_password: boolean
   has_server_url: boolean
   server_host: string | null
+  server_origin: string | null
   server_plain_http: boolean
   budget_id: string | null
   budget_name: string | null
@@ -130,9 +131,15 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
   }, [readOutcome])
 
   const secret = signIn === 'password' ? password : token
-  const secretSaved = signIn === 'password' ? cfg.has_password : cfg.has_token
   const urlTyped = url.trim()
   const urlValid = urlTyped ? isServerUrl(urlTyped) : cfg.has_server_url
+  // The server clears a saved sign-in when the address moves, so here it no longer counts as saved.
+  const moved =
+    !!urlTyped &&
+    urlValid &&
+    cfg.has_server_url &&
+    parsedUrl(urlTyped)?.origin !== cfg.server_origin
+  const secretSaved = !moved && (signIn === 'password' ? cfg.has_password : cfg.has_token)
   const secretValid = !!secret.trim() || secretSaved
   const needsEncryption = !!picked?.encrypted && !cfg.has_encryption_password && !encryption.trim()
   const budgetChange = picked && budgetId !== cfg.budget_id ? budgetId : ''
@@ -261,11 +268,13 @@ function ActualForm({ cfg, refresh }: { cfg: ActualStatus; refresh: () => void }
         htmlFor={`conn-actual-${signIn}`}
         required
         help={
-          secretSaved
-            ? `A ${secretWord} is saved. Leave blank to keep it.`
-            : signIn === 'password'
-              ? 'The password you sign in to your Actual server with.'
-              : "For a server that doesn't take a password."
+          moved
+            ? `A new address needs its ${secretWord} again: the saved one isn't sent to another server.`
+            : secretSaved
+              ? `A ${secretWord} is saved. Leave blank to keep it.`
+              : signIn === 'password'
+                ? 'The password you sign in to your Actual server with.'
+                : "For a server that doesn't take a password."
         }
         error={secretTouched.touched && !secretValid ? `A ${secretWord} is required.` : undefined}
       >

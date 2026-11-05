@@ -28,7 +28,8 @@ Open **Automations → Data sync → Actual** and click **Connect Actual…**. I
 - **Server address** is the address you open Actual at. Plain http to another computer still works,
   but it isn't encrypted, so the form warns you under the field.
 - **Sign in with** is a password or a token, whichever your server takes. Typing a new one replaces
-  the other.
+  the other. A new server address asks for it again, so a mistyped address is never sent your saved
+  password. That covers the host, the port, and a change between http and https.
 - **Budget** appears once an address and sign-in are saved. There's no test button: if the sign-in is
   wrong, this is where it says so, and the connector shows **Auth error** until a read works again.
   The budget you pick here is the one the import starts from.

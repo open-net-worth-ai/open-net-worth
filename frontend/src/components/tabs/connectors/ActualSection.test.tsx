@@ -24,6 +24,7 @@ const BLANK = {
   has_encryption_password: false,
   has_server_url: false,
   server_host: null as string | null,
+  server_origin: null as string | null,
   server_plain_http: false,
   budget_id: null as string | null,
   budget_name: null as string | null,
@@ -39,6 +40,7 @@ const SAVED = {
   has_password: true,
   has_server_url: true,
   server_host: 'actual.acme.test',
+  server_origin: 'https://actual.acme.test',
 }
 const HOUSEHOLD = { id: 'b1', name: 'ACME Household', currency: null, encrypted: false }
 const VAULT = { id: 'b2', name: 'ACME Vault', currency: null, encrypted: true }
@@ -188,6 +190,24 @@ describe('ActualSection', () => {
     status = { ...SAVED, server_plain_http: true, server_host: '192.168.1.20:5006' }
     form()
     expect(await screen.findByText(warning)).toBeTruthy()
+  })
+
+  it('a new address needs its sign-in again, and the same server written another way doesn’t', async () => {
+    status = SAVED
+    form()
+    await screen.findByLabelText(/Server address/)
+    type(/Server address/, 'https://other.acme.test')
+    expect(canSave()).toBe(false)
+    expect(screen.getByText(/A new address needs its password again/)).toBeTruthy()
+    expect((screen.getByLabelText(/^Password/) as HTMLInputElement).placeholder).toBe('')
+    type(/Server address/, 'https://actual.acme.test:443/sync')
+    expect(canSave()).toBe(true)
+    expect(screen.getByText('A password is saved. Leave blank to keep it.')).toBeTruthy()
+    type(/Server address/, 'https://other.acme.test')
+    type(/^Password/, 'pw-2')
+    expect(canSave()).toBe(true)
+    await save()
+    expect(lastSave()).toEqual({ server_url: 'https://other.acme.test', password: 'pw-2' })
   })
 
   it('refuses a malformed address once the field is left', async () => {

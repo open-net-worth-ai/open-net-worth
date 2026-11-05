@@ -10,7 +10,15 @@ import pytest
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
 from backend.services import planning
 from backend.services.envelopes import all_envelopes
-from tests.actual_live.world import FIRST_SHEET_MONTH, THIS_MONTH, open_items, quiet, run, sync
+from tests.actual_live.world import (
+    FIRST_SHEET_MONTH,
+    PASSWORD,
+    THIS_MONTH,
+    open_items,
+    quiet,
+    run,
+    sync,
+)
 
 pytestmark = pytest.mark.flags(actual_budget_sync=True, ynab_import_and_sync=True)
 
@@ -48,7 +56,7 @@ def test_a_large_run_stays_under_the_limit_and_a_rushed_one_stops_cleanly(world)
     )
     world.imported(budget)
     quiet()
-    ActualBudgetConfigStore().update({"server_url": world.server.direct_url})
+    ActualBudgetConfigStore().update({"server_url": world.server.direct_url, "password": PASSWORD})
     envelopes = [e for e in all_envelopes() if not e.get("archived")]
     cells = 0
     for index, month in enumerate(months):
@@ -79,7 +87,7 @@ def test_a_large_run_stays_under_the_limit_and_a_rushed_one_stops_cleanly(world)
     while "waiting for the next run" in sync()["summary"]:
         time.sleep(61)
     quiet()
-    ActualBudgetConfigStore().update({"server_url": world.server.url})
+    ActualBudgetConfigStore().update({"server_url": world.server.url, "password": PASSWORD})
     food = budget.ids["food"]
     view = budget.view(*months)
     shown = {m: view["budget"][m]["categories"][food]["budgeted"] for m in months}

@@ -60,6 +60,17 @@ def display_host(url: str) -> str | None:
     return f"{host}:{parts.port}" if parts.port else host
 
 
+def server_origin(url: str) -> str | None:
+    """Where a saved password would go: scheme, host and port, written as a browser writes an origin."""
+    parts = _parts(url)
+    if parts is None:
+        return None
+    default_port = {"http": 80, "https": 443}[parts.scheme]
+    port = f":{parts.port}" if parts.port and parts.port != default_port else ""
+    host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    return f"{parts.scheme}://{host}{port}"
+
+
 def plain_http_remote(url: str) -> bool:
     """Plain http to anything but this computer. Allowed, and said wherever it matters."""
     parts = _parts(url)
@@ -102,22 +113,30 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
         """Refuse any write behind the gateway, and an address that is not http(s) with a host.
         ``budget_id`` reads a blank as "clear the pick" (it is not a secret), which also drops
         the cached name and currency. A new password or token replaces the other: a saved
-        password would otherwise win over a token typed to replace it."""
+        password would otherwise win over a token typed to replace it. A saved one doesn't follow
+        a new address either, or a mistyped host would be sent it at the next sign-in."""
         self.require_available()
         if "token" in clean and "password" not in clean:
             clean["password"] = None
         elif "password" in clean and "token" not in clean:
             clean["token"] = None
-        if "server_url" in clean and _parts(clean["server_url"]) is None:
-            raise ValidationError(
-                "The server address must start with http:// or https:// and name a host."
-            )
+        if "server_url" in clean:
+            if _parts(clean["server_url"]) is None:
+                raise ValidationError(
+                    "The server address must start with http:// or https:// and name a host."
+                )
+            if "password" not in clean and "token" not in clean and self._moves(clean):
+                clean["password"] = clean["token"] = None
         if "budget_id" in clean:
             new_id = str(clean["budget_id"]).strip() or None
             clean["budget_id"] = new_id
             if new_id is None and "budget_name" not in clean:
                 clean["budget_name"] = None
                 clean["budget_currency"] = None
+
+    def _moves(self, clean: dict) -> bool:
+        saved = self.credentials()["server_url"]
+        return bool(saved) and server_origin(saved) != server_origin(clean["server_url"])
 
     def note_sign_in(self, refused: bool) -> None:
         """What a read learned about the sign-in, as the status word alone: never the server's
@@ -159,6 +178,7 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
             "has_encryption_password": bool(secret["encryption_password"]),
             "has_server_url": bool(secret["server_url"]),
             "server_host": display_host(secret["server_url"]),
+            "server_origin": server_origin(secret["server_url"]),
             "server_plain_http": plain_http_remote(secret["server_url"]),
             "budget_id": cfg.get("budget_id"),
             "budget_name": cfg.get("budget_name"),

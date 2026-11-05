@@ -429,16 +429,94 @@ def test_a_blank_sign_in_replaces_nothing(client, store):
     assert store.is_configured() is True
 
 
-def test_an_address_or_encryption_change_leaves_the_sign_in(client, store):
+def test_an_encryption_change_leaves_the_sign_in(client, store):
     client.put(
         "/api/actual-budget/config",
         json={"server_url": "https://actual.acme.test", "token": "TOKEN-SENTINEL"},
     )
+    client.put("/api/actual-budget/config", json={"encryption_password": "ENC"})
+    assert store.credentials()["token"] == "TOKEN-SENTINEL"
+
+
+@pytest.mark.parametrize(
+    "new",
+    [
+        "https://other.acme.test",
+        "https://actual.acme.test:8443",
+        "http://actual.acme.test",
+    ],
+)
+@pytest.mark.parametrize("saved", [{"token": "TOKEN-SENTINEL"}, {"password": "PASSWORD-SENTINEL"}])
+def test_a_saved_sign_in_doesnt_follow_a_new_address(client, store, saved, new):
+    client.put(
+        "/api/actual-budget/config", json={"server_url": "https://actual.acme.test", **saved}
+    )
+    r = client.put("/api/actual-budget/config", json={"server_url": new})
+    assert r.status_code == 200
+    assert r.json()["has_password"] is r.json()["has_token"] is False
+    assert r.json()["configured"] is False
+    assert store.credentials()["server_url"] == new
+    assert store.credentials()["password"] == store.credentials()["token"] == ""
+
+
+def test_a_new_address_keeps_the_encryption_password(client, store):
     client.put(
         "/api/actual-budget/config",
-        json={"server_url": "https://other.acme.test", "encryption_password": "ENC"},
+        json={
+            "server_url": "https://actual.acme.test",
+            "password": "PASSWORD-SENTINEL",
+            "encryption_password": "ENC",
+        },
     )
-    assert store.credentials()["token"] == "TOKEN-SENTINEL"
+    client.put("/api/actual-budget/config", json={"server_url": "https://other.acme.test"})
+    assert store.credentials()["encryption_password"] == "ENC"
+
+
+def test_a_new_address_can_bring_its_own_sign_in(client, store):
+    client.put(
+        "/api/actual-budget/config",
+        json={"server_url": "https://actual.acme.test", "password": "PASSWORD-SENTINEL"},
+    )
+    r = client.put(
+        "/api/actual-budget/config",
+        json={"server_url": "https://other.acme.test", "password": "ANOTHER-SENTINEL"},
+    )
+    assert r.json()["configured"] is True
+    assert store.credentials()["password"] == "ANOTHER-SENTINEL"
+
+
+@pytest.mark.parametrize(
+    "same",
+    [
+        "https://actual.acme.test",
+        "https://actual.acme.test/",
+        "https://actual.acme.test:443",
+        "https://ACTUAL.acme.test",
+        "https://actual.acme.test/sync",
+        "https://user@actual.acme.test",
+    ],
+)
+def test_the_same_server_written_another_way_keeps_the_sign_in(client, store, same):
+    client.put(
+        "/api/actual-budget/config",
+        json={"server_url": "https://actual.acme.test", "password": "PASSWORD-SENTINEL"},
+    )
+    client.put("/api/actual-budget/config", json={"server_url": same})
+    assert store.credentials()["password"] == "PASSWORD-SENTINEL"
+
+
+def test_the_first_address_clears_nothing(store):
+    store.update({"password": "PASSWORD-SENTINEL"})
+    store.update({"server_url": "https://actual.acme.test"})
+    assert store.credentials()["password"] == "PASSWORD-SENTINEL"
+
+
+def test_public_says_where_a_sign_in_would_go_without_the_userinfo(store):
+    store.update(SECRETS)
+    assert store.public()["server_origin"] == "https://actual.acme.test:5006"
+    store.update({"server_url": "https://[::1]:443/x"})
+    assert store.public()["server_origin"] == "https://[::1]"
+    _no_secret_in(store.public()["server_origin"])
 
 
 # ── a saved address that isn't encrypted ─────────────────────────────────────
