@@ -4,6 +4,7 @@ no state, status or log line."""
 
 from __future__ import annotations
 
+import logging
 from typing import Iterator
 
 from backend.core.errors import ConflictError, ValidationError
@@ -11,6 +12,8 @@ from backend.services import ledger as ledger_service
 from backend.services.budget_app import current, refuse_beside_others, starting
 from backend.services.ynab_sync import conflicts
 from backend.services.ynab_sync import state as sync_state
+
+logger = logging.getLogger(__name__)
 
 manual_runs: dict[str, str] = {}  # app key -> the record of its manual run in progress
 
@@ -95,6 +98,23 @@ def _adopt_plan(plan_id: str) -> dict:
     }
 
 
+def _point_connector_at(st: dict) -> None:
+    """The sync has moved, and that must stand whatever happens here."""
+    app = current()
+    if not app.caps.connector_follows_sync:
+        return
+    try:
+        app.config_store().update(
+            {
+                "budget_id": st["plan_id"],
+                "budget_name": st["plan_name"],
+                "budget_currency": st["currency"],
+            }
+        )
+    except Exception:
+        logger.warning("%s connector could not follow the moved sync", app.name, exc_info=False)
+
+
 def _refuse_beside_others() -> None:
     name = current().name
     refuse_beside_others(f"turning on the {name} sync", f"turn on the {name} sync")
@@ -115,7 +135,8 @@ def update_settings(
         if enabled:  # before a new plan forgets the old one's state, and again as it turns on
             _refuse_beside_others()
         st = sync_state.load()
-        if plan_id and plan_id.strip() != st["plan_id"]:
+        adopted = bool(plan_id and plan_id.strip() != st["plan_id"])
+        if adopted:
             st = _adopt_plan(plan_id.strip())
         if interval is not None:
             st["interval"] = sync_state.validate_interval(interval)
@@ -134,6 +155,8 @@ def update_settings(
             if enabled:
                 _refuse_beside_others()
             sync_state.save(st)
+        if adopted:
+            _point_connector_at(st)
     finally:
         app.lock.release()
     return status()

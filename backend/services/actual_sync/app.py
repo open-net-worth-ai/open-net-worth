@@ -24,7 +24,6 @@ from backend.services.budget_app import (
     BudgetApp,
     Capabilities,
     SyncStores,
-    other_sync_on,
     using,
 )
 from backend.services.ynab_migration import guards, job
@@ -59,6 +58,7 @@ ACTUAL = BudgetApp(
         links_without_baseline=True,
         budget_scoped_accounts=True,
         copies_keep_ids=True,
+        connector_follows_sync=True,
         categorized_transfers=True,
     ),
     config_store=ActualBudgetConfigStore,
@@ -109,26 +109,6 @@ def start_migration(kind: str, budget_id: str, **choices) -> dict:
 # ── the sync ──
 
 
-def _notes(meta: dict) -> list[dict]:
-    """What the page shows for as long as it holds. Each is ``{"item", "reason"}``, as a run's."""
-    notes = []
-    if meta.get("budget_mode") == budget_mode.TRACKING:
-        notes.append(
-            {"item": budget_mode.MODE_ITEM, "reason": budget_mode.tracking_line(ACTUAL.name)}
-        )
-    if other := other_sync_on():
-        notes.append(
-            {
-                "item": f"{other.name} sync",
-                "reason": (
-                    f"The {other.name} sync is on, so this one waits. A book syncs with one app at "
-                    "a time: turn one of them off."
-                ),
-            }
-        )
-    return notes
-
-
 def _waiting(st: dict) -> int:
     """What a one-way sync is holding back for a switch to both ways, as rows and figures."""
     if st["direction"] == "both":
@@ -154,6 +134,29 @@ def _waiting_line(st: dict, count: int) -> str:
     )
 
 
+def _budget_differs(st: dict) -> dict | None:
+    """The connector is set to another budget than the one this sync follows. Reads only what is
+    saved here, and is the one warning that says where to act: ``plan_id`` is the budget to import."""
+    cfg = ACTUAL.config_store().get()
+    saved = cfg.get("budget_id")
+    if not st["plan_id"] or not saved or saved == st["plan_id"]:
+        return None
+    budget = cfg.get("budget_name") or "another budget"
+    how = (
+        f"turn this sync off, then import {budget} here"
+        if st["enabled"]
+        else f"import {budget} here"
+    )
+    return {
+        "kind": "budget_differs",
+        "plan_id": saved,
+        "text": (
+            f"The {ACTUAL.name} connection is set to {budget}, and this sync still follows "
+            f"{st['plan_name']}. To move it, {how}."
+        ),
+    }
+
+
 def _warnings(meta: dict, st: dict) -> list[dict]:
     """Where money isn't landing where it should, or an answer hasn't taken effect yet. Each is
     ``{"kind", "text"}``."""
@@ -177,6 +180,8 @@ def _warnings(meta: dict, st: dict) -> list[dict]:
         )
     if count := _waiting(st):
         found.append({"kind": "waiting_for_both_ways", "text": _waiting_line(st, count)})
+    if differs := _budget_differs(st):
+        found.append(differs)
     if st["awaiting_import"]:
         found.append(
             {
@@ -198,7 +203,6 @@ def _status() -> dict:
         **status,
         "available": True,
         "budget_mode": meta.get("budget_mode"),
-        "notes": _notes(meta),
         "warnings": _warnings(meta, st),
         "waiting": _waiting(st),
         "conflicts_count": len(status["conflicts"]),

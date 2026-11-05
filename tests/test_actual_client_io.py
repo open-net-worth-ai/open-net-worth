@@ -766,3 +766,81 @@ def test_a_sync_run_that_cannot_connect_leaves_no_copy(store, work, fake):
             raise AssertionError("no client without a connection")
     never_leaks(caught.value)
     assert list(work.iterdir()) == []
+
+
+# ── a refused sign-in on the connector ───────────────────────────────────────
+
+
+@pytest.fixture
+def refused(monkeypatch):
+    def refuse(_creds):
+        raise actual_exc.AuthorizationError(f"Server said no: {URL} {PASSWORD}")
+
+    monkeypatch.setattr(client, "_list_files", refuse)
+
+
+def _allowed(monkeypatch):
+    monkeypatch.setattr(client, "_list_files", lambda _creds: [])
+
+
+def test_a_refused_read_marks_the_connector_with_the_word_only(store, refused):
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    assert err.value.message == "Actual refused the sign-in. Check its password or token."
+    public = store.public()
+    assert public["last_status"] == "auth_error"
+    assert public["last_error"] is None and public["last_synced_at"] is None
+
+
+def test_the_next_good_read_clears_it(store, refused, monkeypatch):
+    with pytest.raises(ExternalServiceError):
+        client.list_budgets(store)
+    _allowed(monkeypatch)
+    assert client.list_budgets(store) == []
+    assert store.public()["last_status"] == "never_run"
+
+
+def test_a_good_read_leaves_any_other_status_alone(store, monkeypatch):
+    store.record_status("error", error="made up")
+    _allowed(monkeypatch)
+    client.list_budgets(store)
+    assert store.public()["last_status"] == "error"
+    assert store.public()["last_error"] == "made up"
+
+
+def test_a_server_thats_down_isnt_a_refused_sign_in(store, monkeypatch):
+    def down(_creds):
+        raise httpx.ConnectError("no route")
+
+    monkeypatch.setattr(client, "_list_files", down)
+    with pytest.raises(ExternalServiceError):
+        client.list_budgets(store)
+    assert store.public()["last_status"] == "never_run"
+
+
+def test_opening_a_copy_clears_it_too(store, work, fake):
+    store.note_sign_in(refused=True)
+    with client.open_copy(store, "f1"):
+        pass
+    assert store.public()["last_status"] == "never_run"
+
+
+def test_opening_a_copy_refused_marks_it(store, work, fake, monkeypatch):
+    def refuse(*_a):
+        raise actual_exc.AuthorizationError(f"Server said no: {URL}")
+
+    monkeypatch.setattr(client, "_download", refuse)
+    with pytest.raises(ExternalServiceError):
+        with client.open_copy(store, "f1"):
+            pass
+    assert store.public()["last_status"] == "auth_error"
+
+
+def test_failing_to_note_it_doesnt_hide_the_refusal(store, refused, monkeypatch):
+    def broken(self, *_a, **_k):
+        raise RuntimeError("no")
+
+    monkeypatch.setattr(ActualBudgetConfigStore, "_record", broken)
+    with pytest.raises(ExternalServiceError) as err:
+        client.list_budgets(store)
+    assert "refused the sign-in" in err.value.message

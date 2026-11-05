@@ -74,6 +74,9 @@ def plain_http_remote(url: str) -> bool:
         return True
 
 
+AUTH_ERROR = "auth_error"
+
+
 class ActualBudgetConfigStore(AggregatorConfigStore):
     KIND = "actual_budget"
     LABEL = "Actual Budget"
@@ -115,6 +118,14 @@ class ActualBudgetConfigStore(AggregatorConfigStore):
             if new_id is None and "budget_name" not in clean:
                 clean["budget_name"] = None
                 clean["budget_currency"] = None
+
+    def note_sign_in(self, refused: bool) -> None:
+        """What a read learned about the sign-in, as the status word alone: never the server's
+        text, which can hold the address. A good read clears only this status."""
+        if refused:
+            self._record({"last_status": AUTH_ERROR})
+        elif self.get().get("last_status") == AUTH_ERROR:
+            self._record({"last_status": None})
 
     # ── reads ────────────────────────────────────────────────────────────────────
 

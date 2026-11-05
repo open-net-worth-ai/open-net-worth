@@ -76,6 +76,9 @@ class Capabilities:
     # after a switch can't tell a row deleted there from one added here since the copy: every
     # removal it finds is held for review.
     copies_keep_ids: bool = False
+    # Its connector holds a budget too: the one to import next. A sync moved to a budget points
+    # the connector at it, or the page would warn about the budget the person just chose.
+    connector_follows_sync: bool = False
 
 
 @dataclass(frozen=True)

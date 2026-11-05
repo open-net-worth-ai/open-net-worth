@@ -195,19 +195,24 @@ def _chain(exc: BaseException) -> list[BaseException]:
     return out
 
 
+class SignInRefused(Stopped):
+    """The server turned the saved password or token away."""
+
+
 def _plain_error(exc: Exception) -> Stopped:
     """Ours, in plain words, from whatever the library raised. Never ``str(exc)``: it can hold
     the server address or a password. It ends a run, whatever status it names."""
     from actual import exceptions as ax
 
     chain = _chain(exc)
+    logger.info("Actual Budget request failed (%s)", type(exc).__name__)
 
     def has(*types: type) -> bool:
         return any(isinstance(e, types) for e in chain)
 
     status = next((e for e in chain if isinstance(e, httpx.HTTPStatusError)), None)
     if has(ax.AuthorizationError) or (status and status.response.status_code in (401, 403)):
-        text = "Actual refused the sign-in. Check the password or token in Connectors."
+        return SignInRefused("Actual refused the sign-in. Check its password or token.")
     elif has(ax.UnknownFileId):
         text = _GONE
     elif has(ax.ActualDecryptionError, ax.ActualEncryptionError):
@@ -223,7 +228,6 @@ def _plain_error(exc: Exception) -> Stopped:
         text = "Could not reach the Actual server. Check the address and that it is running."
     else:
         text = f"Actual could not read this budget ({type(exc).__name__})."
-    logger.info("Actual Budget request failed (%s)", type(exc).__name__)
     return Stopped(text)
 
 
@@ -279,6 +283,24 @@ def _build(creds: dict, directory: Path | None = None):
     return checked_class(actual.Actual)(**kwargs)
 
 
+def _note_sign_in(store: ActualBudgetConfigStore, refused: bool) -> None:
+    """Never in the way of the read's own outcome."""
+    try:
+        store.note_sign_in(refused)
+    except Exception:
+        logger.warning("could not note the Actual Budget sign-in", exc_info=False)
+
+
+@contextmanager
+def _sign_in_noted(store: ActualBudgetConfigStore) -> Iterator[None]:
+    try:
+        yield
+    except SignInRefused:
+        _note_sign_in(store, refused=True)
+        raise
+    _note_sign_in(store, refused=False)
+
+
 def _list_files(creds: dict) -> list:
     with _build(creds) as session:
         return session.list_user_files().data
@@ -287,8 +309,9 @@ def _list_files(creds: dict) -> list:
 def list_budgets(store: ActualBudgetConfigStore | None = None) -> list[dict]:
     """What the saved sign-in can see: ``{"id" (the cloud file id), "name", "currency", "encrypted"}``.
     ``currency`` is ``None`` here: it lives inside each budget, which is not downloaded to list it."""
-    _, creds = _prepare(store)
-    files = _plainly(_list_files, creds)
+    store, creds = _prepare(store)
+    with _sign_in_noted(store):
+        files = _plainly(_list_files, creds)
     return [
         {
             "id": f.file_id,
@@ -402,12 +425,14 @@ def _read_metadata(directory: Path) -> dict:
 def open_copy(store: ActualBudgetConfigStore | None, budget_id: str) -> Iterator[Copy]:
     """Download ``budget_id`` (the cloud file id) afresh, and remove the copy when the block
     ends, whatever happens in it."""
-    _, creds = _prepare(store)
+    store, creds = _prepare(store)
     directory = _new_directory()
     try:
-        session = _plainly(_build, creds, directory)
+        with _sign_in_noted(store):  # signing in is part of building the client
+            session = _plainly(_build, creds, directory)
         with session:
-            copy = _plainly(_download, session, creds, budget_id, directory)
+            with _sign_in_noted(store):
+                copy = _plainly(_download, session, creds, budget_id, directory)
             yield copy
     finally:
         _remove(directory)

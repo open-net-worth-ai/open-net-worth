@@ -570,7 +570,7 @@ def test_tracking_skips_assigned(world):
     assert any("tracking" in n["reason"] for n in run["notes"])
     status = actual_app.sync_status()
     assert status["budget_mode"] == "tracking"
-    assert any("tracking" in n["reason"] for n in status["notes"])
+    assert "notes" not in status
     with using(ACTUAL):  # said once, not on every run
         runner._locked_run("manual")
         run = import_runs.get(sync_state.load()["last_run"]["run_id"])
@@ -2085,6 +2085,147 @@ def _envs() -> list[str]:
     return sorted(e["name"] for e in envelopes_service.all_envelopes())
 
 
+def _differs() -> list[dict]:
+    return [w for w in actual_app.sync_status()["warnings"] if w["kind"] == "budget_differs"]
+
+
+def _connect_to(budget_id: str, name: str) -> None:
+    ActualBudgetConfigStore().update({"budget_id": budget_id, "budget_name": name})
+
+
+def test_the_connector_on_another_budget_says_so_with_where_to_import_from(world):
+    enable()
+    sync()
+    assert _differs() == []
+    _connect_to(BUDGET_B, "ACME Other")
+    (warning,) = _differs()
+    assert warning["plan_id"] == BUDGET_B
+    assert warning["text"] == (
+        "The Actual connection is set to ACME Other, and this sync still follows "
+        f"{sync_state_of()['plan_name']}. To move it, turn this sync off, then import ACME Other "
+        "here."
+    )
+    actual_app.sync_settings(False, None, None, None)
+    (warning,) = _differs()
+    assert warning["text"].endswith("To move it, import ACME Other here.")
+    assert warning["plan_id"] == BUDGET_B
+
+
+def test_only_budget_differs_carries_a_plan_id(world):
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    _to_other_budget()
+    sync()
+    _connect_to(BUDGET, "ACME Budget")
+    warnings = actual_app.sync_status()["warnings"]
+    assert {w["kind"] for w in warnings} >= {"import_first", "budget_differs"}
+    assert [w["kind"] for w in warnings if "plan_id" in w] == ["budget_differs"]
+
+
+def test_no_warning_with_nothing_saved_or_no_plan(world):
+    enable()
+    ActualBudgetConfigStore().update({"budget_id": ""})
+    assert _differs() == []
+    with using(ACTUAL):
+        sync_state.reset()
+    _connect_to(BUDGET_B, "ACME Other")
+    assert _differs() == []
+
+
+def test_reading_the_warning_opens_no_connection(world):
+    enable()
+    _connect_to(BUDGET_B, "ACME Other")
+    calls = len(world.calls)
+    actual_app.sync_status()
+    assert len(world.calls) == calls
+
+
+def test_a_moved_sync_points_the_connector_at_the_budget_it_moved_to(world):
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    _connect_to(BUDGET, "ACME Budget")
+    actual_app.sync_settings(False, None, None, None)
+    _import_other_budget()
+    actual_app.sync_settings(True, None, BUDGET_B, "from_ynab")
+    store = ActualBudgetConfigStore()
+    assert store.budget_id() == BUDGET_B
+    assert store.get()["budget_name"] == sync_state_of()["plan_name"]
+    assert store.get()["budget_currency"] == sync_state_of()["currency"]
+    assert _differs() == []
+    assert sync_state_of()["direction"] == "from_ynab"
+
+
+def test_the_connector_failing_to_follow_doesnt_stop_the_move(world, monkeypatch):
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+
+    def refuses(self, changes, **_kw):
+        raise RuntimeError("no")
+
+    monkeypatch.setattr(ActualBudgetConfigStore, "update", refuses)
+    _to_other_budget()
+    assert sync_state_of()["plan_id"] == BUDGET_B
+
+
+def test_a_refused_turn_on_doesnt_move_the_connector(world):
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    actual_app.sync_settings(False, None, None, None)
+    _connect_to(BUDGET, "ACME Budget")
+    YnabSyncStateStore().save({"id": "state", "enabled": True})
+    with pytest.raises(ConflictError):
+        actual_app.sync_settings(True, None, BUDGET_B, None)
+    assert ActualBudgetConfigStore().budget_id() == BUDGET
+
+
+def test_ynab_has_no_connector_to_point_anywhere():
+    assert YNAB.caps.connector_follows_sync is False
+    assert ACTUAL.caps.connector_follows_sync is True
+
+
+def test_import_finished_with_a_run_in_progress_leaves_it_to_the_run(world):
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    _to_other_budget()
+    assert sync()["summary"] == runner.IMPORT_FIRST
+    with using(ACTUAL), ACTUAL.lock:
+        ynab_settings.import_finished(BUDGET_B)
+    assert "import_first" in _warning_kinds()
+
+
+def test_a_failure_answering_import_first_leaves_the_import_done(world, monkeypatch):
+    enable()
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    _to_other_budget()
+    assert sync()["summary"] == runner.IMPORT_FIRST
+
+    def fails(_plan_id):
+        raise RuntimeError("no")
+
+    monkeypatch.setattr(ynab_settings, "import_finished", fails)
+    _import_other_budget()
+    assert import_runs.latest("actual_budget", ("import",))["status"] == "done"
+    assert "import_first" in _warning_kinds()
+
+
 def _warning_kinds() -> list[str]:
     return [w["kind"] for w in actual_app.sync_status()["warnings"]]
 
@@ -2096,7 +2237,7 @@ def test_importing_the_budget_answers_import_first_without_waiting_for_a_run(wor
     with world.on(BUDGET_B):
         seed_other_budget(world, PAST, TODAY)
     _to_other_budget()
-    assert sync()["summary"] == "Import this budget first"
+    assert sync()["summary"] == runner.IMPORT_FIRST
     assert "import_first" in _warning_kinds()
     _import_other_budget()
     assert "import_first" not in _warning_kinds()
@@ -2109,7 +2250,7 @@ def test_importing_another_budget_leaves_import_first_standing(world):
     with world.on(BUDGET_B):
         seed_other_budget(world, PAST, TODAY)
     _to_other_budget()
-    assert sync()["summary"] == "Import this budget first"
+    assert sync()["summary"] == runner.IMPORT_FIRST
     with using(ACTUAL):
         ynab_settings.import_finished("budget-never-synced")
     assert "import_first" in _warning_kinds()
@@ -2128,7 +2269,7 @@ def test_a_budget_never_imported_is_not_synced(world):
     manual = import_runs.latest("actual_budget", ("sync",))
     _to_other_budget()
     run = sync()
-    assert run["ok"] is True and run["summary"] == "Import this budget first"
+    assert run["ok"] is True and run["summary"] == runner.IMPORT_FIRST
     assert open_items() == [] and writes_seen(world) == []
     assert (
         _cats(),
@@ -2145,14 +2286,14 @@ def test_a_budget_never_imported_is_not_synced(world):
     assert "Import this budget first" in warning["text"] and f"ACME {BUDGET_B}" in warning["text"]
     assert import_runs.latest("actual_budget", ("sync",))["id"] != manual["id"]
     stored = import_runs.latest("actual_budget", ("sync",))
-    assert _run("scheduled")["summary"] == "Import this budget first"
+    assert _run("scheduled")["summary"] == runner.IMPORT_FIRST
     assert import_runs.latest("actual_budget", ("sync",)) == stored  # no record per tick
 
     actual_app.sync_settings(False, None, None, None)
     _import_other_budget()
     actual_app.sync_settings(True, None, None, None)
     run = sync()
-    assert run["ok"] is True and run["summary"] != "Import this budget first"
+    assert run["ok"] is True and run["summary"] != runner.IMPORT_FIRST
     assert sync_state_of()["bootstrapped"] is True and open_items() == []
     assert not [w for w in actual_app.sync_status()["warnings"] if w["kind"] == "import_first"]
 
@@ -2369,15 +2510,15 @@ def test_a_race_sees_one_winner(world, monkeypatch):
 
 
 def test_actual_waits_when_a_book_ended_up_with_both_on(world, monkeypatch):
-    """Reachable only by toggling a flag: YNAB keeps running, Actual holds off and says why."""
+    """Reachable only by toggling a flag: YNAB keeps running, and Actual holds off."""
     enable()
     _ynab_on(next_run_at="2999-01-01T00:00:00Z")
     opened = world.opens
     assert ynab_sync.run_if_due() is False
     assert world.opens == opened
-    assert any("YNAB" in n["reason"] for n in actual_app.sync_status()["notes"])
-    with pytest.raises(ConflictError):
+    with pytest.raises(ConflictError) as refused:
         actual_app.start_sync()
+    assert "YNAB" in refused.value.message
 
 
 def test_a_flagged_off_actual_holds_nothing_up(world):
@@ -2623,7 +2764,7 @@ def test_no_warning_while_the_income_pair_has_no_envelope(world):
     enable()
     sync()
     status = actual_app.sync_status()
-    assert status["notes"] == [] and status["warnings"] == []
+    assert status["warnings"] == []
 
 
 # ── wording, and YNAB's ──
@@ -2693,7 +2834,8 @@ def test_the_status_keeps_the_shape_the_page_reads(api):
         ynab_keys = set(runner.status())
     assert ynab_keys <= set(body)
     assert body["available"] is True and body["budget_mode"] is None
-    assert body["notes"] == [] and body["warnings"] == [] and body["conflicts_count"] == 0
+    assert "notes" not in body
+    assert body["warnings"] == [] and body["conflicts_count"] == 0
     assert body["direction"] == "both" and body["last_run"] is None
     assert "password" not in str(body).lower() and HOST not in str(body)
 

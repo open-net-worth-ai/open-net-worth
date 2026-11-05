@@ -55,7 +55,7 @@ from backend.services.ynab_sync.settings import manual_runs as _manual_runs
 
 logger = logging.getLogger(__name__)
 
-IMPORT_FIRST = "Import this budget first"
+IMPORT_FIRST = "Stopped: this budget wasn't imported yet"
 
 
 class _CurrentLock:
