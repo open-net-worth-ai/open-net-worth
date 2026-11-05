@@ -7,7 +7,7 @@
 interface Speaker {
   id: string
   name: string
-  /** Only where LiveKit's docs state it: never guessed from a name. */
+  /** Only where the docs state it: never guessed from a name. */
   gender?: 'female' | 'male'
 }
 
@@ -17,17 +17,30 @@ interface VoiceModel {
   pricePerMillion: number
   /** Only for a voice that speaks fewer than all of the app's languages. */
   speaks?: readonly string[]
-  /** The voices LiveKit's docs name for this model (read 2026-11-06), a sample of each library. */
+  /** The voices LiveKit's and the provider's docs name (read 2026-11-06), a sample of each library. */
   voices?: readonly Speaker[]
   /** What a blank voice id gets; matches the backend's tts_models.py. None: LiveKit chooses. */
   defaultVoice?: string
 }
 
+// Inworld describes Dennis as "smooth, calm and friendly", the nearest any doc comes to a wealth
+// manager (owner, 2026-11-06). Its public page lists Victor and Theodore without stating a gender.
 const INWORLD_VOICES: readonly Speaker[] = [
-  { id: 'Ashley', name: 'Ashley', gender: 'female' },
-  { id: 'Olivia', name: 'Olivia', gender: 'female' },
+  { id: 'Dennis', name: 'Dennis', gender: 'male' },
   { id: 'Edward', name: 'Edward', gender: 'male' },
   { id: 'Diego', name: 'Diego', gender: 'male' },
+  { id: 'Victor', name: 'Victor' },
+  { id: 'Theodore', name: 'Theodore' },
+  { id: 'Ashley', name: 'Ashley', gender: 'female' },
+  { id: 'Olivia', name: 'Olivia', gender: 'female' },
+]
+
+const CARTESIA_SONIC_3_6_VOICES: readonly Speaker[] = [
+  { id: '47c38ca4-5f35-497b-b1a3-415245fb35e1', name: 'Daniel', gender: 'male' },
+  { id: 'ef191366-f52f-447a-a398-ed8c0f2943a1', name: 'Archie', gender: 'male' },
+  { id: '9626c31c-bec5-4cca-baa8-f8ba9e84c8bc', name: 'Jacqueline', gender: 'female' },
+  { id: 'db6b0ed5-d5d3-463d-ae85-518a07d3c2b4', name: 'Skylar', gender: 'female' },
+  { id: '62ae83ad-4f6a-430b-af41-a9bede9286ca', name: 'Gemma', gender: 'female' },
 ]
 
 // The cheapest voice that speaks every language; matches the backend's CONFIG_DEFAULTS.
@@ -39,27 +52,34 @@ const VOICE_MODELS: readonly VoiceModel[] = [
     name: 'Inworld 2.0 Flash (default)',
     pricePerMillion: 15,
     voices: INWORLD_VOICES,
-    defaultVoice: 'Ashley',
+    defaultVoice: 'Dennis',
   },
   {
     value: 'inworld/inworld-tts-2',
     name: 'Inworld 2.0',
     pricePerMillion: 25,
     voices: INWORLD_VOICES,
-    defaultVoice: 'Ashley',
+    defaultVoice: 'Dennis',
   },
   {
     value: 'cartesia/sonic-3',
     name: 'Cartesia Sonic 3',
     pricePerMillion: 50,
     voices: [
-      { id: '5c5ad5e7-1020-476b-8b91-fdcbe9cc313c', name: 'Daniela', gender: 'female' },
-      { id: '9626c31c-bec5-4cca-baa8-f8ba9e84c8bc', name: 'Jacqueline', gender: 'female' },
-      { id: 'f31cc6a7-c1e8-4764-980c-60a361443dd1', name: 'Robyn', gender: 'female' },
+      ...CARTESIA_SONIC_3_6_VOICES,
       { id: 'a167e0f3-df7e-4d52-a9c3-f949145efdab', name: 'Blake', gender: 'male' },
+      { id: '5c5ad5e7-1020-476b-8b91-fdcbe9cc313c', name: 'Daniela', gender: 'female' },
+      { id: 'f31cc6a7-c1e8-4764-980c-60a361443dd1', name: 'Robyn', gender: 'female' },
     ],
+    defaultVoice: '47c38ca4-5f35-497b-b1a3-415245fb35e1',
   },
-  { value: 'cartesia/sonic-3.6', name: 'Cartesia Sonic 3.6', pricePerMillion: 50 },
+  {
+    value: 'cartesia/sonic-3.6',
+    name: 'Cartesia Sonic 3.6',
+    pricePerMillion: 50,
+    voices: CARTESIA_SONIC_3_6_VOICES,
+    defaultVoice: '47c38ca4-5f35-497b-b1a3-415245fb35e1',
+  },
   {
     value: 'assemblyai/assemblyai-tts-1',
     name: 'AssemblyAI TTS 1',
@@ -74,15 +94,15 @@ const VOICE_MODELS: readonly VoiceModel[] = [
     pricePerMillion: 15,
     speaks: ['en', 'zh', 'ja', 'ko', 'es', 'fr', 'de', 'pt'],
     voices: [
+      { id: 'bf322df2096a46f18c579d0baa36f41d', name: 'Adrian', gender: 'male' },
       { id: 'b347db033a6549378b48d00acb0d06cd', name: 'Selene', gender: 'female' },
       { id: 'e3cd384158934cc9a01029cd7d278634', name: 'Laura', gender: 'female' },
-      { id: 'bf322df2096a46f18c579d0baa36f41d', name: 'Adrian', gender: 'male' },
       { id: '536d3a5e000945adb7038665781a4aca', name: 'Ethan' },
       { id: '9a9cf47702da476aa4629e2506d4a857', name: 'Hannah' },
       { id: '79d0bd3e4e5444b18f7b6d89b5927bf1', name: 'Jordan' },
       { id: '933563129e564b19a115bedd57b7406a', name: 'Sarah' },
     ],
-    defaultVoice: 'b347db033a6549378b48d00acb0d06cd',
+    defaultVoice: 'bf322df2096a46f18c579d0baa36f41d',
   },
 ]
 

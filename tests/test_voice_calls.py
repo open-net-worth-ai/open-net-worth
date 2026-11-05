@@ -2202,9 +2202,10 @@ def test_a_blank_voice_id_gets_a_voice_the_model_is_documented_with():
     """LiveKit's docs name no default voice for these models, so nothing is left to chance."""
     from backend.connectors.voice.tts_models import voice_for
 
-    assert voice_for("inworld/inworld-tts-2-flash", "") == "Ashley"
+    assert voice_for("inworld/inworld-tts-2-flash", "") == "Dennis"
     assert voice_for("inworld/inworld-tts-2-flash", "Mine") == "Mine"
-    assert voice_for("cartesia/sonic-3", "") is None  # the voice calls have been tested with
+    assert voice_for("cartesia/sonic-3", "") == "47c38ca4-5f35-497b-b1a3-415245fb35e1"  # Daniel
+    assert voice_for("elevenlabs/eleven_flash_v2_5", "") is None  # LiveKit chooses
 
 
 def test_a_goodbye_is_not_modelled_on_a_time_of_day_the_front_voice_cannot_know():
