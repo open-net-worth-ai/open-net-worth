@@ -290,6 +290,24 @@ def test_a_call_records_its_room_and_refuses_automation_conversations(client, mo
     assert client.post("/api/voice/call", json={"session_id": "sess-auto"}).status_code == 409
 
 
+@pytest.mark.parametrize("retired", ["google/gemini-2.5-flash-lite", "google/gemini-2.5-flash"])
+def test_a_front_model_livekit_retired_reads_as_the_default(db_isolated, retired):
+    from backend.db.voice_config_store import CONFIG_DEFAULTS, VoiceConfigStore
+
+    assert (
+        VoiceConfigStore().update({"front_model": retired})["front_model"]
+        == (CONFIG_DEFAULTS["front_model"])
+    )
+    assert VoiceConfigStore().get()["front_model"] == "google/gemma-4-31b-it"
+
+
+def test_a_front_model_still_listed_stays_as_chosen(db_isolated):
+    from backend.db.voice_config_store import VoiceConfigStore
+
+    VoiceConfigStore().update({"front_model": "openai/gpt-4.1-mini"})
+    assert VoiceConfigStore().get()["front_model"] == "openai/gpt-4.1-mini"
+
+
 @pytest.mark.flags(voice_calls=True)
 def test_calls_stop_being_allowed_when_paused(db_isolated):
     from backend.db.voice_config_store import VoiceConfigStore

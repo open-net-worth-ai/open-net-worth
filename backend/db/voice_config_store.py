@@ -25,13 +25,17 @@ SECRET_KEYS = ("api_key", "api_secret")
 # call defaults to the conversation's own model unless ``lucius_model`` names one.
 CONFIG_DEFAULTS: dict = {
     "livekit_url": "",
-    "front_model": "google/gemini-2.5-flash-lite",
+    "front_model": "google/gemma-4-31b-it",
     "stt_model": "assemblyai/universal-streaming",
     "tts_model": "cartesia/sonic-3",
     "tts_voice": "",
     "lucius_model": "",
     "language": "en",
 }
+
+# LiveKit retired these on 2026-10-20 and names Gemma as their replacement. A setting saved before
+# then reads as the default, so it is a model LiveKit still lists and a choice the screen can show.
+RETIRED_FRONT_MODELS = frozenset({"google/gemini-2.5-flash-lite", "google/gemini-2.5-flash"})
 
 # The languages a call can be held in: speech-to-text listens for it, the voice speaks it, the
 # front voice words its own lines in it. Codes are what LiveKit Inference takes.
@@ -54,6 +58,8 @@ ENGLISH_ONLY_STT = frozenset({"assemblyai/universal-streaming"})
 
 def _merged(row: dict | None, secrets: dict) -> dict:
     config = {**CONFIG_DEFAULTS, **(row["config"] if row else {})}
+    if config["front_model"] in RETIRED_FRONT_MODELS:
+        config["front_model"] = CONFIG_DEFAULTS["front_model"]
     return {
         **config,
         "enabled": bool(row and row["enabled"]),

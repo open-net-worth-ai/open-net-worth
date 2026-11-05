@@ -59,11 +59,10 @@ interface VoiceForm {
 }
 
 // LiveKit Cloud's built-in models — no extra key. The front voice must answer in about a
-// second; Flash-Lite was the fastest in testing and the only one that asked "go ahead with
-// what?" rather than inventing an instruction from a bare "sure".
+// second. Gemma is what LiveKit names in place of the retired Gemini 2.5 models; in testing it
+// asked what a bare "sure" was agreeing to rather than inventing an instruction.
 const FRONT_OPTIONS = [
-  { value: 'google/gemini-2.5-flash-lite', label: 'Gemini 2.5 Flash-Lite (fastest, recommended)' },
-  { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { value: 'google/gemma-4-31b-it', label: 'Gemma 4 (recommended)' },
   { value: 'openai/gpt-4.1-mini', label: 'GPT-4.1 mini' },
   { value: 'openai/gpt-4.1-nano', label: 'GPT-4.1 nano' },
 ]
