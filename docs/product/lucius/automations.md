@@ -25,7 +25,7 @@ bank every few hours, or logging the purchases in your card emails.
 
    | Template | What it does | When |
    |---|---|---|
-   | **Auto-log transactions from email** | Reads bank, card and trade confirmation emails and logs them — payees resolved, nothing double-booked | Every 12 hours |
+   | **Email finance digest** | Logs bank, card and trade confirmation emails, then tells you what else needs you — a failed payment, a bill due, a new login to a money account, a deposit maturing | Every day at 12:00 AM and 12:00 PM |
    | **Daily briefing** | A short, friendly update on yesterday's money and investments | Every day at 9:00 |
    | **Weekly report** | How last week went: spending, bills, investments and anything unusual — as a designed report page | Mondays at 8:30 |
    | **Monthly report** | How last month went: what you earned and kept, spending and investments | The 1st of each month at 9:30 |
@@ -216,18 +216,36 @@ and doesn't copy categories or Assigned.
 
 ## Logging transactions from your email
 
-**Auto-log transactions from email** is in **Recommended**, and behind the **Automate** button on
-the [Email connector](../connectors/email-ingestion.md)'s page. Every 12 hours it reads new bank,
-card and trade confirmation emails, logs what it finds and messages you a summary. Each run reads
-the mail since the last run that finished (at least a day's worth), so a slower schedule or a
-failed run never leaves a gap. It follows the
-built-in **log-transactions-from-email** [skill](skills.md), so when that skill improves, your
-Automation does too (unless you've edited the skill).
+**Email finance digest** is in **Recommended**, and behind the **Automate** button on the
+[Email connector](../connectors/email-ingestion.md)'s page. Every day at 12:00 AM and 12:00 PM it
+does two things:
 
-It needs the Email connector set up first; without a mailbox, the run says so and stops without
-logging anything. Running it twice over the same email never books it twice.
+- **Logs** new bank, card and trade confirmation emails, with payees resolved and nothing booked
+  twice.
+- **Tells you what else affects your money**, in one short message, and what it means going by
+  your books: a new login to an account that can reach your money, a failed payment of any size,
+  a bill due and not yet paid, a margin call, a deposit maturing, a new rate on your savings, a
+  deadline on something you hold, a large amount moving. It judges each email by what it says,
+  not whose name is on it. Promotions, newsletters and sign-ins to services like streaming stay
+  out, and an email is mentioned once. A first run looks back 7 days.
 
-Older installs may have a paused copy of this Automation that was added automatically. It's
+Everything except logging is read-only: Lucius won't reply, pay or follow a link because an email
+asks, and he won't repeat a login code. If nothing was logged and nothing needs you, he doesn't
+message you.
+
+Each run reads the mail since the last run that finished (at least a day's worth), so a slower
+schedule or a failed run never leaves a gap. It follows the built-in **email-finance-digest** and
+**log-transactions-from-email** [skills](skills.md), so when they improve, your Automation does
+too (unless you've edited them). Turning off **log-transactions-from-email** stops the logging, and
+the message tells you so.
+
+For logging with no digest, **Auto-log transactions from email** is under **Start from a
+template**. Use one or the other: both on means two runs reading the same mail, and paying for it.
+
+Both need the Email connector set up first; without a mailbox, the run says so and stops without
+logging anything. Running either twice over the same email never books it twice.
+
+Older installs may have a paused copy of the logging Automation that was added automatically. It's
 yours to edit, turn on or delete — a deleted copy doesn't come back.
 
 ## Cost

@@ -33,7 +33,7 @@ import imaplib
 import logging
 import re
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from email.header import decode_header, make_header
 from email.message import Message
 from email.utils import parsedate_to_datetime
@@ -64,6 +64,11 @@ _FETCH_RESPONSE_UID_RE = re.compile(rb"UID\s+(\d+)")
 # §6.4.4) match on INTERNALDATE's calendar date "disregarding time and timezone", so the
 # `received_date` we report must be that same zone-naive date, not a shifted one.
 _FETCH_RESPONSE_INTERNALDATE_RE = re.compile(rb'INTERNALDATE\s+"(\d{1,2})-([A-Za-z]{3})-(\d{4})')
+# The same literal in full, for `received_at`: an instant to compare against a run's own start,
+# so its zone DOES count here. RFC 3501 pads a one-digit day with a space.
+_FETCH_RESPONSE_INTERNALDATE_INSTANT_RE = re.compile(
+    rb'INTERNALDATE\s+"\s?(\d{1,2})-([A-Za-z]{3})-(\d{4}) (\d{2}):(\d{2}):(\d{2}) ([+-]\d{4})"'
+)
 _MONTH_ABBR_TO_NUM = {
     "Jan": "01",
     "Feb": "02",
@@ -436,8 +441,29 @@ def _parse_internaldate(header_line: bytes) -> str | None:
     return f"{year}-{month_num}-{int(day):02d}"
 
 
-def _parse_multi_fetch_response(data: list) -> dict[int, tuple[bytes, str | None]]:
-    """Map UID -> (fetched header payload bytes, parsed INTERNALDATE as ISO date or None)
+def _parse_internaldate_instant(header_line: bytes) -> str | None:
+    """The UTC ISO instant out of the same ``INTERNALDATE`` literal, or ``None`` when the line
+    carries no complete, valid one."""
+    m = _FETCH_RESPONSE_INTERNALDATE_INSTANT_RE.search(header_line)
+    if not m:
+        return None
+    day, mon, year, hour, minute, second, zone = (g.decode("ascii") for g in m.groups())
+    month_num = _MONTH_ABBR_TO_NUM.get(mon.title())
+    if not month_num:
+        return None
+    try:
+        parsed = datetime.strptime(
+            f"{year}-{month_num}-{int(day):02d} {hour}:{minute}:{second} {zone}",
+            "%Y-%m-%d %H:%M:%S %z",
+        )
+    except ValueError:
+        return None
+    return parsed.astimezone(UTC).isoformat()
+
+
+def _parse_multi_fetch_response(data: list) -> dict[int, tuple[bytes, str | None, str | None]]:
+    """Map UID -> (fetched header payload bytes, parsed INTERNALDATE as ISO date or None, the
+    same INTERNALDATE as a UTC instant or None)
     from a raw imaplib response covering MULTIPLE UIDs in one
     ``UID FETCH <set> (UID INTERNALDATE ...)`` command.
 
@@ -448,7 +474,7 @@ def _parse_multi_fetch_response(data: list) -> dict[int, tuple[bytes, str | None
     be pulled out of each tuple's OWN tagged line via the explicitly-requested fetch-atts,
     never assumed from response order (servers are not required to preserve the requested UID
     set's order)."""
-    result: dict[int, tuple[bytes, str | None]] = {}
+    result: dict[int, tuple[bytes, str | None, str | None]] = {}
     for item in data:
         if not isinstance(item, tuple) or len(item) != 2:
             continue
@@ -460,7 +486,11 @@ def _parse_multi_fetch_response(data: list) -> dict[int, tuple[bytes, str | None
         m = _FETCH_RESPONSE_UID_RE.search(header_line)
         if not m:
             continue
-        result[int(m.group(1))] = (payload, _parse_internaldate(header_line))
+        result[int(m.group(1))] = (
+            payload,
+            _parse_internaldate(header_line),
+            _parse_internaldate_instant(header_line),
+        )
     return result
 
 
@@ -521,12 +551,13 @@ def search_headers(
     Returns:
         {
             "messages": [{uid, message_id (RAW header value or content-fallback digest),
-                          from, subject, date, date_time, received_date}],
+                          from, subject, date, date_time, received_date, received_at}],
                          # UID ascending, NO body_text. `date`/`date_time` are parsed from
                          # the email's OWN Date: header (the sender's clock, never
                          # normalized); `received_date` is the server's INTERNALDATE
                          # (what `since`/`before` actually filter on) as an ISO date —
                          # the two can legitimately land on different calendar days.
+                         # `received_at` is that INTERNALDATE as a UTC instant.
             "uidvalidity": int,
             "folder": str,           # the folder actually SELECTed (for locator caching)
             "candidate_count": int,  # UIDs matched before limit/offset windowing
@@ -591,7 +622,7 @@ def search_headers(
         # mid-scan — the cost here is IMAP round-trip LATENCY (one per command, regardless
         # of response size), not the header/body distinction this function otherwise
         # optimizes for. RFC 3501 §6.4.5 allows a UID SET (comma-separated) in one FETCH.
-        headers_by_uid: dict[int, tuple[bytes, str | None]] = {}
+        headers_by_uid: dict[int, tuple[bytes, str | None, str | None]] = {}
         for chunk in _chunked(uids, _HEADER_FETCH_CHUNK):
             if should_stop is not None and should_stop():
                 logger.info(
@@ -617,7 +648,7 @@ def search_headers(
                     break
                 logger.warning("imap: header fetch UID %d missing from batch response", uid)
                 continue
-            header_bytes, received_date = headers_by_uid[uid]
+            header_bytes, received_date, received_at = headers_by_uid[uid]
             header_msg = email.message_from_bytes(header_bytes)
             raw_message_id = (header_msg.get("Message-ID") or "").strip()
             if not raw_message_id:
@@ -645,6 +676,7 @@ def search_headers(
                         "date": parsed["date"],
                         "date_time": parsed["date_time"],
                         "received_date": received_date,
+                        "received_at": received_at,
                     }
                 )
                 continue
@@ -658,6 +690,7 @@ def search_headers(
                     "date": iso_date,
                     "date_time": iso_date_time,
                     "received_date": received_date,
+                    "received_at": received_at,
                 }
             )
 

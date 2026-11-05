@@ -563,7 +563,7 @@ def test_tools_call_telegram_send_message_round_trips(mcp_env, monkeypatch):
     async def fake_notify(message, channels=None, title=None):
         seen["message"] = message
         seen["channels"] = channels
-        return {"telegram": ["in_app"]}
+        return {"telegram": {"sent": 1}}
 
     monkeypatch.setattr(notify_service, "notify", fake_notify)
 
@@ -580,7 +580,7 @@ def test_tools_call_telegram_send_message_round_trips(mcp_env, monkeypatch):
     assert result["isError"] is False
     assert "proposedChange" not in result  # telegram_send_message is not a propose tool
     payload = json.loads(result["content"][0]["text"])
-    assert payload == {"ok": True, "delivered": {"telegram": ["in_app"]}}
+    assert payload == {"ok": True, "delivered": {"telegram": {"sent": 1}}}
     assert seen["message"] == "hello from MCP"  # verbatim passthrough
     assert seen["channels"] == ["telegram"]  # single-channel, hardcoded by the tool
 

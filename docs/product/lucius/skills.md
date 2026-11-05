@@ -34,6 +34,7 @@ A new install comes with these. Find them in **Skills** in the sidebar.
 |---|---|
 | `catch-up` | "Catch me up" — new transactions in, duplicates merged, unsorted ones labelled, balances checked, overspending covered before the month rolls |
 | `log-transactions-from-email` | "Log my transactions from email" — bank, card and trade confirmations booked, payees cleaned up, nothing twice |
+| `email-finance-digest` | "Anything important in my email?" — logs your bank, card and trade mail, then tells you what else affects your money, like a failed payment, a bill due, a new login to a money account or a deposit maturing |
 | `daily-briefing` | "How did yesterday go?" — a few friendly sentences on money in and out, the portfolio, bills due and anything to review |
 | `weekly-report` | "How did last week go?" — a designed report page |
 | `monthly-report` | "How did September go?" — a designed report page |
@@ -48,9 +49,9 @@ A new install comes with these. Find them in **Skills** in the sidebar.
 
 `statement-import` is always there too: it guides every statement import.
 
-The **Daily briefing**, **Weekly report**, **Monthly report** and **Auto-log transactions from
-email** [Automations](automations.md) use these skills, so improving a skill improves the
-Automation.
+The **Email finance digest**, **Daily briefing**, **Weekly report**, **Monthly report** and
+**Auto-log transactions from email** [Automations](automations.md) use these skills, so improving a
+skill improves the Automation.
 
 Each built-in skill has a switch at the top of its page to turn it off, and **Export** in its
 **⋮** menu. The Skills tab doesn't offer **Edit** for built-ins — ask Lucius to change one

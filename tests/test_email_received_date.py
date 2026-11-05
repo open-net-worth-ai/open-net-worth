@@ -22,7 +22,11 @@ import json
 import pytest
 
 from backend.db.email_config_store import EmailConfigStore
-from backend.ingest.imap_client import _parse_internaldate, _parse_multi_fetch_response
+from backend.ingest.imap_client import (
+    _parse_internaldate,
+    _parse_internaldate_instant,
+    _parse_multi_fetch_response,
+)
 
 # ── fake IMAP: header fetch response now also carries INTERNALDATE ──────────────────────
 
@@ -255,4 +259,43 @@ def test_parse_multi_fetch_response_carries_both_uid_and_internaldate():
         b")",
     ]
     result = _parse_multi_fetch_response(data)
-    assert result[5] == (b"a: b", "2026-09-07")
+    assert result[5] == (b"a: b", "2026-09-07", "2026-09-07T05:32:28+00:00")
+
+
+# ── received_at: the same clock as an instant, for "after my last run" ───────────────────
+
+
+def test_received_at_is_the_internaldate_instant_in_utc():
+    # The zone counts here, unlike received_date: this is compared to a run's own start.
+    line = b'12 (UID 12 INTERNALDATE "07-Sep-2026 05:32:28 +0800" BODY[HEADER.FIELDS] {10}'
+    assert _parse_internaldate_instant(line) == "2026-09-06T21:32:28+00:00"
+
+
+def test_received_at_reads_the_rfc_space_padded_day():
+    line = b'12 (UID 12 INTERNALDATE " 7-Sep-2026 05:32:28 +0000" BODY[HEADER.FIELDS] {10}'
+    assert _parse_internaldate_instant(line) == "2026-09-07T05:32:28+00:00"
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        b"12 (UID 12 BODY[HEADER.FIELDS] {10}",
+        b'12 (UID 12 INTERNALDATE "07-Sep-2026" BODY[HEADER.FIELDS] {10}',
+        b'12 (UID 12 INTERNALDATE "07-Foo-2026 05:32:28 +0000" BODY[HEADER.FIELDS] {10}',
+        b'12 (UID 12 INTERNALDATE "32-Sep-2026 05:32:28 +0000" BODY[HEADER.FIELDS] {10}',
+    ],
+)
+def test_received_at_is_none_without_a_valid_instant(line):
+    assert _parse_internaldate_instant(line) is None
+
+
+def test_search_results_carry_received_at(monkeypatch, store):
+    messages = [
+        (
+            7,
+            _raw("Payment issue", "<m-7@x>", "Mon, 07 Sep 2026 10:00:00 +0000"),
+            "07-Sep-2026 10:00:05 +0000",
+        )
+    ]
+    result, _fake = _search(monkeypatch, store, messages, input_data={"since": "2026-09-01"})
+    assert result["messages"][0]["received_at"] == "2026-09-07T10:00:05+00:00"

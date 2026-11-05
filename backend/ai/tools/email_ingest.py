@@ -14,6 +14,8 @@ docs/rfc/email-as-generic-source.md). It exposes generic blocks Lucius/agents co
     local timezone, never normalized), while ``received_date`` is the server's INTERNALDATE —
     the field ``since``/``before`` actually filter on. Added so a caller can tell the two apart
     instead of assuming a message's displayed date matches the window it was found in.
+    ``received_at`` is that INTERNALDATE as a UTC instant, so a stateless run can tell mail that
+    arrived after its own last run from the overlap it re-reads on purpose.
   * ``email_send_message``   — SEND: compose + send via the connector's SMTP config (an ACTION →
     confirm-first, OFF the headless ceiling).
 
@@ -397,6 +399,7 @@ def _email_search_messages_sync(input_data: dict, should_stop=None):
             "subject": sanitize_untrusted(m.get("subject", "")),
             "date": m.get("date", ""),
             "received_date": m.get("received_date") or "",
+            "received_at": m.get("received_at") or "",
         }
         for m in headers
     ]

@@ -3,6 +3,7 @@ import { CONFLICTING_CONDITIONS, conditionConflicts } from './txnConditionConfli
 import { Clock3, Zap } from 'lucide-react'
 import type { AutomationTrigger } from '../../../api/automations'
 import { fDateTime } from '../../../utils/format'
+import { rruleText } from './rruleText'
 import {
   moneyLabel,
   transactionTriggerView,
@@ -71,7 +72,8 @@ export function automationTriggerLabel(
     }
     if (trigger.type === 'once')
       return trigger.at ? `Once on ${fDateTime(trigger.at, 'short', 'always')}` : 'Once'
-    return trigger.rrule ? `Custom cadence • ${trigger.rrule}` : 'Custom cadence'
+    if (!trigger.rrule) return 'Custom cadence'
+    return rruleText(trigger.rrule) ?? `Custom cadence • ${trigger.rrule}`
   }
 
   const when = trigger.when
@@ -98,6 +100,22 @@ export function automationTriggerLabel(
   if (trigger.limit === 'hour') return `${label} • at most once an hour`
   if (trigger.limit === 'day') return `${label} • at most once a day`
   return label
+}
+
+/** A custom cadence's raw rule, when the label above reads it in words instead of showing it. */
+export function automationCustomRule(trigger: AutomationTrigger): string | null {
+  if (trigger.kind !== 'schedule' || trigger.type !== 'rrule' || !trigger.rrule) return null
+  return rruleText(trigger.rrule) ? trigger.rrule : null
+}
+
+/** The label with a custom cadence's rule beside it: both, where there's room to show them. */
+export function automationTriggerFullLabel(
+  trigger: AutomationTrigger,
+  options: AutomationOptions = EMPTY_AUTOMATION_OPTIONS,
+): string {
+  const label = automationTriggerLabel(trigger, options)
+  const rule = automationCustomRule(trigger)
+  return rule ? `${label} • ${rule}` : label
 }
 
 export function missingTriggerFields(trigger: AutomationTrigger): string[] {
@@ -163,7 +181,9 @@ export function AutomationTriggerSummary({
         <Icon size={14} strokeWidth={1.6} aria-hidden="true" />
       </span>
       <span className="grow">
-        <span className="a3-trigger-summary-text">{automationTriggerLabel(trigger, options)}</span>
+        <span className="a3-trigger-summary-text">
+          {automationTriggerFullLabel(trigger, options)}
+        </span>
         {toSet.length > 0 && (
           <span className="a3-trigger-missing">Set the {joinFields(toSet)} below.</span>
         )}

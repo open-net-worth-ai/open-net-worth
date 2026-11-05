@@ -1,7 +1,11 @@
 import { useState } from 'react'
 import { CalendarDays, Clock3, Zap } from 'lucide-react'
 import type { AutomationDraft } from '../../../api/automations'
-import { automationTriggerLabel, type AutomationOptions } from './AutomationTriggerSummary'
+import {
+  automationCustomRule,
+  automationTriggerLabel,
+  type AutomationOptions,
+} from './AutomationTriggerSummary'
 import {
   AUTOMATION_TEMPLATES,
   CONNECTOR_SYNC_TEMPLATES,
@@ -116,7 +120,7 @@ function TemplateCard({
       <span className="a3-tpl-body">
         <span className="a3-tpl-title">{template.name}</span>
         <span className="a3-tpl-blurb">{template.description}</span>
-        <span className="a3-tpl-when">
+        <span className="a3-tpl-when" title={automationCustomRule(template.trigger) ?? undefined}>
           <TriggerIcon size={11} aria-hidden="true" />{' '}
           {automationTriggerLabel(template.trigger, options)}
         </span>

@@ -59,7 +59,7 @@ it('shows Recommended first, then the 7 connector syncs, then the rest', () => {
       .getAllByRole('button')
       .map((b) => b.getAttribute('aria-label')),
   ).toEqual([
-    'Auto-log transactions from email template',
+    'Email finance digest template',
     'Daily briefing template',
     'Weekly report template',
     'Monthly report template',

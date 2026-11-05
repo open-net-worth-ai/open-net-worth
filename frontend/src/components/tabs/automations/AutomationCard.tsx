@@ -1,7 +1,11 @@
 import { Clock3, Zap } from 'lucide-react'
 import type { Automation } from '../../../api/automations'
 import { AutomationMenu } from './AutomationMenu'
-import { automationTriggerLabel, type AutomationOptions } from './AutomationTriggerSummary'
+import {
+  automationCustomRule,
+  automationTriggerLabel,
+  type AutomationOptions,
+} from './AutomationTriggerSummary'
 
 export function AutomationCard({
   automation,
@@ -61,6 +65,7 @@ export function AutomationCard({
         </span>
         <span
           className={`a3-when${paused || finished ? ' off' : ''}${automation.trigger.kind === 'event' ? ' evt' : ''}`}
+          title={automationCustomRule(automation.trigger) ?? undefined}
         >
           <TriggerIcon size={13} strokeWidth={1.7} aria-hidden="true" />
           {automationTriggerLabel(automation.trigger, options)}

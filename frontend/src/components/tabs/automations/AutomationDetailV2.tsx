@@ -20,7 +20,11 @@ import { AutomationMenu } from './AutomationMenu'
 import { AutomationRunCard } from './AutomationRunCard'
 import { AutomationToolPermissions } from './AutomationToolPermissions'
 import type { ToolLists } from './toolPermissions'
-import { automationTriggerLabel, type AutomationOptions } from './AutomationTriggerSummary'
+import {
+  automationTriggerFullLabel,
+  automationTriggerLabel,
+  type AutomationOptions,
+} from './AutomationTriggerSummary'
 
 export function AutomationDetailV2({
   automation,
@@ -210,7 +214,7 @@ export function AutomationDetailV2({
           <DetailSection title="Trigger" odId="trigger">
             <div className="a3-trigger-detail">
               <TriggerIcon size={14} aria-hidden="true" />
-              {automationTriggerLabel(automation.trigger, options)}
+              {automationTriggerFullLabel(automation.trigger, options)}
             </div>
             <div className="a3-block-note">
               {finished
