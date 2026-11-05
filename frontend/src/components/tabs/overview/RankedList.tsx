@@ -5,6 +5,7 @@
 // tap could never show (the tap navigated away first) and only the bar area answered taps.
 
 import { ChevronRight } from 'lucide-react'
+import { useMaskText } from '../../../utils/amountMask'
 import { fBase, fBaseCompact, fPct } from '../../../utils/format'
 
 export interface RankedRow {
@@ -30,6 +31,7 @@ export function RankedList({
   /** Accessible name of the action, e.g. "Show transactions". */
   selectLabel?: string
 }) {
+  const maskText = useMaskText()
   const max = Math.max(0, ...rows.map((r) => r.value))
   return (
     <ol className="ov-ranked">
@@ -42,7 +44,7 @@ export function RankedList({
               <span className="ov-ranked-amt-full">{fBase(r.value)}</span>
               <span className="ov-ranked-amt-compact">{fBaseCompact(r.value)}</span>
             </span>
-            <span className="ov-ranked-pct">{fPct(r.pct)}</span>
+            <span className="ov-ranked-pct money">{fPct(r.pct)}</span>
             {selectable && <ChevronRight className="ov-ranked-go" size={14} aria-hidden="true" />}
             <span className="ov-ranked-track" aria-hidden="true">
               <i
@@ -58,7 +60,7 @@ export function RankedList({
                 type="button"
                 className="ov-ranked-row"
                 onClick={() => onSelect(r)}
-                aria-label={`${r.label}, ${fBase(r.value)}${selectLabel ? ` — ${selectLabel}` : ''}`}
+                aria-label={`${r.label}, ${maskText(fBase(r.value))}${selectLabel ? ` — ${selectLabel}` : ''}`}
               >
                 {body}
               </button>

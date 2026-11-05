@@ -423,7 +423,7 @@ export function MonthlySavingLever({
         onValueChange={onChange}
       />
       <div className="pl-lever-sub">
-        until you retire • plan: <b>{fBaseWhole(baselineSaving)}/month</b>
+        until you retire • plan: <b className="mask">{fBaseWhole(baselineSaving)}/month</b>
       </div>
     </div>
   )
@@ -454,7 +454,7 @@ export function RetirementSpendingLever({
         onValueChange={onChange}
       />
       <div className="pl-lever-sub">
-        {fBaseWhole(annualSpending)}/year • FIRE number{' '}
+        <span className="mask">{fBaseWhole(annualSpending)}/year</span> • FIRE number{' '}
         <b className="mask">{fCoarse(fireNumber)}</b>
       </div>
     </div>
@@ -1684,7 +1684,7 @@ export function OutlookTab(props: OutlookTabProps) {
                       className={'pl-sum-hero ' + (simLoading ? 'warn' : tone)}
                       style={{ fontSize: 34 }}
                     >
-                      {simLoading ? '—' : `${successPct}%`}
+                      <span className="mask">{simLoading ? '—' : `${successPct}%`}</span>
                     </div>
                     {diverged && (
                       <button
@@ -1767,7 +1767,9 @@ export function OutlookTab(props: OutlookTabProps) {
                       />
                     </span>
                     <span className="v mask">{fCoarse(fireNumber)}</span>
-                    <span className="s">{fundedPct}% funded today</span>
+                    <span className="s">
+                      <span className="mask">{fundedPct}%</span> funded today
+                    </span>
                   </div>
                   {yearsToRet > 0 ? (
                     <div className="pl-sum-stat">
@@ -1781,8 +1783,10 @@ export function OutlookTab(props: OutlookTabProps) {
                           ''
                         ) : (
                           <>
-                            range {fCoarse(result!.nestEggBand.p10)}–
-                            {fCoarse(result!.nestEggBand.p90)}
+                            range{' '}
+                            <span className="mask">
+                              {fCoarse(result!.nestEggBand.p10)}–{fCoarse(result!.nestEggBand.p90)}
+                            </span>
                           </>
                         )}
                       </span>
@@ -1806,7 +1810,8 @@ export function OutlookTab(props: OutlookTabProps) {
                     <>Running the simulation…</>
                   ) : success >= 0.85 ? (
                     <>
-                      You're in good shape — money lasts in <b>{successPct}%</b> of futures
+                      You're in good shape — money lasts in <b className="mask">{successPct}%</b> of
+                      futures
                       {earliestAge != null && stopVsTarget != null && stopVsTarget > 0 ? (
                         <>
                           , and you could stop as early as <b>~{earliestAge}</b>.
@@ -2484,7 +2489,7 @@ export function OutlookTab(props: OutlookTabProps) {
                             ) : !loadedFrom && !isBase ? (
                               <span className="pl-scenrow-tag edited">unsaved</span>
                             ) : (
-                              <span className="pl-scenrow-odds">
+                              <span className="pl-scenrow-odds mask">
                                 {planResult != null ? `${planPct}%` : '—'}
                               </span>
                             )}
@@ -2531,9 +2536,11 @@ export function OutlookTab(props: OutlookTabProps) {
                                         : `Chance your money lasts with this scenario's settings${s.atNumber ? '' : `, retiring at ${s.retireAge}`}`
                                     }
                                   >
-                                    {(liveOdds[s.id] ?? s.odds) != null
-                                      ? `${liveOdds[s.id] ?? s.odds}%`
-                                      : '—'}
+                                    <span className="mask">
+                                      {(liveOdds[s.id] ?? s.odds) != null
+                                        ? `${liveOdds[s.id] ?? s.odds}%`
+                                        : '—'}
+                                    </span>
                                     {!s.atNumber && s.retireAge !== BASE.retireAge && (
                                       <span className="pl-scenrow-age"> at {s.retireAge}</span>
                                     )}
@@ -2800,7 +2807,7 @@ export function OutlookTab(props: OutlookTabProps) {
                                     <span className="pl-event-row-lbl">{ev.label}</span>
                                     <span
                                       className={
-                                        'pl-event-row-amt' + (ev.amount > 0 ? ' windfall' : '')
+                                        'pl-event-row-amt mask' + (ev.amount > 0 ? ' windfall' : '')
                                       }
                                     >
                                       {ev.amount < 0 ? '−' : '+'}
@@ -2909,7 +2916,7 @@ export function OutlookTab(props: OutlookTabProps) {
                                   </div>
                                   <div
                                     className={
-                                      'pl-compare-pct ' + (successPct >= 80 ? 'pos' : 'neg')
+                                      'pl-compare-pct mask ' + (successPct >= 80 ? 'pos' : 'neg')
                                     }
                                   >
                                     {successPct}%
@@ -2932,7 +2939,11 @@ export function OutlookTab(props: OutlookTabProps) {
                                       • {planB.name}
                                     </span>
                                   </div>
-                                  <div className={'pl-compare-pct ' + (bPct >= 80 ? 'pos' : 'neg')}>
+                                  <div
+                                    className={
+                                      'pl-compare-pct mask ' + (bPct >= 80 ? 'pos' : 'neg')
+                                    }
+                                  >
                                     {bPct}%
                                   </div>
                                   <div
@@ -3550,7 +3561,7 @@ export function OutlookTab(props: OutlookTabProps) {
                             : 'var(--bad)',
                     }}
                   >
-                    {successPct}% odds
+                    <span className="mask">{successPct}%</span> odds
                   </b>
                 </div>
               </div>

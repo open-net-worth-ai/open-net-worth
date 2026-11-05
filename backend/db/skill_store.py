@@ -1239,7 +1239,19 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
     ),
     # 2026-11-05: before one money test for every email, and connecting each item to the books.
     "email-finance-digest": frozenset(
-        {"39aa239fc5d8f0dd57029bb9d26ae0fca06af1cf1134d11327906bdf43a92194"}
+        {
+            "39aa239fc5d8f0dd57029bb9d26ae0fca06af1cf1134d11327906bdf43a92194",
+            # 2026-11-05: before the ranked order, the greeting and logging second.
+            "1a1c78a12a7b1113d15502ec44b4a16e48592c9c0e08aae23f3af63256f888bc",
+            # 2026-11-05: before dropping the warning about links from the message.
+            "5eac0567dc62c2f8a83f9c761fdfba7b9c156365a7e8064290d2cc4d408e39e5",
+            # 2026-11-05: before the message said what period it went through.
+            "795001fc51a930e11c7027e7408765a68e51aebf95891ff75e6c2fd1fa486b2f",
+            # 2026-11-05: before an example named one provider instead of "the broker".
+            "33f8841bed9c1b5bbdfc98881645fdcf24551340e81b3df5a46ca06d979e48de",
+            # 2026-11-05: before dropping the scripted "skip this if it was you" line.
+            "8c1ebb1af245d07ad6697f02135aead68ab65d749300f222a8cc351ddf9d245c",
+        }
     ),
 }
 

@@ -307,10 +307,9 @@ class McpClientStore:
         """Cache the result of a connect/``tools/list`` (the /test path).
 
         ``server_info`` is the provenance the ``initialize`` handshake reported (name,
-        version, publisher, links, instructions). Written on EVERY call including a failure (where the
-        caller passes ``None``), for the same reason ``discovered_tools`` is cleared on a
-        failure: the cache describes the LAST connect, and a stale publisher from a connect
-        that no longer succeeds would be a claim about a server we can no longer reach.
+        version, publisher, links, instructions). A failed read does not come here — it goes to
+        ``record_read_failure``, which keeps all of this. An empty list here means the server
+        answered with none, or the endpoint changed and the old answer no longer applies.
 
         ``verification`` is deliberately NOT touched here — a server must not be able to
         upgrade its own trust badge by what it answers in a handshake. Only the curated
@@ -346,6 +345,19 @@ class McpClientStore:
                 conn=conn,
             )
             return self._read(server_id, conn)
+
+    def record_read_failure(self, server_id: str, status: str, error: str) -> None:
+        """A read failed: say so, and keep the tool list and the server's identity.
+
+        Failing to reach a server says nothing about what it offers. Erasing the list took the
+        permission table off the detail page, and Lucius is kept away from a failed server's
+        tools by its status (``McpClientManager``), not by an empty list."""
+        cid = mcp_connector_id(server_id)
+        with _unit(None) as conn:
+            if self._store.get(cid, conn=conn) is not None:
+                self._store.merge_state(
+                    cid, {"last_status": status, "last_error": error}, conn=conn
+                )
 
     def record_refresh_failure(self, server_id: str) -> int:
         """Count one more failed UNATTENDED re-read in a row and return the run's length.

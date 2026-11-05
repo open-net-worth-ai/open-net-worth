@@ -189,6 +189,7 @@ from backend.api.receipts import router as receipts_router
 from backend.api.recurring import router as recurring_router
 from backend.api.reports import router as reports_router
 from backend.api.returns import router as returns_router
+from backend.api.screen_read_api import router as screen_read_router
 from backend.api.search_config_api import router as search_config_router
 from backend.api.setup import router as setup_router
 from backend.api.shortcuts import router as shortcuts_router
@@ -1137,6 +1138,7 @@ app.include_router(budgets_router)
 app.include_router(fire_router)
 app.include_router(chat_router)
 app.include_router(data_events_router)
+app.include_router(screen_read_router)
 app.include_router(desktop_router)
 app.include_router(chat_suggestions_router)
 app.include_router(capture_router)

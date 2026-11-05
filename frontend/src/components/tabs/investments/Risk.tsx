@@ -155,7 +155,10 @@ export function Risk({ risk, guideline = 20, dropPct = 30, onSaveSettings }: Pro
                   }}
                 />
               </span>
-              <span className="mk-risk-pct" style={{ color: hot ? 'var(--warn)' : 'var(--ink)' }}>
+              <span
+                className="mk-risk-pct money"
+                style={{ color: hot ? 'var(--warn)' : 'var(--ink)' }}
+              >
                 {Math.round(r.pct)}%
               </span>
             </div>

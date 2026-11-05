@@ -122,7 +122,9 @@ can add, edit or re-flag a transaction, but can never clear the flag.
 ## Transfers, investments and the Starting Balance
 
 - A **transfer** always has two sides, one in each account, and both stay in sync — edit one and
-  the other follows. Both accounts must exist (one may be archived).
+  the other follows. Both accounts must exist (one may be archived). In **All accounts** it shows
+  as one row with no **+** or **−**, because the money stays yours; inside one of its accounts it
+  shows **−** where the money left and **+** where it arrived.
 - An **Invest** transaction is a buy (cash out, **−**) or a sell (cash in, **+**). While editing,
   click the sign beside the amount to switch. Its payee is the broker or platform (for example
   IBKR) — set automatically when the trade is recorded against an account with an institution,

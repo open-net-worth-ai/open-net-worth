@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import uuid
 from collections import OrderedDict
 from collections.abc import AsyncIterator
@@ -20,7 +19,7 @@ from typing import Optional
 
 from backend.ai import assistant, conversation, live_sessions, turns
 from backend.ai.tool_text import harness_note
-from backend.connectors.voice.events import DeskEvent
+from backend.connectors.voice.events import DeskEvent, speakable
 from backend.core.chat_context_markers import HARNESS_NOTE_CLOSE, HARNESS_NOTE_OPEN
 
 log = logging.getLogger(__name__)
@@ -35,10 +34,15 @@ VOICE_NOTE = (
     "Don't say beforehand that a change will need approving: you can't know, and when it does "
     "the app stops you, shows the card and tells them. Never promise something for later that "
     "this reply doesn't do. To give them a link, write it as a markdown link with a short "
-    "label: only the label is read aloud, and the link shows in the chat."
+    "label and say in words that it's in the chat: the link shows there, a link inside a "
+    "sentence is read aloud as its label, and one on a line of its own isn't read at all."
 )
 SMALL_TALK_NOTE = (
     "Said on a voice call and answered by the voice assistant directly, without a lookup."
+)
+SCREEN_NOTE = (
+    "A call sends no view of their screen: if they mean what they're looking at, call "
+    "read_screen, and never guess."
 )
 # A request whose words are already in the chat (``record_said``): the message carries this
 # instead of repeating them, so the owner's bubble shows once.
@@ -63,19 +67,12 @@ def _own(turn_id: str) -> None:
         _call_turns.popitem(last=False)
 
 
-_MARKDOWN = re.compile(r"[*_`#>|]+")
-_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
-
-
-def speakable(text: str) -> str:
-    return _MARKDOWN.sub("", _LINK.sub(r"\1", text))
-
-
 def translate(raw: dict) -> Optional[DeskEvent]:
     """One live-stream event → what a voice needs from it (``None`` = nothing)."""
     kind = raw.get("type")
     if kind == "text_delta":
-        return DeskEvent("text", speakable(raw.get("text") or ""))
+        # Raw: a link split across two deltas matches nothing. The call cleans the whole answer.
+        return DeskEvent("text", raw.get("text") or "")
     if kind == "tool_use_start":
         display = raw.get("display") or {}
         return DeskEvent(
@@ -118,7 +115,7 @@ def relay_note(understood: str) -> str:
     reading = understood.replace(HARNESS_NOTE_OPEN, "").replace(HARNESS_NOTE_CLOSE, "")
     reading = " ".join(reading.replace("«", "").replace("»", "").split())[:600]
     return harness_note(
-        f"{VOICE_NOTE} The voice assistant relayed this message and took it to mean: "
+        f"{VOICE_NOTE} {SCREEN_NOTE} The voice assistant relayed this message and took it to mean: "
         f"\u00ab{reading}\u00bb. That reading is the assistant's, not the owner's: act on what the "
         "owner actually said, and if the reading asks for more than their words do, ask them "
         "first."
@@ -136,6 +133,10 @@ async def ask(
         yield DeskEvent("error", "Lucius is still busy with another message in this conversation.")
         yield DeskEvent("end")
         return
+    # A call is a turn with no screen: nothing from an earlier look stays invocable, and the one
+    # way to look is on offer without a find_tools round while someone waits on the line.
+    assistant.upsert_session_meta(session_id, screen_handles=[], screen_commands=[])
+    assistant.load_session_tools(session_id, frozenset({"read_screen"}))
     content = [
         {"type": "text", "text": harness_note(SHOWN_NOTE) if shown else said},
         {"type": "text", "text": relay_note(understood or said)},

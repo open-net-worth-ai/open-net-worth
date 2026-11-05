@@ -33,6 +33,7 @@ vi.mock('livekit-client', () => ({
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',
     ActiveSpeakersChanged: 'activeSpeakersChanged',
+    ConnectionQualityChanged: 'connectionQualityChanged',
     ParticipantConnected: 'participantConnected',
     ParticipantDisconnected: 'participantDisconnected',
     Reconnecting: 'reconnecting',
@@ -184,6 +185,65 @@ describe('the server ending a call', () => {
   })
 })
 
+describe('starting a call', () => {
+  it('starts folded, so pressing Call never takes over a phone screen', async () => {
+    await liveCall()
+    expect(state().view).toBe('bar')
+  })
+})
+
+describe('the connection rating', () => {
+  const you = { identity: 'owner' }
+  const lucius = { identity: 'lucius' }
+
+  it("is the weaker of the two connections, yours and Lucius's", async () => {
+    const room = await liveCall()
+    expect(state().quality).toBeNull()
+    room.emit('connectionQualityChanged', 'excellent', you)
+    expect(state().quality).toBe('excellent')
+    room.emit('connectionQualityChanged', 'poor', lucius)
+    expect(state().quality).toBe('poor')
+    room.emit('connectionQualityChanged', 'good', lucius)
+    expect(state().quality).toBe('good')
+  })
+
+  it('drops a side LiveKit can no longer rate, instead of keeping its old rating', async () => {
+    const room = await liveCall()
+    room.emit('connectionQualityChanged', 'excellent', you)
+    room.emit('connectionQualityChanged', 'poor', lucius)
+    room.emit('connectionQualityChanged', 'unknown', lucius)
+    expect(state().quality).toBe('excellent')
+  })
+
+  it('follows the device going offline and back, without waiting for LiveKit', async () => {
+    await liveCall()
+    expect(state().offline).toBe(false)
+    window.dispatchEvent(new Event('offline'))
+    expect(state().offline).toBe(true)
+    window.dispatchEvent(new Event('online'))
+    expect(state().offline).toBe(false)
+  })
+
+  it('stops following the network when the call ends', async () => {
+    await liveCall()
+    await hangUp()
+    window.dispatchEvent(new Event('offline'))
+    expect(state().offline).toBe(false)
+  })
+
+  it("doesn't carry over into the next call", async () => {
+    const room = await liveCall()
+    room.emit('connectionQualityChanged', 'poor', you)
+    await hangUp()
+    expect(state().quality).toBeNull()
+    vi.advanceTimersByTime(4000)
+    resetVoiceCallForTests()
+    const next = await liveCall()
+    next.emit('connectionQualityChanged', 'excellent', lucius)
+    expect(state().quality).toBe('excellent')
+  })
+})
+
 describe("Lucius's side of the call dropping", () => {
   const health = (answer: () => Promise<unknown>) =>
     vi.mocked(authFetch).mockImplementation(async (url) => {
@@ -208,6 +268,21 @@ describe("Lucius's side of the call dropping", () => {
             : { url: 'wss://acme.example', token: 't', session_id: 's1' },
       } as Response
     })
+  })
+
+  it('follows whether Lucius is working, from the same answer', async () => {
+    await liveCall()
+    const reply = (working: boolean) => async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ trouble: false, working }),
+    })
+    health(reply(true))
+    await askAgain()
+    expect(state().luciusWorking).toBe(true)
+    health(reply(false))
+    await askAgain()
+    expect(state().luciusWorking).toBe(false)
   })
 
   it('takes one lost reply for nothing, and two in a row for a dropped line', async () => {

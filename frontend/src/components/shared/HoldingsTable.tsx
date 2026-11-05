@@ -333,7 +333,7 @@ export function HoldingsTable({
             )}
           </span>
         </td>
-        <td>{r.account_name || r.institution || r.category}</td>
+        <td className="not-money">{r.account_name || r.institution || r.category}</td>
         {bondColumns ? (
           <>
             <td>
@@ -427,7 +427,7 @@ export function HoldingsTable({
             </>
           ))}
         {showActions && (
-          <td className="hold-actions-col">
+          <td className="hold-actions-col not-money">
             {r.position_id && onRecordSale && (
               <button
                 className="hold-sell-btn"
@@ -467,7 +467,7 @@ export function HoldingsTable({
           </td>
         )}
         {askable && (
-          <td className="hold-ask-col">
+          <td className="hold-ask-col not-money">
             {r.position_id && (
               <LuciusAskButton
                 type="holding"

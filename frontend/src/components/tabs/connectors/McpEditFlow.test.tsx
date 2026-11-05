@@ -361,7 +361,7 @@ describe('editing an OAuth server', () => {
         config: {
           ...OAUTH_SERVER.config,
           last_status: 'auth_error',
-          last_error: 'Sign-in expired — reconnect Mercury in Connectors.',
+          last_error: 'Connection has expired. You can reconnect to re-authenticate.',
           oauth: {
             ...(OAUTH_SERVER.config.oauth as object),
             needs_reauth: true,
@@ -496,7 +496,7 @@ describe('Reconnect', () => {
     config: {
       ...OAUTH_SERVER.config,
       last_status: 'auth_error',
-      last_error: 'Sign-in expired — reconnect Mercury in Connectors.',
+      last_error: 'Connection has expired. You can reconnect to re-authenticate.',
       oauth: {
         ...(OAUTH_SERVER.config.oauth as object),
         needs_reauth: true,
@@ -505,9 +505,8 @@ describe('Reconnect', () => {
   }
 
   it('a plain MCP server still reconnects by re-testing — unchanged', async () => {
-    mockApi({ 'POST /api/mcp-clients/firecrawl/test': { ok: true, json: async () => ({}) } }, [
-      ERRORING_FIRECRAWL,
-    ])
+    const answersOk = { ok: true, json: async () => ({ last_status: 'ok' }) }
+    mockApi({ 'POST /api/mcp-clients/firecrawl/test': answersOk }, [ERRORING_FIRECRAWL])
     render(<ConnectorsTab />)
     fireEvent.click(await screen.findByRole('button', { name: 'Reconnect' }))
 

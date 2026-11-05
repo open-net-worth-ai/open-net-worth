@@ -318,9 +318,10 @@ def _stored(chat_id: int) -> str:
     )
 
 
-def test_approvals_is_in_the_bot_menu_and_the_help():
-    assert "approvals" in [name for name, _ in handlers.BOT_COMMANDS]
-    assert "/approvals" in handlers._COMMAND_HELP
+def test_the_settings_people_change_most_lead_the_menu_and_the_help():
+    assert [name for name, _ in handlers.BOT_COMMANDS[:3]] == ["model", "effort", "approvals"]
+    help_lines = handlers._COMMAND_HELP.splitlines()[1:4]
+    assert [line.split()[0] for line in help_lines] == ["/model", "/effort", "/approvals"]
 
 
 @v2

@@ -21,7 +21,7 @@ no need to be formal.
   looking at (<kbd>Ctrl</kbd> <kbd>/</kbd> shows or hides it — see [Keyboard
   shortcuts](../reference/keyboard-shortcuts.md)).
 - **On your phone** — through [Telegram](../connectors/telegram.md), once it's set up.
-- **Out loud** — press the phone button in the chat for a [voice call](../connectors/voice-calls.md)
+- **Out loud** — press the Call button in the chat for a [voice call](../connectors/voice-calls.md)
   (experimental, off by default).
 
 Lucius needs an AI model first. If he asks to be set up, see [Connecting an AI
@@ -121,7 +121,8 @@ Want everything? Say so: *"give me a full breakdown of…"*.
 ## He can see what you're looking at
 
 With **Screen awareness** on (the default), what's on your screen goes along with your message —
-*"why did this drop?"* while looking at a chart is enough. Password and key fields are never
+*"why did this drop?"* while looking at a chart is enough. With it off, nothing goes along
+automatically, but he can still look if you ask about your screen. Password and key fields are never
 included. See [Mentioning things in chat](mentions.md#screen-awareness--lucius-sees-what-youre-looking-at).
 
 ## What you see while he works

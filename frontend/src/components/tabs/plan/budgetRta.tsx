@@ -7,6 +7,7 @@
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import * as PD from './planData'
+import { useMaskText } from '../../../utils/amountMask'
 import { Button } from '../../ui'
 import { X } from './icons'
 import { buildRtaLines, buildRtaFlowLines, partitionRtaFlowLines, type RtaLine } from './rtaLines'
@@ -145,6 +146,7 @@ export function RtaHero({
   underfundedCount: number
   onFundUnderfunded: () => void
 }) {
+  const maskText = useMaskText()
   const zero = Math.abs(rta) <= 0.005,
     neg = rta < -0.005
   const heroCls = 'pl-sum-hero mask' + (zero ? '' : neg ? ' neg' : ' pos')
@@ -269,7 +271,7 @@ export function RtaHero({
         className={heroCls + ' as-btn'}
         aria-expanded={open}
         aria-controls="pl-rtapop-panel"
-        aria-label={`Ready to Assign, ${fBaseCents(rta)} — click for breakdown`}
+        aria-label={maskText(`Ready to Assign, ${fBaseCents(rta)} — click for breakdown`)}
         onClick={(e) => {
           e.stopPropagation()
           setOpen((o) => !o)

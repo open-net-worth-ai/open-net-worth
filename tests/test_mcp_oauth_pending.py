@@ -110,3 +110,16 @@ def test_outstanding_count_is_capped():
     assert len(oauth_pending._pending) <= oauth_pending.MAX_OUTSTANDING
     # the newest stays live; the very first minted was evicted first (oldest expires_at)
     assert oauth_pending.pop(states[-1], now=now) is not None
+
+
+def test_a_popped_flow_reads_pending_until_it_finishes():
+    """A poll landing during the token exchange used to read "expired or unknown" and end a
+    sign-in that was about to succeed, leaving the screen on the old error."""
+    state = _stage()
+    assert oauth_pending.pop(state) is not None
+    assert oauth_pending.get_status(state) == {"status": "pending", "error": None}
+
+
+def test_popping_an_unknown_flow_records_nothing():
+    assert oauth_pending.pop("never-issued") is None
+    assert oauth_pending.get_status("never-issued")["status"] == "error"

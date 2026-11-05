@@ -56,7 +56,7 @@ export function ArchivedAccountsModal({
             <span>{TYPE_LABELS[selected.type as keyof typeof TYPE_LABELS] ?? selected.type}</span>
             <span>•</span>
             <span>{selected.currency}</span>
-            <strong>{fCur(selected.balance, selected.currency)}</strong>
+            <strong className="money">{fCur(selected.balance, selected.currency)}</strong>
           </div>
           <p className="acct-archived-note">
             This account is closed. Its history is read-only until you restore it.
@@ -88,7 +88,7 @@ export function ArchivedAccountsModal({
                     <span className="acct-archived-txn-description">
                       {txn.description || txn.memo || 'Transaction'}
                     </span>
-                    <strong className={amount !== null && amount < 0 ? 'neg' : 'pos'}>
+                    <strong className={'money ' + (amount !== null && amount < 0 ? 'neg' : 'pos')}>
                       {amount === null ? '—' : fCur(amount, selected.currency)}
                     </strong>
                   </div>
@@ -121,7 +121,7 @@ export function ArchivedAccountsModal({
                   {account.currency}
                 </small>
               </span>
-              <strong>{fCur(account.balance, account.currency)}</strong>
+              <strong className="money">{fCur(account.balance, account.currency)}</strong>
             </button>
           ))}
         </div>

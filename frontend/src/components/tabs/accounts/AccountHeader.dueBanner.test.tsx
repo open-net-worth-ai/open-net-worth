@@ -350,9 +350,11 @@ describe('AccountsTab wires the fetched statement summary into the due banner (C
       }),
     )
     await renderSelectedCard()
-    await screen.findByText('S$80')
+    const remainder = await screen.findByText('S$80')
+    expect(remainder.tagName).toBe('B')
     expect(screen.getByText(/paid/i)).toBeTruthy()
-    expect(screen.queryByText('S$200')).toBeNull()
+    // The statement total is context ("of S$200"), never the bold figure the banner leads with.
+    expect(screen.getByText('S$200').tagName).not.toBe('B')
   })
 
   it('renders remaining_amount verbatim from the backend rather than re-deriving it (MATH-45)', async () => {

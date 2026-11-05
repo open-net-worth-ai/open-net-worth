@@ -29,8 +29,23 @@ from backend.cli import autostart_windows
 LABEL = "ai.opennetworth.app"
 UNIT_NAME = "open-net-worth.service"
 # Carried into the service verbatim when set in the installing shell — PATH for the CLI
-# providers, the rest so `PORT=9000 onw autostart install` sticks across reboots.
-PASSTHROUGH_ENV = ("PATH", "HOST", "PORT", "ONW_ROOT", "DATA_DIR", "CACHE_DIR", "LOGS_DIR")
+# providers, the rest so `PORT=9000 onw autostart install` sticks across reboots. The last ones
+# decide where uv keeps this install: without them the service looks elsewhere and can't upgrade.
+PASSTHROUGH_ENV = (
+    "PATH",
+    "HOST",
+    "PORT",
+    "ONW_ROOT",
+    "DATA_DIR",
+    "CACHE_DIR",
+    "LOGS_DIR",
+    "UV_TOOL_DIR",
+    "UV_TOOL_BIN_DIR",
+    "UV_CACHE_DIR",
+    "UV_PYTHON_INSTALL_DIR",
+    "XDG_DATA_HOME",
+)
+AUTO_UPGRADE_FLAG = "--auto-upgrade"
 
 Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 
@@ -44,11 +59,15 @@ class ServiceSpec:
 
 
 def service_spec(
-    home: Path, environ: Mapping[str, str] = os.environ, python: str = sys.executable
+    home: Path,
+    environ: Mapping[str, str] = os.environ,
+    python: str = sys.executable,
+    auto_upgrade: bool = False,
 ) -> ServiceSpec:
     root = home / ".open-net-worth"
+    start_args = (AUTO_UPGRADE_FLAG, "--service") if auto_upgrade else ()
     return ServiceSpec(
-        command=(python, "-m", "backend.cli", "start"),
+        command=(python, "-m", "backend.cli", "start", *start_args),
         working_dir=root,
         log_dir=root / "logs",
         env={key: environ[key] for key in PASSTHROUGH_ENV if environ.get(key)},
@@ -133,8 +152,8 @@ def _unsupported(system: str) -> int:
     return 1
 
 
-def install(system: str, home: Path, runner: Runner) -> int:
-    spec = service_spec(home)
+def install(system: str, home: Path, runner: Runner, auto_upgrade: bool = False) -> int:
+    spec = service_spec(home, auto_upgrade=auto_upgrade)
     spec.log_dir.mkdir(parents=True, exist_ok=True)
     if system == "Darwin":
         return _install_launchd(spec, home, runner)
@@ -196,6 +215,22 @@ def stop(system: str, home: Path, runner: Runner) -> int:
     return 0
 
 
+def _saved_service(system: str, home: Path) -> Path | None:
+    paths = {
+        "Darwin": plist_path(home),
+        "Linux": unit_path(home),
+        "Windows": autostart_windows.config_path(home / ".open-net-worth"),
+    }
+    return paths.get(system)
+
+
+def _print_auto_upgrade(system: str, home: Path) -> None:
+    saved = _saved_service(system, home)
+    if saved is not None and saved.is_file():
+        enabled = AUTO_UPGRADE_FLAG in saved.read_text(encoding="utf-8")
+        print(f"auto-upgrade {'on' if enabled else 'off'}")
+
+
 def status(system: str, home: Path, runner: Runner) -> int:
     if system == "Darwin":
         installed = plist_path(home).exists()
@@ -204,7 +239,9 @@ def status(system: str, home: Path, runner: Runner) -> int:
         installed = unit_path(home).exists()
         probe = ["systemctl", "--user", "is-active", UNIT_NAME]
     elif system == "Windows":
-        return autostart_windows.status(runner)
+        code = autostart_windows.status(runner)
+        _print_auto_upgrade(system, home)
+        return code
     else:
         return _unsupported(system)
     if not installed:
@@ -212,6 +249,7 @@ def status(system: str, home: Path, runner: Runner) -> int:
         return 1
     running = runner(probe).returncode == 0
     print("installed and running" if running else "installed but not running")
+    _print_auto_upgrade(system, home)
     return 0 if running else 1
 
 
@@ -220,6 +258,11 @@ def _run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
         return subprocess.run(cmd, capture_output=True, text=True, check=False)
     except FileNotFoundError as exc:
         return subprocess.CompletedProcess(cmd, 127, "", str(exc))
+
+
+def install_service(auto_upgrade: bool = False) -> int:
+    """`onw start --autostart`: the service then matches the flags last typed."""
+    return install(platform.system(), Path.home(), _run, auto_upgrade=auto_upgrade)
 
 
 def run_autostart(action: str) -> int:

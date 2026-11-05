@@ -120,7 +120,7 @@ export function FeedCards({
               {off && (
                 <span className="mk-sec-sub">
                   target {g.tgt}%{' '}
-                  <span className="mk-sec-drift">
+                  <span className="mk-sec-drift money">
                     {(drift! > 0 ? '+' : '−') + Math.abs(drift!)}
                   </span>
                 </span>
@@ -175,13 +175,13 @@ export function FeedCards({
                         <div className="mk-v mask">{fBase(r.value)}</div>
                       </div>
                       <div className="mk-col">
-                        <div className="mk-v">{r.wt.toFixed(1)}%</div>
+                        <div className="mk-v mask">{r.wt.toFixed(1)}%</div>
                       </div>
                       <div className="mk-col">
                         <div className="mk-v mask" style={{ color: tone(r.pl) }}>
                           {fSignedBase(r.pl)}
                         </div>
-                        <div className="mk-plpct" style={{ color: tone(r.pl) }}>
+                        <div className="mk-plpct mask" style={{ color: tone(r.pl) }}>
                           {r.plpct == null ? '—' : fPct(r.plpct)}
                         </div>
                       </div>
@@ -196,9 +196,7 @@ export function FeedCards({
                       aria-label={`Latest price ${fUnitPrice(r.price, r.ccy, priceDigits(r.cls))}, today ${fPct(r.day)}`}
                     >
                       <div className="mk-market">
-                        <span className="money">
-                          {fUnitPrice(r.price, r.ccy, priceDigits(r.cls))}
-                        </span>
+                        <span>{fUnitPrice(r.price, r.ccy, priceDigits(r.cls))}</span>
                       </div>
                       <div className={`mk-day ${dir}`}>{fPct(r.day)}</div>
                     </div>

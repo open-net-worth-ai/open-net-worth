@@ -4,11 +4,12 @@
 editable mode) puts this on the PATH. It sits at the very top of the import stack: it may import
 anything below it (backend.main included); nothing below may import it.
 
-    onw start [--open]                   run the app — API + built frontend, one process
+    onw start [--open] [--autostart] [--auto-upgrade]
+                                         run the app — API + built frontend, one process
     onw autostart install|stop|status    start at login/boot and restart on crash
     onw reset-password                   set a new password when the old one is forgotten
     onw mcp                              stdio MCP bridge for Claude Desktop, Cursor, …
-    onw upgrade                          update a `uv tool` install to the newest release
+    onw upgrade [--check]                update a `uv tool` install to the newest release
     onw version                          print the installed version
 """
 
@@ -36,6 +37,17 @@ def build_parser() -> argparse.ArgumentParser:
     start.add_argument(
         "--open", action="store_true", help="open the app in your browser once it is up"
     )
+    start.add_argument(
+        "--autostart",
+        action="store_true",
+        help="run as a service that starts at login/boot and restarts on crash, not in this terminal",
+    )
+    start.add_argument(
+        "--auto-upgrade",
+        action="store_true",
+        help="install new releases automatically and restart when idle (a `uv tool` install only)",
+    )
+    start.add_argument("--service", action="store_true", help=argparse.SUPPRESS)  # the boot service
 
     auto = sub.add_parser("autostart", help="run at login/boot and restart on crash")
     auto.add_argument("action", choices=("install", "stop", "status"))
@@ -58,7 +70,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--base-url",
         help="this instance's address (default: ONW_BASE_URL, else the running instance's port)",
     )
-    sub.add_parser("upgrade", help="update a `uv tool` install to the newest release")
+    upgrade = sub.add_parser("upgrade", help="update a `uv tool` install to the newest release")
+    upgrade.add_argument(
+        "--check", action="store_true", help="only report whether a newer release is out"
+    )
     sub.add_parser("version", help="print the installed version")
     return parser
 
@@ -87,9 +102,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"open-net-worth {APP_VERSION}")
         return 0
     if args.command == "start":
-        from backend.cli.serve import run_server
+        from backend.cli.serve import start
 
-        return run_server(host=args.host, port=args.port, open_browser=args.open)
+        return start(
+            host=args.host,
+            port=args.port,
+            open_browser=args.open,
+            autostart=args.autostart,
+            auto_upgrade=args.auto_upgrade,
+            service=args.service,
+        )
     if args.command == "autostart-run":
         from backend.cli.autostart_windows import run_service
 
@@ -103,9 +125,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         return run_mcp(base_url=args.base_url)
     if args.command == "upgrade":
-        from backend.cli.serve import upgrade
+        from backend.cli.self_update import check, upgrade
 
-        return upgrade()
+        return check() if args.check else upgrade()
     from backend.cli.autostart import run_autostart
 
     return run_autostart(args.action)

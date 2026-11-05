@@ -37,7 +37,8 @@ from livekit.agents import (
 from livekit.plugins import silero
 
 from backend.connectors.voice.connection import CallConnection
-from backend.connectors.voice.timing import TurnTiming
+from backend.connectors.voice.events import speakable
+from backend.connectors.voice.timing import AnswerTiming, TurnTiming
 from backend.connectors.voice.tokens import OWNER_IDENTITY
 
 if TYPE_CHECKING:
@@ -54,15 +55,19 @@ you look something up, YOU are looking it up ("Let me check.", "One sec.").
 
 You don't have {owner}'s numbers in your head: balances, accounts, spending, budget, goals,
 investments, prices and plans all need a lookup. So:
-- For ANY question or request about their finances, or any change, call `work_on_request`
-  with the request written out in full (resolve "that", "those two" from the conversation so
-  it stands on its own), and with it `ack`: the few words you say right away, starting with
+- For ANY question or request about their finances or what's on their screen, or any change,
+  call `work_on_request` with the request written out in full (resolve "that", "those two" from
+  the conversation so it stands on its own), and with it `ack`: the few words you say right away, starting with
   something like "okay" or "sure" and naming just the subject ("Okay, let me check your grocery
   spending."), worded differently each time, with no number, price or result. Say NOTHING else,
   before or after. NEVER answer it from memory, never guess, never state a number, never invent a
   fact — not even a vague one ("your balance looks a bit high"). That includes things said
   earlier on this call: they may be out of date, and a new question always goes to
   `work_on_request` — only "say that again" gets an earlier answer, repeated word for word.
+- If {owner} corrects the request you just sent ("no, I meant ACME", "not that one, the
+  other card"), call `work_on_request` with the corrected request written out in full and
+  `replaces_last` true, and an `ack` that shows you heard it ("Oh, ACME, got it."). A different,
+  additional question is not a correction: leave `replaces_last` false.
 - The answer is spoken on the call by itself when it is ready, in your voice. Do not repeat or
   summarise it unless asked; if asked to repeat it, repeat it exactly. Never send a request
   that has already been answered.
@@ -97,9 +102,22 @@ LINE_INSTRUCTION = (
     "nothing else: {intent}"
 )
 GREETING = (
-    'Pick up the call: greet {owner}, addressing them exactly as "{owner}", say it\'s Lucius, '
-    "and ask what you can do for them. One or two short sentences, in the call's language."
+    'Pick up the call: open with "{hello}" (in the call\'s language), addressing them exactly as '
+    '"{owner}", say it\'s Lucius, and {opening}. One or two short, casual sentences, in the '
+    "call's language. State no fact "
+    "about their money or their day: you don't know any."
 )
+# Picked for each call: the one instruction always came out as "what can I do for you?" (owner,
+# 2026-11-05).
+GREETING_OPENINGS = (
+    "ask what's on their mind",
+    "ask what they'd like to look at",
+    "say you're listening and let them start",
+    "ask what brought them to call",
+    "ask what you should look into",
+    "ask whether there's something they want checked",
+)
+_opening_bag: list[str] = []
 CHECK_IN = "ask whether they're still there"
 HANG_UP = "say you'll hang up for now and they can call back any time"
 FAILED = "say you hit a problem with that request and ask if they want you to try again"
@@ -176,6 +194,7 @@ ACK_REFUSED = re.compile(
     re.IGNORECASE,
 )
 QUEUED = "say you'll get to that right after the one you're on, in a few words"
+CORRECTED = "say okay, you've got the correction, in a few words"
 # A call with a time limit (the public demo's, ``services.demo_calls``): a heads-up before it,
 # then a goodbye and the hang-up at it.
 TIME_NEARLY_UP = "say we're nearly out of time on this call, so there's time for one quick thing"
@@ -233,7 +252,12 @@ class FrontAgent(Agent):
 
     @function_tool
     async def work_on_request(
-        self, context: RunContext, request: str, kind: str = "question", ack: str = ""
+        self,
+        context: RunContext,
+        request: str,
+        kind: str = "question",
+        ack: str = "",
+        replaces_last: bool = False,
     ) -> str | None:
         """Look up a finance question or carry out a request, with the owner's real data and
         tools. Returns at once; your ``ack`` is spoken, then the answer when it is ready — say
@@ -246,8 +270,10 @@ class FrontAgent(Agent):
                 "the second one", "go ahead").
             ack: What you say right away, a few words naming just the subject: "Okay, let me
                 check your grocery spending." No number, price or result.
+            replaces_last: True only when the owner is correcting the request you just sent,
+                so its answer is no longer wanted.
         """
-        return self._lucius.submit(request, kind, ack)
+        return self._lucius.submit(request, kind, ack, replaces_last)
 
     @function_tool
     async def check_progress(self, context: RunContext) -> str:
@@ -294,7 +320,7 @@ class LuciusDesk:
         self, session: AgentSession, ctx: JobContext, runtime: Runtime, session_id: str
     ) -> None:
         self._session, self._ctx, self._rt, self._session_id = session, ctx, runtime, session_id
-        self._queue: asyncio.Queue[tuple[str, str, bool]] = asyncio.Queue()
+        self._queue: asyncio.Queue[tuple[str, str, bool, str]] = asyncio.Queue()
         # The owner's final transcripts in their CURRENT turn: a turn starts fresh once anyone
         # has spoken since, so small talk the front voice already answered never rides along.
         self._heard: list[str] = []
@@ -313,6 +339,8 @@ class LuciusDesk:
         self._shown = False
         self._answers: set[str] = set()
         self._current: str | None = None
+        self._current_kind = "question"
+        self._superseded = False  # the owner corrected the request under way: no reading it out
         self._checked_in = False  # asked "still there?" since the owner last spoke
         self._approving = False  # a change is waiting on the owner's approval on screen
         self._following = False  # reading out a turn the call didn't start (``_follow_others``)
@@ -536,7 +564,28 @@ class LuciusDesk:
             self._rt.app.call("record_said", session_id=self._session_id, said=said)
         )
 
-    def submit(self, request: str, kind: str = "question", ack: str = "") -> str | None:
+    def _replace_last(self, said: str) -> tuple[str, bool]:
+        """The owner corrected their last request: the answer to what they'd taken back was read
+        out first (owner, 2026-11-05). One still waiting hasn't started, so it goes, and
+        its words ride along. One under way can't be taken back and runs on, so a question's answer
+        is just not read out. A task's always is: it may have changed something, and the owner has
+        to hear that. Returns the words to send, and whether this is now a clean replacement."""
+        waiting: list[tuple[str, str, bool, str]] = []
+        while not self._queue.empty():
+            waiting.append(self._queue.get_nowait())
+        if waiting:
+            old_said, _request, old_shown, _kind = waiting.pop()
+            for item in waiting:
+                self._queue.put_nowait(item)
+            return (said if old_shown else f"{old_said} {said}"), True
+        if self._current is not None and self._current_kind == "question":
+            self._superseded = True
+            return said, True
+        return said, self._current is None
+
+    def submit(
+        self, request: str, kind: str = "question", ack: str = "", replaces_last: bool = False
+    ) -> str | None:
         """Queue the owner's request. ``None`` once it is queued: the tool then asks for no
         reply, because the reply the front model wrote after this tool once made up a whole
         answer and spoke it before Lucius's (live call, 2026-11-03) — so we say the "one
@@ -560,10 +609,18 @@ class LuciusDesk:
         log.info("voice: front handed Lucius a %s request (%d chars)", kind, len(request))
         self.timing.handed()
         busy = self._current is not None
-        self._queue.put_nowait((said, request, shown))
-        line = "" if busy else _usable_ack(ack)
+        replaced = False
+        if replaces_last:
+            said, replaced = self._replace_last(said)
+            log.info("voice: the owner corrected the last request (replaced: %s)", replaced)
+        self._queue.put_nowait((said, request, shown, kind))
+        if replaced and busy:
+            self._current = request  # what a "still on it" line should now name
+        line = "" if busy and not replaced else _usable_ack(ack)
         if line:
             self._holding_said(line)
+        elif replaced and busy:
+            self._holding(CORRECTED + ACK_RULE + _about(request))
         else:
             self._holding(QUEUED if busy else self._ack(kind, request))
         return None
@@ -596,14 +653,16 @@ class LuciusDesk:
 
     async def _run(self) -> None:
         while True:
-            said, request, shown = await self._queue.get()
+            said, request, shown, kind = await self._queue.get()
             self._current, self._started, self._doing = request, time.monotonic(), ""
+            self._current_kind, self._superseded = kind, False
             try:
                 await self._answer(said, request, shown)
             except Exception:  # noqa: BLE001 — a failed request must not end the call
                 log.exception("voice: Lucius request failed")
                 self._current = None  # no longer working: this line belongs in the chat
-                self._line(FAILED)
+                if not self._superseded:
+                    self._line(FAILED)
             finally:
                 self._current, self._doing = None, ""
 
@@ -612,6 +671,10 @@ class LuciusDesk:
             "ask", session_id=self._session_id, said=said, understood=understood, shown=shown
         )
         text, approval = await self._collect(events)
+        if self._superseded:
+            # A card it left still waits, so that part is still said. The chat has the answer.
+            log.info("voice: an answer the owner had corrected wasn't read out")
+            text = ""
         self._speak(text, approval)
         if approval:
             self._approving = True  # its continuation is read out by ``_follow_others``
@@ -619,8 +682,9 @@ class LuciusDesk:
     def _speak(self, text: str, approval: bool) -> None:
         """Lucius's answer; and when he stopped at an approval card, word that it waits on screen
         — said by us unless his answer already said so."""
-        if text.strip():
-            self._answer_now(text.strip())
+        text = speakable(text)
+        if text:
+            self._answer_now(text)
         if approval and not _mentions_approval(text):
             self._line(APPROVAL_WAITING)
 
@@ -636,15 +700,18 @@ class LuciusDesk:
         text, answer, approval, slow_told = "", "", False, False
         running: dict[str, tuple[str, float]] = {}
         heard_at, wait = time.monotonic(), self.QUIET_S
+        timing = AnswerTiming()
         async for event in _with_ticks(events, 1.0):
             now = time.monotonic()
             if event is not None:
                 if event.kind == "text":
                     text += event.text
                     answer += event.text
+                    timing.text(event.text)
                 elif event.kind == "tool":
                     running[event.ref] = (event.noun or "that", now)
                     answer = ""
+                    timing.lookup()
                 elif event.kind == "tool_done":
                     running.pop(event.ref, None)
                 elif event.kind == "approval":
@@ -680,7 +747,9 @@ class LuciusDesk:
         # What he wrote before a later lookup is his working, not his answer: "Note: I used an
         # incorrect format" was read out, and "understood" said twice (owner, 2026-11-04). With
         # nothing after it, an earlier reply is still his reply, unless a card is what he left.
-        return (answer if answer.strip() or approval else text), approval
+        reply = answer if answer.strip() or approval else text
+        timing.done(len(reply))
+        return reply, approval
 
     def _still_on_it(self) -> str:
         last = getattr(self, "_last_reminder", None)
@@ -921,8 +990,30 @@ async def entrypoint(ctx: JobContext) -> None:
         log.warning("voice: no caller came; closing the room")
         await ctx.delete_room()
         return
+    try:
+        part = await runtime.app.call("part_of_day")
+    except Exception:  # noqa: BLE001 — only the greeting's first word depends on it
+        part = ""
     await asyncio.sleep(1.5)  # one ring before "picking up"; an instant greeting cut the ring off
-    session.generate_reply(instructions=GREETING.format(owner=owner or "them"), tool_choice="none")
+    session.generate_reply(instructions=_greeting(owner, part), tool_choice="none")
+
+
+def _greeting(owner: str, part_of_day: str) -> str:
+    """Good morning or plain hi (owner, 2026-11-05); late at night, only hi."""
+    hello = random.choice((f"good {part_of_day}", "hi")) if part_of_day else "hi"
+    return GREETING.format(owner=owner or "them", hello=hello, opening=_next_opening())
+
+
+def _next_opening() -> str:
+    """Each once before any twice: a plain random pick asked the same thing three calls running
+    (owner, 2026-11-05). Calls share this process (``JobExecutorType.THREAD``), so the bag lasts."""
+    if not _opening_bag:
+        last = getattr(_next_opening, "last", None)
+        _opening_bag.extend(random.sample(GREETING_OPENINGS, len(GREETING_OPENINGS)))
+        if _opening_bag[-1] == last:  # popped from the end: never the same across two bags
+            _opening_bag[0], _opening_bag[-1] = _opening_bag[-1], _opening_bag[0]
+    _next_opening.last = _opening_bag.pop()
+    return _next_opening.last
 
 
 def _out_of_credit(error) -> bool:

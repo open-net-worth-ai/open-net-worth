@@ -36,12 +36,23 @@ export function useConnectors(): ConnectorsRead {
   return { ...query, connectors, entries }
 }
 
-/** How many installed connectors the Attention filter lists — the nav's red dot. Polled, because
- *  a background re-read can fail with no write to announce it. */
-export function useConnectorAttentionCount(): number {
+/** The installed connectors the Attention filter lists. Polled, because a background re-read can
+ *  fail with no write to announce it. */
+function useConnectorsNeedingAttention() {
   const { data } = useQueryCache<Connector[]>(CONNECTORS_KEY, fetchConnectors, {
     staleTime: 30_000,
     refetchInterval: 60_000,
   })
-  return useMemo(() => toEntries(data ?? []).filter((e) => e.attention).length, [data])
+  return useMemo(() => toEntries(data ?? []).filter((e) => e.attention), [data])
+}
+
+/** How many connectors need attention — the nav's dot. */
+export function useConnectorAttentionCount(): number {
+  return useConnectorsNeedingAttention().length
+}
+
+/** The nav dot's colour: amber only while every problem is one the user can fix by signing in. */
+export function useConnectorAttentionIsSignInOnly(): boolean {
+  const entries = useConnectorsNeedingAttention()
+  return entries.length > 0 && entries.every((e) => e.tone === 'warn')
 }

@@ -60,8 +60,7 @@ import { isBackgroundConversation, type ConversationMeta } from '../../hooks/use
 import { Brain, ChevronRight, FolderLock, Menu, SquarePen } from '../../ui/icons'
 import { ModelPicker, Skeleton } from '../ui'
 import { ConversationApprovalPicker } from './ConversationApprovalPicker'
-import { VoiceCallButton } from './lucius/VoiceCallButton'
-import { useVoiceCall } from './lucius/voiceCall'
+import { useCallInSendSlot, VoiceCallButton } from './lucius/VoiceCallButton'
 import { VoiceCallNotice } from './lucius/VoiceCallNotice'
 import { VoiceCallSlot } from './lucius/VoiceCallSlot'
 import { computeHomeEmpty } from './homeEmpty'
@@ -498,7 +497,7 @@ export function ChatPanel({
   // In place, over whatever is showing — the cards are hosted at the app level now, not on
   // the Accounts tab, so there is no tab to go to first.
   const { openReview } = useTransactionSurfaces()
-  const callIdle = useVoiceCall().phase === 'idle'
+  const callInSendSlot = useCallInSendSlot()
   const openTransactionReview = useCallback(() => openReview('all'), [openReview])
 
   // Master switch (Settings → Appearance → Chat).
@@ -1175,7 +1174,7 @@ export function ChatPanel({
               </>
             }
             // Mid-call the slot is Send again: what you type goes to Lucius, read aloud.
-            callAction={callIdle ? <VoiceCallButton sessionId={activeId} /> : null}
+            callAction={callInSendSlot ? <VoiceCallButton sessionId={activeId} /> : null}
             ref={composerRef}
             busy={streaming || sending}
             sendBlocked={(streaming || sending) && !multiTurnEnabled}

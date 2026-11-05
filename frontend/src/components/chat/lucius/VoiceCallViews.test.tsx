@@ -5,6 +5,8 @@ import { overrideFlagsForTests } from '../../../hooks/useFlag'
 
 const authFetch = vi.fn(async () => ({ ok: true, json: async () => ({ ready: true, worker: {} }) }))
 vi.mock('../../../api/client', () => ({ authFetch: () => authFetch() }))
+const navigate = vi.fn()
+vi.mock('@tanstack/react-router', () => ({ useNavigate: () => navigate }))
 vi.mock('livekit-client', () => ({
   Room: vi.fn(),
   RoomEvent: {},
@@ -16,6 +18,7 @@ let mobile = false
 vi.mock('../../../hooks/useIsMobile', () => ({ useIsMobile: () => mobile }))
 
 import { VoiceCallButton } from './VoiceCallButton'
+import { VoiceCallFab } from './VoiceCallFab'
 import { VoiceCallPill } from './VoiceCallPill'
 import { VoiceCallSlot } from './VoiceCallSlot'
 import {
@@ -24,7 +27,7 @@ import {
   useVoiceCall,
   type CallState,
 } from './voiceCall'
-import { callStatus, orbState, pillMode } from './voiceCallStatus'
+import { callSignal, callStatus, orbState, pillMode } from './voiceCallStatus'
 
 const LIVE: Partial<CallState> = { phase: 'live', sessionId: 's1', connectedAt: Date.now() }
 
@@ -44,9 +47,11 @@ function call(over: Partial<CallState>): CallState {
     connectedAt: null,
     endedSeconds: null,
     problem: null,
-    setupOpen: false,
     view: 'stage',
     luciusTrouble: false,
+    quality: null,
+    offline: false,
+    luciusWorking: false,
     ...over,
   }
 }
@@ -76,19 +81,59 @@ describe('call status', () => {
     expect(callStatus({ ...live, muted: true }, now, false).line).toBe('')
   })
 
-  it('says whose connection dropped, over everything else on the line', () => {
+  it('says what a bad connection means, over everything else on the line', () => {
     const now = Date.now()
     const live = call({ phase: 'live', connectedAt: now - 134_000, luciusTrouble: true })
     expect(callStatus(live, now, true)).toMatchObject({
-      line: "Lucius's connection dropped. Reconnecting…",
-      dot: 'warn',
+      line: 'Poor connection. Lucius may not hear you.',
+      stripLine: 'Poor connection',
+      short: 'Poor connection',
       time: '2:14',
     })
     expect(orbState(live, true)).toBe('reconnecting')
-    expect(pillMode(live, true)).toBe('reconnecting')
+    expect(pillMode(live, true)).toBe('poor')
     expect(callStatus(call({ phase: 'reconnecting' }), now, false).line).toBe(
       'Your connection dropped. Reconnecting…',
     )
+  })
+})
+
+describe('signal bars', () => {
+  const live = { phase: 'live' as const, connectedAt: Date.now() }
+
+  it.each([
+    ['excellent', 4],
+    ['good', 3],
+    ['poor', 1],
+    ['lost', 0],
+  ] as const)('reads a %s connection as %i bars', (quality, bars) => {
+    expect(callSignal(call({ ...live, quality }))?.bars).toBe(bars)
+  })
+
+  it('shows nothing until LiveKit has rated the call, or outside one', () => {
+    expect(callSignal(call(live))).toBeNull()
+    expect(callSignal(call({ phase: 'ringing', quality: 'excellent' }))).toBeNull()
+    expect(callSignal(call({ phase: 'ended', quality: 'excellent' }))).toBeNull()
+  })
+
+  it('shows no signal the moment the device has no network, whatever LiveKit last said', () => {
+    const now = Date.now()
+    const down = call({ ...live, connectedAt: now - 134_000, quality: 'excellent', offline: true })
+    expect(callSignal(down)?.bars).toBe(0)
+    expect(callStatus(down, now, true)).toMatchObject({
+      line: 'Your connection dropped. Reconnecting…',
+      short: 'Reconnecting…',
+      time: '2:14',
+    })
+    expect(orbState(down, false)).toBe('reconnecting')
+    expect(pillMode(down, true)).toBe('reconnecting')
+    // Yours outranks "Lucius may not hear you": with no network, asking the app fails as well.
+    expect(callStatus({ ...down, luciusTrouble: true }, now, false).line).toContain('Your')
+  })
+
+  it('never shows full bars beside a warning that the connection is bad', () => {
+    expect(callSignal(call({ ...live, quality: 'excellent', luciusTrouble: true }))?.bars).toBe(1)
+    expect(callSignal(call({ phase: 'reconnecting', quality: 'excellent' }))?.bars).toBe(0)
   })
 })
 
@@ -107,6 +152,25 @@ describe('VoiceCallSlot', () => {
     const stage = screen.getByRole('group', { name: 'Voice call' })
     expect(within(stage).getByRole('button', { name: 'End call' })).toBeTruthy()
     expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('leaves the name to the strip heading on a poor connection, and keeps it for a screen reader', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    act(() => setVoiceCallForTests({ ...LIVE, luciusTrouble: true }))
+    const { container } = slot()
+    expect(container.querySelector('.lx-callstage-name')?.textContent).toBe('Lucius')
+    expect(container.querySelector('.lx-callstage-sub')?.textContent).toBe('Poor connection')
+    expect(container.querySelector('.lx-callstage-line')?.textContent).toBe(
+      'Poor connection. Lucius may not hear you.',
+    )
+  })
+
+  it('draws the bars with a name a screen reader can say', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    act(() => setVoiceCallForTests({ ...LIVE, quality: 'poor' }))
+    slot()
+    const bars = screen.getByRole('img', { name: 'Connection quality: poor' })
+    expect(bars.getAttribute('data-bars')).toBe('1')
   })
 
   it('takes the whole screen on a phone, and minimising goes back to the bar', () => {
@@ -180,6 +244,71 @@ describe('VoiceCallSlot', () => {
   })
 })
 
+describe("the phone's round button", () => {
+  const fab = (onLuciusTab = false, onOpenChat = vi.fn()) =>
+    render(<VoiceCallFab onLuciusTab={onLuciusTab} onOpenChat={onOpenChat} />)
+
+  it('is not there with the flag off, or on the Lucius tab, which has the call itself', () => {
+    restore = overrideFlagsForTests({ voice_calls: false })
+    act(() => setVoiceCallForTests({ ...LIVE, view: 'bar' }))
+    const { container, unmount } = fab()
+    expect(container.querySelector('.lx-call-fab')).toBeNull()
+    unmount()
+    restore()
+    restore = overrideFlagsForTests({ voice_calls: true })
+    const onTab = fab(true)
+    expect(onTab.container.querySelector('.lx-call-fab')).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('shows a folded call as a button that opens the full call screen in place', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    act(() => setVoiceCallForTests({ ...LIVE, view: 'bar' }))
+    const onOpenChat = vi.fn()
+    fab(false, onOpenChat)
+    expect(screen.queryByRole('dialog')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open call' }))
+    const stage = screen.getByRole('dialog', { name: 'Voice call with Lucius' })
+    expect(within(stage).getByRole('button', { name: 'End call' })).toBeTruthy()
+    expect(onOpenChat).not.toHaveBeenCalled()
+    fireEvent.click(within(stage).getByRole('button', { name: 'Minimise call' }))
+    expect(screen.queryByRole('dialog')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Open call' })).toBeTruthy()
+  })
+
+  it('shows the call at a glance: the clock, or what is going on instead', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    const now = Date.now()
+    act(() =>
+      setVoiceCallForTests({ ...LIVE, connectedAt: now - 134_000, view: 'bar', quality: 'good' }),
+    )
+    fab()
+    const pill = screen.getByRole('button', { name: 'Open call' })
+    expect(within(pill).getByRole('status').textContent).toMatch(/^2:1\d$/)
+    expect(within(pill).queryByRole('img')).toBeNull()
+    act(() => setVoiceCallForTests({ luciusWorking: true }))
+    expect(within(pill).getByRole('status').textContent).toBe('Working…')
+    act(() => setVoiceCallForTests({ luciusWorking: false, luciusTrouble: true }))
+    expect(within(pill).getByRole('status').textContent).toBe('Poor connection')
+  })
+
+  it('takes Type to the chat, the only place with a message box', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    act(() => setVoiceCallForTests(LIVE))
+    const onOpenChat = vi.fn()
+    fab(false, onOpenChat)
+    fireEvent.click(screen.getByRole('button', { name: 'Type a message' }))
+    expect(onOpenChat).toHaveBeenCalledTimes(1)
+  })
+
+  it('says why a call failed, wherever you started it', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    act(() => setVoiceCallForTests({ problem: { kind: 'other', message: 'It did not start.' } }))
+    fab()
+    expect(screen.getByRole('alert').textContent).toContain('It did not start.')
+  })
+})
+
 describe('VoiceCallPill', () => {
   const handlers = () => ({ onAsk: vi.fn(), onHoverOpen: vi.fn(), onOpenDock: vi.fn() })
 
@@ -192,6 +321,40 @@ describe('VoiceCallPill', () => {
     expect(callBtn.contains(ask) || ask.contains(callBtn)).toBe(false)
     fireEvent.click(ask)
     expect(h.onAsk).toHaveBeenCalled()
+  })
+
+  it.each([
+    ['excellent', false],
+    ['good', false],
+    ['poor', true],
+    ['lost', true],
+  ] as const)('with a %s connection, showing bars is %s', (quality, shown) => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    act(() => setVoiceCallForTests({ ...LIVE, quality }))
+    const { container } = render(
+      <VoiceCallPill sessionId="s1" busy={false} needsApproval={false} {...handlers()} />,
+    )
+    expect(container.querySelector('.lx-callstage-signal') !== null).toBe(shown)
+  })
+
+  it('leaves focus alone when the connection changes', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    act(() => setVoiceCallForTests({ ...LIVE, quality: 'excellent' }))
+    render(<VoiceCallPill sessionId="s1" busy={false} needsApproval={false} {...handlers()} />)
+    act(() => setVoiceCallForTests({ luciusTrouble: true }))
+    expect(document.activeElement).toBe(document.body)
+    act(() => setVoiceCallForTests({ luciusTrouble: false, phase: 'reconnecting' }))
+    expect(document.activeElement).toBe(document.body)
+  })
+
+  it('says a poor connection in words as well as bars', () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    act(() => setVoiceCallForTests({ ...LIVE, quality: 'excellent', luciusTrouble: true }))
+    const { container } = render(
+      <VoiceCallPill sessionId="s1" busy={false} needsApproval={false} {...handlers()} />,
+    )
+    expect(screen.getByRole('status').textContent).toBe('Poor connection')
+    expect(container.querySelector('.lx-callstage-signal')?.getAttribute('data-bars')).toBe('1')
   })
 
   it('holds the whole call: clock, Mute and End, without opening the dock', () => {

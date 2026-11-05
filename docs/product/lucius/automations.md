@@ -228,14 +228,25 @@ does two things:
   a bill due and not yet paid, a margin call, a deposit maturing, a new rate on your savings, a
   deadline on something you hold, a large amount moving. It judges each email by what it says,
   not whose name is on it. Promotions, newsletters and sign-ins to services like streaming stay
-  out, and an email is mentioned once. A first run looks back 7 days.
+  out. A first run looks back 3 days.
+
+The message opens with a greeting, then follows one order: anything that puts your money at risk
+right now, what it logged, money going wrong, decisions with a deadline, a couple of things worth
+knowing, and small things in one line. Lucius can't tell from an email who did something, so he
+lightly mentions every new security notice on a money account, and you can ignore it if it was you.
+The part on what he logged gives each charge's amount, payee, account and category (grouped when
+there are more than five), and says what you may want to correct and whether a bank email wouldn't
+open.
 
 Everything except logging is read-only: Lucius won't reply, pay or follow a link because an email
 asks, and he won't repeat a login code. If nothing was logged and nothing needs you, he doesn't
 message you.
 
-Each run reads the mail since the last run that finished (at least a day's worth), so a slower
-schedule or a failed run never leaves a gap. It follows the built-in **email-finance-digest** and
+Logging reads the mail since the last run that finished (at least a day's worth), so a slower
+schedule or a failed run never leaves a gap. The message reads back to the run before last, so
+what one run skips gets a second chance. Each run sees what the last one sent you and whether it
+arrived: it leaves out what you've been told and tells you again what didn't reach you. Those
+rules are in the Automation's own instructions, where you can change them. It follows the built-in **email-finance-digest** and
 **log-transactions-from-email** [skills](skills.md), so when they improve, your Automation does
 too (unless you've edited them). Turning off **log-transactions-from-email** stops the logging, and
 the message tells you so.

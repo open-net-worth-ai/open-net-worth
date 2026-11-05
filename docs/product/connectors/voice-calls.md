@@ -38,13 +38,22 @@ of hearing nothing, he tells you he's still on it (*"still working on your groce
 again every 30 to 45 seconds until the answer starts. He stays quiet while you're talking or after
 you've asked him to wait. These lines repeat what you asked, never a figure. To cut him off, say at
 least two words (*"hold on"*, *"stop there"*): a lone *"okay"* or background noise doesn't.
-Only his final reply is read out; a link in it shows in the chat, and you hear just its name.
+Correct him while he's looking (*"no, I meant the other card"*) and he moves on to what you meant without
+reading out the first answer. A change you've already asked for can't be taken back this way: it may
+still happen, so you always hear how it went, then he gets to your correction.
+Only his final reply is read out. A link in it shows in the chat: inside a sentence you hear just its
+name, and on a line of its own you don't hear it at all.
 Ask *"what are you doing?"* and the front voice tells you what Lucius is working on right now.
 
 **Changes follow your usual approvals**, which depend on the conversation's mode and the tool's
 permission. When one waits for you, he says so, and the approval card appears in the chat on your
 screen. Tap **Approve** and he tells you on the call when it's done.
 Your [permission settings](../lucius/permissions.md) apply exactly as they do in the chat.
+
+**He can look at your screen.** Ask *"what am I looking at?"* and he reads the screen open in the
+app, whether or not [Screen awareness](../lucius/mentions.md#screen-awareness--lucius-sees-what-youre-looking-at)
+is on: that switch only decides what goes along with a typed message. On a phone, fold the full-screen call away first, so there's a page for him to
+read. If he can't see one, he says so.
 
 You only ever talk to Lucius: the front voice speaks as him, so you'll hear *"let me check"*,
 never *"let me ask Lucius"*.
@@ -69,24 +78,24 @@ Windows x64; on any other computer the settings page says calls aren't available
    **Settings → Keys**, create an API key. Keep the **URL** (`wss://…livekit.cloud`), the **API
    key** and the **API secret**.
 2. In Open Net Worth, open **Connectors → Voice calls** and paste the three values. Save.
-3. When the page says **Ready for calls**, press the **phone** button in Lucius's chat — it sits
+3. When the page says **Ready for calls**, press the **Call** button (four voice bars) in Lucius's chat — it sits
    where **Send** is while the message box is empty. Your browser asks for the microphone the
    first time.
 
 ## During a call
 
 The call has its own view, with an **orb** that moves with whoever is talking: it swells and
-glows with whoever is talking, you as much as Lucius. While he looks something up it
-breathes slowly and the line under it says *Lucius is working…*. Under the orb are **Mute** and **End**.
+glows with whoever is talking, you as much as Lucius, and the colour inside keeps swaying when
+nobody is. While he looks something up it moves faster and the line under it says
+*Lucius is working…*. Under the orb are **Mute** and **End**.
 
 | Where | What you see |
 |---|---|
-| **On a phone** | The call takes the whole screen. The arrow at the top (or **Type**) puts it away so you can read the chat (approval cards included) or type, while you keep talking. |
+| **On a phone** | The call starts small, as a strip above the message box, so you keep your place. Its expand button opens the full call screen. The arrow at the top (or **Type**) puts that away again so you can read the chat (approval cards included) or type, while you keep talking. |
+| **On a phone, away from the Lucius tab** | A small round button sits above the tab bar. With no call on it shows **voice bars**: tap it to call, or to go to Voice calls in Connectors if calls aren't set up. During a call it grows into a small pill with the moving **orb** and the time, or what's going on instead (*Working…*, *Poor connection*, *Reconnecting…*): tap it to open the full call screen, where **End** is. |
 | **In the side panel or the Lucius tab** | The call sits just above the message box — a slim strip on a wide screen — so the chat above stays readable and its cards tappable. |
-| **The floating Lucius button** | It has a **phone** button beside **Ask Lucius**: press it and the call happens right in the button. It grows to show the orb, the time, **Mute** and **End**, and shrinks back when you hang up. Press the time to open the chat. If Lucius needs your approval it says **Needs approval**; press **Review** to see the card. |
+| **The floating Lucius button** | It has a **Call** button (four voice bars) beside **Ask Lucius**: press it and the call happens right in the button. It grows to show the orb, the time, **Mute** and **End**, and shrinks back when you hang up. Press the time to open the chat. On a poor connection it says so and shows the signal bars. If Lucius needs your approval it says **Needs approval**; press **Review** to see the card. |
 
-On a phone, the arrow (or Esc, or **Type**) folds the full-screen call down to the same strip
-you see on a computer, above the message box; its expand button opens the full screen again.
 Folding it never hangs up. If a call can't start or drops, a note at
 the top of the box (or in the floating button) says why, with a button to try again, open Voice
 calls settings or view the app's logs; dismiss it with **×**. That includes Lucius's side going
@@ -149,7 +158,8 @@ Your own copy of Open Net Worth has none of these limits.
 ## Troubleshooting
 
 **The Call button isn't there.** Voice calls are off: turn them on in **Settings → Developer →
-Experimental**. It also gives way to **Send** as soon as you type.
+Experimental**. Or they aren't set up yet: until then the message box keeps **Send**, and the **Call** button
+on the floating Lucius button takes you to Voice calls in Connectors. It also gives way to **Send** as soon as you type.
 
 **The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it opens
 the Voice calls settings right where you are.
@@ -157,19 +167,23 @@ the Voice calls settings right where you are.
 **"Set up Voice calls in Connectors first."** The connector has no LiveKit URL, key or secret yet,
 or it is paused.
 
-**"The voice worker isn't running."** Open **Connectors → Voice calls**: it says why — usually the
-LiveKit details are wrong, or this computer is one voice calls aren't available on.
+**"Voice calls are starting up."** The part of the app that answers calls wasn't running when you
+pressed Call. It retries by itself, and pressing **Call** or **Try again** starts it again, so try
+again in a few seconds. If it keeps saying this, open **Connectors → Voice calls**: it says why —
+usually the LiveKit details are wrong, or this computer is one voice calls aren't available on.
 
 **A call dropped, then voice calls came back on their own.** The voice side of the app runs
 separately from the rest of it, so a crash there ends the call but never the app; it restarts
 itself within a few seconds. Call again.
 
-**The call says a connection dropped.** A call runs from your phone through LiveKit to the computer
-running the app, so either end can break it, and the screen says which. *Your connection dropped* is
-the device you're holding. *Lucius's connection dropped* is the computer running the app: while it
-shows, he can't hear you, so anything you said may need repeating. If it keeps happening, that
-computer's network is the place to look, and a wired connection is the surest fix: a computer that
-keeps switching between wifi bands drops calls even with a strong signal.
+**The call says the connection is poor.** A call runs from your phone through LiveKit to the computer
+running the app, so any part of that path can break it. *Your connection dropped* is the device you're
+holding. *Poor connection. Lucius may not hear you.* is anywhere past it: the computer running the
+app, or a speech service having a moment. While it shows, anything you said may need repeating. The
+**signal bars** on the call rate the weaker of the two connections, yours and Lucius's, so
+they show when a network is struggling. If it keeps happening, the computer's network is the first
+place to look, and a wired connection is the surest fix: a computer that keeps switching between wifi
+bands drops calls even with a strong signal.
 
 **Lucius takes a while to answer.** The front voice answers at once; Lucius's own answer takes as
 long as a chat reply. Pick a faster model under **Lucius on calls**, and close heavy programs —

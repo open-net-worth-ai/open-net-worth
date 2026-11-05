@@ -24,7 +24,7 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: stri
   return (
     <div className="asd-pos-row">
       <span className="asd-pos-label">{label}</span>
-      <span className={`asd-pos-value${tone ? ` ${tone}` : ''}`}>{value}</span>
+      <span className={`asd-pos-value money${tone ? ` ${tone}` : ''}`}>{value}</span>
     </div>
   )
 }
@@ -116,7 +116,9 @@ export function YourPositionCard({ position, symbol, income, assetClass }: Props
             {unvested.next_vest && (
               <Text size="xs" tone="faint">
                 Next vest {fDate(unvested.next_vest.date, 'short', 'always')}:{' '}
-                {unvested.next_vest.units.toLocaleString(undefined, { maximumFractionDigits: 4 })}{' '}
+                <span className="money">
+                  {unvested.next_vest.units.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                </span>{' '}
                 units
               </Text>
             )}

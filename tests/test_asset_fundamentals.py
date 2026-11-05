@@ -34,7 +34,7 @@ def test_bundle_hash_stable_for_same_rows():
     h2 = af._bundle_hash("Technology", valuation, [])
     assert h1 == h2
     assert len(h1) == 16
-    assert af.PROMPT_VERSION == "v2-lean"
+    assert af.PROMPT_VERSION == "v3-percent-units"
 
 
 def test_bundle_hash_changes_when_ticker_moves():

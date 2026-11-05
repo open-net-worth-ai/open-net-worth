@@ -215,6 +215,9 @@ def update_mcp_client(server_id: str, body: McpServerUpdate):
     endpoint_changed = _endpoint_changed(before, updated)
     spawn_changed = _spawn_signature_changed(before, updated)
     if endpoint_changed:
+        # A failed read keeps the tool list, so this is the one place an answer stops applying:
+        # another endpoint's tools must never stand in for this one's.
+        store.record_discovery(server_id, [], updated.last_status, updated.last_error)
         revoked = tool_permissions.revoke_allowed_tools(mcp_connector_id(server_id))
         logger.info(
             "mcp server '%s' endpoint changed — %d 'allow' permission(s) withdrawn",
@@ -328,7 +331,7 @@ def test_mcp_client(server_id: str):
     has no record yet, use ``/api/mcp-clients/probe``.
 
     Never raises on a connection failure — the result carries ``last_status`` /
-    ``last_error`` and an empty ``discovered_tools`` so the UI can show the error.
+    ``last_error`` so the UI can show the error, and the last good ``discovered_tools``.
     """
     result = get_manager().test_connect(server_id)
     if isinstance(result, dict) and result.get("error"):

@@ -815,19 +815,6 @@
   border-top: 0;
 }
 
-body.hide-amounts .mask {
-  color: transparent !important;
-  position: relative;
-}
-body.hide-amounts .mask::after {
-  content: '••••';
-  position: absolute;
-  right: 0;
-  top: 0;
-  color: var(--fg-3);
-  letter-spacing: 1px;
-}
-
 /* ════════════════════ Budget masthead (Ready-to-assign cluster) ════════════════════ */
 /* ════════════════════ Budget summary — one compact card ════════════════════ */
 .pl-summary {

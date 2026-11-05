@@ -123,7 +123,7 @@ function Headline({
     const pos = comp.delta >= 0
     deltaBody = (
       <>
-        <span className={'ov-delta-chip' + (pos ? ' pos' : ' neg')}>
+        <span className={'ov-delta-chip money' + (pos ? ' pos' : ' neg')}>
           {pos ? '↑' : '↓'} {fPct(comp.pct)}
         </span>
         <span className="ov-hero-attrib">
@@ -135,7 +135,7 @@ function Headline({
     const pos = trend.delta >= 0
     deltaBody = (
       <>
-        <span className={'ov-delta-chip' + (pos ? ' pos' : ' neg')}>
+        <span className={'ov-delta-chip money' + (pos ? ' pos' : ' neg')}>
           {pos ? '↑' : '↓'} {fPct(trend.pct != null ? Math.abs(trend.pct) : 0)}
         </span>
         <span className="ov-hero-attrib">{attribLabel(range, trend.span_months)}</span>

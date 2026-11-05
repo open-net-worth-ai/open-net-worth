@@ -196,18 +196,24 @@ Open the server under **Connectors**:
 - **⋯ → Refresh tools list** — pick up tools the server added since you connected it. You rarely
   need it: the app re-reads every server's list when it starts and once a day, and a local server
   that announces a change is re-read straight away (after the next call to it). If one of those
-  re-reads can't reach a server that was working, including the one at startup, its tools stay as
-  they were and it's tried again every hour; only after three misses in a row does the card show
-  the error and Lucius stop offering its tools. A server that comes back is picked up within the
-  hour. A sign-in failure, or a server that never listed its tools, shows the error at once.
+  re-reads can't reach a server that was working, including the one at startup, nothing changes
+  and it's tried again every hour; only after three misses in a row does the card show the error
+  and Lucius stop offering its tools. A server that comes back is picked up within the hour. A
+  sign-in failure, a read you started yourself, or a server that was already failing shows the
+  error at once. Losing the connection never forgets the tools: **Tool permissions** keeps its
+  list and your levels through an error, and only editing the server's address clears the list.
 - **Pause** / **Resume** — Lucius loses access to its tools while paused. Resuming a server that
   has never listed its tools connects to it and lists them; if it can't be reached, it shows an
   error instead of Connected.
 - **⋯ → Remove connector** — removes the server and its saved credentials.
-- **Reconnect** — appears if the server stopped answering or a sign-in expired. A red dot on
-  **Connectors** in the navigation tells you a connector needs this, the **Attention** filter lists
-  which ones, and holding the pointer over its **Error** status shows the reason. Lucius is told
-  too: each turn it sees which connectors have a problem, so it can say why a tool is missing.
+- **Authenticate** — appears when a server has never been signed in. It opens the sign-in window.
+- **Reconnect** — appears when a connection stops working. If the sign-in expired, the status is an
+  amber **Authentication issue** and it opens the sign-in window. If the server stopped answering, the
+  status is a red **Error** and it tries the connection again: a network problem never makes you
+  link the account again. A dot on **Connectors** in the navigation tells you a connector needs one
+  of these (amber if every problem is an expired sign-in), the **Attention** filter lists which
+  ones, and the reason is written on its row and at the top of its page. Lucius is told too: each turn it sees which connectors have a problem, so it can say
+  why a tool is missing.
 
 ## Permissions — start cautious
 

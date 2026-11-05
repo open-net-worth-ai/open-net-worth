@@ -6,11 +6,7 @@ import {
   TEMPLATE_ICONS,
   templateKeyForConnector,
 } from './automationTemplates'
-import {
-  automationCustomRule,
-  automationTriggerFullLabel,
-  automationTriggerLabel,
-} from './AutomationTriggerSummary'
+import { automationCustomRule, automationTriggerLabel } from './AutomationTriggerSummary'
 import type { AutomationTrigger } from '../../../api/automations'
 
 const byKey = (key: string) => ALL_TEMPLATES.find((t) => t.key === key)!
@@ -87,6 +83,13 @@ describe('the email digest template', () => {
     expect(digest.instructions).not.toMatch(/message_id|idempot/i)
   })
 
+  // How a run behaves is the automation's to say. The skill also runs in a chat, with none of it.
+  it('says how far back to read and what not to repeat', () => {
+    expect(digest.instructions).toContain('since the run before last')
+    expect(digest.instructions).toContain('Leave out what the last run already told me')
+    expect(digest.instructions).toContain("tell me again anything that didn't reach me")
+  })
+
   it('is what the Email connector automates', () => {
     expect(templateKeyForConnector('email')).toBe('mail_digest')
   })
@@ -95,26 +98,21 @@ describe('the email digest template', () => {
 describe('the schedule label for a custom cadence', () => {
   const trigger = (rrule: string): AutomationTrigger => ({ kind: 'schedule', type: 'rrule', rrule })
 
-  it('reads a rule it understands, with the rule itself beside it where there is room', () => {
+  it('reads a rule it understands, and keeps the rule apart from the words', () => {
     const readable = trigger('FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=5')
     expect(automationTriggerLabel(readable)).toBe('Every 2 months on the 5th')
     expect(automationCustomRule(readable)).toBe('FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=5')
-    expect(automationTriggerFullLabel(readable)).toBe(
-      'Every 2 months on the 5th • FREQ=MONTHLY;INTERVAL=2;BYMONTHDAY=5',
-    )
   })
 
   it('shows a rule it cannot read once, as written', () => {
     const raw = trigger('FREQ=DAILY;COUNT=3')
     expect(automationTriggerLabel(raw)).toBe('Custom cadence • FREQ=DAILY;COUNT=3')
     expect(automationCustomRule(raw)).toBeNull()
-    expect(automationTriggerFullLabel(raw)).toBe('Custom cadence • FREQ=DAILY;COUNT=3')
   })
 
   it('adds nothing to a schedule that is not custom', () => {
     const daily: AutomationTrigger = { kind: 'schedule', type: 'daily', time: '09:00' }
     expect(automationCustomRule(daily)).toBeNull()
-    expect(automationTriggerFullLabel(daily)).toBe('Every day at 9:00 AM')
   })
 })
 

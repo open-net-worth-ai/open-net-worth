@@ -128,7 +128,7 @@ describe('Masthead on a phone', () => {
     const { container } = render(<Masthead d={makeBook()} {...props} />)
     const meta = container.querySelector('.mk-sum-meta')
     expect(meta).not.toBeNull()
-    expect(within(meta as HTMLElement).getByText(/72\.9% of net worth/)).toBeTruthy()
+    expect(meta?.textContent).toMatch(/72\.9% of net worth/)
     // Enumerate rather than select: jsdom's selector engine can't match an attribute VALUE
     // containing "&", so `[data-ctx-fact="Unrealized P&L"]` silently returns null there.
     expect(factsIn(meta as HTMLElement)).toEqual(['Unrealized P&L', '% of net worth'])
@@ -207,7 +207,7 @@ describe('Portfolio brief on a phone', () => {
     const restore = mockMobile(true)
     const { container } = renderBrief()
     // Lead narrative stays visible — it is the reason the card exists.
-    expect(within(container).getByText(/ACME is 31% of investments/)).toBeTruthy()
+    expect(container.textContent).toMatch(/ACME is 31% of investments/)
     expect(container.querySelector('.brief-more')).toBeNull()
 
     const toggle = within(container).getByRole('button', { name: /2 more/ })

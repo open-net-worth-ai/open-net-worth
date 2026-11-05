@@ -2,6 +2,7 @@
 // Shows trades needed to bring each asset class back to its target allocation.
 
 import { fBase } from '../../../utils/format'
+import { MaskedText } from '../../ui/MaskedText'
 
 interface AllocRow {
   cls: string
@@ -83,7 +84,9 @@ export function Rebalance({ alloc, thresholdPp }: Props) {
               >
                 {(t.amt < 0 ? '−' : '+') + fBase(Math.abs(t.amt))}
               </span>
-              <span className="mk-rb-why">{t.why}</span>
+              <span className="mk-rb-why">
+                <MaskedText>{t.why}</MaskedText>
+              </span>
             </div>
           ))}
         </div>

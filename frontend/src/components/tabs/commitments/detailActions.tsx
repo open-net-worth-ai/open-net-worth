@@ -7,6 +7,7 @@
 // action entry ("+ Add action") was removed (owner directive) — Lucius is the only way in.
 import { useState } from 'react'
 import type { Commitment, CommitmentAction } from '../../../types/commitments'
+import { useMaskText } from '../../../utils/amountMask'
 import { fBase, fCurrency, toBase } from '../../../utils/format'
 import { daysUntil, fmtDate, fmtDay } from '../../../utils/commitments'
 import { BellIcon, CheckIcon, FilterIcon, Spark, XIcon } from './icons'
@@ -120,6 +121,7 @@ interface ActionsProps {
 }
 
 export function Actions({ commitment: c, fx, m }: ActionsProps) {
+  const maskText = useMaskText()
   const narrow = useNarrow()
   const [showAllActs, setShowAllActs] = useState(false)
   const [fStatus, setFStatus] = useState('all')
@@ -470,7 +472,7 @@ export function Actions({ commitment: c, fx, m }: ActionsProps) {
                       <button
                         className="c2-need-icon-btn miss"
                         aria-label="Not happening"
-                        title={buildDidntHint(a as CommitmentAction, fundBase)}
+                        title={maskText(buildDidntHint(a as CommitmentAction, fundBase))}
                         onClick={() => setMissed(a, true)}
                       >
                         <XIcon />

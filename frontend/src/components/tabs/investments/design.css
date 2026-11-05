@@ -2256,19 +2256,6 @@
   color: var(--fg-3);
 }
 
-body.hide-amounts .mask {
-  color: transparent !important;
-  position: relative;
-}
-body.hide-amounts .mask::after {
-  content: '••••';
-  position: absolute;
-  right: 0;
-  top: 0;
-  color: var(--fg-3);
-  letter-spacing: 1px;
-}
-
 .mk-spark {
   color: var(--lucius);
   display: inline-flex;

@@ -10,8 +10,8 @@ stored here, on the session's own meta row, keyed by the ``tool_use_id`` the car
 reload or when a run's conversation is opened later.
 
 Only the answer is stored. What the card showed is rebuilt from the tool_use itself (its name and
-arguments); what the answer DID is already stored where it acts (the permission table, the
-Automation's list, the tool result).
+arguments) and why Auto asked from ``services.auto_approvals``; what the answer DID is already
+stored where it acts (the permission table, the Automation's list, the tool result).
 """
 
 from __future__ import annotations

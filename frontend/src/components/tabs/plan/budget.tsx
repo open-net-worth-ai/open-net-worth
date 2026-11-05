@@ -13,6 +13,7 @@ import { monthLabel } from '../../../hooks/useBudget'
 import type { BudgetMonth } from '../../../hooks/useBudget'
 import { useCommitments } from '../../../hooks/useCommitments'
 import { authFetch } from '../../../api/client'
+import { useMaskText } from '../../../utils/amountMask'
 import { getCurrencySymbol } from '../../../utils/format'
 import { entityRefProps } from '../../../utils/mentionable'
 import { useRegisterScreenFacts, useRegisterScreenPrompts } from '../../../lucius/useScreenContract'
@@ -1005,6 +1006,7 @@ export function CategoryRow({
   onOpenTxn,
   onOpenRegister,
 }: RowHandlers & { c: LocalCat; gid: string; otherGroups: LocalGroup[]; locked: boolean }) {
+  const maskText = useMaskText()
   const [renaming, setRenaming] = useState(false)
   const [assigning, setAssigning] = useState(false)
   const [assignDraft, setAssignDraft] = useState('')
@@ -1259,7 +1261,10 @@ export function CategoryRow({
     ) : null)
   const targetBarNode =
     !renaming && !c.isPaymentEnvelope && (c.target || isOver || fullySpent) ? (
-      <span className={'pl-tbar-wrap' + (c.target && !locked ? ' is-target' : '')} title={barTitle}>
+      <span
+        className={'pl-tbar-wrap' + (c.target && !locked ? ' is-target' : '')}
+        title={barTitle && maskText(barTitle)}
+      >
         <span className="pl-tbar">
           {isOver ? (
             <>
@@ -1488,9 +1493,13 @@ export function CategoryRow({
             className="pl-paycell"
             title={
               paymentOverpaid
-                ? `You sent ${fSmart(-payAvail)} more to ${c.label} than you had set aside.`
+                ? maskText(
+                    `You sent ${fSmart(-payAvail)} more to ${c.label} than you had set aside.`,
+                  )
                 : paymentUnderfundedNow
-                  ? `You have a ${fSmart(paymentOwed)} bill but only ${fSmart(payAvail)} set aside for ${c.label}.`
+                  ? maskText(
+                      `You have a ${fSmart(paymentOwed)} bill but only ${fSmart(payAvail)} set aside for ${c.label}.`,
+                    )
                   : undefined
             }
           >

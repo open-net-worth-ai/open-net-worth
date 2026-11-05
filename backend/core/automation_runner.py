@@ -67,6 +67,10 @@ class AutomationRunnerRequest:
     # run that completed — the instructions carry no timing, so the run learns both here.
     configured_trigger: dict = field(default_factory=dict)
     last_completed_run: Optional[dict] = None
+    # The completed run before that one, and what the last one said and sent, so a run can overlap
+    # its predecessor and still know what the user has already been told.
+    run_before_last: Optional[dict] = None
+    last_run_record: Optional[dict] = None
 
 
 # Appended to the summary of a run that was cancelled. A tool call already in flight can

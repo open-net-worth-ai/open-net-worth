@@ -6,7 +6,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import type { AssetCategory, AssetLoan, OwnedAsset } from '../../../types/assets'
 import { useIsMobile } from '../../../hooks/useIsMobile'
-import { ActionMenu, Button, Cluster, PageTabs } from '../../ui'
+import { ActionMenu, Button, Cluster, MaskedText, PageTabs } from '../../ui'
 import {
   annualizedReturnOf,
   equityOf,
@@ -113,7 +113,7 @@ function ValueStats({ a, loans, isMobile, onUpdate }: ValueStatsProps) {
           {a.valued_on && <div className="as-dstat-s">valued {monthYear(a.valued_on)}</div>}
           {a.share_pct < 100 && (
             <div className="as-dstat-share">
-              Your {sharePct(a.share_pct)}% · {fmtOrDash(a.share_value)}
+              <MaskedText>{`Your ${sharePct(a.share_pct)}% · ${fmtOrDash(a.share_value)}`}</MaskedText>
             </div>
           )}
         </div>
@@ -121,7 +121,9 @@ function ValueStats({ a, loans, isMobile, onUpdate }: ValueStatsProps) {
           <div>
             <div className="as-dstat-k">Net equity</div>
             <div className="as-dstat-v money">{fmt(eq)}</div>
-            <div className="as-dstat-s">Whole asset · {Math.round(ofValue(eq))}% of value</div>
+            <div className="as-dstat-s">
+              Whole asset · <span className="money">{Math.round(ofValue(eq))}%</span> of value
+            </div>
           </div>
         )}
         <div>
@@ -131,9 +133,11 @@ function ValueStats({ a, loans, isMobile, onUpdate }: ValueStatsProps) {
             {g == null ? '—' : g === 0 ? fmt(0) : (g > 0 ? '+' : '−') + fmt(Math.abs(g))}
           </div>
           <div className="as-dstat-s">
-            {g == null
-              ? 'No purchase price yet'
-              : `${pct(gp ?? 0)}${yrs ? ` · ${yrs.toFixed(1)} yr` : ''}${ann != null ? ` · ${pct(ann)}/yr` : ''}`}
+            <MaskedText>
+              {g == null
+                ? 'No purchase price yet'
+                : `${pct(gp ?? 0)}${yrs ? ` · ${yrs.toFixed(1)} yr` : ''}${ann != null ? ` · ${pct(ann)}/yr` : ''}`}
+            </MaskedText>
           </div>
         </div>
       </div>

@@ -1,10 +1,9 @@
-import { useEffect, useState, type ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { VoiceCallStage } from './VoiceCallStage'
-import { VoiceSetupDialog } from './VoiceSetupDialog'
-import { claimSetupHost, closeVoiceSetup, releaseSetupHost, useVoiceCall } from './voiceCall'
+import { useVoiceCall } from './voiceCall'
 
 /** Inside a composer card: while a call is open its strip shows above the composer — or, on a
  *  phone, the full-screen call until it is folded down to the same strip. The composer stays
@@ -24,13 +23,6 @@ export function VoiceCallSlot({
   const on = useFlag('voice_calls')
   const call = useVoiceCall()
   const mobile = useIsMobile()
-  const [token] = useState(() => Symbol('voice-setup-host'))
-  const [hosts, setHosts] = useState(false)
-  useEffect(() => {
-    if (on !== true) return
-    setHosts(claimSetupHost(token))
-    return () => releaseSetupHost(token)
-  }, [on, token])
   if (on !== true) return <>{children}</>
   const shown = visible && call.phase !== 'idle'
   const fullScreen = shown && mobile && call.view === 'stage'
@@ -39,7 +31,6 @@ export function VoiceCallSlot({
       {shown && !fullScreen && <VoiceCallStage variant="card" busy={busy} expandable={mobile} />}
       {fullScreen && createPortal(<VoiceCallStage variant="screen" busy={busy} />, document.body)}
       {children}
-      {hosts && <VoiceSetupDialog open={call.setupOpen} onClose={closeVoiceSetup} />}
     </>
   )
 }

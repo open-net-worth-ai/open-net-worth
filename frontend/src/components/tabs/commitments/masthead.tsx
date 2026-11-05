@@ -105,11 +105,11 @@ export function Masthead({
         {atRisk && riskC ? (
           <>
             <span className="c2-ribbon-core">
-              <b>{riskC.name}</b> runs{' '}
+              <b>{riskC.name}</b>&apos;s funding runs{' '}
               <b className={moneyClass()}>
                 {fBaseWhole(riskC.coverage?.shortfall_base ?? shortfall)}
               </b>{' '}
-              short around{' '}
+              short of its payments by{' '}
               <b>
                 {riskC.coverage?.earliest_shortfall_date
                   ? fmtDate(riskC.coverage.earliest_shortfall_date)
@@ -275,7 +275,8 @@ export function Masthead({
                 <span className="c2-leg zero">
                   <i className="zeroline" />
                   <span>
-                    $0<span className="c2-leg-rest">&nbsp;cash</span>
+                    <span className="money">$0</span>
+                    <span className="c2-leg-rest">&nbsp;cash</span>
                   </span>
                 </span>
               )}
@@ -283,7 +284,10 @@ export function Masthead({
                 <span className="c2-leg floor">
                   <i className="floorline" />
                   <span>
-                    Floor<span className="c2-leg-rest">&nbsp;{fBase(floor)}</span>
+                    Floor
+                    <span className="c2-leg-rest">
+                      &nbsp;<span className="money">{fBase(floor)}</span>
+                    </span>
                   </span>
                 </span>
               )}

@@ -54,13 +54,26 @@ Lucius about this**. On a computer you can also drag a row into the chat. In
 With **Screen awareness** on, what's on your screen is sent along with each message, so *"why did
 this drop?"* while looking at a chart is enough.
 
-- **Turn it on or off** with the **Screen awareness** switch just above the message box. It's **on**
-  by default. The setting is remembered in this browser (or this copy of the desktop app), for
-  every screen.
+- **Turn it on or off** with the **Screen awareness** switch just above the message box. Your choice
+  is remembered in this browser (or this copy of the desktop app), for every screen. With it off,
+  the bar reads **Attach screen content as context**, which is what turning it on does.
+- **Choose how new devices start** in **Settings → Chat → Screen awareness by default**. It's **on**
+  unless you change it. Changing it also resets the switch on the device you're using; a device where
+  you've already used the switch keeps your choice. On a phone, Lucius is a full tab that replaces
+  the screen, so there's no switch and messages never carry one.
 - **See exactly what's shared:** click **Peek** next to the switch.
 - The main screens — the Dashboard, Accounts, Investments, Plan, Assets, Commitments, Connectors,
   Skills and Automations, among others — send structured details about the rows and figures on
   them. Other screens, including Settings, send their visible text.
+
+Lucius can also look at your screen when he needs to, and he gets the same details a message would
+carry: if you ask about your screen with the switch off, on a voice call, where no message carries
+your screen, or if the page may have changed since you sent yours. The chat shows **Read your
+screen** when he does. **The switch doesn't affect this:** it only decides whether your screen goes
+along with each message. He only looks at an app that is in view and showing this conversation. If
+you have the conversation open on more than one device, he reads the one running the call,
+otherwise the one you're using. Telegram and Automations can't look at your screen, and neither can
+the public demo.
 
 **Never sent:** anything in a password, API key, token, one-time code, PIN, CVV, private key or
 recovery phrase field, and any area the app marks as secret.

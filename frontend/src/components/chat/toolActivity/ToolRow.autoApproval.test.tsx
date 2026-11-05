@@ -64,6 +64,23 @@ describe('the auto-approval hint', () => {
     expect(screen.getByRole('tooltip').textContent).toContain('Adds the coffee you asked for.')
   })
 
+  it('says Auto asked, not that it approved, on a call the judge stopped', () => {
+    render(
+      <ToolRow
+        cluster={row({ reason: 'A live order.', model: 'sonnet', verdict: 'ask' })}
+        look={{}}
+      />,
+    )
+    expect(hint()).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Why Auto asked about this' }))
+
+    const tip = screen.getByRole('tooltip').textContent
+    expect(tip).toContain('Auto asked you first (sonnet)')
+    expect(tip).toContain('A live order.')
+    expect(tip).not.toContain('Auto-approved')
+  })
+
   it('does not open the row when the hint is tapped', () => {
     const { container } = render(<ToolRow cluster={row({ reason: 'ok' })} look={{}} />)
 

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Cluster, EmptyState, ErrorState, TabSkeleton } from '../../ui'
+import { MaskedText } from '../../ui/MaskedText'
 import { ChartLine } from '../../../ui/icons'
 import { LuciusCta } from '../../intro/LuciusCta'
 import { usePerformanceView } from './usePerformanceView'
@@ -178,7 +179,7 @@ function PerfChart({ series, hasBenchmark, benchLabel, period }: PerfChartProps)
             <div className="mk-chart-tip-r">
               <i className="good" />
               <span>Portfolio</span>
-              <b className={port[hi]! >= 0 ? 'pos' : 'neg'}>{fmtReturn(port[hi]!)}</b>
+              <b className={(port[hi]! >= 0 ? 'pos' : 'neg') + ' money'}>{fmtReturn(port[hi]!)}</b>
             </div>
             {bench && (
               <div className="mk-chart-tip-r">
@@ -421,7 +422,7 @@ export function PerformanceTab({
                           <StatInfo text="How much your daily returns swing, annualized. Higher means a bumpier ride to the same destination." />
                         </span>
                       </div>
-                      <div className="rk-v">
+                      <div className="rk-v money">
                         {risk.vol != null ? risk.vol.toFixed(1) + '%' : '—'}
                       </div>
                     </div>
@@ -434,7 +435,9 @@ export function PerformanceTab({
                           />
                         </span>
                       </div>
-                      <div className="rk-v">{risk.beta != null ? risk.beta.toFixed(2) : '—'}</div>
+                      <div className="rk-v money">
+                        {risk.beta != null ? risk.beta.toFixed(2) : '—'}
+                      </div>
                     </div>
                     <div className="rk-cell">
                       <div className="rk-k">
@@ -444,7 +447,7 @@ export function PerformanceTab({
                         </span>
                       </div>
                       <div
-                        className="rk-v"
+                        className="rk-v money"
                         style={{
                           color:
                             risk.sharpe == null
@@ -469,12 +472,16 @@ export function PerformanceTab({
                           />
                         </span>
                       </div>
-                      <div className="rk-v" style={{ color: 'var(--bad)' }}>
+                      <div className="rk-v money" style={{ color: 'var(--bad)' }}>
                         {risk.mdd != null ? risk.mdd.toFixed(1) + '%' : '—'}
                       </div>
                     </div>
                   </div>
-                  {rkNote && <p className="inc-chart-cap">{rkNote}</p>}
+                  {rkNote && (
+                    <p className="inc-chart-cap">
+                      <MaskedText>{rkNote}</MaskedText>
+                    </p>
+                  )}
                 </>
               ) : (
                 <EmptyState

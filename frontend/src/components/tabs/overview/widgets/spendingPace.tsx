@@ -103,7 +103,7 @@ function PaceRow({ cat, summary }: { cat: EnvelopeRow; summary: PlanningSummary 
           <b>
             <Money>{fBase(spent)}</Money>
           </b>{' '}
-          / <Money>{fBase(assigned)}</Money> · {Math.round(spentPct)}%
+          / <Money>{fBase(assigned)}</Money> · <Money>{Math.round(spentPct)}%</Money>
         </div>
       </div>
 

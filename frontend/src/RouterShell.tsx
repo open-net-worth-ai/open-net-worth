@@ -7,6 +7,7 @@ import {
   Fragment,
   Suspense,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type MutableRefObject,
@@ -59,6 +60,7 @@ import { getTickerEnabled, subscribeTicker } from './tickerPref'
 import { Overview } from './components/tabs/overview/Overview'
 import { LuciusHome } from './components/tabs/lucius/LuciusHome'
 import { LuciusMobile } from './components/tabs/lucius/LuciusMobile'
+import { VoiceCallFab } from './components/chat/lucius/VoiceCallFab'
 import { Inbox } from './components/tabs/Inbox'
 import { Investments } from './components/tabs/Investments'
 import AccountsTab from './components/tabs/accounts/AccountsTab'
@@ -91,8 +93,12 @@ import {
   useProfile,
   useSetupStatus,
 } from './hooks/serverState'
-import { useConnectorAttentionCount } from './components/tabs/connectors/useConnectors'
+import {
+  useConnectorAttentionCount,
+  useConnectorAttentionIsSignInOnly,
+} from './components/tabs/connectors/useConnectors'
 import { VisibleIdsProvider } from './lucius/visibleIds'
+import { ScreenReadResponder } from './components/chat/lucius/ScreenReadResponder'
 import { LuciusDock } from './components/chat/lucius/LuciusDock'
 import { ArtifactPanelProvider } from './state/artifactPanel'
 import { DockArtifactPanel } from './components/tabs/lucius/DockArtifactPanel'
@@ -965,7 +971,8 @@ function RouterShellInner() {
     })
   }
 
-  useEffect(() => {
+  // Before the first paint, or a reload shows the figures for a frame.
+  useLayoutEffect(() => {
     document.body.classList.toggle('hide-amounts', hidden)
   }, [hidden])
 
@@ -1005,6 +1012,7 @@ function RouterShellInner() {
   }, [matchReviews.data])
 
   const connectorsAttention = useConnectorAttentionCount()
+  const connectorsSignInOnly = useConnectorAttentionIsSignInOnly()
 
   const now = fDateTime(new Date(), 'long', 'always')
   // Clock-only form for the ticker head — see TickerStripProps.asOf for why.
@@ -1205,7 +1213,11 @@ function RouterShellInner() {
         )}
         {t === 'connectors' && connectorsAttention > 0 && (
           <span
-            className="sidebar-attention-dot"
+            className={
+              connectorsSignInOnly
+                ? 'sidebar-attention-dot sidebar-attention-dot-warn'
+                : 'sidebar-attention-dot'
+            }
             role="img"
             aria-label="A connector needs attention"
           />
@@ -1388,6 +1400,7 @@ function RouterShellInner() {
               }
             />
             <VisibleIdsProvider>
+              <ScreenReadResponder />
               <PaletteBridge
                 requestOpenRef={chatRequestOpenRef}
                 switchConversationRef={chatSwitchConversationRef}
@@ -1407,6 +1420,14 @@ function RouterShellInner() {
                 <div {...behindFirstRunWrap}>
                   <NewVersionBanner />
                   <DesktopUpdateNotices />
+                  {isMobile && !onboarding && (
+                    <VoiceCallFab
+                      onLuciusTab={tabToRender === 'lucius'}
+                      onOpenChat={() =>
+                        void navigate({ to: '/lucius', search: { conversation: undefined } })
+                      }
+                    />
+                  )}
                 </div>
                 <nav
                   className={`sidebar${sidebarExpanded ? ' expanded' : ''}${drawerOpen ? ' drawer-open' : ''}`}

@@ -431,8 +431,8 @@ function LotsSection({
                     )}
                   </td>
                   <td>{l.fees ? fAmountNative(l.fees, l.cost_currency || costCcy) : '—'}</td>
-                  <td>{kindLabel(l.kind)}</td>
-                  <td>
+                  <td className="not-money">{kindLabel(l.kind)}</td>
+                  <td className="not-money">
                     {closed ? (
                       '—'
                     ) : (
@@ -447,7 +447,7 @@ function LotsSection({
                   <td className={gain == null ? 'muted' : plClass(gain)}>
                     {gain == null ? '—' : (gain >= 0 ? '+' : '') + fBase(gain)}
                   </td>
-                  {showAccount && <td>{l.account_name || '—'}</td>}
+                  {showAccount && <td className="not-money">{l.account_name || '—'}</td>}
                 </EntityRow>
               )
             })}
@@ -568,8 +568,10 @@ function RealizedSection({
                         : fUnitCostNative(buy.price, buy.currency ?? ev.proceeds_currency)}
                     </td>
                     <td>{fUnitCostNative(ev.proceeds_per_unit, ev.proceeds_currency)}</td>
-                    <td>{ev.method === 'specific_id' ? 'Specific' : 'FIFO'}</td>
-                    <td>
+                    <td className="not-money">
+                      {ev.method === 'specific_id' ? 'Specific' : 'FIFO'}
+                    </td>
+                    <td className="not-money">
                       <span className={`term-badge term-${term}`} title={termTitle(term)}>
                         {term}
                       </span>
@@ -577,7 +579,7 @@ function RealizedSection({
                     <td className={gain == null ? 'muted' : plClass(gain)}>
                       {gain == null ? '—' : (gain >= 0 ? '+' : '') + fBase(gain)}
                     </td>
-                    {showAccount && <td>{ev.account_name || '—'}</td>}
+                    {showAccount && <td className="not-money">{ev.account_name || '—'}</td>}
                   </EntityRow>
                   {isOpen && (
                     <tr className="lots-consumption-row">
@@ -660,7 +662,7 @@ function DividendsSection({
                 toFields={(it) => ({ symbol, income_kind: it.income_kind, paid_at: it.paid_at })}
               >
                 <td>{ev.paid_at ? fDate(ev.paid_at, 'short', 'always') : '—'}</td>
-                <td>{incomeKindLabel(ev.income_kind)}</td>
+                <td className="not-money">{incomeKindLabel(ev.income_kind)}</td>
                 <td>{fAmountNative(ev.gross_amount, ev.currency)}</td>
                 <td>{ev.tax_withheld ? fAmountNative(ev.tax_withheld, ev.currency) : '—'}</td>
                 <td className={ev.base_amount === null ? 'muted' : undefined}>
@@ -668,8 +670,8 @@ function DividendsSection({
                     ? `${fAmountNative(ev.native_net_amount ?? ev.gross_amount - ev.tax_withheld, ev.currency)} (FX unavailable)`
                     : fBase(ev.base_amount)}
                 </td>
-                <td>{ev.is_drp ? 'DRP' : 'Cash'}</td>
-                {showAccount && <td>{ev.account_name || '—'}</td>}
+                <td className="not-money">{ev.is_drp ? 'DRP' : 'Cash'}</td>
+                {showAccount && <td className="not-money">{ev.account_name || '—'}</td>}
               </EntityRow>
             ))}
           </tbody>
@@ -774,7 +776,7 @@ function ConsumptionTable({ event }: { event: RealizedEvent }) {
                 fUnitCostNative(c.unit_cost, c.cost_currency || event.proceeds_currency)
               )}
             </td>
-            <td>
+            <td className="not-money">
               <span className={`term-badge term-${c.term}`} title={termTitle(c.term)}>
                 {c.term}
               </span>

@@ -3,6 +3,7 @@
 // Every prop, SVG path, marker, label, and interaction is reproduced exactly.
 
 import { useState, useRef, useLayoutEffect } from 'react'
+import { useMaskText } from '../../../utils/amountMask'
 import { fBase, fBaseCompact } from '../../../utils/format'
 import type { BandRow } from './planData'
 
@@ -108,6 +109,7 @@ export function FanChart({
   incomeStreams = null,
   focusLayer = null,
 }: FanChartProps) {
+  const maskText = useMaskText()
   const W = VW,
     H = height,
     padL = 8,
@@ -657,14 +659,14 @@ export function FanChart({
           <div className="r">
             <i style={{ background: color }} />
             Typical{' '}
-            <b className="mask" title={fBase(hb.p50)}>
+            <b className="mask" title={maskText(fBase(hb.p50))}>
               {fBaseCompact(hb.p50)}
             </b>
           </div>
           <div className="r">
             <i style={{ background: `color-mix(in srgb, ${color} 45%, transparent)` }} />
             Range{' '}
-            <b className="mask" title={`${fBase(hb.p10)}–${fBase(hb.p90)}`}>
+            <b className="mask" title={maskText(`${fBase(hb.p10)}–${fBase(hb.p90)}`)}>
               {fBaseCompact(hb.p10)}–{fBaseCompact(hb.p90)}
             </b>
           </div>
@@ -672,7 +674,7 @@ export function FanChart({
             <div className="r">
               <i style={{ background: 'var(--muted)', opacity: 0.55 }} />
               Your plan{' '}
-              <b className="mask" title={fBase(overlay[hi!]!.p50)}>
+              <b className="mask" title={maskText(fBase(overlay[hi!]!.p50))}>
                 {fBaseCompact(overlay[hi!]!.p50)}
               </b>
             </div>
@@ -848,7 +850,10 @@ export function FanChart({
             whiteSpace: 'nowrap',
           }}
         >
-          pot {fBaseCompact(dist.p10)}–{fBaseCompact(dist.p90)}
+          pot{' '}
+          <span className="mask">
+            {fBaseCompact(dist.p10)}–{fBaseCompact(dist.p90)}
+          </span>
         </div>
       )}
       {fireY != null && !hb && (
@@ -868,7 +873,7 @@ export function FanChart({
             whiteSpace: 'nowrap',
           }}
         >
-          FIRE target {fBaseCompact(fireNumber!)}
+          FIRE target <span className="mask">{fBaseCompact(fireNumber!)}</span>
         </div>
       )}
       {fireCrossX != null && fireY != null && (
@@ -973,7 +978,7 @@ export function FanChart({
             pointerEvents: 'none',
           }}
         >
-          {fBaseCompact(bands[bands.length - 1]!.p50)}
+          <span className="mask">{fBaseCompact(bands[bands.length - 1]!.p50)}</span>
         </div>
       )}
       {/* Y-axis money scale — overlaid at the RIGHT edge, ON TOP of the plot (does NOT reserve/push
@@ -1010,7 +1015,7 @@ export function FanChart({
                 borderRadius: 2,
               }}
             >
-              {fBaseCompact(maxY * (1 - i / 4))}
+              <span className="mask">{fBaseCompact(maxY * (1 - i / 4))}</span>
             </div>
           )
         })}

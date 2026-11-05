@@ -24,7 +24,7 @@ from backend.db.automation_runtime_store import AutomationRuntimeStore
 from backend.db.automation_store import DELETING_STATUS, AutomationStore
 from backend.db.session_store import SessionStore
 
-from .run_context import configured_trigger, last_completed_run
+from .run_context import configured_trigger, last_completed_run, last_run_record, run_before_last
 from .schedules import compute_next_run, ran_slot_floor
 
 logger = logging.getLogger(__name__)
@@ -273,6 +273,8 @@ def request_for_run(
         blocked=[str(tool) for tool in automation.get("blocked") or []],
         configured_trigger=configured_trigger(automation),
         last_completed_run=last_completed_run(automation["id"], run),
+        run_before_last=run_before_last(automation["id"], run),
+        last_run_record=last_run_record(automation["id"], run),
     )
 
 

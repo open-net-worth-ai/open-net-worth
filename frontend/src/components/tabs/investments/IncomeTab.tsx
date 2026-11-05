@@ -66,7 +66,7 @@ function SourceRow({ row }: { row: IncomeSourceRow }) {
           <span className="inc-src-fill" style={{ width: `${row.barPct}%`, background: dot }} />
         </span>
       </div>
-      <span className="inc-src-amt">{fBase(row.annualBase)}</span>
+      <span className="inc-src-amt money">{fBase(row.annualBase)}</span>
     </div>
   )
 }
@@ -102,7 +102,7 @@ function PaymentRow({ row }: { row: IncomePaymentRow }) {
             <CalendarClock size={14} strokeWidth={2} />
           )}
         </span>
-        <span>{fBase(row.amountBase)}</span>
+        <span className="money">{fBase(row.amountBase)}</span>
       </span>
     </div>
   )
@@ -126,7 +126,9 @@ function RecentIncomePanel({
       <div className="mk-panel-head">
         <span className="mk-panel-title">Recent income</span>
         <span className="mk-panel-spacer" />
-        <span className="mk-panel-sub">{total} received</span>
+        <span className="mk-panel-sub">
+          <span className="money">{total}</span> received
+        </span>
       </div>
       <div className="mk-panel-body">
         {total === 0 ? (
@@ -313,7 +315,7 @@ export function IncomeTab({ version = 0, onAskLucius }: Props) {
                       />
                     </span>
                   </div>
-                  <span className="inc-src-amt">{fBase(view.restSrcSum)}</span>
+                  <span className="inc-src-amt money">{fBase(view.restSrcSum)}</span>
                 </button>
               )}
             </div>
@@ -341,7 +343,7 @@ export function IncomeTab({ version = 0, onAskLucius }: Props) {
                   <div className="inc-cmp-row">
                     <div className="inc-cmp-top">
                       <span className="inc-cmp-k">Received • last 12m</span>
-                      <span className="inc-cmp-v">{fBase(view.growth.received)}</span>
+                      <span className="inc-cmp-v money">{fBase(view.growth.received)}</span>
                     </div>
                     <div className="inc-bar">
                       <span
@@ -357,11 +359,13 @@ export function IncomeTab({ version = 0, onAskLucius }: Props) {
                     <div className="inc-cmp-top">
                       <span className="inc-cmp-k">Forecast • next 12m</span>
                       <span className="inc-cmp-v">
-                        <span>{fBase(view.growth.projected)}</span>
+                        <span className="money">{fBase(view.growth.projected)}</span>
                         {view.growth.growthPct != null && (
-                          <Badge tone={view.growth.growthPct >= 0 ? 'pos' : 'neg'}>
-                            {fPct(view.growth.growthPct, { sign: true })}
-                          </Badge>
+                          <span className="money">
+                            <Badge tone={view.growth.growthPct >= 0 ? 'pos' : 'neg'}>
+                              {fPct(view.growth.growthPct, { sign: true })}
+                            </Badge>
+                          </span>
                         )}
                       </span>
                     </div>
@@ -413,7 +417,7 @@ export function IncomeTab({ version = 0, onAskLucius }: Props) {
             <span className="mk-panel-spacer" />
             <span className="mk-panel-sub">
               next {view.calendarHorizonDays} days • {view.calendarCount} expected •{' '}
-              {view.calendarTotalFmt}
+              <span className="money">{view.calendarTotalFmt}</span>
             </span>
           </div>
           <div className="mk-panel-body">
@@ -429,7 +433,7 @@ export function IncomeTab({ version = 0, onAskLucius }: Props) {
                   </span>
                 </div>
                 <div className="inc-next-r">
-                  <span className="inc-next-amt">{fBase(view.nextPayment.amountFmt)}</span>
+                  <span className="inc-next-amt money">{fBase(view.nextPayment.amountFmt)}</span>
                   <span className="inc-next-pay">pays {view.nextPayment.payLabel}</span>
                 </div>
               </div>

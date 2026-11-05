@@ -187,6 +187,7 @@ _OVERRIDES: dict[str, tuple[str, str, str]] = {
     "fetch_page": ("browse", "Read a page", "pages"),
     "run_code": ("run", "Run code", "scripts"),
     "get_screen_detail": ("read", "Read on-screen detail", "screens"),
+    "read_screen": ("read", "Read your screen", "screens"),
     "show_guide": ("read", "Show a guide", "guides"),
     # `net_worth` has no verb at all in the name; `connector_status` is the pre-2026-10-10
     # name stored transcripts still carry (display only — it no longer dispatches).

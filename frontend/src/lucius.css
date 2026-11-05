@@ -7,6 +7,15 @@
    dropmask/resizer internal raw 5 kept; drag-ghost → --z-toast (top of stack).
 */
 
+/* How far the orb has turned to its reconnecting colour, registered so it can fade: an unregistered
+   property has no in-between value and jumps. Without @property support it still jumps, nothing
+   worse. */
+@property --lx-orb-warn {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
 @layer legacy {
   /* ════════════════ Lucius dock ════════════════ */
   /* The floating Ask-Lucius dock sits above modals (--z-modal) and toasts (--z-toast) — it's the
@@ -89,6 +98,11 @@
   .lx-dock-pill--call[data-mode='reconnecting'] {
     --lx-pill-w: 13rem;
   }
+  /* Room for the words beside the bars: "Reconnecting…" was cut to "Reconne…". */
+  .lx-dock-pill--call[data-mode='reconnecting'],
+  .lx-dock-pill--call[data-mode='poor'] {
+    --lx-pill-w: 16.5rem;
+  }
   .lx-dock-pill--call[data-mode='attention'] {
     --lx-pill-w: 17.5rem;
   }
@@ -100,7 +114,7 @@
     --lx-pill-w: 21rem;
   }
   .lx-dock-pill--call .lx-orb {
-    --lx-orb-tint: #fff;
+    --lx-orb-base: #fff;
   }
   /* Beats .lx-call-btn's composer fill, which is declared later in this file. */
   .lx-call-btn.lx-call-btn--pill {
@@ -133,6 +147,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     font-variant-numeric: tabular-nums;
+    /* The font's letters sit low in their box: centred boxes still read as words below the orb. */
+    translate: 0 -1px;
   }
   .lx-dock-pill-btn {
     width: 1.75rem;
@@ -905,32 +921,83 @@
   .lx-call-btn svg {
     display: block;
   }
-  .lx-call-btn--setup {
-    opacity: 0.55;
+  /* A phone's call away from the Lucius tab: one round button above the tab bar, and a call's
+     problem above that. */
+  .lx-call-float {
+    position: fixed;
+    right: var(--space-4);
+    bottom: calc(24px + var(--safe-b));
+    z-index: var(--z-sticky);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: var(--space-2);
+    max-width: calc(100vw - 2 * var(--space-4));
+    pointer-events: none;
   }
-  .lx-callbar-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
+  .lx-call-float > * {
+    pointer-events: auto;
+  }
+  .lx-call-float .lx-call-notice {
+    margin: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--surface);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  }
+  .lx-call-btn.lx-call-btn--fab {
+    width: 3rem;
+    height: 3rem;
     flex: none;
-    background: var(--muted);
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.2),
+      0 6px 16px rgba(0, 0, 0, 0.22);
   }
-  .lx-callbar-dot--live {
-    background: var(--good);
-    animation: lx-callbar-pulse 1.6s ease-in-out infinite;
+  .lx-call-fab {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 3rem;
+    padding: 0 var(--space-4) 0 var(--space-2);
+    border: none;
+    border-radius: var(--radius-pill);
+    background: var(--cta);
+    color: var(--ink-on-cta);
+    font: inherit;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    box-shadow:
+      0 2px 6px rgba(0, 0, 0, 0.2),
+      0 6px 16px rgba(0, 0, 0, 0.22);
   }
-  .lx-callbar-dot--warn {
-    background: var(--warn);
+  .lx-call-fab .lx-orb {
+    --lx-orb-size: 2rem;
   }
-  @keyframes lx-callbar-pulse {
-    50% {
-      opacity: 0.35;
+  /* A response to the press: without one a tap looked like nothing until the call rang. A darker
+     or lighter shade, not reversed colours, which on a same-coloured page made the button vanish. */
+  .lx-call-btn:active,
+  .lx-call-fab:active {
+    background: var(--cta-hover);
+  }
+  .lx-call-btn.lx-call-btn--pill:active {
+    background: rgba(255, 255, 255, 0.34);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lx-call-btn,
+    .lx-call-fab {
+      transition:
+        scale 0.12s ease,
+        background-color 0.12s ease;
+    }
+    .lx-call-btn:active,
+    .lx-call-fab:active {
+      scale: 0.94;
     }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .lx-callbar-dot--live {
-      animation: none;
-    }
+  .lx-call-fab-text {
+    font-variant-numeric: tabular-nums;
   }
   /* The call's big view: `--screen` is the phone's full-screen call, `--card` takes the composer's
      place on a computer so the chat above stays readable. One look on every surface. */
@@ -988,6 +1055,53 @@
   }
   .lx-callstage--screen .lx-callstage-clock {
     font-size: var(--text-md);
+  }
+  .lx-callstage-signal {
+    --lx-signal-on: var(--good);
+    --lx-signal-off: color-mix(in srgb, var(--ink) 16%, transparent);
+    flex: none;
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+  }
+  .lx-callstage-signal[data-bars='1'] {
+    --lx-signal-on: var(--warn);
+  }
+  /* No network: red, never a stale green. */
+  .lx-callstage-signal[data-bars='0'] {
+    --lx-signal-on: var(--bad);
+  }
+  /* Amber and red would vanish on the pill's colour; its words say which. */
+  .lx-dock-pill--call .lx-callstage-signal {
+    --lx-signal-on: #fff;
+    --lx-signal-off: rgba(255, 255, 255, 0.3);
+  }
+  /* Whole pixels only: at 3.5px browsers rounded the bars to 4, 3, 4, 3 wide. */
+  .lx-callstage-signal > span {
+    width: 3px;
+    border-radius: 99px;
+    background: var(--lx-signal-off);
+    transition: background-color 0.3s ease;
+  }
+  .lx-callstage-signal > span:nth-child(1) {
+    height: 5px;
+  }
+  .lx-callstage-signal > span:nth-child(2) {
+    height: 8px;
+  }
+  .lx-callstage-signal > span:nth-child(3) {
+    height: 11px;
+  }
+  .lx-callstage-signal > span:nth-child(4) {
+    height: 14px;
+  }
+  /* Lost and poor both light the first bar: the colour says which. */
+  .lx-callstage-signal[data-bars='0'] > span:nth-child(1),
+  .lx-callstage-signal[data-bars='1'] > span:nth-child(1),
+  .lx-callstage-signal[data-bars='3'] > span:nth-child(-n + 3),
+  .lx-callstage-signal[data-bars='4'] > span {
+    background: var(--lx-signal-on);
   }
   .lx-callstage-min {
     width: var(--tap-min);
@@ -1101,8 +1215,9 @@
   @container (min-width: 16rem) {
     .lx-callstage--card .lx-callstage-inner {
       display: grid;
-      /* The expand button (phone only) opens a fourth column; without it, none is held. */
-      grid-template-columns: auto 1fr auto;
+      /* Orb, words, bars, controls. The expand button (phone only) opens a fifth column; without
+         it, none is held. */
+      grid-template-columns: auto 1fr auto auto;
       grid-template-rows: 1fr auto auto 1fr;
       /* The stacked layout's gap would also space these rows: 36px of air above and below. */
       row-gap: 0;
@@ -1114,7 +1229,6 @@
     .lx-callstage--card .lx-callstage-body {
       display: contents;
     }
-    .lx-callstage--card .lx-callbar-dot,
     .lx-callstage--card .lx-callstage-clock,
     .lx-callstage--card .lx-callstage-line,
     .lx-callstage--card .lx-callstage-label {
@@ -1127,6 +1241,11 @@
       --lx-orb-size: 1.75rem;
       grid-area: 1 / 1 / 5 / 2;
       margin-right: var(--space-1);
+    }
+    /* A column of its own, centred on the strip like the words and buttons beside it. */
+    .lx-callstage--card .lx-callstage-signal {
+      grid-area: 1 / 3 / 5 / 4;
+      align-self: center;
     }
     .lx-callstage--card .lx-callstage-name {
       display: block;
@@ -1152,11 +1271,11 @@
       scale: 1;
     }
     .lx-callstage--card .lx-callstage-controls {
-      grid-area: 1 / 3 / 5 / 4;
+      grid-area: 1 / 4 / 5 / 5;
       gap: var(--space-3);
     }
     .lx-callstage--card .lx-callstage-min {
-      grid-area: 1 / 4 / 5 / 5;
+      grid-area: 1 / 5 / 5 / 6;
     }
   }
   /* "Ringing…", "Lucius is working…": a soft light passing across the words while you wait. */
@@ -1187,14 +1306,24 @@
     }
   }
 
-  /* The orb: one sphere and its glow, nothing circling it (owner, 2026-11-03). Inside it, three
-     soft lights drift on their own slow paths, so it is alive even in silence; it swells with
-     whoever is talking, you as much as Lucius. The level loop sets --lx-orb-lucius /
-     --lx-orb-you (0–1) each frame and drives `scale`; the keyframes drive `translate` and
-     `rotate`, so the two never fight over one transform. */
+  /* The orb: one sphere and its glow, nothing circling it (owner, 2026-11-03). Inside it, soft
+     colour that sways like liquid, so it is alive even in silence (circling lights read as a
+     spinner: owner, 2026-11-05); it swells with whoever is talking, you as much as Lucius. The level
+     loop sets --lx-orb-lucius / --lx-orb-you (0–1) each frame and drives `scale`; the keyframes
+     drive `translate` and `rotate`, so the two never fight over one transform. */
   .lx-orb {
     --lx-orb-size: 6rem;
-    --lx-orb-tint: var(--lucius);
+    --lx-orb-base: var(--lucius);
+    /* Purple to amber by way of pink and orange: mixed directly, opposite colours pass through a
+       dirty beige (owner, 2026-11-05). Blue and pink lights on amber would make the same beige,
+       so every colour turns with it. */
+    --lx-orb-warn: 0;
+    --lx-orb-warn-pct: calc(var(--lx-orb-warn) * 100%);
+    --lx-orb-tint: color-mix(in oklch, var(--lx-orb-base), #f5a300 var(--lx-orb-warn-pct));
+    --lx-orb-indigo: color-mix(in oklch, #5b8cff, #ff9500 var(--lx-orb-warn-pct));
+    --lx-orb-cyan: color-mix(in oklch longer hue, #4cc9ff, #ffc04d var(--lx-orb-warn-pct));
+    --lx-orb-pink: color-mix(in oklch, #ff7ad0, #ff8a1f var(--lx-orb-warn-pct));
+    --lx-orb-deep: color-mix(in oklch, #1b1464, #8a4f00 var(--lx-orb-warn-pct));
     --lx-orb-halo-mix: 38%;
     --lx-orb-voice: min(1, var(--lx-orb-lucius, 0) + var(--lx-orb-you, 0));
     position: relative;
@@ -1253,7 +1382,7 @@
     font-size: calc(var(--lx-orb-size) / 8);
     scale: calc(1 + var(--lx-orb-lucius, 0) * 0.14 + var(--lx-orb-you, 0) * 0.12);
   }
-  /* A slow, turning wash of colour under the drifting lights. */
+  /* The colour under the moving light, swaying a little with it. */
   .lx-orb-core::before {
     content: '';
     position: absolute;
@@ -1261,57 +1390,77 @@
     background: conic-gradient(
       from 0deg,
       var(--lx-orb-tint),
-      color-mix(in srgb, var(--lx-orb-tint) 40%, #5b8cff),
-      color-mix(in srgb, var(--lx-orb-tint) 30%, #4cc9ff),
+      color-mix(in srgb, var(--lx-orb-tint) 40%, var(--lx-orb-indigo)),
+      color-mix(in srgb, var(--lx-orb-tint) 30%, var(--lx-orb-cyan)),
       var(--lx-orb-tint),
-      color-mix(in srgb, var(--lx-orb-tint) 40%, #ff7ad0),
+      color-mix(in srgb, var(--lx-orb-tint) 40%, var(--lx-orb-pink)),
       var(--lx-orb-tint)
     );
     filter: blur(1.6em);
     opacity: calc(0.6 + var(--lx-orb-voice) * 0.3);
   }
-  /* Each light fades to nothing exactly at its own edge (closest-side → transparent 100%): a
-     gradient still showing where the box ended drew clear circles inside the ball (owner,
-     2026-11-03). Big and soft, so the colours run into each other. */
-  .lx-orb-blob {
+  /* Liquid tipping in a box, not lights going round: wide, low pools of soft colour that sway
+     from side to side out of step, piling up against one wall and running back (owner,
+     2026-11-05). No surface line: drawn waves looked like a cartoon in this soft ball. Each fades
+     to nothing inside its box, or the box's edge shows as a circle (owner, 2026-11-03). */
+  .lx-orb-pool {
     position: absolute;
     z-index: 1;
-    width: 95%;
-    height: 95%;
-    filter: blur(1.4em);
+    inset: -15%;
+    filter: blur(1em);
     mix-blend-mode: screen;
-    opacity: calc(0.8 + var(--lx-orb-voice) * 0.2);
+    opacity: calc(0.85 + var(--lx-orb-voice) * 0.15);
+    transform-origin: 50% 100%;
     scale: calc(1 + var(--lx-orb-voice) * 0.25);
   }
-  .lx-orb-blob:nth-child(1) {
-    top: -25%;
-    left: -22%;
+  .lx-orb-pool:nth-child(1) {
     background: radial-gradient(
-      circle closest-side,
-      color-mix(in srgb, var(--lx-orb-tint) 70%, #fff) 0%,
-      color-mix(in srgb, color-mix(in srgb, var(--lx-orb-tint) 70%, #fff) 45%, transparent) 50%,
+      ellipse 44% 21% at 50% 58%,
+      color-mix(in srgb, var(--lx-orb-tint) 60%, #fff) 0%,
+      color-mix(in srgb, color-mix(in srgb, var(--lx-orb-tint) 60%, #fff) 45%, transparent) 55%,
       transparent 100%
     );
   }
-  .lx-orb-blob:nth-child(2) {
-    bottom: -30%;
-    right: -25%;
+  .lx-orb-pool:nth-child(2) {
     background: radial-gradient(
-      circle closest-side,
-      color-mix(in srgb, var(--lx-orb-tint) 45%, #4cc9ff) 0%,
-      color-mix(in srgb, color-mix(in srgb, var(--lx-orb-tint) 45%, #4cc9ff) 45%, transparent) 50%,
+      ellipse 40% 19% at 50% 70%,
+      color-mix(in srgb, var(--lx-orb-tint) 35%, var(--lx-orb-cyan)) 0%,
+      color-mix(
+          in srgb,
+          color-mix(in srgb, var(--lx-orb-tint) 35%, var(--lx-orb-cyan)) 45%,
+          transparent
+        )
+        55%,
       transparent 100%
     );
   }
-  .lx-orb-blob:nth-child(3) {
-    top: 5%;
-    right: -35%;
-    width: 80%;
-    height: 80%;
+  .lx-orb-pool:nth-child(3) {
     background: radial-gradient(
-      circle closest-side,
-      color-mix(in srgb, var(--lx-orb-tint) 45%, #ff7ad0) 0%,
-      color-mix(in srgb, color-mix(in srgb, var(--lx-orb-tint) 45%, #ff7ad0) 45%, transparent) 50%,
+      ellipse 34% 20% at 50% 42%,
+      color-mix(in srgb, var(--lx-orb-tint) 35%, var(--lx-orb-pink)) 0%,
+      color-mix(
+          in srgb,
+          color-mix(in srgb, var(--lx-orb-tint) 35%, var(--lx-orb-pink)) 45%,
+          transparent
+        )
+        55%,
+      transparent 100%
+    );
+  }
+  /* The one dark pool: depth, and bright pools that stand out against it (owner, 2026-11-05). At
+     80% it looked like a bruise against the ball's edge. */
+  .lx-orb-pool:nth-child(4) {
+    mix-blend-mode: multiply;
+    opacity: 0.6;
+    background: radial-gradient(
+      ellipse 38% 25% at 50% 50%,
+      color-mix(in srgb, var(--lx-orb-tint) 50%, var(--lx-orb-deep)) 0%,
+      color-mix(
+          in srgb,
+          color-mix(in srgb, var(--lx-orb-tint) 50%, var(--lx-orb-deep)) 45%,
+          transparent
+        )
+        55%,
       transparent 100%
     );
   }
@@ -1320,10 +1469,7 @@
     scale: 0.9;
   }
   .lx-orb[data-state='reconnecting'] {
-    --lx-orb-tint: var(--warn);
-  }
-  .lx-orb[data-state='reconnecting'] .lx-orb-core {
-    opacity: 0.6;
+    --lx-orb-warn: 1;
   }
   .lx-orb[data-state='ended'] .lx-orb-core {
     scale: 0.92;
@@ -1338,34 +1484,37 @@
   .lx-orb--mini {
     --lx-orb-size: 1.125rem;
   }
-  .lx-orb--mini .lx-orb-blob {
-    filter: blur(0.15em);
-  }
   @media (prefers-reduced-motion: no-preference) {
     .lx-orb {
       animation: lx-orb-breathe 5.5s ease-in-out infinite;
+      /* Into and out of reconnecting: a blip washes through instead of flashing. */
+      transition: --lx-orb-warn 0.8s ease;
     }
-    .lx-orb-blob:nth-child(1) {
-      animation: lx-orb-drift-a 11s ease-in-out infinite alternate;
+    /* Out of step, so the pools are never all at a wall at once and the ball never rests. */
+    .lx-orb-core::before {
+      animation: lx-orb-sway 13.5s ease-in-out infinite;
     }
-    .lx-orb-blob:nth-child(2) {
-      animation: lx-orb-drift-b 13s ease-in-out infinite alternate;
+    .lx-orb-pool:nth-child(1) {
+      animation: lx-orb-slosh 7.5s ease-in-out infinite;
     }
-    .lx-orb-blob:nth-child(3) {
-      animation: lx-orb-drift-c 9s ease-in-out infinite alternate;
+    .lx-orb-pool:nth-child(2) {
+      animation: lx-orb-slosh 9.75s ease-in-out -3.9s infinite reverse;
     }
-    /* Working: the light moves faster and the breath deepens — busy, never frantic. */
+    .lx-orb-pool:nth-child(3) {
+      animation: lx-orb-slosh 6s ease-in-out -1.65s infinite;
+    }
+    .lx-orb-pool:nth-child(4) {
+      animation: lx-orb-slosh 11.5s ease-in-out -5s infinite reverse;
+    }
+    /* Working: the liquid moves faster and the breath deepens — busy, never frantic. */
     .lx-orb[data-state='working'] {
       animation-duration: 2.6s;
     }
-    .lx-orb[data-state='working'] .lx-orb-blob {
-      animation-duration: 3.5s;
-    }
-    .lx-orb-core::before {
-      animation: lx-orb-spin 18s linear infinite;
+    .lx-orb[data-state='working'] .lx-orb-pool {
+      animation-duration: 3.6s;
     }
     .lx-orb[data-state='working'] .lx-orb-core::before {
-      animation-duration: 6s;
+      animation-duration: 6.75s;
     }
     .lx-orb[data-state='calling'] .lx-orb-halo {
       animation: lx-orb-glow 2s ease-in-out infinite;
@@ -1381,46 +1530,24 @@
       scale: 1.03;
     }
   }
-  @keyframes lx-orb-drift-a {
-    0% {
-      translate: 0 0;
-      rotate: 0deg;
+  @keyframes lx-orb-slosh {
+    0%,
+    100% {
+      translate: -30% 5%;
+      rotate: -9deg;
     }
     50% {
-      translate: 28% 18%;
-    }
-    100% {
-      translate: 8% 42%;
-      rotate: 140deg;
+      translate: 30% -5%;
+      rotate: 9deg;
     }
   }
-  @keyframes lx-orb-drift-b {
-    0% {
-      translate: 0 0;
-      rotate: 0deg;
+  @keyframes lx-orb-sway {
+    0%,
+    100% {
+      translate: -9% 3%;
     }
     50% {
-      translate: -30% -12%;
-    }
-    100% {
-      translate: -14% -38%;
-      rotate: -120deg;
-    }
-  }
-  @keyframes lx-orb-drift-c {
-    0% {
-      translate: 0 0;
-    }
-    50% {
-      translate: -46% 22%;
-    }
-    100% {
-      translate: -20% -26%;
-    }
-  }
-  @keyframes lx-orb-spin {
-    to {
-      rotate: 1turn;
+      translate: 9% -3%;
     }
   }
   @keyframes lx-orb-glow {
@@ -2292,6 +2419,24 @@
   }
   :root:is([data-theme='warm'], [data-theme='light']) .lx-scope-peekbox {
     /* Warm-tinted like every other light-theme elevation token, and fainter still. */
+    box-shadow: 0 -4px 14px rgba(48, 42, 30, 0.08);
+  }
+  /* What the Screen awareness switch just did: floats over the bar like Peek, so it never moves
+     the composer, and takes no clicks. */
+  .lx-scope-notice {
+    position: fixed;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--modal-bg);
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--muted);
+    box-shadow: 0 -4px 14px rgba(0, 0, 0, 0.16);
+    z-index: calc(var(--z-toast) + 20);
+    pointer-events: none;
+  }
+  :root:is([data-theme='warm'], [data-theme='light']) .lx-scope-notice {
     box-shadow: 0 -4px 14px rgba(48, 42, 30, 0.08);
   }
   .lx-scope-peek-h {

@@ -144,6 +144,20 @@ def status(runner: Runner) -> int:
     return 1
 
 
+def restart_command(python: str) -> list[str]:
+    """What starts the service again from outside it: the task, else the unsupervised launcher."""
+    query = subprocess.run(
+        ["schtasks", "/Query", "/TN", TASK_NAME],
+        capture_output=True,
+        check=False,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+    )
+    if query.returncode == 0:
+        return ["schtasks", "/Run", "/TN", TASK_NAME]
+    executable, arguments = launcher_command(python)
+    return [executable, *arguments.split()]
+
+
 def run_service() -> int:
     """``autostart-run``: start the server with no console and wait for it. Its exit code is the
     server's, so Task Scheduler's restart-on-failure sees a crash."""

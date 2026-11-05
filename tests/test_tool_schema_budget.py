@@ -276,7 +276,10 @@ def test_total_tool_schemas_size_under_budget(tool_schemas):
     # ynab_list_plans and ynab_get_plan, plus a plan_id on ynab_list_accounts /
     # ynab_fetch_transactions — the connector keeps only the token and Lucius names the plan per
     # call. ~1.4K chars, connector-scoped, so the CORE default offer is unchanged.
-    budget = 477_000
+    # 2026-11-05: 477_000 -> 479_000. get_asset_technicals / get_asset_fundamentals
+    # (ai/tools/asset_analysis.py) — the ticker Analysis tab's rows for Lucius. ~1.6K chars after
+    # trimming; discoverable, not CORE, so the default offer is unchanged.
+    budget = 479_000
     assert total < budget, (
         f"TOOL_SCHEMAS json.dumps size is {total:,} chars — over the {budget:,}-char budget. "
         "Shorten a tool description or raise the budget intentionally (with a comment)."

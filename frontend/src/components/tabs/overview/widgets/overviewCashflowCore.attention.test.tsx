@@ -85,7 +85,7 @@ describe('Needs attention and the Portfolio Brief', () => {
     respond({ signals: [CONCENTRATION, TODAY], decisions_count: 1, base_currency: 'USD' })
     renderAttention()
     await waitFor(() => expect(screen.getByText(/Position concentration/)).toBeTruthy())
-    expect(screen.getByText(/ACME is 44% of investments/)).toBeTruthy()
+    expect(document.body.textContent).toMatch(/ACME is 44% of investments/)
     expect(screen.queryByText(/All clear/)).toBeNull()
     expect(screen.queryByText(/Portfolio is \+\$40/)).toBeNull()
   })
@@ -122,8 +122,10 @@ describe('Needs attention card bills', () => {
       },
     )
     renderAttention()
-    await waitFor(() => expect(screen.getByText(/Visa: S?\$6,276\.57 due in 3 days/)).toBeTruthy())
-    expect(screen.getByText(/Master: S?\$300\.00 overdue by 2 days/)).toBeTruthy()
+    await waitFor(() =>
+      expect(document.body.textContent).toMatch(/Visa: S?\$6,276\.57 due in 3 days/),
+    )
+    expect(document.body.textContent).toMatch(/Master: S?\$300\.00 overdue by 2 days/)
     expect(screen.getByText(/Estimated from the card's statement cycle\./)).toBeTruthy()
   })
 

@@ -34,7 +34,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Literal, Optional, Tuple
 
-from backend.core.net_guard import UnsafeUrlError, resolve_owner_url
+from backend.core.net_guard import UnresolvableHostError, UnsafeUrlError, resolve_owner_url
 from backend.core.pinned_http import pinned_opener
 from backend.core.redact_error import redact_error
 from backend.core.untrusted import sanitize_untrusted
@@ -387,7 +387,8 @@ class McpClientConnection:
             detail = _error_detail(_safe_read(exc))
             if exc.code == 401 and self._config.auth_type == "oauth":
                 raise _OAuthUnauthorized(
-                    f"server '{self._config.id}' returned HTTP 401: {detail}"
+                    f"server '{self._config.id}' returned HTTP 401: {detail}",
+                    auth_challenge="oauth",
                 ) from exc
             raise McpCallError(
                 f"server '{self._config.id}' returned HTTP {exc.code}: {detail}",
@@ -396,6 +397,11 @@ class McpClientConnection:
                     if exc.code == 401
                     else None
                 ),
+            ) from exc
+        except UnresolvableHostError as exc:
+            raise McpCallError(
+                "Can't reach this server: its address could not be looked up. "
+                "This is usually a network problem."
             ) from exc
         except UnsafeUrlError as exc:
             raise McpCallError(f"server '{self._config.id}' url is not allowed: {exc}") from exc

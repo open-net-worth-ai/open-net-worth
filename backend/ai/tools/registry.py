@@ -1032,6 +1032,8 @@ async def _dispatch_call(
 # matching HTTP routes are locked by api.demo_lockdown; this closes the same doors for Lucius.
 _DEMO_REFUSED_TOOLS = frozenset(
     {
+        # Its request reaches every open app, and on the demo those are other visitors'.
+        "read_screen",
         "list_checkpoints",
         "restore_checkpoint",
         "get_recent_logs",

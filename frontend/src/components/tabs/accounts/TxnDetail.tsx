@@ -1131,7 +1131,7 @@ function ViewBody({
         toFields={txnFields}
         className="acct-detail-hero"
       >
-        <div className={`acct-detail-amt ${heroPos ? 'pos' : 'neg'}`}>
+        <div className={`acct-detail-amt mask l ${heroPos ? 'pos' : 'neg'}`}>
           {heroSign}
           {amtStr}
           <span className="acct-detail-ccy">{currency}</span>
@@ -1148,7 +1148,7 @@ function ViewBody({
                     : (fx.est ?? '') + ' • reporting rate, ≈ today'
                 }
               >
-                ≈ {fCur(shown, baseCurrency, { cents: true })}
+                ≈ <span className="mask l">{fCur(shown, baseCurrency, { cents: true })}</span>
                 <span className="acct-detail-base-sub">
                   {' '}
                   in {baseCurrency}
@@ -1165,7 +1165,8 @@ function ViewBody({
               className="acct-detail-base"
               title="Amount that arrived, in the destination currency"
             >
-              → {fCur(txn.toAmount, txn.toCurrency, { cents: true })}
+              →{' '}
+              <span className="mask l">{fCur(txn.toAmount, txn.toCurrency, { cents: true })}</span>
               <span className="acct-detail-base-sub"> received in {txn.toCurrency}</span>
             </div>
           )}
@@ -1276,7 +1277,7 @@ function ViewBody({
         </DRow>
         {txn.origCurrency && txn.origCurrency !== currency && (
           <DRow label="Original charge">
-            {fCur(txn.origAmount ?? 0, txn.origCurrency)}
+            <span className="mask l">{fCur(txn.origAmount ?? 0, txn.origCurrency)}</span>
             {fx.fact && (
               <span className="acct-detail-fxfact" title="Your card's actual settled rate">
                 {' '}

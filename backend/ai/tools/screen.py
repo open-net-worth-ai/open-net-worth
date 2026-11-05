@@ -38,7 +38,8 @@ class GetScreenDetailInput(ToolInput):
     description=(
         "Fetch the FULL content behind a handle the user is currently looking at on screen — a "
         "news article, a price/data series, or off-screen rows. The available handle ids are "
-        "listed in the on-screen context block under 'available on demand'. Call this INSTEAD of "
+        "listed in the on-screen context block under 'available on demand', on the user's message "
+        "or returned by read_screen. Call this INSTEAD of "
         "guessing what an article says or what a chart shows. Returns the content plus its source "
         "(cite the source/url in your answer)."
     ),
@@ -67,7 +68,8 @@ async def get_screen_detail(input_data: dict):
             {
                 "error": (
                     f"no on-screen handle '{handle_id}' — it may have scrolled off or the user "
-                    "changed screens. Answer from what's already in context."
+                    "changed screens. Call read_screen to look again, or answer from what's "
+                    "already in context."
                 )
             }
         ), None
@@ -367,7 +369,8 @@ class RunScreenCommandInput(ToolInput):
     description=(
         "Drive a review or staging action owned by the user's app screen. A command changes "
         "UI state only and never writes application data itself. The available commands and their "
-        "args are listed in the on-screen context block under 'this screen can be DRIVEN'. "
+        "args are listed in the on-screen context block under 'this screen can be DRIVEN', on the "
+        "user's message or returned by read_screen. "
         "Follow the command description: plan what-ifs are complete relative to the saved "
         "baseline, while review commands carry the complete validated draft. If the screen is not "
         "open, the call parks and the reply shows the user a navigation chip; say so. "
@@ -400,8 +403,9 @@ async def run_screen_command(input_data: dict):
     cmd = next((c for c in manifest if c.get("name") == name), None)
     if cmd is None:
         avail = ", ".join(sorted(c.get("name", "") for c in manifest)) or "none"
+        hint = "" if manifest else " Call read_screen to get what this screen offers."
         return json.dumps(
-            {"error": f"unknown screen command '{name}' — available this turn: {avail}"}
+            {"error": f"unknown screen command '{name}' — available this turn: {avail}.{hint}"}
         ), None
     err = _validate_command_args(cmd, args) or _validate_command_semantics(name, args)
     if err:

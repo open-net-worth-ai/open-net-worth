@@ -116,3 +116,17 @@ export function useChatMultiTurnEnabled(): { enabled: boolean; loaded: boolean }
   )
   return { enabled: value, loaded }
 }
+
+// ── Screen awareness ────────────────────────────────────────────────────────
+export const SCREEN_AWARENESS_DEFAULT_CHANGED_EVENT = 'onw:screen-awareness-default-changed'
+
+/** Reads profile.screen_awareness_default: a device's Screen awareness until it makes its own
+ *  choice with the switch. Default ON, as it was before the setting existed. */
+export function useScreenAwarenessDefault(): { enabled: boolean; loaded: boolean } {
+  const { value, loaded } = useProfilePref(
+    (p) => p.screen_awareness_default !== false,
+    true,
+    SCREEN_AWARENESS_DEFAULT_CHANGED_EVENT,
+  )
+  return { enabled: value, loaded }
+}

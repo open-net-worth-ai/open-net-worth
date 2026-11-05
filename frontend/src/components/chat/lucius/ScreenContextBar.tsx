@@ -27,6 +27,13 @@ import { useScreenSnapshot } from '../../../state/screenSnapshot'
 const PEEK_VIEWPORT_EDGE = 4
 const PEEK_ANCHOR_GAP = 6
 const PEEK_MAX_HEIGHT = 244
+const NOTICE_MS = 4500
+const NOTICE_ON = 'Screen awareness on. Your screen is sent with each message.'
+const NOTICE_OFF =
+  "Screen awareness off. Your screen won't be sent with messages, but Lucius can still look if you ask."
+const OFF_SUB = 'Attach screen content as context'
+const OFF_TOOLTIP =
+  "Screen awareness off — your screen isn't sent with messages. Lucius can still look if you ask."
 
 export interface ScreenContextBarProps {
   visibleIds: Set<string>
@@ -66,6 +73,30 @@ export function ScreenContextBar({
   const switchRef = useRef<HTMLButtonElement>(null)
   const peekId = useId()
   const peekHeadingId = useId()
+  const [notice, setNotice] = useState<{
+    message: string
+    left: number
+    width: number
+    bottom: number
+  } | null>(null)
+  const noticeTimer = useRef<number | undefined>(undefined)
+
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), [])
+
+  const flip = () => {
+    const next = !enabled
+    setEnabled(next)
+    const anchor = anchorRef.current?.getBoundingClientRect()
+    if (!anchor) return
+    setNotice({
+      message: next ? NOTICE_ON : NOTICE_OFF,
+      left: anchor.left,
+      width: anchor.width,
+      bottom: window.innerHeight - anchor.top + PEEK_ANCHOR_GAP,
+    })
+    window.clearTimeout(noticeTimer.current)
+    noticeTimer.current = window.setTimeout(() => setNotice(null), NOTICE_MS)
+  }
 
   // Auto-close the Peek preview when a draft APPEARS (first char, or a staged chip with no
   // keystroke — the false→true edge of `composing`). The button stays (it's gated on `collapsed`,
@@ -213,11 +244,15 @@ export function ScreenContextBar({
     return () => cancelAnimationFrame(raf)
   }, [compact, showPeek])
 
-  const tooltip =
-    'Screen awareness — ' +
-    snap.title +
-    (inView ? ' • ' + inView[1] : '') +
-    (handles.length ? ' • ' + handles.length + ' sources' : '')
+  const tooltip = enabled
+    ? 'Screen awareness — ' +
+      snap.title +
+      (inView ? ' • ' + inView[1] : '') +
+      (handles.length ? ' • ' + handles.length + ' sources' : '')
+    : OFF_TOOLTIP
+  const peekTitle = enabled
+    ? "Preview exactly what's shared this turn"
+    : 'Preview what Lucius would read if he looks'
 
   const onPeekTriggerKeyDown = (e: ReactKeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== 'Tab' || e.shiftKey || !showPeek) return
@@ -257,7 +292,7 @@ export function ScreenContextBar({
             <span className="lx-aw-toggle">
               <span className="lx-aw-dot">◉</span>
               <span className="lx-aw-label">Screen awareness</span>
-              <span className="lx-aw-sub">• {snap.title}</span>
+              <span className="lx-aw-sub">• {enabled ? snap.title : OFF_SUB}</span>
             </span>
             {!collapsed && (
               <button
@@ -266,7 +301,7 @@ export function ScreenContextBar({
                 aria-expanded={peek}
                 aria-controls={peekId}
                 aria-label="Preview what's shared with Lucius"
-                title="Preview exactly what's shared this turn"
+                title={peekTitle}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setPeek((p) => !p)}
                 onKeyDown={onPeekTriggerKeyDown}
@@ -282,12 +317,12 @@ export function ScreenContextBar({
               aria-checked={enabled}
               aria-label={
                 enabled
-                  ? 'Screen awareness on — click to stop sharing this screen'
-                  : 'Screen awareness off — click to share this screen'
+                  ? 'Screen awareness on — click to stop sending this screen with each message'
+                  : 'Screen awareness off — click to send this screen with each message'
               }
-              title={enabled ? 'Using this screen as context' : 'Not using this screen as context'}
+              title={enabled ? 'Sent with each message' : 'Not sent with your messages'}
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => setEnabled(!enabled)}
+              onClick={flip}
             >
               <span className="lx-switch-knob" />
             </button>
@@ -299,9 +334,15 @@ export function ScreenContextBar({
           <span className="lx-scope-txt">
             <b>Screen awareness</b>
             <span className="lx-scope-sub">
-              {snap.title}
-              {inView ? ' • ' + inView[1] : ''}
-              {handles.length ? ' • ' + handles.length + ' sources' : ''}
+              {enabled ? (
+                <>
+                  {snap.title}
+                  {inView ? ' • ' + inView[1] : ''}
+                  {handles.length ? ' • ' + handles.length + ' sources' : ''}
+                </>
+              ) : (
+                OFF_SUB
+              )}
             </span>
           </span>
           {!collapsed && (
@@ -311,7 +352,7 @@ export function ScreenContextBar({
               aria-expanded={peek}
               aria-controls={peekId}
               aria-label="Preview what's shared with Lucius"
-              title="Preview exactly what's shared this turn"
+              title={peekTitle}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => setPeek((p) => !p)}
               onKeyDown={onPeekTriggerKeyDown}
@@ -346,8 +387,8 @@ export function ScreenContextBar({
             role="switch"
             aria-checked={enabled}
             onMouseDown={(e) => e.preventDefault()}
-            onClick={() => setEnabled(!enabled)}
-            title={enabled ? 'Using this screen as context' : 'Not using this screen as context'}
+            onClick={flip}
+            title={enabled ? 'Sent with each message' : 'Not sent with your messages'}
           >
             <span className="lx-switch-knob" />
           </button>
@@ -381,6 +422,21 @@ export function ScreenContextBar({
         </div>
       )}
 
+      {notice &&
+        active &&
+        !showPeek &&
+        createPortal(
+          <div
+            className="lx-scope-notice"
+            role="status"
+            data-portal-layer
+            style={{ left: notice.left, width: notice.width, bottom: notice.bottom }}
+          >
+            {notice.message}
+          </div>,
+          document.body,
+        )}
+
       {showPeek &&
         createPortal(
           <div
@@ -403,7 +459,7 @@ export function ScreenContextBar({
             }
           >
             <div className="lx-scope-peek-h" id={peekHeadingId}>
-              Visible now — passed to Lucius
+              {enabled ? 'Visible now — passed to Lucius' : 'Visible now — read only if he looks'}
             </div>
             {snap.facts.map(([k, v], i) => (
               <div className="lx-scope-fact" key={i}>

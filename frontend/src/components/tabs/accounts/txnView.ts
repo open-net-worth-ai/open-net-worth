@@ -11,10 +11,15 @@ import { getBaseCurrency, txnMentionSublabel } from '../../../utils/format'
 import type { Txn, Account, FxRates } from './types'
 import { fCur, fxInfo, toBase } from './format'
 
+export type TransferLeg = 'source' | 'destination'
+
 export interface TxnView {
   amount: number
   ccy: string
   pos: boolean
+  /** The amount cell's colour class. A transfer seen from neither of its accounts has its own,
+   *  since it is neither money in nor money out. */
+  amtTone: 'pos' | 'neg' | 'transfer'
   baseVal: number
   isForeign: boolean
   baseStr: string
@@ -36,6 +41,8 @@ export interface TxnView {
   /** Transfer-only from/to account names (null when unresolved). */
   payeeFromName: string | null
   payeeToName: string | null
+  /** The transfer leg the viewed account already names, so its label can leave it out. */
+  transferViewedLeg: TransferLeg | null
   mentionSub: string
 }
 
@@ -93,7 +100,16 @@ export function buildTxnView(
     if (fxText) parts.push(fxText)
     return parts.length ? parts.join(' • ') : undefined
   })()
-  const sgn = pos ? '+' : '−'
+  // Viewed from neither leg (All accounts), a transfer moves money between the user's own
+  // accounts and nets zero, as selectionTotal already counts it. A minus read as an expense.
+  const unsignedTransfer =
+    t.kind === 'transfer' &&
+    !!t.fromAccountId &&
+    !!t.toAccountId &&
+    t.fromAccountId !== selectedId &&
+    t.toAccountId !== selectedId
+  const amtTone = unsignedTransfer ? 'transfer' : pos ? 'pos' : 'neg'
+  const sgn = unsignedTransfer ? '' : pos ? '+' : '−'
   const nativeMain = sgn + fCur(Math.abs(amount), ccy, { cents: true })
   const baseMain = sgn + fCur(Math.abs(baseVal), base, { cents: true })
   const primaryAcctId = t.kind === 'income' ? t.toAccountId : t.fromAccountId || t.toAccountId
@@ -114,6 +130,13 @@ export function buildTxnView(
   const payeeFromName = from ? from.name : null
   const payeeToName = to ? to.name : null
   const payeeText = payeeName || t.description || '—'
+  const transferViewedLeg: TransferLeg | null = !selectedId
+    ? null
+    : t.fromAccountId === selectedId
+      ? 'source'
+      : t.toAccountId === selectedId
+        ? 'destination'
+        : null
 
   const signedAmt = (pos ? 1 : -1) * Math.abs(amount)
   const mentionSub = txnMentionSublabel({
@@ -130,6 +153,7 @@ export function buildTxnView(
     amount,
     ccy,
     pos,
+    amtTone,
     baseVal,
     isForeign,
     baseStr,
@@ -147,6 +171,7 @@ export function buildTxnView(
     payeeText,
     payeeFromName,
     payeeToName,
+    transferViewedLeg,
     mentionSub,
   }
 }

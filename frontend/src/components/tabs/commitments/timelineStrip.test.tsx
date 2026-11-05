@@ -282,6 +282,117 @@ describe('TimelineStrip — payments and draws share ONE rail, nothing below it'
   })
 })
 
+describe('TimelineStrip — every payment is drawn, under its own month', () => {
+  // A 24-month loan drew only its first 14 payments and scrolled on through empty rail, and a
+  // payment due on the 30th sat beside the NEXT month's label, so the whole row read a month late.
+  function monthlyPayments(count: number, day = 30): Installment[] {
+    return Array.from({ length: count }, (_, i) => {
+      const lastDay = new Date(2026, 7 + i + 1, 0).getDate()
+      const d = new Date(2026, 7 + i, Math.min(day, lastDay))
+      const due = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      return installment(`inst-${i}`, due, 1000)
+    })
+  }
+  const withPayments = (
+    installments: Installment[],
+    extra: Partial<Commitment> = {},
+  ): Commitment => ({
+    ...commitmentWithDenseDraws(),
+    installments,
+    funding_plan: [],
+    ...extra,
+  })
+  const leftOf = (el: Element): number => parseFloat((el as HTMLElement).style.left)
+  const payMarkers = (container: HTMLElement) => [
+    ...container.querySelectorAll('.c2-strip-mark.pay'),
+  ]
+  const monthLabels = (container: HTMLElement) =>
+    [...container.querySelectorAll('.c2-strip-months span')].filter((s) => s.textContent)
+
+  it('draws all 24 payments of a 24-month plan and labels the last month', () => {
+    const { container } = render(
+      <TimelineStrip commitment={withPayments(monthlyPayments(24))} fx={{ SGD: 1 }} />,
+    )
+    expect(payMarkers(container)).toHaveLength(24)
+    expect(monthLabels(container).map((s) => s.textContent)).toContain(monthShortYear('2028-07'))
+  })
+
+  it('puts a month-end payment exactly on its own month label, never the next one', () => {
+    const { container } = render(
+      <TimelineStrip commitment={withPayments(monthlyPayments(24))} fx={{ SGD: 1 }} />,
+    )
+    const labels = monthLabels(container)
+    expect(labels).toHaveLength(24)
+    payMarkers(container).forEach((marker, i) => {
+      expect(leftOf(marker)).toBe(leftOf(labels[i]!))
+    })
+  })
+
+  it('leaves room for the first month label instead of clipping it at the left edge', () => {
+    const c = withPayments([installment('now', '2026-07-30', 1000)])
+    const { container } = render(<TimelineStrip commitment={c} fx={{ SGD: 1 }} />)
+    // Labels are centred on their tick and run ~50px wide, so half of that has to fit.
+    expect(leftOf(monthLabels(container)[0]!)).toBeGreaterThanOrEqual(25)
+  })
+
+  it('does not scroll on through empty months after the last payment', () => {
+    const { container } = render(
+      <TimelineStrip commitment={withPayments(monthlyPayments(24))} fx={{ SGD: 1 }} />,
+    )
+    const strip = container.querySelector('.c2-strip') as HTMLElement
+    const lastTick = leftOf(payMarkers(container).at(-1)!)
+    const monthPx = leftOf(payMarkers(container)[1]!) - leftOf(payMarkers(container)[0]!)
+    expect(parseFloat(strip.style.width)).toBeLessThanOrEqual(lastTick + monthPx)
+  })
+
+  it('keeps a busy month inside its own slot, so later months stay on their labels', () => {
+    // Weekly payments for a year: pushing markers apart inside fixed-width months would walk
+    // every later marker further and further from its label.
+    const weekly = Array.from({ length: 52 }, (_, i) => {
+      const d = new Date(2026, 7, 3 + i * 7)
+      const due = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      return installment(`week-${i}`, due, 100)
+    })
+    const { container } = render(
+      <TimelineStrip commitment={withPayments(weekly)} fx={{ SGD: 1 }} />,
+    )
+    const markers = payMarkers(container)
+    expect(markers).toHaveLength(52)
+    const labels = monthLabels(container)
+    weekly.forEach((inst, i) => {
+      const idx = labels.findIndex(
+        (l) => l.textContent === monthShortYear(inst.due_date.slice(0, 7)),
+      )
+      expect(leftOf(markers[i]!)).toBeGreaterThanOrEqual(leftOf(labels[idx]!))
+      if (labels[idx + 1]) expect(leftOf(markers[i]!)).toBeLessThan(leftOf(labels[idx + 1]!))
+    })
+    const strip = container.querySelector('.c2-strip') as HTMLElement
+    expect(leftOf(markers.at(-1)!)).toBeLessThan(parseFloat(strip.style.width))
+  })
+
+  it('does not drift when every month has both a payment and a funding draw', () => {
+    const installments = monthlyPayments(24, 15)
+    const c = withPayments(installments, {
+      funding_plan: installments.map((inst, i) => draw(`d-${i}`, inst.due_date, 500)),
+    })
+    const { container } = render(<TimelineStrip commitment={c} fx={{ SGD: 1 }} />)
+    const labels = monthLabels(container)
+    const pays = payMarkers(container)
+    pays.forEach((marker, i) => expect(leftOf(marker)).toBe(leftOf(labels[i]!)))
+  })
+
+  it('starts the shortfall shade at the first uncovered payment', () => {
+    const installments = monthlyPayments(3)
+    const c = withPayments(installments, {
+      coverage: { at_risk: true, earliest_shortfall_date: installments[1]!.due_date },
+    } as Partial<Commitment>)
+    const { container } = render(<TimelineStrip commitment={c} fx={{ SGD: 1 }} />)
+    const shade = container.querySelector('.c2-strip-shade')!
+    expect(leftOf(shade)).toBe(leftOf(payMarkers(container)[1]!))
+    expect(container.querySelectorAll('.c2-strip-mark.pay.bad')).toHaveLength(2)
+  })
+})
+
 describe('drawStemHeight — fixed two-height alternation by chronological order', () => {
   // An earlier (rejected) design used an unbounded greedy lane-packing shared between
   // payments AND draws — it never collided, but pooling both marker types into one

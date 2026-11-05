@@ -113,6 +113,45 @@ def test_build_fund_rows_skips_missing_metrics():
     assert growth[0]["ticker_display"].startswith("$")
 
 
+# ── format_metric ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("metric_id", "ratio", "shown"),
+    [
+        ("revenue_growth", 0.12, "12.0%"),
+        ("revenue_growth", 1.0, "100.0%"),
+        ("revenue_growth", 1.06, "106.0%"),
+        ("eps_growth", 2.7, "270.0%"),
+        ("eps_growth", -1.5, "-150.0%"),
+        ("return_on_equity", 1.42, "142.0%"),
+        ("profit_margin", 0.22, "22.0%"),
+        ("dividend_yield", 0.0031, "0.31%"),
+    ],
+)
+def test_format_metric_reads_a_ratio_as_a_ratio_above_one_too(metric_id, ratio, shown):
+    assert sf.format_metric(metric_id, ratio) == shown
+
+
+def test_format_metric_debt_to_equity_is_already_a_percent():
+    # Yahoo's debtToEquity is a percent: 84.3 means debt is 0.84x equity, not 84x.
+    assert sf.format_metric("debt_to_equity", 84.286) == "84.3%"
+
+
+def test_format_metric_leaves_multiples_and_money_alone():
+    assert sf.format_metric("pe_ratio", 25.0) == "25.00"
+    assert sf.format_metric("eps", -3.5) == "-$3.50"
+
+
+def test_build_fund_row_keeps_a_sector_range_on_one_scale():
+    sector = {"eps_growth": {"low": -0.92, "mean": 0.74, "high": 2.7, "count": 40}}
+    row = sf.build_fund_row("eps_growth", "EPS growth", "help", 1.28, "USD", sector)
+    assert row["ticker_display"] == "128.0%"
+    assert row["sector_low_display"] == "-92.0%"
+    assert row["sector_mean_display"] == "74.0%"
+    assert row["sector_high_display"] == "270.0%"
+
+
 # ── sector_fundamentals_for (stubbed I/O) ─────────────────────────────────────
 
 

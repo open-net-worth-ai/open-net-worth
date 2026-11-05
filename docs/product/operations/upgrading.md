@@ -6,7 +6,7 @@ order: 30
 audience: [user, operator]
 status: stable
 related: [operations/backup-and-restore, operations/desktop, operations/changelog, getting-started/installation]
-keywords: [upgrade, update, onw upgrade, uv tool upgrade, docker pull, ONW_VERSION, git pull, make setup, migration, schema, downgrade]
+keywords: [upgrade, update, auto-upgrade, automatic updates, onw upgrade, uv tool upgrade, docker pull, ONW_VERSION, git pull, make setup, migration, schema, downgrade]
 ---
 
 # Upgrading
@@ -29,6 +29,36 @@ You can also re-run the installer from [Installing Open Net Worth](../getting-st
 
 ### Server installed with the one-line installer (`onw`)
 
+**To keep it up to date automatically**, start it with `--auto-upgrade`:
+
+```bash
+onw start --autostart --auto-upgrade
+```
+
+It checks for a new version 30 seconds after it starts and every 4 hours after that. When one is
+out, it downloads it, checks that it starts in a temporary copy, waits until Lucius, your
+Automations and any restore or import have finished, installs it and restarts itself. It's off unless you ask for it: without the flag, `onw start` never checks.
+
+- **Only a signed release installs.** The release's signature and the download's checksum are
+  checked first, and an older release is never installed. If a check fails, nothing changes and
+  it tries again at the next check.
+- **If the new version won't run,** it puts the old one back and keeps going on it. Once the new
+  version has started and updated your book, there's no going back automatically — see
+  [Going back to an older version](#going-back-to-an-older-version).
+- **A restart takes a few seconds or more,** and an open browser tab reconnects by itself. A voice
+  call in progress isn't noticed as busy: a restart can end it.
+- **To turn it off,** run `onw start --autostart` without the flag. `onw autostart status` shows
+  whether it's on. `onw autostart install` also leaves it off.
+- **In a terminal,** `onw start --auto-upgrade` without `--autostart` works too: it restarts
+  itself in the same terminal (on Windows, in a new console window).
+- **On Windows,** a separate helper does the install once the app has closed, because Windows
+  can't replace a running program. Its log is `upgrade.log` in the folder
+  `%APPDATA%\uv\open-net-worth-upgrades`.
+
+To check by hand, `onw upgrade --check` says whether a newer version is out and changes nothing.
+
+**To update by hand:**
+
 1. Stop the app (press <kbd>Ctrl</kbd>+<kbd>C</kbd> where `onw start` is running, or
    `onw autostart stop` if it runs as a boot service).
 2. Run:
@@ -37,8 +67,9 @@ You can also re-run the installer from [Installing Open Net Worth](../getting-st
    onw upgrade
    ```
 
-   This is the same as `uv tool upgrade open-net-worth`. Re-running the install script works
-   too.
+   This installs the newest signed release. Re-running the install script works too. Use one of
+   these rather than `uv tool upgrade open-net-worth`: after an upgrade `uv` says there's nothing
+   to upgrade, even when there is.
 3. Start it again: `onw start` (or `onw autostart install`).
 4. Check: `onw version` prints the new version.
 

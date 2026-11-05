@@ -6,7 +6,7 @@
 // writes per call) are merged into one emit. After a dropped connection the first reconnect
 // emits '*': whatever was written during the gap was never heard, so everything refreshes.
 import { authFetch } from '../api/client'
-import { emitDataChanged } from './bus'
+import { emitDataChanged, emitScreenRequest } from './bus'
 
 const MERGE_MS = 250
 const MAX_BACKOFF_MS = 15_000
@@ -73,9 +73,20 @@ export async function readEvents(
       for (const line of frame.split('\n')) {
         if (!line.startsWith('data:')) continue
         try {
-          const event = JSON.parse(line.slice(5).trim()) as { type?: string; domains?: unknown }
+          const event = JSON.parse(line.slice(5).trim()) as {
+            type?: string
+            domains?: unknown
+            request_id?: unknown
+            session_id?: unknown
+          }
           if (event.type === 'data_changed' && Array.isArray(event.domains)) {
             onDomains(event.domains.filter((d): d is string => typeof d === 'string'))
+          } else if (
+            event.type === 'screen_request' &&
+            typeof event.request_id === 'string' &&
+            typeof event.session_id === 'string'
+          ) {
+            emitScreenRequest({ request_id: event.request_id, session_id: event.session_id })
           }
         } catch {
           /* a malformed frame is dropped, never fatal to the stream */

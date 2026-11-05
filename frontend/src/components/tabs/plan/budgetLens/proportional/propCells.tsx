@@ -3,6 +3,7 @@
 // Zero-Based's CategoryRow, which hands the SAME leaf controls to both of its layouts
 // (budgetCards.tsx) so a phone never loses what the desktop row shows (owner, 2026-09-25).
 import { useState } from 'react'
+import { useMaskText } from '../../../../../utils/amountMask'
 import type { DragEvent } from 'react'
 import { ActivityCell } from '../../budgetActivity'
 import type { RawTxn } from '../../budgetActivity'
@@ -247,10 +248,11 @@ export function CapStatus({ e }: { e: PropEnvelope }) {
 /** Zero-Based's bar, with the cap as its whole length: the share already spent hatched, what is
  *  left solid; past the cap, the cap's share green and the overage red. No cap, no bar. */
 export function CapBar({ e }: { e: PropEnvelope }) {
+  const maskText = useMaskText()
   const cap = e.cap ?? 0
   if (!cap) return null
   const spent = Math.max(0, e.activity)
-  const title = `Spent ${fSmart(spent)} of a ${fSmart(cap)} cap`
+  const title = maskText(`Spent ${fSmart(spent)} of a ${fSmart(cap)} cap`)
   if (spent > cap + 0.005) {
     const inCap = (cap / spent) * 100
     return (

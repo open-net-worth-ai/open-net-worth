@@ -171,6 +171,21 @@ export function mcpOAuthSummary(c: Connector): OAuthSummary | null {
   return raw as OAuthSummary
 }
 
+/** Whether Reconnect should open the sign-in window at once: an OAuth server that never signed
+ *  in, or whose sign-in the backend knows is dead. Anything else retries the connection first,
+ *  because a failed read says nothing about the sign-in. */
+export function mcpNeedsSignIn(c: Connector): boolean {
+  if (mcpAuthType(c) !== 'oauth') return false
+  const oauth = mcpOAuthSummary(c)
+  return !oauth?.connected || oauth.needs_reauth
+}
+
+/** An OAuth server with no sign-in yet: there is nothing to reconnect, so its button authenticates.
+ *  A sign-in that expired reads Reconnect, though it opens the same window. */
+function mcpNeverSignedIn(c: Connector): boolean {
+  return mcpAuthType(c) === 'oauth' && !mcpOAuthSummary(c)?.connected
+}
+
 /** Installed = it exists on this instance. A `not_configured` card is a DIRECTORY entry,
  *  not a list row — otherwise a fresh instance shows 13 rows of nothing. An MCP server is
  *  installed by virtue of being in the store, even before its first successful probe. */
@@ -193,11 +208,16 @@ export function statusOf(c: Connector): {
   const lastStatus = str(cfg, 'last_status')
   // A bank that wants its sign-in renewed: the keys are fine, nothing syncs until Reconnect.
   if (lastStatus === 'reconnect_needed') {
-    return { statusText: 'Sign-in needed', tone: 'bad', attention: true }
+    return { statusText: 'Sign-in needed', tone: 'warn', attention: true }
   }
   if (ERROR_STATUSES.has(c.status) || ERROR_STATUSES.has(lastStatus)) {
     const authError = c.status === 'auth_error' || lastStatus === 'auth_error'
-    return { statusText: authError ? 'Auth error' : 'Error', tone: 'bad', attention: true }
+    if (!authError) return { statusText: 'Error', tone: 'bad', attention: true }
+    return {
+      statusText: c.id.startsWith(MCP_PREFIX) ? 'Authentication issue' : 'Auth error',
+      tone: 'warn',
+      attention: true,
+    }
   }
   if (c.enabled) return { statusText: 'Connected', tone: 'good', attention: false }
   // "Disconnected" implies a connection that existed and then dropped — wrong for a
@@ -299,6 +319,7 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     statusText: status.statusText,
     tone: status.tone,
     attention: status.attention,
+    fixLabel: mcp && mcpNeverSignedIn(c) ? 'Authenticate' : 'Reconnect',
     lastError: status.attention ? c.error || str(cfg, 'last_error') || undefined : undefined,
     enabled: c.enabled,
     // An MCP server is configured the moment it is in the store — its endpoint WAS the
