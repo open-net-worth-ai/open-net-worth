@@ -13,12 +13,15 @@ sheets count.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
 
 from backend.core.errors import ValidationError
 from backend.core.user_time import user_today
-from backend.services.actual_sync import available
+from backend.services.actual_sync import available, shape_notes
 from backend.services.actual_sync.shape_delta import delta_against
+from backend.services.actual_sync.shape_values import flag as _flag
+from backend.services.actual_sync.shape_values import iso as _iso
+from backend.services.actual_sync.shape_values import milli as _milli
+from backend.services.actual_sync.shape_values import text as _text
 from backend.services.ynab_migration import mapping
 
 __all__ = ["Rows", "delta_against", "plan_from_rows"]
@@ -26,8 +29,6 @@ __all__ = ["Rows", "delta_against", "plan_from_rows"]
 SB_PAYEE_NAME = "Starting Balance"
 SB_PAYEE_ID = "starting-balance"
 SB_CATEGORY = "starting balances"
-_NOT_WHOLE = "Actual Budget returned an amount that is not a whole number of cents."
-_BAD_DATE = "Actual Budget returned a date that is not a real calendar date."
 _BAD_MONTH = "Actual Budget returned a budget month that is not a real month."
 
 
@@ -49,37 +50,12 @@ class Rows:
     today: str | None = None  # ISO; the user's today
 
 
-def _flag(value) -> bool:
-    return bool(value)
-
-
-def _milli(value) -> int:
-    if value is None:
-        return 0
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValidationError(_NOT_WHOLE)
-    return value * 10
-
-
-def _iso(value) -> str:
-    if isinstance(value, bool) or not isinstance(value, int):
-        raise ValidationError(_BAD_DATE)
-    try:
-        return date(value // 10000, value // 100 % 100, value % 100).isoformat()
-    except ValueError:
-        raise ValidationError(_BAD_DATE) from None
-
-
 def _month_int(value) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value % 100 <= 12:
         raise ValidationError(_BAD_MONTH)
     if value // 100 < 1:
         raise ValidationError(_BAD_MONTH)
     return value
-
-
-def _text(value, limit: int) -> str:
-    return mapping.clean(value, limit)
 
 
 def _cleared(row: dict) -> str:
@@ -101,7 +77,9 @@ class _Book:
         self.live_categories = {
             c["id"]: c for c in rows.categories if c.get("id") and not _flag(c.get("tombstone"))
         }
+        self.income_categories = {c["id"] for c in rows.categories if _flag(c.get("is_income"))}
         self.top, self.lines = self._live_transactions()
+        self.openings = {t["id"] for t in self.top if _is_opening(t)}
 
     def category_of(self, raw) -> str | None:
         return self.category_to.get(raw) if raw else None
@@ -136,6 +114,24 @@ class _Book:
                 top.append(t)  # a live child under a plain row: Actual counts it as a row
         return top, lines
 
+    def row_category(self, t: dict, opening: bool) -> str | None:
+        """A row's category. Actual flags an opening balance itself, and files it under
+        Starting Balances, under whatever that was renamed to, or, failing that, under the first
+        income category. That is never income, so it carries no income category here."""
+        category = self.category_of(t.get("category"))
+        return None if opening and category in self.income_categories else category
+
+    def opening_only_categories(self) -> set[str]:
+        """Income categories used by opening rows and by no other live row: what Starting Balances
+        is, whatever it is called."""
+        opening, other = set(), set()
+        for t in self.top:
+            bucket = opening if t["id"] in self.openings else other
+            if not _flag(t.get("isParent")):
+                bucket.add(self.category_of(t.get("category")))
+            bucket |= {self.category_of(c.get("category")) for c in self.lines.get(t["id"], [])}
+        return (opening - other) & self.income_categories
+
     def effective_amount(self, t: dict) -> int:
         if _flag(t.get("isParent")):
             return sum(_milli(c.get("amount")) for c in self.lines.get(t["id"], []))
@@ -156,10 +152,10 @@ def _is_opening(t: dict) -> bool:
     return _flag(t.get("starting_balance_flag")) and not t.get("transferred_id")
 
 
-def _link_fields(book: _Book, t: dict, payee_id) -> dict:
+def _link_fields(book: _Book, t: dict, payee_id, opening: bool) -> dict:
     return {
         "payee_id": payee_id,
-        "category_id": book.category_of(t.get("category")),
+        "category_id": book.row_category(t, opening),
         "transfer_account_id": book.transfer_account(payee_id),
         "transfer_transaction_id": t.get("transferred_id") or None,
     }
@@ -168,7 +164,7 @@ def _link_fields(book: _Book, t: dict, payee_id) -> dict:
 def _transaction(book: _Book, t: dict) -> dict:
     opening = _is_opening(t)
     parent = _flag(t.get("isParent"))
-    fields = _link_fields(book, t, _payee_ref(book, t, opening))
+    fields = _link_fields(book, t, _payee_ref(book, t, opening), opening)
     if parent:
         fields["category_id"] = None
     return {
@@ -192,7 +188,9 @@ def _line(book: _Book, c: dict) -> dict:
         "amount": _milli(c.get("amount")),
         "memo": _text(c.get("notes"), 500) or None,
         "deleted": False,
-        **_link_fields(book, c, book.payee_of(c.get("description"))),
+        **_link_fields(
+            book, c, book.payee_of(c.get("description")), c["parent_id"] in book.openings
+        ),
     }
 
 
@@ -269,6 +267,7 @@ def _groups_and_categories(book: _Book) -> tuple[list[dict], list[dict]]:
         for g in book.rows.category_groups
         if g.get("id")
     ]
+    opening_only = book.opening_only_categories()
     categories = []
     for c in book.rows.categories:
         if not c.get("id"):
@@ -281,7 +280,7 @@ def _groups_and_categories(book: _Book) -> tuple[list[dict], list[dict]]:
                 "category_group_id": c.get("cat_group"),
                 "original_category_group_id": None,
                 "hidden": _flag(c.get("hidden")),
-                "internal": income and name.lower() == SB_CATEGORY,
+                "internal": c["id"] in opening_only or (income and name.lower() == SB_CATEGORY),
                 "deleted": _flag(c.get("tombstone")),
                 "note": _text(notes.get(c["id"]), 500) or None,
                 "is_income": income,
@@ -351,38 +350,6 @@ def _months(book: _Book, categories: list[dict], today: str) -> list[dict]:
     return out
 
 
-def _split_gaps(book: _Book) -> list[dict]:
-    """Splits whose stated amount is not the sum of their lines. Actual allows it and counts the
-    lines, so the plan does too, and these go on the record for a person to see."""
-    out = []
-    for t in book.top:
-        if _flag(t.get("isParent")):
-            stated, lines = _milli(t.get("amount")), book.effective_amount(t)
-            if stated != lines:
-                out.append(
-                    {
-                        "id": t["id"],
-                        "account_id": t["acct"],
-                        "date": _iso(t["date"]),
-                        "parent": stated,
-                        "lines": lines,
-                    }
-                )
-    return out
-
-
-def _held(rows: Rows, today: str) -> list[dict]:
-    """Money held for later in this month or a coming one. An earlier hold has already come back
-    to Actual's To Budget."""
-    out = []
-    for h in rows.held:
-        month = _text(h.get("id"), 7)
-        amount = _milli(h.get("buffered"))
-        if amount and month >= today[:7]:
-            out.append({"month": month, "amount": amount})
-    return out
-
-
 def plan_from_rows(rows: Rows) -> dict:
     """The whole plan in YNAB's flat export shape, in milliunits, with what that shape has no
     place for beside it (``budget_mode``, ``split_gaps``, ``held``). Raises ``ValidationError`` on
@@ -405,6 +372,6 @@ def plan_from_rows(rows: Rows) -> dict:
         "subtransactions": subtransactions,
         "months": _months(book, categories, today),
         "budget_mode": rows.mode,
-        "split_gaps": _split_gaps(book),
-        "held": _held(rows, today) if rows.mode == "envelope" else [],
+        "split_gaps": shape_notes.split_gaps(book.top, book.effective_amount),
+        "held": shape_notes.held(rows.held, today) if rows.mode == "envelope" else [],
     }

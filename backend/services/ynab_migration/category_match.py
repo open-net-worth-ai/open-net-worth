@@ -59,7 +59,6 @@ class Book:
         rows = [c for c in categories_service.all_category_rows() if c["id"] != "split"]
         self.rows = {c["id"]: c for c in rows}
         self.matchable = [c for c in rows if c.get("kind", "expense") == "expense"]
-        self.income = [c for c in rows if c.get("kind") == "income"]
         self.labels = {c["label"].strip().lower() for c in rows}
         live = [e for e in envelopes_service.all_envelopes() if not e.get("archived")]
         self.live = {e["id"]: e for e in live}
@@ -67,6 +66,8 @@ class Book:
         self.envelopes = [e for e in live if e["id"] not in bot]
         self.names = {e["name"].strip().lower() for e in live}
         self.env_of = {cid: e for e in live for cid in e.get("category_ids") or []}
+        # One in an envelope would hold what comes in there, away from Ready to Assign.
+        self.income = [c for c in rows if c.get("kind") == "income" and c["id"] not in self.env_of]
         self.groups = [g for g in planning.list_groups() if not g.get("synced")]
 
     def solo_envelope(self, category_id: str) -> dict | None:

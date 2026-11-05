@@ -54,8 +54,15 @@ def is_income(c: dict) -> bool:
     return c.get("kind") == "income"
 
 
-def _kinds_differ(name: str, label: str) -> ValidationError:
-    return ValidationError(f"{name} can't go with {label}: income pairs only with income.")
+def _not_a_match(name: str, row: dict, book: Book) -> ValidationError:
+    """Why one of the book's categories can't take an income category's money, or the reverse."""
+    env = book.env_of.get(row["id"])
+    if row.get("kind") == "income" and env is not None:
+        return ValidationError(
+            f"{name} can't go with {row['label']}: your envelope {env['name']} holds it, so "
+            "what comes in would stay there and never reach Ready to Assign."
+        )
+    return ValidationError(f"{name} can't go with {row['label']}: income pairs only with income.")
 
 
 def _explicit(c: dict, ref: str, book: Book, taken_c: set[str], taken_e: set[str]) -> dict:
@@ -67,7 +74,7 @@ def _explicit(c: dict, ref: str, book: Book, taken_c: set[str], taken_e: set[str
         pool = book.income if income else book.matchable
         row = next((r for r in pool if r["id"] == ident), None)
         if row is None and current().caps.income_categories and ident in book.rows:
-            raise _kinds_differ(name, book.rows[ident]["label"])
+            raise _not_a_match(name, book.rows[ident], book)
         if row is None:
             raise ValidationError(f"The category chosen for {name} is no longer in this book.")
         if ident in taken_c:
@@ -207,6 +214,9 @@ def note(book: Book, d: dict, c: dict, assigned: bool) -> str:
     """The one line under a category in the review: what its budget does."""
     kind = d["kind"]
     if is_income(c) and kind != "ambiguous":
+        env = book.env_of.get(d["category"]["id"]) if d["category"] else None
+        if env is not None:
+            return f"Your envelope {env['name']} holds it, so what comes in stays there, not in Ready to Assign"
         return "Income: it has no envelope here, and what comes in raises Ready to Assign"
     if kind in ("linked", "category"):
         text = _budget_note(book, d["category"])

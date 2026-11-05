@@ -7,6 +7,8 @@ from collections import Counter
 
 from backend.services.budget_app import current
 
+PROBLEMS_LISTED = 100
+
 _HINTS = {
     "failed": "Open Net Worth refused this row. Fix the cause in {app}, or add the transaction by "
     "hand.",

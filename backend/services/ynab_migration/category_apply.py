@@ -97,7 +97,7 @@ def apply(plan: dict, decisions: dict[str, dict], plan_id: str, book: Book):
         cat = book.rows[cat["id"]]
         env, held = book.solo_envelope(cat["id"]), book.env_of.get(cat["id"])
         if category_links.is_income(c):
-            env = None  # its inflows raise Ready to Assign, whatever it already sits in
+            env = None  # no Assigned of its own, even if the person has since put it in one
         elif held is None and category_links.has_assigned(plan, c["id"]):
             parked = is_parking_name(c["group_name"])
             group_id = None if parked else groups.ensure(book, c["group_id"], c["group_name"])

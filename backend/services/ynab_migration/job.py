@@ -336,8 +336,11 @@ def _import(
 
     tally, problems = apply.send_transactions(plan, acct_ids, cat_ids, run.progress, matches)
     counts["transactions"] = report.transaction_counts(tally)
-    problems = [*plan.get("known_problems", []), *problems]
-    run.update(counts=counts, problems=[report.problem(p) for p in problems[:100]])
+    problems = [*problems, *plan.get("known_problems", [])]
+    listed = problems[: report.PROBLEMS_LISTED]
+    run.update(counts=counts, problems=[report.problem(p) for p in listed])
+    if plan.get("known_problems") and len(problems) > len(listed):
+        run.log(f"{len(problems) - len(listed):,} more problems aren't listed in this report.")
     run.log(report.transactions_line(tally))
     if matches:
         run.log(

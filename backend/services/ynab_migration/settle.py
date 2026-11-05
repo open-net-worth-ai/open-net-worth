@@ -10,6 +10,7 @@ import re
 from backend.core.errors import ValidationError
 from backend.services import ledger as ledger_service
 from backend.services.budget_app import current
+from backend.services.ynab_migration import report
 from backend.services.ynab_migration.mapping import amt
 
 _CURRENCY = re.compile(r"^[A-Z]{3}$")
@@ -75,13 +76,18 @@ def _carryover(plan: dict, months: list[dict]) -> list[str]:
 def _gap_text(gap: dict, accounts: dict[str, str]) -> str:
     return (
         f"A split on {gap['date']} in {accounts.get(gap['account_id'], 'an account')} says "
-        f"{amt(abs(gap['parent'])):,.2f}, but its lines add up to {amt(abs(gap['lines'])):,.2f}."
+        f"{amt(gap['parent']):,.2f}, but its lines add up to {amt(gap['lines']):,.2f}."
     )
 
 
 def _gap_notice(name: str, gaps: list[dict], accounts: dict[str, str]) -> str:
     shown = " ".join(_gap_text(g, accounts) for g in gaps[:5])
-    more = f" And {len(gaps) - 5:,} more; the import's report lists them." if len(gaps) > 5 else ""
+    more = (
+        f" And {len(gaps) - 5:,} more; the import's report lists the first "
+        f"{report.PROBLEMS_LISTED} problems."
+        if len(gaps) > 5
+        else ""
+    )
     return f"{shown}{more} It imports as the lines' figure, which is what {name} counts."
 
 

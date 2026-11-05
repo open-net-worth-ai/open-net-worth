@@ -37,6 +37,7 @@ from backend.services.actual_sync import client, shape
 from backend.services.actual_sync import reader as actual_reader
 from backend.services.actual_sync import rows as actual_rows
 from backend.services.budget_app import YNAB, using
+from backend.services.reports_rollup import trailing_saving
 from backend.services.ynab_migration import job, links, plan_read, source
 from backend.services.ynab_sync import runner
 from tests.test_actual_shape import (
@@ -364,6 +365,180 @@ def test_starting_balance_is_the_opening(server):
     assert record["verification"]["ok"], record["verification"]["mismatches"]
 
 
+def _opening_only(*extra_rows, category="c_sb") -> list[dict]:
+    opening = txn(
+        "t1",
+        "a1",
+        123_400,
+        day(-3),
+        category=category,
+        description="psb",
+        starting_balance_flag=1,
+        cleared=1,
+    )
+    return [opening, *extra_rows]
+
+
+def _opening_row() -> dict:
+    opening_id = account_named("ACME Checking")["opening_txn_id"]
+    return next(t for t in live_txns() if t["id"] == opening_id)
+
+
+def _checking_rows() -> list[dict]:
+    mine = account_named("ACME Checking")["id"]
+    return [t for t in live_txns() if mine in (t.get("from_account_id"), t.get("to_account_id"))]
+
+
+def test_a_renamed_starting_balances_is_still_the_opening(server):
+    server.rows.categories = [
+        cat("c_food", "Food", "g1"),
+        cat("c_sb", "Opening Balances", "gi", income=1),
+    ]
+    server.rows.category_mapping = [
+        {"id": c["id"], "transferId": c["id"]} for c in server.rows.categories
+    ]
+    server.rows.transactions = _opening_only()
+    record = run()
+    assert record["status"] == "done", record["error"]
+    assert record["preview"]["skipped_categories"] == {"internal": 1}
+    assert "Opening Balances" not in {c["label"] for c in categories_service.all_category_rows()}
+    assert [t["id"] for t in _checking_rows()] == [_opening_row()["id"]]
+    assert _opening_row()["to_amount"] == pytest.approx(1234.0)
+    assert balance("ACME Checking") == pytest.approx(1234.0)
+    assert trailing_saving() is None
+    assert record["verification"]["ok"], record["verification"]["mismatches"]
+
+
+def test_an_opening_filed_under_salary_stays_an_opening(server):
+    server.rows.transactions = _opening_only(
+        txn("s1", "a1", 300_000, day(-2), category="c_pay", description="p1", cleared=1),
+        txn("s2", "a1", 300_000, day(-1), category="c_pay", description="p1", cleared=1),
+        category="c_pay",
+    )
+    record = run()
+    assert record["status"] == "done", record["error"]
+    salary = next(c for c in categories_service.all_category_rows() if c["label"] == "Salary")
+    assert salary["kind"] == "income"
+    assert _opening_row()["to_amount"] == pytest.approx(1234.0)
+    assert _opening_row().get("category") in (None, "")
+    paid = [t for t in live_txns() if t.get("category") == salary["id"]]
+    assert sorted(t["to_amount"] for t in paid) == pytest.approx([3000.0, 3000.0])
+    assert all(t["kind"] == "income" for t in paid)
+    assert len(_checking_rows()) == 3
+    assert balance("ACME Checking") == pytest.approx(7234.0)
+    assert trailing_saving()["monthly"] == pytest.approx(3000.0)
+    assert record["verification"]["ok"], record["verification"]["mismatches"]
+
+
+def test_an_opening_split_into_income_stays_an_opening(server):
+    server.rows.transactions = [
+        txn("t1", "a1", 50_000, day(-3), isParent=1, description="psb", starting_balance_flag=1),
+        child("l1", "t1", "a1", 50_000, day(-3), category="c_pay", description="psb"),
+        txn("s1", "a1", 300_000, day(-1), category="c_pay", description="p1"),
+    ]
+    assert run()["status"] == "done"
+    assert _opening_row()["to_amount"] == pytest.approx(500.0)
+    assert len(_checking_rows()) == 2
+
+
+def test_an_opening_in_a_spending_category_funds_it_as_before(server):
+    server.rows.transactions = _opening_only(category="c_food")
+    record = run()
+    assert record["status"] == "done", record["error"]
+    food = next(c for c in categories_service.all_category_rows() if c["label"] == "Food")
+    (row,) = [t for t in live_txns() if t.get("category") == food["id"]]
+    assert row["to_amount"] == pytest.approx(1234.0)
+    assert _opening_row()["to_amount"] in (None, 0, 0.0)
+
+
+def test_only_live_unflagged_rows_keep_an_income_category_real():
+    def internal(*rows) -> bool:
+        plan = shape.plan_from_rows(make_rows(transactions=list(rows)))
+        return next(c for c in plan["categories"] if c["id"] == "c_pay")["internal"]
+
+    opening = _opening_only(category="c_pay")[0]
+    pay = txn("s1", "a1", 100, day(), category="c_pay")
+    assert internal(opening) is True
+    assert internal(opening, pay) is False
+    assert internal(opening, {**pay, "tombstone": 1}) is True
+    assert internal(pay) is False
+    assert internal() is False
+
+
+def test_a_merged_category_counts_as_the_one_it_became():
+    rows = make_rows(
+        categories=[cat("c_pay", "Salary", "gi", income=1), cat("c_old", "Old", "gi", income=1)],
+        transactions=[
+            _opening_only(category="c_old")[0],
+            txn("s1", "a1", 100, day(), category="c_pay"),
+        ],
+    )
+    rows.category_mapping = [
+        {"id": "c_pay", "transferId": "c_pay"},
+        {"id": "c_old", "transferId": "c_pay"},
+    ]
+    plan = shape.plan_from_rows(rows)
+    assert next(c for c in plan["categories"] if c["id"] == "c_pay")["internal"] is False
+    assert next(t for t in plan["transactions"] if t["id"] == "t1")["category_id"] is None
+
+
+def _enveloped_salary() -> dict:
+    made = categories_service.create_category("Salary", kind="income")
+    env = planning.apply_budget_change({"type": "envelope_create", "name": "Pot", "group_id": ""})
+    planning.apply_budget_change(
+        {
+            "type": "envelope_add_category",
+            "envelope_id": env["envelope"]["id"],
+            "category_id": made["id"],
+        }
+    )
+    return made
+
+
+def test_an_enveloped_income_category_is_not_matched_and_salary_reaches_ready_to_assign(server):
+    enveloped = _enveloped_salary()
+    server.rows.transactions = [
+        txn("t1", "a1", 300_000, day(), category="c_pay", description="p1", cleared=1)
+    ]
+    preview = run("preview")["preview"]
+    row = category_row(preview, "c_pay")
+    assert row["link"] is None and row["note"].startswith("Income:")
+    assert preview["category_choices"]["income_categories"] == []
+
+    record = run()
+    assert record["status"] == "done", record["error"]
+    assert ready_to_assign() == pytest.approx(3000.0)
+    (booked,) = [t for t in live_txns() if t["kind"] == "income"]
+    assert booked["category"] != enveloped["id"]
+    made = categories_service.all_category_rows()
+    assert next(c for c in made if c["id"] == booked["category"])["label"] == "Salary (Actual)"
+
+
+def test_picking_an_enveloped_income_category_is_refused_plainly(server):
+    enveloped = _enveloped_salary()
+    refused = run("preview", category_links={"c_pay": f"cat:{enveloped['id']}"})
+    assert refused["status"] == "failed"
+    assert "Pot" in refused["error"] and "Ready to Assign" in refused["error"]
+
+
+def test_a_pair_later_put_in_an_envelope_says_where_the_money_stays(server):
+    server.rows.transactions = [
+        txn("t1", "a1", 300_000, day(), category="c_pay", description="p1", cleared=1)
+    ]
+    assert run()["status"] == "done"
+    salary = next(c for c in categories_service.all_category_rows() if c["label"] == "Salary")
+    env = planning.apply_budget_change({"type": "envelope_create", "name": "Pot", "group_id": ""})
+    planning.apply_budget_change(
+        {
+            "type": "envelope_add_category",
+            "envelope_id": env["envelope"]["id"],
+            "category_id": salary["id"],
+        }
+    )
+    note = category_row(run("preview")["preview"], "c_pay")["note"]
+    assert "Pot" in note and "Ready to Assign" in note and not note.startswith("Income:")
+
+
 # ── cards and account types ──────────────────────────────────────────────────
 
 
@@ -680,7 +855,7 @@ def test_split_not_summing_is_reported(server):
     _bad_split(server)
     warnings = run("preview")["preview"]["warnings"]
     (line,) = [w for w in warnings if "split" in w.lower()]
-    assert "100.00" in line and "90.00" in line and "ACME Checking" in line
+    assert "-100.00" in line and "-90.00" in line and "ACME Checking" in line
 
     record = run()
     assert record["status"] == "done", record["error"]
@@ -690,6 +865,33 @@ def test_split_not_summing_is_reported(server):
     assert problem["item"] == "t1" and "90.00" in problem["reason"]
     assert "Actual" in problem["hint"]
     assert any("90.00" in e["line"] for e in record["log"])
+
+
+def _gaps(count: int) -> list[dict]:
+    rows = []
+    for n in range(count):
+        rows.append(txn(f"t{n}", "a1", -1_000, day(), isParent=1, description="p1", cleared=1))
+        rows.append(child(f"l{n}", f"t{n}", "a1", -500, day(), category="c_food", cleared=1))
+    return rows
+
+
+def test_real_refusals_come_first_and_the_overflow_is_counted(server, monkeypatch):
+    server.rows.transactions = _gaps(105)
+    refused = {"ref": "r1", "reason": "Refused.", "kind": "failed"}
+    real = job.apply.send_transactions
+
+    def send(*args, **kwargs):
+        tally, problems = real(*args, **kwargs)
+        return tally, [refused, *problems]
+
+    monkeypatch.setattr(job.apply, "send_transactions", send)
+    record = run()
+    assert record["status"] == "done", record["error"]
+    assert record["problems"][0]["item"] == "r1"
+    assert len(record["problems"]) == 100
+    assert any(e["line"].startswith("6 more problems") for e in record["log"])
+    notice = next(w for w in record["preview"]["warnings"] if "split" in w.lower())
+    assert "100 more" in notice and "first 100" in notice
 
 
 def test_a_split_that_sums_says_nothing(server):
@@ -899,6 +1101,8 @@ def test_a_future_dated_row_is_booked(server):
     record = run()
     assert record["status"] == "done", record["error"]
     assert record["counts"]["transactions"]["created"] == 1
+    (row,) = [t for t in live_txns() if t["id"] not in ledger_service.opening_txn_ids()]
+    assert row["date"] == f"{_key(3)}-03"
 
 
 def test_nothing_a_person_reads_says_ynab(server):
@@ -945,6 +1149,26 @@ def test_a_currency_refusal_says_the_budget_not_the_plan(server):
     record = run(confirm_nonempty=True)
     assert record["status"] == "failed"
     assert "the Actual budget is EUR" in record["error"]
+
+
+def test_a_preview_read_is_not_reused_for_another_app(server):
+    reads: list[str] = []
+
+    class Reader(actual_reader.ActualReader):
+        def fetch_plan(self, store, plan_id, *, with_budget, progress=lambda *_: None):
+            reads.append(budget_app.current().key)
+            return super().fetch_plan(store, plan_id, with_budget=with_budget, progress=progress)
+
+    first = dataclasses.replace(actual_app.ACTUAL, reader=Reader())
+    second = dataclasses.replace(first, key="acme")
+    fake = SimpleNamespace(id="run-1", progress=lambda *_: None)
+    with using(first):
+        plan_read.read(fake, None, BUDGET, None)
+        plan_read.read(SimpleNamespace(id="run-2", progress=lambda *_: None), None, BUDGET, "run-1")
+    assert reads == ["actual_budget"]  # the same app re-checks from what it read
+    with using(second):
+        plan_read.read(SimpleNamespace(id="run-3", progress=lambda *_: None), None, BUDGET, "run-2")
+    assert reads == ["actual_budget", "acme"]
 
 
 # ── the routes ───────────────────────────────────────────────────────────────

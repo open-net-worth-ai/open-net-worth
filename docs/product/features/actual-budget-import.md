@@ -52,9 +52,12 @@ A budget that states a currency keeps it.
 
 - **Income categories** come in as income categories, with no envelope. Salary raises Ready to
   Assign when it arrives. They pair only with your income categories, and your spending categories
-  only with spending ones.
-- **Starting Balances** isn't a category here. A row in it stays the account's Starting Balance,
-  with no second row beside it.
+  only with spending ones. An income category of yours that sits in an envelope can't be matched,
+  because what comes in would stay in the envelope; the import makes a new one beside it.
+- **Starting Balances** isn't a category here, whatever you've renamed it to. An opening balance
+  stays the account's Starting Balance, with no second row beside it, even if Actual filed it under
+  another income category such as Salary. An opening balance in a spending category funds that
+  category.
 - **A group called "Credit Card Payments"** is an ordinary group in Actual, so it comes in as one,
   named "Credit Card Payments (Actual)". The name itself is kept for this app's own group. Actual
   has no card payment categories, and a card payment there is a plain transfer.
