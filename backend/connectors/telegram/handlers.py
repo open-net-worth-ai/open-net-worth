@@ -458,12 +458,12 @@ async def handle_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 _COMMAND_HELP = (
     "Commands:\n"
     "  /model [name] — show or switch the chat model\n"
+    "  /effort [low|medium|high|max] — set response depth (default: low)\n"
+    "  /approvals [manual|auto] — how much I ask before acting\n"
     "  /status — model, effort, streaming + today's cost\n"
     "  /cost — today's and 30-day AI spend\n"
-    "  /effort [low|medium|high|max] — set response depth (default: low)\n"
     "  /streaming [on|off] — live edit-in-place replies (default: on)\n"
     "  /suggestions [on|off] — tappable follow-up suggestions (default: off)\n"
-    "  /approvals [manual|auto] — how much I ask before acting\n"
     "  /new — start a fresh conversation (saves bandwidth)\n"
     "  /stop — stop the reply that's currently generating\n"
     "  /id — show this chat's ID\n"
@@ -474,13 +474,13 @@ _COMMAND_HELP = (
 # of truth as _COMMAND_HELP — (command, description) pairs, no leading slash.
 BOT_COMMANDS: list[tuple[str, str]] = [
     ("model", "Show or switch the chat model"),
+    ("effort", "Set response depth: low|medium|high|max"),
+    ("approvals", "How much I ask before acting: manual|auto"),
     ("status", "Model, effort, streaming + today's cost"),
     ("cost", "Today's and 30-day AI spend"),
-    ("effort", "Set response depth: low|medium|high|max"),
     ("streaming", "Live edit-in-place replies: on|off"),
     ("suggestions", "Tappable follow-up suggestions: on|off"),
     ("toolstream", "Show what I'm doing while I work: on|off"),
-    ("approvals", "How much I ask before acting: manual|auto"),
     ("new", "Start a fresh conversation"),
     ("stop", "Stop the reply that's currently generating"),
     ("id", "Show this chat's ID"),
