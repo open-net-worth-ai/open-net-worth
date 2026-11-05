@@ -66,6 +66,11 @@ _SERVER_ID_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789-"
 # user set would simply never be found, and every tool would read as the default.
 MCP_CONNECTOR_PREFIX = "mcp:"
 
+# A server in one of these keeps its tool list for the permission table, but Lucius is offered
+# neither its tools nor its instructions: each turn tells him the server failed, and the offer
+# must agree with that.
+FAILED_STATUSES = frozenset({"connect_error", "error", "auth_error"})
+
 
 def mcp_connector_id(server_id: str) -> str:
     """An MCP server's id as the connector namespace spells it (``mcp:<server_id>``)."""

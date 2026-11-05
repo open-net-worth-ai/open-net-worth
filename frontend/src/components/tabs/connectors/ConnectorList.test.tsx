@@ -23,6 +23,7 @@ function entry(overrides: Partial<ConnectorEntry> & Pick<ConnectorEntry, 'id'>):
     statusText: 'Connected',
     tone: 'good',
     attention: false,
+    fixLabel: 'Reconnect',
     enabled: true,
     sub: '',
     ...overrides,

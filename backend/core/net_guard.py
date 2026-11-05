@@ -42,6 +42,11 @@ class UnsafeUrlError(ValueError):
     """The URL is not safe to fetch (bad scheme, missing host, or a private/internal target)."""
 
 
+class UnresolvableHostError(UnsafeUrlError):
+    """DNS had no answer. Refused like any unsafe URL, but it says nothing against the URL: a
+    caller that keeps state can tell a network problem from a refusal."""
+
+
 _ALLOWED_SCHEMES = ("http", "https")
 
 
@@ -158,11 +163,11 @@ def _resolve(url: str, is_blocked, allow_local_names: bool = False) -> tuple[str
     try:
         infos = socket.getaddrinfo(host, port or None, proto=socket.IPPROTO_TCP)
     except socket.gaierror:
-        raise UnsafeUrlError("The host could not be resolved.")
+        raise UnresolvableHostError("The host could not be resolved.")
 
     addrs = [info[4][0] for info in infos]
     if not addrs:
-        raise UnsafeUrlError("The host could not be resolved.")
+        raise UnresolvableHostError("The host could not be resolved.")
     pinned: str | None = None
     for addr in addrs:
         try:

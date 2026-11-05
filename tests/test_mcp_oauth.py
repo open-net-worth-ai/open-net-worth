@@ -18,9 +18,11 @@ from __future__ import annotations
 import http.server
 import io
 import json
+import socket
 import socketserver
 import threading
 import urllib.error
+from email.message import Message
 
 import pytest
 
@@ -601,9 +603,70 @@ def test_fetch_refuses_a_non_public_url_when_the_mcp_server_is_public(monkeypatc
             raise net_guard.UnsafeUrlError("private")
         return u
 
+    def refuse_private_target(*a, **kw):
+        raise net_guard.UnsafeUrlError("Refusing to fetch a private address.")
+
     monkeypatch.setattr(net_guard, "assert_public_url", fail_assert_public_url)
+    monkeypatch.setattr(oauth, "pinned_urlopen", refuse_private_target)
     with pytest.raises(oauth.OAuthSecurityError):
         oauth._fetch("https://internal.example.test/authorize", "https://mcp.stripe.com/mcp")
+
+
+def _no_dns(*a, **kw):
+    raise socket.gaierror(8, "nodename nor servname provided")
+
+
+@pytest.mark.parametrize("failing_host", ["the MCP server", "the sign-in service"])
+def test_no_dns_is_a_network_problem_never_a_security_refusal(monkeypatch, failing_host):
+    if failing_host == "the MCP server":
+        monkeypatch.setattr(socket, "getaddrinfo", _no_dns)
+    else:
+        monkeypatch.setattr(net_guard, "assert_public_url", lambda u: u)
+
+        def no_dns_on_fetch(*a, **kw):
+            raise net_guard.UnresolvableHostError("The host could not be resolved.")
+
+        monkeypatch.setattr(oauth, "pinned_urlopen", no_dns_on_fetch)
+    with pytest.raises(oauth.OAuthUnreachableError):
+        oauth._fetch("https://auth.example.com/token", "https://mcp.example.com/mcp")
+
+
+_REFRESH_AS = oauth.AuthServerMetadata(
+    issuer="https://auth.example.com",
+    authorization_endpoint="https://auth.example.com/authorize",
+    token_endpoint="https://auth.example.com/token",
+)
+_REFRESH_CLIENT = oauth.ClientRegistration(client_id="c1")
+
+
+def _refresh_failing_with(monkeypatch, exc):
+    def post_form(*a, **kw):
+        raise exc
+
+    monkeypatch.setattr(oauth, "_post_form", post_form)
+    return lambda: oauth.refresh_token(
+        _REFRESH_AS, _REFRESH_CLIENT, "https://mcp.example.com/mcp", refresh_token="rt"
+    )
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        urllib.error.URLError("no route to host"),
+        TimeoutError("timed out"),
+        urllib.error.HTTPError("https://auth.example.com/token", 503, "down", Message(), None),
+        urllib.error.HTTPError("https://auth.example.com/token", 429, "slow", Message(), None),
+    ],
+)
+def test_a_refresh_the_service_could_not_answer_is_unreachable(monkeypatch, exc):
+    with pytest.raises(oauth.OAuthUnreachableError):
+        _refresh_failing_with(monkeypatch, exc)()
+
+
+def test_a_refresh_the_service_refused_is_still_a_token_error(monkeypatch):
+    refused = urllib.error.HTTPError("https://auth.example.com/token", 400, "no", Message(), None)
+    with pytest.raises(oauth.TokenExchangeError):
+        _refresh_failing_with(monkeypatch, refused)()
 
 
 def test_fetch_allows_the_same_host_as_a_private_mcp_server(monkeypatch):

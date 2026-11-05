@@ -2,8 +2,8 @@
 
 Stdio: a ``notifications/tools/list_changed`` read off the pooled child triggers a re-list on
 that same child after the call that carried it. Every server: a daily scheduler job re-reads
-it, and an hourly one retries those whose last read failed — keeping the last good list until
-``REFRESH_FAILURES_BEFORE_ERROR`` failures in a row. Hermetic — a real Python subprocess stands in for the server.
+it, and an hourly one retries those whose last read failed. A failed read never erases the list;
+the status holds until ``REFRESH_FAILURES_BEFORE_ERROR`` failures in a row. Hermetic — a real Python subprocess stands in for the server.
 """
 
 from __future__ import annotations
@@ -170,9 +170,76 @@ def test_the_error_shows_after_three_failures_in_a_row(manager, tmp_path):
     for _ in range(REFRESH_FAILURES_BEFORE_ERROR - 1):
         mgr.refresh_tools(only_unhealthy=True)
 
+    assert store.find("down").last_status != "ok"
+
+
+def test_a_failed_server_keeps_its_list_but_lucius_is_not_offered_it(manager, tmp_path):
+    from backend.mcp.client_manager import REFRESH_FAILURES_BEFORE_ERROR
+
+    mgr, store = manager
+    _unreachable(store, tmp_path)
+    assert mgr.external_tool_schemas()
+
+    for _ in range(REFRESH_FAILURES_BEFORE_ERROR):
+        mgr.refresh_tools()
+
+    assert [t["name"] for t in store.find("down").discovered_tools] == ["ping"]
+    assert mgr.external_tool_schemas() == []
+    assert mgr.discovered_tool("mcp__down__ping") is None
+
+
+def test_a_failed_servers_instructions_go_with_its_tools(manager, tmp_path):
+    from backend.models.mcp_client import ServerInfo
+    from backend.services.mcp_instructions import enabled_server_instructions
+
+    mgr, store = manager
+    _unreachable(store, tmp_path)
+    store.record_discovery(
+        "down", _GOOD, "ok", None, server_info=ServerInfo(instructions="Use me.")
+    )
+    assert [i.server_id for i in enabled_server_instructions()] == ["down"]
+
+    mgr.test_connect("down")
+
+    assert store.find("down").server_info_instructions == "Use me."
+    assert enabled_server_instructions() == []
+
+
+def test_a_failed_refresh_click_keeps_the_list_and_says_error_at_once(manager, tmp_path):
+    mgr, store = manager
+    _unreachable(store, tmp_path)
+
+    mgr.test_connect("down")
+
     server = store.find("down")
-    assert server.last_status != "ok"
-    assert server.discovered_tools == []
+    assert server.last_status == "connect_error"
+    assert server.last_error
+    assert [t["name"] for t in server.discovered_tools] == ["ping"]
+
+
+def test_a_failed_server_that_answers_again_is_offered_again(manager, stub_path, tmp_path):
+    mgr, store = manager
+    _unreachable(store, tmp_path)
+    mgr.test_connect("down")
+    assert mgr.external_tool_schemas() == []
+
+    store.update("down", {"args": [str(stub_path)]})  # the server is back
+    mgr.refresh_tools(only_unhealthy=True)
+
+    assert store.find("down").last_status == "ok"
+    assert mgr.external_tool_schemas()
+
+
+def test_a_failed_read_after_a_dead_sign_in_keeps_the_list(manager, tmp_path):
+    """What took the real tool list: a refresh that had just written ``auth_error`` meant the
+    read's own failure skipped the three-in-a-row rule and erased the list."""
+    mgr, store = manager
+    _unreachable(store, tmp_path)
+    store.record_oauth_status("down", "auth_error", "Sign-in expired")
+
+    mgr.connect_enabled()
+
+    assert [t["name"] for t in store.find("down").discovered_tools] == ["ping"]
 
 
 def test_one_failed_read_at_boot_keeps_the_tools(manager, tmp_path):
@@ -196,9 +263,7 @@ def test_boot_misses_count_toward_the_same_three_in_a_row(manager, tmp_path):
     for _ in range(REFRESH_FAILURES_BEFORE_ERROR):
         mgr.connect_enabled()
 
-    server = store.find("down")
-    assert server.last_status != "ok"
-    assert server.discovered_tools == []
+    assert store.find("down").last_status != "ok"
 
 
 def test_boot_shows_a_failure_at_once_with_no_good_list_to_keep(manager, tmp_path):

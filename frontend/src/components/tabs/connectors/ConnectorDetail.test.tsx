@@ -32,6 +32,7 @@ function entry(overrides: Partial<ConnectorDetailEntry> = {}): ConnectorDetailEn
     statusText: 'Connected',
     tone: 'good',
     attention: false,
+    fixLabel: 'Reconnect',
     enabled: true,
     configured: true,
     sub: 'Flex query • nightly import',
@@ -67,6 +68,49 @@ function renderDetail(
   const { container } = render(<ConnectorDetail entry={e} {...handlers} {...extra} />)
   return { container, ...handlers }
 }
+
+describe('a failing connector', () => {
+  const failing = {
+    mcp: true,
+    tone: 'bad',
+    attention: true,
+    statusText: 'Error',
+    lastError: 'Can’t reach this server.',
+  } as const
+
+  it('states the reason on the page without a hover', () => {
+    const { container } = renderDetail(entry(failing))
+    expect(container.querySelector('.cn-errorbox-text')?.textContent).toBe(failing.lastError)
+    expect(container.querySelector('.cn-errorbox')?.hasAttribute('data-ctx-ignore')).toBe(true)
+  })
+
+  it('keeps its tool permission table', () => {
+    renderDetail(entry(failing))
+    expect(screen.queryByText(/gives Lucius no tools yet/)).toBeNull()
+    expect(screen.getByText('Choose when Lucius is allowed to use these tools.')).toBeTruthy()
+  })
+
+  it('says an expired connection will not fix itself, in amber', () => {
+    const { container } = renderDetail(
+      entry({ ...failing, tone: 'warn', statusText: 'Authentication issue' }),
+    )
+    const note = container.querySelector('.cn-errorbox-note')?.textContent
+    expect(note).toContain('until you reconnect')
+    expect(note).not.toContain('every hour')
+    expect(container.querySelector('.cn-errorbox-warn')).toBeTruthy()
+  })
+
+  it('keeps the red box and the hourly retry note for a connection failure', () => {
+    const { container } = renderDetail(entry(failing))
+    expect(container.querySelector('.cn-errorbox-note')?.textContent).toContain('every hour')
+    expect(container.querySelector('.cn-errorbox-warn')).toBeNull()
+  })
+
+  it('shows no box while healthy', () => {
+    const { container } = renderDetail(entry())
+    expect(container.querySelector('.cn-errorbox')).toBeNull()
+  })
+})
 
 /** Stands in for a real provider form — this page only hosts one, it never builds one. */
 const FORM = <label htmlFor="fake-key">Client ID</label>
@@ -180,14 +224,27 @@ describe('the primary action — the only place a connector can be disabled', ()
   // An OAuth reconnect is a popup + poll, not an instant call (RFC `2026-08-14-mcp-oauth`
   // §4.7's "Recovery is one button") — the page has to say so while it waits, rather than
   // sitting there looking clickable with nothing happening.
-  it('says Reconnecting… and disables the button while an OAuth sign-in is in flight', () => {
-    renderDetail(entry({ tone: 'bad', statusText: 'Auth error', attention: true, mcp: true }), {
+  it('says Authenticating… and disables the button while an OAuth sign-in is in flight', () => {
+    renderDetail(
+      entry({
+        tone: 'warn',
+        statusText: 'Auth error',
+        attention: true,
+        mcp: true,
+        fixLabel: 'Authenticate',
+      }),
+      { reconnecting: true },
+    )
+    const button = screen.getByRole('button', { name: 'Authenticating…' })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Authenticate' })).toBeNull()
+  })
+
+  it('says Reconnecting… while a connection retry is in flight', () => {
+    renderDetail(entry({ tone: 'bad', statusText: 'Error', attention: true, mcp: true }), {
       reconnecting: true,
     })
-    const button = screen.getByRole('button', { name: 'Reconnecting…' })
-    expect(button).toBeTruthy()
-    expect((button as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.queryByRole('button', { name: 'Reconnect' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Reconnecting…' })).toBeTruthy()
   })
 })
 

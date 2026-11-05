@@ -1421,8 +1421,9 @@ def test_http_transport_carries_tool_annotations(monkeypatch):
     assert mcp_external.describe_discovered_tool(tool)["read_only"] is True
 
 
-def test_failed_discovery_clears_stale_server_info(manager, monkeypatch):
-    """A server that stops answering must not keep advertising a name we can no longer verify."""
+def test_failed_discovery_keeps_the_server_info(manager, monkeypatch):
+    """A server that stops answering is still the same server: its name and publisher stay on the
+    page beside the error, as they already did for an expired sign-in."""
     mgr, s = manager
     s.create(_cfg())
     monkeypatch.setattr(
@@ -1434,11 +1435,11 @@ def test_failed_discovery_clears_stale_server_info(manager, monkeypatch):
     assert s.find("drive").server_info_instructions == "Use me."
 
     monkeypatch.setattr("backend.mcp.client._urlopen", _make_fake_urlopen({}, down=True))
-    mgr.connect_enabled()
+    mgr.test_connect("drive")
     fresh = s.find("drive")
     assert fresh.last_status == "connect_error"
-    assert fresh.server_info_name is None
-    assert fresh.server_info_instructions is None
+    assert fresh.server_info_name == "Drive"
+    assert fresh.server_info_instructions == "Use me."
 
 
 # ── probe: test a config WITHOUT persisting anything (§7 step 2) ───────────────

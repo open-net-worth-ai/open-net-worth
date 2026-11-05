@@ -588,6 +588,28 @@ def test_create_disabled_reaches_out_to_nothing(client, monkeypatch):
     assert calls == []
 
 
+def test_repointing_the_endpoint_forgets_the_old_servers_tools(client, monkeypatch):
+    """A failed read keeps the list, so the new endpoint being down must not leave the old
+    endpoint's tools standing in for it."""
+    c, _ = client
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS)
+    c.post(
+        "/api/mcp-clients",
+        json={"id": "moved", "url": "https://a.example.com/mcp", "enabled": True},
+    )
+    assert c.post("/api/mcp-clients/moved/test").json()["discovered_tools"]
+
+    _fake_transport(monkeypatch, tools=_FOUR_TOOLS, down=True)
+    assert (
+        c.patch("/api/mcp-clients/moved", json={"url": "https://b.example.com/mcp"}).status_code
+        == 200
+    )
+    body = c.post("/api/mcp-clients/moved/test").json()
+
+    assert body["discovered_tools"] == []
+    assert body["last_status"] == "connect_error"
+
+
 def test_create_enabled_records_a_failed_handshake_and_keeps_the_server(client, monkeypatch):
     """A create whose handshake fails is RECORDED, not rolled back.
 

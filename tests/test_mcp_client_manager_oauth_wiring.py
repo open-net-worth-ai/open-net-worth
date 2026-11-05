@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import urllib.error
+from email.message import Message
 
 import pytest
 
@@ -119,6 +121,48 @@ def test_fire_uses_the_refreshed_token_not_the_stored_stale_one(manager, monkeyp
     assert proposed is None
     assert refresh_calls == ["mercury"]
     assert captured["auth_headers"] == ["Bearer freshly-refreshed"]
+
+
+def test_a_401_on_a_read_asks_for_sign_in_and_keeps_the_tools(manager, monkeypatch):
+    mgr, store = manager
+    store.record_discovery("mercury", [{"name": "list_files"}], "ok", None)
+
+    def challenge(request, *a, **kw):
+        headers = Message()
+        headers["WWW-Authenticate"] = (
+            'Bearer resource_metadata="https://mcp.mercury.com/.well-known"'
+        )
+        raise urllib.error.HTTPError(request.full_url, 401, "no", headers, None)
+
+    monkeypatch.setattr("backend.mcp.client._urlopen", challenge)
+    monkeypatch.setattr(
+        client_manager_mod.oauth_flow, "ensure_fresh_token", lambda server, **kw: server
+    )
+
+    mgr.test_connect("mercury")
+
+    server = store.find("mercury")
+    assert server.last_status == "auth_error"
+    assert [t["name"] for t in server.discovered_tools] == ["list_files"]
+    assert store.public_one("mercury")["oauth"]["needs_reauth"] is True
+    assert server.last_error.startswith("Connection has expired")
+
+
+def test_a_401_keeps_the_reason_the_refresh_recorded(manager, monkeypatch):
+    mgr, store = manager
+    store.record_oauth_status("mercury", "auth_error", "Mercury's app registration was revoked")
+
+    def challenge(request, *a, **kw):
+        raise urllib.error.HTTPError(request.full_url, 401, "no", Message(), None)
+
+    monkeypatch.setattr("backend.mcp.client._urlopen", challenge)
+    monkeypatch.setattr(
+        client_manager_mod.oauth_flow, "ensure_fresh_token", lambda server, **kw: server
+    )
+
+    mgr.test_connect("mercury")
+
+    assert store.find("mercury").last_error == "Mercury's app registration was revoked"
 
 
 def test_discover_uses_the_refreshed_token(manager, monkeypatch):

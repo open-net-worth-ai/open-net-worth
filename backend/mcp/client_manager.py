@@ -84,6 +84,7 @@ from backend.mcp.client import (
 )
 from backend.mcp.stdio_client import STDIO_CONNECT_TIMEOUT_SECONDS, StdioMcpClientConnection
 from backend.models.mcp_client import (
+    FAILED_STATUSES,
     McpServerConfig,
     McpServerProbe,
     ServerInfo,
@@ -250,7 +251,7 @@ class McpClientManager:
         if split is None:
             return None
         server = self._store.find(split[0])
-        if server is None or not server.enabled:
+        if server is None or not server.enabled or server.last_status in FAILED_STATUSES:
             return None
         for tool in server.discovered_tools or []:
             if isinstance(tool, dict) and tool.get("name") == split[1]:
@@ -288,6 +289,8 @@ class McpClientManager:
         """
         schemas: list[dict] = []
         for server in self._store.enabled():
+            if server.last_status in FAILED_STATUSES:
+                continue
             banner = _UNVERIFIED_BANNER.format(
                 name=_safe(server.name or server.id, mcp_external.MAX_SERVER_LABEL_CHARS)
                 or server.id
@@ -873,19 +876,33 @@ class McpClientManager:
     ) -> None:
         """Persist a failed read — or, for an unattended re-read of a server whose last read
         was good, count it and keep the cached tools until the run reaches the threshold.
-        A sign-in failure is never softened: no retry fixes it, the user has to act."""
+        A sign-in failure is never softened: no retry fixes it, the user has to act. Neither path
+        erases the tool list — ``FAILED_STATUSES`` is what keeps Lucius away from it."""
         if unattended and not auth:
             current = self._store.find(server_id)
             if current is not None and current.last_status == "ok" and current.discovered_tools:
                 failures = self._store.record_refresh_failure(server_id)
                 if failures < REFRESH_FAILURES_BEFORE_ERROR:
                     logger.info(
-                        "mcp '%s' re-read failed (%d in a row) — keeping its last tool list",
+                        "mcp '%s' re-read failed (%d in a row) — keeping its status",
                         server_id,
                         failures,
                     )
                     return
-        self._store.record_discovery(server_id, [], status, error)
+        if auth:
+            error = self._auth_failure_text(server_id, error)
+        self._store.record_read_failure(server_id, "auth_error" if auth else status, error)
+
+    def _auth_failure_text(self, server_id: str, error: str) -> str:
+        """A 401 on a signed-in server is the symptom of a dead sign-in, and "returned HTTP 401"
+        tells the user nothing. Keeps a reason the refresh already recorded (a revoked app
+        registration says more than an expired sign-in)."""
+        current = self._store.find(server_id)
+        if current is None or current.auth_type != "oauth":
+            return error
+        if current.last_status == "auth_error" and current.last_error:
+            return current.last_error
+        return oauth_flow.dead_sign_in_reason()
 
     def _boot_connect_one(self, server: McpServerConfig, *, unattended: bool = False) -> None:
         """Spawn/reuse ``server``'s pooled stdio connection, then discover its tools on that

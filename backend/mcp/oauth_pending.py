@@ -64,7 +64,7 @@ class PendingFlow:
 
 @dataclass(frozen=True)
 class _StatusEntry:
-    status: str  # "ok" | "error"
+    status: str  # "pending" (popped, still finishing) | "ok" | "error"
     error: Optional[str]
     recorded_at: float
 
@@ -132,6 +132,11 @@ def pop(state: str, *, now: Optional[float] = None) -> Optional[PendingFlow]:
     unauthenticated caller (RFC §4.3 — no oracle on the callback route)."""
     current = time.time() if now is None else now
     _prune_pending(current)
+    # Before the pop, so a poll never finds the flow in neither map: the token exchange that
+    # follows takes a second or more, and a poll in that window used to read "expired or unknown"
+    # and end a sign-in that was succeeding.
+    if state in _pending:
+        record_status(state, "pending", None, now=current)
     flow = _pending.pop(state or "", None)
     if flow is None or flow.expires_at <= current:
         return None
@@ -141,8 +146,8 @@ def pop(state: str, *, now: Optional[float] = None) -> Optional[PendingFlow]:
 def record_status(
     state: str, status: str, error: Optional[str], *, now: Optional[float] = None
 ) -> None:
-    """Record how a popped flow finished. Called exactly once per flow, right after ``pop()``
-    in ``oauth_flow.complete`` — never holds a token, only a status + a human-readable error."""
+    """Record where a popped flow stands: ``pop()`` writes ``pending``, ``oauth_flow.complete``
+    writes how it finished — never holds a token, only a status + a human-readable error."""
     current = time.time() if now is None else now
     _prune_status(current)
     if len(_status) >= MAX_STATUS:
