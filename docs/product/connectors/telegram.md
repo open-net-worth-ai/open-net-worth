@@ -95,7 +95,10 @@ going quiet.
 comes with buttons — **✓ Once**, **✓ Always**, **✗ Deny** (or **✓ Apply** / **✗ Discard**). They
 work exactly like [confirm cards](../lucius/confirm-cards.md) in the app: the change that runs is
 exactly the one shown, whatever is typed in between. A card only responds to taps in the chat it
-was sent to.
+was sent to. When the [Auto judge](../lucius/permissions-v2.md) is what stopped the call, the
+message also says **Auto asked because:** and its reason. If that would make the message too long
+for Telegram, the card arrives without the reason. If the card can't be sent at all, the bot says
+so: nothing has run, and you can answer it in the app.
 
 **Getting alerts and reports here.** The ready-made report Automations — *Daily briefing*,
 *Weekly report*, *Monthly report* — send to Telegram when it's connected. See

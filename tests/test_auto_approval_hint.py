@@ -1,5 +1,6 @@
-"""The "i" on a row the Auto judge let through: the verdict is stored with the conversation, rides
-the live ``tool_done`` event, and comes back on the tool block after a reload (``permissions_v2``).
+"""The "i" on a row the Auto judge decided, allowed or asked: the verdict is stored with the
+conversation, rides the live ``tool_done`` event, and comes back on the tool block after a reload
+(``permissions_v2``). A call it asked about also gets the reason back on its answered card.
 """
 
 from __future__ import annotations
@@ -10,7 +11,7 @@ from backend.ai import assistant, auto_judge, turns
 from backend.ai.auto_judge import JudgeVerdict
 from backend.core.chat_session import clear_session_id, set_session_id
 from backend.core.tool_use_context import set_tool_use_id
-from backend.services import auto_approvals
+from backend.services import auto_approvals, tool_resolutions
 
 SESSION = "auto-approval-hint-session"
 
@@ -83,14 +84,29 @@ def test_an_allow_that_lets_a_call_run_is_remembered_with_its_reason(db_isolated
     }
 
 
-def test_an_ask_is_not_remembered_because_that_call_gets_the_ordinary_card(db_isolated):
+def test_an_ask_is_remembered_on_the_call_with_its_reason(db_isolated):
+    """A card is deleted once it is answered; the verdict belongs to the call and outlives it."""
     set_session_id(SESSION)
-    _hold("call_1", "add_transactions", JudgeVerdict("ask", "Not what the owner asked for."))
+    _hold(
+        "call_1",
+        "add_transactions",
+        JudgeVerdict("ask", "Not what the owner asked for.", "claude_cli:sonnet"),
+    )
+
+    assert auto_judge.gate_verdict_for("add_transactions") == "gate"
+
+    asked = {"reason": "Not what the owner asked for.", "model": "sonnet", "verdict": "ask"}
+    assert auto_approvals.for_session(SESSION) == {"call_1": asked}
+    assert auto_approvals.take_live("call_1") == asked
+
+
+def test_no_verdict_in_hand_is_not_remembered_as_anything(db_isolated):
+    set_session_id(SESSION)
+    set_tool_use_id("call_1")
 
     assert auto_judge.gate_verdict_for("add_transactions") == "gate"
 
     assert auto_approvals.for_session(SESSION) == {}
-    assert auto_approvals.take_live("call_1") is None
 
 
 def test_a_verdict_for_another_call_is_not_remembered_for_this_one(db_isolated):
@@ -169,3 +185,94 @@ def test_with_the_flag_off_a_reload_shows_no_hint(transcript):
     blocks = _tool_blocks(assistant.rehydrate_messages(SESSION))
 
     assert "autoApproval" not in blocks["call_judged"]
+
+
+def _cards(messages):
+    return {
+        b["change"]["id"]: b["change"]
+        for m in messages
+        for b in (m.get("blocks") or [])
+        if b.get("type") == "change"
+    }
+
+
+def _asked(tool_use_id: str = "call_judged") -> None:
+    auto_approvals.record(
+        SESSION, tool_use_id, "A live order is not cheap to undo.", "claude_cli:sonnet", "ask"
+    )
+
+
+@pytest.mark.flags(permissions_v2=True)
+@pytest.mark.parametrize(
+    "answer", [tool_resolutions.APPROVED, tool_resolutions.ALWAYS_ALLOWED, tool_resolutions.DENIED]
+)
+def test_an_answered_card_keeps_why_auto_asked_after_a_reload(transcript, answer):
+    _asked()
+    tool_resolutions.record(SESSION, "call_judged", answer)
+
+    messages = assistant.rehydrate_messages(SESSION)
+
+    card = _cards(messages)["call_judged"]
+    assert card["judge_reason"] == "A live order is not cheap to undo."
+    assert card["resolution"] == answer
+    assert _tool_blocks(messages)["call_judged"]["autoApproval"]["verdict"] == "ask"
+
+
+@pytest.mark.flags(permissions_v2=True)
+def test_a_call_asked_about_and_never_answered_keeps_its_reason_on_the_row(transcript):
+    """Its card is gone with the turn (``abort_stale_pending``), which is no reason to lose why."""
+    _asked()
+
+    messages = assistant.rehydrate_messages(SESSION)
+
+    assert _cards(messages) == {}
+    assert _tool_blocks(messages)["call_judged"]["autoApproval"] == {
+        "reason": "A live order is not cheap to undo.",
+        "model": "sonnet",
+        "verdict": "ask",
+    }
+
+
+@pytest.mark.flags(permissions_v2=True)
+def test_a_card_answered_for_a_call_auto_allowed_or_never_judged_says_nothing_about_asking(
+    transcript,
+):
+    auto_approvals.record(SESSION, "call_judged", "Adds the coffee you asked for.")
+    tool_resolutions.record(SESSION, "call_judged", tool_resolutions.APPROVED)
+    tool_resolutions.record(SESSION, "call_read", tool_resolutions.APPROVED)
+
+    cards = _cards(assistant.rehydrate_messages(SESSION))
+
+    assert "judge_reason" not in cards["call_judged"]
+    assert "judge_reason" not in cards["call_read"]
+
+
+@pytest.mark.flags(permissions_v2=False)
+def test_with_the_flag_off_a_rebuilt_card_never_carries_a_stored_reason(transcript):
+    """Flipping the flag off keeps the old code untouched, whatever v2 stored while it was on."""
+    _asked()
+
+    card = assistant._card_from_call(SESSION, {"id": "call_judged", "name": "add_transactions"}, "")
+
+    assert "judge_reason" not in card
+
+
+def test_a_connector_call_auto_asked_about_is_remembered_through_the_one_chain(db_isolated):
+    """External tools bypass ``registry.dispatch``; they still reach the same verdict function."""
+    from backend.ai.tools import _confirm_gate_v2 as gate
+    from backend.core.conversation_approval import (
+        ConversationApprovalContext,
+        bind_conversation_approval,
+        reset_conversation_approval,
+    )
+
+    name = "mcp__broker__create_order"
+    set_session_id(SESSION)
+    token = bind_conversation_approval(ConversationApprovalContext(SESSION, "auto"))
+    try:
+        _hold("call_1", name, JudgeVerdict("ask", "A live order.", "claude_cli:sonnet"))
+        assert gate.external_decision(name) == "gate"
+    finally:
+        reset_conversation_approval(token)
+
+    assert auto_approvals.for_session(SESSION)["call_1"]["verdict"] == "ask"

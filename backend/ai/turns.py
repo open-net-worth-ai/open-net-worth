@@ -129,8 +129,8 @@ def _now_iso() -> str:
 
 
 def _with_auto_approval(event: dict) -> dict:
-    """A ``tool_done`` for a call the Auto judge let through carries the judge's reason, so the
-    row shows its "i" while the turn is still live (``services.auto_approvals``)."""
+    """A ``tool_done`` for a call the Auto judge decided carries the judge's reason, so the row
+    shows its "i" while the turn is still live (``services.auto_approvals``)."""
     approval = auto_approvals.take_live(str(event.get("id") or ""))
     return {**event, "autoApproval": approval} if approval else event
 

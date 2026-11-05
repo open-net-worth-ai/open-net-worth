@@ -1942,6 +1942,7 @@ def _card_from_call(session_id: str, block: dict, reason: str) -> dict:
         "session_id": session_id,
         "id": block["id"],
         **_permission_engine().automation_ref(session_id),
+        **_permission_engine().recorded_judge_note(session_id, block["id"]),
     }
 
 
@@ -2575,8 +2576,8 @@ def _rebuild_answered_cards(session_id: str, messages: list[dict]) -> None:
 
 
 def _attach_auto_approvals(session_id: str, messages: list[dict]) -> None:
-    """Give each call the Auto judge let through its stored reason (``autoApproval``), so the
-    row keeps its "i" after a reload (``permissions_v2``, ``services.auto_approvals``)."""
+    """Give each call the Auto judge decided its stored verdict (``autoApproval``), so the row
+    keeps its "i" after a reload (``permissions_v2``, ``services.auto_approvals``)."""
     from backend.services import auto_approvals
 
     approvals = auto_approvals.for_session(session_id)

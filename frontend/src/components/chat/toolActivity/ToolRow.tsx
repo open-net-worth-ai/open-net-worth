@@ -170,14 +170,17 @@ function CallDetail({ item, sessionId }: { item: ToolItem; sessionId?: string })
   )
 }
 
-/** The Auto judge let this call run without a card. Quiet by design: a small faint "i" whose
- *  bubble says so and gives the judge's one-line reason. The reason is model-written from the
- *  call's arguments, so it is rendered as text only — never markdown, never a link. */
+/** What the Auto judge decided about this call: it ran without a card, or it asked first. Quiet
+ *  by design: a small faint "i" whose bubble says which and gives the judge's one-line reason. The
+ *  reason is model-written from the call's arguments, so it is rendered as text only — never
+ *  markdown, never a link. */
 function AutoApprovalHint({ approval }: { approval: AutoApproval }) {
-  const who = approval.model ? `Auto-approved by the judge (${approval.model})` : 'Auto-approved'
+  const asked = approval.verdict === 'ask'
+  const lead = asked ? 'Auto asked you first' : 'Auto-approved'
+  const who = approval.model ? `${lead}${asked ? '' : ' by the judge'} (${approval.model})` : lead
   return (
     <InfoPopover
-      label="Why this ran without asking"
+      label={asked ? 'Why Auto asked about this' : 'Why this ran without asking'}
       triggerClassName="msg-toolact__hint"
       text={
         <span className="msg-toolact__hint-text">
