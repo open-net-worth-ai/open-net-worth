@@ -1818,6 +1818,30 @@ def _import_other_budget(**types) -> None:
     raise AssertionError("the import did not finish")
 
 
+def _ready_for_budget_b(world, interval: str) -> None:
+    enable(interval=interval)
+    sync()
+    world.add_budget(BUDGET_B)
+    with world.on(BUDGET_B):
+        seed_other_budget(world, PAST, TODAY)
+    actual_app.sync_settings(False, None, None, None)
+
+
+def test_moving_the_sync_with_no_interval_keeps_the_schedule(world):
+    _ready_for_budget_b(world, "daily")
+    _import_other_budget()
+    actual_app.sync_settings(True, None, BUDGET_B, "both")
+    st = sync_state_of()
+    assert (st["plan_id"], st["enabled"], st["interval"]) == (BUDGET_B, True, "daily")
+
+
+def test_an_interval_given_with_the_move_wins(world):
+    _ready_for_budget_b(world, "daily")
+    _import_other_budget()
+    actual_app.sync_settings(True, "6h", BUDGET_B, "both")
+    assert sync_state_of()["interval"] == "6h"
+
+
 def test_moving_to_an_imported_budget_and_back(world):
     enable()
     sync()

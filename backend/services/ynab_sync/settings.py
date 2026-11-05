@@ -87,10 +87,13 @@ def _adopt_plan(plan_id: str) -> dict:
         raise ValidationError(
             f"That {app.name} {app.plan_word} has no currency set; open it in {app.name} once first."
         )
-    switched = app.caps.copies_keep_ids and bool(sync_state.load()["plan_id"])
+    old = sync_state.load()
+    switched = app.caps.copies_keep_ids and bool(old["plan_id"])
     sync_state.reset()
+    kept = {"interval": old["interval"]} if app.caps.budget_scoped_accounts else {}
     return {
         **sync_state.blank(),
+        **kept,
         "plan_id": plan_id,
         "plan_name": plan["name"],
         "currency": currency,

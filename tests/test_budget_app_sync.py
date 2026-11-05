@@ -552,6 +552,19 @@ def test_turning_the_sync_on_from_an_import_writes_that_apps_state():
     _ynab_untouched()
 
 
+def test_ynabs_plan_switch_still_resets_the_schedule():
+    plans = [{"id": p, "name": "ACME", "currency": "usd"} for p in ("plan-1", "plan-2")]
+    app = _app(reader=SimpleNamespace(list_plans=lambda store: plans))
+    assert app.caps.budget_scoped_accounts is False
+    _account(app)
+    with using(app):
+        runner.update_settings(False, "daily", "plan-1")
+        assert sync_state.load()["interval"] == "daily"
+        runner.update_settings(False, None, "plan-2")
+    assert _state(app)["interval"] == sync_state.DEFAULT_INTERVAL
+    _ynab_untouched()
+
+
 # ── the scheduler ──
 
 
