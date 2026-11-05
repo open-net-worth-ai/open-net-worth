@@ -126,10 +126,14 @@ def start_call(body: StartCallRequest, request: Request):
     config = VoiceConfigStore().get()
     if not is_ready(config):
         raise HTTPException(status_code=409, detail="Set up Voice calls in Connectors first.")
-    if not voice_service.status()["running"]:
+    worker = voice_service.status()
+    if not worker["running"]:
+        if not worker["libraries_installed"]:
+            raise HTTPException(status_code=503, detail=worker["libraries_problem"])
+        voice_service.retry_start()
         raise HTTPException(
             status_code=503,
-            detail="The voice worker isn't running. Check Connectors → Voice calls.",
+            detail="Voice calls are starting up. Try again in a few seconds.",
         )
     ip, visitor = demo_visitor.client_ip(request), demo_visitor.visitor_of(request)
     # On a demo a call goes only into the visitor's own conversation, as a typed message does.

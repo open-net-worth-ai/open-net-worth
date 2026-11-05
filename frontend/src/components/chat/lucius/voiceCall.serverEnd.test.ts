@@ -33,6 +33,7 @@ vi.mock('livekit-client', () => ({
   RoomEvent: {
     TrackSubscribed: 'trackSubscribed',
     ActiveSpeakersChanged: 'activeSpeakersChanged',
+    ConnectionQualityChanged: 'connectionQualityChanged',
     ParticipantConnected: 'participantConnected',
     ParticipantDisconnected: 'participantDisconnected',
     Reconnecting: 'reconnecting',
@@ -181,6 +182,58 @@ describe('the server ending a call', () => {
     await vi.advanceTimersByTimeAsync(PICKUP_TIMEOUT_MS)
     expect(state().phase).toBe('idle')
     expect(state().problem?.message).toMatch(/didn't pick up/)
+  })
+})
+
+describe('the connection rating', () => {
+  const you = { identity: 'owner' }
+  const lucius = { identity: 'lucius' }
+
+  it("is the weaker of the two connections, yours and Lucius's", async () => {
+    const room = await liveCall()
+    expect(state().quality).toBeNull()
+    room.emit('connectionQualityChanged', 'excellent', you)
+    expect(state().quality).toBe('excellent')
+    room.emit('connectionQualityChanged', 'poor', lucius)
+    expect(state().quality).toBe('poor')
+    room.emit('connectionQualityChanged', 'good', lucius)
+    expect(state().quality).toBe('good')
+  })
+
+  it('drops a side LiveKit can no longer rate, instead of keeping its old rating', async () => {
+    const room = await liveCall()
+    room.emit('connectionQualityChanged', 'excellent', you)
+    room.emit('connectionQualityChanged', 'poor', lucius)
+    room.emit('connectionQualityChanged', 'unknown', lucius)
+    expect(state().quality).toBe('excellent')
+  })
+
+  it('follows the device going offline and back, without waiting for LiveKit', async () => {
+    await liveCall()
+    expect(state().offline).toBe(false)
+    window.dispatchEvent(new Event('offline'))
+    expect(state().offline).toBe(true)
+    window.dispatchEvent(new Event('online'))
+    expect(state().offline).toBe(false)
+  })
+
+  it('stops following the network when the call ends', async () => {
+    await liveCall()
+    await hangUp()
+    window.dispatchEvent(new Event('offline'))
+    expect(state().offline).toBe(false)
+  })
+
+  it("doesn't carry over into the next call", async () => {
+    const room = await liveCall()
+    room.emit('connectionQualityChanged', 'poor', you)
+    await hangUp()
+    expect(state().quality).toBeNull()
+    vi.advanceTimersByTime(4000)
+    resetVoiceCallForTests()
+    const next = await liveCall()
+    next.emit('connectionQualityChanged', 'excellent', lucius)
+    expect(state().quality).toBe('excellent')
   })
 })
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { overrideFlagsForTests } from '../../../hooks/useFlag'
 
 const authFetch = vi.fn()
@@ -18,7 +18,7 @@ vi.mock('livekit-client', () => ({
   createLocalAudioTrack: vi.fn(async () => ({ stop: vi.fn() })),
 }))
 
-import { VoiceCallButton } from './VoiceCallButton'
+import { useCallInSendSlot, VoiceCallButton } from './VoiceCallButton'
 import { VoiceCallNotice } from './VoiceCallNotice'
 import { VoiceCallSlot } from './VoiceCallSlot'
 import { resetVoiceCallForTests, startCall, useVoiceCall } from './voiceCall'
@@ -57,28 +57,78 @@ afterEach(() => {
 })
 
 describe('VoiceCallButton', () => {
+  describe("the composer's Send slot", () => {
+    function Slot() {
+      return useCallInSendSlot() ? <VoiceCallButton sessionId="s1" /> : <button>Send</button>
+    }
+
+    it('keeps Send while the voice_calls flag is off, and asks nothing of the server', () => {
+      restore = overrideFlagsForTests({ voice_calls: false })
+      render(<Slot />)
+      expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy()
+      expect(authFetch).not.toHaveBeenCalled()
+    })
+
+    it('keeps Send while calls are not set up', async () => {
+      restore = overrideFlagsForTests({ voice_calls: true })
+      respond(UNSET)
+      render(<Slot />)
+      await waitFor(() => expect(authFetch).toHaveBeenCalled())
+      await act(async () => {})
+      expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Set up voice calls' })).toBeNull()
+    })
+
+    it('holds Send until it knows, then Call once calls are ready', async () => {
+      restore = overrideFlagsForTests({ voice_calls: true })
+      respond(READY)
+      render(<Slot />)
+      expect(screen.getByRole('button', { name: 'Send' })).toBeTruthy()
+      expect(await screen.findByRole('button', { name: 'Call Lucius' })).toBeTruthy()
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull()
+    })
+  })
+
   it('is not there while the voice_calls flag is off', () => {
     restore = overrideFlagsForTests({ voice_calls: false })
     render(<VoiceCallButton sessionId="s1" />)
     expect(screen.queryByRole('button')).toBeNull()
   })
 
-  it('opens Voice calls setup over the current screen, not an error, while not set up', async () => {
+  it('takes you to Voice calls in Connectors, not an error, while not set up', async () => {
     restore = overrideFlagsForTests({ voice_calls: true })
     respond(UNSET)
-    function Probe() {
-      return <span data-testid="setup">{String(useVoiceCall().setupOpen)}</span>
-    }
+    render(<VoiceCallButton sessionId="s1" />)
+    const phone = await screen.findByRole('button', { name: 'Set up voice calls' })
+    expect(phone.className).toBe('lx-call-btn')
+    fireEvent.click(phone)
+    expect(dispatch).toHaveBeenCalledWith({
+      name: 'connectors.open_setup',
+      args: { id: 'voice' },
+    })
+    expect(navigate).toHaveBeenCalledWith({ to: '/connectors' })
+    expect(authFetch).not.toHaveBeenCalledWith('/api/voice/call', expect.anything())
+  })
+
+  it('says nothing about a worker that is down until you press Call', async () => {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    respond(
+      { ...READY, worker: { ...READY.worker, running: false, error: 'Could not start.' } },
+      { ok: false, body: { detail: 'Voice calls are starting up. Try again in a few seconds.' } },
+    )
     render(
       <>
-        <Probe />
+        <VoiceCallNotice sessionId="s1" />
         <VoiceCallButton sessionId="s1" />
       </>,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Set up voice calls' }))
-    expect(screen.getByTestId('setup').textContent).toBe('true')
-    expect(navigate).not.toHaveBeenCalled()
-    expect(authFetch).not.toHaveBeenCalledWith('/api/voice/call', expect.anything())
+    const call = await screen.findByRole('button', { name: 'Call Lucius' })
+    expect(screen.queryByRole('alert')).toBeNull()
+    fireEvent.click(call)
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('starting up')
+    expect(within(alert).getByRole('button', { name: 'Try again' })).toBeTruthy()
+    expect(within(alert).queryByRole('button', { name: 'View logs' })).toBeNull()
   })
 
   it('calls INTO the open conversation; a refusal lands in the notice, not the toolbar', async () => {

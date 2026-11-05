@@ -9,6 +9,37 @@ import time
 log = logging.getLogger(__name__)
 
 
+class AnswerTiming:
+    """Waiting for Lucius versus Lucius writing: the second part is all that speaking while the
+    answer streams could save (owner, 2026-11-05)."""
+
+    def __init__(self) -> None:
+        self._asked = time.monotonic()
+        self._writing: float | None = None
+
+    def text(self, chunk: str) -> None:
+        if self._writing is None and chunk.strip():
+            self._writing = time.monotonic()
+
+    def lookup(self) -> None:
+        # What he wrote before a lookup is his working, not the answer starting.
+        self._writing = None
+
+    def done(self, chars: int) -> None:
+        now = time.monotonic()
+        if self._writing is None:
+            log.info(
+                "voice timing: Lucius ended %.2fs after the request, no answer", now - self._asked
+            )
+            return
+        log.info(
+            "voice timing: Lucius's answer began %.2fs after the request, written in %.2fs, %d chars",
+            self._writing - self._asked,
+            now - self._writing,
+            chars,
+        )
+
+
 class TurnTiming:
     def __init__(self) -> None:
         self._stopped: float | None = None

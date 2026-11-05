@@ -23,7 +23,7 @@ import { useScreenSnapshot } from '../../../state/screenSnapshot'
 import { LuciusComposer } from './Composer'
 import { ModelEffortCluster } from './ModelEffortRow'
 import { ConversationApprovalPicker } from '../ConversationApprovalPicker'
-import { VoiceCallButton } from './VoiceCallButton'
+import { useCallInSendSlot, VoiceCallButton } from './VoiceCallButton'
 import { VoiceCallNotice } from './VoiceCallNotice'
 import { VoiceCallSlot } from './VoiceCallSlot'
 import { VoiceCallPill } from './VoiceCallPill'
@@ -82,6 +82,7 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
   const [open, setOpen] = useState(false)
   const voiceOn = useFlag('voice_calls') === true
   const callIdle = useVoiceCall().phase === 'idle'
+  const callInSendSlot = useCallInSendSlot()
   const dockRef = useRef<HTMLDivElement>(null)
   const answerRef = useRef<HTMLDivElement>(null)
   const composerRef = useRef<LuciusComposerHandle>(null) as RefObject<LuciusComposerHandle>
@@ -537,7 +538,7 @@ export function LuciusDock({ onExpand, onSetUpAi }: Props) {
               }
               leadingControls={<ConversationApprovalPicker sessionId={activeId} />}
               // Mid-call the slot is Send again: what you type goes to Lucius, read aloud.
-              callAction={callIdle ? <VoiceCallButton sessionId={activeId} /> : null}
+              callAction={callInSendSlot ? <VoiceCallButton sessionId={activeId} /> : null}
               ref={composerRef}
               busy={(streaming && !following) || sending}
               sendBlocked={((streaming && !following) || sending) && !multiTurnEnabled}

@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { readLevels } from './voiceCall'
 
-// The call's orb: a sphere of slowly moving light that swells with whoever is talking, you as
-// much as Lucius. CSS only — the level loop writes two custom properties on every frame and
+// The call's orb: a sphere of soft colour swaying like liquid, that swells with whoever is talking,
+// you as much as Lucius. CSS only — the level loop writes two custom properties on every frame and
 // React never re-renders for it.
 
 export type OrbState = 'calling' | 'live' | 'working' | 'reconnecting' | 'ended'
@@ -78,9 +78,10 @@ export function VoiceOrb({
     >
       <span className="lx-orb-halo" />
       <span className="lx-orb-core">
-        <span className="lx-orb-blob" />
-        <span className="lx-orb-blob" />
-        <span className="lx-orb-blob" />
+        <span className="lx-orb-pool" />
+        <span className="lx-orb-pool" />
+        <span className="lx-orb-pool" />
+        <span className="lx-orb-pool" />
       </span>
     </div>
   )

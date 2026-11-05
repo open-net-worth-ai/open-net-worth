@@ -22,6 +22,7 @@ import time
 from typing import Optional
 
 from backend.core.config import get_settings
+from backend.core.user_time import user_now
 from backend.db.voice_config_store import LANGUAGES, VoiceConfigStore, is_ready
 from backend.services.feature_flags import enabled as flag_enabled
 
@@ -37,6 +38,7 @@ class _Worker:
         self.error: str = ""
         self.restarts = 0
         self.started_at = 0.0
+        self.app_loop: Optional[asyncio.AbstractEventLoop] = None
 
 
 _worker = _Worker()
@@ -231,6 +233,17 @@ def status() -> dict:
     }
 
 
+def part_of_day() -> str:
+    """For the greeting, on the owner's clock: the worker has neither their timezone nor, once
+    started, today's hour. Empty late at night, when "good evening" sounds wrong."""
+    hour = user_now().hour
+    if 5 <= hour < 12:
+        return "morning"
+    if 12 <= hour < 18:
+        return "afternoon"
+    return "evening" if 18 <= hour < 23 else ""
+
+
 def _owner_name() -> str:
     from backend.services.profile import read_profile
 
@@ -279,7 +292,25 @@ async def reload() -> None:
         await _start()
 
 
+def retry_start() -> None:
+    """Someone pressed Call with the worker down: that is the manual retry, a fresh set of
+    attempts. Waits its turn behind a start already under way, and then has nothing to do."""
+    loop = _worker.app_loop
+    if loop is None or loop.is_closed():
+        return
+
+    async def again() -> None:
+        async with _lifecycle_lock():
+            if _running():
+                return
+            _worker.restarts = 0
+            await _start()
+
+    asyncio.run_coroutine_threadsafe(again(), loop)
+
+
 async def _start() -> None:
+    _worker.app_loop = asyncio.get_running_loop()
     if _running():
         return
     _worker.error = ""
@@ -309,8 +340,14 @@ async def _start() -> None:
         started = False
     _worker.started_at = time.monotonic()
     if not started:
+        # Still alive means it was too slow to report ready, as on a machine under heavy load, so
+        # nothing else will try again. One that died has already scheduled its own restart.
+        too_slow = process.alive()
         await asyncio.to_thread(process.stop)
-        _worker.error = "Voice calls couldn't start on this computer. The app log has the details."
+        _worker.error = "Voice calls couldn't start on this computer."
+        if too_slow:
+            log.warning("voice: the worker wasn't ready in time; trying again")
+            _schedule_restart(app_loop)
 
 
 def _crashed(app_loop: asyncio.AbstractEventLoop) -> None:
@@ -329,7 +366,8 @@ def _schedule_restart(app_loop: asyncio.AbstractEventLoop) -> None:
     """A worker that dies restarts itself, a few times, before the page shows it as stopped."""
     attempt = _worker.restarts
     if attempt >= len(_RESTART_DELAYS):
-        _worker.error = "Voice calls stopped and couldn't restart. Restart the app to try again."
+        log.error("voice: the worker couldn't start after %d attempts", attempt + 1)
+        _worker.error = "Voice calls couldn't start. Press Call to try again."
         return
     _worker.restarts += 1
 

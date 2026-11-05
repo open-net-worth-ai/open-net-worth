@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import uuid
 from collections import OrderedDict
 from collections.abc import AsyncIterator
@@ -20,7 +19,7 @@ from typing import Optional
 
 from backend.ai import assistant, conversation, live_sessions, turns
 from backend.ai.tool_text import harness_note
-from backend.connectors.voice.events import DeskEvent
+from backend.connectors.voice.events import DeskEvent, speakable
 from backend.core.chat_context_markers import HARNESS_NOTE_CLOSE, HARNESS_NOTE_OPEN
 
 log = logging.getLogger(__name__)
@@ -35,7 +34,8 @@ VOICE_NOTE = (
     "Don't say beforehand that a change will need approving: you can't know, and when it does "
     "the app stops you, shows the card and tells them. Never promise something for later that "
     "this reply doesn't do. To give them a link, write it as a markdown link with a short "
-    "label: only the label is read aloud, and the link shows in the chat."
+    "label and say in words that it's in the chat: the link shows there, a link inside a "
+    "sentence is read aloud as its label, and one on a line of its own isn't read at all."
 )
 SMALL_TALK_NOTE = (
     "Said on a voice call and answered by the voice assistant directly, without a lookup."
@@ -63,19 +63,12 @@ def _own(turn_id: str) -> None:
         _call_turns.popitem(last=False)
 
 
-_MARKDOWN = re.compile(r"[*_`#>|]+")
-_LINK = re.compile(r"\[([^\]]+)\]\([^)]+\)")
-
-
-def speakable(text: str) -> str:
-    return _MARKDOWN.sub("", _LINK.sub(r"\1", text))
-
-
 def translate(raw: dict) -> Optional[DeskEvent]:
     """One live-stream event → what a voice needs from it (``None`` = nothing)."""
     kind = raw.get("type")
     if kind == "text_delta":
-        return DeskEvent("text", speakable(raw.get("text") or ""))
+        # Raw: a link split across two deltas matches nothing. The call cleans the whole answer.
+        return DeskEvent("text", raw.get("text") or "")
     if kind == "tool_use_start":
         display = raw.get("display") or {}
         return DeskEvent(
