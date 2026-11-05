@@ -3,6 +3,7 @@
 #
 #   curl -fsSL https://github.com/open-net-worth-ai/open-net-worth-releases/releases/latest/download/install-server.sh | sh
 #   curl -fsSL ...install-server.sh | sh -s -- --autostart   # also start at login/boot, restart on crash
+#   curl -fsSL ...install-server.sh | sh -s -- --auto-upgrade   # the same, and stay on the newest release
 #
 # This is the SERVER installer (a release asset named install-server.sh). The desktop app has its own,
 # https://opennetworth.ai/install.sh.
@@ -12,7 +13,7 @@
 #   2. `uv tool install open-net-worth` on uv's OWN Python 3.12 (--managed-python), never a
 #      system/Homebrew one — a `brew upgrade` deletes the old interpreter and would leave the
 #      install dangling. No system Python or Node.js is needed; everything lands in uv's tool dir
-#   3. with --autostart: `onw autostart install`
+#   3. with --autostart: `onw autostart install`; with --auto-upgrade: `onw start --autostart --auto-upgrade`
 # Re-running it upgrades to the newest release. Your data lives in ~/.open-net-worth/, outside
 # the install, so upgrades and reinstalls never touch it. Windows: use Docker (docs, Installation).
 set -eu
@@ -29,10 +30,12 @@ case "$(uname -s 2>/dev/null || echo unknown)" in
 esac
 
 AUTOSTART=0
+AUTO_UPGRADE=0
 for arg in "$@"; do
   case "$arg" in
     --autostart) AUTOSTART=1 ;;
-    *) die "unknown option: $arg (the only option is --autostart)" ;;
+    --auto-upgrade) AUTOSTART=1; AUTO_UPGRADE=1 ;;
+    *) die "unknown option: $arg (the options are --autostart and --auto-upgrade)" ;;
   esac
 done
 
@@ -77,7 +80,9 @@ if [ "$ON_USER_PATH" = 0 ]; then
     || say "Could not add ~/.local/bin to your shell profile — run: uv tool update-shell"
 fi
 
-if [ "$AUTOSTART" = 1 ]; then
+if [ "$AUTO_UPGRADE" = 1 ]; then
+  "$ONW" start --autostart --auto-upgrade
+elif [ "$AUTOSTART" = 1 ]; then
   "$ONW" autostart install
 fi
 

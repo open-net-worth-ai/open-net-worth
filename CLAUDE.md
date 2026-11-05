@@ -31,7 +31,9 @@ Users don't clone: they `uv tool install open-net-worth` (wheel built by `make w
 The wheel carries `frontend/dist`, `docs-site/dist-embed` and `docs/product` under
 `backend/_bundled/`; `core/shipped_assets.py` resolves them — REPO copy wins when present,
 bundled only inside an installed wheel. `backend/cli/` is the top layer (`cli → api → …`). ADR
-`2026-09-19-distribute-as-uv-tool-and-published-image`.
+`2026-09-19-distribute-as-uv-tool-and-published-image`. `onw upgrade` and `onw start --auto-upgrade`
+install the signed release's wheel, never `uv tool upgrade` (ADR
+`2026-11-05-a-server-upgrades-itself-only-when-asked-and-only-from-a-signed-wheel`).
 
 ```bash
 uvicorn backend.main:app --reload --port 8080
