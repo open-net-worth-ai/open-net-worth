@@ -573,20 +573,11 @@ def materialize_automation_session(run: dict, automation: Optional[dict] = None)
     created_transcript = existing is None
     if not isinstance(existing, list) or not existing:
         if "started_at" not in run and automation is not None:
-            request = AutomationRunnerRequest(
-                automation_id=str(run.get("automation_id") or automation.get("id") or ""),
-                run_id=run_id,
-                session_id=session_id,
-                title=str(automation.get("name") or run_id),
-                instructions=str(automation.get("instructions") or ""),
-                trigger=dict(run.get("trigger") or {}),
-                execution=dict(automation.get("execution") or {"kind": "lucius"}),
-                model=str(automation.get("model") or ""),
-                effort=str(automation.get("effort") or "medium"),
-                payload=dict(run.get("context") or {}),
-                permission_mode=str(automation.get("permission_mode") or "manual"),
-                always_allowed=list(automation.get("always_allowed") or []),
-            )
+            # The ONE request a run gets. This message is the only opening it ever sees, so a
+            # request built by hand here told every run it had no last run and no rule.
+            from backend.services.automations.runs import request_for_run
+
+            request = request_for_run(automation, {**run, "session_id": session_id})
             history = [_automation_message(request)]
         else:
             facts = {
@@ -1191,6 +1182,8 @@ def _automation_message(request: AutomationRunnerRequest) -> dict:
             # Why it ran and since when: the instructions say what to do, never when.
             "configured_trigger": request.configured_trigger,
             "last_completed_run": request.last_completed_run,
+            "run_before_last": request.run_before_last,
+            "last_run_record": request.last_run_record,
         },
         sort_keys=True,
         default=str,
