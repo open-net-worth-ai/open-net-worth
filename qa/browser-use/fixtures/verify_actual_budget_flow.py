@@ -17,6 +17,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
@@ -29,6 +30,11 @@ from playwright.sync_api import Error as BrowserError
 from playwright.sync_api import Page, expect, sync_playwright
 
 REPO = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO))  # run by path, so the checkout isn't on it
+
+from backend.core.child_env import scrubbed_environ  # noqa: E402
+from backend.core.process_tree import kill_tree, spawn_kwargs, terminate_tree  # noqa: E402
+
 PASSWORD = "made-up-qa-password"
 PORT = 8095
 LIMIT_SECONDS = 420
@@ -86,7 +92,7 @@ class Actual:
                 [str(self.node_dir / "node_modules" / ".bin" / "actual-server")],
                 cwd=self.node_dir,
                 env={
-                    **os.environ,
+                    **scrubbed_environ(),
                     "ACTUAL_PORT": str(PORT),
                     "ACTUAL_HOSTNAME": "127.0.0.1",
                     "ACTUAL_DATA_DIR": str(data),
@@ -95,7 +101,7 @@ class Actual:
                 },
                 stdout=log,
                 stderr=subprocess.STDOUT,
-                start_new_session=True,
+                **spawn_kwargs(),
             )
         for _ in range(100):
             try:
@@ -114,11 +120,11 @@ class Actual:
 
     def stop(self) -> None:
         if self.process is not None:
-            os.killpg(self.process.pid, signal.SIGTERM)
+            terminate_tree(self.process.pid)
             try:
                 self.process.wait(timeout=15)
             except subprocess.TimeoutExpired:
-                os.killpg(self.process.pid, signal.SIGKILL)
+                kill_tree(self.process.pid)
                 self.process.wait(timeout=15)
             self.process = None
 

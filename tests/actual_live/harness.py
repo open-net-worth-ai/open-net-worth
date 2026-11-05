@@ -10,7 +10,6 @@ import http.client
 import http.server
 import itertools
 import json
-import os
 import shutil
 import socket
 import subprocess
@@ -23,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from backend.core.child_env import scrubbed_environ
 from backend.core.process_tree import kill_tree, spawn_kwargs
 
 PASSWORD = "made-up-smoke-password"
@@ -96,7 +96,7 @@ class Server:
         (data / "server-files").mkdir(parents=True, exist_ok=True)
         (data / "user-files").mkdir(parents=True, exist_ok=True)
         return {
-            **os.environ,
+            **scrubbed_environ(),
             "ACTUAL_PORT": str(self.port),
             "ACTUAL_HOSTNAME": "127.0.0.1",
             "ACTUAL_DATA_DIR": str(data),
