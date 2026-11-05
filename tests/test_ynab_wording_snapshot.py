@@ -455,10 +455,14 @@ def _checks(run_record: dict) -> list[str]:
     return [f"{c['check']} | {c['note']}" for c in [*ver["mismatches"], *ver["matches"]]]
 
 
-def test_import_log_and_verification(ynab):
+def _base_currency(code: str) -> None:
     profile = profile_service.read_profile()
-    profile["base_currency"] = "EUR"
+    profile["base_currency"] = code
     profile_service.write_profile(profile)
+
+
+def test_import_log_and_verification(ynab):
+    _base_currency("EUR")
     preview = run("preview")
     fresh = run()
     assert fresh["status"] == "done", fresh["error"]
@@ -471,9 +475,7 @@ def test_import_log_and_verification(ynab):
 
 
 def test_import_log_with_a_linked_account(ynab):
-    profile = profile_service.read_profile()
-    profile["base_currency"] = "USD"
-    profile_service.write_profile(profile)
+    _base_currency("USD")
     everyday = accounts_service.create_account(
         {
             "name": "Everyday",
@@ -542,6 +544,7 @@ def test_run_failures(ynab, monkeypatch):
         m.setattr(job.category_links, "unresolved", lambda plan, decisions: ["Fun Money"])
         lines.append(_failed_run())
 
+    _base_currency("USD")
     accounts_service.create_account(
         {"name": "Everyday", "type": "cash", "currency": "USD", "initial_balance": 1.0}
     )
