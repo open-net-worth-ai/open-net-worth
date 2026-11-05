@@ -480,6 +480,37 @@ async def process_message(
     )
 
 
+def _bind_owner_approval_mode(connector, channel_id: str, session_id: str, sender_id):
+    """Bind the conversation's approval mode for an owner's turn, or nothing for anyone else.
+
+    A channel turn does not run through ``turns._drive``, which binds the mode for the web, so
+    this is its twin. Only the owner gets it: an adapter says who that is with
+    ``is_owner_chat``, and one that does not implement it has no owner. Nothing bound means
+    every Ask tool shows a card, which is also where any failure here lands.
+    """
+    is_owner = getattr(connector, "is_owner_chat", None)
+    if is_owner is None or not sender_id:
+        return None
+    try:
+        from backend.ai.permissions import channel_turns_follow_mode
+        from backend.core.conversation_approval import (
+            ConversationApprovalContext,
+            bind_conversation_approval,
+        )
+        from backend.services import conversation_approval
+
+        if not is_owner(channel_id, sender_id) or not channel_turns_follow_mode():
+            return None
+        return bind_conversation_approval(
+            ConversationApprovalContext(
+                session_id=session_id, mode=conversation_approval.get_mode(session_id)
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 — a card is the safe outcome of not knowing
+        log.warning("[%s] approval mode not bound: %s", channel_id, type(exc).__name__)
+        return None
+
+
 async def pump_channel_turn(
     connector,
     channel_id: str,
@@ -488,6 +519,7 @@ async def pump_channel_turn(
     session_id: str,
     sender_id: Optional[str] = None,
     observer: Optional[Callable[[dict], None]] = None,
+    follow_approval_mode: bool = True,
 ) -> None:
     """Render ONE turn's event stream to a chat channel — the shared half of every
     connector turn.
@@ -603,6 +635,11 @@ async def pump_channel_turn(
 
     _cost_surface = f"connector:{_channel}" if _channel else "connector"
     set_cost_surface(_cost_surface)
+    _approval_token = (
+        _bind_owner_approval_mode(connector, channel_id, session_id, sender_id)
+        if follow_approval_mode
+        else None
+    )
 
     # /stop plumbing: register THIS turn's task so a `/stop` on the same channel can cancel it.
     # Cancellation raises CancelledError into assistant.run, whose finally tears down the LLM
@@ -749,6 +786,10 @@ async def pump_channel_turn(
             turn_registry.clear_active(_channel, channel_id, _turn_task, session_id=session_id)
         _stop_typing()
         clear_cost_surface()
+        if _approval_token is not None:
+            from backend.core.conversation_approval import reset_conversation_approval
+
+            reset_conversation_approval(_approval_token)
 
 
 async def resume_pending_tool_use(
@@ -813,6 +854,9 @@ async def resume_pending_tool_use(
             session_id=session_id,
             sender_id=sender_id,
             observer=_observe,
+            # The owner just said no. The judge cannot see that, so a retry in the rest of this
+            # turn must reach the owner again rather than be judged from their earlier words.
+            follow_approval_mode=decision != "deny",
         )
     except asyncio.CancelledError:
         raise

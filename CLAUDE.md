@@ -443,7 +443,11 @@ frontend/src/
 - The operator may read a connector secret back; the model never may
   (`services/connector_secrets.py`, not imported under `ai/`/`mcp/`).
 - Chat channels: HMAC/Ed25519 first, `operator_trust` default false, IDOR guard on confirm, 10
-  turns/60s rate limit per sender.
+  turns/60s rate limit per sender. A channel turn gets a card for every Ask tool unless the adapter's
+  `is_owner_chat` says otherwise (Telegram: the private chat of a bot with one approved person,
+  `permissions_v2` on); only
+  then does it follow the conversation's approval mode (ADR
+  `2026-11-05-a-telegram-owner-sets-and-gets-the-approval-mode`).
 - Sandbox: 3 kill switches, off by default — NOT a filesystem jail (no chroot/seccomp/uid-drop).
   Auth: PBKDF2 + HMAC, 5 failures/15min → 429.
 - Gateway mode (`ONW_GATEWAY_TOKEN`, `api/gateway.py`): an outermost ASGI middleware 403s every request

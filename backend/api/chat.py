@@ -948,9 +948,10 @@ def set_session_permission_mode(session_id: str, body: PermissionModeUpdate):
     """Set one conversation's approval mode — ``manual`` | ``auto`` | ``skip``.
 
     HUMAN-ONLY, and that is the security property this whole feature rests on, not a
-    nicety. It is reachable from an authenticated browser and from nowhere else: no tool
-    writes it, no tool schema advertises it, and ``services.conversation_approval`` is the
-    only writer (swept by ``tests/test_conversation_approval.py``). A conversation reads
+    nicety. It is reachable from an authenticated browser and a Telegram owner's
+    ``/approvals`` and from nowhere else: no tool writes it, no tool schema advertises it, and
+    ``services.conversation_approval`` is the only writer (swept by
+    ``tests/test_conversation_approval.py``). A conversation reads
     untrusted text all day — a fetched page, an email body, an MCP result — so a model able
     to set its own mode would turn a prompt injection into an approvals-off switch.
     Automations' ``permission_mode`` carries the identical rule for the identical reason

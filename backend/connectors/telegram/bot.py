@@ -155,6 +155,7 @@ def _build_app(token: str):
     )
 
     from backend.connectors.telegram.handlers import (
+        handle_approvals,
         handle_callback,
         handle_cost,
         handle_document,
@@ -191,6 +192,7 @@ def _build_app(token: str):
     app.add_handler(CommandHandler("streaming", handle_streaming))
     app.add_handler(CommandHandler("suggestions", handle_suggestions))
     app.add_handler(CommandHandler("toolstream", handle_toolstream))
+    app.add_handler(CommandHandler("approvals", handle_approvals))
     app.add_handler(CommandHandler("new", handle_new))
     app.add_handler(CommandHandler("stop", handle_stop))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))

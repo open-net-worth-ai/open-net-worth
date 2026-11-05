@@ -26,6 +26,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from backend.core.chat_context_markers import ATTACHMENT_NOTE
 from backend.core.untrusted import fence_untrusted_block, make_fence_nonce, sanitize_untrusted
 
 MAX_USER_MESSAGES = 3
@@ -128,6 +129,29 @@ def clip(text: str, limit: int) -> str:
 _CONTEXT_PREFIXES = ("<turn_context>", "«mention:", "[Currently on screen", "[SKILL INVOCATION")
 
 
+# A channel reply carries the message it answers, and a forward carries someone else's message.
+# Either may relay a fetched page, an alert's news or a scammer's request: what the person passed
+# along, never what they asked for.
+_RELAYED = re.compile(
+    r"«(reply_quote|forwarded):([0-9a-fA-F]+)».*?«/\1:\2»",
+    re.DOTALL,
+)
+
+
+def _first_said_block(content: list) -> dict:
+    """The block a list row's words are in: a caption follows the attachments it came with, and a
+    missing attachment leaves an app-written note in the same place."""
+    for block in content:
+        if not isinstance(block, dict):
+            return {}
+        if block.get("type") == "attachment_ref":
+            continue
+        if block.get("type") == "text" and str(block.get("text")).startswith(ATTACHMENT_NOTE):
+            continue
+        return block
+    return {}
+
+
 def typed_text(content: Any) -> str:
     """Only what the owner TYPED in a stored user row, or "" when there is none.
 
@@ -141,7 +165,7 @@ def typed_text(content: Any) -> str:
     if isinstance(content, str):
         text = content
     elif isinstance(content, list) and content and isinstance(content[0], dict):
-        first = content[0]
+        first = _first_said_block(content)
         if first.get("type") != "text" or not isinstance(first.get("text"), str):
             return ""
         text = first["text"]
@@ -152,7 +176,7 @@ def typed_text(content: Any) -> str:
     from backend.ai.assistant import _strip_user_msg_fence
 
     unwrapped = _strip_user_msg_fence(text)
-    return unwrapped if unwrapped is not None else text
+    return _RELAYED.sub("", unwrapped if unwrapped is not None else text).strip()
 
 
 def recent_owner_messages(session_id: str) -> list[str]:
