@@ -108,14 +108,21 @@ export function automationCustomRule(trigger: AutomationTrigger): string | null 
   return rruleText(trigger.rrule) ? trigger.rrule : null
 }
 
-/** The label with a custom cadence's rule beside it: both, where there's room to show them. */
-export function automationTriggerFullLabel(
-  trigger: AutomationTrigger,
-  options: AutomationOptions = EMPTY_AUTOMATION_OPTIONS,
-): string {
-  const label = automationTriggerLabel(trigger, options)
+/** The trigger in words, with a custom cadence's rule quietly below them. */
+export function AutomationTriggerText({
+  trigger,
+  options = EMPTY_AUTOMATION_OPTIONS,
+}: {
+  trigger: AutomationTrigger
+  options?: AutomationOptions
+}) {
   const rule = automationCustomRule(trigger)
-  return rule ? `${label} • ${rule}` : label
+  return (
+    <>
+      <span className="a3-trigger-words">{automationTriggerLabel(trigger, options)}</span>
+      {rule && <span className="a3-trigger-rule">{rule}</span>}
+    </>
+  )
 }
 
 export function missingTriggerFields(trigger: AutomationTrigger): string[] {
@@ -182,7 +189,7 @@ export function AutomationTriggerSummary({
       </span>
       <span className="grow">
         <span className="a3-trigger-summary-text">
-          {automationTriggerFullLabel(trigger, options)}
+          <AutomationTriggerText trigger={trigger} options={options} />
         </span>
         {toSet.length > 0 && (
           <span className="a3-trigger-missing">Set the {joinFields(toSet)} below.</span>
