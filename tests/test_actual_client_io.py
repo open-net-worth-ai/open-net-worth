@@ -13,9 +13,11 @@ import datetime
 import io
 import logging
 import os
+import shutil
 import sqlite3
 import stat
 import sys
+import time
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -461,11 +463,18 @@ def test_unknown_file_from_the_library_is_the_same_plain_error(store, work, fake
 # ── sweep ────────────────────────────────────────────────────────────────────
 
 
+def _long_ago(*paths: Path) -> None:
+    then = time.time() - client.LEFTOVER_AGE_SECONDS - 60
+    for path in paths:
+        os.utime(path, (then, then))
+
+
 def test_sweep_removes_leftovers(work):
     work.mkdir(parents=True)
     (work / "run-old").mkdir()
     (work / "run-old" / "db.sqlite").write_bytes(b"decrypted")
     (work / "stray.txt").write_text("x")
+    _long_ago(work / "run-old", work / "stray.txt")
     assert client.sweep_leftovers() == 2
     assert list(work.iterdir()) == []
 
@@ -474,9 +483,59 @@ def test_sweep_with_nothing_there_is_fine(work):
     assert client.sweep_leftovers() == 0
 
 
+def test_sweep_leaves_what_changed_lately_it_may_be_a_sibling_workers(work):
+    work.mkdir(parents=True)
+    (work / "run-sibling").mkdir()
+    assert client.sweep_leftovers() == 0
+    assert (work / "run-sibling").is_dir()
+
+
+def test_a_copy_that_couldnt_be_deleted_goes_at_the_next_copy(store, work, fake, monkeypatch):
+    real = shutil.rmtree
+    stuck = []
+
+    def held_open(path, *args, **kwargs):
+        if not stuck:
+            stuck.append(Path(path))
+            raise PermissionError("a scanner has it open")
+        real(path, *args, **kwargs)
+
+    monkeypatch.setattr(client.shutil, "rmtree", held_open)
+    monkeypatch.setattr(client.time, "sleep", lambda _s: None)
+    with client.open_copy(store, "f1"):
+        pass
+    assert stuck[0].is_dir(), "the delete failed, and the run goes on"
+    with client.open_copy(store, "f1") as copy:
+        assert not stuck[0].exists(), "though it changed moments ago: it's this process's own"
+        assert copy.directory.is_dir()
+    assert list(work.iterdir()) == []
+
+
+def test_each_copy_clears_an_old_leftover_and_leaves_a_recent_one(store, work, fake):
+    work.mkdir(parents=True)
+    (work / "run-old").mkdir()
+    (work / "run-sibling").mkdir()
+    _long_ago(work / "run-old")
+    with client.open_copy(store, "f1"):
+        assert not (work / "run-old").exists()
+        assert (work / "run-sibling").is_dir()
+
+
+def test_a_refused_copy_still_clears_what_it_can(store, work, fake):
+    work.mkdir(parents=True)
+    (work / "run-old").mkdir()
+    _long_ago(work / "run-old")
+    store.update({"enabled": False})
+    with pytest.raises(ConflictError):
+        with client.open_copy(store, "f1"):
+            pass
+    assert list(work.iterdir()) == []
+
+
 def test_sweep_leaves_a_running_copy_alone(store, work, fake):
     with client.open_copy(store, "f1") as copy:
         (work / "run-old").mkdir()
+        _long_ago(work / "run-old")
         assert client.sweep_leftovers() == 1
         assert copy.directory.is_dir()
     assert list(work.iterdir()) == []
@@ -592,6 +651,25 @@ def test_no_log_record_carries_the_address(db_isolated, work, monkeypatch, caplo
     for secret in ("hunter2", "alice", "acme-actual", "5006", PASSWORD):
         assert not [m for m in seen if secret in m]
     assert [m for m in seen if "other.example.test" in m], "other hosts still log"
+
+
+def test_no_log_record_carries_a_host_typed_in_another_script(
+    db_isolated, work, monkeypatch, caplog
+):
+    """httpx logs a host in its IDNA form, which is not what was typed."""
+    s = ActualBudgetConfigStore()
+    s.update(
+        {
+            "enabled": True,
+            "server_url": "http://b\u00fccher.example.test:5006",
+            "password": PASSWORD,
+        }
+    )
+    serve(monkeypatch, lambda: httpx.Response(404))
+    caplog.set_level(logging.DEBUG)
+    assert client.list_budgets(s)
+    seen = [r.getMessage() for r in caplog.records]
+    assert not [m for m in seen if "xn--" in m or "example.test" in m]
 
 
 def test_the_cap_is_512_mib():

@@ -63,7 +63,10 @@ DOWNLOAD_SECONDS = 600.0  # a read timeout covers one chunk; a trickle could go 
 SMALL_SECONDS = 120.0
 CLOCK_MARGIN = timedelta(minutes=10)  # how far behind a person's device clock a read still sees
 
+LEFTOVER_AGE_SECONDS = 3600.0  # longer than a run's own limits add up to
+
 _active: set[str] = set()
+_left_behind: set[Path] = set()
 _active_lock = threading.Lock()
 
 _BUDGET_FILES = frozenset({"db.sqlite", "metadata.json"})
@@ -104,7 +107,8 @@ def _new_directory() -> Path:
 
 
 def _remove(path: Path) -> None:
-    """Delete a run's directory. Windows holds a file open a moment after its engine closes."""
+    """Delete a run's directory. Windows holds a file open a moment after its engine closes, and a
+    scanner can hold one for longer: what is still there is tried again at the next copy."""
     try:
         for attempt in range(10 if sys.platform == "win32" else 1):
             try:
@@ -115,6 +119,8 @@ def _remove(path: Path) -> None:
             except OSError:
                 if attempt == (9 if sys.platform == "win32" else 0):
                     logger.warning("could not remove Actual Budget copy %s", path.name)
+                    with _active_lock:
+                        _left_behind.add(path)
                     return
                 time.sleep(0.2)
     finally:
@@ -122,18 +128,34 @@ def _remove(path: Path) -> None:
             _active.discard(str(path))
 
 
+def _clear_leftovers() -> None:
+    """A long-running app can't wait for its next boot to delete a decrypted copy. What a run of
+    this process failed to delete goes at once, and anything else old enough to be nobody's."""
+    with _active_lock:
+        retry = list(_left_behind)
+        _left_behind.clear()
+    for path in retry:
+        _remove(path)
+    sweep_leftovers()
+
+
 def sweep_leftovers() -> int:
-    """Delete every copy a crashed run left behind (boot). A run still going in this process is
-    left alone. Returns how many entries were removed."""
+    """Delete every copy a crashed run left behind (boot, and before each copy). A run still going
+    in this process is left alone, and so is anything changed lately: it may be a sibling worker's
+    live copy. A copy from a crash just before a restart goes once it's old enough, at the next
+    copy or boot. Returns how many entries were removed."""
     root = work_root()
     if not root.is_dir():
         return 0
     removed = 0
+    keep_after = time.time() - LEFTOVER_AGE_SECONDS
     for entry in root.iterdir():
         with _active_lock:
             if str(entry) in _active:
                 continue
         try:
+            if entry.lstat().st_mtime > keep_after:
+                continue
             if entry.is_dir() and not entry.is_symlink():
                 shutil.rmtree(entry)
             else:
@@ -536,6 +558,7 @@ def _read_metadata(directory: Path) -> dict:
 def open_copy(store: ActualBudgetConfigStore | None, budget_id: str) -> Iterator[Copy]:
     """Download ``budget_id`` (the cloud file id) afresh, and remove the copy when the block
     ends, whatever happens in it."""
+    _clear_leftovers()
     store, creds = _prepare(store)
     directory = _new_directory()
     try:

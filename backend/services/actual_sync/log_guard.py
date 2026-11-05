@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from urllib.parse import urlsplit
 
+import httpx
+
 _HTTP_LOGGERS = (
     "httpx",
     "httpcore",
@@ -13,6 +15,14 @@ _HTTP_LOGGERS = (
     "httpcore.http2",
     "httpcore.proxy",
 )
+
+
+def _wire_host(url: str) -> str | None:
+    """The host as ``httpx`` writes it in a log line: its IDNA form, for one typed in any script."""
+    try:
+        return httpx.URL(url).raw_host.decode("ascii")
+    except (httpx.InvalidURL, UnicodeError):
+        return None
 
 
 class _AddressFilter(logging.Filter):
@@ -26,7 +36,9 @@ class _AddressFilter(logging.Filter):
 
     def add(self, url: str) -> None:
         parts = urlsplit(url)
-        self.tokens |= {t for t in (url.rstrip("/"), parts.netloc, parts.hostname) if t}
+        self.tokens |= {
+            t for t in (url.rstrip("/"), parts.netloc, parts.hostname, _wire_host(url)) if t
+        }
 
     def filter(self, record: logging.LogRecord) -> bool:
         try:
