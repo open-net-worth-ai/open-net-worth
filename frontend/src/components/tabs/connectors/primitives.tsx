@@ -323,8 +323,6 @@ export function Modal({
   const cardRef = useRef<HTMLDivElement>(null)
   const scrimRef = useRef<HTMLDivElement>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
-  const headRef = useRef<HTMLDivElement>(null)
-  const footRef = useRef<HTMLDivElement>(null)
   // The measured element: an inner wrapper around `children`, NOT `.rd-modal-body` itself.
   // Once the body below gets its own explicit `height`, ITS scrollHeight would just echo that
   // height back — measuring a child that is never height-constrained is the only way to read
@@ -365,11 +363,16 @@ export function Modal({
     const bodyStyle = getComputedStyle(body)
     const paddingV = parseFloat(bodyStyle.paddingTop) + parseFloat(bodyStyle.paddingBottom)
     const natural = content.scrollHeight + paddingV
-    const maxTotal = parseFloat(getComputedStyle(card).maxHeight)
-    // Everything in the card but the body counts, the phone sheet's drag handle included.
-    const available = Number.isFinite(maxTotal)
-      ? Math.max(0, maxTotal - (card.offsetHeight - body.offsetHeight))
-      : Infinity
+    const cardStyle = getComputedStyle(card)
+    const maxTotal = parseFloat(cardStyle.maxHeight)
+    // Everything in the card but the body counts, the phone sheet's drag handle (a real child,
+    // hidden on desktop) and the card's border included. Not `card.offsetHeight - body.offsetHeight`:
+    // once the body is pinned, a card clipped at its max height would hand the pinned height back.
+    let chrome = parseFloat(cardStyle.borderTopWidth) + parseFloat(cardStyle.borderBottomWidth)
+    for (const el of Array.from(card.children)) {
+      if (el !== body) chrome += (el as HTMLElement).offsetHeight
+    }
+    const available = Number.isFinite(maxTotal) ? Math.max(0, maxTotal - chrome) : Infinity
     const next = Math.min(natural, available)
     setBodyHeight((prev) => {
       if (prev != null && prev !== next) body.style.overflowY = 'hidden'
@@ -456,7 +459,7 @@ export function Modal({
         <div className="ui-modal-handle-wrap">
           <span className="ui-modal-handle" />
         </div>
-        <div className="rd-modal-head" ref={headRef}>
+        <div className="rd-modal-head">
           <div className="rd-modal-title">{title}</div>
           <button className="rd-modal-x" onClick={onClose} aria-label="Close">
             <X size={18} strokeWidth={1.6} aria-hidden="true" />
@@ -469,11 +472,7 @@ export function Modal({
         >
           <div ref={contentRef}>{children}</div>
         </div>
-        {footer ? (
-          <div className="rd-modal-foot" ref={footRef}>
-            {footer}
-          </div>
-        ) : null}
+        {footer ? <div className="rd-modal-foot">{footer}</div> : null}
       </div>
     </div>
   )
