@@ -44,6 +44,7 @@ class Rows:
     category_mapping: list[dict] = field(default_factory=list)
     budgets: list[dict] = field(default_factory=list)  # the mode's table: zero_ or reflect_budgets
     notes: list[dict] = field(default_factory=list)
+    held: list[dict] = field(default_factory=list)  # zero_budget_months: id "YYYY-MM", buffered
     mode: str = "envelope"
     today: str | None = None  # ISO; the user's today
 
@@ -350,10 +351,44 @@ def _months(book: _Book, categories: list[dict], today: str) -> list[dict]:
     return out
 
 
+def _split_gaps(book: _Book) -> list[dict]:
+    """Splits whose stated amount is not the sum of their lines. Actual allows it and counts the
+    lines, so the plan does too, and these go on the record for a person to see."""
+    out = []
+    for t in book.top:
+        if _flag(t.get("isParent")):
+            stated, lines = _milli(t.get("amount")), book.effective_amount(t)
+            if stated != lines:
+                out.append(
+                    {
+                        "id": t["id"],
+                        "account_id": t["acct"],
+                        "date": _iso(t["date"]),
+                        "parent": stated,
+                        "lines": lines,
+                    }
+                )
+    return out
+
+
+def _held(rows: Rows, today: str) -> list[dict]:
+    """Money held for later in this month or a coming one. An earlier hold has already come back
+    to Actual's To Budget."""
+    out = []
+    for h in rows.held:
+        month = _text(h.get("id"), 7)
+        amount = _milli(h.get("buffered"))
+        if amount and month >= today[:7]:
+            out.append({"month": month, "amount": amount})
+    return out
+
+
 def plan_from_rows(rows: Rows) -> dict:
-    """The whole plan in YNAB's flat export shape, in milliunits. Raises ``ValidationError`` on
+    """The whole plan in YNAB's flat export shape, in milliunits, with what that shape has no
+    place for beside it (``budget_mode``, ``split_gaps``, ``held``). Raises ``ValidationError`` on
     an amount, date or month that is not a plain whole value."""
     book = _Book(rows)
+    today = rows.today or user_today().isoformat()
     transactions = [_transaction(book, t) for t in book.top]
     subtransactions = [
         _line(book, c) for parent in book.top for c in book.lines.get(parent["id"], [])
@@ -368,6 +403,8 @@ def plan_from_rows(rows: Rows) -> dict:
         "payees": _payees(book, used),
         "transactions": transactions,
         "subtransactions": subtransactions,
-        "months": _months(book, categories, rows.today or user_today().isoformat()),
+        "months": _months(book, categories, today),
         "budget_mode": rows.mode,
+        "split_gaps": _split_gaps(book),
+        "held": _held(rows, today) if rows.mode == "envelope" else [],
     }

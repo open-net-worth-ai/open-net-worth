@@ -46,7 +46,17 @@ def read_rows(conn: sqlite3.Connection, mode: str, today: str | None = None) -> 
     for table, columns in _TABLES.items():
         setattr(rows, table, _all(conn, table, columns))
     rows.budgets = _all(conn, _BUDGET_TABLES[mode], "month, category, amount, carryover")
+    rows.held = read_held(conn)
     return rows
+
+
+def read_held(conn: sqlite3.Connection) -> list[dict]:
+    """Money held for later, by month. Only ever shown to a person, so a copy without the table
+    reads as none held rather than stopping the run."""
+    try:
+        return _all(conn, "zero_budget_months", "id, buffered")
+    except sqlite3.OperationalError:
+        return []
 
 
 def read_currency(conn: sqlite3.Connection) -> str | None:

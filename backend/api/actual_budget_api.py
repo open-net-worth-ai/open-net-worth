@@ -11,6 +11,8 @@ Thin router over ``db.ActualBudgetConfigStore`` and ``services.actual_sync``, al
     pick is VALIDATED live against the sign-in's budget list (the way ``/api/ynab/config``
     validates one), and its name and currency are cached; a blank pick clears it.
   * ``GET /api/actual-budget/budgets`` - the budgets the saved sign-in can see, for a picker.
+  * ``GET /api/actual-budget/migration`` / ``POST /api/actual-budget/migration/{preview,start,verify}``
+    - the one-time import, the same server-owned job YNAB's is (``services.actual_sync.app``).
 
 Refused behind the gateway (``core.config.gateway_active``): a hosted instance must not reach
 its own network.
@@ -27,6 +29,8 @@ from pydantic import BaseModel
 from backend.core.errors import OpenNetWorthError, to_http_status
 from backend.db.actual_budget_config_store import ActualBudgetConfigStore
 from backend.services import actual_flag, actual_sync
+from backend.services.actual_sync import app as actual_app
+from backend.services.ynab_migration import ConfirmationRequired
 
 
 def _flag_on() -> None:
@@ -100,3 +104,68 @@ async def _pick_budget(store: ActualBudgetConfigStore, chosen: str) -> None:
             "budget_currency": budget.get("currency"),
         }
     )
+
+
+class MigrationRequest(BaseModel):
+    # The budget is always an explicit pick: the wrong one writes someone else's money here.
+    plan_id: str
+    confirm_nonempty: bool = False
+    # Refused until Actual can sync; an import never quietly drops what it was asked to do.
+    sync_direction: Optional[str] = None
+    account_links: Optional[dict[str, str]] = None
+    same_as: Optional[dict[str, str]] = None
+    category_links: Optional[dict[str, str]] = None
+    recheck_of: Optional[str] = None
+    # Actual account id -> the type it becomes here. Every new account needs one to import.
+    account_types: Optional[dict[str, str]] = None
+    # For a budget that states no currency.
+    currency: Optional[str] = None
+
+
+def _migration(kind: str, body: MigrationRequest) -> dict:
+    try:
+        return actual_app.start_migration(
+            kind,
+            body.plan_id,
+            confirm_nonempty=body.confirm_nonempty,
+            sync_direction=body.sync_direction or None,
+            account_links=body.account_links,
+            same_as=body.same_as,
+            category_links=body.category_links,
+            recheck_of=body.recheck_of if kind == "preview" else None,
+            account_types=body.account_types,
+            currency=body.currency,
+        )
+    except ConfirmationRequired as exc:
+        raise HTTPException(
+            409, detail={"error": "confirm_nonempty", "message": exc.message}
+        ) from exc
+    except OpenNetWorthError as exc:
+        raise _refuse(exc) from exc
+
+
+@router.get("/api/actual-budget/migration")
+def actual_budget_migration_status():
+    """The newest import run and whether a sign-in is saved. Never a secret."""
+    try:
+        return actual_app.migration_status()
+    except OpenNetWorthError as exc:
+        raise _refuse(exc) from exc
+
+
+@router.post("/api/actual-budget/migration/preview", status_code=202)
+def actual_budget_migration_preview(body: MigrationRequest):
+    """Read the budget and map it; writes nothing. The result lands on the run's ``preview``."""
+    return _migration("preview", body)
+
+
+@router.post("/api/actual-budget/migration/start", status_code=202)
+def actual_budget_migration_start(body: MigrationRequest):
+    """Import the budget, then verify it."""
+    return _migration("import", body)
+
+
+@router.post("/api/actual-budget/migration/verify", status_code=202)
+def actual_budget_migration_verify(body: MigrationRequest):
+    """Re-check an earlier import against Actual's current figures; writes nothing."""
+    return _migration("verify", body)

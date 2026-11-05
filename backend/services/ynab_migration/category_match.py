@@ -59,6 +59,7 @@ class Book:
         rows = [c for c in categories_service.all_category_rows() if c["id"] != "split"]
         self.rows = {c["id"]: c for c in rows}
         self.matchable = [c for c in rows if c.get("kind", "expense") == "expense"]
+        self.income = [c for c in rows if c.get("kind") == "income"]
         self.labels = {c["label"].strip().lower() for c in rows}
         live = [e for e in envelopes_service.all_envelopes() if not e.get("archived")]
         self.live = {e["id"]: e for e in live}
@@ -91,17 +92,24 @@ class Book:
         return out
 
 
-def propose(name: str, book: Book, taken_cats: set[str], taken_envs: set[str]) -> Match:
+def propose(
+    name: str, book: Book, taken_cats: set[str], taken_envs: set[str], income: bool = False
+) -> Match:
+    """``income``: an income category pairs only with one of the book's income categories, and
+    never goes in an envelope."""
     key = norm(name)
     if not key:
         return Match("new")
-    cats = [c for c in book.matchable if norm(c["label"]) == key and c["id"] not in taken_cats]
+    pool = book.income if income else book.matchable
+    cats = [c for c in pool if norm(c["label"]) == key and c["id"] not in taken_cats]
     if len(cats) == 1:
         return Match("category", category=cats[0])
     if cats:
         return Match(
             "ambiguous", options=[{"ref": cat_ref(c["id"]), "name": c["label"]} for c in cats]
         )
+    if income:
+        return Match("new")
     envs = [e for e in book.envelopes if norm(e["name"]) == key and e["id"] not in taken_envs]
     if len(envs) == 1:
         return Match("offer" if envs[0].get("category_ids") else "envelope", envelope=envs[0])

@@ -67,14 +67,20 @@ def _blank(provider: str, kind: str, plan_id: str, trigger: str, plan_name: str)
 
 
 def start(
-    provider: str, kind: str, plan_id: str, trigger: str = "manual", plan_name: str = ""
+    provider: str,
+    kind: str,
+    plan_id: str,
+    trigger: str = "manual",
+    plan_name: str = "",
+    busy: str | None = None,
 ) -> dict:
-    """Open a ``running`` record. At most one run per provider is in progress at a time."""
+    """Open a ``running`` record. At most one run per provider is in progress at a time; ``busy``
+    is what a second one reads."""
     _validated(kind, trigger)
     store = ImportRunStore()
     with _lock:
         if store.has_running(provider):
-            raise ConflictError(f"A {provider} run is already in progress.")
+            raise ConflictError(busy or f"A {provider} run is already in progress.")
         run = _blank(provider, kind, plan_id, trigger, plan_name)
         store.insert(run)
     return run

@@ -44,6 +44,7 @@ def merge_meta(plan: dict, meta: dict) -> None:
         "internal",
         "deleted",
         "note",
+        "is_income",
     )
     meta["categories"] = _upsert(
         meta["categories"], [{k: c.get(k) for k in keep} for c in plan.get("categories") or []]

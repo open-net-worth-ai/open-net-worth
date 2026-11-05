@@ -46,8 +46,10 @@ class YnabBaselineStore(BookPayloadTableStore):
     of YNAB's categories (``c:<ynab category id>``) and category groups (``g:<ynab group id>``)
     with ours, each with the name/group/hidden state both sides last agreed on."""
 
+    TABLE = ynab_sync_baselines
+
     def __init__(self, engine=None):
-        super().__init__(ynab_sync_baselines, engine=engine, checkpointed=False)
+        super().__init__(self.TABLE, engine=engine, checkpointed=False)
 
     def split(self) -> tuple[dict[str, dict], dict[tuple[str, str], int]]:
         txns, assigned = {}, {}

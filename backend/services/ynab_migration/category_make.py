@@ -19,12 +19,17 @@ def _change(**change) -> dict:
 
 
 def make_category(
-    book: Book, label: str, group_id: str | None, hidden: bool = False, budgeted: bool = True
+    book: Book,
+    label: str,
+    group_id: str | None,
+    hidden: bool = False,
+    budgeted: bool = True,
+    kind: str = "expense",
 ):
-    """A new expense category and (``budgeted``) an envelope of its own, named alike, in
+    """A new category of ``kind`` and (``budgeted``) an envelope of its own, named alike, in
     ``group_id``. Returns ``(category, envelope or None)``."""
     label = book.free_label(label)
-    cat = _change(type="category_create", label=label, kind="expense")
+    cat = _change(type="category_create", label=label, kind=kind)
     env = None
     if budgeted:
         env = _change(type="envelope_create", name=label, group_id=group_id or "")["envelope"]

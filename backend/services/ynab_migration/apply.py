@@ -78,7 +78,8 @@ def ensure_base_currency(currency: str, money: list[str]) -> str | None:
         return None
     if money:
         raise ConflictError(
-            f"This book's base currency is {base} but the {current().name} plan is {currency}, "
+            f"This book's base currency is {base} but the {current().name} {current().plan_word} "
+            f"is {currency}, "
             f"and the book already holds {', '.join(money)}. Change the base currency in Settings "
             "first, or import into an empty book."
         )

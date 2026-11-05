@@ -35,6 +35,7 @@ from backend.services.ynab_migration import (
     job,
     links,
     mapping,
+    plan_read,
     report,
     source,
     verify,
@@ -723,3 +724,19 @@ def test_verification_notes(monkeypatch):
         [f"{r['label']} | {r['note']}" for r in rows]
         + [verify._ready_note(names) for names in ([], ["A", "B"], ["A", "B", "C", "D"])],
     )
+
+
+def test_the_phase_of_a_read_says_the_name(ynab):
+    phases: list[str] = []
+    fake = SimpleNamespace(id="r", progress=lambda phase, *_: phases.append(phase))
+    plan_read.read(fake, YnabConfigStore(), ynab_stub.PLAN, None)
+    assert phases[0] == "reading YNAB"
+    pin("run_phases", phases)
+
+
+def test_a_second_run_reads_as_it_always_has(ynab):
+    run_id = import_runs.start("ynab", "preview", ynab_stub.PLAN)["id"]
+    line = said(job.start, "preview", ynab_stub.PLAN)
+    import_runs.finish(run_id, "done")
+    assert line == "A ynab run is already in progress."
+    pin("run_in_progress", [line])

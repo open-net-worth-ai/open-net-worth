@@ -15,8 +15,12 @@ import pytest
 from backend.db.ynab_config_store import YnabConfigStore
 from backend.db.ynab_sync_store import YnabBaselineStore, YnabSyncStateStore
 from backend.services import budget_app, import_runs, ynab_pairs
+from backend.services import categories as categories_service
+from backend.services import envelopes as envelopes_service
+from backend.services import ledger as ledger_service
 from backend.services.budget_app import YNAB, current, using
 from backend.services.ynab_migration import (
+    apply,
     category_make,
     category_match,
     job,
@@ -244,3 +248,122 @@ def test_another_apps_run_is_found(db_isolated, monkeypatch):
     import_runs.finish(run_id, "done")
     with using(other):
         assert budget_app.other_running() is False
+
+
+class _FakeReader:
+    """One small budget in the engine's format, and a note of every read."""
+
+    def __init__(self):
+        self.calls: list[str] = []
+        self.account = {
+            "id": "y1",
+            "name": "Everyday",
+            "type": "checking",
+            "on_budget": True,
+            "closed": False,
+            "deleted": False,
+            "balance": -12_000,
+            "cleared_balance": -12_000,
+        }
+        self.category = {"id": "c1", "budgeted": 50_000, "activity": -12_000, "balance": 38_000}
+
+    def _month(self) -> str:
+        return verify.user_today().strftime("%Y-%m")
+
+    def list_plans(self, store):
+        self.calls.append("list_plans")
+        return [{"id": "plan-1", "name": "ACME Plan", "currency": "USD"}]
+
+    def fetch_plan(self, store, plan_id, *, with_budget, progress=lambda *_: None):
+        self.calls.append("fetch_plan")
+        when = f"{self._month()}-02"
+        return {
+            "accounts": [self.account],
+            "groups": [
+                {"id": "g1", "name": "Usual", "categories": [{"id": "c1", "name": "Food"}]},
+            ],
+            "transactions": [
+                {
+                    "id": "t1",
+                    "account_id": "y1",
+                    "date": when,
+                    "amount": -12_000,
+                    "cleared": "cleared",
+                    "category_id": "c1",
+                    "payee_name": "Corner Market",
+                    "subtransactions": [],
+                }
+            ],
+            "months": [{"month": f"{self._month()}-01", "categories": [self.category]}],
+        }
+
+    def fetch_accounts(self, store, plan_id):
+        self.calls.append("fetch_accounts")
+        return [self.account]
+
+    def fetch_month(self, store, plan_id, month):
+        self.calls.append("fetch_month")
+        return {"categories": [self.category], "to_be_budgeted": -50_000}
+
+
+@pytest.fixture
+def source_is_never_read(monkeypatch):
+    def boom(*_args, **_kwargs):
+        raise AssertionError("read YNAB's source under another app")
+
+    for name in ("list_plans", "fetch_plan", "fetch_accounts", "fetch_month", "call"):
+        monkeypatch.setattr(source, name, boom)
+
+
+def test_the_import_and_verify_read_through_the_current_reader(db_isolated, source_is_never_read):
+    categories_service.ensure_builtins_seeded()
+    envelopes_service.ensure_envelopes_migrated()
+    reader = _FakeReader()
+    app = other_app(reader=reader)
+    with using(app):
+        record = job._Run(import_runs.start(app.key, "import", "plan-1")["id"])
+        job._execute(record, "import", "plan-1", True, {})
+        import_runs.finish(record.id, "done")
+    run = import_runs.get(record.id)
+    assert run["verification"]["ok"], run["verification"]["mismatches"]
+    assert reader.calls == ["list_plans", "fetch_plan", "fetch_accounts", "fetch_month"]
+    assert run["log"][0]["line"].startswith("Backup taken")
+
+    (account,) = ledger_service.accounts.query_accounts(include_archived=True)
+    assert account["external_ids"][0]["source"] == "acme_budget"
+    (row,) = [t for t in ledger_service.transactions.all() if t.get("external_refs")]
+    assert row["external_refs"][0]["source"] == "acme_budget"
+
+    reader.calls.clear()
+    with using(app):
+        plan = mapping.build_plan(
+            "ACME Plan",
+            "USD",
+            [reader.account],
+            reader.fetch_plan(None, "plan-1", with_budget=True)["groups"],
+            reader.fetch_plan(None, "plan-1", with_budget=True)["transactions"],
+            [],
+        )
+        checked = verify.verify(app.config_store(), "plan-1", plan, {}, False)
+        assert apply.book_state(plan)[0] == "rerun"
+    assert checked["ok"], checked["rows"]
+    assert "fetch_accounts" in reader.calls and "fetch_month" not in reader.calls
+    assert apply.book_state(plan)[0] == "foreign"  # to YNAB, that account is someone else's
+
+
+def test_a_rerun_finds_its_accounts_and_rows_under_the_current_source(
+    db_isolated, source_is_never_read
+):
+    categories_service.ensure_builtins_seeded()
+    envelopes_service.ensure_envelopes_migrated()
+    app = other_app(reader=_FakeReader())
+    with using(app):
+        for _ in range(2):
+            record = job._Run(import_runs.start(app.key, "import", "plan-1")["id"])
+            job._execute(record, "import", "plan-1", True, {})
+            import_runs.finish(record.id, "done")
+    run = import_runs.get(record.id)
+    assert run["book_state"] == "rerun"
+    assert run["counts"]["accounts"]["created"] == 0
+    assert run["counts"]["transactions"] == report.count(existing=1)
+    assert run["counts"]["categories"]["created"] == 0

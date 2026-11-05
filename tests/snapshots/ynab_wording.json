@@ -151,6 +151,13 @@
   "This book already has accounts that did not come from YNAB. Confirm to import alongside them.",
   "This book has accounts that did not come from YNAB."
  ],
+ "run_in_progress": [
+  "A ynab run is already in progress."
+ ],
+ "run_phases": [
+  "reading YNAB",
+  "reading the plan"
+ ],
  "run_summary": [
   "Nothing changed",
   "2 sent to YNAB",

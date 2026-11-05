@@ -354,6 +354,11 @@ deleted yet: each waits in the review list, where you confirm or undo it, and th
 goes ahead. Edits older than the transaction audit log keeps (20,000
 events) can't be told apart from YNAB's on the first run.
 
+## Actual Budget
+
+Bring a whole Actual budget here once, from your own Actual server. See
+[Import from Actual Budget](../features/actual-budget-import.md).
+
 ## Alpaca
 
 The read-only Alpaca data source is no longer offered in **Browse & add**. Alpaca's own MCP

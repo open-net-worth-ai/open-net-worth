@@ -159,6 +159,7 @@ _EXCLUDED_TABLES = frozenset(
         "ynab_sync_mirror",
         "ynab_sync_baselines",
         "ynab_sync_conflicts",
+        "actual_sync_baselines",  # the Actual import's category pairing, excluded for the same reason as ynab_sync_baselines
         "txn_audit",  # transaction provenance/audit trail — a forensic record of how the data got here; a data restore must NOT erase it (mirrors TXN_AUDIT_JSON above; transaction-provenance RFC)
         "corrections",  # category-correction signal log (P2-SP2) — a runtime/behavioral signal, not user-authored data; a /rewind must not resurrect stale correction history. Replaces the file-level CORRECTIONS_JSON exclusion in _EXCLUDED_PATHS above (kept there too, for the legacy file) now that CorrectionStore is DB-backed (plan 4a task 2)
         "asset_brief",  # per-instrument synthesized brief — derived search/LLM cache, like price_history/intel_signals; a turn rollback must not delete/resurrect a refreshed brief (same rationale as ASSET_BRIEF_JSON above). Replaces the file-level ASSET_BRIEF_JSON exclusion in _EXCLUDED_PATHS above (kept there too, for the legacy file) now that AssetBriefStore is DB-backed (plan 4b task 3)

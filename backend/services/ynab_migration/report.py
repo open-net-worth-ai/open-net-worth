@@ -15,6 +15,8 @@ _HINTS = {
     "previously_deleted": "You deleted this transaction here earlier, so it was not booked again. "
     "Restore it from Accounts if you want it back.",
     "assigned": "Set that month's Assigned by hand in Plan.",
+    "split_gap": "{app} counts the lines, so that is what was booked. Correct the split in {app} "
+    "if the larger figure was right.",
 }
 
 

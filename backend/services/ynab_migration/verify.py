@@ -134,25 +134,33 @@ def verify_budget(store, plan_id: str, plan: dict, env_ids: dict[str, dict]) -> 
                 float(rows[env]["assigned"]),
             )
         )
+        out.append(_available_row(plan, cat, month, amt(ycat["balance"]), rows[env]["available"]))
+    out += _special_rows(plan, ycats, rows, table, month)
+    if current().caps.compares_ready_to_assign:
         out.append(
             _row(
-                "envelope",
-                f"{cat['label']}: available {month}",
-                amt(ycat["balance"]),
-                float(rows[env]["available"]),
+                "ready",
+                f"Ready to Assign {month}",
+                amt(ymonth["to_be_budgeted"]),
+                float(table["ready_to_assign"]),
+                _ready_note(unsynced),
             )
         )
-    out += _special_rows(plan, ycats, rows, table, month)
-    out.append(
-        _row(
-            "ready",
-            f"Ready to Assign {month}",
-            amt(ymonth["to_be_budgeted"]),
-            float(table["ready_to_assign"]),
-            _ready_note(unsynced),
-        )
-    )
     return out
+
+
+def _available_row(plan: dict, cat: dict, month: str, theirs: float, here) -> dict:
+    """A category the app holds overspending in reads differently here, as the review said."""
+    row = _row("envelope", f"{cat['label']}: available {month}", theirs, float(here))
+    if row["ok"] or cat["id"] not in plan.get("carryover", ()):
+        return row
+    name = current().name
+    return {
+        **row,
+        "ok": True,
+        "note": f"A known difference: {name}'s carryover keeps the overspending in the category, "
+        "and here it comes out of Ready to Assign.",
+    }
 
 
 def _ready_note(unsynced: list[str]) -> str:
@@ -198,8 +206,9 @@ def first_divergence(plan: dict, env_ids: dict[str, dict], until: str) -> list[d
     labels |= {
         cid: f"{name} (card payment)" for cid, name in plan.get("card_categories", {}).items()
     }
-    pending = {cid for cid in labels if env_ids.get(cid, {}).get("envelope")}
-    out, rta_done = [], False
+    known = set(plan.get("carryover", ()))
+    pending = {cid for cid in labels if env_ids.get(cid, {}).get("envelope") and cid not in known}
+    out, rta_done = [], not current().caps.compares_ready_to_assign
     for month in sorted(m for m in plan.get("history", {}) if m < until):
         if not pending and rta_done:
             break

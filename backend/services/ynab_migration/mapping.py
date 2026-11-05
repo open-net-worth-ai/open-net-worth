@@ -103,11 +103,13 @@ def plan_categories(groups: list[dict], txns: list[dict], months: list[dict]) ->
     skip: dict[str, str] = {}
     cards: dict[str, str] = {}  # card payment category id -> its card account's name
     chosen: list[tuple[str, str, str, bool, str]] = []
+    income: set[str] = set()
+    caps = current().caps
     by_id = {g["id"]: g for g in groups if not g.get("deleted")}
     for g in groups:
         if g.get("deleted"):
             continue
-        card_group = g["name"].strip().lower() == CC_GROUP
+        card_group = caps.card_payment_categories and g["name"].strip().lower() == CC_GROUP
         for c in g.get("categories", []):
             hidden = bool(c.get("hidden") or g.get("hidden"))
             if c.get("deleted"):
@@ -133,6 +135,8 @@ def plan_categories(groups: list[dict], txns: list[dict], months: list[dict]) ->
                 chosen.append(
                     (c["id"], clean(c["name"], 120), clean(home["name"], 120), hidden, home["id"])
                 )
+                if caps.income_categories and c.get("is_income"):
+                    income.add(c["id"])
     labels = unique_labels([(i, n, g) for i, n, g, _, _ in chosen])
     cats = [
         {
@@ -143,6 +147,7 @@ def plan_categories(groups: list[dict], txns: list[dict], months: list[dict]) ->
             "group_id": gid,
             "group_name": g,
             "hidden": h,
+            **({"kind": "income"} if i in income else {}),
         }
         for i, n, g, h, gid in chosen
     ]
@@ -459,7 +464,8 @@ def build_plan(plan_name, currency, accounts, groups, txns, months) -> dict:
             }
         )
     real = {c["id"] for c in cat_plan["categories"]}
-    budgeted = real | set(cat_plan["card_categories"])
+    envelopes = {c["id"] for c in cat_plan["categories"] if c.get("kind") != "income"}
+    budgeted = envelopes | set(cat_plan["card_categories"])
     assigned: dict[str, dict[str, int]] = {}
     for m in months:
         row = {
@@ -545,6 +551,7 @@ def preview_summary(plan: dict) -> dict:
         warnings.append(
             f"{s['transfers_one_sided']} transfer(s) have no matching row in the other account; they import as plain income or expense."
         )
+    warnings += plan.get("notices", [])
     return {
         "plan_name": plan["name"],
         "currency": plan["currency"],

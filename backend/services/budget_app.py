@@ -28,7 +28,7 @@ from backend.db.ynab_sync_store import (
     YnabMirrorStore,
     YnabSyncStateStore,
 )
-from backend.services import import_runs
+from backend.services import import_runs, ynab_flag
 
 if TYPE_CHECKING:
     from backend.services.ynab_sync.client import Budget
@@ -61,7 +61,9 @@ class SyncStores:
 
 
 class Reader(Protocol):
-    """Reads one budget in the engine's internal format (``ynab_migration.source``)."""
+    """Reads one budget in the engine's internal format (``ynab_migration.source``). ``fetch_plan``
+    may add what its format has no place for: ``currency``, ``budget_mode``, ``split_gaps``,
+    ``held``, ``notices`` (``ynab_migration.settle``)."""
 
     def list_plans(self, store) -> list[dict]: ...
 
@@ -86,6 +88,17 @@ class BudgetApp:
     open_client: Callable[[str, "Budget"], ContextManager[Any]]
     stores: SyncStores
     lock: threading.Lock
+    # Whether its feature flag is on. Off, its stored state can hold nothing up.
+    is_on: Callable[[], bool] = lambda: True
+    # Its budget doesn't say an account's type or, always, its currency: the review settles them.
+    asks_type_and_currency: bool = False
+    # Its two-way sync exists, so an import may turn it on.
+    syncs: bool = True
+    # What a person reads, where the name alone doesn't carry the sentence.
+    plan_word: str = "plan"
+    sign_in: str = "a YNAB access token"
+    saved_sign_in: str = "token"
+    run_busy: str = "A ynab run is already in progress."
 
 
 class _YnabReader:
@@ -143,10 +156,20 @@ YNAB = BudgetApp(
         conflicts=YnabConflictStore,
     ),
     lock=threading.Lock(),
+    is_on=ynab_flag.on,
 )
 
 _current: contextvars.ContextVar[BudgetApp] = contextvars.ContextVar("budget_app", default=YNAB)
-_apps: dict[str, BudgetApp] = {YNAB.key: YNAB}
+
+
+def _actual() -> BudgetApp:
+    from backend.services.actual_sync.app import ACTUAL
+
+    return ACTUAL
+
+
+# Loaded on first look: ``actual_sync`` is built on the engine, which imports this module.
+_apps: dict[str, BudgetApp | Callable[[], BudgetApp]] = {YNAB.key: YNAB, "actual_budget": _actual}
 
 
 def current() -> BudgetApp:
@@ -167,7 +190,7 @@ def register(app: BudgetApp) -> None:
 
 
 def all_apps() -> list[BudgetApp]:
-    return list(_apps.values())
+    return [app() if callable(app) else app for app in _apps.values()]
 
 
 def _others() -> list[BudgetApp]:
@@ -176,8 +199,11 @@ def _others() -> list[BudgetApp]:
 
 
 def other_sync_on() -> BudgetApp | None:
-    """Another app whose two-way sync is enabled."""
-    return next((a for a in _others() if a.stores.state().doc("state").get("enabled")), None)
+    """Another app whose two-way sync is enabled. One whose flag is off isn't running anything,
+    and has no way left to be turned off."""
+    return next(
+        (a for a in _others() if a.is_on() and a.stores.state().doc("state").get("enabled")), None
+    )
 
 
 def other_running() -> bool:

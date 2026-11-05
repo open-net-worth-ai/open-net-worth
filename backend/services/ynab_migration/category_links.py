@@ -12,6 +12,7 @@ A decision is a dict ``{kind, category, envelope, options, chosen, offer}``: ``k
 from __future__ import annotations
 
 from backend.core.errors import ValidationError
+from backend.services.budget_app import current
 from backend.services.ynab_migration.category_match import (
     CLOSE,
     Book,
@@ -49,24 +50,37 @@ def _state(
     }
 
 
+def is_income(c: dict) -> bool:
+    return c.get("kind") == "income"
+
+
+def _kinds_differ(name: str, label: str) -> ValidationError:
+    return ValidationError(f"{name} can't go with {label}: income pairs only with income.")
+
+
 def _explicit(c: dict, ref: str, book: Book, taken_c: set[str], taken_e: set[str]) -> dict:
     if ref == "":
         return _state("new", chosen=True)
     kind, _, ident = ref.partition(":")
-    name = c["name"]
+    name, income = c["name"], is_income(c)
     if kind == "cat":
-        row = next((r for r in book.matchable if r["id"] == ident), None)
+        pool = book.income if income else book.matchable
+        row = next((r for r in pool if r["id"] == ident), None)
+        if row is None and current().caps.income_categories and ident in book.rows:
+            raise _kinds_differ(name, book.rows[ident]["label"])
         if row is None:
             raise ValidationError(f"The category chosen for {name} is no longer in this book.")
         if ident in taken_c:
-            raise ValidationError(f"{row['label']} is chosen for two YNAB categories.")
+            raise ValidationError(f"{row['label']} is chosen for two {current().name} categories.")
         taken_c.add(ident)
         return _state("category", category=row, chosen=True)
+    if income:
+        raise ValidationError(f"{name} is income, so it has no envelope here.")
     env = next((e for e in book.envelopes if e["id"] == ident), None) if kind == "env" else None
     if env is None:
         raise ValidationError(f"The envelope chosen for {name} is no longer in this book.")
     if ident in taken_e:
-        raise ValidationError(f"{env['name']} is chosen for two YNAB categories.")
+        raise ValidationError(f"{env['name']} is chosen for two {current().name} categories.")
     taken_e.add(ident)
     return _state("envelope", envelope=env, chosen=True)
 
@@ -109,7 +123,8 @@ def decide(
             out[c["id"]] = _explicit(c, links[c["id"]], book, taken_c, taken_e)
     for c in plan["categories"]:
         if c["id"] not in out:
-            out[c["id"]] = _from_match(propose(c["name"], book, taken_c, taken_e), taken_c, taken_e)
+            found = propose(c["name"], book, taken_c, taken_e, income=is_income(c))
+            out[c["id"]] = _from_match(found, taken_c, taken_e)
     _settle_ties(plan, out, book, taken_c, taken_e)
     _suggest_close(plan, out, book, taken_c)
     return out
@@ -156,7 +171,7 @@ def _suggest_close(plan: dict, out: dict[str, dict], book: Book, taken_c: set[st
         (
             (closeness(c["name"], row["label"]), i, row["id"], c["id"])
             for i, c in enumerate(open_)
-            for row in book.matchable
+            for row in (book.income if is_income(c) else book.matchable)
             if row["id"] not in taken_c
         ),
         key=lambda t: (-t[0], t[1]),
@@ -191,10 +206,12 @@ def _budget_note(book: Book, category: dict) -> str:
 def note(book: Book, d: dict, c: dict, assigned: bool) -> str:
     """The one line under a category in the review: what its budget does."""
     kind = d["kind"]
+    if is_income(c) and kind != "ambiguous":
+        return "Income: it has no envelope here, and what comes in raises Ready to Assign"
     if kind in ("linked", "category"):
         text = _budget_note(book, d["category"])
         if text == "Not budgeted here" and assigned:
-            return "Gets an envelope here, since YNAB has money assigned to it"
+            return f"Gets an envelope here, since {current().name} has money assigned to it"
         return text
     if kind == "envelope":
         env = d["envelope"]
@@ -230,7 +247,13 @@ def _envelope_view(book: Book, env: dict | None) -> dict | None:
 
 def choices(book: Book) -> dict:
     """What a category can be sent to, listed once for every row of the review."""
+    income = (
+        {"income_categories": [{"ref": cat_ref(c["id"]), "name": c["label"]} for c in book.income]}
+        if current().caps.income_categories
+        else {}
+    )
     return {
+        **income,
         "categories": [
             {
                 "ref": cat_ref(c["id"]),
@@ -289,7 +312,7 @@ def group_matches(plan: dict, book: Book, paired: dict[str, dict]) -> dict[str, 
     out: dict[str, dict | None] = {}
     for c in plan["categories"]:
         gid = c["group_id"]
-        if gid in out:
+        if gid in out or is_income(c):
             continue
         doc = paired.get(gid)
         if doc and not doc.get("gone"):

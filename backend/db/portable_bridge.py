@@ -400,6 +400,7 @@ from backend.db.tables import (
     DEFAULT_BOOK_ID,
     accounts,
     actions,
+    actual_sync_baselines,
     alerts,
     artifacts,
     asset_brief,
@@ -1285,6 +1286,11 @@ def _wipe_ynab_sync(conn: Connection) -> list[Path]:
     return paths
 
 
+def _wipe_actual_sync(conn: Connection) -> list[Path]:
+    """As ``_wipe_ynab_sync``: Actual's pairs describe categories the reset removes."""
+    return _capture_then_delete(conn, actual_sync_baselines, "id")
+
+
 def _wipe_settings_namespace(conn: Connection, namespace: str) -> list[Path]:
     """The namespace-scoped counterpart to ``_capture_then_delete``: ``memory_settings``
     and ``preferred_models`` share ONE physical ``settings`` table (keyed by
@@ -1468,6 +1474,7 @@ _WIPE_FNS: dict[str, Callable[[Connection], list[Path]]] = {
     # still named it would be reaching for a table that no longer exists.
     "tool_permissions.json": _wipe_tool_permissions,
     "ynab_sync.json": _wipe_ynab_sync,
+    "actual_sync.json": _wipe_actual_sync,
     "memory_settings.json": _wipe_memory_settings,
     "preferred_models.json": _wipe_preferred_models,
     # Misc stores (plan 4e task 1) — the three BRIDGED misc stores, reached via the
@@ -1610,6 +1617,7 @@ def wipe_all(conn: Connection) -> list[Path]:
         "signals.json",
         "tool_permissions.json",
         "ynab_sync.json",
+        "actual_sync.json",
     ):
         paths_to_unlink.extend(wipe(conn, filename))
     paths_to_unlink.extend(wipe(conn, "pending_pushes.json"))

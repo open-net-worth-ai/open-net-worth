@@ -9,6 +9,7 @@ Two decisions, both made from what the book HOLDS rather than from "has no accou
 
 from __future__ import annotations
 
+from backend.core.errors import ConflictError
 from backend.db.budget_assignments_store import BudgetAssignmentsStore
 from backend.db.commitments_store import CommitmentsStore
 from backend.db.grant_store import GrantStore
@@ -20,8 +21,24 @@ from backend.services import categories as categories_service
 from backend.services import envelopes as envelopes_service
 from backend.services import ledger as ledger_service
 from backend.services import planning
+from backend.services.budget_app import all_apps, other_running, other_sync_on
 
 _STARTER_GROUP_NAMES = {name for name, _ in STARTER_GROUPS}
+
+
+def refuse_beside_the_other_app(app) -> None:
+    """Categories an import creates here would be pushed into another app whose sync is on, and a
+    sync and an import must not interleave."""
+    if other := other_sync_on():
+        raise ConflictError(
+            f"The {other.name} sync is on. Turn it off in Data sync before importing from "
+            f"{app.name}."
+        )
+    if other_running():
+        names = " or ".join(a.name for a in all_apps() if a.key != app.key)
+        raise ConflictError(
+            f"An import or sync with {names} is running; start this import when it finishes."
+        )
 
 
 def money_data() -> list[str]:

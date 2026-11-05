@@ -36,7 +36,13 @@ _COMPATIBLE = {
     "loan": frozenset({"loan"}),
     "fixed_deposit": _OFF_BUDGET_ASSETS,
     "investment": _OFF_BUDGET_ASSETS,
+    "retirement": _OFF_BUDGET_ASSETS,
+    "receivable": _OFF_BUDGET_ASSETS,
 }
+# The types a person may give a new account, by its budget band: the engine goes on following the
+# app's on-budget flag while budget membership here comes from the type, so the two must agree.
+ON_BUDGET_TYPES = ("cash", "credit")
+OFF_BUDGET_TYPES = ("fixed_deposit", "investment", "retirement", "receivable", "loan")
 _DUPLICATE = frozenset(k.value for k in DUPLICATE_CLASSES)
 CHUNK = match_preflight.MAX_PROPOSED_ROWS
 PAIRS_CAP = 100  # possible matches listed per account in the review
@@ -66,6 +72,43 @@ def _fits(pa: dict, account: dict, currency: str) -> bool:
         and account.get("type") in _COMPATIBLE.get(pa["payload"]["type"], ())
         and ynab_ref(account) in (None, pa["id"])
     )
+
+
+def type_options(pa: dict) -> tuple[str, ...]:
+    return ON_BUDGET_TYPES if pa["on_budget"] else OFF_BUDGET_TYPES
+
+
+def check_type(pa: dict, chosen: str) -> None:
+    allowed = type_options(pa)
+    if chosen not in allowed:
+        band = "budget" if pa["on_budget"] else "off-budget"
+        raise ValidationError(
+            f"{pa['payload']['name']} can't be {chosen}: a {band} account here is one of "
+            f"{', '.join(allowed)}."
+        )
+
+
+def settle_types(
+    plan: dict,
+    types: dict[str, str] | None,
+    existing: list[dict],
+    links: dict[str, str] | None,
+    required: bool,
+) -> None:
+    """Give each plan account the type the person chose. ``required`` (an import): an account this
+    run would create must have one; an account here already keeps the type it has."""
+    types = types or {}
+    known = {pa["id"] for pa in plan["accounts"]}
+    if any(ynab_id not in known for ynab_id in types):
+        raise ValidationError(f"That {current().name} account is not in the plan; review it again.")
+    here = {ynab_ref(a) for a in existing} | set(links or {})
+    for pa in plan["accounts"]:
+        chosen = types.get(pa["id"])
+        if chosen is not None:
+            check_type(pa, chosen)
+            pa["payload"]["type"] = chosen
+        elif required and pa["id"] not in here:
+            raise ValidationError(f"Choose a type for {pa['payload']['name']} first.")
 
 
 def candidates(plan: dict, existing: list[dict]) -> dict[str, list[dict]]:
