@@ -171,6 +171,11 @@ on the floating Lucius button takes you to Voice calls in Connectors. It also gi
 **The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it opens
 the Voice calls settings right where you are.
 
+**"A call can't join an Automation's conversation."** An Automation's conversation continues on its
+own, so a call can't join it. Press **Start a new chat**, then **Call**. On a phone's other tabs,
+**Open Lucius** takes you to the chat first. The message stays with that conversation: it doesn't
+follow you to another one.
+
 **"Calls are ready."** The page had to reload before it could reach your voice server, for example
 because it was already open when calls were set up on another device. Press **Call**.
 

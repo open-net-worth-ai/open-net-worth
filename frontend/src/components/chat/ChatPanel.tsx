@@ -1105,7 +1105,11 @@ export function ChatPanel({
   const composerFooter = (
     <div className="lx-side-foot" ref={footRef}>
       <div className="lx-inputblock">
-        <VoiceCallNotice sessionId={activeId} busy={streaming || sending} />
+        <VoiceCallNotice
+          sessionId={activeId}
+          busy={streaming || sending}
+          onNewChat={handleNewConversation}
+        />
         <VoiceCallSlot busy={streaming || sending} visible={open}>
           <LuciusComposer
             /* Approvals govern the CONVERSATION, so it rides in the LEFT tool group beside
