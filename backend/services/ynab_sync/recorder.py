@@ -16,6 +16,7 @@ from contextvars import ContextVar
 from functools import wraps
 
 from backend.services import import_runs
+from backend.services.budget_app import current
 from backend.services.ynab_sync.canon import Canon, view
 
 logger = logging.getLogger(__name__)
@@ -120,7 +121,7 @@ def _safe(fn):
         try:
             fn(rec, *args, **kwargs)
         except Exception:
-            logger.exception("YNAB sync: could not record %s", fn.__name__)
+            logger.exception("%s sync: could not record %s", current().name, fn.__name__)
 
     return wrapper
 

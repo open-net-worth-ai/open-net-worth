@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 from backend.core.errors import ExternalServiceError
+from backend.services.budget_app import current
 from backend.services.ynab_sync import client as ynab_client
 from backend.services.ynab_sync.client import RateCapReached, YnabClient
 from backend.services.ynab_sync.context import Context
@@ -146,7 +147,9 @@ def send_creates(ctx: Context, client: YnabClient, units: list[Unit], out: Outco
     def done(batch, saved):
         for (unit, _), hit in zip(batch, _match_created(batch, saved)):
             if hit is None:
-                out.failed.append((unit, "YNAB created it but did not report which one it is"))
+                out.failed.append(
+                    (unit, f"{current().name} created it but did not report which one it is")
+                )
                 continue
             _remember(ctx, hit)
             twin = hit.get("transfer_transaction_id")
@@ -172,8 +175,9 @@ def send_deletes(ctx: Context, client: YnabClient, units: list[Unit], out: Outco
     for i, unit in enumerate(units):
         shape, tops = classify(ctx, unit.refs)
         if shape == "complex" or not tops:
+            app = current().name
             out.unsupported.append(
-                (unit, "this is one part of a larger YNAB split; delete it in YNAB")
+                (unit, f"this is one part of a larger {app} split; delete it in {app}")
             )
             continue
         try:

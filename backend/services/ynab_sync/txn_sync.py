@@ -8,7 +8,7 @@ from collections import Counter
 
 from backend.core.errors import OpenNetWorthError
 from backend.services import ledger as ledger_service
-from backend.services.ynab_migration.mapping import SOURCE
+from backend.services.budget_app import current
 from backend.services.ynab_sync import conflicts, pull, push, recorder, units
 from backend.services.ynab_sync.baselines import Baselines
 from backend.services.ynab_sync.canon import canon, view
@@ -92,7 +92,12 @@ def _apply_pull(ctx: Context, unit: Unit, base: Baselines, tally: Counter) -> No
         _file(ctx, unit, conflicts.CONFLICT, "Changed here while the sync was running.")
         return
     except OpenNetWorthError as exc:
-        _file(ctx, unit, conflicts.FAILED, f"The ledger refused YNAB's version: {exc.message}")
+        _file(
+            ctx,
+            unit,
+            conflicts.FAILED,
+            f"The ledger refused {current().name}'s version: {exc.message}",
+        )
         return
     if unit.onw_id and row_id != unit.onw_id:
         base.drop_txn(unit.onw_id)  # a deleted row booked back is a new row
@@ -110,7 +115,8 @@ def _seed(unit: Unit, base: Baselines) -> None:
         return
     if unit.attach:
         ledger_service.update_transaction(
-            unit.onw_id, {"external_refs": [{"source": SOURCE, "ref": r} for r in unit.refs]}
+            unit.onw_id,
+            {"external_refs": [{"source": current().source, "ref": r} for r in unit.refs]},
         )
     if unit.onw is None:
         base.drop_txn(unit.onw_id)
@@ -160,7 +166,7 @@ def settle(
                 ctx,
                 u,
                 conflicts.CONFLICT,
-                "Changed in both Open Net Worth and YNAB since the last sync.",
+                f"Changed in both Open Net Worth and {current().name} since the last sync.",
             )
         elif action == "pull" and direction == "to_ynab":
             held["ynab"].update(u.refs)
@@ -186,7 +192,7 @@ def _hold_removals(ctx: Context, all_units: list[Unit], open_items: dict) -> lis
     if len(removals) <= max(MIN_REMOVAL_GUARD, MAX_REMOVAL_FRACTION * linked):
         return all_units
     reason = (
-        f"{len(removals)} of {linked} synced transactions were deleted in YNAB at once; "
+        f"{len(removals)} of {linked} synced transactions were deleted in {current().name} at once; "
         "confirm each deletion here."
     )
     for u in removals:
@@ -210,7 +216,7 @@ def _push_all(
                 ctx,
                 u,
                 conflicts.CONFLICT,
-                f"{len(deletes)} deletions would be sent to YNAB at once; confirm each one.",
+                f"{len(deletes)} deletions would be sent to {current().name} at once; confirm each one.",
             )
         deletes = []
     push.send_updates(ctx, client, updates, out)
@@ -219,10 +225,10 @@ def _push_all(
     for u, reason in out.unsupported:
         _file(ctx, u, conflicts.UNSUPPORTED, reason)
     for u, reason in out.failed:
-        _file(ctx, u, conflicts.FAILED, f"YNAB did not accept it: {reason}")
+        _file(ctx, u, conflicts.FAILED, f"{current().name} did not accept it: {reason}")
     tally["sent"] += len(out.sent)
     for u in out.deferred:
-        recorder.deferred(_title(u), "Waiting for the next run (YNAB request limit).")
+        recorder.deferred(_title(u), f"Waiting for the next run ({current().name} request limit).")
     return [u.onw_id for u in out.deferred if u.onw_id]
 
 
@@ -234,7 +240,10 @@ def _recorded(ctx: Context, unit: Unit, out: push.Outcome, base: Baselines) -> N
         _record_sent(unit, out, base)
     except OpenNetWorthError as exc:
         _file(
-            ctx, unit, conflicts.FAILED, f"Sent to YNAB, but linking it here failed: {exc.message}"
+            ctx,
+            unit,
+            conflicts.FAILED,
+            f"Sent to {current().name}, but linking it here failed: {exc.message}",
         )
 
 
@@ -246,7 +255,7 @@ def _record_sent(u: Unit, out: push.Outcome, base: Baselines) -> None:
     if u.key in out.new_refs:
         refs = out.new_refs[u.key]
         updated = ledger_service.update_transaction(
-            u.onw_id, {"external_refs": [{"source": SOURCE, "ref": r} for r in refs]}
+            u.onw_id, {"external_refs": [{"source": current().source, "ref": r} for r in refs]}
         )
         now = canon(updated)
     base.set_txn(u.onw_id, refs, now)

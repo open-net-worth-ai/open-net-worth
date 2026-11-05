@@ -6,8 +6,9 @@ Bookkeeping only, never a credential, and not checkpointed."""
 from __future__ import annotations
 
 from backend.db.tables import actual_sync_baselines
-from backend.db.ynab_sync_store import YnabBaselineStore
+from backend.db.ynab_sync_store import SyncBaselineStore
 
 
-class ActualBaselineStore(YnabBaselineStore):
-    TABLE = actual_sync_baselines
+class ActualBaselineStore(SyncBaselineStore):
+    def __init__(self, engine=None):
+        super().__init__(actual_sync_baselines, engine=engine)

@@ -16,11 +16,10 @@ from dataclasses import dataclass
 
 from backend.db.transaction_audit_store import TransactionAuditStore
 from backend.services import ledger as ledger_service
-from backend.services.ynab_migration.mapping import SOURCE
+from backend.services.budget_app import current
 from backend.services.ynab_sync import context
 from backend.services.ynab_sync.canon import Canon, canon, reconstruct_original
 from backend.services.ynab_sync.context import Context
-from backend.services.ynab_sync.state import SURFACE
 
 CREATABLE = ("expense", "income", "transfer")
 
@@ -53,10 +52,11 @@ def decide(base: Canon, onw: Canon, ynab: Canon) -> str:
 
 def ynab_refs(row: dict) -> list[str]:
     """A ledger row's YNAB transaction ids ("<account>:balance" adjustments are not YNAB's)."""
+    source = current().source
     return [
         e["ref"]
         for e in row.get("external_refs") or []
-        if e.get("source") == SOURCE and ":" not in e["ref"]
+        if e.get("source") == source and ":" not in e["ref"]
     ]
 
 
@@ -70,7 +70,8 @@ def _eligible(ctx: Context, row: dict, openings: frozenset[str]) -> bool:
 
 def audit_touched(since: int, upto: int) -> set[str]:
     return {
-        e["txn_id"] for e in TransactionAuditStore().since(since, upto=upto, not_surface=SURFACE)
+        e["txn_id"]
+        for e in TransactionAuditStore().since(since, upto=upto, not_surface=current().surface)
     }
 
 
@@ -80,7 +81,7 @@ def first_run_bases(rows: list[dict]) -> dict[str, Canon]:
     itself — a migrated row's own ``create`` event is its cut-off by construction, so no
     timestamp is compared. (The migration's single follow-up write, ``mark_cleared``, shows up
     as an edit too; harmless, because the comparison is of values, not of whether an event exists.)"""
-    edits = TransactionAuditStore().edits_of({r["id"] for r in rows}, not_surface=SURFACE)
+    edits = TransactionAuditStore().edits_of({r["id"] for r in rows}, not_surface=current().surface)
     return {r["id"]: canon(reconstruct_original(r, edits.get(r["id"], []))) for r in rows}
 
 
@@ -88,13 +89,13 @@ def _render(ctx: Context, piece: dict) -> tuple[dict | None, str | None]:
     try:
         rendered = context.render(ctx, piece)
     except KeyError:
-        return None, "the transaction is in a YNAB account that is not in this book"
+        return None, f"the transaction is in a {current().name} account that is not in this book"
     wanted = [piece["category"]] if piece["category"] else []
     wanted += [s["category"] for s in piece["splits"] or []]
     for cid in wanted:
         if not ctx.cat_ids.get(cid):
             name = next((c["name"] for c in ctx.meta["categories"] if c["id"] == cid), cid)
-            return None, f"The YNAB category {name} isn't in this book yet."
+            return None, f"The {current().name} category {name} isn't in this book yet."
     return rendered, None
 
 

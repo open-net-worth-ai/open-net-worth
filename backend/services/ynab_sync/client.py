@@ -9,6 +9,7 @@ import re
 
 from backend.core.errors import ExternalServiceError
 from backend.db.ynab_config_store import YnabConfigStore
+from backend.services.budget_app import current
 from backend.services.ynab_migration import source
 
 PLAN_MAX_BYTES = 96 * 1024 * 1024
@@ -27,10 +28,10 @@ class RateCapReached(ExternalServiceError):
     """The run has used its request budget, or YNAB answered 429; what is left waits for the
     next run. Never slept on: the run lock is held while a run waits."""
 
-    def __init__(
-        self, message: str = "YNAB request limit reached; the rest waits for the next run"
-    ):
-        super().__init__(message)
+    def __init__(self, message: str | None = None):
+        super().__init__(
+            message or f"{current().name} request limit reached; the rest waits for the next run"
+        )
 
 
 class Budget:

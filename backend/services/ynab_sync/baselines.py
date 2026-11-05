@@ -4,8 +4,8 @@ YNAB category and category group pairs with ours (``ynab_pairs``) with the state
 
 from __future__ import annotations
 
-from backend.db.ynab_sync_store import YnabBaselineStore
 from backend.services import ynab_pairs
+from backend.services.budget_app import current
 from backend.services.ynab_sync.canon import Canon
 
 FLUSH_BULK = 200  # past this many changes, rewrite the table in one transaction
@@ -13,7 +13,7 @@ FLUSH_BULK = 200  # past this many changes, rewrite the table in one transaction
 
 class Baselines:
     def __init__(self, plan_id: str | None = None) -> None:
-        self._store = YnabBaselineStore()
+        self._store = current().stores.baselines()
         self.txns, self.assigned = self._store.split()
         self.plan_id = plan_id
         self.cats, self.groups = ynab_pairs.load(plan_id)

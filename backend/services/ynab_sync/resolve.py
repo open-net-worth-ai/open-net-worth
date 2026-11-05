@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 
 from backend.core import audit_context, data_events
 from backend.core.errors import ConflictError, NotFoundError, ValidationError
-from backend.db.ynab_sync_store import YnabMirrorStore
 from backend.services import import_runs, planning
 from backend.services import ledger as ledger_service
+from backend.services.budget_app import current
 from backend.services.ynab_sync import (
     assigned,
     category_resolve,
@@ -34,52 +34,52 @@ RESOLVE_REQUESTS = 6  # one resolution never needs more than a PATCH, its note a
 
 
 def resolve(conflict_id: str, keep: str, choice: str | None = None) -> dict:
+    app = current()
     if keep not in ("onw", "ynab"):
         raise ValidationError("keep must be 'onw' or 'ynab'")
     if not sync_state.load()["plan_id"]:
-        raise ValidationError("choose the YNAB plan to sync first")
+        raise ValidationError(f"choose the {app.name} {app.plan_word} to sync first")
     item = conflicts.get(conflict_id)
     if item is None:
         raise NotFoundError("That review item is already resolved.")
-    if not runner._lock.acquire(blocking=False):
-        raise ConflictError("A YNAB sync is running; resolve this when it finishes.")
-    if import_runs.has_running("ynab"):
-        runner._lock.release()
-        raise ConflictError("A YNAB import is running; resolve this when it finishes.")
-    token = audit_context.set_audit_scope("user", sync_state.SURFACE, note="review list")
+    if not app.lock.acquire(blocking=False):
+        raise ConflictError(f"A {app.name} sync is running; resolve this when it finishes.")
+    if import_runs.has_running(app.key):
+        app.lock.release()
+        raise ConflictError(f"A {app.name} import is running; resolve this when it finishes.")
+    token = audit_context.set_audit_scope("user", app.surface, note="review list")
     rec = recorder.Recorder()
     rec_token = recorder.activate(rec)
     started = datetime.now(timezone.utc)
+    budget = Budget(RESOLVE_REQUESTS)
     try:
         st = sync_state.load()
-        meta, mirror_store = sync_state.load_meta(), YnabMirrorStore()
+        meta, mirror_store = sync_state.load_meta(), app.stores.mirror()
         mirror = mirror_store.by_id()
         loaded = dict(mirror)
         base = Baselines(st["plan_id"])
         ctx = context.build(st, meta, mirror, base.assigned, base.cats, base.declined)
-        client = YnabClient(st["plan_id"], Budget(RESOLVE_REQUESTS))
-        if item["entity"] == "start":
-            starts.resolve(item, keep)
-        elif item["entity"] in ("category", "group", "new_category", "budget"):
-            category_resolve.apply(item, keep, choice, st, meta, base, client)
-        elif _held_side(st["direction"], keep):
-            _accept(ctx, item, keep, base)
-        elif item["entity"] == "assigned":
-            _assigned(item, keep, client, base, meta)
-        else:
-            _transaction(ctx, item, keep, client, base)
-        base.flush()
-        delta.save_changes(mirror_store, loaded, mirror, set(), False)
-        sync_state.save_meta(meta)
-        conflicts.close(item["key"])
+        with app.open_client(st["plan_id"], budget) as client:
+            if item["entity"] == "start":
+                starts.resolve(item, keep)
+            elif item["entity"] in ("category", "group", "new_category", "budget"):
+                category_resolve.apply(item, keep, choice, st, meta, base, client)
+            elif _held_side(st["direction"], keep):
+                _accept(ctx, item, keep, base)
+            elif item["entity"] == "assigned":
+                _assigned(item, keep, client, base, meta)
+            else:
+                _transaction(ctx, item, keep, client, base)
+            base.flush()
+            delta.save_changes(mirror_store, loaded, mirror, set(), False)
+            sync_state.save_meta(meta)
+            conflicts.close(item["key"])
     finally:
         recorder.deactivate(rec_token)
         audit_context.clear_audit_scope(token)
-        runner._lock.release()
+        app.lock.release()
     if rec.sent_to_ynab():
-        runner.store_record(
-            st, rec, "manual", started, None, "Resolved a review item", client.budget.used
-        )
+        runner.store_record(st, rec, "manual", started, None, "Resolved a review item", budget.used)
     data_events.publish(["*"])
     return runner.status()
 
@@ -128,7 +128,7 @@ def _assigned(item: dict, keep: str, client: YnabClient, base: Baselines, meta: 
     it.onw = round(planning.assignments_store.month_map(it.month).get(it.env, 0.0) * 1000)
     sent, _, rejected = assigned.push(client, [it], {c["id"]: c for c in meta["categories"]})
     if rejected:
-        raise ConflictError(f"YNAB did not accept it: {rejected[0][1]}")
+        raise ConflictError(f"{current().name} did not accept it: {rejected[0][1]}")
     base.set_assigned(it.month, it.cid, it.onw)
     name = next((c["name"] for c in meta["categories"] if c["id"] == it.cid), "Category")
     recorder.assigned_change("sent", name, it.month, it.ynab, it.onw)
@@ -160,7 +160,7 @@ def _transaction(ctx, item: dict, keep: str, client: YnabClient, base: Baselines
     unit = _unit(ctx, item, base)
     if keep == "ynab":
         if unit.blocked:
-            raise ConflictError(f"YNAB's version cannot be brought in: {unit.blocked}")
+            raise ConflictError(f"{current().name}'s version cannot be brought in: {unit.blocked}")
         now, row_id = pull.apply(unit.row, unit.rendered if unit.ynab is not None else None)
         if unit.onw_id and row_id != unit.onw_id:
             base.drop_txn(unit.onw_id)
@@ -189,8 +189,8 @@ def _transaction(ctx, item: dict, keep: str, client: YnabClient, base: Baselines
     sender[kind](ctx, client, [send], out)
     if out.unsupported or out.failed:
         why = (out.unsupported or out.failed)[0][1]
-        raise ConflictError(f"YNAB cannot take this change: {why}")
+        raise ConflictError(f"{current().name} cannot take this change: {why}")
     if out.deferred:
-        raise ConflictError("Out of YNAB requests for now; try again shortly.")
+        raise ConflictError(f"Out of {current().name} requests for now; try again shortly.")
     recorder.txn_change("sent", ctx, send.onw_id, send.base, send.onw)
     _record_sent(send, out, base)

@@ -7,17 +7,26 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from backend.core.errors import ValidationError
-from backend.db.ynab_sync_store import YnabSyncStateStore
+from backend.services.budget_app import YNAB, current
 
-SURFACE = "ynab_sync"  # the audit surface of every write the sync makes (echo suppression)
+# YNAB's audit surface, for what still imports it; a run writes and skips ``current().surface``.
+SURFACE = YNAB.surface
 INTERVALS = {"15m": 900, "30m": 1800, "1h": 3600, "6h": 21600, "daily": 86400, "manual": None}
 DEFAULT_INTERVAL = "1h"
 # Which way changes flow. One way skips the other way's sends or pulls; a change on both sides
 # still goes to the review list (ADR 2026-10-20 amendment, 2026-11-02).
 DIRECTIONS = ("both", "from_ynab", "to_ynab")
-REQUEST_CAP = 40  # per run; YNAB allows 200 an hour per token
+REQUEST_CAP = YNAB.caps.request_cap  # per run; YNAB allows 200 an hour per token
 
-_store = YnabSyncStateStore()
+
+def _store():
+    return current().stores.state()
+
+
+def request_cap() -> int:
+    """What one run may spend. YNAB's is this module's ``REQUEST_CAP``, read on each run."""
+    app = current()
+    return REQUEST_CAP if app is YNAB else app.caps.request_cap
 
 
 def _now() -> datetime:
@@ -53,7 +62,7 @@ def blank() -> dict:
 
 
 def load() -> dict:
-    state = {**blank(), **_store.doc("state")}
+    state = {**blank(), **_store().doc("state")}
     last = state["last_run"]
     if last and last.get("trigger") == "schedule":  # the value before the run records existed
         state["last_run"] = {**last, "trigger": "scheduled"}
@@ -61,7 +70,7 @@ def load() -> dict:
 
 
 def save(state: dict) -> None:
-    _store.save(state)
+    _store().save(state)
 
 
 def load_meta() -> dict:
@@ -71,28 +80,23 @@ def load_meta() -> dict:
         "categories": [],
         "payees": {},
         "months": [],
-        **_store.doc("meta"),
+        **_store().doc("meta"),
     }
 
 
 def save_meta(meta: dict) -> None:
-    _store.save({**meta, "id": "meta"})
+    _store().save({**meta, "id": "meta"})
 
 
 def reset() -> None:
     """Forget everything about one plan (the plan was changed or the sync was re-pointed). How
     YNAB's categories and groups pair with ours is kept, for every plan: the import wrote it, and
     turning the sync on (for this plan or one used before) must find it."""
-    from backend.db.ynab_sync_store import YnabBaselineStore, YnabConflictStore, YnabMirrorStore
     from backend.services import ynab_pairs
 
     kept = ynab_pairs.keep_for()
-    for store in (
-        YnabSyncStateStore(),
-        YnabMirrorStore(),
-        YnabBaselineStore(),
-        YnabConflictStore(),
-    ):
+    stores = current().stores
+    for store in (stores.state(), stores.mirror(), stores.baselines(), stores.conflicts()):
         store.replace_all([])
     ynab_pairs.save(kept)
 

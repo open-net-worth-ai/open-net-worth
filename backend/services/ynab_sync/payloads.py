@@ -6,6 +6,7 @@ edit split lines, and takes no future dates."""
 from __future__ import annotations
 
 from backend.core.user_time import user_today
+from backend.services.budget_app import current
 from backend.services.ynab_sync import recorder
 from backend.services.ynab_sync.canon import changed_fields
 from backend.services.ynab_sync.context import Context, top_of
@@ -32,16 +33,16 @@ def _category_id(ctx: Context, onw_category: str | None) -> str | None:
         return None
     if onw_category in ctx.ynab_cat:
         return ctx.ynab_cat[onw_category]
-    label = ctx.names["categories"].get(onw_category, onw_category)
+    label, app = ctx.names["categories"].get(onw_category, onw_category), current().name
     if onw_category in ctx.unsent:
         if onw_category not in ctx.said:
             ctx.said.add(onw_category)
             recorder.note(
                 label,
-                f"Transactions in {label} go to YNAB uncategorized, as {label} isn't in YNAB.",
+                f"Transactions in {label} go to {app} uncategorized, as {label} isn't in {app}.",
             )
         return None
-    raise NotYet(f"The category {label} isn't in YNAB yet.")
+    raise NotYet(f"The category {label} isn't in {app} yet.")
 
 
 def _signed(n: dict) -> tuple[list, bool]:
@@ -50,13 +51,14 @@ def _signed(n: dict) -> tuple[list, bool]:
 
 
 def _check_plain_shape(ctx: Context, n: dict) -> None:
+    app = current().name
     if n["kind"] not in ("expense", "income", "transfer"):
-        raise Unsupported(f"a {n['kind']} transaction has no YNAB equivalent")
+        raise Unsupported(f"a {n['kind']} transaction has no {app} equivalent")
     if n["date"] > user_today().isoformat():
-        raise Unsupported("YNAB does not accept transactions dated in the future")
+        raise Unsupported(f"{app} does not accept transactions dated in the future")
     for leg in (n["from"], n["to"]):
         if leg and leg[0] not in ctx.ynab_acct:
-            raise Unsupported("the account is not linked to a YNAB account")
+            raise Unsupported(f"the account is not linked to a {app} account")
 
 
 def classify(ctx: Context, refs: list[str]) -> tuple[str, list[str]]:
@@ -83,7 +85,7 @@ def create_payload(ctx: Context, n: dict, currencies: set[str]) -> dict:
     _check_plain_shape(ctx, n)
     if currencies - {ctx.currency}:
         raise Unsupported(
-            f"YNAB only holds {ctx.currency}; this transaction is in {', '.join(sorted(currencies))}"
+            f"{current().name} only holds {ctx.currency}; this transaction is in {', '.join(sorted(currencies))}"
         )
     leg, outflow = _signed(n)
     body = {
@@ -98,7 +100,7 @@ def create_payload(ctx: Context, n: dict, currencies: set[str]) -> dict:
             (a for a in ctx.meta["accounts"] if a["id"] == ctx.ynab_acct.get(n["to"][0])), None
         )
         if n["from"][1] != n["to"][1] or not dest or not dest.get("transfer_payee_id"):
-            raise Unsupported("this transfer cannot be expressed as a YNAB transfer")
+            raise Unsupported(f"this transfer cannot be expressed as a {current().name} transfer")
         return {
             **body,
             "account_id": ctx.ynab_acct[n["from"][0]],
@@ -134,9 +136,11 @@ def _cleared(top: dict, now: bool) -> str | None:
 def _plain_fields(ctx: Context, top: dict, b: dict, n: dict, changed: list[str]) -> dict:
     op: dict = {}
     if "kind" in changed and "transfer" in (b["kind"], n["kind"]):
-        raise Unsupported("turning a transaction into a transfer (or back) cannot be sent to YNAB")
+        raise Unsupported(
+            f"turning a transaction into a transfer (or back) cannot be sent to {current().name}"
+        )
     if n["splits"]:
-        raise Unsupported("YNAB's API cannot split an existing transaction")
+        raise Unsupported(f"{current().name}'s API cannot split an existing transaction")
     leg, outflow = _signed(n)
     if {"from", "to", "kind"} & set(changed):
         op["amount"] = _milli(leg[1], outflow)
@@ -155,7 +159,9 @@ def _transfer_ops(
     if {"kind", "category", "splits"} & set(changed) or any(
         b[s] and n[s] and b[s][0] != n[s][0] for s in ("from", "to")
     ):
-        raise Unsupported("changing a transfer's accounts or category cannot be sent to YNAB")
+        raise Unsupported(
+            f"changing a transfer's accounts or category cannot be sent to {current().name}"
+        )
     ops = []
     for tid, outflow in zip(tops, (True, False)):
         op = {"id": tid}
@@ -168,17 +174,18 @@ def _transfer_ops(
 def update_payloads(ctx: Context, refs: list[str], b: dict, n: dict) -> list[dict]:
     """Request bodies (one per YNAB transaction) that bring YNAB from ``b`` to ``n``."""
     _check_plain_shape(ctx, n)
+    app = current().name
     changed = changed_fields(b, n)
     shape, tops = classify(ctx, refs)
     if shape == "complex":
-        raise Unsupported("this is one part of a larger YNAB split; edit it in YNAB")
+        raise Unsupported(f"this is one part of a larger {app} split; edit it in {app}")
     top = ctx.mirror[tops[0]]
     if shape == "split":
         extra = set(changed) - {"description", "memo", "cleared"}
         if extra:
             raise Unsupported(
-                "YNAB's API cannot change a split's date, amount, category or lines; "
-                "change it in YNAB, or keep YNAB's version"
+                f"{app}'s API cannot change a split's date, amount, category or lines; "
+                f"change it in {app}, or keep {app}'s version"
             )
         ops = [
             {

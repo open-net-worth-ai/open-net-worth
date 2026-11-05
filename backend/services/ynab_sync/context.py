@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 
 from backend.services import categories as categories_service
 from backend.services import ledger as ledger_service
+from backend.services.budget_app import current
 from backend.services.ynab_migration import apply, mapping
 
 
@@ -83,11 +84,12 @@ def build(
     live = {c["id"] for c in rows}
     paired = {y: p for y, p in pairs.items() if not p.get("gone") and p["category"] in live}
     accounts = ledger_service.accounts.query_accounts(include_archived=True)
+    source = current().source
     acct_ids = {
         e["ref"]: a["id"]
         for a in accounts
         for e in a.get("external_ids") or []
-        if e.get("source") == mapping.SOURCE
+        if e.get("source") == source
     }
     sub_parent = {s["id"]: t["id"] for t in mirror.values() for s in t.get("subtransactions") or []}
     link_of = {

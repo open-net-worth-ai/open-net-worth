@@ -9,7 +9,7 @@ import logging
 from backend.core.errors import ConflictError, OpenNetWorthError
 from backend.core.txn_sources import canonical_writer
 from backend.services import ledger as ledger_service
-from backend.services.ynab_migration.mapping import SOURCE
+from backend.services.budget_app import current
 from backend.services.ynab_sync.canon import Canon, canon, changed_fields
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,8 @@ def row_changes(rendered: dict, row: dict, changed: list[str]) -> dict:
 
 
 def create(rendered: dict, *, resurrect: bool = False) -> dict:
-    row = {**rendered, "source": canonical_writer(SOURCE) or SOURCE}
+    source = current().source
+    row = {**rendered, "source": canonical_writer(source) or source}
     pairs = {(e["source"], e["ref"]) for e in rendered["external_refs"]} if resurrect else None
     created, skipped = ledger_service.bulk_create_transactions(
         [row],

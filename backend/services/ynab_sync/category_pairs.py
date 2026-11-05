@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from backend.core.errors import ExternalServiceError, OpenNetWorthError
 from backend.services import planning
+from backend.services.budget_app import current
 from backend.services.ynab_migration import category_make as make
 from backend.services.ynab_migration.mapping import clean
 from backend.services.ynab_pairs import HIDDEN_HERE
@@ -81,9 +82,9 @@ class Pairs(Base):
         if "conflict" in acts.values():
             clashing = {f for f, a in acts.items() if a == "conflict"}
             reason = (
-                "Renamed here and in YNAB. Pick the name to keep."
+                f"Renamed here and in {current().name}. Pick the name to keep."
                 if clashing == {"name"}
-                else "Changed here and in YNAB. Pick the version to keep."
+                else f"Changed here and in {current().name}. Pick the version to keep."
             )
             return self.file(
                 conflicts.CONFLICT, key, o["name"], reason, entity="category",
@@ -115,19 +116,22 @@ class Pairs(Base):
             for f in fields:
                 if f == "name":
                     o["name"] = self.pull_name(cat, y["name"])
-                    self.count("pulled", f"Renamed {old} to {o['name']} here, as in YNAB.")
+                    self.count(
+                        "pulled", f"Renamed {old} to {o['name']} here, as in {current().name}."
+                    )
                 elif f == "hidden":
                     make.set_hidden([cat["id"]], y["hidden"])
                     o["hidden"] = y["hidden"]
                     verb = "Hid" if y["hidden"] else "Showed"
-                    self.count("pulled", f"{verb} {o['name']} here, as in YNAB.")
+                    self.count("pulled", f"{verb} {o['name']} here, as in {current().name}.")
                 else:
                     o["group"] = self.pull_group(cat, y, o)
                 p["ynab"][f], p["onw"][f] = y[f], o[f]
         except OpenNetWorthError:
+            app = current().name
             reason = (
-                f"YNAB changed {old}, but this book could not take the change. "
-                "Keep Open Net Worth's version to send it to YNAB instead."
+                f"{app} changed {old}, but this book could not take the change. "
+                f"Keep Open Net Worth's version to send it to {app} instead."
             )
             self.file(
                 conflicts.FAILED, f"cat:{ycid}", old, reason, entity="category",
@@ -154,7 +158,8 @@ class Pairs(Base):
             )
             self.book.refresh()
             self.count(
-                "pulled", f"Moved {solo['name']} to {self.ogroup_name(gid)} here, as in YNAB."
+                "pulled",
+                f"Moved {solo['name']} to {self.ogroup_name(gid)} here, as in {current().name}.",
             )
         return gid
 
@@ -207,8 +212,9 @@ class Pairs(Base):
         self.say_pushed(y, o, fields, body)
 
     def refuse(self, ycid: str, name: str, fields: list[str], y: dict, o: dict) -> None:
+        app = current().name
         reason = (
-            f"YNAB did not accept the change to {name}. Keep YNAB's version, "
+            f"{app} did not accept the change to {name}. Keep {app}'s version, "
             "or change it there and sync again."
         )
         self.file(
@@ -217,24 +223,24 @@ class Pairs(Base):
         )  # fmt: skip
 
     def say_pushed(self, y: dict, o: dict, fields: list[str], body: dict) -> None:
-        name = o["name"]
+        name, app = o["name"], current().name
         if "name" in body:
-            self.count("sent", f"Renamed {y['name']} to {name} in YNAB.")
+            self.count("sent", f"Renamed {y['name']} to {name} in {app}.")
         if "category_group_id" in body:
             where = HIDDEN_HERE if o["hidden"] else self.ygroup_name(body["category_group_id"])
             if o["hidden"]:
-                line = f"Moved {name} to {where} in YNAB, as it is hidden here. You can hide it in YNAB yourself."
+                line = f"Moved {name} to {where} in {app}, as it is hidden here. You can hide it in {app} yourself."
             elif "hidden" in fields:
-                line = f"Moved {name} back to {where} in YNAB, as it is shown here."
+                line = f"Moved {name} back to {where} in {app}, as it is shown here."
             else:
-                line = f"Moved {name} to {where} in YNAB."
+                line = f"Moved {name} to {where} in {app}."
             self.count("sent", line)
 
     def ours_gone(self, ycid: str, p: dict, ycat: dict | None) -> None:
         """Deleted here (or merged into another category): YNAB's API can neither delete nor hide
         a category, so it is moved into "Hidden in Open Net Worth" and the pair is kept. Its
         transactions were relabelled here, and follow."""
-        name = p["onw"]["name"]
+        name, app = p["onw"]["name"], current().name
         if ycat is None or ycat.get("deleted") or self.ystate(ycat)["hidden"]:
             p["gone"] = True
         elif p.get("parked") or not self.can_push or f"cat:{ycid}" in self.open:
@@ -249,7 +255,7 @@ class Pairs(Base):
                 return
             except ExternalServiceError as exc:
                 self.refused(exc)
-                reason = f"YNAB would not move {name} to {HIDDEN_HERE}. Move it there or hide it in YNAB yourself."
+                reason = f"{app} would not move {name} to {HIDDEN_HERE}. Move it there or hide it in {app} yourself."
                 return self.file(conflicts.FAILED, f"cat:{ycid}", name, reason, entity="category")
             if not self.confirmed(saved, body):
                 return
@@ -257,6 +263,6 @@ class Pairs(Base):
             self.put_cat(saved)
             p["parked"] = True
             p["ynab"]["group"], p["onw"]["hidden"] = gid, True
-            line = f"Moved {name} to {HIDDEN_HERE} in YNAB, as it was removed here. You can hide it in YNAB yourself."
+            line = f"Moved {name} to {HIDDEN_HERE} in {app}, as it was removed here. You can hide it in {app} yourself."
             self.count("sent", line)
         self.base.set_cat(p)

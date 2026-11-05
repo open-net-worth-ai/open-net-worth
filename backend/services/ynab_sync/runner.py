@@ -4,12 +4,16 @@ request budget; anything it cannot finish is kept for the next run, never droppe
 
 At most one run at a time (a lock, not a queue): a due run that finds one in progress is skipped
 and "Sync now" gets a 409. The YNAB token is read inside ``client`` and appears in no state,
-status or log line."""
+status or log line.
+
+All of it works for ``budget_app.current()``. A run holds only its own app's lock, and the apps
+share one pool, so a run queued behind another app's waits its turn while it already reads as
+running."""
 
 from __future__ import annotations
 
+import contextvars
 import logging
-import threading
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -17,12 +21,9 @@ from datetime import datetime, timezone
 from backend.core import audit_context, data_events
 from backend.core.errors import ConflictError, OpenNetWorthError, ValidationError
 from backend.db.transaction_audit_store import TransactionAuditStore
-from backend.db.ynab_config_store import YnabConfigStore
-from backend.db.ynab_sync_store import YnabMirrorStore
 from backend.services import import_runs, planning
 from backend.services import ledger as ledger_service
-from backend.services.ynab_migration import source
-from backend.services.ynab_migration.mapping import SOURCE
+from backend.services.budget_app import current
 from backend.services.ynab_sync import (
     assigned,
     category_sync,
@@ -40,8 +41,23 @@ from backend.services.ynab_sync.client import Budget, YnabClient
 
 logger = logging.getLogger(__name__)
 
-_lock = threading.Lock()
-_current: str | None = None  # the record of the manual run in progress
+
+class _CurrentLock:
+    """``current().lock``, looked up on each call. What takes a lock to do work binds its app's
+    once and releases that one; this answers for whichever app the caller is working for."""
+
+    def acquire(self, blocking: bool = True, timeout: float = -1) -> bool:
+        return current().lock.acquire(blocking, timeout)
+
+    def release(self) -> None:
+        current().lock.release()
+
+    def locked(self) -> bool:
+        return current().lock.locked()
+
+
+_lock = _CurrentLock()
+_manual_runs: dict[str, str] = {}  # app key -> the record of its manual run in progress
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ynab-sync")
 
 
@@ -56,7 +72,7 @@ def month_name(month: str) -> str:
 def _summary(tally: Counter, open_items: int) -> str:
     parts = []
     if tally["sent"]:
-        parts.append(f"{tally['sent']} sent to YNAB")
+        parts.append(f"{tally['sent']} sent to {current().name}")
     if tally["pulled"]:
         parts.append(f"{tally['pulled']} pulled")
     if tally["categories"]:
@@ -74,6 +90,7 @@ def _assigned_phase(
 ) -> None:
     if first:
         base.seed_assigned({k: v for k, v in change.assigned.items() if v})
+    app = current().name
     direction = st["direction"]
     # YNAB's figures a To-YNAB run did not pull arrive only once, so they are kept and replayed.
     for month, cid, milli in st["held_assigned"]:
@@ -98,12 +115,12 @@ def _assigned_phase(
             try:
                 assigned.pull(it)
             except OpenNetWorthError as exc:
-                logger.info("YNAB Assigned pull refused for %s %s: %s", it.cid, it.month, exc)
+                logger.info("%s Assigned pull refused for %s %s: %s", app, it.cid, it.month, exc)
                 _file_assigned(
                     it,
                     names,
                     conflicts.FAILED,
-                    f"This book couldn't take YNAB's Assigned for {names.get(it.cid, 'this category')} "
+                    f"This book couldn't take {app}'s Assigned for {names.get(it.cid, 'this category')} "
                     f"in {month_name(it.month)}. Keep Open Net Worth's to send this book's instead.",
                 )
                 continue
@@ -121,9 +138,9 @@ def _assigned_phase(
                 conflicts.CONFLICT,
                 (
                     f"The Assigned of {names.get(it.cid, 'this category')} for {month_name(it.month)} differs "
-                    "between Open Net Worth and YNAB. Pick the one to keep."
+                    f"between Open Net Worth and {app}. Pick the one to keep."
                     if it.cid in fresh
-                    else "Changed in both Open Net Worth and YNAB since the last sync."
+                    else f"Changed in both Open Net Worth and {app} since the last sync."
                 ),
                 fresh=it.cid in fresh,
             )
@@ -137,9 +154,9 @@ def _assigned_phase(
         recorder.assigned_change("sent", names.get(it.cid, "Category"), it.month, it.ynab, it.onw)
     for it in deferred:
         label = f"{names.get(it.cid, 'Category')} · {month_name(it.month)}"
-        recorder.deferred(label, "Waiting for the next run (YNAB request limit).")
+        recorder.deferred(label, f"Waiting for the next run ({app} request limit).")
     for it, why in rejected:
-        _file_assigned(it, names, conflicts.FAILED, f"YNAB did not accept it: {why}")
+        _file_assigned(it, names, conflicts.FAILED, f"{app} did not accept it: {why}")
     tally["sent"] += len(sent)
     tally["deferred"] += len(deferred)
 
@@ -166,18 +183,19 @@ def _file_assigned(it, names: dict, kind: str, reason: str, fresh: bool = False)
 
 def _execute(st: dict, tally: Counter) -> None:
     """One run's work; raises on anything that stops it (the caller records the failure)."""
-    client = YnabClient(st["plan_id"], Budget(sync_state.REQUEST_CAP))
-    recorder.phase("reading YNAB")
-    try:
-        _reconcile(st, tally, client)
-    finally:
-        tally["requests"] = client.budget.used
+    app = current()
+    with app.open_client(st["plan_id"], Budget(sync_state.request_cap())) as client:
+        recorder.phase(f"reading {app.name}")
+        try:
+            _reconcile(st, tally, client)
+        finally:
+            tally["requests"] = client.budget.used
 
 
 def _reconcile(st: dict, tally: Counter, client: YnabClient) -> None:
     first = not st["bootstrapped"]
     upto = TransactionAuditStore().max_seq()
-    meta, mirror_store = sync_state.load_meta(), YnabMirrorStore()
+    meta, mirror_store = sync_state.load_meta(), current().stores.mirror()
     mirror = {} if first else mirror_store.by_id()
     loaded = dict(mirror)
     change = delta.apply_read(
@@ -272,7 +290,7 @@ def store_record(
         if not _worth_storing(trigger, error, st["last_run"], rec):
             return None
         return import_runs.record(
-            "ynab",
+            current().key,
             "sync",
             st["plan_id"] or "",
             trigger,
@@ -282,7 +300,7 @@ def store_record(
             **fields,
         )["id"]
     except Exception:
-        logger.exception("YNAB sync: could not store the run record")
+        logger.exception("%s sync: could not store the run record", current().name)
         return None
 
 
@@ -294,7 +312,9 @@ def _close(run_id: str, status: str, fields: dict) -> None:
             import_runs.finish(run_id, status, phase="done", **fields)
             return
         except Exception:
-            logger.exception("YNAB sync: could not close run %s (attempt %d)", run_id, attempt)
+            logger.exception(
+                "%s sync: could not close run %s (attempt %d)", current().name, run_id, attempt
+            )
     _fail(run_id)
 
 
@@ -304,14 +324,14 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
     tally: Counter = Counter()
     error = None
     rec = recorder.Recorder(run_id)
-    token = audit_context.set_audit_scope("system", sync_state.SURFACE)
+    token = audit_context.set_audit_scope("system", current().surface)
     rec_token = recorder.activate(rec)
     try:
         _execute(st, tally)
     except OpenNetWorthError as exc:
         error = exc.message or str(exc)
     except Exception as exc:
-        logger.exception("YNAB sync crashed")
+        logger.exception("%s sync crashed", current().name)
         error = f"Unexpected error ({type(exc).__name__}); see the server log."
     finally:
         recorder.deactivate(rec_token)
@@ -340,36 +360,37 @@ def _locked_run(trigger: str, run_id: str | None = None) -> None:
 def start_now() -> dict:
     """ "Sync now": claim the run lock here (so a second click is a 409), open the run's record
     (which also refuses while an import is running) and run in the pool."""
-    global _current
+    app = current()
     st = sync_state.load()
     if not st["plan_id"] or not st["enabled"]:
         raise ValidationError("turn the two-way sync on first")
-    if not _lock.acquire(blocking=False):
-        raise ConflictError("A YNAB sync is already running.")
+    if not app.lock.acquire(blocking=False):
+        raise ConflictError(f"A {app.name} sync is already running.")
     try:
-        run = import_runs.start("ynab", "sync", st["plan_id"], "manual", st["plan_name"] or "")
+        run = import_runs.start(
+            app.key, "sync", st["plan_id"], "manual", st["plan_name"] or "", busy=app.run_busy
+        )
     except Exception:
-        _lock.release()
+        app.lock.release()
         raise
 
     def work() -> None:
-        global _current
         try:
             _locked_run("manual", run["id"])
         except Exception:
-            logger.exception("YNAB sync run %s crashed", run["id"])
+            logger.exception("%s sync run %s crashed", app.name, run["id"])
             _fail(run["id"])
         finally:
-            _current = None
-            _lock.release()
+            _manual_runs.pop(app.key, None)
+            app.lock.release()
 
-    _current = run["id"]
+    _manual_runs[app.key] = run["id"]
     try:
-        _POOL.submit(work)
+        _POOL.submit(contextvars.copy_context().run, work)
     except Exception:
-        logger.exception("YNAB sync run %s could not be queued", run["id"])
-        _current = None
-        _lock.release()
+        logger.exception("%s sync run %s could not be queued", app.name, run["id"])
+        _manual_runs.pop(app.key, None)
+        app.lock.release()
         _fail(run["id"])
         raise
     return status()
@@ -384,21 +405,22 @@ def _fail(run_id: str) -> None:
             outcome="Failed",
         )
     except Exception:
-        logger.exception("YNAB sync run %s could not be recorded as failed", run_id)
+        logger.exception("%s sync run %s could not be recorded as failed", current().name, run_id)
 
 
 def run_if_due() -> bool:
-    """The scheduler's tick (every minute): run when due and nothing is running."""
+    """One app's tick (every minute): run when due and nothing is running."""
+    app = current()
     st = sync_state.load()
-    if not sync_state.is_due(st) or not _lock.acquire(blocking=False):
+    if not sync_state.is_due(st) or not app.lock.acquire(blocking=False):
         return False
-    if import_runs.has_running("ynab"):  # an import is writing the book; the next tick retries
-        _lock.release()
+    if import_runs.has_running(app.key):  # an import is writing the book; the next tick retries
+        app.lock.release()
         return False
     try:
         _locked_run("scheduled")
     finally:
-        _lock.release()
+        app.lock.release()
     return True
 
 
@@ -407,9 +429,10 @@ def is_running() -> bool:
 
 
 def status() -> dict:
+    app = current()
     st = sync_state.load()
     return {
-        "token_saved": YnabConfigStore().is_configured(),
+        "token_saved": app.config_store().is_configured(),
         "enabled": st["enabled"],
         "interval": st["interval"],
         "intervals": list(sync_state.INTERVALS),
@@ -417,8 +440,8 @@ def status() -> dict:
         "directions": list(sync_state.DIRECTIONS),
         "plan_id": st["plan_id"],
         "plan_name": st["plan_name"],
-        "running": _lock.locked(),
-        "run_id": _current,
+        "running": app.lock.locked(),
+        "run_id": _manual_runs.get(app.key),
         "last_run": st["last_run"],
         "next_run_at": st["next_run_at"] if st["enabled"] else None,
         "conflicts": conflicts.listing(),
@@ -426,20 +449,27 @@ def status() -> dict:
 
 
 def _linked_book() -> bool:
+    source = current().source
     return any(
-        e.get("source") == SOURCE
+        e.get("source") == source
         for a in ledger_service.accounts.query_accounts(include_archived=True)
         for e in a.get("external_ids") or []
     )
 
 
 def _adopt_plan(plan_id: str) -> dict:
-    plan = next((p for p in source.list_plans(YnabConfigStore()) if p["id"] == plan_id), None)
+    app = current()
+    plans = app.reader.list_plans(app.config_store())
+    plan = next((p for p in plans if p["id"] == plan_id), None)
     if plan is None:
-        raise ValidationError("That YNAB plan is not visible to the saved token.")
+        raise ValidationError(
+            f"That {app.name} {app.plan_word} is not visible to the saved {app.saved_sign_in}."
+        )
     currency = (plan.get("currency") or "").upper()
     if len(currency) != 3:
-        raise ValidationError("That YNAB plan has no currency set; open it in YNAB once first.")
+        raise ValidationError(
+            f"That {app.name} {app.plan_word} has no currency set; open it in {app.name} once first."
+        )
     sync_state.reset()
     return {
         **sync_state.blank(),
@@ -455,8 +485,9 @@ def update_settings(
     plan_id: str | None,
     direction: str | None = None,
 ) -> dict:
-    if not _lock.acquire(blocking=False):
-        raise ConflictError("A YNAB sync is running; change the settings when it finishes.")
+    app = current()
+    if not app.lock.acquire(blocking=False):
+        raise ConflictError(f"A {app.name} sync is running; change the settings when it finishes.")
     try:
         st = sync_state.load()
         if plan_id and plan_id.strip() != st["plan_id"]:
@@ -476,16 +507,18 @@ def update_settings(
             sync_state.schedule_next(st, sync_state.parse(last["started_at"]))
         sync_state.save(st)
     finally:
-        _lock.release()
+        app.lock.release()
     return status()
 
 
 def _require_ready(st: dict) -> None:
-    if not YnabConfigStore().is_configured():
-        raise ValidationError("save a YNAB access token first")
+    app = current()
+    if not app.config_store().is_configured():
+        raise ValidationError(f"save {app.sign_in} first")
     if not st["plan_id"]:
-        raise ValidationError("pick the YNAB plan to sync")
+        raise ValidationError(f"pick the {app.name} {app.plan_word} to sync")
     if not _linked_book():
         raise ValidationError(
-            "migrate the YNAB plan into this book first; the sync pairs with what it imported"
+            f"migrate the {app.name} {app.plan_word} into this book first; "
+            "the sync pairs with what it imported"
         )

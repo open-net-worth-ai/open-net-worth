@@ -193,6 +193,11 @@ def all_apps() -> list[BudgetApp]:
     return [app() if callable(app) else app for app in _apps.values()]
 
 
+def syncing_apps() -> list[BudgetApp]:
+    """Those whose two-way sync exists and whose flag is on: what a scheduled tick goes through."""
+    return [app for app in all_apps() if app.syncs and app.is_on()]
+
+
 def _others() -> list[BudgetApp]:
     me = current().key
     return [app for app in all_apps() if app.key != me]
