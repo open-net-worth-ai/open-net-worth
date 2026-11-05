@@ -1251,6 +1251,8 @@ _SUPERSEDED_STARTER_BODIES: dict[str, frozenset[str]] = {
             "33f8841bed9c1b5bbdfc98881645fdcf24551340e81b3df5a46ca06d979e48de",
             # 2026-11-05: before dropping the scripted "skip this if it was you" line.
             "8c1ebb1af245d07ad6697f02135aead68ab65d749300f222a8cc351ddf9d245c",
+            # 2026-11-06: before security notes were limited to finance apps.
+            "d7c70868131e008f640a1fa61bb7370a15259954218acc1610d83390ffeb48fa",
         }
     ),
 }

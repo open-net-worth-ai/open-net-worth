@@ -115,9 +115,21 @@ def test_one_money_test_decides_not_the_name_on_the_email():
     assert "The name decides nothing" in BODY
 
 
-def test_security_notices_are_limited_to_accounts_that_can_reach_money():
-    assert "an account that can reach their money" in BODY
-    assert "sign-ins to services that can't spend or move their money" in BODY
+def test_security_notices_are_limited_to_finance_apps():
+    # A real message led with email, shop and ride-app logins, and the owner asked to hear only
+    # about finance apps. "Could reach their money" let all of those in.
+    assert "Someone may be in a finance app" in BODY
+    assert "a bank, card, broker, crypto, wallet or payment account" in BODY
+    assert "a shop that can spend" not in BODY
+    assert "that can reach their money" not in BODY
+    assert "security notices from anything that isn't a finance app" in BODY
+    assert "email, Apple or Google accounts, shops, ride and delivery apps, streaming" in BODY
+
+
+def test_a_security_notice_is_not_followed_by_a_disclaimer_or_advice():
+    # The same message spent more words on "I can't tell who did this" than on the notices.
+    assert "don't add that you can't tell who did it" in BODY
+    assert "or advice on reviewing sign-ins" in BODY
 
 
 def test_small_failed_payments_stay_while_small_items_do_not():
