@@ -89,11 +89,23 @@ Windows x64; on any other computer the settings page says calls aren't available
 The call has its own view, with an **orb** that moves with whoever is talking: it swells and
 glows with whoever is talking, you as much as Lucius, and the colour inside keeps swaying when
 nobody is. While he looks something up it moves faster and the line under it says
-*Lucius is working…*. Under the orb are **Mute** and **End**.
+*Lucius is working…*. Above the bottom row is the mic button to mute, and along the bottom are smaller buttons to attach a file, choose the model, type and end the call. A call uses the conversation's own model, the same one you see in the chat. Changing it there or on the call changes it for that conversation, without restarting the call: his next answer uses it. The gear at the top right opens Voice settings. A file you attach goes straight to Lucius and you stay on the call, where he answers it. To go back to the chat, swipe down or tap the arrow: the call carries on. You can mute from the moment you press
+**Call**, while it's still ringing, and stay muted when he picks up. A short tone falls when you mute
+and rises when you unmute. On a phone's full call screen
+the light shows whose turn it is: a glow rises from the bottom while you talk, and the screen's edges
+light up while he does, with a wave from the orb as he starts to answer. If you talk over him, the
+mic button lights up.
+
+To change language or who speaks during a call, use the gear at the top of the full call screen, even while the call is still starting, or
+change it in Voice calls settings. A call picks its language when it starts, so changing it hangs up
+and calls back in the same conversation, which takes a few seconds.
+
+Lucius keeps a spoken answer to a sentence or two and offers more if there's more. Ask for the detail
+when you want it.
 
 | Where | What you see |
 |---|---|
-| **On a phone** | Pressing **Call** in the Lucius chat opens the full call screen. The arrow at the top (or **Type**) folds it into a strip above the message box so you can read the chat (approval cards included) or type, while you keep talking. The strip's expand button opens the full screen again. |
+| **On a phone** | Pressing **Call** in the Lucius chat opens the full call screen. The arrow at the top (or the keyboard button) folds it into a strip above the message box so you can read the chat (approval cards included) or type, while you keep talking. The strip's expand button opens the full screen again. |
 | **On a phone, away from the Lucius tab** | A small round button sits above the tab bar. With no call on it shows **voice bars**: tap it to call, or to go to Voice calls in Connectors if calls aren't set up. During a call it grows into a small pill with the moving **orb** and the time, or what's going on instead (*Working…*, *Poor connection*, *Reconnecting…*): tap it to open the full call screen, where **End** is. |
 | **In the side panel or the Lucius tab** | The call sits just above the message box — a slim strip on a wide screen — so the chat above stays readable and its cards tappable. |
 | **The floating Lucius button** | It has a **Call** button (four voice bars) beside **Ask Lucius**: press it and the call happens right in the button. It grows to show the orb, the time, **Mute** and **End**, and shrinks back when you hang up. Press the time to open the chat. On a poor connection it says so and shows the signal bars. If Lucius needs your approval it says **Needs approval**; press **Review** to see the card. |
@@ -113,6 +125,10 @@ attach a file, and it goes to Lucius like any other message — and he reads his
 call, as well as showing it in the chat. The same goes for a change you approve on screen: what
 happens next is read out.
 
+**Lucius answers out loud.** Ask for a list and he says the top few and how many there are, then
+offers the rest. He only uses the screen for changes waiting on your approval, or when you ask to
+see something: then he says it's there and shows it as a table, without reading the table out.
+
 **In the Open Net Worth desktop app**, the first call asks macOS for the microphone (once — it
 remembers). The desktop app allows the microphone for the app's own page only, and only audio;
 this needs desktop version with voice-call support or later. If you said no, macOS won't ask
@@ -129,9 +145,8 @@ works; from another device the app must be reachable over HTTPS (see
 | Setting | What it changes |
 |---|---|
 | **Front voice** | The model that holds the conversation. *Gemma 4* is the default: it's LiveKit's replacement for the retired Gemini 2.5 models, and in testing it asked what a bare "sure" was agreeing to instead of guessing. A setting saved with a retired model moves to it by itself. |
-| **Lucius on calls** | The model Lucius answers with during a call. Unset, he uses the conversation's own model. A faster one keeps the waits short. |
 | **Language** | What you speak on calls: English, Vietnamese, Chinese, Japanese, Korean, Hindi, Indonesian, Spanish, French, German or Portuguese. Lucius hears it, his greeting and check-ins are in it, and his voice speaks it. |
-| **Speech to text** | Which service turns your voice into text. *Automatic* lets LiveKit pick the best one for your language; *AssemblyAI Universal (English)* hears English only, so another language moves you to Automatic. |
+| **Speech to text** | Which service turns your voice into text. *Automatic* uses Deepgram Nova-3, which hears every language here. The AssemblyAI models hear fewer (*Universal* hears English only), so picking a language they can't hear moves you to Automatic. All of these are told the common finance words to expect in your language, so they mishear them less. Those are general words: nothing from your own accounts goes with them. |
 | **Voice model** | Which service speaks and what it costs. *Inworld 2.0 Flash* is the default for a new setup: it's the cheapest model that speaks every language here. A setup you've already saved keeps its choice until you change it. Only models that speak your language are offered. |
 | **Voice** | Who speaks: a sample of male and female voices, marked with the gender the docs state. The default is a calm male voice where one is documented (*Dennis* on Inworld), and a setup with no voice picked uses it. Pick **Another voice…** to paste an id from that service's library, which has many more. Picking another service goes back to its default voice. A voice may not sound natural in every language, so try it with a short call. |
 
@@ -209,7 +224,7 @@ place to look, and a wired connection is the surest fix: a computer that keeps s
 bands drops calls even with a strong signal.
 
 **Lucius takes a while to answer.** The front voice answers at once; Lucius's own answer takes as
-long as a chat reply. Pick a faster model under **Lucius on calls**, and close heavy programs —
+long as a chat reply. Pick a faster model with the model button on the call, and close heavy programs —
 a very busy computer also slows how fast the call notices you've stopped talking.
 
 ## Related pages

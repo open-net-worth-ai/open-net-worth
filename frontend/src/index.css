@@ -18749,6 +18749,24 @@ body.hide-amounts .mask * {
   flex-direction: column;
   gap: var(--space-2);
 }
+/* The model pill on the phone's call screen: frosted like the buttons beside it. Here, not in
+   lucius.css, whose layer can't outrank the trigger's own rules. */
+.lx-callstage--screen .lx-callstage-model .mp-trigger {
+  width: auto;
+  max-width: 100%;
+  height: var(--tap-min);
+  padding: 0 var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--bg) 45%, transparent);
+  color: var(--ink);
+  font-size: var(--text-sm);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+}
+.lx-callstage-model .mp-trigger-prov {
+  display: none;
+}
 .mp-trigger {
   display: inline-flex;
   min-width: 0;

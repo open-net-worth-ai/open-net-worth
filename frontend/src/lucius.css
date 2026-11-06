@@ -1043,6 +1043,100 @@
       ),
       var(--bg);
   }
+  /* The full-screen call's light, whose turn it is at a glance (VoiceCallGlow). Under the call,
+     never in its way: the levels only ever change opacity, which costs a phone nothing. */
+  .lx-callstage--screen .lx-callstage-inner {
+    position: relative;
+    z-index: 1;
+  }
+  .lx-callglow {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .lx-callglow-you,
+  .lx-callglow-lucius {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    /* Along the edges, heaviest at the bottom, gone before the top: iOS paints the status bar
+       itself in the plain background, so light on the page's top edge draws a line under it
+       (owner, 2026-11-06). Boosted because real speech uses only part of the level's range. */
+    -webkit-mask-image: linear-gradient(to top, #000 28%, transparent 72%);
+    mask-image: linear-gradient(to top, #000 28%, transparent 72%);
+  }
+  /* You: one deep dome of light off to the side with a curved top, and a small one low on the other
+     side, drifting. No layer across the full width: that's what read as a flat band (owner,
+     2026-11-06). Follows the level itself: squared, normal speech came out too pale. */
+  .lx-callglow-you {
+    -webkit-mask-image: none;
+    mask-image: none;
+    inset: 0 -12%;
+    background:
+      radial-gradient(
+        84% 42% at 58% 100%,
+        color-mix(in srgb, var(--accent) 78%, transparent) 0%,
+        color-mix(in srgb, var(--accent) 46%, transparent) 50%,
+        transparent 100%
+      ),
+      radial-gradient(
+        46% 18% at 12% 100%,
+        color-mix(in srgb, var(--accent) 42%, transparent),
+        transparent
+      );
+    opacity: min(0.95, calc(var(--lx-orb-you, 0) * 1.05));
+    transform-origin: bottom;
+    transform: scaleY(calc(0.78 + var(--lx-orb-you, 0) * 0.27));
+    transition: opacity 0.2s ease;
+  }
+  /* While Lucius talks the light is his: talking over him lights the mic alone (owner, 2026-11-06). */
+  .lx-callglow[data-lucius-talking] .lx-callglow-you {
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .lx-callglow-you {
+      animation: lx-callglow-drift 9s ease-in-out infinite alternate;
+    }
+  }
+  @keyframes lx-callglow-drift {
+    from {
+      translate: -7% 0;
+    }
+    to {
+      translate: 7% 0;
+    }
+  }
+  .lx-callglow-lucius {
+    /* The phone's own corners, or the light cuts across them. */
+    border-radius: 0 0 3.5rem 3.5rem;
+    box-shadow:
+      inset 0 -4px 14px -4px color-mix(in srgb, var(--lucius) 90%, transparent),
+      inset 0 -22px 56px -18px color-mix(in srgb, var(--lucius) 75%, transparent);
+    opacity: min(1, calc(var(--lx-orb-lucius, 0) * 1.3));
+  }
+  .lx-callglow-wave {
+    position: absolute;
+    left: 50%;
+    top: 42%;
+    width: 120vmax;
+    height: 120vmax;
+    margin: -60vmax 0 0 -60vmax;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      color-mix(in srgb, var(--lucius) 60%, transparent),
+      transparent 65%
+    );
+    opacity: 0;
+  }
+  /* No moving levels for someone who asked for less motion: a steady light says the same thing. */
+  @media (prefers-reduced-motion: reduce) {
+    .lx-callglow[data-speaker='you']:not([data-lucius-talking]) .lx-callglow-you,
+    .lx-callglow[data-speaker='lucius'] .lx-callglow-lucius {
+      opacity: 0.7;
+    }
+  }
   .lx-callstage-top {
     align-self: stretch;
     display: flex;
@@ -1058,6 +1152,28 @@
   }
   .lx-callstage--screen .lx-callstage-clock {
     font-size: var(--text-md);
+  }
+  /* The clock's own row on the card; on the full screen, centred between the two round buttons. */
+  .lx-callstage-when {
+    display: contents;
+  }
+  .lx-callstage--screen .lx-callstage-when {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+  }
+  .lx-callstage--screen .lx-callstage-clock {
+    flex: none;
+  }
+  .lx-callstage--screen .lx-callstage-top > .lx-callstage-min {
+    border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+    background: color-mix(in srgb, var(--bg) 45%, transparent);
+    color: var(--ink);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    backdrop-filter: blur(20px) saturate(1.4);
   }
   .lx-callstage-signal {
     --lx-signal-on: var(--good);
@@ -1189,15 +1305,180 @@
     background: var(--bad);
     color: var(--ink-on-cta);
   }
-  .lx-callstage--screen .lx-callstage-btn {
+  /* The phone's full screen, laid out like the voice modes people know (owner, 2026-11-06): the mic
+     big and raised on its own, the rest small along the bottom, and End alone on the right. */
+  .lx-callstage--screen .lx-callstage-controls {
+    align-self: stretch;
+    display: grid;
+    grid-template-columns: auto minmax(0, auto) 1fr auto auto;
+    align-items: center;
+    column-gap: var(--space-2);
+    row-gap: var(--space-4);
+  }
+  .lx-callstage-attachnote {
+    grid-row: 1;
+    grid-column: 1 / -1;
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--muted);
+    text-align: center;
+    overflow-wrap: anywhere;
+  }
+  .lx-callstage-ctl--mic {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
+  .lx-callstage-ctl--attach,
+  .lx-callstage-ctl--model,
+  .lx-callstage-ctl--type,
+  .lx-callstage-ctl--end {
+    grid-row: 3;
+  }
+  .lx-callstage-ctl--attach {
+    grid-column: 1;
+  }
+  .lx-callstage-ctl--model {
+    grid-column: 2;
+    min-width: 0;
+    align-items: stretch;
+  }
+  .lx-callstage-ctl--type {
+    grid-column: 4;
+  }
+  .lx-callstage-ctl--end {
+    grid-column: 5;
+  }
+  /* The sheet behind the gear. */
+  .lx-callsettings {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+  .lx-callsettings-scrim {
+    position: absolute;
+    inset: 0;
+    border: none;
+    background: color-mix(in srgb, #000 28%, transparent);
+    cursor: default;
+  }
+  .lx-callsettings-sheet {
+    position: relative;
+    max-height: 90dvh;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-4) max(var(--space-4), var(--safe-r)) max(var(--space-8), var(--safe-b))
+      max(var(--space-4), var(--safe-l));
+    border-radius: 1.75rem 1.75rem 0 0;
+    background: var(--bg);
+  }
+  .lx-callsettings-head {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--tap-min);
+    margin-bottom: var(--space-3);
+  }
+  .lx-callsettings-head .lx-callstage-min {
+    position: absolute;
+    left: 0;
+    color: var(--ink);
+    border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent);
+  }
+  .lx-callsettings-head h2 {
+    margin: 0;
+    font-size: var(--text-lg);
+    font-weight: 600;
+  }
+  .lx-callsettings-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-height: calc(var(--tap-min) * 1.25);
+    padding: var(--space-2) var(--space-5);
+    border-radius: 1.5rem;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    font-size: var(--text-md);
+  }
+  .lx-callsettings-value {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    color: var(--muted);
+    text-align: right;
+  }
+  .lx-callsettings-value svg {
+    flex: none;
+  }
+  /* The phone's own menu, opened by tapping anywhere on the row. 16px: iOS zooms in on less. */
+  .lx-callsettings-row select {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    opacity: 0;
+    font-size: 16px;
+    cursor: pointer;
+  }
+  /* Frosted, so the call's light passes through them (owner, 2026-11-06). */
+  .lx-callstage--screen .lx-callstage-ctl--mic .lx-callstage-btn {
     --lx-callstage-btn: calc(var(--tap-min) * 1.5);
+  }
+  .lx-callstage--screen .lx-callstage-btn {
+    background: color-mix(in srgb, var(--bg) 45%, transparent);
+    border-color: color-mix(in srgb, var(--ink) 14%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    backdrop-filter: blur(20px) saturate(1.4);
+  }
+  /* The mic's light: only while you talk, over Lucius too, and never for his voice (owner,
+     2026-11-06). Squared like the glow so a quiet line stays dark. Under the icon, and never in
+     the way of a tap. */
+  .lx-callstage--screen .lx-callstage-btn {
+    position: relative;
+  }
+  .lx-callstage--screen .lx-callstage-btn svg {
+    position: relative;
+  }
+  .lx-callstage-miclight {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    background: color-mix(in srgb, var(--accent) 38%, transparent);
+    box-shadow: 0 0 20px 4px color-mix(in srgb, var(--accent) 70%, transparent);
+    opacity: calc(var(--lx-orb-you, 0) * var(--lx-orb-you, 0));
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .lx-callstage-miclight {
+      opacity: 0;
+    }
+    .lx-callstage-miclight[data-speaker='you'] {
+      opacity: 0.8;
+    }
+  }
+  .lx-callstage--screen .lx-callstage-btn[aria-pressed='true'] {
+    background: color-mix(in srgb, var(--ink) 72%, transparent);
+    border-color: transparent;
+  }
+  .lx-callstage--screen .lx-callstage-btn--end {
+    background: color-mix(in srgb, var(--bad) 74%, transparent);
+    border-color: transparent;
   }
   .lx-callstage-label {
     font-size: var(--text-xs);
     color: var(--muted);
   }
+  /* Icons alone on the full call screen; each button still has its name for a screen reader. */
   .lx-callstage--screen .lx-callstage-label {
-    font-size: var(--text-sm);
+    display: none;
   }
   @media (hover: hover) {
     .lx-callstage-min:hover {

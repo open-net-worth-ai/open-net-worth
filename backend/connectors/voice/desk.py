@@ -27,9 +27,17 @@ log = logging.getLogger(__name__)
 
 VOICE_NOTE = (
     "This message was spoken on a live voice call and your reply will be read aloud word "
-    "for word. Answer in one to three short spoken sentences: no markdown, lists, tables or "
-    "emoji; round amounts the way a person says them. A voice assistant in front of you has "
-    "already told the owner you're on it and what about, so don't announce lookups or say "
+    "for word, so what you say is all they get: they may not be looking at a screen. Keep it "
+    "to one or two short sentences, about 30 words at most: the answer first, with only the "
+    "figures they asked for. If there's more worth knowing, don't say it: offer it in a few "
+    'words ("Want the breakdown?"). If they ask for a list, say it in a sentence: the top few '
+    "by name, with their amounts if they matter, and how many there are in all, then offer the "
+    "rest. Only go longer when they ask for the detail. Don't put anything on the screen or "
+    "point them to the chat unless they ask to see it. If they do, say in one sentence that "
+    "it's on screen, and put it in a markdown table: its rows are shown and not read aloud. "
+    "Otherwise no markdown, lists, tables or emoji; round amounts the way a person says them. "
+    "A voice assistant in front of "
+    "you has already told the owner you're on it and what about, so don't announce lookups or say "
     "their request back to them, unless you need them to confirm a detail. Say only what has "
     "happened: a tool that gave you a result has run, so never call it waiting for approval. "
     "Don't say beforehand that a change will need approving: you can't know, and when it does "
@@ -138,7 +146,6 @@ async def ask(
     *,
     understood: str = "",
     shown: bool = False,
-    model_ref: str = "",
     unheard: bool = False,
 ) -> AsyncIterator[DeskEvent]:
     """Run ``said`` (the owner's own transcribed words) as their next message on
@@ -164,7 +171,6 @@ async def ask(
         return conversation.stream_turn(
             session_id,
             [{"role": "user", "content": content}],
-            model_ref=model_ref or None,
             effort="low",
             surface="chat:voice",
             turn_id=turn_id,

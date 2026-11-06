@@ -46,16 +46,13 @@ def linked(monkeypatch):
     )
     allowed = {"on": True}
     monkeypatch.setattr(service, "calls_allowed", lambda: allowed["on"])
-    monkeypatch.setattr(host, "_lucius_model", lambda: "owner-pick")
-    models: list[str] = []
 
-    async def ask(session_id, said, *, understood="", shown=False, model_ref=""):
-        models.append(model_ref)
+    async def ask(session_id, said, *, understood="", shown=False, unheard=False):
         yield DeskEvent("text", f"answer to {said}")
         yield DeskEvent("end")
 
     monkeypatch.setattr(desk, "ask", ask)
-    link.allowed, link.models = allowed, models
+    link.allowed = allowed
     yield link
     # Close both pipes so each reader sees the end and returns: no thread outlives the test.
     to_app_w.close()
@@ -93,7 +90,6 @@ def test_the_app_holds_the_limits_itself_not_the_worker(linked, monkeypatch):
     async def run():
         assert await linked.call("claim_call", room="r1") == "sess-call"
         await ask()
-        assert linked.models == ["owner-pick"]  # the owner's setting, never the worker's
         for _ in range(host.MAX_ASKS_PER_MINUTE - 1):
             await ask()
         with pytest.raises(AppError):  # past the per-minute cap

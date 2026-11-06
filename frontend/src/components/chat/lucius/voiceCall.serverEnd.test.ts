@@ -42,7 +42,12 @@ vi.mock('livekit-client', () => ({
   },
   Track: { Kind: { Audio: 'audio' } },
   DisconnectReason: { CLIENT_INITIATED: 1, ROOM_DELETED: 5 },
-  createLocalAudioTrack: vi.fn(async () => ({ stop: vi.fn(), mediaStreamTrack: {} })),
+  createLocalAudioTrack: vi.fn(async () => ({
+    stop: vi.fn(),
+    mute: vi.fn(async () => {}),
+    unmute: vi.fn(async () => {}),
+    mediaStreamTrack: {},
+  })),
 }))
 const serverProblem: { current: { kind: string; message: string } | null } = vi.hoisted(() => ({
   current: null,
@@ -52,7 +57,7 @@ vi.mock('../../../api/client', () => ({
     ok: true,
     json: async () =>
       url === '/api/voice/config'
-        ? { worker: { call_problem: serverProblem.current } }
+        ? { worker: { running: true, call_problem: serverProblem.current } }
         : { url: 'wss://acme.example', token: 't', session_id: 's1' },
   })),
 }))
@@ -64,12 +69,16 @@ import {
   LEFT_GRACE_MS,
   PICKUP_TIMEOUT_MS,
   minimizeCall,
+  readLevels,
   resetVoiceCallForTests,
+  restartCall,
   startCall,
+  toggleMute,
   useVoiceCall,
 } from './voiceCall'
 import { page, saveNeedsReload, takeReloadNotice } from './voicePagePolicy'
 import { renderHook } from '@testing-library/react'
+import { createLocalAudioTrack } from 'livekit-client'
 import { authFetch } from '../../../api/client'
 
 function state() {
@@ -277,6 +286,352 @@ describe('starting a call', () => {
   })
 })
 
+describe('muting before Lucius picks up', () => {
+  const openedMic = () => vi.mocked(createLocalAudioTrack).mock.results.at(-1)!.value
+
+  it('mutes while it rings, and stays muted when he answers', async () => {
+    await startCall('s1')
+    expect(state().phase).toBe('ringing')
+    await toggleMute()
+    expect(state().muted).toBe(true)
+    expect((await openedMic()).mute).toHaveBeenCalledOnce()
+    const room = FakeRoom.last
+    room.remoteParticipants.set('lucius', { identity: 'lucius' })
+    room.emit('participantConnected')
+    room.emit('activeSpeakersChanged', [{ identity: 'lucius' }])
+    expect(state().phase).toBe('live')
+    expect(state().muted).toBe(true)
+  })
+
+  it('holds a press made while the microphone is still opening', async () => {
+    const calling = startCall('s1')
+    expect(state().phase).toBe('connecting')
+    await toggleMute()
+    await calling
+    expect(state().muted).toBe(true)
+    expect((await openedMic()).mute).toHaveBeenCalledOnce()
+  })
+
+  it('unmutes the same way', async () => {
+    await startCall('s1')
+    await toggleMute()
+    await toggleMute()
+    expect(state().muted).toBe(false)
+    expect((await openedMic()).unmute).toHaveBeenCalledOnce()
+  })
+
+  it('does nothing with no call on', async () => {
+    await toggleMute()
+    expect(state().muted).toBe(false)
+  })
+})
+
+describe('how loud you are', () => {
+  const openedMic = () => vi.mocked(createLocalAudioTrack).mock.results.at(-1)!.value
+
+  it("uses LiveKit's level when the page's own reads nothing, as on an iPhone", async () => {
+    const room = await liveCall()
+    expect(readLevels().you).toBe(0)
+    ;(room.localParticipant as unknown as { audioLevel: number }).audioLevel = 0.4
+    expect(readLevels().you).toBe(0.4)
+  })
+
+  it('reads nothing while muted, whatever LiveKit last said', async () => {
+    const room = await liveCall()
+    ;(room.localParticipant as unknown as { audioLevel: number }).audioLevel = 0.4
+    await toggleMute()
+    expect(readLevels().you).toBe(0)
+    await toggleMute()
+    expect(readLevels().you).toBe(0.4)
+  })
+
+  describe('with Lucius on the speaker', () => {
+    // A level for each side, by the track the meter is on: what the analyser would read.
+    let levels: Map<unknown, number>
+
+    beforeEach(() => {
+      levels = new Map()
+      vi.stubGlobal(
+        'AudioContext',
+        class {
+          currentTime = 0
+          destination = {}
+          resume = vi.fn(async () => {})
+          close = vi.fn(async () => {})
+          createAnalyser = () => ({
+            fftSize: 512,
+            source: null as unknown,
+            getFloatTimeDomainData(this: { source: unknown }, out: Float32Array) {
+              out.fill(levels.get(this.source) ?? 0)
+            },
+          })
+          createMediaStreamSource = (stream: { track: unknown }) => ({
+            connect: (analyser: { source: unknown }) => {
+              analyser.source = stream.track
+            },
+          })
+          createGain = () => ({
+            connect: vi.fn(),
+            gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+          })
+          createOscillator = () => ({
+            frequency: { value: 0 },
+            connect: vi.fn(),
+            start: vi.fn(),
+            stop: vi.fn(),
+          })
+        },
+      )
+      vi.stubGlobal(
+        'MediaStream',
+        class {
+          track: unknown
+          constructor(tracks: unknown[]) {
+            this.track = tracks[0]
+          }
+        },
+      )
+    })
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    async function onSpeaker() {
+      await startCall('s1')
+      const mine = (await openedMic()).mediaStreamTrack
+      const his = {}
+      FakeRoom.last.emit('trackSubscribed', {
+        kind: 'audio',
+        mediaStreamTrack: his,
+        attach: () => document.createElement('audio'),
+      })
+      return { mine, his }
+    }
+
+    it('does not take his voice in the mic for you talking', async () => {
+      const { mine, his } = await onSpeaker()
+      levels.set(mine, 0.2) // the mic hears the speaker
+      levels.set(his, 0.2)
+      const heard = readLevels()
+      expect(heard.lucius).toBeGreaterThan(0)
+      expect(heard.you).toBe(0)
+    })
+
+    it('shows you when you cut in, louder than he is', async () => {
+      const { mine, his } = await onSpeaker()
+      levels.set(his, 0.1)
+      levels.set(mine, 0.3)
+      const heard = readLevels()
+      expect(heard.you).toBeGreaterThan(0) // the mic's light still shows you
+      expect(heard.luciusTalking).toBe(true) // and the wash knows the light is his
+    })
+
+    it('stays quiet through the gaps between his words, then shows you', async () => {
+      const { mine, his } = await onSpeaker()
+      levels.set(mine, 0.2)
+      levels.set(his, 0.2)
+      readLevels()
+      levels.set(his, 0)
+      levels.set(mine, 0) // the room's echo fades with him
+      expect(readLevels().you).toBe(0)
+      vi.advanceTimersByTime(600)
+      levels.set(mine, 0.2)
+      expect(readLevels().you).toBeGreaterThan(0)
+    })
+
+    it('shows you straight away while he is silent', async () => {
+      const { mine } = await onSpeaker()
+      levels.set(mine, 0.2)
+      expect(readLevels().you).toBeGreaterThan(0)
+    })
+  })
+
+  describe('after unmuting onto a new track', () => {
+    let listeningTo: unknown[] = []
+
+    beforeEach(() => {
+      listeningTo = []
+      vi.stubGlobal(
+        'AudioContext',
+        class {
+          currentTime = 0
+          destination = {}
+          resume = vi.fn(async () => {})
+          close = vi.fn(async () => {})
+          createAnalyser = () => ({ fftSize: 0, getFloatTimeDomainData: vi.fn() })
+          createMediaStreamSource = (stream: { track: unknown }) => {
+            listeningTo.push(stream.track)
+            return { connect: vi.fn() }
+          }
+          createGain = () => ({
+            connect: vi.fn(),
+            gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+          })
+          createOscillator = () => ({
+            frequency: { value: 0 },
+            connect: vi.fn(),
+            start: vi.fn(),
+            stop: vi.fn(),
+          })
+        },
+      )
+      vi.stubGlobal(
+        'MediaStream',
+        class {
+          track: unknown
+          constructor(tracks: unknown[]) {
+            this.track = tracks[0]
+          }
+        },
+      )
+    })
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    it('listens to the new track, not the dead one', async () => {
+      await startCall('s1')
+      const track = await openedMic()
+      const fresh = { id: 'reacquired' }
+      track.unmute.mockImplementation(async () => {
+        track.mediaStreamTrack = fresh
+      })
+      await toggleMute()
+      await toggleMute()
+      expect(listeningTo.at(-1)).toBe(fresh)
+    })
+
+    it('leaves it alone when the track stayed the same', async () => {
+      await startCall('s1')
+      const before = listeningTo.length
+      await toggleMute()
+      await toggleMute()
+      expect(listeningTo).toHaveLength(before)
+    })
+  })
+})
+
+describe('restarting a call', () => {
+  it('hangs up, runs the change, and calls back into the same conversation', async () => {
+    const first = await liveCall()
+    const seen: string[] = []
+    await restartCall(async () => {
+      seen.push(state().phase)
+      expect(FakeRoom.last).toBe(first) // no new call until the change is done
+    })
+    expect(seen).toEqual(['connecting'])
+    expect(FakeRoom.last).not.toBe(first)
+    expect(state().phase).toBe('ringing')
+    expect(state().sessionId).toBe('s1')
+    expect(state().problem).toBeNull()
+  })
+
+  it('restarts a call still opening the microphone, and drops that first attempt', async () => {
+    let openMic = (_mic: unknown) => {}
+    vi.mocked(createLocalAudioTrack).mockImplementationOnce(
+      () => new Promise((done) => (openMic = done)) as never,
+    )
+    const starting = startCall('s1')
+    await restartCall(async () => {})
+    expect(state().phase).toBe('ringing')
+    const restarted = FakeRoom.last
+    const stale = { stop: vi.fn() }
+    openMic(stale)
+    await starting
+    expect(stale.stop).toHaveBeenCalledOnce()
+    expect(FakeRoom.last).toBe(restarted)
+    expect(state().phase).toBe('ringing')
+  })
+
+  it('keeps the full screen it was on', async () => {
+    await startCall('s1', 'stage')
+    await restartCall(async () => {})
+    expect(state().view).toBe('stage')
+  })
+
+  it('only runs the change with no call on', async () => {
+    const change = vi.fn(async () => {})
+    await restartCall(change)
+    expect(change).toHaveBeenCalledOnce()
+    expect(state().phase).toBe('idle')
+  })
+
+  it('says so and stays hung up when the change is refused', async () => {
+    const first = await liveCall()
+    await restartCall(async () => {
+      throw new Error('That voice cannot speak Hindi.')
+    })
+    expect(FakeRoom.last).toBe(first)
+    expect(state().phase).toBe('idle')
+    expect(state().problem?.message).toBe('That voice cannot speak Hindi.')
+  })
+
+  it('does not call back if you ended the call meanwhile', async () => {
+    const first = await liveCall()
+    await restartCall(async () => {
+      await hangUp()
+    })
+    expect(FakeRoom.last).toBe(first)
+    expect(state().phase).toBe('idle')
+  })
+})
+
+describe('the sound of muting', () => {
+  let played: number[] = []
+
+  beforeEach(() => {
+    played = []
+    class FakeContext {
+      currentTime = 0
+      destination = {}
+      resume = vi.fn(async () => {})
+      close = vi.fn(async () => {})
+      createAnalyser = () => ({ fftSize: 0, getFloatTimeDomainData: vi.fn() })
+      createMediaStreamSource = () => ({ connect: vi.fn() })
+      createGain = () => ({
+        connect: vi.fn(),
+        gain: { setValueAtTime: vi.fn(), exponentialRampToValueAtTime: vi.fn() },
+      })
+      createOscillator() {
+        const osc = { frequency: { value: 0 }, connect: vi.fn(), start: vi.fn(), stop: vi.fn() }
+        osc.start = vi.fn(() => void played.push(osc.frequency.value))
+        return osc
+      }
+    }
+    vi.stubGlobal('AudioContext', FakeContext)
+    vi.stubGlobal('MediaStream', class {})
+  })
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  async function afterTheRing() {
+    await startCall('s1')
+    played = []
+  }
+
+  it('falls for muted and rises for live again', async () => {
+    await afterTheRing()
+    await toggleMute()
+    expect(played).toEqual([660, 440])
+    played = []
+    await toggleMute()
+    expect(played).toEqual([440, 660])
+  })
+
+  it('plays from the moment you press Call, before he picks up', async () => {
+    await afterTheRing()
+    expect(state().phase).toBe('ringing')
+    await toggleMute()
+    expect(played).toHaveLength(2)
+  })
+
+  it('stays quiet with no call on', async () => {
+    await toggleMute()
+    expect(played).toEqual([])
+  })
+})
+
 describe('the connection rating', () => {
   const you = { identity: 'owner' }
   const lucius = { identity: 'lucius' }
@@ -342,6 +697,20 @@ describe("Lucius's side of the call dropping", () => {
   })
   const askAgain = () => vi.advanceTimersByTimeAsync(HEALTH_MS)
 
+  it('reports what the mic is doing with each check, never sound', async () => {
+    health(answers(false))
+    await liveCall()
+    await askAgain()
+    const asked = vi
+      .mocked(authFetch)
+      .mock.calls.map(([url]) => String(url))
+      .find((url) => url.startsWith('/api/voice/call/health'))!
+    const report = new URL(asked, 'http://acme.test').searchParams.get('mic')
+    expect(report).toMatch(
+      /^track=\w+,system_muted=[01],enabled=[01],app_muted=[01],audio=\w+,peak=[\d.]+,server_peak=[\d.]+,page=\w+$/,
+    )
+  })
+
   afterEach(() => {
     vi.mocked(authFetch).mockReset()
     vi.mocked(authFetch).mockImplementation(async (url) => {
@@ -349,7 +718,7 @@ describe("Lucius's side of the call dropping", () => {
         ok: true,
         json: async () =>
           url === '/api/voice/config'
-            ? { worker: { call_problem: serverProblem.current } }
+            ? { worker: { running: true, call_problem: serverProblem.current } }
             : { url: 'wss://acme.example', token: 't', session_id: 's1' },
       } as Response
     })

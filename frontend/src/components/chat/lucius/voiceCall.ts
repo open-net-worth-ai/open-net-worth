@@ -18,6 +18,7 @@ import {
   takeReloadNotice,
   watchPolicyBlock,
 } from './voicePagePolicy'
+import { playMuteTone } from './voiceCallSounds'
 
 // One voice call for the whole app (`voice_calls` flag), held OUTSIDE React. The first build kept
 // the LiveKit room inside the Call button, so a chat that re-laid its composer (the landing screen
@@ -204,13 +205,17 @@ function meter(side: Side, track: MediaStreamTrack): void {
   void levelCtx.resume()
 }
 
-function rms(side: Side): number {
+function rawLevel(side: Side): number {
   const m = meters[side]
   if (!m) return 0
   m.analyser.getFloatTimeDomainData(m.samples)
   let sum = 0
   for (const v of m.samples) sum += v * v
-  const level = Math.sqrt(sum / m.samples.length)
+  return Math.sqrt(sum / m.samples.length)
+}
+
+function rms(side: Side): number {
+  const level = rawLevel(side)
   // Lucius's voice arrives at full volume (speech ~0.02–0.2 RMS). Yours comes through the
   // browser's echo cancelling and noise suppression, much quieter: a higher gain above a small
   // noise floor, so the orb answers your voice as readily as his (owner, 2026-11-03).
@@ -221,8 +226,32 @@ function rms(side: Side): number {
 const MIC_FLOOR = 0.004
 const MIC_GAIN = 16
 
-export function readLevels(): { lucius: number; you: number } {
-  return { lucius: rms('lucius'), you: state.muted ? 0 : rms('you') }
+/** How loud LiveKit says you are, from the audio it receives. An iPhone's analyser on the mic read
+ *  exactly zero through a whole call while Lucius answered every word, so nothing moved when you
+ *  spoke (owner's phone, 2026-11-06). Coarser than the analyser, but it's never wrong about that. */
+function serverLevel(): number {
+  return room?.localParticipant.audioLevel ?? 0
+}
+
+// How loud his voice must be to count as him talking, and how long after it to keep counting: it
+// dips between words, and the room rings on a moment after he stops.
+const LUCIUS_TALKING = 0.05
+const LUCIUS_TAIL_MS = 500
+let luciusHeardAt = -Infinity
+
+export function readLevels(): { lucius: number; you: number; luciusTalking: boolean } {
+  const lucius = rms('lucius')
+  const now = performance.now()
+  if (lucius > LUCIUS_TALKING) luciusHeardAt = now
+  const luciusTalking = now - luciusHeardAt < LUCIUS_TAIL_MS
+  if (state.muted) return { lucius, you: 0, luciusTalking }
+  // On speaker the mic hears him too, and it read as you talking (owner, 2026-11-06). So while he
+  // is talking, you only count when the mic is louder than he is: echo stays under his own level,
+  // and someone cutting in goes over it.
+  if (luciusTalking && rawLevel('you') <= rawLevel('lucius')) {
+    return { lucius, you: 0, luciusTalking }
+  }
+  return { lucius, you: rms('you') || serverLevel(), luciusTalking }
 }
 
 function closeLevels(): void {
@@ -273,10 +302,39 @@ export const HEALTH_MS = 2000
 const HEALTH_TIMEOUT_MS = 2500
 const HEALTH_MISSES = 2
 let healthTimer: number | undefined
+let micTimer: number | undefined
+let micPeak = 0
+let serverPeak = 0
+
+/** What the phone's mic is doing, for the server's log: state and loudness, never sound. "The mic
+ *  misses me on a quiet line" had nothing to go on, as only the phone knows this (owner, 2026-11-06). */
+function micReport(): string {
+  const track = mic?.mediaStreamTrack
+  const report = [
+    `track=${track?.readyState ?? 'none'}`,
+    `system_muted=${track?.muted ? 1 : 0}`,
+    `enabled=${track?.enabled ? 1 : 0}`,
+    `app_muted=${state.muted ? 1 : 0}`,
+    `audio=${levelCtx?.state ?? 'none'}`,
+    `peak=${micPeak.toFixed(3)}`,
+    `server_peak=${serverPeak.toFixed(3)}`,
+    `page=${document.visibilityState}`,
+  ].join(',')
+  micPeak = 0
+  serverPeak = 0
+  return report
+}
 
 function watchLuciusLine(roomName: string): void {
   let misses = 0
   let asking = false
+  // Between reports, or a word said between two of them would never show.
+  micPeak = 0
+  serverPeak = 0
+  micTimer = window.setInterval(() => {
+    micPeak = Math.max(micPeak, rawLevel('you'))
+    serverPeak = Math.max(serverPeak, serverLevel())
+  }, 100)
   healthTimer = window.setInterval(async () => {
     if (asking || state.phase !== 'live') return
     asking = true
@@ -285,7 +343,8 @@ function watchLuciusLine(roomName: string): void {
     let said = false
     let working = false
     try {
-      const r = await authFetch(`/api/voice/call/health?room=${encodeURIComponent(roomName)}`, {
+      const query = `room=${encodeURIComponent(roomName)}&mic=${encodeURIComponent(micReport())}`
+      const r = await authFetch(`/api/voice/call/health?${query}`, {
         signal: giveUp.signal,
       })
       // A tunnel answers 5xx for an app it can't reach; a 4xx is the app itself, so it's there.
@@ -348,6 +407,7 @@ let mic: LocalAudioTrack | null = null
 function teardown() {
   window.clearInterval(followTimer)
   window.clearInterval(healthTimer)
+  window.clearInterval(micTimer)
   window.clearTimeout(leftTimer)
   window.clearTimeout(pickupTimer)
   qualities.clear()
@@ -385,7 +445,9 @@ function finish(problem: CallProblem | null) {
 }
 
 export async function startCall(sessionId: string, view: CallState['view'] = 'bar'): Promise<void> {
-  if (room || state.phase === 'connecting') return
+  if (room || (state.phase === 'connecting' && !restarting)) return
+  restarting = false
+  const thisCall = ++callAttempt
   window.clearTimeout(endedTimer)
   callSession = sessionId || null
   if (!navigator.mediaDevices?.getUserMedia) {
@@ -411,18 +473,20 @@ export async function startCall(sessionId: string, view: CallState['view'] = 'ba
     // the second one, every time it opened mid-ring (owner, 2026-11-03).
     const opened = await createLocalAudioTrack()
     // Read afresh: a hang-up while the microphone opened changed it (TS keeps the narrowed type).
-    if ((state.phase as CallPhase) !== 'connecting') {
+    if (thisCall !== callAttempt || (state.phase as CallPhase) !== 'connecting') {
       opened.stop() // hung up while the microphone was opening
       return
     }
     mic = opened
     meter('you', opened.mediaStreamTrack)
     stopRing = startRingback()
+    if (state.muted) await opened.mute() // pressed Mute while the microphone was opening
     const r = await authFetch('/api/voice/call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId || null }),
     })
+    if (thisCall !== callAttempt) return
     if (!r.ok) {
       const d = await r.json().catch(() => ({}))
       teardown()
@@ -507,6 +571,7 @@ export async function startCall(sessionId: string, view: CallState['view'] = 'ba
     watchDeviceNetwork()
     await next.localParticipant.publishTrack(mic)
   } catch (e) {
+    if (thisCall !== callAttempt) return // a restart has already replaced this attempt
     // Hanging up while it was still connecting rejects the connect ("Client initiated
     // disconnect"): what you just did, not a problem to report (owner, 2026-11-04).
     const mine = localHangUp
@@ -548,12 +613,73 @@ export async function hangUp(): Promise<void> {
   else finish(null)
 }
 
+/** Works from the moment you press Call: you may not want to be heard when Lucius picks up. */
 export async function toggleMute(): Promise<void> {
-  if (!room) return
+  if (state.phase === 'idle' || state.phase === 'ended') return
   const muted = !state.muted
-  // The call's own track: "enable the microphone" could open a SECOND one beside it.
-  if (mic) await (muted ? mic.mute() : mic.unmute())
   set({ muted })
+  if (levelCtx) playMuteTone(levelCtx, muted)
+  // The call's own track: "enable the microphone" could open a SECOND one beside it.
+  if (!mic) return
+  const before = mic.mediaStreamTrack
+  await (muted ? mic.mute() : mic.unmute())
+  // Unmuting can reacquire the mic as a new track, and the level was left listening to the dead
+  // one: nothing moved when you spoke after that (owner's phone, 2026-11-06).
+  if (mic && mic.mediaStreamTrack !== before) meter('you', mic.mediaStreamTrack)
+}
+
+const WORKER_WAIT_MS = 30_000
+const WORKER_POLL_MS = 500
+let restarting = false
+/** Which start is current: a restart can overtake one still opening the microphone or connecting,
+ *  and the phase can't tell them apart, since the new one is `connecting` too. */
+let callAttempt = 0
+
+/** Saving the voice settings restarts the worker, so it may be a few seconds before it can answer. */
+async function workerRunning(stillWanted: () => boolean): Promise<boolean> {
+  const giveUpAt = Date.now() + WORKER_WAIT_MS
+  while (stillWanted() && Date.now() < giveUpAt) {
+    try {
+      const r = await authFetch('/api/voice/config')
+      const config = r.ok ? ((await r.json()) as { worker?: { running?: boolean } }) : null
+      if (config?.worker?.running) return true
+    } catch {
+      // The app is restarting the worker, or the network blinked: ask again.
+    }
+    await new Promise((done) => window.setTimeout(done, WORKER_POLL_MS))
+  }
+  return false
+}
+
+/** Runs `change` with the call hung up, then calls back into the same conversation: a call reads
+ *  its settings once, when it starts, even one still connecting (owner, 2026-11-06). With no call on, it only runs `change`.
+ *  Ending the call meanwhile wins: nothing calls back. */
+export async function restartCall(change: () => Promise<void>): Promise<void> {
+  const { sessionId, view, phase } = state
+  if (phase === 'idle' || phase === 'ended') return change()
+  callAttempt++
+  await hangUp()
+  if (room) finish(null)
+  window.clearTimeout(endedTimer)
+  set({ ...IDLE, phase: 'connecting', sessionId, view })
+  const stillWanted = () => state.phase === 'connecting' && state.sessionId === sessionId
+  try {
+    await change()
+  } catch (e) {
+    if (stillWanted()) {
+      const message = e instanceof Error ? e.message : 'Could not change the voice settings.'
+      set({ ...IDLE, problem: { kind: 'other', message } })
+    }
+    return
+  }
+  const ready = await workerRunning(stillWanted)
+  if (!stillWanted()) return
+  if (!ready) {
+    set({ ...IDLE, problem: { kind: 'other', message: 'Voice calls are still starting up.' } })
+    return
+  }
+  restarting = true
+  await startCall(sessionId, view)
 }
 
 export function minimizeCall(): void {
@@ -573,6 +699,8 @@ export function resetVoiceCallForTests(): void {
   teardown()
   window.clearTimeout(endedTimer)
   callSession = null
+  luciusHeardAt = -Infinity
+  restarting = false
   state = IDLE
   listeners.forEach((l) => l())
 }

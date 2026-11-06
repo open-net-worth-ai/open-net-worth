@@ -1,24 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import { authFetch } from '../../../api/client'
-import { useModels } from '../../../hooks/useModels'
-import {
-  FormField,
-  ModelPicker,
-  PasswordField,
-  Stack,
-  Text,
-  TextField,
-  useSecretReveal,
-} from '../../ui'
+import { FormField, PasswordField, Stack, Text, TextField, useSecretReveal } from '../../ui'
+import { restartCall } from '../../chat/lucius/voiceCall'
 import { page, saveNeedsReload } from '../../chat/lucius/voicePagePolicy'
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
 import {
-  DEFAULT_VOICE_MODEL,
+  sttHears,
+  LANGUAGE_OPTIONS,
+  languagePatch,
   voiceCostLine,
   voiceIdAfterChange,
   voiceOptions,
-  voiceSpeaks,
 } from './voiceOptions'
 import { FieldSelect, VoicePicker } from './VoicePicker'
 
@@ -45,7 +38,6 @@ interface VoiceConfig {
   stt_model: string
   tts_model: string
   tts_voice: string
-  lucius_model: string
   language: string
   has_api_key: boolean
   has_api_secret: boolean
@@ -60,7 +52,6 @@ interface VoiceForm {
   stt_model: string
   tts_model: string
   tts_voice: string
-  lucius_model: string
   language: string
 }
 
@@ -72,24 +63,8 @@ const FRONT_OPTIONS = [
   { value: 'openai/gpt-4.1-mini', label: 'GPT-4.1 mini' },
   { value: 'openai/gpt-4.1-nano', label: 'GPT-4.1 nano' },
 ]
-// Codes as LiveKit Inference takes them; mirrors backend LANGUAGES (db/voice_config_store.py).
-const LANGUAGE_OPTIONS = [
-  { value: 'en', label: 'English' },
-  { value: 'vi', label: 'Vietnamese' },
-  { value: 'zh', label: 'Chinese' },
-  { value: 'ja', label: 'Japanese' },
-  { value: 'ko', label: 'Korean' },
-  { value: 'hi', label: 'Hindi' },
-  { value: 'id', label: 'Indonesian' },
-  { value: 'es', label: 'Spanish' },
-  { value: 'fr', label: 'French' },
-  { value: 'de', label: 'German' },
-  { value: 'pt', label: 'Portuguese' },
-]
-/** Hears English only — refused beside any other language (backend ENGLISH_ONLY_STT). */
-const ENGLISH_ONLY_STT = new Set(['assemblyai/universal-streaming'])
 const STT_OPTIONS = [
-  { value: 'auto', label: 'Automatic (the best model for your language)' },
+  { value: 'auto', label: 'Automatic (hears every language, expects finance words)' },
   { value: 'assemblyai/universal-streaming', label: 'AssemblyAI Universal (English)' },
   {
     value: 'assemblyai/universal-streaming-multilingual',
@@ -111,7 +86,6 @@ function formOf(c: VoiceConfig): VoiceForm {
     stt_model: c.stt_model,
     tts_model: c.tts_model,
     tts_voice: c.tts_voice || '',
-    lucius_model: c.lucius_model || '',
     language: c.language || 'en',
   }
 }
@@ -138,7 +112,6 @@ export function VoiceSection() {
   const [error, setError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveErr, setSaveErr] = useState<string | null>(null)
-  const { models } = useModels(true)
 
   function load() {
     setError(false)
@@ -165,16 +138,25 @@ export function VoiceSection() {
         stt_model: form.stt_model,
         tts_model: form.tts_model,
         tts_voice: form.tts_voice.trim(),
-        lucius_model: form.lucius_model,
         language: form.language,
       }
       if (form.api_key.trim()) body.api_key = form.api_key.trim()
       if (form.api_secret.trim()) body.api_secret = form.api_secret.trim()
-      const r = await authFetch('/api/voice/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
+      const put = () =>
+        authFetch('/api/voice/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+      let r!: Response
+      // A call reads its language once, when it starts: a new one restarts a call that's on.
+      if (form.language !== cfg.language) {
+        await restartCall(async () => {
+          r = await put()
+        })
+      } else {
+        r = await put()
+      }
       if (!r.ok) {
         const d = await r.json().catch(() => ({}))
         setSaveErr(d.detail || 'Could not save the Voice calls settings.')
@@ -250,15 +232,7 @@ export function VoiceSection() {
   // Another language beside a model that hears only English would mishear every word:
   // move to Automatic with it (the owner can still pick another model that hears it).
   const pickLanguage = (language: string) =>
-    setForm(
-      (f) =>
-        f && {
-          ...f,
-          language,
-          stt_model: language !== 'en' && ENGLISH_ONLY_STT.has(f.stt_model) ? 'auto' : f.stt_model,
-          ...(voiceSpeaks(f.tts_model, language) ? {} : withVoiceModel(f, DEFAULT_VOICE_MODEL)),
-        },
-    )
+    setForm((f) => f && { ...f, language, ...languagePatch(f, language) })
   const pickVoice = (model: string) => setForm((f) => f && { ...f, ...withVoiceModel(f, model) })
   const status = workerLine(cfg)
 
@@ -340,19 +314,6 @@ export function VoiceSection() {
         />
       </FormField>
       <FormField
-        label="Lucius on calls"
-        help="The model Lucius answers with during a call. A faster one keeps the waits short."
-      >
-        <ModelPicker
-          size="field"
-          label="Lucius on calls"
-          models={models}
-          value={form.lucius_model}
-          defaultLabel="Same as the conversation"
-          onChange={(next) => set('lucius_model', next)}
-        />
-      </FormField>
-      <FormField
         label="Language"
         htmlFor="conn-voice-language"
         help="What you'll speak on calls. Lucius hears it, answers in it, and his voice speaks it."
@@ -368,8 +329,8 @@ export function VoiceSection() {
         label="Speech to text"
         htmlFor="conn-voice-stt"
         error={
-          form.language !== 'en' && ENGLISH_ONLY_STT.has(form.stt_model)
-            ? 'This model hears English only. Pick Automatic.'
+          !sttHears(form.stt_model, form.language)
+            ? "This model doesn't hear your language. Pick Automatic."
             : undefined
         }
       >

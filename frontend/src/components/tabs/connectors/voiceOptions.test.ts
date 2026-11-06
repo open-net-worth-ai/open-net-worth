@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_VOICE_MODEL,
+  languagePatch,
   OTHER_VOICE,
   speakerChoice,
   speakerOptions,
@@ -103,5 +104,35 @@ describe('who speaks on a voice model', () => {
   it('points at the library of the model it is on', () => {
     expect(voiceLibrary(flash)?.name).toBe('Inworld')
     expect(voiceLibrary('elevenlabs/eleven_flash_v2_5')).toBeUndefined()
+  })
+})
+
+describe('what changes with the language', () => {
+  const flash = 'inworld/inworld-tts-2-flash'
+
+  it('changes nothing when the models already handle it', () => {
+    expect(
+      languagePatch({ stt_model: 'auto', tts_model: flash, tts_voice: 'Edward' }, 'vi'),
+    ).toEqual({})
+  })
+
+  it('moves an English-only ear to Automatic, except for English', () => {
+    const stt_model = 'assemblyai/universal-streaming'
+    expect(languagePatch({ stt_model, tts_model: flash }, 'vi').stt_model).toBe('auto')
+    expect(languagePatch({ stt_model, tts_model: flash }, 'en')).toEqual({})
+  })
+
+  it("moves a model that hears some languages when it can't hear this one", () => {
+    const stt_model = 'assemblyai/universal-streaming-multilingual'
+    expect(languagePatch({ stt_model, tts_model: flash }, 'vi').stt_model).toBe('auto')
+    expect(languagePatch({ stt_model, tts_model: flash }, 'es')).toEqual({})
+  })
+
+  it("moves a voice that can't speak it to the default, dropping the other provider's id", () => {
+    const patch = languagePatch(
+      { stt_model: 'auto', tts_model: 'assemblyai/assemblyai-tts-1', tts_voice: 'abc' },
+      'vi',
+    )
+    expect(patch).toEqual({ tts_model: DEFAULT_VOICE_MODEL, tts_voice: '' })
   })
 })

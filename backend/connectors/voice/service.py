@@ -16,6 +16,7 @@ import asyncio
 import importlib.util
 import logging
 import platform
+import re
 import sys
 import threading
 import time
@@ -27,6 +28,8 @@ from backend.db.voice_config_store import LANGUAGES, VoiceConfigStore, is_ready
 from backend.services.feature_flags import enabled as flag_enabled
 
 log = logging.getLogger(__name__)
+
+_MIC_REPORT = re.compile(r"[a-z_]+=[a-z0-9.]+(,[a-z_]+=[a-z0-9.]+){0,9}")
 
 FLAG = "voice_calls"
 _REQUIRED_MODULES = ("livekit.agents", "livekit.plugins.silero")
@@ -120,6 +123,13 @@ def call_session(room: str) -> Optional[str]:
     with _calls_lock:
         entry = _calls.get(room)
         return entry[0] if entry and entry[1] >= time.monotonic() else None
+
+
+def note_mic(report: str) -> None:
+    """What the caller's phone says its mic is doing: state and loudness, never sound or words. A
+    page's text going into the log, so anything but that shape is dropped."""
+    if _MIC_REPORT.fullmatch(report):
+        log.info("voice mic: %s", report)
 
 
 def claim_call(room: str) -> Optional[str]:

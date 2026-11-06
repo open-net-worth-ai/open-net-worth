@@ -226,7 +226,7 @@ export function VoiceCallPill({
             className="lx-dock-pill-btn"
             aria-pressed={call.muted}
             aria-label={call.muted ? 'Unmute' : 'Mute'}
-            disabled={call.phase !== 'live'}
+            disabled={call.phase === 'ended'}
             onClick={() => void toggleMute()}
           >
             {call.muted ? <MicOff size={14} /> : <Mic size={14} />}

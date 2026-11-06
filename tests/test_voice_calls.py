@@ -77,6 +77,49 @@ def test_every_route_is_absent_while_the_flag_is_off(client):
     assert client.post("/api/voice/call", json={}).status_code == 404
 
 
+def _sessions_client():
+    from backend.api.chat import router
+
+    app = FastAPI()
+    app.include_router(router)
+    return TestClient(app)
+
+
+def test_the_model_chosen_on_a_call_is_the_conversations_saved_at_once(db_isolated, monkeypatch):
+    """Owner, 2026-11-06: Lucius on a call IS the conversation's model. No typed message will
+    carry the choice to the server, so the next spoken answer would run on the old one."""
+    from backend.ai import conversation
+
+    chosen = []
+    monkeypatch.setattr(conversation, "select_session_model", lambda *a: chosen.append(a))
+    res = _sessions_client().patch("/api/sessions/sess-1", json={"model": "acme:fast"})
+    assert res.status_code == 200 and chosen == [("sess-1", "acme:fast")]
+
+
+def test_a_model_that_cannot_be_used_is_refused_on_a_call_too(db_isolated, monkeypatch):
+    from backend.ai import conversation
+    from backend.core.errors import ConfigurationError
+
+    def refuse(*_a):
+        raise ConfigurationError("That provider is off.")
+
+    monkeypatch.setattr(conversation, "select_session_model", refuse)
+    res = _sessions_client().patch("/api/sessions/sess-1", json={"model": "acme:fast"})
+    assert res.status_code == 422 and "provider is off" in res.json()["detail"]
+
+
+def test_a_call_has_no_model_setting_of_its_own():
+    import inspect
+
+    from backend.api.voice import VoiceConfigPatch
+    from backend.connectors.voice import desk
+    from backend.db.voice_config_store import CONFIG_DEFAULTS
+
+    assert "lucius_model" not in CONFIG_DEFAULTS
+    assert "lucius_model" not in VoiceConfigPatch.model_fields
+    assert "model_ref" not in inspect.signature(desk.ask).parameters  # the worker can't name one
+
+
 @pytest.mark.flags(voice_calls=True)
 def test_credentials_are_write_only(client):
     res = client.put(
@@ -228,7 +271,6 @@ def test_a_spoken_request_is_a_normal_web_turn_with_a_hidden_voice_note(monkeypa
                 "sess-1",
                 "what's my net worth",
                 understood="What's my net worth?",
-                model_ref="claude_cli:haiku",
             )
         ]
 
@@ -245,7 +287,7 @@ def test_a_spoken_request_is_a_normal_web_turn_with_a_hidden_voice_note(monkeypa
     assert said == {"type": "text", "text": "what's my net worth"}
     assert note["text"].startswith(HARNESS_NOTE_OPEN)
     assert "What's my net worth?" in note["text"] and "not the owner's" in note["text"]
-    assert captured["model_ref"] == "claude_cli:haiku" and captured["turn_id"] == "turn-1"
+    assert "model_ref" not in captured and captured["turn_id"] == "turn-1"
 
 
 def test_the_worker_only_joins_rooms_this_app_started():
@@ -299,6 +341,30 @@ def test_a_call_records_its_room_and_refuses_automation_conversations(client, mo
 
     monkeypatch.setattr(runs, "automation_run_for_session", lambda sid: ({"id": "a"}, {"id": "r"}))
     assert client.post("/api/voice/call", json={"session_id": "sess-auto"}).status_code == 423
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_a_phone_reports_its_mic_to_the_log_as_state_and_loudness_only(client, caplog, monkeypatch):
+    from backend.services import demo_calls
+
+    # A real room after the worker claimed it: gone from call_session, and the call is on.
+    assert service.call_session("voice-acme") is None
+    good = "track=live,system_muted=0,enabled=1,app_muted=0,audio=running,peak=0.012,server_peak=0.300,page=visible"
+
+    def ask(mic):
+        res = client.get("/api/voice/call/health", params={"room": "voice-acme", "mic": mic})
+        assert res.status_code == 200
+        return [r.getMessage() for r in caplog.records if r.getMessage().startswith("voice mic:")]
+
+    with caplog.at_level("INFO", logger=service.__name__):
+        assert ask(good) == [f"voice mic: {good}"]
+        caplog.clear()
+        # Nothing that isn't that shape: this is a page's text going into the log.
+        assert ask("track=live\nvoice mic: forged") == []
+        assert ask("my password is hunter2") == []
+        assert ask("") == []
+        monkeypatch.setattr(demo_calls, "enabled", lambda: True)
+        assert ask(good) == []
 
 
 @pytest.mark.flags(voice_calls=True)
@@ -1121,7 +1187,7 @@ def test_a_call_can_be_held_in_vietnamese_but_never_with_an_english_only_ear(cli
     """Owner, 2026-11-03: a call in Vietnamese went unheard — the speech-to-text was pinned to
     English. The language is a setting now, refused beside a model that hears English only."""
     refused = client.put("/api/voice/config", json={"language": "vi"})  # default STT: English-only
-    assert refused.status_code == 422 and "English only" in refused.json()["detail"]
+    assert refused.status_code == 422 and "doesn't hear" in refused.json()["detail"]
     ok = client.put("/api/voice/config", json={"language": "vi", "stt_model": "auto"})
     assert ok.status_code == 200 and ok.json()["language"] == "vi"
     assert client.put("/api/voice/config", json={"language": "xx"}).status_code == 422
@@ -1143,6 +1209,7 @@ def _ready_config():
     )
 
 
+@pytest.mark.flags(voice_calls=False)
 def test_with_the_flag_off_no_worker_starts_and_no_call_is_taken(db_isolated, monkeypatch):
     """Owner, 2026-11-03: off must mean off — not just no Call button. Set up or not, no
     worker process is started, and a worker already running refuses every call."""
@@ -1773,6 +1840,80 @@ def test_a_call_says_a_change_awaits_approval_only_from_a_real_pending_card():
     assert "will need approving" in VOICE_NOTE
     assert "approves it on screen" not in VOICE_NOTE
     assert "are approved by" not in agent.FRONT_INSTRUCTIONS
+
+
+def test_a_spoken_answer_is_told_how_short_and_to_offer_the_rest():
+    """ "One to three short sentences" still came out at a median of 446 characters: too long to
+    listen to, and the voice is most of a call's cost (owner, 2026-11-06)."""
+    from backend.connectors.voice.desk import VOICE_NOTE
+
+    assert "about 30 words at most" in VOICE_NOTE
+    assert "one to three" not in VOICE_NOTE
+    assert "Want the breakdown?" in VOICE_NOTE
+    assert "when they ask for the detail" in VOICE_NOTE
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_a_model_that_cannot_hear_vietnamese_is_refused_beside_it(client):
+    """The owner's multilingual model hears five languages: Vietnamese isn't one of them."""
+    model = "assemblyai/universal-streaming-multilingual"
+    res = client.put("/api/voice/config", json={"stt_model": model, "language": "vi"})
+    assert res.status_code == 422 and "doesn't hear Vietnamese" in res.json()["detail"]
+    assert client.put("/api/voice/config", json={"stt_model": model, "language": "es"}).is_success
+
+
+def test_every_call_language_has_its_own_finance_words_within_the_limit():
+    from backend.connectors.voice.stt_hints import _TERMS
+    from backend.db.voice_config_store import LANGUAGES
+
+    assert set(_TERMS) == set(LANGUAGES)
+    for language, terms in _TERMS.items():
+        assert 20 <= len(terms) <= 50, language
+        assert len(set(terms)) == len(terms), language
+        assert all("," not in term and ";" not in term for term in terms), language
+    assert "ngân sách" in _TERMS["vi"] and "net worth" in _TERMS["en"]
+
+
+def test_automatic_uses_the_model_that_takes_word_hints_in_every_language():
+    from backend.connectors.voice.stt_hints import hearing_model, hint_kwargs
+
+    model = hearing_model("auto")
+    assert model == "deepgram/nova-3"
+    extra = hint_kwargs(model, "vi")
+    assert "ngân sách" in extra["keyterm"]
+    assert extra["endpointing"] > 25  # its default ends a turn at any breath
+    assert hearing_model("assemblyai/universal-streaming") == "assemblyai/universal-streaming"
+
+
+def test_each_model_gets_hints_under_its_own_name_and_only_if_it_takes_them():
+    from backend.connectors.voice.stt_hints import hint_kwargs
+
+    assert "net worth" in hint_kwargs("assemblyai/universal-streaming", "en")["keyterms_prompt"]
+    assert "keyterm" in hint_kwargs("deepgram/nova-3", "es")
+    assert hint_kwargs("cartesia/ink-whisper", "en") == {}
+
+
+def test_a_call_answers_out_loud_and_uses_the_screen_only_when_asked():
+    """Owner, 2026-11-06: told to keep it short, he said a list was "in the chat" when it wasn't.
+    What they need is spoken; the screen is for what they ask to see, and approval cards."""
+    from backend.connectors.voice.desk import VOICE_NOTE
+
+    assert "what you say is all they get" in VOICE_NOTE
+    assert "the top few by name" in VOICE_NOTE
+    assert "unless they ask to see it" in VOICE_NOTE
+    assert "markdown table" in VOICE_NOTE
+
+
+def test_a_table_they_asked_to_see_is_shown_and_not_read_out():
+    from backend.connectors.voice.desk import speakable
+
+    answer = (
+        "Your five biggest are on screen.\n\n"
+        "| Payee | Amount |\n| --- | --- |\n| ACME | 12 |\n  | Example Co | 8 |\n"
+    )
+    assert speakable(answer) == "Your five biggest are on screen."
+    assert speakable("About a | b.") == "About a  b."
+    assert speakable("| ACME | 12 |") == "ACME  12"  # all there is: never silence
 
 
 def test_a_link_in_a_reply_shows_in_the_chat_and_only_its_name_is_read_out():

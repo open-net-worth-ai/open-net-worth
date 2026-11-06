@@ -503,7 +503,6 @@ _KINDS: tuple[ConnectorKind, ...] = (
             "stt_model",
             "tts_model",
             "tts_voice",
-            "lucius_model",
         ),
     ),
     _kind(

@@ -203,7 +203,6 @@ class Host:
                 str(args.get("said") or ""),
                 understood=str(args.get("understood") or ""),
                 shown=bool(args.get("shown")),
-                model_ref=_lucius_model(),
                 unheard=bool(args.get("unheard")),
             )
         return desk.follow_next_turn(session_id)
@@ -258,13 +257,6 @@ async def _spoken(text: str):
 
     yield DeskEvent("text", text)
     yield DeskEvent("end")
-
-
-def _lucius_model() -> str:
-    """The owner's setting for Lucius on calls, read here — never a model the worker names."""
-    from backend.db.voice_config_store import VoiceConfigStore
-
-    return VoiceConfigStore().get().get("lucius_model") or ""
 
 
 class WorkerProcess:

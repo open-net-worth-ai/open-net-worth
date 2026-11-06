@@ -875,10 +875,18 @@ class SessionMetaUpdate(BaseModel):
     # normalization) rather than the person typing it — it then yields to an AI title and
     # to a rename instead of overwriting them. See `SessionStore.write_title`.
     auto: bool = False
+    # The conversation's model, chosen on a call: no typed message will carry it to the server,
+    # and the next spoken answer reads it from there. Blank clears it back to the default.
+    model: Optional[str] = None
 
 
 @router.patch("/api/sessions/{session_id}")
 def update_session_meta(session_id: str, body: SessionMetaUpdate):
+    if body.model is not None:
+        try:
+            conversation.select_session_model(session_id, body.model)
+        except ConfigurationError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
     if body.title is None:
         assistant.upsert_session_meta(session_id)
     else:

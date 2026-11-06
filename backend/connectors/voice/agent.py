@@ -38,6 +38,7 @@ from livekit.plugins import silero
 
 from backend.connectors.voice.connection import CallConnection
 from backend.connectors.voice.events import speakable
+from backend.connectors.voice.stt_hints import hearing_model, hint_kwargs
 from backend.connectors.voice.timing import AnswerTiming, SpeechLog, TurnTiming
 from backend.connectors.voice.tokens import OWNER_IDENTITY
 from backend.connectors.voice.tts_models import voice_for
@@ -916,19 +917,18 @@ async def entrypoint(ctx: JobContext) -> None:
     # format_turns=True: ONE punctuated final transcript per turn. Off (also the default), the
     # gateway sends each sentence as a final AND the whole turn again unpunctuated, so every
     # sentence reached Lucius twice (measured against the live service, 2026-11-03).
-    stt_kwargs = (
-        {"extra_kwargs": {"format_turns": True, **PATIENT_TURNS}}
-        if cfg["stt_model"].startswith("assemblyai/")
-        else {}
-    )
+    language = cfg.get("language") or "en"
+    stt_model = hearing_model(cfg["stt_model"])
+    stt_extra = hint_kwargs(stt_model, language)
+    if stt_model.startswith("assemblyai/"):
+        stt_extra.update(format_turns=True, **PATIENT_TURNS)
+    stt_kwargs = {"extra_kwargs": stt_extra} if stt_extra else {}
     voice = voice_for(cfg["tts_model"], cfg.get("tts_voice"))
     tts_kwargs = {"voice": voice} if voice else {}
-    language = cfg.get("language") or "en"
     session = AgentSession(
-        # The call's language, for hearing and for speaking ("auto" lets LiveKit pick the
-        # speech-to-text model that hears it). It was pinned to English: Vietnamese went
-        # unheard (owner, 2026-11-03).
-        stt=inference.STT(cfg["stt_model"], language=language, **stt_kwargs),
+        # The call's language, for hearing and for speaking. It was pinned to English: Vietnamese
+        # went unheard (owner, 2026-11-03).
+        stt=inference.STT(stt_model, language=language, **stt_kwargs),
         llm=inference.LLM(cfg["front_model"]),
         tts=inference.TTS(cfg["tts_model"], language=language, **tts_kwargs),
         vad=ctx.proc.userdata.get("vad") or silero.VAD.load(),

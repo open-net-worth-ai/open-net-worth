@@ -190,3 +190,49 @@ export function voiceCostLine(model: string): string | undefined {
 export function voiceIdAfterChange(from: string, to: string, voiceId: string): string {
   return from.split('/')[0] === to.split('/')[0] ? voiceId : ''
 }
+
+// Codes as LiveKit Inference takes them; mirrors backend LANGUAGES (db/voice_config_store.py).
+export const LANGUAGE_OPTIONS = [
+  { value: 'en', label: 'English' },
+  { value: 'vi', label: 'Vietnamese' },
+  { value: 'zh', label: 'Chinese' },
+  { value: 'ja', label: 'Japanese' },
+  { value: 'ko', label: 'Korean' },
+  { value: 'hi', label: 'Hindi' },
+  { value: 'id', label: 'Indonesian' },
+  { value: 'es', label: 'Spanish' },
+  { value: 'fr', label: 'French' },
+  { value: 'de', label: 'German' },
+  { value: 'pt', label: 'Portuguese' },
+]
+
+/** Models that hear only some languages: refused beside any other (backend STT_HEARS_ONLY). */
+const STT_HEARS_ONLY: Record<string, string[]> = {
+  'assemblyai/universal-streaming': ['en'],
+  'assemblyai/universal-streaming-multilingual': ['en', 'es', 'fr', 'de', 'pt'],
+}
+
+export function sttHears(model: string, language: string): boolean {
+  return !STT_HEARS_ONLY[model] || STT_HEARS_ONLY[model].includes(language)
+}
+
+/** What else must change with the language: a model that can't hear it moves to Automatic, and a
+ *  voice that can't speak it to the default, or the server refuses the language. */
+export function languagePatch(
+  current: { stt_model?: string; tts_model?: string; tts_voice?: string },
+  language: string,
+): { stt_model?: string; tts_model?: string; tts_voice?: string } {
+  const patch: { stt_model?: string; tts_model?: string; tts_voice?: string } = {}
+  if (current.stt_model && !sttHears(current.stt_model, language)) {
+    patch.stt_model = 'auto'
+  }
+  if (current.tts_model && !voiceSpeaks(current.tts_model, language)) {
+    patch.tts_model = DEFAULT_VOICE_MODEL
+    patch.tts_voice = voiceIdAfterChange(
+      current.tts_model,
+      DEFAULT_VOICE_MODEL,
+      current.tts_voice ?? '',
+    )
+  }
+  return patch
+}
