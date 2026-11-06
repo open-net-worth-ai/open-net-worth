@@ -271,8 +271,7 @@ def render_news_context_block(signal_summary: str, headlines: list[dict]) -> str
         ``_build_prompts`` uses — collision-proofed the same way (text_sanitize's dash-run
         collapse), so hostile headline content can't forge either boundary.
     Returns "" when both are empty — a caller with no signal and no fresh evidence gets nothing to
-    inject, so its own prompt renders exactly as it did before this feature existed (pinned by
-    price_monitor's own byte-identical-prompt test)."""
+    inject."""
     signal_block = prior_analysis_block(signal_summary)
     headline_lines = _render_evidence_lines(headlines)
     headlines_block = (

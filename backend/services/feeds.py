@@ -19,6 +19,7 @@ import xml.etree.ElementTree as ET
 
 from backend.core.urls import hostname
 from backend.db.watchlist_topics import is_topic
+from backend.services.evidence import ticker_subject
 
 # Yahoo ticker suffix → Google News locale (hl, gl, ceid). A non-US listing's news — especially
 # shareholder/regulatory disclosures — is published in the local language by local outlets, so a
@@ -124,6 +125,11 @@ def resolve_holding_feeds(row: dict) -> list[dict]:
     label = (row.get("label") or row.get("symbol") or ticker).strip()
     asset_class = (row.get("asset_class") or "equity").lower()
     subjects = [s for s in (f"asset:{iid}" if iid else "", "scan:intel") if s]
+    # With no instrument there is no asset: tag, and the shared scan pool can't be searched by
+    # stock. A watchlist item carries its symbol as `value`; the feed's query is unchanged.
+    symbol = ticker or (row.get("value") or "").strip()
+    if not iid and symbol:
+        subjects.append(ticker_subject(symbol))
     if not subjects or not (label or ticker):
         return []
     feeds: list[dict] = []

@@ -351,9 +351,9 @@ def test_cooldown_persists_across_runs(monkeypatch):
     assert cache["AAPL"]["crash_state"]["last_fired_at"] is not None
 
 
-# Asserts the sender's own push, so it pins the flag off; the flag-on path is in
-# tests/test_delivery_seam.py.
-@pytest.mark.flags(intel_delivery_decider=False)
+# Asserts the sender's own push before the price check returns, so it pins both flags off; the
+# flag-on paths are in tests/test_delivery_seam.py and tests/test_price_alert_run.py.
+@pytest.mark.flags(intel_delivery_decider=False, price_alert_lucius_run=False)
 def test_both_lanes_fire_on_same_ticker_share_one_cache_entry(monkeypatch):
     """An asset with an explicit alert AND held in the portfolio runs through both lanes in one
     pass. They share cache["AAPL"] (alert_states + crash_state are distinct sub-keys) — assert both

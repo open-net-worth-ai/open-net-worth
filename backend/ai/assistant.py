@@ -4638,6 +4638,21 @@ async def _run_turn(
                             tool_name = tu["name"]
                             tool_input_summary = redact_summary(tu["input"])
                             logger.info("tool_call  %s  input=%s", tool_name, tool_input_summary)
+                            # Before both dispatch branches: an external MCP tool skips
+                            # registry.dispatch, and it is the one that could place an order.
+                            if _skill_scope.offer_refuses(tool_name):
+                                logger.warning("enforced_offer_refused  tool=%s", tool_name)
+                                _refused_msg = json.dumps(
+                                    {
+                                        "error": (
+                                            f"NOT EXECUTED: '{tool_name}' is not available on "
+                                            "this run. Use only the tools you were given."
+                                        )
+                                    }
+                                )
+                                yield {"type": "tool_done", "id": tu["id"], "result": _refused_msg}
+                                tool_results.append(_tool_result_block(tu["id"], _refused_msg))
+                                continue
                             # Stage 1b — tool-discovery gate (find_tools auto-load). On a normal
                             # interactive turn the offer is CORE ∪ already-loaded tools, while
                             # the FULL toolset lives in the prompt catalog; on a LARGE explicit

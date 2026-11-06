@@ -19,6 +19,7 @@ import functools
 import json
 import logging
 import operator
+from typing import Awaitable, Callable
 
 import backend.services.evidence as _evidence_svc
 from backend.api.portfolio import read_rows
@@ -28,6 +29,7 @@ from backend.api.watchlist import _watchlist_lock, read_watchlist, write_watchli
 from backend.core.timestamps import sort_key as _ts_sort_key
 from backend.db.alert_store import _resolve_instrument_id_by_ticker, alert_cache_key
 from backend.db.intel_stories_store import IntelStoriesStore
+from backend.monitoring import price_alert_run
 from backend.monitoring.analyst_prompt import render_news_context_block, sanitize_snippets
 from backend.services import alerts as alerts_service
 from backend.services import thesis_judgment
@@ -278,30 +280,31 @@ async def _news_context_for_alert(ticker: str, iid: str) -> str:
     this SAME system had already analyzed and pushed the Uber M&A offer driving the move; the
     narrator built its prompt from position data only and never consulted the asset's own intel
     signal/evidence). Reuses the INT12 fencing/sanitizing machinery (analyst_prompt.py) instead of
-    inventing a parallel convention. Graceful no-op: any failure, or genuinely no signal/evidence,
-    returns "" so the alert prompt renders EXACTLY as before this feature (pinned by
-    tests/test_price_monitor_news_context.py)."""
+    inventing a parallel convention. Reads the ticker's own tag beside the instrument's, because a
+    watched-but-not-held ticker may have no instrument at all (see feeds.resolve_holding_feeds).
+    Graceful no-op: any failure, or genuinely no signal/evidence, returns "" and the prompt says
+    no news is on hand (pinned by tests/test_price_monitor_news_context.py)."""
     try:
         signal = _current_asset_signal(iid, ticker)
         signal_summary = (signal or {}).get("current_summary") or ""
 
-        headlines: list[dict] = []
-        if iid:
-            # Off the event loop — the evidence file can be large (55MB rule, mirrors
-            # analyst._process_row's own read_evidence call).
-            evidence = await asyncio.to_thread(
-                _evidence_svc.read_evidence,
-                subjects=[f"asset:{iid}"],
-                fresh_only=True,
-                limit=8,
-            )
-            fresh = [
-                ev
-                for ev in evidence
-                if _evidence_svc.recency_hours(ev.get("published_at") or "")
-                <= _NEWS_CONTEXT_MAX_AGE_HOURS
-            ][:_NEWS_CONTEXT_HEADLINE_LIMIT]
-            headlines = sanitize_snippets(fresh, max_items=_NEWS_CONTEXT_HEADLINE_LIMIT)
+        subjects = [f"asset:{iid}"] if iid else []
+        subjects.append(_evidence_svc.ticker_subject(ticker))
+        # Off the event loop — the evidence file can be large (55MB rule, mirrors
+        # analyst._process_row's own read_evidence call).
+        evidence = await asyncio.to_thread(
+            _evidence_svc.read_evidence,
+            subjects=subjects,
+            fresh_only=True,
+            limit=8,
+        )
+        fresh = [
+            ev
+            for ev in evidence
+            if _evidence_svc.recency_hours(ev.get("published_at") or "")
+            <= _NEWS_CONTEXT_MAX_AGE_HOURS
+        ][:_NEWS_CONTEXT_HEADLINE_LIMIT]
+        headlines = sanitize_snippets(fresh, max_items=_NEWS_CONTEXT_HEADLINE_LIMIT)
 
         return render_news_context_block(signal_summary, headlines)
     except Exception as exc:
@@ -355,6 +358,15 @@ def _build_alert_prompt(
             "event rather than open-ended price action. If the context above is empty or "
             "unrelated to this move, don't force a connection.\n"
         )
+    else:
+        # This call has no tools, so nothing was tried: "I couldn't check" reads as a failed
+        # lookup and sent the owner hunting an outage that never happened (report 2026-11-05).
+        prompt += (
+            "\nNo recent news on this asset is on hand for this alert, and you cannot look "
+            "anything up. If the user's intent asks about news, say plainly that no recent news "
+            "is on file; never say you tried, couldn't or failed to check, and don't guess a "
+            "cause.\n"
+        )
 
     # Owner report 2026-08-31: a real fired alert (PLTR) came back with 3 dense, multi-clause
     # paragraphs and long bullets stacked with parentheticals and em-dash asides — technically
@@ -381,8 +393,7 @@ def _build_alert_prompt(
     return prompt
 
 
-async def _ai_signal(
-    signal_id: str,
+async def _narration_data(
     label: str,
     ticker: str,
     op: str,
@@ -391,12 +402,10 @@ async def _ai_signal(
     position_ctx: str,
     user_note: str,
     profile: dict,
-    now: str,
     news_context: str = "",
-    instrument_id: str = "",
     move_pct: float | None = None,
 ) -> dict:
-    """Narrate a fired alert as a contextual signal, on the configured model."""
+    """The model's narration of a fired alert: one tool-free call, on the configured model."""
     from backend.core.llm_seam import complete_json
 
     prompt = _build_alert_prompt(
@@ -431,7 +440,54 @@ async def _ai_signal(
         )
         or {}
     )
+    return data
 
+
+async def _ai_signal(
+    signal_id: str,
+    label: str,
+    ticker: str,
+    op: str,
+    target: float,
+    current_price: float,
+    position_ctx: str,
+    user_note: str,
+    profile: dict,
+    now: str,
+    news_context: str = "",
+    instrument_id: str = "",
+    move_pct: float | None = None,
+) -> dict:
+    """Narrate a fired alert as a contextual signal, on the configured model."""
+    data = await _narration_data(
+        label,
+        ticker,
+        op,
+        target,
+        current_price,
+        position_ctx,
+        user_note,
+        profile,
+        news_context,
+        move_pct=move_pct,
+    )
+    return {
+        "id": signal_id,
+        "type": "price_alert",
+        "instrument_id": instrument_id or None,
+        "label": f"{label} — price alert",
+        "ticker": ticker,
+        "status": "action_needed",
+        **_narrated_fields(label, op, target, move_pct, data),
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def _narrated_fields(
+    label: str, op: str, target: float, move_pct: float | None, data: dict
+) -> dict:
+    """The fields of a signal the model writes, under the deterministic line saying what fired."""
     if move_pct is not None:
         word = _move_direction_word(op)
         symbol = "≥" if op in (">=", ">") else "≤"
@@ -443,18 +499,50 @@ async def _ai_signal(
         direction_word = "risen above" if op in (">=", ">") else "dropped below"
         current_summary = f"{label} has {direction_word} {target:g}. {data.get('summary', '')}"
     return {
-        "id": signal_id,
-        "type": "price_alert",
-        "instrument_id": instrument_id or None,
-        "label": f"{label} — price alert",
-        "ticker": ticker,
-        "status": "action_needed",
         "current_summary": current_summary,
         "portfolio_impact": data.get("portfolio_impact", ""),
         "action_items": data.get("action_items", []),
-        "created_at": now,
-        "updated_at": now,
     }
+
+
+async def _investigate_then_deliver(
+    signal: dict,
+    channels: list[str],
+    prompt: str,
+    news_context: str,
+    narrate: Callable[..., Awaitable[dict]],
+    fields: Callable[[dict], dict],
+) -> None:
+    """Background half of a fired alert with ``price_alert_lucius_run`` on: search, then narrate the
+    findings with no tools. ``signal`` is the quick alert, already in Intel, and every way this can
+    go wrong still sends it. On shutdown that push is queued for retry if the channel has already
+    stopped (asyncio.run waits for a task that absorbs its cancellation)."""
+    from datetime import datetime, timezone
+
+    final = signal
+    try:
+        findings = await price_alert_run.search(prompt, model=_alert_model())
+        if findings:
+            data = await asyncio.wait_for(
+                narrate(news_context=news_context + price_alert_run.findings_block(findings)),
+                price_alert_run.NARRATION_TIMEOUT_SECONDS,
+            )
+            cleaned = price_alert_run.usable(data)
+            if cleaned:
+                final = {
+                    **signal,
+                    **fields(cleaned),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+                apply_story_change(final)
+    except asyncio.CancelledError:
+        if channels:
+            await _deliver_alert(signal, channels)
+        raise
+    except Exception as exc:
+        logger.warning("price_monitor: alert run did not finish: %s", type(exc).__name__)
+    if channels:
+        await _deliver_alert(final, channels)
 
 
 def _format_alert(signal: dict) -> str:
@@ -707,7 +795,7 @@ async def _fire_alert_condition(
     # fire+push even if a future change to that helper — or the news-context machinery it
     # delegates to — lets an exception through unguarded.
     try:
-        news_context = await _news_context_for_alert(ticker, row.get("instrument_id") or "")
+        news_context = await _news_context_for_alert(ticker, instrument_id)
     except Exception as exc:
         logger.debug("price_monitor: news context failed for %s: %s", ticker, exc)
         news_context = ""
@@ -745,7 +833,29 @@ async def _fire_alert_condition(
     apply_story_change(signal)
     logger.info("price_monitor: alert fired — %s %s %s %g", ticker, op_str, currency, target)
     channels = list(condition.get("channels") or [])
-    if channels:
+    if await asyncio.to_thread(price_alert_run.active):
+        price_alert_run.spawn(
+            _investigate_then_deliver(
+                signal,
+                channels,
+                price_alert_run.search_prompt(label, ticker, op_str, current_price, user_note),
+                news_context,
+                functools.partial(
+                    _narration_data,
+                    label,
+                    ticker,
+                    op_str,
+                    target,
+                    current_price,
+                    position_ctx,
+                    user_note,
+                    profile,
+                    move_pct=move_pct,
+                ),
+                functools.partial(_narrated_fields, label, op_str, target, move_pct),
+            )
+        )
+    elif channels:
         await _deliver_alert(signal, channels)
     # Zero-latency tripwire (news-ingestion-latency.md Phase 2 addendum, owner directive
     # "receive it ~5 min after release"): the market reacts before any feed indexes, so don't

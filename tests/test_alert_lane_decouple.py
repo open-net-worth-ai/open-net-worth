@@ -402,9 +402,9 @@ def test_notify_in_app_never_pushes_external(monkeypatch):
     assert push_calls == []
 
 
-# Asserts the sender's own push, so it pins the flag off; the flag-on path is in
-# tests/test_delivery_seam.py.
-@pytest.mark.flags(intel_delivery_decider=False)
+# Asserts the sender's own push before the price check returns, so it pins both flags off; the
+# flag-on paths are in tests/test_delivery_seam.py and tests/test_price_alert_run.py.
+@pytest.mark.flags(intel_delivery_decider=False, price_alert_lucius_run=False)
 def test_alert_pushes_to_its_own_channels_not_the_settings_default(monkeypatch):
     """An alert's saved channels are the whole story: the price-alert default in Settings
     (telegram here) is only where a NEW alert starts, never read when one fires."""

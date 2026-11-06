@@ -48,6 +48,11 @@ def _now_iso(now: str | None = None) -> str:
     return now or datetime.now(timezone.utc).isoformat()
 
 
+def ticker_subject(ticker: str) -> str:
+    """The evidence subject for news from one ticker's own feed when it has no instrument."""
+    return f"ticker:{ticker.strip().upper()}"
+
+
 def canonical_key(url: str) -> str:
     """Stable dedup id for a URL: ``ev_`` + sha1(canonical_url)[:16]. Same article (tracking
     params / fragment / www / casing aside) → same id across every scan."""
