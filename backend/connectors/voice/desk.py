@@ -18,7 +18,7 @@ from collections.abc import AsyncIterator
 from typing import Optional
 
 from backend.ai import assistant, conversation, live_sessions, turns
-from backend.ai.tool_text import harness_note
+from backend.ai.tool_text import harness_note, is_harness_note
 from backend.ai.tools.registry import may_change_something
 from backend.connectors.voice.events import DeskEvent, speakable
 from backend.core.chat_context_markers import HARNESS_NOTE_CLOSE, HARNESS_NOTE_OPEN
@@ -78,6 +78,7 @@ UNHEARD_NOTE = (
 # continuation — and reads the answer aloud (owner, 2026-11-03).
 _CALL_TURNS_MAX = 256
 _call_turns: "OrderedDict[str, None]" = OrderedDict()
+_stopped: set[str] = set()  # conversations whose turn the call just stopped on purpose
 _followed: dict[str, str] = {}  # conversation → the last turn a call followed there
 
 
@@ -150,6 +151,7 @@ async def ask(
     understood: str = "",
     shown: bool = False,
     unheard: bool = False,
+    continues: bool = False,
 ) -> AsyncIterator[DeskEvent]:
     """Run ``said`` (the owner's own transcribed words) as their next message on
     ``session_id``, with the front model's reading as a relay note; yield the turn's events.
@@ -163,6 +165,8 @@ async def ask(
     # way to look is on offer without a find_tools round while someone waits on the line.
     assistant.upsert_session_meta(session_id, screen_handles=[], screen_commands=[])
     assistant.load_session_tools(session_id, frozenset({"read_screen"}))
+    if continues:
+        shown = _add_to_last_said(session_id, said) or shown
     content = [
         {"type": "text", "text": harness_note(SHOWN_NOTE) if shown else said},
         {"type": "text", "text": relay_note(understood or said)},
@@ -187,6 +191,50 @@ async def ask(
         _announce(session_id, handle.turn_id, said)
     async for event in _follow(session_id, handle.turn_id):
         yield event
+
+
+def stop_call_turn(session_id: str) -> None:
+    """Stop the call's own turn running on this conversation: the owner has said more, so what it
+    is working on is out of date. Never a turn the call didn't start, like something typed."""
+    turn_id = turns.executing_turn_id(session_id)
+    if turn_id in _call_turns:
+        _stopped.add(session_id)
+        turns.cancel(session_id, turn_id=turn_id, reason="voice_owner_went_on")
+
+
+def _plain_text(message: dict) -> str | None:
+    """What the owner said in a message of theirs, or None for anything else (a note, a reply)."""
+    blocks = message.get("content")
+    first = blocks[0] if isinstance(blocks, list) and blocks else None
+    if message.get("role") != "user" or not isinstance(first, dict):
+        return None
+    text = first.get("text")
+    return text if isinstance(text, str) and not is_harness_note(text) else None
+
+
+def _add_to_last_said(session_id: str, said: str) -> bool:
+    """The owner went on: add to their last message instead of opening another. Only when nothing
+    has answered it but a turn the call stopped, whose partial reply goes with it. If the new words
+    already stand as their own last message, they move up into the earlier one. Changes nothing,
+    and says so, when that can't be done."""
+    stopped = session_id in _stopped
+    _stopped.discard(session_id)
+    _sid, history = assistant.get_or_create_session(session_id)
+    end = len(history)
+    if end and (_plain_text(history[-1]) or "").strip() == said.strip():
+        end -= 1
+    for index in range(end - 1, -1, -1):
+        message = history[index]
+        if message.get("role") == "assistant" and not stopped:
+            return False
+        text = _plain_text(message)
+        if text is None:
+            continue
+        message["content"][0]["text"] = f"{text} {said}"
+        del history[index + 1 :]
+        assistant._save_session(session_id, history)
+        return True
+    return False
 
 
 def _announce(session_id: str, turn_id: str, said: str) -> None:

@@ -62,6 +62,11 @@ import { ModelPicker, Skeleton } from '../ui'
 import { ConversationApprovalPicker } from './ConversationApprovalPicker'
 import { useCallInSendSlot, VoiceCallButton } from './lucius/VoiceCallButton'
 import { VoiceCallNotice } from './lucius/VoiceCallNotice'
+import {
+  LastAnswerReveal,
+  VoiceCallHeardMessage,
+  VoiceCallSpokenMessage,
+} from './lucius/VoiceCallLive'
 import { VoiceCallSlot } from './lucius/VoiceCallSlot'
 import { computeHomeEmpty } from './homeEmpty'
 import { useProfile } from '../../hooks/serverState'
@@ -1468,41 +1473,59 @@ export function ChatPanel({
                     {brief.automationId && <ChevronRight size={14} />}
                   </button>
                 ) : (
-                  <MessageBubble
+                  <LastAnswerReveal
                     key={msg.id}
                     message={msg}
-                    restoreGuide={changedTurns.has(msg.id)}
-                    onSendMessage={(text) =>
-                      sendMessage(
-                        text,
-                        [],
-                        effort,
-                        false,
-                        activeModel,
-                        [],
-                        undefined,
-                        undefined,
-                        captureScreen(),
-                      )
-                    }
-                    onResolvePendingToolUse={resolvePendingToolUse}
-                    onRespondToChange={respondToChange}
-                    onOpenAiSettings={() => {
-                      void navigate({ to: '/settings', search: { sub: 'model' } } as never)
-                    }}
-                    onRetry={
-                      msg.role === 'assistant' &&
-                      msg.error &&
-                      i === visibleDelivered.length - 1 &&
-                      canRetry
-                        ? retryLast
-                        : undefined
-                    }
-                    onPreviewCheckpoint={previewCheckpoint}
-                    onRestoreCheckpoint={restoreCheckpoint}
-                  />
+                    sessionId={activeId}
+                    live={i === visibleDelivered.length - 1}
+                  >
+                    {(shown) => (
+                      <MessageBubble
+                        key={msg.id}
+                        message={shown}
+                        restoreGuide={changedTurns.has(msg.id)}
+                        onSendMessage={(text) =>
+                          sendMessage(
+                            text,
+                            [],
+                            effort,
+                            false,
+                            activeModel,
+                            [],
+                            undefined,
+                            undefined,
+                            captureScreen(),
+                          )
+                        }
+                        onResolvePendingToolUse={resolvePendingToolUse}
+                        onRespondToChange={respondToChange}
+                        onOpenAiSettings={() => {
+                          void navigate({ to: '/settings', search: { sub: 'model' } } as never)
+                        }}
+                        onRetry={
+                          msg.role === 'assistant' &&
+                          msg.error &&
+                          i === visibleDelivered.length - 1 &&
+                          canRetry
+                            ? retryLast
+                            : undefined
+                        }
+                        onPreviewCheckpoint={previewCheckpoint}
+                        onRestoreCheckpoint={restoreCheckpoint}
+                      />
+                    )}
+                  </LastAnswerReveal>
                 )
               })}
+
+              <VoiceCallHeardMessage
+                sessionId={activeId}
+                lastUser={messages.findLast((m) => m.role === 'user')}
+              />
+              <VoiceCallSpokenMessage
+                sessionId={activeId}
+                lastAssistant={messages.findLast((m) => m.role === 'assistant')}
+              />
 
               {/* Follow-up suggestions after a completed turn — a skeleton row while they're
                   still generating, so the gap doesn't read as "nothing is coming." Widths

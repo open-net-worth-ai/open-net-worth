@@ -2,7 +2,6 @@ import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useFlag } from '../../../hooks/useFlag'
 import { useIsMobile } from '../../../hooks/useIsMobile'
-import { VoiceCallHeard } from './VoiceCallHeard'
 import { VoiceCallStage } from './VoiceCallStage'
 import { useVoiceCall } from './voiceCall'
 
@@ -29,7 +28,6 @@ export function VoiceCallSlot({
   const fullScreen = shown && mobile && call.view === 'stage'
   return (
     <>
-      {shown && !fullScreen && <VoiceCallHeard variant="card" />}
       {shown && !fullScreen && <VoiceCallStage variant="card" busy={busy} expandable={mobile} />}
       {fullScreen && createPortal(<VoiceCallStage variant="screen" busy={busy} />, document.body)}
       {children}

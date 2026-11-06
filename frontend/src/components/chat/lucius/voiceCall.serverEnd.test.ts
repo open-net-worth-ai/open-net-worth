@@ -593,6 +593,10 @@ describe('your words as you speak them', () => {
       await after
       return text
     },
+    async *[Symbol.asyncIterator]() {
+      await after
+      for (const piece of text.split(/(?<= )/)) yield piece
+    },
   })
   const say = async (reader: unknown, identity = 'lucius-agent') => {
     await FakeRoom.last.transcript!(reader, { identity })
@@ -618,6 +622,52 @@ describe('your words as you speak them', () => {
     await liveCall()
     await say(words('your balance is fine', false, 'TR_lucius'))
     expect(state().heard).toBe('')
+    expect(state().spoken).toBe('your balance is fine')
+    expect(state().spokenDone).toBe(true)
+  })
+
+  it('follows Lucius word by word as the voice says them', async () => {
+    await liveCall()
+    const seen: string[] = []
+    await say({
+      info: { attributes: { 'lk.transcribed_track_id': 'TR_lucius' } },
+      async *[Symbol.asyncIterator]() {
+        for (const piece of ['your ', 'balance ', 'is fine']) {
+          yield piece
+          seen.push(state().spoken)
+        }
+      },
+    })
+    expect(seen).toEqual(['your', 'your balance', 'your balance is fine'])
+    expect(state().spokenDone).toBe(true)
+    expect(state().lastSpoken).toBe('your balance is fine')
+  })
+
+  it('builds up across the segments of one long sentence', async () => {
+    await liveCall()
+    await say(words('so what I want to know', true))
+    await say(words('is how much'))
+    expect(state().heard).toBe('so what I want to know is how much')
+    await say(words('is how much I spent', true))
+    expect(state().heard).toBe('so what I want to know is how much I spent')
+  })
+
+  it('starts a fresh sentence once you have stopped talking', async () => {
+    await liveCall()
+    const realSetTimeout = window.setTimeout
+    const pending: (() => void)[] = []
+    window.setTimeout = ((fn: () => void, ms?: number) => {
+      if (ms === 3000) pending.push(fn)
+      return realSetTimeout(() => {}, 0)
+    }) as typeof window.setTimeout
+    await say(words('how much did I spend', true))
+    window.setTimeout = realSetTimeout
+    pending.forEach((fn) => fn())
+    expect(state().heard).toBe('how much did I spend')
+    expect(state().heardDone).toBe(true)
+    await say(words('and my rent'))
+    expect(state().heard).toBe('and my rent')
+    expect(state().heardDone).toBe(false)
   })
 
   it('keeps newer words when an older update finishes reading last', async () => {
@@ -630,12 +680,13 @@ describe('your words as you speak them', () => {
     expect(state().heard).toBe('how much')
   })
 
-  it('clears soon after the final words, and at once when the call ends', async () => {
+  it('keeps the final words for the chat, and clears at once when the call ends', async () => {
     const timers = vi.spyOn(window, 'setTimeout')
     await liveCall()
     await say(words('how much did I spend', true))
     expect(state().heard).toBe('how much did I spend')
-    expect(timers.mock.calls.some(([, ms]) => ms === 1500)).toBe(true)
+    expect(state().heardDone).toBe(true)
+    expect(timers.mock.calls.some(([, ms]) => ms === 10000)).toBe(true)
     timers.mockRestore()
     await say(words('still talking'))
     await hangUp()

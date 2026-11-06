@@ -75,10 +75,23 @@ export interface CallState {
   luciusWorking: boolean
   /** Your words as the call hears them, updating as you speak; empty otherwise. */
   heard: string
+  /** You've finished saying `heard`: it stays in the chat until your real message lands. */
+  heardDone: boolean
+  /** Lucius's words as the voice says them, in step with it; empty otherwise. */
+  spoken: string
+  /** He has finished saying `spoken`: it stays on screen a moment longer. */
+  spokenDone: boolean
+  /** The last line said, kept until the chat has it: a line the voice says itself is only saved
+   *  to the chat once it has finished playing, so it can't stream there as a message. */
+  lastSpoken: string
 }
 
 const IDLE: CallState = {
   heard: '',
+  heardDone: false,
+  spoken: '',
+  spokenDone: false,
+  lastSpoken: '',
   phase: 'idle',
   sessionId: null,
   muted: false,
@@ -409,45 +422,102 @@ let endProblem: CallProblem | null = null
 // The call's microphone, opened BEFORE the ringing starts and published once connected.
 let mic: LocalAudioTrack | null = null
 
-// LiveKit's transcript of a call: each update of your words is a new stream holding all of them so
-// far, and the last is marked final. Lucius's own words come the same way, on his track.
+// LiveKit's transcript of a call. Each update of your words is a new stream holding all of the
+// segment so far, the last marked final. Lucius's words are one stream that grows, paced to his voice.
 const TRANSCRIPT_TOPIC = 'lk.transcription'
-// Long enough for the real message to reach the chat, which looks every 1.5s (`FOLLOW_MS`).
-const HEARD_FINAL_HOLD_MS = 1500
+// How long Lucius's last words stay up once he's finished.
+const LIVE_WORDS_HOLD_MS = 1500
+// Going on talking this soon after a segment ends is the same sentence.
+const HEARD_SAME_SENTENCE_MS = 3000
+// The chat swaps your words for the real message when it lands, which is only saved once the voice
+// starts or the request goes out: clearing them on a short timer left a gap with nothing there
+// (owner, 2026-11-06). This is only for a message that never comes.
+const HEARD_KEEP_MS = 10000
 // A segment that never gets its final word mustn't leave stale words on screen.
 const HEARD_STALE_MS = 6000
 let heardTimer: number | undefined
+let sentenceTimer: number | undefined
+let spokenTimer: number | undefined
+let lastSpokenTimer: number | undefined
 let heardLatest = 0
+let spokenLatest = 0
+// Finished segments of what you're still saying: a long sentence comes in several, and each
+// restarting the line lost the words before it.
+let heardBefore = ''
 let transcriptStreams = 0
 let heardUpdates = 0
 
-function watchHeard(next: Room) {
-  next.registerTextStreamHandler(TRANSCRIPT_TOPIC, async (reader, from) => {
+type TranscriptReader = AsyncIterable<string> & {
+  info: { attributes?: Record<string, string> }
+  readAll: () => Promise<string>
+}
+
+async function showSpoken(next: Room, reader: TranscriptReader) {
+  const order = ++spokenLatest
+  const current = () => room === next && order === spokenLatest
+  let text = ''
+  window.clearTimeout(spokenTimer)
+  window.clearTimeout(lastSpokenTimer)
+  try {
+    for await (const chunk of reader) {
+      text += chunk
+      if (current()) set({ spoken: text.trim(), spokenDone: false, lastSpoken: text.trim() })
+    }
+  } catch {
+    // The stream broke, as at a hang-up: what was said stays said.
+  }
+  if (!current()) return
+  set({ spokenDone: true })
+  spokenTimer = window.setTimeout(() => {
+    if (order === spokenLatest) set({ spoken: '', spokenDone: false })
+  }, LIVE_WORDS_HOLD_MS)
+  lastSpokenTimer = window.setTimeout(() => {
+    if (order === spokenLatest) set({ lastSpoken: '' })
+  }, HEARD_KEEP_MS)
+}
+
+function watchTranscript(next: Room) {
+  next.registerTextStreamHandler(TRANSCRIPT_TOPIC, async (rawReader, from) => {
+    const reader = rawReader as unknown as TranscriptReader
     transcriptStreams += 1
     const attributes = reader.info.attributes ?? {}
     const track = attributes['lk.transcribed_track_id']
     const own =
       from.identity === next.localParticipant.identity ||
       (!!track && next.localParticipant.trackPublications.has(track))
-    // Read either way: an unread stream would sit in memory for the rest of the call.
-    const order = own ? ++heardLatest : 0
+    if (!own) return showSpoken(next, reader)
+    const order = ++heardLatest
     const text = (await reader.readAll()).trim()
     // Streams can finish out of order: a slower, shorter one mustn't overwrite newer words.
-    if (!own || !text || room !== next || order !== heardLatest) return
+    if (!text || room !== next || order !== heardLatest) return
     heardUpdates += 1
     const final = attributes['lk.transcription_final'] === 'true'
+    const heard = heardBefore ? `${heardBefore} ${text}` : text
     window.clearTimeout(heardTimer)
+    window.clearTimeout(sentenceTimer)
+    if (final) {
+      heardBefore = heard
+      sentenceTimer = window.setTimeout(() => (heardBefore = ''), HEARD_SAME_SENTENCE_MS)
+    }
     heardTimer = window.setTimeout(
-      () => set({ heard: '' }),
-      final ? HEARD_FINAL_HOLD_MS : HEARD_STALE_MS,
+      () => {
+        heardBefore = ''
+        set({ heard: '', heardDone: false })
+      },
+      final ? HEARD_KEEP_MS : HEARD_STALE_MS,
     )
-    set({ heard: text })
+    set({ heard, heardDone: final })
   })
 }
 
 function teardown() {
   window.clearTimeout(heardTimer)
+  window.clearTimeout(sentenceTimer)
+  window.clearTimeout(spokenTimer)
+  window.clearTimeout(lastSpokenTimer)
   heardLatest = 0
+  spokenLatest = 0
+  heardBefore = ''
   window.clearInterval(followTimer)
   window.clearInterval(healthTimer)
   window.clearInterval(micTimer)
@@ -553,7 +623,7 @@ export async function startCall(sessionId: string, view: CallState['view'] = 'ba
     room = next
     transcriptStreams = 0
     heardUpdates = 0
-    watchHeard(next)
+    watchTranscript(next)
     // Lucius "picks up" when he first speaks: stop the ring and start the clock then. The level
     // is read straight off his audio — LiveKit's active-speaker report lags a few hundred ms, so
     // the ring played over his "Hi" (live call, 2026-11-03); that report stays as a fallback.

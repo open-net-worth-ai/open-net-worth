@@ -19,7 +19,8 @@ from pydantic import BaseModel, Field
 
 from backend.ai import assistant, skill_runtime
 from backend.ai.structured import complete_model
-from backend.ai.tool_text import is_harness_note
+from backend.ai.tool_text import VOICE_CALL_NOTE_OPENINGS, is_harness_note
+from backend.core.chat_context_markers import HARNESS_NOTE_OPEN
 from backend.core.untrusted import is_screen_context_block
 
 logger = logging.getLogger(__name__)
@@ -200,6 +201,23 @@ def _last_exchange(history: list[dict]) -> Optional[tuple[str, str]]:
     return None
 
 
+def _spoken_on_a_call(history: list) -> bool:
+    """Whether the newest thing the owner said came through a voice call: the call marks each
+    message with a harness note, which the owner's own words can't forge."""
+    for message in reversed(history):
+        if message.get("role") != "user":
+            continue
+        content = message.get("content")
+        blocks = content if isinstance(content, list) else []
+        texts = [b.get("text", "") for b in blocks if isinstance(b, dict)]
+        return any(
+            f"{HARNESS_NOTE_OPEN}{opening}" in text
+            for text in texts
+            for opening in VOICE_CALL_NOTE_OPENINGS
+        )
+    return False
+
+
 async def followup_suggestions(session_id: str) -> list[str]:
     """2-4 tappable follow-up messages for the session's last exchange. ``[]`` if there's no
     session/history or generation fails. The CALLER gates on the per-connector enable toggle."""
@@ -215,6 +233,9 @@ async def followup_suggestions(session_id: str) -> list[str]:
         user_q, assistant_a = exchange
         if menu := onboarding_menu_choices(history, assistant_a):
             return menu
+        # Nobody taps a chip mid-conversation out loud: a model call for nothing (owner, 2026-11-06).
+        if _spoken_on_a_call(history):
+            return []
         prompt = (
             f"The client asked:\n{user_q[:1500] or '(opening message)'}\n\n"
             f"You replied:\n{assistant_a[:3000]}\n\n"

@@ -545,6 +545,7 @@ def bare_desk(agent, said: list | None = None):
     desk_.timing = agent.TurnTiming()
     desk_._away_since, desk_._busy_timer = None, None
     desk_._answers, desk_._turn_said, desk_._shown = set(), "", False
+    desk_._reply_beside_request = False
     desk_._current_kind, desk_._superseded = "question", False
     desk_.speech_log = agent.SpeechLog()
     desk_._turn_changed, desk_._unheard = False, False
@@ -698,8 +699,11 @@ def test_a_correction_drops_the_answer_of_the_question_under_way():
     said: list[str] = []
     desk_ = _desk_with_words(agent, said)
     desk_._current, desk_._current_kind = "Find the ACME gym charge", "question"
+    stopped: list[bool] = []
+    desk_._stop_current = lambda: (stopped.append(True), setattr(desk_, "_superseded", True))
 
     assert desk_.submit("Find the ACME yoga charge", "question", "Oh, yoga, got it.", True) is None
+    assert stopped == [True]  # the old question is stopped, not left to run its answer out
     assert said == ["Oh, yoga, got it."]  # not "right after the one you're on"
     assert desk_._superseded is True
     assert desk_._current == "Find the ACME yoga charge"
@@ -1942,6 +1946,307 @@ def test_each_model_gets_hints_under_its_own_name_and_only_if_it_takes_them():
     assert "net worth" in hint_kwargs("assemblyai/universal-streaming", "en")["keyterms_prompt"]
     assert "keyterm" in hint_kwargs("deepgram/nova-3", "es")
     assert hint_kwargs("cartesia/ink-whisper", "en") == {}
+
+
+def test_the_front_voice_answers_only_small_talk_and_never_claims_to_lack_anything():
+    """Owner, 2026-11-06: asked for a suggestion, it answered itself that it had no risk profile,
+    with Lucius holding the profile the whole time. Twice more when challenged on it."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    rules = agent.FRONT_INSTRUCTIONS
+    assert "For EVERYTHING but that small talk" in rules
+    assert "what would you suggest?" in rules
+    assert "you never say you lack something or can't" in rules
+    assert "If in doubt, it's a request" in rules
+    assert 'Say only\n  "Mm-hm?"' in rules
+
+
+def test_turns_wait_long_enough_to_keep_a_sentence_whole():
+    """Owner, 2026-11-06: one sentence reached the front voice as three pieces."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    from backend.connectors.voice.stt_hints import DEEPGRAM_TURN_SILENCE_MS
+
+    assert agent.PATIENT_TURNS["end_of_turn_confidence_threshold"] >= 0.6
+    assert agent.PATIENT_TURNS["min_end_of_turn_silence_when_confident"] >= 480
+    assert agent.PATIENT_TURNS["max_turn_silence"] >= 1600
+    assert DEEPGRAM_TURN_SILENCE_MS >= 900
+
+
+def _recording_desk(agent):
+    import types
+
+    recorded: list[tuple[str, str]] = []
+
+    async def call(_method, **args):
+        recorded.append((args["said"], args["reply"]))
+
+    desk_ = bare_desk(agent)
+    desk_._session_id, desk_._rt = (
+        "s1",
+        types.SimpleNamespace(app=types.SimpleNamespace(call=call)),
+    )
+    return desk_, recorded
+
+
+def test_a_line_said_beside_a_request_never_lands_after_the_answer():
+    """Owner, 2026-11-06: it is saved once it has played, by when Lucius's answer is in the chat."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    async def run():
+        desk_, recorded = _recording_desk(agent)
+        desk_._reply_beside_request = True
+        desk_.item_added("assistant", "One sec, let me check.")
+        await asyncio.sleep(0)
+        assert recorded == []
+        desk_.item_added("user", "thanks")
+        desk_.item_added("assistant", "You're welcome.")
+        await asyncio.sleep(0)
+        assert recorded == [("thanks", "You're welcome.")]
+
+    asyncio.run(run())
+
+
+def test_going_on_talking_keeps_the_start_of_what_you_said_in_the_chat():
+    """Owner, 2026-11-06: the screen streamed the whole sentence, the chat saved only its end."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    async def run():
+        desk_, recorded = _recording_desk(agent)
+        desk_.item_added("user", "What do you mean by saying that you")
+        desk_.item_added("user", "don't have my risk profile?")
+        desk_.item_added("assistant", "Let me look.")
+        await asyncio.sleep(0)
+        assert recorded == [
+            ("What do you mean by saying that you don't have my risk profile?", "Let me look.")
+        ]
+
+    asyncio.run(run())
+
+
+def test_a_piece_that_repeats_the_earlier_words_is_not_doubled():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    async def run():
+        desk_, recorded = _recording_desk(agent)
+        desk_.item_added("user", "how much did I")
+        desk_.item_added("user", "How much did I spend?")
+        desk_.item_added("assistant", "Let me look.")
+        await asyncio.sleep(0)
+        assert recorded == [("How much did I spend?", "Let me look.")]
+
+    asyncio.run(run())
+
+
+def test_no_follow_up_chips_are_generated_for_what_was_said_on_a_call(db_isolated, monkeypatch):
+    """Owner, 2026-11-06: nobody taps a chip while talking, and each costs a model call."""
+    import asyncio as aio
+
+    from backend.ai import assistant, chat_suggestions
+    from backend.ai.tool_text import VOICE_CALL_NOTE_OPENINGS, harness_note
+    from backend.connectors.voice.desk import SMALL_TALK_NOTE, VOICE_NOTE
+
+    assert VOICE_NOTE.startswith(VOICE_CALL_NOTE_OPENINGS[0])
+    assert SMALL_TALK_NOTE.startswith(VOICE_CALL_NOTE_OPENINGS[1])
+
+    called = []
+
+    async def complete(*_a, **_k):
+        called.append(True)
+        return None
+
+    monkeypatch.setattr(chat_suggestions, "complete_model", complete)
+    answer = {"role": "assistant", "content": [{"type": "text", "text": "About two."}]}
+
+    def asked(*blocks):
+        history = [
+            {"role": "user", "content": [{"type": "text", "text": b} for b in blocks]},
+            answer,
+        ]
+        monkeypatch.setattr(assistant, "_load_session", lambda _s: history)
+        return aio.run(chat_suggestions.followup_suggestions("s1"))
+
+    assert asked("how much", harness_note(VOICE_NOTE)) == []
+    assert asked("thanks", harness_note(SMALL_TALK_NOTE)) == []
+    assert called == []
+    asked("how much did I spend")  # typed: as before
+    assert called == [True]
+    called.clear()
+    asked("This message was spoken on a live voice call")  # the owner's own words aren't the note
+    assert called == [True]
+
+
+def _carrying_on_desk(agent, current_kind="question", changed=False):
+    desk_ = bare_desk(agent, [])
+    desk_._current, desk_._current_kind = "Find the ACME charge", current_kind
+    desk_._turn_changed = changed
+    stops: list[bool] = []
+    desk_._stop_current = lambda: (stops.append(True), setattr(desk_, "_superseded", True))
+    desk_._heard.append("on the card")
+    return desk_, stops
+
+
+def test_carrying_on_stops_the_question_under_way_and_asks_one_request():
+    """Owner, 2026-11-06: one sentence became two requests, each answered alone, neither right."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    desk_, stops = _carrying_on_desk(agent)
+
+    assert desk_.submit("On the card", "question", "Mm-hm.", False, True) is None
+    assert stops == [True]
+    said, request, _shown, _kind = desk_._queue.get_nowait()
+    assert request == "Find the ACME charge On the card"
+    assert desk_._continued_request == request
+
+
+def test_carrying_on_never_stops_a_task_or_a_change_that_has_started():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    for kind, changed in (("task", False), ("question", True)):
+        desk_, stops = _carrying_on_desk(agent, kind, changed)
+        desk_.submit("On the card", "question", "", False, True)
+        assert stops == []
+        assert (
+            desk_._queue.get_nowait()[1] == "On the card"
+        )  # a request of its own, after the first
+
+
+def test_carrying_on_joins_a_request_that_has_not_started():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    desk_ = bare_desk(agent, [])
+    desk_._queue.put_nowait(("what is my", "What is my risk?", False, "question"))
+    desk_._heard.append("portfolio risk")
+
+    desk_.submit("Portfolio risk", "question", "", False, True)
+    said, request, _shown, _kind = desk_._queue.get_nowait()
+    assert said == "what is my portfolio risk"
+    assert request == "What is my risk? Portfolio risk"
+    assert desk_._queue.empty()
+
+
+def test_nothing_waits_before_lucius_starts():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+    import inspect
+
+    source = inspect.getsource(agent.LuciusDesk._run)
+    assert "sleep" not in source and "HOLD" not in source and "SETTLE" not in source
+
+
+def _chat(desk_module, monkeypatch, history):
+    saved = []
+    monkeypatch.setattr(desk_module.assistant, "get_or_create_session", lambda _s: ("s1", history))
+    monkeypatch.setattr(desk_module.assistant, "_save_session", lambda _s, h: saved.append(list(h)))
+    desk_module._stopped.discard("s1")
+    return saved
+
+
+def _user(*texts):
+    return {"role": "user", "content": [{"type": "text", "text": t} for t in texts]}
+
+
+def test_the_words_you_carry_on_with_are_added_to_your_last_message(monkeypatch):
+    from backend.ai.tool_text import harness_note
+    from backend.connectors.voice import desk as desk_module
+
+    history = [
+        _user("what is my", harness_note("relay")),
+        {"role": "assistant", "content": [{"type": "text", "text": "half an answ"}]},
+    ]
+    saved = _chat(desk_module, monkeypatch, history)
+    desk_module._stopped.add("s1")  # the call stopped that turn itself
+
+    assert desk_module._add_to_last_said("s1", "portfolio risk") is True
+    assert [m["role"] for m in saved[-1]] == ["user"]
+    assert saved[-1][0]["content"][0]["text"] == "what is my portfolio risk"
+
+
+def test_an_answered_message_is_never_added_to(monkeypatch):
+    from backend.connectors.voice import desk as desk_module
+
+    history = [_user("what is my balance"), {"role": "assistant", "content": []}]
+    saved = _chat(desk_module, monkeypatch, history)
+
+    assert desk_module._add_to_last_said("s1", "and my rent") is False
+    assert saved == [] and history[0]["content"][0]["text"] == "what is my balance"
+
+
+def test_words_already_saved_on_their_own_move_up_into_the_earlier_message(monkeypatch):
+    from backend.ai.tool_text import harness_note
+    from backend.connectors.voice import desk as desk_module
+
+    history = [
+        _user("I just want to know", harness_note("small talk")),
+        _user("my portfolio", harness_note("small talk")),
+    ]
+    saved = _chat(desk_module, monkeypatch, history)
+
+    assert desk_module._add_to_last_said("s1", "my portfolio") is True
+    assert len(saved[-1]) == 1
+    assert saved[-1][0]["content"][0]["text"] == "I just want to know my portfolio"
+
+
+def test_only_a_turn_the_call_started_is_ever_stopped(monkeypatch):
+    from backend.connectors.voice import desk as desk_module
+
+    cancelled = []
+    monkeypatch.setattr(desk_module.turns, "executing_turn_id", lambda _s: "typed-turn")
+    monkeypatch.setattr(desk_module.turns, "cancel", lambda *a, **k: cancelled.append(k))
+    desk_module.stop_call_turn("s1")
+    assert cancelled == []
+    desk_module._own("call-turn")
+    monkeypatch.setattr(desk_module.turns, "executing_turn_id", lambda _s: "call-turn")
+    desk_module.stop_call_turn("s1")
+    assert cancelled and cancelled[0]["turn_id"] == "call-turn"
+
+
+def test_the_front_voice_is_told_to_say_whether_the_owner_went_on_or_changed_course():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    rules = agent.FRONT_INSTRUCTIONS
+    assert "`continues_last` true" in rules
+    assert "`replaces_last` true" in rules
+    assert "answered after the one under way" in rules
+
+
+def test_mm_hm_is_said_so_it_is_in_the_chat_like_everything_else():
+    """Owner, 2026-11-06: nothing heard on a call is left out of the chat."""
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    async def run():
+        desk_, recorded = _recording_desk(agent)
+        desk_.item_added("user", "so what I mean is")
+        desk_.item_added("assistant", "Mm-hm?")
+        await asyncio.sleep(0)
+        assert recorded == [("so what I mean is", "Mm-hm?")]
+
+    asyncio.run(run())
+
+
+def test_a_new_turn_clears_the_mark_when_no_line_came_with_the_request():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    async def run():
+        desk_, recorded = _recording_desk(agent)
+        desk_._reply_beside_request = True
+        desk_.item_added("user", "hello")
+        desk_.item_added("assistant", "Hi there.")
+        await asyncio.sleep(0)
+        assert recorded == [("hello", "Hi there.")]
+
+    asyncio.run(run())
+
+
+def test_handing_over_marks_a_line_only_if_one_is_under_way():
+    agent = pytest.importorskip("backend.connectors.voice.agent")
+
+    desk_ = bare_desk(agent, [])
+    desk_._session.current_speech = object()
+    desk_._heard.append("what would you suggest")
+    desk_.submit("What would you suggest?")
+    assert desk_._reply_beside_request is True
+
+    desk_ = bare_desk(agent, [])
+    desk_._session.current_speech = None
+    desk_._heard.append("what would you suggest")
+    desk_.submit("What would you suggest?")
+    assert desk_._reply_beside_request is False
 
 
 def test_a_call_answers_out_loud_and_uses_the_screen_only_when_asked():

@@ -1432,36 +1432,48 @@
     background: color-mix(in srgb, var(--ink) 7%, transparent);
     font-size: var(--text-md);
   }
-  /* Your words as the call hears them, the newest kept in view when they run long. */
-  .lx-callheard {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    overflow: hidden;
-    font-style: italic;
-    color: var(--ink);
-  }
-  .lx-callheard--screen {
+  /* Whoever's talking, above the mic: three lines, the newest kept in view. */
+  .lx-callcaption {
     position: absolute;
     right: 0;
     bottom: calc(100% + var(--space-3));
     left: 0;
-    max-height: 4.5em;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    height: 4.5em;
+    overflow: hidden;
     font-size: var(--text-md);
     line-height: 1.5;
     text-align: center;
+    color: var(--ink);
     pointer-events: none;
   }
-  .lx-callheard--card {
-    max-height: 4.5em;
-    margin-bottom: var(--space-3);
-    font-size: var(--text-sm);
-    line-height: 1.5;
-    text-align: right;
-    color: var(--muted);
+  .lx-callcaption > span {
+    flex: none;
+  }
+  /* Past three lines, the cut-off top line blurs away. */
+  .lx-callcaption[data-long]::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 1;
+    height: 1.5em;
+    -webkit-backdrop-filter: blur(2.5px);
+    backdrop-filter: blur(2.5px);
+    -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent);
+    mask-image: linear-gradient(to bottom, #000 45%, transparent);
+  }
+  .lx-callcaption[data-who='you'] {
+    font-style: italic;
   }
   .lx-callstage--screen .lx-callstage-controls {
     position: relative;
+  }
+  /* Your words in the chat before they become your message. */
+  .lx-callheard-msg {
+    font-style: italic;
+    opacity: 0.75;
   }
   /* A label with its Beta pill, both on one centre line. */
   .lx-beta-label {

@@ -4,7 +4,7 @@ import { expandCall, hangUp, minimizeCall, toggleMute, useVoiceCall } from './vo
 import { callSignal, callStatus, orbState, useCallClock } from './voiceCallStatus'
 import { VoiceCallAttach } from './VoiceCallAttach'
 import { VoiceCallGlow } from './VoiceCallGlow'
-import { VoiceCallHeard } from './VoiceCallHeard'
+import { VoiceCallCaption } from './VoiceCallLive'
 import { VoiceCallMicLight } from './VoiceCallMicLight'
 import { VoiceCallModel } from './VoiceCallModel'
 import { VoiceCallSettings } from './VoiceCallSettings'
@@ -131,7 +131,7 @@ export function VoiceCallStage({
         </div>
         {
           <div className="lx-callstage-controls" data-ended={ended || undefined}>
-            {screen && <VoiceCallHeard variant="screen" />}
+            {screen && <VoiceCallCaption />}
             {screen && <VoiceCallAttach disabled={ended} busy={busy} />}
             {screen && <VoiceCallModel disabled={ended} />}
             {screen && (

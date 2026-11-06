@@ -29,6 +29,7 @@ CALLS = frozenset(
     {
         "is_expected",
         "call_settings",
+        "stop_request",
         "calls_allowed",
         "claim_call",
         "call_limit",
@@ -128,6 +129,9 @@ class Host:
             return service.calls_allowed()
         if method == "call_settings":
             return service.call_settings()
+        if method == "stop_request":
+            desk.stop_call_turn(self._owned(args))
+            return None
         if method == "claim_call":
             return self._claim(str(args.get("room") or ""))
         if method == "part_of_day":
@@ -207,6 +211,7 @@ class Host:
                 understood=str(args.get("understood") or ""),
                 shown=bool(args.get("shown")),
                 unheard=bool(args.get("unheard")),
+                continues=bool(args.get("continues")),
             )
         return desk.follow_next_turn(session_id)
 

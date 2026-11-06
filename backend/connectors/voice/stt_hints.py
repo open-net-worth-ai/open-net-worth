@@ -12,7 +12,7 @@ AUTOMATIC_MODEL = "deepgram/nova-3"
 
 # Its default 25ms of silence ends a turn at any breath, and one sentence became two requests
 # (owner, 2026-11-05, on the AssemblyAI equivalent).
-DEEPGRAM_TURN_SILENCE_MS = 700
+DEEPGRAM_TURN_SILENCE_MS = 900
 
 # Deepgram allows 100 terms and 500 tokens, and advises 20-50.
 _MAX_TERMS = 50

@@ -125,7 +125,9 @@ attach a file, and it goes to Lucius like any other message — and he reads his
 call, as well as showing it in the chat. The same goes for a change you approve on screen: what
 happens next is read out.
 
-**You see your words as you speak.** The call shows what it hears, word by word, above the mic or just above the call strip. Your message then appears in the chat as usual.
+**You see the call as it happens.** Your words appear as you speak, and Lucius's as he says them: above the mic on the full call screen, and in the chat. When the voice hasn't started or you cut him off, the chat shows his whole answer.
+
+**Carrying on, correcting, or changing the subject.** Say more after you've asked something and the call decides which it is. If you're finishing the same question, Lucius's current attempt is stopped and he starts again on the whole of it, and your words stay one message in the chat. If you correct yourself, the old attempt is stopped and its answer is dropped. A different question waits its turn. A change he has already started, or a task, always runs to the end first, and he tells you what it did. Nothing waits before Lucius starts: stopping is what saves the wasted work.
 
 **Lucius answers out loud.** He keeps it to a few sentences: the answer, then what matters most about
 it. Ask for a list and he says the top few and how many there are. He only uses the screen for changes waiting on your approval, or when you ask to
