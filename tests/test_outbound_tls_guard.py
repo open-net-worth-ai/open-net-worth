@@ -19,6 +19,7 @@ BACKEND = Path(__file__).resolve().parent.parent / "backend"
 # Loopback-only callers — plain http://127.0.0.1, never TLS, never the public internet.
 ALLOWED_BARE = {
     "backend/cli/serve.py",  # waits on its own http://127.0.0.1/api/health before opening a browser
+    "backend/cli/status.py",  # reads its own http://127.0.0.1/api/health for `onw status`
     "backend/scripts/perf_bench.py",  # localhost benchmark harness
 }
 OWNER = "backend/core/pinned_http.py"  # the one place that BUILDS the context

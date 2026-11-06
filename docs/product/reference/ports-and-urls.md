@@ -31,6 +31,8 @@ All relative to the app's address (e.g. `http://localhost:8080`):
 | `/help` | This help center, inside the app. |
 | `/api/health` | A health check — returns `{"status": "ok", …}` with the version when the server is up. Works without signing in, so it's safe for a monitoring tool or a load balancer. |
 
+To see which address a running server is on, run `onw status`.
+
 ## Changing the port
 
 8080 already taken, or want a different one?

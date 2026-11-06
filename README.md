@@ -145,6 +145,7 @@ Other commands you may need ([full list](docs/product/getting-started/installati
 
 | Command | What it does |
 |---|---|
+| `onw status` | Show whether it's running, its URL, version and folder |
 | `onw upgrade` | Update to the newest release |
 | `onw reset-password` | Set a new password if you've forgotten it |
 | `onw version` | Print the installed version |

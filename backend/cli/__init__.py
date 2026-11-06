@@ -6,6 +6,7 @@ anything below it (backend.main included); nothing below may import it.
 
     onw start [--open] [--autostart] [--auto-upgrade]
                                          run the app — API + built frontend, one process
+    onw status                           whether it's running, its URL, version and folder
     onw autostart install|stop|status    start at login/boot and restart on crash
     onw reset-password                   set a new password when the old one is forgotten
     onw mcp                              stdio MCP bridge for Claude Desktop, Cursor, …
@@ -48,6 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
         help="install new releases automatically and restart when idle (a `uv tool` install only)",
     )
     start.add_argument("--service", action="store_true", help=argparse.SUPPRESS)  # the boot service
+
+    sub.add_parser("status", help="show whether it's running, its URL, version and folder")
 
     auto = sub.add_parser("autostart", help="run at login/boot and restart on crash")
     auto.add_argument("action", choices=("install", "stop", "status"))
@@ -112,6 +115,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             auto_upgrade=args.auto_upgrade,
             service=args.service,
         )
+    if args.command == "status":
+        from backend.cli.status import run_status
+
+        return run_status()
     if args.command == "autostart-run":
         from backend.cli.autostart_windows import run_service
 
