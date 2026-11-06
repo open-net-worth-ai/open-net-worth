@@ -62,18 +62,19 @@ For a story rather than one stock — an IPO, a war, interest rates:
    (where this alert goes), and **Additional instructions** — what Lucius should weigh when it
    fires, e.g. *"check whether the move is news-driven"*. An alert reads the news the app has
    already collected for that ticker from the last 24 hours, held or not. If nothing recent is on
-   file, Lucius searches for it, as described below.
+   file, it says so. It doesn't search the web on its own unless you turn on the experiment below.
 5. Click **Create alert**. The ticker's alerts screen shows every level on a 52-week price scale, each with its own
    on/off switch.
 
-**Lucius looks into each alert.** When an alert fires, Lucius follows its instructions, searching
-the web and X before it messages you. It takes up to two minutes (usually much less), so the message
-can arrive a little later, and it uses your search quota, up to 20 runs a day. The search can't
-change your data, send anything or place an order, and it never sees your position or profile. It
-does see the alert's instructions, so keep private numbers out of them. Your **Web search** setting
-for scans doesn't turn this off. To get only the quick alert, turn off *"When a price alert fires,
-Lucius looks into it"* in Settings → Developer → Experimental. If a run fails or times out, you get
-the quick alert anyway. This doesn't run on the Antigravity CLI.
+**Let Lucius look into each alert (experimental, off by default).** In Settings → Developer →
+Experimental, turn on *"When a price alert fires, Lucius looks into it"*. Lucius then follows an
+alert's instructions when it fires, searching the web and X before it messages you. It takes up to
+two minutes (usually much less), so the message can arrive a little later, and it uses your AI model
+and search quota, up to 20 runs a day. The search can't change your data, send anything or place an
+order, and it never sees your position or profile. It does see the alert's instructions, so keep
+private numbers out of them. Your **Web search** setting for scans doesn't turn this off; the
+experiment switch does. If a run fails or times out, you get the quick alert. This doesn't run on
+the Antigravity CLI.
 
 The **🔔 Mute** button next to the price on that screen silences the ticker: no price alerts and no
 news scans for it until you click it again (it then reads **Muted**). **Additional news sources**
