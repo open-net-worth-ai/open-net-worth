@@ -83,7 +83,8 @@ The person's own words about this come first. What follows is only the default.
 For each NEW ITEM choose one:
 - now: it changes how this person sees something they hold or watch, or a level they set was \
 crossed. For example a deal agreed or collapsing, a ruling, a CEO or CFO leaving, guidance or a \
-dividend cut, a takeover bid, a war or ceasefire, a surprise rate move.
+dividend cut, a takeover bid, a war or ceasefire, a surprise rate move. A price_alert item always \
+goes out now, whatever the hour: they asked to be told, so your only choice is how it reads.
 - later: worth knowing but not worth an interruption: confirmed next steps of something they \
 already know, results in line with expectations, a single unconfirmed report. It waits for a \
 roundup.

@@ -101,3 +101,23 @@ cross-subject claim) stop repeats but cannot say whether *this person* needs *th
 - **Alternatives weighed:** per-analysis decision; more per-sender rules; memory fact; code-enforced user-set
 - **Driving artifacts:** owner report of a seven-push day; `docs/FEATURE_FLAGS.md`
 - **Why this way (one line):** one batched decision with the full picture, behind one seam, with the model's judgement bounded only by rails that cannot lose a stop the user set.
+
+## Amendment 2026-11-06: a price alert always goes out
+
+This ADR left a valid `skip` or `later` standing for a level the user set, so only a model failure
+was covered. The ledger showed the cost: 2 of 11 price alerts were held back, one skipped outright
+at night ("tiny position, no new cause") and one delayed to a roundup. The user set that level so
+they would be told, and a silent skip is the failure they can't see. The text the model judges can
+also be shaped by a page, which makes "already told" or "unconfirmed" a way to suppress a stop-loss.
+
+`_decision_for` now turns `later` or `skip` into `now` for `source == "price_alert"`, sending the
+alert's own text and logging what the model chose and why. The prompt says so too, so the model
+writes the message instead of being overruled.
+
+**Crash-watch keeps the model's judgement**, even though it carries `user_set` for the failure
+rails. It is an automatic detector, not a level anyone chose, and it re-fires through a slide: 19 of
+23 candidates were held back, mostly repeats. Forcing those through would bring back the noise this
+ADR exists to stop.
+
+**Consequence:** `delivery_instructions` can no longer hold back a price alert ("not at night").
+Muting the ticker or turning the alert off is how to stop one.
