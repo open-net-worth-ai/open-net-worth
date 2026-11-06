@@ -147,7 +147,6 @@ Other commands you may need ([full list](docs/product/getting-started/installati
 |---|---|
 | `onw upgrade` | Update to the newest release |
 | `onw reset-password` | Set a new password if you've forgotten it |
-| `onw mcp` | Let another AI app use your book |
 | `onw version` | Print the installed version |
 
 Good to know:
@@ -156,6 +155,8 @@ Good to know:
   `logs/` and `backups/`. First run lets you put it elsewhere and remembers the choice. No `.env`
   file is needed.
 - **The desktop app** can connect to a server like this instead of using a local book.
+- **Other AI apps** like Claude Desktop, Cursor or ChatGPT can use your book while the server is
+  running. See [Use your book from other AI apps](docs/product/operations/connect-ai-apps.md).
 - **Working on the code?** Run `make setup start` from a checkout (Python 3.12+ and Node.js 22+).
 
 ### Option C — Docker
