@@ -556,11 +556,11 @@ def test_a_public_demo_never_starts_a_run(monkeypatch):
     assert run.active() is False
 
 
-def test_the_run_is_on_by_default():
+def test_the_run_is_off_by_default_until_its_review_findings_are_fixed():
     from backend.core.feature_flags import all_flags
 
     (flag,) = [f for f in all_flags() if f.name == "price_alert_lucius_run"]
-    assert flag.default is True
+    assert flag.default is False
 
 
 def test_an_unreadable_flag_means_the_old_path(monkeypatch):

