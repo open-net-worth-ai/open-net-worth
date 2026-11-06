@@ -117,37 +117,82 @@ folders and keyboard shortcuts.
 
 ### Option B — a server
 
+**1. Install it.** You don't need Python or Node.js on your system. This is for macOS and Linux;
+on Windows, follow [these steps](docs/product/getting-started/installation.md#windows) instead.
+
 ```bash
 curl -fsSL https://github.com/open-net-worth-ai/open-net-worth-releases/releases/latest/download/install-server.sh | sh
+```
+
+If the installer tells you to open a new terminal, do that before the next step.
+
+**2. Start it.** Your browser opens the app, and first run takes it from there.
+
+```bash
 onw start --open
 ```
 
-Installs [uv](https://docs.astral.sh/uv/) if needed, then `open-net-worth` on its own Python 3.12
-(no system Python or Node.js). It provides the `onw` command (`onw start --open`,
-`onw start --autostart --auto-upgrade`, `onw upgrade`, `onw reset-password`, `onw mcp`, `onw version`). The desktop app can connect to a server
-like this instead of using a local book. Working on the code instead? `make setup start` from a
-checkout (Python 3.12+ and Node.js 22+).
+**3. Optional: keep it running and up to date.** Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop the
+copy from step 2, then run the command below. It starts the app at login, restarts it after a
+crash and installs each new signed release. Leave out `--auto-upgrade` to update by hand. See
+[Keeping it running](#keeping-it-running).
 
-No `.env` file is needed. Everything lives in one working folder, `~/.open-net-worth/`, holding
-`data/`, `cache/`, `logs/` and `backups/`. First run lets you put it elsewhere and remembers the
-choice.
+```bash
+onw start --autostart --auto-upgrade
+```
+
+Other commands you may need ([full list](docs/product/getting-started/installation.md#the-onw-command)):
+
+| Command | What it does |
+|---|---|
+| `onw upgrade` | Update to the newest release |
+| `onw reset-password` | Set a new password if you've forgotten it |
+| `onw mcp` | Let another AI app use your book |
+| `onw version` | Print the installed version |
+
+Good to know:
+
+- **Your data** lives in one working folder, `~/.open-net-worth/`, holding `data/`, `cache/`,
+  `logs/` and `backups/`. First run lets you put it elsewhere and remembers the choice. No `.env`
+  file is needed.
+- **The desktop app** can connect to a server like this instead of using a local book.
+- **Working on the code?** Run `make setup start` from a checkout (Python 3.12+ and Node.js 22+).
 
 ### Option C — Docker
 
+**1. Download the Compose file** into an empty folder.
+
 ```bash
 curl -fsSLO https://github.com/open-net-worth-ai/open-net-worth-releases/releases/latest/download/docker-compose.yml
+```
+
+**2. Pick a password and start it.** Use at least 8 characters. Compose won't start without a
+password.
+
+```bash
 AUTH_PASSWORD='pick a password' docker compose up -d
 ```
 
-Pulls the public image `ghcr.io/open-net-worth-ai/open-net-worth`, pinned by that compose file to
-the release it came with (`ONW_VERSION=x.y.z` runs another). From a checkout, add
-`-f compose.build.yml --build` to build it locally instead. Then open http://localhost:8080 and log in with
-that password. The password is not optional under Docker: your browser reaches the container from
-Docker's bridge, not from localhost, so the "same machine, no login" shortcut never applies, and
-without a password nothing can operate the instance — details in the
-[first-run guide](docs/product/getting-started/first-run.md#docker). Compose refuses to start
-without it. Migrations run at boot; data lives in a named volume that survives
-`docker compose down`.
+In Windows PowerShell, use `curl.exe` in step 1, and run this in step 2:
+
+```powershell
+$env:AUTH_PASSWORD='pick a password'; docker compose up -d
+```
+
+**3. Open <http://localhost:8080>** and log in with that password.
+
+Good to know:
+
+- **Why the password is required:** your browser reaches the container from Docker's bridge, not
+  from localhost, so the "same machine, no login" shortcut never applies. Without a password,
+  nothing could operate the instance. Details are in the
+  [first-run guide](docs/product/getting-started/first-run.md#docker).
+- **Your data** lives in a named volume that survives `docker compose down`. Migrations run at
+  boot.
+- **The version** is the public image `ghcr.io/open-net-worth-ai/open-net-worth`, pinned by that
+  Compose file to the release it came with. `ONW_VERSION=x.y.z` runs another.
+- **Working on the code?** From a checkout, add `-f compose.build.yml --build` to build the image
+  locally.
 
 ## Coming from YNAB or Lunch Money?
 
