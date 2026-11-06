@@ -16,8 +16,8 @@ from backend.monitoring.delivery_prompt import (
     DeliveryOutput,
     DeliveryRoundup,
     build_prompt,
-    strip_unknown_links,
 )
+from backend.monitoring.text_sanitize import strip_unknown_links
 from backend.services import news_delivery as nd
 from backend.services import notify_routes
 from backend.services.news_delivery import apply_delivery_change as change
@@ -184,6 +184,20 @@ def test_a_user_set_level_is_never_held_back_by_an_omission(model):
     result = run(dd.decide([item("dlv_1", user_set=True)], [], CONTEXT, now=NOW))
     (d,) = result["decisions"]
     assert d["decision"] == "now" and d["message"].startswith("Analysis")
+
+
+def test_a_message_loses_a_bare_domain_it_was_not_given(model):
+    model.reply = out(
+        {
+            "id": "dlv_1",
+            "decision": "now",
+            "reason": "stop",
+            "message": "Sam, ACME fell. Details: acme-filings.example/r?w=12.5",
+        }
+    )
+    candidate = item("dlv_1", user_set=True, source="price_alert")
+    decision = run(dd.decide([candidate], [], CONTEXT, now=NOW))["decisions"][0]
+    assert "w=12.5" not in decision["message"]
 
 
 @pytest.mark.parametrize("chosen", ["later", "skip"])

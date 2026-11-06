@@ -230,7 +230,13 @@ async def _start_connector(name: str, start) -> None:
 
 
 async def _headless_turn_runner(
-    prompt: str, *, allowed_tools=None, model=None, lean_prompt=False, enforce_offer=False
+    prompt: str,
+    *,
+    allowed_tools=None,
+    model=None,
+    lean_prompt=False,
+    enforce_offer=False,
+    effort="medium",
 ) -> str:
     """The headless-turn runner registered on the ``core.headless_turn`` seam (below, in
     ``lifespan``) so a service can run one Lucius turn WITHOUT ``services`` importing ``ai``
@@ -304,6 +310,7 @@ async def _headless_turn_runner(
                 else build_system_prompt()
             ),
             model=run_model,
+            effort=effort,
         ):
             if event.get("type") == "text_delta":
                 parts.append(event.get("text", ""))
@@ -899,6 +906,10 @@ async def lifespan(app: FastAPI):
 
     await cancel_memory_extractions()
     unregister_automation_adapters()
+    # Before the channels stop: a price alert's background run still owes its push.
+    from backend.monitoring import price_alert_run
+
+    await price_alert_run.drain()
     await telegram_bot.stop()
     from backend.connectors.voice import service as voice_service
 

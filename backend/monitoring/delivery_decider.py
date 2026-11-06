@@ -39,8 +39,8 @@ from backend.monitoring.delivery_prompt import (
     MESSAGE_CHARS,
     DeliveryOutput,
     build_prompt,
-    strip_unknown_links,
 )
+from backend.monitoring.text_sanitize import strip_unknown_links
 from backend.services.news_delivery import apply_delivery_change
 
 logger = logging.getLogger(__name__)

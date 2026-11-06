@@ -214,6 +214,18 @@ def apply_story_change(
         )
 
 
+def merge_fired_story(story_id: str, created_at: str | None, changes: dict) -> dict | None:
+    """Add ``changes`` to a fired alert's story once a background run finishes. It re-reads the row
+    in one transaction, so a dismissal, read mark or explanation made during the run survives, and
+    it skips the write when the alert has fired again since (``created_at`` differs)."""
+    store = IntelStoriesStore()
+    with locked_unit_of_work(intel_stories, signal_timeline_entries) as conn:
+        current = store.find_by_id(story_id, conn=conn)
+        if current is None or current.get("created_at") != created_at:
+            return None
+        return _apply_story_change(store, {**current, **changes}, None, None, None, conn)
+
+
 def _apply_story_change(
     store: IntelStoriesStore,
     story: dict,
