@@ -52,7 +52,7 @@ from backend.ai.image_payloads import decode_image_payloads
 from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConfigurationError, ExternalServiceError, ProviderTimeoutError
 
-from . import claude_live_session
+from . import claude_live_session, cli_sign_in
 from .base import AIProvider, log_text_cap
 from .cli_call_grace import PostCallWatch, grace_seconds
 from .cli_tool_protocol import (
@@ -263,6 +263,18 @@ def _result_error(event: dict) -> str:
         "Claude Code CLI reported an error: "
         + (detail or "The CLI returned an error without details.")[:500]
     )
+
+
+# The CLI's words for having no usable login: "Not logged in · Please run /login", and for an
+# expired one, "…run /login". `/login` means nothing to someone reading it in our chat.
+_NOT_SIGNED_IN_MARKERS = ("not logged in", "run /login")
+
+
+def _cli_failure(message: str) -> ExternalServiceError:
+    """The exception for an ``is_error`` result, carrying ``_result_error``'s text."""
+    if any(marker in message.lower() for marker in _NOT_SIGNED_IN_MARKERS):
+        return cli_sign_in.not_signed_in_error("Claude Code")
+    return ExternalServiceError(message)
 
 
 class ClaudeCliProvider(AIProvider):
@@ -712,7 +724,7 @@ class ClaudeCliProvider(AIProvider):
                             attempts,
                         )
                         continue
-                    raise ExternalServiceError(cli_error)
+                    raise _cli_failure(cli_error)
 
                 if usage_event is not None:
                     break
@@ -893,7 +905,7 @@ class ClaudeCliProvider(AIProvider):
                             # response to it.
                             retryable_error = ev.get("subtype") or ""
                             break
-                        raise ExternalServiceError(_result_error(ev))
+                        raise _cli_failure(_result_error(ev))
                     log.info(
                         "claude_cli OK num_turns=%s output_tokens=%s duration_ms=%s",
                         ev.get("num_turns"),
@@ -1048,7 +1060,7 @@ class ClaudeCliProvider(AIProvider):
                 if ev.get("type") != "result":
                     continue
                 if ev.get("is_error"):
-                    raise ExternalServiceError(_result_error(ev))
+                    raise _cli_failure(_result_error(ev))
                 saw_result = True
                 text = ev.get("result") or ""
                 usage = ev.get("usage") or {}

@@ -19,7 +19,7 @@ your home folder — the same for the server, `onw start` and the desktop app:
 | macOS | `/Users/<you>/.open-net-worth` |
 | Linux | `/home/<you>/.open-net-worth` |
 | Windows | `C:\Users\<you>\.open-net-worth` |
-| Docker | `/home/onw/.open-net-worth` inside the container, kept in the `onw-data` volume |
+| Docker | `/home/onw/.open-net-worth` inside the container, kept in the `onw-data` volume. Claude Code, Codex and OpenCode sign-ins are kept apart from your data, in the `onw-claude`, `onw-codex` and `onw-opencode` volumes |
 
 It's a hidden folder (the name starts with a dot). On macOS press <kbd>⌘</kbd> <kbd>Shift</kbd>
 <kbd>.</kbd> in Finder to show hidden folders; on Windows turn on **View → Hidden items** in

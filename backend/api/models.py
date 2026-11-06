@@ -49,6 +49,7 @@ import httpx
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
+from backend.ai.models import cli_sign_in
 from backend.ai.models.cli_default_model import cli_default_model, cli_default_models
 from backend.ai.models.codex_cli_catalog import model_ids as _codex_model_ids
 from backend.core.config import get_settings
@@ -483,6 +484,10 @@ def get_model_config_providers():
     so without this the Settings row has nothing true to say about itself while its models
     are already showing up in every picker.  Detection writes nothing.
     ``cli_host_platform`` names the server OS for installation instructions.
+
+    ``cli_sign_in`` is what detection cannot say: whether each detected Claude Code / Codex
+    can spend a login (``signed_in`` | ``not_signed_in`` | ``unknown``). ``cli_in_container``
+    says a sign-in has to go through ``docker exec``.
     """
     store = ModelConfigStore()
     return {
@@ -499,7 +504,22 @@ def get_model_config_providers():
         "cli_host_platform": {"Darwin": "macos", "Windows": "windows", "Linux": "linux"}.get(
             platform.system(), "other"
         ),
+        "cli_sign_in": _cli_sign_in_states(store),
+        "cli_in_container": cli_sign_in.in_container(),
     }
+
+
+def _cli_sign_in_states(store: ModelConfigStore) -> dict[str, str]:
+    """Sign-in state for each detected CLI that is switched on. A switched-off row shows no
+    status at all, so it isn't worth a process spawn on every poll."""
+    configured = store.providers_public()
+    paths = {
+        key: path
+        for key, path in store.detected_cli_paths().items()
+        if (configured.get(key) or {}).get("enabled") is not False
+    }
+    has_key = {key: bool((configured.get(key) or {}).get("has_api_key")) for key in paths}
+    return cli_sign_in.states(paths, has_key)
 
 
 @router.put("/api/model-config")
@@ -874,7 +894,32 @@ def validate_provider_credentials(provider_key: str):
         result["models"] = models
     else:
         result["error"] = error
+    if status == "valid":
+        _report_cli_sign_in(result, provider_key, entry, base_url, api_key)
     return result
+
+
+def _report_cli_sign_in(
+    result: dict, provider_key: str, entry: dict, cli_path: str, api_key: str
+) -> None:
+    """Test connection answers "will this work", and for a CLI ``--version`` can't. ``key_status``
+    stays about the binary, because the model pickers key off it and a login can come later."""
+    from backend.db.model_config_store import cli_binary_path
+
+    if entry["transport"] not in _CLI_TRANSPORTS:
+        return
+    state = cli_sign_in.check(
+        provider_key,
+        cli_binary_path(provider_key, cli_path),
+        has_api_key=bool(api_key),
+        fresh=True,
+    )
+    result["sign_in"] = state
+    if state == cli_sign_in.NOT_SIGNED_IN:
+        result["error"] = (
+            f"{entry.get('label') or provider_key} is installed but not signed in. "
+            "Expand Sign in to see how."
+        )
 
 
 # ── Reveal stored API key ─────────────────────────────────────────────────────

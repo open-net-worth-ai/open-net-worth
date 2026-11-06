@@ -193,12 +193,13 @@ def _friendly_error(exc: BaseException) -> tuple[str, bool]:
     Never leaks a key, stack trace, or raw SDK dict.
     """
     from backend.core.errors import (
+        CliNotSignedInError,
         ProviderDisabledError,
         ProviderTimeoutError,
         UnsupportedModalityError,
     )
 
-    if isinstance(exc, ProviderDisabledError):
+    if isinstance(exc, (ProviderDisabledError, CliNotSignedInError)):
         return str(exc), True
     if isinstance(exc, ProviderTimeoutError):
         # The provider's own words ("Claude Code CLI timed out after 300s (raise

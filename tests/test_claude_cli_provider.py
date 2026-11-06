@@ -27,7 +27,12 @@ from backend.ai.models.claude_cli_tools import (
     render_tool_manifest,
 )
 from backend.ai.models.cli_tool_protocol import looks_like_an_unfenced_tool_call
-from backend.core.errors import ConfigurationError, ExternalServiceError, ValidationError
+from backend.core.errors import (
+    CliNotSignedInError,
+    ConfigurationError,
+    ExternalServiceError,
+    ValidationError,
+)
 from backend.db.model_telemetry_store import ModelTelemetryStore
 
 
@@ -1312,7 +1317,9 @@ async def test_login_error_never_displays_the_success_protocol_subtype(
                 system="",
                 model="haiku",
             )
-    assert str(raised.value) == f"Claude Code CLI reported an error: {detail}"
+    assert isinstance(raised.value, CliNotSignedInError)
+    assert "success" not in str(raised.value)
+    assert "Claude Code isn't signed in" in str(raised.value)
 
 
 @pytest.mark.asyncio
@@ -2361,3 +2368,25 @@ def test_a_block_broken_anywhere_but_its_last_brackets_stays_malformed(body):
     from backend.ai.models.cli_tool_protocol import parse_tool_calls
 
     assert parse_tool_calls(f"<tool_call>{body}</tool_call>") == []
+
+
+@pytest.mark.asyncio
+async def test_a_turn_with_no_login_says_sign_in(tmp_path):
+    """The event is what `claude` 2.1 really emits with an empty home: subtype "success",
+    is_error true, and the reason in `result`."""
+    cli = _fake_cli(
+        tmp_path,
+        [_result_event("Not logged in · Please run /login", is_error=True, subtype="success")],
+        exit_code=1,
+    )
+    provider = ClaudeCliProvider(cli_path=str(cli))
+
+    with pytest.raises(CliNotSignedInError, match="Claude Code isn't signed in"):
+        async for _ in provider.stream_chat(
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            system="s",
+            model="sonnet",
+            effort="low",
+        ):
+            pass

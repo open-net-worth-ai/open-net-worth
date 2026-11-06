@@ -187,3 +187,64 @@ it('shows no install help for a tool that is already found', () => {
   )
   expect(screen.getByText('Install & sign in')).toBeTruthy()
 })
+
+it('offers sign-in for a found CLI with no login, which used to get no row at all', () => {
+  render(
+    <CliSubscriptionHelp
+      provider="codex_cli"
+      platform="linux"
+      detected
+      signIn="not_signed_in"
+      onCheck={onCheck}
+    />,
+  )
+  expect(screen.getByText('Not signed in')).toBeTruthy()
+  fireEvent.click(screen.getByRole('button', { name: /^Sign in/ }))
+  expect(screen.getByText('codex login')).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Copy Codex install command' })).toBeNull()
+})
+
+it.each([
+  ['codex_cli', 'Codex', 'docker exec -it open-net-worth codex login --device-auth'],
+  ['claude_cli', 'Claude Code', 'docker exec -it open-net-worth claude auth login'],
+] as const)('gives the docker exec command in a container: %s', (provider, label, command) => {
+  render(
+    <CliSubscriptionHelp
+      provider={provider}
+      platform="linux"
+      detected
+      signIn="not_signed_in"
+      inContainer
+      onCheck={onCheck}
+    />,
+  )
+  fireEvent.click(screen.getByRole('button', { name: /^Sign in/ }))
+  expect(screen.getByText(command)).toBeTruthy()
+  expect(
+    screen.getByText(new RegExp(`${label} comes with the Open Net Worth container`)),
+  ).toBeTruthy()
+})
+
+it.each(['signed_in', 'unknown', undefined] as const)(
+  'shows no row for a found CLI with no word against its login: %s',
+  (signIn) => {
+    const { container } = render(
+      <CliSubscriptionHelp
+        provider="codex_cli"
+        platform="linux"
+        detected
+        signIn={signIn}
+        onCheck={onCheck}
+      />,
+    )
+    expect(container.textContent).toBe('')
+  },
+)
+
+it('says so when the sign-in lands while the help is open', () => {
+  const props = { provider: 'codex_cli', platform: 'linux', detected: true, onCheck } as const
+  const { rerender } = render(<CliSubscriptionHelp {...props} signIn="not_signed_in" />)
+  fireEvent.click(screen.getByRole('button', { name: /^Sign in/ }))
+  rerender(<CliSubscriptionHelp {...props} signIn="signed_in" />)
+  expect(screen.getByText('Signed in. Lucius can use it now.')).toBeTruthy()
+})

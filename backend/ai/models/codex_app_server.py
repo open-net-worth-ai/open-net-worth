@@ -48,9 +48,10 @@ from typing import AsyncGenerator, Optional
 
 from backend.core.child_env import scrubbed_environ
 from backend.core.errors import ConfigurationError, ExternalServiceError
+from backend.core.report_redact import redact_text
 
 from .cli_tool_protocol import write_image_files  # noqa: F401 — LiveTurn calls it via this module
-from .codex_home import isolated_home
+from .codex_home import has_login, isolated_home
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +63,10 @@ _STDOUT_LIMIT = 8 * 1024 * 1024
 _DEFAULT_TIMEOUT_SECONDS = 300.0
 # The handshake is local and cheap; if it does not complete the binary is wrong or broken.
 _INITIALIZE_TIMEOUT_SECONDS = 30.0
+_STDERR_TAIL_LINES = 5
+_STDERR_LINE_CHARS = 300
+_STDERR_QUOTE_CHARS = 500
+_STDERR_SETTLE_SECONDS = 1.0
 # Bound the fan-out: a subscription's rate limit is per-ACCOUNT, so parallel turns buy
 # nothing and can trip it. Unlike the exec transport this is NOT about process count — the
 # process is shared — purely about concurrent turns against the same account.
@@ -194,6 +199,16 @@ def _code_mode_host_present(cli: str) -> bool:
     return shutil.which(_CODE_MODE_HOST, path=search) is not None
 
 
+# "unexpected status 401 Unauthorized: Missing bearer or basic authentication in header" is what
+# Codex says with no login at all; the other is its expired or rotated login.
+_AUTH_REJECTION = re.compile(r"\b401\b.*unauthorized|sign in again", re.IGNORECASE | re.DOTALL)
+
+
+def is_auth_rejection(text: str) -> bool:
+    """True when Codex refused a turn for the login it holds, not for the request."""
+    return bool(_AUTH_REJECTION.search(text or ""))
+
+
 class NativeToolsUnavailable(ExternalServiceError):
     """The app-server refused the turn's tool registration — run it on the text protocol."""
 
@@ -236,6 +251,11 @@ class AppServerClient:
         self._next_id = 0
         self._lock = asyncio.Lock()
         self._start_error: Optional[BaseException] = None
+        # True when this child cannot be holding a working login: it started with none, or a
+        # turn was refused. A child reads its login once, so signing in needs a new child.
+        self._login_stale = False
+        self._stderr_tail: "collections.deque[str]" = collections.deque(maxlen=_STDERR_TAIL_LINES)
+        self._stderr_drain: Optional[asyncio.Future] = None
 
     # ── lifecycle ─────────────────────────────────────────────────────────────
 
@@ -247,7 +267,9 @@ class AppServerClient:
         """Spawn + handshake if we have no live child. Safe to call on every turn."""
         async with self._lock:
             if self.alive:
-                return
+                if not (self._login_stale and self._has_login()):
+                    return
+                log.info("codex_app_server: a login appeared — restarting the child to read it")
             await self._reap()
             resolved = shutil.which(self.cli_path)
             if not resolved:
@@ -268,8 +290,10 @@ class AppServerClient:
                 env=child_env(self.api_key, native_tools=self.native_tools),
                 limit=_STDOUT_LIMIT,
             )
+            self._login_stale = not self._has_login()
             self._reader = asyncio.ensure_future(self._read_loop())
-            asyncio.ensure_future(_drain(self._proc.stderr))
+            self._stderr_tail.clear()
+            self._stderr_drain = asyncio.ensure_future(_drain(self._proc.stderr, self._stderr_tail))
             handshake: dict = {"clientInfo": {"name": _CLIENT_NAME, "version": _CLIENT_VERSION}}
             if self.native_tools:
                 # `thread/start.dynamicTools` is gated behind the experimental API.
@@ -283,6 +307,7 @@ class AppServerClient:
                 await self._reap()
                 raise ExternalServiceError(
                     f"Codex app-server did not complete its handshake: {exc}"
+                    + await self._stderr_summary()
                 ) from exc
             self._notify("initialized")
             self.native_ready = (
@@ -296,6 +321,24 @@ class AppServerClient:
                 self._proc.pid,
                 self.native_ready,
             )
+
+    def _has_login(self) -> bool:
+        return bool(self.api_key) or has_login(self.native_tools)
+
+    def note_auth_rejected(self) -> None:
+        """A turn came back 401: whatever this child read at spawn is no good. The next turn
+        re-reads the login if there is one, which is how signing in again takes effect."""
+        self._login_stale = True
+
+    async def _stderr_summary(self) -> str:
+        """What the dead child printed — otherwise a failed start gives no reason at all."""
+        if self._stderr_drain is not None:
+            await asyncio.wait({self._stderr_drain}, timeout=_STDERR_SETTLE_SECONDS)
+        text = " | ".join(self._stderr_tail)[-_STDERR_QUOTE_CHARS:]
+        if not text:
+            return ""
+        log.warning("codex_app_server: child stderr before the failed start: %s", text)
+        return f". Codex printed: {redact_text(text)}"
 
     async def aclose(self) -> None:
         async with self._lock:
@@ -634,7 +677,8 @@ def classify(msg: dict) -> dict:
 
     Same vocabulary as the exec transport's ``_classify`` so the provider has one mapping:
     ``text`` (a visible delta), ``thinking``, ``message`` (a whole assistant message),
-    ``usage``, ``done``, ``error``, ``ignore``.
+    ``usage``, ``done``, ``error``, ``ignore`` — plus ``retrying``, which only this transport has:
+    Codex lost the stream and is trying again by itself (see ``LiveTurn.events``).
     """
     method = msg.get("method") or ""
     p = msg.get("params") or {}
@@ -687,15 +731,17 @@ def classify(msg: dict) -> dict:
     if method == "turn/completed":
         turn = p.get("turn") or {}
         if turn.get("status") == "failed" or turn.get("error"):
-            err = turn.get("error") or {}
-            message = err.get("message") if isinstance(err, dict) else str(err)
-            return {"kind": "error", "text": message or _describe_error(turn), "usage": {}}
+            return {"kind": "error", "text": _error_text(turn), "usage": {}}
         return {"kind": "done", "text": _final_text(turn), "usage": {}}
     if method == "turn/failed":
-        err = p.get("error") or {}
-        return {"kind": "error", "text": err.get("message") or _describe_error(p), "usage": {}}
+        return {"kind": "error", "text": _error_text(p), "usage": {}}
     if method == "error":
-        return {"kind": "error", "text": p.get("message") or _describe_error(p), "usage": {}}
+        # "Reconnecting... 2/5" says nothing; the reason it is reconnecting is in the details.
+        if p.get("willRetry") is True:
+            err = p.get("error") if isinstance(p.get("error"), dict) else {}
+            detail = err.get("additionalDetails") or err.get("message") or ""
+            return {"kind": "retrying", "text": str(detail), "usage": {}}
+        return {"kind": "error", "text": _error_text(p), "usage": {}}
     return {"kind": "ignore", "text": "", "usage": {}}
 
 
@@ -737,6 +783,25 @@ def strictify_schema(schema: dict) -> dict:
     return out
 
 
+def _error_text(payload: dict) -> str:
+    """The readable reason in an error-bearing frame, which is either at the top (older builds)
+    or under ``error`` with its cause beside it. Anything else is serialised for diagnosis."""
+    if payload.get("message"):
+        return str(payload["message"])
+    err = payload.get("error")
+    if not isinstance(err, dict) or not err.get("message"):
+        return str(err) if err and not isinstance(err, dict) else _describe_error(payload)
+    message, details = str(err["message"]), err.get("additionalDetails")
+    return f"{message}: {details}" if details and str(details) not in message else message
+
+
+def dropped_mid_reply(detail: str) -> str:
+    """The error for a stream lost after text was shown, when Codex would re-send the whole reply
+    and no event can take back what the chat already has."""
+    cause = f" ({detail})" if detail else ""
+    return f"The connection to the model dropped partway through the reply{cause}. Send your message again."
+
+
 def _describe_error(payload: dict) -> str:
     """A diagnosable string for an error frame carrying no ``message``.
 
@@ -774,8 +839,9 @@ def usage_fields(breakdown: dict) -> dict:
     }
 
 
-async def _drain(stream) -> None:
-    """Read stderr to EOF so a full pipe can never block the child mid-turn."""
+async def _drain(stream, tail: Optional["collections.deque[str]"] = None) -> None:
+    """Read stderr to EOF so a full pipe can never block the child mid-turn, keeping the last
+    lines in ``tail`` for the one error that needs them."""
     if stream is None:
         return
     try:
@@ -786,6 +852,8 @@ async def _drain(stream) -> None:
             text = chunk.decode("utf-8", "replace").strip()
             if text:
                 log.debug("codex_app_server stderr: %.300s", text)
+                if tail is not None:
+                    tail.append(text[:_STDERR_LINE_CHARS])
     except (asyncio.CancelledError, OSError, ValueError):
         return
 
