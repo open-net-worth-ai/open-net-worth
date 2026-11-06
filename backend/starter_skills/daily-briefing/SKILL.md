@@ -52,7 +52,15 @@ if anything, needs them. It takes seconds to read. Say only what is worth knowin
   reconcile it, and any card bill or other payment due in the next 3 days that is not paid yet.
 - **Needs a look:** transactions waiting for their review or still uncategorized, and anything
   that looks off — a possible duplicate, an unusually large charge, a first-time payee — named,
-  not just counted.
+  not just counted. Check each one against what you remember first: leave out what they've
+  finished with, and if it's still waiting on someone, give where it stands instead of asking
+  them again.
+- **Waiting on someone:** what you remember is still with someone else, such as a dispute, a
+  refund, a claim or an application. Check the books for the outcome with `get_transactions`
+  first. If it's settled, say so once. If not, say where it stands in one short sentence ("the two
+  card charges are still with the bank, result around the 12th"), worked into the paragraph with
+  nothing in front of it to label it. Once its date has arrived, or a week has passed if it has
+  none, use that sentence to remind them what to recheck and with whom.
 
 ## Where the data is
 
