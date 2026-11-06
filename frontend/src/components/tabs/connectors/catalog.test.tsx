@@ -258,6 +258,8 @@ describe('MCP provenance — what we confirmed, stated exactly', () => {
     ['mcp-quickbooks', 'Intuit', 'verified'],
     ['mcp-xero', 'Xero', 'verified'],
     ['mcp-mercury', 'Mercury', 'verified'],
+    // help.monarch.com publishes the endpoint (2026-10-30 article).
+    ['mcp-monarch', 'Monarch', 'verified'],
     // IBKR publishes this endpoint itself (ai-integrations page, connector v1.1.5 release notes,
     // 2026-07-28 press release) and serves it from api.ibkr.com.
     ['mcp-ibkr', 'Interactive Brokers', 'verified'],
@@ -383,6 +385,7 @@ describe('install presets', () => {
       expect(catalogProvenanceFor(previewEndpoint(rowFor(id))), id).toEqual({
         publisher: entry.publisher,
         verification: entry.verification,
+        families: entry.families,
         repoUrl: entry.repoUrl,
         homepageUrl: entry.homepageUrl,
         // Identity travels with provenance and for the same reason (D14): an installed server

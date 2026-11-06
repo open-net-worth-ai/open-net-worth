@@ -310,7 +310,7 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     // catalog match, a server shows the icon IT or its website declared — never ours.
     logo: provenance?.logo ?? (mcp ? mcpIconUrl(c) : connectorLogo(c.id)),
     families: mcp
-      ? ['MCP']
+      ? (provenance?.families ?? ['MCP'])
       : (CATALOG.find((e) => e.id === c.id)?.families ?? UNLISTED_FAMILIES[kind] ?? []),
     categories: mcp
       ? (provenance?.categories ?? [])

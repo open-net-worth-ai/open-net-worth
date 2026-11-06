@@ -57,6 +57,7 @@ export const LOGO_FILES: Record<string, string> = {
   'mcp-quickbooks': 'quickbooks.png',
   'mcp-xero': 'xero.svg',
   'mcp-mercury': 'mercury.svg',
+  'mcp-monarch': 'monarch.svg',
   'mcp-ibkr': 'ibkr-mcp.png',
   'mcp-robinhood': 'robinhood.png',
   'mcp-moomoo': 'moomoo.png',
