@@ -49,6 +49,7 @@ _UPGRADES_DIR = "open-net-worth-upgrades"
 _DETACHED_PROCESS = 0x00000008
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
 _CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+_ON_WINDOWS = os.name == "nt"  # a test can pick a branch here; changing os.name breaks pathlib
 
 
 @dataclass(frozen=True)
@@ -205,7 +206,7 @@ class AutoUpgrader(threading.Thread):
             return False
         if not wheel_matches(wheel, release):  # the idle wait can last hours
             raise UpgradeError(f"The downloaded {release.version} changed on disk.")
-        if os.name == "nt":
+        if _ON_WINDOWS:
             restart, new_console = _windows_restart(self.service)
             spawn_windows_helper(job, self.installer.directory, restart, new_console)
             self.handed_off = True
@@ -273,7 +274,7 @@ def upgrade() -> int:
     except UpgradeError as exc:
         print(exc.message, file=sys.stderr)
         return 1
-    if os.name == "nt":
+    if _ON_WINDOWS:
         spawn_windows_helper(job, installer.directory, restart=None)
         print(f"==> Installing {release.version} in the background. Check with: onw version")
         print(f"    If it doesn't change, see {installer.directory / 'upgrade.log'}")

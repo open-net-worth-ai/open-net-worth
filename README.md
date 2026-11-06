@@ -124,7 +124,7 @@ onw start --open
 
 Installs [uv](https://docs.astral.sh/uv/) if needed, then `open-net-worth` on its own Python 3.12
 (no system Python or Node.js). It provides the `onw` command (`onw start --open`,
-`onw autostart install`, `onw upgrade`, `onw reset-password`, `onw mcp`, `onw version`). The desktop app can connect to a server
+`onw start --autostart --auto-upgrade`, `onw upgrade`, `onw reset-password`, `onw mcp`, `onw version`). The desktop app can connect to a server
 like this instead of using a local book. Working on the code instead? `make setup start` from a
 checkout (Python 3.12+ and Node.js 22+).
 
@@ -171,14 +171,15 @@ front of it, and none is required.
   restarts on crash, with no terminal window to keep open:
 
   ```bash
-  onw autostart install
+  onw start --autostart
   ```
 
-  (From a source checkout, `make autostart` runs setup first, then the same thing.) This
-  installs a per-user **launchd** LaunchAgent on macOS, or a per-user **systemd** unit (plus
-  `loginctl enable-linger`, so it starts even before you log in) on Linux — no sudo needed on
-  either. `onw autostart status` shows whether it's running; `onw autostart stop` stops it and
-  removes the service. Logs land in `~/.open-net-worth/logs/autostart.{out,err}.log`.
+  (`onw autostart install` is the same thing. From a source checkout, `make autostart` runs setup
+  first, then the same thing.) This installs a per-user **launchd** LaunchAgent on macOS, a
+  per-user **systemd** unit (plus `loginctl enable-linger`, so it starts even before you log in) on
+  Linux, or a per-user **Task Scheduler** task on Windows — no sudo or admin needed on any of them.
+  `onw autostart status` shows whether it's running; `onw autostart stop` stops it and removes the
+  service. Logs land in `~/.open-net-worth/logs/app.log`.
 
   <details>
   <summary>What that installs, if you'd rather see it or do it by hand</summary>
@@ -186,7 +187,8 @@ front of it, and none is required.
   The service runs the same interpreter `onw` runs on, so it is identical for a uv install and a
   checkout's `.venv`; it also carries your shell's `PATH` (launchd and systemd give a fresh
   process a minimal one) and any of `HOST`, `PORT`, `ONW_ROOT`, `DATA_DIR`, `CACHE_DIR`,
-  `LOGS_DIR` that were set when you installed it.
+  `LOGS_DIR`, `UV_TOOL_DIR`, `UV_TOOL_BIN_DIR`, `UV_CACHE_DIR`, `UV_PYTHON_INSTALL_DIR`,
+  `XDG_DATA_HOME` that were set when you installed it.
 
   macOS (`~/Library/LaunchAgents/ai.opennetworth.app.plist`):
 
@@ -229,9 +231,11 @@ front of it, and none is required.
 
 - **Updating.** The desktop app updates itself (see the
   [desktop guide](docs/product/operations/desktop.md#updates)); re-running its installer also
-  works. A server: `onw upgrade` for a uv install; for Docker, download the new release's
-  `docker-compose.yml` (it pins the image version) or set `ONW_VERSION=x.y.z`, then
-  `docker compose up -d` (a checkout: `git pull && make setup`). Your data is outside all of them, and migrations run at the next start.
+  works. A server installed with uv: `onw upgrade` by hand, or start it with
+  `onw start --autostart --auto-upgrade` to install each new signed release and restart itself
+  once it's idle — off unless you ask for it ([Upgrading](docs/product/operations/upgrading.md)).
+  For Docker, download the new release's `docker-compose.yml` (it pins the image version) or set
+  `ONW_VERSION=x.y.z`, then `docker compose up -d` (a checkout: `git pull && make setup`). Your data is outside all of them, and migrations run at the next start.
 
 ## Configuration
 

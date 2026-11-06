@@ -16,16 +16,24 @@ const LIVEKIT_CLOUD = 'https://cloud.livekit.io'
 export function VoiceCallNotice({
   sessionId,
   busy = false,
+  onNewChat,
+  onOpenChat,
 }: {
   sessionId: string
   /** Lucius is answering something: a call's problem has been moved on from. */
   busy?: boolean
+  /** Starts a new conversation, for a call this one can't take. */
+  onNewChat?: () => void
+  /** Away from the chat (a phone's other tabs) there's no conversation to replace: go to it. */
+  onOpenChat?: () => void
 }) {
   const call = useVoiceCall()
   const openSetup = useOpenVoiceSetup()
   // LiveKit's raw reason, folded away: the plain message stays the thing you read.
   const [detailOpen, setDetailOpen] = useState(false)
-  const problem = call.problem
+  // A call's problem stays with its conversation: it isn't about the one you've moved to.
+  const problem =
+    call.problem?.sessionId && call.problem.sessionId !== sessionId ? null : call.problem
   // Once you've moved on — sent Lucius a message — the call's problem is old news: it went on
   // showing above an unrelated chat (owner, 2026-11-03). No call is on when there is a problem,
   // so this turn is always yours.
@@ -81,7 +89,24 @@ export function VoiceCallNotice({
             Open LiveKit
           </a>
         )}
-        {problem.kind !== 'insecure' && (
+        {problem.kind === 'conversation' && onNewChat && (
+          <button
+            type="button"
+            className="lx-call-notice-action"
+            onClick={() => {
+              dismissProblem()
+              onNewChat()
+            }}
+          >
+            Start a new chat
+          </button>
+        )}
+        {problem.kind === 'conversation' && onOpenChat && (
+          <button type="button" className="lx-call-notice-action" onClick={onOpenChat}>
+            Open Lucius
+          </button>
+        )}
+        {problem.kind !== 'insecure' && problem.kind !== 'conversation' && (
           <button
             type="button"
             className="lx-call-notice-action"

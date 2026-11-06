@@ -98,19 +98,20 @@ export function Mono({ icon: iconKey, hue, logo, size }: MonoProps): JSX.Element
   // connector is not still suppressed by the previous one's failure.
   const [broken, setBroken] = useState<string | null>(null)
   const showLogo = !!logo && broken !== logo
+  // The call-to-action color is a solid fill, as on the Send and Call buttons, never a tint.
+  const tint =
+    hue === 'var(--cta)'
+      ? { color: 'var(--ink-on-cta)', background: hue, borderColor: 'transparent' }
+      : {
+          color: hue,
+          background: `color-mix(in srgb, ${hue} 14%, transparent)`,
+          borderColor: `color-mix(in srgb, ${hue} 30%, transparent)`,
+        }
 
   return (
     <span
       className={'cn-tile' + (size === 'lg' ? ' lg' : '') + (showLogo ? ' plate' : '')}
-      style={
-        showLogo
-          ? undefined
-          : {
-              color: hue,
-              background: `color-mix(in srgb, ${hue} 14%, transparent)`,
-              borderColor: `color-mix(in srgb, ${hue} 30%, transparent)`,
-            }
-      }
+      style={showLogo ? undefined : tint}
     >
       {showLogo ? (
         // `alt=""` on purpose: the connector's name is always beside the tile, so a screen

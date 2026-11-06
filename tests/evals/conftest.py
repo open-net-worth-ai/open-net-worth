@@ -80,6 +80,12 @@ _EVAL_ENV_KEYS = (
 # never evidence of a harness leak.
 _PYTEST_OWNED_ENV_KEYS = frozenset({"PYTEST_CURRENT_TEST"})
 
+# The app's own decision, not a harness leak: the first import of backend.main anywhere in the
+# run calls core.pinned_http.ensure_default_trust_store, which sets this on an interpreter with
+# no platform CA file (every Windows run). It is meant to last for the process, so it isn't
+# restored either.
+_APP_BOOT_ENV_KEYS = frozenset({"SSL_CERT_FILE"})
+
 
 def _clear_seeded_files(path_str: str) -> None:
     """Remove the seeded FILES under a throwaway data/cache dir, leaving the tree intact.
@@ -236,6 +242,7 @@ def pytest_runtest_logfinish(nodeid, location):
         for key in set(PRISTINE_ENV) | set(os.environ)
         if key not in _EVAL_ENV_KEYS
         and key not in _PYTEST_OWNED_ENV_KEYS
+        and key not in _APP_BOOT_ENV_KEYS
         and PRISTINE_ENV.get(key) != os.environ.get(key)
     }
     assert not escaped, (

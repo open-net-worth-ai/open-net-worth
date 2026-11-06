@@ -264,8 +264,8 @@ export const CATALOG: CatalogEntry[] = [
     name: 'Voice calls',
     families: ['Channel'],
     categories: ['Voice'],
-    icon: 'phone',
-    hue: 'var(--accent)',
+    icon: 'voice',
+    hue: 'var(--cta)',
     // sub/desc: read live from `services/connector_copy.py` SHORT/LONG["voice"].
     publisher: 'Open Net Worth',
     verification: 'unverified',

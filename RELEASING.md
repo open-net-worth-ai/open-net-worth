@@ -14,7 +14,9 @@ builds, tests and publishes the three desktop apps, then (since 2026-10-08) the 
 (`ghcr.io/open-net-worth-ai/open-net-worth:<version>`), the wheel, the server files and a signed
 `manifest.json` to the published release, and (since 2026-10-15) its `pypi` job uploads the same
 wheel and sdist to PyPI. It has no gate, draft, verify or approve stages yet, and
-promotes on its own. The portal's hourly release watch (`onw-portal release-watch`,
+promotes on its own. After a release is published with its manifest, its `image-tags` job
+(`image-tags.yml`, dispatchable by hand to repair the tags) moves the image's `latest` and `X.Y`
+tags to that release. The portal's hourly release watch (`onw-portal release-watch`,
 `onw-release-watch.timer` in onw-cloud) rolls each new signed release to Stable; with no staging
 agent it does so straight away. Two ways to start it:
 

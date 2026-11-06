@@ -60,14 +60,17 @@ describe('who speaks on a voice model', () => {
 
   it('offers male and female voices, its default first and marked', () => {
     expect(labels(flash)).toEqual([
-      'Ashley (female, default)',
-      'Olivia (female)',
+      'Dennis (male, default)',
       'Edward (male)',
       'Diego (male)',
+      'Victor',
+      'Theodore',
+      'Ashley (female)',
+      'Olivia (female)',
       'Another voice…',
     ])
     expect(speakerOptions(flash)[0].value).toBe('')
-    expect(speakerOptions(flash)[2].value).toBe('Edward')
+    expect(speakerOptions(flash)[1].value).toBe('Edward')
   })
 
   it('states no gender the docs do not state', () => {
@@ -75,10 +78,14 @@ describe('who speaks on a voice model', () => {
     expect(labels('fishaudio/s2.1-pro')).toContain('Ethan')
   })
 
-  it('says when LiveKit chooses, and names no voice a model has none documented for', () => {
-    expect(labels('cartesia/sonic-3')[0]).toBe('Default (LiveKit chooses)')
+  it('defaults to a man wherever one is documented', () => {
+    expect(labels('cartesia/sonic-3')[0]).toBe('Daniel (male, default)')
     expect(labels('cartesia/sonic-3')).toContain('Blake (male)')
-    expect(labels('cartesia/sonic-3.6')).toEqual(['Default (LiveKit chooses)', 'Another voice…'])
+    expect(labels('cartesia/sonic-3.6')[0]).toBe('Daniel (male, default)')
+    expect(labels('fishaudio/s2.1-pro')[0]).toBe('Adrian (male, default)')
+  })
+
+  it('says when LiveKit chooses, on a model we know no voices for', () => {
     expect(labels('elevenlabs/eleven_flash_v2_5')).toEqual([
       'Default (LiveKit chooses)',
       'Another voice…',
@@ -87,7 +94,7 @@ describe('who speaks on a voice model', () => {
 
   it('reads a saved id back as the right entry', () => {
     expect(speakerChoice(flash, '', false)).toBe('')
-    expect(speakerChoice(flash, 'Ashley', false)).toBe('')
+    expect(speakerChoice(flash, 'Dennis', false)).toBe('')
     expect(speakerChoice(flash, 'Edward', false)).toBe('Edward')
     expect(speakerChoice(flash, 'Someone-Else', false)).toBe(OTHER_VOICE)
     expect(speakerChoice('cartesia/sonic-3.6', 'abc', false)).toBe(OTHER_VOICE)

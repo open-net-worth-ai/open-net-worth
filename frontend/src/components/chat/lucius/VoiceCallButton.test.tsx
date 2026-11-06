@@ -261,6 +261,49 @@ describe('the call notice once you move on', () => {
   })
 })
 
+describe("a conversation that can't take a call", () => {
+  const WHY = "A call can't join an Automation's conversation. Start a new chat."
+
+  async function refused() {
+    restore = overrideFlagsForTests({ voice_calls: true })
+    authFetch.mockImplementation(async (url: string) =>
+      url === '/api/voice/config'
+        ? { ok: true, json: async () => READY }
+        : { ok: false, status: 423, json: async () => ({ detail: WHY }) },
+    )
+    await act(async () => void startCall('s1'))
+  }
+
+  it('offers a new chat, and neither settings nor a retry that cannot help', async () => {
+    await refused()
+    const onNewChat = vi.fn()
+    render(<VoiceCallNotice sessionId="s1" onNewChat={onNewChat} />)
+    expect(screen.getByText(WHY)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Voice calls settings' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Start a new chat' }))
+    expect(onNewChat).toHaveBeenCalledOnce()
+    expect(screen.queryByText(WHY)).toBeNull()
+  })
+
+  it('stays with its conversation instead of following you to another', async () => {
+    await refused()
+    const { rerender } = render(<VoiceCallNotice sessionId="s1" onNewChat={vi.fn()} />)
+    expect(screen.getByText(WHY)).toBeTruthy()
+    rerender(<VoiceCallNotice sessionId="s2" onNewChat={vi.fn()} />)
+    expect(screen.queryByText(WHY)).toBeNull()
+  })
+
+  it('takes you to the chat from a screen with no conversation to replace', async () => {
+    await refused()
+    const onOpenChat = vi.fn()
+    render(<VoiceCallNotice sessionId="s1" onOpenChat={onOpenChat} />)
+    expect(screen.queryByRole('button', { name: 'Start a new chat' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open Lucius' }))
+    expect(onOpenChat).toHaveBeenCalledOnce()
+  })
+})
+
 describe('a refused microphone in the Mac desktop app', () => {
   afterEach(() => {
     delete (window as { onwDesktopClient?: unknown }).onwDesktopClient

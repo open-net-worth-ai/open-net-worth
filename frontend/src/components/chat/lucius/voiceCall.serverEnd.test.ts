@@ -249,7 +249,7 @@ describe('the server ending a call', () => {
     FakeRoom.last.emit('disconnected', 5) // the worker closed the room after the refusal
     await vi.advanceTimersByTimeAsync(0)
     expect(state().phase).toBe('idle')
-    expect(state().problem).toEqual({
+    expect(state().problem).toMatchObject({
       kind: 'service',
       message: 'LiveKit is out of inference credit.',
     })

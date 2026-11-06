@@ -82,6 +82,14 @@ _ECHO_CLOSE_RE = re.compile(r"</tool[_a-z]*result>")
 ID_ECHO_OPENS = ("<tool_call_id>", "<tool_use_id>")
 _ID_ECHO_CLOSE_RE = re.compile(r"</tool[_a-z]*id>")
 
+# A call's arguments with no `<invoke>` around them. Live 2026-11-06 (Automation run,
+# claude_cli:sonnet): `<parameter name="transactions">[…]</parameter>` streamed to the screen,
+# then the model said "Wait" and made the call properly. With no tool name there is nothing to
+# run, so it is dropped like the other echoes. Inside a real call the block branch reads it
+# first. The opener includes `name=` so prose mentioning `<parameter>` stays visible.
+PARAMETER_OPEN = "<parameter name="
+_PARAMETER_CLOSE_RE = re.compile(r"</parameter>")
+
 # The bare XML dialect, WITHOUT the `<function_calls>` wrapper — the shape Claude is trained
 # on. Live 2026-09-30 (chat, claude_cli): a reply opened with
 #
@@ -114,6 +122,7 @@ _SENTINELS = (
     INVOKE_OPEN_TAG,
     ECHO_OPEN,
     *ID_ECHO_OPENS,
+    PARAMETER_OPEN,
     SHORT_OPEN_TAG,
     SHORT_CLOSE_TAG,
     *STRAY_CLOSERS,
@@ -825,6 +834,7 @@ class ToolCallScanner:
                 for i, o, r in (
                     (self._buf.find(ECHO_OPEN), ECHO_OPEN, _ECHO_CLOSE_RE),
                     *((self._buf.find(o), o, _ID_ECHO_CLOSE_RE) for o in ID_ECHO_OPENS),
+                    (self._buf.find(PARAMETER_OPEN), PARAMETER_OPEN, _PARAMETER_CLOSE_RE),
                 )
                 if i >= 0
             )

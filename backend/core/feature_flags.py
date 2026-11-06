@@ -140,7 +140,7 @@ FLAGS: tuple[Flag, ...] = (
             "Talk to Lucius out loud: a Call button in the chat starts a voice call with your "
             "microphone. Set it up in Connectors → Voice calls."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 11, 3),
         remove_by=date(2027, 3, 1),

@@ -113,6 +113,17 @@ def test_system_prompt_has_account_model_doctrine(isolated):
     assert "custodian" in n
 
 
+def test_system_prompt_names_the_app_in_stable_half(isolated):
+    """A digest called a broker's notice about this very app "a third-party app", because the
+    prompt said only "this personal wealth portal"."""
+    from backend.ai.prompts import CACHE_SPLIT_MARKER, build_system_prompt
+
+    stable, _volatile = build_system_prompt().split(CACHE_SPLIT_MARKER, 1)
+
+    assert "This app is Open Net Worth, and you run inside it." in stable
+    assert "it means this app, not an outside third party" in stable
+
+
 def test_selling_block_has_disposal_grounding_reinforcement(isolated):
     from backend.ai.prompts import build_system_prompt
 

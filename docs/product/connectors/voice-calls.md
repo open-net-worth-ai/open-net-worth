@@ -11,8 +11,9 @@ keywords: [voice, call, talk, speak, microphone, livekit, phone, speech, hands-f
 
 # Voice calls
 
-> **Experimental.** Voice calls are off by default. Turn them on in **Settings → Developer →
-> Experimental → Voice calls**. While the switch is off, nothing on this page appears in the app.
+> **Experimental.** Voice calls are on by default, and nothing happens until you connect a LiveKit
+> project. To hide them, turn off **Settings → Developer → Experimental → Voice calls**. While the
+> switch is off, nothing on this page appears in the app.
 
 Press **Call** in Lucius's chat and talk instead of typing. Lucius answers out loud, looks things
 up, and proposes changes exactly as he does in the chat — and the call shows up in that same
@@ -132,7 +133,7 @@ works; from another device the app must be reachable over HTTPS (see
 | **Language** | What you speak on calls: English, Vietnamese, Chinese, Japanese, Korean, Hindi, Indonesian, Spanish, French, German or Portuguese. Lucius hears it, his greeting and check-ins are in it, and his voice speaks it. |
 | **Speech to text** | Which service turns your voice into text. *Automatic* lets LiveKit pick the best one for your language; *AssemblyAI Universal (English)* hears English only, so another language moves you to Automatic. |
 | **Voice model** | Which service speaks and what it costs. *Inworld 2.0 Flash* is the default for a new setup: it's the cheapest model that speaks every language here. A setup you've already saved keeps its choice until you change it. Only models that speak your language are offered. |
-| **Voice** | Who speaks: male and female voices where LiveKit names them, marked with the gender its docs state. These are a sample. Pick **Another voice…** to paste an id from that service's library, which has many more. Picking another service goes back to its default voice. A voice may not sound natural in every language, so try it with a short call. |
+| **Voice** | Who speaks: a sample of male and female voices, marked with the gender the docs state. The default is a calm male voice where one is documented (*Dennis* on Inworld), and a setup with no voice picked uses it. Pick **Another voice…** to paste an id from that service's library, which has many more. Picking another service goes back to its default voice. A voice may not sound natural in every language, so try it with a short call. |
 
 **What a call costs.** Lucius's voice is most of it, and it's charged by the character, so the price
 beside each voice and the length of his answers matter most. Settings shows an estimate for the voice
@@ -164,12 +165,17 @@ Your own copy of Open Net Worth has none of these limits.
 
 ## Troubleshooting
 
-**The Call button isn't there.** Voice calls are off: turn them on in **Settings → Developer →
+**The Call button isn't there.** Voice calls may be switched off: check **Settings → Developer →
 Experimental**. Or they aren't set up yet: until then the message box keeps **Send**, and the **Call** button
 on the floating Lucius button takes you to Voice calls in Connectors. It also gives way to **Send** as soon as you type.
 
 **The button says "Set up voice calls".** Voice calls are on but not set up yet: pressing it opens
 the Voice calls settings right where you are.
+
+**"A call can't join an Automation's conversation."** An Automation's conversation continues on its
+own, so a call can't join it. Press **Start a new chat**, then **Call**. On a phone's other tabs,
+**Open Lucius** takes you to the chat first. The message stays with that conversation: it doesn't
+follow you to another one.
 
 **"Calls are ready."** The page had to reload before it could reach your voice server, for example
 because it was already open when calls were set up on another device. Press **Call**.
