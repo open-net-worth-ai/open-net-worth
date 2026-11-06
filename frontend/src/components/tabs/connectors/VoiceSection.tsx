@@ -5,6 +5,7 @@ import { restartCall } from '../../chat/lucius/voiceCall'
 import { page, saveNeedsReload } from '../../chat/lucius/voicePagePolicy'
 import { unrevealed, useConnectorSave, useTouched } from './formSave'
 import { revealConnectorSecret } from './secrets'
+import { Badge } from '../../ui/Badge'
 import {
   sttHears,
   LANGUAGE_OPTIONS,
@@ -314,7 +315,11 @@ export function VoiceSection() {
         />
       </FormField>
       <FormField
-        label="Language"
+        label={
+          <span className="lx-beta-label">
+            Language <Badge>Beta</Badge>
+          </span>
+        }
         htmlFor="conn-voice-language"
         help="What you'll speak on calls. Lucius hears it, answers in it, and his voice speaks it."
       >

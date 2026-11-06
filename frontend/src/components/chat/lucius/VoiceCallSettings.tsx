@@ -3,6 +3,7 @@ import { ChevronsUpDown, Settings, X } from 'lucide-react'
 import { authFetch } from '../../../api/client'
 import { useSheetDragToDismiss } from '../../../hooks/useSheetDragToDismiss'
 import { invalidateQueryCache } from '../../../state/queryCache'
+import { Badge } from '../../ui/Badge'
 import {
   DEFAULT_VOICE_MODEL,
   LANGUAGE_OPTIONS,
@@ -25,18 +26,23 @@ interface Option {
 
 function SettingRow({
   label,
+  beta = false,
   value,
   options,
   onChange,
 }: {
   label: string
+  beta?: boolean
   value: string
   options: Option[]
   onChange: (value: string) => void
 }) {
   return (
     <label className="lx-callsettings-row">
-      <span>{label}</span>
+      <span className="lx-beta-label">
+        {label}
+        {beta && <Badge>Beta</Badge>}
+      </span>
       <span className="lx-callsettings-value">
         {options.find((o) => o.value === value)?.label ?? value}
         <ChevronsUpDown size={16} aria-hidden="true" />
@@ -136,6 +142,7 @@ export function VoiceCallSettings({ ended }: { ended: boolean }) {
             </div>
             <SettingRow
               label="Language"
+              beta
               value={language}
               options={LANGUAGE_OPTIONS}
               onChange={(next) => {

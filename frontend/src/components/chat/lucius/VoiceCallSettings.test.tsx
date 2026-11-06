@@ -49,6 +49,13 @@ describe('VoiceCallSettings', () => {
     expect(sheet.textContent).toContain('Dennis (male, default)')
   })
 
+  it('marks the language as beta, and only the language', () => {
+    render(<VoiceCallSettings ended={false} />)
+    open()
+    expect(screen.getAllByText('Beta')).toHaveLength(1)
+    expect(screen.getByText('Beta').closest('label')?.textContent).toContain('Language')
+  })
+
   it('restarts the call in the new language, with an ear that can hear it', async () => {
     render(<VoiceCallSettings ended={false} />)
     open()

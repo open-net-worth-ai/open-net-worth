@@ -1432,6 +1432,12 @@
     background: color-mix(in srgb, var(--ink) 7%, transparent);
     font-size: var(--text-md);
   }
+  /* A label with its Beta pill, both on one centre line. */
+  .lx-beta-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
   .lx-callsettings-value {
     display: flex;
     align-items: center;
