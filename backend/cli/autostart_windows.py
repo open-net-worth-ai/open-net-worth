@@ -25,6 +25,7 @@ TASK_NAME = "Open Net Worth"
 RUN_KEY = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run"
 CONFIG_NAME = "autostart.json"
 TASK_XML_NAME = "autostart-task.xml"
+RUN_BY_TASK_ENV = "ONW_RUN_BY_AUTOSTART"
 
 Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 
@@ -166,7 +167,7 @@ def run_service() -> int:
     process = subprocess.Popen(  # noqa: S603 — the command is the interpreter `autostart install` recorded
         config["command"],
         cwd=config["cwd"],
-        env={**os.environ, **config["env"]},
+        env={**os.environ, **config["env"], RUN_BY_TASK_ENV: "1"},
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,

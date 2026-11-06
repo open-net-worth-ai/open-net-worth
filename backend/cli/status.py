@@ -20,7 +20,7 @@ _HEALTH_TIMEOUT_S = 3.0
 _MAX_HEALTH_BYTES = 1_000_000
 
 
-def _server_version(base_url: str) -> str | None:
+def server_version(base_url: str) -> str | None:
     """The version the server at ``base_url`` reports, or None if it isn't this app answering."""
     # A proxy from the environment must not stand between this machine and its own loopback.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
@@ -59,7 +59,7 @@ def run_status() -> int:
 
     folder = str(get_settings().data_dir.parent)
     base_url = discovered_base_url()
-    version = _server_version(base_url) if base_url else None
+    version = server_version(base_url) if base_url else None
     if base_url and version:
         print("Open Net Worth is running")
         _print_rows(

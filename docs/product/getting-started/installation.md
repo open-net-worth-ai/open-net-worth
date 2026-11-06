@@ -135,7 +135,7 @@ The `install-server.sh` script is for macOS and Linux. On Windows, in PowerShell
 | `onw autostart install` | Start at login/boot and restart on crash — a launchd agent on macOS, a systemd user service on Linux, a Task Scheduler task on Windows. No `sudo` or admin. The same as `onw start --autostart`. |
 | `onw autostart status` | Show whether that service is installed and running, and whether auto-upgrade is on. |
 | `onw autostart stop` | Stop it and remove the service. |
-| `onw upgrade` | Update to the newest release. `--check` only says whether one is out. |
+| `onw upgrade` | Update to the newest release. A running server installs it and restarts once it's idle ([Upgrading](../operations/upgrading.md)). `--check` only says whether one is out. |
 | `onw reset-password` | Set a new password if you've forgotten it — see [I lost my password](../troubleshooting/lost-password.md). |
 | `onw mcp` | Let another AI app (Claude Desktop, Cursor…) use your book — see [Connect AI apps](../operations/connect-ai-apps.md). |
 | `onw version` | Print the installed version. |

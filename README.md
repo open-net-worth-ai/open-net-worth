@@ -278,9 +278,10 @@ front of it, and none is required.
 
 - **Updating.** The desktop app updates itself (see the
   [desktop guide](docs/product/operations/desktop.md#updates)); re-running its installer also
-  works. A server installed with uv: `onw upgrade` by hand, or start it with
-  `onw start --autostart --auto-upgrade` to install each new signed release and restart itself
-  once it's idle — off unless you ask for it ([Upgrading](docs/product/operations/upgrading.md)).
+  works. A server installed with uv: `onw upgrade` by hand, which a running server installs and
+  restarts into once it's idle, or start it with `onw start --autostart --auto-upgrade` to do that
+  for each new signed release — off unless you ask for it
+  ([Upgrading](docs/product/operations/upgrading.md)).
   For Docker, download the new release's `docker-compose.yml` (it pins the image version) or set
   `ONW_VERSION=x.y.z`, then `docker compose up -d` (a checkout: `git pull && make setup`). Your data is outside all of them, and migrations run at the next start.
 

@@ -107,24 +107,21 @@ def _run_server(
     if open_browser:
         threading.Thread(target=_open_when_ready, args=(url,), daemon=True).start()
 
-    import uvicorn
-
     from backend.main import app
 
     print(f"==> Open Net Worth {APP_VERSION} — {url}")
     if unavailable:
         logger.warning("Auto-upgrade is off for this run: %s", unavailable)
-    if installer is not None:
-        return _serve_with_auto_upgrade(app, settings, installer, service)
-    uvicorn.run(app, host=settings.host, port=settings.port)
-    return 0
+    return _serve(app, settings, installer, service)
 
 
-def _serve_with_auto_upgrade(app, settings, installer, service: bool) -> int:
+def _serve(app, settings, installer, service: bool) -> int:
+    """Every `onw start` listens for `onw upgrade`. Only `--auto-upgrade` looks for releases."""
     import uvicorn
 
     from backend.ai import turns
-    from backend.cli.self_update import AutoUpgrader
+    from backend.cli.self_update import AutoUpgrader, find_installer
+    from backend.cli.upgrade_request import RequestWatcher, request_path
 
     writes = _WritesInFlight(app)
     server = uvicorn.Server(
@@ -132,28 +129,48 @@ def _serve_with_auto_upgrade(app, settings, installer, service: bool) -> int:
             writes,
             host=settings.host,
             port=settings.port,
-            timeout_graceful_shutdown=_SHUTDOWN_GRACE_SECONDS,
+            timeout_graceful_shutdown=_SHUTDOWN_GRACE_SECONDS if installer else None,
         )
     )
 
     def request_exit() -> None:
+        server.config.timeout_graceful_shutdown = _SHUTDOWN_GRACE_SECONDS
         server.should_exit = True
 
-    upgrader = AutoUpgrader(
-        installer=installer,
-        request_exit=request_exit,
-        # `started`: boot may still be migrating the database, reading scripts from this install.
-        is_idle=lambda: server.started and not turns.any_running() and writes.count == 0,
-        service=service,
+    def upgrader_with(chosen) -> AutoUpgrader:
+        return AutoUpgrader(
+            installer=chosen,
+            request_exit=request_exit,
+            # `started`: boot may still be migrating the database, reading scripts from this install.
+            is_idle=lambda: server.started and not turns.any_running() and writes.count == 0,
+            service=service,
+        )
+
+    auto = upgrader_with(installer) if installer else None
+    watcher = RequestWatcher(
+        request_path(),
+        lambda: auto or upgrader_with(find_installer()),
+        ready=lambda: server.started,
     )
-    upgrader.start()
+    if auto:
+        auto.start()
+    watcher.start()
     try:
         server.run()
     except KeyboardInterrupt:
         pass
-    upgrader.finished.set()
+    watcher.stop()
+    if auto:
+        auto.finished.set()
     if not server.started:
         return _STARTUP_FAILURE
+    upgrader = auto or watcher.upgrader
+    if upgrader is None:
+        return 0
+    try:
+        upgrader.finish_install()
+    except KeyboardInterrupt:  # a second Ctrl-C: whoever pressed it would rather leave now
+        return 0
     return upgrader.exit_code()
 
 

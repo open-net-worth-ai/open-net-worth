@@ -33,7 +33,9 @@ The wheel carries `frontend/dist`, `docs-site/dist-embed` and `docs/product` und
 bundled only inside an installed wheel. `backend/cli/` is the top layer (`cli → api → …`). ADR
 `2026-09-19-distribute-as-uv-tool-and-published-image`. `onw upgrade` and `onw start --auto-upgrade`
 install the signed release's wheel, never `uv tool upgrade` (ADR
-`2026-11-05-a-server-upgrades-itself-only-when-asked-and-only-from-a-signed-wheel`).
+`2026-11-05-a-server-upgrades-itself-only-when-asked-and-only-from-a-signed-wheel`). With a server
+running, `onw upgrade` asks it to do this itself once idle (ADR
+`2026-11-07-onw-upgrade-asks-a-running-server-to-upgrade-itself`).
 
 ```bash
 uvicorn backend.main:app --reload --port 8080
