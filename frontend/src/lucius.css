@@ -1066,28 +1066,42 @@
     -webkit-mask-image: linear-gradient(to top, #000 28%, transparent 72%);
     mask-image: linear-gradient(to top, #000 28%, transparent 72%);
   }
-  /* You: one deep dome of light off to the side with a curved top, and a small one low on the other
-     side, drifting. No layer across the full width: that's what read as a flat band (owner,
-     2026-11-06). Follows the level itself: squared, normal speech came out too pale. */
+  /* You: light rising from the bottom, higher at the sides and dipping in the middle, so its top
+     curves down rather than up (owner, 2026-11-06). Low and dense, as reaching halfway up in one
+     long ramp read as an even wash, with a long tail of stops, as a quick fall-off drew an edge you
+     could trace. Follows the level itself: squared, normal speech came out too pale. */
   .lx-callglow-you {
     -webkit-mask-image: none;
     mask-image: none;
     inset: 0 -12%;
     background:
       radial-gradient(
-        84% 42% at 58% 100%,
-        color-mix(in srgb, var(--accent) 78%, transparent) 0%,
-        color-mix(in srgb, var(--accent) 46%, transparent) 50%,
+        80% 43% at 4% 100%,
+        color-mix(in srgb, var(--accent) 80%, transparent) 0%,
+        color-mix(in srgb, var(--accent) 60%, transparent) 34%,
+        color-mix(in srgb, var(--accent) 30%, transparent) 60%,
+        color-mix(in srgb, var(--accent) 10%, transparent) 82%,
         transparent 100%
       ),
       radial-gradient(
-        46% 18% at 12% 100%,
-        color-mix(in srgb, var(--accent) 42%, transparent),
-        transparent
+        72% 27% at 96% 100%,
+        color-mix(in srgb, var(--accent) 80%, transparent) 0%,
+        color-mix(in srgb, var(--accent) 60%, transparent) 34%,
+        color-mix(in srgb, var(--accent) 30%, transparent) 60%,
+        color-mix(in srgb, var(--accent) 10%, transparent) 82%,
+        transparent 100%
+      ),
+      linear-gradient(
+        to top,
+        color-mix(in srgb, var(--accent) 70%, transparent) 0%,
+        color-mix(in srgb, var(--accent) 48%, transparent) 11%,
+        color-mix(in srgb, var(--accent) 22%, transparent) 19%,
+        color-mix(in srgb, var(--accent) 6%, transparent) 25%,
+        transparent 29%
       );
     opacity: min(0.95, calc(var(--lx-orb-you, 0) * 1.05));
     transform-origin: bottom;
-    transform: scaleY(calc(0.78 + var(--lx-orb-you, 0) * 0.27));
+    transform: scaleY(calc(0.7 + var(--lx-orb-you, 0) * 0.4));
     transition: opacity 0.2s ease;
   }
   /* While Lucius talks the light is his: talking over him lights the mic alone (owner, 2026-11-06). */
