@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 CALLS = frozenset(
     {
         "is_expected",
+        "call_settings",
         "calls_allowed",
         "claim_call",
         "call_limit",
@@ -125,6 +126,8 @@ class Host:
             return expected
         if method == "calls_allowed":
             return service.calls_allowed()
+        if method == "call_settings":
+            return service.call_settings()
         if method == "claim_call":
             return self._claim(str(args.get("room") or ""))
         if method == "part_of_day":

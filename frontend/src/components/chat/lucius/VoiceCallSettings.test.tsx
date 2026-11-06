@@ -89,6 +89,18 @@ describe('VoiceCallSettings', () => {
     expect(restartCall).not.toHaveBeenCalled()
   })
 
+  it('closes when pulled down, like every other sheet', async () => {
+    render(<VoiceCallSettings ended={false} />)
+    open()
+    const sheet = screen.getByRole('dialog', { name: 'Voice settings' })
+    Object.defineProperty(sheet, 'offsetHeight', { value: 300, configurable: true })
+    fireEvent.pointerDown(sheet, { clientY: 200, pointerId: 1 })
+    await new Promise((done) => setTimeout(done, 150))
+    fireEvent.pointerMove(sheet, { clientY: 440, pointerId: 1 })
+    fireEvent.pointerUp(sheet, { clientY: 440, pointerId: 1 })
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
   it('closes as the call ends', () => {
     const { rerender } = render(<VoiceCallSettings ended={false} />)
     open()

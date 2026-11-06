@@ -1854,6 +1854,46 @@ def test_a_spoken_answer_is_told_how_short_and_to_offer_the_rest():
 
 
 @pytest.mark.flags(voice_calls=True)
+def test_changing_language_or_voice_leaves_the_worker_running(client, monkeypatch):
+    """Stopping and starting it took 2-7s of silence after each change (owner, 2026-11-06)."""
+    reloads = []
+
+    async def reload():
+        reloads.append(True)
+
+    monkeypatch.setattr(service, "reload", reload)
+    monkeypatch.setattr(service, "status", lambda: {"running": True})
+    client.put("/api/voice/config", json={"tts_voice": "Edward"})
+    client.put("/api/voice/config", json={"language": "es"})
+    assert reloads == []
+    client.put("/api/voice/config", json={"livekit_url": "wss://acme.livekit.cloud"})
+    assert reloads == [True]
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_a_worker_that_is_not_up_is_started_by_a_save(client, monkeypatch):
+    reloads = []
+
+    async def reload():
+        reloads.append(True)
+
+    monkeypatch.setattr(service, "reload", reload)
+    monkeypatch.setattr(service, "status", lambda: {"running": False})
+    client.put("/api/voice/config", json={"tts_voice": "Edward"})
+    assert reloads == [True]
+
+
+def test_a_call_reads_its_settings_at_the_start_and_never_a_credential(db_isolated):
+    from backend.db.voice_config_store import VoiceConfigStore
+
+    VoiceConfigStore().update({"api_secret": "shh", "api_key": "APIx", "language": "vi"})
+    settings = service.call_settings()
+    assert settings["language"] == "vi" and settings["language_name"] == "Vietnamese"
+    assert "api_secret" not in settings and "api_key" not in settings
+    assert "shh" not in json.dumps(settings)
+
+
+@pytest.mark.flags(voice_calls=True)
 def test_a_model_that_cannot_hear_vietnamese_is_refused_beside_it(client):
     """The owner's multilingual model hears five languages: Vietnamese isn't one of them."""
     model = "assemblyai/universal-streaming-multilingual"

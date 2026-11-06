@@ -170,3 +170,12 @@ def test_a_worker_that_ignores_stop_is_killed():
     assert worker.start({"config": {}}, timeout=20)
     worker.stop(timeout=1)
     assert not worker.alive() and exits == []
+
+
+def test_the_worker_may_ask_for_a_calls_settings(linked, monkeypatch):
+    monkeypatch.setattr(service, "call_settings", lambda: {"language": "vi"})
+
+    async def run():
+        assert await linked.call("call_settings") == {"language": "vi"}
+
+    asyncio.run(run())

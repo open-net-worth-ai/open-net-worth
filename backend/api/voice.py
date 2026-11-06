@@ -109,7 +109,7 @@ def get_voice_config():
 
 @router.put("/api/voice/config")
 async def update_voice_config(body: VoiceConfigPatch):
-    """Save settings, then restart the worker so they apply (it reads them once, at start)."""
+    """Save settings. A call reads them when it starts; only a new connection restarts the worker."""
     _require_flag()
     url = (body.livekit_url or "").strip()
     if url and not _acceptable_url(url):
@@ -119,8 +119,10 @@ async def update_voice_config(body: VoiceConfigPatch):
         )
     store = VoiceConfigStore()
     _check_language(store.get(), body)
+    before = store.get()
     config = store.update(body.model_dump(exclude_none=True))
-    await voice_service.reload()
+    if voice_service.needs_restart(before, config):
+        await voice_service.reload()
     return _view(config)
 
 

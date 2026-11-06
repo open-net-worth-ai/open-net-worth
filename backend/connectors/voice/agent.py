@@ -913,7 +913,9 @@ async def entrypoint(ctx: JobContext) -> None:
         log.warning("voice: refused a call that this app did not start or no longer allows")
         return
     await ctx.connect()
-    cfg = runtime.config
+    # Read now, not at the worker's start: changing language or voice needs no restart.
+    settings = await runtime.app.call("call_settings")
+    cfg = {**runtime.config, **settings}
     # format_turns=True: ONE punctuated final transcript per turn. Off (also the default), the
     # gateway sends each sentence as a final AND the whole turn again unpunctuated, so every
     # sentence reached Lucius twice (measured against the live service, 2026-11-03).
@@ -1034,7 +1036,7 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.room.on("participant_disconnected", lambda who: _caller_left(ctx, who))
     owner = runtime.owner_name
     await session.start(
-        agent=FrontAgent(owner, runtime.language_name, lucius),
+        agent=FrontAgent(owner, settings["language_name"], lucius),
         room=ctx.room,
         # Only the owner's browser (the identity its token names) is listened to, and only by
         # voice: no typed text into the room.

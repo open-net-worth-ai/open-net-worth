@@ -18975,6 +18975,8 @@ body.hide-amounts .mask * {
   box-shadow: var(--shadow-modal);
   animation: mb-sheet-in 0.26s cubic-bezier(0.32, 0.72, 0, 1);
   padding-bottom: var(--safe-b);
+  /* Pull down to dismiss (useSheetDragToDismiss): the root drags, the list inside scrolls natively. */
+  touch-action: none;
 }
 .mp-sheet-handle-wrap {
   display: flex;

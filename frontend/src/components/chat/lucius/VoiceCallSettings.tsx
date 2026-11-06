@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ChevronsUpDown, Settings, X } from 'lucide-react'
 import { authFetch } from '../../../api/client'
+import { useSheetDragToDismiss } from '../../../hooks/useSheetDragToDismiss'
 import { invalidateQueryCache } from '../../../state/queryCache'
 import {
   DEFAULT_VOICE_MODEL,
@@ -54,6 +55,12 @@ function SettingRow({
 export function VoiceCallSettings({ ended }: { ended: boolean }) {
   const config = useVoiceReadiness()
   const [open, setOpen] = useState(false)
+  const sheet = useRef<HTMLDivElement>(null)
+  const dragHandlers = useSheetDragToDismiss({
+    sheetRef: sheet,
+    onDismiss: () => setOpen(false),
+    enabled: open,
+  })
   if (!config) return null
 
   const language = config.language ?? 'en'
@@ -108,7 +115,14 @@ export function VoiceCallSettings({ ended }: { ended: boolean }) {
             tabIndex={-1}
             onClick={() => setOpen(false)}
           />
-          <div className="lx-callsettings-sheet" role="dialog" aria-label="Voice settings">
+          <div
+            ref={sheet}
+            className="lx-callsettings-sheet"
+            role="dialog"
+            aria-label="Voice settings"
+            {...dragHandlers}
+          >
+            <div className="lx-callsettings-handle" aria-hidden="true" />
             <div className="lx-callsettings-head">
               <button
                 type="button"

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useIsMobile } from '../../hooks/useIsMobile'
+import { useSheetDragToDismiss } from '../../hooks/useSheetDragToDismiss'
 import { X, ChevronLeft, ChevronRight, ChevronDown, Check } from '../../ui/icons'
 import type { ModelOption } from '../../api/models'
 
@@ -213,6 +214,11 @@ export function ModelPicker(props: ModelPickerProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLInputElement>(null)
   const isMobile = useIsMobile()
+  const dragHandlers = useSheetDragToDismiss({
+    sheetRef: panelRef,
+    onDismiss: () => close(true),
+    enabled: open && isMobile,
+  })
 
   const multiple = props.multiple === true
   const defaultLabel = multiple ? undefined : (props as SingleProps).defaultLabel
@@ -550,7 +556,13 @@ export function ModelPicker(props: ModelPickerProps) {
   const panel =
     open &&
     (isMobile ? (
-      <div className="mp-sheet" data-portal-layer ref={panelRef} onKeyDown={onKeyDown}>
+      <div
+        className="mp-sheet"
+        data-portal-layer
+        ref={panelRef}
+        onKeyDown={onKeyDown}
+        {...dragHandlers}
+      >
         <div className="mp-sheet-handle-wrap">
           <span className="mp-sheet-handle" />
         </div>
