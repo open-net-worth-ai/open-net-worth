@@ -261,6 +261,8 @@ def _one_line_fields(item: dict) -> dict:
         **item,
         "title": " ".join(str(item.get("title") or "").split()),
         "snippet": " ".join(str(item.get("snippet") or "").split()),
+        "source": " ".join(str(item.get("source") or "").split()),
+        "published_at": " ".join(str(item.get("published_at") or "").split()),
     }
 
 

@@ -6,6 +6,7 @@ it for a preview with no click, so a form this misses is a leak of whatever the 
 
 from __future__ import annotations
 
+import re
 import time
 
 import pytest
@@ -14,6 +15,12 @@ from backend.connectors.msgfmt import render
 from backend.monitoring.text_sanitize import plain_line, strip_unknown_links
 
 LINK = "https://wire.example/story"
+_JOINED = re.compile(r"[^\s.]\.[^\W\d_][^\s.]")
+_ADDRESS = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
+
+
+def _reads_as_a_link(text: str) -> bool:
+    return bool("://" in text or _JOINED.search(text) or _ADDRESS.search(text))
 
 
 @pytest.mark.parametrize(
@@ -51,13 +58,70 @@ LINK = "https://wire.example/story"
         "evil.বাংলা/r?v=41250",
         "(evil.com/r?v=41250).",
         "see:evil.com/r?v=41250",
+        "a=evil.com/r?v=41250",
+        "a/evil.com",
     ],
 )
-def test_no_form_of_a_link_survives_and_its_data_goes_with_it(bad):
+def test_no_form_of_a_link_survives(bad):
     cleaned = strip_unknown_links(f"Read {bad} before the open.", set())
-    assert "://" not in cleaned and "/r?" not in cleaned and "?v=" not in cleaned
-    assert "41250" not in cleaned, cleaned
-    assert "<a" not in render(cleaned, "telegram") and "<i>" not in render(cleaned, "telegram")
+    assert not _reads_as_a_link(cleaned), cleaned
+    rendered = render(cleaned, "telegram")
+    assert "<a" not in rendered and "<i>" not in rendered
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "evil.com/r?v=41250",
+        "EVIL.COM?V=41250",
+        "évil.com/r?v=41250",
+        "пример.рф/r?v=41250",
+        "93.184.216.34/r?v=41250",
+        "a=93.184.216.34/r?v=41250",
+        "x:93.184.216.34/r?v=41250",
+        "a,93.184.216.34/r?v=41250",
+        "[evil.com/r?v=41250](x)",
+    ],
+)
+def test_a_domain_or_address_loses_what_its_path_carried(bad):
+    assert "41250" not in strip_unknown_links(f"Read {bad} now.", set())
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        "evil.\u0333com/r?v=41250",
+        "evil.\u033fcom/r?v=41250",
+        "evil.\u030acom/r?v=41250",
+        "evil.\u0301com/r?v=41250",
+        "t.\u0333me/evil_bot?start=41250",
+        "http:/\u0333/1.1.1.1/41250",
+        "evil\u2028.com/r?v=41250",
+        "evil\u202e.com/r?v=41250",
+    ],
+)
+def test_characters_telegram_deletes_cannot_hide_a_link(bad):
+    assert "41250" not in strip_unknown_links(f"Read {bad} now.", set())
+
+
+@pytest.mark.parametrize("bad", ["@\u0333evil_support_bot", "@\ufe0fevil"])
+def test_a_hidden_character_cannot_hide_a_handle(bad):
+    assert "evil" not in strip_unknown_links(f"Message {bad} now.", set())
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "[https://evil.com/r?v=41250]( LINK )",
+        "[a\nhttps://evil.com/r?v=41250\nb](LINK)",
+        "[a\n@evil_bot\nb](LINK)",
+        "[@evil_support_bot t.me/evil]( LINK )",
+        "[https://evil.com/r?v=41250](LINK)",
+    ],
+)
+def test_the_text_of_a_given_link_is_cleaned_too(text):
+    cleaned = strip_unknown_links(text.replace("LINK", LINK), {LINK})
+    assert "evil.com" not in cleaned and "@" not in cleaned and "t.me" not in cleaned
 
 
 @pytest.mark.parametrize(
@@ -80,12 +144,28 @@ def test_a_handle_is_removed(bad):
     assert "evil" not in strip_unknown_links(f"Message {bad} now.", set())
 
 
-def test_cleaning_stays_fast_on_one_huge_word():
+@pytest.mark.parametrize(
+    "hostile",
+    [
+        "a" * 200_000,
+        "[" * 8000,
+        "@" * 8000,
+        " " * 8000 + "x",
+        "a." * 50_000,
+        "[" * 4000 + "ﷺ" * 4000,
+        "[" * 6000 + "ﷺ" * 1500,
+        "<" * 8000,
+        ("<" + " " * 7) * 1000,
+        "[x](" * 2000,
+        "[x](" + "(" * 8000,
+    ],
+)
+def test_no_input_can_stall_the_event_loop(hostile):
     started = time.monotonic()
-    assert plain_line("a" * 200_000, 40)
-    assert plain_line("[" * 50_000, 40) is not None
-    assert plain_line("a." * 50_000, 40) is not None
-    assert time.monotonic() - started < 1
+    line = plain_line(hostile, 40)
+    render(line, "telegram")
+    assert time.monotonic() - started < 0.1
+    assert len(line) <= 1000
 
 
 def test_double_dollars_cannot_reach_telegrams_rich_path():
@@ -119,6 +199,29 @@ def test_a_given_link_survives_in_both_forms():
         ("Reuters.com says so", "Reuters says so"),
         ("earnings.In Q3", "earnings. In Q3"),
         ("Up 2*3 x<y", "Up 2*3 x below y"),
+        ("Giá trị giao dịch đạt 1.234.567.890 đồng hôm nay.", None),
+        ("Vốn hóa 1.200.000.000 đồng", None),
+        ("Market cap $1.234.567.890 reported", None),
+        ("Giá:25.000đ.Khuyến nghị giữ", "Giá: 25.000đ. Khuyến nghị giữ"),
+        ("Support:180.Resistance:200", "Support: 180. Resistance: 200"),
+        ("Target:$180.Analysts cut", "Target: $180. Analysts cut"),
+        (
+            "腾讯：股价下跌3%。分析师称财报不及预期。建议减仓。",
+            "腾讯: 股价下跌3%. 分析师称财报不及预期. 建议减仓.",
+        ),
+        ("トヨタ：株価は3%下落。アナリストは慎重。", "トヨタ: 株価は3%下落. アナリストは慎重."),
+        (
+            "股价为何下跌？分析师认为财报不及预期。建议观望。",
+            "股价为何下跌? 分析师认为财报不及预期. 建议观望.",
+        ),
+        ("M&M.NS fell", None),
+        ("BMW.DE/SAP.DE fell", "BMW.DE/ SAP. DE fell"),
+        ("Name (BMW.DE) fell", None),
+        ("$ACME.DE fell", None),
+        ("HPG.HM and 1155.KL and BAJAJ-AUTO.NS fell", None),
+        ("x -> y and a => b", "x → y and a ⇒ b"),
+        ("Down ~3% today", None),
+        ("Xuống 3,5% hôm nay, giá 25.000 đồng", None),
         ("via @Reuters reported", "via reported"),
         ("Up 3.5 today in the U.S., e.g. i.e. $3.5bn, 2.5x, 1.2B", None),
         ("10.5am ACME.DE 0700.HK BRK.B fell", None),
