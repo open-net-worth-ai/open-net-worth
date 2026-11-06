@@ -15,7 +15,6 @@ of ``{"ticker", "label", "weight_pct"}``, largest first), ``watching`` (a list o
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
@@ -206,22 +205,3 @@ def build_prompt(candidates: list[dict], waiting: list[dict], context: dict) -> 
         "roundup of the waiting items should go out."
     )
     return user, SYSTEM_PROMPT
-
-
-_LINK_RE = re.compile(
-    r"\[([^\]]*)\]\(([^)]*)\)|(?:[a-z][a-z0-9+.-]*://|www\.)[^\s)\]]+", re.IGNORECASE
-)
-
-
-def strip_unknown_links(message: str, allowed_urls: set[str]) -> str:
-    """The message with every link that was not given to the model removed: a markdown link of
-    ANY scheme (``tg://``, ``javascript:``, protocol-relative …) keeps its text, a bare URL
-    (``scheme://`` or ``www.``) goes. Links from the items' own server-built sources survive."""
-
-    def _keep(match: re.Match) -> str:
-        if match.group(2) is not None:
-            return match.group(0) if match.group(2).strip() in allowed_urls else match.group(1)
-        bare = match.group(0)
-        return bare if bare.rstrip(".,;:!?") in allowed_urls else ""
-
-    return _LINK_RE.sub(_keep, message).strip()

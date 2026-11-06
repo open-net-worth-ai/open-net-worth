@@ -14,6 +14,8 @@ from __future__ import annotations
 from contextvars import ContextVar
 from typing import NamedTuple, Optional
 
+from backend.core.errors import ToolCallLimitError
+
 # A deprecated restrictive scope retained for explicit legacy callers. Instruction
 # skills never set it.
 _active_invocation_ids: ContextVar[tuple[str, ...]] = ContextVar(
@@ -53,6 +55,8 @@ _offer_enforced: ContextVar[bool] = ContextVar("offer_enforced", default=False)
 # The tool calls such a turn may make: text written by strangers must not be able to burn the
 # owner's search quota. A list so a task copied from this context shares the one count.
 ENFORCED_OFFER_MAX_CALLS = 8
+# A refused call starts another model round, so a turn that keeps calling is ended outright.
+ENFORCED_OFFER_MAX_ATTEMPTS = 16
 _offer_calls: ContextVar[Optional[list]] = ContextVar("offer_calls", default=None)
 
 # The tool names a feature flag retires from every offer THIS turn, resolved once when the turn
@@ -232,17 +236,19 @@ def offer_is_enforced() -> bool:
 
 
 def offer_refuses(tool_name: str) -> bool:
-    """True when this turn's enforced offer excludes ``tool_name`` or its calls are used up. Call
-    once per tool call: an allowed name counts. Enforced with no offer at all refuses everything,
-    so a caller's slip fails closed."""
+    """True when this turn's enforced offer excludes ``tool_name`` or its calls are used up, and
+    raises once the turn has plainly stopped listening. Call once per tool call: every call counts.
+    Enforced with no offer at all refuses everything, so a caller's slip fails closed."""
     if not _offer_enforced.get():
         return False
-    if tool_name not in (offer_tool_names() or frozenset()):
-        return True
     calls = _offer_calls.get()
     if calls is None:
         return True
     calls[0] += 1
+    if calls[0] > ENFORCED_OFFER_MAX_ATTEMPTS:
+        raise ToolCallLimitError("this turn kept calling tools after being refused")
+    if tool_name not in (offer_tool_names() or frozenset()):
+        return True
     return calls[0] > ENFORCED_OFFER_MAX_CALLS
 
 

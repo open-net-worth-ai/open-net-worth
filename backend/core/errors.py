@@ -212,6 +212,10 @@ class FeatureFlagLockedError(ConflictError):
     """A feature flag cannot be changed here (the public demo always runs the defaults)."""
 
 
+class ToolCallLimitError(OpenNetWorthError):
+    """A turn with an enforced tool list kept calling tools after being refused."""
+
+
 class ConfigurationError(OpenNetWorthError):
     """A required setting/credential is missing or invalid."""
 

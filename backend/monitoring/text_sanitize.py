@@ -37,6 +37,79 @@ def sanitize_untrusted_text(value: str | None, max_len: int) -> str:
     return text[:max_len]
 
 
+# Every text that reaches a phone goes through ``strip_unknown_links``, so no sender can forget a
+# link form. A markdown link of ANY scheme keeps its text, a bare URL goes, and a bare domain is
+# defused: Telegram links one and fetches it for a preview with no click, so
+# ``acme-filings.com/r?v=<value>`` would otherwise be a leak.
+_LINK_RE = re.compile(
+    r"\[([^\]]*)\]\(([^)]*)\)"
+    r"|(?P<url>(?:[a-z][a-z0-9+.-]*://|www\.)[^\s)\]]+)"
+    r"|(?P<host>\b\d{1,3}(?:\.\d{1,3}){3}\b|(?:[^\W_](?:[\w-]*[^\W_])?\.)+[^\W\d_]{2,})"
+    r"(?P<path>[/?#:]\S+)?",
+    re.IGNORECASE,
+)
+_IPV4_RE = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}")
+_EXCHANGE_TICKER_RE = re.compile(r"[A-Z0-9]{1,6}\.([A-Z]{1,3})")
+_EXCHANGE_SUFFIXES = frozenset(
+    "AS AX BO BR CO DE F HE HK KQ KS L LS MC MI MX NS NZ OL PA SA SI SS ST SW SZ T TO TW V VI WA".split()
+)
+_COMMON_TLDS = frozenset(
+    "ai app au biz ca cc club cn co com de dev eu fr gg in info io jp link live me mov net news "
+    "online org pro ru shop site store tech top tv uk us xyz zip".split()
+)
+_HANDLE_RE = re.compile(r"(?<![\w@.])@[A-Za-z_]\w*")
+_BELOW_RE = re.compile(r"\s*<\s*(?=[\d$€£¥])")
+_ABOVE_RE = re.compile(r"\s*>\s*(?=[\d$€£¥])")
+
+
+def _without_markup(text: str) -> str:
+    """NFKC first so a lookalike can't pass as ordinary text, and angle brackets go BEFORE the link
+    checks: removed last, ``http<://evil<.com`` was rebuilt into a live link after they had run."""
+    text = unicodedata.normalize("NFKC", text).replace("\u3002", ".")
+    text = "".join(c for c in text if unicodedata.category(c) != "Cf")
+    text = _CTRL_RE.sub("", text).replace("<=", "≤").replace(">=", "≥")
+    text = _BELOW_RE.sub(" below ", text)
+    text = _ABOVE_RE.sub(" above ", text)
+    return text.replace("<", "").replace(">", "")
+
+
+def _defuse_host(host: str, path: str | None) -> str:
+    """A ticker survives. A domain with a path is reduced to its name, dropping whatever the path
+    carried. With no path, a familiar domain is reduced too (``reuters.com`` reads as ``reuters``),
+    and anything else gets spaces, so a missed space in prose (``J.P.Morgan``, ``rose.Margins``)
+    stays readable and no longer links."""
+    if _IPV4_RE.fullmatch(host):
+        return ""
+    ticker = _EXCHANGE_TICKER_RE.fullmatch(host)
+    if ticker and not path and ticker.group(1) in _EXCHANGE_SUFFIXES:
+        return host
+    labels = host.split(".")
+    if path or labels[-1].lower() in _COMMON_TLDS:
+        return labels[0]
+    return ". ".join(labels)
+
+
+def strip_unknown_links(message: str, allowed_urls: set[str]) -> str:
+    """The message with every link that was not given to the model removed, and no markup. Links
+    from the items' own server-built sources survive."""
+
+    def _keep(match: re.Match) -> str:
+        if match.group("host"):
+            return _defuse_host(match.group("host"), match.group("path"))
+        if match.group("url"):
+            bare = match.group("url")
+            return bare if bare.rstrip(".,;:!?") in allowed_urls else ""
+        return match.group(0) if match.group(2).strip() in allowed_urls else match.group(1)
+
+    return _HANDLE_RE.sub("", _LINK_RE.sub(_keep, _without_markup(message))).strip()
+
+
+def plain_line(value: object, max_words: int) -> str:
+    """One line of push text with no link, handle or emphasis, and a hard word limit."""
+    text = strip_unknown_links(str(value or ""), set()).replace("*", "").replace("`", "")
+    return " ".join(text.split()[:max_words])
+
+
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
 # A small, deliberately conservative stopword set for overlap comparisons (INT12 SF-2): filler

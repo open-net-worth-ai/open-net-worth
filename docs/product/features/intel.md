@@ -70,11 +70,11 @@ For a story rather than one stock — an IPO, a war, interest rates:
 Experimental, turn on *"When a price alert fires, Lucius looks into it"*. Lucius then follows an
 alert's instructions when it fires, searching the web and X before it messages you. It takes up to
 two minutes (usually much less), so the message can arrive a little later, and it uses your AI model
-and search quota, up to 20 runs a day. The search can't change your data, send anything or place an
-order, and it never sees your position or profile. It does see the alert's instructions, so keep
-private numbers out of them. Your **Web search** setting for scans doesn't turn this off; the
-experiment switch does. If a run fails or times out, you get the quick alert. This doesn't run on
-the Antigravity CLI.
+and search quota, up to 20 runs a day. The search can only search: it can't change your data, send
+anything or place an order, and it never sees your position, your profile or any figures in the
+alert's instructions. Your **Web search** setting for scans doesn't turn this off; the experiment
+switch does. If a run fails or times out, you get the quick alert. This doesn't run on the
+Antigravity CLI, or on the Codex CLI when it can't use its native tools.
 
 The **🔔 Mute** button next to the price on that screen silences the ticker: no price alerts and no
 news scans for it until you click it again (it then reads **Muted**). **Additional news sources**

@@ -32,33 +32,45 @@ runs two steps in the background (`monitoring/price_alert_run.py`, seam in `pric
 **The split is the security boundary.** The first version gave one turn the tools, the web text and
 the position together. Security review showed why that was wrong: a page could steer a turn holding
 the user's numbers. Now the turn reading strangers' text never gets the position, thesis, profile
-or cached headlines, and the call holding those has no tools. The alert's note does reach the search
-turn, because following it is the point, so a note holding a cost or a share count is still in that
-turn's reach. The prompt forbids putting it in a query, but that is an instruction, not a guarantee.
+or cached headlines, and the call holding those has no tools. The alert's note does reach the search turn,
+because following it is the point, but every figure in it is replaced with `[figure]` first: a cost
+or a share count never reaches a turn reading strangers' text. Wording in a note can still carry
+something private.
 
 **The tool list is a real ceiling, for this turn only.** An explicit offer is advisory everywhere
 else: a call outside it still dispatches (ADR `2026-07-18-remove-layered-ai-permission-system`,
 pinned by `test_explicit_offer_turn_does_not_auto_load_an_unoffered_tool`), and an unattended turn
 has no card to stop it. So `_skill_scope.enforce_offer()` makes the tool loop refuse every other
 name, before either dispatch branch, because an external MCP tool (a broker's order) skips
-`registry.dispatch`. It also caps the turn at 8 tool calls. This does not bring the removed ceiling
+`registry.dispatch`. It also caps the turn at 8 tool calls, and raises `ToolCallLimitError` at 16
+attempts, because a refused call starts another model round. This does not bring the removed ceiling
 back: no other turn sets it.
 
 **A ceiling only the host enforces needs a host that sees every call.** The Antigravity CLI runs
-its own tools with no off switch, so `stream_chat` refuses an enforced turn there, as the Auto judge
-already does, and the quick alert goes out. The Claude CLI runs with `--tools ""`.
+its own tools with no off switch, and Codex's text-protocol fallback leaves `web_search`,
+`view_image` and sub-agents on. Both refuse an enforced turn, and the quick alert goes out. The
+Claude CLI runs with `--tools ""`, and Codex's native mode turns its built-ins off.
 
 **`fetch_page` is left out** because it would let a page name a URL for this server to request.
 
-**The second narration's text is cleaned before it is pushed** (`usable`), against links, bare
-domains, handles and markup, with one line and hard word limits. Telegram links a bare domain and
-fetches it for a preview with no click, so `acme-filings.com/r?v=<value>` would be a leak. This
-cleaner is known to be incomplete: see the review below.
+**Every narration is cleaned at one seam** (`_narrated_fields` → `clean_narration`), including the
+quick one, which reads cached headlines and is what a failed search falls back to. The cleaner
+(`text_sanitize.strip_unknown_links`) is shared with the delivery decider, so a rewrite can't put a
+form back. It normalizes first and removes angle brackets before looking for links, then removes
+markdown links, URLs, IPv4 addresses and handles, and defuses bare domains in any script. Telegram
+links a bare domain and fetches it for a preview with no click, so `acme-filings.com/r?v=<value>`
+would be a leak. Pushes also ask Telegram for no preview, as chat replies already did. A domain with
+a path is reduced to its name; one with no path reads as its name or gets spaces (`J. P. Morgan`),
+and an all-caps ticker with an exchange suffix (`ACME.DE`) survives. Word limits are enforced here.
 
-**The run is meant not to lose the alert.** The story and the cooldown are written at once, from the
-same quick narration as the old path. The push waits for the run and falls back to that narration on
-a timeout (90 s search, 30 s narration), an error, an unusable reply or the daily cap. A SIGTERM
-during a run still loses the push: see the review below.
+**The run cannot lose the alert.** The story and the cooldown are written at once, from the same
+quick narration as the old path. The push waits for the run and falls back to that narration on a
+timeout (90 s search, 30 s narration), an error, an unusable reply or the daily cap. A SIGTERM kills
+the process before asyncio cancels anything, so lifespan shutdown calls `price_alert_run.drain()`
+before the Telegram bot stops: it stops the investigations, and each task then sends its quick alert.
+It never cancels a task that is already sending. A later story write re-reads the row in one
+transaction (`merge_fired_story`), so a dismissal made during the run survives, and it skips the
+write if the alert has fired again since.
 
 **The scan's `web_search_enabled` setting does not govern this.** That switch and its budget belong
 to Intel scans. The owner chose this run knowing the setting was off, so gating on it would have
@@ -102,37 +114,13 @@ treated differently. A page can still shape that wording, and a later turn with 
   fired.
 - An owner's Ask setting on a search tool does not stop this turn: the `scheduled` surface cannot
   show a card, so the tool runs. `blocked` is honoured.
-## Review on merged main, 2026-11-06: the flag stays, off by default
+## Review on merged main, 2026-11-06
 
 The owner's rule: if testing on `main` holds up, remove the flag; if not, keep it so a release is
-unaffected while this improves. The tool ceiling and the private-data split held, including live
-against pages written to hijack a real model. The review of the merged code still found these, so
-the flag defaulted back to off. Fix them before turning it on by default:
-
-1. **High.** The quick narration is pushed uncleaned, and it reads cached headlines. Steering the
-   second narration into an unusable reply forces that fallback. Clean in `_narrated_fields`, the
-   seam both share, and disable link previews at `connectors/telegram/bot.py`.
-2. **High.** `_plain` removes `<` and `>` last, so `http<://evil<.com/r?v=1` is rebuilt into a live
-   link after the checks. All-caps hosts, non-ASCII hosts, IPv4 and fullwidth dots also survive.
-3. **Medium.** The narration prompt never says the findings are data, and near-forgeries of the
-   fence survive. Add a system line, a per-call nonce and flatten the findings' newlines.
-4. **Medium.** On Codex's text-protocol fallback the CLI's own tools (`web_search`, `view_image`,
-   sub-agents) are outside the ceiling. Refuse an enforced turn there, as on Antigravity.
-5. **Medium.** A SIGTERM kills the process before tasks are cancelled, so a run in flight loses its
-   push, and the cooldown is already stamped. Drain `price_alert_run._tasks` in lifespan before the
-   Telegram bot stops.
-6. **Medium.** The delivery decider can rewrite the text into a bare link that its own stripper
-   allows, and a price alert now always goes out. Share one cleaner.
-7. **Medium.** The late story write replaces the whole row from a snapshot, undoing a dismissal, a
-   read mark or an explanation made during the run, and an older run can overwrite a newer fire.
-8. **Low to medium.** A refused call starts another model round: only the 90 s limit bounds them.
-   The turn also runs at medium effort on the instance model.
-9. **Low.** The cleaner mangles ordinary text: `Trim @180.50` loses the price, `RSI<30` loses its
-   operator, and `U.S.Steel` becomes `U`.
-
-**One of these reaches the flag-off path.** Finding 1's quick narration runs for everyone, and the
-news-lookup fix extends its cached headlines from held tickers to watched ones. A planted headline
-was already able to shape a held ticker's alert before this change.
+unaffected while this improves. The first pass held for the tool ceiling and the private-data split,
+including live against pages written to hijack a real model, but review found the output cleaning
+beatable, a push lost on SIGTERM and a late story write undoing a dismissal. So the flag defaulted
+off and the findings were fixed in the decisions above. It stays off until a review of the fixes.
 
 Retire the flag by 2027-03-01: keep the run and remove the narration-only branch, or delete this.
 

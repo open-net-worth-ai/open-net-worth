@@ -7,7 +7,8 @@ this leaf seam, exactly like ``core.channels`` (notify) and ``core.io`` (the che
 hook): ``ai/`` registers a runner at import time and the service invokes it via ``get_runner()``.
 
 A runner is an **async** callable
-``(prompt, *, allowed_tools=None, model=None, lean_prompt=False, enforce_offer=False) -> str``
+``(prompt, *, allowed_tools=None, model=None, lean_prompt=False, enforce_offer=False,
+effort="medium") -> str``
 returning the assistant's text output.
 
 * ``allowed_tools`` is the EXPLICIT tool offer. ``None`` = the ordinary interactive offer;
@@ -33,7 +34,7 @@ from __future__ import annotations
 
 from typing import Awaitable, Callable, Iterable, Optional
 
-# An async runner: (prompt, *, allowed_tools, model, lean_prompt, enforce_offer) -> text.
+# An async runner: (prompt, *, allowed_tools, model, lean_prompt, enforce_offer, effort) -> text.
 HeadlessRunner = Callable[..., Awaitable[str]]
 
 # A per-caller tool scope (a list/set/frozenset of tool names), or None for the

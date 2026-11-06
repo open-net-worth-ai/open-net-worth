@@ -126,6 +126,18 @@ _APP_SERVER_ATTEMPTS = 3
 _APP_SERVER_RETRY_DELAY = 0.5
 
 
+def _refuse_enforced_offer() -> None:
+    """The text protocol leaves the CLI's own tools on (web_search, view_image, sub-agents), and the
+    tool loop never sees those. A turn whose tool list must be a real ceiling can't run on it."""
+    from backend.ai.tools._skill_scope import offer_is_enforced
+
+    if offer_is_enforced():
+        raise ConfigurationError(
+            "This turn's tools must be enforced, and Codex's text protocol cannot be limited to "
+            "them. It needs Codex's native tools."
+        )
+
+
 def _preferred_transport() -> str:
     pinned = (os.getenv("ONW_CODEX_TRANSPORT") or "").strip().lower()
     return pinned if pinned in _TRANSPORTS else "app_server"
@@ -533,6 +545,8 @@ class CodexCliProvider(AIProvider):
         calls, and the next round — when it carries exactly those calls' results — continues
         the same thread instead of pasting the conversation into a new one
         (:mod:`backend.ai.models.codex_live_turn`)."""
+        if specs is None:
+            _refuse_enforced_offer()
         native = specs is not None
         instructions = (system or "") + (
             NATIVE_TOOLS_NOTE if native and tools else render_tool_manifest(tools)
@@ -652,6 +666,7 @@ class CodexCliProvider(AIProvider):
         effort: str,
         images: list[dict] | None = None,
     ) -> AsyncGenerator[dict, None]:
+        _refuse_enforced_offer()
         prompt = build_prompt(instructions, transcript)
         argv = self._argv(model, effort=effort)
 
