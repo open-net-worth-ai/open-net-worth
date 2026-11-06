@@ -328,7 +328,11 @@ class AntigravityCliProvider(AIProvider):
     ) -> AsyncGenerator[str, None]:
         """One model round on a live (pooled) or one-shot process; yields visible text."""
         env = child_environment()
-        key_argv = [*key_argv, env["HOME"], env["ONW_PRIVATE_BUS_ID"]]
+        key_argv = [
+            *key_argv,
+            env.get("HOME") or env.get("USERPROFILE", ""),
+            env["ONW_PRIVATE_BUS_ID"],
+        ]
         async with self._semaphore:
             if pooled:
                 session, text, _images, rnd.reused = await antigravity_live_session.acquire(

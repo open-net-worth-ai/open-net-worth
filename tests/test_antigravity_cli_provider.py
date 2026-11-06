@@ -319,6 +319,37 @@ async def test_changed_identity_never_shares_a_session(provider, tmp_path, monke
     assert second_row["pid"] != first_row["pid"]
 
 
+async def test_chat_accepts_userprofile_without_home(provider, tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "backend.ai.models.antigravity_cli_provider.child_environment",
+        lambda: {
+            "PATH": os.environ["PATH"],
+            "USERPROFILE": str(tmp_path),
+            "ONW_PRIVATE_BUS_ID": "",
+        },
+    )
+    events = await _chat(provider, [USER])
+    assert _text(events).strip()
+    assert events[-1]["type"] == "done"
+
+
+async def test_different_userprofiles_do_not_share_a_session(provider, tmp_path, monkeypatch):
+    identity = {"path": str(tmp_path / "first")}
+    monkeypatch.setattr(
+        "backend.ai.models.antigravity_cli_provider.child_environment",
+        lambda: {
+            "PATH": os.environ["PATH"],
+            "USERPROFILE": identity["path"],
+            "ONW_PRIVATE_BUS_ID": "",
+        },
+    )
+    await _chat(provider, [USER])
+    identity["path"] = str(tmp_path / "second")
+    await _chat(provider, [USER, ASSISTANT, TOOL_RESULT])
+    first_row, second_row = _received(tmp_path)
+    assert first_row["pid"] != second_row["pid"]
+
+
 async def test_a_changed_tool_manifest_never_shares_a_session(provider, tmp_path):
     await _chat(provider, [USER])
     other = [{"name": "other_tool", "description": "x", "parameters": {}}]
