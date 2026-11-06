@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { getAutomationActivity, type AutomationActivity } from '../api/automations'
-import { useQueryCache, type QueryCacheResult } from '../state/queryCache'
+import { invalidateQueryCache, useQueryCache, type QueryCacheResult } from '../state/queryCache'
 
 const ACTIVITY_KEY = '/api/automations/activity'
 
@@ -21,4 +21,10 @@ export function useAutomationActivity(): QueryCacheResult<AutomationActivity> {
     staleTime: 30_000,
     refetchInterval: 30_000,
   })
+}
+
+/** Re-read the panel now rather than at the next poll. A read stamp clears a failed run from
+ *  Needs attention, and nothing else tells this cache that one landed. */
+export function refreshAutomationActivity(): void {
+  invalidateQueryCache(ACTIVITY_KEY)
 }

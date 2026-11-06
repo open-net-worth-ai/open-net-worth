@@ -1,4 +1,4 @@
-"""A failed Automation stays visible until a later run succeeds.
+"""A failed Automation stays visible until it is opened or a later run succeeds.
 
 Owner report 2026-10-14: a run that failed showed "Failed" only until it was read, four failed
 runs never showed it at all (their turn ended ``timeout``/``interrupted``), and two said "New
@@ -16,6 +16,7 @@ import pytest
 from backend.ai import assistant
 from backend.db.automation_run_store import AutomationRunStore
 from backend.db.automation_store import AutomationStore
+from backend.db.session_store import SessionStore
 from backend.services.automations.activity import automation_activity, run_status_by_session
 
 
@@ -111,6 +112,76 @@ def test_a_failure_waits_at_most_a_day(stores):
 
     assert [i["automation_name"] for i in automation_activity()["failed"]] == ["Recent"]
     assert run_status_by_session()[old["session_id"]] == "failed"
+
+
+def _with_conversation(run: dict) -> str:
+    SessionStore().upsert_meta(run["session_id"], {"title": "Email digest"})
+    return run["session_id"]
+
+
+def test_opening_the_failed_run_clears_it(stores):
+    automations, runs = stores
+    digest = automations.create({"name": "Email digest"})
+    failed = _run(runs, digest["id"], ago(9), "failed", error="boom", finished_at=ago(8))
+    session_id = _with_conversation(failed)
+    assert [item["run_id"] for item in automation_activity()["failed"]] == [failed["id"]]
+
+    assistant.mark_sessions_read([session_id])
+
+    assert automation_activity()["failed"] == []
+
+
+def test_a_read_before_the_run_ended_does_not_clear_it(stores):
+    automations, runs = stores
+    digest = automations.create({"name": "Email digest"})
+    failed = _run(runs, digest["id"], ago(9), "failed", error="boom", finished_at=ago(1))
+    SessionStore().mark_read([_with_conversation(failed)], at=ago(2))
+
+    assert [item["run_id"] for item in automation_activity()["failed"]] == [failed["id"]]
+
+
+def test_the_next_failure_comes_back_after_the_last_was_read(stores):
+    automations, runs = stores
+    digest = automations.create({"name": "Email digest"})
+    first = _run(runs, digest["id"], ago(9), "failed", error="boom", finished_at=ago(8))
+    assistant.mark_sessions_read([_with_conversation(first)])
+    second = _run(runs, digest["id"], ago(2), "failed", error="boom", finished_at=ago(1))
+
+    assert [item["run_id"] for item in automation_activity()["failed"]] == [second["id"]]
+
+
+def test_a_retry_that_fails_after_the_read_comes_back(stores):
+    automations, runs = stores
+    digest = automations.create({"name": "Email digest"})
+    run = _run(runs, digest["id"], ago(9), "failed", error="boom", finished_at=ago(8))
+    SessionStore().mark_read([_with_conversation(run)], at=ago(2))
+    assert automation_activity()["failed"] == []
+
+    runs.transition(run["id"], {"failed"}, "running", {"finished_at": None})
+    runs.transition(run["id"], {"running"}, "failed", {"error": "again", "finished_at": ago(1)})
+
+    assert [item["run_id"] for item in automation_activity()["failed"]] == [run["id"]]
+
+
+def test_a_recent_failure_read_stays_in_active_with_its_status(stores):
+    automations, runs = stores
+    digest = automations.create({"name": "Email digest"})
+    failed = _run(runs, digest["id"], ago(2), "failed", error="boom", finished_at=ago(1))
+    assistant.mark_sessions_read([_with_conversation(failed)])
+
+    activity = automation_activity()
+
+    assert activity["failed"] == []
+    assert [(i["run_id"], i["status"]) for i in activity["active"]] == [(failed["id"], "failed")]
+
+
+def test_an_unreadable_read_stamp_keeps_the_failure_listed(stores):
+    automations, runs = stores
+    digest = automations.create({"name": "Email digest"})
+    failed = _run(runs, digest["id"], ago(2), "failed", error="boom", finished_at=ago(1))
+    SessionStore().upsert_meta(failed["session_id"], {"last_read_at": "not a date"})
+
+    assert [item["run_id"] for item in automation_activity()["failed"]] == [failed["id"]]
 
 
 def test_an_automation_being_deleted_is_left_out(stores):

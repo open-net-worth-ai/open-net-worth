@@ -191,9 +191,10 @@ runs**; **Mark all read** there clears the unread ones in one click.
 
 A run that failed keeps saying **Failed** there, even after you've opened it. And while an
 Automation's latest run has failed, the Lucius home screen lists it under **Needs attention** — on
-your phone too — with the reason. **Open** takes you to the run, where **Try again** is. It drops off
-the list once a later run, or your retry, succeeds — and after 24 hours in any case, so a paused or
-finished Automation doesn't sit there for good.
+your phone too — with the reason. **Open** takes you to the run, where **Try again** is, and clears
+it from the list on all your devices: you've seen it. If the Automation fails again, it comes back.
+It also drops off once a later run, or your retry, succeeds — and after 24 hours in any case, so a
+paused or finished Automation doesn't sit there for good.
 
 Deleting an Automation also deletes its run history. It can't be undone.
 
