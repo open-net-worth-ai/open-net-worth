@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import stat
 import sys
 import textwrap
@@ -140,6 +141,14 @@ def _clean_pool():
 @pytest.fixture
 def agy(tmp_path, monkeypatch):
     script = _fake_agy(tmp_path)
+    monkeypatch.setattr(
+        "backend.ai.models.antigravity_cli_provider.child_environment",
+        lambda: {
+            "PATH": os.environ["PATH"],
+            "HOME": str(tmp_path),
+            "ONW_PRIVATE_BUS_ID": "synthetic",
+        },
+    )
     monkeypatch.setattr(
         "backend.db.model_config_store.cli_binary_path", lambda *_a, **_k: str(script)
     )
@@ -297,6 +306,48 @@ async def test_a_changed_system_prompt_never_shares_a_session(provider, tmp_path
     first_row, second_row = _received(tmp_path)
     assert second_row["pid"] != first_row["pid"]
     assert "Prompt B" in second_row["event"]["message"]["content"]
+
+
+async def test_changed_identity_never_shares_a_session(provider, tmp_path, monkeypatch):
+    await _chat(provider, [USER])
+    monkeypatch.setattr(
+        "backend.ai.models.antigravity_cli_provider.child_environment",
+        lambda: {"PATH": os.environ["PATH"], "HOME": str(tmp_path), "ONW_PRIVATE_BUS_ID": "other"},
+    )
+    await _chat(provider, [USER, ASSISTANT, TOOL_RESULT])
+    first_row, second_row = _received(tmp_path)
+    assert second_row["pid"] != first_row["pid"]
+
+
+async def test_chat_accepts_userprofile_without_home(provider, tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "backend.ai.models.antigravity_cli_provider.child_environment",
+        lambda: {
+            "PATH": os.environ["PATH"],
+            "USERPROFILE": str(tmp_path),
+            "ONW_PRIVATE_BUS_ID": "",
+        },
+    )
+    events = await _chat(provider, [USER])
+    assert _text(events).strip()
+    assert events[-1]["type"] == "done"
+
+
+async def test_different_userprofiles_do_not_share_a_session(provider, tmp_path, monkeypatch):
+    identity = {"path": str(tmp_path / "first")}
+    monkeypatch.setattr(
+        "backend.ai.models.antigravity_cli_provider.child_environment",
+        lambda: {
+            "PATH": os.environ["PATH"],
+            "USERPROFILE": identity["path"],
+            "ONW_PRIVATE_BUS_ID": "",
+        },
+    )
+    await _chat(provider, [USER])
+    identity["path"] = str(tmp_path / "second")
+    await _chat(provider, [USER, ASSISTANT, TOOL_RESULT])
+    first_row, second_row = _received(tmp_path)
+    assert first_row["pid"] != second_row["pid"]
 
 
 async def test_a_changed_tool_manifest_never_shares_a_session(provider, tmp_path):
