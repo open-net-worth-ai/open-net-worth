@@ -39,6 +39,7 @@ export const LOGO_FILES: Record<string, string> = {
   lunch_money: 'lunch_money.png',
   lunch_flow: 'lunch_flow.svg',
   ynab: 'ynab.png',
+  actual_budget: 'actual_budget.png',
   alpaca: 'alpaca.png',
   ibkr: 'ibkr.png',
   enable_banking: 'enable_banking.png',

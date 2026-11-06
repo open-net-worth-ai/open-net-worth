@@ -463,8 +463,9 @@ describe('the Data sync list', () => {
     const onOpen = vi.fn()
     render(<List apps={[ACTUAL_APP]} onOpen={onOpen} />)
     const tile = await screen.findByRole('button', { name: 'Set up Actual' })
-    expect(tile.querySelector('.a3-tpl-ic')).toBeTruthy()
-    expect(tile.querySelector('.a3-mark')).toBeNull()
+    expect(tile.querySelector('.a3-mark-logo')?.getAttribute('src')).toBe(
+      '/connector-logos/actual_budget.png',
+    )
     fireEvent.click(tile)
     expect(onOpen).toHaveBeenCalledWith('actual_budget')
     expect(screen.queryByRole('button', { name: 'Set up YNAB' })).toBeNull()
