@@ -5,6 +5,7 @@ import { authFetch } from '../api/client'
 import { isStandalonePwa } from '../utils/pwa'
 import { conversationTitleFromFirstMessage } from '../utils/conversationTitle'
 import { laterIso } from '../utils/isoTime'
+import { refreshAutomationActivity } from './useAutomationActivity'
 
 export interface ConversationMeta {
   id: string
@@ -529,7 +530,9 @@ export function useConversations() {
       const persisted = unique.filter((id) => !pendingConvsRef.current.has(id))
       for (let i = 0; i < persisted.length; i += READ_BATCH) {
         void apiMarkRead(persisted.slice(i, i + READ_BATCH)).then((stamps) => {
-          if (stamps) applyReadStamps(stamps)
+          if (!stamps) return
+          applyReadStamps(stamps)
+          refreshAutomationActivity()
         })
       }
     },
