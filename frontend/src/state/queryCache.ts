@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import { onDataChanged } from '../lucius/bus'
 
 /** Stamped once per build by vite's `define`. See `PERSIST_KEY` below. */
@@ -15,7 +15,7 @@ interface QueryEntry<T> {
   snapshot: QuerySnapshot<T>
   listeners: Set<() => void>
   /** Disabled readers still receive cached writes, but must not initiate background reads. */
-  activeListeners: Set<() => void>
+  activeListeners: Map<() => void, () => Promise<T>>
   promise: Promise<T> | null
   fetcher: () => Promise<T>
   /** Pending eviction timer, armed when the last listener unsubscribes. See scheduleGc. */
@@ -134,7 +134,7 @@ function hydrateFromStorage(): void {
           refreshing: false,
         },
         listeners: new Set(),
-        activeListeners: new Set(),
+        activeListeners: new Map(),
         promise: null,
         // Replaced by the real one the moment any consumer calls entryFor(). Until then the
         // entry is read-only: hydrated data with no way to refetch is still better than
@@ -250,7 +250,7 @@ function entryFor<T>(
     entry = {
       snapshot: EMPTY_SNAPSHOT,
       listeners: new Set(),
-      activeListeners: new Set(),
+      activeListeners: new Map(),
       promise: null,
       fetcher,
       gcTimer: null,
@@ -377,11 +377,13 @@ export function useQueryCache<T>(
 ): QueryCacheResult<T> {
   const enabled = options.enabled ?? true
   const entry = entryFor(key, fetcher, enabled)
+  const fetcherRef = useRef(fetcher)
+  fetcherRef.current = fetcher
   const subscribe = useCallback(
     (listener: () => void) => {
       cancelGc(entry)
       entry.listeners.add(listener)
-      if (enabled) entry.activeListeners.add(listener)
+      if (enabled) entry.activeListeners.set(listener, () => fetcherRef.current())
       return () => {
         entry.listeners.delete(listener)
         entry.activeListeners.delete(listener)
@@ -417,7 +419,7 @@ export function useQueryCache<T>(
   const refetchInterval = options.refetchInterval
   useEffect(() => {
     if (!enabled || !refetchInterval) return
-    const id = setInterval(() => void revalidate(key, entry.fetcher), refetchInterval)
+    const id = setInterval(() => void revalidate(key, () => fetcherRef.current()), refetchInterval)
     return () => clearInterval(id)
   }, [key, refetchInterval, entry, enabled])
 
@@ -429,7 +431,7 @@ export function useQueryCache<T>(
     // Nor may a DISABLED key: nothing is coming, so a spinner would never resolve.
     initialLoading: enabled && snapshot.data === undefined && snapshot.error == null,
     refreshing: snapshot.refreshing,
-    refresh: useCallback(() => revalidate(key, entry.fetcher), [key, entry]),
+    refresh: useCallback(() => revalidate(key, () => fetcherRef.current()), [key]),
   }
 }
 
@@ -447,7 +449,8 @@ export function invalidateQueryCache(matcher: string | ((key: string) => boolean
   for (const [key, entry] of entries) {
     if (!matches(key)) continue
     publish(entry, { updatedAt: 0 })
-    if (entry.activeListeners.size > 0) void revalidate(key, entry.fetcher)
+    const activeFetcher = entry.activeListeners.values().next().value
+    if (activeFetcher) void revalidate(key, activeFetcher)
   }
 }
 
@@ -487,7 +490,7 @@ export function setCachedQueryData<T>(
     entry = {
       snapshot: EMPTY_SNAPSHOT,
       listeners: new Set(),
-      activeListeners: new Set(),
+      activeListeners: new Map(),
       promise: null,
       fetcher: async () => {
         throw new Error(`No fetcher registered for ${key}`)
