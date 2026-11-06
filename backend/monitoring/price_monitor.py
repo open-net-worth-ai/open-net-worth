@@ -535,6 +535,8 @@ async def _investigated(
     cleaned = price_alert_run.usable(data)
     if not cleaned:
         return signal
+    # Text a page may have shaped reaches a phone as Lucius's words, so it says where it came from.
+    cleaned = {**cleaned, "summary": f"From a web search, unverified: {cleaned['summary']}"}
     changes = {**fields(cleaned), "updated_at": datetime.now(timezone.utc).isoformat()}
     try:
         merge_fired_story(signal["id"], signal.get("created_at"), changes)

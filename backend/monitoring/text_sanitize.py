@@ -37,77 +37,112 @@ def sanitize_untrusted_text(value: str | None, max_len: int) -> str:
     return text[:max_len]
 
 
-# Every text that reaches a phone goes through ``strip_unknown_links``, so no sender can forget a
-# link form. A markdown link of ANY scheme keeps its text, a bare URL goes, and a bare domain is
-# defused: Telegram links one and fetches it for a preview with no click, so
-# ``acme-filings.com/r?v=<value>`` would otherwise be a leak.
-_LINK_RE = re.compile(
-    r"\[([^\]]*)\]\(([^)]*)\)"
-    r"|(?P<url>(?:[a-z][a-z0-9+.-]*://|www\.)[^\s)\]]+)"
-    r"|(?P<host>\b\d{1,3}(?:\.\d{1,3}){3}\b|(?:[^\W_](?:[\w-]*[^\W_])?\.)+[^\W\d_]{2,})"
-    r"(?P<path>[/?#:]\S+)?",
-    re.IGNORECASE,
-)
-_IPV4_RE = re.compile(r"\d{1,3}(?:\.\d{1,3}){3}")
-_EXCHANGE_TICKER_RE = re.compile(r"[A-Z0-9]{1,6}\.([A-Z]{1,3})")
+# The cleaner for alert text and delivery decider messages. It works token by token in linear time,
+# because a blocklist of link shapes kept missing forms and its regexes went quadratic on one long
+# word, freezing the event loop. Telegram links a bare domain and can fetch it for a preview with no
+# click, so ``acme-filings.com/r?v=<value>`` would be a leak of whatever the model put in it.
+_MAX_INPUT_CHARS = 8000
+_MAX_PASSES = 4
+_MARKDOWN_LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)]*)\)")
+_TAG_RE = re.compile(r"</?[A-Za-z][^<>]*>")
+_BELOW_RE = re.compile(r"\s*<\s*(?=[\w$€£¥])")
+_ABOVE_RE = re.compile(r"\s*>\s*(?=[\w$€£¥])")
+_STAR_RE = re.compile(r"(?<!\d)\*|\*(?!\d)")
+_UNDERSCORE_RE = re.compile(r"(?<![^\W_])_|_(?![^\W_])")
+_HANDLE_RE = re.compile(r"@+[^\W\d]\w*")
+_DOUBLE_DOLLAR_RE = re.compile(r"\${2,}")
+_SPACES_RE = re.compile(r"[ \t]{2,}")
+_TOKEN_SPLIT_RE = re.compile(r"(\s+)")
+# A dot joining text to at least two more characters, starting with a letter in any script. A
+# digit after the dot is a number (3.5) and one letter is an abbreviation (U.S., e.g., BRK.B).
+_JOINING_DOT_RE = re.compile(r"[^\s.]\.[^\W\d_][^\s.]")
+_IPV4_RE = re.compile(r"\W*\d{1,3}(?:\.\d{1,3}){3}")
+_PATH_RE = re.compile(r"[/?#:=&]")
+_EXCHANGE_TICKER_RE = re.compile(r"[A-Z0-9]{1,10}\.([A-Z]{1,3})")
 _EXCHANGE_SUFFIXES = frozenset(
-    "AS AX BO BR CO DE F HE HK KQ KS L LS MC MI MX NS NZ OL PA SA SI SS ST SW SZ T TO TW V VI WA".split()
+    "AS AX BO BR CO DE F HE HK IS JK JO KQ KS L LS MC MI MX NS NZ OL PA SA SI SS ST SW SZ T TO TW "
+    "V VI VN WA".split()
 )
-_COMMON_TLDS = frozenset(
-    "ai app au biz ca cc club cn co com de dev eu fr gg in info io jp link live me mov net news "
-    "online org pro ru shop site store tech top tv uk us xyz zip".split()
-)
-_HANDLE_RE = re.compile(r"(?<![\w@.])@[A-Za-z_]\w*")
-_BELOW_RE = re.compile(r"\s*<\s*(?=[\d$€£¥])")
-_ABOVE_RE = re.compile(r"\s*>\s*(?=[\d$€£¥])")
+_READS_AS_A_NAME_TLDS = frozenset({"com", "net", "org"})
+_TRAILING_PUNCTUATION = ".,;:!?)]\"'"
 
 
 def _without_markup(text: str) -> str:
-    """NFKC first so a lookalike can't pass as ordinary text, and angle brackets go BEFORE the link
-    checks: removed last, ``http<://evil<.com`` was rebuilt into a live link after they had run."""
-    text = unicodedata.normalize("NFKC", text).replace("\u3002", ".")
+    """NFKC first so a lookalike can't pass as ordinary text, and brackets go BEFORE the link checks:
+    removed last, ``http<://evil<.com`` was rebuilt into a live link after they had run."""
+    text = unicodedata.normalize("NFKC", text[:_MAX_INPUT_CHARS]).replace("\u3002", ".")
     text = "".join(c for c in text if unicodedata.category(c) != "Cf")
-    text = _CTRL_RE.sub("", text).replace("<=", "≤").replace(">=", "≥")
-    text = _BELOW_RE.sub(" below ", text)
-    text = _ABOVE_RE.sub(" above ", text)
+    text = _TAG_RE.sub("", _CTRL_RE.sub("", text).replace("\x00", ""))
+    text = text.replace("<=", "≤").replace(">=", "≥")
+    text = _ABOVE_RE.sub(" above ", _BELOW_RE.sub(" below ", text))
     return text.replace("<", "").replace(">", "")
 
 
-def _defuse_host(host: str, path: str | None) -> str:
-    """A ticker survives. A domain with a path is reduced to its name, dropping whatever the path
-    carried. With no path, a familiar domain is reduced too (``reuters.com`` reads as ``reuters``),
-    and anything else gets spaces, so a missed space in prose (``J.P.Morgan``, ``rose.Margins``)
-    stays readable and no longer links."""
-    if _IPV4_RE.fullmatch(host):
-        return ""
-    ticker = _EXCHANGE_TICKER_RE.fullmatch(host)
-    if ticker and not path and ticker.group(1) in _EXCHANGE_SUFFIXES:
-        return host
+def _defuse_token(token: str) -> str:
+    """One whitespace-free token, with no way left to read as a link. A ticker survives. A domain
+    with a path is reduced to its name, dropping whatever the path carried. With no path, a familiar
+    domain reads as its name, and anything else gets spaces, so a missed space in prose
+    (``J.P.Morgan``, ``rose.Margins``) stays readable and no longer links."""
+    core = token.rstrip(_TRAILING_PUNCTUATION)
+    tail = token[len(core) :]
+    if "://" in core or core.lower().lstrip("([").startswith("www."):
+        return tail
+    if _IPV4_RE.match(core):
+        return tail
+    ticker = _EXCHANGE_TICKER_RE.fullmatch(core)
+    if (ticker and ticker.group(1) in _EXCHANGE_SUFFIXES) or not _JOINING_DOT_RE.search(core):
+        return token
+    host, *path = _PATH_RE.split(core, maxsplit=1)
     labels = host.split(".")
-    if path or labels[-1].lower() in _COMMON_TLDS:
-        return labels[0]
-    return ". ".join(labels)
+    if path or labels[-1].lower() in _READS_AS_A_NAME_TLDS:
+        return labels[0].lstrip("/") + tail
+    return ". ".join(labels) + tail
+
+
+def _one_pass(text: str, allowed_urls: set[str], hold) -> str:
+    def _markdown(match: re.Match) -> str:
+        return hold(match.group(0)) if match.group(2).strip() in allowed_urls else match.group(1)
+
+    def _allowed_token(token: str) -> str:
+        core = token.rstrip(_TRAILING_PUNCTUATION)
+        return hold(core) + token[len(core) :] if core in allowed_urls else token
+
+    text = _MARKDOWN_LINK_RE.sub(_markdown, text)
+    tokens = _TOKEN_SPLIT_RE.split(text)
+    tokens[::2] = [_allowed_token(token) for token in tokens[::2]]
+    text = "".join(tokens)
+    text = _STAR_RE.sub("", text).replace("`", "").replace("~", "")
+    text = _DOUBLE_DOLLAR_RE.sub("$", _UNDERSCORE_RE.sub("", text))
+    tokens = _TOKEN_SPLIT_RE.split(text)
+    tokens[::2] = [_defuse_token(token) for token in tokens[::2]]
+    return _HANDLE_RE.sub("", "".join(tokens))
 
 
 def strip_unknown_links(message: str, allowed_urls: set[str]) -> str:
-    """The message with every link that was not given to the model removed, and no markup. Links
-    from the items' own server-built sources survive."""
+    """The message with every link it was not given removed, and no markup or emphasis. It repeats
+    until nothing changes, because removing one thing can reveal another. Links from the items' own
+    server-built sources are held out of every pass, so they survive unaltered."""
+    kept: list[str] = []
 
-    def _keep(match: re.Match) -> str:
-        if match.group("host"):
-            return _defuse_host(match.group("host"), match.group("path"))
-        if match.group("url"):
-            bare = match.group("url")
-            return bare if bare.rstrip(".,;:!?") in allowed_urls else ""
-        return match.group(0) if match.group(2).strip() in allowed_urls else match.group(1)
+    def hold(link: str) -> str:
+        kept.append(link)
+        return f"\x00{len(kept) - 1}\x00"
 
-    return _HANDLE_RE.sub("", _LINK_RE.sub(_keep, _without_markup(message))).strip()
+    text = _without_markup(message)
+    for _ in range(_MAX_PASSES):
+        cleaned = _one_pass(text, allowed_urls, hold)
+        if cleaned == text:
+            break
+        text = cleaned
+    text = _SPACES_RE.sub(" ", text).strip()
+    for index, link in enumerate(kept):
+        text = text.replace(f"\x00{index}\x00", link)
+    return text
 
 
 def plain_line(value: object, max_words: int) -> str:
     """One line of push text with no link, handle or emphasis, and a hard word limit."""
-    text = strip_unknown_links(str(value or ""), set()).replace("*", "").replace("`", "")
-    return " ".join(text.split()[:max_words])
+    return " ".join(strip_unknown_links(str(value or ""), set()).split()[:max_words])
 
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")

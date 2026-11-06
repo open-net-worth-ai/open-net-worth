@@ -27,6 +27,7 @@ def _clean_state():
     run._runs_by_day.clear()
     run._tasks.clear()
     run._investigations.clear()
+    run._closing = False
     _skill_scope.clear_scope()
     set_extra_groups(frozenset())
     set_extra_names(frozenset())
@@ -35,6 +36,7 @@ def _clean_state():
     run._runs_by_day.clear()
     run._tasks.clear()
     run._investigations.clear()
+    run._closing = False
     _skill_scope.clear_scope()
     set_extra_groups(frozenset())
     set_extra_names(frozenset())
@@ -311,12 +313,22 @@ def test_search_prompt_warns_about_untrusted_results():
             "My cost is $43210, holding 488.75 shares",
             "My cost is [figure], holding [figure] shares",
         ),
-        ("Trim above S$3,000 or 15%", "Trim above [figure] or [figure]"),
-        ("Check Q3 results and the 10-K", "Check Q3 results and the [figure]-K"),
+        ("Trim above S$3,000 or 15%", "Trim above S[figure] or [figure]"),
+        ("Check Q3 results and the 10-K", "Check Q[figure] results and the [figure]-K"),
+        (
+            "avg150 on ACCT4821, USD500 or $.50",
+            "avg[figure] on ACCT[figure], USD[figure] or [figure]",
+        ),
+        ("1.234.567 shares", "[figure] shares"),
     ],
 )
 def test_figures_in_a_note_never_reach_the_search_turn(note, kept):
     assert kept in run.search_prompt("ACME", "ACME", "<=", 234.6, note)
+
+
+def test_figures_in_the_alert_name_never_reach_the_search_turn():
+    prompt = run.search_prompt("ACME 500 shares of my IRA", "ACME", "<=", 234.6, "")
+    assert "500" not in prompt.split("Current price")[0]
 
 
 def test_findings_cannot_forge_the_end_of_their_fence():
@@ -398,6 +410,7 @@ class _Env:
 @pytest.fixture
 def env(monkeypatch):
     state = _Env()
+    monkeypatch.setattr(run, "_host_sees_every_call", lambda: True)
 
     async def fake_ai_signal(**kwargs):
         return {
@@ -492,7 +505,8 @@ def test_flag_on_sends_one_alert_carrying_what_the_search_found(env):
     signal, channels = env.pushed[0]
     assert channels == ["telegram"]
     assert signal["current_summary"] == (
-        "ACME has dropped below 235. ACME fell on a regulator's review, per Reuters."
+        "ACME has dropped below 235. From a web search, unverified: "
+        "ACME fell on a regulator's review, per Reuters."
     )
     assert signal["portfolio_impact"] == _NARRATION["portfolio_impact"]
     assert signal["action_items"] == _NARRATION["action_items"]
@@ -710,6 +724,56 @@ def test_the_run_is_off_by_default_until_its_review_findings_are_fixed():
 
     (flag,) = [f for f in all_flags() if f.name == "price_alert_lucius_run"]
     assert flag.default is False
+
+
+@pytest.mark.parametrize(
+    "transport, expected",
+    [
+        ("codex_cli", False),
+        ("antigravity_cli", False),
+        ("claude_cli", True),
+        ("anthropic", True),
+        ("openai_compatible", True),
+    ],
+)
+def test_no_run_where_the_cli_has_tools_the_host_cannot_see(monkeypatch, transport, expected):
+    """On these the narration holding the position has the CLI's own tools too, so refusing only
+    the search turn would not be enough."""
+
+    class _Store:
+        def task_model_override(self, task):
+            return ""
+
+        def resolved(self):
+            return {"transport": transport}
+
+    monkeypatch.setattr(run, "ModelConfigStore", _Store)
+    monkeypatch.setattr(run, "_flag_enabled", lambda name: True)
+    assert run.active() is expected
+
+
+def test_a_task_model_override_on_codex_also_stops_the_run(monkeypatch):
+    class _Store:
+        def task_model_override(self, task):
+            return "codex_cli:gpt"
+
+        def resolve_override(self, override):
+            return {"transport": "codex_cli"}
+
+        def resolved(self):
+            return {"transport": "anthropic"}
+
+    monkeypatch.setattr(run, "ModelConfigStore", _Store)
+    monkeypatch.setattr(run, "_flag_enabled", lambda name: True)
+    assert run.active() is False
+
+
+def test_no_new_run_starts_once_shutdown_has_begun(monkeypatch):
+    monkeypatch.setattr(run, "_flag_enabled", lambda name: True)
+    monkeypatch.setattr(run, "_host_sees_every_call", lambda: True)
+    assert run.active() is True
+    asyncio.run(run.drain())
+    assert run.active() is False
 
 
 def test_an_unreadable_flag_means_the_old_path(monkeypatch):

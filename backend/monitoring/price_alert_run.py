@@ -24,6 +24,7 @@ from backend.core.config import get_settings
 from backend.core.headless_turn import get_runner
 from backend.core.untrusted import fence_untrusted_block, make_fence_nonce, sanitize_untrusted
 from backend.core.user_time import user_today
+from backend.db.model_config_store import ModelConfigStore
 from backend.monitoring.text_sanitize import plain_line, sanitize_untrusted_text
 from backend.services.feature_flags import enabled as _flag_enabled
 
@@ -48,23 +49,33 @@ _runs_by_day: dict[str, int] = {}
 # Strong references: the event loop only holds a task weakly, so an unreferenced one can vanish.
 _tasks: set[asyncio.Task] = set()
 _investigations: set[asyncio.Task] = set()
+_closing = False
 
-# A figure in an alert's note is usually the user's own (a cost, a share count). The search turn
-# reads text written by strangers, so it never gets one: a prompt asking it not to search for them
-# would be a request, and this is a guarantee.
-_FIGURE_RE = re.compile(r"(?<![A-Za-z0-9.])(?:[A-Za-z]{0,3}[$€£¥])?\d(?:[\d,]*\d)?(?:\.\d+)?%?")
+# A figure in an alert's note or label is usually the user's own (a cost, a share count). The search
+# turn reads text written by strangers, so it never gets one. Spelled-out numbers can't be caught.
+_FIGURE_RE = re.compile(r"[$€£¥]?\.?\d(?:[\d,.'’]*\d)?%?")
+# The tool ceiling and the tool-free narration both rest on the host seeing every call. These CLIs
+# run tools of their own that it never sees, in the search turn or the call holding the position.
+_TRANSPORTS_WITH_THEIR_OWN_TOOLS = frozenset({"antigravity_cli", "codex_cli"})
+
+
+def _host_sees_every_call() -> bool:
+    store = ModelConfigStore()
+    override = store.task_model_override("price_monitor")
+    resolved = store.resolve_override(override) if override else store.resolved()
+    return (resolved or {}).get("transport") not in _TRANSPORTS_WITH_THEIR_OWN_TOOLS
 
 
 def active() -> bool:
-    """Whether a fired alert starts a run. An unreadable flag is the old path, never a guess. A
+    """Whether a fired alert starts a run. An unreadable setting is the old path, never a guess. A
     public demo never runs one: its alerts would spend the instance's model and search quota with
-    no visitor asking."""
+    no visitor asking. Nor does a server shutting down, which could not finish it."""
     try:
-        if get_settings().demo_mode:
+        if _closing or get_settings().demo_mode:
             return False
-        return _flag_enabled("price_alert_lucius_run")
+        return _flag_enabled("price_alert_lucius_run") and _host_sees_every_call()
     except Exception as exc:
-        logger.warning("price_alert_run: flag unreadable, narrating: %s", type(exc).__name__)
+        logger.warning("price_alert_run: unreadable setting, narrating: %s", type(exc).__name__)
         return False
 
 
@@ -91,6 +102,8 @@ async def until_shutdown(work: Coroutine[Any, Any, dict], fallback: dict) -> dic
 async def drain() -> None:
     """Called at shutdown BEFORE the channels stop. A SIGTERM kills the process before asyncio would
     cancel these tasks, so without this a run in flight lost its push, with the cooldown stamped."""
+    global _closing
+    _closing = True
     for task in list(_investigations):
         task.cancel()
     if _tasks:
@@ -101,8 +114,9 @@ def search_prompt(label: str, ticker: str, op: str, current_price: float, note: 
     """Only public facts and the alert's own note: never the position, thesis or profile."""
     word = "rose" if op in (">=", ">") else "fell"
     instructions = _FIGURE_RE.sub("[figure]", sanitize_untrusted_text(note, _NOTE_CHARS)).strip()
+    name = _FIGURE_RE.sub("[figure]", sanitize_untrusted_text(label, _NOTE_CHARS)).strip()
     return (
-        f"{label} ({ticker}) {word} through a price alert the user set. Current price: "
+        f"{name} ({ticker}) {word} through a price alert the user set. Current price: "
         f"{current_price:.4g}.\n\n"
         f"The alert's instructions: {instructions or 'none, so find out why the price moved'}\n\n"
         "Carry them out with web_search and x_search. Search only for public information about "
