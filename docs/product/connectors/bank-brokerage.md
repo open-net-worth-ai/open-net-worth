@@ -360,6 +360,18 @@ deleted yet: each waits in the review list, where you confirm or undo it, and th
 goes ahead. Edits older than the transaction audit log keeps (20,000
 events) can't be told apart from YNAB's on the first run.
 
+## Actual Budget
+
+Off by default: turn it on in
+[Settings → Developer → Experimental](../features/settings.md#experimental-features).
+
+Bring a whole Actual budget here from your own Actual server, and keep the two in step if you want
+to. The connector asks for the server's address, a password or token, and the encryption password
+if the budget has one, then lists your budgets. Passwords and tokens never come back from the server:
+a saved one shows as dots, and leaving the field blank keeps it. An Actual server limits how fast one
+address can call it, so a very large sync finishes over more than one run. It isn't available on a
+hosted instance. See [Import from Actual Budget](../features/actual-budget-import.md).
+
 ## Alpaca
 
 The read-only Alpaca data source is no longer offered in **Browse & add**. Alpaca's own MCP

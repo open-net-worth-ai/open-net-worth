@@ -6,6 +6,7 @@ per account, explaining both outcomes, and never moves it on its own."""
 from __future__ import annotations
 
 from backend.services import ledger as ledger_service
+from backend.services.budget_app import current
 from backend.services.ynab_sync import conflicts, units
 from backend.services.ynab_sync import state as sync_state
 from backend.services.ynab_sync.context import Context
@@ -41,17 +42,17 @@ def _item(acct: dict, start: str, rows: list[dict], txns: list[dict]) -> dict:
     now = ledger_service.account_balance(acct, txns, start)
     counted = ledger_service.account_balance(acct, txns, earliest)
     cur = acct.get("currency") or ""
-    many = len(rows) != 1
+    many, app = len(rows) != 1, current().name
     reason = (
         f"{len(rows)} synced transaction{'s are' if many else ' is'} dated before "
         f"{acct['name']}'s Starting Balance ({start}). Open Net Worth treats "
         f"{'them' if many else 'it'} as history already inside the Starting Balance, so the "
-        f"balance stays {_money(now, cur)}. YNAB adds {'them' if many else 'it'} to the balance. "
+        f"balance stays {_money(now, cur)}. {app} adds {'them' if many else 'it'} to the balance. "
         f"Move the Starting Balance to {earliest}: its amount stays the same, "
         f"{'they count' if many else 'it counts'}, and the balance becomes "
-        f"{_money(counted, cur)}, as in YNAB. "
+        f"{_money(counted, cur)}, as in {app}. "
         f"Keep as history: nothing changes here, and {acct['name']} stays "
-        f"{_money(abs(counted - now), cur)} apart from YNAB."
+        f"{_money(abs(counted - now), cur)} apart from {app}."
     )
     return {
         "start": start,

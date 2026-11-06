@@ -20284,3 +20284,66 @@ body.hide-amounts .mf-lbl-amt {
     text-align: right;
   }
 }
+
+/* Actual's review: every account row holds a dropdown, so cells centre on it as Categories' do. */
+.imp-table.ynr-accts td {
+  vertical-align: middle;
+}
+.ynr-phone-only {
+  display: none;
+}
+/* Section 8 of the Actual spec: a note someone decides by isn't --faint. The count stays. */
+.ynr-table.ynr-accts .ynr-groupnote {
+  color: var(--muted);
+}
+.ynr-table.ynr-accts .ynr-count {
+  letter-spacing: normal;
+}
+@media (max-width: 1023.98px) {
+  .imp-table.ynr-accts .ynr-roomy {
+    display: none;
+  }
+}
+@media (max-width: 639.98px) {
+  .imp-table.ynr-accts td.ynr-wide-only {
+    display: none;
+  }
+  .imp-table.ynr-accts .ynr-phone-only {
+    display: inline;
+  }
+  .ynr-table.ynr-accts .ynr-group th {
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .ynr-table.ynr-accts .ynr-groupnote {
+    display: block;
+    margin-left: 0;
+    margin-top: var(--space-1);
+  }
+  .imp-table.ynr-accts td[data-label] {
+    align-items: center;
+  }
+  /* Cells with no label to sit opposite (a row's name, a link's summary) read from the left. */
+  .imp-table.ynr-accts td:not([data-label]) {
+    text-align: left;
+  }
+  .ynr-currency .pm-select.ynr-dest {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+  /* The sheet is the one scroller here: a fixed pane inside it left a row and a third in view. */
+  .ynr-pane--flow {
+    height: auto;
+    min-height: min(400px, 44vh);
+    overflow: visible;
+  }
+}
+@media (pointer: coarse) and (max-width: 767.98px) {
+  .ynr-accts .pm-select .acct-acctsel-btn {
+    min-height: var(--tap-min);
+  }
+  .ynr-more {
+    min-height: var(--tap-min);
+  }
+}

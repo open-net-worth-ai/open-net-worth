@@ -88,13 +88,13 @@ def fetch_plan(
     progress("reading the plan", 1, 1)
     return {
         "accounts": plan.get("accounts") or [],
-        "groups": _nest_groups(plan),
-        "transactions": _nest_transactions(plan),
+        "groups": nest_groups(plan),
+        "transactions": nest_transactions(plan),
         "months": (plan.get("months") or []) if with_budget else [],
     }
 
 
-def _nest_groups(plan: dict) -> list[dict]:
+def nest_groups(plan: dict) -> list[dict]:
     by_group: dict[str, list] = {}
     for c in plan.get("categories") or []:
         by_group.setdefault(c.get("category_group_id"), []).append(c)
@@ -103,7 +103,7 @@ def _nest_groups(plan: dict) -> list[dict]:
     ]
 
 
-def _nest_transactions(plan: dict) -> list[dict]:
+def nest_transactions(plan: dict) -> list[dict]:
     """The export is flat: payees by id, split lines in their own list. Rebuild the shape the
     per-account endpoint returns (``payee_name``, nested ``subtransactions``)."""
     payees = {p["id"]: p.get("name") for p in plan.get("payees") or []}

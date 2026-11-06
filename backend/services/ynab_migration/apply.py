@@ -26,7 +26,8 @@ from backend.services import envelopes as envelopes_service
 from backend.services import ledger as ledger_service
 from backend.services import match_review, planning
 from backend.services import profile as profile_service
-from backend.services.ynab_migration.mapping import SOURCE, render_piece
+from backend.services.budget_app import current
+from backend.services.ynab_migration.mapping import render_piece
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,8 @@ def book_state(plan: dict) -> tuple[str, list[dict]]:
         a
         for a in existing
         if not any(
-            e.get("source") == SOURCE and e.get("ref") in mine for e in a.get("external_ids") or []
+            e.get("source") == current().source and e.get("ref") in mine
+            for e in a.get("external_ids") or []
         )
     ]
     return ("foreign" if foreign else "rerun"), existing
@@ -76,9 +78,10 @@ def ensure_base_currency(currency: str, money: list[str]) -> str | None:
         return None
     if money:
         raise ConflictError(
-            f"This book's base currency is {base} but the YNAB plan is {currency}, and the book "
-            f"already holds {', '.join(money)}. Change the base currency in Settings first, or "
-            "import into an empty book."
+            f"This book's base currency is {base} but the {current().name} {current().plan_word} "
+            f"is {currency}, "
+            f"and the book already holds {', '.join(money)}. Change the base currency in Settings "
+            "first, or import into an empty book."
         )
     profile = profile_service.read_profile()
     profile["base_currency"] = currency
@@ -97,7 +100,7 @@ def sync_accounts(
         e["ref"]: a
         for a in existing
         for e in a.get("external_ids") or []
-        if e.get("source") == SOURCE
+        if e.get("source") == current().source
     }
     rows, created, joined = {}, 0, 0
     for pa in plan["accounts"]:
@@ -159,13 +162,14 @@ def _attach(row: dict, txn: dict, tally: Counter, problems: list[dict]) -> None:
         ledger_service.attach_external_refs(
             txn["id"],
             row["external_refs"],
-            reason="YNAB import: the same transaction as one already in the linked account",
+            reason=f"{current().name} import: the same transaction as one already in the linked "
+            "account",
         )
         patch = match_review.adopt_if_blank(txn, row)
         if patch:
             ledger_service.update_transaction(txn["id"], patch)
     except OpenNetWorthError as exc:
-        logger.warning("ynab migration match not linked: %s", exc.message)
+        logger.warning("%s migration match not linked: %s", current().key, exc.message)
         tally["failed"] += 1
         problems.append(
             {"ref": row["external_refs"][0]["ref"], "reason": exc.message, "kind": "failed"}
@@ -187,7 +191,7 @@ def _book_chunk(rows: list[dict], batch_id: str, tally: Counter, problems: list[
         )
     except OpenNetWorthError as exc:
         if len(rows) == 1:
-            logger.warning("ynab migration row refused: %s", exc.message)
+            logger.warning("%s migration row refused: %s", current().key, exc.message)
             tally["failed"] += 1
             problems.append(
                 {"ref": rows[0]["external_refs"][0]["ref"], "reason": exc.message, "kind": "failed"}
@@ -226,7 +230,7 @@ def send_transactions(
     """Render and book one chunk at a time, so only a chunk of payloads is ever in memory. A
     piece ``decisions`` (``links.match``) marks ``link`` is attached to its existing row
     instead; every other one is booked, a possible match included."""
-    source = canonical_writer(SOURCE) or SOURCE
+    source = canonical_writer(current().source) or current().source
     pieces = plan["pieces"]
     decisions = decisions or {}
     batch_id, tally, problems = str(uuid.uuid4()), Counter(), []
@@ -257,7 +261,8 @@ def mark_cleared(plan: dict) -> int:
         if not t.get("deleted")
         and not t.get("cleared")
         and any(
-            x.get("source") == SOURCE and x.get("ref") in want for x in t.get("external_refs") or []
+            x.get("source") == current().source and x.get("ref") in want
+            for x in t.get("external_refs") or []
         )
     ]
     for i in range(0, len(ids), CHUNK):
@@ -283,7 +288,7 @@ def card_envelopes(plan: dict) -> dict[str, dict]:
         e.get("name"): a.get("payment_envelope_id")
         for a in ledger_service.accounts.query_accounts(include_archived=True)
         for e in a.get("external_ids") or []
-        if e.get("source") == SOURCE and a.get("payment_envelope_id")
+        if e.get("source") == current().source and a.get("payment_envelope_id")
     }
     return {
         cid: {"category": None, "envelope": by_name[name]}

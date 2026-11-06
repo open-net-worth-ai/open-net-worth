@@ -7,6 +7,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from backend.core.errors import ExternalServiceError
+from backend.services.budget_app import current
 from backend.services.ynab_migration import category_make as make
 from backend.services.ynab_migration.category_match import Book
 from backend.services.ynab_migration.mapping import clean
@@ -16,7 +17,6 @@ from backend.services.ynab_sync import conflicts, delta, recorder
 from backend.services.ynab_sync.baselines import Baselines
 from backend.services.ynab_sync.client import RateCapReached, YnabClient
 
-CATEGORY_REQUESTS = 20  # of a run's requests; transactions and Assigned keep the rest
 # YNAB's API cannot hide a category, so one hidden, deleted or merged here is moved into the group
 # HIDDEN_HERE (made once, for the person to hide in YNAB if they like). Neither it, "Not budgeted"
 # nor YNAB's own "Hidden Categories" (``ynab_pairs.PARKING``) is ever a group the book follows a
@@ -38,7 +38,7 @@ def trim(text: str) -> str:
 
 
 def shared_line(envelope_name: str) -> str:
-    return f"{envelope_name} holds several categories, so its Assigned isn't synced with YNAB."
+    return f"{envelope_name} holds several categories, so its Assigned isn't synced with {current().name}."
 
 
 class Base:
@@ -112,8 +112,11 @@ class Base:
         self.yg[saved["id"]] = {**self.yg.get(saved["id"], {}), **saved}
 
     def parking(self, ygid: str | None) -> bool:
-        """A YNAB group that only holds categories the book has no group for."""
-        return norm((self.yg.get(ygid) or {}).get("name", "")) in PARKING
+        """A YNAB group that only holds categories the book has no group for. An app that can hide
+        a category parks nothing, so there the one such group is where a category in no envelope
+        lives."""
+        name = norm((self.yg.get(ygid) or {}).get("name", ""))
+        return name == norm(NOT_BUDGETED) if current().caps.hide_categories else name in PARKING
 
     def parking_group(self, name: str) -> str:
         """The YNAB group of this name, made on first use."""
@@ -125,7 +128,7 @@ class Base:
             return found["id"]
         saved = self.send(self.client.create_group, name)
         self.put_group(saved)
-        self.count("sent", f"Added the group {name} to YNAB.")
+        self.count("sent", f"Added the group {name} to {current().name}.")
         return saved["id"]
 
     def not_budgeted_group(self) -> str:
@@ -133,16 +136,18 @@ class Base:
 
     def mirrorable_group(self, g: dict) -> bool:
         """A YNAB group a book group can pair with: not deleted, not the one YNAB keeps for card
-        payments, not a parking group, not an internal one."""
-        if g.get("deleted") or norm(g["name"]) in ("credit card payments", *PARKING):
+        payments, not a parking group, not an internal one, not an app's income group."""
+        reserved = ("credit card payments",) if current().caps.card_payment_categories else ()
+        if g.get("deleted") or g.get("is_income") or norm(g["name"]) in (*reserved, *PARKING):
             return False
         members = [c for c in self.yc.values() if c.get("category_group_id") == g["id"]]
         return not (members and all(c.get("internal") for c in members))
 
     # ── writing to YNAB ──
     def send(self, call, *args):
-        """One request within the categories' allowance; ``RateCapReached`` when it is used up."""
-        if self.client.budget.used >= CATEGORY_REQUESTS:
+        """One request within the categories' allowance (transactions and Assigned keep the rest
+        of a run's); ``RateCapReached`` when it is used up."""
+        if self.client.budget.used >= current().caps.category_request_cap:
             raise RateCapReached
         return call(*args)
 
@@ -202,5 +207,6 @@ class Base:
         if self.deferred:
             self.tally["deferred"] += self.deferred
             recorder.deferred(
-                "Categories", "Some category changes wait for the next run (YNAB request limit)."
+                "Categories",
+                f"Some category changes wait for the next run ({current().name} request limit).",
             )

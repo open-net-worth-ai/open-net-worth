@@ -176,6 +176,26 @@
   oracles) that the popover's flow terms are an exact rearrangement of the stock identity, never
   a second, independently-computed figure that could drift from it.
 
+## Budget apps (YNAB and Actual)
+
+- **One engine, one app at a time** (ADR `2026-11-05-actual-budget-is-a-second-app-behind-the-ynab-engine`).
+  The sync and the import are `services/ynab_sync` + `services/ynab_migration`, working for
+  `budget_app.current()`. A difference between apps is a capability on `BudgetApp`, never a second
+  path. `from_ynab`, `to_ynab`, `keep: "ynab"`, `held_ynab` and a pair's `"ynab"` key mean "the budget
+  app's side" for both apps, in stored documents and on the wire; people only see `app.name`. A book
+  syncs with one app: turning one on, or importing from it, is refused while the other's sync is on.
+- **Actual has no delta read and no compare-and-set.** Each run reads a fresh copy and compares it with
+  the stored mirror, and `actualpy`'s `sync()` list is never used. Each write batch is sync, re-check
+  what it touches against what this run read, apply, commit. A read asks from a little before the copy
+  began (`client.CLOCK_MARGIN`), never from the client's clock, which `commit` moves past our own
+  messages; that once hid a person's edit from every later batch of the run. Nothing syncs over an
+  uncommitted edit, and any commit error ends the run. The same field edited inside a batch's own
+  pull-to-commit gap can still lose; the ADR has the measured size.
+- **A run stays under the server's limit.** An Actual server takes 500 requests a minute from one
+  address. A batch is two requests, so `caps.request_cap` is 200 batches, past which the rest waits for
+  the next run through the engine's deferred path. A 429 anyway ends that run in plain words, and
+  nothing is lost.
+
 ## Accounts and cash
 
 - **Seven account types are the only classification axis: `cash`, `fixed_deposit`, `investment`, `retirement`, `receivable`, `credit`, `loan`** (ADR `2026-09-07-seven-account-types-one-axis`, spec `docs/superpowers/specs/2026-09-07-account-taxonomy-design.md`). Everything else the app asks of an account — `kind` (asset vs. liability), band, spendability, budget membership — is DERIVED from the type; `kind`, `asset_class`, `locked`, `on_budget`, and `group` no longer exist as stored fields, on `Account`/`AccountCreate`/`AccountUpdate`, or on the `create_account`/`update_accounts` tool schemas, and the store REFUSES any type outside the seven. The scar: 26 types (15 with zero behavior) plus five overlapping classification axes let `cash_balance_base` net a brokerage account's drawn margin into spendable cash, let a `pension` account with no `asset_class` band as `cash`, and left "cash on hand" reading three different numbers on Accounts / Assets / Plan → Cash Flow for the same book — the owner had to ask which one was true.

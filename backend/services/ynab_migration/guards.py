@@ -9,6 +9,7 @@ Two decisions, both made from what the book HOLDS rather than from "has no accou
 
 from __future__ import annotations
 
+from backend.core.errors import ConflictError
 from backend.db.budget_assignments_store import BudgetAssignmentsStore
 from backend.db.commitments_store import CommitmentsStore
 from backend.db.grant_store import GrantStore
@@ -20,8 +21,44 @@ from backend.services import categories as categories_service
 from backend.services import envelopes as envelopes_service
 from backend.services import ledger as ledger_service
 from backend.services import planning
+from backend.services.budget_app import refuse_beside_others
 
 _STARTER_GROUP_NAMES = {name for name, _ in STARTER_GROUPS}
+
+
+def refuse_beside_the_other_app(app) -> None:
+    """Categories an import creates here would be pushed into another app whose sync is on, and a
+    sync and an import must not interleave."""
+    refuse_beside_others(f"importing from {app.name}", "start this import")
+
+
+def refuse_another_budget(app, plan_id: str) -> None:
+    """Its rows would land on accounts the running sync doesn't know, beside the budget it holds."""
+    if not app.caps.budget_scoped_accounts:
+        return
+    st = app.stores.state().doc("state")
+    if st.get("enabled") and st.get("plan_id") not in (None, plan_id):
+        raise ConflictError(
+            f"The {app.name} sync is on for {st.get('plan_name')}. Turn it off in Data sync before "
+            f"importing another {app.name} {app.plan_word}."
+        )
+
+
+def refuse_import(app, plan_id: str | None) -> None:
+    """What stops an import from starting. With no plan named, only what stops any import."""
+    refuse_beside_the_other_app(app)
+    if plan_id:
+        refuse_another_budget(app, plan_id)
+
+
+def import_refusal(app, plan_id: str | None) -> str | None:
+    """What ``refuse_import`` would say right now, for a review to say before the person has
+    settled anything. Reads only."""
+    try:
+        refuse_import(app, plan_id)
+    except ConflictError as exc:
+        return exc.message or str(exc)
+    return None
 
 
 def money_data() -> list[str]:

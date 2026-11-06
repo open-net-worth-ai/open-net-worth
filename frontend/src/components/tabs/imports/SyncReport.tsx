@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Badge, Button, Cluster, Panel, SegmentedControl, Stack, SummaryBar, Text } from '../../ui'
+import { YNAB_APP, type BudgetAppInfo } from '../automations/datasync/budgetApps'
 import { ReviewCard } from './ReviewItem'
 import { sendSync, useSyncStatus } from './sync'
 import type { AssignedChange, CategoryChange, Note, RunRecord, TxnChange } from './runs'
@@ -116,7 +117,7 @@ function Transactions({ run }: { run: RunRecord }) {
   )
 }
 
-function AssignedTable({ changes }: { changes: AssignedChange[] }) {
+function AssignedTable({ app, changes }: { app: BudgetAppInfo; changes: AssignedChange[] }) {
   return (
     <table className="imp-table">
       <thead>
@@ -137,7 +138,9 @@ function AssignedTable({ changes }: { changes: AssignedChange[] }) {
             <td data-label="Before → After" className="imp-table__num">
               {money(c.before)} → {money(c.after)}
             </td>
-            <td data-label="Direction">{c.direction === 'sent' ? 'Sent to YNAB' : 'Pulled in'}</td>
+            <td data-label="Direction">
+              {c.direction === 'sent' ? `Sent to ${app.name}` : 'Pulled in'}
+            </td>
           </tr>
         ))}
       </tbody>
@@ -182,8 +185,8 @@ function Notes({ title, notes, hidden }: { title: string; notes: Note[]; hidden?
   )
 }
 
-function Conflicts({ run }: { run: RunRecord }) {
-  const live = useSyncStatus().data
+function Conflicts({ app, run }: { app: BudgetAppInfo; run: RunRecord }) {
+  const live = useSyncStatus(true, app).data
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const filed = run.conflicts ?? []
@@ -193,7 +196,7 @@ function Conflicts({ run }: { run: RunRecord }) {
 
   async function keep(id: string, side: 'onw' | 'ynab', choice?: string) {
     setBusy(id)
-    setError(await sendSync(`/conflicts/${id}/resolve`, 'POST', { keep: side, choice }))
+    setError(await sendSync(`/conflicts/${id}/resolve`, 'POST', { keep: side, choice }, app))
     setBusy(null)
   }
 
@@ -209,6 +212,7 @@ function Conflicts({ run }: { run: RunRecord }) {
           open.has(c.id) ? (
             <ReviewCard
               key={c.id}
+              app={app}
               item={
                 open.get(c.id) ?? {
                   id: c.id,
@@ -239,7 +243,7 @@ function Conflicts({ run }: { run: RunRecord }) {
   )
 }
 
-export function SyncSections({ run }: { run: RunRecord }) {
+export function SyncSections({ app = YNAB_APP, run }: { app?: BudgetAppInfo; run: RunRecord }) {
   const t = run.totals
   const assigned = run.assigned_changes ?? []
   const categories = run.category_changes ?? []
@@ -274,7 +278,7 @@ export function SyncSections({ run }: { run: RunRecord }) {
           <Paged
             items={assigned}
             hidden={run.not_stored?.assigned_changes}
-            render={(page) => <AssignedTable changes={page} />}
+            render={(page) => <AssignedTable app={app} changes={page} />}
           />
         </Panel>
       )}
@@ -288,7 +292,7 @@ export function SyncSections({ run }: { run: RunRecord }) {
         </Panel>
       )}
       <Notes title="Worth knowing" notes={run.notes ?? []} hidden={run.not_stored?.notes} />
-      <Conflicts run={run} />
+      <Conflicts app={app} run={run} />
       <Notes title="Deferred" notes={run.deferred ?? []} hidden={run.not_stored?.deferred} />
       <Notes title="Errors" notes={run.errors ?? []} hidden={run.not_stored?.errors} />
     </>

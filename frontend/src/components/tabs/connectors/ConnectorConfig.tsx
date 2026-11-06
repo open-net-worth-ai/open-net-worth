@@ -27,6 +27,7 @@ import { SimpleFinSection } from './SimpleFinSection'
 import { PlaidSection } from './PlaidSection'
 import { LunchMoneySection } from './LunchMoneySection'
 import { LunchFlowSection } from './LunchFlowSection'
+import { ActualSection } from './ActualSection'
 import { YnabSection } from './YnabSection'
 import { WebSearchSection } from './WebSearchSection'
 import { EnableBankingSection } from './EnableBankingSection'
@@ -53,6 +54,7 @@ const CONFIGURABLE_KINDS = new Set([
   'lunch_money',
   'lunch_flow',
   'ynab',
+  'actual_budget',
   'web_search',
   'enable_banking',
   'gocardless',
@@ -108,6 +110,8 @@ function configForm(connector: Connector, initialCountry?: string): JSX.Element 
       return <LunchFlowSection />
     case 'ynab':
       return <YnabSection />
+    case 'actual_budget':
+      return <ActualSection />
     case 'web_search':
       return <WebSearchSection providerId={connector.id.replace(WEB_SEARCH_PREFIX, '')} />
     case 'enable_banking':

@@ -382,6 +382,26 @@ export const CATALOG: CatalogEntry[] = [
     tools: ['get_connector_status', 'connector_sync'],
   },
   {
+    // Behind the `actual_budget_sync` flag. No Lucius tools: it is driven from the Data sync tab.
+    id: 'actual_budget',
+    flag: 'actual_budget_sync',
+    name: 'Actual Budget',
+    families: ['Data source'],
+    categories: ['Banking'],
+    icon: 'accounts',
+    hue: 'var(--accent)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["actual_budget"]`.
+    publisher: 'Actual Budget',
+    verification: 'unverified',
+    homepageUrl: 'https://actualbudget.org',
+    repoUrl: 'https://github.com/actualbudget/actual',
+    supportUrl: 'https://github.com/actualbudget/actual/issues',
+    // No privacy link: the server is the person's own, so no vendor sees the data.
+    mcp: false,
+    popular: false,
+    tools: [],
+  },
+  {
     id: 'enable_banking',
     name: 'Enable Banking',
     families: ['Data source'],

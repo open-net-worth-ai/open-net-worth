@@ -4,16 +4,20 @@ YNAB category and category group pairs with ours (``ynab_pairs``) with the state
 
 from __future__ import annotations
 
-from backend.db.ynab_sync_store import YnabBaselineStore
 from backend.services import ynab_pairs
+from backend.services.budget_app import current
 from backend.services.ynab_sync.canon import Canon
 
 FLUSH_BULK = 200  # past this many changes, rewrite the table in one transaction
 
 
+def categories_paired_elsewhere(store, plan_id: str | None) -> set[str]:
+    return {d["category"] for d in store.of_other_plans(plan_id) if d["id"].startswith("c:")}
+
+
 class Baselines:
     def __init__(self, plan_id: str | None = None) -> None:
-        self._store = YnabBaselineStore()
+        self._store = current().stores.baselines()
         self.txns, self.assigned = self._store.split()
         self.plan_id = plan_id
         self.cats, self.groups = ynab_pairs.load(plan_id)
@@ -49,6 +53,10 @@ class Baselines:
         """Leave a category out of the other side for good (``y:<ynab id>`` / ``o:<id>``)."""
         self.declined.add(key)
         self._dirty.add(f"x:{key}")
+
+    def categories_of_other_plans(self) -> set[str]:
+        """Categories here that are paired with another budget of the app."""
+        return categories_paired_elsewhere(self._store, self.plan_id)
 
     def told(self, env_id: str) -> bool:
         """Whether the person was already told this envelope's categories share their Assigned

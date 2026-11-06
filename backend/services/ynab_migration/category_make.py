@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from backend.services import categories as categories_service
 from backend.services import planning, ynab_pairs
+from backend.services.budget_app import current
 from backend.services.ynab_migration.category_match import Book
 from backend.services.ynab_migration.mapping import RESERVED_GROUPS
 from backend.services.ynab_pairs import is_parking_name, norm
@@ -18,12 +19,17 @@ def _change(**change) -> dict:
 
 
 def make_category(
-    book: Book, label: str, group_id: str | None, hidden: bool = False, budgeted: bool = True
+    book: Book,
+    label: str,
+    group_id: str | None,
+    hidden: bool = False,
+    budgeted: bool = True,
+    kind: str = "expense",
 ):
-    """A new expense category and (``budgeted``) an envelope of its own, named alike, in
+    """A new category of ``kind`` and (``budgeted``) an envelope of its own, named alike, in
     ``group_id``. Returns ``(category, envelope or None)``."""
     label = book.free_label(label)
-    cat = _change(type="category_create", label=label, kind="expense")
+    cat = _change(type="category_create", label=label, kind=kind)
     env = None
     if budgeted:
         env = _change(type="envelope_create", name=label, group_id=group_id or "")["envelope"]
@@ -63,7 +69,7 @@ def set_hidden(category_ids: list[str], hidden: bool) -> None:
 def our_group_name(ynab_name: str) -> str:
     """The app keeps Commitments and Credit Card Payments for itself."""
     name = ynab_name.strip()
-    return f"{name} (YNAB)" if norm(name) in RESERVED_GROUPS else name
+    return f"{name} ({current().name})" if norm(name) in RESERVED_GROUPS else name
 
 
 class Groups:

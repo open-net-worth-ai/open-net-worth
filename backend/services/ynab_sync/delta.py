@@ -31,7 +31,7 @@ def merge_meta(plan: dict, meta: dict) -> None:
     meta["groups"] = _upsert(
         meta["groups"],
         [
-            {k: g.get(k) for k in ("id", "name", "hidden", "deleted")}
+            {k: g.get(k) for k in ("id", "name", "hidden", "deleted", "is_income")}
             for g in plan.get("category_groups") or []
         ],
     )
@@ -44,6 +44,7 @@ def merge_meta(plan: dict, meta: dict) -> None:
         "internal",
         "deleted",
         "note",
+        "is_income",
     )
     meta["categories"] = _upsert(
         meta["categories"], [{k: c.get(k) for k in keep} for c in plan.get("categories") or []]
@@ -60,7 +61,7 @@ def _merge_lines(row: dict, lines: list[dict]) -> None:
 
 def merge_transactions(plan: dict, mirror: dict[str, dict], meta: dict, full: bool) -> set[str]:
     """Update ``mirror`` in place; returns the ids of every transaction the read touched."""
-    nested = source._nest_transactions(
+    nested = source.nest_transactions(
         {
             "payees": [{"id": i, "name": n} for i, n in meta["payees"].items()],
             "transactions": plan.get("transactions") or [],

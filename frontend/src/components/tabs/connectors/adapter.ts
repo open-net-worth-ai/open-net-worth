@@ -44,6 +44,7 @@ const PRESENTATION: Record<string, { icon: string; hue: string }> = {
   voice: { icon: 'voice', hue: 'var(--cta)' },
   webhook: { icon: 'link', hue: 'var(--cash-c)' },
   email: { icon: 'mail', hue: 'var(--recv)' },
+  actual_budget: { icon: 'accounts', hue: 'var(--accent)' },
   plaid: { icon: 'accounts', hue: 'var(--crypto)' },
   lunch_flow: { icon: 'accounts', hue: 'var(--good)' },
   enable_banking: { icon: 'accounts', hue: 'var(--cash-c)' },
@@ -81,6 +82,7 @@ const DEVELOPERS: Record<string, { name: string; url: string }> = {
   lunch_money: { name: 'Lunch Money', url: 'https://lunchmoney.app' },
   lunch_flow: { name: 'Lunch Flow', url: 'https://lunchflow.app' },
   ynab: { name: 'YNAB', url: 'https://www.ynab.com' },
+  actual_budget: { name: 'Actual Budget', url: 'https://actualbudget.org' },
   enable_banking: {
     name: 'Enable Banking',
     url: 'https://enablebanking.com/docs/api/reference/',

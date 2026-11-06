@@ -124,6 +124,17 @@ FLAGS: tuple[Flag, ...] = (
         remove_by=date(2027, 2, 1),
     ),
     Flag(
+        name="actual_budget_sync",
+        description=(
+            "Connect an Actual server, import a whole budget and keep it and this book "
+            "in step on a schedule. Shares the Data sync tab in Automations with YNAB."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 5),
+        remove_by=date(2027, 3, 1),
+    ),
+    Flag(
         name="voice_calls",
         description=(
             "Talk to Lucius out loud: a Call button in the chat starts a voice call with your "
