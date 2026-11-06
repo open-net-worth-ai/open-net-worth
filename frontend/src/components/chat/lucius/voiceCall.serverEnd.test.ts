@@ -9,7 +9,11 @@ const { FakeRoom } = vi.hoisted(() => {
     static last: FakeRoom
     handlers = new Map<string, Handler[]>()
     remoteParticipants = new Map<string, { identity: string }>()
-    localParticipant = { identity: 'owner', publishTrack: vi.fn(async () => {}) }
+    localParticipant = {
+      identity: 'owner',
+      trackPublications: new Map([['TR_mine', {}]]),
+      publishTrack: vi.fn(async () => {}),
+    }
     constructor() {
       FakeRoom.last = this
     }
@@ -19,6 +23,10 @@ const { FakeRoom } = vi.hoisted(() => {
     }
     emit(event: string, ...args: unknown[]) {
       for (const h of this.handlers.get(event) ?? []) h(...args)
+    }
+    transcript: ((reader: unknown, from: { identity: string }) => Promise<void>) | null = null
+    registerTextStreamHandler(_topic: string, h: FakeRoom['transcript']) {
+      this.transcript = h
     }
     async connect() {}
     async disconnect() {
@@ -576,6 +584,65 @@ describe('restarting a call', () => {
   })
 })
 
+describe('your words as you speak them', () => {
+  const words = (text: string, final = false, track = 'TR_mine', after = Promise.resolve()) => ({
+    info: {
+      attributes: { 'lk.transcribed_track_id': track, 'lk.transcription_final': String(final) },
+    },
+    readAll: async () => {
+      await after
+      return text
+    },
+  })
+  const say = async (reader: unknown, identity = 'lucius-agent') => {
+    await FakeRoom.last.transcript!(reader, { identity })
+  }
+
+  it('shows them as they arrive, each update replacing the last', async () => {
+    await liveCall()
+    await say(words('how much'))
+    expect(state().heard).toBe('how much')
+    await say(words('how much did I spend'))
+    expect(state().heard).toBe('how much did I spend')
+  })
+
+  it("knows them by your mic's track or your name, whoever relays them", async () => {
+    await liveCall()
+    await say(words('by track'))
+    expect(state().heard).toBe('by track')
+    await say(words('by name', false, 'TR_other'), 'owner')
+    expect(state().heard).toBe('by name')
+  })
+
+  it("never shows Lucius's words as yours", async () => {
+    await liveCall()
+    await say(words('your balance is fine', false, 'TR_lucius'))
+    expect(state().heard).toBe('')
+  })
+
+  it('keeps newer words when an older update finishes reading last', async () => {
+    await liveCall()
+    let finishOld = () => {}
+    const old = say(words('how', false, 'TR_mine', new Promise<void>((done) => (finishOld = done))))
+    await say(words('how much'))
+    finishOld()
+    await old
+    expect(state().heard).toBe('how much')
+  })
+
+  it('clears soon after the final words, and at once when the call ends', async () => {
+    const timers = vi.spyOn(window, 'setTimeout')
+    await liveCall()
+    await say(words('how much did I spend', true))
+    expect(state().heard).toBe('how much did I spend')
+    expect(timers.mock.calls.some(([, ms]) => ms === 1500)).toBe(true)
+    timers.mockRestore()
+    await say(words('still talking'))
+    await hangUp()
+    expect(state().heard).toBe('')
+  })
+})
+
 describe('the sound of muting', () => {
   let played: number[] = []
 
@@ -707,7 +774,7 @@ describe("Lucius's side of the call dropping", () => {
       .find((url) => url.startsWith('/api/voice/call/health'))!
     const report = new URL(asked, 'http://acme.test').searchParams.get('mic')
     expect(report).toMatch(
-      /^track=\w+,system_muted=[01],enabled=[01],app_muted=[01],audio=\w+,peak=[\d.]+,server_peak=[\d.]+,page=\w+$/,
+      /^track=\w+,system_muted=[01],enabled=[01],app_muted=[01],audio=\w+,peak=[\d.]+,server_peak=[\d.]+,page=\w+,streams=\d+,words=\d+$/,
     )
   })
 

@@ -125,8 +125,10 @@ attach a file, and it goes to Lucius like any other message — and he reads his
 call, as well as showing it in the chat. The same goes for a change you approve on screen: what
 happens next is read out.
 
-**Lucius answers out loud.** Ask for a list and he says the top few and how many there are, then
-offers the rest. He only uses the screen for changes waiting on your approval, or when you ask to
+**You see your words as you speak.** The call shows what it hears, word by word, above the mic or just above the call strip. Your message then appears in the chat as usual.
+
+**Lucius answers out loud.** He keeps it to a few sentences: the answer, then what matters most about
+it. Ask for a list and he says the top few and how many there are. He only uses the screen for changes waiting on your approval, or when you ask to
 see something: then he says it's there and shows it as a table, without reading the table out.
 
 **In the Open Net Worth desktop app**, the first call asks macOS for the microphone (once — it

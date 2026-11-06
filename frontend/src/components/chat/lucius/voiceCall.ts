@@ -73,9 +73,12 @@ export interface CallState {
   /** Lucius has a turn running on the call's conversation, as the app reports it: away from the
    *  chat there is nothing else to say so. */
   luciusWorking: boolean
+  /** Your words as the call hears them, updating as you speak; empty otherwise. */
+  heard: string
 }
 
 const IDLE: CallState = {
+  heard: '',
   phase: 'idle',
   sessionId: null,
   muted: false,
@@ -319,6 +322,8 @@ function micReport(): string {
     `peak=${micPeak.toFixed(3)}`,
     `server_peak=${serverPeak.toFixed(3)}`,
     `page=${document.visibilityState}`,
+    `streams=${transcriptStreams}`,
+    `words=${heardUpdates}`,
   ].join(',')
   micPeak = 0
   serverPeak = 0
@@ -404,7 +409,45 @@ let endProblem: CallProblem | null = null
 // The call's microphone, opened BEFORE the ringing starts and published once connected.
 let mic: LocalAudioTrack | null = null
 
+// LiveKit's transcript of a call: each update of your words is a new stream holding all of them so
+// far, and the last is marked final. Lucius's own words come the same way, on his track.
+const TRANSCRIPT_TOPIC = 'lk.transcription'
+// Long enough for the real message to reach the chat, which looks every 1.5s (`FOLLOW_MS`).
+const HEARD_FINAL_HOLD_MS = 1500
+// A segment that never gets its final word mustn't leave stale words on screen.
+const HEARD_STALE_MS = 6000
+let heardTimer: number | undefined
+let heardLatest = 0
+let transcriptStreams = 0
+let heardUpdates = 0
+
+function watchHeard(next: Room) {
+  next.registerTextStreamHandler(TRANSCRIPT_TOPIC, async (reader, from) => {
+    transcriptStreams += 1
+    const attributes = reader.info.attributes ?? {}
+    const track = attributes['lk.transcribed_track_id']
+    const own =
+      from.identity === next.localParticipant.identity ||
+      (!!track && next.localParticipant.trackPublications.has(track))
+    // Read either way: an unread stream would sit in memory for the rest of the call.
+    const order = own ? ++heardLatest : 0
+    const text = (await reader.readAll()).trim()
+    // Streams can finish out of order: a slower, shorter one mustn't overwrite newer words.
+    if (!own || !text || room !== next || order !== heardLatest) return
+    heardUpdates += 1
+    const final = attributes['lk.transcription_final'] === 'true'
+    window.clearTimeout(heardTimer)
+    heardTimer = window.setTimeout(
+      () => set({ heard: '' }),
+      final ? HEARD_FINAL_HOLD_MS : HEARD_STALE_MS,
+    )
+    set({ heard: text })
+  })
+}
+
 function teardown() {
+  window.clearTimeout(heardTimer)
+  heardLatest = 0
   window.clearInterval(followTimer)
   window.clearInterval(healthTimer)
   window.clearInterval(micTimer)
@@ -508,6 +551,9 @@ export async function startCall(sessionId: string, view: CallState['view'] = 'ba
     if ((state.phase as CallPhase) !== 'connecting') return
     const next = new Room({ adaptiveStream: true })
     room = next
+    transcriptStreams = 0
+    heardUpdates = 0
+    watchHeard(next)
     // Lucius "picks up" when he first speaks: stop the ring and start the clock then. The level
     // is read straight off his audio — LiveKit's active-speaker report lags a few hundred ms, so
     // the ring played over his "Hi" (live call, 2026-11-03); that report stays as a fallback.

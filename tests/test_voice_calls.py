@@ -1847,10 +1847,21 @@ def test_a_spoken_answer_is_told_how_short_and_to_offer_the_rest():
     listen to, and the voice is most of a call's cost (owner, 2026-11-06)."""
     from backend.connectors.voice.desk import VOICE_NOTE
 
-    assert "about 30 words at most" in VOICE_NOTE
+    assert "about 50 words" in VOICE_NOTE
     assert "one to three" not in VOICE_NOTE
-    assert "Want the breakdown?" in VOICE_NOTE
     assert "when they ask for the detail" in VOICE_NOTE
+
+
+def test_a_spoken_answer_gives_a_read_and_asking_back_is_his_call():
+    """Owner, 2026-11-06: told to offer the rest, he gave bare figures and ended nearly every
+    answer with "Want the breakdown?". He may ask back: he decides when, with no rule either way."""
+    from backend.connectors.voice.desk import VOICE_NOTE
+
+    assert "Want the breakdown?" not in VOICE_NOTE
+    assert "Give your read, not just the figures" in VOICE_NOTE
+    assert "whenever you judge it would help" in VOICE_NOTE
+    assert "your call each time" in VOICE_NOTE
+    assert "two answers in a row" not in VOICE_NOTE
 
 
 @pytest.mark.flags(voice_calls=True)
