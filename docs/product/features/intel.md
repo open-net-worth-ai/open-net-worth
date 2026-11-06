@@ -335,8 +335,11 @@ already told you in the last 48 hours and what time it is where you are, and cho
 - **Skip** — analyst target changes, "moved 3%" with no new cause, anything you told it to
   ignore, anything you were already told. It stays in the Intel tab.
 
-Everything is still in the Intel tab either way. A price alert or crash-watch you set yourself is
-never held back if Lucius cannot be reached: it is sent as written.
+Everything is still in the Intel tab either way. **A price alert you set always reaches you right
+away**, at any hour, and Lucius only chooses how the message reads. To stop one, mute the ticker or
+turn the alert off. Automatic crash-watch alerts are different: Lucius can hold them back, usually
+because you've already heard about the same slide, but they are still sent as written if Lucius
+cannot be reached.
 
 With the experiment on, **Settings → Intelligence → What Intel should tell me** takes your own
 words, for example *"Don't tell me about analyst upgrades. Not at night unless it's serious."*
@@ -347,7 +350,8 @@ Lucius reads it every time it decides. You can also ask Lucius in chat to set it
 **No alerts on my phone** — check that the channel is set up and enabled in **Connectors**, and
 ticked for that alert kind in **Settings → Intelligence → Alerts**. Remember only explained alerts
 are pushed for watch signals; the rest stay in the app. If you turned on the experiment above,
-Lucius may have held the alert for a roundup or skipped it; the Intel tab has it either way.
+Lucius may have held a news or crash-watch alert for a roundup or skipped it; the Intel tab has it
+either way. It never does that to a price alert you set.
 
 **An alert I expected did not come right away** — with the experiment on, a normal alert waits
 about a minute so Lucius can see related alerts together. — check that the channel is set up and enabled in **Connectors**, and
