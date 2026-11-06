@@ -82,9 +82,14 @@ from typing import AsyncGenerator, List, Optional
 
 from backend.ai.tool_text import UNPARSED_CALL_NOTICE
 from backend.core.child_env import scrubbed_environ
-from backend.core.errors import ConfigurationError, ExternalServiceError, ProviderTimeoutError
+from backend.core.errors import (
+    CliNotSignedInError,
+    ConfigurationError,
+    ExternalServiceError,
+    ProviderTimeoutError,
+)
 
-from . import codex_app_server, codex_live_turn, codex_turn_claims
+from . import cli_sign_in, codex_app_server, codex_live_turn, codex_turn_claims
 from .base import AIProvider, log_text_cap
 from .cli_tool_protocol import (
     NATIVE_TOOLS_NOTE,
@@ -138,9 +143,20 @@ _NON_RETRYABLE_MARKERS = (
 )
 
 
+_RECONNECTING_PREFIX = "Reconnecting..."
+
+
 def _is_retryable(exc: Exception) -> bool:
     text = str(exc).lower()
     return not any(marker in text for marker in _NON_RETRYABLE_MARKERS)
+
+
+def _reported_error(transport: str, text: str, api_key: str) -> ExternalServiceError:
+    """The exception for an error Codex reported. A refused login is only about signing in when
+    no key was stored; with one, the existing bad-key message is the true one."""
+    if not api_key and codex_app_server.is_auth_rejection(text):
+        return cli_sign_in.not_signed_in_error("Codex")
+    return ExternalServiceError(f"{transport} reported an error: {text}"[:500])
 
 
 def _app_server_failed(exc: Exception, attempt: int) -> ExternalServiceError:
@@ -442,8 +458,9 @@ class CodexCliProvider(AIProvider):
                         started = True
                         yield event
                     return
-                except ConfigurationError:
-                    # No CLI at all — retrying cannot help and exec would fail identically.
+                except (ConfigurationError, CliNotSignedInError):
+                    # No CLI at all, or no login — retrying cannot help and exec would fail
+                    # identically.
                     raise
                 except ExternalServiceError as exc:
                     if started:
@@ -603,9 +620,7 @@ class CodexCliProvider(AIProvider):
                     elif kind == "usage":
                         turn.with_usage(codex_app_server.usage_fields(parsed["usage"]))
                     elif kind == "error":
-                        raise ExternalServiceError(
-                            f"Codex app-server reported an error: {parsed['text']}"[:500]
-                        )
+                        raise _reported_error("Codex app-server", parsed["text"], self.api_key)
                     elif kind == "done":
                         turn.finish(parsed["text"])
             finally:
@@ -681,9 +696,7 @@ class CodexCliProvider(AIProvider):
                 elif kind == "usage":
                     turn = (turn or _Turn()).with_usage(parsed["usage"])
                 elif kind == "error":
-                    raise ExternalServiceError(
-                        f"Codex CLI reported an error: {parsed['text']}"[:500]
-                    )
+                    raise _reported_error("Codex CLI", parsed["text"], self.api_key)
                 elif kind == "done":
                     turn = turn or _Turn()
                     if parsed["usage"]:
@@ -914,7 +927,7 @@ class CodexCliProvider(AIProvider):
                     return await self._complete_app_server(
                         prompt, system, model, effort, response_format
                     )
-                except ConfigurationError:
+                except (ConfigurationError, CliNotSignedInError):
                     raise
                 except ExternalServiceError as exc:
                     if attempt >= _APP_SERVER_ATTEMPTS or not _is_retryable(exc):
@@ -952,9 +965,7 @@ class CodexCliProvider(AIProvider):
             ):
                 kind = parsed["kind"]
                 if kind == "error":
-                    raise ExternalServiceError(
-                        f"Codex app-server reported an error: {parsed['text']}"[:500]
-                    )
+                    raise _reported_error("Codex app-server", parsed["text"], self.api_key)
                 if kind == "text":
                     turn.with_message(parsed["text"], append=True)
                 elif kind == "message":
@@ -991,9 +1002,7 @@ class CodexCliProvider(AIProvider):
                 parsed = _classify(ev)
                 kind = parsed["kind"]
                 if kind == "error":
-                    raise ExternalServiceError(
-                        f"Codex CLI reported an error: {parsed['text']}"[:500]
-                    )
+                    raise _reported_error("Codex CLI", parsed["text"], self.api_key)
                 if kind in ("text", "message"):
                     turn = turn.with_message(parsed["text"], append=(kind == "text"))
                 elif kind == "usage":
@@ -1104,6 +1113,10 @@ def _classify(ev: dict) -> dict:
         err = ev.get("error") or {}
         return {"kind": "error", "text": err.get("message") or "turn failed", "usage": {}}
     if etype == "error":
+        # Codex retrying by itself, which exec reports with no retry field, only these words.
+        # Exec sends whole messages, so nothing already shown can be re-sent.
+        if str(ev.get("message") or "").startswith(_RECONNECTING_PREFIX):
+            return {"kind": "ignore", "text": "", "usage": {}}
         return {"kind": "error", "text": ev.get("message") or "error", "usage": {}}
 
     # ── legacy schema ─────────────────────────────────────────────────────────

@@ -296,7 +296,8 @@ class LiveTurn:
         captured = cas._CapturedCalls(self.offered)
         deadline = time.monotonic() + cas._timeout_seconds()
         last_phase, reasoning_part, continuations = "", None, 0
-        parked = settled = False
+        parked = settled = abandoned = False
+        shown_text = False
         try:
             while True:
                 remaining = deadline - time.monotonic()
@@ -344,6 +345,20 @@ class LiveTurn:
                         self._reject(captured)
                     continue
                 event = cas.classify(msg)
+                if event["kind"] == "retrying":
+                    # Before any text the retry is invisible, so Codex is left to it. After text
+                    # it re-sends the reply from the start (measured on 0.160) and we'd show it
+                    # twice, so this reply ends here, like any failure after content. Codex is
+                    # still working, so this turn needs interrupting (`abandoned`).
+                    if not (shown_text or captured.request_ids):
+                        log.info("codex_app_server: Codex is retrying — %s", event["text"][:200])
+                        continue
+                    abandoned = True
+                    event = {
+                        "kind": "error",
+                        "text": cas.dropped_mid_reply(event["text"]),
+                        "usage": {},
+                    }
                 if event["kind"] == "usage":
                     self._last = event["usage"]
                     self._total = event.get("total") or self._total
@@ -358,7 +373,7 @@ class LiveTurn:
                         "usage": {},
                     }
                     yield {"kind": "done", "text": "", "usage": {}}
-                    settled = True
+                    settled = not abandoned
                     return
                 if event["kind"] == "error":
                     # The RAW frame, once, beside the classified text. Only the frame itself can
@@ -368,6 +383,8 @@ class LiveTurn:
                         event.get("text"),
                         json.dumps(msg, default=str)[:1200],
                     )
+                    if cas.is_auth_rejection(event.get("text") or ""):
+                        self.client.note_auth_rejected()
                 if event["kind"] == "thinking" and event["text"]:
                     part = event.get("part")
                     if part != reasoning_part:
@@ -385,8 +402,10 @@ class LiveTurn:
                     yield {"kind": "usage", "text": "", "usage": self._round_usage()}
                 if event["kind"] != "ignore":
                     yield event
+                if event["kind"] in ("text", "message") and event.get("text"):
+                    shown_text = True
                 if event["kind"] == "error":
-                    settled = True
+                    settled = not abandoned
                     return
                 if event["kind"] == "done":
                     if (
@@ -402,7 +421,7 @@ class LiveTurn:
                             continuations,
                             cas._MAX_CONTINUATIONS,
                         )
-                        last_phase, reasoning_part = "", None
+                        last_phase, reasoning_part, shown_text = "", None, False
                         nudge = cas._NATIVE_CONTINUE_NUDGE if self.offered else cas._CONTINUE_NUDGE
                         restarted = await self.client._request(
                             "turn/start",

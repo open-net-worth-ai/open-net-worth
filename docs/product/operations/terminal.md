@@ -60,7 +60,9 @@ files and saved credentials. Read [Safeguards](#safeguards) first.
    [Connecting an AI provider](../getting-started/connecting-an-ai-provider.md).
 
 The sign-in is saved in the home folder of the account running Open Net Worth and stays on that
-server.
+server. Under Docker, that folder only survives an update with the volumes in the current
+`docker-compose.yml` — see
+[Subscription under Docker](../getting-started/connecting-an-ai-provider.md#subscription-under-docker).
 
 ## How it behaves
 
