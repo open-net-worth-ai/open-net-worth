@@ -46,7 +46,6 @@ def test_list_has_builtins_never_500(client):
         "lunch_money",
         "lunch_flow",
         "ynab",
-        "actual_budget",
         "enable_banking",
         "gocardless",
         "yodlee",

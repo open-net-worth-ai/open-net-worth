@@ -435,6 +435,7 @@ def run(app_url: str, backend_url: str, evidence: Path, root: Path) -> int:
             page.on("pageerror", lambda e: errors.append(e.message[:300]))
             api = App(backend_url)
             api.call("/api/setup-status/complete", "POST", {})  # first run is its own flow
+            api.call("/api/feature-flags/actual_budget_sync", "PUT", {"enabled": True})
             flow = Flow(page, app_url, api, actual, evidence)
             try:
                 flow.connect()

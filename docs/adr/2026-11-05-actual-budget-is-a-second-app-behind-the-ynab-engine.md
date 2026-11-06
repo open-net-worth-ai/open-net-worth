@@ -123,6 +123,10 @@ open on it).
 
 ## Consequences
 
+The `actual_budget_sync` flag ships off, by the owner's choice, and covers only what is Actual's: its
+connector, routes and runs. The shared engine and screens read the app description whatever the flag
+says, so turning it off doesn't undo a change to YNAB's path.
+
 **Positive**
 
 - A fix to the engine reaches both apps. Actual's differences are a table anyone can read.

@@ -11,6 +11,10 @@ keywords: [actual, actual budget, import, migrate, migration, move, review, veri
 
 # Import from Actual Budget
 
+> **Experimental.** Actual Budget is off by default. Turn it on in **Settings → Developer →
+> Experimental**. While the switch is off, nothing on this page appears in the app. Anything you've
+> already imported stays here, and the sync waits until you turn it back on.
+
 If you budget in **Actual Budget**, you can bring a whole budget here in one go: its accounts,
 categories, transactions and each month's Assigned amounts. You see everything before anything is
 written, and afterwards the figures are checked against Actual's. After that you can stop, or

@@ -362,6 +362,9 @@ events) can't be told apart from YNAB's on the first run.
 
 ## Actual Budget
 
+Off by default: turn it on in
+[Settings → Developer → Experimental](../features/settings.md#experimental-features).
+
 Bring a whole Actual budget here from your own Actual server, and keep the two in step if you want
 to. The connector asks for the server's address, a password or token, and the encryption password
 if the budget has one, then lists your budgets. Passwords and tokens never come back from the server:

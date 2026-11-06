@@ -50,7 +50,6 @@ def test_empty_state_has_builtin_transports_no_mcp():
         "lunch_money",
         "lunch_flow",
         "ynab",
-        "actual_budget",
         "enable_banking",
         "gocardless",
         "yodlee",

@@ -210,7 +210,8 @@ The switch appears once a data sync is turned on in
 **Automations** is the Lucius list alone.
 
 There are two: [YNAB](../features/imports-and-sync.md) and
-[Actual](../features/actual-budget-import.md). Each imports your budget and then keeps it and this
+[Actual](../features/actual-budget-import.md), which is off until you turn it on in
+**Settings → Developer → Experimental**. Each imports your budget and then keeps it and this
 book in step: from the app, to the app, or both ways. A book syncs with one of them at a time. The
 **Sync YNAB** template under Lucius is the one-way version: Lucius fetches new YNAB transactions and
 books them here, and doesn't copy categories or Assigned.
