@@ -229,7 +229,7 @@ async def _start_connector(name: str, start) -> None:
 
 
 async def _headless_turn_runner(
-    prompt: str, *, allowed_tools=None, model=None, lean_prompt=False
+    prompt: str, *, allowed_tools=None, model=None, lean_prompt=False, enforce_offer=False
 ) -> str:
     """The headless-turn runner registered on the ``core.headless_turn`` seam (below, in
     ``lifespan``) so a service can run one Lucius turn WITHOUT ``services`` importing ``ai``
@@ -260,6 +260,9 @@ async def _headless_turn_runner(
 
     lean_prompt = use the short system prompt instead of the full conversational one — right
     for a zero-tool completion that only has to return text.
+
+    enforce_offer = make ``allowed_tools`` a real ceiling for this turn. Without it an offer is
+    advisory: a call outside it still dispatches, and nobody is here to tap a card.
     """
     import uuid
 
@@ -281,6 +284,8 @@ async def _headless_turn_runner(
     _snap = _skill_scope.snapshot_scope()
     if allowed_tools is not None:
         _skill_scope.set_offer_scope(allowed_tools)
+    if enforce_offer:
+        _skill_scope.enforce_offer()
     run_model = model or ModelConfigStore().resolved()["model"]
     short_id = str(uuid.uuid4())[:8]
     session_id = f"headless-{short_id}"

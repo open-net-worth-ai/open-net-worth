@@ -139,9 +139,9 @@ def test_alert_fire_triggers_instant_freshen(monkeypatch):
     assert freshen_calls == ["AAPL"]
 
 
-# Asserts the sender's own push, so it pins the flag off; the flag-on path is in
-# tests/test_delivery_seam.py.
-@pytest.mark.flags(intel_delivery_decider=False)
+# Asserts the sender's own push before the price check returns, so it pins both flags off; the
+# flag-on paths are in tests/test_delivery_seam.py and tests/test_price_alert_run.py.
+@pytest.mark.flags(intel_delivery_decider=False, price_alert_lucius_run=False)
 def test_freshen_task_does_not_delay_push_or_alert_ordering(monkeypatch):
     """BLOCKER regression (code review): a SLOW _instant_news_freshen must not delay
     _push_external_alert's own ordering or run_price_check()'s return. Before the fix,
