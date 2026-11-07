@@ -9,7 +9,7 @@ import logging
 from backend.core.errors import ConflictError, OpenNetWorthError
 from backend.core.txn_sources import canonical_writer
 from backend.services import ledger as ledger_service
-from backend.services.ynab_migration.mapping import SOURCE
+from backend.services.budget_app import current
 from backend.services.ynab_sync.canon import Canon, canon, changed_fields
 
 logger = logging.getLogger(__name__)
@@ -39,7 +39,8 @@ def row_changes(rendered: dict, row: dict, changed: list[str]) -> dict:
 
 
 def create(rendered: dict, *, resurrect: bool = False) -> dict:
-    row = {**rendered, "source": canonical_writer(SOURCE) or SOURCE}
+    source = current().source
+    row = {**rendered, "source": canonical_writer(source) or source}
     pairs = {(e["source"], e["ref"]) for e in rendered["external_refs"]} if resurrect else None
     created, skipped = ledger_service.bulk_create_transactions(
         [row],
@@ -82,5 +83,7 @@ def apply(row: dict | None, rendered: dict | None) -> tuple[Canon, str | None]:
         return canon(created), created["id"]
     row = _unchanged(row)
     patch = row_changes(rendered, row, changed_fields(canon(row), canon(rendered)))
-    updated = ledger_service.update_transaction(row["id"], patch) if patch else row
+    # The app's word on the category stands; YNAB's path stays as it has always been.
+    given = {"labels_as_given": True} if current().caps.labels_as_given_on_pull else {}
+    updated = ledger_service.update_transaction(row["id"], patch, **given) if patch else row
     return canon(updated or row), row["id"]

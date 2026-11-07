@@ -18,6 +18,7 @@ import {
   takeReloadNotice,
   watchPolicyBlock,
 } from './voicePagePolicy'
+import { playMuteTone } from './voiceCallSounds'
 
 // One voice call for the whole app (`voice_calls` flag), held OUTSIDE React. The first build kept
 // the LiveKit room inside the Call button, so a chat that re-laid its composer (the landing screen
@@ -33,6 +34,8 @@ export type CallProblemKind =
   | 'dropped'
   | 'service'
   | 'other'
+  /** This conversation can't take a call (an Automation's): the way out is another one. */
+  | 'conversation'
   /** Not a problem: the page reloaded so it could reach the voice server, and a call needs a tap. */
   | 'ready'
 
@@ -41,6 +44,8 @@ export interface CallProblem {
   message: string
   /** The service's own words (LiveKit's refusal), for the notice's Details. */
   detail?: string
+  /** The conversation the call was for: its problem doesn't follow you to another. */
+  sessionId?: string
 }
 
 export type CallQuality = 'excellent' | 'good' | 'poor' | 'lost'
@@ -68,9 +73,25 @@ export interface CallState {
   /** Lucius has a turn running on the call's conversation, as the app reports it: away from the
    *  chat there is nothing else to say so. */
   luciusWorking: boolean
+  /** Your words as the call hears them, updating as you speak; empty otherwise. */
+  heard: string
+  /** You've finished saying `heard`: it stays in the chat until your real message lands. */
+  heardDone: boolean
+  /** Lucius's words as the voice says them, in step with it; empty otherwise. */
+  spoken: string
+  /** He has finished saying `spoken`: it stays on screen a moment longer. */
+  spokenDone: boolean
+  /** The last line said, kept until the chat has it: a line the voice says itself is only saved
+   *  to the chat once it has finished playing, so it can't stream there as a message. */
+  lastSpoken: string
 }
 
 const IDLE: CallState = {
+  heard: '',
+  heardDone: false,
+  spoken: '',
+  spokenDone: false,
+  lastSpoken: '',
   phase: 'idle',
   sessionId: null,
   muted: false,
@@ -94,8 +115,13 @@ let audioEls: HTMLElement[] = []
 let localHangUp = false
 let endedTimer: number | undefined
 
+/** The conversation the latest call was for, which every problem from then on belongs to. */
+let callSession: string | null = null
+
 function set(next: Partial<CallState>) {
-  state = { ...state, ...next }
+  const problem =
+    next.problem && callSession ? { sessionId: callSession, ...next.problem } : next.problem
+  state = { ...state, ...next, ...(next.problem !== undefined && { problem }) }
   listeners.forEach((l) => l())
 }
 
@@ -195,13 +221,17 @@ function meter(side: Side, track: MediaStreamTrack): void {
   void levelCtx.resume()
 }
 
-function rms(side: Side): number {
+function rawLevel(side: Side): number {
   const m = meters[side]
   if (!m) return 0
   m.analyser.getFloatTimeDomainData(m.samples)
   let sum = 0
   for (const v of m.samples) sum += v * v
-  const level = Math.sqrt(sum / m.samples.length)
+  return Math.sqrt(sum / m.samples.length)
+}
+
+function rms(side: Side): number {
+  const level = rawLevel(side)
   // Lucius's voice arrives at full volume (speech ~0.02–0.2 RMS). Yours comes through the
   // browser's echo cancelling and noise suppression, much quieter: a higher gain above a small
   // noise floor, so the orb answers your voice as readily as his (owner, 2026-11-03).
@@ -212,8 +242,32 @@ function rms(side: Side): number {
 const MIC_FLOOR = 0.004
 const MIC_GAIN = 16
 
-export function readLevels(): { lucius: number; you: number } {
-  return { lucius: rms('lucius'), you: state.muted ? 0 : rms('you') }
+/** How loud LiveKit says you are, from the audio it receives. An iPhone's analyser on the mic read
+ *  exactly zero through a whole call while Lucius answered every word, so nothing moved when you
+ *  spoke (owner's phone, 2026-11-06). Coarser than the analyser, but it's never wrong about that. */
+function serverLevel(): number {
+  return room?.localParticipant.audioLevel ?? 0
+}
+
+// How loud his voice must be to count as him talking, and how long after it to keep counting: it
+// dips between words, and the room rings on a moment after he stops.
+const LUCIUS_TALKING = 0.05
+const LUCIUS_TAIL_MS = 500
+let luciusHeardAt = -Infinity
+
+export function readLevels(): { lucius: number; you: number; luciusTalking: boolean } {
+  const lucius = rms('lucius')
+  const now = performance.now()
+  if (lucius > LUCIUS_TALKING) luciusHeardAt = now
+  const luciusTalking = now - luciusHeardAt < LUCIUS_TAIL_MS
+  if (state.muted) return { lucius, you: 0, luciusTalking }
+  // On speaker the mic hears him too, and it read as you talking (owner, 2026-11-06). So while he
+  // is talking, you only count when the mic is louder than he is: echo stays under his own level,
+  // and someone cutting in goes over it.
+  if (luciusTalking && rawLevel('you') <= rawLevel('lucius')) {
+    return { lucius, you: 0, luciusTalking }
+  }
+  return { lucius, you: rms('you') || serverLevel(), luciusTalking }
 }
 
 function closeLevels(): void {
@@ -264,10 +318,41 @@ export const HEALTH_MS = 2000
 const HEALTH_TIMEOUT_MS = 2500
 const HEALTH_MISSES = 2
 let healthTimer: number | undefined
+let micTimer: number | undefined
+let micPeak = 0
+let serverPeak = 0
+
+/** What the phone's mic is doing, for the server's log: state and loudness, never sound. "The mic
+ *  misses me on a quiet line" had nothing to go on, as only the phone knows this (owner, 2026-11-06). */
+function micReport(): string {
+  const track = mic?.mediaStreamTrack
+  const report = [
+    `track=${track?.readyState ?? 'none'}`,
+    `system_muted=${track?.muted ? 1 : 0}`,
+    `enabled=${track?.enabled ? 1 : 0}`,
+    `app_muted=${state.muted ? 1 : 0}`,
+    `audio=${levelCtx?.state ?? 'none'}`,
+    `peak=${micPeak.toFixed(3)}`,
+    `server_peak=${serverPeak.toFixed(3)}`,
+    `page=${document.visibilityState}`,
+    `streams=${transcriptStreams}`,
+    `words=${heardUpdates}`,
+  ].join(',')
+  micPeak = 0
+  serverPeak = 0
+  return report
+}
 
 function watchLuciusLine(roomName: string): void {
   let misses = 0
   let asking = false
+  // Between reports, or a word said between two of them would never show.
+  micPeak = 0
+  serverPeak = 0
+  micTimer = window.setInterval(() => {
+    micPeak = Math.max(micPeak, rawLevel('you'))
+    serverPeak = Math.max(serverPeak, serverLevel())
+  }, 100)
   healthTimer = window.setInterval(async () => {
     if (asking || state.phase !== 'live') return
     asking = true
@@ -276,7 +361,8 @@ function watchLuciusLine(roomName: string): void {
     let said = false
     let working = false
     try {
-      const r = await authFetch(`/api/voice/call/health?room=${encodeURIComponent(roomName)}`, {
+      const query = `room=${encodeURIComponent(roomName)}&mic=${encodeURIComponent(micReport())}`
+      const r = await authFetch(`/api/voice/call/health?${query}`, {
         signal: giveUp.signal,
       })
       // A tunnel answers 5xx for an app it can't reach; a 4xx is the app itself, so it's there.
@@ -336,9 +422,105 @@ let endProblem: CallProblem | null = null
 // The call's microphone, opened BEFORE the ringing starts and published once connected.
 let mic: LocalAudioTrack | null = null
 
+// LiveKit's transcript of a call. Each update of your words is a new stream holding all of the
+// segment so far, the last marked final. Lucius's words are one stream that grows, paced to his voice.
+const TRANSCRIPT_TOPIC = 'lk.transcription'
+// How long Lucius's last words stay up once he's finished.
+const LIVE_WORDS_HOLD_MS = 1500
+// Going on talking this soon after a segment ends is the same sentence.
+const HEARD_SAME_SENTENCE_MS = 3000
+// The chat swaps your words for the real message when it lands, which is only saved once the voice
+// starts or the request goes out: clearing them on a short timer left a gap with nothing there
+// (owner, 2026-11-06). This is only for a message that never comes.
+const HEARD_KEEP_MS = 10000
+// A segment that never gets its final word mustn't leave stale words on screen.
+const HEARD_STALE_MS = 6000
+let heardTimer: number | undefined
+let sentenceTimer: number | undefined
+let spokenTimer: number | undefined
+let lastSpokenTimer: number | undefined
+let heardLatest = 0
+let spokenLatest = 0
+// Finished segments of what you're still saying: a long sentence comes in several, and each
+// restarting the line lost the words before it.
+let heardBefore = ''
+let transcriptStreams = 0
+let heardUpdates = 0
+
+type TranscriptReader = AsyncIterable<string> & {
+  info: { attributes?: Record<string, string> }
+  readAll: () => Promise<string>
+}
+
+async function showSpoken(next: Room, reader: TranscriptReader) {
+  const order = ++spokenLatest
+  const current = () => room === next && order === spokenLatest
+  let text = ''
+  window.clearTimeout(spokenTimer)
+  window.clearTimeout(lastSpokenTimer)
+  try {
+    for await (const chunk of reader) {
+      text += chunk
+      if (current()) set({ spoken: text.trim(), spokenDone: false, lastSpoken: text.trim() })
+    }
+  } catch {
+    // The stream broke, as at a hang-up: what was said stays said.
+  }
+  if (!current()) return
+  set({ spokenDone: true })
+  spokenTimer = window.setTimeout(() => {
+    if (order === spokenLatest) set({ spoken: '', spokenDone: false })
+  }, LIVE_WORDS_HOLD_MS)
+  lastSpokenTimer = window.setTimeout(() => {
+    if (order === spokenLatest) set({ lastSpoken: '' })
+  }, HEARD_KEEP_MS)
+}
+
+function watchTranscript(next: Room) {
+  next.registerTextStreamHandler(TRANSCRIPT_TOPIC, async (rawReader, from) => {
+    const reader = rawReader as unknown as TranscriptReader
+    transcriptStreams += 1
+    const attributes = reader.info.attributes ?? {}
+    const track = attributes['lk.transcribed_track_id']
+    const own =
+      from.identity === next.localParticipant.identity ||
+      (!!track && next.localParticipant.trackPublications.has(track))
+    if (!own) return showSpoken(next, reader)
+    const order = ++heardLatest
+    const text = (await reader.readAll()).trim()
+    // Streams can finish out of order: a slower, shorter one mustn't overwrite newer words.
+    if (!text || room !== next || order !== heardLatest) return
+    heardUpdates += 1
+    const final = attributes['lk.transcription_final'] === 'true'
+    const heard = heardBefore ? `${heardBefore} ${text}` : text
+    window.clearTimeout(heardTimer)
+    window.clearTimeout(sentenceTimer)
+    if (final) {
+      heardBefore = heard
+      sentenceTimer = window.setTimeout(() => (heardBefore = ''), HEARD_SAME_SENTENCE_MS)
+    }
+    heardTimer = window.setTimeout(
+      () => {
+        heardBefore = ''
+        set({ heard: '', heardDone: false })
+      },
+      final ? HEARD_KEEP_MS : HEARD_STALE_MS,
+    )
+    set({ heard, heardDone: final })
+  })
+}
+
 function teardown() {
+  window.clearTimeout(heardTimer)
+  window.clearTimeout(sentenceTimer)
+  window.clearTimeout(spokenTimer)
+  window.clearTimeout(lastSpokenTimer)
+  heardLatest = 0
+  spokenLatest = 0
+  heardBefore = ''
   window.clearInterval(followTimer)
   window.clearInterval(healthTimer)
+  window.clearInterval(micTimer)
   window.clearTimeout(leftTimer)
   window.clearTimeout(pickupTimer)
   qualities.clear()
@@ -376,8 +558,11 @@ function finish(problem: CallProblem | null) {
 }
 
 export async function startCall(sessionId: string, view: CallState['view'] = 'bar'): Promise<void> {
-  if (room || state.phase === 'connecting') return
+  if (room || (state.phase === 'connecting' && !restarting)) return
+  restarting = false
+  const thisCall = ++callAttempt
   window.clearTimeout(endedTimer)
+  callSession = sessionId || null
   if (!navigator.mediaDevices?.getUserMedia) {
     set({
       ...IDLE,
@@ -401,24 +586,27 @@ export async function startCall(sessionId: string, view: CallState['view'] = 'ba
     // the second one, every time it opened mid-ring (owner, 2026-11-03).
     const opened = await createLocalAudioTrack()
     // Read afresh: a hang-up while the microphone opened changed it (TS keeps the narrowed type).
-    if ((state.phase as CallPhase) !== 'connecting') {
+    if (thisCall !== callAttempt || (state.phase as CallPhase) !== 'connecting') {
       opened.stop() // hung up while the microphone was opening
       return
     }
     mic = opened
     meter('you', opened.mediaStreamTrack)
     stopRing = startRingback()
+    if (state.muted) await opened.mute() // pressed Mute while the microphone was opening
     const r = await authFetch('/api/voice/call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId || null }),
     })
+    if (thisCall !== callAttempt) return
     if (!r.ok) {
       const d = await r.json().catch(() => ({}))
       teardown()
       // A limit reached (429: the demo's call caps, a token budget) isn't fixed in settings: say
       // why and offer Try again, not a Voice calls settings button that can't help.
-      const kind: CallProblemKind = r.status === 429 ? 'other' : 'setup'
+      const kind: CallProblemKind =
+        r.status === 429 ? 'other' : r.status === 423 ? 'conversation' : 'setup'
       set({ ...IDLE, problem: { kind, message: d.detail || 'The call could not start.' } })
       return
     }
@@ -433,6 +621,9 @@ export async function startCall(sessionId: string, view: CallState['view'] = 'ba
     if ((state.phase as CallPhase) !== 'connecting') return
     const next = new Room({ adaptiveStream: true })
     room = next
+    transcriptStreams = 0
+    heardUpdates = 0
+    watchTranscript(next)
     // Lucius "picks up" when he first speaks: stop the ring and start the clock then. The level
     // is read straight off his audio — LiveKit's active-speaker report lags a few hundred ms, so
     // the ring played over his "Hi" (live call, 2026-11-03); that report stays as a fallback.
@@ -496,6 +687,7 @@ export async function startCall(sessionId: string, view: CallState['view'] = 'ba
     watchDeviceNetwork()
     await next.localParticipant.publishTrack(mic)
   } catch (e) {
+    if (thisCall !== callAttempt) return // a restart has already replaced this attempt
     // Hanging up while it was still connecting rejects the connect ("Client initiated
     // disconnect"): what you just did, not a problem to report (owner, 2026-11-04).
     const mine = localHangUp
@@ -537,12 +729,73 @@ export async function hangUp(): Promise<void> {
   else finish(null)
 }
 
+/** Works from the moment you press Call: you may not want to be heard when Lucius picks up. */
 export async function toggleMute(): Promise<void> {
-  if (!room) return
+  if (state.phase === 'idle' || state.phase === 'ended') return
   const muted = !state.muted
-  // The call's own track: "enable the microphone" could open a SECOND one beside it.
-  if (mic) await (muted ? mic.mute() : mic.unmute())
   set({ muted })
+  if (levelCtx) playMuteTone(levelCtx, muted)
+  // The call's own track: "enable the microphone" could open a SECOND one beside it.
+  if (!mic) return
+  const before = mic.mediaStreamTrack
+  await (muted ? mic.mute() : mic.unmute())
+  // Unmuting can reacquire the mic as a new track, and the level was left listening to the dead
+  // one: nothing moved when you spoke after that (owner's phone, 2026-11-06).
+  if (mic && mic.mediaStreamTrack !== before) meter('you', mic.mediaStreamTrack)
+}
+
+const WORKER_WAIT_MS = 30_000
+const WORKER_POLL_MS = 500
+let restarting = false
+/** Which start is current: a restart can overtake one still opening the microphone or connecting,
+ *  and the phase can't tell them apart, since the new one is `connecting` too. */
+let callAttempt = 0
+
+/** Saving the voice settings restarts the worker, so it may be a few seconds before it can answer. */
+async function workerRunning(stillWanted: () => boolean): Promise<boolean> {
+  const giveUpAt = Date.now() + WORKER_WAIT_MS
+  while (stillWanted() && Date.now() < giveUpAt) {
+    try {
+      const r = await authFetch('/api/voice/config')
+      const config = r.ok ? ((await r.json()) as { worker?: { running?: boolean } }) : null
+      if (config?.worker?.running) return true
+    } catch {
+      // The app is restarting the worker, or the network blinked: ask again.
+    }
+    await new Promise((done) => window.setTimeout(done, WORKER_POLL_MS))
+  }
+  return false
+}
+
+/** Runs `change` with the call hung up, then calls back into the same conversation: a call reads
+ *  its settings once, when it starts, even one still connecting (owner, 2026-11-06). With no call on, it only runs `change`.
+ *  Ending the call meanwhile wins: nothing calls back. */
+export async function restartCall(change: () => Promise<void>): Promise<void> {
+  const { sessionId, view, phase } = state
+  if (phase === 'idle' || phase === 'ended') return change()
+  callAttempt++
+  await hangUp()
+  if (room) finish(null)
+  window.clearTimeout(endedTimer)
+  set({ ...IDLE, phase: 'connecting', sessionId, view })
+  const stillWanted = () => state.phase === 'connecting' && state.sessionId === sessionId
+  try {
+    await change()
+  } catch (e) {
+    if (stillWanted()) {
+      const message = e instanceof Error ? e.message : 'Could not change the voice settings.'
+      set({ ...IDLE, problem: { kind: 'other', message } })
+    }
+    return
+  }
+  const ready = await workerRunning(stillWanted)
+  if (!stillWanted()) return
+  if (!ready) {
+    set({ ...IDLE, problem: { kind: 'other', message: 'Voice calls are still starting up.' } })
+    return
+  }
+  restarting = true
+  await startCall(sessionId, view)
 }
 
 export function minimizeCall(): void {
@@ -561,6 +814,9 @@ export function dismissProblem(): void {
 export function resetVoiceCallForTests(): void {
   teardown()
   window.clearTimeout(endedTimer)
+  callSession = null
+  luciusHeardAt = -Infinity
+  restarting = false
   state = IDLE
   listeners.forEach((l) => l())
 }

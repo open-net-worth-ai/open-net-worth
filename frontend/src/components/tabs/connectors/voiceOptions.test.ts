@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_VOICE_MODEL,
+  languagePatch,
   OTHER_VOICE,
   speakerChoice,
   speakerOptions,
@@ -60,14 +61,17 @@ describe('who speaks on a voice model', () => {
 
   it('offers male and female voices, its default first and marked', () => {
     expect(labels(flash)).toEqual([
-      'Ashley (female, default)',
-      'Olivia (female)',
+      'Dennis (male, default)',
       'Edward (male)',
       'Diego (male)',
+      'Victor',
+      'Theodore',
+      'Ashley (female)',
+      'Olivia (female)',
       'Another voice…',
     ])
     expect(speakerOptions(flash)[0].value).toBe('')
-    expect(speakerOptions(flash)[2].value).toBe('Edward')
+    expect(speakerOptions(flash)[1].value).toBe('Edward')
   })
 
   it('states no gender the docs do not state', () => {
@@ -75,10 +79,14 @@ describe('who speaks on a voice model', () => {
     expect(labels('fishaudio/s2.1-pro')).toContain('Ethan')
   })
 
-  it('says when LiveKit chooses, and names no voice a model has none documented for', () => {
-    expect(labels('cartesia/sonic-3')[0]).toBe('Default (LiveKit chooses)')
+  it('defaults to a man wherever one is documented', () => {
+    expect(labels('cartesia/sonic-3')[0]).toBe('Daniel (male, default)')
     expect(labels('cartesia/sonic-3')).toContain('Blake (male)')
-    expect(labels('cartesia/sonic-3.6')).toEqual(['Default (LiveKit chooses)', 'Another voice…'])
+    expect(labels('cartesia/sonic-3.6')[0]).toBe('Daniel (male, default)')
+    expect(labels('fishaudio/s2.1-pro')[0]).toBe('Adrian (male, default)')
+  })
+
+  it('says when LiveKit chooses, on a model we know no voices for', () => {
     expect(labels('elevenlabs/eleven_flash_v2_5')).toEqual([
       'Default (LiveKit chooses)',
       'Another voice…',
@@ -87,7 +95,7 @@ describe('who speaks on a voice model', () => {
 
   it('reads a saved id back as the right entry', () => {
     expect(speakerChoice(flash, '', false)).toBe('')
-    expect(speakerChoice(flash, 'Ashley', false)).toBe('')
+    expect(speakerChoice(flash, 'Dennis', false)).toBe('')
     expect(speakerChoice(flash, 'Edward', false)).toBe('Edward')
     expect(speakerChoice(flash, 'Someone-Else', false)).toBe(OTHER_VOICE)
     expect(speakerChoice('cartesia/sonic-3.6', 'abc', false)).toBe(OTHER_VOICE)
@@ -96,5 +104,35 @@ describe('who speaks on a voice model', () => {
   it('points at the library of the model it is on', () => {
     expect(voiceLibrary(flash)?.name).toBe('Inworld')
     expect(voiceLibrary('elevenlabs/eleven_flash_v2_5')).toBeUndefined()
+  })
+})
+
+describe('what changes with the language', () => {
+  const flash = 'inworld/inworld-tts-2-flash'
+
+  it('changes nothing when the models already handle it', () => {
+    expect(
+      languagePatch({ stt_model: 'auto', tts_model: flash, tts_voice: 'Edward' }, 'vi'),
+    ).toEqual({})
+  })
+
+  it('moves an English-only ear to Automatic, except for English', () => {
+    const stt_model = 'assemblyai/universal-streaming'
+    expect(languagePatch({ stt_model, tts_model: flash }, 'vi').stt_model).toBe('auto')
+    expect(languagePatch({ stt_model, tts_model: flash }, 'en')).toEqual({})
+  })
+
+  it("moves a model that hears some languages when it can't hear this one", () => {
+    const stt_model = 'assemblyai/universal-streaming-multilingual'
+    expect(languagePatch({ stt_model, tts_model: flash }, 'vi').stt_model).toBe('auto')
+    expect(languagePatch({ stt_model, tts_model: flash }, 'es')).toEqual({})
+  })
+
+  it("moves a voice that can't speak it to the default, dropping the other provider's id", () => {
+    const patch = languagePatch(
+      { stt_model: 'auto', tts_model: 'assemblyai/assemblyai-tts-1', tts_voice: 'abc' },
+      'vi',
+    )
+    expect(patch).toEqual({ tts_model: DEFAULT_VOICE_MODEL, tts_voice: '' })
   })
 })

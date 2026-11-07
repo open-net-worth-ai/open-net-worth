@@ -10,6 +10,7 @@ import json
 
 import pytest
 
+from backend.db.actual_budget_config_store import ActualBudgetConfigStore
 from backend.db.alpaca_config_store import AlpacaConfigStore
 from backend.db.connector_store import ConnectorStore
 from backend.db.enable_banking_config_store import EnableBankingConfigStore
@@ -28,6 +29,7 @@ STORES = [
     LunchMoneyConfigStore,
     LunchFlowConfigStore,
     YnabConfigStore,
+    ActualBudgetConfigStore,
     EnableBankingConfigStore,
     YodleeConfigStore,
     AlpacaConfigStore,
@@ -46,6 +48,7 @@ _VALUES = {
     "aspsp": "Some Bank",
     "country": "FI",
     "budget_id": "budget-1",
+    "server_url": "https://actual.acme.test",
     "flex_query_id": "987",
     "base_url": "https://flex.example/ws",
     "last_synced_at": "2026-10-10T00:00:00+00:00",
@@ -71,6 +74,11 @@ def _values(cls) -> dict:
     if cls is AlpacaConfigStore:
         values["environment"] = "live"
     return values
+
+
+def _free_text_secret(cls) -> str:
+    """A secret that accepts any string; an address is validated, so it is not one."""
+    return next(k for k in cls.SECRET_KEYS if k not in cls.READ_ONLY_KEYS and k != "server_url")
 
 
 @pytest.fixture(autouse=True)
@@ -138,7 +146,7 @@ def test_get_returns_the_merged_view_and_public_never_a_secret(cls):
 @pytest.mark.parametrize("cls", STORES, ids=_IDS)
 def test_a_blank_secret_keeps_the_saved_one(cls):
     store = cls()
-    secret = next(k for k in cls.SECRET_KEYS if k not in cls.READ_ONLY_KEYS)
+    secret = _free_text_secret(cls)
     store.update({secret: "keep-me"})
     store.update({secret: "   ", "enabled": True})
     assert store.get()[secret] == "keep-me"
@@ -148,7 +156,7 @@ def test_a_blank_secret_keeps_the_saved_one(cls):
 @pytest.mark.parametrize("cls", STORES, ids=_IDS)
 def test_reset_deletes_the_row_and_its_secrets(cls):
     store = cls()
-    secret = next(k for k in cls.SECRET_KEYS if k not in cls.READ_ONLY_KEYS)
+    secret = _free_text_secret(cls)
     store.update({secret: "x", "enabled": True})
     store.reset()
     assert ConnectorStore().get(cls.KIND) is None

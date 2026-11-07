@@ -16,6 +16,7 @@ import asyncio
 import importlib.util
 import logging
 import platform
+import re
 import sys
 import threading
 import time
@@ -27,6 +28,8 @@ from backend.db.voice_config_store import LANGUAGES, VoiceConfigStore, is_ready
 from backend.services.feature_flags import enabled as flag_enabled
 
 log = logging.getLogger(__name__)
+
+_MIC_REPORT = re.compile(r"[a-z_]+=[a-z0-9.]+(,[a-z_]+=[a-z0-9.]+){0,9}")
 
 FLAG = "voice_calls"
 _REQUIRED_MODULES = ("livekit.agents", "livekit.plugins.silero")
@@ -120,6 +123,13 @@ def call_session(room: str) -> Optional[str]:
     with _calls_lock:
         entry = _calls.get(room)
         return entry[0] if entry and entry[1] >= time.monotonic() else None
+
+
+def note_mic(report: str) -> None:
+    """What the caller's phone says its mic is doing: state and loudness, never sound or words. A
+    page's text going into the log, so anything but that shape is dropped."""
+    if _MIC_REPORT.fullmatch(report):
+        log.info("voice mic: %s", report)
 
 
 def claim_call(room: str) -> Optional[str]:
@@ -295,8 +305,28 @@ async def stop() -> None:
         await _stop()
 
 
+# What a call reads when it starts, so changing one takes effect at the next call with no restart:
+# stopping and starting the worker took 2-7s, all of it silence after changing language or voice
+# mid-call (owner, 2026-11-06). Never a credential: those are the worker's connection.
+_PER_CALL = ("language", "front_model", "stt_model", "tts_model", "tts_voice")
+_CONNECTION = ("enabled", "livekit_url", "api_key", "api_secret")
+
+
+def call_settings() -> dict:
+    config = VoiceConfigStore().get()
+    return {
+        **{key: config.get(key) for key in _PER_CALL},
+        "language_name": LANGUAGES.get(config.get("language") or "en", "English"),
+    }
+
+
+def needs_restart(before: dict, after: dict) -> bool:
+    """Only the connection is read once, at start; a worker that isn't up may be able to start."""
+    return not status()["running"] or any(before.get(k) != after.get(k) for k in _CONNECTION)
+
+
 async def reload() -> None:
-    """Apply changed settings: the worker reads its config once, at start."""
+    """Apply a changed connection: the worker reads it once, at start."""
     async with _lifecycle_lock():
         _worker.restarts = 0
         await _stop()

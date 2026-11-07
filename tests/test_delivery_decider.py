@@ -16,8 +16,8 @@ from backend.monitoring.delivery_prompt import (
     DeliveryOutput,
     DeliveryRoundup,
     build_prompt,
-    strip_unknown_links,
 )
+from backend.monitoring.text_sanitize import strip_unknown_links
 from backend.services import news_delivery as nd
 from backend.services import notify_routes
 from backend.services.news_delivery import apply_delivery_change as change
@@ -184,6 +184,57 @@ def test_a_user_set_level_is_never_held_back_by_an_omission(model):
     result = run(dd.decide([item("dlv_1", user_set=True)], [], CONTEXT, now=NOW))
     (d,) = result["decisions"]
     assert d["decision"] == "now" and d["message"].startswith("Analysis")
+
+
+def test_a_message_loses_a_bare_domain_it_was_not_given(model):
+    model.reply = out(
+        {
+            "id": "dlv_1",
+            "decision": "now",
+            "reason": "stop",
+            "message": "Sam, ACME fell. Details: acme-filings.example/r?w=12.5",
+        }
+    )
+    candidate = item("dlv_1", user_set=True, source="price_alert")
+    decision = run(dd.decide([candidate], [], CONTEXT, now=NOW))["decisions"][0]
+    assert "w=12.5" not in decision["message"]
+
+
+@pytest.mark.parametrize("chosen", ["later", "skip"])
+def test_a_price_alert_goes_out_whatever_the_model_chose(model, chosen):
+    """The user chose this level so they would be told when it was crossed. Text a page shaped can
+    also read as "already told, unconfirmed", so the model's judgement can't be the last word."""
+    model.reply = out({"id": "dlv_1", "decision": chosen, "reason": "tiny position, 4am"})
+    candidate = item("dlv_1", user_set=True, source="price_alert", legacy_message="Stop crossed.")
+    result = run(dd.decide([candidate], [], CONTEXT, now=NOW))
+    decision = result["decisions"][0]
+    assert decision["decision"] == "now"
+    assert decision["message"] == "Stop crossed."
+    assert f"model chose {chosen}" in decision["reason"]
+    assert "tiny position, 4am" in decision["reason"]
+
+
+def test_a_price_alert_keeps_the_message_the_model_wrote(model):
+    model.reply = out({"id": "dlv_1", "decision": "now", "reason": "stop", "message": "Sam, stop."})
+    candidate = item("dlv_1", user_set=True, source="price_alert", legacy_message="Stop crossed.")
+    decision = run(dd.decide([candidate], [], CONTEXT, now=NOW))["decisions"][0]
+    assert decision["message"] == "Sam, stop."
+    assert decision["reason"] == "stop"
+
+
+@pytest.mark.parametrize("chosen", ["later", "skip"])
+def test_crash_watch_stays_the_models_call(model, chosen):
+    """An automatic drop detector, not a level anyone chose: it re-fires through a slide, and
+    holding the repeats back is what the decider is for."""
+    model.reply = out({"id": "dlv_1", "decision": chosen, "reason": "same slide"})
+    candidate = item("dlv_1", user_set=True, source="crash_watch")
+    decision = run(dd.decide([candidate], [], CONTEXT, now=NOW))["decisions"][0]
+    assert decision["decision"] == chosen
+
+
+def test_the_prompt_says_a_price_alert_always_goes_out():
+    user, system = dd.build_prompt([item("dlv_1", source="price_alert")], [], CONTEXT)
+    assert "A price_alert item always goes out now" in system
 
 
 def test_a_model_failure_sends_user_set_as_written_and_holds_the_rest(model):
@@ -354,6 +405,17 @@ def test_now_is_sent_once_and_marked_told(tick):
     )
     tick_on()
     assert len(tick.sent) == 1 and len(tick.model.calls) == 1
+
+
+def test_a_price_alert_the_model_skipped_is_still_sent_once_and_told(tick):
+    row = submit(story_id="stop", user_set=True, source="price_alert")
+    tick.model.reply = out({"id": row["id"], "decision": "skip", "reason": "tiny position"})
+    tick_on()
+    assert len(tick.sent) == 1
+    (told,) = nd.recently_told()
+    assert told["id"] == row["id"] and told["told_via"] == "now"
+    tick_on()
+    assert len(tick.sent) == 1
 
 
 def test_one_model_call_decides_every_candidate(tick):

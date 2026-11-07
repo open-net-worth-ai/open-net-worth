@@ -225,6 +225,10 @@ Back up first — see [Backup and restore](../operations/backup-and-restore.md).
 - **Claude Code or Codex stays "Not installed"** — it must be installed on the computer running
   Open Net Worth, not the one showing the browser. Open a new terminal after installing so it's
   on your `PATH`.
+- **Claude Code or Codex says "Not signed in"** — it's installed but has no sign-in yet. Expand
+  **Sign in** on its row for the command. Under Docker, these tools come with the container, so
+  the sign-in has to happen inside it — see
+  [Subscription under Docker](connecting-an-ai-provider.md#subscription-under-docker).
 - **"Those two passwords do not match."** — retype the **Confirm** field.
 - **Opening it from another device shows "Set a password first"** — no password is set yet. Set
   one in **Settings → Security** on the computer running the app, then click

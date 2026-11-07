@@ -138,6 +138,24 @@
       }
     },
     {
+      "id": "actual_budget",
+      "name": "Actual Budget",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Banking"
+      ],
+      "publisher": "Actual Budget",
+      "verification": "unverified",
+      "popular": false,
+      "mcp": false,
+      "connect": {
+        "kind": "in_app_form"
+      },
+      "flag": "actual_budget_sync"
+    },
+    {
       "id": "enable_banking",
       "name": "Enable Banking",
       "families": [
@@ -432,6 +450,25 @@
         "kind": "sign_in"
       },
       "endpoint": "https://mcp.mercury.com/mcp"
+    },
+    {
+      "id": "mcp-monarch",
+      "name": "Monarch",
+      "families": [
+        "Data source"
+      ],
+      "categories": [
+        "Banking"
+      ],
+      "publisher": "Monarch",
+      "verification": "verified",
+      "sub": "Reads and edits your Monarch transactions and budgets",
+      "popular": false,
+      "mcp": true,
+      "connect": {
+        "kind": "sign_in"
+      },
+      "endpoint": "https://api.monarch.com/mcp"
     },
     {
       "id": "mcp-ibkr",

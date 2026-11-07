@@ -124,14 +124,37 @@ FLAGS: tuple[Flag, ...] = (
         remove_by=date(2027, 2, 1),
     ),
     Flag(
+        name="actual_budget_sync",
+        description=(
+            "Connect an Actual server, import a whole budget and keep it and this book "
+            "in step on a schedule. Shares the Data sync tab in Automations with YNAB."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 5),
+        remove_by=date(2027, 3, 1),
+    ),
+    Flag(
         name="voice_calls",
         description=(
             "Talk to Lucius out loud: a Call button in the chat starts a voice call with your "
             "microphone. Set it up in Connectors → Voice calls."
         ),
-        default=False,
+        default=True,
         owner="owner",
         added=date(2026, 11, 3),
+        remove_by=date(2027, 3, 1),
+    ),
+    Flag(
+        name="price_alert_lucius_run",
+        description=(
+            "When a price alert fires, Lucius looks into it before you hear about it: it follows "
+            "the alert's instructions by searching the web and X. It can delay an alert by up to "
+            "two minutes and uses your search quota and AI model. Off: you get the quick alert only."
+        ),
+        default=False,
+        owner="owner",
+        added=date(2026, 11, 6),
         remove_by=date(2027, 3, 1),
     ),
 )

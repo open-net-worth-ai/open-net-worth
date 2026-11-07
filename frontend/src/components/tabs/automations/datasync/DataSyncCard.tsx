@@ -1,39 +1,42 @@
 import { useState } from 'react'
 import { Clock3 } from 'lucide-react'
-import { DIRECTION_LABELS, sendSync } from '../../imports/sync'
+import { directionLabels, sendSync } from '../../imports/sync'
 import { AutomationMenu } from '../AutomationMenu'
-import {
-  YNAB_SYNC_BLURB,
-  YNAB_SYNC_KEY,
-  YNAB_SYNC_NAME,
-  scheduleLabel,
-  type YnabSyncSummary,
-} from './ynabSync'
+import { YNAB_APP, appBlurb, type BudgetAppInfo } from './budgetApps'
+import { scheduleLabel, type YnabSyncSummary } from './ynabSync'
 
 // A data sync in the Data sync view: the same row as a Lucius Automation, with the sync's own
 // menu (no edit or duplicate: there is no prompt to change).
 export function DataSyncCard({
+  app = YNAB_APP,
   sync,
   onOpen,
   onChanged,
+  onError,
 }: {
+  app?: BudgetAppInfo
   sync: YnabSyncSummary
   onOpen: () => void
   onChanged: () => void
+  /** What a refused action said; null as an action starts. */
+  onError?: (message: string | null) => void
 }) {
   const [busy, setBusy] = useState(false)
   const on = sync.stage === 'on'
+  const paused = !!sync.status?.connector_paused
   const act = async (path: string, method: string, body?: unknown) => {
     setBusy(true)
-    await sendSync(path, method, body)
+    onError?.(null)
+    const refused = await sendSync(path, method, body, app)
     setBusy(false)
+    onError?.(refused)
     onChanged()
   }
   return (
     <article
       className={`a3-row${on ? '' : ' off'}`}
-      aria-label={YNAB_SYNC_NAME}
-      data-od-id={`automation-row-${YNAB_SYNC_KEY}`}
+      aria-label={app.name}
+      data-od-id={`automation-row-${app.key}`}
       tabIndex={0}
       onClick={onOpen}
       onKeyDown={(event) => {
@@ -42,19 +45,23 @@ export function DataSyncCard({
     >
       <span className="a3-row-body">
         <span className="a3-row-title">
-          <span className="t">{YNAB_SYNC_NAME}</span>
+          <span className="t">{app.name}</span>
           {sync.toReview > 0 && <span className="a3-tag warn">{sync.toReview} to review</span>}
           {!on && <span className="a3-tag warn">Off</span>}
+          {on && paused && <span className="a3-tag warn">Connection paused</span>}
         </span>
         <span className="a3-row-blurb">
           {sync.planName ? `${sync.planName}: ` : ''}
-          {YNAB_SYNC_BLURB}
+          {appBlurb(app, sync.status?.budget_mode === 'tracking')}
         </span>
         <span className={`a3-when${on ? '' : ' off'}`}>
           <Clock3 size={13} strokeWidth={1.7} aria-hidden="true" />
           {sync.running
             ? 'Syncing now…'
-            : [sync.status && DIRECTION_LABELS[sync.status.direction], scheduleLabel(sync.status)]
+            : [
+                sync.status && directionLabels(app)[sync.status.direction],
+                scheduleLabel(sync.status),
+              ]
                 .filter(Boolean)
                 .join(' · ')}
         </span>
@@ -64,7 +71,7 @@ export function DataSyncCard({
           items={[
             {
               label: 'Sync now',
-              disabled: busy || !on || sync.running,
+              disabled: busy || !on || sync.running || paused,
               onSelect: () => void act('/run', 'POST'),
             },
             {

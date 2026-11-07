@@ -36,7 +36,7 @@ import { Paperclip, AtSign, ArrowUp } from '../../../ui/icons'
 import { isSafeCssColor } from '../../../utils/mentionable'
 import { byId } from '../../../lucius/objectFields'
 import { resolveChipMeta } from '../../../lucius/chipMeta'
-import { toSendAttachments, useComposerAttachments } from './useComposerAttachments'
+import { ATTACH_ACCEPT, toSendAttachments, useComposerAttachments } from './useComposerAttachments'
 import type { AttachmentItem } from './useComposerAttachments'
 import { DictateButton } from './DictateButton'
 
@@ -758,7 +758,7 @@ export const LuciusComposer = forwardRef<LuciusComposerHandle, LuciusComposerPro
           ref={fileInputRef}
           type="file"
           multiple
-          accept="image/*,.pdf,.csv,.txt,.xlsx,.docx"
+          accept={ATTACH_ACCEPT}
           style={{ display: 'none' }}
           onChange={(e) => {
             addFiles(e.target.files)

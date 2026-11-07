@@ -29,7 +29,7 @@ class EvidenceRow(TypedDict, total=False):
     guid: str  # feed item guid — stable id + dedup fallback when the URL is a redirect
     author: str  # article author when the feed supplies it (Atom), else ""
     kind: str  # "news" | "asset" | "macro" | "opportunity" | "filing" — TTL selector
-    subjects: list[str]  # logical join keys, e.g. ["asset:42", "macro:USD", "scan:intel"]
+    subjects: list[str]  # logical join keys, e.g. ["asset:42", "ticker:ACME", "scan:intel"]
     queries: list[str]  # every query string that surfaced this URL (audit + gap detection)
     first_seen: str  # ISO, set once on insert — the "yesterday's news stays" anchor
     last_seen: str  # ISO, bumped each time a live search re-surfaces it (corroboration)

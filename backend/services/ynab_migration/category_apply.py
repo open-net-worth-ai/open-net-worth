@@ -14,6 +14,7 @@ from collections import Counter
 
 from backend.core.errors import ValidationError
 from backend.services import ynab_pairs
+from backend.services.budget_app import current
 from backend.services.ynab_migration import category_links
 from backend.services.ynab_migration.category_make import (
     Groups,
@@ -28,20 +29,27 @@ logger = logging.getLogger(__name__)
 
 
 def shared_note(envelope_name: str) -> str:
-    return f"{envelope_name} holds several categories, so its Assigned isn't synced with YNAB."
+    return (
+        f"{envelope_name} holds several categories, so its Assigned isn't synced with "
+        f"{current().name}."
+    )
 
 
 def _category_for(c: dict, d: dict, book: Book, groups: Groups, made: Counter) -> dict:
     kind = d["kind"]
     if kind == "ambiguous":
         raise ValidationError(
-            f"YNAB's {c['name']} matches more than one of your categories. Pick one."
+            f"{current().name}'s {c['name']} matches more than one of your categories. Pick one."
         )
     if kind in ("linked", "category"):
         return d["category"]
     if kind == "envelope":
         made["categories"] += 1
         return make_category_in(book, d["envelope"], c["label"], c["hidden"])
+    if category_links.is_income(c):
+        cat, _ = make_category(book, c["label"], None, c["hidden"], budgeted=False, kind="income")
+        made["categories"] += 1
+        return cat
     if is_parking_name(c["group_name"]):  # YNAB's parking groups hold no budget
         cat, _ = make_category(book, c["label"], None, c["hidden"], budgeted=False)
         made["categories"] += 1
@@ -79,7 +87,8 @@ def apply(plan: dict, decisions: dict[str, dict], plan_id: str, book: Book):
     # and unpaired for the next one to create again.
     groups = Groups(plan_id, old_groups, lambda doc: ynab_pairs.save([doc]))
     for c in plan["categories"]:
-        groups.match(book, c["group_id"], c["group_name"])
+        if not category_links.is_income(c):
+            groups.match(book, c["group_id"], c["group_name"])
     out: dict[str, dict] = {}
     made: Counter = Counter()
     notes: dict[str, str] = {}
@@ -87,7 +96,9 @@ def apply(plan: dict, decisions: dict[str, dict], plan_id: str, book: Book):
         cat = _category_for(c, decisions[c["id"]], book, groups, made)
         cat = book.rows[cat["id"]]
         env, held = book.solo_envelope(cat["id"]), book.env_of.get(cat["id"])
-        if held is None and category_links.has_assigned(plan, c["id"]):
+        if category_links.is_income(c):
+            env = None  # no Assigned of its own, even if the person has since put it in one
+        elif held is None and category_links.has_assigned(plan, c["id"]):
             parked = is_parking_name(c["group_name"])
             group_id = None if parked else groups.ensure(book, c["group_id"], c["group_name"])
             env = give_envelope(book, cat, group_id)
@@ -112,6 +123,6 @@ def lookup(plan: dict, plan_id: str, book: Book) -> dict[str, dict]:
         if pair is None or pair["category"] not in book.rows:
             out[c["id"]] = {"category": None, "envelope": None}
             continue
-        env = book.solo_envelope(pair["category"])
+        env = None if category_links.is_income(c) else book.solo_envelope(pair["category"])
         out[c["id"]] = {"category": pair["category"], "envelope": env["id"] if env else None}
     return out

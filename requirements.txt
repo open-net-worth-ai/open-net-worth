@@ -23,6 +23,7 @@ cryptography>=42.0.0
 websockets>=12.0
 jsonschema>=4.0.0    # AI tool-input validation at the dispatch boundary (ai/tools/registry.py)
 segno
+actualpy==0.22.4         # Actual Budget client (services/actual_sync/client.py, imported lazily)
 SQLAlchemy>=2.0.30      # storage engine (Core only — no ORM); spec 2026-08-05 D2
 alembic>=1.13.0          # versioned, ordered migrations; spec 2026-08-05 D3
 psycopg[binary]>=3.1.0   # Postgres dialect for hosted/CI; SQLite needs no driver

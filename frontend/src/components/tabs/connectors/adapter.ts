@@ -41,9 +41,10 @@ const UNLISTED_FAMILIES: Record<string, ConnectorFamily[]> = {
  *  that instead — see `logos.ts` and D25; these stay as the answer for everything else. */
 const PRESENTATION: Record<string, { icon: string; hue: string }> = {
   telegram: { icon: 'chat', hue: 'var(--accent)' },
-  voice: { icon: 'phone', hue: 'var(--accent)' },
+  voice: { icon: 'voice', hue: 'var(--cta)' },
   webhook: { icon: 'link', hue: 'var(--cash-c)' },
   email: { icon: 'mail', hue: 'var(--recv)' },
+  actual_budget: { icon: 'accounts', hue: 'var(--accent)' },
   plaid: { icon: 'accounts', hue: 'var(--crypto)' },
   lunch_flow: { icon: 'accounts', hue: 'var(--good)' },
   enable_banking: { icon: 'accounts', hue: 'var(--cash-c)' },
@@ -81,6 +82,7 @@ const DEVELOPERS: Record<string, { name: string; url: string }> = {
   lunch_money: { name: 'Lunch Money', url: 'https://lunchmoney.app' },
   lunch_flow: { name: 'Lunch Flow', url: 'https://lunchflow.app' },
   ynab: { name: 'YNAB', url: 'https://www.ynab.com' },
+  actual_budget: { name: 'Actual Budget', url: 'https://actualbudget.org' },
   enable_banking: {
     name: 'Enable Banking',
     url: 'https://enablebanking.com/docs/api/reference/',
@@ -308,7 +310,7 @@ export function toEntry(c: Connector): ConnectorDetailEntry {
     // catalog match, a server shows the icon IT or its website declared — never ours.
     logo: provenance?.logo ?? (mcp ? mcpIconUrl(c) : connectorLogo(c.id)),
     families: mcp
-      ? ['MCP']
+      ? (provenance?.families ?? ['MCP'])
       : (CATALOG.find((e) => e.id === c.id)?.families ?? UNLISTED_FAMILIES[kind] ?? []),
     categories: mcp
       ? (provenance?.categories ?? [])

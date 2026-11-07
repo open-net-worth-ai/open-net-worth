@@ -9,6 +9,7 @@ import re
 
 from backend.core.errors import ExternalServiceError
 from backend.db.ynab_config_store import YnabConfigStore
+from backend.services.budget_app import current
 from backend.services.ynab_migration import source
 
 PLAN_MAX_BYTES = 96 * 1024 * 1024
@@ -27,10 +28,10 @@ class RateCapReached(ExternalServiceError):
     """The run has used its request budget, or YNAB answered 429; what is left waits for the
     next run. Never slept on: the run lock is held while a run waits."""
 
-    def __init__(
-        self, message: str = "YNAB request limit reached; the rest waits for the next run"
-    ):
-        super().__init__(message)
+    def __init__(self, message: str | None = None):
+        super().__init__(
+            message or f"{current().name} request limit reached; the rest waits for the next run"
+        )
 
 
 class Budget:
@@ -114,7 +115,36 @@ class YnabClient:
         )["category"]
 
 
+class Refused(ExternalServiceError):
+    """The app refused this request's content, said by a client with no HTTP status to say it."""
+
+
+class NotThere(Refused):
+    """What the request is about no longer exists."""
+
+
+class Moved(Refused):
+    """What the request is about changed since this run read it. Nothing was written."""
+
+
+class Stopped(ExternalServiceError):
+    """Ends the run, whatever its words say."""
+
+
 def rejected(exc: Exception) -> bool:
-    """YNAB refused this request's content (400/404/409) — the change is not retryable as sent,
-    unlike an auth failure, an outage or the rate limit, which stop the whole run."""
-    return any(f"HTTP {code}" in str(exc) for code in (400, 404, 409))
+    """The app refused this request's content (for YNAB: 400/404/409) — the change is not
+    retryable as sent, unlike an auth failure, an outage or the rate limit, which stop the whole
+    run."""
+    if isinstance(exc, Stopped):
+        return False
+    return isinstance(exc, Refused) or any(f"HTTP {code}" in str(exc) for code in (400, 404, 409))
+
+
+def not_found(exc: Exception) -> bool:
+    if isinstance(exc, Stopped):
+        return False
+    return isinstance(exc, NotThere) or "HTTP 404" in str(exc)
+
+
+def moved(exc: Exception) -> bool:
+    return isinstance(exc, Moved)

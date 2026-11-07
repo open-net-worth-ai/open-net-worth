@@ -129,12 +129,12 @@ def test_first_greeting_is_concise_before_asking_for_a_name(db_isolated):
     assert "Do not list capabilities" in body
 
 
-def test_the_skill_is_honest_about_migration_not_existing(db_isolated):
-    """YNAB/Actual budget migration is unbuilt. Lucius must not imply it works — the connector
-    syncs transactions only."""
+def test_the_skill_says_where_a_budget_app_import_is(db_isolated):
+    """YNAB and Actual budgets import from Data sync, and the person runs it from that screen."""
     body = _onboarding_skill_body()
-    assert "YNAB" in body
-    assert "not built yet" in body
+    assert "YNAB" in body and "Actual Budget" in body
+    assert "Automations > Data sync" in body
+    assert "not built yet" not in body
 
 
 def test_the_skill_is_both_host_and_model_invocable(db_isolated):

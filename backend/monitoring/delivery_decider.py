@@ -11,6 +11,9 @@ Code keeps only safety rails; judgement stays in the prompt (``delivery_prompt``
 * a decision that is missing or not now / later / skip waits (never goes out now);
 * a model failure never holds back a level the user set — it goes out as written — and anything
   else waits;
+* a price alert always goes out now, whatever the model chose: the user asked to be told, and the
+  text the model judges can be shaped by a page. Crash-watch is an automatic detector, not a level
+  anyone chose, so holding back its repeats stays the model's call;
 * an item is told at most once (the ledger's status machine) and only after a send that reached
   at least one channel; a send that reached none is handed to ``push_retry``;
 * a message never carries a link the model was not given;
@@ -36,8 +39,8 @@ from backend.monitoring.delivery_prompt import (
     MESSAGE_CHARS,
     DeliveryOutput,
     build_prompt,
-    strip_unknown_links,
 )
+from backend.monitoring.text_sanitize import strip_unknown_links
 from backend.services.news_delivery import apply_delivery_change
 
 logger = logging.getLogger(__name__)
@@ -100,6 +103,9 @@ def _decision_for(item: dict, entry: Any, ok: bool, allowed: set[str]) -> dict:
             "reason": "model unavailable" if not ok else "no valid decision",
             "message": "",
         }
+    if chosen != "now" and item.get("source") == "price_alert":
+        reason = f"model chose {chosen} ({reason}); a price alert the user set always goes out"
+        chosen = "now"
     message = _message_for(item, getattr(entry, "message", ""), allowed) if chosen == "now" else ""
     return {"id": item["id"], "decision": chosen, "reason": reason, "message": message}
 

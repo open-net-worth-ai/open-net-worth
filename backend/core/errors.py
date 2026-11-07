@@ -156,6 +156,14 @@ class ProviderTimeoutError(ExternalServiceError):
         self.stalled = stalled
 
 
+class CliNotSignedInError(ExternalServiceError):
+    """A local CLI provider has no login to spend, so its turn was refused. Installed is not
+    signed in: the Docker image ships the CLIs with no login at all. The message names the CLI
+    and where to sign in; the chat surface shows it as written, as a setup hint."""
+
+    code = "cli_not_signed_in"
+
+
 class MissingFxRateError(ExternalServiceError):
     """A conversion cannot be valued without a finite, positive exchange rate."""
 
@@ -202,6 +210,10 @@ class UnknownFeatureFlagError(NotFoundError):
 
 class FeatureFlagLockedError(ConflictError):
     """A feature flag cannot be changed here (the public demo always runs the defaults)."""
+
+
+class ToolCallLimitError(OpenNetWorthError):
+    """A turn with an enforced tool list kept calling tools after being refused."""
 
 
 class ConfigurationError(OpenNetWorthError):

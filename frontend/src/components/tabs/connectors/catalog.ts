@@ -117,6 +117,9 @@ export interface CatalogProvenance {
   /** What the entry is FOR. Same inheritance, same reason — an installed server should not
    *  lose the topical tags its own catalog card carries. */
   categories: ConnectorCategory[]
+  /** Which lane the entry is listed in. Same inheritance: an installed server stays in the
+   *  section its directory card sits in. */
+  families: ConnectorFamily[]
   /** The entry's subtitle and description. Same inheritance: a listed server's page reads
    *  what its directory card read, not the generic text a hand-added server falls back to. */
   sub?: string
@@ -264,8 +267,8 @@ export const CATALOG: CatalogEntry[] = [
     name: 'Voice calls',
     families: ['Channel'],
     categories: ['Voice'],
-    icon: 'phone',
-    hue: 'var(--accent)',
+    icon: 'voice',
+    hue: 'var(--cta)',
     // sub/desc: read live from `services/connector_copy.py` SHORT/LONG["voice"].
     publisher: 'Open Net Worth',
     verification: 'unverified',
@@ -380,6 +383,26 @@ export const CATALOG: CatalogEntry[] = [
     mcp: false,
     popular: false,
     tools: ['get_connector_status', 'connector_sync'],
+  },
+  {
+    // Behind the `actual_budget_sync` flag. No Lucius tools: it is driven from the Data sync tab.
+    id: 'actual_budget',
+    flag: 'actual_budget_sync',
+    name: 'Actual Budget',
+    families: ['Data source'],
+    categories: ['Banking'],
+    icon: 'accounts',
+    hue: 'var(--accent)',
+    // sub/desc: read live from `_SHORT_DESC`/`_LONG_DESC["actual_budget"]`.
+    publisher: 'Actual Budget',
+    verification: 'unverified',
+    homepageUrl: 'https://actualbudget.org',
+    repoUrl: 'https://github.com/actualbudget/actual',
+    supportUrl: 'https://github.com/actualbudget/actual/issues',
+    // No privacy link: the server is the person's own, so no vendor sees the data.
+    mcp: false,
+    popular: false,
+    tools: [],
   },
   {
     id: 'enable_banking',
@@ -746,6 +769,25 @@ export const CATALOG: CatalogEntry[] = [
     // every non-browser client, so it is the one link here that could not be checked the way
     // all the others were. Shipping an unchecked link is precisely what this file avoids.
     privacyUrl: 'https://mercury.com/legal/privacy',
+    mcp: true,
+    popular: false,
+    tools: [],
+  },
+  {
+    id: 'mcp-monarch',
+    name: 'Monarch',
+    families: ['Data source'],
+    categories: ['Banking'],
+    icon: 'accounts',
+    hue: 'var(--apt)',
+    sub: 'Reads and edits your Monarch transactions and budgets',
+    desc: 'Connect Monarch’s own hosted server to let Lucius work with your Monarch data: transactions, accounts, balances, categories, budgets and net worth. If you allow writing, it can also create and edit transactions, tags and rules, and Monarch can’t undo those changes. Sign-in happens in the browser over OAuth, and Monarch’s consent page lets you leave Write unticked for read-only access. Accounts Monarch gets through Finicity aren’t available to it yet, which particularly affects Fidelity. Monarch sets a weekly usage limit, higher on Plus than on Core.',
+    publisher: 'Monarch',
+    verification: 'verified',
+    // help.monarch.com publishes this endpoint, but it refuses non-browser clients, so it is
+    // the link left out here.
+    homepageUrl: 'https://www.monarch.com',
+    privacyUrl: 'https://www.monarch.com/privacy',
     mcp: true,
     popular: false,
     tools: [],
@@ -1214,6 +1256,7 @@ export const MCP_INSTALL_PRESETS: Record<string, McpInstallPreset> = {
     env: 'XERO_CLIENT_ID=\nXERO_CLIENT_SECRET=',
   },
   'mcp-mercury': { transport: 'remote', url: 'https://mcp.mercury.com/mcp', auth: 'oauth' },
+  'mcp-monarch': { transport: 'remote', url: 'https://api.monarch.com/mcp', auth: 'oauth' },
   // The address IBKR publishes for "any MCP client" (connector v1.1.5 release notes) — the same
   // OAuth server behind its Claude/ChatGPT/Grok directory listings.
   'mcp-ibkr': { transport: 'remote', url: 'https://api.ibkr.com/v1/api/mcp-public', auth: 'oauth' },
@@ -1423,6 +1466,7 @@ export function catalogProvenanceFor(endpoint: string | undefined): CatalogProve
         homepageUrl: entry.homepageUrl,
         logo: connectorLogo(entry.id),
         categories: entry.categories,
+        families: entry.families,
         sub: entry.sub,
         desc: entry.desc,
       }

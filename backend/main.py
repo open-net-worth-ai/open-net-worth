@@ -91,6 +91,7 @@ from backend.api._deps import require_auth
 from backend.api.account_linking_api import router as account_linking_router
 from backend.api.actions_api import router as actions_router
 from backend.api.activity import router as activity_router
+from backend.api.actual_budget_api import router as actual_budget_router
 from backend.api.alerts import router as alerts_router
 from backend.api.alpaca_api import router as alpaca_router
 from backend.api.artifacts import router as artifacts_router
@@ -229,7 +230,13 @@ async def _start_connector(name: str, start) -> None:
 
 
 async def _headless_turn_runner(
-    prompt: str, *, allowed_tools=None, model=None, lean_prompt=False
+    prompt: str,
+    *,
+    allowed_tools=None,
+    model=None,
+    lean_prompt=False,
+    enforce_offer=False,
+    effort="medium",
 ) -> str:
     """The headless-turn runner registered on the ``core.headless_turn`` seam (below, in
     ``lifespan``) so a service can run one Lucius turn WITHOUT ``services`` importing ``ai``
@@ -260,6 +267,9 @@ async def _headless_turn_runner(
 
     lean_prompt = use the short system prompt instead of the full conversational one — right
     for a zero-tool completion that only has to return text.
+
+    enforce_offer = make ``allowed_tools`` a real ceiling for this turn. Without it an offer is
+    advisory: a call outside it still dispatches, and nobody is here to tap a card.
     """
     import uuid
 
@@ -281,6 +291,8 @@ async def _headless_turn_runner(
     _snap = _skill_scope.snapshot_scope()
     if allowed_tools is not None:
         _skill_scope.set_offer_scope(allowed_tools)
+    if enforce_offer:
+        _skill_scope.enforce_offer()
     run_model = model or ModelConfigStore().resolved()["model"]
     short_id = str(uuid.uuid4())[:8]
     session_id = f"headless-{short_id}"
@@ -298,6 +310,7 @@ async def _headless_turn_runner(
                 else build_system_prompt()
             ),
             model=run_model,
+            effort=effort,
         ):
             if event.get("type") == "text_delta":
                 parts.append(event.get("text", ""))
@@ -401,6 +414,13 @@ async def lifespan(app: FastAPI):
     from backend.services.portability import sweep_stale_exports
 
     sweep_stale_exports()
+
+    try:
+        from backend.services.actual_sync import sweep_leftovers
+
+        sweep_leftovers()
+    except Exception:
+        _log.exception("Actual Budget leftover sweep failed (non-fatal)")
 
     # Boot sweep (B20): the parse-progress registry is in-process and ephemeral — a restart
     # (crash, `kill -9`, redeploy) mid-parse leaves no live entry to ask, so any statement
@@ -886,6 +906,10 @@ async def lifespan(app: FastAPI):
 
     await cancel_memory_extractions()
     unregister_automation_adapters()
+    # Before the channels stop: a price alert's background run still owes its push.
+    from backend.monitoring import price_alert_run
+
+    await price_alert_run.drain()
     await telegram_bot.stop()
     from backend.connectors.voice import service as voice_service
 
@@ -1176,6 +1200,7 @@ app.include_router(ibkr_router)
 app.include_router(yodlee_router)
 app.include_router(lunch_money_router)
 app.include_router(ynab_router)
+app.include_router(actual_budget_router)
 app.include_router(import_runs_router)
 app.include_router(account_linking_router)
 app.include_router(integrations_router)

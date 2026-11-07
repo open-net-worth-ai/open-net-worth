@@ -21,8 +21,8 @@ _NAME = "Voice calls"
 SECRET_KEYS = ("api_key", "api_secret")
 
 # Defaults that work on LiveKit Cloud with nothing else to set up (its built-in inference).
-# The front voice must answer in about a second, so its default is a fast model; Lucius on a
-# call defaults to the conversation's own model unless ``lucius_model`` names one.
+# The front voice must answer in about a second, so its default is a fast model. Lucius on a call
+# uses the conversation's own model: there is no second setting for it.
 CONFIG_DEFAULTS: dict = {
     "livekit_url": "",
     "front_model": "google/gemma-4-31b-it",
@@ -30,7 +30,6 @@ CONFIG_DEFAULTS: dict = {
     # The cheapest voice that speaks every language in ``LANGUAGES``; a saved voice stays as it is.
     "tts_model": "inworld/inworld-tts-2-flash",
     "tts_voice": "",
-    "lucius_model": "",
     "language": "en",
 }
 
@@ -53,8 +52,11 @@ LANGUAGES: dict[str, str] = {
     "de": "German",
     "pt": "Portuguese",
 }
-# Speech-to-text models that hear English only (LiveKit's model table, 2026-11-03).
-ENGLISH_ONLY_STT = frozenset({"assemblyai/universal-streaming"})
+# Speech-to-text models that hear only some of ``LANGUAGES`` (LiveKit's model table, 2026-11-06).
+STT_HEARS_ONLY: dict[str, frozenset[str]] = {
+    "assemblyai/universal-streaming": frozenset({"en"}),
+    "assemblyai/universal-streaming-multilingual": frozenset({"en", "es", "fr", "de", "pt"}),
+}
 
 
 def _merged(row: dict | None, secrets: dict) -> dict:

@@ -105,7 +105,7 @@ def test_resolve_holding_crypto_gets_google_only():
 def test_resolve_holding_without_instrument_id_still_scan_tagged():
     row = {"price_source_id": "AAPL", "label": "Apple", "asset_class": "equity"}
     fs = feeds.resolve_holding_feeds(row)
-    assert fs and all(f["subjects"] == ["scan:intel"] for f in fs)
+    assert fs and all(f["subjects"] == ["scan:intel", "ticker:AAPL"] for f in fs)
 
 
 def test_resolve_holding_empty_when_no_ticker_or_label():
@@ -232,3 +232,15 @@ def test_parse_rss_drops_dangerous_url_scheme():
     rss = b"<rss><channel><item><title>x</title><link>javascript:alert(1)</link></item></channel></rss>"
     h = feeds.parse_rss(rss)[0]
     assert h["url"] == ""
+
+
+def test_watch_item_without_instrument_tags_its_ticker():
+    """A watchlist item carries its symbol as `value`, and with no instrument its news would
+    otherwise land only in the shared scan pool, unreachable for that one stock."""
+    fs = feeds.resolve_holding_feeds({"value": "acme", "label": "ACME Entry"})
+    assert fs and all(f["subjects"] == ["scan:intel", "ticker:ACME"] for f in fs)
+
+
+def test_row_with_instrument_does_not_add_a_ticker_tag():
+    fs = feeds.resolve_holding_feeds({"instrument_id": "i1", "ticker": "ACME", "label": "ACME"})
+    assert fs and all(f["subjects"] == ["asset:i1", "scan:intel"] for f in fs)

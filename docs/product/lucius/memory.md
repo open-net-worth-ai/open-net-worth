@@ -270,6 +270,10 @@ works whether memory is on or off.
   section yet aren't in the reply; when you mention something he may have been told — *"my
   apartment"*, a nickname — he searches everything he remembers for it. The search is a plain
   keyword lookup and never changes a fact.
+- Before he flags something or asks you about it, he checks it against what he remembers, in chat
+  and in reports and automation runs too. He won't ask you to do what you've already done. What's
+  finished stays out. What's still open, like a charge you're disputing with your bank, gets a
+  short line on where it stands, and a reminder to recheck once its date arrives.
 - Memory is context, not proof. Before acting on anything that can change — a balance, a rate, a
   date — Lucius checks the records, and if they disagree the record wins and he fixes the memory.
 

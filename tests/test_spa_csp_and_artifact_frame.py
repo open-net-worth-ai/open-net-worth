@@ -62,6 +62,7 @@ def _spa(tmp_path, monkeypatch=None, state=None):
     return TestClient(spa)
 
 
+@pytest.mark.flags(voice_calls=False)  # on, the policy also names the voice server
 def test_html_shell_carries_the_csp_including_the_spa_fallback(tmp_path):
     client = _spa(tmp_path)
     for path in ("/", "/accounts/some/deep/link"):

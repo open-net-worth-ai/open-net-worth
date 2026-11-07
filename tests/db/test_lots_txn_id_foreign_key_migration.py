@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 
 from backend.db.alembic_config import make_config
 
-_BEFORE = "202611021300_merge_ynab_sync_and_news_deliveries"
+_BEFORE = "202611051800_actual_budget_sync"
 _AFTER = "202611061200_lots_txn_id_foreign_key"
 
 

@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from backend.db.automation_run_store import AutomationRunStore
 from backend.db.automation_store import AutomationStore
+from backend.db.session_store import SessionStore
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,8 @@ _RECENT_WINDOW = timedelta(hours=4)
 # Owner call (2026-10-14): a failure waits in Needs attention for at most a day. Most clear
 # sooner — a later good run settles them — but a paused or finished automation never runs
 # again, and its failure would otherwise sit there forever. The history list keeps "Failed".
+# Owner call (2026-11-06): opening the run's conversation also clears it — the row exists to get
+# you to the failure. A later failure is a new moment, so it comes back.
 _FAILED_WINDOW = timedelta(hours=24)
 _FETCH_LIMIT = 20
 # Generous multiple of _FETCH_LIMIT: terminal runs finish far more often than ones stay
@@ -165,12 +168,28 @@ def _failed_within(run: dict, now: datetime) -> bool:
         return False
 
 
-def _failed_items(now: datetime) -> list[dict]:
-    """Every automation whose LATEST run failed in the last ``_FAILED_WINDOW``, newest first.
+def _read_since_it_ended(run: dict) -> bool:
+    """Has the person opened this run's conversation since the run ended? Anything unreadable
+    answers no: an unseen failure must stay listed, and one bad row must not blank the panel."""
+    session_id = run.get("session_id")
+    ended = run.get("finished_at") or run.get("started_at")
+    if not session_id or not ended:
+        return False
+    try:
+        read_at = (SessionStore().get_meta(session_id) or {}).get("last_read_at")
+        return bool(read_at) and _parse_iso(read_at) > _parse_iso(ended)
+    except Exception:
+        logger.warning("activity: cannot read %r's read stamp", session_id, exc_info=True)
+        return False
 
-    A failure leaves sooner when a later run — a scheduled one, Run now, or a retry in the
+
+def _failed_items(now: datetime) -> list[dict]:
+    """Every automation whose LATEST run failed in the last ``_FAILED_WINDOW`` and that hasn't
+    been opened since, newest first.
+
+    A failure also leaves when a later run — a scheduled one, Run now, or a retry in the
     run's own conversation, which settles that same row — succeeds. A recurring automation
-    that keeps failing stays, since each failure is fresh."""
+    that keeps failing comes back, since each failure is fresh."""
     latest: dict[str, dict] = {}
     for run in AutomationRunStore().outcomes():
         if run.get("automation_id"):
@@ -181,7 +200,7 @@ def _failed_items(now: datetime) -> list[dict]:
         automation = automations.get(automation_id)  # all() already drops one being deleted
         if run.get("status") != "failed" or automation is None:
             continue
-        if not _failed_within(run, now):
+        if not _failed_within(run, now) or _read_since_it_ended(run):
             continue
         items.append(
             {

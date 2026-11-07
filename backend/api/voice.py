@@ -20,8 +20,8 @@ from backend.connectors.voice import service as voice_service
 from backend.connectors.voice.tokens import TTL_S, mint_call_token, new_room_name
 from backend.connectors.voice.tts_models import speaks
 from backend.db.voice_config_store import (
-    ENGLISH_ONLY_STT,
     LANGUAGES,
+    STT_HEARS_ONLY,
     VoiceConfigStore,
     is_ready,
     public,
@@ -59,7 +59,6 @@ class VoiceConfigPatch(BaseModel):
     stt_model: Optional[str] = None
     tts_model: Optional[str] = None
     tts_voice: Optional[str] = None
-    lucius_model: Optional[str] = None
     language: Optional[str] = None
 
 
@@ -86,12 +85,11 @@ def _check_language(saved: dict, body: VoiceConfigPatch) -> None:
     stt = body.stt_model if body.stt_model is not None else saved.get("stt_model") or ""
     if language not in LANGUAGES:
         raise HTTPException(status_code=422, detail="That language isn't available for calls.")
-    if language != "en" and stt in ENGLISH_ONLY_STT:
+    if stt in STT_HEARS_ONLY and language not in STT_HEARS_ONLY[stt]:
         raise HTTPException(
             status_code=422,
             detail=(
-                f"That speech-to-text model hears English only. Pick Automatic for "
-                f"{LANGUAGES[language]}."
+                f"That speech-to-text model doesn't hear {LANGUAGES[language]}. Pick Automatic."
             ),
         )
     tts = body.tts_model if body.tts_model is not None else saved.get("tts_model") or ""
@@ -111,7 +109,7 @@ def get_voice_config():
 
 @router.put("/api/voice/config")
 async def update_voice_config(body: VoiceConfigPatch):
-    """Save settings, then restart the worker so they apply (it reads them once, at start)."""
+    """Save settings. A call reads them when it starts; only a new connection restarts the worker."""
     _require_flag()
     url = (body.livekit_url or "").strip()
     if url and not _acceptable_url(url):
@@ -121,8 +119,10 @@ async def update_voice_config(body: VoiceConfigPatch):
         )
     store = VoiceConfigStore()
     _check_language(store.get(), body)
+    before = store.get()
     config = store.update(body.model_dump(exclude_none=True))
-    await voice_service.reload()
+    if voice_service.needs_restart(before, config):
+        await voice_service.reload()
     return _view(config)
 
 
@@ -148,8 +148,9 @@ def start_call(body: StartCallRequest, request: Request):
     if body.session_id and not demo_visitors.may_access(body.session_id, visitor, write=True):
         raise HTTPException(status_code=404, detail="No such conversation.")
     if body.session_id and _automation_owned(body.session_id):
+        # Its own status, not "not set up"'s 409: the page offers a new chat here, not settings.
         raise HTTPException(
-            status_code=409,
+            status_code=423,
             detail="A call can't join an Automation's conversation. Start a new chat.",
         )
     room = new_room_name()
@@ -177,12 +178,16 @@ def start_call(body: StartCallRequest, request: Request):
 
 
 @router.get("/api/voice/call/health")
-def call_health(room: str):
+def call_health(room: str, mic: Optional[str] = None):
     """Whether this call's line is broken on the app's side, which the call screen takes no
     answer at all to mean as well, and whether Lucius is working on something: away from the chat
     a phone has no other way to know. Asked every few seconds."""
     _require_flag()
     session_id = voice_service.call_session(room)
+    # Not on the public demo, whose visitors would fill the log. No check for the room: a call the
+    # worker has claimed isn't in call_session any more, which is every call that's on.
+    if mic and not demo_calls.enabled():
+        voice_service.note_mic(mic)
     return {
         "trouble": voice_service.call_connection_trouble(room),
         "working": bool(session_id and turns.executing_turn_id(session_id)),

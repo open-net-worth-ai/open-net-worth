@@ -22,7 +22,7 @@ PRECOMMIT  := $(if $(wildcard $(VENV)/bin/pre-commit),$(VENV)/bin/pre-commit,pre
 IMPORTLINT := $(if $(wildcard $(VENV)/bin/lint-imports),$(VENV)/bin/lint-imports,lint-imports)
 
 .DEFAULT_GOAL := check
-.PHONY: release-commit check lint imports type test build format install install-hooks setup start bundle wheel seed dev serve demo demo-host demo-reset demo-rebuild demo-stop demo-layout-save demo-layout-restore qa qa-cu qa-cu-mock qa-clean qa-manual qa-manual-stop qa-fresh qa-fresh-stop qa-fresh-reset qa-ports-free ui-gate qa-e2e qa-e2e-crypto-market-data qa-e2e-setup qa-acceptance-check qa-data dedup-eval bug help db-upgrade db-revision db-check daemon-start daemon-stop daemon-status docs-site docs-site-embed docs-lint cli-smoke cli-smoke-update cli-smoke-install cli-smoke-uninstall memory-eval memory-eval-mock
+.PHONY: release-commit check lint imports type test build format install install-hooks setup start bundle wheel seed dev serve demo demo-host demo-reset demo-rebuild demo-stop demo-layout-save demo-layout-restore qa qa-cu qa-cu-mock qa-clean qa-manual qa-manual-stop qa-fresh qa-fresh-stop qa-fresh-reset qa-ports-free ui-gate qa-e2e qa-e2e-crypto-market-data qa-e2e-setup qa-acceptance-check qa-data dedup-eval bug help db-upgrade db-revision db-check daemon-start daemon-stop daemon-status docs-site docs-site-embed docs-lint cli-smoke cli-smoke-update cli-smoke-install cli-smoke-uninstall actual-smoke memory-eval memory-eval-mock
 
 # QA needs a real key for any LLM-dependent spec: clone_data_for_qa deliberately strips
 # stored provider keys, so the cloned instance has none. Prefer an exported ANTHROPIC_API_KEY;
@@ -337,6 +337,12 @@ cli-smoke-install:
 
 cli-smoke-uninstall:
 	$(PY) scripts/cli_smoke.py uninstall
+
+## actual-smoke: OPT-IN live regression of the Actual Budget sync — a pinned server and the official
+##               client on a local port, made-up budgets, installed once into a cache folder. Needs
+##               Node 22+. Never part of `make check`. ARGS="-k tracking" narrows it.
+actual-smoke:
+	$(PY) scripts/actual_smoke.py $(if $(ARGS),-- $(ARGS))
 
 ## backup: on-demand full-data backup (also runs automatically once a day — see Settings → Data)
 backup:

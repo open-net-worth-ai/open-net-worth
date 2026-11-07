@@ -1,0 +1,33 @@
+name: Mirror releases
+
+# Gives this repo a release entry for each one published in open-net-worth-releases, which builds
+# and publishes everything. See scripts/mirror_releases.py. It uses GITHUB_TOKEN on purpose: events
+# from that token start no workflows, and the tags carry no `v`, so neither can start release.yml.
+on:
+  schedule:
+    - cron: "23 * * * *"
+  workflow_dispatch:
+    inputs:
+      only:
+        description: Mirror just this tag of the releases repo, e.g. v0.1.40
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mirror-releases
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Create the missing entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ONLY: ${{ inputs.only }}
+        run: python3 scripts/mirror_releases.py ${ONLY:+--only "$ONLY"}

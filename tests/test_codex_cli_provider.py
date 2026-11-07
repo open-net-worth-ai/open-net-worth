@@ -888,3 +888,17 @@ def test_the_tool_protocol_is_the_one_shared_by_both_cli_transports():
     from backend.ai.models import claude_cli_tools
 
     assert claude_cli_tools.ToolCallScanner is ToolCallScanner
+
+
+def test_the_exec_transport_ignores_codex_saying_it_will_reconnect():
+    """`codex exec --json` on 0.160 has no retry field, only this line, and then finishes the
+    turn normally. Exec sends whole messages, so nothing can be shown twice."""
+    line = {
+        "type": "error",
+        "message": "Reconnecting... 1/3 (stream disconnected before completion: closed early)",
+    }
+    assert ccp._classify(line)["kind"] == "ignore"
+
+
+def test_the_exec_transport_still_fails_on_a_real_error():
+    assert ccp._classify({"type": "error", "message": "usage limit reached"})["kind"] == "error"

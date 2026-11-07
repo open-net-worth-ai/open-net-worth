@@ -7,6 +7,7 @@ The wire shapes asserted here are not invented: they were captured from a live
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -16,7 +17,7 @@ import pytest
 
 from backend.ai.models import codex_app_server as cas
 from backend.ai.models import codex_cli_provider as ccp
-from backend.core.errors import ExternalServiceError
+from backend.core.errors import CliNotSignedInError, ExternalServiceError
 
 THREAD_ID = "019fbbae-29a8-7c73-821d-aef48de1a574"
 TURN_ID = "019fbbae-29cf-7991-8ee7-c323140a9b42"
@@ -214,9 +215,12 @@ for raw in sys.stdin:
               "params": {"threadId": THREAD, "thread": {"id": THREAD}}})
         send({"jsonrpc": "2.0", "id": mid, "result": {"thread": {"id": THREAD}}})
         record("thread/start", msg.get("params") or {})
+    elif method == "turn/interrupt":
+        record("turn/interrupt", msg.get("params") or {})
+        send({"jsonrpc": "2.0", "id": mid, "result": {}})
     elif method == "turn/start":
         record("turn/start", msg.get("params") or {})
-        send({"jsonrpc": "2.0", "id": mid, "result": {}})
+        send({"jsonrpc": "2.0", "id": mid, "result": {"turn": {"id": "turn-1"}}})
         script = TURNS[min(turn_n, len(TURNS) - 1)]
         turn_n += 1
         for note in script:
@@ -1178,3 +1182,203 @@ async def test_reasoning_in_a_continuation_turn_does_not_fuse_onto_the_first(tmp
     thinking = "".join(e["text"] for e in events if e["type"] == "thinking_delta")
     assert "****" not in thinking
     assert thinking.strip() == "**Planning Gmail lookup**\n\n**Planning Gmail MCP schema**"
+
+
+_UNAUTHORIZED = (
+    "unexpected status 401 Unauthorized: Missing bearer or basic authentication in header, "
+    "url: https://api.openai.com/v1/responses"
+)
+
+
+def _rejected_turn():
+    return {
+        "method": "turn/completed",
+        "params": {"turn": {"status": "failed", "error": {"message": _UNAUTHORIZED}}},
+    }
+
+
+@pytest.mark.asyncio
+async def test_a_turn_with_no_login_says_sign_in_and_marks_the_child_for_a_reread(tmp_path):
+    """The frames are the ones `codex-cli 0.160.0` really sends with an empty CODEX_HOME."""
+    cli, _record = _fake_server(tmp_path, [_rejected_turn()])
+    provider = ccp.CodexCliProvider(cli_path=cli)
+
+    with pytest.raises(CliNotSignedInError, match="Codex isn't signed in"):
+        await _drain_stream(
+            provider,
+            messages=[{"role": "user", "content": "hi"}],
+            tools=[],
+            system="s",
+            model="m",
+            effort="low",
+        )
+
+    client = cas.client_for(cli)
+    assert client._login_stale is True
+    await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_a_complete_with_no_login_says_sign_in_too(tmp_path):
+    cli, _record = _fake_server(tmp_path, [_rejected_turn()])
+    provider = ccp.CodexCliProvider(cli_path=cli)
+
+    with pytest.raises(CliNotSignedInError):
+        await provider.complete("hi", system="s", model="m", effort="low")
+    await cas.client_for(cli).aclose()
+
+
+# ── Codex's own retries ───────────────────────────────────────────────────────
+#
+# Frame shapes measured on codex-cli 0.160.0 against a server that drops the stream. Codex says
+# "Reconnecting... n/m" with `willRetry: true` and carries on by itself. Before the drop reaches
+# any text the retry is invisible and the turn completes. After text it re-sends the whole reply
+# as a new message, so there is no way to continue without showing it twice.
+
+
+def _retrying(n=1, details="stream disconnected before completion: stream closed early"):
+    return {
+        "method": "error",
+        "params": {
+            "error": {
+                "message": f"Reconnecting... {n}/5",
+                "codexErrorInfo": {"responseStreamDisconnected": {"httpStatusCode": None}},
+                "additionalDetails": details,
+            },
+            "willRetry": True,
+        },
+    }
+
+
+def _gave_up(message="stream disconnected before completion: stream closed early"):
+    return {
+        "method": "error",
+        "params": {
+            "error": {"message": message, "codexErrorInfo": "other", "additionalDetails": None},
+            "willRetry": False,
+        },
+    }
+
+
+def _reasoning(text):
+    return {"method": "item/reasoning/summaryTextDelta", "params": {"delta": text}}
+
+
+_CHAT = {
+    "messages": [{"role": "user", "content": "hi"}],
+    "tools": [],
+    "system": "s",
+    "model": "m",
+    "effort": "low",
+}
+
+
+def _visible(events) -> str:
+    return "".join(e["text"] for e in events if e.get("type") == "text_delta")
+
+
+def test_a_frame_codex_will_retry_is_not_an_error():
+    ev = cas.classify(_retrying())
+    assert ev["kind"] == "retrying"
+    assert ev["text"] == "stream disconnected before completion: stream closed early"
+
+
+def test_a_frame_codex_gave_up_on_reads_as_its_message_not_as_json():
+    ev = cas.classify(_gave_up("usage limit reached"))
+    assert ev == {"kind": "error", "text": "usage limit reached", "usage": {}}
+
+
+def test_an_error_frame_with_no_retry_field_is_still_an_error():
+    ev = cas.classify({"method": "error", "params": {"message": "boom"}})
+    assert ev["kind"] == "error" and ev["text"] == "boom"
+
+
+def test_additional_details_are_kept_beside_a_vague_message():
+    frame = _gave_up("request failed")
+    frame["params"]["error"]["additionalDetails"] = "connection reset"
+    assert cas.classify(frame)["text"] == "request failed: connection reset"
+
+
+def test_details_already_in_the_message_are_not_repeated():
+    frame = _gave_up("request failed: connection reset")
+    frame["params"]["error"]["additionalDetails"] = "connection reset"
+    assert cas.classify(frame)["text"] == "request failed: connection reset"
+
+
+@pytest.mark.asyncio
+async def test_a_retry_before_any_text_finishes_the_turn_normally(tmp_path):
+    cli, record = _fake_server(
+        tmp_path,
+        [_retrying(1), _retrying(2), _delta("all "), _delta("good"), _usage(), _completed()],
+    )
+    events = await _drain_stream(ccp.CodexCliProvider(cli_path=cli), **_CHAT)
+    assert _visible(events) == "all good"
+    assert len(_received_all(record, "turn/start")) == 1
+    await cas.client_for(cli).aclose()
+
+
+@pytest.mark.asyncio
+async def test_a_retry_after_only_reasoning_still_finishes_normally(tmp_path):
+    cli, _record = _fake_server(
+        tmp_path, [_reasoning("thinking"), _retrying(), _delta("answer"), _usage(), _completed()]
+    )
+    events = await _drain_stream(ccp.CodexCliProvider(cli_path=cli), **_CHAT)
+    assert _visible(events) == "answer"
+    await cas.client_for(cli).aclose()
+
+
+@pytest.mark.asyncio
+async def test_a_retry_after_text_stops_rather_than_showing_the_reply_twice(tmp_path):
+    cli, record = _fake_server(
+        tmp_path,
+        [_delta("Your net worth "), _retrying(), _delta("Your net worth "), _delta("is ACME.")],
+    )
+    seen = []
+    with pytest.raises(ExternalServiceError, match="dropped partway through the reply") as err:
+        async for event in ccp.CodexCliProvider(cli_path=cli).stream_chat(**_CHAT):
+            seen.append(event)
+    assert _visible(seen).strip() == "Your net worth"
+    assert "Reconnecting" not in str(err.value)
+    await _wait_for_interrupt(record)
+    await cas.client_for(cli).aclose()
+
+
+async def _wait_for_interrupt(record) -> None:
+    """The model must not keep running a reply nobody will read."""
+    for _ in range(100):
+        if '"turn/interrupt"' in record.read_text():
+            return
+        await asyncio.sleep(0.02)
+    raise AssertionError("the abandoned turn was never interrupted")
+
+
+@pytest.mark.asyncio
+async def test_retries_that_run_out_end_in_one_readable_error(tmp_path):
+    cli, _record = _fake_server(
+        tmp_path, [_retrying(1), _retrying(2), _gave_up("usage limit reached")]
+    )
+    with pytest.raises(ExternalServiceError) as err:
+        await _drain_stream(ccp.CodexCliProvider(cli_path=cli), **_CHAT)
+    assert "usage limit reached" in str(err.value)
+    assert "codexErrorInfo" not in str(err.value)
+    assert "Reconnecting" not in str(err.value)
+    await cas.client_for(cli).aclose()
+
+
+@pytest.mark.asyncio
+async def test_a_retry_that_never_comes_back_hits_the_turn_timeout(tmp_path, monkeypatch):
+    monkeypatch.setattr(cas, "_timeout_seconds", lambda: 0.5)
+    cli, _record = _fake_server(tmp_path, [_retrying()])
+    with pytest.raises(ExternalServiceError, match="timed out"):
+        await _drain_stream(ccp.CodexCliProvider(cli_path=cli), **_CHAT)
+    await cas.client_for(cli).aclose()
+
+
+@pytest.mark.asyncio
+async def test_an_exhausted_login_rejection_during_retries_still_says_sign_in(tmp_path):
+    cli, _record = _fake_server(
+        tmp_path, [_retrying(details=_UNAUTHORIZED), _gave_up(_UNAUTHORIZED)]
+    )
+    with pytest.raises(CliNotSignedInError):
+        await _drain_stream(ccp.CodexCliProvider(cli_path=cli), **_CHAT)
+    await cas.client_for(cli).aclose()

@@ -557,7 +557,7 @@ def test_an_older_signed_release_is_not_a_downgrade(monkeypatch, tmp_path):
 
 def test_a_newer_release_installs_then_asks_the_server_to_exit(monkeypatch, tmp_path):
     scene = Scene(monkeypatch, tmp_path)
-    monkeypatch.setattr(self_update.os, "name", "posix")
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", False)
 
     assert scene.upgrader.attempt() is True
 
@@ -567,7 +567,7 @@ def test_a_newer_release_installs_then_asks_the_server_to_exit(monkeypatch, tmp_
 
 def test_nothing_installs_while_a_turn_is_running(monkeypatch, tmp_path):
     scene = Scene(monkeypatch, tmp_path)
-    monkeypatch.setattr(self_update.os, "name", "posix")
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", False)
     answers = iter([False, False, True])
     seen_installs = []
 
@@ -605,7 +605,7 @@ def test_a_wheel_changed_during_the_idle_wait_is_refused(monkeypatch, tmp_path):
 
 def test_work_started_during_the_install_gets_to_finish_before_the_exit(monkeypatch, tmp_path):
     scene = Scene(monkeypatch, tmp_path)
-    monkeypatch.setattr(self_update.os, "name", "posix")
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", False)
     answers = iter([True, False, False, True])
     exits_while_busy = []
 
@@ -623,7 +623,7 @@ def test_work_started_during_the_install_gets_to_finish_before_the_exit(monkeypa
 
 def test_stuck_work_cannot_hold_a_swapped_install_forever(monkeypatch, tmp_path):
     scene = Scene(monkeypatch, tmp_path)
-    monkeypatch.setattr(self_update.os, "name", "posix")
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", False)
     monkeypatch.setattr(self_update, "DRAIN_SECONDS", 0.01)
     answers = iter([True])
     scene.upgrader.is_idle = lambda: next(answers, False)
@@ -645,7 +645,7 @@ def test_stopping_while_busy_installs_nothing(monkeypatch, tmp_path):
 
 def test_a_failed_install_keeps_the_server_up(monkeypatch, tmp_path):
     scene = Scene(monkeypatch, tmp_path, installs=False)
-    monkeypatch.setattr(self_update.os, "name", "posix")
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", False)
 
     with pytest.raises(UpgradeError):
         scene.upgrader.attempt()
@@ -678,7 +678,7 @@ def test_a_failed_check_does_not_end_the_loop(monkeypatch, tmp_path):
 
 def test_under_the_service_the_exit_code_asks_for_a_restart(monkeypatch, tmp_path):
     scene = Scene(monkeypatch, tmp_path)
-    monkeypatch.setattr(self_update.os, "name", "posix")
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", False)
     scene.upgrader.attempt()
 
     assert scene.upgrader.exit_code() == self_update.RESTART_EXIT_CODE
@@ -687,7 +687,7 @@ def test_under_the_service_the_exit_code_asks_for_a_restart(monkeypatch, tmp_pat
 
 def test_in_a_terminal_it_replaces_itself(monkeypatch, tmp_path):
     scene = Scene(monkeypatch, tmp_path, service=False)
-    monkeypatch.setattr(self_update.os, "name", "posix")
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", False)
     monkeypatch.setattr(self_update.sys, "argv", ["onw", "start", "--auto-upgrade"])
     replaced = []
     monkeypatch.setattr(self_update.os, "execv", lambda path, argv: replaced.append(argv))
@@ -710,12 +710,10 @@ def test_windows_hands_over_and_exits_zero_so_the_task_cannot_restart_the_old_co
     monkeypatch.setattr(
         self_update.autostart_windows, "restart_command", lambda _py: ["schtasks", "/Run"]
     )
-    monkeypatch.setattr(self_update.os, "name", "nt")
-    try:
-        assert scene.upgrader.attempt() is True
-        code = scene.upgrader.exit_code()
-    finally:
-        monkeypatch.undo()
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", True)
+
+    assert scene.upgrader.attempt() is True
+    code = scene.upgrader.exit_code()
 
     assert scene.installed == []
     assert scene.helpers[0][2:] == (["schtasks", "/Run"], False)
@@ -880,7 +878,7 @@ def test_upgrade_installs_the_verified_wheel_never_uv_tool_upgrade(monkeypatch, 
     monkeypatch.setattr(self_update, "find_installer", lambda: Installer("uv", tmp_path))
     monkeypatch.setattr(self_update, "latest_release", release)
     monkeypatch.setattr(self_update, "download_wheel", lambda rel, d: d / rel.wheel_name)
-    monkeypatch.setattr(self_update.os, "name", "posix")
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", False)
     monkeypatch.setattr(
         self_update.upgrade_steps, "boots_in_a_scratch_copy", lambda *_a, **_kw: True
     )
@@ -940,6 +938,7 @@ def test_the_service_carries_the_flag_only_when_asked(tmp_path):
     assert "--autostart" not in command  # or the service would reinstall itself on every start
 
 
+@pytest.mark.skipif(not hasattr(os, "getuid"), reason="launchctl domains are per-uid")
 def test_launchd_keeps_the_flags_across_reboots(tmp_path):
     runner = lambda cmd: subprocess.CompletedProcess(cmd, 0, "", "")  # noqa: E731
 

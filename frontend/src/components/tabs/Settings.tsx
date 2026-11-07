@@ -43,6 +43,7 @@ import {
 } from '../../ui/icons'
 import type { IconProps } from '../../ui/icons'
 import { SectionBackProvider, SectionBusyProvider, useToast } from './settings/ds'
+import { SettingsVersion } from './settings/SettingsVersion'
 import type { SectionBack } from './settings/ds'
 import { Spark } from '../../lucius/identity'
 import { PROFILE_KEY, fetchJson } from '../../hooks/serverState'
@@ -498,6 +499,7 @@ export function Settings({
               {!shown.length ? <span className="rd-set-nohits">No matching settings</span> : null}
             </div>
           )}
+          <SettingsVersion />
         </nav>
       )}
       <div className="rd-set-pane" {...swipeBackHandlers}>
@@ -582,6 +584,7 @@ export function Settings({
                     </div>
                   </div>
                 ))}
+                <SettingsVersion />
               </div>
             ) : (
               <SectionBusyProvider onChange={bumpBusy}>

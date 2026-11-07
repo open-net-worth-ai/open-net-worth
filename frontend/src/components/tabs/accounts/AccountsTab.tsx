@@ -276,7 +276,6 @@ export function AccountsTab({
   // them. "Start review" reviews everything flagged — the same set the register filter and
   // the count show; Lucius's door reviews automation rows only.
   const surfaces = useTransactionSurfaces()
-  const [reviewTotal, setReviewTotal] = useState(0)
   // The count follows the ledger bus directly: the app-level surfaces' approvals announce
   // there (the shell's refreshSignal follows it too, a beat later).
   const ledgerVersion = useDataVersion('ledger')
@@ -288,29 +287,24 @@ export function AccountsTab({
   // automations" keeps its own, narrower count.
   // On an account page both are that account's alone — the filter is scoped to it, so a
   // book-wide count there promised rows the filter then didn't show (owner report 2026-10-26).
-  const loadReviewTotal = useCallback(
-    async (isCurrent: () => boolean = () => true) => {
-      const scope = selectedId ? `&account_id=${encodeURIComponent(selectedId)}` : ''
-      try {
-        const response = await authFetch(
-          `/api/transactions/recently-added?needs_review=true${scope}&limit=1`,
-        )
-        if (!response.ok) return
-        const body = (await response.json()) as { total?: number }
-        if (isCurrent()) setReviewTotal(body.total ?? 0)
-      } catch {
-        /* the count keeps its last value */
-      }
+  // Read through the query cache so coming back from another screen (Lucius → Accounts) paints
+  // the last count in the first frame: a fresh `0` hid the review pill and the line grew when the
+  // fetch landed (owner report 2026-11-06). It still revalidates on every mount and write.
+  const reviewScope = selectedId ? `&account_id=${encodeURIComponent(selectedId)}` : ''
+  // The whole response, not its total: the Dashboard reads this same key (`attentionFlags.ts`), and a
+  // bare count here drew its object on Accounts and crashed the tab (owner's phone, 2026-11-07).
+  const reviewQuery = useQueryCache<{ total?: number }>(
+    `/api/transactions/recently-added?needs_review=true${reviewScope}&limit=1`,
+    async () => {
+      const response = await authFetch(
+        `/api/transactions/recently-added?needs_review=true${reviewScope}&limit=1`,
+      )
+      if (!response.ok) throw new Error('review count unavailable')
+      return (await response.json()) as { total?: number }
     },
-    [selectedId],
+    { version: (refreshSignal ?? 0) + ledgerVersion },
   )
-  useEffect(() => {
-    let active = true
-    void loadReviewTotal(() => active)
-    return () => {
-      active = false
-    }
-  }, [refreshSignal, ledgerVersion, loadReviewTotal])
+  const reviewTotal = reviewQuery.data?.total ?? 0
   const selectAccount = (id: string | null) => {
     setSelectedId(id)
     onSelectAccount?.(id)

@@ -1,22 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { authFetch } from '../../../api/client'
-import { fAmountNative, fDate } from '../../../utils/format'
-import { Button, Checkbox, Cluster, Modal, PageTabs, Skeleton, Stack, Text } from '../../ui'
-import { TYPE_LABELS, type AccountType } from '../accounts/categories'
+import { invalidateQueryCache } from '../../../state/queryCache'
+import { Button, Cluster, Modal, PageTabs, Stack, Text } from '../../ui'
 import { PMSelect } from '../accounts/ds'
+import { YNAB_APP, type BudgetAppInfo } from '../automations/datasync/budgetApps'
+import { Accounts, Meta, Placeholder, Transactions } from './ReviewPanes'
+import { CurrencyRow, ImportBlockReader, SettleAccounts } from './ReviewSettle'
+import { importBlockKey, useAccountTypes } from './reviewTypes'
+import { BLOCKED_NOTE_ID, Notes, SettleNotes, TYPES_NOTE_ID } from './reviewNotes'
 import { ASK, Categories } from './YnabCategories'
-import {
-  messageOf,
-  useRun,
-  type LinkMatch,
-  type Preview,
-  type PreviewAccount,
-  type PreviewCategory,
-  type PreviewTxn,
-} from './runs'
-import type { SyncDirection } from './sync'
+import { messageOf, useRun } from './runs'
+import type { SyncChoice } from './sync'
 
-// The review before a YNAB import, in one window: a line saying what the plan holds, what it
+// The review before a budget app's import, in one window: a line saying what the plan holds, what it
 // changes in this book, then the plan itself in three tabs (accounts, categories, transactions)
 // over a pane of fixed height, so neither switching tabs nor the read finishing resizes it. It
 // shows ONE preview run at a time; the import it starts turns the sync on itself when it succeeds
@@ -33,30 +29,39 @@ import type { SyncDirection } from './sync'
 // re-checked like an account's. A category that matches several of the book's must be picked
 // before the import can start.
 
-type SyncChoice = SyncDirection | 'off'
 type Pane = 'accounts' | 'categories' | 'transactions'
 
-const SYNC_OPTIONS: { value: SyncChoice; label: string }[] = [
+const TYPES_SETTLE_MS = 400
+
+const syncOptions = (app: BudgetAppInfo): { value: SyncChoice; label: string }[] => [
   { value: 'both', label: 'Keep in sync both ways' },
-  { value: 'from_ynab', label: 'Sync from YNAB only' },
-  { value: 'to_ynab', label: 'Sync to YNAB only' },
+  { value: 'from_ynab', label: `Sync from ${app.name} only` },
+  { value: 'to_ynab', label: `Sync to ${app.name} only` },
   { value: 'off', label: 'Don’t sync, import once' },
 ]
 
-const plural = (n: number, one: string, many = `${one}s`) =>
-  `${n.toLocaleString()} ${n === 1 ? one : many}`
-
 export function YnabReview({
+  app = YNAB_APP,
   runId,
   planLabel,
+  blockedAtStart = null,
+  initialSync = 'both',
   onClose,
   onStarted,
+  onConnect,
 }: {
+  app?: BudgetAppInfo
   runId: string
   /** "Name (CUR)" from the picker, so the window is titled before the plan is read. */
   planLabel: string
+  /** What the preview's own answer said an import would be refused with. */
+  blockedAtStart?: string | null
+  /** What the import does to the sync unless the person changes it here. */
+  initialSync?: SyncChoice
   onClose: () => void
   onStarted: () => void
+  /** Where a budget that can't be read gets fixed. */
+  onConnect?: () => void
 }) {
   const [shownId, setShownId] = useState(runId)
   const [checkId, setCheckId] = useState<string | null>(null)
@@ -66,12 +71,20 @@ export function YnabReview({
   const p = run?.status === 'done' ? run.preview : null
   const reading = !run || run.status === 'running'
   const [pane, setPane] = useState<Pane>('accounts')
-  const [sync, setSync] = useState<SyncChoice>('both')
+  const [sync, setSync] = useState<SyncChoice>(initialSync)
   const [links, setLinks] = useState<Record<string, string>>({})
   const [sameAs, setSameAs] = useState<Record<string, string>>({})
   const [catLinks, setCatLinks] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currency, setCurrency] = useState<string | null>(null)
+  const [posting, setPosting] = useState(false)
+  const [checkedTypes, setCheckedTypes] = useState<string | null>(null)
+  const types = useAccountTypes(first, p)
+  const [blocked, setBlocked] = useState(blockedAtStart)
+  const asks = app.asksTypeAndCurrency
+  const askedCurrency = asks && p?.currency_asked ? (currency ?? p.currency) : null
+  const settling = asks ? types.unsettled : 0
 
   if (checkId && check?.status === 'done') {
     setShownId(checkId)
@@ -81,6 +94,8 @@ export function YnabReview({
     setCheckId(null)
   }
   const checking = checkId !== null
+  // A choice during a type's re-check would start a second one, and the older answer could win.
+  const locked = checking || (asks && posting)
   // What the first answer proposed for each category: the choice the person did not make.
   const proposals = Object.fromEntries(
     (first?.category_groups ?? [])
@@ -89,11 +104,16 @@ export function YnabReview({
   )
   const asking = (p?.category_groups ?? []).flatMap((g) => g.categories).filter((c) => c.ask)
 
-  async function recheck(accounts: Record<string, string>, categories: Record<string, string>) {
+  async function recheck(
+    accounts: Record<string, string>,
+    categories: Record<string, string>,
+    asked = askedCurrency,
+  ) {
     if (!run) return
     setError(null)
+    setPosting(true)
     try {
-      const r = await authFetch('/api/ynab/migration/preview', {
+      const r = await authFetch(`${app.apiPrefix}/migration/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -101,6 +121,8 @@ export function YnabReview({
           account_links: accounts,
           ...(Object.keys(categories).length > 0 && { category_links: categories }),
           recheck_of: shownId,
+          ...(asks && { account_types: types.forRequest(accounts) }),
+          ...(asked && { currency: asked }),
         }),
       })
       const body = await r.json().catch(() => null)
@@ -111,8 +133,26 @@ export function YnabReview({
       setCheckId((body as { id: string }).id)
     } catch {
       setError('Could not reach the server.')
+    } finally {
+      setPosting(false)
     }
   }
+
+  // A type changes what the shown preview says only through a re-check, which must not freeze a
+  // long column of dropdowns. So a choice lands at once, and once the changes pause and no re-check
+  // is running, the newest one the preview doesn't reflect goes out: a burst, or changes made during
+  // a re-check, become one. The key keeps a choice the server refused from going out again.
+  const typesAhead = asks && types.ahead !== checkedTypes ? types.ahead : null
+  useEffect(() => {
+    if (!typesAhead || checking || posting) return
+    const timer = setTimeout(() => {
+      setCheckedTypes(typesAhead)
+      void recheck(links, catLinks)
+    }, TYPES_SETTLE_MS)
+    return () => clearTimeout(timer)
+    // Only a new state of the choices fires this; the closure is that render's own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typesAhead, checking, posting])
 
   function relink(ynabId: string, accountId: string) {
     const next = { ...links }
@@ -130,15 +170,28 @@ export function YnabReview({
     void recheck(links, next)
   }
 
+  const cannotImport =
+    !p ||
+    p.currency_blocked ||
+    checking ||
+    asking.length > 0 ||
+    (asks && (posting || !!typesAhead || settling > 0 || !!blocked))
+
+  // A refusal the block now states leaves Import disabled, with focus on it.
+  const refusalIsBlock = !!error && error === blocked
+  useEffect(() => {
+    if (refusalIsBlock) document.getElementById('ui-page-tab-accounts')?.focus()
+  }, [refusalIsBlock])
+
   async function importNow() {
-    if (!run || !p || p.currency_blocked || checking || asking.length > 0) return
+    if (!run || !p || cannotImport) return
     // Only an answer about a pair the shown preview still lists counts.
     const listed = new Set(p.accounts.flatMap((a) => a.match?.pairs ?? []).map((x) => x.ref))
     const same = Object.fromEntries(Object.entries(sameAs).filter(([ref]) => listed.has(ref)))
     setBusy(true)
     setError(null)
     try {
-      const r = await authFetch('/api/ynab/migration/start', {
+      const r = await authFetch(`${app.apiPrefix}/migration/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         // The note above the tabs says the plan goes in beside the book's own accounts;
@@ -150,10 +203,13 @@ export function YnabReview({
           ...(Object.keys(links).length > 0 && { account_links: links }),
           ...(Object.keys(same).length > 0 && { same_as: same }),
           ...(Object.keys(catLinks).length > 0 && { category_links: catLinks }),
+          ...(asks && { account_types: types.forRequest(links) }),
+          ...(askedCurrency && { currency: askedCurrency }),
         }),
       })
       if (!r.ok) {
         setError(messageOf(await r.json().catch(() => null), 'Could not start the import.'))
+        if (app.tellsImportBlock) invalidateQueryCache(importBlockKey(app, run.plan_id))
         return
       }
       onStarted()
@@ -172,14 +228,14 @@ export function YnabReview({
       size="xl"
       onClose={onClose}
       title={`Import ${p ? p.plan_name : planLabel}`}
-      subtitle={reading ? 'Reading it from YNAB…' : p ? <Meta preview={p} /> : undefined}
+      subtitle={reading ? `Reading it from ${app.name}…` : p ? <Meta preview={p} /> : undefined}
       footer={
         <Cluster justify="between" gap="--space-3" className="ynr-footer">
           <PMSelect
             className="ynr-sync"
             ariaLabel="After import"
             value={sync}
-            options={SYNC_OPTIONS}
+            options={syncOptions(app)}
             onChange={(v) => setSync(v as SyncChoice)}
           />
           <Cluster gap="--space-2">
@@ -189,9 +245,10 @@ export function YnabReview({
             <Button
               size="sm"
               variant="primary"
-              disabled={!p || p.currency_blocked || checking || asking.length > 0}
-              loading={busy}
+              disabled={cannotImport}
+              loading={busy || (asks && (checking || posting))}
               onClick={importNow}
+              {...importBlockedProps(blocked, settling)}
             >
               Import
             </Button>
@@ -200,22 +257,70 @@ export function YnabReview({
       }
     >
       <Stack gap="--space-4">
-        {failed ? (
-          <Text size="sm" tone="bad">
-            {run?.error || 'The plan could not be read.'}
-          </Text>
-        ) : (
-          p && <Notes preview={p} asking={asking} />
+        {app.tellsImportBlock && run?.plan_id && (
+          <ImportBlockReader app={app} planId={run.plan_id} onRead={setBlocked} />
         )}
-        {error && (
-          <Text size="sm" tone="bad">
-            {error}
-          </Text>
+        {failed ? (
+          <>
+            <Text size="sm" tone="bad">
+              {run?.error || `The ${app.planWord} could not be read.`}
+            </Text>
+            {asks && onConnect && (
+              <div>
+                <button
+                  type="button"
+                  className="a3-linkbtn"
+                  onClick={() => {
+                    onClose()
+                    onConnect()
+                  }}
+                >
+                  Open the connection
+                </button>
+              </div>
+            )}
+          </>
+        ) : p && asks ? (
+          <>
+            {askedCurrency && (
+              <CurrencyRow
+                app={app}
+                value={askedCurrency}
+                disabled={checking || posting}
+                onChange={(code) => {
+                  setCurrency(code)
+                  if (code !== p.currency) void recheck(links, catLinks, code)
+                }}
+              />
+            )}
+            <SettleNotes
+              app={app}
+              preview={p}
+              asking={asking}
+              blocked={blocked}
+              unsettled={types.unsettled}
+              suggested={types.acceptable}
+              onAccept={() => {
+                // The button is about to go, and focus with it: back to the top of the window.
+                document.getElementById('ui-page-tab-accounts')?.focus()
+                types.accept()
+              }}
+            />
+          </>
+        ) : (
+          p && <Notes app={app} preview={p} asking={asking} />
+        )}
+        {error && !refusalIsBlock && (
+          <div role="alert">
+            <Text size="sm" tone="bad">
+              {error}
+            </Text>
+          </div>
         )}
         {!failed && (
           <div>
             <PageTabs
-              ariaLabel="What the plan holds"
+              ariaLabel={`What the ${app.planWord} holds`}
               value={pane}
               onChange={setPane}
               tabs={[
@@ -225,15 +330,27 @@ export function YnabReview({
               ]}
             />
             <div
-              className="ynr-pane"
+              className={asks ? 'ynr-pane ynr-pane--flow' : 'ynr-pane'}
               role="tabpanel"
               aria-labelledby={`ui-page-tab-${pane}`}
               aria-busy={reading}
             >
               {!p ? (
                 <Placeholder />
+              ) : pane === 'accounts' && asks ? (
+                <SettleAccounts
+                  app={app}
+                  preview={p}
+                  types={types}
+                  links={links}
+                  checking={locked}
+                  onLink={relink}
+                  sameAs={sameAs}
+                  onSameAs={setSameAs}
+                />
               ) : pane === 'accounts' ? (
                 <Accounts
+                  app={app}
                   preview={p}
                   links={links}
                   checking={checking}
@@ -243,14 +360,15 @@ export function YnabReview({
                 />
               ) : pane === 'categories' ? (
                 <Categories
+                  app={app}
                   preview={p}
                   catLinks={catLinks}
                   proposals={proposals}
-                  checking={checking}
+                  checking={locked}
                   onChoose={recategorize}
                 />
               ) : (
-                <Transactions preview={p} />
+                <Transactions app={app} preview={p} />
               )}
             </div>
           </div>
@@ -260,272 +378,13 @@ export function YnabReview({
   )
 }
 
-function Meta({ preview: p }: { preview: Preview }) {
-  return (
-    <span className="ynr-meta">
-      {[
-        p.currency,
-        plural(p.accounts.length, 'account'),
-        plural(p.transactions, 'transaction'),
-        plural(p.categories, 'category', 'categories'),
-        plural(p.budget_months, 'budget month'),
-      ].join(', ')}
-    </span>
-  )
-}
-
-// What the import does to this book beyond adding the plan — each one sentence, only when true.
-function Notes({ preview: p, asking }: { preview: Preview; asking: PreviewCategory[] }) {
-  const lines: { text: string; bad?: boolean }[] = []
-  for (const c of asking)
-    lines.push({
-      bad: true,
-      text: `YNAB’s ${c.name} matches more than one of your categories. Pick one in Categories.`,
-    })
-  if (p.currency_blocked)
-    lines.push({
-      bad: true,
-      text: `Can’t import: this book is in ${p.base_currency} and already has data, and the plan is in ${p.currency}. Import into an empty book, or one in ${p.currency}.`,
-    })
-  if (p.book_state === 'foreign' && !p.currency_blocked)
-    lines.push({
-      text: 'This book already has accounts of its own. Each YNAB account comes in as a new one unless you pick one of yours under In this book.',
-    })
-  if (p.book_state === 'rerun')
-    lines.push({ text: 'This plan was imported before; importing again adds only what is new.' })
-  if (p.currency_change)
-    lines.push({
-      text: `The book’s base currency changes from ${p.base_currency} to ${p.currency}.`,
-    })
-  const pruned = [...p.prune.categories, ...p.prune.groups]
-  if (pruned.length > 0)
-    lines.push({
-      text: `The starter categories the app came with that you never used are removed, since YNAB brings its own: ${pruned.join(', ')}. To keep one, pick it for a YNAB category in Categories.`,
-    })
-  for (const w of p.warnings) lines.push({ text: w })
-  if (lines.length === 0) return null
-  return (
-    <ul className="ynr-notes">
-      {lines.map((l) => (
-        <li key={l.text} className={l.bad ? 'ynr-note ynr-note--bad' : 'ynr-note'}>
-          {l.text}
-        </li>
-      ))}
-    </ul>
-  )
-}
-
-function Placeholder() {
-  return (
-    <div className="ynr-placeholder">
-      <Stack gap="--space-4">
-        {[92, 78, 85, 64, 88, 70].map((w) => (
-          <Skeleton key={w} width={`${w}%`} height={12} />
-        ))}
-      </Stack>
-    </div>
-  )
-}
-
-function Empty({ children }: { children: string }) {
-  return <p className="ynr-empty">{children}</p>
-}
-
-interface LinkProps {
-  links: Record<string, string>
-  checking: boolean
-  onLink: (ynabId: string, accountId: string) => void
-  sameAs: Record<string, string>
-  onSameAs: (next: Record<string, string>) => void
-}
-
-function Accounts({ preview: p, ...link }: { preview: Preview } & LinkProps) {
-  if (p.accounts.length === 0) return <Empty>This plan has no accounts.</Empty>
-  return (
-    <table className="imp-table ynr-table">
-      <thead>
-        <tr>
-          <th>Account</th>
-          <th>Type</th>
-          <th>In this book</th>
-          <th className="imp-table__num">Transactions</th>
-          <th className="imp-table__num">Opening balance</th>
-        </tr>
-      </thead>
-      {p.accounts.map((a) => (
-        <tbody key={a.id ?? a.name}>
-          <tr>
-            <td data-label="Account">
-              {a.name}
-              {a.closed && <span className="ynr-dim"> (closed)</span>}
-            </td>
-            <td data-label="Type" className="ynr-dim">
-              {TYPE_LABELS[a.type as AccountType] ?? a.type}
-              {a.on_budget === false ? ' (tracking)' : ''}
-            </td>
-            <td data-label="In this book">
-              <Destination account={a} {...link} />
-            </td>
-            <td data-label="Transactions" className="imp-table__num">
-              {a.transactions}
-            </td>
-            <td data-label="Opening balance" className="imp-table__num">
-              {a.link ? (
-                <span className="ynr-dim">Its own</span>
-              ) : (
-                fAmountNative(a.opening_balance, p.currency)
-              )}
-            </td>
-          </tr>
-          {a.match && a.chosen && (
-            <tr className="ynr-link">
-              <td colSpan={5}>
-                <LinkSummary account={a} match={a.match} currency={p.currency} {...link} />
-              </td>
-            </tr>
-          )}
-        </tbody>
-      ))}
-    </table>
-  )
-}
-
-// A new account, or one already here of a type and currency the plan's account fits.
-function Destination({
-  account: a,
-  links,
-  checking,
-  onLink,
-}: { account: PreviewAccount } & LinkProps) {
-  if (a.link && !a.chosen) return <span className="ynr-dim">{a.link.name} (linked)</span>
-  if (!a.id || !a.candidates?.length) return <span className="ynr-dim">New account</span>
-  return (
-    <PMSelect
-      className="ynr-dest"
-      ariaLabel={`Where ${a.name} goes`}
-      value={links[a.id] ?? ''}
-      disabled={checking}
-      options={[
-        { value: '', label: 'New account' },
-        ...a.candidates.map((c) => ({ value: c.id, label: `Use ${c.name}` })),
-      ]}
-      onChange={(v) => onLink(a.id!, v)}
-    />
-  )
-}
-
-function LinkSummary({
-  account: a,
-  match: m,
-  currency,
-  checking,
-  sameAs,
-  onSameAs,
-}: { account: PreviewAccount; match: LinkMatch; currency: string } & LinkProps) {
-  if (checking)
-    return <span className="ynr-dim">Checking which transactions are already there…</span>
-  const here = a.link?.name ?? 'the account'
-  const parts = [
-    `${plural(m.matched, 'transaction')} already in ${here}`,
-    `${m.added.toLocaleString()} added`,
-  ]
-  if (m.to_check > 0) parts.push(`${m.to_check.toLocaleString()} to check`)
-  const money = (n: number) => fAmountNative(n, currency)
-  return (
-    <Stack gap="--space-2">
-      <span>{parts.join('. ')}.</span>
-      {m.own_only > 0 && (
-        <span className="ynr-dim">
-          {plural(m.own_only, 'transaction')} of {here}’s own{' '}
-          {m.own_only === 1 ? 'isn’t' : 'aren’t'} in YNAB; a sync to YNAB sends{' '}
-          {m.own_only === 1 ? 'it' : 'them'} there.
-        </span>
-      )}
-      {m.pairs.length > 0 && (
-        <>
-          <span className="ynr-dim">
-            These may be the same transaction. Each is added as a new one unless you tick it.
-          </span>
-          <ul className="ynr-pairs">
-            {m.pairs.map((x) => (
-              <li key={x.ref}>
-                <Checkbox
-                  checked={sameAs[x.ref] === x.existing.id}
-                  onChange={(e) => {
-                    const next = { ...sameAs }
-                    if (e.target.checked) next[x.ref] = x.existing.id
-                    else delete next[x.ref]
-                    onSameAs(next)
-                  }}
-                  label={`Same as ${x.existing.payee ?? '(no payee)'}, ${fDate(x.existing.date)}, ${money(x.existing.amount)}`}
-                  description={`YNAB: ${x.payee ?? '(no payee)'}, ${fDate(x.date)}, ${money(x.amount)}`}
-                />
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-    </Stack>
-  )
-}
-
-// A blank category on an inflow is money to assign, as in YNAB; on a spend it is uncategorized.
-const NO_CATEGORY: Record<PreviewTxn['kind'], string> = {
-  income: 'Ready to Assign',
-  expense: 'Uncategorized',
-  transfer: '',
-}
-
-function Transactions({ preview: p }: { preview: Preview }) {
-  const rows = p.transaction_list
-  if (!rows) return <Empty>Review again to see the transactions.</Empty>
-  if (rows.length === 0) return <Empty>This plan has no transactions.</Empty>
-  return (
-    <table className="imp-table ynr-table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Account</th>
-          <th>Payee</th>
-          <th>Memo</th>
-          <th>Category</th>
-          <th className="imp-table__num">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((t, i) => (
-          <tr key={i}>
-            <td data-label="Date" className="ynr-dim ynr-nowrap">
-              {fDate(t.date)}
-            </td>
-            <td data-label="Account">
-              {t.kind === 'transfer' ? `${t.account ?? '?'} → ${t.to_account ?? '?'}` : t.account}
-            </td>
-            <td data-label="Payee" className="imp-table__wrap">
-              {t.payee ?? ''}
-            </td>
-            <td data-label="Memo" className="imp-table__wrap ynr-dim">
-              {t.memo ?? ''}
-            </td>
-            <td data-label="Category" className="ynr-dim">
-              {t.category ?? NO_CATEGORY[t.kind]}
-            </td>
-            <td data-label="Amount" className="imp-table__num ynr-nowrap">
-              {fAmountNative(t.amount, p.currency)}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-      {rows.length < p.transactions && (
-        <tfoot>
-          <tr>
-            <td colSpan={6} className="ynr-dim">
-              The newest {rows.length} of {p.transactions.toLocaleString()}. The import brings them
-              all.
-            </td>
-          </tr>
-        </tfoot>
-      )}
-    </table>
-  )
+/** Why Import is off, for the button: a reason said once, in the notes above it. */
+function importBlockedProps(blocked: string | null, settling: number) {
+  if (!blocked && settling === 0) return {}
+  return {
+    title: settling > 0 ? 'Check the account types first' : undefined,
+    'aria-describedby': [blocked && BLOCKED_NOTE_ID, settling > 0 && TYPES_NOTE_ID]
+      .filter(Boolean)
+      .join(' '),
+  }
 }

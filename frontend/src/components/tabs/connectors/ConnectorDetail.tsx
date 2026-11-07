@@ -107,6 +107,9 @@ export interface ConnectorDetailProps {
    *
    *  Ignored when there is nothing to set up — see `setupPending`. */
   configureOnOpen?: boolean
+  /** With `configureOnOpen`: open on the form whatever the connector's health, for a caller whose
+   *  link is about changing what the form holds. */
+  formFirst?: boolean
   /** Fired when the config view is left, so the caller can refetch — a saved credential
    *  changes `status`, and the page behind is showing it. */
   onConfigClosed?: () => void
@@ -134,6 +137,7 @@ export function ConnectorDetail({
   alwaysOn = false,
   configForm,
   configureOnOpen = false,
+  formFirst = false,
   onConfigClosed,
   onSaved,
 }: ConnectorDetailProps): JSX.Element {
@@ -183,7 +187,9 @@ export function ConnectorDetail({
   // row action's target — its actual fix lives in its credentials, so this seed also fires
   // for `configureOnOpen` there, alongside the already-unconfigured `setupPending` case.
   const [configuringId, setConfiguringId] = useState<string | null>(
-    configureOnOpen && (setupPending || (Boolean(configForm) && entry.attention)) ? entry.id : null,
+    configureOnOpen && (setupPending || (Boolean(configForm) && (entry.attention || formFirst)))
+      ? entry.id
+      : null,
   )
   const configuring = configuringId === entry.id
   // The config view's footer is the credential form's OWN Save (see ./formSave) — there is

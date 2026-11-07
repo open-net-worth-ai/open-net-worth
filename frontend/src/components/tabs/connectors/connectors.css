@@ -1937,6 +1937,13 @@
   .cn-page .rd-masthead {
     display: contents;
   }
+  /* `display: contents` drops the box, not its pseudo-elements: the desktop scroll shadow
+     (`.rd-masthead.scrolled::after`, absolute at top:100%) would still render, anchored to the
+     scroller instead of the header, and wash out whatever line of the page it lands on once the
+     page has scrolled. The pinned bar's own fade below is the phone's shadow. */
+  .cn-page .rd-masthead::after {
+    display: none;
+  }
   .cn-page .rd-masthead-sub {
     display: none;
   }

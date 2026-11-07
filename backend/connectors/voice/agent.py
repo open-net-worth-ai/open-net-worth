@@ -38,6 +38,7 @@ from livekit.plugins import silero
 
 from backend.connectors.voice.connection import CallConnection
 from backend.connectors.voice.events import speakable
+from backend.connectors.voice.stt_hints import hearing_model, hint_kwargs
 from backend.connectors.voice.timing import AnswerTiming, SpeechLog, TurnTiming
 from backend.connectors.voice.tokens import OWNER_IDENTITY
 from backend.connectors.voice.tts_models import voice_for
@@ -54,10 +55,13 @@ To {owner} there is only you: speak as yourself, in the first person. Never ment
 assistant, a colleague, "the real Lucius", a back office, a handoff, or "asking" anyone — when
 you look something up, YOU are looking it up ("Let me check.", "One sec.").
 
-You don't have {owner}'s numbers in your head: balances, accounts, spending, budget, goals,
-investments, prices and plans all need a lookup. So:
-- For ANY question or request about their finances or what's on their screen, or any change,
-  call `work_on_request` with the request written out in full (resolve "that", "those two" from
+You know nothing about {owner} yourself: their numbers, profile, risk tolerance, goals, plans and
+history all need a lookup, and everything said on this call about their money came from one. You
+answer nothing yourself but the small talk below, and you never say you lack something or can't
+recommend: only a lookup can tell. So:
+- For EVERYTHING but that small talk, call `work_on_request`: any question, request, change or
+  opinion ("what would you suggest?"), and any follow-up to or challenge of something said ("what
+  do you mean?", "you should know that"). If in doubt, it's a request. Call it with the request written out in full (resolve "that", "those two" from
   the conversation so it stands on its own), and with it `ack`: the few words you say right away, starting with
   something like "okay" or "sure" and naming just the subject ("Okay, let me check your grocery
   spending."), worded differently each time, with no number, price or result. Say NOTHING else,
@@ -65,18 +69,23 @@ investments, prices and plans all need a lookup. So:
   fact — not even a vague one ("your balance looks a bit high"). That includes things said
   earlier on this call: they may be out of date, and a new question always goes to
   `work_on_request` — only "say that again" gets an earlier answer, repeated word for word.
-- If {owner} corrects the request you just sent ("no, I meant ACME", "not that one, the
-  other card"), call `work_on_request` with the corrected request written out in full and
-  `replaces_last` true, and an `ack` that shows you heard it ("Oh, ACME, got it."). A different,
-  additional question is not a correction: leave `replaces_last` false.
+- When {owner} says more after a request, decide what it is, each time, from what was said:
+  - They're finishing or adding to the same request (it ended mid-thought, or this completes it):
+    `continues_last` true, with the request written out in full. Say only "Mm-hm." as your `ack`.
+  - They've changed their mind or corrected it ("no, I meant ACME", "not that one, the other card",
+    "forget that, check my rent"): `replaces_last` true, with an `ack` that shows you heard it
+    ("Oh, ACME, got it.").
+  - It's a different question: leave both false, and it's answered after the one under way.
 - The answer is spoken on the call by itself when it is ready, in your voice. Do not repeat or
   summarise it unless asked; if asked to repeat it, repeat it exactly. Never send a request
   that has already been answered.
 - If {owner} asks how it's going, whether you're still there, or what's taking so long, call
   `check_progress` and say what it tells you, briefly, as yourself ("Still pulling the
   numbers, nearly there.").
-- Small talk, greetings, "thanks", "okay", "mm-hmm": answer naturally in a few words, with
+- Only greetings, "how are you", "thanks", "okay", "mm-hmm": answer naturally in a few words, with
   no tool.
+- Words that plainly stop mid-thought ("do you mean by your"): they haven't finished. Say only
+  "Mm-hm?" and let them go on.
 - A bare "sure" / "go ahead" / "yes" is a request ONLY when your last spoken line offered or
   asked to do something: then call `work_on_request` with "Yes, go ahead with what you
   offered: <the offer, quoted>". Never turn a question the owner asked ("should I sell?")
@@ -87,8 +96,9 @@ investments, prices and plans all need a lookup. So:
   words ("Sure, take your time.") and call `wait_for_owner` with how long they asked for
   (two minutes if they didn't say). Then stay quiet until they speak.
 - Ending the call: when {owner} is done — they say bye, or they answer "are we all set?" /
-  "anything else?" with "no", "all good", "we're done", "that's it" — say ONE short goodbye
-  AND call `end_call` in that same reply. A goodbye ("Talk soon", "Take care", "Bye") without
+  "anything else?" with "no", "all good", "we're done", "that's it" — say ONE warm goodbye, a
+  full sentence that answers any thanks, AND call `end_call` in that same reply. A goodbye
+  ("Thanks for calling, talk to you soon.", "You're welcome, take care of yourself.") without
   `end_call` leaves the line open: never say one without the other. You don't know the time, so
   a goodbye never mentions it: no "have a great day", "good night" or "have a good evening".
   Don't announce that you're ending the call. If you're not sure they're done, ask instead of
@@ -208,12 +218,13 @@ TIME_WARNING_S = 30
 MAX_CALL_S = 3600
 # When speech-to-text may call a turn over. The gateway's own defaults (0.01 confidence, no
 # silence) end it at any breath, leaving LiveKit's fixed 0.5s as the only guard: at 0.3s one
-# sentence became two requests (owner, 2026-11-05). A finished-sounding sentence ends quickly; an
-# unfinished one gets up to ``max_turn_silence`` ms.
+# sentence became two requests (owner, 2026-11-05), and at 0.4 confidence and 160ms "do you mean by
+# your" and "of everything?" still went through as two (owner, 2026-11-06). A finished-sounding
+# sentence ends fairly quickly; an unfinished one gets up to ``max_turn_silence`` ms.
 PATIENT_TURNS = {
-    "end_of_turn_confidence_threshold": 0.4,
-    "min_end_of_turn_silence_when_confident": 160,
-    "max_turn_silence": 1280,
+    "end_of_turn_confidence_threshold": 0.6,
+    "min_end_of_turn_silence_when_confident": 480,
+    "max_turn_silence": 1600,
 }
 CALLER_WAIT_S = 60
 
@@ -231,6 +242,25 @@ def _mentions_approval(text: str) -> bool:
     """His answer already tells them to approve it — no second line saying the same."""
     lowered = text.lower()
     return any(word in lowered for word in ("approv", "confirm", "on screen", "on your screen"))
+
+
+def _with_earlier(earlier: str, said: str) -> str:
+    """What to send for a request: ``said`` is what was heard since the voice last spoke, so words
+    from before a reply it started are only in ``earlier``, which already ends in ``said``."""
+    if earlier.casefold().endswith(said.casefold()):
+        return earlier
+    return _joined(earlier, said)
+
+
+def _joined(earlier: str, text: str) -> str:
+    """The owner's words so far this turn. Going on talking cancels the reply to what came before,
+    so that piece gets no reply to carry it to the chat, and only the last piece was being kept:
+    "personal risk already" was saved where the screen had streamed the whole sentence (owner,
+    2026-11-06). A piece that already repeats the earlier words replaces them."""
+    if not earlier or text.casefold().startswith(earlier.casefold()):
+        return text
+    log.info("voice: joined two pieces of what the owner said")
+    return f"{earlier} {text}"
 
 
 @dataclass
@@ -261,6 +291,7 @@ class FrontAgent(Agent):
         kind: str = "question",
         ack: str = "",
         replaces_last: bool = False,
+        continues_last: bool = False,
     ) -> str | None:
         """Look up a finance question or carry out a request, with the owner's real data and
         tools. Returns at once; your ``ack`` is spoken, then the answer when it is ready — say
@@ -275,8 +306,10 @@ class FrontAgent(Agent):
                 check your grocery spending." No number, price or result.
             replaces_last: True only when the owner is correcting the request you just sent,
                 so its answer is no longer wanted.
+            continues_last: True when these words finish or add to the request you just sent,
+                so the two are one request. Never with ``replaces_last``.
         """
-        return self._lucius.submit(request, kind, ack, replaces_last)
+        return self._lucius.submit(request, kind, ack, replaces_last, continues_last)
 
     @function_tool
     async def check_progress(self, context: RunContext) -> str:
@@ -318,6 +351,8 @@ class LuciusDesk:
     MAX_HOLD_S = 600
     MAX_QUEUED = 3
     MAX_PER_MINUTE = 10  # the chat channels' per-sender ceiling
+    _continued_request: str | None = None
+    _stopped = False
 
     def __init__(
         self, session: AgentSession, ctx: JobContext, runtime: Runtime, session_id: str
@@ -340,6 +375,7 @@ class LuciusDesk:
         # The owner's current words are already in the chat (``spoke``): a request made of
         # them then carries them only as a note, so they never show twice.
         self._shown = False
+        self._reply_beside_request = False
         self._answers: set[str] = set()
         self._current: str | None = None
         self._current_kind = "question"
@@ -548,7 +584,8 @@ class LuciusDesk:
         if not text:
             return
         if role == "user":
-            self._turn_said = text
+            self._turn_said = _joined(self._turn_said, text)
+            self._reply_beside_request = False
             return
         if role != "assistant":
             return
@@ -556,6 +593,12 @@ class LuciusDesk:
         answer = next((a for a in self._answers if a.startswith(text)), None)
         if answer is not None:
             self._answers.discard(answer)
+            return
+        # Said beside a request it handed over, and saved only once it has played: by then Lucius's
+        # answer is in the chat, and this landed after it (owner, 2026-11-06). Filler either way.
+        beside_request, self._reply_beside_request = self._reply_beside_request, False
+        if beside_request:
+            log.info("voice: left a line said beside a request out of the chat")
             return
         if self._busy():
             return
@@ -616,10 +659,47 @@ class LuciusDesk:
         if self._current is None:
             return said, True
         self._superseded = True
+        if self._can_stop():
+            self._stop_current()
         return said, self._current_kind == "question"
 
+    def _can_stop(self) -> bool:
+        """Only what can't have changed anything: a task, or a turn that has started a change, runs
+        to the end, and the owner hears what it did."""
+        return self._current_kind != "task" and not self._turn_changed
+
+    def _stop_current(self) -> None:
+        self._superseded = self._stopped = True
+        asyncio.ensure_future(self._rt.app.call("stop_request", session_id=self._session_id))
+
+    def _continue_last(self, said: str, request: str) -> tuple[str, str, bool]:
+        """The owner is finishing what they just asked: one request, stopping the one under way if
+        that's safe. Returns the words and request to send, and whether they were joined."""
+        waiting: list[tuple[str, str, bool, str]] = []
+        while not self._queue.empty():
+            waiting.append(self._queue.get_nowait())
+        if waiting:
+            old_said, old_request, old_shown, _kind = waiting.pop()
+            for item in waiting:
+                self._queue.put_nowait(item)
+            return (said if old_shown else f"{old_said} {said}"), f"{old_request} {request}", True
+        if self._current is None:
+            self._continued_request = request
+            return said, request, True
+        if not self._can_stop():
+            return said, request, False
+        merged = f"{self._current} {request}"
+        self._stop_current()
+        self._continued_request = merged
+        return said, merged, True
+
     def submit(
-        self, request: str, kind: str = "question", ack: str = "", replaces_last: bool = False
+        self,
+        request: str,
+        kind: str = "question",
+        ack: str = "",
+        replaces_last: bool = False,
+        continues_last: bool = False,
     ) -> str | None:
         """Queue the owner's request. ``None`` once it is queued: the tool then asks for no
         reply, because the reply the front model wrote after this tool once made up a whole
@@ -639,7 +719,12 @@ class LuciusDesk:
         self._recent[key] = now
         shown, self._shown = self._shown, False
         self._heard.clear()
-        self._turn_said = ""  # the owner's words travel with the request instead
+        # The owner's words travel with the request instead, including any said before a reply the
+        # voice started, which ``heard`` has moved past.
+        if self._turn_said:
+            said = _with_earlier(self._turn_said, said)
+        self._turn_said = ""
+        self._reply_beside_request = getattr(self._session, "current_speech", None) is not None
         self._sent_at.append(now)
         log.info("voice: front handed Lucius a %s request (%d chars)", kind, len(request))
         self.timing.handed()
@@ -648,6 +733,9 @@ class LuciusDesk:
         if replaces_last:
             said, replaced = self._replace_last(said)
             log.info("voice: the owner corrected the last request (replaced: %s)", replaced)
+        elif continues_last:
+            said, request, replaced = self._continue_last(said, request)
+            log.info("voice: the owner carried on from the last request (joined: %s)", replaced)
         self._queue.put_nowait((said, request, shown, kind))
         if replaced and busy:
             self._current = request  # what a "still on it" line should now name
@@ -691,9 +779,12 @@ class LuciusDesk:
             said, request, shown, kind = await self._queue.get()
             self._current, self._started, self._doing = request, time.monotonic(), ""
             self._current_kind, self._superseded = kind, False
+            self._stopped = False
+            continues = request == self._continued_request
+            self._continued_request = None
             unheard, self._unheard = self._unheard, False
             try:
-                await self._answer(said, request, shown, unheard)
+                await self._answer(said, request, shown, unheard, continues)
             except Exception:  # noqa: BLE001 — a failed request must not end the call
                 log.exception("voice: Lucius request failed")
                 self._current = None  # no longer working: this line belongs in the chat
@@ -703,7 +794,12 @@ class LuciusDesk:
                 self._current, self._doing = None, ""
 
     async def _answer(
-        self, said: str, understood: str, shown: bool = False, unheard: bool = False
+        self,
+        said: str,
+        understood: str,
+        shown: bool = False,
+        unheard: bool = False,
+        continues: bool = False,
     ) -> None:
         events = self._rt.app.stream(
             "ask",
@@ -712,6 +808,7 @@ class LuciusDesk:
             understood=understood,
             shown=shown,
             unheard=unheard,
+            continues=continues,
         )
         self._turn_changed = False
         text, approval = await self._collect(events)
@@ -721,7 +818,7 @@ class LuciusDesk:
         if self._superseded and not self._turn_changed:
             log.info("voice: an answer the owner had corrected wasn't read out")
             text = ""
-            self._unheard = True
+            self._unheard = not self._stopped  # stopped on purpose: its words carry on in the next
         self._last_answer = None
         self._speak(text, approval)
         if self._last_answer is not None and not self._turn_changed and not approval:
@@ -911,23 +1008,24 @@ async def entrypoint(ctx: JobContext) -> None:
         log.warning("voice: refused a call that this app did not start or no longer allows")
         return
     await ctx.connect()
-    cfg = runtime.config
+    # Read now, not at the worker's start: changing language or voice needs no restart.
+    settings = await runtime.app.call("call_settings")
+    cfg = {**runtime.config, **settings}
     # format_turns=True: ONE punctuated final transcript per turn. Off (also the default), the
     # gateway sends each sentence as a final AND the whole turn again unpunctuated, so every
     # sentence reached Lucius twice (measured against the live service, 2026-11-03).
-    stt_kwargs = (
-        {"extra_kwargs": {"format_turns": True, **PATIENT_TURNS}}
-        if cfg["stt_model"].startswith("assemblyai/")
-        else {}
-    )
+    language = cfg.get("language") or "en"
+    stt_model = hearing_model(cfg["stt_model"])
+    stt_extra = hint_kwargs(stt_model, language)
+    if stt_model.startswith("assemblyai/"):
+        stt_extra.update(format_turns=True, **PATIENT_TURNS)
+    stt_kwargs = {"extra_kwargs": stt_extra} if stt_extra else {}
     voice = voice_for(cfg["tts_model"], cfg.get("tts_voice"))
     tts_kwargs = {"voice": voice} if voice else {}
-    language = cfg.get("language") or "en"
     session = AgentSession(
-        # The call's language, for hearing and for speaking ("auto" lets LiveKit pick the
-        # speech-to-text model that hears it). It was pinned to English: Vietnamese went
-        # unheard (owner, 2026-11-03).
-        stt=inference.STT(cfg["stt_model"], language=language, **stt_kwargs),
+        # The call's language, for hearing and for speaking. It was pinned to English: Vietnamese
+        # went unheard (owner, 2026-11-03).
+        stt=inference.STT(stt_model, language=language, **stt_kwargs),
         llm=inference.LLM(cfg["front_model"]),
         tts=inference.TTS(cfg["tts_model"], language=language, **tts_kwargs),
         vad=ctx.proc.userdata.get("vad") or silero.VAD.load(),
@@ -1033,7 +1131,7 @@ async def entrypoint(ctx: JobContext) -> None:
     ctx.room.on("participant_disconnected", lambda who: _caller_left(ctx, who))
     owner = runtime.owner_name
     await session.start(
-        agent=FrontAgent(owner, runtime.language_name, lucius),
+        agent=FrontAgent(owner, settings["language_name"], lucius),
         room=ctx.room,
         # Only the owner's browser (the identity its token names) is listened to, and only by
         # voice: no typed text into the room.

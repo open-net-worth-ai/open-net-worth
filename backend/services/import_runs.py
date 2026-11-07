@@ -23,6 +23,7 @@ from backend.core.errors import ConflictError, NotFoundError, ValidationError
 from backend.db.import_run_store import COLUMNS, ImportRunStore
 
 KINDS = ("import", "verify", "preview", "sync")
+WRITING_KINDS = ("import", "sync")  # a preview or a verify only reads
 TRIGGERS = ("manual", "scheduled")
 LIST_LIMIT = 200
 _lock = threading.Lock()
@@ -67,14 +68,20 @@ def _blank(provider: str, kind: str, plan_id: str, trigger: str, plan_name: str)
 
 
 def start(
-    provider: str, kind: str, plan_id: str, trigger: str = "manual", plan_name: str = ""
+    provider: str,
+    kind: str,
+    plan_id: str,
+    trigger: str = "manual",
+    plan_name: str = "",
+    busy: str | None = None,
 ) -> dict:
-    """Open a ``running`` record. At most one run per provider is in progress at a time."""
+    """Open a ``running`` record. At most one run per provider is in progress at a time; ``busy``
+    is what a second one reads."""
     _validated(kind, trigger)
     store = ImportRunStore()
     with _lock:
         if store.has_running(provider):
-            raise ConflictError(f"A {provider} run is already in progress.")
+            raise ConflictError(busy or f"A {provider} run is already in progress.")
         run = _blank(provider, kind, plan_id, trigger, plan_name)
         store.insert(run)
     return run
@@ -122,6 +129,10 @@ def latest(provider: str, kinds: tuple[str, ...] | None = None) -> dict | None:
 
 def has_running(provider: str) -> bool:
     return ImportRunStore().has_running(provider)
+
+
+def has_writing_run(provider: str) -> bool:
+    return ImportRunStore().has_running(provider, WRITING_KINDS)
 
 
 def summary(run: dict) -> dict:

@@ -60,6 +60,7 @@ _LEGACY_WRITER_ALIASES = {
     "ibkr": "feed",
     "lunch_money": "feed",
     "ynab": "feed",
+    "actual_budget": "feed",
     "bank": "feed",
 }
 
@@ -132,6 +133,7 @@ AUTHORITATIVE_ID_NAMESPACES = frozenset(
         "ibkr",
         "lunch_money",  # Lunch Money's own numeric transaction id — globally unique
         "ynab",  # YNAB's own transaction id — unique within the budget
+        "actual_budget",  # Actual's own transaction id — a uuid
         "vest",  # equity vest event id
         "option-premium",
         "option-close",

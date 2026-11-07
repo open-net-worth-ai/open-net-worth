@@ -6,7 +6,7 @@ order: 40
 audience: [user, operator]
 status: stable
 related: [lucius/permissions, lucius/confirm-cards, connectors/web-search]
-keywords: [mcp, model context protocol, third-party, stdio, local command, remote server, oauth, api key, playwright, stripe, setup, security, brokerage, webull, longbridge, tiger brokers, zerodha, kite, upstox, public.com, bybit]
+keywords: [mcp, model context protocol, third-party, stdio, local command, remote server, oauth, api key, playwright, stripe, setup, security, monarch, brokerage, webull, longbridge, tiger brokers, zerodha, kite, upstox, public.com, bybit]
 ---
 
 # External MCP servers
@@ -57,7 +57,8 @@ recording it by hand) if there's no official server.
 The directory includes ready-made entries — Playwright (a real web browser), Firecrawl, Stripe,
 QuickBooks Online, Xero, Mercury, Interactive Brokers, Robinhood, moomoo, Webull, Longbridge, Tiger
 Brokers, Zerodha Kite, Upstox, Public.com, Alpaca MCP, Coinbase, OKX, Kraken, Bybit, Expensify,
-Avalara AvaTax, Twelve Data, SEC EDGAR and FRED.
+Avalara AvaTax, Twelve Data, SEC EDGAR and FRED. Monarch works the same way but is listed under
+**Data sources**, and stays in that section once it's connected.
 
 Each connector shows coloured tags for what it's for, such as **Brokerage**, **Banking** or
 **Web search**. Searching the Connectors page matches those tags too. In **Browse & add**, click a
@@ -76,7 +77,7 @@ search or filter; click one to read about it and add it. **Sort** orders the ful
 2. Click a card to read what it does and which tools it offers, then click **Add**. The connection
    form opens with the address or command already filled in.
 3. Fill in what the server needs:
-   - **OAuth** servers (Mercury, Interactive Brokers, Robinhood, moomoo, Webull, Longbridge,
+   - **OAuth** servers (Mercury, Monarch, Interactive Brokers, Robinhood, moomoo, Webull, Longbridge,
      Tiger Brokers, Upstox, Expensify, Avalara, Twelve Data): click **Connect** and sign in to the
      vendor in the window that opens.
    - **Zerodha Kite** needs nothing to connect. Once it's added, ask Lucius to log in to Kite,
@@ -242,8 +243,8 @@ their server at any time.
   server's own instructions are the one exception Lucius follows — only for that server's tools,
   and never past your tool permissions. That
   lowers the risk; it doesn't remove it — which is why approval is the default.
-- **Some servers write to real accounts.** Stripe, QuickBooks, Xero and Mercury tools can create or
-  change records in those services, and Interactive Brokers, Robinhood, moomoo, Longbridge,
+- **Some servers write to real accounts.** Stripe, QuickBooks, Xero, Mercury and Monarch tools can create or
+  change records in those services (Monarch only if you leave Write ticked on its consent page), and Interactive Brokers, Robinhood, moomoo, Longbridge,
   Public.com, Alpaca MCP, Coinbase, OKX, Kraken and Bybit tools can place orders (Robinhood only in a
   separate agent account it opens for you; Webull's only as instructions you confirm in the Webull
   app; Zerodha Kite's only GTT orders). Tiger Brokers and Upstox are read-only. The directory card says so when that's the case. For a server you run with an API

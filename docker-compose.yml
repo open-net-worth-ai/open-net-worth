@@ -46,8 +46,14 @@ services:
       - onw-data:/home/onw/.open-net-worth
       # The Claude Code / Codex / OpenCode CLI providers (Settings → AI) run inside this
       # container's OWN filesystem, so they start with NO login — your host's
-      # subscription auth doesn't cross the container boundary on its own. To
-      # share it in:
+      # subscription auth doesn't cross the container boundary on its own. Sign in inside
+      # the container (Settings → AI shows the command), for example:
+      #   docker exec -it open-net-worth codex login --device-auth
+      # These three volumes keep that sign-in when an update recreates the container.
+      - onw-codex:/home/onw/.codex
+      - onw-claude:/home/onw/.claude
+      - onw-opencode:/home/onw/.local/share/opencode
+      # Or share a sign-in from the host instead:
       #   1. On the HOST: `claude setup-token` (one-time; needs a browser) if you
       #      haven't already got a `~/.claude/.credentials.json` — macOS normally
       #      keeps this in the Keychain instead, which a Linux container can't
@@ -75,3 +81,9 @@ services:
 volumes:
   onw-data:
     name: open-net-worth-data
+  onw-codex:
+    name: open-net-worth-codex
+  onw-claude:
+    name: open-net-worth-claude
+  onw-opencode:
+    name: open-net-worth-opencode

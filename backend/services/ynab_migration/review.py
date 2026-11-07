@@ -6,6 +6,7 @@ the review showed."""
 from __future__ import annotations
 
 from backend.services import ynab_pairs
+from backend.services.budget_app import current
 from backend.services.ynab_migration import (
     apply,
     category_links,
@@ -72,6 +73,11 @@ def preview_accounts(plan: dict, existing: list[dict], chosen: dict, same_as: di
                 "chosen": pa["id"] in chosen,
                 "candidates": options[pa["id"]],
                 "match": matched.get(pa["id"]),
+                **(
+                    {"type_options": list(links.type_options(pa))}
+                    if current().asks_type_and_currency
+                    else {}
+                ),
             }
         )
     return out

@@ -11,7 +11,7 @@ child tables, so SQLite's batch rebuild cascades into nothing. Downgrade drops t
 payload still holds the link.
 
 Revision ID: 202611061200_lots_txn_id_foreign_key
-Revises: 202611021300_merge_ynab_sync_and_news_deliveries
+Revises: 202611051800_actual_budget_sync
 Create Date: 2026-11-06
 """
 
@@ -23,7 +23,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "202611061200_lots_txn_id_foreign_key"
-down_revision = "202611021300_merge_ynab_sync_and_news_deliveries"
+down_revision = "202611051800_actual_budget_sync"
 branch_labels = None
 depends_on = None
 

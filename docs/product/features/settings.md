@@ -84,7 +84,8 @@ removed) and disappears from this list. When the list is empty there is nothing 
 
 Right now the list holds **Permissions v2**, a new way of deciding when Lucius asks you before
 using a tool; see [Permissions v2](../lucius/permissions-v2.md). It also holds **Voice calls**: talk to Lucius out loud
-from the chat; see [Voice calls](../connectors/voice-calls.md).
+from the chat; see [Voice calls](../connectors/voice-calls.md). **Actual Budget** is here too, off
+by default: see [Import from Actual Budget](actual-budget-import.md).
 
 A switch is read-only when the server sets it from its environment (the row names the variable),
 and on the public demo, which runs the defaults unless its server was started with one switched on
@@ -100,6 +101,9 @@ or off. Lucius cannot change these switches.
   Anything you'd rather he not know, leave blank.
 - **Some sections only appear where they apply** — Desktop in the desktop app, Terminal where it
   is enabled.
+- **The version is at the bottom of Settings** — at the foot of the side rail, or of the menu on a
+  phone. It's the version of the server you're connected to, so it changes only after that server
+  restarts on a new release.
 
 ## Related pages
 

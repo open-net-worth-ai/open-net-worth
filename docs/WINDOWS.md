@@ -16,6 +16,9 @@ mechanisms that differ, the few guarantees that are weaker, and what the owner p
   (the release carries `RELEASES` and the full `.nupkg` beside the installer).
 - From source or `uv tool install`: `onw start`; `onw autostart install` registers a per-user Task
   Scheduler task (logon trigger, restart on failure, no window, no admin).
+- Server updates (`uv tool install` only): `onw upgrade` by hand, or
+  `onw start --autostart --auto-upgrade` to install each new signed release without being asked.
+  `install.ps1` installs the desktop app, not a server, so it has no such option.
 
 ## Mechanism map
 
@@ -29,6 +32,7 @@ mechanisms that differ, the few guarantees that are weaker, and what the owner p
 | Binary file I/O | n/a | `O_BINARY` on every content descriptor, UTF-8 stdio, UTF-8 child interpreter (`PYTHONUTF8`) | `core/platform_fs.py` |
 | Owner-only data root | mode 0700/0600 | `icacls` strips inheritance and grants only the user and SYSTEM on the root the app creates | `core/platform_fs.py` |
 | Autostart | launchd / systemd | Task Scheduler (Run-key fallback, no crash restart) | `cli/autostart_windows.py` |
+| Server self-upgrade (`onw upgrade`, `--auto-upgrade`) | installs in place, then exits 75 or re-executes | a detached helper copied outside the install waits for the server to exit (0, so the task can't restart the old copy), installs with retries and starts it again; its log is `upgrade.log` in `%APPDATA%\uv\open-net-worth-upgrades` | `cli/self_update.py`, `cli/upgrade_steps.py` |
 | Launch at login (desktop) | Login Item | Login item that starts through `Update.exe`, so it survives updates | `desktop/src/main/login-item.ts` |
 | Watched-folder imports | inode + dev from `lstat` | same; Node reports Windows file indexes as doubles, the helper compares after the same rounding | `desktop/qa/identity-check.mjs` |
 
@@ -45,6 +49,10 @@ mechanisms that differ, the few guarantees that are weaker, and what the owner p
 - **Anchored directory access**: not atomic. POSIX resolves each name against a pinned descriptor;
   Windows checks the path then opens it and detects a swap in between by comparing file identity.
 - **Unsigned builds**: until a certificate exists, Windows SmartScreen warns on first run.
+- **Server self-upgrade**: a running program can't be replaced, so another process running from the
+  install, such as `onw mcp`, can keep it locked until the helper's retries run out. CI runs its
+  tests on `windows-latest`, with the install itself faked; only the real-device pass below
+  exercises a locked install.
 
 The desktop app still refuses the sandbox, stdio MCP and builder engines on every platform
 ("until child-process containment is supported"); that is unchanged and identical on macOS.
@@ -74,5 +82,8 @@ The desktop app still refuses the sandbox, stdio MCP and builder engines on ever
 - Lucius: connect a provider, run a turn; background automation fires on schedule.
 - `onw autostart install` from a source checkout; log off/on; `status` says running; kill the python
   process and confirm it restarts within a minute.
+- `uv tool install` an older release; `onw start --autostart --auto-upgrade`; within a minute it
+  moves to the newest release and comes back by itself (`onw version`, `upgrade.log`). Repeat with
+  `onw mcp` running from the install: the server must still come back, on either version.
 - Path with spaces and non-ASCII characters in the user name; a book on a second drive.
 - Uninstall via Apps & features; the book folder is left in place.

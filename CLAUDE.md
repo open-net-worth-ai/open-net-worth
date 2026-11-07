@@ -33,7 +33,9 @@ The wheel carries `frontend/dist`, `docs-site/dist-embed` and `docs/product` und
 bundled only inside an installed wheel. `backend/cli/` is the top layer (`cli → api → …`). ADR
 `2026-09-19-distribute-as-uv-tool-and-published-image`. `onw upgrade` and `onw start --auto-upgrade`
 install the signed release's wheel, never `uv tool upgrade` (ADR
-`2026-11-05-a-server-upgrades-itself-only-when-asked-and-only-from-a-signed-wheel`).
+`2026-11-05-a-server-upgrades-itself-only-when-asked-and-only-from-a-signed-wheel`). With a server
+running, `onw upgrade` asks it to do this itself once idle (ADR
+`2026-11-07-onw-upgrade-asks-a-running-server-to-upgrade-itself`).
 
 ```bash
 uvicorn backend.main:app --reload --port 8080
@@ -327,6 +329,10 @@ One line each — full reasoning and the scar behind each is in
   CATEGORIES by id (`services/ynab_pairs`, never by name once imported); its Assigned syncs only
   with an envelope holding just that category. ADR
   `2026-10-20-ynab-two-way-sync-reconciles-against-per-entity-baselines`.
+- Actual Budget is the second app behind that one engine: everything app-specific is the `BudgetApp`
+  in `services/budget_app.py` + `services/actual_sync/app.py`; only `actual_sync/client.py` imports
+  `actual`; `make actual-smoke` is the opt-in live regression. ADR
+  `2026-11-05-actual-budget-is-a-second-app-behind-the-ynab-engine`.
 
 ## AI tools
 

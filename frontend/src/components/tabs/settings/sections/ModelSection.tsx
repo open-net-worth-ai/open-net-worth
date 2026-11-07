@@ -22,7 +22,7 @@ import { getCachedQueryData, useCachedFetchState } from '../../../../state/query
 import { openReportProblem } from '../../../../state/reportProblem'
 import { useCliDetectionPoll } from '../../../../hooks/useCliDetectionPoll'
 import { CliSubscriptionHelp } from '../../../shared/CliSubscriptionHelp'
-import type { CliHostPlatform } from '../../../shared/CliSubscriptionHelp'
+import type { CliHostPlatform, CliSignInState } from '../../../shared/CliSubscriptionHelp'
 import { NO_LOCAL_MODELS_NOTE, isLocalOnlyProvider } from '../../../shared/privateCloudCopy'
 import { ModelPicker } from '../../../ui'
 import { ChevronRight, Eye, EyeOff, TriangleAlert, Plus } from '../../../../ui/icons'
@@ -73,6 +73,9 @@ interface ProvidersResponse {
   /** What each CLI runs when told nothing — read from the CLI's own config. */
   cli_default_models?: Record<string, string>
   cli_host_platform?: CliHostPlatform
+  /** Whether each detected CLI can spend a login. Installed does not say so. */
+  cli_sign_in?: Record<string, CliSignInState>
+  cli_in_container?: boolean
 }
 
 const CLI_DEFAULT_NOTE: Record<string, string> = {
@@ -215,6 +218,7 @@ function ProviderRow({
   isDefault,
   detected,
   detectedPath,
+  signIn,
   onEdit,
   onToggle,
   toast,
@@ -225,11 +229,13 @@ function ProviderRow({
   isDefault: boolean
   detected: boolean
   detectedPath: string
+  signIn?: CliSignInState
   onEdit: (k: string) => void
   onToggle: (k: string, v: boolean) => void
   toast: SectionProps['toast']
   subscription?: {
     platform?: CliHostPlatform
+    inContainer?: boolean
     onCheck: () => Promise<unknown>
     terminal?: { onOpen: () => void }
   }
@@ -248,11 +254,13 @@ function ProviderRow({
     // whether its binary was even installed. The Default model row below names its provider,
     // so the chip was saying it twice and costing the useful fact.
     if (!enabled) return null
-    // Binary presence does not prove the CLI's saved login can answer a turn.
-    if (isCli)
-      return (
-        <Badge tone={detected ? 'good' : 'bad'}>{detected ? 'Installed' : 'Not installed'}</Badge>
-      )
+    // Binary presence does not prove the CLI's saved login can answer a turn, so the CLI's own
+    // answer wins. "Installed" is left for a CLI we couldn't ask.
+    if (isCli) {
+      if (!detected) return <Badge tone="bad">Not installed</Badge>
+      if (signIn === 'not_signed_in') return <Badge tone="bad">Not signed in</Badge>
+      return <Badge tone="good">{signIn === 'signed_in' ? 'Signed in' : 'Installed'}</Badge>
+    }
     const [txt, tone] = STATUS_BADGE[cfg.key_status || 'unchecked'] || STATUS_BADGE.unchecked!
     return <Badge tone={tone}>{txt}</Badge>
   }
@@ -316,6 +324,8 @@ function ProviderRow({
           provider={entry.key}
           platform={subscription.platform}
           detected={detected}
+          signIn={signIn}
+          inContainer={subscription.inContainer}
           onCheck={subscription.onCheck}
           terminal={subscription.terminal}
         />
@@ -333,6 +343,8 @@ function ProviderModal({
   models,
   cliPlatform,
   detectedClis,
+  cliSignIn,
+  cliInContainer,
   onCheckCli,
   terminal,
   taken,
@@ -350,6 +362,8 @@ function ProviderModal({
   models: ModelOption[]
   cliPlatform?: CliHostPlatform
   detectedClis: Record<string, boolean>
+  cliSignIn?: Record<string, CliSignInState>
+  cliInContainer?: boolean
   onCheckCli: () => Promise<unknown>
   terminal?: { onOpen: () => void }
   taken: string[]
@@ -441,11 +455,14 @@ function ProviderModal({
       })
       const body = (await r.json().catch(() => null)) as {
         key_status?: string
+        sign_in?: CliSignInState
         error?: string
         detail?: string
       } | null
       const ms = Math.round(performance.now() - started)
-      if (body?.key_status === 'valid') toast(`Tested ok — ${ms}ms`)
+      // Signed out is a step to take, not a failure to report; the sign-in steps are right here.
+      if (body?.sign_in === 'not_signed_in') toast(body.error || 'Not signed in.')
+      else if (body?.key_status === 'valid') toast(`Tested ok — ${ms}ms`)
       // `detail` is what a 4xx carries (e.g. the provider is switched off). Without it this
       // asserted "unreachable" for ANY failure — including our own server erroring — and so
       // blamed the network for problems that had nothing to do with it.
@@ -638,6 +655,8 @@ function ProviderModal({
               provider={entry.key}
               platform={cliPlatform}
               detected={Boolean(detectedClis[entry.key])}
+              signIn={cliSignIn?.[entry.key]}
+              inContainer={cliInContainer}
               onCheck={onCheckCli}
               terminal={terminal}
             />
@@ -907,6 +926,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
   const configured = providers.data?.configured_providers ?? {}
   const detected = providers.data?.detected_clis ?? {}
   const detectedPaths = providers.data?.detected_cli_paths ?? {}
+  const cliSignIn = providers.data?.cli_sign_in ?? {}
   const refreshProviders = providers.refresh
   const refreshCliDetection = useCallback(async () => {
     const previous = getCachedQueryData<ProvidersResponse>('/api/model-config/providers')
@@ -1102,10 +1122,21 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
                   isDefault={defaultKey === entry.key}
                   detected={Boolean(detected[entry.key])}
                   detectedPath={detectedPaths[entry.key] || ''}
+                  signIn={cliSignIn[entry.key]}
                   toast={toast}
                   onEdit={(k) => setEditor({ mode: 'edit', key: k })}
                   onToggle={(k, v) =>
                     void putProvider(k, { enabled: v }, v ? 'Enabled' : 'Disabled')
+                  }
+                  subscription={
+                    cliSignIn[entry.key] === 'not_signed_in'
+                      ? {
+                          platform: providers.data?.cli_host_platform,
+                          inContainer: providers.data?.cli_in_container,
+                          onCheck: checkCliInstallations,
+                          terminal,
+                        }
+                      : undefined
                   }
                 />
               )
@@ -1164,6 +1195,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
                   isDefault={defaultKey === entry.key}
                   detected={Boolean(detected[entry.key])}
                   detectedPath={detectedPaths[entry.key] || ''}
+                  signIn={cliSignIn[entry.key]}
                   toast={toast}
                   onEdit={(key) => setEditor({ mode: 'edit', key })}
                   onToggle={(key, enabled) =>
@@ -1171,6 +1203,7 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
                   }
                   subscription={{
                     platform: providers.data?.cli_host_platform,
+                    inContainer: providers.data?.cli_in_container,
                     onCheck: checkCliInstallations,
                     terminal,
                   }}
@@ -1233,6 +1266,8 @@ export function ModelSection({ toast, gatewayMode = false, openSection }: Sectio
           models={models}
           cliPlatform={providers.data?.cli_host_platform}
           detectedClis={detected}
+          cliSignIn={cliSignIn}
+          cliInContainer={providers.data?.cli_in_container}
           onCheckCli={checkCliInstallations}
           terminal={terminal}
           taken={takenKeys}

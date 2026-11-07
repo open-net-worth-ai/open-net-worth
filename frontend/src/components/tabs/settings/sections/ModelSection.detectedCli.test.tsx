@@ -14,7 +14,7 @@
 // `!`, so only a render catches it. That is what this file is for.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 vi.mock('../../../../api/client', () => ({
   authFetch: vi.fn(),
@@ -67,8 +67,16 @@ function json(body: unknown, status = 200): Response {
   })
 }
 
+let providersBody: Record<string, unknown> = PROVIDERS
+
 function route(url: string): Response {
-  if (url.startsWith('/api/model-config/providers')) return json(PROVIDERS)
+  if (url.endsWith('/validate'))
+    return json({
+      key_status: 'valid',
+      sign_in: 'not_signed_in',
+      error: 'Claude Code CLI is installed but not signed in.',
+    })
+  if (url.startsWith('/api/model-config/providers')) return json(providersBody)
   if (url.startsWith('/api/model-config'))
     return json({
       default_model: 'claude_cli:sonnet',
@@ -93,6 +101,7 @@ function route(url: string): Response {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  providersBody = PROVIDERS
   invalidateQueryCache(() => true)
   mockAuthFetch.mockImplementation(async (url: string) => route(String(url)))
 })
@@ -124,5 +133,47 @@ describe('ModelSection — a detected CLI with nothing configured', () => {
     render(<ModelSection toast={vi.fn()} />)
     await waitFor(() => expect(screen.getByText('Claude Code CLI')).toBeTruthy())
     expect(screen.getByText('/Users/someone/.local/bin/claude')).toBeTruthy()
+  })
+})
+
+describe('ModelSection — what a detected CLI says about its login', () => {
+  const withSignIn = (state: string, extra: Record<string, unknown> = {}) => {
+    providersBody = { ...PROVIDERS, cli_sign_in: { claude_cli: state }, ...extra }
+  }
+
+  it('calls a CLI with no login "Not signed in", and offers the sign-in on its row', async () => {
+    withSignIn('not_signed_in', { cli_in_container: true })
+    render(<ModelSection toast={vi.fn()} />)
+    await waitFor(() => expect(screen.getAllByText('Not signed in').length).toBeGreaterThan(0))
+    expect(screen.queryByText('Installed')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /^Sign in/ }))
+    expect(screen.getByText('docker exec -it open-net-worth claude auth login')).toBeTruthy()
+  })
+
+  it('calls a CLI with a login "Signed in", with no help row', async () => {
+    withSignIn('signed_in')
+    render(<ModelSection toast={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Signed in')).toBeTruthy())
+    expect(screen.queryByRole('button', { name: /^Sign in/ })).toBeNull()
+  })
+
+  it('keeps saying "Installed" when the CLI could not be asked', async () => {
+    withSignIn('unknown')
+    render(<ModelSection toast={vi.fn()} />)
+    await waitFor(() => expect(screen.getByText('Installed')).toBeTruthy())
+  })
+
+  it('does not report Test connection as ok for a CLI with no login', async () => {
+    withSignIn('not_signed_in')
+    const toast = vi.fn()
+    render(<ModelSection toast={toast} />)
+    await waitFor(() => expect(screen.getByText('Claude Code CLI')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Test connection' }))
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith('Claude Code CLI is installed but not signed in.'),
+    )
+    expect(toast).not.toHaveBeenCalledWith(expect.stringContaining('Tested ok'))
+    expect(screen.queryByRole('button', { name: 'Report this problem' })).toBeNull()
   })
 })

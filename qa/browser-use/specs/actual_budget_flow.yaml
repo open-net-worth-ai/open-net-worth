@@ -1,0 +1,34 @@
+# Actual Budget: the whole flow in a real browser against a throwaway Actual server. Deterministic:
+# a Playwright fixture, no model, so `make qa-e2e SPECS=ACTUAL-01` needs no API key.
+# It reads the book it boots on, so run it with DATA_DIR pointing at an empty scratch folder.
+id: ACTUAL-01
+acceptance_ids:
+  - ACTUAL-CONNECT-SAVE
+  - ACTUAL-CONNECT-PLAIN-HTTP
+  - ACTUAL-CONNECT-SECRETS
+  - ACTUAL-CONNECT-AUTH-ERROR
+  - ACTUAL-PAGE-NO-ADDRESS
+  - ACTUAL-REVIEW-SETTLE
+title: "Actual Budget: connect, review, import, sync, conflict, resolve, one-way"
+description: >
+  Starts the pinned Actual server and official client (the ones make actual-smoke installs) on port
+  8095, makes up a budget, and drives the running app through the whole flow, with the official
+  client as the person editing in Actual and as the referee of what reached the server.
+setup_script: "verify_actual_budget_flow.py"
+fixture_only: true
+timeout_seconds: 480
+fixture:
+  type: "Playwright against the running app, with a real Actual server"
+  source: "qa/browser-use/fixtures/verify_actual_budget_flow.py"
+  isolation: "Made-up budget on a throwaway server; the server stops when the fixture ends."
+acceptance_criteria:
+  - AC1: A refused sign-in reads as one, a right one shows a Budget picker, and no secret reaches the page
+  - AC2: The review keeps Import off until the account types are settled, and the import turns the sync on
+  - AC3: A run brings a person's edit here and sends an edit here to Actual, balances agreeing with the official client
+  - AC4: A change on both sides waits in review with both sides untouched, and the answer reaches Actual
+  - AC5: From Actual writes nothing there, To Actual changes nothing here, and what waits is said on the page
+browser_use_task: |
+  Executed by the deterministic fixture declared above; no browser agent is needed.
+expected:
+  pass_condition: "deterministic fixture passes"
+  note: "Screenshots go to ONW_QA_EVIDENCE_DIR, or the gitignored artifacts folder."

@@ -191,9 +191,10 @@ runs**; **Mark all read** there clears the unread ones in one click.
 
 A run that failed keeps saying **Failed** there, even after you've opened it. And while an
 Automation's latest run has failed, the Lucius home screen lists it under **Needs attention** — on
-your phone too — with the reason. **Open** takes you to the run, where **Try again** is. It drops off
-the list once a later run, or your retry, succeeds — and after 24 hours in any case, so a paused or
-finished Automation doesn't sit there for good.
+your phone too — with the reason. **Open** takes you to the run, where **Try again** is, and clears
+it from the list on all your devices: you've seen it. If the Automation fails again, it comes back.
+It also drops off once a later run, or your retry, succeeds — and after 24 hours in any case, so a
+paused or finished Automation doesn't sit there for good.
 
 Deleting an Automation also deletes its run history. It can't be undone.
 
@@ -209,10 +210,12 @@ The switch appears once a data sync is turned on in
 [Settings → Developer → Experimental](../features/settings.md#experimental-features); until then
 **Automations** is the Lucius list alone.
 
-Today there is one: [YNAB](../features/imports-and-sync.md). It imports your YNAB plan and then
-keeps it and this book in step: from YNAB, to YNAB, or both ways. The **Sync YNAB** template
-under Lucius is the one-way version: Lucius fetches new YNAB transactions and books them here,
-and doesn't copy categories or Assigned.
+There are two: [YNAB](../features/imports-and-sync.md) and
+[Actual](../features/actual-budget-import.md), which is off until you turn it on in
+**Settings → Developer → Experimental**. Each imports your budget and then keeps it and this
+book in step: from the app, to the app, or both ways. A book syncs with one of them at a time. The
+**Sync YNAB** template under Lucius is the one-way version: Lucius fetches new YNAB transactions and
+books them here, and doesn't copy categories or Assigned.
 
 ## Logging transactions from your email
 
@@ -223,16 +226,16 @@ does two things:
 - **Logs** new bank, card and trade confirmation emails, with payees resolved and nothing booked
   twice.
 - **Tells you what else affects your money**, in one short message, and what it means going by
-  your books: a new login to an account that can reach your money, a failed payment of any size,
+  your books: a new login to a bank, broker or other finance app, a failed payment of any size,
   a bill due and not yet paid, a margin call, a deposit maturing, a new rate on your savings, a
   deadline on something you hold, a large amount moving. It judges each email by what it says,
-  not whose name is on it. Promotions, newsletters and sign-ins to services like streaming stay
-  out. A first run looks back 3 days.
+  not whose name is on it. Promotions, newsletters and security notices from anything that isn't
+  a finance app, like your email, shops or streaming, stay out. A first run looks back 3 days.
 
 The message opens with a greeting, then follows one order: anything that puts your money at risk
 right now, what it logged, money going wrong, decisions with a deadline, a couple of things worth
 knowing, and small things in one line. Lucius can't tell from an email who did something, so he
-lightly mentions every new security notice on a money account, and you can ignore it if it was you.
+lightly mentions every new security notice on a finance app, and you can ignore it if it was you.
 The part on what he logged gives each charge's amount, payee, account and category (grouped when
 there are more than five), and says what you may want to correct and whether a bank email wouldn't
 open.
@@ -282,7 +285,9 @@ the time, and look at its **History** tab. More in [A scheduled Automation didn'
 run](../troubleshooting/automations-not-running.md).
 
 **A run is stuck on "Needs you".** It's in **Manually approve** and waiting on a confirm card.
-Open the run and answer it, or switch the Automation to **Automatically approve**.
+Open the run and answer it, or switch the Automation to **Automatically approve**. A waiting run has
+used its scheduled time, so that time won't start a second run, and the next scheduled run still
+starts on time.
 
 **"This turn hit its 20-minute time limit and was stopped."** The model was too slow for the job.
 Pick a faster **Model** for this Automation, or raise the **Turn time limit** — see [Models and

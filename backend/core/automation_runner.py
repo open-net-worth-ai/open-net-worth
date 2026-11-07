@@ -105,6 +105,11 @@ _CANCEL_NOTES = {
         "cancels whatever was in flight. Nobody stopped it. A tool call already in flight "
         "may have completed, so anything it touched needs checking before you rely on it."
     ),
+    "crash": (
+        "Did not finish — the server stopped unexpectedly while this {subject} was working. "
+        "Nobody stopped it. A tool call already in flight may have completed, so anything it "
+        "touched needs checking before you rely on it."
+    ),
     "conversation_deleted": (
         "Did not finish — the conversation this {subject} was working in was deleted, which "
         "cancels whatever was in flight. A tool call already in flight may have completed, "

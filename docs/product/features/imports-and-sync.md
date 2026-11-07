@@ -21,13 +21,19 @@ than a Lucius prompt, so no AI is involved and it costs nothing to run. Every ru
 saved, so you can come back to its report whenever you like, from any device.
 
 > **Experimental, on by default.** It has a switch in [Settings → Developer → Experimental](settings.md#experimental-features)
-> (**Ynab import and sync**). Turning it off stops the sync and hides the **Data sync** tab, but
-> keeps its settings, review list and history, so turning it back on carries on where it left
-> off. The YNAB connector itself works
-> the same either way.
+> (**Ynab import and sync**). Turning it off stops the sync and takes YNAB out of the **Data sync**
+> tab, but keeps its settings, review list and history, so turning it back on carries on where it
+> left off. The tab goes too unless Actual is there. The YNAB connector itself works the same
+> either way.
 
 This is separate from [importing a statement](importing.md), which reads one bank or card file, and
 from the one-way **Sync YNAB** template, where Lucius fetches new YNAB transactions on a schedule.
+
+Coming from Actual Budget instead? Once it's turned on in **Settings → Developer → Experimental**, it
+has its own card under **Data sync**, and works the same way,
+with a few differences its page lists: see [Import from Actual Budget](actual-budget-import.md). A
+book syncs with one of the two at a time, and an import from one is refused while the other's sync is
+on.
 
 ## Set it up
 

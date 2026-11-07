@@ -2,8 +2,15 @@ import { useEffect, useRef } from 'react'
 import { ChevronDown, Keyboard, Maximize2, Mic, MicOff, PhoneOff } from 'lucide-react'
 import { expandCall, hangUp, minimizeCall, toggleMute, useVoiceCall } from './voiceCall'
 import { callSignal, callStatus, orbState, useCallClock } from './voiceCallStatus'
+import { VoiceCallAttach } from './VoiceCallAttach'
+import { VoiceCallGlow } from './VoiceCallGlow'
+import { VoiceCallCaption } from './VoiceCallLive'
+import { VoiceCallMicLight } from './VoiceCallMicLight'
+import { VoiceCallModel } from './VoiceCallModel'
+import { VoiceCallSettings } from './VoiceCallSettings'
 import { VoiceCallSignal } from './VoiceCallSignal'
 import { VoiceOrb } from './VoiceOrb'
+import { useSwipeToMinimize } from './useSwipeToMinimize'
 
 // The call's view (`voice_calls` flag). `screen` is the phone's full-screen call; `card` is the
 // call strip above the composer — the ONLY form on a computer, and the phone's call folded down
@@ -41,6 +48,8 @@ export function VoiceCallStage({
   const root = useRef<HTMLDivElement>(null)
   const screen = variant === 'screen'
 
+  useSwipeToMinimize(root, minimizeCall, screen && !ended)
+
   useEffect(() => {
     if (screen) root.current?.focus()
   }, [screen])
@@ -60,12 +69,9 @@ export function VoiceCallStage({
         }
       }}
     >
+      {screen && <VoiceCallGlow live={call.phase === 'live'} />}
       <div className="lx-callstage-inner">
         <div className="lx-callstage-top">
-          {signal && <VoiceCallSignal signal={signal} />}
-          <span className="lx-callstage-clock" role="timer" aria-label="Call duration">
-            {top}
-          </span>
           {screen && (
             <button
               type="button"
@@ -79,6 +85,13 @@ export function VoiceCallStage({
               <ChevronDown size={22} />
             </button>
           )}
+          <span className="lx-callstage-when">
+            {signal && <VoiceCallSignal signal={signal} />}
+            <span className="lx-callstage-clock" role="timer" aria-label="Call duration">
+              {top}
+            </span>
+          </span>
+          {screen && <VoiceCallSettings ended={ended} />}
           {expandable && (
             <button
               type="button"
@@ -118,22 +131,12 @@ export function VoiceCallStage({
         </div>
         {
           <div className="lx-callstage-controls" data-ended={ended || undefined}>
-            <div className="lx-callstage-ctl">
-              <button
-                type="button"
-                className="lx-callstage-btn"
-                aria-pressed={call.muted}
-                aria-label={call.muted ? 'Unmute' : 'Mute'}
-                disabled={call.phase !== 'live'}
-                onClick={() => void toggleMute()}
-              >
-                {call.muted ? <MicOff size={screen ? 26 : 14} /> : <Mic size={screen ? 26 : 14} />}
-              </button>
-              <span className="lx-callstage-label">{call.muted ? 'Unmute' : 'Mute'}</span>
-            </div>
+            {screen && <VoiceCallCaption />}
+            {screen && <VoiceCallAttach disabled={ended} busy={busy} />}
+            {screen && <VoiceCallModel disabled={ended} />}
             {screen && (
-              // The phone's call covers the chat: Type folds it to the bar, over the message box.
-              <div className="lx-callstage-ctl">
+              // The phone's call covers the chat: this folds it to the bar, over the message box.
+              <div className="lx-callstage-ctl lx-callstage-ctl--type">
                 <button
                   type="button"
                   className="lx-callstage-btn"
@@ -141,12 +144,26 @@ export function VoiceCallStage({
                   disabled={ended}
                   onClick={onType}
                 >
-                  <Keyboard size={26} />
+                  <Keyboard size={20} />
                 </button>
                 <span className="lx-callstage-label">Type</span>
               </div>
             )}
-            <div className="lx-callstage-ctl">
+            <div className="lx-callstage-ctl lx-callstage-ctl--mic">
+              <button
+                type="button"
+                className="lx-callstage-btn"
+                aria-pressed={call.muted}
+                aria-label={call.muted ? 'Unmute' : 'Mute'}
+                disabled={ended}
+                onClick={() => void toggleMute()}
+              >
+                {screen && <VoiceCallMicLight live={call.phase === 'live'} />}
+                {call.muted ? <MicOff size={screen ? 26 : 14} /> : <Mic size={screen ? 26 : 14} />}
+              </button>
+              <span className="lx-callstage-label">{call.muted ? 'Unmute' : 'Mute'}</span>
+            </div>
+            <div className="lx-callstage-ctl lx-callstage-ctl--end">
               <button
                 type="button"
                 className="lx-callstage-btn lx-callstage-btn--end"
@@ -154,7 +171,7 @@ export function VoiceCallStage({
                 disabled={ended}
                 onClick={() => void hangUp()}
               >
-                <PhoneOff size={screen ? 28 : 14} />
+                <PhoneOff size={screen ? 20 : 14} />
               </button>
               <span className="lx-callstage-label">End</span>
             </div>

@@ -675,6 +675,13 @@ ynab_sync_mirror = book_payload_table("ynab_sync_mirror")
 ynab_sync_baselines = book_payload_table("ynab_sync_baselines")
 ynab_sync_conflicts = book_payload_table("ynab_sync_conflicts")
 
+# The Actual sync's own: the twins of the four above, one set per app so nothing of one reaches
+# the other. No credentials.
+actual_sync_state = book_payload_table("actual_sync_state")
+actual_sync_mirror = book_payload_table("actual_sync_mirror")
+actual_sync_baselines = book_payload_table("actual_sync_baselines")
+actual_sync_conflicts = book_payload_table("actual_sync_conflicts")
+
 # owned_assets / owned_asset_categories: the Assets tab domain (ADR 2026-09-06-assets-tab-
 # faithful-port) — things you own that are valued by a dated manual mark, not a ledger balance
 # or a price feed (property, vehicles, watches, art, precious metals, cash-value policies, and

@@ -1,3 +1,4 @@
+from .actual_budget_config_store import ActualBudgetConfigStore
 from .alert_store import AlertStore
 from .alpaca_config_store import AlpacaConfigStore
 from .automation_store import AutomationStore
@@ -23,6 +24,7 @@ from .ynab_config_store import YnabConfigStore
 from .yodlee_config_store import YodleeConfigStore
 
 __all__ = [
+    "ActualBudgetConfigStore",
     "AlertStore",
     "AutomationStore",
     "AlpacaConfigStore",

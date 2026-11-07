@@ -43,6 +43,14 @@ describe('an MCP server identity', () => {
     expect(toEntry(mcp({})).developerUrl).toBeUndefined()
   })
 
+  it('keeps a listed server in the lane its directory card sits in', () => {
+    expect(toEntry(mcp({ url: 'https://api.monarch.com/mcp' })).families).toEqual(['Data source'])
+    expect(toEntry(mcp({ url: 'https://api.ibkr.com/v1/api/mcp-public' })).families).toEqual([
+      'MCP',
+    ])
+    expect(toEntry(mcp({})).families).toEqual(['MCP'])
+  })
+
   // A listed server's page read the generic hand-added text under its name (owner report,
   // 2026-11-01): it reads what its directory card reads.
   it('describes a listed server with its directory text', () => {
