@@ -33,14 +33,17 @@ every request with Lucius's answer — so you can scroll back through it later, 
 what was said on the call next time you talk.
 
 When you ask for something real, the front voice hands it to Lucius and says something short
-about what you asked (*"okay, let me check your grocery spending"* — never a promise of how long it takes, or a hint of the answer). Lucius's question and answer appear in the chat. If a lookup is genuinely slow,
+about what you asked (*"okay, let me check your grocery spending"* — never a promise of how long it takes, or a hint of the answer). When you're following on from what he just said, like *"yes, please"*, it's just *"sure"*. Lucius's question and answer appear in the chat. If a lookup is genuinely slow,
 you hear that it's taking longer than usual — once, and only when it's true. After about 10 seconds
 of hearing nothing, he tells you he's still on it (*"still working on your grocery spending"*), then
 again every 30 to 45 seconds until the answer starts. He stays quiet while you're talking or after
 you've asked him to wait. These lines repeat what you asked, never a figure. To cut him off, say at
 least two words (*"hold on"*, *"stop there"*): a lone *"okay"* or background noise doesn't.
 Correct him (*"no, I meant the other card"*) and he moves on to what you meant, skipping the first
-answer if it hasn't been read out yet; he also knows you never heard it. Asking something different
+answer if it hasn't been read out yet; he also knows you never heard it. Start talking just as an
+answer begins, before any of it has played, and he knows you missed it: if what you said was a
+question, he includes whatever you still need in the reply, and if it was only a cough or an *"mm"*,
+he says the answer a moment later. Cut him off partway and he knows how far he got. Asking something different
 keeps the first answer, in order. A change can't be taken back this way: if the first request did
 change something, you always hear how it went, then he gets to your correction.
 Only his final reply is read out. A link in it shows in the chat: inside a sentence you hear just its
@@ -48,8 +51,14 @@ name, and on a line of its own you don't hear it at all.
 Ask *"what are you doing?"* and the front voice tells you what Lucius is working on right now.
 
 **Changes follow your usual approvals**, which depend on the conversation's mode and the tool's
-permission. When one waits for you, he says so, and the approval card appears in the chat on your
-screen. Tap **Approve** and he tells you on the call when it's done.
+permission. When one waits for you, he reads out what it is and asks whether to go ahead, and the
+approval card appears in the chat on your screen. Answer out loud (*"yes, go ahead"*, *"no, leave it"*)
+or tap the card: either does the same thing, and he tells you on the call how it went. Your voice
+counts for any card, including one that moves money. Anyone near your phone can answer too, and
+voices aren't told apart. So a yes only counts if you start saying it after he's finished reading that
+card, and it's a plain yes: *"hmm"*, a question, or half a sentence approves nothing, and he asks again.
+*"No"* always works. A card he can't read out with enough detail to go on needs a tap. While a card
+waits, anything else you ask waits too, and he comes back to it once you've answered.
 Your [permission settings](../lucius/permissions.md) apply exactly as they do in the chat.
 
 **He can look at your screen.** Ask *"what am I looking at?"* and he reads the screen open in the
@@ -125,7 +134,13 @@ attach a file, and it goes to Lucius like any other message — and he reads his
 call, as well as showing it in the chat. The same goes for a change you approve on screen: what
 happens next is read out.
 
-**You see the call as it happens.** Your words appear as you speak, and Lucius's as he says them: above the mic on the full call screen, and in the chat. When the voice hasn't started or you cut him off, the chat shows his whole answer.
+**A call is a normal conversation.** It's saved like any other, and it's named from the first thing you asked rather than your greeting. Switch to another app for a moment and you come back to the same conversation; the installed app starts a new one only after about 30 minutes away.
+
+**You see the call as it happens.** Your words appear as you speak, and Lucius's as he says them: above the mic on the full call screen, and in the chat. When the voice hasn't started or you cut him off, the chat shows his whole answer. Everything you hear is in the chat, in the order you heard it, including short lines like *"one sec"* said while he works; those are for you to read, and Lucius's model doesn't see them.
+
+**Only Lucius states facts.** The voice that picks up instantly handles only small talk. If it tries to answer with a figure, or to say something is done, that reply is thrown away and your question goes to Lucius instead. If you pause partway through a sentence, it says *"mm-hm?"* and waits for the rest.
+
+**It learns your merchants.** The names you spend with most, up to 20, are passed to the speech-to-text service as word hints on each call, so it hears them correctly.
 
 **Carrying on, correcting, or changing the subject.** Say more after you've asked something and the call decides which it is. If you're finishing the same question, Lucius's current attempt is stopped and he starts again on the whole of it, and your words stay one message in the chat. If you correct yourself, the old attempt is stopped and its answer is dropped. A different question waits its turn. A change he has already started, or a task, always runs to the end first, and he tells you what it did. Nothing waits before Lucius starts: stopping is what saves the wasted work.
 

@@ -1452,17 +1452,10 @@
   .lx-callcaption > span {
     flex: none;
   }
-  /* Past three lines, the cut-off top line blurs away. */
-  .lx-callcaption[data-long]::before {
-    content: '';
-    position: absolute;
-    inset: 0 0 auto;
-    z-index: 1;
-    height: 1.5em;
-    -webkit-backdrop-filter: blur(2.5px);
-    backdrop-filter: blur(2.5px);
-    -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent);
-    mask-image: linear-gradient(to bottom, #000 45%, transparent);
+  /* Past three lines, the top line fades out. Not blurred: that smeared the words (owner, 2026-11-07). */
+  .lx-callcaption[data-long] {
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 1.5em);
+    mask-image: linear-gradient(to bottom, transparent, #000 1.5em);
   }
   .lx-callcaption[data-who='you'] {
     font-style: italic;
@@ -1712,15 +1705,38 @@
     will-change: scale, opacity;
     transition: opacity 0.4s ease;
   }
+  /* Fades along a curve to nothing at the very edge of its box. A straight fade that stops partway
+     ends at a visible corner, which the eye reads as a second circle (owner, 2026-11-07). */
   .lx-orb-halo {
+    /* Where the fade starts: well behind the sphere's edge, as the glow grows with the voice and a
+       flat band would otherwise show around it. */
+    --lx-orb-halo-rim: 50%;
     inset: -22%;
     background: radial-gradient(
-      circle,
-      color-mix(in srgb, var(--lx-orb-tint) var(--lx-orb-halo-mix), transparent) 0%,
-      transparent 68%
+      circle closest-side,
+      color-mix(in srgb, var(--lx-orb-tint) var(--lx-orb-halo-mix), transparent)
+        var(--lx-orb-halo-rim),
+      color-mix(in srgb, var(--lx-orb-tint) calc(var(--lx-orb-halo-mix) * 0.62), transparent)
+        calc(var(--lx-orb-halo-rim) + (100% - var(--lx-orb-halo-rim)) * 0.2),
+      color-mix(in srgb, var(--lx-orb-tint) calc(var(--lx-orb-halo-mix) * 0.34), transparent)
+        calc(var(--lx-orb-halo-rim) + (100% - var(--lx-orb-halo-rim)) * 0.4),
+      color-mix(in srgb, var(--lx-orb-tint) calc(var(--lx-orb-halo-mix) * 0.15), transparent)
+        calc(var(--lx-orb-halo-rim) + (100% - var(--lx-orb-halo-rim)) * 0.6),
+      color-mix(in srgb, var(--lx-orb-tint) calc(var(--lx-orb-halo-mix) * 0.05), transparent)
+        calc(var(--lx-orb-halo-rim) + (100% - var(--lx-orb-halo-rim)) * 0.8),
+      transparent 100%
     );
     scale: calc(0.88 + var(--lx-orb-voice) * 0.42);
     opacity: calc(0.4 + var(--lx-orb-voice) * 0.6);
+  }
+  /* The big ball has the room to let it go out gradually. */
+  .lx-callstage--screen .lx-orb-halo {
+    --lx-orb-halo-rim: 30%;
+    --lx-orb-halo-mix: 30%;
+    inset: -60%;
+  }
+  :root:is([data-theme='light'], [data-theme='warm']) .lx-callstage--screen .lx-orb-halo {
+    --lx-orb-halo-mix: 24%;
   }
   /* clip-path, not overflow + border-radius: Safari doesn't clip blurred children to a
      rounded box, and the moving light showed as a square (owner's phone, 2026-11-03). */
