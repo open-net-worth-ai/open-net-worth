@@ -2,6 +2,7 @@ import { Button, ErrorState, Loading, Modal } from '../../ui'
 import { Archive, ChevronLeft, RotateCcw } from '../../../ui/icons'
 import { TYPE_LABELS } from './categories'
 import { fCur } from './format'
+import { fDate } from '../../../utils/format'
 import type { Account, Txn } from './types'
 
 function transactionAmount(txn: Txn, account: Account): number | null {
@@ -84,7 +85,9 @@ export function ArchivedAccountsModal({
                 const amount = transactionAmount(txn, selected)
                 return (
                   <div className="acct-archived-txn" key={txn.id}>
-                    <span className="acct-archived-txn-date">{txn.date}</span>
+                    <span className="acct-archived-txn-date">
+                      {fDate(txn.date, 'numeric', 'always')}
+                    </span>
                     <span className="acct-archived-txn-description">
                       {txn.description || txn.memo || 'Transaction'}
                     </span>
