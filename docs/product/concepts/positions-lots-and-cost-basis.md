@@ -100,6 +100,8 @@ the **Not a sale** option.
 - If you delete the cash transaction behind a lot, the lot stays and keeps its cost, but it no
   longer has a linked purchase. Correcting that lot later doesn't change or add any cash. To book
   the purchase again, pick an account under **Deduct from**.
+- A sale works the same way: delete its cash deposit and the sale and its gain stay on record.
+  Editing the sale doesn't add the cash back unless you choose a different account.
 - Correcting a sold lot keeps every sale exactly as recorded (which lots it used, how many,
   the price and the cash). Only that lot's lines on the sale follow: a new date updates their
   holding period, and a new cost or fees updates the sale's gain. A sold lot can't be made

@@ -346,7 +346,8 @@ class DisposeAssetInput(ToolInput):
         "for the proceeds into the given cash account (skipped when proceeds=0), then "
         "archives the asset — it stops counting toward net worth but its history is kept. "
         "Confirm the proceeds amount and destination account with the user first; this is "
-        "not reversible the way an ordinary transaction edit is."
+        "not reversible the way an ordinary transaction edit is. If its proceeds transaction "
+        "was deleted, disposing again books them back."
     ),
     input_schema=schema_of(DisposeAssetInput, tool_name="dispose_asset"),
     mutates=("assets", "ledger"),

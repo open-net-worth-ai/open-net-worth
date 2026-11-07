@@ -31,12 +31,12 @@ We will make `lots.txn_id` a real nullable column, indexed, with a foreign key t
    takes it. The payload keeps a copy for raw JSON readers, which `SET NULL` can leave stale.
 2. **A deliberate delete clears the link** in its own transaction: `bulk_delete_transactions`,
    `delete_transactions_where`, and the account force-delete sweep (explicitly, so the change is
-   checkpointed, where the FK's own write would not be). `bulk_delete_transactions` reports
-   `unlinked_lots`, and the tool tells Lucius to tell the user.
+   checkpointed, where the FK's own write would not be). This is one case of the wider rule in ADR
+   `2026-11-06-deleting-a-transaction-leaves-nothing-unfixable`, which also moves links on a merge.
 3. **An amend treats a link to a deleted or merged row as no link.** It saves the correction,
    clears the link, and leaves cash alone unless the caller names a funding account. This stays
-   after (2) because an import rollback and a merge keep their links on purpose, and because the
-   migration does not rewrite existing soft-deleted links.
+   after (2) because an import rollback keeps its link on purpose, and because the migration does
+   not rewrite existing soft-deleted links.
 4. **`update_transaction` never deletes and re-inserts a row.** `TransactionStore.replace_at_end`
    rewrites it under its id and keeps the same move-to-end ordering. The old delete + upsert would
    have fired `SET NULL` on every edit of a cash row.
@@ -79,7 +79,6 @@ for links to rows that no longer exist.
 
 - `realized_events.txn_id` and `vest_events.txn_id` are the same kind of link and stay
   payload-only. Move them only if they bite.
-- A merge could repoint a lot's link to the surviving row instead of leaving it dead.
 
 ## Alternatives considered
 

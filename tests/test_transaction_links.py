@@ -1,0 +1,533 @@
+"""Deleting a transaction never leaves something the user can't fix — synthetic data only.
+
+Every record that points at a transaction is either released in the delete's own database
+transaction or named in ``NOT_RELEASED`` with the reason. For each link: delete the row, then every
+edit and undo on the record that pointed at it must still work. ADR
+2026-11-06-deleting-a-transaction-leaves-nothing-unfixable.
+"""
+
+# ruff: noqa: F811  (the shared fixtures are imported, then requested by name)
+from __future__ import annotations
+
+import asyncio
+import json
+import re
+from pathlib import Path
+
+import pytest
+
+from backend.ai.tools import execute_tool, registry
+from backend.db.account_store import AccountStore
+from backend.db.commitments_store import CommitmentsStore
+from backend.db.income_event_store import IncomeEventStore
+from backend.db.lot_store import LotStore
+from backend.db.owned_assets_store import OwnedAssetsStore
+from backend.db.position_store import PositionStore
+from backend.db.realized_event_store import RealizedEventStore
+from backend.db.transaction_store import TransactionStore
+from backend.services import commitments as commitments_service
+from backend.services import income as income_service
+from backend.services import ledger as ledger_service
+from backend.services import lots as lots_service
+from backend.services import owned_assets as owned_assets_service
+from backend.services import transaction_links
+from tests.test_lot_cash_link import _buy, _live_ids, _twin_of, book  # noqa: F401
+from tests.test_position_figures import isolated  # noqa: F401
+
+
+def _delete(*ids: str) -> dict:
+    return ledger_service.bulk_delete_transactions(list(ids))
+
+
+def _kinds(result: dict) -> set[str]:
+    return {link["kind"] for link in result.get("released_links") or []}
+
+
+# ── Sale proceeds ────────────────────────────────────────────────────────────────────────
+
+
+def _sell(book, *, source="manual") -> dict:
+    return lots_service.apply_lot_change(
+        {
+            "type": "dispose",
+            "position_id": book["pid"],
+            "quantity": 4,
+            "proceeds_per_unit": 25.0,
+            "proceeds_currency": "SGD",
+            "disposed_at": "2026-02-01",
+            "method": "fifo",
+            "proceeds_account_id": book["cash"],
+            "source": source,
+        }
+    )
+
+
+def _edit_sale(book, event_id: str, **fields) -> dict:
+    return lots_service.apply_lot_change(
+        {
+            "type": "dispose_amend",
+            "event_id": event_id,
+            "quantity": 4,
+            "proceeds_per_unit": 26.0,
+            "proceeds_currency": "SGD",
+            "disposed_at": "2026-02-01",
+            "method": "fifo",
+            "proceeds_account_id": book["cash"],
+            **fields,
+        }
+    )
+
+
+def test_deleting_a_sales_cash_row_keeps_the_sale_and_clears_its_deposit(book):
+    _buy(book)
+    sold = _sell(book)
+
+    result = _delete(sold["cash_leg_id"])
+
+    event = RealizedEventStore().find_by_id(sold["event_id"])
+    assert "sale" in _kinds(result)
+    assert (event["txn_id"], event["proceeds_account_id"]) == (None, None)
+    assert event["quantity"] == 4
+
+
+def test_editing_a_sale_after_its_cash_row_is_gone_does_not_book_the_cash_again(book):
+    bought = _buy(book)
+    sold = _sell(book)
+    _delete(sold["cash_leg_id"])
+    live = _live_ids()
+
+    edited = _edit_sale(book, sold["event_id"], proceeds_account_id=None)
+
+    assert edited["ok"] is True
+    assert _live_ids() == live, f"only the purchase {bought['cash_leg_id']} stays"
+
+
+def test_editing_a_sale_with_a_dead_link_from_old_data_is_not_refused(book):
+    _buy(book)
+    sold = _sell(book)
+    twin = ledger_service.create_transaction(
+        {
+            "date": "2026-02-01",
+            "kind": "investment",
+            "description": "Sold 4 ACME at 25.00",
+            "to_account_id": book["cash"],
+            "to_amount": 100.0,
+            "to_currency": "SGD",
+            "source": "email",
+        },
+        allow_duplicate=True,
+    )["id"]
+    TransactionStore().soft_delete(sold["cash_leg_id"])  # how a delete used to leave it
+
+    edited = _edit_sale(book, sold["event_id"])  # the form resends the account it showed
+
+    assert edited["ok"] is True
+    assert edited["cash_leg_id"] is None
+    assert twin in _live_ids()
+    assert "cash" in edited["cash_note"].lower()
+
+
+def test_choosing_a_different_account_on_a_sale_books_cash_again(book):
+    _buy(book)
+    sold = _sell(book)
+    _delete(sold["cash_leg_id"])
+    other = AccountStore().create(
+        {"name": "Other cash", "kind": "asset", "type": "investment", "currency": "SGD"}
+    )
+
+    edited = _edit_sale(book, sold["event_id"], proceeds_account_id=other["id"])
+
+    assert edited["cash_leg_id"] in _live_ids()
+
+
+def test_editing_a_sale_booked_elsewhere_replaces_its_own_cash_row(book):
+    _buy(book)
+    sold = _sell(book, source="automation")
+
+    edited = _edit_sale(book, sold["event_id"])
+
+    assert edited["ok"] is True
+    assert sold["cash_leg_id"] not in _live_ids()
+    assert TransactionStore().find_by_id(edited["cash_leg_id"])["to_amount"] == 104.0
+
+
+def test_undoing_a_sale_after_its_cash_row_is_gone_works(book):
+    bought = _buy(book)
+    sold = _sell(book)
+    TransactionStore().soft_delete(sold["cash_leg_id"])
+    audit_before = _audit_count(sold["cash_leg_id"])
+
+    undone = lots_service.apply_lot_change({"type": "dispose_undo", "event_id": sold["event_id"]})
+
+    assert undone["ok"] is True
+    assert LotStore().find_by_id(bought["lot_id"])["remaining_qty"] == 10
+    assert _audit_count(sold["cash_leg_id"]) == audit_before, "the dead row isn't deleted twice"
+
+
+def test_removing_a_lot_after_its_cash_row_is_gone_works(book):
+    bought = _buy(book)
+    TransactionStore().soft_delete(bought["cash_leg_id"])
+    audit_before = _audit_count(bought["cash_leg_id"])
+
+    removed = lots_service.apply_lot_change({"type": "delete", "lot_id": bought["lot_id"]})
+
+    assert removed["ok"] is True
+    assert _audit_count(bought["cash_leg_id"]) == audit_before
+
+
+def _audit_count(txn_id: str) -> int:
+    from backend.db.transaction_audit_store import TransactionAuditStore
+
+    return len(TransactionAuditStore().query(txn_id=txn_id))
+
+
+# ── Commitments ──────────────────────────────────────────────────────────────────────────
+
+
+def _commitment(book, txn_id: str, *, due="2020-01-01") -> tuple[str, str, str]:
+    commitment = commitments_service.create_commitment(
+        {
+            "name": "School fees",
+            "installments": [{"id": "inst-1", "label": "Term 1", "due_date": due, "amount": 200}],
+            "funding_plan": [{"id": "fund-1", "label": "Bonus", "amount": 200}],
+        }
+    )
+    cid = commitment["id"]
+    commitments_service.update_installment(cid, "inst-1", {"status": "paid", "paid_txn_id": txn_id})
+    commitments_service.update_funding_source(
+        cid, "fund-1", {"status": "done", "realized_txn_id": txn_id}
+    )
+    return cid, "inst-1", "fund-1"
+
+
+def _row(cid: str, key: str, row_id: str) -> dict:
+    rows = CommitmentsStore().find_by_id(cid)[key]
+    return next(row for row in rows if row["id"] == row_id)
+
+
+def test_deleting_a_payment_puts_a_past_installment_back_to_due(book):
+    bought = _buy(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+
+    result = _delete(bought["cash_leg_id"])
+
+    inst = _row(cid, "installments", inst_id)
+    assert "installment" in _kinds(result)
+    assert (inst["paid_txn_id"], inst["status"]) == (None, "due")
+    assert commitments_service.is_paid(inst) is False
+
+
+def test_deleting_a_payment_puts_a_future_installment_back_to_upcoming(book):
+    bought = _buy(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"], due="2099-01-01")
+
+    _delete(bought["cash_leg_id"])
+
+    assert _row(cid, "installments", inst_id)["status"] == "upcoming"
+
+
+def test_an_installment_can_be_removed_after_its_payment_is_deleted(book):
+    bought = _buy(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+    _delete(bought["cash_leg_id"])
+
+    updated, missing, refused = CommitmentsStore().remove_installments(cid, [inst_id])
+
+    assert (missing, refused) == ([], [])
+    assert updated["installments"] == []
+
+
+def test_an_installment_marked_paid_by_hand_is_left_alone(book):
+    bought = _buy(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+    commitments_service.update_installment(cid, inst_id, {"paid_txn_id": None})
+
+    _delete(bought["cash_leg_id"])
+
+    assert _row(cid, "installments", inst_id)["status"] == "paid"
+
+
+def test_deleting_a_receipt_puts_funding_back_to_planned(book):
+    bought = _buy(book)
+    cid, _, fund_id = _commitment(book, bought["cash_leg_id"])
+
+    result = _delete(bought["cash_leg_id"])
+
+    source = _row(cid, "funding_plan", fund_id)
+    assert "funding" in _kinds(result)
+    assert (source["realized_txn_id"], source["status"]) == (None, "planned")
+    assert commitments_service.funding_arrived(source) is False
+
+
+# ── Asset sales ──────────────────────────────────────────────────────────────────────────
+
+
+def _sold_asset(book) -> tuple[str, str, str]:
+    cash = AccountStore().create(
+        {"name": "Savings", "kind": "asset", "type": "cash", "currency": "SGD"}
+    )
+    asset = owned_assets_service.apply_owned_asset_change(
+        {"op": "create", "name": "Old bike", "category": "other", "value": 900}
+    )
+    owned_assets_service.apply_owned_asset_change(
+        {"op": "dispose", "id": asset["id"], "proceeds": 500, "account_id": cash["id"]}
+    )
+    stored = OwnedAssetsStore().find_by_id(asset["id"])
+    return asset["id"], cash["id"], stored["disposal_txn_id"]
+
+
+def test_deleting_an_asset_sales_cash_keeps_it_sold_and_clears_the_link(book):
+    asset_id, _, txn_id = _sold_asset(book)
+
+    result = _delete(txn_id)
+
+    asset = OwnedAssetsStore().find_by_id(asset_id)
+    assert "asset_sale" in _kinds(result)
+    assert asset["archived"] is True
+    assert asset["disposal_txn_id"] is None
+
+
+def test_an_asset_sale_can_book_its_cash_again_after_the_row_is_deleted(book):
+    asset_id, cash_id, txn_id = _sold_asset(book)
+    _delete(txn_id)
+
+    owned_assets_service.apply_owned_asset_change(
+        {"op": "dispose", "id": asset_id, "proceeds": 450, "account_id": cash_id}
+    )
+
+    asset = OwnedAssetsStore().find_by_id(asset_id)
+    assert asset["disposal_proceeds"] == 450
+    assert asset["disposal_txn_id"] in _live_ids()
+    assert TransactionStore().find_by_id(asset["disposal_txn_id"])["to_amount"] == 450
+
+
+def test_lucius_can_book_an_asset_sales_cash_again(book):
+    asset_id, cash_id, txn_id = _sold_asset(book)
+    _delete(txn_id)
+
+    text, _ = asyncio.run(
+        execute_tool(
+            "dispose_asset", {"asset_id": asset_id, "proceeds": 500, "account_id": cash_id}
+        )
+    )
+
+    assert json.loads(text)["ok"] is True
+    assert OwnedAssetsStore().find_by_id(asset_id)["disposal_txn_id"] in _live_ids()
+
+
+def test_an_asset_sale_with_a_dead_link_from_old_data_can_book_again(book):
+    asset_id, cash_id, txn_id = _sold_asset(book)
+    TransactionStore().soft_delete(txn_id)
+
+    owned_assets_service.apply_owned_asset_change(
+        {"op": "dispose", "id": asset_id, "proceeds": 500, "account_id": cash_id}
+    )
+
+    assert OwnedAssetsStore().find_by_id(asset_id)["disposal_txn_id"] in _live_ids()
+
+
+def test_a_sale_with_live_cash_still_cant_be_recorded_twice(book):
+    from backend.core.errors import ValidationError
+
+    asset_id, cash_id, _ = _sold_asset(book)
+
+    with pytest.raises(ValidationError, match="recorded twice"):
+        owned_assets_service.apply_owned_asset_change(
+            {"op": "dispose", "id": asset_id, "proceeds": 450, "account_id": cash_id}
+        )
+
+
+# ── Income ───────────────────────────────────────────────────────────────────────────────
+
+
+def test_deleting_a_dividends_cash_keeps_the_income_record(book, monkeypatch):
+    monkeypatch.setattr(income_service, "base_currency", lambda: "SGD")
+    monkeypatch.setattr(income_service, "events", IncomeEventStore())
+    monkeypatch.setattr(income_service, "positions", PositionStore())
+    recorded = income_service.apply_income_change(
+        {
+            "type": "record",
+            "position_id": book["pid"],
+            "gross_amount": 50.0,
+            "tax_withheld": 0.0,
+            "currency": "SGD",
+            "account_id": book["cash"],
+            "paid_at": "2026-05-01",
+        }
+    )
+
+    result = _delete(recorded["txn_id"])
+
+    assert "income" in _kinds(result)
+    assert IncomeEventStore().find_by_id(recorded["event_id"])["txn_id"] is None
+    assert income_service.apply_income_change({"type": "delete", "event_id": recorded["event_id"]})
+
+
+# ── Merges keep the money, so links move instead of clearing ─────────────────────────────
+
+
+def test_merging_a_linked_row_moves_every_link_to_the_surviving_row(book):
+    bought = _buy(book)
+    twin = _twin_of(book)
+    cid, inst_id, fund_id = _commitment(book, bought["cash_leg_id"])
+
+    ledger_service.merge_transactions(twin, bought["cash_leg_id"], override=True)
+
+    assert LotStore().find_by_id(bought["lot_id"])["txn_id"] == twin
+    inst = _row(cid, "installments", inst_id)
+    assert (inst["paid_txn_id"], inst["status"]) == (twin, "paid")
+    assert _row(cid, "funding_plan", fund_id)["realized_txn_id"] == twin
+
+
+def test_undoing_a_merge_moves_the_links_back(book):
+    bought = _buy(book)
+    twin = _twin_of(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+    ledger_service.merge_transactions(twin, bought["cash_leg_id"], override=True)
+
+    ledger_service.unmerge_transactions(bought["cash_leg_id"])
+
+    assert LotStore().find_by_id(bought["lot_id"])["txn_id"] == bought["cash_leg_id"]
+    assert _row(cid, "installments", inst_id)["paid_txn_id"] == bought["cash_leg_id"]
+
+
+# ── The rule holds across the delete ─────────────────────────────────────────────────────
+
+
+def test_a_failed_cleanup_rolls_the_delete_back(book, monkeypatch):
+    bought = _buy(book)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("cleanup failed")
+
+    monkeypatch.setattr(transaction_links, "release", boom)
+
+    with pytest.raises(RuntimeError):
+        _delete(bought["cash_leg_id"])
+
+    assert bought["cash_leg_id"] in _live_ids()
+    assert LotStore().find_by_id(bought["lot_id"])["txn_id"] == bought["cash_leg_id"]
+
+
+def test_rewinding_a_delete_restores_the_row_and_every_link(book):
+    from backend.ai import checkpoint as ckpt
+
+    bought = _buy(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+
+    ctx, token = ckpt.begin_turn("sess-link-undo", anchor_history_len=0, message_preview="delete")
+    try:
+        _delete(bought["cash_leg_id"])
+    finally:
+        entry = ckpt.end_turn(ctx, token)
+    ckpt.restore(entry["id"], mode="data")
+
+    assert bought["cash_leg_id"] in _live_ids()
+    assert LotStore().find_by_id(bought["lot_id"])["txn_id"] == bought["cash_leg_id"]
+    inst = _row(cid, "installments", inst_id)
+    assert (inst["paid_txn_id"], inst["status"]) == (bought["cash_leg_id"], "paid")
+
+
+def test_an_import_rollback_releases_nothing(book):
+    bought = _buy(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+    TransactionStore().update_by_id(bought["cash_leg_id"], {"batch_id": "batch_1"})
+
+    ledger_service.delete_transactions_where(batch_id="batch_1")
+
+    assert _row(cid, "installments", inst_id)["paid_txn_id"] == bought["cash_leg_id"]
+
+
+def test_a_filtered_delete_releases_every_link(book):
+    bought = _buy(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+    out: dict = {}
+
+    ledger_service.delete_transactions_where(account_id=book["cash"], meta_out=out)
+
+    assert _row(cid, "installments", inst_id)["paid_txn_id"] is None
+    assert {"lot", "installment", "funding"} <= {link["kind"] for link in out["released_links"]}
+
+
+# ── You see the effect before you confirm ────────────────────────────────────────────────
+
+
+def test_the_preview_names_what_would_change_and_writes_nothing(book):
+    bought = _buy(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+
+    links = transaction_links.linked_to([bought["cash_leg_id"]])
+
+    assert {link["kind"] for link in links} == {"lot", "installment", "funding"}
+    assert all(link["label"] and link["effect"] for link in links)
+    assert LotStore().find_by_id(bought["lot_id"])["txn_id"] == bought["cash_leg_id"]
+    assert _row(cid, "installments", inst_id)["paid_txn_id"] == bought["cash_leg_id"]
+
+
+def test_the_delete_card_warns_about_a_linked_row(book):
+    bought = _buy(book)
+
+    adapter = registry.tool_preview_adapter("delete_transactions")
+    preview = adapter.build({"transaction_ids": [bought["cash_leg_id"]]})
+
+    assert preview["kind"] == "field_diff"
+    assert adapter.validate(preview) is None
+    text = json.dumps(preview["data"]["items"])
+    assert bought["cash_leg_id"] in text
+    assert "linked purchase" in text
+
+
+def test_the_delete_card_stays_plain_for_a_row_nothing_points_at(book):
+    twin = _twin_of(book)
+
+    adapter = registry.tool_preview_adapter("delete_transactions")
+
+    assert adapter.build({"transaction_ids": [twin]}) is None
+
+
+def test_the_register_can_ask_what_a_delete_would_change(book):
+    from backend.api.ledger import TxnDeletePreview, preview_transaction_delete
+
+    bought = _buy(book)
+
+    out = preview_transaction_delete(TxnDeletePreview(ids=[bought["cash_leg_id"]]))
+
+    assert [link["kind"] for link in out["links"]] == ["lot"]
+
+
+# ── A new link can't skip the rule ───────────────────────────────────────────────────────
+
+
+# A store's field appears quoted in its code or, for a flat store, only in its schema docstring.
+_FIELD = re.compile(r"""\b([a-z_]*txn_id|transaction_id)\b["']?\s*:""")
+_NOT_STORES = {
+    "investments_io.py",  # lots' import path, covered by the lot link
+    "money_io.py",  # the ledger's own rows
+    "portable_bridge.py",
+    "tables.py",
+    "transaction_store.py",
+}
+
+
+def _stored_links() -> set[tuple[str, str]]:
+    found: set[tuple[str, str]] = set()
+    for path in Path("backend/db").glob("*.py"):
+        if path.name in _NOT_STORES:
+            continue
+        found |= {(path.name, field) for field in _FIELD.findall(path.read_text())}
+    return found
+
+
+def test_every_stored_link_to_a_transaction_is_released_or_explained():
+    known = set(transaction_links.RELEASED_FIELDS) | set(transaction_links.NOT_RELEASED)
+
+    assert _stored_links() - known == set(), (
+        "A store now points at a transaction. Add it to transaction_links so deleting that "
+        "row can't leave it stuck, or to NOT_RELEASED with the reason."
+    )
+
+
+def test_the_registry_names_no_field_that_no_longer_exists():
+    known = set(transaction_links.RELEASED_FIELDS) | set(transaction_links.NOT_RELEASED)
+
+    assert known - _stored_links() == set()

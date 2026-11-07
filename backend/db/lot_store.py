@@ -44,7 +44,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import Connection, select
+from sqlalchemy import Connection
 from sqlalchemy import update as sa_update
 
 from backend.core.ids import new_id
@@ -119,19 +119,6 @@ class LotStore(BookPayloadTableStore):
         return None
 
     # ── Writes ────────────────────────────────────────────────────────────────
-
-    def clear_cash_links(self, txn_ids: list[str], *, conn: Connection) -> list[str]:
-        """Unlink every lot whose purchase cash row is one of ``txn_ids``; returns those lots'
-        ids. The caller holds this table's lock and owns the transaction."""
-        if not txn_ids:
-            return []
-        linked = conn.execute(
-            select(lots.c.id).where(lots.c.txn_id.in_(txn_ids)).order_by(lots.c.seq)
-        ).scalars()
-        lot_ids = list(linked)
-        for lot_id in lot_ids:
-            self.touch(lot_id, {"txn_id": None}, conn=conn)
-        return lot_ids
 
     def create(self, data: dict) -> dict:
         return self.insert(_make_lot(data))

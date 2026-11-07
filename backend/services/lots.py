@@ -46,7 +46,7 @@ from backend.db.tables import positions as positions_tbl
 from backend.db.tables import realized_events as realized_tbl
 from backend.db.tables import transactions as txns_tbl
 from backend.db.tables import txn_audit as txn_audit_tbl
-from backend.services import position_figures
+from backend.services import position_figures, transaction_links
 
 # Lots may be split/consumed at floating-point granularity; treat sub-dust as zero so a
 # fully-consumed lot closes cleanly instead of leaving 1e-12 behind.
@@ -528,7 +528,7 @@ def _delete_lot(lot_id: str) -> dict:
     tracing every write path): the delete + resync is a genuine 2-table write
     (lots + positions), composed the same way as every other choke in this module."""
     lot = LotStore().find_by_id(lot_id)
-    txn_id = (lot or {}).get("txn_id")
+    txn_id = _live_cash_row((lot or {}).get("txn_id"))
     tables = [lots_tbl, positions_tbl]
     if txn_id:
         tables.extend((txns_tbl, txn_audit_tbl))
@@ -593,7 +593,7 @@ def _restore_disposal(ev: dict, *, conn: Connection) -> None:
     lots = LotStore()
     consumptions = ev.get("consumptions") or []
     lots.bulk_restore([(c["lot_id"], float(c.get("qty") or 0)) for c in consumptions], conn=conn)
-    txn_id = ev.get("txn_id")
+    txn_id = _live_cash_row(ev.get("txn_id"))
     if txn_id:
         from backend.services import ledger as ledger_service
 
@@ -1236,15 +1236,21 @@ def _funding_account_from_txn(txn_id: str | None) -> Optional[str]:
     from backend.db.transaction_store import TransactionStore
 
     txn = TransactionStore().find_by_id(txn_id)
-    return None if _cash_row_is_gone(txn) else txn.get("from_account_id")
+    return None if transaction_links.is_gone(txn) else txn.get("from_account_id")
 
 
-def _cash_row_is_gone(txn: Optional[dict]) -> bool:
-    return not txn or bool(txn.get("deleted") or txn.get("merged_into"))
+def _live_cash_row(txn_id: Optional[str]) -> Optional[str]:
+    """``txn_id`` if that row is still in the ledger. A record can outlive its cash row, and
+    reversing a row that's already gone would only write a second delete to its audit trail."""
+    if not txn_id:
+        return None
+    from backend.db.transaction_store import TransactionStore
+
+    return None if transaction_links.is_gone(TransactionStore().find_by_id(txn_id)) else txn_id
 
 
 _GONE_CASH_NOTE = (
-    "This lot's linked cash row had already been deleted, so no cash row was changed or added. "
+    "This record's linked cash row had already been deleted, so no cash row was changed or added. "
     "The dead link was cleared."
 )
 
@@ -1252,13 +1258,8 @@ _GONE_CASH_NOTE = (
 def _drop_gone_cash_link(lot: dict) -> tuple[dict, bool]:
     """The lot as an amend must see it: a link to a deleted or merged row is no link, or the
     amend re-books a purchase the ledger already holds (or no longer wants). An import rollback
-    and a merge keep their link on purpose, so this stays even though deletes clear theirs."""
-    txn_id = lot.get("txn_id")
-    if not txn_id:
-        return lot, False
-    from backend.db.transaction_store import TransactionStore
-
-    if not _cash_row_is_gone(TransactionStore().find_by_id(txn_id)):
+    keeps its link on purpose, and older data predates the delete clearing it, so this stays."""
+    if not lot.get("txn_id") or _live_cash_row(lot["txn_id"]):
         return lot, False
     return {**lot, "txn_id": None}, True
 
@@ -1530,6 +1531,12 @@ def _apply_dispose_amend(change: dict) -> dict:
     }
     new_change["position_id"] = pos["id"]
     new_change["source"] = change.get("source", "manual")
+    live_cash = _live_cash_row(ev.get("txn_id"))
+    link_gone = bool(ev.get("txn_id")) and not live_cash
+    # The edit form resends the account it showed. With the cash row gone, that isn't a request
+    # to book the cash again; picking a different account is.
+    if link_gone and new_change.get("proceeds_account_id") == ev.get("proceeds_account_id"):
+        new_change["proceeds_account_id"] = None
     if not new_change.get("allow_duplicate"):
         dup = _find_duplicate_disposal(pos, new_change, exclude_event_id=event_id)
         if dup:
@@ -1566,7 +1573,12 @@ def _apply_dispose_amend(change: dict) -> dict:
             },
             conn=conn,
         )
-        cash_leg_id = _book_deposit_proceeds(draft, new_change, payee_id, conn=conn)
+        # Replacing a live row adds no booking; see _replaces_its_own_row.
+        cash_change = {
+            **new_change,
+            "allow_duplicate": bool(new_change.get("allow_duplicate") or live_cash),
+        }
+        cash_leg_id = _book_deposit_proceeds(draft, cash_change, payee_id, conn=conn)
         if cash_leg_id:
             event = (
                 RealizedEventStore().update_by_id(event["id"], {"txn_id": cash_leg_id}, conn=conn)
@@ -1575,6 +1587,7 @@ def _apply_dispose_amend(change: dict) -> dict:
         agg = position_figures.rederive(pos["id"], conn=conn)
     return {
         "ok": True,
+        **({"cash_note": _GONE_CASH_NOTE} if link_gone and not cash_leg_id else {}),
         "event_id": event["id"],
         "position_id": pos["id"],
         "realized_gain": draft["realized_gain"],

@@ -170,7 +170,7 @@ def test_deleting_a_lots_cash_row_clears_the_link_and_says_which_lot(book):
 
     result = ledger_service.bulk_delete_transactions([bought["cash_leg_id"]])
 
-    assert result["unlinked_lots"] == [bought["lot_id"]]
+    assert [link["id"] for link in result["released_links"]] == [bought["lot_id"]]
     assert LotStore().find_by_id(bought["lot_id"])["txn_id"] is None
     assert _column(bought["lot_id"]) is None
 
@@ -181,7 +181,7 @@ def test_deleting_an_unrelated_row_reports_no_lot(book):
 
     result = ledger_service.bulk_delete_transactions([twin])
 
-    assert "unlinked_lots" not in result
+    assert "released_links" not in result
     assert LotStore().find_by_id(bought["lot_id"])["txn_id"] == bought["cash_leg_id"]
 
 
@@ -192,7 +192,7 @@ def test_the_delete_tool_tells_the_model_a_lot_lost_its_cash_row(book):
         execute_tool("delete_transactions", {"transaction_ids": [bought["cash_leg_id"]]})
     )
 
-    assert json.loads(text)["unlinked_lots"] == [bought["lot_id"]]
+    assert [link["id"] for link in json.loads(text)["released_links"]] == [bought["lot_id"]]
 
 
 def test_a_filtered_delete_clears_the_link(book):

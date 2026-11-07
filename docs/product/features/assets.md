@@ -102,6 +102,9 @@ This books a real transaction into that cash account on that date, archives the 
 history, releases its loan link, and drops it from net worth from that day. The gain is
 measured against your share of what you paid.
 
+If you later delete that transaction, the asset stays sold but its proceeds are no longer in your
+ledger. Ask Lucius to record the sale again to book them back.
+
 **Added it by mistake?** **⋯** → **Delete asset** removes the record and its whole history.
 
 ## Photos and documents

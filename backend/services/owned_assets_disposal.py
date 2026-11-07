@@ -14,10 +14,12 @@ from backend.db.account_store import AccountStore
 from backend.db.engine import locked_unit_of_work
 from backend.db.owned_assets_store import OwnedAssetsStore
 from backend.db.tables import owned_assets as owned_assets_table
+from backend.db.tables import rejected_identities as rejected_identities_table
 from backend.db.tables import transactions as transactions_table
 from backend.db.tables import txn_audit as txn_audit_table
 from backend.services import ledger as ledger_service
 from backend.services import owned_assets_rules as rules
+from backend.services import transaction_links
 from backend.services.fx_cache import load_fx_cache
 from backend.services.owned_assets_summary import LedgerSnapshot
 
@@ -73,6 +75,8 @@ def _post_proceeds(
     account: dict,
     disposed_on: str,
     conn: Connection,
+    *,
+    rebooking: bool = False,
 ) -> dict | None:
     txn_data = {
         "date": disposed_on,
@@ -85,7 +89,8 @@ def _post_proceeds(
         "external_refs": [{"source": "asset_disposal", "ref": asset["id"]}],
     }
     meta: dict = {}
-    txn = ledger_service.create_transaction(txn_data, conn=conn, meta_out=meta)
+    # A deleted proceeds row left its identity remembered; the user is booking it back on purpose.
+    txn = ledger_service.create_transaction(txn_data, conn=conn, meta_out=meta, resurrect=rebooking)
     # H3: the ledger's own external_refs dedup can fire even though the asset read as
     # not-yet-archived — a proceeds row for this asset already booked by an earlier commit
     # (two disposes can no longer interleave through this choke, which reads under the same
@@ -104,6 +109,17 @@ def _post_proceeds(
             "disposal_account_id": account["id"],
         },
         conn=conn,
+    )
+
+
+def _proceeds_row_is_gone(asset: dict, conn: Connection) -> bool:
+    """A sale that had proceeds and no longer has the row for them can book them again, or the
+    asset would stay sold with its money missing and no way to put it back."""
+    if not asset.get("disposal_proceeds"):
+        return False
+    txn_id = asset.get("disposal_txn_id")
+    return not txn_id or transaction_links.is_gone(
+        ledger_service.transactions.find_by_id(txn_id, conn=conn)
     )
 
 
@@ -133,10 +149,16 @@ def dispose(store: OwnedAssetsStore, asset_id: str, change: dict) -> dict | None
         rules.parse_day(change.get("date"), field="date", future=rules.FUTURE_SALE)
         or user_today().isoformat()
     )
-    with locked_unit_of_work(owned_assets_table, transactions_table, txn_audit_table) as conn:
+    with locked_unit_of_work(
+        owned_assets_table, transactions_table, txn_audit_table, rejected_identities_table
+    ) as conn:
         asset = rules.require_asset(store, asset_id, conn=conn)
         account = _proceeds_account(asset, change.get("account_id"))
         if asset.get("archived"):
+            if proceeds > 0 and _proceeds_row_is_gone(asset, conn):
+                return _post_proceeds(
+                    store, asset, proceeds, account, disposed_on, conn, rebooking=True
+                )
             return _repeat_sale(asset, proceeds, account["id"], disposed_on)
         rules.refuse_sale_before_purchase(disposed_on, asset)
         if proceeds > 0:

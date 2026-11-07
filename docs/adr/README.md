@@ -535,3 +535,4 @@ away**. To change a recorded decision, add a **new** ADR and flip the old one's 
 | [2026-11-03-restore-undoes-the-message-and-every-later-turn](2026-11-03-restore-undoes-the-message-and-every-later-turn.md) | Restore undoes the message and every later turn | Accepted | 2026-11-03 |
 | [2026-11-05-a-server-upgrades-itself-only-when-asked-and-only-from-a-signed-wheel](2026-11-05-a-server-upgrades-itself-only-when-asked-and-only-from-a-signed-wheel.md) | 2026-11-05. A server upgrades itself only when asked, only from a signed wheel, and restarts by exiting | Accepted | 2026-11-05 |
 | [2026-11-06-a-lots-cash-link-is-a-real-foreign-key](2026-11-06-a-lots-cash-link-is-a-real-foreign-key.md) | A lot's cash link is a real foreign key | Accepted | 2026-11-06 |
+| [2026-11-06-deleting-a-transaction-leaves-nothing-unfixable](2026-11-06-deleting-a-transaction-leaves-nothing-unfixable.md) | Deleting a transaction leaves nothing unfixable | Accepted | 2026-11-06 |
