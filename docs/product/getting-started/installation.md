@@ -131,7 +131,7 @@ The `install-server.sh` script is for macOS and Linux. On Windows, in PowerShell
 | Command | What it does |
 |---|---|
 | `onw start` | Run the app. `--open` opens your browser once it's up; `--port 9000` or `--host 0.0.0.0` override the defaults (`127.0.0.1:8080`). `--autostart` runs it as the boot service instead of in this terminal; `--auto-upgrade` installs new versions automatically ([Upgrading](../operations/upgrading.md)). |
-| `onw status` | Show whether it's running, its URL and version, the working folder and the boot service. If it isn't running, it says so and exits with an error code, so scripts can check it too. It looks at the server for this working folder on this machine. For Docker, use `docker compose ps`. |
+| `onw status` | Show whether it's running, its URL and version, the working folder, the boot service, where the log is, and how an upgrade is going or why it failed. If it isn't running, it says so and exits with an error code, so scripts can check it too. It looks at the server for this working folder on this machine. For Docker, use `docker compose ps`. |
 | `onw autostart install` | Start at login/boot and restart on crash — a launchd agent on macOS, a systemd user service on Linux, a Task Scheduler task on Windows. No `sudo` or admin. The same as `onw start --autostart`. |
 | `onw autostart status` | Show whether that service is installed and running, and whether auto-upgrade is on. |
 | `onw autostart stop` | Stop it and remove the service. |

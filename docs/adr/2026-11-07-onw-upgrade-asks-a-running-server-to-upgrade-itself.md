@@ -82,3 +82,25 @@ had no write counter and no way to restart.
   check and the restart, and nothing outside can restart a server started by hand in a terminal.
 - **Only a clearer warning.** It leaves a person to work out when it's safe to restart, and the
   Windows failure in place.
+
+## Amendment (same day): the commands say what's happening
+
+The first version went silent for minutes, said "isn't finished yet" about a server that had already
+failed to boot, and left the reason for a late failure in a log nothing pointed to.
+
+- **The server names its stage in the file** (preparing, waiting, installing, restarting) and the
+  command prints each one. The text is fixed in the code: a stage is only matched against that list,
+  and a failure message is stripped of control characters before a terminal sees it.
+- **A failure stays in the file if the command has gone,** and `onw status` shows it until the next
+  request or restart, so leaving the command early doesn't lose it. "In progress" is shown only while
+  a server answers: with none running it's a leftover.
+- **Once the server has left, not coming back is a failure.** The command gets a fresh three minutes
+  from that moment, so time spent waiting for idle can't use up a slow boot's time, then names the
+  log and exits 1.
+- **`onw status` names the log,** because a service has no terminal to read. On Windows the command
+  also names `upgrade.log` as it leaves.
+- **`onw start` writes a failed boot to that log.** The app's file handler attaches well after the
+  checks that refuse a boot, and uvicorn reports the refusal on stderr, which a service on macOS or
+  Windows discards. Without this, the log the command names would be silent about the one failure
+  it's named for. A crash while importing the app, before the server exists, still reaches only
+  stderr.

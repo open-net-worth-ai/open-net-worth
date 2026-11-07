@@ -16,12 +16,14 @@ import threading
 import time
 import urllib.request
 import webbrowser
+from collections.abc import Callable
 
 from backend.core.version import APP_VERSION
 
 _SHUTDOWN_GRACE_SECONDS = 10  # an open tab's event stream would otherwise hold the exit forever
 _STARTUP_FAILURE = 3  # uvicorn's own exit code for a server that never came up
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+_UVICORN_ERRORS = "uvicorn.error"
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +45,30 @@ class _WritesInFlight:
             await self.app(scope, receive, send)
         finally:
             self.count -= 1
+
+
+class _BootFailureLog(logging.Handler):
+    """Puts a failed boot in the app's log. uvicorn reports it on stderr, which a service on macOS or
+    Windows discards, and the app's own file handler is only attached well after the checks that
+    refuse a boot. Nothing else explains why a service never came back."""
+
+    def __init__(self, is_up: Callable[[], bool]) -> None:
+        super().__init__(level=logging.ERROR)
+        self.is_up = is_up
+        self.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self.is_up():  # from here the app's own handler and rotation have the file
+            return
+        from backend.cli.status import log_file
+
+        try:
+            path = log_file()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with path.open("a", encoding="utf-8") as file:
+                file.write(self.format(record) + "\n")
+        except OSError:  # the terminal has it anyway: this must not change how the boot fails
+            pass
 
 
 def start(
@@ -155,13 +181,17 @@ def _serve(app, settings, installer, service: bool) -> int:
     if auto:
         auto.start()
     watcher.start()
+    boot_failures = _BootFailureLog(is_up=lambda: server.started)
+    logging.getLogger(_UVICORN_ERRORS).addHandler(boot_failures)
     try:
         server.run()
     except KeyboardInterrupt:
         pass
-    watcher.stop()
-    if auto:
-        auto.finished.set()
+    finally:  # uvicorn leaves through SystemExit when a boot fails
+        logging.getLogger(_UVICORN_ERRORS).removeHandler(boot_failures)
+        watcher.stop()
+        if auto:
+            auto.finished.set()
     if not server.started:
         return _STARTUP_FAILURE
     upgrader = auto or watcher.upgrader
