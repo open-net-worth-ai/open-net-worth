@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react'
 import { onDataChanged } from '../lucius/bus'
 
 /** Stamped once per build by vite's `define`. See `PERSIST_KEY` below. */
@@ -14,6 +14,8 @@ interface QuerySnapshot<T> {
 interface QueryEntry<T> {
   snapshot: QuerySnapshot<T>
   listeners: Set<() => void>
+  /** Disabled readers still receive cached writes, but must not initiate background reads. */
+  activeListeners: Map<() => void, () => Promise<T>>
   promise: Promise<T> | null
   fetcher: () => Promise<T>
   /** Pending eviction timer, armed when the last listener unsubscribes. See scheduleGc. */
@@ -132,6 +134,7 @@ function hydrateFromStorage(): void {
           refreshing: false,
         },
         listeners: new Set(),
+        activeListeners: new Map(),
         promise: null,
         // Replaced by the real one the moment any consumer calls entryFor(). Until then the
         // entry is read-only: hydrated data with no way to refetch is still better than
@@ -241,12 +244,17 @@ if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
   })
 }
 
-function entryFor<T>(key: string, fetcher: () => Promise<T>): QueryEntry<T> {
+function entryFor<T>(
+  key: string,
+  fetcher: () => Promise<T>,
+  registerFetcher = true,
+): QueryEntry<T> {
   let entry = entries.get(key) as QueryEntry<T> | undefined
   if (!entry) {
     entry = {
       snapshot: EMPTY_SNAPSHOT,
       listeners: new Set(),
+      activeListeners: new Map(),
       promise: null,
       fetcher,
       gcTimer: null,
@@ -254,7 +262,7 @@ function entryFor<T>(key: string, fetcher: () => Promise<T>): QueryEntry<T> {
     }
     entries.set(key, entry as QueryEntry<unknown>)
   }
-  entry.fetcher = fetcher
+  if (registerFetcher) entry.fetcher = fetcher
   return entry
 }
 
@@ -312,8 +320,7 @@ function revalidate<T>(key: string, fetcher: () => Promise<T>, force = false): P
   const generation = ++entry.generation
   const isNewest = () => generation === entry.generation
   publish(entry, { refreshing: true, error: null })
-  const promise: Promise<T> = entry
-    .fetcher()
+  const promise: Promise<T> = invokeFetcher(entry)
     .then(
       (data) => {
         if (!isNewest()) return followNewest(entry)
@@ -334,6 +341,14 @@ function revalidate<T>(key: string, fetcher: () => Promise<T>, force = false): P
   // refresh is represented in the snapshot without becoming an unhandled promise.
   promise.catch(() => {})
   return promise
+}
+
+function invokeFetcher<T>(entry: QueryEntry<T>): Promise<T> {
+  try {
+    return Promise.resolve(entry.fetcher())
+  } catch (error) {
+    return Promise.reject(error)
+  }
 }
 
 function followNewest<T>(entry: QueryEntry<T>): Promise<T> | T {
@@ -364,17 +379,22 @@ export function useQueryCache<T>(
     enabled?: boolean
   } = {},
 ): QueryCacheResult<T> {
-  const entry = entryFor(key, fetcher)
+  const enabled = options.enabled ?? true
+  const entry = entryFor(key, fetcher, enabled)
+  const fetcherRef = useRef(fetcher)
+  fetcherRef.current = fetcher
   const subscribe = useCallback(
     (listener: () => void) => {
       cancelGc(entry)
       entry.listeners.add(listener)
+      if (enabled) entry.activeListeners.set(listener, () => fetcherRef.current())
       return () => {
         entry.listeners.delete(listener)
+        entry.activeListeners.delete(listener)
         if (entry.listeners.size === 0) scheduleGc(key, entry)
       }
     },
-    [entry, key],
+    [enabled, entry, key],
   )
   const getSnapshot = useCallback(() => entry.snapshot, [entry])
   const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
@@ -384,7 +404,6 @@ export function useQueryCache<T>(
   // window. Every explicit staleTime in the codebase was already 0 — call sites had been
   // hand-patching this default away one staleness bug at a time).
   const staleTime = options.staleTime ?? 0
-  const enabled = options.enabled ?? true
 
   useEffect(() => {
     if (!enabled) return
@@ -403,10 +422,10 @@ export function useQueryCache<T>(
   // in-flight promise when a tick lands while a fetch is already running.
   const refetchInterval = options.refetchInterval
   useEffect(() => {
-    if (!refetchInterval) return
-    const id = setInterval(() => void revalidate(key, entry.fetcher), refetchInterval)
+    if (!enabled || !refetchInterval) return
+    const id = setInterval(() => void revalidate(key, () => fetcherRef.current()), refetchInterval)
     return () => clearInterval(id)
-  }, [key, refetchInterval, entry])
+  }, [key, refetchInterval, entry, enabled])
 
   return {
     data: snapshot.data,
@@ -416,7 +435,7 @@ export function useQueryCache<T>(
     // Nor may a DISABLED key: nothing is coming, so a spinner would never resolve.
     initialLoading: enabled && snapshot.data === undefined && snapshot.error == null,
     refreshing: snapshot.refreshing,
-    refresh: useCallback(() => revalidate(key, entry.fetcher), [key, entry]),
+    refresh: useCallback(() => revalidate(key, () => fetcherRef.current()), [key]),
   }
 }
 
@@ -434,7 +453,8 @@ export function invalidateQueryCache(matcher: string | ((key: string) => boolean
   for (const [key, entry] of entries) {
     if (!matches(key)) continue
     publish(entry, { updatedAt: 0 })
-    if (entry.listeners.size > 0) void revalidate(key, entry.fetcher)
+    const activeFetcher = entry.activeListeners.values().next().value
+    if (activeFetcher) void revalidate(key, activeFetcher)
   }
 }
 
@@ -474,6 +494,7 @@ export function setCachedQueryData<T>(
     entry = {
       snapshot: EMPTY_SNAPSHOT,
       listeners: new Set(),
+      activeListeners: new Map(),
       promise: null,
       fetcher: async () => {
         throw new Error(`No fetcher registered for ${key}`)
