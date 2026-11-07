@@ -132,3 +132,9 @@ withdrawal rate. Press <kbd>H</kbd> again to show them.
 - [Backup and restore](backup-and-restore.md) — how downloaded backups strip credentials
 - [Permissions](../lucius/permissions.md) — what Lucius may do
 - [Use your book from other AI apps](connect-ai-apps.md) — what an app with your API token can do
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Private AI financial assistant: where your data goes](https://opennetworth.ai/blog/where-your-financial-data-goes/): where your data goes with cloud apps, AI chats and a self-hosted agent

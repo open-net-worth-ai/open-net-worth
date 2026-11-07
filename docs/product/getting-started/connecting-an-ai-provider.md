@@ -227,3 +227,10 @@ automations and memory.
 - [Your first run](first-run.md)
 - [Models and cost](../lucius/models-and-cost.md)
 - [Terminal](../operations/terminal.md)
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [An Open-Source Claude Personal Finance Alternative](https://opennetworth.ai/blog/claude-personal-finance-alternative/): using a Claude subscription with your own ledger
+- [Private AI financial assistant: where your data goes](https://opennetworth.ai/blog/where-your-financial-data-goes/): what each model choice means for your data
