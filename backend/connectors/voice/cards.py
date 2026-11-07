@@ -71,6 +71,16 @@ def is_plain_yes(said: str, language: str = "en") -> bool:
     return bool(clauses) and all(c in known for c in clauses)
 
 
+_YES_WORDS = frozenset(word for said in _YES.values() for yes in said for word in yes.split())
+_WORD = re.compile(r"[^\W\d_]+(?:'[^\W\d_]+)?")
+
+
+def sounds_like_a_yes(name: str) -> bool:
+    """A name holding any word of any yes: a hint makes its words likelier to be heard, and none
+    gets to make a yes likelier on a call that can approve."""
+    return any(word in _YES_WORDS for word in _WORD.findall(name.casefold().replace("’", "'")))
+
+
 def card_reading(summary: str, language: str) -> str:
     """Said word for word, with no model in between: a card's text can hold a merchant's name or a
     model's words, and through a model those could change what the owner is asked."""

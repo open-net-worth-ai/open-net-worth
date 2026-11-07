@@ -29,13 +29,17 @@ and neither a voice nor a model can change it.
 A card is read out word for word (`session.say`, `cards.card_reading`), with no model in between, built
 from what its screen version shows: amounts, recipients, named transactions. It has to be ALL of what
 the card does: one with an id we can't name, a long list cut short, or text past the limit can't be
-approved by voice and needs a tap. After a second answer too soon to count, so does any card, as a noisy
-line would otherwise never let one through.
+approved by voice and needs a tap. So does any card whose type isn't on the list of summaries checked to
+say everything (`desk._reads_in_full`), and any whose text cleaning for speech would change. After a second
+answer that doesn't count, so does any card, as a noisy line would otherwise never let one through.
 
 The worker accepts a spoken yes only if all of these hold:
 
-- That exact card was read out, to the end, with no failure, and only the voice's re-ask of it has
-  been said since: a "yes" to anything else mustn't reach it.
+- That exact card was read out, to the end, with no failure, and nothing has been said since: a
+  "yes" to anything else mustn't reach it. So asking again means reading the card again word for word,
+  never a line a model worded.
+- They've finished: a yes waits about a second and a half, and any sound or further words in that time
+  stop it ("yes... wait, not that one").
 - The words' own start came after the voice last stopped, plus a margin. Not the latest sound: a cough
   afterwards mustn't date words that began during the reading.
 - The whole answer is on the allowlist of plain yeses for the call's language or English

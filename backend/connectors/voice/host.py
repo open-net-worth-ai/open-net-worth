@@ -175,7 +175,7 @@ class Host:
             await desk.record_said(self._owned(args), str(args.get("said") or ""))
             return None
         if method == "waiting_cards":
-            return desk.waiting_cards(self._owned(args))
+            return await asyncio.to_thread(desk.waiting_cards, self._owned(args))
         if method == "answer_card":
             session_id = self._owned(args)
             self._count_ask(session_id)

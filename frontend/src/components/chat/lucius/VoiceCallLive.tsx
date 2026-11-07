@@ -151,11 +151,25 @@ function useAnswerWithoutWords(): string {
   const id = sessionId ?? ''
   const subscribe = useCallback((cb: () => void) => chatSessions.subscribe(id, cb), [id])
   const slice = useSyncExternalStore(subscribe, () => chatSessions.getSlice(id))
+  // Shown once for a line the voice said without words: the next such line isn't this answer.
+  const showing = useRef('')
+  const done = useRef('')
+  if (!luciusSpeaking && showing.current) {
+    done.current = showing.current
+    showing.current = ''
+  }
   if (!luciusSpeaking || spoken || !id) return ''
-  const his = slice.messages
-    .filter((m) => m.role === 'assistant' && (!m.ts || !connectedAt || m.ts >= connectedAt))
-    .map((m) => m.text || '')
-  return unheardAnswer(spokenLines, his)
+  const his = slice.messages.filter(
+    (m) => m.role === 'assistant' && (!m.ts || !connectedAt || m.ts >= connectedAt),
+  )
+  if (his.at(-1)?.streaming) return ''
+  const answer = unheardAnswer(
+    spokenLines,
+    his.map((m) => m.text || ''),
+  )
+  if (answer === done.current) return ''
+  if (answer) showing.current = answer
+  return answer
 }
 
 /** The full call screen's caption, above the mic: you while you're talking, otherwise Lucius. */

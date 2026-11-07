@@ -748,6 +748,7 @@ def _card_desk(result="ok", heard=True):
     desk_._rt = type("Rt", (), {"app": type("App", (), {"call": staticmethod(call)})()})()
     desk_._cards = [agent.Card("c1", "Approve ACME 12.40.")]
     desk_._approving = True
+    desk_.YES_SETTLE_S = 0
     if heard:
         desk_._card_line, desk_._card_read_id, desk_._card_is_last = _spoken(), "c1", True
         desk_._card_announced_id = "c1"
@@ -924,11 +925,14 @@ def test_a_transcript_takes_its_start_from_the_sound_that_began_it():
     assert desk_._heard_began == 50.0 and desk_._utterance_began is None
 
 
-def test_a_sound_that_ended_while_the_voice_spoke_dates_nothing_after():
+def test_a_sound_during_the_reading_still_dates_the_words_after_it():
+    """Security review: clearing it let a cough date a yes said over the card's amount."""
     _agent, desk_ = _desk()
     desk_.owner_began()
+    began = desk_._utterance_began
     desk_.voice_stopped()
-    assert desk_._utterance_began is None
+    desk_.owner_began()
+    assert desk_._utterance_began == began
 
 
 def test_a_card_that_cant_be_read_out_needs_a_tap():
@@ -996,7 +1000,8 @@ def test_a_request_while_a_card_waits_keeps_the_card_open():
     agent, desk_, said, _calls = _card_desk()
     desk_.heard("What's my balance?")
     assert desk_.submit("What's my balance?") is None
-    assert said == [agent.CARD_FIRST] and desk_._queue.qsize() == 1
+    assert said[0] == agent.CARD_FIRST and desk_._queue.qsize() == 1
+    assert said[1:] == ["Approve ACME 12.40. Shall I go ahead?"]
 
     async def run():
         waiting = asyncio.ensure_future(desk_._cards_answered())
@@ -1543,10 +1548,14 @@ def test_a_yes_answers_only_what_was_said_last():
 
 
 def test_asking_them_again_about_the_card_keeps_it_answerable():
-    _agent, desk_, _said, calls = _card_desk()
+    _agent, desk_, said, calls = _card_desk()
     desk_._heard.append("hmm")
-    assert "clear yes" in _say_to_card(desk_, "approve")
-    _voice_said(desk_, "Sorry, shall I go ahead?")
+    assert _say_to_card(desk_, "approve") is None
+    assert _resolved(calls) == [] and said[-1] == "Approve ACME 12.40. Shall I go ahead?"
+    _voice_said(desk_, said[-1])
+    desk_._card_line = _spoken()
+    desk_._card_read_id = "c1"
+    desk_._voice_quiet_at, desk_._heard_began = 100.0, 101.0
     desk_._heard[:] = ["Yes."]
     assert _say_to_card(desk_, "approve") is None
     assert len(_resolved(calls)) == 1
@@ -1763,3 +1772,143 @@ def test_the_phone_can_report_the_caption():
         "track=live,system_muted=0,enabled=1,app_muted=0,audio=running,peak=0.1,server_peak=0.2,"
     )
     assert _MIC_REPORT.fullmatch(fields + "page=visible,streams=1,words=1,caption=lucius,voice=1")
+
+
+# From the review of the whole branch, 2026-11-07.
+
+
+def _yes_now(desk_):
+    desk_._heard[:] = ["Yes."]
+    return _say_to_card(desk_, "approve")
+
+
+def test_a_model_worded_line_after_a_card_means_a_yes_doesnt_reach_it():
+    _agent, desk_, _said, calls = _card_desk()
+    _voice_said(desk_, "Shall I go ahead?")
+    assert _yes_now(desk_) is None
+    assert _resolved(calls) == []
+
+
+def test_a_request_while_a_card_waits_reads_the_card_again_word_for_word():
+    agent, desk_, said, _calls = _card_desk()
+    desk_.heard("also pay the ACME bill")
+    desk_.submit("Pay the ACME bill")
+    assert agent.CARD_FIRST in said
+    assert said[-1] == "Approve ACME 12.40. Shall I go ahead?"
+    assert "go ahead" not in agent.CARD_FIRST
+
+
+def test_more_words_after_a_yes_stop_it():
+    """ "Yes... wait, not that one": a pause can end the turn with more to come."""
+    import asyncio
+
+    _agent, desk_, _said, calls = _card_desk()
+    desk_.YES_SETTLE_S = 0.02
+
+    async def run():
+        desk_._heard[:] = ["Yes."]
+        waiting = asyncio.ensure_future(desk_.answer_card("approve"))
+        await asyncio.sleep(0)
+        desk_._heard.append("wait, not that one")
+        await waiting
+
+    asyncio.run(run())
+    assert _resolved(calls) == []
+
+
+def test_still_talking_after_a_yes_stops_it():
+    import asyncio
+    import time
+
+    _agent, desk_, _said, calls = _card_desk()
+    desk_.YES_SETTLE_S = 0.02
+
+    async def run():
+        desk_._heard[:] = ["Yes."]
+        waiting = asyncio.ensure_future(desk_.answer_card("approve"))
+        await asyncio.sleep(0)
+        desk_._owner_sound_at = time.monotonic()
+        await waiting
+
+    asyncio.run(run())
+    assert _resolved(calls) == []
+
+
+def test_a_no_doesnt_wait():
+    _agent, desk_, _said, calls = _card_desk()
+    desk_.YES_SETTLE_S = 60
+    desk_._heard[:] = ["No."]
+    assert _say_to_card(desk_, "reject") is None
+    assert len(_resolved(calls)) == 1
+
+
+def test_a_request_waiting_behind_a_card_is_still_said_after_a_hang_up():
+    """Review: it was out of the queue while it waited, so a hang-up lost the owner's words."""
+    import asyncio
+
+    agent, desk_, _said, calls = _card_desk()
+
+    async def run():
+        desk_._queue.put_nowait(agent.Task("what's my rent", "what's my rent"))
+        runner = asyncio.ensure_future(desk_._run())
+        await asyncio.sleep(0.01)
+        assert desk_._queue.qsize() == 1 and desk_._current is None
+        await desk_.finish()
+        runner.cancel()
+
+    asyncio.run(run())
+    written = [args["lines"] for method, args in calls if method == "record_lines"]
+    assert [line["text"] for lines in written for line in lines] == ["what's my rent"]
+
+
+def _flat_card(**change):
+    return desk.card_summary(change)
+
+
+def test_only_cards_checked_to_say_everything_can_be_said_yes_to():
+    """Review: "Txn bulk update" was all a card said, and a yes applied every edit behind it."""
+    assert _flat_card(type="txn_bulk_update", display={})[1] is False
+    assert _flat_card(type="skill_create", display={"name": "ACME"})[1] is False
+    assert _flat_card(type="agent_update", display={"name": "ACME"})[1] is False
+    assert _flat_card(type="remove", display={"name": "ACME"})[1] is True
+    assert _flat_card(type="add", display={"symbol": "ACME", "quantity": 1})[1] is True
+
+
+def test_a_transfer_card_reads_one_leg_so_it_needs_a_tap():
+    leg = {"amount": 10.0, "currency": "SGD", "account_name": "ACME"}
+    assert _flat_card(type="txn_create", **{"from": leg, "to": leg})[1] is False
+    assert _flat_card(type="txn_create", **{"from": leg})[1] is True
+
+
+def test_a_bulk_card_counts_as_read_only_if_every_row_is():
+    row = {"date": "2026-11-01", "description": "ACME", "amount": 1.0, "currency": "SGD"}
+    assert _flat_card(type="txn_bulk", count=5, rows=[row] * 5)[1] is True
+    assert _flat_card(type="txn_bulk", count=6, rows=[row] * 6)[1] is False
+
+
+def test_what_cleaning_would_change_isnt_what_they_heard():
+    linked = {"name": "[Joint savings](evil-target)"}
+    assert _flat_card(type="remove", display=linked)[1] is False
+    assert _flat_card(type="remove", display={"name": "| a table row"})[1] is False
+
+
+def test_a_flag_is_read_out_and_nothing_goes_unsaid():
+    parts, whole = desk._details({"amount": 100, "dry_run": True})
+    assert parts == ["amount 100", "dry run yes"] and whole is True
+    assert desk._details({"dry_run": False})[0] == ["dry run no"]
+    assert desk._details({"rows": [[1, 2]]})[1] is False
+
+
+def test_an_id_counts_as_unnamed_however_it_is_labelled():
+    assert desk._details({"destinationAccountId": "x"})[1] is False
+    assert desk._details({"to": "acc_9f3a"})[1] is False
+    assert desk._details({"to": "9f3a1c2e-1111-4222-8333-abcdefabcdef"})[1] is False
+    assert desk._details({"to": "ACME Holdings"})[1] is True
+
+
+def test_no_name_makes_a_yes_likelier_in_any_language():
+    from backend.connectors.voice.cards import sounds_like_a_yes
+
+    for name in ("Yep Coffee", "Oui Market", "Correct Tax", "Ja Bakery", "Go Mart", "Please Hold"):
+        assert sounds_like_a_yes(name), name
+    assert not sounds_like_a_yes("ACME Shop")

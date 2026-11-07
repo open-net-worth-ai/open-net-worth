@@ -91,6 +91,10 @@ class CallLog:
     def started(self, task: Task) -> None:
         self._started.add(task.id)
 
+    def not_started(self, task: Task) -> None:
+        """The app held it back after all: its lines wait for it again."""
+        self._started.discard(task.id)
+
     def _place(self, started_at: float) -> tuple[str | None, Place]:
         if not self._tasks:
             return None, AFTER

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import uuid
 from collections import OrderedDict
 from collections.abc import AsyncIterator
@@ -142,13 +143,36 @@ def _spoken_value(value) -> str:
     return " ".join(str(value).split()) if isinstance(value, (str, int, float)) else ""
 
 
+# "acc_9f3a" or a UUID, wherever it turns up: a key needn't say it holds an id.
+_ID_VALUE = re.compile(
+    r"^(?:[a-z]{2,8}_(?=[0-9a-z]*\d)[0-9a-z]{3,}"
+    r"|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+    re.I,
+)
+_CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
+
+
+def _scalar_part(name: str, value) -> tuple[str, bool]:
+    """One value as it's read out, and whether that says all of it. A flag can't be left out:
+    `dry_run` true and false would sound the same (security review, 2026-11-07)."""
+    label = f"{name} " if name else ""
+    if value is None or value == "":
+        return "", True
+    if isinstance(value, bool):
+        return f"{label}{'yes' if value else 'no'}", True
+    spoken = _spoken_value(value)
+    if not spoken:  # not a kind of value we can say
+        return "", False
+    return f"{label}{spoken}", not _ID_VALUE.match(spoken)
+
+
 def _details(args: dict) -> tuple[list[str], bool]:
     """A tool's arguments as they can be read out, and whether that's all of them: an opaque id we
     can't name, or a long list cut short, could be hiding what matters."""
     parts: list[str] = []
     whole = True
     for key, value in args.items():
-        name = str(key).replace("_", " ")
+        name = _CAMEL.sub(" ", str(key)).replace("_", " ").lower()
         if name in ("transaction id", "txn id") or name.endswith("transaction ids"):
             ids = value if isinstance(value, list) else [value]
             named = _named_transactions(ids)
@@ -167,10 +191,14 @@ def _details(args: dict) -> tuple[list[str], bool]:
                     inner, inner_whole = _details(item)
                     parts.extend(inner)
                     whole = whole and inner_whole
-                elif _spoken_value(item):
-                    parts.append(_spoken_value(item))
-        elif _spoken_value(value):
-            parts.append(f"{name} {_spoken_value(value)}")
+                else:
+                    part, part_whole = _scalar_part("", item)
+                    parts.extend([part] if part else [])
+                    whole = whole and part_whole
+        else:
+            part, part_whole = _scalar_part(name, value)
+            parts.extend([part] if part else [])
+            whole = whole and part_whole
     return parts, whole
 
 
@@ -190,6 +218,22 @@ def _named_transactions(ids: list) -> list[str]:
     return named
 
 
+def _reads_in_full(change: dict) -> bool:
+    """Whether a card's own summary is all of what it does. Those summaries were written for a
+    screen with more on it, so only the ones checked to say everything count: "Txn bulk update", a
+    transfer's one leg, or a skill's name alone isn't something to say yes to (security review,
+    2026-11-07). Anything new needs a tap until it's added here."""
+    kind = change.get("type", "update")
+    if kind in ("update", "add", "remove", "txn_update"):
+        return True
+    if kind == "txn_create":
+        return not (change.get("from") and change.get("to"))
+    if kind == "txn_bulk":
+        count = change.get("count", 0)
+        return isinstance(count, int) and count <= CARD_ITEMS_READ
+    return False
+
+
 def card_summary(change: dict) -> tuple[str, bool]:
     """What a card asks, to read out on a call, from what its screen version is built from, and
     whether that's enough to say yes to: only if it's ALL of what the card does. "Wire transfer, amount
@@ -207,13 +251,16 @@ def card_summary(change: dict) -> tuple[str, bool]:
         known, whole = (preview, preview_whole) if preview else _details(args)
         text, readable = ". ".join([label, ", ".join(known)]), bool(known) and whole
     else:
-        text, readable = format_change_summary(change), True
+        text, readable = format_change_summary(change), _reads_in_full(change)
     for mark in ("\u00ab", "\u00bb", HARNESS_NOTE_OPEN, HARNESS_NOTE_CLOSE):
         text = text.replace(mark, "")
-    text = " ".join(speakable(text.replace("\u2192", " to ").replace("\u2022", ",")).split())
-    if len(text) > CARD_SUMMARY_CHARS:
+    flat = " ".join(text.replace("\u2192", " to ").replace("\u2022", ",").split())
+    # Flattened first, so a line can't be dropped as a table row. Anything cleaning would still
+    # change, like a link's target, wouldn't be what they heard (security review, 2026-11-07).
+    spoken = " ".join(speakable(flat).split())
+    if spoken != flat or len(flat) > CARD_SUMMARY_CHARS:
         readable = False
-    return text[:CARD_SUMMARY_CHARS].rstrip(" .") + ".", readable
+    return spoken[:CARD_SUMMARY_CHARS].rstrip(" .") + ".", readable
 
 
 def _open_ids(session_id: str) -> set[str]:
@@ -351,7 +398,7 @@ async def ask(
     if unheard:
         content.append({"type": "text", "text": harness_note(UNHEARD_NOTE)})
     elif heard_part:
-        heard = heard_part[:HEARD_PART_MAX]
+        heard = " ".join(heard_part[:HEARD_PART_MAX].split())
         for mark in ("«", "»", HARNESS_NOTE_OPEN, HARNESS_NOTE_CLOSE):
             heard = heard.replace(mark, "")
         content.append({"type": "text", "text": harness_note(CUT_OFF_NOTE.format(heard=heard))})

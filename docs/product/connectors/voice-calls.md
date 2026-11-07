@@ -56,8 +56,10 @@ approval card appears in the chat on your screen. Answer out loud (*"yes, go ahe
 or tap the card: either does the same thing, and he tells you on the call how it went. Your voice
 counts for any card, including one that moves money. Anyone near your phone can answer too, and
 voices aren't told apart. So a yes only counts if you start saying it after he's finished reading that
-card, and it's a plain yes: *"hmm"*, a question, or half a sentence approves nothing, and he asks again.
-*"No"* always works. A card he can't read out with enough detail to go on needs a tap. While a card
+card, and it's a plain yes: *"hmm"*, a question, or half a sentence approves nothing, and he reads the card
+again. A yes takes effect about a second and a half after you stop, so you can still go on: *"yes... wait,
+not that one"* doesn't approve it. *"No"* always works. A card he can't read out in full, such as a transfer or a
+long list, needs a tap. While a card
 waits, anything else you ask waits too, and he comes back to it once you've answered.
 Your [permission settings](../lucius/permissions.md) apply exactly as they do in the chat.
 

@@ -151,7 +151,7 @@ CARD_NEEDS_TAP = (
     "say this one needs a tap on the screen, as you can't read out enough of it to go ahead by "
     "voice, though they can tell you to reject it"
 )
-CARD_FIRST = "say you'll get to that as soon as they've answered what's waiting, then ask whether to go ahead"
+CARD_FIRST = "say you'll get to that as soon as they've answered what's waiting"
 CARD_APPROVED = "say okay, you're doing it, in a few words"
 CARD_REJECTED = "say okay, you won't, in a few words"
 CARD_GONE = "say that's no longer waiting, so nothing was done"
@@ -490,8 +490,8 @@ class LuciusDesk:
     _card_read_id: str | None = None  # the card ``_card_line`` read out
     _card_announced_id: str | None = None  # the card last told about, however
     _card_text = ""  # what ``_card_line`` says
-    _card_is_last = False  # nothing has been said since it, but the re-ask
-    _reask_due = False  # the next thing said asks them about the card again
+    _card_is_last = False  # it's the last thing said: set once it has played
+    YES_SETTLE_S = SOUND_CLAIMED_S  # a yes waits this long, as more words may follow it
     _unheard_answers = 0  # answers to this card that came too soon to count
     _undelivered: str | None = None  # an answer dropped before it made a sound, to say when quiet
     _resays = 0
@@ -816,11 +816,7 @@ class LuciusDesk:
             return
         if role != "assistant":
             return
-        if _letters(text) != self._card_text:
-            if self._reask_due:
-                self._reask_due = False
-            else:
-                self._card_is_last = False
+        self._card_is_last = bool(self._card_text) and _letters(text) == self._card_text
         # An answer the owner cut off is stored as just its spoken part: still his answer.
         answer = next((a for a in self._answers if a.startswith(text)), None)
         if answer is not None:
@@ -1030,8 +1026,11 @@ class LuciusDesk:
         if replaced and busy:
             self._current.request = task.request  # what a "still on it" line should now name
         if self._approving:
-            self._reask_due = True
             self._holding(CARD_FIRST)
+            # Word for word: a yes to anything a model worded could be a yes to something else, as
+            # with "also pay ACME", "shall I go ahead?" (security review, 2026-11-07).
+            if self._cards:
+                self._read_card()
             return None
         if continues_last and not replaced:
             # Theirs is the same request even if it can't join the one running: never "after this one".
@@ -1121,10 +1120,10 @@ class LuciusDesk:
         self._utterance_began = None
 
     def voice_stopped(self) -> None:
-        """A sound that ended while it spoke can't date anything said after."""
+        """Any sound still unclaimed stays until ``_forget_sound``: words said over the reading can
+        reach us after it ends, and a cough must not date them (security review, 2026-11-07). A breath
+        before a yes means being asked again, which is the safe way round."""
         self._voice_quiet_at = time.monotonic()
-        if getattr(self._session, "user_state", "") != "speaking":
-            self._utterance_began = None
 
     def _card_was_heard(self, card: Card) -> bool:
         """This card, read out to the end, with no failure along the way."""
@@ -1162,6 +1161,15 @@ class LuciusDesk:
             refused = self._why_no_yes(card, said)
             if refused is not None:
                 return refused or None
+            # "Yes... wait, not that one": a pause can end a turn with more to come.
+            await asyncio.sleep(self.YES_SETTLE_S)
+            if self._still_talking() or not self._cards or self._cards[0].id != card.id:
+                log.info("voice decision: more was said after a yes, it doesn't count")
+                return None
+            said = " ".join(self._heard).strip()
+            refused = self._why_no_yes(card, said)
+            if refused is not None:
+                return refused or None
         await self._resolve_card(card, decision, said)
         return None
 
@@ -1172,19 +1180,16 @@ class LuciusDesk:
             log.info("voice decision: a card that can't be read out needs a tap")
             self._line(CARD_NEEDS_TAP)
             return ""
-        if not self._card_was_heard(card) or not self._began_after_the_voice():
-            log.info("voice decision: an answer came before the card was heard out")
-            self._unheard_answers += 1
-            if self._unheard_answers > MAX_CARD_REREADS:
-                self._line(CARD_NEEDS_TAP)  # a noisy line would otherwise never let one count
-            else:
-                self._read_card()
-            return ""
-        if not is_plain_yes(said, self.language):
-            log.info("voice decision: a yes to a card wasn't plain, asking again")
-            self._reask_due = True
-            return "It isn't a clear yes, and nothing has been done: ask them plainly, once."
-        return None
+        heard_out = self._card_was_heard(card) and self._began_after_the_voice()
+        if heard_out and is_plain_yes(said, self.language):
+            return None
+        log.info("voice decision: not a yes to a card it heard out, asking again word for word")
+        self._unheard_answers += 1
+        if self._unheard_answers > MAX_CARD_REREADS:
+            self._line(CARD_NEEDS_TAP)  # a noisy line would otherwise never let one count
+        else:
+            self._read_card()
+        return ""
 
     async def _resolve_card(self, card: Card, decision: str, said: str) -> None:
         log.info("voice decision: card %s by voice", decision)
@@ -1228,7 +1233,7 @@ class LuciusDesk:
             return
         self.speech_log.label(speech, "card", len(card.summary))
         self._card_line, self._card_read_id = speech, card.id
-        self._card_text, self._card_is_last = _letters(reading), True
+        self._card_text = _letters(reading)
 
     async def _cards_answered(self) -> None:
         """A request waits while a card does: a new message cancels any card still open, and half a
@@ -1283,10 +1288,15 @@ class LuciusDesk:
 
     async def _run(self) -> None:
         while True:
-            task = await self._queue.get()
+            # It stays in the queue while it waits: a hang-up, a correction or more of the same words
+            # have to find it, and in here nothing else could.
+            self._put_back(await self._queue.get())
             await self._cards_answered()
             await self._still_waiting(False)
             await self._cards_answered()
+            if self._queue.empty():
+                continue
+            task = self._queue.get_nowait()
             self._current, self._started, self._doing = task, time.monotonic(), ""
             self.call_log.started(task)
             unheard, self._unheard = self._unheard, False
@@ -1320,6 +1330,7 @@ class LuciusDesk:
         if self._card_open:
             # The app refused it: a card is open that couldn't be seen from here. It goes back.
             log.info("voice decision: a request held back behind a card")
+            self.call_log.not_started(task)
             self._put_back(task)
             self._unheard, self._cut_off = unheard, heard_part
             await self._still_waiting(True)

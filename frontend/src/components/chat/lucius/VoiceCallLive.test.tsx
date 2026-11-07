@@ -268,6 +268,34 @@ describe('the full screen caption', () => {
     chatSessions.apply('s1', (slice) => ({ ...slice, messages: [] }))
   })
 
+  it('waits for an answer still being written before showing it', () => {
+    chatSessions.apply('s1', (slice) => ({
+      ...slice,
+      messages: [
+        { id: 'a1', role: 'assistant', text: 'About two', ts: 0, streaming: true } as never,
+      ],
+    }))
+    Object.assign(call, { luciusSpeaking: true, spokenLines: [] })
+    expect(render(<VoiceCallCaption />).container.firstChild).toBeNull()
+    chatSessions.apply('s1', (slice) => ({ ...slice, messages: [] }))
+  })
+
+  it('does not show the same answer for the next line said without words', () => {
+    chatSessions.apply('s1', (slice) => ({
+      ...slice,
+      messages: [{ id: 'a1', role: 'assistant', text: 'About two thousand.', ts: 0 } as never],
+    }))
+    Object.assign(call, { luciusSpeaking: true, spokenLines: [] })
+    const { container, rerender } = render(<VoiceCallCaption />)
+    expect(container.textContent).toBe('About two thousand.')
+    Object.assign(call, { luciusSpeaking: false })
+    rerender(<VoiceCallCaption />)
+    Object.assign(call, { luciusSpeaking: true })
+    rerender(<VoiceCallCaption />)
+    expect(container.textContent).toBe('')
+    chatSessions.apply('s1', (slice) => ({ ...slice, messages: [] }))
+  })
+
   it('shows nothing of yours the store has hidden, even with no line of his', () => {
     call.heard = 'how much did I spend'
     call.heardDone = true

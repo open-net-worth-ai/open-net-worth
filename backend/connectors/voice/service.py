@@ -22,6 +22,7 @@ import threading
 import time
 from typing import Optional
 
+from backend.connectors.voice.cards import sounds_like_a_yes
 from backend.core.config import get_settings
 from backend.core.user_time import user_now
 from backend.db.voice_config_store import LANGUAGES, VoiceConfigStore, is_ready
@@ -29,9 +30,7 @@ from backend.services.feature_flags import enabled as flag_enabled
 
 log = logging.getLogger(__name__)
 # A hint makes its words likelier: no merchant gets to make a yes likelier, on a call that can approve.
-_SOUNDS_LIKE_A_YES = re.compile(
-    r"\b(?:yes|yeah|go|ahead|approve\w*|confirm\w*|okay|ok|sure)\b", re.I
-)
+_SOUNDS_LIKE_A_YES = re.compile(r"\b(?:approve\w*|confirm\w*|okay|ok)\b", re.I)
 _PLAIN_NAME = re.compile(r"^[^\W\d_][^\W_]*(?:[ '&.-][^\W\d_][^\W_]*)*$")
 
 _MIC_REPORT = re.compile(r"[a-z_]+=[a-z0-9.]+(,[a-z_]+=[a-z0-9.]+){0,11}")
@@ -345,6 +344,7 @@ def _own_terms(limit: int = 20) -> list[str]:
         and len(n.split()) <= 3
         and _PLAIN_NAME.match(n)
         and not _SOUNDS_LIKE_A_YES.search(n)
+        and not sounds_like_a_yes(n)
     ]
     return plain[:limit]
 
