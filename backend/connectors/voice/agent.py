@@ -535,6 +535,7 @@ class LuciusDesk:
     _unheard_answers = 0  # answers to this card that came too soon to count
     _undelivered: str | None = None  # an answer they didn't get to the end of, to say when quiet
     _said_since_answer = ""  # their words since the last answer was queued
+    _hearing = ""  # the sentence they're in the middle of, as far as it has been transcribed
     _resays = 0
     _cut_off = ""  # how much of the last answer they heard, when their voice cut it off
     _owner_sound_at = 0.0  # when they last started or stopped making a sound
@@ -599,12 +600,30 @@ class LuciusDesk:
     async def finish(self) -> None:
         """The call is over. A hang-up doesn't take back what was said. Before the app is told, as
         it stops answering for this conversation then, and shutdown callbacks all run at once."""
-        self._current = None
+        working_on, self._current = self._current, None
         while not self._queue.empty():  # asked, never started: still said
             task = self._queue.get_nowait()
             if not task.shown:
                 self.call_log.add(task.said, "owner", task.asked_at or time.time())
+        said, said_at = self._words_with_no_reply(working_on)
+        if said:
+            self.call_log.add(said, "owner", said_at)
         await self._write_lines(everything=True)
+
+    def _words_with_no_reply(self, working_on: Task | None) -> tuple[str, float]:
+        """What they said that no reply or request has carried to the chat. Hanging up while the
+        voice was still deciding what to say lost all of it (owner's call, 2026-11-08)."""
+        turn_said, self._turn_said = self._turn_said, ""
+        heard = [] if self._spoken_since_heard else list(self._heard)
+        heard += [self._hearing] if self._hearing else []
+        self._heard.clear()
+        self._hearing = ""
+        said = " ".join(heard).strip()
+        said = _with_earlier(turn_said, said) if turn_said and said else turn_said or said
+        already_sent = working_on is not None and _letters(said) in _letters(working_on.said)
+        if _only_noise(said) or already_sent:
+            return "", 0.0
+        return said, (self._turn_started_at if turn_said else 0.0) or time.time()
 
     def limit_call(self, seconds: float) -> None:
         """End the call ``seconds`` from now: a heads-up ``TIME_WARNING_S`` before, then a
@@ -641,10 +660,15 @@ class LuciusDesk:
         self._busy_timer = None
         self.away()
 
+    def hearing(self, transcript: str) -> None:
+        """Words of a sentence not finished yet: all there is of it if they hang up now."""
+        self._hearing = transcript.strip()
+
     def heard(self, transcript: str) -> None:
         text = transcript.strip()
         if not text:
             return
+        self._hearing = ""
         self.back()
         if self._spoken_since_heard:
             self._heard.clear()
@@ -1705,8 +1729,12 @@ async def entrypoint(ctx: JobContext) -> None:
 
     @session.on("user_input_transcribed")
     def _heard(ev) -> None:
+        if ev.transcript.strip():
+            lucius.timing.words(ev.is_final)
         if ev.is_final:
             lucius.heard(ev.transcript)
+        else:
+            lucius.hearing(ev.transcript)
 
     @session.on("conversation_item_added")
     def _item(ev) -> None:

@@ -786,6 +786,66 @@ describe('your words as you speak them', () => {
     expect(state().heardShown).toBe(false)
   })
 
+  // The owner's call, 2026-11-08: his greeting's stream never closed, so yours never showed.
+  const lineThatNeverCloses = (text: string) => ({
+    info: { attributes: { 'lk.transcribed_track_id': 'TR_lucius' } },
+    async *[Symbol.asyncIterator]() {
+      yield text
+      await new Promise(() => {})
+    },
+  })
+
+  it('shows your words once his voice is quiet, even if his line never closes', async () => {
+    await liveCall()
+    void say(lineThatNeverCloses('hi it is Lucius'))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(state().spoken).toBe('hi it is Lucius')
+    await say(words('how'))
+    expect(state().heardShown).toBe(false) // his words can trail his voice for a moment
+
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(state().spokenDone).toBe(true)
+    await say(words('how much'))
+    expect(state().heardShown).toBe(true)
+
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(state().spoken).toBe('') // and his line doesn't come back after yours
+  })
+
+  it('leaves his line alone for as long as his voice is talking', async () => {
+    await liveCall()
+    hisVoice('speaking')
+    void say(lineThatNeverCloses('a long answer'))
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(state().spokenDone).toBe(false)
+    await say(words('background talk'))
+    expect(state().heardShown).toBe(false)
+
+    hisVoice('listening')
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(state().spokenDone).toBe(true)
+  })
+
+  it('gives a line more time while its words are still arriving after his voice', async () => {
+    await liveCall()
+    let more: () => void = () => {}
+    const pause = new Promise<void>((resolve) => (more = resolve))
+    void say({
+      info: { attributes: { 'lk.transcribed_track_id': 'TR_lucius' } },
+      async *[Symbol.asyncIterator]() {
+        yield 'first '
+        await pause
+        yield 'second'
+        await new Promise(() => {})
+      },
+    })
+    await vi.advanceTimersByTimeAsync(1500)
+    more()
+    await vi.advanceTimersByTimeAsync(1500)
+    expect(state().spoken).toBe('first second')
+    expect(state().spokenDone).toBe(false)
+  })
+
   it('hides what is heard while his voice talks with no words of its own', async () => {
     await liveCall()
     hisVoice('speaking')
@@ -981,7 +1041,7 @@ describe("Lucius's side of the call dropping", () => {
       .find((url) => url.startsWith('/api/voice/call/health'))!
     const report = new URL(asked, 'http://acme.test').searchParams.get('mic')
     expect(report).toMatch(
-      /^track=\w+,system_muted=[01],enabled=[01],app_muted=[01],audio=\w+,peak=[\d.]+,server_peak=[\d.]+,page=\w+,streams=\d+,words=\d+,caption=(you|lucius|none),voice=[01]$/,
+      /^track=\w+,system_muted=[01],enabled=[01],app_muted=[01],audio=\w+,peak=[\d.]+,server_peak=[\d.]+,page=\w+,streams=\d+,words=\d+,caption=(you|lucius|none),voice=[01],line=[01],quality=\w+$/,
     )
   })
 

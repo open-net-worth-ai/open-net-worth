@@ -2361,8 +2361,14 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                 continues_turn = False
             else:
                 # Pure tool_results — the same tool loop continues, so the assistant
-                # entry that follows belongs on THIS turn's bubble, not a new one.
-                continues_turn = True
+                # entry that follows belongs on THIS turn's bubble, not a new one. A turn opening
+                # with nothing to draw isn't that: a voice call's request re-sent with more words
+                # keeps them on its first message, and taking it for tool results pulled the answer
+                # up into the PREVIOUS answer's bubble, above its own question (owner, 2026-11-08).
+                continues_turn = any(
+                    isinstance(b, dict) and b.get("type") == "tool_result"
+                    for b in (content if isinstance(content, list) else [])
+                )
 
         elif role == "assistant":
             # Live, one turn can drive many tool_use rounds, but they all land on the

@@ -33,7 +33,7 @@ log = logging.getLogger(__name__)
 _SOUNDS_LIKE_A_YES = re.compile(r"\b(?:approve\w*|confirm\w*|okay|ok)\b", re.I)
 _PLAIN_NAME = re.compile(r"^[^\W\d_][^\W_]*(?:[ '&.-][^\W\d_][^\W_]*)*$")
 
-_MIC_REPORT = re.compile(r"[a-z_]+=[a-z0-9.]+(,[a-z_]+=[a-z0-9.]+){0,11}")
+_MIC_REPORT = re.compile(r"[a-z_]+=[a-z0-9.]+(,[a-z_]+=[a-z0-9.]+){0,13}")
 
 FLAG = "voice_calls"
 _REQUIRED_MODULES = ("livekit.agents", "livekit.plugins.silero")
