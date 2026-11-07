@@ -4635,7 +4635,7 @@ export function ImportModal({
                 const opening = !!drawerLoading[r.id]
                 return (
                   <div key={r.id} className="acct-stmtview-check-row">
-                    <span className="nums">{r.date}</span>
+                    <span className="nums">{r.date ? fDate(r.date, 'numeric', 'always') : ''}</span>
                     <span className="acct-stmtview-check-note">
                       <button
                         type="button"

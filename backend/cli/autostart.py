@@ -6,7 +6,7 @@ runs THIS interpreter (`<python> -m backend.cli start`), so it is identical for 
 install and for a checkout's .venv, and it carries this shell's PATH — launchd/systemd hand a
 fresh process a minimal one, and the claude/codex CLI providers would not resolve otherwise.
 
-`stop` deletes the unit file, not just unloads it: a LaunchAgent that is merely booted out is
+`uninstall` deletes the unit file, not just unloads it: a LaunchAgent that is merely booted out is
 loaded again at the next login, which is not "stopped".
 
 Windows: a per-user Task Scheduler task with restart-on-failure (``autostart_windows``).
@@ -266,5 +266,5 @@ def install_service(auto_upgrade: bool = False) -> int:
 
 
 def run_autostart(action: str) -> int:
-    handlers = {"install": install, "stop": stop, "status": status}
+    handlers = {"install": install, "uninstall": stop, "stop": stop, "status": status}
     return handlers[action](platform.system(), Path.home(), _run)
