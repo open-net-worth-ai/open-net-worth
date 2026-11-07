@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from backend.ai import assistant, turns
 from backend.api import demo_visitor
+from backend.connectors.voice import isolation
 from backend.connectors.voice import service as voice_service
 from backend.connectors.voice.tokens import TTL_S, mint_call_token, new_room_name
 from backend.connectors.voice.tts_models import speaks
@@ -77,7 +78,13 @@ def _automation_owned(session_id: str) -> bool:
 
 
 def _view(config: dict) -> dict:
-    return {**public(config), "ready": is_ready(config), "worker": voice_service.status()}
+    return {
+        **public(config),
+        "ready": is_ready(config),
+        "worker": voice_service.status(),
+        # New calls are on Standard for now, as LiveKit refused voice isolation; blank otherwise.
+        "isolation_standard_until": isolation.standard_until(),
+    }
 
 
 def _check_language(saved: dict, body: VoiceConfigPatch) -> None:
@@ -125,6 +132,8 @@ async def update_voice_config(body: VoiceConfigPatch):
     _check_language(store.get(), body)
     before = store.get()
     config = store.update(body.model_dump(exclude_none=True))
+    if config.get("noise_filter") != before.get("noise_filter"):
+        isolation.forget()
     if voice_service.needs_restart(before, config):
         await voice_service.reload()
     return _view(config)

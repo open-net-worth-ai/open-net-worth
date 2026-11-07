@@ -10,6 +10,7 @@ import {
   sttHears,
   DEFAULT_NOISE_FILTER,
   freeMinutesEstimate,
+  isolationStandInLine,
   LANGUAGE_OPTIONS,
   languagePatch,
   NOISE_FILTER_OPTIONS,
@@ -46,6 +47,7 @@ interface VoiceConfig {
   tts_voice: string
   language: string
   noise_filter: string
+  isolation_standard_until?: string
   has_api_key: boolean
   has_api_secret: boolean
   worker: WorkerStatus
@@ -246,6 +248,10 @@ export function VoiceSection() {
   const pickVoice = (model: string) => setForm((f) => f && { ...f, ...withVoiceModel(f, model) })
   const status = workerLine(cfg)
   const onCloud = onLiveKitCloud(form.livekit_url)
+  const standIn =
+    cfg.noise_filter === 'isolation' && form.noise_filter === 'isolation'
+      ? isolationStandInLine(cfg.isolation_standard_until ?? '')
+      : ''
   const estimate = onCloud ? freeMinutesEstimate(form) : undefined
 
   return (
@@ -361,7 +367,7 @@ export function VoiceSection() {
         <FormField
           label="Noise cancelling"
           htmlFor="conn-voice-noise"
-          help={noiseFilterHelp(form.noise_filter)}
+          help={standIn || noiseFilterHelp(form.noise_filter)}
         >
           <FieldSelect
             id="conn-voice-noise"

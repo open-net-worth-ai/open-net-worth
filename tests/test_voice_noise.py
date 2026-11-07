@@ -145,3 +145,231 @@ def test_past_the_allowance_voice_isolation_passes_the_audio_through(monkeypatch
     isolation._on_credentials_updated(token="t", url=CLOUD)
     frame = _frame()
     assert isolation._process(frame) is frame
+
+
+class _FakeIsolation:
+    """Stands in for the plugin: hands back the same frame while refused, a new one otherwise."""
+
+    enabled = True
+
+    def __init__(self):
+        self.refused = False
+        self.credentials = []
+        self.closed = False
+
+    def _process(self, frame):
+        return frame if self.refused else object()
+
+    def _on_credentials_updated(self, *, token, url):
+        self.credentials.append((token, url))
+
+    def _close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def watched(monkeypatch):
+    noise = pytest.importorskip("backend.connectors.voice.noise")
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(noise.time, "monotonic", lambda: clock["now"])
+    said = []
+    inner = _FakeIsolation()
+    filter_ = noise.WatchedIsolation(inner, said.append)
+    filter_._on_credentials_updated(token="t", url=CLOUD)
+
+    def run(seconds, *, step=0.05):
+        for _ in range(int(seconds / step)):
+            filter_._process(object())
+            clock["now"] += step
+
+    return filter_, inner, said, run
+
+
+def test_ten_seconds_of_untouched_audio_counts_as_refused_once(watched):
+    _filter, inner, said, run = watched
+    inner.refused = True
+    run(9)
+    assert said == []
+    run(30)
+    assert said == [False]
+
+
+def test_a_minute_of_filtered_audio_counts_as_working_once(watched):
+    _filter, _inner, said, run = watched
+    run(59)
+    assert said == []
+    run(120)
+    assert said == [True]
+
+
+def test_a_moment_of_untouched_audio_is_not_a_refusal(watched):
+    _filter, inner, said, run = watched
+    inner.refused = True
+    run(8)
+    inner.refused = False
+    run(1)
+    inner.refused = True
+    run(8)
+    assert False not in said
+
+
+def test_running_out_partway_through_a_call_still_counts(watched):
+    _filter, inner, said, run = watched
+    run(70)
+    inner.refused = True
+    run(11)
+    assert said == [True, False]
+
+
+def test_audio_before_the_credentials_arrive_says_nothing(monkeypatch):
+    noise = pytest.importorskip("backend.connectors.voice.noise")
+    clock = {"now": 0.0}
+    monkeypatch.setattr(noise.time, "monotonic", lambda: clock["now"])
+    said = []
+    inner = _FakeIsolation()
+    inner.refused = True
+    filter_ = noise.WatchedIsolation(inner, said.append)
+    for _ in range(400):
+        filter_._process(object())
+        clock["now"] += 0.05
+    assert said == []
+
+
+def test_a_failed_report_never_touches_the_audio(monkeypatch):
+    noise = pytest.importorskip("backend.connectors.voice.noise")
+    clock = {"now": 0.0}
+    monkeypatch.setattr(noise.time, "monotonic", lambda: clock["now"])
+
+    def broken(_working):
+        raise RuntimeError("the link is down")
+
+    inner = _FakeIsolation()
+    inner.refused = True
+    filter_ = noise.WatchedIsolation(inner, broken)
+    filter_._on_credentials_updated(token="t", url=CLOUD)
+    frame = object()
+    clock["now"] = 5.0
+    filter_._process(frame)
+    clock["now"] = 20.0
+    assert filter_._process(frame) is frame
+
+
+def test_the_watcher_passes_the_framework_s_calls_on(watched):
+    filter_, inner, _said, _run = watched
+    assert inner.credentials == [("t", CLOUD)]
+    filter_.enabled = False
+    assert inner.enabled is False and filter_.enabled is False
+    filter_._close()
+    assert inner.closed
+
+
+@pytest.fixture
+def at(monkeypatch):
+    from datetime import datetime, timezone
+
+    from backend.connectors.voice import isolation
+
+    clock = {"now": datetime(2026, 11, 8, 10, 0, tzinfo=timezone.utc)}
+    monkeypatch.setattr(isolation, "user_now", lambda: clock["now"])
+
+    def move(**changes):
+        clock["now"] = clock["now"].replace(**changes)
+
+    return isolation, move
+
+
+def test_no_refusal_leaves_voice_isolation_chosen(db_isolated, at):
+    isolation, _move = at
+    assert isolation.filter_for_call("isolation") == "isolation"
+    assert isolation.standard_until() == ""
+
+
+def test_one_refusal_puts_new_calls_on_standard_for_an_hour(db_isolated, at):
+    isolation, move = at
+    isolation.note_refused()
+    assert isolation.filter_for_call("isolation") == "standard"
+    move(minute=59)
+    assert isolation.filter_for_call("isolation") == "standard"
+    move(hour=11, minute=1)
+    assert isolation.filter_for_call("isolation") == "isolation"
+
+
+def test_a_second_refusal_in_a_row_waits_for_next_month(db_isolated, at):
+    isolation, move = at
+    isolation.note_refused()
+    move(hour=12)
+    isolation.note_refused()
+    assert isolation.standard_until().startswith("2026-12-01")
+    move(day=30)
+    assert isolation.filter_for_call("isolation") == "standard"
+    move(month=12, day=1, hour=0)
+    assert isolation.filter_for_call("isolation") == "isolation"
+
+
+def test_next_month_rolls_over_the_year(db_isolated, at):
+    isolation, move = at
+    isolation.note_refused()
+    move(month=12, day=31, hour=23)
+    isolation.note_refused()
+    assert isolation.standard_until().startswith("2027-01-01")
+
+
+def test_a_call_refused_while_another_waits_is_the_same_refusal(db_isolated, at):
+    isolation, _move = at
+    isolation.note_refused()
+    isolation.note_refused()
+    until = isolation.standard_until()
+    assert until.startswith("2026-11-08T11:00")
+
+
+def test_working_again_forgets_the_refusals(db_isolated, at):
+    isolation, move = at
+    isolation.note_refused()
+    move(hour=12)
+    isolation.note_working()
+    assert isolation.standard_until() == ""
+    isolation.note_refused()
+    assert isolation.standard_until().startswith("2026-11-08T13:00")
+
+
+@pytest.mark.parametrize("choice", ["off", "standard"])
+def test_a_refusal_never_changes_the_other_choices(db_isolated, at, choice):
+    isolation, _move = at
+    isolation.note_refused()
+    assert isolation.filter_for_call(choice) == choice
+
+
+def test_a_new_call_reads_standard_but_the_owner_s_choice_stays(db_isolated, at):
+    from backend.db.voice_config_store import VoiceConfigStore
+
+    isolation, _move = at
+    VoiceConfigStore().update({"noise_filter": "isolation"})
+    isolation.note_refused()
+    assert service.call_settings()["noise_filter"] == "standard"
+    assert VoiceConfigStore().get()["noise_filter"] == "isolation"
+
+
+@pytest.mark.flags(voice_calls=True)
+def test_settings_say_so_and_picking_it_again_tries_again(client):
+    from backend.connectors.voice import isolation
+
+    client.put("/api/voice/config", json={"noise_filter": "isolation"})
+    isolation.note_refused()
+    assert client.get("/api/voice/config").json()["isolation_standard_until"]
+    client.put("/api/voice/config", json={"language": "es"})
+    assert client.get("/api/voice/config").json()["isolation_standard_until"]
+    client.put("/api/voice/config", json={"noise_filter": "standard"})
+    assert client.get("/api/voice/config").json()["isolation_standard_until"] == ""
+
+
+def test_the_worker_may_report_it_and_it_lands(db_isolated):
+    import asyncio
+
+    from backend.connectors.voice import host, isolation
+
+    assert "note_isolation" in host.CALLS
+    answer = host.Host.__new__(host.Host)
+    asyncio.run(answer._call("note_isolation", {"working": False}))
+    assert isolation.standard_until()
+    asyncio.run(answer._call("note_isolation", {"working": True}))
+    assert isolation.standard_until() == ""

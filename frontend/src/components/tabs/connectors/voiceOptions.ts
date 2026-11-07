@@ -1,3 +1,5 @@
+import { fDate } from '../../../utils/format'
+
 // The voices offered for a call, with what each costs. Mirrors the backend's
 // connectors/voice/tts_models.py for which languages each speaks.
 // Prices: LiveKit Inference on the Build and Ship plans, per million characters (livekit.com/pricing/
@@ -221,11 +223,22 @@ const NOISE_FILTER_HELP: Record<string, string> = {
   standard: 'Krisp removes fans, traffic and music, and keeps every voice it hears. No extra cost.',
   isolation:
     `Krisp also removes other people talking near you. LiveKit's free plan includes ` +
-    `${BUILD_PLAN_ISOLATION_MINUTES} minutes a month; after that, expect calls to go on without it.`,
+    `${BUILD_PLAN_ISOLATION_MINUTES} minutes a month; after that, new calls use Standard.`,
 }
 
 export function noiseFilterHelp(choice: string): string | undefined {
   return NOISE_FILTER_HELP[choice]
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Says so when LiveKit refused voice isolation and new calls are on Standard for now. */
+export function isolationStandInLine(until: string, now: number = Date.now()): string {
+  const retry = Date.parse(until)
+  if (!until || Number.isNaN(retry)) return ''
+  const when =
+    retry - now < DAY_MS ? 'within the hour' : `on ${fDate(until.slice(0, 10), 'short', 'always')}`
+  return `LiveKit refused voice isolation, so new calls use Standard for now. It tries again ${when}.`
 }
 
 /** Both Krisp filters need LiveKit Cloud. No address yet reads as Cloud, what the form suggests. */
@@ -256,21 +269,19 @@ export function freeMinutesEstimate(
     voice +
     (HEARING_COST_PER_MINUTE[choices.stt_model] ?? NOVA_3_COST_PER_MINUTE) +
     (FRONT_COST_PER_MINUTE[choices.front_model] ?? GEMMA_COST_PER_MINUTE)
-  const creditMinutes = Math.round(BUILD_PLAN_CREDIT / perMinute / 10) * 10
-  const isolationFirst =
-    choices.noise_filter === 'isolation' && creditMinutes > BUILD_PLAN_ISOLATION_MINUTES
-  const minutes = isolationFirst ? BUILD_PLAN_ISOLATION_MINUTES : creditMinutes
-  const limit = isolationFirst
-    ? `Its ${BUILD_PLAN_ISOLATION_MINUTES} minutes of voice isolation run out first; the ` +
-      `$${BUILD_PLAN_CREDIT.toFixed(2)} credit would last about ${creditMinutes}.`
-    : `Its $${BUILD_PLAN_CREDIT.toFixed(2)} monthly credit runs out first, at about ` +
-      `${cents(perMinute)} a call minute.`
+  const minutes = Math.round(BUILD_PLAN_CREDIT / perMinute / 10) * 10
+  // New calls step down to Standard when voice isolation runs out, so it never ends the free calls.
+  const isolation =
+    choices.noise_filter === 'isolation' && minutes > BUILD_PLAN_ISOLATION_MINUTES
+      ? ` About the first ${BUILD_PLAN_ISOLATION_MINUTES} use voice isolation, then Standard.`
+      : ''
   return {
     headline: `Estimated free minutes: about ${minutes} a month`,
     detail:
-      `On LiveKit's free plan, with these settings. ${limit} A call that talks more uses it ` +
-      `faster, and LiveKit sets the prices. Lucius's own model isn't counted: your AI provider ` +
-      `bills that.`,
+      `On LiveKit's free plan, with these settings: its $${BUILD_PLAN_CREDIT.toFixed(2)} monthly ` +
+      `credit, at about ${cents(perMinute)} a call minute.${isolation} A call that talks more ` +
+      `uses it faster, and LiveKit sets the prices. Lucius's own model isn't counted: your AI ` +
+      `provider bills that.`,
   }
 }
 

@@ -19,6 +19,7 @@ import logging
 import random
 import re
 import time
+from collections.abc import Callable
 from contextlib import aclosing
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
@@ -1748,6 +1749,24 @@ async def _with_ticks(events, every: float):
         pending.cancel()
 
 
+def _isolation_reporter(runtime: Runtime) -> Callable[[bool], None]:
+    """Tells the app whether voice isolation is working, from the audio task, which can't wait."""
+    sending: set[asyncio.Task] = set()
+
+    async def send(working: bool) -> None:
+        try:
+            await runtime.app.call("note_isolation", working=working)
+        except Exception:  # noqa: BLE001 — the next call simply tries voice isolation again
+            log.info("voice: couldn't tell the app how voice isolation is doing", exc_info=True)
+
+    def report(working: bool) -> None:
+        task = asyncio.get_running_loop().create_task(send(working))
+        sending.add(task)
+        task.add_done_callback(sending.discard)
+
+    return report
+
+
 def prewarm(proc: JobProcess) -> None:
     proc.userdata["vad"] = silero.VAD.load()
 
@@ -1930,7 +1949,9 @@ async def entrypoint(ctx: JobContext) -> None:
         room_input_options=RoomInputOptions(
             text_enabled=False,
             participant_identity=OWNER_IDENTITY,
-            noise_cancellation=call_filter(cfg.get("noise_filter"), cfg.get("livekit_url")),
+            noise_cancellation=call_filter(
+                cfg.get("noise_filter"), cfg.get("livekit_url"), _isolation_reporter(runtime)
+            ),
         ),
     )
     if not await _wait_for_caller(ctx.room):

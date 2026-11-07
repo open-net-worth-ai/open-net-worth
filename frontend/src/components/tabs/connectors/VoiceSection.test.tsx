@@ -64,9 +64,10 @@ describe('Noise cancelling in the Voice calls settings', () => {
   it('moves the estimate as soon as an option is picked, before saving', async () => {
     render(<Host />)
     fireEvent.change(await noise(), { target: { value: 'isolation' } })
-    expect(screen.getByText('Estimated free minutes: about 100 a month')).toBeTruthy()
+    expect(screen.getByText(/About the first 100 use voice isolation/)).toBeTruthy()
     expect(screen.getByText(/also removes other people talking/)).toBeTruthy()
     fireEvent.change(await noise(), { target: { value: 'off' } })
+    expect(screen.queryByText(/About the first 100 use voice isolation/)).toBeNull()
     expect(screen.getByText('Estimated free minutes: about 170 a month')).toBeTruthy()
   })
 
@@ -77,6 +78,19 @@ describe('Noise cancelling in the Voice calls settings', () => {
       target: { value: 'assemblyai/universal-streaming' },
     })
     expect(screen.getByText('Estimated free minutes: about 200 a month')).toBeTruthy()
+  })
+
+  it('says when LiveKit refused voice isolation and new calls are on Standard', async () => {
+    serve({
+      ...CONFIG,
+      noise_filter: 'isolation',
+      isolation_standard_until: '2099-12-01T00:00:00+00:00',
+    })
+    render(<Host />)
+    await noise()
+    expect(screen.getByText(/LiveKit refused voice isolation/)).toBeTruthy()
+    fireEvent.change(await noise(), { target: { value: 'standard' } })
+    expect(screen.queryByText(/LiveKit refused voice isolation/)).toBeNull()
   })
 
   it('saves the choice and restarts a call that is on', async () => {

@@ -36,7 +36,10 @@ Settings shows one estimate of free minutes for everything picked, including wha
   heard less well, so a real call has to check it.
 - When LiveKit refuses voice isolation, the plugin logs an error every few seconds and passes audio
   through unchanged, seen for minutes with the real filter and an unreachable server, and pinned by a
-  test. A project that has really used its 100 minutes hasn't been tried. Isolation doesn't step down
-  to Standard, and nothing tells the caller.
+  test. A project that has really used its 100 minutes hasn't been tried.
+- The worker sees that pass-through and tells the app, which starts new calls on Standard: for an hour
+  after one refusal, as a network blink looks the same, and until next month after a second in a row.
+  The call that's refused can't change filter, so it finishes without Krisp. LiveKit's allowance may
+  renew on another day than the calendar month, so Standard can last longer than it needed to.
 - Both packages point to LiveKit's terms, not an open licence, and the image and desktop app would carry
   them. Whether that's allowed has to be settled before a release.

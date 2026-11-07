@@ -22,6 +22,7 @@ import threading
 import time
 from typing import Optional
 
+from backend.connectors.voice import isolation
 from backend.connectors.voice.cards import sounds_like_a_yes
 from backend.core.config import get_settings
 from backend.core.user_time import user_now
@@ -320,6 +321,7 @@ def call_settings() -> dict:
     config = VoiceConfigStore().get()
     return {
         **{key: config.get(key) for key in _PER_CALL},
+        "noise_filter": isolation.filter_for_call(config.get("noise_filter")),
         "language_name": LANGUAGES.get(config.get("language") or "en", "English"),
         "own_terms": _own_terms(),
     }

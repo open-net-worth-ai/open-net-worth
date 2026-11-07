@@ -4,6 +4,7 @@ import {
   languagePatch,
   OTHER_VOICE,
   freeMinutesEstimate,
+  isolationStandInLine,
   noiseFilterHelp,
   onLiveKitCloud,
   speakerChoice,
@@ -64,30 +65,29 @@ describe('the free minutes these settings come to', () => {
     noise_filter: 'standard',
   }
 
-  it('is what the credit lasts when noise cancelling costs nothing', () => {
+  it('is what the credit lasts, whichever noise cancelling is on', () => {
     const estimate = freeMinutesEstimate(defaults)
     expect(estimate?.headline).toBe('Estimated free minutes: about 170 a month')
-    expect(estimate?.detail).toContain('$2.50 monthly credit runs out first')
-    expect(freeMinutesEstimate({ ...defaults, noise_filter: 'off' })?.headline).toBe(
-      estimate?.headline,
-    )
+    expect(estimate?.detail).toContain('$2.50 monthly credit')
+    for (const noise_filter of ['off', 'isolation']) {
+      expect(freeMinutesEstimate({ ...defaults, noise_filter })?.headline).toBe(estimate?.headline)
+    }
   })
 
-  it('stops at voice isolation when its allowance runs out before the credit', () => {
+  it('says voice isolation covers the first minutes, then Standard', () => {
     const estimate = freeMinutesEstimate({ ...defaults, noise_filter: 'isolation' })
-    expect(estimate?.headline).toBe('Estimated free minutes: about 100 a month')
-    expect(estimate?.detail).toContain('voice isolation run out first')
-    expect(estimate?.detail).toContain('would last about 170')
+    expect(estimate?.detail).toContain('About the first 100 use voice isolation, then Standard.')
+    expect(freeMinutesEstimate(defaults)?.detail).not.toContain('voice isolation')
   })
 
-  it('stays on the credit when a dearer voice spends it before voice isolation runs out', () => {
+  it('leaves that out when a dearer voice spends the credit first', () => {
     const estimate = freeMinutesEstimate({
       ...defaults,
       tts_model: 'cartesia/sonic-3',
       noise_filter: 'isolation',
     })
     expect(estimate?.headline).toBe('Estimated free minutes: about 80 a month')
-    expect(estimate?.detail).toContain('monthly credit runs out first')
+    expect(estimate?.detail).not.toContain('then Standard')
   })
 
   it('moves with hearing and the front voice too', () => {
@@ -106,6 +106,15 @@ describe('noise cancelling', () => {
   it('explains the option picked', () => {
     expect(noiseFilterHelp('standard')).toContain('keeps every voice')
     expect(noiseFilterHelp('isolation')).toContain('100 minutes a month')
+  })
+
+  it('says when new calls are standing in on Standard, and until when', () => {
+    const now = Date.parse('2026-11-08T10:00:00+08:00')
+    expect(isolationStandInLine('', now)).toBe('')
+    expect(isolationStandInLine('2026-11-08T11:00:00+08:00', now)).toContain('within the hour')
+    const nextMonth = isolationStandInLine('2026-12-01T00:00:00+08:00', now)
+    expect(nextMonth).toContain('new calls use Standard')
+    expect(nextMonth).toContain('Dec')
   })
 
   it('is offered on LiveKit Cloud only', () => {
