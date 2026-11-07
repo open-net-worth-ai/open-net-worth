@@ -288,3 +288,9 @@ within about an hour of a later run if a crash stops that, so your decrypted bud
 disk. It's tested against a real Actual server for the sync cases on this page, including end-to-end
 encrypted and tracking budgets. It hasn't been tested on Windows,
 with OpenID-only servers, or on large real budgets.
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Actual Budget Alternative: Open Net Worth vs Actual Budget](https://opennetworth.ai/blog/open-net-worth-vs-actual-budget/): Actual Budget and Open Net Worth side by side, and how to move over

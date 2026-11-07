@@ -100,3 +100,9 @@ vehicle accounts became owned assets — link their loan on the Assets tab.
 
 - [Upgrading](upgrading.md) — how to update, and what the app does to protect your data
 - [Net worth](../concepts/net-worth.md) — what counts and how it's calculated
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Open Net Worth Release Notes: What Changed in October 2026](https://opennetworth.ai/blog/open-net-worth-october-2026/): the October 2026 changes explained

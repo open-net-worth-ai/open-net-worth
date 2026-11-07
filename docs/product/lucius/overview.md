@@ -77,3 +77,10 @@ can be undone with the **Restore** button on the reply. See [Permissions](permis
 - [Permissions](permissions.md)
 - [Automations](automations.md)
 - [Connecting an AI provider](../getting-started/connecting-an-ai-provider.md)
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [AI Agent for Personal Finance: A Personal Wealth Agent](https://opennetworth.ai/blog/ai-agent-for-personal-finance/): what a personal wealth agent does day to day
+- [Muse vs dots vs an Open-source Personal Wealth Agent](https://opennetworth.ai/blog/muse-vs-dots-vs-self-hosted-ai-wealth-assistant/): Lucius next to hosted AI money assistants

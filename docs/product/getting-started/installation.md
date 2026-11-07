@@ -248,3 +248,10 @@ own machine is covered in [Exposing it beyond localhost](../operations/exposing-
 - [Upgrading](../operations/upgrading.md) — updating each kind of install.
 - [Where your files live](../reference/file-layout.md) — what's in `~/.open-net-worth/`.
 - [Environment variables](../reference/environment-variables.md) — optional overrides, such as `ONW_ROOT` to keep your data elsewhere.
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [How to Self-Host a Personal Finance App: 3 Install Routes](https://opennetworth.ai/blog/how-to-self-host-personal-finance-app/): the three install routes compared
+- [Self-Hosted Personal Finance: Apps, Tradeoffs and Setup](https://opennetworth.ai/blog/self-hosted-personal-finance/): what self-hosting your finances involves

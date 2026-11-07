@@ -196,3 +196,10 @@ usual cause.
 - [Bank & brokerage connections](../connectors/bank-brokerage.md)
 - [The ledger](../concepts/the-ledger.md)
 - [An import created duplicates](../troubleshooting/import-created-duplicates.md)
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Import Bank Statements Into a Budget App: PDF to CAMT.053](https://opennetworth.ai/blog/import-bank-statements-budget-app/): bank statements from PDF to CAMT.053, with worked examples
+- [Firefly III Alternative: Open Net Worth vs Firefly III](https://opennetworth.ai/blog/firefly-iii-alternative/): moving a Firefly III export across
