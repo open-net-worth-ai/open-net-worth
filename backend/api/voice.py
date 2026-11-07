@@ -21,6 +21,7 @@ from backend.connectors.voice.tokens import TTL_S, mint_call_token, new_room_nam
 from backend.connectors.voice.tts_models import speaks
 from backend.db.voice_config_store import (
     LANGUAGES,
+    NOISE_FILTERS,
     STT_HEARS_ONLY,
     VoiceConfigStore,
     is_ready,
@@ -60,6 +61,7 @@ class VoiceConfigPatch(BaseModel):
     tts_model: Optional[str] = None
     tts_voice: Optional[str] = None
     language: Optional[str] = None
+    noise_filter: Optional[str] = None
 
 
 class StartCallRequest(BaseModel):
@@ -117,6 +119,8 @@ async def update_voice_config(body: VoiceConfigPatch):
             status_code=422,
             detail="The LiveKit URL starts with wss:// (ws:// only for a server on this machine).",
         )
+    if body.noise_filter is not None and body.noise_filter not in NOISE_FILTERS:
+        raise HTTPException(status_code=422, detail="That noise cancelling option isn't available.")
     store = VoiceConfigStore()
     _check_language(store.get(), body)
     before = store.get()

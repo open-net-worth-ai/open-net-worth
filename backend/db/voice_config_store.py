@@ -31,7 +31,12 @@ CONFIG_DEFAULTS: dict = {
     "tts_model": "inworld/inworld-tts-2-flash",
     "tts_voice": "",
     "language": "en",
+    "noise_filter": "standard",
 }
+
+# Which Krisp filter cleans the caller's audio (``connectors/voice/noise.py``): none, background
+# noise only, or other people's voices too.
+NOISE_FILTERS = frozenset({"off", "standard", "isolation"})
 
 # LiveKit retired these on 2026-10-20 and names Gemma as their replacement. A setting saved before
 # then reads as the default, so it is a model LiveKit still lists and a choice the screen can show.

@@ -41,6 +41,7 @@ from backend.connectors.voice.call_log import CallLog, Card, Task
 from backend.connectors.voice.cards import asks_something, card_reading, is_plain_yes
 from backend.connectors.voice.connection import CallConnection
 from backend.connectors.voice.events import speakable
+from backend.connectors.voice.noise import call_filter
 from backend.connectors.voice.stt_hints import hearing_model, hint_kwargs
 from backend.connectors.voice.timing import AnswerTiming, SpeechLog, TurnTiming
 from backend.connectors.voice.tokens import OWNER_IDENTITY
@@ -1927,7 +1928,9 @@ async def entrypoint(ctx: JobContext) -> None:
         # Only the owner's browser (the identity its token names) is listened to, and only by
         # voice: no typed text into the room.
         room_input_options=RoomInputOptions(
-            text_enabled=False, participant_identity=OWNER_IDENTITY
+            text_enabled=False,
+            participant_identity=OWNER_IDENTITY,
+            noise_cancellation=call_filter(cfg.get("noise_filter"), cfg.get("livekit_url")),
         ),
     )
     if not await _wait_for_caller(ctx.room):

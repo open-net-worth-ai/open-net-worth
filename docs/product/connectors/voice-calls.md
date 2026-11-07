@@ -173,13 +173,17 @@ works; from another device the app must be reachable over HTTPS (see
 | **Front voice** | The model that holds the conversation. *Gemma 4* is the default: it's LiveKit's replacement for the retired Gemini 2.5 models, and in testing it asked what a bare "sure" was agreeing to instead of guessing. A setting saved with a retired model moves to it by itself. |
 | **Language** | In beta: how good a language sounds depends on the voice, so try yours before relying on it. What you speak on calls: English, Vietnamese, Chinese, Japanese, Korean, Hindi, Indonesian, Spanish, French, German or Portuguese. Lucius hears it, his greeting and check-ins are in it, and his voice speaks it. |
 | **Speech to text** | Which service turns your voice into text. *Automatic* uses Deepgram Nova-3, which hears every language here. The AssemblyAI models hear fewer (*Universal* hears English only), so picking a language they can't hear moves you to Automatic. All of these are told the common finance words to expect in your language, so they mishear them less. Those are general words: nothing from your own accounts goes with them. |
+| **Noise cancelling** | LiveKit Cloud only, and there's no extra account or key. *Standard* (the default) uses Krisp to remove fans, traffic and music, and keeps every voice it hears, at no extra cost. *Voice isolation* also removes other people talking near you; LiveKit's free plan includes 100 minutes of it a month, and after that you should expect calls to go on without it. *Off* leaves only your browser's own noise suppression, which stays on with the others too. On your own LiveKit server this setting isn't shown and calls go on as before. Change it during a call and the call restarts with it. |
 | **Voice model** | Which service speaks and what it costs. *Inworld 2.0 Flash* is the default for a new setup: it's the cheapest model that speaks every language here. A setup you've already saved keeps its choice until you change it. Only models that speak your language are offered. |
 | **Voice** | Who speaks: a sample of male and female voices, marked with the gender the docs state. The default is a calm male voice where one is documented (*Dennis* on Inworld), and a setup with no voice picked uses it. Pick **Another voice…** to paste an id from that service's library, which has many more. Picking another service goes back to its default voice. A voice may not sound natural in every language, so try it with a short call. |
 
 **What a call costs.** Lucius's voice is most of it, and it's charged by the character, so the price
-beside each voice and the length of his answers matter most. Settings shows an estimate for the voice
-you pick: on LiveKit's free $2.50 credit, about 80 minutes at $50 per million characters, about 140 at
-$25 and about 200 at $15. A call that talks more uses it faster, and LiveKit sets the prices.
+beside each voice and the length of his answers matter most. At the bottom, settings shows **Estimated
+free minutes**: how long LiveKit's free plan should last each month with what you've picked, and what
+runs out first. A new setup comes to about 200 minutes on its $2.50 monthly credit, or about 100 with
+voice isolation on, which is how many minutes of it the plan includes. A call that talks more uses it
+faster, and LiveKit sets the prices. Lucius's own model isn't counted: your AI provider
+bills that.
 
 The LiveKit key and secret are stored like every connector credential: never shown to Lucius,
 readable back only by you through the eye on the field. Pausing the connector stops taking calls.

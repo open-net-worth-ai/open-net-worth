@@ -3,6 +3,9 @@ import {
   DEFAULT_VOICE_MODEL,
   languagePatch,
   OTHER_VOICE,
+  freeMinutesEstimate,
+  noiseFilterHelp,
+  onLiveKitCloud,
   speakerChoice,
   speakerOptions,
   voiceCostLine,
@@ -41,17 +44,75 @@ describe('the voices offered for a call', () => {
     expect(voiceCostLine(saved)).toBeUndefined()
   })
 
-  it('puts the cost in call minutes and in the free credit', () => {
-    expect(voiceCostLine('cartesia/sonic-3')).toContain('About 3.1¢ a call minute')
-    expect(voiceCostLine('cartesia/sonic-3')).toContain('about 80 minutes')
-    expect(voiceCostLine('inworld/inworld-tts-2')).toContain('about 140 minutes')
-    expect(voiceCostLine('inworld/inworld-tts-2-flash')).toContain('about 200 minutes')
+  it('puts the cost of his voice in call minutes', () => {
+    expect(voiceCostLine('cartesia/sonic-3')).toContain('about 2.6¢ a call minute')
+    expect(voiceCostLine('inworld/inworld-tts-2-flash')).toContain('about 0.8¢ a call minute')
   })
 
   it('drops a voice id only when the provider changes', () => {
     const cartesia = 'cartesia/sonic-3'
     expect(voiceIdAfterChange(cartesia, 'cartesia/sonic-3.6', 'abc')).toBe('abc')
     expect(voiceIdAfterChange(cartesia, 'inworld/inworld-tts-2', 'abc')).toBe('')
+  })
+})
+
+describe('the free minutes these settings come to', () => {
+  const defaults = {
+    stt_model: 'auto',
+    tts_model: 'inworld/inworld-tts-2-flash',
+    front_model: 'google/gemma-4-31b-it',
+    noise_filter: 'standard',
+  }
+
+  it('is what the credit lasts when noise cancelling costs nothing', () => {
+    const estimate = freeMinutesEstimate(defaults)
+    expect(estimate?.headline).toBe('Estimated free minutes: about 170 a month')
+    expect(estimate?.detail).toContain('$2.50 monthly credit runs out first')
+    expect(freeMinutesEstimate({ ...defaults, noise_filter: 'off' })?.headline).toBe(
+      estimate?.headline,
+    )
+  })
+
+  it('stops at voice isolation when its allowance runs out before the credit', () => {
+    const estimate = freeMinutesEstimate({ ...defaults, noise_filter: 'isolation' })
+    expect(estimate?.headline).toBe('Estimated free minutes: about 100 a month')
+    expect(estimate?.detail).toContain('voice isolation run out first')
+    expect(estimate?.detail).toContain('would last about 170')
+  })
+
+  it('stays on the credit when a dearer voice spends it before voice isolation runs out', () => {
+    const estimate = freeMinutesEstimate({
+      ...defaults,
+      tts_model: 'cartesia/sonic-3',
+      noise_filter: 'isolation',
+    })
+    expect(estimate?.headline).toBe('Estimated free minutes: about 80 a month')
+    expect(estimate?.detail).toContain('monthly credit runs out first')
+  })
+
+  it('moves with hearing and the front voice too', () => {
+    const headline = (changes: Partial<typeof defaults>) =>
+      freeMinutesEstimate({ ...defaults, ...changes })?.headline
+    expect(headline({ stt_model: 'assemblyai/universal-streaming' })).toContain('about 200')
+    expect(headline({ front_model: 'openai/gpt-4.1-nano' })).toContain('about 190')
+  })
+
+  it('says nothing for a voice with no price', () => {
+    expect(freeMinutesEstimate({ ...defaults, tts_model: 'elevenlabs/x' })).toBeUndefined()
+  })
+})
+
+describe('noise cancelling', () => {
+  it('explains the option picked', () => {
+    expect(noiseFilterHelp('standard')).toContain('keeps every voice')
+    expect(noiseFilterHelp('isolation')).toContain('100 minutes a month')
+  })
+
+  it('is offered on LiveKit Cloud only', () => {
+    expect(onLiveKitCloud('wss://acme.livekit.cloud')).toBe(true)
+    expect(onLiveKitCloud('')).toBe(true)
+    expect(onLiveKitCloud('wss://livekit.example.com')).toBe(false)
+    expect(onLiveKitCloud('wss://acme.livekit.cloud.example.com')).toBe(false)
   })
 })
 

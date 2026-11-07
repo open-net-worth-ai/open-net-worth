@@ -312,7 +312,7 @@ async def stop() -> None:
 # What a call reads when it starts, so changing one takes effect at the next call with no restart:
 # stopping and starting the worker took 2-7s, all of it silence after changing language or voice
 # mid-call (owner, 2026-11-06). Never a credential: those are the worker's connection.
-_PER_CALL = ("language", "front_model", "stt_model", "tts_model", "tts_voice")
+_PER_CALL = ("language", "front_model", "stt_model", "tts_model", "tts_voice", "noise_filter")
 _CONNECTION = ("enabled", "livekit_url", "api_key", "api_secret")
 
 
