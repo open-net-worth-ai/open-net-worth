@@ -131,6 +131,9 @@ While Lucius works, his thinking shows as he writes it; once the reply is done i
 short preview you can open. Each step he takes shows as its own row, named after what it does
 (*"Get net worth"*, *"Delete envelope"*), and you can open a row for its details.
 
+A code block in a reply, such as a terminal command, has a **Copy** button in its corner: it shows
+when you point at the block (always, on a touch screen) and copies the block's text exactly.
+
 If a reply goes quiet, a small **Still working…** line with the time so far shows up after about
 ten seconds, so you can tell Lucius is alive and not stuck.
 
