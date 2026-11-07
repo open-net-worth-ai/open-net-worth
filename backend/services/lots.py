@@ -25,9 +25,10 @@ Imports are downward only (db + core) — no api/ai import (Contract 3).
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import date, datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import Connection
 
@@ -47,6 +48,8 @@ from backend.db.tables import realized_events as realized_tbl
 from backend.db.tables import transactions as txns_tbl
 from backend.db.tables import txn_audit as txn_audit_tbl
 from backend.services import position_figures, transaction_links
+
+logger = logging.getLogger(__name__)
 
 # Lots may be split/consumed at floating-point granularity; treat sub-dust as zero so a
 # fully-consumed lot closes cleanly instead of leaving 1e-12 behind.
@@ -592,19 +595,18 @@ def _undo_dispose(change: dict) -> dict:
     return {"ok": True, "event_id": event_id, "position_id": pos_id, "txn_id": txn_id, **agg}
 
 
-def _restore_disposal(ev: dict, *, conn: Connection, release_links: bool = True) -> None:
+def _restore_disposal(ev: dict, *, conn: Connection, keep_cash: bool = False) -> None:
     """Undo a disposal's writes on an already-open unit of work: restore consumed qty,
-    reverse the proceeds cash leg, delete the event. Caller validated lots exist."""
+    reverse the proceeds cash leg (unless a sale edit is keeping it), delete the event. Caller
+    validated lots exist."""
     lots = LotStore()
     consumptions = ev.get("consumptions") or []
     lots.bulk_restore([(c["lot_id"], float(c.get("qty") or 0)) for c in consumptions], conn=conn)
     txn_id = _live_cash_row(ev.get("txn_id"))
-    if txn_id:
+    if txn_id and not keep_cash:
         from backend.services import ledger as ledger_service
 
-        ledger_service.bulk_delete_transactions(
-            [txn_id], conn=conn, reject_identities=False, release_links=release_links
-        )
+        ledger_service.bulk_delete_transactions([txn_id], conn=conn, reject_identities=False)
     RealizedEventStore().delete(ev["id"], conn=conn)
 
 
@@ -1247,13 +1249,166 @@ def _funding_account_from_txn(txn_id: str | None) -> Optional[str]:
     return None if transaction_links.is_gone(txn) else txn.get("from_account_id")
 
 
-def _follow_cash_row(old: Optional[str], new: Optional[str], *, conn: Connection) -> None:
-    """A rewrite keeps the money on a new row, so what pointed at the old one follows it. With no
-    new row there's nothing to follow, and the links are released like any other delete."""
-    if old and new:
-        transaction_links.move({old: new}, conn=conn)
-    elif old:
-        transaction_links.release([old], conn=conn)
+def _edit_cash_row(
+    row_id: str,
+    *,
+    leg: str,
+    account_id: str,
+    before: Optional[float],
+    after: float,
+    currency: str,
+    day: Optional[str],
+    traded: dict,
+    payee_id: Optional[str],
+    shared: bool,
+    conn: Connection,
+) -> str:
+    """Correct a record's cash on the row it already has, so the row keeps its category, cleared
+    and reconciled state, source and refs, and a re-delivered email is still recognised. A base
+    value only moves when the amount does, and then at the row's own exchange rate, not today's.
+    A row other records share moves by the difference and keeps its description.
+
+    A row that no longer has this leg, or was merged into a transfer, isn't this cash any more:
+    it's left alone and the correction still saves, because a correction must never fail on it."""
+    from backend.services import ledger as ledger_service
+
+    row = ledger_service.transactions.find_by_id(row_id, conn=conn) or {}
+    if row.get("kind") == "transfer" or not row.get(f"{leg}_account_id"):
+        logger.info("lots: left cash row %s alone, it no longer has a %s leg", row_id, leg)
+        return row_id
+    same_account = row[f"{leg}_account_id"] == account_id
+    stored = float(row.get(f"{leg}_amount") or 0)
+    row_currency = (row.get(f"{leg}_currency") or "").upper()
+    other_units = same_account and bool(row_currency) and row_currency != currency
+    amount = after
+    if before and (shared or other_units):
+        if not other_units:
+            rate = 1.0
+        elif shared:
+            rate = _rate_between(currency, row_currency, _load_rates()) or 0.0
+        else:
+            rate = stored / before
+        amount = round(stored + (after - before) * rate, 2)
+    final_currency = row_currency if other_units else currency
+    changes: dict = {
+        f"{leg}_account_id": account_id,
+        f"{leg}_amount": amount,
+        f"{leg}_currency": final_currency,
+        **({"date": day} if day else {}),
+        **({} if shared else traded),
+        **({"payee_id": payee_id} if payee_id and not same_account else {}),
+    }
+    amount_moved = abs(amount - stored) >= 0.005
+    rate_applies = row_currency == final_currency and row.get("base_currency") == (
+        base_currency().upper()
+    )
+    if amount_moved and row.get("fx_rate") and rate_applies:
+        changes["base_amount"] = round(amount * float(row["fx_rate"]), 2)
+    ledger_service.update_transaction(row_id, changes, labels_as_given=True, conn=conn)
+    return row_id
+
+
+def _figures_changed(old: dict, new: dict, keys: tuple[str, ...]) -> bool:
+    return any(float(old.get(k) or 0) != float(new.get(k) or 0) for k in keys)
+
+
+def _shares_cash_row(store: Any, txn_id: str, own_id: str, *, conn: Connection) -> bool:
+    return any(x.get("txn_id") == txn_id and x["id"] != own_id for x in store.all(conn=conn))
+
+
+def _sync_purchase_cash(
+    lot: dict, patched: dict, fund_change: dict, payee_id: Optional[str], *, conn: Connection
+) -> Optional[str]:
+    """Bring a corrected lot's purchase cash in line and return the row that now holds it: the row
+    it already had, a new one if it had none and an account was chosen, or none at all."""
+    from backend.services import ledger as ledger_service
+
+    txn_id = lot.get("txn_id")
+    if not _will_fund_acquire(fund_change):
+        if txn_id:
+            ledger_service.bulk_delete_transactions([txn_id], conn=conn, reject_identities=False)
+        return None
+    if not txn_id:
+        return _book_funding_debit(fund_change, patched, payee_id, conn=conn)
+    currency = (fund_change.get("cost_currency") or patched.get("cost_currency") or "").upper()
+    # The description says what was traded, so it only changes when that does: a date or an
+    # account correction leaves one the user wrote alone.
+    figures_changed = _figures_changed(lot, patched, ("original_qty", "unit_cost", "fees"))
+    return _edit_cash_row(
+        txn_id,
+        leg="from",
+        account_id=fund_change["funding_account_id"],
+        before=_acquisition_gross(
+            {
+                "quantity": lot.get("original_qty"),
+                "unit_cost": lot.get("unit_cost"),
+                "fees": lot.get("fees"),
+            }
+        ),
+        after=_acquisition_gross(fund_change),
+        currency=currency,
+        day=fund_change.get("acquired_at"),
+        traded=_traded(
+            patched.get("instrument_id"),
+            patched.get("original_qty"),
+            verb="Bought",
+            price=fund_change.get("unit_cost"),
+            currency=currency,
+            fees=fund_change.get("fees"),
+        )
+        if figures_changed
+        else {},
+        payee_id=payee_id,
+        shared=_shares_cash_row(LotStore(), txn_id, lot["id"], conn=conn),
+        conn=conn,
+    )
+
+
+def _sync_proceeds_cash(
+    ev: dict,
+    draft: dict,
+    change: dict,
+    payee_id: Optional[str],
+    txn_id: Optional[str],
+    *,
+    conn: Connection,
+) -> Optional[str]:
+    """The sale-edit twin of ``_sync_purchase_cash``. The old event is already gone when this runs,
+    so sharing is read from the other sales still on the row."""
+    from backend.services import ledger as ledger_service
+
+    if not txn_id:
+        return _book_deposit_proceeds(draft, change, payee_id, conn=conn)
+    net = _net_proceeds(draft)
+    if not change.get("proceeds_account_id") or net <= 0:
+        ledger_service.bulk_delete_transactions([txn_id], conn=conn, reject_identities=False)
+        return None
+    currency = (draft.get("proceeds_currency") or "").upper()
+    figures_changed = _figures_changed(
+        ev, draft, ("quantity", "proceeds_per_unit", "disposal_fees")
+    )
+    return _edit_cash_row(
+        txn_id,
+        leg="to",
+        account_id=change["proceeds_account_id"],
+        before=_net_proceeds(ev),
+        after=net,
+        currency=currency,
+        day=draft.get("disposed_at"),
+        traded=_traded(
+            draft.get("instrument_id"),
+            draft.get("quantity"),
+            verb="Sold",
+            price=draft.get("proceeds_per_unit"),
+            currency=currency,
+            fees=draft.get("disposal_fees"),
+        )
+        if figures_changed
+        else {},
+        payee_id=payee_id,
+        shared=_shares_cash_row(RealizedEventStore(), txn_id, ev["id"], conn=conn),
+        conn=conn,
+    )
 
 
 def _refuse_dead_cash_link(txn_id: Optional[str]) -> None:
@@ -1390,8 +1545,8 @@ def _amend_sold_lot(lot: dict, change: dict) -> dict:
         if "funding_account_id" in change
         else _funding_account_from_txn(lot.get("txn_id"))
     )
-    # A linked purchase is rewritten when its figures change; a sold lot with none gets one
-    # when the user now picks "Deduct from" (the open-lot path does the same).
+    # A linked purchase follows when its figures change; a sold lot with none gets one when the
+    # user now picks "Deduct from" (the open-lot path does the same).
     rewrite_cash = _cash_changed(lot, change) and bool(lot.get("txn_id") or funding)
     # PRE-transaction, like the open path: resolving may create the payee on its own
     # connection, which would wait on this unit of work's write lock (review, 2026-10-13).
@@ -1422,14 +1577,6 @@ def _amend_sold_lot(lot: dict, change: dict) -> dict:
     }
 
 
-def _replaces_its_own_row(lot: dict, change: dict) -> bool:
-    """A rewrite of a live cash row adds no booking, so the duplicate guard has nothing to catch.
-    It also scans on its own connection and can't see the old row's delete in this still-open
-    transaction, so it would match the row being replaced. Call after ``_drop_gone_cash_link``:
-    a lot with no live row books a genuinely new one, and the guard applies."""
-    return bool(change.get("allow_duplicate") or lot.get("txn_id"))
-
-
 def _rewrite_funding_debit(
     lot: dict,
     patched: dict,
@@ -1439,9 +1586,7 @@ def _rewrite_funding_debit(
     *,
     conn: Connection,
 ) -> None:
-    """Re-book a corrected lot's purchase cash so it matches the lot's new figures."""
-    from backend.services import ledger as ledger_service
-
+    """Bring a corrected sold lot's purchase cash in line with its new figures."""
     fund_change = {
         **change,
         "quantity": patched.get("original_qty"),
@@ -1451,19 +1596,9 @@ def _rewrite_funding_debit(
         "cost_currency": patched.get("cost_currency"),
         "funding_account_id": funding,
         "source": change.get("source", "manual"),
-        "allow_duplicate": _replaces_its_own_row(lot, change),
     }
-    if lot.get("txn_id"):
-        ledger_service.bulk_delete_transactions(
-            [lot["txn_id"]], conn=conn, reject_identities=False, release_links=False
-        )
-        LotStore().touch(lot["id"], {"txn_id": None}, conn=conn)
-    cash_leg_id = None
-    if _will_fund_acquire(fund_change):
-        cash_leg_id = _book_funding_debit(fund_change, patched, payee_id, conn=conn)
-    if cash_leg_id:
-        LotStore().touch(lot["id"], {"txn_id": cash_leg_id}, conn=conn)
-    _follow_cash_row(lot.get("txn_id"), cash_leg_id, conn=conn)
+    cash_leg_id = _sync_purchase_cash(lot, patched, fund_change, payee_id, conn=conn)
+    LotStore().touch(lot["id"], {"txn_id": cash_leg_id}, conn=conn)
 
 
 def _amend_open_lot(lot: dict, change: dict) -> dict:
@@ -1497,7 +1632,6 @@ def _amend_open_lot(lot: dict, change: dict) -> dict:
         "cost_currency": updates.get("cost_currency", lot.get("cost_currency")),
         "funding_account_id": funding,
         "source": change.get("source", "manual"),
-        "allow_duplicate": _replaces_its_own_row(lot, change),
     }
     if not _cash_changed(lot, change):
         with locked_unit_of_work(lots_tbl, positions_tbl) as conn:
@@ -1518,18 +1652,9 @@ def _amend_open_lot(lot: dict, change: dict) -> dict:
     )
     tables = [lots_tbl, positions_tbl, txns_tbl, txn_audit_tbl, *transaction_links.LOCK_TABLES]
     with locked_unit_of_work(*tables) as conn:
-        if lot.get("txn_id"):
-            from backend.services import ledger as ledger_service
-
-            ledger_service.bulk_delete_transactions(
-                [lot["txn_id"]], conn=conn, reject_identities=False, release_links=False
-            )
-            updates["txn_id"] = None
         patched = LotStore().touch(lot["id"], updates, conn=conn) or lot
-        cash_leg_id = _book_funding_debit(fund_change, patched, payee_id, conn=conn)
-        if cash_leg_id:
-            patched = LotStore().touch(lot["id"], {"txn_id": cash_leg_id}, conn=conn) or patched
-        _follow_cash_row(lot.get("txn_id"), cash_leg_id, conn=conn)
+        cash_leg_id = _sync_purchase_cash(lot, patched, fund_change, payee_id, conn=conn)
+        LotStore().touch(lot["id"], {"txn_id": cash_leg_id}, conn=conn)
         agg = position_figures.rederive(lot.get("position_id", ""), conn=conn)
     return {
         "ok": True,
@@ -1601,7 +1726,7 @@ def _apply_dispose_amend(change: dict) -> dict:
         txn_audit_tbl,
         *transaction_links.LOCK_TABLES,
     ) as conn:
-        _restore_disposal(ev, conn=conn, release_links=False)
+        _restore_disposal(ev, conn=conn, keep_cash=True)
         open_lots = lots.open_lots_for_position(pos["id"], conn=conn)
         draft = compute_disposal(pos, open_lots, new_change, rates=rates)
         lots.bulk_consume([(c["lot_id"], c["qty"]) for c in draft["consumptions"]], conn=conn)
@@ -1614,18 +1739,12 @@ def _apply_dispose_amend(change: dict) -> dict:
             },
             conn=conn,
         )
-        # Replacing a live row adds no booking; see _replaces_its_own_row.
-        cash_change = {
-            **new_change,
-            "allow_duplicate": bool(new_change.get("allow_duplicate") or live_cash),
-        }
-        cash_leg_id = _book_deposit_proceeds(draft, cash_change, payee_id, conn=conn)
+        cash_leg_id = _sync_proceeds_cash(ev, draft, new_change, payee_id, live_cash, conn=conn)
         if cash_leg_id:
             event = (
                 RealizedEventStore().update_by_id(event["id"], {"txn_id": cash_leg_id}, conn=conn)
                 or event
             )
-        _follow_cash_row(live_cash, cash_leg_id, conn=conn)
         agg = position_figures.rederive(pos["id"], conn=conn)
     return {
         "ok": True,

@@ -95,8 +95,8 @@ the **Not a sale** option.
   never disappears. The header counts both, for example *1 open · 5 closed*. A sold lot has no
   unrealized gain; its gain is under **Realized history**.
 - Click any lot to correct its date, quantity, cost, fees or kind — including a lot you've sold
-  from. If you deducted its cost from an account, that purchase is corrected to match; changing
-  only the note leaves it alone.
+  from. If you deducted its cost from an account, that transaction is corrected to match and keeps
+  its category, status and history; changing only the note leaves it alone.
 - If you delete the cash transaction behind a lot, the lot stays and keeps its cost, but it no
   longer has a linked purchase. Correcting that lot later doesn't change or add any cash. To book
   the purchase again, pick an account under **Deduct from**.

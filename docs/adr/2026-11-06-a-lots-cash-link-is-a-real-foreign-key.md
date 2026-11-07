@@ -42,11 +42,10 @@ We will make `lots.txn_id` a real nullable column, indexed, with a foreign key t
    have fired `SET NULL` on every edit of a cash row.
 5. **`update_lots` returns a choke's refusal as that item's result**, single or batched. Each item
    is its own unit of work, so a refused one rolls back whole and the rest still apply.
-6. **Rewriting a lot's live cash row skips the duplicate guard.** The row count doesn't change, so
-   there is nothing to catch. The guard also scans on its own connection and can't see the delete
-   in the open transaction, so it matched the row being replaced whenever that row came from a
-   different source: every fee or cost correction on an automation-booked lot was refused. A lot
-   with no live row books a genuinely new one, and the guard still applies.
+6. **A correction doesn't re-book a live cash row.** Doing so was refused whenever that row came
+   from a different source, because the duplicate scan couldn't see the delete in the open
+   transaction: every fee or cost correction on an automation-booked lot failed. ADR
+   `2026-11-06-deleting-a-transaction-leaves-nothing-unfixable` (amendment) edits the row in place.
 
 A backup bundle is untrusted and can be partial, so `investments_io.import_lots` imports a link to
 a row the book doesn't hold as no link instead of failing the restore. The migration does the same
@@ -70,8 +69,6 @@ for links to rows that no longer exist.
 - `services/returns` reads the link as "funded": an `opening` lot without one is priced at market,
   and a `transfer_in` without one is not an external flow. Deleting such a lot's cash row now
   changes its returns from then on, which matches what the ledger says. A `buy` is unaffected.
-- A rewrite still replaces the cash row, so the new row loses the old one's category, cleared and
-  reconciled state, source and external refs, as it did before this decision.
 - Rewinding to a checkpoint from before this migration restores a lot image with no column value,
   so that lot reads as having no link. A later edit to it then leaves its cash alone.
 

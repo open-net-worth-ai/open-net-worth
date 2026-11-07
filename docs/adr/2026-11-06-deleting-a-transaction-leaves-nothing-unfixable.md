@@ -35,9 +35,8 @@ leaves something the user can't fix.**
    loses its cash row. If the cleanup fails, the delete rolls back.
    The app reversing its own cash row follows the same rule: undoing a sale, removing a lot or a
    position, and undoing a vest all release, because other records can point at that cash too.
-2. **Where the money survives, `move` sends links to the row that holds it.** That covers a merge,
-   and undoing it returns only the rows it moved and leaves any link made since. It also covers a
-   lot or sale correction that replaces its cash row. Clearing these would mark a real payment as
+2. **A merge keeps the money, so `move` sends links to the surviving row.** Undoing it returns only
+   the rows it moved and leaves any link made since. Clearing them would mark a real payment as
    unpaid.
 3. **An import rollback releases nothing.** It isn't a decision about the event, and a rollforward
    brings the row back.
@@ -72,8 +71,25 @@ leaves something the user can't fix.**
 
 ### Follow-ups
 
-- A lot or sale rewrite still replaces the cash row, losing its category, cleared and reconciled
-  state and external refs. A re-delivered email could then book that purchase again.
+- None from this decision. Why a correction edits its row is in the amendment below.
+
+## Amendment: a correction edits the cash row it already has
+
+A lot or sale correction used to delete its cash row and book a new one. That dropped the row's
+category, cleared and reconciled state, source and external refs, so a re-delivered email could
+book the purchase again, and the delete in the open transaction was invisible to the duplicate scan,
+which refused the correction against the very row it was replacing.
+
+We will edit the row in place through `ledger.update_transaction`, which now accepts `conn=` so the
+record and its cash commit together. A base value moves only when the amount does, and at the row's
+own exchange rate. A row in another currency than the lot keeps its own conversion. A row other
+records share moves by the difference. A row is deleted only when the correction leaves no cash at
+all, and a new one is booked, with the duplicate guard on, only when a record has none and an account
+was chosen. A row that no longer has that leg, or was merged into a transfer, is left alone and the
+correction still saves, so the correction and that row can disagree until the user fixes the row.
+
+The amount on a reconciled row can now change, where before it was replaced. Nothing refuses that,
+and the row stays marked reconciled. No linked row in the owner's book is reconciled.
 
 ## Alternatives considered
 

@@ -2927,6 +2927,7 @@ def update_transaction(
     preserve_base: bool = False,
     meta_out: dict | None = None,
     labels_as_given: bool = False,
+    conn: Connection | None = None,
 ) -> dict | None:
     """Update one transaction in place by id and return the rebuilt row (or None if it
     doesn't exist). ``changes`` is a partial field map (already filtered of unset fields).
@@ -2954,13 +2955,22 @@ def update_transaction(
     ``meta_out``, when given, is FILLED with ``declined_fields`` — every patched field whose
     stored value did not move (see ``_fields_the_write_declined``). A caller that does not pass
     it cannot tell a partly-applied patch from a fully-applied one, which is how an
-    append-only ``external_refs`` no-op reported success for years."""
+    append-only ``external_refs`` no-op reported success for years.
+
+    ``conn`` composes the edit into a caller's open transaction, so a lot or sale correction and
+    its cash row commit together. The caller holds the ``transactions`` and ``txn_audit`` locks;
+    everything that opens its own transaction waits for the outer commit."""
+    composed = conn is not None
     requested_fields = dict(changes)
-    existing = transactions.find_by_id(txn_id)
+    existing = (
+        transactions.find_by_id(txn_id, conn=conn) if composed else transactions.find_by_id(txn_id)
+    )
     if existing is None:
         return None
     refuse_automation_approval(txn_id, existing, changes)
     if _is_opening_txn(existing):
+        if composed:
+            raise ConflictError("a Starting Balance row can't change as part of another record")
         balance_before = _capture_automation_balance_snapshot()
         rebuilt = _apply_opening_txn_edit(existing, changes)
         if rebuilt is not None:
@@ -3038,14 +3048,19 @@ def update_transaction(
             meta_out=rebuild_meta,
             force_transfer_rate=not _leg_changed,
             labels_as_given=labels_as_given,
+            conn=conn,
         )
     # PLAN 3 TASK 4: the cleanup below (drop the appended dup, restamp the stable id, restore
     # the row in place) + the update audit event are now ONE transaction. The inner
     # create_transaction call above stays OUTSIDE it — it already committed its own money-core
     # write via its OWN locked_unit_of_work by the time it returns, so this is a SEQUENCE of
     # two independent transactions, never a nested one (locked_unit_of_work's per-table locks
-    # are non-reentrant; nesting would self-deadlock).
-    with locked_unit_of_work(transactions_table, txn_audit_table) as conn:
+    # are non-reentrant; nesting would self-deadlock). Composed, both steps ride the caller's.
+    with (
+        contextlib.nullcontext(conn)
+        if composed
+        else locked_unit_of_work(transactions_table, txn_audit_table)
+    ) as conn:
         same_row = rebuilt["id"] == txn_id
         if not same_row:
             transactions.delete(rebuilt["id"], conn=conn)  # remove the appended dup
@@ -3107,10 +3122,13 @@ def update_transaction(
     # be atomic with the ledger write (best-effort, exception-guarded).
     from backend.services.automations.transaction_events import record_committed_matches
 
-    record_committed_matches(
-        rebuild_meta.get("automation_matches") or [],
-        transaction_id=txn_id,
-        context="transaction_pre_commit",
+    _after_outer_commit(
+        composed,
+        lambda: record_committed_matches(
+            rebuild_meta.get("automation_matches") or [],
+            transaction_id=txn_id,
+            context="transaction_pre_commit",
+        ),
     )
     # Snapshot promote — MOVED out of the transaction above (storage plan 4e task 1 finding,
     # the identical class of bug the automation-match fix just above closed): both snapshot
@@ -3126,7 +3144,8 @@ def update_transaction(
     # harmless (promote is idempotent) but pointless work on every unrelated edit that merely
     # re-asserts its own refs.
     if "external_refs" in changes:
-        _promote_pairs(ext_ref_pairs(rebuilt) - ext_ref_pairs(existing))
+        new_pairs = ext_ref_pairs(rebuilt) - ext_ref_pairs(existing)
+        _after_outer_commit(composed, lambda: _promote_pairs(new_pairs))
     # Learn-from-corrections (P2-SP2): the single recorder. If this edit changed the category
     # of an expense/income txn, log a correction signal so the detector can later PROPOSE a
     # categorization rule. Best-effort — never blocks the edit. Moved out of the transaction
@@ -3140,10 +3159,12 @@ def update_transaction(
     # meant to be atomic with the ledger write anyway (checkpoint-excluded, best-effort).
     from backend.services import corrections as corrections_service
 
-    corrections_service.record_correction(existing, rebuilt)
+    _after_outer_commit(composed, lambda: corrections_service.record_correction(existing, rebuilt))
     # Moved out of the transaction above — see create_transaction's identical note.
     if after_diff is not None:
-        _publish_committed_transaction_events("update", [rebuilt], balance_before=balance_before)
+        _publish_transaction_events_after_commit(
+            composed, "update", [rebuilt], balance_before=balance_before
+        )
     if meta_out is not None:
         meta_out["declined_fields"] = _fields_the_write_declined(
             requested_fields, existing, rebuilt
@@ -3617,7 +3638,6 @@ def bulk_delete_transactions(
     *,
     conn: Connection | None = None,
     reject_identities: bool = True,
-    release_links: bool = True,
 ) -> dict:
     """Soft-delete many transactions by id, looping the per-txn soft-delete (so each write
     is checkpoint-captured). Returns ``{deleted: [ids], not_found: [ids], count: int,
@@ -3634,8 +3654,7 @@ def bulk_delete_transactions(
     this transaction, and returned as ``released_links`` (absent when nothing was). A soft delete
     is an UPDATE, so no foreign key can do it. That holds for a trade undo too: its own record
     isn't the only thing that can point at its cash. A composed caller must also hold
-    ``transaction_links.LOCK_TABLES``. ``release_links=False`` is only for a caller replacing the
-    row, which moves the links to the new one itself.
+    ``transaction_links.LOCK_TABLES``.
 
     Refuses OUTRIGHT (ConflictError) — before deleting anything — when ANY requested id is
     a Starting Balance transaction (ledger-tracking-start Phase 2): change the account's
@@ -3665,8 +3684,7 @@ def bulk_delete_transactions(
     # STORAGE PLAN 4B TASK 4: `_txn_unit_of_work` composes into a caller's conn when given.
     # `composed` is captured BEFORE that rebinding — see _publish_transaction_events_after_commit.
     composed = conn is not None
-    also_lock = transaction_links.LOCK_TABLES if release_links else ()
-    with _txn_unit_of_work(conn, *also_lock) as conn:
+    with _txn_unit_of_work(conn, *transaction_links.LOCK_TABLES) as conn:
         for txn_id in ids:
             row = transactions.soft_delete(txn_id, conn=conn)
             if row is None:
@@ -3683,7 +3701,7 @@ def bulk_delete_transactions(
             from backend.services import rejected_identities as _rejected
 
             rejected = _rejected.remember_deleted(deleted_rows, conn=conn)
-        released = transaction_links.release(deleted, conn=conn) if release_links else []
+        released = transaction_links.release(deleted, conn=conn)
     # Same composed-conn handling as create_transaction's own publish call above — see
     # _publish_transaction_events_after_commit for why the composed case must defer.
     _publish_transaction_events_after_commit(

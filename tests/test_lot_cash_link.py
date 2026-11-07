@@ -212,32 +212,32 @@ def test_an_import_rollback_is_not_a_decision_and_keeps_the_link(book):
     assert LotStore().find_by_id(bought["lot_id"])["txn_id"] == bought["cash_leg_id"]
 
 
-def test_correcting_a_live_link_still_replaces_the_cash_row(book):
+def test_correcting_a_live_link_edits_the_cash_row(book):
     bought = _buy(book)
 
     assert _update_lots(lot_id=bought["lot_id"], fees=1.0)["ok"] is True
 
     lot = LotStore().find_by_id(bought["lot_id"])
-    assert lot["txn_id"] != bought["cash_leg_id"]
+    assert lot["txn_id"] == bought["cash_leg_id"]
     assert _live_ids() == {lot["txn_id"]}
     assert TransactionStore().find_by_id(lot["txn_id"])["from_amount"] == 201.0
     assert _column(bought["lot_id"]) == lot["txn_id"]
 
 
-# The duplicate scan reads on its own connection, so it can't see the old row's delete in the
-# amend's still-open transaction. From a different source it matched the row being replaced.
-def test_correcting_a_lot_booked_elsewhere_replaces_its_own_cash_row(book):
+# Rewriting by delete-and-book used to be refused here: the duplicate scan couldn't see the
+# delete in the open transaction, so it matched the row being replaced.
+def test_correcting_a_lot_booked_elsewhere_edits_its_own_cash_row(book):
     bought = _buy(book, source="automation")
 
     assert _update_lots(lot_id=bought["lot_id"], fees=1.0)["ok"] is True
 
     lot = LotStore().find_by_id(bought["lot_id"])
     assert lot["fees"] == 1.0
-    assert _live_ids() == {lot["txn_id"]}, "replaced, never doubled"
+    assert _live_ids() == {lot["txn_id"]}, "never doubled"
     assert TransactionStore().find_by_id(lot["txn_id"])["from_amount"] == 201.0
 
 
-def test_correcting_a_sold_lot_booked_elsewhere_replaces_its_own_cash_row(book):
+def test_correcting_a_sold_lot_booked_elsewhere_edits_its_own_cash_row(book):
     bought = _buy(book, source="automation")
     lots_service.apply_lot_change(
         {
@@ -255,7 +255,7 @@ def test_correcting_a_sold_lot_booked_elsewhere_replaces_its_own_cash_row(book):
 
     lot = LotStore().find_by_id(bought["lot_id"])
     assert lot["fees"] == 1.0
-    assert TransactionStore().find_by_id(bought["cash_leg_id"])["deleted"] is True
+    assert lot["txn_id"] == bought["cash_leg_id"]
     assert TransactionStore().find_by_id(lot["txn_id"])["from_amount"] == 201.0
 
 

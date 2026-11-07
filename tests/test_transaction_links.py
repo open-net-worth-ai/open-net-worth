@@ -140,14 +140,14 @@ def test_choosing_a_different_account_on_a_sale_books_cash_again(book):
     assert edited["cash_leg_id"] in _live_ids()
 
 
-def test_editing_a_sale_booked_elsewhere_replaces_its_own_cash_row(book):
+def test_editing_a_sale_booked_elsewhere_edits_its_own_cash_row(book):
     _buy(book)
     sold = _sell(book, source="automation")
 
     edited = _edit_sale(book, sold["event_id"])
 
     assert edited["ok"] is True
-    assert sold["cash_leg_id"] not in _live_ids()
+    assert edited["cash_leg_id"] == sold["cash_leg_id"]
     assert TransactionStore().find_by_id(edited["cash_leg_id"])["to_amount"] == 104.0
 
 
@@ -394,20 +394,19 @@ def test_undoing_a_merge_moves_the_links_back(book):
 # ── The app reversing its own cash row follows the same rule ─────────────────────────────
 
 
-def test_correcting_a_lot_moves_a_payment_link_to_the_new_cash_row(book):
+def test_correcting_a_lot_keeps_a_payment_linked(book):
     bought = _buy(book)
     cid, inst_id, fund_id = _commitment(book, bought["cash_leg_id"])
 
     lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
 
     new_row = LotStore().find_by_id(bought["lot_id"])["txn_id"]
-    assert new_row != bought["cash_leg_id"]
     inst = _row(cid, "installments", inst_id)
     assert (inst["paid_txn_id"], inst["status"]) == (new_row, "paid")
     assert _row(cid, "funding_plan", fund_id)["realized_txn_id"] == new_row
 
 
-def test_correcting_a_sold_lot_moves_a_payment_link_to_the_new_cash_row(book):
+def test_correcting_a_sold_lot_keeps_a_payment_linked(book):
     bought = _buy(book)
     _sell(book)
     cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
@@ -420,7 +419,7 @@ def test_correcting_a_sold_lot_moves_a_payment_link_to_the_new_cash_row(book):
     )
 
 
-def test_editing_a_sale_moves_a_funding_link_to_the_new_cash_row(book):
+def test_editing_a_sale_keeps_a_funding_source_linked(book):
     _buy(book)
     sold = _sell(book)
     cid, _, fund_id = _commitment(book, sold["cash_leg_id"])
@@ -503,6 +502,364 @@ def test_a_lot_linked_to_a_row_that_doesnt_exist_is_refused_plainly(book):
                 "txn_id": "txn_never_existed",
             }
         )
+
+
+# ── A correction edits the cash row it already has ───────────────────────────────────────
+
+
+_KEPT = {
+    "category": None,  # filled by _dressed
+    "memo": "my note",
+    "cleared": True,
+    "reconciled_at": "2026-02-02T00:00:00+00:00",
+}
+
+
+def _dressed(row_id: str) -> dict:
+    """Give a cash row everything a user or a feed adds to it after booking."""
+    from backend.services import categories
+
+    category = categories.create_category("Investing", "expense")
+    changes = {**_KEPT, "category": category["id"]}
+    ledger_service.update_transaction(row_id, changes)
+    ledger_service.update_transaction(
+        row_id, {"external_refs": [{"source": "email", "ref": "<msg-acme-1@broker.test>"}]}
+    )
+    return TransactionStore().find_by_id(row_id)
+
+
+def _assert_details_kept(before: dict, after: dict) -> None:
+    for field in ("category", "memo", "cleared", "reconciled_at", "source", "external_refs"):
+        assert after.get(field) == before.get(field), field
+
+
+def test_correcting_a_lot_keeps_its_cash_row_and_everything_on_it(book):
+    bought = _buy(book, source="automation")
+    before = _dressed(bought["cash_leg_id"])
+
+    assert lots_service.apply_lot_change(
+        {"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0, "acquired_at": "2026-01-06"}
+    )["ok"]
+
+    lot = LotStore().find_by_id(bought["lot_id"])
+    after = TransactionStore().find_by_id(bought["cash_leg_id"])
+    assert lot["txn_id"] == bought["cash_leg_id"]
+    assert after["deleted"] is False
+    assert (after["from_amount"], after["date"]) == (201.0, "2026-01-06")
+    assert "fee" in after["description"].lower()
+    _assert_details_kept(before, after)
+
+
+def test_correcting_a_sold_lot_keeps_its_cash_row(book):
+    bought = _buy(book, source="automation")
+    _sell(book)
+    before = _dressed(bought["cash_leg_id"])
+
+    lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+
+    after = TransactionStore().find_by_id(bought["cash_leg_id"])
+    assert LotStore().find_by_id(bought["lot_id"])["txn_id"] == bought["cash_leg_id"]
+    assert after["from_amount"] == 201.0
+    _assert_details_kept(before, after)
+
+
+def test_editing_a_sale_keeps_its_cash_row(book):
+    _buy(book)
+    sold = _sell(book, source="automation")
+    before = _dressed(sold["cash_leg_id"])
+
+    edited = _edit_sale(book, sold["event_id"])
+
+    after = TransactionStore().find_by_id(sold["cash_leg_id"])
+    assert edited["cash_leg_id"] == sold["cash_leg_id"]
+    assert RealizedEventStore().find_by_id(edited["event_id"])["txn_id"] == sold["cash_leg_id"]
+    assert after["to_amount"] == 104.0
+    _assert_details_kept(before, after)
+
+
+def test_a_re_delivered_email_is_still_recognised_after_a_correction(book):
+    bought = _buy(book, source="automation")
+    _dressed(bought["cash_leg_id"])
+    lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+    live = _live_ids()
+
+    again = ledger_service.create_transaction(
+        {
+            "date": "2026-01-05",
+            "kind": "investment",
+            "description": "Bought 10 ACME",
+            "from_account_id": book["cash"],
+            "from_amount": 200.0,
+            "from_currency": "SGD",
+            "source": "email",
+            "external_refs": [{"source": "email", "ref": "<msg-acme-1@broker.test>"}],
+        }
+    )
+
+    assert again["id"] == bought["cash_leg_id"]
+    assert _live_ids() == live
+
+
+def test_a_correction_shows_as_an_edit_in_the_rows_history(book):
+    from backend.db.transaction_audit_store import TransactionAuditStore
+
+    bought = _buy(book)
+
+    lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+
+    ops = [e["op"] for e in TransactionAuditStore().query(txn_id=bought["cash_leg_id"])]
+    assert "update" in ops
+    assert "delete" not in ops
+
+
+def test_a_correction_keeps_the_rows_original_exchange_rate(book):
+    bought = _buy(book)
+    row_id = bought["cash_leg_id"]
+    TransactionStore().update_by_id(row_id, {"fx_rate": 1.35, "base_amount": 270.0})
+
+    lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+
+    after = TransactionStore().find_by_id(row_id)
+    assert after["base_amount"] == pytest.approx(201.0 * 1.35)
+
+
+def test_a_correction_to_one_lot_on_a_shared_cash_row_keeps_the_other_lots_money(book):
+    first = _buy(book, quantity=10, unit_cost=20)
+    second = LotStore().create(
+        {
+            "position_id": book["pid"],
+            "instrument_id": LotStore().find_by_id(first["lot_id"])["instrument_id"],
+            "account_id": LotStore().find_by_id(first["lot_id"])["account_id"],
+            "acquired_at": "2026-01-05",
+            "original_qty": 5,
+            "remaining_qty": 5,
+            "unit_cost": 20,
+            "cost_currency": "SGD",
+            "kind": "buy",
+            "txn_id": first["cash_leg_id"],
+        }
+    )
+    TransactionStore().update_by_id(first["cash_leg_id"], {"from_amount": 300.0})
+
+    lots_service.apply_lot_change({"type": "amend", "lot_id": first["lot_id"], "fees": 1.0})
+
+    assert TransactionStore().find_by_id(first["cash_leg_id"])["from_amount"] == 301.0
+    assert LotStore().find_by_id(second["id"])["txn_id"] == first["cash_leg_id"]
+
+
+def test_a_date_only_correction_leaves_the_rows_base_value_exactly_alone(book):
+    bought = _buy(book)
+    row_id = bought["cash_leg_id"]
+    TransactionStore().update_by_id(row_id, {"fx_rate": 1.351235, "base_amount": 270.25})
+
+    lots_service.apply_lot_change(
+        {"type": "amend", "lot_id": bought["lot_id"], "acquired_at": "2026-01-07"}
+    )
+
+    after = TransactionStore().find_by_id(row_id)
+    assert after["date"] == "2026-01-07"
+    assert after["base_amount"] == 270.25
+
+
+def test_a_lot_paid_from_another_currency_keeps_the_rows_own_conversion(book):
+    bought = _buy(book)
+    row_id = bought["cash_leg_id"]
+    LotStore().touch(bought["lot_id"], {"cost_currency": "USD"})
+    TransactionStore().update_by_id(row_id, {"from_amount": 270.0, "from_currency": "SGD"})
+
+    lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+
+    after = TransactionStore().find_by_id(row_id)
+    assert (after["from_amount"], after["from_currency"]) == (271.35, "SGD")
+
+
+def test_a_shared_row_in_another_currency_moves_by_the_difference_in_its_own_units(
+    book, monkeypatch
+):
+    first = _buy(book)
+    row_id = first["cash_leg_id"]
+    lot = LotStore().find_by_id(first["lot_id"])
+    LotStore().create({**lot, "id": "lot_other", "idempotency_key": None})
+    LotStore().touch(first["lot_id"], {"cost_currency": "USD"})
+    LotStore().touch("lot_other", {"cost_currency": "USD"})
+    TransactionStore().update_by_id(row_id, {"from_amount": 500.0, "from_currency": "SGD"})
+    monkeypatch.setattr(lots_service, "_rate_between", lambda frm, to, rates: 1.3)
+
+    lots_service.apply_lot_change({"type": "amend", "lot_id": first["lot_id"], "fees": 1.0})
+
+    assert TransactionStore().find_by_id(row_id)["from_amount"] == 501.3
+
+
+@pytest.mark.parametrize(
+    "reshaped",
+    [
+        {"kind": "transfer", "to_account_id": "__other__", "to_amount": 200.0},
+        {
+            "kind": "income",
+            "from_account_id": None,
+            "from_amount": None,
+            "to_account_id": "__cash__",
+            "to_amount": 200.0,
+        },
+    ],
+    ids=["merged_into_a_transfer", "rekinded_with_no_such_leg"],
+)
+def test_a_row_that_no_longer_looks_like_this_cash_never_blocks_a_correction(book, reshaped):
+    bought = _buy(book)
+    row_id = bought["cash_leg_id"]
+    other = AccountStore().create(
+        {"name": "Other cash", "kind": "asset", "type": "investment", "currency": "SGD"}
+    )
+    swap = {"__other__": other["id"], "__cash__": book["cash"]}
+    TransactionStore().update_by_id(row_id, {k: swap.get(v, v) for k, v in reshaped.items()})
+    before = TransactionStore().find_by_id(row_id)
+
+    done = lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+
+    assert done["ok"] is True
+    assert LotStore().find_by_id(bought["lot_id"])["fees"] == 1.0
+    after = TransactionStore().find_by_id(row_id)
+    assert (after["from_amount"], after["to_amount"]) == (
+        before["from_amount"],
+        before["to_amount"],
+    )
+
+
+def test_moving_a_lot_to_another_account_takes_the_new_accounts_payee(book, monkeypatch):
+    from backend.services import payee_registry
+
+    bought = _buy(book)
+    other = AccountStore().create(
+        {"name": "Other cash", "kind": "asset", "type": "investment", "currency": "SGD"}
+    )
+    payee = payee_registry.create_payee("Other Broker")["id"]
+    monkeypatch.setattr(lots_service, "_resolve_deposit_payee_if_needed", lambda change: payee)
+
+    lots_service.apply_lot_change(
+        {"type": "amend", "lot_id": bought["lot_id"], "funding_account_id": other["id"]}
+    )
+
+    assert TransactionStore().find_by_id(bought["cash_leg_id"])["payee_id"] == payee
+
+
+def test_a_fee_correction_keeps_the_rows_payee(book, monkeypatch):
+    from backend.services import payee_registry
+
+    bought = _buy(book)
+    kept = payee_registry.create_payee("My Broker")["id"]
+    TransactionStore().update_by_id(bought["cash_leg_id"], {"payee_id": kept})
+    other = payee_registry.create_payee("Other Broker")["id"]
+    monkeypatch.setattr(lots_service, "_resolve_deposit_payee_if_needed", lambda change: other)
+
+    lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+
+    assert TransactionStore().find_by_id(bought["cash_leg_id"])["payee_id"] == kept
+
+
+def test_a_note_only_sale_edit_keeps_a_description_you_wrote(book):
+    _buy(book)
+    sold = _sell(book)
+    TransactionStore().update_by_id(sold["cash_leg_id"], {"description": "My own words"})
+
+    _edit_sale(book, sold["event_id"], proceeds_per_unit=25.0, note="just a note")
+
+    assert TransactionStore().find_by_id(sold["cash_leg_id"])["description"] == "My own words"
+
+
+def test_changing_a_sales_figures_updates_the_description(book):
+    _buy(book)
+    sold = _sell(book)
+    TransactionStore().update_by_id(sold["cash_leg_id"], {"description": "My own words"})
+
+    _edit_sale(book, sold["event_id"])
+
+    assert "26" in TransactionStore().find_by_id(sold["cash_leg_id"])["description"]
+
+
+def test_choosing_no_account_removes_the_cash_row(book):
+    bought = _buy(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+
+    lots_service.apply_lot_change(
+        {"type": "amend", "lot_id": bought["lot_id"], "funding_account_id": None}
+    )
+
+    assert bought["cash_leg_id"] not in _live_ids()
+    assert LotStore().find_by_id(bought["lot_id"])["txn_id"] is None
+    assert _row(cid, "installments", inst_id)["paid_txn_id"] is None
+
+
+def test_moving_a_lot_to_another_account_edits_the_row(book):
+    bought = _buy(book)
+    other = AccountStore().create(
+        {"name": "Other cash", "kind": "asset", "type": "investment", "currency": "SGD"}
+    )
+
+    lots_service.apply_lot_change(
+        {"type": "amend", "lot_id": bought["lot_id"], "funding_account_id": other["id"]}
+    )
+
+    after = TransactionStore().find_by_id(bought["cash_leg_id"])
+    assert after["from_account_id"] == other["id"]
+    assert LotStore().find_by_id(bought["lot_id"])["txn_id"] == bought["cash_leg_id"]
+
+
+def test_a_correction_that_fails_leaves_the_row_and_the_lot_untouched(book, monkeypatch):
+    from backend.services import position_figures
+
+    bought = _buy(book)
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("failed after the row was edited")
+
+    monkeypatch.setattr(position_figures, "rederive", boom)
+
+    with pytest.raises(RuntimeError):
+        lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+
+    assert TransactionStore().find_by_id(bought["cash_leg_id"])["from_amount"] == 200.0
+    assert LotStore().find_by_id(bought["lot_id"])["fees"] == 0
+
+
+def test_rewinding_a_correction_restores_the_row(book):
+    from backend.ai import checkpoint as ckpt
+
+    bought = _buy(book)
+
+    ctx, token = ckpt.begin_turn("sess-correct-undo", anchor_history_len=0, message_preview="fee")
+    try:
+        lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+    finally:
+        entry = ckpt.end_turn(ctx, token)
+    ckpt.restore(entry["id"], mode="data")
+
+    assert TransactionStore().find_by_id(bought["cash_leg_id"])["from_amount"] == 200.0
+    assert LotStore().find_by_id(bought["lot_id"])["fees"] == 0
+
+
+def test_a_composed_edit_tells_the_app_only_after_the_commit(book, monkeypatch):
+    bought = _buy(book)
+    seen: list[float] = []
+    real = ledger_service._publish_committed_transaction_events
+
+    def spy(operation, rows, **kwargs):
+        seen.append(TransactionStore().find_by_id(rows[0]["id"])["from_amount"])
+        return real(operation, rows, **kwargs)
+
+    monkeypatch.setattr(ledger_service, "_publish_committed_transaction_events", spy)
+
+    lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+
+    assert seen == [201.0], "fired once, and it could already read the committed row"
+
+
+def test_an_ordinary_edit_still_works_on_its_own(book):
+    bought = _buy(book)
+
+    edited = ledger_service.update_transaction(bought["cash_leg_id"], {"memo": "just a note"})
+
+    assert edited["memo"] == "just a note"
+    assert LotStore().find_by_id(bought["lot_id"])["txn_id"] == bought["cash_leg_id"]
 
 
 # ── The rule holds across the delete ─────────────────────────────────────────────────────
