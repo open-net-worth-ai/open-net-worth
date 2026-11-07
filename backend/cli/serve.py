@@ -171,7 +171,7 @@ def _serve(app, settings, installer, service: bool) -> int:
     import uvicorn
 
     from backend.ai import turns
-    from backend.cli.self_update import AutoUpgrader, find_installer
+    from backend.cli.self_update import AutoUpgrader, find_installer, restart_this_process
     from backend.cli.upgrade_request import RequestWatcher, request_path, stop_path
 
     writes = _WritesInFlight(app)
@@ -188,11 +188,15 @@ def _serve(app, settings, installer, service: bool) -> int:
         server.config.timeout_graceful_shutdown = _SHUTDOWN_GRACE_SECONDS
         server.should_exit = True
 
-    def stop_after_writes() -> None:
+    restarting = threading.Event()
+
+    def leave_after_writes(restart: bool) -> None:
         # What `onw stop` adds to Ctrl-C: nobody is watching to see a restore cut off at the grace.
         deadline = time.monotonic() + _STOP_WAITS_FOR_WRITES_SECONDS
         while writes.count and time.monotonic() < deadline:
             time.sleep(0.2)
+        if restart:
+            restarting.set()
         request_exit()
 
     def upgrader_with(chosen) -> AutoUpgrader:
@@ -210,7 +214,7 @@ def _serve(app, settings, installer, service: bool) -> int:
         lambda: auto or upgrader_with(find_installer()),
         ready=lambda: server.started,
         stop_file=stop_path(),
-        request_stop=stop_after_writes,
+        request_stop=leave_after_writes,
     )
     if auto:
         auto.start()
@@ -229,13 +233,14 @@ def _serve(app, settings, installer, service: bool) -> int:
     if not server.started:
         return _STARTUP_FAILURE
     upgrader = auto or watcher.upgrader
-    if upgrader is None:
-        return 0
-    try:
-        upgrader.finish_install()
-    except KeyboardInterrupt:  # a second Ctrl-C: whoever pressed it would rather leave now
-        return 0
-    return upgrader.exit_code()
+    if upgrader is not None:
+        try:
+            upgrader.finish_install()
+        except KeyboardInterrupt:  # a second Ctrl-C: whoever pressed it would rather leave now
+            return 0
+    if restarting.is_set():
+        return restart_this_process(service)
+    return upgrader.exit_code() if upgrader else 0
 
 
 def browser_url(host: str, port: int) -> str:

@@ -57,7 +57,7 @@ your devices to each other, encrypted, without opening anything to the internet.
    onw start --host 0.0.0.0
    ```
 
-   As a boot service: `onw autostart stop`, then `HOST=0.0.0.0 onw autostart install`.
+   As a boot service: `onw autostart uninstall`, then `HOST=0.0.0.0 onw autostart install`.
    Docker: in `docker-compose.yml`, change the `ports:` line to `"0.0.0.0:${PORT:-8080}:8080"` and
    run `docker compose up -d`.
 3. On your other device, open `http://<computer's Tailscale name or IP>:8080` and sign in with

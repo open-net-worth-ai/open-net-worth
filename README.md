@@ -147,6 +147,7 @@ Other commands you may need ([full list](docs/product/getting-started/installati
 |---|---|
 | `onw start --background` | Run it without keeping this terminal, until `onw stop` or a reboot |
 | `onw stop` | Stop it |
+| `onw restart` | Restart it, the way it was running |
 | `onw status` | Show whether it's running, its URL, version and folder |
 | `onw logs` | Show the end of its log. `-f` keeps following it |
 | `onw upgrade` | Update to the newest release |
@@ -228,7 +229,7 @@ front of it, and none is required.
   first, then the same thing.) This installs a per-user **launchd** LaunchAgent on macOS, a
   per-user **systemd** unit (plus `loginctl enable-linger`, so it starts even before you log in) on
   Linux, or a per-user **Task Scheduler** task on Windows — no sudo or admin needed on any of them.
-  `onw autostart status` shows whether it's running; `onw autostart stop` stops it and removes the
+  `onw autostart status` shows whether it's running; `onw autostart uninstall` stops it and removes the
   service. Logs land in `~/.open-net-worth/logs/app.log`.
 
   <details>
