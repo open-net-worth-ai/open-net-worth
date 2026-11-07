@@ -23,7 +23,14 @@ import {
 } from '../../hooks/useModels'
 import { useChatComposer } from '../../state/chatComposer'
 import { useReauthDraftSource } from '../../state/useReauthDraftSource'
-import { followsBottom, newScrollIntent, useChatScrollPin } from '../../utils/chatScroll'
+import {
+  followsBottom,
+  newScrollIntent,
+  placeOf,
+  restorePlace,
+  useChatScrollPin,
+  type HeldPlace,
+} from '../../utils/chatScroll'
 import { fUsd, sumSessionCost } from '../../utils/costFormat'
 import { fDateTime } from '../../utils/format'
 import { ConversationBrowser } from './ConversationBrowser'
@@ -919,40 +926,46 @@ export function ChatPanel({
   const activeIdRef = useRef(activeId)
   activeIdRef.current = activeId
 
-  // Expanding adds content ABOVE the viewport; keep what the eye was on in place.
-  const transcriptAnchorRef = useRef<number | null>(null)
+  // Expanding adds content ABOVE the viewport; keep what the eye was on in place, by the
+  // message itself (`restorePlace`). Held from the moment a load starts, as the reader goes on
+  // scrolling while a page is fetched, and let go after the commit that finishes it.
+  const heldPlaceRef = useRef<HeldPlace | null>(null)
   const showEarlierMessages = () => {
     if (hiddenTranscript > 0) {
-      transcriptAnchorRef.current = messagesAreaRef.current?.scrollHeight ?? null
+      heldPlaceRef.current = placeOf(messagesAreaRef.current)
+      if (heldPlaceRef.current) heldPlaceRef.current.last = true
       setTranscriptWindow((w) => w + TRANSCRIPT_WINDOW_STEP)
       return
     }
-    // Local window exhausted — page the previous slice down from the server. Prepending
-    // alone doesn't move anything (the window shows the LAST N), so the scroll anchor is
-    // captured right before the window widens to reveal what arrived.
+    // Local window exhausted — page the previous slice down from the server.
     if (serverEarlier > 0 && !loadingEarlierRef.current) {
       loadingEarlierRef.current = true
+      heldPlaceRef.current = placeOf(messagesAreaRef.current)
       setLoadingEarlier(true)
       const ownerId = activeId
       void loadEarlierMessages(ownerId).then((added) => {
         loadingEarlierRef.current = false
         setLoadingEarlier(false)
         // The messages landed on ownerId's slice regardless; only the VIEW adjustments
-        // (window widening, scroll anchor) must not leak onto a conversation the user
+        // (window widening, held place) must not leak onto a conversation the user
         // switched to while the fetch was in flight.
         if (added > 0 && activeIdRef.current === ownerId) {
-          transcriptAnchorRef.current = messagesAreaRef.current?.scrollHeight ?? null
+          if (heldPlaceRef.current) heldPlaceRef.current.last = true
           setTranscriptWindow((w) => w + added)
+        } else {
+          heldPlaceRef.current = null
         }
       })
     }
   }
+  // Every commit while a place is held: the fetched page and the wider window are two.
   useLayoutEffect(() => {
     const el = messagesAreaRef.current
-    const prev = transcriptAnchorRef.current
-    transcriptAnchorRef.current = null
-    if (el && prev !== null) el.scrollTop += el.scrollHeight - prev
-  }, [transcriptWindow])
+    const held = heldPlaceRef.current
+    if (!el || !held) return
+    restorePlace(el, held)
+    if (held.last) heldPlaceRef.current = null
+  })
 
   // Scroll to bottom when new messages arrive (if already near bottom). Counts
   // `queuedMessages` too — a message you just sent while busy renders below the
@@ -1347,17 +1360,20 @@ export function ChatPanel({
           const el = messagesAreaRef.current
           if (!el) return
           isNearBottomRef.current = followsBottom(el, scrollIntentRef.current)
+          // Scrolling on while a page loads: what's held is where the message is NOW.
+          const held = heldPlaceRef.current
+          if (held?.node.isConnected) held.top = held.node.getBoundingClientRect().top
           // Soft top fade only once scrolled (CSS keys on it), so text dissolves under the
           // top edge like Claude's transcript without dimming the first message at rest.
           el.toggleAttribute('data-scrolled', el.scrollTop > 2)
           // Infinite scroll upward: nearing the top auto-reveals earlier messages —
           // nobody should have to hunt for the "show earlier" button (it stays as the
-          // explicit fallback). The anchor ref doubles as an in-flight guard: set when
-          // an expansion starts, cleared by the layout effect that restores position.
+          // explicit fallback). The held place doubles as an in-flight guard: set when
+          // an expansion starts, let go by the layout effect that restores position.
           if (
             el.scrollTop < 600 &&
             (hiddenTranscript > 0 || serverEarlier > 0) &&
-            transcriptAnchorRef.current === null
+            heldPlaceRef.current === null
           ) {
             showEarlierMessages()
           }
