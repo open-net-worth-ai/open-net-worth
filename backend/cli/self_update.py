@@ -2,6 +2,7 @@
 
 Both install the signed release's wheel, and never call `uv tool upgrade`: once a tool is installed
 from a file, uv's record of it points at that file, so `uv tool upgrade` would find nothing newer.
+With a server running, `onw upgrade` asks that server to do it (`upgrade_request`).
 
 The server restarts by exiting. Under the boot service a non-zero exit brings it back (launchd,
 systemd and Task Scheduler all do that on a failure); in a terminal it re-executes itself. Windows
@@ -25,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from backend.cli import autostart_windows, upgrade_steps
+from backend.cli import autostart_windows, upgrade_request, upgrade_steps
 from backend.cli.release_check import (
     Release,
     UpgradeError,
@@ -49,6 +50,9 @@ _UPGRADES_DIR = "open-net-worth-upgrades"
 _DETACHED_PROCESS = 0x00000008
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
 _CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+# Set on `onw start --background`'s server: it has no console to come back in. A variable and not a
+# flag, because a restart hands its arguments to whichever version it just installed.
+DETACHED_ENV = "ONW_DETACHED"
 _ON_WINDOWS = os.name == "nt"  # a test can pick a branch here; changing os.name breaks pathlib
 
 
@@ -149,10 +153,17 @@ def spawn_windows_helper(
         subprocess.Popen(command, creationflags=flags, **kwargs)
 
 
+def _restart_args() -> list[str]:
+    """This run's own arguments, without `--open`: a restart reconnects the tab that's already open."""
+    return [arg for arg in sys.argv[1:] if arg != "--open"]
+
+
 def _windows_restart(service: bool) -> tuple[list[str], bool]:
-    if service:
+    # A service installed without --auto-upgrade has no --service flag, so its launcher says so.
+    if service or os.environ.get(autostart_windows.RUN_BY_TASK_ENV):
         return autostart_windows.restart_command(sys.executable), False
-    return [sys.executable, "-P", "-m", "backend.cli", *sys.argv[1:]], True
+    command = [sys.executable, "-P", "-m", "backend.cli", *_restart_args()]
+    return command, not os.environ.get(DETACHED_ENV)
 
 
 class AutoUpgrader(threading.Thread):
@@ -180,6 +191,9 @@ class AutoUpgrader(threading.Thread):
         self.finished = threading.Event()
         self.installed = False  # the new version is on disk: re-running this process picks it up
         self.handed_off = False  # the Windows helper has taken over
+        self.exit_requested = False  # stopping for another reason isn't a request to restart
+        self._attempting = threading.Lock()  # its own loop and an `onw upgrade` request can overlap
+        self._installing = threading.Lock()
 
     def run(self) -> None:
         wait = self.first_check
@@ -193,16 +207,22 @@ class AutoUpgrader(threading.Thread):
             except Exception:  # noqa: BLE001 — a failed check must never take the server down
                 logger.exception("Auto-upgrade check failed")
 
-    def attempt(self) -> bool:
-        """One check. True when an upgrade went through and the server has been asked to exit."""
+    def attempt(self, on_stage: Callable[[str], None] = lambda _stage: None) -> bool:
+        """One check. True when an upgrade went through and the server has been asked to exit.
+        `on_stage` hears each `upgrade_request` stage, for whoever is waiting on this."""
+        with self._attempting:
+            return self.installed or self.handed_off or self._attempt(on_stage)
+
+    def _attempt(self, on_stage: Callable[[str], None]) -> bool:
         release = latest_release()
         if not is_newer(release.version, APP_VERSION):
             return False
         logger.info("Auto-upgrade: %s is out, this is %s", release.version, APP_VERSION)
+        on_stage(upgrade_request.PREPARING)
         wheel = download_wheel(release, self.installer.directory)
         job = _job(self.installer, release, wheel)
         _prove_it_starts(job, self.installer, logger.warning)
-        if not self._wait_until_idle():
+        if not self._wait_until_idle(on_stage):
             return False
         if not wheel_matches(wheel, release):  # the idle wait can last hours
             raise UpgradeError(f"The downloaded {release.version} changed on disk.")
@@ -211,16 +231,37 @@ class AutoUpgrader(threading.Thread):
             spawn_windows_helper(job, self.installer.directory, restart, new_console)
             self.handed_off = True
         else:
-            if not upgrade_steps.install_and_confirm(job, log=logger.warning):
-                raise UpgradeError(f"Installing {release.version} did not complete.")
-            self.installed = True
+            on_stage(upgrade_request.INSTALLING)
+            self._install(job, release)
+            on_stage(upgrade_request.RESTARTING)
             self._drain()
+        if self.finished.is_set():  # the server stopped meanwhile: stay stopped
+            return True
         logger.info("Auto-upgrade: restarting into %s", release.version)
+        self.exit_requested = True
         self.request_exit()
         return True
 
-    def _wait_until_idle(self) -> bool:
+    def _install(self, job: dict[str, Any], release: Release) -> None:
+        with self._installing:
+            if not upgrade_steps.install_and_confirm(job, log=logger.warning):
+                raise UpgradeError(f"Installing {release.version} did not complete.")
+            self.installed = True
+
+    def finish_install(self) -> None:
+        """Called once the server has stopped. Leaving in the middle of an install would skip the
+        step that confirms the new version runs and puts the old one back if it doesn't."""
+        if self._installing.locked():
+            logger.warning("An upgrade is installing. Stopping once it has finished.")
+        with self._installing:
+            pass
+
+    def _wait_until_idle(self, on_stage: Callable[[str], None]) -> bool:
+        said = False
         while not self.is_idle():
+            if not said:
+                on_stage(upgrade_request.WAITING)
+                said = True
             if self.finished.wait(self.idle_poll):
                 return False
         return not self.finished.is_set()
@@ -235,11 +276,13 @@ class AutoUpgrader(threading.Thread):
 
     def exit_code(self) -> int:
         """What the process does once the server has stopped. Re-executes in a terminal."""
-        if not self.installed:
+        if not (self.installed and self.exit_requested):
             return 0
         if self.service:
             return RESTART_EXIT_CODE
-        os.execv(sys.executable, [sys.executable, "-P", "-m", "backend.cli", *sys.argv[1:]])
+        # The same process stays, so this also holds for a service installed without --auto-upgrade,
+        # which has no --service flag: its supervisor never sees it leave.
+        os.execv(sys.executable, [sys.executable, "-P", "-m", "backend.cli", *_restart_args()])
         return 0  # unreachable: execv does not return
 
 
@@ -258,14 +301,53 @@ def check() -> int:
     return 0
 
 
+def _is_behind(running: str, newest: str) -> bool:
+    try:
+        return is_newer(newest, running)
+    except UpgradeError:  # a development build: it isn't ours to judge
+        return False
+
+
 def upgrade() -> int:
-    """`onw upgrade`: install the newest signed release now."""
+    """`onw upgrade`: the newest signed release, now, or as soon as the running server is idle."""
     try:
         installer = find_installer()
         release = latest_release()
-        if not is_newer(release.version, APP_VERSION):
-            print(f"You're up to date ({APP_VERSION}).")
-            return 0
+        newer = is_newer(release.version, APP_VERSION)
+    except UpgradeError as exc:
+        print(exc.message, file=sys.stderr)
+        return 1
+    server = upgrade_request.running_server()
+    stale = server is not None and _is_behind(server.version, release.version)
+    if server is not None and (newer or stale):
+        answer = upgrade_request.ask_server(
+            upgrade_request.request_path(),
+            server,
+            release.version,
+            handoff_log=installer.directory / "upgrade.log" if _ON_WINDOWS else None,
+        )
+        if answer is not None:
+            return answer
+    if not newer:
+        print(f"You're up to date ({APP_VERSION}).")
+        if server is not None and stale:
+            print(f"The server at {server.url} is still on {server.version}. Restart it to update.")
+        return 0
+    if server is not None and _ON_WINDOWS:
+        print(
+            f"The server at {server.url} is running and Windows can't replace a running program. "
+            "Stop it, then run: onw upgrade",
+            file=sys.stderr,
+        )
+        return 1
+    return _install_here(installer, release, server)
+
+
+def _install_here(
+    installer: Installer, release: Release, server: upgrade_request.RunningServer | None
+) -> int:
+    """No server is running, or the one that is can't be asked."""
+    try:
         print(f"==> Downloading {release.version} ...")
         wheel = download_wheel(release, installer.directory)
         job = _job(installer, release, wheel)
@@ -281,5 +363,9 @@ def upgrade() -> int:
         return 0
     if not upgrade_steps.install_and_confirm(job, log=lambda line: print(line, file=sys.stderr)):
         return 1
-    print(f"==> Updated to {release.version}. Restart the app to use it.")
+    if server is None:
+        print(f"==> Updated to {release.version}. The app uses it the next time it starts.")
+    else:
+        print(f"==> Updated to {release.version}.")
+        print(f"    The server at {server.url} is still on {server.version}. Restart it to use it.")
     return 0

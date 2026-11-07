@@ -6,7 +6,7 @@ import { useEffect } from 'react'
 import { AccountsTab } from './AccountsTab'
 import { TransactionSurfacesProvider } from './TransactionSurfaces'
 import { useTransactionSurfaces } from './transactionSurfacesContext'
-import { clearQueryCache } from '../../../state/queryCache'
+import { clearQueryCache, getCachedQueryData, setCachedQueryData } from '../../../state/queryCache'
 import type { ApiAccount, ApiTxn } from './types'
 
 const { sendMessage } = vi.hoisted(() => ({ sendMessage: vi.fn(async () => undefined) }))
@@ -136,6 +136,27 @@ describe('AccountsTab — transaction review mode', () => {
       ),
     )
     expect(await screen.findByRole('heading', { name: 'Kroger' })).toBeTruthy()
+  })
+
+  // The Dashboard reads this same key (`attentionFlags.ts`). Storing a bare count here while it
+  // stored the response drew an object on Accounts and crashed the tab (owner's phone, 2026-11-07).
+  const BOOK_REVIEW_KEY = '/api/transactions/recently-added?needs_review=true&limit=1'
+
+  it('opens with the count the Dashboard already cached under the same key', async () => {
+    setCachedQueryData(BOOK_REVIEW_KEY, { transactions: [TXN], total: 1, has_more: false })
+    // Its own read still on the way, so what's drawn is what the Dashboard left there.
+    const answer = mockAuthFetch.getMockImplementation()!
+    mockAuthFetch.mockImplementation((url: string, init?: RequestInit) =>
+      url === BOOK_REVIEW_KEY ? new Promise(() => {}) : answer(url, init),
+    )
+    renderTab()
+    expect(await screen.findByText('1 to review')).toBeTruthy()
+  })
+
+  it('leaves that key in the shape the Dashboard reads', async () => {
+    renderTab()
+    await screen.findByRole('button', { name: 'Start review' })
+    expect(getCachedQueryData<{ total?: number }>(BOOK_REVIEW_KEY)?.total).toBe(1)
   })
 
   it('offers Start review beside the count, and no bulk clear of every flag', async () => {

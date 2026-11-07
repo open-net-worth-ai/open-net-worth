@@ -290,19 +290,20 @@ export function AccountsTab({
   // the last count in the first frame: a fresh `0` hid the review pill and the line grew when the
   // fetch landed (owner report 2026-11-06). It still revalidates on every mount and write.
   const reviewScope = selectedId ? `&account_id=${encodeURIComponent(selectedId)}` : ''
-  const reviewQuery = useQueryCache(
+  // The whole response, not its total: the Dashboard reads this same key (`attentionFlags.ts`), and a
+  // bare count here drew its object on Accounts and crashed the tab (owner's phone, 2026-11-07).
+  const reviewQuery = useQueryCache<{ total?: number }>(
     `/api/transactions/recently-added?needs_review=true${reviewScope}&limit=1`,
     async () => {
       const response = await authFetch(
         `/api/transactions/recently-added?needs_review=true${reviewScope}&limit=1`,
       )
       if (!response.ok) throw new Error('review count unavailable')
-      const body = (await response.json()) as { total?: number }
-      return body.total ?? 0
+      return (await response.json()) as { total?: number }
     },
     { version: (refreshSignal ?? 0) + ledgerVersion },
   )
-  const reviewTotal = reviewQuery.data ?? 0
+  const reviewTotal = reviewQuery.data?.total ?? 0
   const selectAccount = (id: string | null) => {
     setSelectedId(id)
     onSelectAccount?.(id)

@@ -101,6 +101,9 @@ or off. Lucius cannot change these switches.
   Anything you'd rather he not know, leave blank.
 - **Some sections only appear where they apply** — Desktop in the desktop app, Terminal where it
   is enabled.
+- **The version is at the bottom of Settings** — at the foot of the side rail, or of the menu on a
+  phone. It's the version of the server you're connected to, so it changes only after that server
+  restarts on a new release.
 
 ## Related pages
 
