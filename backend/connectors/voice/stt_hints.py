@@ -1,7 +1,8 @@
 """What speech-to-text hears a call with, and the money words it is told to expect in each language.
 
 It misheard "the full list in a chart" as "funnel list in a charge" (live call, 2026-11-06). These
-lists are general vocabulary only: nothing from the owner's book goes to the speech provider.
+lists are general vocabulary. From the owner's book, only the names of their most used merchants go
+to the speech provider (``service._own_terms``), and the product docs say so.
 """
 
 from __future__ import annotations
@@ -14,8 +15,11 @@ AUTOMATIC_MODEL = "deepgram/nova-3"
 # (owner, 2026-11-05, on the AssemblyAI equivalent).
 DEEPGRAM_TURN_SILENCE_MS = 900
 
-# Deepgram allows 100 terms and 500 tokens, and advises 20-50.
+# Deepgram allows 100 terms and 500 tokens, and advises 20-50. A hint makes that word likelier for
+# ANYTHING that sounds a bit like it: "Roth IRA" was heard for an ordinary reply about a purchase
+# (owner, 2026-11-06), so no acronyms or account jargon a normal sentence can be mistaken for.
 _MAX_TERMS = 50
+_MAX_OWN_TERMS = 20
 
 # fmt: off
 _TERMS: dict[str, tuple[str, ...]] = {
@@ -23,7 +27,7 @@ _TERMS: dict[str, tuple[str, ...]] = {
         "Lucius", "net worth", "budget", "envelope", "ready to assign", "transaction", "payee",
         "category", "uncategorized", "balance", "credit card", "checking account",
         "savings account", "brokerage", "portfolio", "dividend", "stock", "bond", "ETF",
-        "mutual fund", "401k", "IRA", "Roth IRA", "RSU", "vesting", "capital gains", "cash flow",
+        "vesting", "capital gains", "cash flow",
         "mortgage", "interest rate", "retirement", "runway", "statement", "subscription",
         "rebalance", "expenses", "income",
     ),
@@ -95,10 +99,13 @@ def hearing_model(stt_model: str) -> str:
     return AUTOMATIC_MODEL if stt_model == "auto" else stt_model
 
 
-def hint_kwargs(model: str, language: str) -> dict:
+def hint_kwargs(model: str, language: str, own_terms: tuple[str, ...] = ()) -> dict:
     """What this model is told beyond the language: its word hints, under its own option name, and
-    how long it waits before calling a turn over. Nothing for a model that takes no hints."""
-    terms = list(_TERMS.get(language, _TERMS["en"]))[:_MAX_TERMS]
+    how long it waits before calling a turn over. Nothing for a model that takes no hints. The
+    owner's own merchants come first: no general model knows them, and "ACME" was heard as "top"
+    (owner, 2026-11-06)."""
+    general = _TERMS.get(language, _TERMS["en"])
+    terms = list(dict.fromkeys((*own_terms[:_MAX_OWN_TERMS], *general)))[:_MAX_TERMS]
     if model.startswith("deepgram/nova-3"):
         return {"keyterm": terms, "endpointing": DEEPGRAM_TURN_SILENCE_MS}
     if model.startswith("assemblyai/"):

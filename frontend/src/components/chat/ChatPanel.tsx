@@ -1476,6 +1476,7 @@ export function ChatPanel({
                   <LastAnswerReveal
                     key={msg.id}
                     message={msg}
+                    messages={messages}
                     sessionId={activeId}
                     live={i === visibleDelivered.length - 1}
                   >
@@ -1522,10 +1523,7 @@ export function ChatPanel({
                 sessionId={activeId}
                 lastUser={messages.findLast((m) => m.role === 'user')}
               />
-              <VoiceCallSpokenMessage
-                sessionId={activeId}
-                lastAssistant={messages.findLast((m) => m.role === 'assistant')}
-              />
+              <VoiceCallSpokenMessage sessionId={activeId} messages={messages} />
 
               {/* Follow-up suggestions after a completed turn — a skeleton row while they're
                   still generating, so the gap doesn't read as "nothing is coming." Widths

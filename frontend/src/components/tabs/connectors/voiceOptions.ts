@@ -147,7 +147,7 @@ export function speakerChoice(model: string, voiceId: string, typing: boolean): 
 }
 
 export function voiceLibrary(model: string) {
-  return VOICE_LIBRARIES[model.split('/')[0]]
+  return VOICE_LIBRARIES[model.split('/')[0] ?? '']
 }
 
 // Measured on one LiveKit project, November 2026: 77 call minutes spoke 511 characters a minute,

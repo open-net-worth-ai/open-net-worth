@@ -38,7 +38,7 @@ function entry(overrides: Partial<ConnectorEntry> & Pick<ConnectorEntry, 'id'>):
     enabled: true,
     sub: '',
     ...overrides,
-  }
+  } as ConnectorEntry
 }
 
 describe('suggestionsBySection', () => {

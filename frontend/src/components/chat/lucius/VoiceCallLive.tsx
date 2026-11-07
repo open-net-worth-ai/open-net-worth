@@ -1,7 +1,17 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from 'react'
+import { chatSessions } from '../../../state/chatSessions'
 import type { Message } from '../../../types/chat'
 import { useVoiceCall } from './voiceCall'
-import { spokenPrefix, useFollowBottom, useVoiceReveal } from './voiceReveal'
+import { unheardAnswer, unsavedLines, useFollowBottom, useVoiceReveal } from './voiceReveal'
 
 // What a call is saying right now, for whoever is looking: the chat streams it where the message
 // will land, and the full call screen, which covers the chat, shows it above the mic. Not announced
@@ -40,27 +50,54 @@ export function VoiceCallHeardMessage({
   )
 }
 
-/** A line the voice says itself ("One sec", an answer to small talk), as a message at the end of the
- *  chat while it's said, until the real one lands. Lucius's own answers are already in the chat, and
- *  follow the voice there (``LastAnswerReveal``). */
-export function VoiceCallSpokenMessage({
-  sessionId,
-  lastAssistant,
-}: {
-  sessionId: string
-  lastAssistant?: Pick<Message, 'id' | 'text'>
-}) {
-  const { lastSpoken, sessionId: callSession } = useVoiceCall()
+type ChatLine = Pick<Message, 'role' | 'text' | 'ts'>
+
+/** The lines heard that the chat doesn't have yet, either side of its newest answer. */
+function useUnsavedLines(sessionId: string, messages: ChatLine[]) {
+  const { spokenLines, connectedAt, sessionId: callSession } = useVoiceCall()
+  return useMemo(() => {
+    if (callSession !== sessionId || !spokenLines.length) return { above: [], below: [] }
+    const his = messages
+      .filter((m) => m.role === 'assistant' && (!m.ts || !connectedAt || m.ts >= connectedAt))
+      .map((m) => m.text || '')
+    return unsavedLines(spokenLines, his)
+  }, [spokenLines, messages, connectedAt, callSession, sessionId])
+}
+
+function SpokenLines({ lines }: { lines: string[] }) {
   const ref = useRef<HTMLDivElement>(null)
-  const inChat = !!lastAssistant?.text && spokenPrefix(lastAssistant.text, lastSpoken) !== null
-  const show = !!lastSpoken && callSession === sessionId && !inChat
-  useFollowBottom(ref, show ? lastSpoken : '')
-  if (!show) return null
+  useFollowBottom(ref, lines.at(-1) ?? '')
+  if (!lines.length) return null
   return (
-    <div ref={ref} className="msg-bubble msg-assistant lx-callheard-msg" aria-hidden="true">
-      <div className="msg-text">{lastSpoken}</div>
+    <div ref={ref} style={{ display: 'contents' }}>
+      {lines.map((line, i) => (
+        <div key={i} className="msg-bubble msg-assistant lx-callheard-msg" aria-hidden="true">
+          <div className="msg-text">{line}</div>
+        </div>
+      ))}
     </div>
   )
+}
+
+/** Lines the voice said itself ("One sec", an answer to small talk) that came after the newest answer,
+ *  or with no answer since: messages at the end of the chat until the real ones land. Lucius's own
+ *  answers are already in the chat, and follow the voice there (``LastAnswerReveal``). */
+export function VoiceCallSpokenMessage({
+  sessionId,
+  messages,
+}: {
+  sessionId: string
+  messages: ChatLine[]
+}) {
+  const { above, below } = useUnsavedLines(sessionId, messages)
+  // With your words the newest message, there's no answer for "above" to sit over yet.
+  const lines = messages.at(-1)?.role === 'assistant' ? below : [...above, ...below]
+  return <SpokenLines lines={lines} />
+}
+
+/** Lines said while Lucius worked on the answer below them. */
+function SpokenAbove({ sessionId, messages }: { sessionId: string; messages: ChatLine[] }) {
+  return <SpokenLines lines={useUnsavedLines(sessionId, messages).above} />
 }
 
 /** Draws the conversation's newest answer as far as Lucius has said it. */
@@ -87,29 +124,76 @@ function VoiceCallRevealed({
  *  on every spoken word, so an older message must never carry it. */
 export function LastAnswerReveal({
   message,
+  messages,
   sessionId,
   live,
   children,
 }: {
   message: Message
+  messages: ChatLine[]
   sessionId: string
   live: boolean
   children: (message: Message) => ReactNode
 }) {
   if (!live || message.role !== 'assistant') return <>{children(message)}</>
   return (
-    <VoiceCallRevealed message={message} sessionId={sessionId}>
-      {children}
-    </VoiceCallRevealed>
+    <>
+      <SpokenAbove sessionId={sessionId} messages={messages} />
+      <VoiceCallRevealed message={message} sessionId={sessionId}>
+        {children}
+      </VoiceCallRevealed>
+    </>
   )
+}
+
+const WORDS_LATE_MS = 1200
+
+/** What to show while the voice talks and its words haven't come: the answer it's reading. */
+function useAnswerWithoutWords(): string {
+  const { luciusSpeaking, spoken, spokenLines, connectedAt, sessionId } = useVoiceCall()
+  const id = sessionId ?? ''
+  const subscribe = useCallback((cb: () => void) => chatSessions.subscribe(id, cb), [id])
+  const slice = useSyncExternalStore(subscribe, () => chatSessions.getSlice(id))
+  // The speaking state arrives just before the words do: this waits, or the whole answer flashed
+  // up first on every line (test call, 2026-11-07).
+  const noWords = luciusSpeaking && !spoken && !!id
+  const [wordsLate, setWordsLate] = useState(false)
+  useEffect(() => {
+    if (!noWords) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setWordsLate(false)
+      return
+    }
+    const timer = window.setTimeout(() => setWordsLate(true), WORDS_LATE_MS)
+    return () => window.clearTimeout(timer)
+  }, [noWords])
+  // Shown once for a line the voice said without words: the next such line isn't this answer.
+  const showing = useRef('')
+  const done = useRef('')
+  if (!luciusSpeaking && showing.current) {
+    done.current = showing.current
+    showing.current = ''
+  }
+  if (!noWords || !wordsLate) return ''
+  const his = slice.messages.filter(
+    (m) => m.role === 'assistant' && (!m.ts || !connectedAt || m.ts >= connectedAt),
+  )
+  if (his.at(-1)?.streaming) return ''
+  const answer = unheardAnswer(
+    spokenLines,
+    his.map((m) => m.text || ''),
+  )
+  if (answer === done.current) return ''
+  if (answer) showing.current = answer
+  return answer
 }
 
 /** The full call screen's caption, above the mic: you while you're talking, otherwise Lucius. */
 export function VoiceCallCaption() {
-  const { heard, heardDone, spoken } = useVoiceCall()
-  // Your words stay in the chat until they land, but here Lucius takes over once you've finished.
-  const yours = !!heard && !(heardDone && spoken)
-  const text = yours ? heard : spoken
+  const { heard, heardShown, spoken } = useVoiceCall()
+  const withoutWords = useAnswerWithoutWords()
+  const yours = heardShown && !!heard
+  const text = yours ? heard : spoken || withoutWords
   const box = useRef<HTMLDivElement>(null)
   const [long, setLong] = useState(false)
   // Measured, as how many lines some words take depends on the screen and the language.

@@ -42,6 +42,9 @@ PASSWORD = "PASSWORD-SENTINEL-9"
 TOKEN = "TOKEN-SENTINEL-9"
 ENC = "ENCRYPTION-SENTINEL-9"
 
+# Off by default, so these turn it on to reach what they test.
+pytestmark = pytest.mark.flags(actual_budget_sync=True)
+
 
 @pytest.fixture
 def store(db_isolated):
