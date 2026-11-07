@@ -266,6 +266,8 @@ RESAY_QUIET_S = 2.5
 RESAY_CHECK_S = 0.25
 RESAY_GIVE_UP_S = 60.0
 MAX_RESAYS = 2  # in a row, so a noisy line can't loop on one answer: it's in the chat anyway
+_NOISE_WORD = re.compile(r"m+|h+m+|m+h+m+|u+h+|u+m+|huh|e+r+|a+h+|o+h+|ahem|okay|ok|yeah|yep")
+_SENTENCE_END = re.compile(r"[.!?…]\s+")
 HEARD_PART_CHARS = 1000
 QUEUED = "say you'll get to that right after the one you're on, in a few words"
 CORRECTED = "say okay, you've got the correction, in a few words"
@@ -302,6 +304,20 @@ def _usable_ack(ack: str) -> str:
 
 def _letters(text: str) -> str:
     return "".join(c for c in text.casefold() if c.isalnum())
+
+
+def _only_noise(said: str) -> bool:
+    """A sound or a "go on", with nothing in it they want. Narrow on purpose: "hold on" isn't one,
+    and words it doesn't know, in any language, just mean he doesn't talk over them."""
+    return all(_NOISE_WORD.fullmatch(word) for word in re.findall(r"\w+", said.casefold()))
+
+
+def _from_the_sentence_it_stopped_in(answer: str, heard: str) -> str:
+    """Where a person picks up again. All of it, if what was heard doesn't line up with the answer."""
+    if not answer.startswith(heard):
+        return answer
+    ends = _SENTENCE_END.finditer(answer, 0, len(heard) + 1)
+    return answer[max((end.end() for end in ends), default=0) :]
 
 
 def _usable_reply(text: str) -> bool:
@@ -396,6 +412,14 @@ class FrontAgent(Agent):
         to pass ``_usable_reply``, or its words go, whatever it called: a reply to what
         ``check_progress`` said can make the same claims as any other. Said beside a hand-over they
         always go, as the ack says it."""
+        if (
+            model_settings.tool_choice != "none"
+            and _answers_the_owner(chat_ctx)
+            and self._lucius.a_sound_over_an_answer(
+                getattr(chat_ctx.items[-1], "text_content", "") or ""
+            )
+        ):
+            return
         stream = Agent.default.llm_node(self, chat_ctx, tools, model_settings)
         async with aclosing(stream) as chunks_in:
             chunks = [chunk async for chunk in chunks_in]
@@ -509,7 +533,8 @@ class LuciusDesk:
     _last_line_asked = False  # what they last heard asked them something
     YES_SETTLE_S = SOUND_CLAIMED_S  # a yes waits this long, as more words may follow it
     _unheard_answers = 0  # answers to this card that came too soon to count
-    _undelivered: str | None = None  # an answer dropped before it made a sound, to say when quiet
+    _undelivered: str | None = None  # an answer they didn't get to the end of, to say when quiet
+    _said_since_answer = ""  # their words since the last answer was queued
     _resays = 0
     _cut_off = ""  # how much of the last answer they heard, when their voice cut it off
     _owner_sound_at = 0.0  # when they last started or stopped making a sound
@@ -630,6 +655,7 @@ class LuciusDesk:
         self._utterance_began = None
         self._cancel_mid_thought()
         self._heard.append(text)
+        self._said_since_answer = f"{self._said_since_answer} {text}"
         self._checked_in = False
         self._end_hold()
 
@@ -697,6 +723,7 @@ class LuciusDesk:
         if answer:
             self._answers[text] = self._current
             self._cut_off = ""
+            self._said_since_answer = ""
         try:
             speech = self._session.say(text, add_to_chat_ctx=True)
             self.speech_log.label(speech, "answer" if answer else "line", len(text))
@@ -718,10 +745,12 @@ class LuciusDesk:
             for item in speech.chat_items
             if getattr(item, "role", None) == "assistant"
         ).strip()
-        if heard:
+        if heard == text:
             self._resays = 0
-            if heard != text:
-                self._cut_off = heard[:HEARD_PART_CHARS]
+            return
+        if heard:
+            self._cut_off = heard[:HEARD_PART_CHARS]
+            self._pick_up_when_quiet(_from_the_sentence_it_stopped_in(text, heard))
             return
         if text not in self._answers:  # dropped on purpose (``_drop_unspoken``), and that says so
             return
@@ -733,9 +762,34 @@ class LuciusDesk:
             self._undelivered = text
             asyncio.ensure_future(self._deliver_when_quiet(text, task))
 
-    async def _deliver_when_quiet(self, text: str, task: Task | None) -> None:
-        """Say it after all, unless what they said became a request: that one is told (``_unheard``),
-        and answers with whatever of this they still need."""
+    def _pick_up_when_quiet(self, rest: str) -> None:
+        """A cough or "mm" stopped an answer 1.7 seconds in, he said "Mm-hm?", and they never heard
+        the rest (test call, 2026-11-07). Words that meant something leave it stopped."""
+        if self._resays >= MAX_RESAYS:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._resays += 1
+        self._undelivered = rest
+        loop.create_task(self._deliver_when_quiet(rest, None, only_after_noise=True))
+
+    def a_sound_over_an_answer(self, said: str) -> bool:
+        """They made a sound and the answer is going on: a reply would stand in its way, and the
+        sound isn't worth keeping, or a request made next would begin with it."""
+        if self._undelivered is None or not _only_noise(said):
+            return False
+        log.info("voice decision: a sound over an answer gets no reply")
+        self._turn_said = ""
+        self._heard.clear()
+        return True
+
+    async def _deliver_when_quiet(
+        self, text: str, task: Task | None, *, only_after_noise: bool = False
+    ) -> None:
+        """Say it after all, unless what they said became a request: that one is told (``_unheard``,
+        ``_cut_off``), and answers with whatever of this they still need."""
         quiet_since = time.monotonic()
         give_up_at = quiet_since + RESAY_GIVE_UP_S
         while time.monotonic() < give_up_at:
@@ -743,13 +797,17 @@ class LuciusDesk:
             if self._undelivered != text:
                 return
             if self._request_since_answer():
-                self._undelivered = None
+                self._undelivered, self._resays = None, 0
                 return
             now = time.monotonic()
             front_busy = getattr(self._session, "agent_state", "") in ("thinking", "speaking")
             if self._still_talking() or front_busy:
                 quiet_since = now
             elif now - quiet_since >= RESAY_QUIET_S:
+                if only_after_noise and not _only_noise(self._said_since_answer):
+                    log.info("voice decision: words cut the answer off, so it stays stopped")
+                    self._undelivered, self._resays = None, 0
+                    return
                 self._undelivered, self._unheard = None, False
                 self._say(text, answer=True)
                 self._answers[text] = task
@@ -825,6 +883,8 @@ class LuciusDesk:
             return
         started_at = started_at or time.time()
         if role == "user":
+            if self._undelivered is not None and _only_noise(text):
+                return  # it can arrive after the voice has decided not to reply to it
             if not self._turn_said:
                 self._turn_started_at = started_at
             self._turn_said = _joined(self._turn_said, text)

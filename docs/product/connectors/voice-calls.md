@@ -43,7 +43,8 @@ Correct him (*"no, I meant the other card"*) and he moves on to what you meant, 
 answer if it hasn't been read out yet; he also knows you never heard it. Start talking just as an
 answer begins, before any of it has played, and he knows you missed it: if what you said was a
 question, he includes whatever you still need in the reply, and if it was only a cough or an *"mm"*,
-he says the answer a moment later. Cut him off partway and he knows how far he got. Asking something different
+he says the answer a moment later. Cut him off partway and he knows how far he got; if it was only a
+cough or an *"mm"*, he picks up again from that sentence. Asking something different
 keeps the first answer, in order. A change can't be taken back this way: if the first request did
 change something, you always hear how it went, then he gets to your correction.
 Only his final reply is read out. A link in it shows in the chat: inside a sentence you hear just its

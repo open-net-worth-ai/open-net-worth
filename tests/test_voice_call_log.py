@@ -597,7 +597,7 @@ def test_small_talk_is_still_said(reply):
     assert agent._usable_reply(reply)
 
 
-def _run_node(agent, monkeypatch, chunks, last_role="user", tool_choice=None):
+def _run_node(agent, monkeypatch, chunks, last_role="user", tool_choice=None, sound=False):
     import asyncio
     import types
 
@@ -608,7 +608,9 @@ def _run_node(agent, monkeypatch, chunks, last_role="user", tool_choice=None):
     monkeypatch.setattr(agent.Agent.default, "llm_node", default)
     refused = []
     front = agent.FrontAgent.__new__(agent.FrontAgent)
-    front._lucius = types.SimpleNamespace(reply_refused=refused.append)
+    front._lucius = types.SimpleNamespace(
+        reply_refused=refused.append, a_sound_over_an_answer=lambda _said: sound
+    )
     ctx = types.SimpleNamespace(items=[types.SimpleNamespace(role=last_role)])
     settings = types.SimpleNamespace(tool_choice=tool_choice)
 
@@ -1690,6 +1692,118 @@ def test_every_answer_is_followed_to_see_what_they_heard():
     speech = desk_._session.speech
     speech.when_done[0](speech)
     assert desk_._cut_off == "Yesterday"
+
+
+def _cut_off_by(desk_, said="", during=None, wait=0.15):
+    import asyncio
+
+    async def run():
+        if said:
+            desk_.heard(said)
+        desk_._answer_played(_Said("First one. The second"), "First one. The second one is long.")
+        if during:
+            during()
+        await asyncio.sleep(wait)
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("said", ["", "M m", "mm-hm", "Uh huh.", "Ahem", "Yeah, okay."])
+def test_a_sound_that_cut_an_answer_off_doesnt_end_it(monkeypatch, said):
+    """A test call: an "mm" stopped it 1.7 seconds in, and they never heard the rest."""
+    _agent, desk_ = _talked_over_desk(monkeypatch)
+    _cut_off_by(desk_, said)
+    assert desk_._session.said == ["The second one is long."]
+    assert desk_._cut_off == ""
+
+
+@pytest.mark.parametrize("said", ["Hold on a second.", "Stop there", "What did you say?", "vâng ạ"])
+def test_words_that_cut_an_answer_off_leave_it_stopped(monkeypatch, said):
+    _agent, desk_ = _talked_over_desk(monkeypatch)
+    _cut_off_by(desk_, said)
+    assert desk_._session.said == []
+    assert desk_._cut_off == "First one. The second"
+    assert desk_._undelivered is None and desk_._resays == 0
+
+
+def test_a_request_after_a_sound_is_told_how_far_it_got_and_it_doesnt_go_on(monkeypatch):
+    agent, desk_ = _talked_over_desk(monkeypatch)
+    _cut_off_by(desk_, "M m", lambda: desk_._queue.put_nowait(agent.Task("next", "next")))
+    assert desk_._session.said == []
+    assert desk_._cut_off == "First one. The second"
+    assert desk_._resays == 0
+
+
+def test_a_noisy_line_cant_loop_on_a_cut_off_answer(monkeypatch):
+    agent, desk_ = _talked_over_desk(monkeypatch)
+    monkeypatch.setattr(agent, "RESAY_QUIET_S", 60)
+    for _ in range(agent.MAX_RESAYS + 1):
+        _cut_off_by(desk_, "M m", wait=0.01)
+    assert desk_._resays == agent.MAX_RESAYS
+
+
+def test_words_said_before_this_answer_dont_count_against_it():
+    agent, desk_ = _desk()
+    desk_._session = _QuietSession()
+    desk_._session.said = []
+    desk_.heard("How much did I spend?")
+    agent.LuciusDesk._say(desk_, "You spent a lot.", answer=True)
+    assert desk_._said_since_answer == ""
+
+
+@pytest.mark.parametrize(
+    ("heard", "rest"),
+    [
+        ("One", "One. Two. Three."),
+        ("One.", "Two. Three."),
+        ("One. Tw", "Two. Three."),
+        ("One. Two. Th", "Three."),
+        ("Not what was said", "One. Two. Three."),
+    ],
+)
+def test_it_picks_up_from_the_sentence_it_stopped_in(heard, rest):
+    agent, _desk_ = _desk()
+    assert agent._from_the_sentence_it_stopped_in("One. Two. Three.", heard) == rest
+
+
+def test_a_decimal_isnt_where_a_sentence_ends():
+    agent, _desk_ = _desk()
+    answer = "It's 4.1 percent on the loan."
+    assert agent._from_the_sentence_it_stopped_in(answer, "It's 4.1 per") == answer
+
+
+def test_a_sound_over_an_answer_gets_no_reply_and_isnt_kept():
+    _agent, desk_ = _desk()
+    assert desk_.a_sound_over_an_answer("M m") is False  # nothing is going on
+    desk_._undelivered = "The rest."
+    assert desk_.a_sound_over_an_answer("Hold on") is False
+    desk_._turn_said = "M m"
+    desk_.heard("M m")
+    assert desk_.a_sound_over_an_answer("M m") is True
+    assert desk_._turn_said == "" and not desk_._heard
+
+
+def test_a_sound_over_an_answer_stays_out_of_the_chat_however_late_it_arrives():
+    _agent, desk_ = _desk()
+    desk_._undelivered = "The rest."
+    desk_.item_added("user", "M m.", 100.0)
+    assert desk_._turn_said == ""
+    desk_.item_added("user", "What about September?", 101.0)
+    assert desk_._turn_said == "What about September?"
+
+
+def test_the_front_voice_says_nothing_to_a_sound_over_an_answer(monkeypatch):
+    agent, _desk_ = _desk()
+    out, refused = _run_node(agent, monkeypatch, [_Chunk("Mm-hm?")], sound=True)
+    assert out == [] and refused == []
+
+
+def test_a_line_of_our_own_is_still_said_while_an_answer_waits(monkeypatch):
+    agent, _desk_ = _desk()
+    out, _refused = _run_node(
+        agent, monkeypatch, [_Chunk("Still on it.")], tool_choice="none", sound=True
+    )
+    assert _words(out) == "Still on it."
 
 
 def test_an_answer_heard_to_the_end_changes_nothing():
