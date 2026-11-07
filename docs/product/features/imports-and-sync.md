@@ -224,3 +224,11 @@ A run that failed shows why at the top, with everything it captured before it st
 
 Run history belongs to the book it describes: **Reset** clears it, and it is not part of an export.
 It never contains your YNAB token.
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Leave YNAB With Your Plan: Categories, Assigned and Sync](https://opennetworth.ai/blog/migrate-from-ynab/): moving a whole YNAB plan, step by step
+- [Actual Budget Alternative: Open Net Worth vs Actual Budget](https://opennetworth.ai/blog/open-net-worth-vs-actual-budget/): what carries over from Actual Budget and what doesn't
+- [Open Source YNAB Alternative: Zero-Based Budget, AI Agent](https://opennetworth.ai/blog/open-net-worth-vs-ynab/): how the YNAB-style budget compares
