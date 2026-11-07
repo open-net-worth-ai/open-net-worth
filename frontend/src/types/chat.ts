@@ -671,6 +671,8 @@ export interface Message {
   // A restore of an EARLIER message rewound past this turn: no Restore while that restore
   // stands; undoing it clears the flag (the checkpoint is kept for exactly that).
   checkpointSuperseded?: boolean
+  // An answer written for a voice call that was never read out: the owner spoke first and moved on.
+  unheard?: boolean
   // Set the instant sendMessage() queues this (user) message into an already-busy
   // conversation, instead of opening a fresh turn (RFC mid-turn injection, acceptance C1/
   // C2). 'queued' is the only value today — there is no error variant (C3: a turn that

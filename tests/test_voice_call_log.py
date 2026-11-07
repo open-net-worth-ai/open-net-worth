@@ -133,6 +133,43 @@ def test_an_answer_to_a_request_said_in_two_goes_stays_below_it(monkeypatch):
     ]
 
 
+@pytest.mark.parametrize(("he_spoke", "joins"), [(False, True), (True, False)])
+def test_more_words_join_the_last_message_only_if_he_said_nothing_since(he_spoke, joins):
+    """The owner's call: "HER too?", then "Okay, let me check HER.", then "And Uber"."""
+    agent, desk_ = _desk()
+    desk_.heard("Check HER too?")
+    desk_.submit("How is HER doing?")
+    desk_._queue.get_nowait()  # taken up and finished, so the next words can only join or not
+    if he_spoke:
+        desk_.spoke()
+    desk_.heard("And Uber")
+    desk_.submit("How are HER and Uber doing?", continues_last=True)
+    later = desk_._queue.get_nowait()
+    assert later.continues is joins
+    assert later.request.endswith("How are HER and Uber doing?")  # still one request either way
+
+
+def test_an_answer_never_read_out_says_so_in_the_chat(monkeypatch):
+    history = [
+        {"role": "user", "content": "Question"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Same words."}]},
+        {"role": "user", "content": "Again"},
+        {"role": "assistant", "content": [{"type": "text", "text": "**Same** words."}]},
+    ]
+    desk.place_lines(history, [{"unheard": "Same words."}])
+    assert desk.UNHEARD_KEY not in history[1]  # the newest answer with those words
+    assert history[3][desk.UNHEARD_KEY] is True
+    monkeypatch.setattr(desk.assistant, "_load_session", lambda _sid: history)
+    shown = desk.assistant.rehydrate_messages("voice-log-unheard")
+    assert [m.get("unheard", False) for m in shown] == [False, False, False, True]
+
+
+def test_words_no_answer_has_mark_nothing():
+    history = [{"role": "assistant", "content": [{"type": "text", "text": "Something else."}]}]
+    desk.place_lines(history, [{"unheard": "Not this."}])
+    assert desk.UNHEARD_KEY not in history[0]
+
+
 def test_a_correction_keeps_its_place_in_the_chat():
     earlier = Task("find it", "find", asked_at=4.0, id="t1", revision=2)
     later = Task("the gym one", "gym", asked_at=9.0)
@@ -1696,6 +1733,78 @@ def test_it_waits_while_the_front_voice_is_still_replying(monkeypatch):
     desk_._session.agent_state = "speaking"
     _run_talked_over(desk_)
     assert desk_._session.said == []
+
+
+def _telling_desk(monkeypatch):
+    """A talked-over desk whose calls to the app are kept."""
+    agent, desk_ = _talked_over_desk(monkeypatch)
+    told = []
+
+    async def call(method, **args):
+        told.append((method, args["text"]))
+
+    desk_._session_id = "s1"
+    desk_._rt = type("Rt", (), {"app": type("App", (), {"call": staticmethod(call)})()})()
+    return agent, desk_, told
+
+
+def test_an_answer_a_request_replaced_is_marked_never_read_out(monkeypatch):
+    agent, desk_, told = _telling_desk(monkeypatch)
+    _run_talked_over(desk_, lambda: desk_._queue.put_nowait(agent.Task("next", "next")))
+    assert told == [("answer_unheard", "The answer.")]
+
+
+def test_a_request_starting_at_once_still_marks_the_answer(monkeypatch):
+    """Starting a request clears what's waiting to be said before the wait can see the request."""
+    _agent, desk_, told = _telling_desk(monkeypatch)
+    _run_talked_over(desk_, lambda: setattr(desk_, "_undelivered", None))
+    assert told == [("answer_unheard", "The answer.")]
+
+
+def test_an_answer_said_after_all_isnt_marked(monkeypatch):
+    _agent, desk_, told = _telling_desk(monkeypatch)
+    _run_talked_over(desk_)
+    assert desk_._session.said == ["The answer."] and told == []
+
+
+def test_an_answer_they_heard_part_of_isnt_marked(monkeypatch):
+    _agent, desk_, told = _telling_desk(monkeypatch)
+    _cut_off_by(desk_, "Hold on a second.")
+    assert told == []
+
+
+def test_an_answer_past_its_retries_is_marked(monkeypatch):
+    agent, desk_, told = _telling_desk(monkeypatch)
+    monkeypatch.setattr(agent, "RESAY_QUIET_S", 60)
+    desk_._resays = agent.MAX_RESAYS
+    _run_talked_over(desk_, wait=0.01)
+    assert told == [("answer_unheard", "The answer.")]
+
+
+def test_word_timings_are_asked_for_where_the_provider_needs_asking():
+    from backend.connectors.voice.tts_models import word_timing_options
+
+    assert word_timing_options("inworld/inworld-tts-2-flash") == {"timestamp_type": "WORD"}
+    assert word_timing_options("cartesia/sonic-3") == {"add_timestamps": True}
+    assert word_timing_options("assemblyai/assemblyai-tts-1") == {}  # on by default
+    assert word_timing_options("fishaudio/s2.1-pro") == {}
+
+
+def test_a_sound_during_his_voice_doesnt_date_their_next_words(monkeypatch, caplog):
+    import logging
+
+    agent, _desk_ = _desk()
+    timing = agent.TurnTiming()
+    now = [1000.0]
+    monkeypatch.setattr("backend.connectors.voice.timing.time.monotonic", lambda: now[0])
+    timing.user_state("speaking")
+    now[0] += 20
+    timing.agent_speaking()
+    timing.user_state("speaking")
+    now[0] += 1
+    with caplog.at_level(logging.INFO):
+        timing.words(False)
+    assert "first words 1.00s" in caplog.text
 
 
 def test_a_noisy_line_cant_loop_on_one_answer(monkeypatch):

@@ -85,6 +85,14 @@
     content-visibility: auto;
     contain-intrinsic-size: auto 140px;
   }
+  /* A bubble turning from its estimate into its real height moves what's below it. A browser that
+     can't hold your place through that (Safari) moved the chat under your finger as you scrolled
+     up, so it renders them all (owner, 2026-11-08). */
+  @supports not (overflow-anchor: auto) {
+    .msg-bubble:nth-last-child(n + 9) {
+      content-visibility: visible;
+    }
+  }
   .msg-user {
     align-items: flex-end;
   }
@@ -2040,6 +2048,11 @@
       opacity: 1;
       visibility: visible;
     }
+  }
+  .msg-unheard {
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: var(--muted);
   }
   .msg-time {
     font-size: 10.5px;

@@ -11,7 +11,7 @@ import {
 import { chatSessions } from '../../../state/chatSessions'
 import type { Message } from '../../../types/chat'
 import { useVoiceCall } from './voiceCall'
-import { unheardAnswer, unsavedLines, useFollowBottom, useVoiceReveal } from './voiceReveal'
+import { unheardAnswer, unsavedLines, useVoiceReveal } from './voiceReveal'
 
 // What a call is saying right now, for whoever is looking: the chat streams it where the message
 // will land, and the full call screen, which covers the chat, shows it above the mic. Not announced
@@ -33,7 +33,6 @@ export function VoiceCallHeardMessage({
   lastUser?: Pick<Message, 'id' | 'text'>
 }) {
   const { heard, heardDone, sessionId: callSession } = useVoiceCall()
-  const ref = useRef<HTMLDivElement>(null)
   // While you talk the newest message is an earlier one; a newer one after that is this one, even
   // when the saved words differ from the ones streamed.
   const before = useRef(lastUser?.id)
@@ -41,10 +40,9 @@ export function VoiceCallHeardMessage({
   const sameWords = !!lastUser?.text && plainWords(lastUser.text).endsWith(plainWords(heard))
   const landed = !!heard && (sameWords || (heardDone && lastUser?.id !== before.current))
   const show = !!heard && callSession === sessionId && !landed
-  useFollowBottom(ref, show ? heard : '')
   if (!show) return null
   return (
-    <div ref={ref} className="msg-bubble msg-user lx-callheard-msg" aria-hidden="true">
+    <div className="msg-bubble msg-user lx-callheard-msg" aria-hidden="true">
       <div className="msg-text">{heard}</div>
     </div>
   )
@@ -65,18 +63,11 @@ function useUnsavedLines(sessionId: string, messages: ChatLine[]) {
 }
 
 function SpokenLines({ lines }: { lines: string[] }) {
-  const ref = useRef<HTMLDivElement>(null)
-  useFollowBottom(ref, lines.at(-1) ?? '')
-  if (!lines.length) return null
-  return (
-    <div ref={ref} style={{ display: 'contents' }}>
-      {lines.map((line, i) => (
-        <div key={i} className="msg-bubble msg-assistant lx-callheard-msg" aria-hidden="true">
-          <div className="msg-text">{line}</div>
-        </div>
-      ))}
+  return lines.map((line, i) => (
+    <div key={i} className="msg-bubble msg-assistant lx-callheard-msg" aria-hidden="true">
+      <div className="msg-text">{line}</div>
     </div>
-  )
+  ))
 }
 
 /** Lines the voice said itself ("One sec", an answer to small talk) that came after the newest answer,
@@ -110,14 +101,7 @@ function VoiceCallRevealed({
   sessionId: string
   children: (message: Message) => ReactNode
 }) {
-  const shown = useVoiceReveal(message, sessionId)
-  const ref = useRef<HTMLDivElement>(null)
-  useFollowBottom(ref, shown.text)
-  return (
-    <div ref={ref} style={{ display: 'contents' }}>
-      {children(shown)}
-    </div>
-  )
+  return children(useVoiceReveal(message, sessionId))
 }
 
 /** One message of the chat. Only the newest, if it's an answer, follows the voice: the hook wakes

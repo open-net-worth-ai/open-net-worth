@@ -10,6 +10,8 @@ else that reads the conversation as what was asked and answered (ADR
 from __future__ import annotations
 
 VOICE_LINES_KEY = "voice_lines"
+# On an answer written for a call that was never read out: the owner spoke first and moved on.
+UNHEARD_KEY = "voice_unheard"
 BEFORE_MESSAGE = "before"
 AFTER_MESSAGE = "after"
 

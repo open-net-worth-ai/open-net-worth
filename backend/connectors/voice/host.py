@@ -41,6 +41,7 @@ CALLS = frozenset(
         "record_said",
         "record_exchange",
         "record_lines",
+        "answer_unheard",
         "waiting_cards",
         "answer_card",
     }
@@ -187,6 +188,9 @@ class Host:
         if method == "record_lines":
             session_id = self._owned(args)
             await desk.record_lines(session_id, self._within_budget(session_id, args.get("lines")))
+            return None
+        if method == "answer_unheard":
+            await desk.answer_unheard(self._owned(args), str(args.get("text") or ""))
             return None
         await desk.record_exchange(
             self._owned(args), str(args.get("said") or ""), str(args.get("reply") or "")

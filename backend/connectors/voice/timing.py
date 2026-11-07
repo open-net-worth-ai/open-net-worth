@@ -130,6 +130,7 @@ class TurnTiming:
         log.info("voice timing: handed to Lucius %s after they stopped", self._since())
 
     def agent_speaking(self) -> None:
+        self._began = None  # a sound that came to nothing isn't when what they say next began
         if self._stopped is not None:
             log.info("voice timing: first sound %s after they stopped", self._since())
             self._stopped = None
