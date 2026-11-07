@@ -141,6 +141,14 @@ export interface ImportPreviewDraft {
     from_account_name?: string | null
     to_account_id: string
     to_account_name?: string | null
+    /** The other account's side when it holds another currency: what the write would book,
+     *  converted at the latest rate — an estimate, not the bank's figure. */
+    other_leg?: {
+      account_id: string
+      account_name?: string | null
+      amount: number
+      currency: string
+    } | null
   } | null
   /** SI-68: the Lucius draft-operations pass op that shaped THIS row (from the owner's
    *  upload instructions) — null for every untouched row. Reasoned + undoable in the UI.
@@ -712,6 +720,25 @@ export function originalCharge(
   return fCur(amount, currency, { cents: true })
 }
 
+/** Both sides of a cross-currency routed row: "Anchor sends S$135.00 • Harbor receives about
+ *  $100.00". The statement's side is printed fact; the other is the estimate, so only it says
+ *  "about". Empty for any row without a converted side. */
+export function crossCurrencyAmounts(d: {
+  amount: number
+  currency: string
+  routed?: ImportPreviewDraft['routed']
+}): string {
+  const r = d.routed
+  if (!r?.other_leg) return ''
+  const printed = fCur(Math.abs(d.amount), d.currency, { cents: true })
+  const estimate = fCur(Math.abs(r.other_leg.amount), r.other_leg.currency, { cents: true })
+  const from = r.from_account_name || 'The other account'
+  const to = r.to_account_name || 'The other account'
+  return d.amount < 0
+    ? `${from} sends ${printed} • ${to} receives about ${estimate}`
+    : `${from} sends about ${estimate} • ${to} receives ${printed}`
+}
+
 // ── Row-flag display labels ───────────────────────────────────────────────
 
 export const FLAG_LABEL: Record<string, string> = {
@@ -724,6 +751,7 @@ export const FLAG_LABEL: Record<string, string> = {
   intra_batch_duplicate: 'Repeated in file',
   amount_anomaly: 'Unusual amount',
   no_account_for_currency: 'No account in this currency',
+  transfer_no_rate: 'Not a transfer — no exchange rate for that account',
   fx_transfer_pair: 'Transfer between your accounts',
   fx_transfer_leg: 'Second leg — folds into the transfer',
 }
