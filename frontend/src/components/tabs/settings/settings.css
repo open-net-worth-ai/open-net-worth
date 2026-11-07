@@ -970,6 +970,10 @@
     border-color 0.12s ease,
     background 0.12s ease;
 }
+/* PasswordField's eye sits inside the input; keep room for it over the shared padding. */
+.onw-settings .ui-password > .rd-input {
+  padding-right: 40px;
+}
 /* A field must read lighter than the surface it sits on — that is what says "you can type here".
    `--surface2` preserves that step in every named theme; disabled controls use the recessed
    `--bg-2` step instead. */
