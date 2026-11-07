@@ -81,6 +81,10 @@ def sounds_like_a_yes(name: str) -> bool:
     return any(word in _YES_WORDS for word in _WORD.findall(name.casefold().replace("’", "'")))
 
 
+def asks_something(line: str) -> bool:
+    return bool(_QUESTION.search(line))
+
+
 def card_reading(summary: str, language: str) -> str:
     """Said word for word, with no model in between: a card's text can hold a merchant's name or a
     model's words, and through a model those could change what the owner is asked."""

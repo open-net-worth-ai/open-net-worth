@@ -38,7 +38,7 @@ from livekit.agents import (
 from livekit.plugins import silero
 
 from backend.connectors.voice.call_log import CallLog, Card, Task
-from backend.connectors.voice.cards import card_reading, is_plain_yes
+from backend.connectors.voice.cards import asks_something, card_reading, is_plain_yes
 from backend.connectors.voice.connection import CallConnection
 from backend.connectors.voice.events import speakable
 from backend.connectors.voice.stt_hints import hearing_model, hint_kwargs
@@ -231,6 +231,7 @@ ACK_REFUSED = re.compile(
 # and date (owner, 2026-11-06). So it's enforced: a reply that doesn't pass is never spoken, and what
 # they said goes to Lucius instead. The length covers languages the word list doesn't.
 REPLY_MAX_WORDS = 20
+LINE_MAX_WORDS = 30
 _FIGURE_WORDS = (
     r"dollars?|cents?|bucks|percent|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
     r"\w+teen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|"
@@ -256,6 +257,9 @@ MID_THOUGHT_WAIT_S = 2.5  # a request that really did end there goes ahead after
 MID_THOUGHT_RECHECK_S = 0.5
 SOUND_CLAIMED_S = 1.5  # speech-to-text has caught up with a sound by then
 MAX_CARD_REREADS = 1
+YES_TO_NOTHING = (
+    "say you're not sure what they're saying yes to, and ask what they'd like you to do"
+)
 # An answer they talked over before it made a sound. Quiet this long means their words didn't become
 # a request (a cough, "mm"): it's said after all. A request sooner gets the note instead.
 RESAY_QUIET_S = 2.5
@@ -305,6 +309,14 @@ def _usable_reply(text: str) -> bool:
     or that anything has happened."""
     line = _CLOSING_QUESTION.sub("", " ".join(text.split()))
     return len(line.split()) <= REPLY_MAX_WORDS and not REPLY_REFUSED.search(line)
+
+
+def _usable_line(text: str) -> bool:
+    """A line of ours, worded by the front voice: short, with no figure. Asked "what did you just
+    say?", its "okay" came out as the whole answer, figures and all, then Lucius said it again (test
+    call, 2026-11-07). Narrower than ``_usable_reply``, as our own lines may mention approving."""
+    line = " ".join(text.split())
+    return len(line.split()) <= LINE_MAX_WORDS and not _ACK_FIGURES.search(line)
 
 
 def _answers_the_owner(chat_ctx) -> bool:
@@ -380,18 +392,21 @@ class FrontAgent(Agent):
 
     async def llm_node(self, chat_ctx, tools, model_settings):
         """Hold what the front voice writes until we know what it is, as it takes well under a
-        second. Lines of our own call no tool, and pass. Anything else has to pass
-        ``_usable_reply``, or its words go, whatever it called: a reply to what ``check_progress``
-        said can make the same claims as any other. Said beside a hand-over they always go, as the
-        ack says it."""
+        second. Lines of our own call no tool, and have to pass ``_usable_line``. Anything else has
+        to pass ``_usable_reply``, or its words go, whatever it called: a reply to what
+        ``check_progress`` said can make the same claims as any other. Said beside a hand-over they
+        always go, as the ack says it."""
         stream = Agent.default.llm_node(self, chat_ctx, tools, model_settings)
         async with aclosing(stream) as chunks_in:
-            if model_settings.tool_choice == "none":
-                async for chunk in chunks_in:
-                    yield chunk
-                return
             chunks = [chunk async for chunk in chunks_in]
         text, called = _reply_parts(chunks)
+        if model_settings.tool_choice == "none":
+            if not _usable_line(text):
+                log.info("voice decision: a line the front voice worded wasn't said")
+                return
+            for chunk in chunks:
+                yield chunk
+            return
         if not called & {"work_on_request", "answer_card"} and (
             not text.strip() or _usable_reply(text)
         ):
@@ -491,6 +506,7 @@ class LuciusDesk:
     _card_announced_id: str | None = None  # the card last told about, however
     _card_text = ""  # what ``_card_line`` says
     _card_is_last = False  # it's the last thing said: set once it has played
+    _last_line_asked = False  # what they last heard asked them something
     YES_SETTLE_S = SOUND_CLAIMED_S  # a yes waits this long, as more words may follow it
     _unheard_answers = 0  # answers to this card that came too soon to count
     _undelivered: str | None = None  # an answer dropped before it made a sound, to say when quiet
@@ -817,6 +833,7 @@ class LuciusDesk:
         if role != "assistant":
             return
         self._card_is_last = bool(self._card_text) and _letters(text) == self._card_text
+        self._last_line_asked = asks_something(text)
         # An answer the owner cut off is stored as just its spoken part: still his answer.
         answer = next((a for a in self._answers if a.startswith(text)), None)
         if answer is not None:
@@ -983,6 +1000,14 @@ class LuciusDesk:
         if self.language == "en" and MID_THOUGHT.search(said) and said != self._guarded_said:
             self._hold_mid_thought(said, (request, kind, ack, replaces_last, continues_last))
             return None
+        # Decided here, as the fast model doesn't reliably keep to it: "yes, please" after an answer
+        # that offered nothing went back to an older offer and changed 14 transactions (test call,
+        # 2026-11-07). A card has its own path.
+        if is_plain_yes(said, self.language) and not (self._last_line_asked or self._approving):
+            log.info("voice decision: a yes to nothing wasn't passed on")
+            self._heard.clear()
+            self._line(YES_TO_NOTHING)
+            return None
         continues_last = (continues_last or self._mid_thought) and not replaces_last
         self._mid_thought = False
         now = time.monotonic()
@@ -1092,7 +1117,9 @@ class LuciusDesk:
             if self._busy():
                 self._holding(self._still_on_it())
             return
-        if said and self.submit(said) is not None:
+        # "One sec" with no model: it's what wrote this. In another language it's still worded for us.
+        ack = "One sec." if self.language == "en" else ""
+        if said and self.submit(said, "question", ack) is not None:
             self._line("say you didn't catch that, and ask them to say it again")
 
     def owner_began(self) -> None:

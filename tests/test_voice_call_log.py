@@ -1777,6 +1777,31 @@ def test_the_phone_can_report_the_caption():
 # From the review of the whole branch, 2026-11-07.
 
 
+def test_a_yes_to_nothing_isnt_passed_on():
+    """A test call: "yes, please" after an answer that offered nothing changed 14 transactions."""
+    agent, desk_ = _desk()
+    desk_.item_added("assistant", "The savings account holds the most.", 100.0)
+    desk_.heard("Yes, please.")
+    assert desk_.submit("Yes, go ahead with what you offered: recategorise") is None
+    assert desk_._queue.empty()
+
+
+def test_a_yes_to_a_question_goes_through():
+    _agent, desk_ = _desk()
+    desk_.item_added("assistant", "Shall I recategorise those?", 100.0)
+    desk_.heard("Yes, please.")
+    assert desk_.submit("Yes, go ahead with what you offered: recategorise") is None
+    assert desk_._queue.qsize() == 1
+
+
+def test_a_real_request_isnt_mistaken_for_a_yes():
+    _agent, desk_ = _desk()
+    desk_.item_added("assistant", "The savings account holds the most.", 100.0)
+    desk_.heard("What is my net worth?")
+    desk_.submit("What is my net worth?")
+    assert desk_._queue.qsize() == 1
+
+
 def _yes_now(desk_):
     desk_._heard[:] = ["Yes."]
     return _say_to_card(desk_, "approve")
@@ -1912,3 +1937,13 @@ def test_no_name_makes_a_yes_likelier_in_any_language():
     for name in ("Yep Coffee", "Oui Market", "Correct Tax", "Ja Bakery", "Go Mart", "Please Hold"):
         assert sounds_like_a_yes(name), name
     assert not sounds_like_a_yes("ACME Shop")
+
+
+def test_a_line_the_front_voice_words_cant_carry_an_answer():
+    """A test call: asked "what did you just say?", its "okay" repeated the answer, figures and all."""
+    agent, _desk_ = _desk()
+    assert agent._usable_line("Okay, let me check your grocery spending.")
+    assert not agent._usable_line("You spent about eleven hundred eighty dollars on groceries.")
+    assert not agent._usable_line("You spent 1180 dollars.")
+    assert not agent._usable_line(" ".join(["word"] * 31))
+    assert agent._usable_line("I can't approve that one by voice, so please tap it on screen.")

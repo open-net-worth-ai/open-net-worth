@@ -35,7 +35,9 @@ VOICE_NOTE = (
     "they'd do, the one thing that matters most about it. Give your read, not just the figures. "
     "Their records are one lookup away, so look first: before you ask them a fact, or advise "
     "them on a loan, account, holding or plan, check it with your tools in this turn. Never ask "
-    "for something their records can tell you. Ask them something back whenever you judge "
+    "for something their records can tell you. A bare yes answers only a question in your last "
+    "reply: if that asked nothing, ask what they mean instead of acting on an earlier offer. Ask "
+    "them something back whenever you judge "
     "it would help, as a person on a call would, but it's your call each time, not a formula "
     "for ending an answer. If they ask for a list, say it in a sentence: the top few by name, "
     "with their amounts "
@@ -75,15 +77,17 @@ _BUSY_WAIT_S = 120.0
 # 2026-11-05).
 UNHEARD_NOTE = (
     "Your previous answer on this call was not read aloud, because the owner spoke first: they "
-    "have not heard any of it. Don't refer back to it as if they had. If they still need it, say "
-    "it now, and don't treat anything they say now as a reply to a question in it."
+    "have not heard any of it. Don't refer back to it as if they had. Unless they've corrected or "
+    "replaced that request, give its answer too, briefly, as they asked for it and never got it. "
+    "Don't treat anything they say now as a reply to a question in it."
 )
 # Their voice cut an answer off partway. The transcript holds all of it, so only this says how much
 # reached them (owner, 2026-11-07).
 CUT_OFF_NOTE = (
     "Your previous answer on this call was cut off when the owner spoke. They heard only this much "
     "of it: «{heard}». Don't assume they heard the rest. If they still need it, say it "
-    "now, and don't treat anything they say now as a reply to a question they didn't hear."
+    "now, and don't treat anything they say now as a reply to a question they didn't hear. Just "
+    "answer: don't talk about what they did or didn't hear."
 )
 HEARD_PART_MAX = 1000
 # Turns a call started itself (its requests, the lines it records). The call follows every

@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -145,12 +146,27 @@ export function LastAnswerReveal({
   )
 }
 
+const WORDS_LATE_MS = 1200
+
 /** What to show while the voice talks and its words haven't come: the answer it's reading. */
 function useAnswerWithoutWords(): string {
   const { luciusSpeaking, spoken, spokenLines, connectedAt, sessionId } = useVoiceCall()
   const id = sessionId ?? ''
   const subscribe = useCallback((cb: () => void) => chatSessions.subscribe(id, cb), [id])
   const slice = useSyncExternalStore(subscribe, () => chatSessions.getSlice(id))
+  // The speaking state arrives just before the words do: this waits, or the whole answer flashed
+  // up first on every line (test call, 2026-11-07).
+  const noWords = luciusSpeaking && !spoken && !!id
+  const [wordsLate, setWordsLate] = useState(false)
+  useEffect(() => {
+    if (!noWords) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setWordsLate(false)
+      return
+    }
+    const timer = window.setTimeout(() => setWordsLate(true), WORDS_LATE_MS)
+    return () => window.clearTimeout(timer)
+  }, [noWords])
   // Shown once for a line the voice said without words: the next such line isn't this answer.
   const showing = useRef('')
   const done = useRef('')
@@ -158,7 +174,7 @@ function useAnswerWithoutWords(): string {
     done.current = showing.current
     showing.current = ''
   }
-  if (!luciusSpeaking || spoken || !id) return ''
+  if (!noWords || !wordsLate) return ''
   const his = slice.messages.filter(
     (m) => m.role === 'assistant' && (!m.ts || !connectedAt || m.ts >= connectedAt),
   )

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, render } from '@testing-library/react'
+import { act, cleanup, render } from '@testing-library/react'
 
 const call = vi.hoisted(() => ({
   spokenLines: [] as string[],
@@ -261,7 +261,11 @@ describe('the full screen caption', () => {
       messages: [{ id: 'a1', role: 'assistant', text: 'About two thousand.', ts: 0 } as never],
     }))
     Object.assign(call, { luciusSpeaking: true, spokenLines: [] })
+    vi.useFakeTimers()
     const { container } = render(<VoiceCallCaption />)
+    expect(container.textContent).toBe('') // its words normally land just after the voice starts
+    act(() => void vi.advanceTimersByTime(1300))
+    vi.useRealTimers()
     expect(container.textContent).toBe('About two thousand.')
     expect(container.querySelector('[data-who]')?.getAttribute('data-who')).toBe('lucius')
     cleanup()
@@ -278,7 +282,11 @@ describe('the full screen caption', () => {
       ],
     }))
     Object.assign(call, { luciusSpeaking: true, spokenLines: [] })
-    expect(render(<VoiceCallCaption />).container.firstChild).toBeNull()
+    vi.useFakeTimers()
+    const { container } = render(<VoiceCallCaption />)
+    act(() => void vi.advanceTimersByTime(1300))
+    vi.useRealTimers()
+    expect(container.firstChild).toBeNull()
     chatSessions.apply('s1', (slice) => ({ ...slice, messages: [] }))
   })
 
@@ -288,12 +296,16 @@ describe('the full screen caption', () => {
       messages: [{ id: 'a1', role: 'assistant', text: 'About two thousand.', ts: 0 } as never],
     }))
     Object.assign(call, { luciusSpeaking: true, spokenLines: [] })
+    vi.useFakeTimers()
     const { container, rerender } = render(<VoiceCallCaption />)
+    act(() => void vi.advanceTimersByTime(1300))
     expect(container.textContent).toBe('About two thousand.')
     Object.assign(call, { luciusSpeaking: false })
     rerender(<VoiceCallCaption />)
     Object.assign(call, { luciusSpeaking: true })
     rerender(<VoiceCallCaption />)
+    act(() => void vi.advanceTimersByTime(1300))
+    vi.useRealTimers()
     expect(container.textContent).toBe('')
     chatSessions.apply('s1', (slice) => ({ ...slice, messages: [] }))
   })
