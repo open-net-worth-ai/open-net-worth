@@ -1162,7 +1162,8 @@ class LuciusDesk:
             refused = self._why_no_yes(card, said)
             if refused is not None:
                 return refused or None
-        return await self._resolve_card(card, decision, said)
+        await self._resolve_card(card, decision, said)
+        return None
 
     def _why_no_yes(self, card: Card, said: str) -> str | None:
         """Why this isn't a yes to this card: words for the front voice, ``""`` if a line of ours has
