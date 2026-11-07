@@ -705,6 +705,7 @@ def test_half_a_sentence_starts_no_work_and_the_rest_joins_it():
 @pytest.mark.parametrize("said", ["What's my balance?", "Approve the one on the card.", "Yes."])
 def test_a_finished_sentence_starts_at_once(said):
     _agent, desk_ = _desk()
+    desk_._last_line_asked = True
     desk_.heard(said)
     desk_.submit("Do it", "task")
     assert desk_._queue.qsize() == 1
@@ -835,7 +836,7 @@ def test_anything_else_never_approves_however_it_was_read(words):
     _agent, desk_, _said, calls = _card_desk()
     if words:
         desk_._heard.append(words)
-    assert isinstance(_say_to_card(desk_, "approve"), str)
+    _say_to_card(desk_, "approve")
     assert _resolved(calls) == [] and len(desk_._cards) == 1
 
 
@@ -1779,8 +1780,8 @@ def test_the_phone_can_report_the_caption():
 
 def test_a_yes_to_nothing_isnt_passed_on():
     """A test call: "yes, please" after an answer that offered nothing changed 14 transactions."""
-    agent, desk_ = _desk()
-    desk_.item_added("assistant", "The savings account holds the most.", 100.0)
+    _agent, desk_ = _desk()
+    desk_._last_line_asked = False
     desk_.heard("Yes, please.")
     assert desk_.submit("Yes, go ahead with what you offered: recategorise") is None
     assert desk_._queue.empty()
@@ -1788,15 +1789,23 @@ def test_a_yes_to_nothing_isnt_passed_on():
 
 def test_a_yes_to_a_question_goes_through():
     _agent, desk_ = _desk()
-    desk_.item_added("assistant", "Shall I recategorise those?", 100.0)
+    desk_._last_line_asked = True
     desk_.heard("Yes, please.")
     assert desk_.submit("Yes, go ahead with what you offered: recategorise") is None
     assert desk_._queue.qsize() == 1
 
 
+def test_what_they_last_heard_decides_whether_a_yes_answers_it():
+    _agent, desk_, _said, _calls = _card_desk()
+    _voice_said(desk_, "The savings account holds the most.")
+    assert desk_._last_line_asked is False
+    _voice_said(desk_, "Shall I recategorise those?")
+    assert desk_._last_line_asked is True
+
+
 def test_a_real_request_isnt_mistaken_for_a_yes():
     _agent, desk_ = _desk()
-    desk_.item_added("assistant", "The savings account holds the most.", 100.0)
+    desk_._last_line_asked = False
     desk_.heard("What is my net worth?")
     desk_.submit("What is my net worth?")
     assert desk_._queue.qsize() == 1

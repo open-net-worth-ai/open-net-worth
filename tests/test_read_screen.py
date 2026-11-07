@@ -275,7 +275,7 @@ def test_the_events_stream_keeps_a_requests_own_type():
 
     class Req:
         async def is_disconnected(self):
-            return True
+            return False
 
     async def go():
         stream = data_events_api._event_stream(Req())

@@ -30,6 +30,9 @@ SECRETS = {
     "encryption_password": "ENCRYPTION-SENTINEL",
 }
 
+# Off by default, so these turn it on to reach what they test.
+pytestmark = pytest.mark.flags(actual_budget_sync=True)
+
 
 @pytest.fixture
 def store(db_isolated):
@@ -58,9 +61,9 @@ def _no_secret_in(payload: object) -> None:
 # ── the flag ─────────────────────────────────────────────────────────────────
 
 
-def test_the_flag_ships_on_and_dated():
+def test_the_flag_ships_off_and_dated():
     flag = feature_flags.get("actual_budget_sync")
-    assert flag.default is True and flag.kind == "release"
+    assert flag.default is False and flag.kind == "release"
     assert flag.added == date(2026, 11, 5) and flag.remove_by == date(2027, 3, 1)
     assert actual_flag.ACTUAL_FLAG == "actual_budget_sync"
 

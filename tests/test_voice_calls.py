@@ -652,7 +652,9 @@ def test_a_worker_that_cannot_load_says_why(db_isolated, monkeypatch):
     monkeypatch.setattr(host, "_WORKER_ARGV", (sys.executable, "-c", "raise SystemExit(3)"))
     asyncio.run(service.start())
     status = service.status()
-    assert status["running"] is False and "couldn't start" in status["error"]
+    # Either message says why: the process dying and the start giving up race to report it.
+    assert status["running"] is False
+    assert "couldn't start" in status["error"] or "stopped unexpectedly" in status["error"]
 
 
 class _SlowWorker:
