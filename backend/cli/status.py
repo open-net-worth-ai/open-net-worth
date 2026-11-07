@@ -13,6 +13,7 @@ import http.client
 import io
 import json
 import urllib.request
+from pathlib import Path
 
 from backend.cli.mcp import discovered_base_url
 
@@ -35,6 +36,13 @@ def server_version(base_url: str) -> str | None:
     return version if isinstance(version, str) and version else None
 
 
+def log_file() -> Path:
+    """Where the server writes its log, in a terminal or as a service."""
+    from backend.core.config import get_settings
+
+    return get_settings().log_dir / "app.log"
+
+
 def _service_summary() -> str:
     """What `onw autostart status` reports, on one line."""
     from backend.cli import autostart
@@ -54,6 +62,13 @@ def _print_rows(rows: list[tuple[str, str]]) -> None:
         print(f"  {label + ':':<10}{value}")
 
 
+def _upgrade_row(*, running: bool) -> list[tuple[str, str]]:
+    from backend.cli import upgrade_request
+
+    summary = upgrade_request.summary(upgrade_request.request_path(), running=running)
+    return [("Upgrade", summary)] if summary else []
+
+
 def run_status() -> int:
     from backend.core.config import get_settings
 
@@ -66,13 +81,23 @@ def run_status() -> int:
             [
                 ("URL", base_url),
                 ("Version", version),
+                *_upgrade_row(running=True),
                 ("Folder", folder),
                 ("Service", _service_summary()),
+                ("Logs", str(log_file())),
             ]
         )
         return 0
     print("Open Net Worth is not running")
     checked = [("Checked", f"{base_url} (no answer from Open Net Worth)")] if base_url else []
-    _print_rows([*checked, ("Folder", folder), ("Service", _service_summary())])
+    _print_rows(
+        [
+            *checked,
+            *_upgrade_row(running=False),
+            ("Folder", folder),
+            ("Service", _service_summary()),
+            ("Logs", str(log_file())),
+        ]
+    )
     print("If it was just started, try again in a moment. Otherwise run: onw start --open")
     return 1

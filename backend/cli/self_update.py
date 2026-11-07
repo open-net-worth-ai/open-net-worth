@@ -50,6 +50,9 @@ _UPGRADES_DIR = "open-net-worth-upgrades"
 _DETACHED_PROCESS = 0x00000008
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
 _CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+# Set on `onw start --background`'s server: it has no console to come back in. A variable and not a
+# flag, because a restart hands its arguments to whichever version it just installed.
+DETACHED_ENV = "ONW_DETACHED"
 _ON_WINDOWS = os.name == "nt"  # a test can pick a branch here; changing os.name breaks pathlib
 
 
@@ -159,7 +162,8 @@ def _windows_restart(service: bool) -> tuple[list[str], bool]:
     # A service installed without --auto-upgrade has no --service flag, so its launcher says so.
     if service or os.environ.get(autostart_windows.RUN_BY_TASK_ENV):
         return autostart_windows.restart_command(sys.executable), False
-    return [sys.executable, "-P", "-m", "backend.cli", *_restart_args()], True
+    command = [sys.executable, "-P", "-m", "backend.cli", *_restart_args()]
+    return command, not os.environ.get(DETACHED_ENV)
 
 
 class AutoUpgrader(threading.Thread):
@@ -203,20 +207,22 @@ class AutoUpgrader(threading.Thread):
             except Exception:  # noqa: BLE001 — a failed check must never take the server down
                 logger.exception("Auto-upgrade check failed")
 
-    def attempt(self) -> bool:
-        """One check. True when an upgrade went through and the server has been asked to exit."""
+    def attempt(self, on_stage: Callable[[str], None] = lambda _stage: None) -> bool:
+        """One check. True when an upgrade went through and the server has been asked to exit.
+        `on_stage` hears each `upgrade_request` stage, for whoever is waiting on this."""
         with self._attempting:
-            return self.installed or self.handed_off or self._attempt()
+            return self.installed or self.handed_off or self._attempt(on_stage)
 
-    def _attempt(self) -> bool:
+    def _attempt(self, on_stage: Callable[[str], None]) -> bool:
         release = latest_release()
         if not is_newer(release.version, APP_VERSION):
             return False
         logger.info("Auto-upgrade: %s is out, this is %s", release.version, APP_VERSION)
+        on_stage(upgrade_request.PREPARING)
         wheel = download_wheel(release, self.installer.directory)
         job = _job(self.installer, release, wheel)
         _prove_it_starts(job, self.installer, logger.warning)
-        if not self._wait_until_idle():
+        if not self._wait_until_idle(on_stage):
             return False
         if not wheel_matches(wheel, release):  # the idle wait can last hours
             raise UpgradeError(f"The downloaded {release.version} changed on disk.")
@@ -225,7 +231,9 @@ class AutoUpgrader(threading.Thread):
             spawn_windows_helper(job, self.installer.directory, restart, new_console)
             self.handed_off = True
         else:
+            on_stage(upgrade_request.INSTALLING)
             self._install(job, release)
+            on_stage(upgrade_request.RESTARTING)
             self._drain()
         if self.finished.is_set():  # the server stopped meanwhile: stay stopped
             return True
@@ -248,8 +256,12 @@ class AutoUpgrader(threading.Thread):
         with self._installing:
             pass
 
-    def _wait_until_idle(self) -> bool:
+    def _wait_until_idle(self, on_stage: Callable[[str], None]) -> bool:
+        said = False
         while not self.is_idle():
+            if not said:
+                on_stage(upgrade_request.WAITING)
+                said = True
             if self.finished.wait(self.idle_poll):
                 return False
         return not self.finished.is_set()
@@ -309,7 +321,10 @@ def upgrade() -> int:
     stale = server is not None and _is_behind(server.version, release.version)
     if server is not None and (newer or stale):
         answer = upgrade_request.ask_server(
-            upgrade_request.request_path(), server, release.version, handoff=_ON_WINDOWS
+            upgrade_request.request_path(),
+            server,
+            release.version,
+            handoff_log=installer.directory / "upgrade.log" if _ON_WINDOWS else None,
         )
         if answer is not None:
             return answer

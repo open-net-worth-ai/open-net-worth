@@ -9,8 +9,9 @@ authenticate and to lock down, and whoever can write this folder can already rea
 in the file is trusted. It can only start what `--auto-upgrade` does, which installs the newest
 signed release and nothing else.
 
-The file goes requested (written by `onw upgrade`) → working (the server heard) → removed once the
-server is on its way out, or failed, with a message, for `onw upgrade` to print and remove.
+The file goes requested (written by `onw upgrade`) → working (the server heard, with the stage it's
+at) → removed once the server is on its way out, or failed, with a message, for `onw upgrade` to
+print and remove. If that command has gone, the failure stays for `onw status` to show.
 """
 
 from __future__ import annotations
@@ -28,19 +29,32 @@ from typing import Protocol
 
 from backend.cli.mcp import discovered_base_url
 from backend.cli.release_check import UpgradeError
-from backend.cli.status import server_version
+from backend.cli.status import log_file, server_version
 from backend.core import platform_fs
 
 logger = logging.getLogger(__name__)
 
 REQUEST_NAME = ".upgrade-request.json"
+STOP_NAME = ".stop-request"
 REQUESTED = "requested"
 WORKING = "working"
 FAILED = "failed"
 UNREADABLE = "unreadable"
+PREPARING = "preparing"
+WAITING = "waiting"
+INSTALLING = "installing"
+RESTARTING = "restarting"
+# Fixed text keyed by stage: what's in the file is only ever matched against these.
+STAGE_TEXT = {
+    PREPARING: "Downloading it and checking that it starts in a test copy",
+    WAITING: "Waiting for Lucius, Automations and imports to finish",
+    INSTALLING: "Installing it",
+    RESTARTING: "Restarting",
+}
 WATCH_SECONDS = 2.0  # how long a request can sit unnoticed
 HEARD_SECONDS = 10.0  # longer than a few watch polls, so silence means nothing is listening
 REPORT_SECONDS = 5 * 60.0  # download, test copy, install and restart, on an idle server
+RESTART_SECONDS = 3 * 60.0  # the file has gone, so the server should be back: boot and migrations
 CLIENT_POLL_SECONDS = 1.0
 _MAX_REQUEST_BYTES = 64_000
 _CLEAR_ATTEMPTS = 10
@@ -53,15 +67,23 @@ def request_path() -> Path:
     return get_settings().data_dir.parent / REQUEST_NAME
 
 
+def stop_path() -> Path:
+    """`onw stop` writes this, and the server removes it to say it heard."""
+    return request_path().with_name(STOP_NAME)
+
+
 def read_state(path: Path) -> tuple[str | None, str]:
     """``(state, message)``. The state is None when there's no file at all."""
     try:
         with path.open(encoding="utf-8") as file:
             record = json.loads(file.read(_MAX_REQUEST_BYTES))
-        return str(record["state"]), str(record.get("message", ""))
+        message = str(record.get("message", ""))
+        # A terminal shows this: anything that can write the folder can write the file.
+        printable = "".join(ch for ch in message if ch.isprintable() or ch == "\n")
+        return str(record["state"]), printable
     except FileNotFoundError:
         return None, ""
-    except (OSError, ValueError, KeyError, TypeError):
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return UNREADABLE, ""
 
 
@@ -78,17 +100,28 @@ def clear(path: Path) -> None:
     path.unlink(missing_ok=True)
 
 
+def summary(path: Path, *, running: bool) -> str | None:
+    """A line for `onw status`. An upgrade "in progress" with no server running is a leftover."""
+    state, message = read_state(path)
+    if state == FAILED:
+        return f"failed. {message}"
+    if not running or state not in (REQUESTED, WORKING):
+        return None
+    stage = STAGE_TEXT.get(message)
+    return f"in progress. {stage}" if stage else "in progress"
+
+
 # ── the server's side ─────────────────────────────────────────────────────────
 
 
 class Upgrader(Protocol):
     finished: threading.Event
 
-    def attempt(self) -> bool: ...
+    def attempt(self, on_stage: Callable[[str], None]) -> bool: ...
 
 
 class RequestWatcher(threading.Thread):
-    """Watches for a request while the server runs and starts one upgrade attempt for it."""
+    """Watches for `onw upgrade` and `onw stop` while the server runs."""
 
     def __init__(
         self,
@@ -96,12 +129,16 @@ class RequestWatcher(threading.Thread):
         make_upgrader: Callable[[], Upgrader],
         ready: Callable[[], bool] = lambda: True,
         poll: float = WATCH_SECONDS,
+        stop_file: Path | None = None,
+        request_stop: Callable[[], None] = lambda: None,
     ) -> None:
         super().__init__(name="upgrade-requests", daemon=True)
         self.path = path
         self.make_upgrader = make_upgrader
         self.ready = ready
         self.poll = poll
+        self.stop_file = stop_file
+        self.request_stop = request_stop
         self.finished = threading.Event()
         self.upgrader: Upgrader | None = None
 
@@ -113,12 +150,23 @@ class RequestWatcher(threading.Thread):
                 if self.finished.wait(self.poll):
                     return
             clear(self.path)  # from before this server started, so whoever asked has gone
+            if self.stop_file is not None:
+                clear(self.stop_file)
             while not self.finished.wait(self.poll):
-                if read_state(self.path)[0] == REQUESTED and self.handle():
+                if self._stop_was_asked() or (
+                    read_state(self.path)[0] == REQUESTED and self.handle()
+                ):
                     return
         except OSError:
             # A request it can't answer would be acted on again at every poll.
             logger.exception("Upgrade requests are off for this run: can't use %s", self.path)
+
+    def _stop_was_asked(self) -> bool:
+        if self.stop_file is None or not self.stop_file.exists():
+            return False
+        clear(self.stop_file)  # first: a file it can't remove would stop every server after this
+        self.request_stop()
+        return True
 
     def handle(self) -> bool:
         """One request. True when the server has been asked to exit into the new version."""
@@ -136,16 +184,22 @@ class RequestWatcher(threading.Thread):
         try:
             if self.upgrader is None:
                 self.upgrader = self.make_upgrader()
-            if self.upgrader.attempt():
+            if self.upgrader.attempt(self._note_stage):
                 return None
         except UpgradeError as exc:
             return exc.message
         except Exception:  # noqa: BLE001 — a failed upgrade must never take the server down
             logger.exception("Upgrade request failed")
-            return "It failed unexpectedly. The server's log (app.log) has the details."
+            return f"It failed unexpectedly. The details are in {log_file()}"
         if self.finished.is_set():
             return "The server stopped before it could upgrade."
         return "There's no newer version to install."
+
+    def _note_stage(self, stage: str) -> None:
+        try:
+            write_state(self.path, WORKING, stage)
+        except OSError:  # only the report suffers: the upgrade itself is fine
+            logger.warning("Couldn't record the upgrade's progress in %s", self.path)
 
     def _clear_after_upgrade(self) -> None:
         """The upgrade is going ahead now, whatever happens here. Windows refuses to remove a file
@@ -189,28 +243,54 @@ def _heard(path: Path, wait: float, poll: float) -> bool:
     return False
 
 
-def _report(path: Path, server: RunningServer, *, handoff: bool, wait: float, poll: float) -> int:
+def _did_not_come_back(path: Path) -> int:
+    print("The server hasn't come back on the new version.", file=sys.stderr)
+    print("Check with: onw status", file=sys.stderr)
+    print(f"Its log says why: {log_file()}", file=sys.stderr)
+    return 1
+
+
+def _report(
+    path: Path,
+    server: RunningServer,
+    *,
+    handoff_log: Path | None,
+    wait: float,
+    restart_wait: float,
+    poll: float,
+) -> int:
     deadline = time.monotonic() + wait
-    while time.monotonic() < deadline:
+    shown = ""
+    gone_at: float | None = None
+    while True:
         state, message = read_state(path)
         if state == FAILED:
             clear(path)
             print(f"The server couldn't upgrade: {message}", file=sys.stderr)
             print("To install it by hand, stop the server and run: onw upgrade", file=sys.stderr)
             return 1
-        if state is None and handoff:
+        if state == WORKING and message in STAGE_TEXT and message != shown:
+            shown = message
+            print(f"    {STAGE_TEXT[message]} ...", flush=True)
+        if state is None and handoff_log is not None:
             # This command runs from the install too: leave at once, so it doesn't hold it locked.
             print("==> It's closing so the new version can install, then it starts again.")
-            print("    Check with: onw status")
+            print(f"    Check with: onw status. If it doesn't come back, see {handoff_log}")
             return 0
+        if state is None and gone_at is None:
+            gone_at = time.monotonic()
         version = server_version(server.url)
         if version and version != server.version:
             print(f"==> Now running {version} at {server.url}.")
             return 0
+        if gone_at is not None:
+            if time.monotonic() - gone_at > restart_wait:
+                return _did_not_come_back(path)
+        elif time.monotonic() > deadline:
+            print("==> It isn't finished, and the server carries on without this command.")
+            print("    See how it's going with: onw status")
+            return 0
         time.sleep(poll)
-    print("==> It isn't finished yet, and doesn't need this command to carry on.")
-    print("    Check with: onw status")
-    return 0
 
 
 def ask_server(
@@ -218,15 +298,17 @@ def ask_server(
     server: RunningServer,
     target: str,
     *,
-    handoff: bool,
+    handoff_log: Path | None = None,
     heard_wait: float = HEARD_SECONDS,
     report_wait: float = REPORT_SECONDS,
+    restart_wait: float = RESTART_SECONDS,
     poll: float = CLIENT_POLL_SECONDS,
 ) -> int | None:
     """Ask the server to upgrade and report how it went. None when nothing is listening: a server
     too old to know about this, or one not started with `onw start`.
 
-    `handoff` is for Windows, where the server exits before anything installs."""
+    `handoff_log` is for Windows, where the server exits before anything installs, and that log is
+    the only place a failed install shows."""
     if read_state(path)[0] == WORKING:
         # It only reads requests between attempts, so a new one would look unheard, and a second
         # install would race the one it's waiting to do.
@@ -235,15 +317,23 @@ def ask_server(
         try:
             write_state(path, REQUESTED)
         except OSError as exc:
-            logger.warning("Can't ask the server to upgrade: %s", exc)
+            print(f"Can't ask the server to upgrade: {exc}", file=sys.stderr)
             return None
-        print(f"==> Asking the server at {server.url} to upgrade to {target} ...")
+        print(f"==> Asking the server at {server.url} to upgrade to {target} ...", flush=True)
         if not _heard(path, heard_wait, poll):
             clear(path)
+            print("    It didn't answer: it's on a version from before it could be asked, or it")
+            print("    wasn't started with `onw start`.")
             return None
-    print("    It installs and restarts once Lucius, Automations and imports have finished.")
     try:
-        return _report(path, server, handoff=handoff, wait=report_wait, poll=poll)
+        return _report(
+            path,
+            server,
+            handoff_log=handoff_log,
+            wait=report_wait,
+            restart_wait=restart_wait,
+            poll=poll,
+        )
     except KeyboardInterrupt:
-        print("\n==> The server carries on without this command. Check with: onw status")
+        print("\n==> The server carries on without this command. See how with: onw status")
         return 0

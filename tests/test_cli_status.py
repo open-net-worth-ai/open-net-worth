@@ -173,3 +173,46 @@ def test_service_summary_on_a_platform_without_autostart(monkeypatch, capsys):
 
     assert cli_status._service_summary() == "not available on this platform"
     assert capsys.readouterr().err == ""
+
+
+def test_it_names_the_log_whether_or_not_the_server_is_running(root, server_answering, capsys):
+    from backend.core.config import get_settings
+
+    log = str(get_settings().log_dir / "app.log")
+    assert main(["status"]) == 1
+    assert log in capsys.readouterr().out
+
+    _write_lock(root, server_answering(_health()))
+    assert main(["status"]) == 0
+    assert log in capsys.readouterr().out
+
+
+def test_a_running_server_shows_an_upgrade_under_way(root, server_answering, capsys):
+    from backend.cli import upgrade_request as requests
+
+    _write_lock(root, server_answering(_health()))
+    requests.write_state(requests.request_path(), requests.WORKING, requests.INSTALLING)
+
+    assert main(["status"]) == 0
+
+    assert "in progress. Installing it" in capsys.readouterr().out
+
+
+def test_a_failure_the_command_was_gone_for_is_still_shown(root, capsys):
+    from backend.cli import upgrade_request as requests
+
+    requests.write_state(requests.request_path(), requests.FAILED, "It's offline.")
+
+    assert main(["status"]) == 1
+
+    assert "failed. It's offline." in capsys.readouterr().out
+
+
+def test_an_upgrade_in_progress_with_no_server_is_a_leftover(root, capsys):
+    from backend.cli import upgrade_request as requests
+
+    requests.write_state(requests.request_path(), requests.WORKING, requests.INSTALLING)
+
+    assert main(["status"]) == 1
+
+    assert "in progress" not in capsys.readouterr().out

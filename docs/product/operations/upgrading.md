@@ -70,8 +70,11 @@ there is.
 - **If the app is running,** the app does the update itself. It waits until Lucius, your Automations
   and any restore or import have finished, installs the new version and restarts, in the same
   terminal if you started it in one (on Windows, in a new console window), or as the boot service.
-  The command tells you when the new version is running. If the app is busy for longer than a few
-  minutes the command stops waiting, and the update carries on without it.
+  The command shows each step and tells you when the new version is running. If the app is busy for
+  longer than a few minutes the command stops waiting, and the update carries on without it:
+  `onw status` shows how it's going, and why it failed if it did.
+- **If the new version doesn't come back,** the command says so, names the log and exits with an
+  error code. `onw status` also shows where the log is.
 - **If the app isn't running,** it installs the new version, which is used the next time the app
   starts.
 - **If the running server is older than the install,** say after an update that didn't restart it,

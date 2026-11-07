@@ -41,7 +41,7 @@ class FakeUpgrader:
         self.finished = threading.Event()
         self.attempts = 0
 
-    def attempt(self):
+    def attempt(self, on_stage=lambda _stage: None):
         self.attempts += 1
         result = self.results.pop(0)
         if isinstance(result, Exception):
@@ -105,7 +105,7 @@ def test_it_says_it_heard_before_it_starts_work(path):
     seen = []
 
     class Looks(FakeUpgrader):
-        def attempt(self):
+        def attempt(self, on_stage=None):
             seen.append(read_state(path)[0])
             return True
 
@@ -217,8 +217,8 @@ def test_a_request_it_cannot_answer_is_never_acted_on(path, monkeypatch):
     def refuse(*_a, **_kw):
         raise PermissionError("read-only folder")
 
-    path.write_text(json.dumps({"state": REQUESTED}), encoding="utf-8")
     monkeypatch.setattr(upgrade_request, "write_state", refuse)
+    path.write_text(json.dumps({"state": REQUESTED}), encoding="utf-8")
     watcher.join(5)
 
     assert not watcher.is_alive()
@@ -229,7 +229,7 @@ def test_a_request_it_cannot_answer_is_never_acted_on(path, monkeypatch):
 
 
 def test_silence_means_nothing_is_listening_and_leaves_no_request(path, capsys):
-    assert ask_server(path, SERVER, "9.9.9", handoff=False, **FAST) is None
+    assert ask_server(path, SERVER, "9.9.9", **FAST) is None
 
     assert not path.exists()
     assert "upgrading" not in capsys.readouterr().out
@@ -241,7 +241,7 @@ def test_a_folder_it_cannot_write_counts_as_not_listening(path, monkeypatch):
 
     monkeypatch.setattr(upgrade_request, "write_state", refuse)
 
-    assert ask_server(path, SERVER, "9.9.9", handoff=False, **FAST) is None
+    assert ask_server(path, SERVER, "9.9.9", **FAST) is None
 
 
 @pytest.fixture
@@ -268,7 +268,7 @@ LONGER = {"heard_wait": 5.0, "report_wait": 5.0, "poll": 0.002}
 def test_it_reports_the_version_the_server_comes_back_on(path, serve_requests, capsys):
     serve_requests(FakeUpgrader(True), versions=[None, "9.9.9"])
 
-    assert ask_server(path, SERVER, "9.9.9", handoff=False, **LONGER) == 0
+    assert ask_server(path, SERVER, "9.9.9", **LONGER) == 0
 
     assert "Now running 9.9.9" in capsys.readouterr().out
     assert not path.exists()
@@ -279,7 +279,7 @@ def test_it_ignores_the_old_version_still_answering_during_the_restart(
 ):
     serve_requests(FakeUpgrader(True), versions=["1.0.0", "1.0.0", None, "9.9.9"])
 
-    assert ask_server(path, SERVER, "9.9.9", handoff=False, **LONGER) == 0
+    assert ask_server(path, SERVER, "9.9.9", **LONGER) == 0
 
     assert "Now running 9.9.9" in capsys.readouterr().out
 
@@ -287,7 +287,7 @@ def test_it_ignores_the_old_version_still_answering_during_the_restart(
 def test_it_prints_a_failure_exits_non_zero_and_removes_the_report(path, serve_requests, capsys):
     serve_requests(FakeUpgrader(UpgradeError("It's offline.")))
 
-    assert ask_server(path, SERVER, "9.9.9", handoff=False, **LONGER) == 1
+    assert ask_server(path, SERVER, "9.9.9", **LONGER) == 1
 
     err = capsys.readouterr().err
     assert "It's offline." in err
@@ -300,7 +300,9 @@ def test_windows_leaves_at_once_so_it_does_not_hold_the_install(path, serve_requ
     started = time.monotonic()
     waits = {"heard_wait": 5, "report_wait": 30, "poll": 0.002}
 
-    assert ask_server(path, SERVER, "9.9.9", handoff=True, **waits) == 0
+    assert (
+        ask_server(path, SERVER, "9.9.9", handoff_log=path.with_name("upgrade.log"), **waits) == 0
+    )
 
     assert time.monotonic() - started < 10
     assert "onw status" in capsys.readouterr().out
@@ -312,17 +314,17 @@ def test_a_busy_server_outlasts_the_wait_and_the_command_says_it_carries_on(
     release_it = threading.Event()
 
     class Busy(FakeUpgrader):
-        def attempt(self):
+        def attempt(self, on_stage=None):
             release_it.wait(5)
             return False
 
     serve_requests(Busy())
     waits = {"heard_wait": 5, "report_wait": 0.05, "poll": 0.002}
-    code = ask_server(path, SERVER, "9.9.9", handoff=False, **waits)
+    code = ask_server(path, SERVER, "9.9.9", **waits)
     release_it.set()
 
     assert code == 0
-    assert "doesn't need this command" in capsys.readouterr().out
+    assert "carries on without this command" in capsys.readouterr().out
 
 
 # ── onw upgrade ───────────────────────────────────────────────────────────────
@@ -355,8 +357,8 @@ class Upgrade:
         )
         monkeypatch.setattr(upgrade_request, "running_server", lambda: server)
 
-        def ask(_path, _server, target, *, handoff):
-            self.asked.append((target, handoff))
+        def ask(_path, _server, target, *, handoff_log):
+            self.asked.append((target, handoff_log is not None))
             return answer
 
         monkeypatch.setattr(upgrade_request, "ask_server", ask)
@@ -704,7 +706,7 @@ def test_a_second_command_joins_an_upgrade_under_way_rather_than_install_its_own
     command would go on to install beside the server."""
     write_state(path, WORKING)
 
-    code = ask_server(path, SERVER, "9.9.9", handoff=False, heard_wait=0, report_wait=0, poll=0)
+    code = ask_server(path, SERVER, "9.9.9", heard_wait=0, report_wait=0, poll=0)
 
     assert code == 0
     assert read_state(path)[0] == WORKING
@@ -808,3 +810,279 @@ def test_a_failed_install_seen_while_stopping_does_not_hang(monkeypatch, tmp_pat
 
     upgrader.finish_install()
     assert upgrader.exit_code() == 0
+
+
+# ── saying what's happening ───────────────────────────────────────────────────
+
+
+def test_the_upgrader_names_each_stage_in_order(monkeypatch, tmp_path):
+    Upgrade(monkeypatch, tmp_path)
+    monkeypatch.setattr(self_update, "wheel_matches", lambda _p, _r: True)
+    upgrader = upgrader_for(tmp_path)
+    stages = []
+
+    upgrader.attempt(stages.append)
+
+    assert stages == [
+        upgrade_request.PREPARING,
+        upgrade_request.INSTALLING,
+        upgrade_request.RESTARTING,
+    ]
+
+
+def test_it_says_it_is_waiting_only_when_the_server_is_busy(monkeypatch, tmp_path):
+    Upgrade(monkeypatch, tmp_path)
+    monkeypatch.setattr(self_update, "wheel_matches", lambda _p, _r: True)
+    answers = iter([False, False, True])
+    upgrader = upgrader_for(tmp_path)
+    upgrader.is_idle = lambda: next(answers, True)
+    upgrader.idle_poll = 0.001
+    stages = []
+
+    upgrader.attempt(stages.append)
+
+    assert stages[:2] == [upgrade_request.PREPARING, upgrade_request.WAITING]
+
+
+def test_windows_never_says_installing_because_a_helper_does_that(monkeypatch, tmp_path):
+    Upgrade(monkeypatch, tmp_path)
+    monkeypatch.setattr(self_update, "wheel_matches", lambda _p, _r: True)
+    monkeypatch.setattr(self_update, "_ON_WINDOWS", True)
+    monkeypatch.setattr(self_update, "_windows_restart", lambda _service: (["again"], False))
+    stages = []
+
+    upgrader_for(tmp_path).attempt(stages.append)
+
+    assert stages == [upgrade_request.PREPARING]
+
+
+def test_each_stage_reaches_the_command_once(path, serve_requests, capsys):
+    seen = threading.Event()
+
+    class Staged(FakeUpgrader):
+        def attempt(self, on_stage=None):
+            for stage in (upgrade_request.PREPARING, upgrade_request.WAITING):
+                on_stage(stage)
+                time.sleep(0.02)
+            seen.set()
+            return True
+
+    serve_requests(Staged(), versions=[])
+    waits = {"heard_wait": 5, "restart_wait": 0.01, "poll": 0.001}
+
+    assert ask_server(path, SERVER, "9.9.9", **waits) == 1
+
+    out = capsys.readouterr().out
+    assert seen.is_set()
+    assert out.count(upgrade_request.STAGE_TEXT[upgrade_request.PREPARING]) == 1
+    assert out.count(upgrade_request.STAGE_TEXT[upgrade_request.WAITING]) == 1
+
+
+def test_a_stage_it_does_not_know_is_never_printed(path, capsys):
+    write_state(path, WORKING, "rm -rf everything")
+
+    ask_server(path, SERVER, "9.9.9", heard_wait=0, report_wait=0, poll=0)
+
+    assert "rm -rf" not in capsys.readouterr().out
+
+
+def test_a_problem_recording_a_stage_does_not_stop_the_upgrade(path, monkeypatch):
+    class Staged(FakeUpgrader):
+        def attempt(self, on_stage=None):
+            on_stage(upgrade_request.INSTALLING)
+            return True
+
+    watcher = RequestWatcher(path, lambda: Staged())
+    real_write = upgrade_request.write_state
+
+    def refuse_stages(target, state, message=""):
+        if message:
+            raise PermissionError("read-only folder")
+        real_write(target, state, message)
+
+    monkeypatch.setattr(upgrade_request, "write_state", refuse_stages)
+
+    assert watcher.handle() is True
+
+
+def test_control_characters_never_reach_the_terminal(path):
+    path.write_text(
+        json.dumps({"state": FAILED, "message": "bad\x1b[2J line\nnext"}), encoding="utf-8"
+    )
+
+    assert read_state(path) == (FAILED, "bad[2J line\nnext")
+
+
+def test_a_server_that_does_not_come_back_is_a_failure_that_names_the_log(
+    path, monkeypatch, capsys
+):
+    monkeypatch.setattr(upgrade_request, "server_version", lambda _url: None)
+    monkeypatch.setattr(upgrade_request, "log_file", lambda: path.with_name("app.log"))
+
+    code = upgrade_request._report(
+        path, SERVER, handoff_log=None, wait=5, restart_wait=0.01, poll=0.001
+    )
+
+    assert code == 1
+    err = capsys.readouterr().err
+    assert "hasn't come back" in err
+    assert str(path.with_name("app.log")) in err
+
+
+def test_the_wait_for_a_restart_starts_when_the_server_leaves(path, monkeypatch, capsys):
+    """Time spent waiting for idle must not use up the time a slow boot gets."""
+    answers = iter([None, None, "9.9.9"])
+    monkeypatch.setattr(upgrade_request, "server_version", lambda _url: next(answers))
+
+    code = upgrade_request._report(
+        path, SERVER, handoff_log=None, wait=0, restart_wait=5, poll=0.001
+    )
+
+    assert code == 0
+    assert "Now running 9.9.9" in capsys.readouterr().out
+
+
+def test_windows_names_the_log_a_failed_install_would_be_in(path, capsys):
+    log = path.with_name("upgrade.log")
+
+    code = upgrade_request._report(
+        path, SERVER, handoff_log=log, wait=5, restart_wait=5, poll=0.001
+    )
+
+    assert code == 0
+    assert str(log) in capsys.readouterr().out
+
+
+def test_silence_is_explained_before_anything_else_happens(path, capsys):
+    assert ask_server(path, SERVER, "9.9.9", **FAST) is None
+
+    out = capsys.readouterr().out
+    assert "It didn't answer" in out
+    assert "onw start" in out
+
+
+@pytest.mark.parametrize(
+    ("state", "message", "running", "expected"),
+    [
+        (None, "", True, None),
+        (REQUESTED, "", True, "in progress"),
+        (WORKING, upgrade_request.WAITING, True, "in progress. Waiting for Lucius"),
+        (WORKING, "unknown", True, "in progress"),
+        (WORKING, upgrade_request.WAITING, False, None),
+        (FAILED, "It's offline.", True, "failed. It's offline."),
+        (FAILED, "It's offline.", False, "failed. It's offline."),
+    ],
+)
+def test_status_says_how_an_upgrade_is_going(path, state, message, running, expected):
+    if state:
+        write_state(path, state, message)
+
+    summary = upgrade_request.summary(path, running=running)
+
+    assert (summary is None) if expected is None else summary.startswith(expected)
+
+
+# ── a failed boot reaches the log ─────────────────────────────────────────────
+
+
+def test_a_refused_boot_is_written_to_the_log_a_service_would_be_sent_to(
+    monkeypatch, tmp_path, plain_serve
+):
+    """A real uvicorn and a lifespan that refuses, as the database check does. stderr isn't enough:
+    a service on macOS or Windows sends it nowhere, and the app's file handler isn't attached yet."""
+    from backend.cli import status
+
+    log = tmp_path / "logs" / "app.log"
+    monkeypatch.setattr(status, "log_file", lambda: log)
+
+    async def refusing(scope, receive, send):
+        assert scope["type"] == "lifespan"
+        await receive()
+        await send({"type": "lifespan.startup.failed", "message": "synthetic refusal"})
+
+    settings = SimpleNamespace(host="127.0.0.1", port=0)
+
+    with pytest.raises(SystemExit) as exited:  # how uvicorn leaves when a boot fails
+        serve._serve(refusing, settings, None, False)
+
+    assert exited.value.code == serve._STARTUP_FAILURE
+    assert "synthetic refusal" in log.read_text(encoding="utf-8")
+
+
+def test_the_handler_is_gone_once_the_server_has_stopped(monkeypatch, plain_serve):
+    import logging
+
+    FakeUvicorn(monkeypatch, lambda _server: None)
+    before = list(logging.getLogger("uvicorn.error").handlers)
+
+    plain_serve.run()
+
+    assert logging.getLogger("uvicorn.error").handlers == before
+
+
+def test_errors_after_boot_are_left_to_the_apps_own_log(monkeypatch, tmp_path):
+    import logging
+
+    from backend.cli import status
+
+    log = tmp_path / "app.log"
+    monkeypatch.setattr(status, "log_file", lambda: log)
+    handler = serve._BootFailureLog(is_up=lambda: True)
+
+    handler.emit(logging.LogRecord("uvicorn.error", logging.ERROR, "", 0, "later", None, None))
+
+    assert not log.exists()
+
+
+def test_a_log_it_cannot_write_does_not_change_how_the_boot_fails(monkeypatch, tmp_path):
+    import logging
+
+    from backend.cli import status
+
+    blocker = tmp_path / "a-file"
+    blocker.write_text("", encoding="utf-8")
+    monkeypatch.setattr(status, "log_file", lambda: blocker / "logs" / "app.log")
+    handler = serve._BootFailureLog(is_up=lambda: False)
+
+    handler.emit(logging.LogRecord("uvicorn.error", logging.ERROR, "", 0, "boom", None, None))
+
+
+# ── onw stop ──────────────────────────────────────────────────────────────────
+
+
+def test_stopping_waits_for_a_write_to_finish(monkeypatch, plain_serve):
+    exited_while_busy = []
+    stop_file = upgrade_request.stop_path()
+
+    def during(server):
+        writes = server.config.app
+        writes.count = 1
+        time.sleep(0.02)  # past the watcher's clearing of anything from before it started
+        stop_file.write_text("stop\n", encoding="utf-8")
+        assert wait_until(lambda: not stop_file.exists())
+        time.sleep(0.05)
+        exited_while_busy.append(server.should_exit)
+        writes.count = 0
+        assert wait_until(lambda: server.should_exit)
+
+    fake = FakeUvicorn(monkeypatch, during)
+
+    assert plain_serve.run() == 0
+
+    assert exited_while_busy == [False]
+    assert fake.server.config.timeout_graceful_shutdown == serve._SHUTDOWN_GRACE_SECONDS
+
+
+def test_a_stuck_write_cannot_hold_a_stop_forever(monkeypatch, plain_serve):
+    monkeypatch.setattr(serve, "_STOP_WAITS_FOR_WRITES_SECONDS", 0.01)
+    stop_file = upgrade_request.stop_path()
+
+    def during(server):
+        server.config.app.count = 1
+        time.sleep(0.02)
+        stop_file.write_text("stop\n", encoding="utf-8")
+        assert wait_until(lambda: server.should_exit)
+
+    FakeUvicorn(monkeypatch, during)
+
+    assert plain_serve.run() == 0

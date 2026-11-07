@@ -4,9 +4,11 @@
 editable mode) puts this on the PATH. It sits at the very top of the import stack: it may import
 anything below it (backend.main included); nothing below may import it.
 
-    onw start [--open] [--autostart] [--auto-upgrade]
+    onw start [--open] [--background] [--autostart] [--auto-upgrade]
                                          run the app — API + built frontend, one process
+    onw stop                             stop it
     onw status                           whether it's running, its URL, version and folder
+    onw logs [--follow] [--lines N]      show the end of its log
     onw autostart install|stop|status    start at login/boot and restart on crash
     onw reset-password                   set a new password when the old one is forgotten
     onw mcp                              stdio MCP bridge for Claude Desktop, Cursor, …
@@ -39,6 +41,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--open", action="store_true", help="open the app in your browser once it is up"
     )
     start.add_argument(
+        "--background",
+        action="store_true",
+        help="free this terminal and keep it running until `onw stop` or a reboot",
+    )
+    start.add_argument(
         "--autostart",
         action="store_true",
         help="run as a service that starts at login/boot and restarts on crash, not in this terminal",
@@ -50,7 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     start.add_argument("--service", action="store_true", help=argparse.SUPPRESS)  # the boot service
 
+    sub.add_parser("stop", help="stop the running app")
     sub.add_parser("status", help="show whether it's running, its URL, version and folder")
+    logs = sub.add_parser("logs", help="show the end of the app's log")
+    logs.add_argument("-f", "--follow", action="store_true", help="keep showing what it adds")
+    logs.add_argument("-n", "--lines", type=int, default=50, help="how many lines (default: 50)")
 
     auto = sub.add_parser("autostart", help="run at login/boot and restart on crash")
     auto.add_argument("action", choices=("install", "stop", "status"))
@@ -114,7 +125,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             autostart=args.autostart,
             auto_upgrade=args.auto_upgrade,
             service=args.service,
+            background=args.background,
         )
+    if args.command == "stop":
+        from backend.cli.background import stop
+
+        return stop()
+    if args.command == "logs":
+        from backend.cli.background import logs as show_logs
+
+        return show_logs(follow=args.follow, lines=args.lines)
     if args.command == "status":
         from backend.cli.status import run_status
 
