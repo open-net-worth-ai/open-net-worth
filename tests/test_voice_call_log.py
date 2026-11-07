@@ -1714,7 +1714,6 @@ def test_a_sound_that_cut_an_answer_off_doesnt_end_it(monkeypatch, said):
     _agent, desk_ = _talked_over_desk(monkeypatch)
     _cut_off_by(desk_, said)
     assert desk_._session.said == ["The second one is long."]
-    assert desk_._cut_off == ""
 
 
 @pytest.mark.parametrize("said", ["Hold on a second.", "Stop there", "What did you say?", "vâng ạ"])
@@ -1742,13 +1741,16 @@ def test_a_noisy_line_cant_loop_on_a_cut_off_answer(monkeypatch):
     assert desk_._resays == agent.MAX_RESAYS
 
 
-def test_words_said_before_this_answer_dont_count_against_it():
+def test_a_new_answer_starts_clean():
+    """Words from before it don't count against it, and once it's said, nothing was cut off."""
     agent, desk_ = _desk()
     desk_._session = _QuietSession()
     desk_._session.said = []
     desk_.heard("How much did I spend?")
+    desk_._cut_off = "You spent"
     agent.LuciusDesk._say(desk_, "You spent a lot.", answer=True)
     assert desk_._said_since_answer == ""
+    assert desk_._cut_off == ""
 
 
 @pytest.mark.parametrize(
