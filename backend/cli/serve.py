@@ -2,9 +2,9 @@
 
 `start` is the same boot as `python3 -m backend.main` (fail-closed migrations, the working-folder
 claim, one uvicorn process serving API + SPA + docs) with conveniences on top: flag overrides for
-host/port, `--open`, which launches the browser once /api/health answers, `--autostart`, which runs
-it as the boot service instead of in this terminal, and `--auto-upgrade`, which keeps it on the
-newest release.
+host/port, `--open`, which launches the browser once /api/health answers, `--background`, which runs
+it without this terminal (`background`), `--autostart`, which runs it as the boot service instead,
+and `--auto-upgrade`, which keeps it on the newest release.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ from collections.abc import Callable
 from backend.core.version import APP_VERSION
 
 _SHUTDOWN_GRACE_SECONDS = 10  # an open tab's event stream would otherwise hold the exit forever
+_STOP_WAITS_FOR_WRITES_SECONDS = 60
 _STARTUP_FAILURE = 3  # uvicorn's own exit code for a server that never came up
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 _UVICORN_ERRORS = "uvicorn.error"
@@ -79,7 +80,11 @@ def start(
     autostart: bool = False,
     auto_upgrade: bool = False,
     service: bool = False,
+    background: bool = False,
 ) -> int:
+    if background and autostart:
+        print("--autostart already runs it in the background. Use one of them.", file=sys.stderr)
+        return 2
     # Settings are read from the environment once, at first import — the overrides must land
     # BEFORE anything under backend.* other than core.version is imported.
     if host:
@@ -103,6 +108,10 @@ def start(
             unavailable = exc.message
     if autostart:
         return _start_as_service(open_browser=open_browser, auto_upgrade=auto_upgrade)
+    if background:
+        return _start_in_background(
+            host=host, port=port, open_browser=open_browser, auto_upgrade=auto_upgrade
+        )
     return _run_server(
         open_browser=open_browser, installer=installer, service=service, unavailable=unavailable
     )
@@ -121,6 +130,22 @@ def _start_as_service(*, open_browser: bool, auto_upgrade: bool) -> int:
     if open_browser:
         _open_when_ready(browser_url(settings.host, settings.port))
     return 0
+
+
+def _start_in_background(
+    *, host: str | None, port: int | None, open_browser: bool, auto_upgrade: bool
+) -> int:
+    from backend.cli.background import start_in_background
+    from backend.core.config import get_settings
+
+    settings = get_settings()
+    return start_in_background(
+        url=browser_url(settings.host, settings.port),
+        host=host,
+        port=port,
+        open_browser=open_browser,
+        auto_upgrade=auto_upgrade,
+    )
 
 
 def _run_server(
@@ -147,7 +172,7 @@ def _serve(app, settings, installer, service: bool) -> int:
 
     from backend.ai import turns
     from backend.cli.self_update import AutoUpgrader, find_installer
-    from backend.cli.upgrade_request import RequestWatcher, request_path
+    from backend.cli.upgrade_request import RequestWatcher, request_path, stop_path
 
     writes = _WritesInFlight(app)
     server = uvicorn.Server(
@@ -163,6 +188,13 @@ def _serve(app, settings, installer, service: bool) -> int:
         server.config.timeout_graceful_shutdown = _SHUTDOWN_GRACE_SECONDS
         server.should_exit = True
 
+    def stop_after_writes() -> None:
+        # What `onw stop` adds to Ctrl-C: nobody is watching to see a restore cut off at the grace.
+        deadline = time.monotonic() + _STOP_WAITS_FOR_WRITES_SECONDS
+        while writes.count and time.monotonic() < deadline:
+            time.sleep(0.2)
+        request_exit()
+
     def upgrader_with(chosen) -> AutoUpgrader:
         return AutoUpgrader(
             installer=chosen,
@@ -177,6 +209,8 @@ def _serve(app, settings, installer, service: bool) -> int:
         request_path(),
         lambda: auto or upgrader_with(find_installer()),
         ready=lambda: server.started,
+        stop_file=stop_path(),
+        request_stop=stop_after_writes,
     )
     if auto:
         auto.start()

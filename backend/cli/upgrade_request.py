@@ -35,6 +35,7 @@ from backend.core import platform_fs
 logger = logging.getLogger(__name__)
 
 REQUEST_NAME = ".upgrade-request.json"
+STOP_NAME = ".stop-request"
 REQUESTED = "requested"
 WORKING = "working"
 FAILED = "failed"
@@ -64,6 +65,11 @@ def request_path() -> Path:
     from backend.core.config import get_settings
 
     return get_settings().data_dir.parent / REQUEST_NAME
+
+
+def stop_path() -> Path:
+    """`onw stop` writes this, and the server removes it to say it heard."""
+    return request_path().with_name(STOP_NAME)
 
 
 def read_state(path: Path) -> tuple[str | None, str]:
@@ -115,7 +121,7 @@ class Upgrader(Protocol):
 
 
 class RequestWatcher(threading.Thread):
-    """Watches for a request while the server runs and starts one upgrade attempt for it."""
+    """Watches for `onw upgrade` and `onw stop` while the server runs."""
 
     def __init__(
         self,
@@ -123,12 +129,16 @@ class RequestWatcher(threading.Thread):
         make_upgrader: Callable[[], Upgrader],
         ready: Callable[[], bool] = lambda: True,
         poll: float = WATCH_SECONDS,
+        stop_file: Path | None = None,
+        request_stop: Callable[[], None] = lambda: None,
     ) -> None:
         super().__init__(name="upgrade-requests", daemon=True)
         self.path = path
         self.make_upgrader = make_upgrader
         self.ready = ready
         self.poll = poll
+        self.stop_file = stop_file
+        self.request_stop = request_stop
         self.finished = threading.Event()
         self.upgrader: Upgrader | None = None
 
@@ -140,12 +150,23 @@ class RequestWatcher(threading.Thread):
                 if self.finished.wait(self.poll):
                     return
             clear(self.path)  # from before this server started, so whoever asked has gone
+            if self.stop_file is not None:
+                clear(self.stop_file)
             while not self.finished.wait(self.poll):
-                if read_state(self.path)[0] == REQUESTED and self.handle():
+                if self._stop_was_asked() or (
+                    read_state(self.path)[0] == REQUESTED and self.handle()
+                ):
                     return
         except OSError:
             # A request it can't answer would be acted on again at every poll.
             logger.exception("Upgrade requests are off for this run: can't use %s", self.path)
+
+    def _stop_was_asked(self) -> bool:
+        if self.stop_file is None or not self.stop_file.exists():
+            return False
+        clear(self.stop_file)  # first: a file it can't remove would stop every server after this
+        self.request_stop()
+        return True
 
     def handle(self) -> bool:
         """One request. True when the server has been asked to exit into the new version."""

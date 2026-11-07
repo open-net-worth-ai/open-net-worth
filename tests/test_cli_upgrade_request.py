@@ -1045,3 +1045,44 @@ def test_a_log_it_cannot_write_does_not_change_how_the_boot_fails(monkeypatch, t
     handler = serve._BootFailureLog(is_up=lambda: False)
 
     handler.emit(logging.LogRecord("uvicorn.error", logging.ERROR, "", 0, "boom", None, None))
+
+
+# ── onw stop ──────────────────────────────────────────────────────────────────
+
+
+def test_stopping_waits_for_a_write_to_finish(monkeypatch, plain_serve):
+    exited_while_busy = []
+    stop_file = upgrade_request.stop_path()
+
+    def during(server):
+        writes = server.config.app
+        writes.count = 1
+        time.sleep(0.02)  # past the watcher's clearing of anything from before it started
+        stop_file.write_text("stop\n", encoding="utf-8")
+        assert wait_until(lambda: not stop_file.exists())
+        time.sleep(0.05)
+        exited_while_busy.append(server.should_exit)
+        writes.count = 0
+        assert wait_until(lambda: server.should_exit)
+
+    fake = FakeUvicorn(monkeypatch, during)
+
+    assert plain_serve.run() == 0
+
+    assert exited_while_busy == [False]
+    assert fake.server.config.timeout_graceful_shutdown == serve._SHUTDOWN_GRACE_SECONDS
+
+
+def test_a_stuck_write_cannot_hold_a_stop_forever(monkeypatch, plain_serve):
+    monkeypatch.setattr(serve, "_STOP_WAITS_FOR_WRITES_SECONDS", 0.01)
+    stop_file = upgrade_request.stop_path()
+
+    def during(server):
+        server.config.app.count = 1
+        time.sleep(0.02)
+        stop_file.write_text("stop\n", encoding="utf-8")
+        assert wait_until(lambda: server.should_exit)
+
+    FakeUvicorn(monkeypatch, during)
+
+    assert plain_serve.run() == 0

@@ -130,8 +130,10 @@ The `install-server.sh` script is for macOS and Linux. On Windows, in PowerShell
 
 | Command | What it does |
 |---|---|
-| `onw start` | Run the app. `--open` opens your browser once it's up; `--port 9000` or `--host 0.0.0.0` override the defaults (`127.0.0.1:8080`). `--autostart` runs it as the boot service instead of in this terminal; `--auto-upgrade` installs new versions automatically ([Upgrading](../operations/upgrading.md)). |
+| `onw start` | Run the app. `--open` opens your browser once it's up; `--port 9000` or `--host 0.0.0.0` override the defaults (`127.0.0.1:8080`). It stays in that terminal until you press <kbd>Ctrl</kbd>+<kbd>C</kbd>. `--background` frees the terminal and keeps it running until `onw stop` or a reboot; `--autostart` runs it as the boot service, which also starts it at login and restarts it after a crash; `--auto-upgrade` installs new versions automatically ([Upgrading](../operations/upgrading.md)). |
+| `onw stop` | Stop it, however you started it, once any save or import in progress has finished (it waits up to a minute). A reply Lucius is writing is cut off, as with <kbd>Ctrl</kbd>+<kbd>C</kbd>. If it runs as the boot service, this tells you to use `onw autostart stop`, because the service would only start it again. |
 | `onw status` | Show whether it's running, its URL and version, the working folder, the boot service, where the log is, and how an upgrade is going or why it failed. If it isn't running, it says so and exits with an error code, so scripts can check it too. It looks at the server for this working folder on this machine. For Docker, use `docker compose ps`. |
+| `onw logs` | Show the end of its log. `--follow` (`-f`) keeps showing what's added until you press <kbd>Ctrl</kbd>+<kbd>C</kbd>; `--lines 200` (`-n`) shows more. |
 | `onw autostart install` | Start at login/boot and restart on crash — a launchd agent on macOS, a systemd user service on Linux, a Task Scheduler task on Windows. No `sudo` or admin. The same as `onw start --autostart`. |
 | `onw autostart status` | Show whether that service is installed and running, and whether auto-upgrade is on. |
 | `onw autostart stop` | Stop it and remove the service. |

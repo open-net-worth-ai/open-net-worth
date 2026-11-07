@@ -50,6 +50,9 @@ _UPGRADES_DIR = "open-net-worth-upgrades"
 _DETACHED_PROCESS = 0x00000008
 _CREATE_NEW_PROCESS_GROUP = 0x00000200
 _CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+# Set on `onw start --background`'s server: it has no console to come back in. A variable and not a
+# flag, because a restart hands its arguments to whichever version it just installed.
+DETACHED_ENV = "ONW_DETACHED"
 _ON_WINDOWS = os.name == "nt"  # a test can pick a branch here; changing os.name breaks pathlib
 
 
@@ -159,7 +162,8 @@ def _windows_restart(service: bool) -> tuple[list[str], bool]:
     # A service installed without --auto-upgrade has no --service flag, so its launcher says so.
     if service or os.environ.get(autostart_windows.RUN_BY_TASK_ENV):
         return autostart_windows.restart_command(sys.executable), False
-    return [sys.executable, "-P", "-m", "backend.cli", *_restart_args()], True
+    command = [sys.executable, "-P", "-m", "backend.cli", *_restart_args()]
+    return command, not os.environ.get(DETACHED_ENV)
 
 
 class AutoUpgrader(threading.Thread):
