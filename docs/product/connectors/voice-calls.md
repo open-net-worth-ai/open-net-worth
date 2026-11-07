@@ -139,6 +139,8 @@ happens next is read out.
 
 **A call is a normal conversation.** It's saved like any other, and it's named from the first thing you asked rather than your greeting. Switch to another app for a moment and you come back to the same conversation; the installed app starts a new one only after about 30 minutes away.
 
+**The screen stays on during a call**, where your browser allows it, and goes back to normal when the call ends. A phone held to your ear can still turn its screen off, as it does on any call.
+
 **You see the call as it happens.** Your words appear as you speak, and Lucius's as he says them: above the mic on the full call screen, and in the chat. When the voice hasn't started or you cut him off, the chat shows his whole answer. Everything you hear is in the chat, in the order you heard it, including short lines like *"one sec"* said while he works; those are for you to read, and Lucius's model doesn't see them.
 
 **Only Lucius states facts.** The voice that picks up instantly handles only small talk. If it tries to answer with a figure, or to say something is done, that reply is thrown away and your question goes to Lucius instead. If you pause partway through a sentence, it says *"mm-hm?"* and waits for the rest.

@@ -19,6 +19,7 @@ import {
   watchPolicyBlock,
 } from './voicePagePolicy'
 import { playMuteTone } from './voiceCallSounds'
+import { keepScreenOn } from './voiceWakeLock'
 
 // One voice call for the whole app (`voice_calls` flag), held OUTSIDE React. The first build kept
 // the LiveKit room inside the Call button, so a chat that re-laid its composer (the landing screen
@@ -130,6 +131,8 @@ function set(next: Partial<CallState>) {
   const problem =
     next.problem && callSession ? { sessionId: callSession, ...next.problem } : next.problem
   state = { ...state, ...next, ...(next.problem !== undefined && { problem }) }
+  // Here, so no way of starting or ending a call can leave it wrong.
+  keepScreenOn(state.phase !== 'idle' && state.phase !== 'ended')
   listeners.forEach((l) => l())
 }
 
