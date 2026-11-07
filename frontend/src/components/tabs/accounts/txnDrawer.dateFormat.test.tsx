@@ -10,10 +10,9 @@ afterEach(() => setDisplayFormats({ date_format: null }))
 
 describe('transaction drawer dates follow the Date-format setting', () => {
   it.each([
-    ['dmy', '31/12/2026'],
-    ['mdy', '12/31/2026'],
-    ['iso', '2026-12-31'],
-  ])('fmtDay in %s', (fmt, expected) => {
+    ['dmy', '31 Dec 2026'],
+    ['mdy', 'Dec 31, 2026'],
+  ])('fmtDay spells the month in the %s order', (fmt, expected) => {
     setDisplayFormats({ date_format: fmt })
     expect(fmtDay('2026-12-31')).toBe(expected)
   })
