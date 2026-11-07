@@ -1578,3 +1578,31 @@ news_deliveries = Table(
     Index("ix_news_deliveries_status", "status"),
     Index("ix_news_deliveries_story_id", "story_id"),
 )
+
+
+# Trading execution history is operational evidence: checkpoints must never replay it.
+TRADING_TABLE_NAMES = (
+    "trading_workspaces",
+    "trading_runs",
+    "trading_accounts",
+    "trading_orders",
+    "trading_fills",
+    "trading_events",
+    "trading_comparisons",
+    "trading_control",
+    "trading_grants",
+)
+TRADING_TABLES = {
+    name: Table(
+        name,
+        metadata,
+        Column("book_id", Text, ForeignKey("books.id"), nullable=False),
+        Column("seq", Integer, nullable=False),
+        Column("id", Text, primary_key=True),
+        Column("scope_id", Text, nullable=False),
+        Column("payload", JSON, nullable=False),
+        Index(f"ix_{name}_book_seq", "book_id", "seq", unique=True),
+        Index(f"ix_{name}_book_scope", "book_id", "scope_id"),
+    )
+    for name in TRADING_TABLE_NAMES
+}
