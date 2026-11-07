@@ -531,7 +531,7 @@ def _delete_lot(lot_id: str) -> dict:
     txn_id = _live_cash_row((lot or {}).get("txn_id"))
     tables = [lots_tbl, positions_tbl]
     if txn_id:
-        tables.extend((txns_tbl, txn_audit_tbl))
+        tables.extend((txns_tbl, txn_audit_tbl, *transaction_links.LOCK_TABLES))
     with locked_unit_of_work(*tables) as conn:
         if txn_id:
             from backend.services import ledger as ledger_service
@@ -580,14 +580,19 @@ def _undo_dispose(change: dict) -> dict:
     pos_id = ev.get("position_id", "")
     txn_id = ev.get("txn_id")
     with locked_unit_of_work(
-        lots_tbl, positions_tbl, realized_tbl, txns_tbl, txn_audit_tbl
+        lots_tbl,
+        positions_tbl,
+        realized_tbl,
+        txns_tbl,
+        txn_audit_tbl,
+        *transaction_links.LOCK_TABLES,
     ) as conn:
         _restore_disposal(ev, conn=conn)
         agg = position_figures.rederive(pos_id, conn=conn) if pos_id else {}
     return {"ok": True, "event_id": event_id, "position_id": pos_id, "txn_id": txn_id, **agg}
 
 
-def _restore_disposal(ev: dict, *, conn: Connection) -> None:
+def _restore_disposal(ev: dict, *, conn: Connection, release_links: bool = True) -> None:
     """Undo a disposal's writes on an already-open unit of work: restore consumed qty,
     reverse the proceeds cash leg, delete the event. Caller validated lots exist."""
     lots = LotStore()
@@ -597,7 +602,9 @@ def _restore_disposal(ev: dict, *, conn: Connection) -> None:
     if txn_id:
         from backend.services import ledger as ledger_service
 
-        ledger_service.bulk_delete_transactions([txn_id], conn=conn, reject_identities=False)
+        ledger_service.bulk_delete_transactions(
+            [txn_id], conn=conn, reject_identities=False, release_links=release_links
+        )
     RealizedEventStore().delete(ev["id"], conn=conn)
 
 
@@ -913,6 +920,7 @@ def _apply_acquire(change: dict) -> dict:
         "idempotency_key": idempotency_key,
         "note": change.get("note", ""),
     }
+    _require_cash_row(change.get("txn_id"))
     will_fund = _will_fund_acquire(change)
     payee_id = (
         _resolve_deposit_payee_if_needed({"proceeds_account_id": change.get("funding_account_id")})
@@ -1239,6 +1247,25 @@ def _funding_account_from_txn(txn_id: str | None) -> Optional[str]:
     return None if transaction_links.is_gone(txn) else txn.get("from_account_id")
 
 
+def _follow_cash_row(old: Optional[str], new: Optional[str], *, conn: Connection) -> None:
+    """A rewrite keeps the money on a new row, so what pointed at the old one follows it. With no
+    new row there's nothing to follow, and the links are released like any other delete."""
+    if old and new:
+        transaction_links.move({old: new}, conn=conn)
+    elif old:
+        transaction_links.release([old], conn=conn)
+
+
+def _require_cash_row(txn_id: Optional[str]) -> None:
+    if not txn_id:
+        return
+    from backend.core.errors import ValidationError
+    from backend.db.transaction_store import TransactionStore
+
+    if transaction_links.is_gone(TransactionStore().find_by_id(txn_id)):
+        raise ValidationError(f"{txn_id!r} is not a transaction in the ledger.", field="txn_id")
+
+
 def _live_cash_row(txn_id: Optional[str]) -> Optional[str]:
     """``txn_id`` if that row is still in the ledger. A record can outlive its cash row, and
     reversing a row that's already gone would only write a second delete to its audit trail."""
@@ -1372,7 +1399,12 @@ def _amend_sold_lot(lot: dict, change: dict) -> dict:
         _resolve_deposit_payee_if_needed({"proceeds_account_id": funding}) if rewrite_cash else None
     )
     with locked_unit_of_work(
-        lots_tbl, positions_tbl, realized_tbl, txns_tbl, txn_audit_tbl
+        lots_tbl,
+        positions_tbl,
+        realized_tbl,
+        txns_tbl,
+        txn_audit_tbl,
+        *transaction_links.LOCK_TABLES,
     ) as conn:
         patched = LotStore().touch(lot["id"], lot_updates, conn=conn) or lot
         for event_id, patch in plan["event_updates"].items():
@@ -1422,13 +1454,16 @@ def _rewrite_funding_debit(
         "allow_duplicate": _replaces_its_own_row(lot, change),
     }
     if lot.get("txn_id"):
-        ledger_service.bulk_delete_transactions([lot["txn_id"]], conn=conn, reject_identities=False)
+        ledger_service.bulk_delete_transactions(
+            [lot["txn_id"]], conn=conn, reject_identities=False, release_links=False
+        )
         LotStore().touch(lot["id"], {"txn_id": None}, conn=conn)
-    if not _will_fund_acquire(fund_change):
-        return
-    cash_leg_id = _book_funding_debit(fund_change, patched, payee_id, conn=conn)
+    cash_leg_id = None
+    if _will_fund_acquire(fund_change):
+        cash_leg_id = _book_funding_debit(fund_change, patched, payee_id, conn=conn)
     if cash_leg_id:
         LotStore().touch(lot["id"], {"txn_id": cash_leg_id}, conn=conn)
+    _follow_cash_row(lot.get("txn_id"), cash_leg_id, conn=conn)
 
 
 def _amend_open_lot(lot: dict, change: dict) -> dict:
@@ -1481,19 +1516,20 @@ def _amend_open_lot(lot: dict, change: dict) -> dict:
     payee_id = (
         _resolve_deposit_payee_if_needed({"proceeds_account_id": funding}) if will_fund else None
     )
-    tables = [lots_tbl, positions_tbl, txns_tbl, txn_audit_tbl]
+    tables = [lots_tbl, positions_tbl, txns_tbl, txn_audit_tbl, *transaction_links.LOCK_TABLES]
     with locked_unit_of_work(*tables) as conn:
         if lot.get("txn_id"):
             from backend.services import ledger as ledger_service
 
             ledger_service.bulk_delete_transactions(
-                [lot["txn_id"]], conn=conn, reject_identities=False
+                [lot["txn_id"]], conn=conn, reject_identities=False, release_links=False
             )
             updates["txn_id"] = None
         patched = LotStore().touch(lot["id"], updates, conn=conn) or lot
         cash_leg_id = _book_funding_debit(fund_change, patched, payee_id, conn=conn)
         if cash_leg_id:
             patched = LotStore().touch(lot["id"], {"txn_id": cash_leg_id}, conn=conn) or patched
+        _follow_cash_row(lot.get("txn_id"), cash_leg_id, conn=conn)
         agg = position_figures.rederive(lot.get("position_id", ""), conn=conn)
     return {
         "ok": True,
@@ -1558,9 +1594,14 @@ def _apply_dispose_amend(change: dict) -> dict:
     payee_id = _resolve_deposit_payee_if_needed(new_change)
     rates = _load_rates()
     with locked_unit_of_work(
-        lots_tbl, positions_tbl, realized_tbl, txns_tbl, txn_audit_tbl
+        lots_tbl,
+        positions_tbl,
+        realized_tbl,
+        txns_tbl,
+        txn_audit_tbl,
+        *transaction_links.LOCK_TABLES,
     ) as conn:
-        _restore_disposal(ev, conn=conn)
+        _restore_disposal(ev, conn=conn, release_links=False)
         open_lots = lots.open_lots_for_position(pos["id"], conn=conn)
         draft = compute_disposal(pos, open_lots, new_change, rates=rates)
         lots.bulk_consume([(c["lot_id"], c["qty"]) for c in draft["consumptions"]], conn=conn)
@@ -1584,6 +1625,7 @@ def _apply_dispose_amend(change: dict) -> dict:
                 RealizedEventStore().update_by_id(event["id"], {"txn_id": cash_leg_id}, conn=conn)
                 or event
             )
+        _follow_cash_row(live_cash, cash_leg_id, conn=conn)
         agg = position_figures.rederive(pos["id"], conn=conn)
     return {
         "ok": True,

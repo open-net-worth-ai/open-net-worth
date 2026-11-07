@@ -215,7 +215,7 @@ def move_back(moved: list[dict], *, conn: Connection) -> None:
         if owner is None:
             continue
         row = next((r for r in link.rows(owner) if r.get("id") == record["row_id"]), None)
-        if row is None:
+        if row is None or row.get(link.field) != record["moved_to"]:
             continue
         changes = {link.field: record["txn_id"]}
         row.update(changes)
@@ -231,7 +231,10 @@ def _rewrite(moves: dict[str, Optional[str]], *, releasing: bool, conn: Connecti
             hits = [r for r in link.rows(owner) if r.get(link.field) in moves]
             changes: dict = {}
             for row in hits:
-                touched.append(link.describe(owner, row, row[link.field]))
+                record = link.describe(owner, row, row[link.field])
+                touched.append(
+                    record if releasing else {**record, "moved_to": moves[record["txn_id"]]}
+                )
                 changes = {
                     link.field: moves[row[link.field]],
                     **(link.on_release(row) if releasing else {}),

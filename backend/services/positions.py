@@ -31,7 +31,7 @@ from backend.db.account_store import AccountStore
 from backend.db.instrument_store import InstrumentStore
 from backend.db.position_store import FIGURE_FIELDS, PositionStore, vesting_state_of
 from backend.db.price_history_store import PriceHistoryStore
-from backend.services import fixed_income
+from backend.services import fixed_income, transaction_links
 from backend.services import prices as prices_service
 
 _log = logging.getLogger(__name__)
@@ -340,7 +340,9 @@ def remove_position(position_id: str) -> bool:
     from backend.db.tables import txn_audit as txn_audit_tbl
     from backend.services import lots as lots_service
 
-    with locked_unit_of_work(lots_tbl, positions_tbl, txns_tbl, txn_audit_tbl, grants_tbl) as conn:
+    with locked_unit_of_work(
+        lots_tbl, positions_tbl, txns_tbl, txn_audit_tbl, grants_tbl, *transaction_links.LOCK_TABLES
+    ) as conn:
         store = PositionStore()
         if store.find_by_id(position_id, conn=conn) is None:
             return False

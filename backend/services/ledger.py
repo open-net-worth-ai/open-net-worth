@@ -3613,7 +3613,11 @@ def mark_batch_reviewed(batch_id: str) -> dict:
 
 
 def bulk_delete_transactions(
-    ids: list[str], *, conn: Connection | None = None, reject_identities: bool = True
+    ids: list[str],
+    *,
+    conn: Connection | None = None,
+    reject_identities: bool = True,
+    release_links: bool = True,
 ) -> dict:
     """Soft-delete many transactions by id, looping the per-txn soft-delete (so each write
     is checkpoint-captured). Returns ``{deleted: [ids], not_found: [ids], count: int,
@@ -3626,11 +3630,12 @@ def bulk_delete_transactions(
     =False`` is for a caller undoing its OWN booking (a trade undo reversing a linked cash leg)
     — reversing is not rejecting. Batch rollback never reaches this choke at all.
 
-    The same decision releases everything that pointed at a deleted row
-    (``services.transaction_links``), in this transaction, and returns what changed as
-    ``released_links`` (absent when nothing did). A soft delete is an UPDATE, so no foreign key
-    can do it. A ``reject_identities=False`` caller owns its record and its lock set, so it is
-    left to manage its own link.
+    Everything that pointed at a deleted row is released (``services.transaction_links``), in
+    this transaction, and returned as ``released_links`` (absent when nothing was). A soft delete
+    is an UPDATE, so no foreign key can do it. That holds for a trade undo too: its own record
+    isn't the only thing that can point at its cash. A composed caller must also hold
+    ``transaction_links.LOCK_TABLES``. ``release_links=False`` is only for a caller replacing the
+    row, which moves the links to the new one itself.
 
     Refuses OUTRIGHT (ConflictError) — before deleting anything — when ANY requested id is
     a Starting Balance transaction (ledger-tracking-start Phase 2): change the account's
@@ -3660,7 +3665,7 @@ def bulk_delete_transactions(
     # STORAGE PLAN 4B TASK 4: `_txn_unit_of_work` composes into a caller's conn when given.
     # `composed` is captured BEFORE that rebinding — see _publish_transaction_events_after_commit.
     composed = conn is not None
-    also_lock = transaction_links.LOCK_TABLES if reject_identities else ()
+    also_lock = transaction_links.LOCK_TABLES if release_links else ()
     with _txn_unit_of_work(conn, *also_lock) as conn:
         for txn_id in ids:
             row = transactions.soft_delete(txn_id, conn=conn)
@@ -3678,7 +3683,7 @@ def bulk_delete_transactions(
             from backend.services import rejected_identities as _rejected
 
             rejected = _rejected.remember_deleted(deleted_rows, conn=conn)
-        released = transaction_links.release(deleted, conn=conn) if reject_identities else []
+        released = transaction_links.release(deleted, conn=conn) if release_links else []
     # Same composed-conn handling as create_transaction's own publish call above — see
     # _publish_transaction_events_after_commit for why the composed case must defer.
     _publish_transaction_events_after_commit(

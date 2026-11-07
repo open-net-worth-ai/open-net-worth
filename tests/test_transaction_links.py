@@ -391,6 +391,120 @@ def test_undoing_a_merge_moves_the_links_back(book):
     assert _row(cid, "installments", inst_id)["paid_txn_id"] == bought["cash_leg_id"]
 
 
+# ── The app reversing its own cash row follows the same rule ─────────────────────────────
+
+
+def test_correcting_a_lot_moves_a_payment_link_to_the_new_cash_row(book):
+    bought = _buy(book)
+    cid, inst_id, fund_id = _commitment(book, bought["cash_leg_id"])
+
+    lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+
+    new_row = LotStore().find_by_id(bought["lot_id"])["txn_id"]
+    assert new_row != bought["cash_leg_id"]
+    inst = _row(cid, "installments", inst_id)
+    assert (inst["paid_txn_id"], inst["status"]) == (new_row, "paid")
+    assert _row(cid, "funding_plan", fund_id)["realized_txn_id"] == new_row
+
+
+def test_correcting_a_sold_lot_moves_a_payment_link_to_the_new_cash_row(book):
+    bought = _buy(book)
+    _sell(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+
+    lots_service.apply_lot_change({"type": "amend", "lot_id": bought["lot_id"], "fees": 1.0})
+
+    assert (
+        _row(cid, "installments", inst_id)["paid_txn_id"]
+        == LotStore().find_by_id(bought["lot_id"])["txn_id"]
+    )
+
+
+def test_editing_a_sale_moves_a_funding_link_to_the_new_cash_row(book):
+    _buy(book)
+    sold = _sell(book)
+    cid, _, fund_id = _commitment(book, sold["cash_leg_id"])
+
+    edited = _edit_sale(book, sold["event_id"])
+
+    source = _row(cid, "funding_plan", fund_id)
+    assert (source["realized_txn_id"], source["status"]) == (edited["cash_leg_id"], "done")
+
+
+def test_removing_a_sales_deposit_releases_a_funding_link(book):
+    _buy(book)
+    sold = _sell(book)
+    cid, _, fund_id = _commitment(book, sold["cash_leg_id"])
+
+    edited = _edit_sale(book, sold["event_id"], proceeds_account_id=None)
+
+    assert edited["cash_leg_id"] is None
+    source = _row(cid, "funding_plan", fund_id)
+    assert (source["realized_txn_id"], source["status"]) == (None, "planned")
+
+
+def test_undoing_a_sale_releases_a_funding_link_to_its_cash(book):
+    _buy(book)
+    sold = _sell(book)
+    cid, _, fund_id = _commitment(book, sold["cash_leg_id"])
+
+    lots_service.apply_lot_change({"type": "dispose_undo", "event_id": sold["event_id"]})
+
+    source = _row(cid, "funding_plan", fund_id)
+    assert (source["realized_txn_id"], source["status"]) == (None, "planned")
+
+
+def test_removing_a_lot_releases_a_payment_link_to_its_cash(book):
+    bought = _buy(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+
+    lots_service.apply_lot_change({"type": "delete", "lot_id": bought["lot_id"]})
+
+    assert _row(cid, "installments", inst_id)["paid_txn_id"] is None
+
+
+def test_removing_a_position_releases_a_payment_link_to_its_cash(book):
+    from backend.services import positions as positions_service
+
+    bought = _buy(book)
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+
+    positions_service.apply_position_change({"type": "remove", "position_id": book["pid"]})
+
+    assert bought["cash_leg_id"] not in _live_ids()
+    assert _row(cid, "installments", inst_id)["paid_txn_id"] is None
+
+
+def test_undoing_a_merge_leaves_a_link_made_since_alone(book):
+    bought = _buy(book)
+    twin = _twin_of(book)
+    other = _twin_of(book, amount=999.0, on="2026-06-01")
+    cid, inst_id, _ = _commitment(book, bought["cash_leg_id"])
+    ledger_service.merge_transactions(twin, bought["cash_leg_id"], override=True)
+    commitments_service.update_installment(cid, inst_id, {"paid_txn_id": other})
+
+    ledger_service.unmerge_transactions(bought["cash_leg_id"])
+
+    assert _row(cid, "installments", inst_id)["paid_txn_id"] == other
+
+
+def test_a_lot_linked_to_a_row_that_doesnt_exist_is_refused_plainly(book):
+    from backend.core.errors import ValidationError
+
+    with pytest.raises(ValidationError, match="not a transaction"):
+        lots_service.apply_lot_change(
+            {
+                "type": "acquire",
+                "position_id": book["pid"],
+                "quantity": 1,
+                "unit_cost": 5,
+                "cost_currency": "SGD",
+                "acquired_at": "2026-04-01",
+                "txn_id": "txn_never_existed",
+            }
+        )
+
+
 # ── The rule holds across the delete ─────────────────────────────────────────────────────
 
 

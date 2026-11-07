@@ -33,8 +33,12 @@ leaves something the user can't fix.**
    `released_links`. A lot or sale loses its cash link, an installment goes back to due or upcoming,
    funding goes back to planned, an asset stays sold with no proceeds row, and an income record
    loses its cash row. If the cleanup fails, the delete rolls back.
-2. **A merge keeps the money, so `move` sends links to the surviving row**, and undoing the merge
-   returns exactly the rows it moved. Clearing them would mark a real payment as unpaid.
+   The app reversing its own cash row follows the same rule: undoing a sale, removing a lot or a
+   position, and undoing a vest all release, because other records can point at that cash too.
+2. **Where the money survives, `move` sends links to the row that holds it.** That covers a merge,
+   and undoing it returns only the rows it moved and leaves any link made since. It also covers a
+   lot or sale correction that replaces its cash row. Clearing these would mark a real payment as
+   unpaid.
 3. **An import rollback releases nothing.** It isn't a decision about the event, and a rollforward
    brings the row back.
 4. **Corrections treat a dead link as no link**, because rollbacks and older data can still hold
