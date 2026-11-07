@@ -920,7 +920,7 @@ def _apply_acquire(change: dict) -> dict:
         "idempotency_key": idempotency_key,
         "note": change.get("note", ""),
     }
-    _require_cash_row(change.get("txn_id"))
+    _refuse_dead_cash_link(change.get("txn_id"))
     will_fund = _will_fund_acquire(change)
     payee_id = (
         _resolve_deposit_payee_if_needed({"proceeds_account_id": change.get("funding_account_id")})
@@ -1256,14 +1256,14 @@ def _follow_cash_row(old: Optional[str], new: Optional[str], *, conn: Connection
         transaction_links.release([old], conn=conn)
 
 
-def _require_cash_row(txn_id: Optional[str]) -> None:
+def _refuse_dead_cash_link(txn_id: Optional[str]) -> None:
     if not txn_id:
         return
     from backend.core.errors import ValidationError
     from backend.db.transaction_store import TransactionStore
 
     if transaction_links.is_gone(TransactionStore().find_by_id(txn_id)):
-        raise ValidationError(f"{txn_id!r} is not a transaction in the ledger.", field="txn_id")
+        raise ValidationError(f"{txn_id!r} is not a transaction in the ledger.")
 
 
 def _live_cash_row(txn_id: Optional[str]) -> Optional[str]:
