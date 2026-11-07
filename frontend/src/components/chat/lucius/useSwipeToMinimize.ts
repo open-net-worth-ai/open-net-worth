@@ -25,18 +25,19 @@ export function useSwipeToMinimize(
     const onStart = (e: TouchEvent) => {
       // The settings sheet has its own controls and scrolling.
       const inSheet = (e.target as Element | null)?.closest?.('.lx-callsettings')
-      if (e.touches.length !== 1 || inSheet) return
-      const { clientX, clientY } = e.touches[0]
-      startX = clientX
-      startY = clientY
+      const touch = e.touches[0]
+      if (e.touches.length !== 1 || inSheet || !touch) return
+      startX = touch.clientX
+      startY = touch.clientY
       startedAt = e.timeStamp
       pull = 0
       tracking = true
       el.style.transition = 'none'
     }
     const onMove = (e: TouchEvent) => {
-      if (!tracking) return
-      const { clientX, clientY } = e.touches[0]
+      const touch = e.touches[0]
+      if (!tracking || !touch) return
+      const { clientX, clientY } = touch
       const down = clientY - startY
       // Mostly sideways is not this gesture.
       if (pull === 0 && Math.abs(clientX - startX) > Math.abs(down)) return

@@ -41,7 +41,7 @@ export interface DirectoryPreviewProps {
   d: DirectoryRow
   /** Status text for an installed entry, from the live connector. */
   statusText?: string
-  statusTone?: 'good' | 'bad' | ''
+  statusTone?: 'good' | 'warn' | 'bad' | ''
   prompts?: string[]
   onAdd: (entry: DirectoryRow) => void
   onConfigure: (entry: DirectoryRow) => void

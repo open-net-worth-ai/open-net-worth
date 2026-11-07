@@ -82,6 +82,7 @@ describe('a commitment shortfall says it is about funding, not cash', () => {
         onBack={vi.fn()}
         onAskLucius={onAskLucius}
         onChanged={vi.fn()}
+        onOpenCommitment={vi.fn()}
       />,
     )
   }

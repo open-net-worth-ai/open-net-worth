@@ -873,7 +873,7 @@ export async function restartCall(change: () => Promise<void>): Promise<void> {
     return
   }
   restarting = true
-  await startCall(sessionId, view)
+  await startCall(sessionId ?? '', view)
 }
 
 export function minimizeCall(): void {

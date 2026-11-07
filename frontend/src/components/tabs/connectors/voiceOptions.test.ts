@@ -70,8 +70,8 @@ describe('who speaks on a voice model', () => {
       'Olivia (female)',
       'Another voice…',
     ])
-    expect(speakerOptions(flash)[0].value).toBe('')
-    expect(speakerOptions(flash)[1].value).toBe('Edward')
+    expect(speakerOptions(flash)[0]?.value).toBe('')
+    expect(speakerOptions(flash)[1]?.value).toBe('Edward')
   })
 
   it('states no gender the docs do not state', () => {

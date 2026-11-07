@@ -48,14 +48,16 @@ function savedAs(lines: string[], messages: string[]): (number | null)[] {
   const found: (number | null)[] = lines.map(() => null)
   const taken = new Set<number>()
   const claim = (i: number, fits: (message: string, line: string) => boolean) => {
-    const at = saved.findIndex((m, j) => !taken.has(j) && fits(m, said[i]))
+    const at = saved.findIndex((m, j) => !taken.has(j) && fits(m, said[i] ?? ''))
     if (at >= 0) {
       taken.add(at)
       found[i] = at
     }
   }
   said.forEach((_, i) => claim(i, (m, line) => m === line))
-  const longest = said.map((_, i) => i).sort((a, b) => said[b].length - said[a].length)
+  const longest = said
+    .map((_, i) => i)
+    .sort((a, b) => (said[b] ?? '').length - (said[a] ?? '').length)
   for (const i of longest) {
     if (found[i] !== null) continue
     claim(
@@ -92,9 +94,10 @@ export function unsavedLines(
  *  arriving: `lk.transcription` sometimes sends none for a line (owner, 2026-11-07). */
 export function unheardAnswer(lines: string[], messages: string[]): string {
   const newest = messages.length - 1
-  if (newest < 0 || !messages[newest].trim()) return ''
+  const answer = messages[newest]
+  if (!answer?.trim()) return ''
   const said = lines.filter((line) => line.trim())
-  return savedAs(said, messages).includes(newest) ? '' : messages[newest]
+  return savedAs(said, messages).includes(newest) ? '' : answer
 }
 
 /** The message as the chat should draw it now. Only for the conversation's newest answer. */

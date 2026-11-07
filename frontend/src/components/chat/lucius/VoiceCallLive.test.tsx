@@ -7,6 +7,8 @@ const call = vi.hoisted(() => ({
   connectedAt: null as number | null,
   heard: '',
   heardDone: false,
+  heardShown: false,
+  luciusSpeaking: false,
   spoken: '',
   spokenDone: false,
   phase: 'live',
