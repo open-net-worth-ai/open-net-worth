@@ -529,28 +529,19 @@ export function txnMentionSublabel({
   return parts.join(' • ')
 }
 
-/** Short, year-less date for a compact chip: "2026-06-02" → "Jun 2". Pure string parse
- *  (no Date/timezone). Falls back to the input when it isn't an ISO yyyy-mm-dd. */
+/** Compact month + day for a dense cell ("02/06", "06/02" or "06-02" by the Date-format
+ *  preference); the year is left out. Empty for a missing or unreadable value. */
+export function fMonthDay(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = parseDate(iso)
+  return d ? fDate(d, 'numeric', 'never') : ''
+}
+
+/** Short, year-less date for a compact chip: "2026-06-02" → "2 Jun" / "Jun 2" by the
+ *  Date-format preference. Falls back to the input when it isn't an ISO yyyy-mm-dd. */
 export function fShortDate(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
-  if (!m) return iso
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ]
-  const month = months[parseInt(m[2]!, 10) - 1]
-  if (!month) return iso
-  return `${month} ${parseInt(m[3]!, 10)}`
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
+  return fDate(iso, 'short', 'never')
 }
 
 export const fVND = (m: number): string =>

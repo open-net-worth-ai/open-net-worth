@@ -19,7 +19,7 @@ import {
   Text,
 } from '../../ui'
 import { authFetch } from '../../../api/client'
-import { getBaseCurrency } from '../../../utils/format'
+import { fDate, getBaseCurrency } from '../../../utils/format'
 import type { Account, AccountCreate, AccountUpdate, AccountPrefill, ExternalId } from './types'
 import { ACCOUNT_TYPES, TYPE_LABELS, TYPE_MEANING, TYPE_ICON, LIABILITY_TYPES } from './categories'
 import type { AccountType } from './categories'
@@ -826,7 +826,9 @@ export default function AccountModal({
                         {!isAsset && (account?.initialBalance ?? 0) !== 0 ? ' owed' : ''}
                       </span>
                       <span className="acct-opening-meta">
-                        {form.asOf ? `as of ${form.asOf}` : 'tracked from the first transaction'}
+                        {form.asOf
+                          ? `as of ${fDate(form.asOf, 'short', 'always')}`
+                          : 'tracked from the first transaction'}
                       </span>
                       {onEditOpening && (
                         <button type="button" className="acct-opening-link" onClick={onEditOpening}>

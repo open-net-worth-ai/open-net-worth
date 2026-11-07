@@ -84,7 +84,7 @@ export function OverviewTab({ commitment: c, fx, envelope, positions, goTo, m }:
                 currency: c.currency,
                 status: it.status,
               })}
-              sublabel={`${c.name} • ${i.due_date}`}
+              sublabel={`${c.name} • ${fmtDate(i.due_date)}`}
             >
               <span className="c3-ov-date">{fmtDate(i.due_date)}</span>
               <span className="c3-ov-label">
@@ -168,7 +168,7 @@ export function OverviewTab({ commitment: c, fx, envelope, positions, goTo, m }:
                 currency: it.currency || c.currency,
                 status: it.status,
               })}
-              sublabel={`${c.name} • ${a.due_date}`}
+              sublabel={`${c.name} • ${fmtDate(a.due_date)}`}
             >
               <span className={'c3-ov-date' + (od ? ' od' : '')}>
                 {od ? 'Overdue • ' : ''}
