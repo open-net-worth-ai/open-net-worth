@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { Sparkles, Plus, X, Check, ChevronLeft, ChevronRight, Settings } from '../../../ui/icons'
 import { useIsMobile } from '../../../hooks/useIsMobile'
+import { fDate } from '../../../utils/format'
 import type { Account, Category } from './types'
 import { TYPE_LABELS, TYPE_ORDER } from './categories'
 
@@ -1003,12 +1004,7 @@ export function AddDateField({ value, onChange, advance, autoFocus }: AddDateFie
       }
     }
   }
-  const label = value
-    ? (() => {
-        const [y, m, d] = value.split('-')
-        return m + '/' + d + '/' + y
-      })()
-    : 'Date'
+  const label = value ? fDate(value, 'numeric', 'always') : 'Date'
   const fx = useAnchoredFixed(open, ref as React.RefObject<HTMLElement>, 244)
   return (
     <div className="acct-datef" ref={ref}>

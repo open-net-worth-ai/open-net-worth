@@ -174,17 +174,17 @@ type SourceState =
 // prop-threaded), so the receipt row's date matches every other date in this drawer.
 // The drawer is the audit view of a ledger row, so the year is always shown.
 export function fmtDay(iso: string | null | undefined): string {
-  return iso ? fDate(iso.split('T')[0]!, 'short', 'always') : '—'
+  return iso ? fDate(iso.split('T')[0]!, 'numeric', 'always') : '—'
 }
 // Date-only values stay verbatim (no timezone shift). A full timestamp is stored in UTC
-// (…Z) — render it in the viewer's LOCAL time (HH:MM, 24h, no seconds), like the rest of the drawer.
+// (…Z) — render it in the viewer's LOCAL time, (HH:MM, 24h, no seconds); the date follows the app's Date-format preference.
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return '—'
   const d = iso.includes('T') ? new Date(iso) : null
   if (!d || isNaN(d.getTime())) return fmtDay(iso)
   const hh = String(d.getHours()).padStart(2, '0')
   const mm = String(d.getMinutes()).padStart(2, '0')
-  return `${fDate(d, 'short', 'always')}  •  ${hh}:${mm}`
+  return `${fDate(d, 'numeric', 'always')}  •  ${hh}:${mm}`
 }
 /** "provider_account_id" → "Provider Account Id" — the raw-fields toggle's row labels
  *  (connectors-as-data-sources UI spec §4.4). */
