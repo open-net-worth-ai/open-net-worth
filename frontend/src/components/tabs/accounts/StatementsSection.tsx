@@ -406,7 +406,7 @@ export function StatementViewer({
           {diffOpen &&
             diff.map((d) => (
               <div key={d.id} className="acct-stmtview-check-row">
-                <span className="nums">{fDate(d.date, 'numeric', 'always')}</span>
+                <span className="nums">{d.date ? fDate(d.date, 'numeric', 'always') : ''}</span>
                 <span className="acct-stmtview-check-note">{d.note || '—'}</span>
                 <Badge tone="muted">{d.source || d.kind || 'row'}</Badge>
                 <Money className="nums">
