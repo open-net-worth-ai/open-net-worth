@@ -17789,6 +17789,14 @@ body.hide-amounts .mask * {
 /* On the foldable iPhone (UA says iPhone, portrait) the page starts under the system status area with no edge of its own, so the
    strip above the rail and the top bar reads as part of the page. An inset line draws that edge
    without adding height (owner, 2026-11-09). */
+/* On an iPhone the page never sits under the status area (`default` status-bar style lays it out
+   below it in portrait; landscape moves the status area to the side), so the top inset is never
+   ours to reserve. iOS also keeps reporting the portrait inset for ~5s after rotating to
+   landscape, which held an empty band above the ticker bar until it caught up (owner's screen
+   recording, 2026-11-09). Zero it so a stale value can't reach the layout. */
+:root[data-onw-device='iphone'] {
+  --safe-t: 0px;
+}
 @media (orientation: portrait) {
   :root[data-onw-device='iphone'] :is(.sidebar-header, .topbar) {
     box-shadow: inset 0 1px 0 var(--line);
