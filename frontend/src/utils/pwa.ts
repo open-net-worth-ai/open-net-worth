@@ -44,10 +44,20 @@ export function relayoutAfterRotation(): void {
         window.scrollTo(0, 0)
       })
     })
+  // iOS settles the rotated layout at an unannounced moment, so nudge right away, a few times
+  // while it settles, and on each resize it reports — the first one after it settles wins.
+  let lastWidth = window.innerWidth
   const onRotate = () => {
     nudge()
-    window.setTimeout(nudge, 400)
+    for (const ms of [60, 150, 300, 500]) window.setTimeout(nudge, ms)
+  }
+  const onResize = () => {
+    if (window.innerWidth === lastWidth) return
+    lastWidth = window.innerWidth
+    onRotate()
   }
   screen.orientation?.addEventListener?.('change', onRotate)
   window.addEventListener('orientationchange', onRotate)
+  window.addEventListener('resize', onResize)
+  window.visualViewport?.addEventListener('resize', onResize)
 }
