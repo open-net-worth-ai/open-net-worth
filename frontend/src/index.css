@@ -17776,19 +17776,14 @@ body.hide-amounts .mask * {
      One knob for every page; raise it if a table needs more room. */
   --content-max: 1400px;
 }
-/* Installed iPad web apps can lay out under the status bar while reporting a zero
-   safe-area-inset-top. Give touch-capable tablets the 24px iPad status-bar floor; the real
-   env() value still wins up to 32px: a foldable's large top inset (Surface Duo) otherwise
-   inflated the ticker bar and rail header to ~130px. Keeping this on --safe-t makes every top-level
-   chrome owner (topbar, nav rail, and Lucius) consume the same inset. */
+/* The installed app (`default` status-bar style, index.html) is laid out BELOW the status bar,
+   so the page reserves only what the OS reports — and never more than 32px of it. A 24px
+   iPad "floor" used to sit here; it double-reserved the strip the system already leaves and
+   pushed the ticker row down (owner, 2026-11-09). Every top-level chrome owner (topbar, nav
+   rail, Lucius) reads --safe-t, so the cap keeps a large inset (foldables) from inflating them. */
 @media (min-width: 640px) and (any-pointer: coarse) {
   :root {
     --safe-t: min(env(safe-area-inset-top, 0px), 32px);
-  }
-}
-@media (min-width: 640px) and (any-pointer: coarse) and (display-mode: standalone) {
-  :root {
-    --safe-t: clamp(24px, env(safe-area-inset-top, 0px), 32px);
   }
 }
 /* Desktop-only: the mobile shell hides `.sidebar` via CSS but never unmounts it, so
