@@ -17785,6 +17785,13 @@ body.hide-amounts .mask * {
   :root {
     --safe-t: min(env(safe-area-inset-top, 0px), 32px);
   }
+  /* The page starts under the system status area with no edge of its own, so the strip above
+     the rail and the top bar read as part of the page. An inset line draws that edge without
+     adding height (owner, 2026-11-09). */
+  .sidebar-header,
+  .topbar {
+    box-shadow: inset 0 1px 0 var(--line);
+  }
 }
 /* Desktop-only: the mobile shell hides `.sidebar` via CSS but never unmounts it, so
    `sidebarExpanded`'s default-true state kept matching `:has()` on phones too — its
