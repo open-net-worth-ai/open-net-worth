@@ -133,6 +133,124 @@ def test_an_answer_to_a_request_said_in_two_goes_stays_below_it(monkeypatch):
     ]
 
 
+def _quiet_desk(monkeypatch):
+    agent, desk_ = _desk()
+    monkeypatch.setattr(agent, "SOUND_CLAIMED_S", 0.0)
+    desk_.AWAY_S = 0.02
+    desk_._session = _QuietSession()
+    desk_._session.said = []
+    desk_._owner_sound_at = 0.0
+    went = []
+    desk_.away = lambda: went.append("away")
+    return desk_, went
+
+
+def _after(desk_, steps, wait=0.1):
+    import asyncio
+
+    async def run():
+        for step in steps:
+            step()
+        await asyncio.sleep(wait)
+
+    asyncio.run(run())
+
+
+def test_a_quiet_line_checks_in_without_waiting_on_livekit(monkeypatch):
+    """The owner's call: a minute of silence and no "are you still there?"."""
+    desk_, went = _quiet_desk(monkeypatch)
+    _after(desk_, [desk_.voice_stopped])
+    assert went == ["away"]
+
+
+def test_him_speaking_stops_the_count(monkeypatch):
+    desk_, went = _quiet_desk(monkeypatch)
+    _after(desk_, [desk_.voice_stopped, desk_.spoke])
+    assert went == []
+
+
+def test_their_words_count_from_when_they_came(monkeypatch):
+    desk_, went = _quiet_desk(monkeypatch)
+    desk_.AWAY_S = 0.06
+
+    async def steps():
+        import asyncio
+
+        desk_.voice_stopped()
+        await asyncio.sleep(0.04)
+        desk_.heard("Let me think")
+        await asyncio.sleep(0.04)
+        assert went == []  # counting from their words, not from his voice
+        await asyncio.sleep(0.06)
+
+    import asyncio
+
+    asyncio.run(steps())
+    assert went == ["away"]
+
+
+def test_sounds_with_no_words_dont_keep_a_call_open(monkeypatch):
+    """The detector flipped to speaking every few seconds on a silent line."""
+    desk_, went = _quiet_desk(monkeypatch)
+    _after(desk_, [desk_.voice_stopped, desk_.owner_began, desk_.owner_stopped, desk_.owner_began])
+    assert went == ["away"]
+
+
+def test_it_counts_again_while_he_is_still_speaking(monkeypatch):
+    desk_, went = _quiet_desk(monkeypatch)
+    desk_._session.agent_state = "speaking"
+    _after(desk_, [desk_.voice_stopped], wait=0.05)
+    assert went == []
+    desk_._session.agent_state = "listening"
+    _after(desk_, [desk_.watch_quiet])
+    assert went == ["away"]
+
+
+class _WaitingAnswer:
+    """An answer queued on the call, not yet playing."""
+
+    def __init__(self):
+        self.interrupted = False
+
+    def done(self):
+        return self.interrupted
+
+    def interrupt(self):
+        self.interrupted = True
+
+
+def _adding_to_a_request(agent, desk_, answer, playing=False):
+    desk_._session = _QuietSession()
+    desk_._session.said = []
+    if playing:
+        desk_._session.current_speech = answer
+        desk_._session.agent_state = "speaking"
+    desk_.heard("How much on groceries this week?")
+    desk_.submit("How much did I spend on groceries this week?")
+    desk_._queue.get_nowait()
+    desk_._last_answer = answer
+    desk_.heard("And my rent")
+    desk_.submit("Groceries and rent this week?", ack="Got it, rent too.", continues_last=True)
+
+
+def test_more_asked_while_its_answer_waits_drops_that_answer_and_says_got_it():
+    """The owner's call: "Got it, rental too" was queued behind the groceries answer and dropped."""
+    agent, desk_ = _desk()
+    waiting = _WaitingAnswer()
+    _adding_to_a_request(agent, desk_, waiting)
+    assert waiting.interrupted
+    assert desk_._session.said[-1] == "Got it, rent too."
+    assert not desk_._waiting_lines()  # an answer arriving can't drop it
+
+
+def test_an_answer_already_playing_finishes_and_got_it_still_comes():
+    agent, desk_ = _desk()
+    playing = _WaitingAnswer()
+    _adding_to_a_request(agent, desk_, playing, playing=True)
+    assert not playing.interrupted
+    assert desk_._session.said[-1] == "Got it, rent too."
+
+
 @pytest.mark.parametrize(("he_spoke", "joins"), [(False, True), (True, False)])
 def test_more_words_join_the_last_message_only_if_he_said_nothing_since(he_spoke, joins):
     """The owner's call: "HER too?", then "Okay, let me check HER.", then "And Uber"."""
