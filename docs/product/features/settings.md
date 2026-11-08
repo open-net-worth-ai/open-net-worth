@@ -33,7 +33,8 @@ On a phone the sections are a grouped list — tap one to open it, and use the b
    and the default date on new entries. The browser's zone is detected the first time; a zone
    you pick yourself is never overwritten.
 3. Under **Number & date format**, choose a **Date format** (31/12/2026, 12/31/2026 or
-   2026-12-31) and a **Number format**. Left on **Browser default**, they follow your browser.
+   2026-12-31) and a **Number format**. Left on **Browser default**, they follow your browser. Large figures in tight spaces are
+   shortened with K, M, B or T (₫2.01B) in every number format; only the separators change.
 
 **Switch to dark mode**
 1. Open **Settings → Appearance**.
