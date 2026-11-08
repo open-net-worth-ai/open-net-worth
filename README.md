@@ -124,7 +124,9 @@ on Windows, follow [these steps](docs/product/getting-started/installation.md#wi
 curl -fsSL https://github.com/open-net-worth-ai/open-net-worth-releases/releases/latest/download/install-server.sh | sh
 ```
 
-If the installer tells you to open a new terminal, do that before the next step.
+If it says `onw` was added to your `PATH`, run the `source` line it shows (for zsh,
+`source ~/.zshenv`) or open a new terminal. It finishes by listing the commands you're likely to
+need next.
 
 **2. Start it.** Your browser opens the app, and first run takes it from there.
 
@@ -225,11 +227,11 @@ front of it, and none is required.
   onw start --autostart
   ```
 
-  (`onw autostart install` is the same thing. From a source checkout, `make autostart` runs setup
+  (`onw autostart on` is the same thing, and `onw autostart off` turns it off again. From a source checkout, `make autostart` runs setup
   first, then the same thing.) This installs a per-user **launchd** LaunchAgent on macOS, a
   per-user **systemd** unit (plus `loginctl enable-linger`, so it starts even before you log in) on
   Linux, or a per-user **Task Scheduler** task on Windows — no sudo or admin needed on any of them.
-  `onw autostart status` shows whether it's running; `onw autostart uninstall` stops it and removes the
+  `onw autostart` on its own shows whether it's on; `onw autostart off` stops it and removes the
   service. Logs land in `~/.open-net-worth/logs/app.log`.
 
   <details>

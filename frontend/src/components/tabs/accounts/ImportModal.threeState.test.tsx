@@ -192,13 +192,13 @@ describe('ImportModal — strong band pair row', () => {
     // The existing entry's identity (labels never change) with the statement's date.
     expect(within(after).getByText('Grab ride')).toBeTruthy()
     const struck = after.querySelector('s.imp-after-old') as HTMLElement
-    expect(struck.textContent).toBe('06-06')
-    expect(within(after).getByText('06-05').className).toContain('imp-after-new')
+    expect(struck.textContent).toBe('06/06')
+    expect(within(after).getByText('06/05').className).toContain('imp-after-new')
     // Same settled amount → no amount delta, the value stays quiet.
     expect(after.querySelectorAll('s.imp-after-old').length).toBe(1)
     expect(within(after).getByText('reference attached')).toBeTruthy()
     // The outcome line (zone 3) still reads the date re-stamp.
-    expect(screen.getByText('06-05', { selector: '.imp-after-new' })).toBeTruthy()
+    expect(screen.getByText('06/05', { selector: '.imp-after-new' })).toBeTruthy()
   })
 
   it('flipping to Skip updates the decision chip AND the after column to the byte-unchanged record — live reactivity', async () => {
@@ -211,7 +211,7 @@ describe('ImportModal — strong band pair row', () => {
     const after = afterCol(pairRowFor('Leave out'))
     // ONE record, the existing entry as-is: its own date, no deltas, no cleared badge.
     expect(after.querySelectorAll('.imp-after-rec').length).toBe(1)
-    expect(within(after).getByText('06-06')).toBeTruthy()
+    expect(within(after).getByText('06/06')).toBeTruthy()
     expect(after.querySelector('s.imp-after-old')).toBeNull()
     expect(within(after).getByText('yours stays as-is')).toBeTruthy()
     expect(screen.getByText('Nothing to book')).toBeTruthy()
@@ -476,8 +476,8 @@ describe('ImportModal — weak band (twin-sourced pair row)', () => {
     expect(after.querySelectorAll('.imp-after-rec').length).toBe(1)
     expect(within(after).getByText('Anthropic Claude API')).toBeTruthy() // label kept
     const olds = Array.from(after.querySelectorAll('s.imp-after-old')).map((el) => el.textContent)
-    expect(olds).toEqual(['06-19', '-S$14.16'])
-    expect(within(after).getByText('06-18').className).toContain('imp-after-new')
+    expect(olds).toEqual(['06/19', '-S$14.16'])
+    expect(within(after).getByText('06/18').className).toContain('imp-after-new')
     expect(within(after).getByText('-S$14.63').className).toContain('imp-after-new')
     expect(within(after).getByText('reference attached')).toBeTruthy()
     expect(document.querySelector('.imp3-foot-note')?.textContent).toContain('Link 1')
@@ -656,7 +656,7 @@ describe('ImportModal — after column transfer-echo exception', () => {
     const after = afterCol(pairRowFor('Link'))
     expect(after.querySelectorAll('.imp-after-rec').length).toBe(1)
     expect(within(after).getByText('EUR→SGD conversion')).toBeTruthy()
-    expect(within(after).getByText('06-13')).toBeTruthy() // the transfer's OWN date, kept
+    expect(within(after).getByText('06/13')).toBeTruthy() // the transfer's OWN date, kept
     expect(after.querySelector('s.imp-after-old')).toBeNull() // no delta, nothing rewritten
     expect(within(after).getByText('linked ✓')).toBeTruthy()
     expect(screen.getByText(/linked ✓/)).toBeTruthy()
@@ -2052,7 +2052,7 @@ describe('ImportModal — statement meta line minimum payment', () => {
       }),
     )
     await screen.findByText('X')
-    expect(screen.getByText('Due 2026-06-30 • S$3,000.00 • min S$386.02')).toBeTruthy()
+    expect(screen.getByText('Due Jun 30, 2026 • S$3,000.00 • min S$386.02')).toBeTruthy()
   })
 
   it('renders no min fragment when minimum_payment is absent or zero', async () => {
@@ -2065,7 +2065,7 @@ describe('ImportModal — statement meta line minimum payment', () => {
       }),
     )
     await screen.findByText('X')
-    expect(screen.getByText('Due 2026-06-30 • S$3,000.00')).toBeTruthy()
+    expect(screen.getByText('Due Jun 30, 2026 • S$3,000.00')).toBeTruthy()
   })
 })
 
@@ -2137,9 +2137,9 @@ describe('ImportModal — transfer_pair formation copy (§2b)', () => {
     const after = afterCol(pairRowFor('Link'))
     expect(within(after).getByText(/cleared ✓/)).toBeTruthy()
     expect(within(after).getByText('becomes a transfer')).toBeTruthy()
-    // The statement's own date wins (the existing income's 06-04 is struck through).
-    expect(after.querySelector('s.imp-after-old')?.textContent).toBe('06-04')
-    expect(within(after).getByText('06-05')).toBeTruthy()
+    // The statement's own date wins (the existing income's 06/04 is struck through).
+    expect(after.querySelector('s.imp-after-old')?.textContent).toBe('06/04')
+    expect(within(after).getByText('06/05')).toBeTruthy()
     // The draft is the debit leg — its own -$200 magnitude is the projected leg amount,
     // never averaged/replaced by the existing income's figure.
     expect(within(after).getByText('S$200.00')).toBeTruthy()

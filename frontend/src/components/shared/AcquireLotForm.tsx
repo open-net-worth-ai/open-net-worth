@@ -458,7 +458,7 @@ export function AcquireLotForm({
     if (!lot) return
     setConfirm({
       title: 'Remove this lot?',
-      body: `This will permanently remove ${lot.original_qty} units acquired on ${lot.acquired_at}. Unrealized P&L and cost basis will update.`,
+      body: `This will permanently remove ${lot.original_qty} units acquired on ${lot.acquired_at ? fDate(lot.acquired_at, 'short', 'always') : 'an unknown date'}. Unrealized P&L and cost basis will update.`,
       confirmLabel: 'Remove',
       danger: true,
       confirmDisabled: removing,

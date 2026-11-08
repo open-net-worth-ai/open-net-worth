@@ -262,25 +262,51 @@ export const fBaseWhole = (n: number): string =>
  *  (e.g. VND projections in the cash-flow grid). 2,008,437,944 → ₫2.01B, 50,400 → S$50.4K.
  *  Small values (<1000) render in full. Pair with a `title` carrying the exact fBase value. */
 export function fBaseCompact(n: number): string {
-  const code = _baseCurrency
+  return fCompactAmount(n, _baseCurrency, 2)
+}
+
+const COMPACT_UNITS: ReadonlyArray<readonly [number, string]> = [
+  [1e12, 'T'],
+  [1e9, 'B'],
+  [1e6, 'M'],
+  [1e3, 'K'],
+]
+
+/** Scale to K/M/B/T. The suffix is fixed (never the locale's "Mio."/"Mrd."/"Tr"), so a
+ *  figure reads the same in every Number format; only separators and symbol placement follow it. */
+function scaleCompact(v: number, maxFrac: number): { scaled: number; suffix: string } {
+  const a = Math.abs(v)
+  const i = COMPACT_UNITS.findIndex(([u]) => a >= u)
+  if (i < 0) return { scaled: v, suffix: '' }
+  const f = 10 ** maxFrac
+  const rounded = Math.round((a / COMPACT_UNITS[i][0]) * f) / f
+  const j = rounded >= 1000 && i > 0 ? i - 1 : i
+  return { scaled: v / COMPACT_UNITS[j][0], suffix: COMPACT_UNITS[j][1] }
+}
+
+/** Compact currency amount WITH symbol and a fixed K/M/B/T suffix — ₫2.01B, S$50.4K. */
+export function fCompactAmount(n: number, currency: string, maxFrac = 2): string {
+  const code = (currency || _baseCurrency).toUpperCase()
   const value = n === 0 ? 0 : n
   try {
-    const fmt = new Intl.NumberFormat(_numberLocale, {
+    const { scaled, suffix } = scaleCompact(value, maxFrac)
+    const parts = new Intl.NumberFormat(_numberLocale, {
       style: 'currency',
       currency: code,
       currencyDisplay: 'narrowSymbol',
-      notation: 'compact',
-      maximumFractionDigits: 2,
-    })
-    if (UNAMBIGUOUS[code]) {
-      return fmt
-        .formatToParts(value)
-        .map((p) => (p.type === 'currency' ? UNAMBIGUOUS[code] : p.value))
-        .join('')
-    }
-    return fmt.format(value)
+      minimumFractionDigits: 0,
+      maximumFractionDigits: maxFrac,
+    }).formatToParts(scaled)
+    const last = parts.map((p) => p.type).lastIndexOf('fraction')
+    const at = last >= 0 ? last : parts.map((p) => p.type).lastIndexOf('integer')
+    return parts
+      .map((p, k) => {
+        const v = p.type === 'currency' && UNAMBIGUOUS[code] ? UNAMBIGUOUS[code] : p.value
+        return k === at ? v + suffix : v
+      })
+      .join('')
   } catch {
-    return fBase(n)
+    return fCurrency(n, code)
   }
 }
 
@@ -337,10 +363,11 @@ export const fNum = (n: number): string => Math.round(n).toLocaleString(_numberL
  *  120234567 → "120.23M". Used for crypto market cap / token supply. */
 export function fCompact(n: number, maxFrac = 2): string {
   try {
-    return new Intl.NumberFormat(_numberLocale, {
-      notation: 'compact',
-      maximumFractionDigits: maxFrac,
-    }).format(n)
+    const { scaled, suffix } = scaleCompact(n, maxFrac)
+    return (
+      new Intl.NumberFormat(_numberLocale, { maximumFractionDigits: maxFrac }).format(scaled) +
+      suffix
+    )
   } catch {
     return fNum(n)
   }
@@ -529,28 +556,19 @@ export function txnMentionSublabel({
   return parts.join(' • ')
 }
 
-/** Short, year-less date for a compact chip: "2026-06-02" → "Jun 2". Pure string parse
- *  (no Date/timezone). Falls back to the input when it isn't an ISO yyyy-mm-dd. */
+/** Compact month + day for a dense cell ("02/06", "06/02" or "06-02" by the Date-format
+ *  preference); the year is left out. Empty for a missing or unreadable value. */
+export function fMonthDay(iso: string | null | undefined): string {
+  if (!iso) return ''
+  const d = parseDate(iso)
+  return d ? fDate(d, 'numeric', 'never') : ''
+}
+
+/** Short, year-less date for a compact chip: "2026-06-02" → "2 Jun" / "Jun 2" by the
+ *  Date-format preference. Falls back to the input when it isn't an ISO yyyy-mm-dd. */
 export function fShortDate(iso: string): string {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso)
-  if (!m) return iso
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ]
-  const month = months[parseInt(m[2]!, 10) - 1]
-  if (!month) return iso
-  return `${month} ${parseInt(m[3]!, 10)}`
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso
+  return fDate(iso, 'short', 'never')
 }
 
 export const fVND = (m: number): string =>

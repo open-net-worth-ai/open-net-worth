@@ -256,7 +256,7 @@ def test_a_boot_service_is_not_stopped_only_to_come_back(running, monkeypatch, c
 
     assert background.stop(**FAST) == 1
 
-    assert "onw autostart uninstall" in capsys.readouterr().err
+    assert "onw autostart off" in capsys.readouterr().err
     assert not upgrade_request.stop_path().exists()
 
 

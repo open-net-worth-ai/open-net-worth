@@ -193,7 +193,7 @@ def stop(
         return 0
     if boot_service_runs_this_folder():
         print("It runs as the boot service, which would only start it again.", file=sys.stderr)
-        print("To stop it and remove the service, run: onw autostart uninstall", file=sys.stderr)
+        print("To stop it and turn autostart off, run: onw autostart off", file=sys.stderr)
         return 1
     if not _asked(server, "stop", "Stopping", heard_wait=heard_wait, poll=poll):
         return 1

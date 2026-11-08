@@ -10,8 +10,7 @@ anything below it (backend.main included); nothing below may import it.
     onw restart                          restart it, the way it was running
     onw status                           whether it's running, its URL, version and folder
     onw logs [--follow] [--lines N]      show the end of its log
-    onw autostart install|uninstall|status
-                                         start at login/boot and restart on crash
+    onw autostart [on|off|status]        start it by itself at every login, and after a crash
     onw upgrade [--check]                update to the newest release
     onw reset-password                   set a new password when the old one is forgotten
     onw mcp                              stdio MCP bridge an AI app launches itself
@@ -29,6 +28,7 @@ import sys
 from collections.abc import Sequence
 
 _WINDOWS_TASK_COMMAND = "autostart-run"
+_COMMAND_SPELLINGS = {"auto-start": "autostart"}  # typed either way; the help shows one
 _INTERRUPTED = 130  # 128 + SIGINT, what a shell reports for Ctrl-C
 
 
@@ -76,6 +76,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="install new releases automatically and restart when idle (a `uv tool` install only)",
     )
     start.add_argument("--service", action="store_true", help=argparse.SUPPRESS)  # the boot service
+    # The other spellings people type, off the help so it shows one name each.
+    start.add_argument(
+        "--auto-start", dest="autostart", action="store_true", help=argparse.SUPPRESS
+    )
+    start.add_argument(
+        "--auto-update", dest="auto_upgrade", action="store_true", help=argparse.SUPPRESS
+    )
 
     sub.add_parser("stop", help="stop the app")
     sub.add_parser("restart", help="restart the app, the way it was running")
@@ -84,12 +91,21 @@ def build_parser() -> argparse.ArgumentParser:
     logs.add_argument("-f", "--follow", action="store_true", help="keep showing what it adds")
     logs.add_argument("-n", "--lines", type=int, default=50, help="how many lines (default: 50)")
 
-    auto = sub.add_parser("autostart", help="start the app at login/boot and restart it on a crash")
-    # `stop` is the old name for `uninstall`, and still works.
+    auto = sub.add_parser(
+        "autostart",
+        help="start the app by itself at every login, and after a crash",
+        description="Start the app by itself at every login, and after a crash. On its own, "
+        "this says whether that's on.",
+    )
+    # The older names still work, off the help: `install` is `on`, `uninstall` and `stop` are `off`.
     auto.add_argument(
         "action",
-        choices=("install", "uninstall", "status", "stop"),
-        metavar="{install,uninstall,status}",
+        nargs="?",
+        default="status",
+        choices=("on", "off", "status", "install", "uninstall", "stop"),
+        metavar="{on,off,status}",
+        help="on: turn it on and start the app now. off: turn it off and stop the app. "
+        "status (the default): say whether it's on",
     )
 
     reset = sub.add_parser(
@@ -138,6 +154,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             from backend.cli.autostart_windows import run_service
 
             return run_service()
+        if arguments and arguments[0] in _COMMAND_SPELLINGS:
+            arguments = [_COMMAND_SPELLINGS[arguments[0]], *arguments[1:]]
         return _run(build_parser(), arguments)
     except KeyboardInterrupt:
         return _INTERRUPTED
@@ -198,4 +216,9 @@ def _run(parser: argparse.ArgumentParser, arguments: list[str]) -> int:
         return check() if args.check else upgrade()
     from backend.cli.autostart import run_autostart
 
-    return run_autostart(args.action)
+    code = run_autostart(args.action)
+    if args.action == "status":
+        print(
+            "To turn it off: onw autostart off" if code == 0 else "To turn it on: onw autostart on"
+        )
+    return code

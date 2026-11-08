@@ -384,7 +384,7 @@ export function Commitments({ fx, onAskLucius, selectedId, onSelect }: Props) {
         ['Remaining', fBase(remainingBase(open, fx))],
       ]
       const ni = nextInstallment(open)
-      if (ni) facts.push(['Next installment', `${fBase(ni.amount)} due ${ni.due_date}`])
+      if (ni) facts.push(['Next installment', `${fBase(ni.amount)} due ${fmtDate(ni.due_date)}`])
       return facts
     }
     if (!coverage || !derived) return []

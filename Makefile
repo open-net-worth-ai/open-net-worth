@@ -249,11 +249,11 @@ start:
 ##            the non-Docker answer to Docker's `restart: unless-stopped`; Docker
 ##            already has that built in and needs no target here.
 autostart: setup
-	@$(VENV)/bin/onw autostart install
+	@$(VENV)/bin/onw autostart on
 
 ## autostart-stop: stop the boot service and stop it starting at boot again
 autostart-stop:
-	@$(VENV)/bin/onw autostart stop
+	@$(VENV)/bin/onw autostart off
 
 ## autostart-status: is the boot service currently installed/running
 autostart-status:

@@ -15,7 +15,7 @@ import { catOptionsFor } from './categories'
 import TxnDetail from './TxnDetail'
 import { useIsMobile } from '../../../hooks/useIsMobile'
 import { X, ArrowLeftRight, Plus, ChevronDown, ChevronRight } from '../../../ui/icons'
-import { fDate } from '../../../utils/format'
+import { fDate, fMonthDay } from '../../../utils/format'
 import { fetchVaultItem, type VaultItem } from '../../../api/vault'
 import { PreviewLoading } from '../../vault/PreviewLoading'
 import { DocumentPreview } from '../../vault/DocumentPreview'
@@ -2822,7 +2822,7 @@ export function ImportModal({
     const draftOrigCcy = d.original_currency ?? d.origCurrency
     const addsOriginal = draftOrigAmt != null && !!draftOrigCcy && ex?.original_amount == null
     const frags: string[] = []
-    if (dateChanged) frags.push(`${ex!.date!.slice(5)} → ${d.date.slice(5)}`)
+    if (dateChanged) frags.push(`${fMonthDay(ex.date)} → ${fMonthDay(d.date)}`)
     if (amountChanged)
       frags.push(
         `${fCur(ex!.amount!, ex!.currency || d.currency, { cents: true })} → ${fCur(d.amount, d.currency, { cents: true })}`,
@@ -4260,7 +4260,7 @@ export function ImportModal({
                   return {
                     id: String(d.rowIndex),
                     line:
-                      `${d.date.slice(5)} • ${rowTitle(d)} • ${fCur(d.amount, d.currency, { cents: true })}` +
+                      `${fMonthDay(d.date)} • ${rowTitle(d)} • ${fCur(d.amount, d.currency, { cents: true })}` +
                       (original ? ` (${original})` : ''),
                     taken: false,
                     hint: holds ? `• linked to ${holds}` : undefined,
@@ -4366,7 +4366,7 @@ export function ImportModal({
                         setLedgerExpanded((current) => ({ ...current, [r.id]: !current[r.id] }))
                       }
                     >
-                      <span className="imp3-arow-date">{r.date?.slice(5) || '—'}</span>
+                      <span className="imp3-arow-date">{fMonthDay(r.date) || '—'}</span>
                       {/* No native `title` on the name: the browser's own tooltip covered the row
                       beneath it on every truncated description (owner, 2026-07-31). The name
                       ellipsizes cleanly instead; the FULL text is still announced — it is this
@@ -4635,7 +4635,7 @@ export function ImportModal({
                 const opening = !!drawerLoading[r.id]
                 return (
                   <div key={r.id} className="acct-stmtview-check-row">
-                    <span className="nums">{r.date ? fDate(r.date, 'numeric', 'always') : ''}</span>
+                    <span className="nums">{r.date ? fDate(r.date, 'short', 'always') : ''}</span>
                     <span className="acct-stmtview-check-note">
                       <button
                         type="button"
@@ -4911,7 +4911,7 @@ export function ImportModal({
                         }
                       }}
                     >
-                      <span className="imp3-arow-date">{d.date.slice(5)}</span>
+                      <span className="imp3-arow-date">{fMonthDay(d.date)}</span>
                       <span className="imp3-arow-main">
                         <span className="imp3-arow-name" title={rowTitle(d)}>
                           {rowTitle(d)}
@@ -5040,7 +5040,7 @@ export function ImportModal({
                           <span className="imp3-arow-maybe-tag">Maybe</span>
                           <span className="imp3-arow-maybe-name">{ex.note || '—'}</span>
                           <span className="imp3-arow-maybe-facts">
-                            <span>{ledgerDate ? ledgerDate.slice(5) : '—'}</span>
+                            <span>{ledgerDate ? fMonthDay(ledgerDate) : '—'}</span>
                             {driftPhrase(d.amount, ledgerAmount) && (
                               <span>{driftPhrase(d.amount, ledgerAmount)}</span>
                             )}
@@ -5089,7 +5089,7 @@ export function ImportModal({
                         the expanded comparison. */}
                           <span className="imp3-arow-match-facts">
                             <span className={dateDrifts ? 'hi' : ''}>
-                              {ledgerDate ? ledgerDate.slice(5) : '—'}
+                              {ledgerDate ? fMonthDay(ledgerDate) : '—'}
                             </span>
                             <span aria-hidden="true">•</span>
                             <span>{MATCH_KIND_LABEL[ex.kind || ''] || ex.kind || '—'}</span>
@@ -5141,7 +5141,7 @@ export function ImportModal({
                               <div className="imp3-cmp-src">{d.description}</div>
                             )}
                             <div className="imp3-cmp-facts">
-                              <span className={dateDrifts ? 'hi' : ''}>{d.date.slice(5)}</span>
+                              <span className={dateDrifts ? 'hi' : ''}>{fMonthDay(d.date)}</span>
                               {origAmt && origCcy && origCcy !== d.currency ? (
                                 <span
                                   className="imp3-orig"
@@ -5217,7 +5217,7 @@ export function ImportModal({
                           original above — the two columns must be directly comparable. */}
                             <div className="imp3-cmp-facts">
                               <span className={dateDrifts ? 'hi' : ''}>
-                                {ledgerDate ? ledgerDate.slice(5) : '—'}
+                                {ledgerDate ? fMonthDay(ledgerDate) : '—'}
                               </span>
                               {ledgerOriginal && (
                                 <span
@@ -5694,7 +5694,7 @@ export function ImportModal({
                         }
                       }}
                     >
-                      <span className="imp3-arow-date">{d.date.slice(5)}</span>
+                      <span className="imp3-arow-date">{fMonthDay(d.date)}</span>
                       <span className="imp3-arow-main">
                         <span className="imp3-arow-name" title={title}>
                           {title}
@@ -6293,7 +6293,7 @@ export function ImportModal({
                         {position} of {queueItems.length}
                       </span>
                       <span className="imp3-qtitle">
-                        {title} • {d.date.slice(5)} •{' '}
+                        {title} • {fMonthDay(d.date)} •{' '}
                         <b>{fCur(d.amount, d.currency, { cents: true })}</b>
                         {origLine && (
                           <span
@@ -6358,7 +6358,7 @@ export function ImportModal({
                           <div className="imp3-cmp-name">{d.payee || d.description}</div>
                           <div className="imp3-cmp-src">{d.description}</div>
                           <div className="imp3-cmp-facts">
-                            <span>{d.date.slice(5)}</span>
+                            <span>{fMonthDay(d.date)}</span>
                             {origLine && (
                               <span
                                 className="imp3-orig"
@@ -6416,7 +6416,7 @@ export function ImportModal({
                             })}
                           </div>
                           <div className="imp3-cmp-facts">
-                            <span>{existingDate ? existingDate.slice(5) : '—'}</span>
+                            <span>{existingDate ? fMonthDay(existingDate) : '—'}</span>
                             {existingOriginal && (
                               <span
                                 className="imp3-orig"
@@ -6619,7 +6619,7 @@ export function ImportModal({
                       ) : action === 'new' ? (
                         <span className="imp3-after-rec">
                           <b>{title}</b>
-                          <span>{d.date.slice(5)}</span>
+                          <span>{fMonthDay(d.date)}</span>
                           <span>{queueCategory}</span>
                           <span className="amt">{statementAmount}</span>
                           {origLine && <span className="imp-after-orig">original {origLine}</span>}
@@ -6685,7 +6685,7 @@ export function ImportModal({
                             )}
                             {preview.meta?.payment_due_date && (
                               <span>
-                                Due {preview.meta.payment_due_date}
+                                Due {fDate(preview.meta.payment_due_date, 'short', 'always')}
                                 {preview.meta.amount_due != null
                                   ? ` • ${fCur(preview.meta.amount_due, preview.meta.currency || account?.currency || 'SGD', { cents: true })}`
                                   : ''}
