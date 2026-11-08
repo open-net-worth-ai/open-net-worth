@@ -26,7 +26,8 @@ place a trade.
 
 | You have… | Use | What you need |
 |---|---|---|
-| A US or Canadian bank or card | **SimpleFIN** (easiest) or **Plaid** | SimpleFIN: a paid SimpleFIN Bridge account (about $15/year). Plaid: a Plaid developer account. |
+| A US bank or card | **SimpleFIN** (easiest) or **Plaid** | SimpleFIN: a paid SimpleFIN Bridge account (about $15/year). Plaid: a Plaid developer account. |
+| A Canadian bank or card | **SimpleFIN** | A paid SimpleFIN Bridge account (about $15/year). Plaid Link here is set to US institutions only. |
 | A bank in the EU or UK | **Enable Banking** | An Enable Banking application (ID + private key). |
 | A bank in the EU or UK, and an existing GoCardless Bank Account Data account | **GoCardless** | A secret ID and secret key from GoCardless. GoCardless no longer accepts new signups. |
 | Banks in other countries | **Lunch Flow** | A Lunch Flow developer client ID and secret. |
