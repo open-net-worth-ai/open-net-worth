@@ -15,13 +15,11 @@ const register = readFileSync(src('components/tabs/accounts/Register.tsx'), 'utf
 const feedTable = readFileSync(src('components/tabs/investments/FeedTable.tsx'), 'utf8')
 
 describe('iPad desktop support', () => {
-  it('provides a top safe-area floor when iPad standalone mode reports a zero inset', () => {
+  it('caps the top safe area on touch desktop layouts and adds no floor over what the OS reports', () => {
     expect(layoutCss).toMatch(
-      /@media \(min-width: 640px\) and \(any-pointer: coarse\) and \(display-mode: standalone\)\s*\{[\s\S]*?:root\s*\{[\s\S]*?--safe-t:\s*max\(env\(safe-area-inset-top, 0px\), 24px\);/,
+      /@media \(min-width: 640px\) and \(any-pointer: coarse\)\s*\{\s*:root\s*\{\s*--safe-t:\s*min\(env\(safe-area-inset-top, 0px\), 32px\);/,
     )
-    expect(layoutCss).not.toMatch(
-      /@media \(min-width: 640px\) and \(any-pointer: coarse\)\s*\{\s*:root\s*\{\s*--safe-t:/,
-    )
+    expect(layoutCss).not.toMatch(/--safe-t:\s*(max|clamp)\([^;]*24px/)
   })
 
   it('keeps the desktop navigation header below the shared top safe area', () => {
