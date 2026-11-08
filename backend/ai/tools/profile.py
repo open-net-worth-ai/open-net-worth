@@ -511,6 +511,7 @@ async def update_profile(input_data: dict):
             **changes["briefing_preferences"],
         }
     old_base = profile.get("base_currency")
+    old_notes = profile.get("notes")
     profile.update(changes)
     # Same side effects as the REST path: clear the stale FX cache + flag the manual
     # base-denominated amounts that don't auto-convert (so the user is reminded to revisit).
@@ -518,7 +519,16 @@ async def update_profile(input_data: dict):
 
     handle_base_currency_change(profile, old_base, changes.get("base_currency"))
     _root.write_profile(profile)
-    return json.dumps({"ok": True, "profile": profile}, ensure_ascii=False), None
+    result: dict = {"ok": True, "profile": profile}
+    if "notes" in changes:
+        from backend.services.profile import text_diff
+
+        diff = text_diff(old_notes, profile.get("notes"))
+        if diff["added"] or diff["removed"]:
+            result["changed"] = [
+                {"field": "notes", "label": "Instructions", "type": "text", "diff": diff}
+            ]
+    return json.dumps(result, ensure_ascii=False), None
 
 
 class DismissBaseCurrencyReviewInput(ToolInput):
