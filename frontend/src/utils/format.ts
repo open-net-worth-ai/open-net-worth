@@ -277,11 +277,12 @@ const COMPACT_UNITS: ReadonlyArray<readonly [number, string]> = [
 function scaleCompact(v: number, maxFrac: number): { scaled: number; suffix: string } {
   const a = Math.abs(v)
   const i = COMPACT_UNITS.findIndex(([u]) => a >= u)
-  if (i < 0) return { scaled: v, suffix: '' }
+  const unit = COMPACT_UNITS[i]
+  if (!unit) return { scaled: v, suffix: '' }
   const f = 10 ** maxFrac
-  const rounded = Math.round((a / COMPACT_UNITS[i][0]) * f) / f
-  const j = rounded >= 1000 && i > 0 ? i - 1 : i
-  return { scaled: v / COMPACT_UNITS[j][0], suffix: COMPACT_UNITS[j][1] }
+  const rounded = Math.round((a / unit[0]) * f) / f
+  const [divisor, suffix] = (rounded >= 1000 && COMPACT_UNITS[i - 1]) || unit
+  return { scaled: v / divisor, suffix }
 }
 
 /** Compact currency amount WITH symbol and a fixed K/M/B/T suffix — ₫2.01B, S$50.4K. */
