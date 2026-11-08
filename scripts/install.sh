@@ -121,7 +121,7 @@ if [ "$ON_USER_PATH" = 0 ]; then
   # update-shell` writes ~/.zshenv, and with uv already installed ~/.zshrc doesn't get the line.
   PROFILE="$(path_profile)"
   if [ -n "$PROFILE" ]; then
-    echo "    onw was added to your PATH. Reload it:"
+    echo "    onw was added to your PATH. Reload it before running any command:"
     echo "        source $PROFILE"
   else
     echo "    onw was added to your PATH. Open a new terminal to use it."

@@ -150,7 +150,7 @@ def test_it_names_the_file_that_now_holds_the_path(machine, shell, written, show
     result = run(home, f"{stubs}:/usr/bin:/bin", fake_uv, SHELL=shell, FAKE_PROFILE=written)
 
     assert result.returncode == 0, result.stderr
-    assert "onw was added to your PATH. Reload it:" in result.stdout
+    assert "onw was added to your PATH. Reload it before running any command:" in result.stdout
     assert shown in result.stdout
     assert "new terminal" not in result.stdout
 
