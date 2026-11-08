@@ -135,9 +135,9 @@ The `install-server.sh` script is for macOS and Linux. On Windows, in PowerShell
 | `onw restart` | Restart it the way it was running: in its terminal, in the background or as the boot service. It waits for a save or import in progress, as `onw stop` does, and says when it's back. |
 | `onw status` | Show whether it's running, its URL and version, the working folder, the boot service, where the log is, and how an upgrade is going or why it failed. If it isn't running, it says so and exits with an error code, so scripts can check it too. It looks at the server for this working folder on this machine. For Docker, use `docker compose ps`. |
 | `onw logs` | Show the end of its log. `--follow` (`-f`) keeps showing what's added until you press <kbd>Ctrl</kbd>+<kbd>C</kbd>; `--lines 200` (`-n`) shows more. |
-| `onw autostart install` | Start at login/boot and restart on crash — a launchd agent on macOS, a systemd user service on Linux, a Task Scheduler task on Windows. No `sudo` or admin. The same as `onw start --autostart`. |
-| `onw autostart status` | Show whether that service is installed and running, and whether auto-upgrade is on. |
-| `onw autostart uninstall` | Stop it and remove the service. The older name, `onw autostart stop`, still works. |
+| `onw autostart on` | Turn autostart on: the app starts now, by itself at every login, and again after a crash. It uses a launchd agent on macOS, a systemd user service on Linux, and a Task Scheduler task on Windows, with no `sudo` or admin. The same as `onw start --autostart`. |
+| `onw autostart off` | Turn it off: the app stops and won't start by itself again. Your book isn't touched. |
+| `onw autostart` | Say whether it's on, and whether auto-upgrade is on. `onw autostart status` does the same. The older names `install`, `uninstall` and `stop` still work. |
 | `onw upgrade` | Update to the newest release. A running server installs it and restarts once it's idle ([Upgrading](../operations/upgrading.md)). `--check` only says whether one is out. |
 | `onw reset-password` | Set a new password if you've forgotten it — see [I lost my password](../troubleshooting/lost-password.md). |
 | `onw mcp` | Let another AI app (Claude Desktop, Cursor…) use your book — see [Connect AI apps](../operations/connect-ai-apps.md). |
@@ -207,7 +207,7 @@ make setup start
 
 `make setup` creates `.venv`, installs dependencies and the `onw` command, builds the web
 interface and this help, and migrates the database. `make start` runs it on
-`http://127.0.0.1:8080`. `make autostart` runs setup, then `onw autostart install`.
+`http://127.0.0.1:8080`. `make autostart` runs setup, then `onw autostart on`.
 `CONTRIBUTING.md` covers the two-process dev mode (`uvicorn --reload` + `npm run dev`) and the
 test gate.
 
@@ -248,3 +248,10 @@ own machine is covered in [Exposing it beyond localhost](../operations/exposing-
 - [Upgrading](../operations/upgrading.md) — updating each kind of install.
 - [Where your files live](../reference/file-layout.md) — what's in `~/.open-net-worth/`.
 - [Environment variables](../reference/environment-variables.md) — optional overrides, such as `ONW_ROOT` to keep your data elsewhere.
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [How to Self-Host a Personal Finance App: 3 Install Routes](https://opennetworth.ai/blog/how-to-self-host-personal-finance-app/): the three install routes compared
+- [Self-Hosted Personal Finance: Apps, Tradeoffs and Setup](https://opennetworth.ai/blog/self-hosted-personal-finance/): what self-hosting your finances involves

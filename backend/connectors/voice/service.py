@@ -22,14 +22,18 @@ import threading
 import time
 from typing import Optional
 
+from backend.connectors.voice.cards import sounds_like_a_yes
 from backend.core.config import get_settings
 from backend.core.user_time import user_now
 from backend.db.voice_config_store import LANGUAGES, VoiceConfigStore, is_ready
 from backend.services.feature_flags import enabled as flag_enabled
 
 log = logging.getLogger(__name__)
+# A hint makes its words likelier: no merchant gets to make a yes likelier, on a call that can approve.
+_SOUNDS_LIKE_A_YES = re.compile(r"\b(?:approve\w*|confirm\w*|okay|ok)\b", re.I)
+_PLAIN_NAME = re.compile(r"^[^\W\d_][^\W_]*(?:[ '&.-][^\W\d_][^\W_]*)*$")
 
-_MIC_REPORT = re.compile(r"[a-z_]+=[a-z0-9.]+(,[a-z_]+=[a-z0-9.]+){0,9}")
+_MIC_REPORT = re.compile(r"[a-z_]+=[a-z0-9.]+(,[a-z_]+=[a-z0-9.]+){0,11}")
 
 FLAG = "voice_calls"
 _REQUIRED_MODULES = ("livekit.agents", "livekit.plugins.silero")
@@ -317,7 +321,32 @@ def call_settings() -> dict:
     return {
         **{key: config.get(key) for key in _PER_CALL},
         "language_name": LANGUAGES.get(config.get("language") or "en", "English"),
+        "own_terms": _own_terms(),
     }
+
+
+def _own_terms(limit: int = 20) -> list[str]:
+    """The owner's most used merchants, for the call to hear them right. Plain names only: a raw
+    bank description ("ACME*1234 SG") would only teach it noise. Never fails a call."""
+    from backend.services.payees import list_payees
+
+    try:
+        payees = list_payees()["payees"]
+    except Exception:  # noqa: BLE001 — a call is still a call without them
+        log.info("voice: couldn't read the merchants to hint at")
+        return []
+    payees = sorted(payees, key=lambda p: p.get("txn_count") or 0, reverse=True)
+    names = [str(p.get("payee") or "").strip() for p in payees]
+    plain = [
+        n
+        for n in names
+        if 3 <= len(n) <= 30
+        and len(n.split()) <= 3
+        and _PLAIN_NAME.match(n)
+        and not _SOUNDS_LIKE_A_YES.search(n)
+        and not sounds_like_a_yes(n)
+    ]
+    return plain[:limit]
 
 
 def needs_restart(before: dict, after: dict) -> bool:

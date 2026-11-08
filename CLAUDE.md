@@ -22,7 +22,7 @@ capture a bug with `make bug MSG="…"`.
 Fresh clone: `make setup start` (venv, deps, DB migration, frontend build, editable install of
 the `onw` CLI, then run). No `.env` needed — data defaults to `~/.open-net-worth/`, outside the
 checkout. `AUTH_PASSWORD=… docker compose up` on Windows (the password is REQUIRED under Docker).
-`onw autostart install` / `make autostart` installs a boot service (launchd/systemd).
+`onw autostart on` / `make autostart` installs a boot service (launchd/systemd).
 
 Users don't clone: they `uv tool install open-net-worth` (wheel built by `make wheel`) or pull
 `ghcr.io/open-net-worth-ai/open-net-worth`. A release is a manual, gated, signed act —
@@ -450,6 +450,11 @@ frontend/src/
   the raw field; every server-chosen string is sanitized.
 - The operator may read a connector secret back; the model never may
   (`services/connector_secrets.py`, not imported under `ai/`/`mcp/`).
+- Voice calls: a spoken answer can resolve ANY approval card, by the owner's knowing choice, through
+  the tap's own path (`desk.answer_card`). A yes counts only for a card read out verbatim to the end,
+  in words that began after the voice stopped, and only if it's a plain yes (`voice/cards.py`): never on
+  how a model read it. A new message cancels an open card, so a request waits, and nothing is appended
+  after one. ADR `2026-11-07-a-spoken-answer-can-resolve-any-approval-card`.
 - Chat channels: HMAC/Ed25519 first, `operator_trust` default false, IDOR guard on confirm, 10
   turns/60s rate limit per sender. A channel turn gets a card for every Ask tool unless the adapter's
   `is_owner_chat` says otherwise (Telegram: the private chat of a bot with one approved person,

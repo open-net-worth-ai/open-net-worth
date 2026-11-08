@@ -27,7 +27,7 @@ import { VoiceCallSettings } from './VoiceCallSettings'
 const open = () => fireEvent.click(screen.getByRole('button', { name: 'Voice settings' }))
 const pick = (label: string, value: string) =>
   fireEvent.change(screen.getByRole('combobox', { name: label }), { target: { value } })
-const saved = () => JSON.parse(authFetch.mock.calls[0][1].body)
+const saved = () => JSON.parse(authFetch.mock.calls[0]![1].body)
 
 beforeEach(() => {
   authFetch.mockResolvedValue({ ok: true, json: async () => ({}) })
@@ -62,7 +62,7 @@ describe('VoiceCallSettings', () => {
     pick('Language', 'vi')
     expect(restartCall).toHaveBeenCalledOnce()
     await waitFor(() => expect(authFetch).toHaveBeenCalledOnce())
-    expect(authFetch.mock.calls[0][0]).toBe('/api/voice/config')
+    expect(authFetch.mock.calls[0]![0]).toBe('/api/voice/config')
     expect(saved()).toEqual({ language: 'vi', stt_model: 'auto' })
     await waitFor(() => expect(invalidate).toHaveBeenCalledWith('voice-config'))
     expect(screen.queryByRole('dialog')).toBeNull()

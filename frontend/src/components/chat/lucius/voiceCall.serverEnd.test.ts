@@ -42,6 +42,7 @@ vi.mock('livekit-client', () => ({
     TrackSubscribed: 'trackSubscribed',
     ActiveSpeakersChanged: 'activeSpeakersChanged',
     ConnectionQualityChanged: 'connectionQualityChanged',
+    ParticipantAttributesChanged: 'participantAttributesChanged',
     ParticipantConnected: 'participantConnected',
     ParticipantDisconnected: 'participantDisconnected',
     Reconnecting: 'reconnecting',
@@ -640,7 +641,7 @@ describe('your words as you speak them', () => {
     })
     expect(seen).toEqual(['your', 'your balance', 'your balance is fine'])
     expect(state().spokenDone).toBe(true)
-    expect(state().lastSpoken).toBe('your balance is fine')
+    expect(state().spokenLines).toEqual(['your balance is fine'])
   })
 
   it('builds up across the segments of one long sentence', async () => {
@@ -678,6 +679,161 @@ describe('your words as you speak them', () => {
     finishOld()
     await old
     expect(state().heard).toBe('how much')
+  })
+
+  // A line of his held open until `end()`, as the voice speaks it.
+  const hisLine = (text: string) => {
+    let end = () => {}
+    const ended = new Promise<void>((done) => (end = done))
+    const reader = {
+      info: { attributes: { 'lk.transcribed_track_id': 'TR_lucius' } },
+      async *[Symbol.asyncIterator]() {
+        yield text
+        await ended
+      },
+    }
+    return { reader, end }
+  }
+  const whileHeSpeaks = async (text: string, during: () => Promise<void>) => {
+    const line = hisLine(text)
+    const speaking = say(line.reader)
+    await vi.waitFor(() => expect(state().spoken).toBe(text))
+    await during()
+    line.end()
+    await speaking
+  }
+
+  it('shows your words on the call screen while you talk and until he answers', async () => {
+    await liveCall()
+    await say(words('how much'))
+    expect(state().heardShown).toBe(true)
+    await say(words('how much did I spend', true))
+    expect(state().heardShown).toBe(true)
+    await whileHeSpeaks('One sec', async () => {
+      expect(state().heardShown).toBe(false)
+      expect(state().heard).toBe('how much did I spend') // the chat still needs them
+    })
+    expect(state().heardShown).toBe(false)
+  })
+
+  it('does not bring your words back when they finish late, after he has stopped', async () => {
+    await liveCall()
+    await say(words('how much did I'))
+    await whileHeSpeaks('One sec', async () => {})
+    await say(words('how much did I spend', true))
+    expect(state().heardShown).toBe(false)
+  })
+
+  it('does not bring them back when the same sentence finishes twice', async () => {
+    await liveCall()
+    await say(words('how much did I spend', true))
+    await whileHeSpeaks('One sec', async () => {})
+    await say(words('How much did I spend?', true))
+    expect(state().heardShown).toBe(false)
+    expect(state().heard).toBe('how much did I spend')
+  })
+
+  it('never shows what is heard while he talks, echo or not', async () => {
+    await liveCall()
+    await whileHeSpeaks('Your balance is fine', async () => {
+      await say(words('your balance'))
+      expect(state().heardShown).toBe(false)
+      await say(words('your balance is fine', true))
+      expect(state().heardShown).toBe(false)
+    })
+    expect(state().heardShown).toBe(false)
+  })
+
+  it('shows you once you talk on after he has stopped, as when you cut him off', async () => {
+    await liveCall()
+    await whileHeSpeaks('Your balance is', async () => {
+      await say(words('wait'))
+      expect(state().heardShown).toBe(false)
+    })
+    await say(words('wait a second'))
+    expect(state().heardShown).toBe(true)
+    await say(words('wait a second please', true))
+    expect(state().heardShown).toBe(true)
+  })
+
+  it('does not join what you said before his line to what you say after it', async () => {
+    await liveCall()
+    await say(words('how much did I spend', true))
+    await whileHeSpeaks('One sec', async () => {})
+    await say(words('and my rent'))
+    expect(state().heard).toBe('and my rent')
+    expect(state().heardShown).toBe(true)
+  })
+
+  // Live call, 2026-11-07: a line sometimes sends no words, and your earlier question stayed up.
+  const hisVoice = (state: string) =>
+    FakeRoom.last.emit(
+      'participantAttributesChanged',
+      { 'lk.agent.state': state },
+      { identity: 'lucius-agent', attributes: { 'lk.agent.state': state } },
+    )
+
+  it('takes your words off the call screen when his voice starts, words or no words', async () => {
+    await liveCall()
+    await say(words('how much did I spend', true))
+    expect(state().heardShown).toBe(true)
+    hisVoice('speaking')
+    expect(state().luciusSpeaking).toBe(true)
+    expect(state().heardShown).toBe(false)
+    expect(state().heard).toBe('how much did I spend') // the chat still needs them
+    hisVoice('listening')
+    expect(state().luciusSpeaking).toBe(false)
+    expect(state().heardShown).toBe(false)
+  })
+
+  it('hides what is heard while his voice talks with no words of its own', async () => {
+    await liveCall()
+    hisVoice('speaking')
+    await say(words('your balance'))
+    expect(state().heardShown).toBe(false)
+    hisVoice('listening')
+    await say(words('wait a second'))
+    expect(state().heardShown).toBe(true)
+  })
+
+  it('does not take his line off the screen when the voice starts after its words', async () => {
+    await liveCall()
+    await whileHeSpeaks('One sec', async () => {
+      hisVoice('speaking')
+      expect(state().spoken).toBe('One sec')
+    })
+  })
+
+  it('clears an earlier line when the voice starts with no words', async () => {
+    await liveCall()
+    await say(words('One sec', false, 'TR_lucius'))
+    expect(state().spoken).toBe('One sec')
+    hisVoice('speaking')
+    expect(state().spoken).toBe('')
+  })
+
+  it('ignores your own attributes', async () => {
+    await liveCall()
+    FakeRoom.last.emit(
+      'participantAttributesChanged',
+      {},
+      {
+        identity: FakeRoom.last.localParticipant.identity,
+        attributes: { 'lk.agent.state': 'speaking' },
+      },
+    )
+    expect(state().luciusSpeaking).toBe(false)
+  })
+
+  it('takes your finished words off the call screen if nothing answers soon', async () => {
+    const timers = vi.spyOn(window, 'setTimeout')
+    await liveCall()
+    await say(words('how much did I spend', true))
+    const hide = timers.mock.calls.find(([, ms]) => ms === 3500)?.[0] as () => void
+    timers.mockRestore()
+    hide()
+    expect(state().heardShown).toBe(false)
+    expect(state().heard).toBe('how much did I spend')
   })
 
   it('keeps the final words for the chat, and clears at once when the call ends', async () => {
@@ -825,7 +981,7 @@ describe("Lucius's side of the call dropping", () => {
       .find((url) => url.startsWith('/api/voice/call/health'))!
     const report = new URL(asked, 'http://acme.test').searchParams.get('mic')
     expect(report).toMatch(
-      /^track=\w+,system_muted=[01],enabled=[01],app_muted=[01],audio=\w+,peak=[\d.]+,server_peak=[\d.]+,page=\w+,streams=\d+,words=\d+$/,
+      /^track=\w+,system_muted=[01],enabled=[01],app_muted=[01],audio=\w+,peak=[\d.]+,server_peak=[\d.]+,page=\w+,streams=\d+,words=\d+,caption=(you|lucius|none),voice=[01]$/,
     )
   })
 

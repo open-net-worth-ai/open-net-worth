@@ -21,6 +21,7 @@ from backend.ai import pending_injection, run_plan, skill_runtime
 from backend.ai.memory_citations import CitationStripper, note_cited_facts, split_citations
 from backend.ai.models.base import AIProvider
 from backend.ai.permissions import engine as _permission_engine
+from backend.ai.spoken_lines import lines_around
 from backend.ai.tool_text import (
     UNPARSED_CALL_NOTICE,
     LiveLineFilter,
@@ -2198,7 +2199,11 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
             )
         pending_receipt = None
 
+    lines_after: list[dict] = []  # what a voice call said after the entry before this one
     for i, entry in enumerate(history):
+        messages.extend(lines_after)
+        lines_before, lines_after = lines_around(session_id, i, entry)
+        messages.extend(lines_before)
         if isinstance(entry.get(skill_runtime.DEACTIVATION_MARKER), dict):
             continue
         if entry.get("_onw_skill"):
@@ -2497,6 +2502,7 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
             # — a later call's greeting showed inside an earlier answer (owner, 2026-11-03).
             continues_turn = False
 
+    messages.extend(lines_after)
     _land_pending_skills()
     _land_receipt()
 

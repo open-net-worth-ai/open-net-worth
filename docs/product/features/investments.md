@@ -155,3 +155,9 @@ The app records the trade and takes no view on how it's taxed.
 - [Net worth](../concepts/net-worth.md)
 - [Base currency & FX](../concepts/base-currency-and-fx.md)
 - [Positions, lots & cost basis](../concepts/positions-lots-and-cost-basis.md)
+
+## Guides and comparisons
+
+Longer write-ups on the Open Net Worth blog:
+
+- [Ghostfolio Alternative: Open Net Worth vs Ghostfolio](https://opennetworth.ai/blog/ghostfolio-alternative/): portfolio trackers compared with Open Net Worth's holdings

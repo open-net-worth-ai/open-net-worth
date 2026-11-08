@@ -47,7 +47,17 @@ def linked(monkeypatch):
     allowed = {"on": True}
     monkeypatch.setattr(service, "calls_allowed", lambda: allowed["on"])
 
-    async def ask(session_id, said, *, understood="", shown=False, unheard=False, continues=False):
+    async def ask(
+        session_id,
+        said,
+        *,
+        understood="",
+        shown=False,
+        unheard=False,
+        heard_part="",
+        continues=False,
+        task_id="",
+    ):
         yield DeskEvent("text", f"answer to {said}")
         yield DeskEvent("end")
 
