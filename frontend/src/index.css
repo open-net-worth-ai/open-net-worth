@@ -17786,6 +17786,15 @@ body.hide-amounts .mask * {
     --safe-t: min(env(safe-area-inset-top, 0px), 32px);
   }
 }
+/* An installed app's page starts under the system status area with no edge of its own, so the
+   strip above the rail and the top bar reads as part of the page. An inset line draws that edge
+   without adding height (owner, 2026-11-09). */
+@media (min-width: 640px) and (any-pointer: coarse) and (display-mode: standalone) {
+  .sidebar-header,
+  .topbar {
+    box-shadow: inset 0 1px 0 var(--line);
+  }
+}
 /* Desktop-only: the mobile shell hides `.sidebar` via CSS but never unmounts it, so
    `sidebarExpanded`'s default-true state kept matching `:has()` on phones too — its
    (0,2,0,0) specificity beat the mobile reset below (0,1,0,0) regardless of viewport,
