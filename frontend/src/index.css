@@ -369,6 +369,7 @@
     position: sticky;
     top: 0;
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
     z-index: var(--z-dropdown);
   }
@@ -662,6 +663,7 @@
      would overflow by the topbar's height. */
   .app-main:has(.app-layout--panel) {
     height: 100vh;
+    height: 100dvh;
     overflow: hidden;
   }
   .app-layout--panel {
@@ -17774,11 +17776,12 @@ body.hide-amounts .mask * {
 }
 /* Installed iPad web apps can lay out under the status bar while reporting a zero
    safe-area-inset-top. Give touch-capable tablets the 24px iPad status-bar floor; the real
-   env() value still wins when it is larger. Keeping this on --safe-t makes every top-level
+   env() value still wins up to 32px: a foldable's large top inset (Surface Duo) otherwise
+   inflated the ticker bar and rail header to ~130px. Keeping this on --safe-t makes every top-level
    chrome owner (topbar, nav rail, and Lucius) consume the same inset. */
 @media (min-width: 640px) and (any-pointer: coarse) and (display-mode: standalone) {
   :root {
-    --safe-t: max(env(safe-area-inset-top, 0px), 24px);
+    --safe-t: clamp(24px, env(safe-area-inset-top, 0px), 32px);
   }
 }
 /* Desktop-only: the mobile shell hides `.sidebar` via CSS but never unmounts it, so
