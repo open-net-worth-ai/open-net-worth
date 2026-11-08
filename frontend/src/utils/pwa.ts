@@ -26,3 +26,28 @@ export function stampPwaDisplayMode(): void {
 export function isWebKit(userAgent: string): boolean {
   return /AppleWebKit/.test(userAgent) && !/(Chrome|Chromium|Edg|Electron)\//.test(userAgent)
 }
+
+/** An installed app on an iPhone keeps its portrait layout offset after the device rotates:
+ *  the whole page sits a status band lower until something makes iOS lay it out again — in
+ *  the owner's screen recording a touch did, ~5s later. Nudge that layout pass ourselves on
+ *  every rotation: re-assert the scroll origin and toggle the root's height for one frame. */
+export function relayoutAfterRotation(): void {
+  if (typeof window === 'undefined') return
+  if (document.documentElement.dataset.onwDevice !== 'iphone') return
+  const nudge = () =>
+    requestAnimationFrame(() => {
+      const root = document.documentElement
+      window.scrollTo(0, 0)
+      root.style.minHeight = 'calc(100% + 1px)'
+      requestAnimationFrame(() => {
+        root.style.minHeight = ''
+        window.scrollTo(0, 0)
+      })
+    })
+  const onRotate = () => {
+    nudge()
+    window.setTimeout(nudge, 400)
+  }
+  screen.orientation?.addEventListener?.('change', onRotate)
+  window.addEventListener('orientationchange', onRotate)
+}
