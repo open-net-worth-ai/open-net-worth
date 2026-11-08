@@ -2,7 +2,7 @@
 //
 // Owner bug, 2026-07-29: a foreign-currency statement row showed BOTH its converted and its
 // original amount, but the matched ledger entry beside it showed only the converted one —
-// `06-22  $17.98  −S$21.67` against a bare `−S$21.21`. Both are the same ~US$18 charge; the
+// `06/22  $17.98  −S$21.67` against a bare `−S$21.21`. Both are the same ~US$18 charge; the
 // S$0.46 gap is FX timing, not a discrepancy. Showing one side's original and not the other's
 // made an identical charge read as a mismatch.
 //
@@ -242,7 +242,7 @@ describe('ImportModal — the matched ledger entry shows its own original', () =
     expect(row.textContent).not.toContain('()')
     expect(row.textContent).not.toContain('—S$')
     const ledger = row.querySelectorAll('.imp3-cmp > .imp-pair-side')[1] as HTMLElement
-    expect(ledger.querySelector('.imp3-cmp-facts')!.textContent).toBe('06-22-S$21.21')
+    expect(ledger.querySelector('.imp3-cmp-facts')!.textContent).toBe('06/22-S$21.21')
   })
 })
 

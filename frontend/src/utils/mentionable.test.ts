@@ -221,7 +221,7 @@ describe('renderMaskableSublabel', () => {
     expect(nodes[1]).toBe(' • ')
     expect(nodes[2]).toBe('OCBC 360')
     expect(nodes[3]).toBe(' • ')
-    expect(nodes[4]).toBe('2026-08-30')
+    expect(nodes[4]).toBe('Aug 30, 2026')
     expect(nodes[5]).toBe(' • ')
     const last = nodes[6] as ReactElement<{ className?: string; children?: React.ReactNode }>
     expect(last.props.className).toBe('money')

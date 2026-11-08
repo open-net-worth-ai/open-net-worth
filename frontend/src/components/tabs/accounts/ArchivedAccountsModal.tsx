@@ -86,7 +86,7 @@ export function ArchivedAccountsModal({
                 return (
                   <div className="acct-archived-txn" key={txn.id}>
                     <span className="acct-archived-txn-date">
-                      {fDate(txn.date, 'numeric', 'always')}
+                      {fDate(txn.date, 'short', 'always')}
                     </span>
                     <span className="acct-archived-txn-description">
                       {txn.description || txn.memo || 'Transaction'}

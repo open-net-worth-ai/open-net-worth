@@ -318,7 +318,7 @@ function InstRow({ c, i, fx, m, split }: InstRowProps) {
         status: it.status,
       })}
       search={`${i.label} ${c.name} ${i.description}`}
-      sublabel={`${c.name} · ${i.due_date}`}
+      sublabel={`${c.name} · ${fmtDate(i.due_date)}`}
     >
       <div className="c2-si-rail">
         <span className="c2-si-dot">{s === 'paid' ? <CheckIcon /> : null}</span>
