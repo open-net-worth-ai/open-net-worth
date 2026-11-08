@@ -13,6 +13,9 @@ export function isStandalonePwa(): boolean {
 export function stampPwaDisplayMode(): void {
   if (typeof document === 'undefined') return
   document.documentElement.dataset.onwDisplayMode = isStandalonePwa() ? 'standalone' : 'browser'
+  document.documentElement.dataset.onwDevice = /iPhone/.test(navigator.userAgent)
+    ? 'iphone'
+    : 'other'
   document.documentElement.dataset.onwEngine = isWebKit(navigator.userAgent) ? 'webkit' : 'other'
 }
 
