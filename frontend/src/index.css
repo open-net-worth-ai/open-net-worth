@@ -322,6 +322,7 @@
     background: var(--bg);
     display: flex;
     min-height: 100vh;
+    min-height: 100dvh;
   }
   /* The margin is NOT transitioned: the content takes its new width ONCE, when the panel opens or
      closes, while the panel itself slides on a transform (.lx-side). Easing the margin re-laid-out
@@ -358,6 +359,7 @@
   .sidebar {
     width: 52px;
     min-height: 100vh;
+    min-height: 100dvh;
     /* App chrome tracks the PAGE, not the card surface. --surface happens to equal --bg
        today, but the sidebar is page-level chrome and must follow --bg if they diverge. */
     background: var(--bg);
