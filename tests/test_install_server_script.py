@@ -21,6 +21,7 @@ SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "install.sh"
 FAKE_UV = """#!/bin/sh
 echo "$* | PATH=$PATH" >> "$HOME/uv-calls"
 case "$1 $2" in
+  "tool update-shell") [ -n "$FAKE_PROFILE" ] && echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/$FAKE_PROFILE" ;;
   "--version "*) echo "uv 0.0.0" ;;
   "tool install") printf '#!/bin/sh\\necho "open-net-worth 9.9.9"\\n' > "$HOME/.local/bin/onw"
                   chmod +x "$HOME/.local/bin/onw" ;;
@@ -61,8 +62,8 @@ def machine(tmp_path):
     return home, stubs, fake_uv
 
 
-def run(home: Path, path: str, fake_uv: Path) -> subprocess.CompletedProcess:
-    env = {"HOME": str(home), "PATH": path, "FAKE_UV_SRC": str(fake_uv)}
+def run(home: Path, path: str, fake_uv: Path, **extra: str) -> subprocess.CompletedProcess:
+    env = {"HOME": str(home), "PATH": path, "FAKE_UV_SRC": str(fake_uv), **extra}
     return subprocess.run(["sh", str(SCRIPT)], env=env, capture_output=True, text=True, timeout=60)
 
 
@@ -85,7 +86,9 @@ def test_clean_machine_puts_local_bin_on_the_users_shell_path(machine):
     assert (home / "uv-installer-path").read_text().strip() == user_path
     assert update_shell_paths(home) == [user_path]
     assert local_bin not in update_shell_paths(home)[0].split(":")
-    assert 'exec "$SHELL" -l' in result.stdout
+    assert (
+        "Open a new terminal to use it" in result.stdout
+    )  # no shell named: it can't know the file
     assert "Installed open-net-worth 9.9.9" in result.stdout
 
 
@@ -97,7 +100,7 @@ def test_local_bin_already_on_path_leaves_the_profile_alone(machine):
 
     assert result.returncode == 0, result.stderr
     assert update_shell_paths(home) == []
-    assert "exec" not in result.stdout
+    assert "PATH" not in result.stdout
 
 
 def test_uv_in_local_bin_but_off_path_is_reused_and_the_profile_fixed(machine):
@@ -129,6 +132,36 @@ def test_auto_upgrade_starts_the_service_with_the_flag(machine):
 
     assert result.returncode == 0, result.stderr
     assert "start --autostart --auto-upgrade" in (home / "onw-calls").read_text()
+
+
+@pytest.mark.parametrize(
+    ("shell", "written", "shown"),
+    [
+        ("/bin/zsh", ".zshenv", "source ~/.zshenv"),
+        ("/bin/bash", ".bashrc", "source ~/.bashrc"),
+        ("/usr/local/bin/fish", ".config/fish/config.fish", "source ~/.config/fish/config.fish"),
+    ],
+)
+def test_it_names_the_file_that_now_holds_the_path(machine, shell, written, shown):
+    """zsh gets ~/.zshenv from `uv tool update-shell`, not ~/.zshrc: never guess the file."""
+    home, stubs, fake_uv = machine
+    (home / written).parent.mkdir(parents=True, exist_ok=True)
+
+    result = run(home, f"{stubs}:/usr/bin:/bin", fake_uv, SHELL=shell, FAKE_PROFILE=written)
+
+    assert result.returncode == 0, result.stderr
+    assert "onw was added to your PATH. Reload it:" in result.stdout
+    assert shown in result.stdout
+    assert "new terminal" not in result.stdout
+
+
+def test_a_shell_whose_file_it_cannot_find_is_told_to_open_a_new_terminal(machine):
+    home, stubs, fake_uv = machine
+
+    result = run(home, f"{stubs}:/usr/bin:/bin", fake_uv, SHELL="/bin/zsh")
+
+    assert "source" not in result.stdout
+    assert "Open a new terminal to use it" in result.stdout
 
 
 def test_the_end_names_the_version_and_what_to_type_next(machine):

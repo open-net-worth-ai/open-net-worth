@@ -19,6 +19,27 @@
 set -eu
 
 say() { printf '==> %s\n' "$1"; }
+
+# The file that puts ~/.local/bin on PATH for the user's shell, as ~/..., or nothing if unsure.
+path_profile() {
+  ZDOT="${ZDOTDIR:-$HOME}"
+  case "$(basename "${SHELL:-}")" in
+    zsh) set -- "$ZDOT/.zshenv" "$ZDOT/.zshrc" "$ZDOT/.zprofile" ;;
+    bash) set -- "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile" ;;
+    fish) set -- "$HOME/.config/fish/config.fish" ;;
+    *) return 0 ;;
+  esac
+  for file in "$@"; do
+    if [ -f "$file" ] && grep -q '\.local/bin' "$file"; then
+      # shellcheck disable=SC2088  # a literal ~, shown to the user
+      case "$file" in
+        "$HOME"/*) printf '~/%s\n' "${file#"$HOME"/}" ;;
+        *) printf '%s\n' "$file" ;;
+      esac
+      return 0
+    fi
+  done
+}
 die() { printf '\nERROR: %s\n' "$1" >&2; exit 1; }
 
 INSTALL_DOCS="https://docs.opennetworth.ai/getting-started/installation/"
@@ -95,12 +116,16 @@ echo ""
 say "Done. Open Net Worth $VERSION is installed."
 echo ""
 if [ "$ON_USER_PATH" = 0 ]; then
-  # A pipe into sh can't change the PATH of the terminal that ran it. Reloading that shell rereads
-  # its profile, whichever shell it is, and keeps the window and folder.
-  echo "    This terminal opened before onw was on your PATH. Reload it:"
-  # shellcheck disable=SC2016  # printed for the user to run, not expanded here
-  echo '        exec "$SHELL" -l'
-  echo "    (or open a new terminal)"
+  # A pipe into sh can't change the PATH of the terminal that ran it, so name the file that now
+  # adds ~/.local/bin, for the user to `source`. Found, not guessed: for zsh, `uv tool
+  # update-shell` writes ~/.zshenv, and with uv already installed ~/.zshrc doesn't get the line.
+  PROFILE="$(path_profile)"
+  if [ -n "$PROFILE" ]; then
+    echo "    onw was added to your PATH. Reload it:"
+    echo "        source $PROFILE"
+  else
+    echo "    onw was added to your PATH. Open a new terminal to use it."
+  fi
   echo ""
 fi
 if [ "$AUTOSTART" = 1 ]; then
