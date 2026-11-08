@@ -127,6 +127,16 @@ export function PasswordPanel({
       sub="Signs you in to this instance — it is the only account, and it is stored on your own server"
     >
       <div className="rd-formgrid">
+        <input
+          type="text"
+          name="username"
+          autoComplete="username"
+          defaultValue="opennetworth"
+          readOnly
+          tabIndex={-1}
+          aria-hidden="true"
+          className="sr-only"
+        />
         {needsCurrent && (
           <Field label="Current password">
             <PasswordField
