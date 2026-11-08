@@ -373,3 +373,23 @@ def test_the_worker_may_report_it_and_it_lands(db_isolated):
     assert isolation.standard_until()
     asyncio.run(answer._call("note_isolation", {"working": True}))
     assert isolation.standard_until() == ""
+
+
+def test_the_settings_say_which_filters_this_install_has(monkeypatch):
+    """A call runs without a missing filter, so the settings page has to say so."""
+    found = {"livekit.plugins.noise_cancellation": object(), "livekit.plugins.krisp": None}
+    monkeypatch.setattr(service.importlib.util, "find_spec", lambda name: found.get(name))
+    assert service.noise_filters_installed() == {"standard": True, "isolation": False}
+
+
+def test_each_call_logs_the_filter_it_got(monkeypatch, caplog):
+    import logging
+
+    noise = pytest.importorskip("backend.connectors.voice.noise")
+    monkeypatch.setattr(noise, "noise_cancellation", None)
+    with caplog.at_level(logging.INFO):
+        assert noise.call_filter("standard", CLOUD) is None
+        noise.call_filter("off", CLOUD)
+    said = [r.getMessage() for r in caplog.records]
+    assert "voice: noise cancelling on this call: none (not installed here)" in said
+    assert "voice: noise cancelling on this call: none (off)" in said

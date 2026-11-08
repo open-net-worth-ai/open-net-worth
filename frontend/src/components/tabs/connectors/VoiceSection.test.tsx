@@ -110,3 +110,33 @@ describe('Noise cancelling in the Voice calls settings', () => {
     expect(screen.queryByText(/Estimated free minutes/)).toBeNull()
   })
 })
+
+describe('Noise cancelling missing from this install', () => {
+  beforeEach(() => authFetch.mockReset())
+  afterEach(cleanup)
+
+  const missing = { ...CONFIG.worker, noise_installed: { standard: false, isolation: false } }
+
+  it('says calls run without it, and still lets you choose', async () => {
+    serve({ ...CONFIG, worker: missing })
+    render(<Host />)
+    const select = await noise()
+    expect(await screen.findByText(/Krisp isn’t installed on this computer/)).toBeTruthy()
+    expect(select.disabled).toBe(false)
+  })
+
+  it('says nothing when it is off', async () => {
+    serve({ ...CONFIG, noise_filter: 'off', worker: missing })
+    render(<Host />)
+    await noise()
+    expect(screen.queryByText(/Krisp isn’t installed/)).toBeNull()
+  })
+
+  it('says nothing when it is installed', async () => {
+    const installed = { ...CONFIG.worker, noise_installed: { standard: true, isolation: true } }
+    serve({ ...CONFIG, worker: installed })
+    render(<Host />)
+    await noise()
+    expect(screen.queryByText(/Krisp isn’t installed/)).toBeNull()
+  })
+})

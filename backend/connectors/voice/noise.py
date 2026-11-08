@@ -134,9 +134,17 @@ def call_filter(
     """The filter for one call, or None for none. A voice isolation filter holds that call's
     session, so each call gets its own. Never raises."""
     if choice == "off" or not on_livekit_cloud(livekit_url):
+        log.info(
+            "voice: noise cancelling on this call: none (%s)", choice or "not on LiveKit Cloud"
+        )
         return None
     try:
-        return _isolation(note_working) if choice == "isolation" else _standard()
+        chosen = _isolation(note_working) if choice == "isolation" else _standard()
+        log.info(
+            "voice: noise cancelling on this call: %s",
+            type(chosen).__name__ if chosen is not None else "none (not installed here)",
+        )
+        return chosen
     except Exception:  # noqa: BLE001 — a call is still a call without it
         log.warning(
             "voice: couldn't set up noise cancelling; this call goes without", exc_info=True

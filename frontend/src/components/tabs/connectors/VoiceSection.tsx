@@ -33,6 +33,8 @@ interface WorkerStatus {
   libraries_installed: boolean
   /** Why calls can't run here for want of the voice libraries; "" when installed. */
   libraries_problem?: string
+  /** Which Krisp filters this install has; a call runs without one that's missing. */
+  noise_installed?: Record<string, boolean>
   running: boolean
   error: string
 }
@@ -99,6 +101,12 @@ function formOf(c: VoiceConfig): VoiceForm {
     language: c.language || 'en',
     noise_filter: c.noise_filter || DEFAULT_NOISE_FILTER,
   }
+}
+
+/** A filter chosen but missing from this install: calls still run, without it, and you're told. */
+export function noiseMissing(c: VoiceConfig, choice: string): string {
+  if (choice === 'off' || c.worker.noise_installed?.[choice] !== false) return ''
+  return 'Krisp isn’t installed on this computer, so calls run without noise cancelling. Reinstall Open Net Worth to add it.'
 }
 
 function workerLine(c: VoiceConfig): { tone: 'faint' | 'warn' | 'good'; text: string } {
@@ -367,7 +375,9 @@ export function VoiceSection() {
         <FormField
           label="Noise cancelling"
           htmlFor="conn-voice-noise"
-          help={standIn || noiseFilterHelp(form.noise_filter)}
+          help={
+            noiseMissing(cfg, form.noise_filter) || standIn || noiseFilterHelp(form.noise_filter)
+          }
         >
           <FieldSelect
             id="conn-voice-noise"

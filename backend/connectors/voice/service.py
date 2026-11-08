@@ -246,12 +246,31 @@ def libraries_installed() -> bool:
         return False
 
 
+_NOISE_MODULES = {
+    "standard": "livekit.plugins.noise_cancellation",
+    "isolation": "livekit.plugins.krisp",
+}
+
+
+def noise_filters_installed() -> dict[str, bool]:
+    """Which Krisp filters this install has. A call runs without a missing one, so the settings
+    page says so rather than letting it pass unnoticed (owner, 2026-11-08)."""
+    found = {}
+    for choice, module in _NOISE_MODULES.items():
+        try:
+            found[choice] = importlib.util.find_spec(module) is not None
+        except (ImportError, ValueError):
+            found[choice] = False
+    return found
+
+
 def status() -> dict:
     """What the settings page shows: is the worker up, and if not, why."""
     running = _running()
     return {
         "flag_on": flag_enabled(FLAG),
         "libraries_installed": libraries_installed(),
+        "noise_installed": noise_filters_installed(),
         "libraries_problem": libraries_problem(),
         "running": running,
         "error": "" if running else _worker.error,
