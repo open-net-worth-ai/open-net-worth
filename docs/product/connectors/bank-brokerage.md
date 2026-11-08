@@ -99,7 +99,7 @@ token and paste it into the same field. Leaving the field blank keeps the saved 
 
 ## Plaid
 
-US banks and cards, through your own Plaid developer account.
+US and Canadian banks and cards, through your own Plaid developer account.
 
 1. Create a developer account at [Plaid](https://dashboard.plaid.com). Under **Developers →
    Keys**, copy your **client_id** and the **secret** for the environment you want. *Sandbox*
