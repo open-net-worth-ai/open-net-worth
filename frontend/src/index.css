@@ -17781,6 +17781,11 @@ body.hide-amounts .mask * {
    env() value still wins up to 32px: a foldable's large top inset (Surface Duo) otherwise
    inflated the ticker bar and rail header to ~130px. Keeping this on --safe-t makes every top-level
    chrome owner (topbar, nav rail, and Lucius) consume the same inset. */
+@media (min-width: 640px) and (any-pointer: coarse) {
+  :root {
+    --safe-t: min(env(safe-area-inset-top, 0px), 32px);
+  }
+}
 @media (min-width: 640px) and (any-pointer: coarse) and (display-mode: standalone) {
   :root {
     --safe-t: clamp(24px, env(safe-area-inset-top, 0px), 32px);
