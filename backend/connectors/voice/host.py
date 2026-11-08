@@ -30,6 +30,7 @@ CALLS = frozenset(
     {
         "is_expected",
         "call_settings",
+        "note_isolation",
         "stop_request",
         "calls_allowed",
         "claim_call",
@@ -41,6 +42,7 @@ CALLS = frozenset(
         "record_said",
         "record_exchange",
         "record_lines",
+        "answer_unheard",
         "waiting_cards",
         "answer_card",
     }
@@ -125,7 +127,7 @@ class Host:
             pass
 
     async def _call(self, method: str, args: dict) -> Any:
-        from backend.connectors.voice import desk, service
+        from backend.connectors.voice import desk, isolation, service
         from backend.services import demo_calls
 
         if method == "is_expected":
@@ -138,6 +140,9 @@ class Host:
             return service.calls_allowed()
         if method == "call_settings":
             return await asyncio.to_thread(service.call_settings)
+        if method == "note_isolation":
+            note = isolation.note_working if args.get("working") else isolation.note_refused
+            return await asyncio.to_thread(note)
         if method == "stop_request":
             desk.stop_call_turn(self._owned(args))
             return None
@@ -187,6 +192,9 @@ class Host:
         if method == "record_lines":
             session_id = self._owned(args)
             await desk.record_lines(session_id, self._within_budget(session_id, args.get("lines")))
+            return None
+        if method == "answer_unheard":
+            await desk.answer_unheard(self._owned(args), str(args.get("text") or ""))
             return None
         await desk.record_exchange(
             self._owned(args), str(args.get("said") or ""), str(args.get("reply") or "")

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Message } from '../../../types/chat'
 import { useVoiceCall } from './voiceCall'
 
@@ -127,13 +127,4 @@ export function useVoiceReveal(message: Message, sessionId: string): Message {
 
   if (finished || blocked) return message
   return { ...message, text: prefix ?? '', streaming: true }
-}
-
-/** Keeps a growing message in view, unless you've scrolled up to read something else. */
-export function useFollowBottom(ref: RefObject<HTMLElement | null>, content: string) {
-  useEffect(() => {
-    let el = ref.current?.parentElement ?? null
-    while (el && !/(auto|scroll)/.test(getComputedStyle(el).overflowY)) el = el.parentElement
-    if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 160) el.scrollTop = el.scrollHeight
-  }, [ref, content])
 }

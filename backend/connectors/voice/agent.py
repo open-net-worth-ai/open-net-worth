@@ -19,6 +19,7 @@ import logging
 import random
 import re
 import time
+from collections.abc import Callable
 from contextlib import aclosing
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
@@ -41,10 +42,11 @@ from backend.connectors.voice.call_log import CallLog, Card, Task
 from backend.connectors.voice.cards import asks_something, card_reading, is_plain_yes
 from backend.connectors.voice.connection import CallConnection
 from backend.connectors.voice.events import speakable
+from backend.connectors.voice.noise import call_filter
 from backend.connectors.voice.stt_hints import hearing_model, hint_kwargs
 from backend.connectors.voice.timing import AnswerTiming, SpeechLog, TurnTiming
 from backend.connectors.voice.tokens import OWNER_IDENTITY
-from backend.connectors.voice.tts_models import voice_for
+from backend.connectors.voice.tts_models import voice_for, word_timing_options
 
 if TYPE_CHECKING:
     from backend.connectors.voice.app_link import AppLink
@@ -75,8 +77,11 @@ recommend: only a lookup can tell. So:
   earlier on this call: they may be out of date, and a new question always goes to
   `work_on_request` — only "say that again" gets an earlier answer, repeated word for word.
 - When {owner} says more after a request, decide what it is, each time, from what was said:
-  - They're finishing or adding to the same request (it ended mid-thought, or this completes it):
-    `continues_last` true, with the request written out in full. Say only "Mm-hm." as your `ack`.
+  - They're finishing the sentence they were in (it ended mid-thought): `continues_last` true, with
+    the request written out in full. Say only "Mm-hm." as your `ack`.
+  - They're adding another thing to it ("and Uber", "and NVIDIA"): `continues_last` true, with the
+    request written out in full and an `ack` that names what they added ("Got it, Uber too."), or
+    they can't tell you caught it.
   - They've changed their mind or corrected it ("no, I meant ACME", "not that one, the other card",
     "forget that, check my rent"): `replaces_last` true, with an `ack` that shows you heard it
     ("Oh, ACME, got it.").
@@ -535,6 +540,9 @@ class LuciusDesk:
     _unheard_answers = 0  # answers to this card that came too soon to count
     _undelivered: str | None = None  # an answer they didn't get to the end of, to say when quiet
     _said_since_answer = ""  # their words since the last answer was queued
+    _hearing = ""  # the sentence they're in the middle of, as far as it has been transcribed
+    _spoke_since_request = False  # the voice said something after their last request went
+    _quiet_timer: asyncio.TimerHandle | None = None  # ends ``AWAY_S`` into a silence
     _resays = 0
     _cut_off = ""  # how much of the last answer they heard, when their voice cut it off
     _owner_sound_at = 0.0  # when they last started or stopped making a sound
@@ -580,6 +588,7 @@ class LuciusDesk:
         self.speech_log = SpeechLog()
         self._away_since: float | None = None  # silent while busy, since when
         self._busy_timer: asyncio.TimerHandle | None = None
+        self._quiet_timer: asyncio.TimerHandle | None = None
         self._hold_until = 0.0  # the owner asked us to wait until then
         self._hold_timer: asyncio.TimerHandle | None = None
         self._started = 0.0
@@ -592,6 +601,7 @@ class LuciusDesk:
         self._runner.cancel()
         self._others.cancel()
         self.back()
+        self._stop_watching_quiet()
         for timer in self._limit_timers:
             timer.cancel()
         self._cancel_mid_thought()
@@ -599,12 +609,30 @@ class LuciusDesk:
     async def finish(self) -> None:
         """The call is over. A hang-up doesn't take back what was said. Before the app is told, as
         it stops answering for this conversation then, and shutdown callbacks all run at once."""
-        self._current = None
+        working_on, self._current = self._current, None
         while not self._queue.empty():  # asked, never started: still said
             task = self._queue.get_nowait()
             if not task.shown:
                 self.call_log.add(task.said, "owner", task.asked_at or time.time())
+        said, said_at = self._words_with_no_reply(working_on)
+        if said:
+            self.call_log.add(said, "owner", said_at)
         await self._write_lines(everything=True)
+
+    def _words_with_no_reply(self, working_on: Task | None) -> tuple[str, float]:
+        """What they said that no reply or request has carried to the chat. Hanging up while the
+        voice was still deciding what to say lost all of it (owner's call, 2026-11-08)."""
+        turn_said, self._turn_said = self._turn_said, ""
+        heard = [] if self._spoken_since_heard else list(self._heard)
+        heard += [self._hearing] if self._hearing else []
+        self._heard.clear()
+        self._hearing = ""
+        said = " ".join(heard).strip()
+        said = _with_earlier(turn_said, said) if turn_said and said else turn_said or said
+        already_sent = working_on is not None and _letters(said) in _letters(working_on.said)
+        if _only_noise(said) or already_sent:
+            return "", 0.0
+        return said, (self._turn_started_at if turn_said else 0.0) or time.time()
 
     def limit_call(self, seconds: float) -> None:
         """End the call ``seconds`` from now: a heads-up ``TIME_WARNING_S`` before, then a
@@ -630,6 +658,16 @@ class LuciusDesk:
             or self._following
         )
 
+    def _busy_with(self) -> str:
+        """What ``_busy`` found, for the log."""
+        parts = {
+            "a request": self._current is not None,
+            "a queue": not self._queue.empty(),
+            "an approval": self._approving,
+            "a typed turn": self._following,
+        }
+        return ", ".join(name for name, on in parts.items() if on)
+
     def back(self) -> None:
         """The owner made a sound: not gone."""
         self._away_since = None
@@ -641,10 +679,17 @@ class LuciusDesk:
         self._busy_timer = None
         self.away()
 
+    def hearing(self, transcript: str) -> None:
+        """Words of a sentence not finished yet: all there is of it if they hang up now."""
+        self._hearing = transcript.strip()
+        self.watch_quiet()
+
     def heard(self, transcript: str) -> None:
         text = transcript.strip()
         if not text:
             return
+        self._hearing = ""
+        self.watch_quiet()
         self.back()
         if self._spoken_since_heard:
             self._heard.clear()
@@ -681,10 +726,12 @@ class LuciusDesk:
         up — so a forgotten call doesn't stay open. Never while a request is still being
         worked on or approved on screen: then the owner is busy with us, not gone — but only up
         to ``BUSY_AWAY_S``: LiveKit says "away" once, so a card nobody answered kept the call, and
-        its bill, open for good. His work and the card carry on in the chat."""
+        its bill, open for good. His work and the card carry on in the chat. Each way out is
+        logged: a call stayed open a minute with no check-in, and nothing said why (2026-11-08)."""
         if self._busy():
             now = time.monotonic()
             self._away_since = self._away_since if self._away_since is not None else now
+            log.info("voice decision: quiet, but Lucius is busy (%s)", self._busy_with())
             if now - self._away_since >= self.BUSY_AWAY_S:
                 self._line(HANG_UP)
                 self.hang_up_after_speech()
@@ -697,13 +744,18 @@ class LuciusDesk:
         if getattr(self._session, "agent_state", "") == "speaking":
             # Still reading out an answer: the owner is listening, not gone (owner, 2026-11-03,
             # "it asks am I still there mid-answer"). Count the silence from its end instead.
+            log.info("voice decision: quiet, but the voice is still speaking")
             self._session.reset_away_timer()
             return
         left = self._hold_until - time.monotonic()
         if left > 0:  # they asked us to wait: look again once that's over
+            log.info("voice decision: quiet, as they asked us to wait")
             if self._hold_timer is None:
                 self._hold_timer = asyncio.get_running_loop().call_later(left, self._hold_over)
             return
+        log.info(
+            "voice decision: quiet, so %s", "hanging up" if self._checked_in else "checking in"
+        )
         if not self._checked_in:
             self._checked_in = True
             self._line(CHECK_IN)
@@ -761,6 +813,20 @@ class LuciusDesk:
             self._resays += 1
             self._undelivered = text
             asyncio.ensure_future(self._deliver_when_quiet(text, task))
+        else:
+            self._never_heard(text)
+
+    def _never_heard(self, text: str) -> None:
+        """Its whole text stayed in the chat as if he'd said it: all they heard was "Oracle", and
+        then a different answer (owner's call, 2026-11-08). The chat says so instead."""
+
+        async def tell() -> None:
+            try:
+                await self._rt.app.call("answer_unheard", session_id=self._session_id, text=text)
+            except Exception:  # noqa: BLE001 — the call carries on, and the answer is still there
+                log.exception("voice: couldn't mark an answer as not read out")
+
+        asyncio.ensure_future(tell())
 
     def _pick_up_when_quiet(self, rest: str) -> None:
         """A cough or "mm" stopped an answer 1.7 seconds in, he said "Mm-hm?", and they never heard
@@ -794,10 +860,11 @@ class LuciusDesk:
         give_up_at = quiet_since + RESAY_GIVE_UP_S
         while time.monotonic() < give_up_at:
             await asyncio.sleep(RESAY_CHECK_S)
-            if self._undelivered != text:
-                return
-            if self._request_since_answer():
-                self._undelivered, self._resays = None, 0
+            if self._undelivered != text or self._request_since_answer():
+                if self._undelivered == text:
+                    self._undelivered, self._resays = None, 0
+                if not only_after_noise:  # a cut-off answer they heard part of is still his answer
+                    self._never_heard(text)
                 return
             now = time.monotonic()
             front_busy = getattr(self._session, "agent_state", "") in ("thinking", "speaking")
@@ -813,6 +880,8 @@ class LuciusDesk:
                 self._answers[text] = task
                 return
         self._undelivered = None
+        if not only_after_noise:
+            self._never_heard(text)
 
     def _request_since_answer(self) -> bool:
         return bool(
@@ -849,6 +918,32 @@ class LuciusDesk:
             speech = self._session.say(line, add_to_chat_ctx=True)
             self.speech_log.label(speech, "holding line", len(line))
             self._keep_holding(speech)
+        except RuntimeError:
+            log.info("voice: the call ended before a line could be said")
+
+    def _make_way_for_more(self) -> None:
+        """They added to a request while its answer waited to be said: that answer goes, as it no
+        longer answers all of it, and the next one says what they still need (``_unheard``). Said
+        behind it, "Got it, rental too" went with the other waiting lines when the next answer
+        came, and the first played as if nothing had been added (owner's call, 2026-11-08)."""
+        answer = self._last_answer
+        if answer is None or answer.done():
+            return
+        playing = (
+            getattr(self._session, "current_speech", None) is answer
+            and getattr(self._session, "agent_state", "") == "speaking"
+        )
+        if not playing:
+            log.info("voice decision: an answer waiting to be said goes, as more was asked")
+            answer.interrupt()
+
+    def _ack_said(self, line: str) -> None:
+        """Their addition acknowledged: never dropped for an answer, unlike a holding line. Without
+        it, they can't tell it was caught."""
+        log.info("voice: acknowledged what they added (%d chars)", len(line))
+        try:
+            speech = self._session.say(line, add_to_chat_ctx=True)
+            self.speech_log.label(speech, "acknowledgement", len(line))
         except RuntimeError:
             log.info("voice: the call ended before a line could be said")
 
@@ -944,6 +1039,8 @@ class LuciusDesk:
         answering them itself, their words go in the chat NOW — they waited for its reply to
         finish playing and came in with it (owner, 2026-11-03); the reply follows on its own."""
         self._spoken_since_heard = True
+        self._spoke_since_request = True
+        self._stop_watching_quiet()
         said = self._turn_said
         if not said or self._busy():
             return
@@ -1022,7 +1119,10 @@ class LuciusDesk:
 
     def _continue_last(self, task: Task) -> bool:
         """The owner is finishing what they just asked: one request, stopping the one under way if
-        that's safe. Returns whether they were joined."""
+        that's safe. Returns whether they were joined. Their words join their last message only if
+        the voice has said nothing since: "Okay, let me check HER." came between "HER too?" and
+        "And Uber", and the chat showed them as one, out of the order heard (owner, 2026-11-08)."""
+        joins = not self._spoke_since_request
         waiting = self._pop_waiting()
         if waiting is not None:
             if not waiting.shown:
@@ -1032,12 +1132,12 @@ class LuciusDesk:
             task.absorb(waiting)
             return True
         if self._current is None:
-            task.continues = True
+            task.continues = joins
             return True
         if not self._can_stop():
             return False
         task.request = f"{self._current.request} {task.request}"
-        task.continues = True
+        task.continues = joins
         task.absorb(self._current)
         self._stop_current()
         return True
@@ -1097,6 +1197,7 @@ class LuciusDesk:
             replaced = self._replace_last(task)
         elif continues_last:
             replaced = self._continue_last(task)
+        self._spoke_since_request = False
         how = "corrects" if replaces_last else "continues" if continues_last else "separate"
         log.info(
             "voice decision: %s, joined %s, task %s revision %d",
@@ -1117,12 +1218,16 @@ class LuciusDesk:
             if self._cards:
                 self._read_card()
             return None
+        if continues_last:
+            self._make_way_for_more()
         if continues_last and not replaced:
             # Theirs is the same request even if it can't join the one running: never "after this one".
-            self._holding_said(_usable_ack(ack) or "Mm-hm.")
+            self._ack_said(_usable_ack(ack) or "Mm-hm.")
             return None
         line = "" if busy and not replaced else _usable_ack(ack)
-        if line:
+        if line and continues_last:
+            self._ack_said(line)
+        elif line:
             self._holding_said(line)
         elif replaced and busy:
             self._holding(CORRECTED + ACK_RULE + _about(task.request))
@@ -1211,6 +1316,37 @@ class LuciusDesk:
         reach us after it ends, and a cough must not date them (security review, 2026-11-07). A breath
         before a yes means being asked again, which is the safe way round."""
         self._voice_quiet_at = time.monotonic()
+        self.watch_quiet()
+
+    def watch_quiet(self) -> None:
+        """Start counting the silence from now: from his voice stopping, or their last words.
+        Words, not sounds: on a silent line the voice detector still flipped between speaking and
+        not every few seconds, so LiveKit's away timer, which waits for it to settle, never ran,
+        and a call left alone went on with no check-in (owner's call, 2026-11-08)."""
+        self._stop_watching_quiet()
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._quiet_timer = loop.call_later(self.AWAY_S, self._quiet_for_long)
+
+    def _stop_watching_quiet(self) -> None:
+        if self._quiet_timer is not None:
+            self._quiet_timer.cancel()
+            self._quiet_timer = None
+
+    def _quiet_for_long(self) -> None:
+        self._quiet_timer = None
+        his_state = getattr(self._session, "agent_state", "")
+        if self._hearing or his_state in ("speaking", "thinking"):
+            log.info(
+                "voice decision: not quiet yet (they're %s, he's %s)",
+                getattr(self._session, "user_state", "?"),
+                his_state,
+            )
+            self.watch_quiet()  # it isn't quiet: count again from now
+            return
+        self.away()
 
     def _card_was_heard(self, card: Card) -> bool:
         """This card, read out to the end, with no failure along the way."""
@@ -1613,6 +1749,24 @@ async def _with_ticks(events, every: float):
         pending.cancel()
 
 
+def _isolation_reporter(runtime: Runtime) -> Callable[[bool], None]:
+    """Tells the app whether voice isolation is working, from the audio task, which can't wait."""
+    sending: set[asyncio.Task] = set()
+
+    async def send(working: bool) -> None:
+        try:
+            await runtime.app.call("note_isolation", working=working)
+        except Exception:  # noqa: BLE001 — the next call simply tries voice isolation again
+            log.info("voice: couldn't tell the app how voice isolation is doing", exc_info=True)
+
+    def report(working: bool) -> None:
+        task = asyncio.get_running_loop().create_task(send(working))
+        sending.add(task)
+        task.add_done_callback(sending.discard)
+
+    return report
+
+
 def prewarm(proc: JobProcess) -> None:
     proc.userdata["vad"] = silero.VAD.load()
 
@@ -1657,7 +1811,10 @@ async def entrypoint(ctx: JobContext) -> None:
         stt_extra.update(format_turns=True, **PATIENT_TURNS)
     stt_kwargs = {"extra_kwargs": stt_extra} if stt_extra else {}
     voice = voice_for(cfg["tts_model"], cfg.get("tts_voice"))
-    tts_kwargs = {"voice": voice} if voice else {}
+    tts_kwargs: dict = {"voice": voice} if voice else {}
+    timings = word_timing_options(cfg["tts_model"])
+    if timings:
+        tts_kwargs["extra_kwargs"] = timings
     session = AgentSession(
         # The call's language, for hearing and for speaking. It was pinned to English: Vietnamese
         # went unheard (owner, 2026-11-03).
@@ -1673,7 +1830,8 @@ async def entrypoint(ctx: JobContext) -> None:
         # front voice moved on to "anything else?" (live call, 2026-11-04). It also keeps street
         # noise, which transcribes as nothing, from cutting him off at all.
         min_interruption_words=2,
-        user_away_timeout=LuciusDesk.AWAY_S,
+        # Off: its timer never started on our calls. ``LuciusDesk.watch_quiet`` counts the silence.
+        user_away_timeout=None,
     )
     lucius = LuciusDesk(session, ctx, runtime, session_id)
     lucius.language = language
@@ -1705,8 +1863,12 @@ async def entrypoint(ctx: JobContext) -> None:
 
     @session.on("user_input_transcribed")
     def _heard(ev) -> None:
+        if ev.transcript.strip():
+            lucius.timing.words(ev.is_final)
         if ev.is_final:
             lucius.heard(ev.transcript)
+        else:
+            lucius.hearing(ev.transcript)
 
     @session.on("conversation_item_added")
     def _item(ev) -> None:
@@ -1752,17 +1914,21 @@ async def entrypoint(ctx: JobContext) -> None:
 
     @session.on("user_state_changed")
     def _away(ev) -> None:
+        log.info("voice: owner %s -> %s", ev.old_state, ev.new_state)
         lucius.timing.user_state(ev.new_state)
         if ev.new_state == "speaking":
             lucius.back()
             lucius.owner_began()
         elif ev.new_state == "away":
+            log.info("voice: LiveKit says the owner is away")
             lucius.away()
         if ev.old_state == "speaking":
             lucius.owner_stopped()
 
     @session.on("agent_state_changed")
     def _spoke(ev) -> None:
+        # The call's states, to see why a quiet line did or didn't check in (2026-11-08).
+        log.info("voice: agent %s -> %s", ev.old_state, ev.new_state)
         if ev.new_state == "speaking":
             lucius.timing.agent_speaking()
             lucius.speech_log.playing(session.current_speech)
@@ -1781,7 +1947,11 @@ async def entrypoint(ctx: JobContext) -> None:
         # Only the owner's browser (the identity its token names) is listened to, and only by
         # voice: no typed text into the room.
         room_input_options=RoomInputOptions(
-            text_enabled=False, participant_identity=OWNER_IDENTITY
+            text_enabled=False,
+            participant_identity=OWNER_IDENTITY,
+            noise_cancellation=call_filter(
+                cfg.get("noise_filter"), cfg.get("livekit_url"), _isolation_reporter(runtime)
+            ),
         ),
     )
     if not await _wait_for_caller(ctx.room):

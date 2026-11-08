@@ -16,11 +16,13 @@ from pydantic import BaseModel
 
 from backend.ai import assistant, turns
 from backend.api import demo_visitor
+from backend.connectors.voice import isolation
 from backend.connectors.voice import service as voice_service
 from backend.connectors.voice.tokens import TTL_S, mint_call_token, new_room_name
 from backend.connectors.voice.tts_models import speaks
 from backend.db.voice_config_store import (
     LANGUAGES,
+    NOISE_FILTERS,
     STT_HEARS_ONLY,
     VoiceConfigStore,
     is_ready,
@@ -60,6 +62,7 @@ class VoiceConfigPatch(BaseModel):
     tts_model: Optional[str] = None
     tts_voice: Optional[str] = None
     language: Optional[str] = None
+    noise_filter: Optional[str] = None
 
 
 class StartCallRequest(BaseModel):
@@ -75,7 +78,13 @@ def _automation_owned(session_id: str) -> bool:
 
 
 def _view(config: dict) -> dict:
-    return {**public(config), "ready": is_ready(config), "worker": voice_service.status()}
+    return {
+        **public(config),
+        "ready": is_ready(config),
+        "worker": voice_service.status(),
+        # New calls are on Standard for now, as LiveKit refused voice isolation; blank otherwise.
+        "isolation_standard_until": isolation.standard_until(),
+    }
 
 
 def _check_language(saved: dict, body: VoiceConfigPatch) -> None:
@@ -117,10 +126,14 @@ async def update_voice_config(body: VoiceConfigPatch):
             status_code=422,
             detail="The LiveKit URL starts with wss:// (ws:// only for a server on this machine).",
         )
+    if body.noise_filter is not None and body.noise_filter not in NOISE_FILTERS:
+        raise HTTPException(status_code=422, detail="That noise cancelling option isn't available.")
     store = VoiceConfigStore()
     _check_language(store.get(), body)
     before = store.get()
     config = store.update(body.model_dump(exclude_none=True))
+    if config.get("noise_filter") != before.get("noise_filter"):
+        isolation.forget()
     if voice_service.needs_restart(before, config):
         await voice_service.reload()
     return _view(config)

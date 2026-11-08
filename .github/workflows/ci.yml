@@ -374,6 +374,12 @@ jobs:
         run: |
           uv venv --python "$PYTHON_VERSION" "$RUNNER_TEMP/onw-venv"
           uv pip install --python "$RUNNER_TEMP/onw-venv/bin/python" dist/*.whl
+      - name: The installed wheel has the voice libraries, Krisp included
+        # A call runs without a missing Krisp, so a broken install would pass everything else here
+        # and reach users quietly (owner, 2026-11-08). Imported, not just found: their native parts load.
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/onw-venv/bin/python" -c "import livekit.agents, livekit.plugins.silero, livekit.plugins.noise_cancellation, livekit.plugins.krisp; print('VOICE_LIBRARIES_OK')"
       - name: Boot from the wheel and probe it
         # Run from OUTSIDE the checkout so nothing can resolve to repo files by accident.
         working-directory: ${{ runner.temp }}

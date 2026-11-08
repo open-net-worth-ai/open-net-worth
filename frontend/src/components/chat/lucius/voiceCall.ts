@@ -350,6 +350,8 @@ function micReport(): string {
     `words=${heardUpdates}`,
     `caption=${state.heardShown && state.heard ? 'you' : state.spoken ? 'lucius' : 'none'}`,
     `voice=${state.luciusSpeaking ? 1 : 0}`,
+    `line=${lineOpen ? 1 : 0}`,
+    `quality=${state.quality ?? 'none'}`,
   ].join(',')
   micPeak = 0
   serverPeak = 0
@@ -464,12 +466,36 @@ let heardBefore = ''
 // His line is being spoken, and the update before this one left your segment unfinished.
 let lineOpen = false
 let inSegment = false
+// His words can trail his voice, so a line outlasts it by this long, and no longer. A stream that
+// never closed kept his greeting up and your words off the screen (owner's call, 2026-11-08).
+const LINE_OUTLASTS_VOICE_MS = 2000
+let lineTimer: number | undefined
 let transcriptStreams = 0
 let heardUpdates = 0
 
 type TranscriptReader = AsyncIterable<string> & {
   info: { attributes?: Record<string, string> }
   readAll: () => Promise<string>
+}
+
+function endLine(order: number): void {
+  window.clearTimeout(lineTimer)
+  lineOpen = false
+  set({ spokenDone: true })
+  window.clearTimeout(spokenTimer)
+  spokenTimer = window.setTimeout(() => {
+    if (order === spokenLatest) set({ spoken: '', spokenDone: false })
+  }, LIVE_WORDS_HOLD_MS)
+}
+
+/** While his voice is quiet, an open line ends soon unless more of its words arrive. */
+function watchLineEnd(): void {
+  window.clearTimeout(lineTimer)
+  if (state.luciusSpeaking || !lineOpen) return
+  const order = spokenLatest
+  lineTimer = window.setTimeout(() => {
+    if (lineOpen && order === spokenLatest) endLine(order)
+  }, LINE_OUTLASTS_VOICE_MS)
 }
 
 async function showSpoken(next: Room, reader: TranscriptReader) {
@@ -480,6 +506,7 @@ async function showSpoken(next: Room, reader: TranscriptReader) {
   window.clearTimeout(captionTimer)
   window.clearTimeout(sentenceTimer)
   lineOpen = true
+  watchLineEnd()
   // Whatever you said before this line stays said: it can't join what you say after it.
   heardBefore = ''
   set({ heardShown: false, spokenLines: [...state.spokenLines.slice(1 - MAX_SPOKEN_LINES), ''] })
@@ -487,19 +514,17 @@ async function showSpoken(next: Room, reader: TranscriptReader) {
     for await (const chunk of reader) {
       text += chunk
       if (current()) {
+        window.clearTimeout(spokenTimer)
+        lineOpen = true
         const earlier = state.spokenLines.slice(0, -1)
         set({ spoken: text.trim(), spokenDone: false, spokenLines: [...earlier, text.trim()] })
+        watchLineEnd()
       }
     }
   } catch {
     // The stream broke, as at a hang-up: what was said stays said.
   }
-  if (!current()) return
-  lineOpen = false
-  set({ spokenDone: true })
-  spokenTimer = window.setTimeout(() => {
-    if (order === spokenLatest) set({ spoken: '', spokenDone: false })
-  }, LIVE_WORDS_HOLD_MS)
+  if (current()) endLine(order)
 }
 
 function sameWords(a: string, b: string): boolean {
@@ -531,8 +556,10 @@ function noteHisVoice(speaking: boolean): void {
   if (speaking === state.luciusSpeaking) return
   if (!speaking) {
     set({ luciusSpeaking: false })
+    watchLineEnd()
     return
   }
+  window.clearTimeout(lineTimer)
   window.clearTimeout(captionTimer)
   window.clearTimeout(sentenceTimer)
   heardBefore = ''
@@ -588,6 +615,7 @@ function teardown() {
   window.clearTimeout(sentenceTimer)
   window.clearTimeout(spokenTimer)
   window.clearTimeout(captionTimer)
+  window.clearTimeout(lineTimer)
   heardLatest = 0
   spokenLatest = 0
   heardBefore = ''

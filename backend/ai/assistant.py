@@ -21,7 +21,7 @@ from backend.ai import pending_injection, run_plan, skill_runtime
 from backend.ai.memory_citations import CitationStripper, note_cited_facts, split_citations
 from backend.ai.models.base import AIProvider
 from backend.ai.permissions import engine as _permission_engine
-from backend.ai.spoken_lines import lines_around
+from backend.ai.spoken_lines import UNHEARD_KEY, lines_around
 from backend.ai.tool_text import (
     UNPARSED_CALL_NOTICE,
     LiveLineFilter,
@@ -2361,8 +2361,14 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                 continues_turn = False
             else:
                 # Pure tool_results — the same tool loop continues, so the assistant
-                # entry that follows belongs on THIS turn's bubble, not a new one.
-                continues_turn = True
+                # entry that follows belongs on THIS turn's bubble, not a new one. A turn opening
+                # with nothing to draw isn't that: a voice call's request re-sent with more words
+                # keeps them on its first message, and taking it for tool results pulled the answer
+                # up into the PREVIOUS answer's bubble, above its own question (owner, 2026-11-08).
+                continues_turn = any(
+                    isinstance(b, dict) and b.get("type") == "tool_result"
+                    for b in (content if isinstance(content, list) else [])
+                )
 
         elif role == "assistant":
             # Live, one turn can drive many tool_use rounds, but they all land on the
@@ -2496,6 +2502,8 @@ def rehydrate_messages(session_id: str) -> Optional[list[dict]]:
                     msg["usage"] = usage_by_idx[i]
                 messages.append(msg)
                 last_assistant = msg
+            if entry.get(UNHEARD_KEY):
+                last_assistant["unheard"] = True
             # Only the tool_results entry right before carries a turn on: a SECOND assistant
             # entry in a row is a new line (a voice call's greeting or check-in after an
             # answer). Left set, every one after a tool round piled into that round's bubble

@@ -100,6 +100,194 @@ def test_a_hang_up_writes_whatever_is_left():
     assert len(log.take(everything=True)) == 1
 
 
+def test_an_answer_to_a_request_said_in_two_goes_stays_below_it(monkeypatch):
+    """The owner's call: "check HER too? And Uber". The first message keeps the words, the second is
+    all notes, and that was taken for tool results, so the answer joined the previous answer."""
+    history = [
+        {"role": "user", "content": "First question"},
+        {"role": "assistant", "content": [{"type": "text", "text": "First answer."}]},
+        {"role": "user", "content": [{"type": "text", "text": "Second question"}]},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": desk.harness_note(desk.SHOWN_NOTE)},
+                {"type": "text", "text": desk.relay_note("Second question")},
+                {"type": "text", "text": "<turn_context>\nTODAY'S DATE\n</turn_context>"},
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "id": "a", "name": "get_portfolio", "input": {}}],
+        },
+        {
+            "role": "user",
+            "content": [{"type": "tool_result", "tool_use_id": "a", "content": "ok"}],
+        },
+        {"role": "assistant", "content": [{"type": "text", "text": "Second answer."}]},
+    ]
+    assert _shown(history, monkeypatch) == [
+        "First question",
+        "First answer.",
+        "Second question",
+        "Second answer.",
+    ]
+
+
+def _quiet_desk(monkeypatch):
+    agent, desk_ = _desk()
+    monkeypatch.setattr(agent, "SOUND_CLAIMED_S", 0.0)
+    desk_.AWAY_S = 0.02
+    desk_._session = _QuietSession()
+    desk_._session.said = []
+    desk_._owner_sound_at = 0.0
+    went = []
+    desk_.away = lambda: went.append("away")
+    return desk_, went
+
+
+def _after(desk_, steps, wait=0.1):
+    import asyncio
+
+    async def run():
+        for step in steps:
+            step()
+        await asyncio.sleep(wait)
+
+    asyncio.run(run())
+
+
+def test_a_quiet_line_checks_in_without_waiting_on_livekit(monkeypatch):
+    """The owner's call: a minute of silence and no "are you still there?"."""
+    desk_, went = _quiet_desk(monkeypatch)
+    _after(desk_, [desk_.voice_stopped])
+    assert went == ["away"]
+
+
+def test_him_speaking_stops_the_count(monkeypatch):
+    desk_, went = _quiet_desk(monkeypatch)
+    _after(desk_, [desk_.voice_stopped, desk_.spoke])
+    assert went == []
+
+
+def test_their_words_count_from_when_they_came(monkeypatch):
+    desk_, went = _quiet_desk(monkeypatch)
+    desk_.AWAY_S = 0.06
+
+    async def steps():
+        import asyncio
+
+        desk_.voice_stopped()
+        await asyncio.sleep(0.04)
+        desk_.heard("Let me think")
+        await asyncio.sleep(0.04)
+        assert went == []  # counting from their words, not from his voice
+        await asyncio.sleep(0.06)
+
+    import asyncio
+
+    asyncio.run(steps())
+    assert went == ["away"]
+
+
+def test_sounds_with_no_words_dont_keep_a_call_open(monkeypatch):
+    """The detector flipped to speaking every few seconds on a silent line."""
+    desk_, went = _quiet_desk(monkeypatch)
+    _after(desk_, [desk_.voice_stopped, desk_.owner_began, desk_.owner_stopped, desk_.owner_began])
+    assert went == ["away"]
+
+
+def test_it_counts_again_while_he_is_still_speaking(monkeypatch):
+    desk_, went = _quiet_desk(monkeypatch)
+    desk_._session.agent_state = "speaking"
+    _after(desk_, [desk_.voice_stopped], wait=0.05)
+    assert went == []
+    desk_._session.agent_state = "listening"
+    _after(desk_, [desk_.watch_quiet])
+    assert went == ["away"]
+
+
+class _WaitingAnswer:
+    """An answer queued on the call, not yet playing."""
+
+    def __init__(self):
+        self.interrupted = False
+
+    def done(self):
+        return self.interrupted
+
+    def interrupt(self):
+        self.interrupted = True
+
+
+def _adding_to_a_request(agent, desk_, answer, playing=False):
+    desk_._session = _QuietSession()
+    desk_._session.said = []
+    if playing:
+        desk_._session.current_speech = answer
+        desk_._session.agent_state = "speaking"
+    desk_.heard("How much on groceries this week?")
+    desk_.submit("How much did I spend on groceries this week?")
+    desk_._queue.get_nowait()
+    desk_._last_answer = answer
+    desk_.heard("And my rent")
+    desk_.submit("Groceries and rent this week?", ack="Got it, rent too.", continues_last=True)
+
+
+def test_more_asked_while_its_answer_waits_drops_that_answer_and_says_got_it():
+    """The owner's call: "Got it, rental too" was queued behind the groceries answer and dropped."""
+    agent, desk_ = _desk()
+    waiting = _WaitingAnswer()
+    _adding_to_a_request(agent, desk_, waiting)
+    assert waiting.interrupted
+    assert desk_._session.said[-1] == "Got it, rent too."
+    assert not desk_._waiting_lines()  # an answer arriving can't drop it
+
+
+def test_an_answer_already_playing_finishes_and_got_it_still_comes():
+    agent, desk_ = _desk()
+    playing = _WaitingAnswer()
+    _adding_to_a_request(agent, desk_, playing, playing=True)
+    assert not playing.interrupted
+    assert desk_._session.said[-1] == "Got it, rent too."
+
+
+@pytest.mark.parametrize(("he_spoke", "joins"), [(False, True), (True, False)])
+def test_more_words_join_the_last_message_only_if_he_said_nothing_since(he_spoke, joins):
+    """The owner's call: "HER too?", then "Okay, let me check HER.", then "And Uber"."""
+    agent, desk_ = _desk()
+    desk_.heard("Check HER too?")
+    desk_.submit("How is HER doing?")
+    desk_._queue.get_nowait()  # taken up and finished, so the next words can only join or not
+    if he_spoke:
+        desk_.spoke()
+    desk_.heard("And Uber")
+    desk_.submit("How are HER and Uber doing?", continues_last=True)
+    later = desk_._queue.get_nowait()
+    assert later.continues is joins
+    assert later.request.endswith("How are HER and Uber doing?")  # still one request either way
+
+
+def test_an_answer_never_read_out_says_so_in_the_chat(monkeypatch):
+    history = [
+        {"role": "user", "content": "Question"},
+        {"role": "assistant", "content": [{"type": "text", "text": "Same words."}]},
+        {"role": "user", "content": "Again"},
+        {"role": "assistant", "content": [{"type": "text", "text": "**Same** words."}]},
+    ]
+    desk.place_lines(history, [{"unheard": "Same words."}])
+    assert desk.UNHEARD_KEY not in history[1]  # the newest answer with those words
+    assert history[3][desk.UNHEARD_KEY] is True
+    monkeypatch.setattr(desk.assistant, "_load_session", lambda _sid: history)
+    shown = desk.assistant.rehydrate_messages("voice-log-unheard")
+    assert [m.get("unheard", False) for m in shown] == [False, False, False, True]
+
+
+def test_words_no_answer_has_mark_nothing():
+    history = [{"role": "assistant", "content": [{"type": "text", "text": "Something else."}]}]
+    desk.place_lines(history, [{"unheard": "Not this."}])
+    assert desk.UNHEARD_KEY not in history[0]
+
+
 def test_a_correction_keeps_its_place_in_the_chat():
     earlier = Task("find it", "find", asked_at=4.0, id="t1", revision=2)
     later = Task("the gym one", "gym", asked_at=9.0)
@@ -1665,6 +1853,78 @@ def test_it_waits_while_the_front_voice_is_still_replying(monkeypatch):
     assert desk_._session.said == []
 
 
+def _telling_desk(monkeypatch):
+    """A talked-over desk whose calls to the app are kept."""
+    agent, desk_ = _talked_over_desk(monkeypatch)
+    told = []
+
+    async def call(method, **args):
+        told.append((method, args["text"]))
+
+    desk_._session_id = "s1"
+    desk_._rt = type("Rt", (), {"app": type("App", (), {"call": staticmethod(call)})()})()
+    return agent, desk_, told
+
+
+def test_an_answer_a_request_replaced_is_marked_never_read_out(monkeypatch):
+    agent, desk_, told = _telling_desk(monkeypatch)
+    _run_talked_over(desk_, lambda: desk_._queue.put_nowait(agent.Task("next", "next")))
+    assert told == [("answer_unheard", "The answer.")]
+
+
+def test_a_request_starting_at_once_still_marks_the_answer(monkeypatch):
+    """Starting a request clears what's waiting to be said before the wait can see the request."""
+    _agent, desk_, told = _telling_desk(monkeypatch)
+    _run_talked_over(desk_, lambda: setattr(desk_, "_undelivered", None))
+    assert told == [("answer_unheard", "The answer.")]
+
+
+def test_an_answer_said_after_all_isnt_marked(monkeypatch):
+    _agent, desk_, told = _telling_desk(monkeypatch)
+    _run_talked_over(desk_)
+    assert desk_._session.said == ["The answer."] and told == []
+
+
+def test_an_answer_they_heard_part_of_isnt_marked(monkeypatch):
+    _agent, desk_, told = _telling_desk(monkeypatch)
+    _cut_off_by(desk_, "Hold on a second.")
+    assert told == []
+
+
+def test_an_answer_past_its_retries_is_marked(monkeypatch):
+    agent, desk_, told = _telling_desk(monkeypatch)
+    monkeypatch.setattr(agent, "RESAY_QUIET_S", 60)
+    desk_._resays = agent.MAX_RESAYS
+    _run_talked_over(desk_, wait=0.01)
+    assert told == [("answer_unheard", "The answer.")]
+
+
+def test_word_timings_are_asked_for_where_the_provider_needs_asking():
+    from backend.connectors.voice.tts_models import word_timing_options
+
+    assert word_timing_options("inworld/inworld-tts-2-flash") == {"timestamp_type": "WORD"}
+    assert word_timing_options("cartesia/sonic-3") == {"add_timestamps": True}
+    assert word_timing_options("assemblyai/assemblyai-tts-1") == {}  # on by default
+    assert word_timing_options("fishaudio/s2.1-pro") == {}
+
+
+def test_a_sound_during_his_voice_doesnt_date_their_next_words(monkeypatch, caplog):
+    import logging
+
+    agent, _desk_ = _desk()
+    timing = agent.TurnTiming()
+    now = [1000.0]
+    monkeypatch.setattr("backend.connectors.voice.timing.time.monotonic", lambda: now[0])
+    timing.user_state("speaking")
+    now[0] += 20
+    timing.agent_speaking()
+    timing.user_state("speaking")
+    now[0] += 1
+    with caplog.at_level(logging.INFO):
+        timing.words(False)
+    assert "first words 1.00s" in caplog.text
+
+
 def test_a_noisy_line_cant_loop_on_one_answer(monkeypatch):
     agent, desk_ = _talked_over_desk(monkeypatch)
     monkeypatch.setattr(agent, "RESAY_QUIET_S", 60)
@@ -1882,13 +2142,99 @@ def test_lucius_is_told_how_much_was_heard(monkeypatch):
     assert "They heard only this much of it: \u00abYesterday had\u00bb" in text
 
 
-def test_the_phone_can_report_the_caption():
+def test_the_phone_can_report_the_caption_and_the_connection():
     from backend.connectors.voice.service import _MIC_REPORT
 
     fields = (
         "track=live,system_muted=0,enabled=1,app_muted=0,audio=running,peak=0.1,server_peak=0.2,"
     )
-    assert _MIC_REPORT.fullmatch(fields + "page=visible,streams=1,words=1,caption=lucius,voice=1")
+    assert _MIC_REPORT.fullmatch(
+        fields + "page=visible,streams=1,words=1,caption=lucius,voice=1,line=1,quality=good"
+    )
+
+
+def _left_at_hang_up(desk_, calls):
+    import asyncio
+
+    asyncio.run(desk_.finish())
+    written = [args["lines"] for method, args in calls if method == "record_lines"]
+    return [(line["speaker"], line["text"]) for lines in written for line in lines]
+
+
+def test_words_with_no_reply_yet_reach_the_chat_after_a_hang_up():
+    """The owner's call: they spoke, he was still deciding what to say, and it was all lost."""
+    _agent, desk_, _said, calls = _card_desk()
+    desk_.heard("How much did I spend")
+    assert _left_at_hang_up(desk_, calls) == [("owner", "How much did I spend")]
+    assert not desk_._heard
+
+
+def test_the_sentence_they_were_in_the_middle_of_reaches_the_chat():
+    _agent, desk_, _said, calls = _card_desk()
+    desk_.heard("How much did I spend.")
+    desk_.hearing("And on what")
+    assert _left_at_hang_up(desk_, calls) == [("owner", "How much did I spend. And on what")]
+
+
+def test_words_kept_for_a_reply_arent_written_twice():
+    _agent, desk_, _said, calls = _card_desk()
+    desk_.heard("How much did I spend")
+    desk_.item_added("user", "How much did I spend", 100.0)
+    lines = _left_at_hang_up(desk_, calls)
+    assert lines == [("owner", "How much did I spend")]
+
+
+def test_words_a_reply_already_carried_arent_written_again():
+    _agent, desk_, _said, calls = _card_desk()
+    desk_.heard("Hello there")
+    desk_._spoken_since_heard = True
+    assert _left_at_hang_up(desk_, calls) == []
+
+
+def test_words_already_sent_as_the_request_arent_written_again():
+    agent, desk_, _said, calls = _card_desk()
+    desk_._current = agent.Task("How much did I spend", "spend")
+    desk_.heard("How much did I spend")
+    assert ("owner", "How much did I spend") not in _left_at_hang_up(desk_, calls)
+
+
+def test_a_sound_isnt_kept_as_something_they_said():
+    _agent, desk_, _said, calls = _card_desk()
+    desk_.heard("M m")
+    assert _left_at_hang_up(desk_, calls) == []
+
+
+def test_how_long_words_take_to_come_back_is_logged(caplog):
+    import logging
+
+    agent, _desk_ = _desk()
+    timing = agent.TurnTiming()
+    with caplog.at_level(logging.INFO):
+        timing.user_state("speaking")
+        timing.words(False)
+        timing.words(False)
+        timing.user_state("listening")
+        timing.words(True)
+    said = [r.getMessage() for r in caplog.records if "voice timing" in r.getMessage()]
+    assert len([line for line in said if "first words" in line]) == 1
+    assert len([line for line in said if "final words" in line]) == 1
+    assert not any("spend" in line for line in said)
+
+
+def test_a_sound_long_ago_doesnt_date_the_next_words(monkeypatch, caplog):
+    import logging
+
+    agent, _desk_ = _desk()
+    timing = agent.TurnTiming()
+    now = [1000.0]
+    monkeypatch.setattr("backend.connectors.voice.timing.time.monotonic", lambda: now[0])
+    timing.user_state("speaking")
+    now[0] += 60
+    timing.user_state("speaking")
+    now[0] += 1
+    with caplog.at_level(logging.INFO):
+        timing.words(False)
+    assert "first words 1.00s" in caplog.text
 
 
 # From the review of the whole branch, 2026-11-07.

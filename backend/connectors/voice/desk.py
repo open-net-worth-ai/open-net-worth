@@ -19,7 +19,7 @@ from collections.abc import AsyncIterator
 from typing import Optional
 
 from backend.ai import assistant, conversation, live_sessions, session_titles, turns
-from backend.ai.spoken_lines import AFTER_MESSAGE, BEFORE_MESSAGE, VOICE_LINES_KEY
+from backend.ai.spoken_lines import AFTER_MESSAGE, BEFORE_MESSAGE, UNHEARD_KEY, VOICE_LINES_KEY
 from backend.ai.tool_text import harness_note, is_harness_note
 from backend.ai.tools.registry import may_change_something
 from backend.connectors.voice.call_log import AFTER, BEFORE
@@ -544,10 +544,27 @@ def _line_home(history: list[dict], task_id: str | None, place: str) -> tuple[in
     return last, AFTER_MESSAGE
 
 
+def _mark_unheard(history: list[dict], spoken: str) -> None:
+    """The newest answer with these words wasn't read out. The call knows it only by what it would
+    have said, as a request said in two goes shares one id between two answers."""
+    wanted = " ".join(spoken.split())
+    for entry in reversed(history):
+        content = entry.get("content")
+        if entry.get("role") != "assistant" or not isinstance(content, list):
+            continue
+        text = "".join(b.get("text", "") for b in content if b.get("type") == "text")
+        if " ".join(speakable(text).split()) == wanted:
+            entry[UNHEARD_KEY] = True
+            return
+
+
 def place_lines(history: list[dict], lines: list[dict]) -> None:
     """Keep lines on the messages they go with, in the order given, which is the order heard. No
     message moves: a transcript is addressed by position (``backend.ai.spoken_lines``)."""
     for line in lines:
+        if "unheard" in line:
+            _mark_unheard(history, str(line["unheard"]))
+            continue
         if not history:
             log.warning("voice: a spoken line had no conversation to go in")
             return
@@ -570,6 +587,11 @@ async def record_lines(session_id: str, lines: list[dict]) -> None:
     unwritten.extend(lines[: max(0, _MAX_UNWRITTEN - len(unwritten))])
     if session_id not in _line_writers:
         _line_writers[session_id] = asyncio.ensure_future(_write_lines(session_id))
+
+
+async def answer_unheard(session_id: str, spoken: str) -> None:
+    """In the same queue as the lines: it can't touch the transcript while a turn holds it either."""
+    await record_lines(session_id, [{"unheard": spoken}])
 
 
 async def _write_lines(session_id: str) -> None:

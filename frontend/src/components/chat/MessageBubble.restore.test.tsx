@@ -25,6 +25,21 @@ function renderMessage(over: Partial<Message>, onRestore = vi.fn()) {
   )
 }
 
+describe('MessageBubble — an answer never read out on a call', () => {
+  const answer = { role: 'assistant' as const, text: 'Your balance is fine.', blocks: [] }
+
+  it('says so, and keeps the answer', () => {
+    const { getByText } = renderMessage({ ...answer, unheard: true })
+    expect(getByText(/Not read aloud/)).toBeTruthy()
+    expect(getByText('Your balance is fine.')).toBeTruthy()
+  })
+
+  it('says nothing on an answer that was heard', () => {
+    const { queryByText } = renderMessage(answer)
+    expect(queryByText(/Not read aloud/)).toBeNull()
+  })
+})
+
 describe('MessageBubble — Restore control', () => {
   it('shows Restore on a checkpointed message', () => {
     const { container } = renderMessage({ checkpointId: 'cp_1' })

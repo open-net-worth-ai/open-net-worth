@@ -13,4 +13,13 @@ export function isStandalonePwa(): boolean {
 export function stampPwaDisplayMode(): void {
   if (typeof document === 'undefined') return
   document.documentElement.dataset.onwDisplayMode = isStandalonePwa() ? 'standalone' : 'browser'
+  document.documentElement.dataset.onwEngine = isWebKit(navigator.userAgent) ? 'webkit' : 'other'
+}
+
+/** Safari's engine: every browser on an iPhone, Chrome included ("CriOS"), and Safari on a Mac.
+ *  It doesn't hold your place as a lazily drawn message turns from its estimate into its real
+ *  height, so scrolling up jumped 62 times in a long chat where Chromium jumped twice (measured,
+ *  2026-11-08); the chat draws every message in full there. */
+export function isWebKit(userAgent: string): boolean {
+  return /AppleWebKit/.test(userAgent) && !/(Chrome|Chromium|Edg|Electron)\//.test(userAgent)
 }
