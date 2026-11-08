@@ -47,8 +47,8 @@ Automations and any restore or import have finished, installs it and restarts it
   [Going back to an older version](#going-back-to-an-older-version).
 - **A restart takes a few seconds or more,** and an open browser tab reconnects by itself. A voice
   call in progress isn't noticed as busy: a restart can end it.
-- **To turn it off,** run `onw start --autostart` without the flag. `onw autostart status` shows
-  whether it's on. `onw autostart install` also leaves it off.
+- **To turn it off,** run `onw start --autostart` without the flag. `onw autostart` shows
+  whether it's on. `onw autostart on` also leaves it off.
 - **In a terminal,** `onw start --auto-upgrade` without `--autostart` works too: it restarts
   itself in the same terminal (on Windows, in a new console window).
 - **On Windows,** a separate helper does the install once the app has closed, because Windows

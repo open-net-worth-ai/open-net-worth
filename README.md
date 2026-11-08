@@ -225,11 +225,11 @@ front of it, and none is required.
   onw start --autostart
   ```
 
-  (`onw autostart install` is the same thing. From a source checkout, `make autostart` runs setup
+  (`onw autostart on` is the same thing, and `onw autostart off` turns it off again. From a source checkout, `make autostart` runs setup
   first, then the same thing.) This installs a per-user **launchd** LaunchAgent on macOS, a
   per-user **systemd** unit (plus `loginctl enable-linger`, so it starts even before you log in) on
   Linux, or a per-user **Task Scheduler** task on Windows — no sudo or admin needed on any of them.
-  `onw autostart status` shows whether it's running; `onw autostart uninstall` stops it and removes the
+  `onw autostart` on its own shows whether it's on; `onw autostart off` stops it and removes the
   service. Logs land in `~/.open-net-worth/logs/app.log`.
 
   <details>

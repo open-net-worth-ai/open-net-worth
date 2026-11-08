@@ -14,7 +14,7 @@ mechanisms that differ, the few guarantees that are weaker, and what the owner p
 - Updates: the installed app updates itself through Squirrel.Windows, from the feed at
   `https://opennetworth.ai/update/<platform-arch>/<version>`
   (the release carries `RELEASES` and the full `.nupkg` beside the installer).
-- From source or `uv tool install`: `onw start`; `onw autostart install` registers a per-user Task
+- From source or `uv tool install`: `onw start`; `onw autostart on` registers a per-user Task
   Scheduler task (logon trigger, restart on failure, no window, no admin).
 - Server updates (`uv tool install` only): `onw upgrade` by hand, or
   `onw start --autostart --auto-upgrade` to install each new signed release without being asked.
@@ -80,7 +80,7 @@ The desktop app still refuses the sandbox, stdio MCP and builder engines on ever
 - Watched folder: add a folder, drop a CSV, it imports once.
 - Import a PDF statement and a HEIC photo; export a file.
 - Lucius: connect a provider, run a turn; background automation fires on schedule.
-- `onw autostart install` from a source checkout; log off/on; `status` says running; kill the python
+- `onw autostart on` from a source checkout; log off/on; `status` says running; kill the python
   process and confirm it restarts within a minute.
 - `uv tool install` an older release; `onw start --autostart --auto-upgrade`; within a minute it
   moves to the newest release and comes back by itself (`onw version`, `upgrade.log`). Repeat with

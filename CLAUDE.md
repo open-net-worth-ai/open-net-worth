@@ -22,7 +22,7 @@ capture a bug with `make bug MSG="…"`.
 Fresh clone: `make setup start` (venv, deps, DB migration, frontend build, editable install of
 the `onw` CLI, then run). No `.env` needed — data defaults to `~/.open-net-worth/`, outside the
 checkout. `AUTH_PASSWORD=… docker compose up` on Windows (the password is REQUIRED under Docker).
-`onw autostart install` / `make autostart` installs a boot service (launchd/systemd).
+`onw autostart on` / `make autostart` installs a boot service (launchd/systemd).
 
 Users don't clone: they `uv tool install open-net-worth` (wheel built by `make wheel`) or pull
 `ghcr.io/open-net-worth-ai/open-net-worth`. A release is a manual, gated, signed act —

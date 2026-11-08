@@ -76,29 +76,60 @@ def test_ctrl_c_is_the_standard_exit_code_and_no_traceback(monkeypatch):
     assert main(["logs"]) == 130
 
 
-@pytest.mark.parametrize("word", ["uninstall", "stop"])
-def test_removing_the_service_is_uninstall_and_the_old_name_works(monkeypatch, word):
-    seen = []
-    monkeypatch.setattr(
-        "backend.cli.autostart.run_autostart", lambda action: seen.append(action) or 0
-    )
-
-    assert main(["autostart", word]) == 0
-
-    assert seen == [word]
-
-
-@pytest.mark.parametrize("word", ["uninstall", "stop"])
-def test_both_names_remove_the_service(monkeypatch, word):
+@pytest.mark.parametrize(
+    ("typed", "means"),
+    [
+        ("on", "install"),
+        ("off", "stop"),
+        ("install", "install"),
+        ("uninstall", "stop"),
+        ("stop", "stop"),
+    ],
+)
+def test_on_and_off_and_the_older_names_flip_the_same_switch(monkeypatch, typed, means):
     from backend.cli import autostart
 
-    monkeypatch.setattr(autostart, "stop", lambda _system, _home, _runner: 5)
+    seen = []
+    monkeypatch.setattr(autostart, "install", lambda *_a, **_kw: seen.append("install") or 0)
+    monkeypatch.setattr(autostart, "stop", lambda *_a: seen.append("stop") or 0)
 
-    assert autostart.run_autostart(word) == 5
+    assert main(["autostart", typed]) == 0
+
+    assert seen == [means]
 
 
-def test_the_old_name_stays_off_the_help(capsys):
-    assert "stop" not in run_help(capsys, "help", "autostart")[1]
+@pytest.mark.parametrize(("code", "hint"), [(0, "onw autostart off"), (1, "onw autostart on")])
+def test_autostart_on_its_own_says_whether_it_is_on_and_how_to_change_it(
+    monkeypatch, capsys, code, hint
+):
+    from backend.cli import autostart
+
+    def status(*_a):
+        print("on and running" if code == 0 else "off")
+        return code
+
+    monkeypatch.setattr(autostart, "status", status)
+
+    assert main(["autostart"]) == code
+
+    assert hint in capsys.readouterr().out
+
+
+def test_the_status_line_in_onw_status_carries_no_hint(monkeypatch):
+    from backend.cli import autostart
+    from backend.cli import status as cli_status
+
+    monkeypatch.setattr(autostart, "status", lambda *_a: print("off") or 1)
+
+    assert cli_status._service_summary() == "off"
+
+
+def test_the_help_shows_only_the_new_names(capsys):
+    out = run_help(capsys, "help", "autostart")[1]
+
+    assert "{on,off,status}" in out
+    for older in ("install", "uninstall", "{stop", ",stop"):
+        assert older not in out
 
 
 def test_the_list_has_no_placeholder_row(capsys):
