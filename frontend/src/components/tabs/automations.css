@@ -60,6 +60,7 @@
 }
 .a3-awake {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   padding: 11px 15px;
@@ -76,6 +77,9 @@
 }
 .a3-awake-label {
   flex: none;
+  /* When the card is too narrow for one line, the label and switch wrap together under the text
+     and sit at the right — not a five-line sentence squeezed beside them (owner, 2026-11-09). */
+  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -83,7 +87,7 @@
   font-weight: 600;
 }
 .a3-awake-text {
-  flex: 1;
+  flex: 1 1 220px;
   min-width: 0;
 }
 .a3-awake-switch {
