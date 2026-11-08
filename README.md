@@ -124,7 +124,8 @@ on Windows, follow [these steps](docs/product/getting-started/installation.md#wi
 curl -fsSL https://github.com/open-net-worth-ai/open-net-worth-releases/releases/latest/download/install-server.sh | sh
 ```
 
-If the installer tells you to open a new terminal, do that before the next step.
+If the installer says this terminal needs reloading, run the line it shows (`exec "$SHELL" -l`) or
+open a new terminal. It finishes by listing the commands you're likely to need next.
 
 **2. Start it.** Your browser opens the app, and first run takes it from there.
 

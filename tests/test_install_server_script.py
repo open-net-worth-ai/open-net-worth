@@ -27,6 +27,9 @@ case "$1 $2" in
 esac
 """
 
+# An `onw` from before `onw help` existed: argparse refuses the unknown command with exit code 2.
+OLD_ONW_BODY = '[ "$1" = help ] && exit 2\\necho "open-net-worth 9.9.9"'
+
 # The uv installer is what curl pipes into `sh`: it records the PATH it ran under, then installs
 # the fake uv the way the real one does (into ~/.local/bin).
 FAKE_CURL = """#!/bin/sh
@@ -82,7 +85,7 @@ def test_clean_machine_puts_local_bin_on_the_users_shell_path(machine):
     assert (home / "uv-installer-path").read_text().strip() == user_path
     assert update_shell_paths(home) == [user_path]
     assert local_bin not in update_shell_paths(home)[0].split(":")
-    assert "Open a NEW terminal first" in result.stdout
+    assert 'exec "$SHELL" -l' in result.stdout
     assert "Installed open-net-worth 9.9.9" in result.stdout
 
 
@@ -94,7 +97,7 @@ def test_local_bin_already_on_path_leaves_the_profile_alone(machine):
 
     assert result.returncode == 0, result.stderr
     assert update_shell_paths(home) == []
-    assert "Open a NEW terminal" not in result.stdout
+    assert "exec" not in result.stdout
 
 
 def test_uv_in_local_bin_but_off_path_is_reused_and_the_profile_fixed(machine):
@@ -126,6 +129,54 @@ def test_auto_upgrade_starts_the_service_with_the_flag(machine):
 
     assert result.returncode == 0, result.stderr
     assert "start --autostart --auto-upgrade" in (home / "onw-calls").read_text()
+
+
+def test_the_end_names_the_version_and_what_to_type_next(machine):
+    home, stubs, fake_uv = machine
+
+    result = run(home, f"{stubs}:/usr/bin:/bin", fake_uv)
+
+    out = result.stdout
+    assert "Open Net Worth 9.9.9 is installed" in out
+    for command in (
+        "onw start --open",
+        "onw start --autostart --auto-upgrade",
+        "onw start --background",
+        "onw stop",
+        "onw status",
+        "onw upgrade",
+        "onw help",
+    ):
+        assert command in out, command
+    assert "~/.open-net-worth/" in out
+
+
+def test_a_release_without_the_newer_commands_never_suggests_them(machine):
+    """The installer installs whatever PyPI has: a copy older than `onw help` lacks stop/background."""
+    home, stubs, fake_uv = machine
+    fake_uv.write_text(FAKE_UV.replace('echo "open-net-worth 9.9.9"', OLD_ONW_BODY))
+
+    result = run(home, f"{stubs}:/usr/bin:/bin", fake_uv)
+
+    out = result.stdout
+    assert result.returncode == 0, result.stderr
+    assert "onw start --autostart --auto-upgrade" in out
+    assert "onw --help" in out
+    for missing in ("onw stop", "--background", "onw help"):
+        assert missing not in out, missing
+
+
+def test_when_it_is_already_running_it_says_so_instead_of_how_to_start(machine):
+    home, stubs, fake_uv = machine
+    env = {"HOME": str(home), "PATH": f"{stubs}:/usr/bin:/bin", "FAKE_UV_SRC": str(fake_uv)}
+
+    result = subprocess.run(
+        ["sh", str(SCRIPT), "--auto-upgrade"], env=env, capture_output=True, text=True, timeout=60
+    )
+
+    assert "running now" in result.stdout
+    assert "keeps itself up to date" in result.stdout
+    assert "Start it now" not in result.stdout
 
 
 @pytest.mark.skipif(shutil.which("shellcheck") is None, reason="shellcheck not installed")
