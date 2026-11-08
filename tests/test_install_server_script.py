@@ -212,6 +212,24 @@ def test_when_it_is_already_running_it_says_so_instead_of_how_to_start(machine):
     assert "Start it now" not in result.stdout
 
 
+@pytest.mark.parametrize("spelling", ["--auto-upgrade", "--auto-update"])
+def test_either_spelling_turns_auto_upgrade_on(machine, spelling):
+    home, stubs, fake_uv = machine
+    fake = fake_uv.read_text().replace(
+        'echo "open-net-worth 9.9.9"\\n\'',
+        'echo "$*" >> "$HOME/onw-calls"\\n\'',
+    )
+    fake_uv.write_text(fake)
+    env = {"HOME": str(home), "PATH": f"{stubs}:/usr/bin:/bin", "FAKE_UV_SRC": str(fake_uv)}
+
+    result = subprocess.run(
+        ["sh", str(SCRIPT), spelling], env=env, capture_output=True, text=True, timeout=60
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "start --autostart --auto-upgrade" in (home / "onw-calls").read_text()
+
+
 @pytest.mark.skipif(shutil.which("shellcheck") is None, reason="shellcheck not installed")
 def test_script_is_shellcheck_clean():
     subprocess.run(["shellcheck", str(SCRIPT)], check=True, timeout=60)

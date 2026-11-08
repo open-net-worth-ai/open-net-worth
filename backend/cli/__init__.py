@@ -28,6 +28,7 @@ import sys
 from collections.abc import Sequence
 
 _WINDOWS_TASK_COMMAND = "autostart-run"
+_COMMAND_SPELLINGS = {"auto-start": "autostart"}  # typed either way; the help shows one
 _INTERRUPTED = 130  # 128 + SIGINT, what a shell reports for Ctrl-C
 
 
@@ -75,6 +76,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="install new releases automatically and restart when idle (a `uv tool` install only)",
     )
     start.add_argument("--service", action="store_true", help=argparse.SUPPRESS)  # the boot service
+    # The other spellings people type, off the help so it shows one name each.
+    start.add_argument(
+        "--auto-start", dest="autostart", action="store_true", help=argparse.SUPPRESS
+    )
+    start.add_argument(
+        "--auto-update", dest="auto_upgrade", action="store_true", help=argparse.SUPPRESS
+    )
 
     sub.add_parser("stop", help="stop the app")
     sub.add_parser("restart", help="restart the app, the way it was running")
@@ -146,6 +154,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             from backend.cli.autostart_windows import run_service
 
             return run_service()
+        if arguments and arguments[0] in _COMMAND_SPELLINGS:
+            arguments = [_COMMAND_SPELLINGS[arguments[0]], *arguments[1:]]
         return _run(build_parser(), arguments)
     except KeyboardInterrupt:
         return _INTERRUPTED

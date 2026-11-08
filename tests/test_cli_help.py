@@ -134,3 +134,42 @@ def test_the_help_shows_only_the_new_names(capsys):
 
 def test_the_list_has_no_placeholder_row(capsys):
     assert "\n  <command>\n" not in run_help(capsys, "help")[1]
+
+
+@pytest.mark.parametrize(
+    ("typed", "autostart", "auto_upgrade"),
+    [
+        (["--autostart", "--auto-upgrade"], True, True),
+        (["--auto-start", "--auto-update"], True, True),
+        (["--auto-start"], True, False),
+        (["--auto-update"], False, True),
+    ],
+)
+def test_either_spelling_of_the_start_flags_works(typed, autostart, auto_upgrade):
+    from backend.cli import build_parser
+
+    args = build_parser().parse_args(["start", *typed])
+
+    assert (args.autostart, args.auto_upgrade) == (autostart, auto_upgrade)
+
+
+def test_the_help_shows_one_spelling_of_each(capsys):
+    out = run_help(capsys, "help", "start")[1]
+
+    assert "--autostart" in out and "--auto-upgrade" in out
+    assert "--auto-start" not in out and "--auto-update" not in out
+
+
+def test_onw_auto_start_is_onw_autostart(monkeypatch):
+    from backend.cli import autostart
+
+    seen = []
+    monkeypatch.setattr(autostart, "install", lambda *_a, **_kw: seen.append("on") or 0)
+
+    assert main(["auto-start", "on"]) == 0
+
+    assert seen == ["on"]
+
+
+def test_the_command_list_shows_one_spelling(capsys):
+    assert "auto-start" not in run_help(capsys, "help")[1]

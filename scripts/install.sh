@@ -54,8 +54,8 @@ AUTOSTART=0
 AUTO_UPGRADE=0
 for arg in "$@"; do
   case "$arg" in
-    --autostart) AUTOSTART=1 ;;
-    --auto-upgrade) AUTOSTART=1; AUTO_UPGRADE=1 ;;
+    --autostart|--auto-start) AUTOSTART=1 ;;
+    --auto-upgrade|--auto-update) AUTOSTART=1; AUTO_UPGRADE=1 ;;
     *) die "unknown option: $arg (the options are --autostart and --auto-upgrade)" ;;
   esac
 done
