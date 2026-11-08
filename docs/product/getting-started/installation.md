@@ -106,8 +106,9 @@ port 8080. You open it in a browser, or connect the desktop app to it from anoth
    `open-net-worth` on uv's own Python 3.12. You need no system Python or Node.js. The first
    install downloads a few hundred MB. It also adds `~/.local/bin` to your shell's `PATH` if it
    isn't there yet. The terminal you ran it in can't see that change, so the installer then shows
-   a line to reload it, `exec "$SHELL" -l`, or you can open a new terminal. It finishes by listing
-   the commands you're likely to need next.
+   the `source` line that reloads it, naming the file it changed: `source ~/.zshenv` for zsh,
+   `source ~/.bashrc` for bash. Opening a new terminal works too. It finishes by listing the
+   commands you're likely to need next.
 2. Start it and open it in your browser:
 
    ```bash
